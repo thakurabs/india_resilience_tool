@@ -1,5 +1,3 @@
-Here’s a complete `README.md` you can copy-paste as-is and tweak later if needed:
-
 ````markdown
 # IRT Climate Pipeline (Prototype)
 
