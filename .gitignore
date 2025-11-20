@@ -1,0 +1,72 @@
+# --------------------------------
+# Python / build artifacts
+# --------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+*.log
+
+# --------------------------------
+# Virtual environments / env files
+# --------------------------------
+.venv/
+venv/
+.env
+.env.*
+.conda/
+
+# --------------------------------
+# Editors / IDEs
+# --------------------------------
+.vscode/
+.idea/
+*.code-workspace
+
+# --------------------------------
+# OS junk
+# --------------------------------
+.DS_Store
+Thumbs.db
+
+# --------------------------------
+# Jupyter
+# --------------------------------
+.ipynb_checkpoints/
+
+# --------------------------------
+# Streamlit
+# --------------------------------
+.streamlit/
+
+# --------------------------------
+# Data / outputs (generic)
+# --------------------------------
+data/
+raw_data/
+processed/
+outputs/
+logs/
+figures/
+tmp/
+temp/
+
+# Binary data files (if any ever show up in repo)
+*.nc
+*.nc4
+*.grb
+*.grib
+*.tif
+*.tiff
+*.zip
+
+# --------------------------------
+# Project-specific directories (if they ever end up under repo)
+# --------------------------------
+r1i1p1f1/
+processed/
