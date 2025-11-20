@@ -30,7 +30,7 @@ def dbg(*args, **kwargs):
 # CONFIG
 # -------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent
-DATA_DIR = PROJECT_ROOT / "data"
+DATA_DIR = Path(r"D:\projects\irt_data\\")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 ADM2_GEOJSON = DATA_DIR / "districts_4326.geojson"
@@ -710,7 +710,7 @@ with metric_ui_placeholder.container():
     VARCFG = VARIABLES[VARIABLE_SLUG]
 
     PROCESSED_ROOT = Path(
-        os.getenv("IRT_PROCESSED_ROOT", PROJECT_ROOT / "processed" / VARIABLE_SLUG)
+        os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / VARIABLE_SLUG)
     ).resolve()
     (PROCESSED_ROOT / PILOT_STATE).mkdir(parents=True, exist_ok=True)
     MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / "master_metrics_by_district.csv"
