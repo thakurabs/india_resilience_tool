@@ -17,7 +17,7 @@ DEFAULT_MEMBER = "r1i1p1f1"
 EXPERIMENTS = ["historical", "ssp245", "ssp585"]
 LAT_MIN, LAT_MAX = 17.0, 22.0
 LON_MIN, LON_MAX = 78.0, 85.0
-OUTDIR = r".\aspirational_districts_data"
+OUTDIR = r"G:\My Drive\aspirational_districts_data"
 SLEEP_BETWEEN = 0.5
 
 def s3_client():
