@@ -36,13 +36,13 @@ import json
 # -----------------------------------------------------------------------------
 
 # Root where all model/scenario data live
-DATA_ROOT = Path(r"G:\My Drive\irt_data\r1i1p1f1")
+DATA_ROOT = Path(r"D:\projects\irt_data\r1i1p1f1")
 
 # Shapefile / GeoJSON with all India districts
-DISTRICTS_PATH = Path(r"G:\My Drive\irt_data\districts_4326.geojson")
+DISTRICTS_PATH = Path(r"D:\projects\irt_data\districts_4326.geojson")
 
 # Base output root; each metric uses its own subfolder under this
-BASE_OUTPUT_ROOT = Path(r"G:\My Drive\irt_data\processed")
+BASE_OUTPUT_ROOT = Path(r"D:\projects\irt_data\processed")
 
 # Scenarios (periods define requested averaging windows)
 SCENARIOS = {

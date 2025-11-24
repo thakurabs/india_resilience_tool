@@ -30,7 +30,7 @@ def dbg(*args, **kwargs):
 # CONFIG
 # -------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent
-DATA_DIR = Path(r"G:\My Drive\irt_data\\")
+DATA_DIR = Path(r"D:\projects\irt_data\\")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 ADM2_GEOJSON = DATA_DIR / "districts_4326.geojson"
