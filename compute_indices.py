@@ -102,7 +102,49 @@ METRICS = [
         "compute": "count_rainy_days",
         "params": {"thresh_mm": 2.5},
     },
+    {
+        "name": "Consecutive Summer Days (tasmax > 30 °C)",
+        "slug": "tasmax_csd_gt30",
+        "var": "tasmax",
+        "value_col": "consec_summer_days_gt_30C",
+        "units": "days",
+        "compute": "max_consecutive_summer_days",
+        "params": {"thresh_k": 30.0 + 273.15},
+    },
+    {
+        "name": "Tropical Nights (tasmin > 20 °C)",
+        "slug": "tasmin_tropical_nights_gt20",
+        "var": "tasmin",
+        "value_col": "tropical_nights_gt_20C",
+        "units": "days",
+        "compute": "count_days_above_threshold",
+        "params": {"thresh_k": 20.0 + 273.15},
+    },
+    {
+        "name": "Heat Wave Duration Index (HWDI)",
+        "slug": "hwdi_tasmax_plus5C",       # or whatever slug you're using
+        "var": "tasmax",
+        "value_col": "hwdi_max_spell_len",
+        "units": "days",
+        "compute": "heatwave_duration_index",
+        "params": {
+            "min_spell_days": 5,
+        },
+    },
+    {
+        "name": "Heat Wave Frequency Index (HWFI)",
+        "slug": "hwfi_tmean_90p",
+        "var": "tas",
+        "value_col": "hwfi_days_in_spells",
+        "units": "days",
+        "compute": "heatwave_frequency_index",
+        "params": {
+            "quantile": 0.9,
+            "min_spell_days": 5,
+        },
+    },
 ]
+
 
 # -----------------------------------------------------------------------------
 # LOGGING
@@ -223,6 +265,168 @@ def count_rainy_days(da_pr: xr.DataArray, mask: xr.DataArray, thresh_mm: float =
     daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
     return int((daily_mean > thresh_mm).sum().item())
 
+def _run_length_stats(mask: np.ndarray, min_len: int) -> tuple[int, int]:
+    """
+    Given a 1D boolean array `mask`, return:
+      - max_run: longest length of consecutive True values (only counting runs >= min_len)
+      - total_days: total number of True days that belong to runs of length >= min_len
+    """
+    max_run = 0
+    total_days = 0
+    current = 0
+
+    for v in mask:
+        if v:
+            current += 1
+        else:
+            if current >= min_len:
+                total_days += current
+                if current > max_run:
+                    max_run = current
+            current = 0
+
+    # handle trailing run
+    if current >= min_len:
+        total_days += current
+        if current > max_run:
+            max_run = current
+
+    return max_run, total_days
+
+
+def heatwave_duration_index(
+    da_tasmax: xr.DataArray,
+    mask: xr.DataArray,
+    anomaly_thresh_k: float = 5.0,       # kept for signature compatibility, not used directly
+    abs_thresh_k: float = 40.0 + 273.15, # 40°C in Kelvin
+    min_spell_days: int = 5,
+) -> int:
+    """
+    Heat Wave Duration Index (HWDI) for a single district and year.
+
+    Practical definition used here:
+      - Compute district-mean daily tasmax.
+      - Define a yearly "hot-day" threshold as the max of:
+          * the 90th percentile of daily tasmax for that year, and
+          * an absolute threshold abs_thresh_k (default 40°C in K).
+      - Flag a "heatwave day" when tasmax >= that threshold.
+      - Identify all spells of consecutive heatwave days; HWDI is the
+        length of the longest spell with length >= min_spell_days.
+
+    Returns 0 if there are no qualifying spells.
+
+    NOTE: This is a percentile-based variant of the IPCC/IMD-style definition.
+    If you later precompute a 30-year DOY climatology, you can swap the
+    threshold logic to use (climatology + 5°C) instead.
+    """
+    tasmax_masked = da_tasmax.where(mask)
+    daily_mean = tasmax_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    if "time" not in daily_mean.dims:
+        raise ValueError("Expected 'time' dimension in tasmax DataArray for HWDI.")
+
+    # Drop pure-NaN days (just in case)
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+
+    if daily_mean.size == 0:
+        return 0
+
+    # Yearly 90th percentile of district-mean tasmax
+    year_p90 = float(daily_mean.quantile(0.9).item())
+
+    # Heatwave threshold: high absolute temp AND extreme relative to the year's distribution
+    thresh = max(abs_thresh_k, year_p90)
+
+    hw = daily_mean >= thresh
+    hw = hw.fillna(False)
+    arr = np.asarray(hw.values, dtype=bool)
+
+    max_run, _ = _run_length_stats(arr, min_len=min_spell_days)
+    return int(max_run)
+
+def heatwave_frequency_index(
+    da_tas: xr.DataArray,
+    mask: xr.DataArray,
+    quantile: float = 0.9,
+    min_spell_days: int = 5,
+) -> int:
+    """
+    Heat Wave Frequency Index (HWFI) for a single district and year.
+
+    Practical definition used here (warm-spell days style):
+      - Compute district-mean daily tas (Tmean).
+      - Compute the yearly 90th percentile threshold of Tmean.
+      - Flag "hot-mean" days where tas > threshold.
+      - Identify all spells of consecutive hot-mean days with length >= min_spell_days.
+      - HWFI is the total number of days belonging to such spells.
+
+    Returns 0 if there are no qualifying spells.
+
+    NOTE: This mirrors the WSDI / warm spell days idea but uses yearly
+    percentiles instead of a fixed multi-decade DOY climatology. You
+    can later swap in DOY-based thresholds computed from 1990–2010 data.
+    """
+    tas_masked = da_tas.where(mask)
+    daily_mean = tas_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    if "time" not in daily_mean.dims:
+        raise ValueError("Expected 'time' dimension in tas DataArray for HWFI.")
+
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+    if daily_mean.size == 0:
+        return 0
+
+    # Yearly 90th percentile threshold for daily mean temperature
+    thresh = float(daily_mean.quantile(quantile).item())
+
+    hot = daily_mean > thresh
+    hot = hot.fillna(False)
+    arr = np.asarray(hot.values, dtype=bool)
+
+    _, total_days = _run_length_stats(arr, min_len=min_spell_days)
+    return int(total_days)
+
+def max_consecutive_summer_days(
+    da_tasmax: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_k: float = 30.0 + 273.15,
+) -> int:
+    """
+    Return the maximum number of consecutive 'summer days' in a year
+    for a single district.
+
+    A summer day is defined as a day where the district-mean tasmax > thresh_k.
+    """
+    # Apply the district mask and compute district-mean tasmax per day
+    tasmax_masked = da_tasmax.where(mask)
+    daily_mean = tasmax_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    # Boolean series: True on "summer days"
+    summer = (daily_mean > thresh_k)
+
+    # Treat NaNs as non-summer days
+    summer = summer.fillna(False)
+
+    arr = summer.values
+    if arr.size == 0:
+        return 0
+
+    # Ensure boolean dtype
+    arr = arr.astype(bool)
+
+    # Compute maximum run length of consecutive True values
+    max_run = 0
+    current = 0
+    for v in arr:
+        if v:
+            current += 1
+            if current > max_run:
+                max_run = current
+        else:
+            current = 0
+
+    return int(max_run)
+
 def yearly_files_for_dir(dirpath: Path) -> dict:
     files = glob.glob(str(dirpath / "*.nc"))
     out = {}
@@ -283,6 +487,45 @@ def validated_year_files(data_dir: Path) -> tuple[dict, dict]:
             bad[year] = {"path": p, "reason": "open_failed", "magic": magic}
     logging.info(f"Valid files: {len(valid)} ; Bad files: {len(bad)}")
     return dict(sorted(valid.items())), bad
+
+def existing_processed_years_for_model_scenario(
+    metric_root_path: Path,
+    state: str,
+    model: str,
+    scenario: str,
+) -> set[int]:
+    """
+    Return the set of years that have already been processed for this
+    (metric, state, model, scenario) combination.
+
+    We inspect the first district that has a <district>_yearly.csv.
+    If nothing exists yet, we return an empty set.
+    """
+    state_dir = metric_root_path / state
+    if not state_dir.exists():
+        return set()
+
+    for entry in state_dir.iterdir():
+        if not entry.is_dir():
+            continue
+        # Skip non-district dirs
+        if entry.name in {"validation_reports", "ensembles"}:
+            continue
+
+        yearly_csv = entry / model / scenario / f"{entry.name}_yearly.csv"
+        if yearly_csv.exists():
+            try:
+                df = pd.read_csv(yearly_csv, usecols=["year"])
+                years = set(int(y) for y in df["year"].dropna().unique())
+                return years
+            except Exception as e:
+                logging.warning(
+                    f"Could not read existing yearly CSV {yearly_csv} for "
+                    f"{model}/{scenario}: {e}"
+                )
+                return set()
+
+    return set()
 
 def discover_models(data_root: Path, scenarios: dict) -> list:
     models = set()
@@ -351,6 +594,29 @@ def process_metric_for_model_scenario(metric: dict,
     if not valid_year_files:
         logging.warning(f"[{slug}] No valid files to process in {data_dir}.")
         return
+
+    # --- Consistency check: skip if all years already processed ---
+    existing_years = existing_processed_years_for_model_scenario(
+        metric_root_path,
+        state="Telangana",
+        model=model,
+        scenario=scenario,
+    )
+    if existing_years:
+        current_years = set(valid_year_files.keys())
+        if current_years.issubset(existing_years):
+            logging.info(
+                f"[{slug}] All years {sorted(current_years)} already processed for "
+                f"Telangana/{model}/{scenario}; skipping recomputation."
+            )
+            return
+        else:
+            missing = sorted(current_years - existing_years)
+            logging.info(
+                f"[{slug}] Existing yearly outputs for {model}/{scenario}: "
+                f"{sorted(existing_years)}; missing years in NetCDF: {missing}. "
+                f"Recomputing all years for consistency."
+            )
 
     # -- Build masks from a sample file of THIS metric/variable (grid-safe) --
     sample_year, sample_path = next(iter(valid_year_files.items()))

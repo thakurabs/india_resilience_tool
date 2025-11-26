@@ -51,7 +51,7 @@ MIN_LAT, MAX_LAT = 5, 45.0
 #  - file patterns for district/state yearly series discovery
 VARIABLES = {
     "tas_gt32": {
-        "label": "Days > 32°C",
+        "label": "Summer Days",
         "periods_metric_col": "days_gt_32C",
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
@@ -61,7 +61,7 @@ VARIABLES = {
         ],
     },
     "rain_gt_2p5mm": {
-        "label": "Rainy days (> 2.5 mm)",
+        "label": "Rainy days (pr > 2.5 mm)",
         "periods_metric_col": "days_rain_gt_2p5mm",
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
@@ -70,7 +70,48 @@ VARIABLES = {
             "{root}/{state}/state_yearly_ensemble_stats.csv"
         ],
     },
+    "tasmax_csd_gt30": {
+        "label": "Consecutive Summer Days (tasmax > 30°C)",
+        "periods_metric_col": "consec_summer_days_gt_30C",
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "tasmin_tropical_nights_gt20": {
+        "label": "Tropical Nights (tasmin > 20°C)",
+        "periods_metric_col": "tropical_nights_gt_20C",
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "hwdi_tasmax_plus5C": {
+        "label": "Heat Wave Duration Index (HWDI)",
+        "periods_metric_col": "hwdi_max_spell_len",
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "hwfi_tmean_90p": {
+        "label": "Heat Wave Frequency Index (HWFI)",
+        "periods_metric_col": "hwfi_days_in_spells",
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
 }
+
 
 
 
@@ -689,6 +730,33 @@ st.title("India Resilience Tool")
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
 # -------------------------
+# Pre-build master CSVs for all indices (on app launch)
+# -------------------------
+for slug, cfg in VARIABLES.items():
+    processed_root = Path(
+        os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / slug)
+    ).resolve()
+    (processed_root / PILOT_STATE).mkdir(parents=True, exist_ok=True)
+    master_path = processed_root / PILOT_STATE / "master_metrics_by_district.csv"
+
+    try:
+        if master_needs_rebuild(master_path, processed_root, PILOT_STATE):
+            # Build quietly, without user-facing spinner.
+            from build_master_metrics import build_master_metrics
+
+            build_master_metrics(
+                str(processed_root),
+                PILOT_STATE,
+                metric_col_in_periods=cfg["periods_metric_col"],
+                out_path=str(master_path),
+                attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
+                verbose=False,
+            )
+    except Exception as e:
+        # Don't break the app if one index fails; the per-index fallback below will handle it.
+        print(f"[WARN] Pre-build of master CSV failed for index '{slug}': {e}")
+
+# -------------------------
 # Unified Index selection (single dropdown)
 # -------------------------
 with metric_ui_placeholder.container():
@@ -1031,8 +1099,15 @@ if numeric_vals.empty:
     st.error("No numeric values found for selected index & selection.")
     st.stop()
 
-
+# Default min/max from data
 vmin_default, vmax_default = float(numeric_vals.min()), float(numeric_vals.max())
+
+# If there is no spread (all values identical), pad the range a bit
+if vmin_default == vmax_default:
+    # Use a small padding relative to the magnitude, with a sensible floor
+    padding = max(abs(vmin_default) * 0.1, 1.0)
+    vmin_default -= padding
+    vmax_default += padding
 
 with st.sidebar:
     vmin_vmax = color_slider_placeholder.slider(
@@ -1043,6 +1118,7 @@ with st.sidebar:
         step=max((vmax_default - vmin_default) / 200.0, 0.01),
         key="color_range_slider",
     )
+
 vmin, vmax = float(vmin_vmax[0]), float(vmin_vmax[1])
 
 # Choose colormap: sequential for absolute, diverging for change
