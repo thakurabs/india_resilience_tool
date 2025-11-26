@@ -143,6 +143,29 @@ METRICS = [
             "min_spell_days": 5,
         },
     },
+    {
+        "name": "Heat Wave Duration Events (HWDI, # events)",
+        "slug": "hwdi_events_tasmax_plus5C",
+        "var": "tasmax",
+        "value_col": "hwdi_events_count",
+        "units": "events/year",
+        "compute": "heatwave_duration_events_index",
+        "params": {
+            "min_spell_days": 5,
+        },
+    },
+    {
+        "name": "Heat Wave Frequency Events (HWFI, # events)",
+        "slug": "hwfi_events_tmean_90p",
+        "var": "tas",
+        "value_col": "hwfi_events_count",
+        "units": "events/year",
+        "compute": "heatwave_frequency_events_index",
+        "params": {
+            "quantile": 0.9,
+            "min_spell_days": 5,
+        },
+    },
 ]
 
 
@@ -293,6 +316,30 @@ def _run_length_stats(mask: np.ndarray, min_len: int) -> tuple[int, int]:
 
     return max_run, total_days
 
+def _count_events(mask: np.ndarray, min_len: int) -> int:
+    """
+    Count the number of contiguous True-runs of length >= min_len
+    in a 1D boolean array.
+    """
+    arr = np.asarray(mask, dtype=bool)
+    if arr.size == 0:
+        return 0
+
+    events = 0
+    run_len = 0
+    for v in arr:
+        if v:
+            run_len += 1
+        else:
+            if run_len >= min_len:
+                events += 1
+            run_len = 0
+
+    # handle trailing run
+    if run_len >= min_len:
+        events += 1
+
+    return int(events)
 
 def heatwave_duration_index(
     da_tasmax: xr.DataArray,
@@ -344,6 +391,47 @@ def heatwave_duration_index(
     max_run, _ = _run_length_stats(arr, min_len=min_spell_days)
     return int(max_run)
 
+def heatwave_duration_events_index(
+    da_tasmax: xr.DataArray,
+    mask: xr.DataArray,
+    anomaly_thresh_k: float = 5.0,       # kept for signature compatibility
+    abs_thresh_k: float = 40.0 + 273.15, # 40°C in Kelvin
+    min_spell_days: int = 5,
+) -> int:
+    """
+    Heat Wave Duration Events Index (HWDI_events) for a single district and year.
+
+    Uses the SAME threshold logic as heatwave_duration_index, but instead of
+    returning the maximum spell length (days), it returns the NUMBER of
+    qualifying heatwave spells (events) in that year.
+
+    A qualifying event is any contiguous run of heatwave days with length
+    >= min_spell_days.
+    """
+    tasmax_masked = da_tasmax.where(mask)
+    daily_mean = tasmax_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    if "time" not in daily_mean.dims:
+        raise ValueError("Expected 'time' dimension in tasmax DataArray for HWDI_events.")
+
+    # Drop pure-NaN days
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+    if daily_mean.size == 0:
+        return 0
+
+    # Yearly 90th percentile of district-mean tasmax
+    year_p90 = float(daily_mean.quantile(0.9).item())
+
+    # Heatwave threshold (same as HWDI days)
+    thresh = max(abs_thresh_k, year_p90)
+
+    hw = daily_mean >= thresh
+    hw = hw.fillna(False)
+    arr = np.asarray(hw.values, dtype=bool)
+
+    events = _count_events(arr, min_len=min_spell_days)
+    return int(events)
+
 def heatwave_frequency_index(
     da_tas: xr.DataArray,
     mask: xr.DataArray,
@@ -385,6 +473,42 @@ def heatwave_frequency_index(
 
     _, total_days = _run_length_stats(arr, min_len=min_spell_days)
     return int(total_days)
+
+def heatwave_frequency_events_index(
+    da_tas: xr.DataArray,
+    mask: xr.DataArray,
+    quantile: float = 0.9,
+    min_spell_days: int = 5,
+) -> int:
+    """
+    Heat Wave Frequency Events Index (HWFI_events) for a single district and year.
+
+    Uses the SAME threshold logic as heatwave_frequency_index, but instead of
+    returning the total number of days in hot spells, it returns the NUMBER of
+    qualifying hot-mean spells (events) in that year.
+
+    A qualifying event is any contiguous run of 'hot-mean' days with length
+    >= min_spell_days.
+    """
+    tas_masked = da_tas.where(mask)
+    daily_mean = tas_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    if "time" not in daily_mean.dims:
+        raise ValueError("Expected 'time' dimension in tas DataArray for HWFI_events.")
+
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+    if daily_mean.size == 0:
+        return 0
+
+    # Yearly 90th percentile threshold for daily mean temperature
+    thresh = float(daily_mean.quantile(quantile).item())
+
+    hot = daily_mean > thresh
+    hot = hot.fillna(False)
+    arr = np.asarray(hot.values, dtype=bool)
+
+    events = _count_events(arr, min_len=min_spell_days)
+    return int(events)
 
 def max_consecutive_summer_days(
     da_tasmax: xr.DataArray,

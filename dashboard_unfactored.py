@@ -110,8 +110,27 @@ VARIABLES = {
             "{root}/{state}/state_yearly_ensemble_stats.csv"
         ],
     },
+    "hwdi_events_tasmax_plus5C": {
+        "label": "Heat Wave Duration Events (HWDI, # events)",
+        "periods_metric_col": "hwdi_events_count",
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "hwfi_events_tmean_90p": {
+        "label": "Heat Wave Frequency Events (HWFI, # events)",
+        "periods_metric_col": "hwfi_events_count",
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
 }
-
 
 
 
