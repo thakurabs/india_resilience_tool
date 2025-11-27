@@ -48,11 +48,16 @@ MIN_LAT, MAX_LAT = 5, 45.0
 # Each entry maps an "index slug" to:
 #  - label: what the user sees in the Index dropdown
 #  - periods_metric_col: the base metric name in master CSV (<metric>__<scenario>__<period>__<stat>)
+#  - description: human-readable definition used in tooltips
 #  - file patterns for district/state yearly series discovery
 VARIABLES = {
     "tas_gt32": {
         "label": "Summer Days",
         "periods_metric_col": "days_gt_32C",
+        "description": (
+            "Number of days in a year on which the district-average daily near-surface "
+            "air temperature exceeds 32 °C."
+        ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
         ],
@@ -63,6 +68,10 @@ VARIABLES = {
     "rain_gt_2p5mm": {
         "label": "Rainy days (pr > 2.5 mm)",
         "periods_metric_col": "days_rain_gt_2p5mm",
+        "description": (
+            "Number of days in a year on which the district-average daily rainfall "
+            "exceeds 2.5 mm/day."
+        ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
         ],
@@ -73,6 +82,10 @@ VARIABLES = {
     "tasmax_csd_gt30": {
         "label": "Consecutive Summer Days (tasmax > 30°C)",
         "periods_metric_col": "consec_summer_days_gt_30C",
+        "description": (
+            "For each year, the maximum length (in days) of any spell of consecutive days "
+            "on which the district-average daily maximum temperature (tasmax) exceeds 30 °C."
+        ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
         ],
@@ -83,6 +96,10 @@ VARIABLES = {
     "tasmin_tropical_nights_gt20": {
         "label": "Tropical Nights (tasmin > 20°C)",
         "periods_metric_col": "tropical_nights_gt_20C",
+        "description": (
+            "Number of nights in a year on which the district-average daily minimum "
+            "temperature (tasmin) exceeds 20 °C."
+        ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
         ],
@@ -93,6 +110,12 @@ VARIABLES = {
     "hwdi_tasmax_plus5C": {
         "label": "Heat Wave Duration Index (HWDI)",
         "periods_metric_col": "hwdi_max_spell_len",
+        "description": (
+            "For each year, the length (in days) of the longest heat-wave spell. "
+            "Heat-wave spells are defined from days on which the district-average daily "
+            "maximum temperature is at least about 5 °C warmer than its local historical "
+            "normal (i.e. persistent, unusually hot days)."
+        ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
         ],
@@ -103,6 +126,12 @@ VARIABLES = {
     "hwfi_tmean_90p": {
         "label": "Heat Wave Frequency Index (HWFI)",
         "periods_metric_col": "hwfi_days_in_spells",
+        "description": (
+            "For each year, the total number of days that occur inside heat-wave spells. "
+            "Heat-wave spells are identified using the district-average daily mean "
+            "temperature exceeding a high threshold (around the 90th percentile of the "
+            "historical distribution) and persisting for several consecutive days."
+        ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
         ],
@@ -113,6 +142,11 @@ VARIABLES = {
     "hwdi_events_tasmax_plus5C": {
         "label": "Heat Wave Duration Events (HWDI, # events)",
         "periods_metric_col": "hwdi_events_count",
+        "description": (
+            "Number of distinct heat-wave spells per year for the HWDI definition "
+            "(spells of unusually hot days based on daily maximum temperature being "
+            "roughly ≥5 °C above its local historical normal)."
+        ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
         ],
@@ -123,6 +157,82 @@ VARIABLES = {
     "hwfi_events_tmean_90p": {
         "label": "Heat Wave Frequency Events (HWFI, # events)",
         "periods_metric_col": "hwfi_events_count",
+        "description": (
+            "Number of distinct heat-wave spells per year for the HWFI definition "
+            "(spells of several consecutive days on which the district-average daily "
+            "mean temperature exceeds a high percentile threshold, ~90th percentile)."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "tasmax_csd_events_gt30": {
+        "label": "Consecutive Summer Day Events (tasmax > 30°C, spells ≥5 days)",
+        "periods_metric_col": "csd_events_gt_30C",
+        "description": (
+            "Number of distinct ‘Consecutive Summer Day’ spells per year, where each spell "
+            "is a run of at least 5 consecutive days on which the district-average daily "
+            "maximum temperature exceeds 30 °C."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "tasmax_annual_mean": {
+        "label": "Annual Max Temperature (tasmax)",
+        "periods_metric_col": "annual_tasmax_mean_C",
+        "description": (
+            "Annual mean of daily maximum near-surface air temperature (tasmax), in °C, "
+            "averaged over all days in the year for each district."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "tasmax_summer_mean": {
+        "label": "Summer Max Temperature (tasmax, Mar–May)",
+        "periods_metric_col": "summer_tasmax_mean_C",
+        "description": (
+            "Mean of daily maximum temperature (tasmax), in °C, averaged over the "
+            "summer season (March–May) for each year and district."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "tasmin_annual_mean": {
+        "label": "Annual Min Temperature (tasmin)",
+        "periods_metric_col": "annual_tasmin_mean_C",
+        "description": (
+            "Annual mean of daily minimum near-surface air temperature (tasmin), in °C, "
+            "averaged over all days in the year for each district."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "tasmin_winter_mean": {
+        "label": "Winter Min Temperature (tasmin, Dec–Feb)",
+        "periods_metric_col": "winter_tasmin_mean_C",
+        "description": (
+            "Mean of daily minimum temperature (tasmin), in °C, averaged over the winter "
+            "season (December–February) for each year and district."
+        ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
         ],
@@ -131,6 +241,7 @@ VARIABLES = {
         ],
     },
 }
+
 
 
 
@@ -390,22 +501,39 @@ def master_needs_rebuild(master_path: Path, processed_root: Path, state: str) ->
 def load_master_csv(path: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
-# Normalize master columns to <metric>__<scenario>__<period>__<stat>
+# Normalize master columns to <metric>__<scenario>__<period>__<suffix>
 def normalize_master_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Rename columns like
+        days_gt_32C_ssp585_2020_2040__mean
+    to
+        days_gt_32C__ssp585__2020-2040__mean
+
+    and likewise for:
+        __median, __std, __p05, __p95, __n_models, __models, __values_per_model.
+    """
     mapping = {}
     pat = re.compile(
-        rf"^(.+?)_"
+        r"^(.+?)_"
         r"(historical|ssp119|ssp126|ssp245|ssp370|ssp434|ssp460|ssp585)_"
-        r"(\d{4})_(\d{4})__(mean|median|std|p05|p95)$",
+        r"(\d{4})_(\d{4})__"
+        r"(mean|median|std|p05|p95|n_models|models|values_per_model)$",
         re.I,
     )
+
     for c in df.columns:
-        s = str(c)
+        s = str(c).strip()
         m = pat.match(s)
-        if m:
-            metric, scen, y0, y1, stat = m.groups()
-            mapping[c] = f"{metric.strip()}__{scen.lower().strip()}__{y0}-{y1}__{stat.lower().strip()}"
-    return df.rename(columns=mapping) if mapping else df
+        if not m:
+            continue
+        metric, scen, y0, y1, suffix = m.groups()
+        new = f"{metric.strip()}__{scen.lower().strip()}__{y0}-{y1}__{suffix.lower().strip()}"
+        mapping[c] = new
+
+    if mapping:
+        return df.rename(columns=mapping)
+    return df
+
 
 def parse_master_schema(cols):
     pat = re.compile(
@@ -699,6 +827,111 @@ def make_scenario_comparison_figure(
     fig.tight_layout()
     return fig, ax
 
+def make_state_boxplot_for_districts(
+    sel_districts_gdf: gpd.GeoDataFrame,
+    metric_col: str,
+    metric_label: str,
+    sel_state: str,
+    sel_scenario: str,
+    sel_period: str,
+    sel_stat: str,
+):
+    """
+    For a given state selection, build a boxplot where:
+      - each box = one district in the state
+      - y-values = distribution across models for the selected metric,
+        if a <metric>__...__values_per_model column exists;
+        otherwise fall back to a single value per district (metric_col).
+      - x-axis = districts, ordered by metric_col.
+    """
+    import matplotlib.pyplot as plt
+
+    if sel_districts_gdf is None or sel_districts_gdf.empty:
+        return None
+
+    # Try to find a per-model distribution column for this metric
+    metric_base = metric_col.rsplit("__", 1)[0]
+    vpm_col = f"{metric_base}__values_per_model"
+    use_vpm = vpm_col in sel_districts_gdf.columns
+
+    dist_to_values: dict[str, list[float]] = {}
+    central_value: dict[str, float] = {}
+
+    for _, row in sel_districts_gdf.iterrows():
+        dist_name = str(row.get("district_name") or "").strip()
+        if not dist_name:
+            continue
+
+        # Central value for ordering (the current stat)
+        try:
+            cv = pd.to_numeric(pd.Series([row.get(metric_col)]), errors="coerce").iloc[0]
+        except Exception:
+            cv = np.nan
+        if pd.isna(cv):
+            continue
+        cv = float(cv)
+        central_value[dist_name] = cv
+
+        # Build the distribution for this district
+        if use_vpm:
+            raw = row.get(vpm_col)
+            if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+                # fall back to single value if per-model data missing
+                dist_to_values.setdefault(dist_name, []).append(cv)
+                continue
+
+            vals = []
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+                if isinstance(parsed, dict):
+                    vals = [float(v) for v in parsed.values()]
+                elif isinstance(parsed, (list, tuple, np.ndarray, pd.Series)):
+                    vals = [float(v) for v in parsed]
+            except Exception:
+                vals = []
+
+            vals = [v for v in vals if pd.notna(v)]
+            if not vals:
+                vals = [cv]  # again, fall back
+            dist_to_values[dist_name] = vals
+        else:
+            # No values_per_model column at all: treat the single stat as
+            # a degenerate "distribution" so we still get a plot.
+            dist_to_values[dist_name] = [cv]
+
+    if not dist_to_values:
+        return None
+
+    # Debug: how many points per district?
+    for d, vals in dist_to_values.items():
+        dbg(f"Boxplot debug – {d}: n={len(vals)}, sample={vals[:5]}")
+
+    # Order districts by central value (highest on the left)
+    ordered_districts = sorted(
+        dist_to_values.keys(),
+        key=lambda d: central_value.get(d, 0.0),
+        reverse=True,
+    )
+    data = [dist_to_values[d] for d in ordered_districts]
+
+    n = len(ordered_districts)
+    fig_width = min(max(6.0, 0.3 * n), 16.0)
+
+    fig, ax = plt.subplots(figsize=(fig_width, 4.5), dpi=150)
+    ax.boxplot(data, positions=range(1, n + 1), showfliers=True)
+    ax.set_xticks(range(1, n + 1))
+    ax.set_xticklabels(ordered_districts, rotation=90, fontsize=7)
+
+    ax.set_ylabel(metric_label)
+    ax.set_title(
+        f"{sel_state}: {metric_label}\nScenario: {sel_scenario} · "
+        f"Period: {sel_period} · Stat: {sel_stat}"
+    )
+    ax.grid(True, axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+
+    return fig
+
 # -------------------------
 # Risk class helper (percentile → label)
 # -------------------------
@@ -795,6 +1028,16 @@ with metric_ui_placeholder.container():
     # Resolve per-index config
     VARIABLE_SLUG = selected_var
     VARCFG = VARIABLES[VARIABLE_SLUG]
+
+    # --- NEW: small info button + text description for the selected index ---
+    desc = VARCFG.get("description", "").strip()
+    if desc:
+        # # A tiny ℹ️ button with a tooltip on hover
+        # info_col, _ = st.columns([0.12, 0.88])
+        # with info_col:
+        #     st.button("ℹ️", help=desc)
+        # # And a short textual caption under the dropdown
+        st.caption(desc)
 
     PROCESSED_ROOT = Path(
         os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / VARIABLE_SLUG)
@@ -1682,6 +1925,12 @@ with col2:
         # else pick lexicographically earliest period
         candidates.sort(key=lambda x: x[1])
         return candidates[0][0]
+    
+    # If the sidebar says "District = All" and a state is selected,
+    # we intentionally ignore any previous map click and go into
+    # state-summary mode.
+    if selected_state != "All" and st.session_state.get("selected_district", "All") == "All":
+        matched_row = None
 
     # ----------- STATE SUMMARY MODE (no district selected) -----------
     if matched_row is None or matched_row.empty:
@@ -1689,36 +1938,34 @@ with col2:
             ensemble, per_model_df, sel_districts_gdf = compute_state_metrics_from_merged(
                 merged, adm1, metric_col, selected_state
             )
+
             st.subheader(f"{selected_state} — State summary")
             st.markdown(
                 f"**Index:** {VARIABLES[VARIABLE_SLUG]['label']}  \n"
                 f"**Scenario:** {sel_scenario}  \n"
                 f"**Period:** {sel_period}"
             )
-            if ensemble.get("n_districts", 0) > 0:
-                stat_rows = [
-                    {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
-                    {"Statistic": "median", "Value": f"{ensemble['median']:.2f}"},
-                    {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
-                    {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
-                    {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
-                    {"Statistic": "n_districts", "Value": int(ensemble["n_districts"])},
-                ]
-                st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
-            else:
-                st.info("No numeric district values found for this state & selection.")
-            if not per_model_df.empty:
-                st.markdown("**Per-model state averages**")
-                st.dataframe(
-                    per_model_df.rename(
-                        columns={"value": "state_avg", "n_districts": "n_districts_used"}
-                    ),
-                    use_container_width=True,
-                )
-            if sel_districts_gdf is not None and not sel_districts_gdf.empty:
-                st.caption(f"Districts used: {len(sel_districts_gdf)}")
 
-            # State-level yearly PDF (unchanged, but uses VARCFG label)
+            # --- Expander 2: District-wise distribution across models (boxplot) ---
+            with st.expander("District-wise distribution across models", expanded=False):
+                fig_box = make_state_boxplot_for_districts(
+                    sel_districts_gdf=sel_districts_gdf,
+                    metric_col=metric_col,
+                    metric_label=VARIABLES[VARIABLE_SLUG]["label"],
+                    sel_state=selected_state,
+                    sel_scenario=sel_scenario,
+                    sel_period=sel_period,
+                    sel_stat=sel_stat,
+                )
+                if fig_box is not None:
+                    st.pyplot(fig_box, use_container_width=True)
+                else:
+                    st.info(
+                        "Per-model district data is not available for this index, "
+                        "so the boxplot could not be generated."
+                    )
+
+            # --- Helper functions for state-level yearly time-series (unchanged) ---
             @st.cache_data
             def _load_state_yearly(ts_root_str: str, state_dir: str) -> pd.DataFrame:
                 f = Path(ts_root_str) / state_dir / "state_yearly_ensemble_stats.csv"
@@ -1738,12 +1985,18 @@ with col2:
                 metric_label: str,
                 out_dir: Path,
             ) -> Optional[Path]:
-                d = df_yearly.copy()
-                if d.empty:
+                if df_yearly is None or df_yearly.empty:
                     return None
+                d = df_yearly.copy()
                 d = d[
                     (d["state"].astype(str).str.strip().str.lower() == state_name.strip().lower())
-                    & (d["scenario"].astype(str).str.strip().str.lower() == scenario_name.strip().lower())
+                    & (
+                        d["scenario"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        == scenario_name.strip().lower()
+                    )
                 ]
                 if d.empty:
                     return None
@@ -1753,18 +2006,28 @@ with col2:
                 d = d.dropna(subset=["year"]).sort_values("year")
                 if d.empty:
                     return None
+
                 fig, ax = plt.subplots(figsize=(7.5, 4.5), dpi=150)
-                ax.plot(d["year"], d["mean"], linewidth=3.0, label="Mean")
-                if "p05" in d.columns:
-                    ax.plot(d["year"], d["p05"], linewidth=1.5, label="5th percentile")
-                if "p95" in d.columns:
-                    ax.plot(d["year"], d["p95"], linewidth=1.5, label="95th percentile")
+                x = d["year"]
+                y = d["mean"]
+                ax.plot(x, y, marker="o", linewidth=1.5, label="Mean")
+
+                if "p05" in d.columns and "p95" in d.columns:
+                    ax.fill_between(
+                        x,
+                        d["p05"],
+                        d["p95"],
+                        alpha=0.2,
+                        label="5–95% range",
+                    )
+
                 ax.set_xlabel("Year")
                 ax.set_ylabel(metric_label)
-                ax.set_title(f"{state_name} • {metric_label} • {scenario_name}")
-                ax.grid(True, linestyle="--", alpha=0.35)
+                ax.set_title(f"{state_name} — {metric_label} ({scenario_name})")
+                ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
                 ax.legend(frameon=False, ncol=3, fontsize=9)
                 out_dir.mkdir(parents=True, exist_ok=True)
+
                 safe = lambda s: "".join(
                     c if c.isalnum() or c in ("-", "_") else "_" for c in str(s)
                 )
@@ -1777,29 +2040,60 @@ with col2:
                 plt.close(fig)
                 return pdf_path
 
-            _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
-            pdf_path = _make_state_yearly_pdf(
-                _yearly_df,
-                selected_state,
-                sel_scenario,
-                VARIABLES[VARIABLE_SLUG]["label"],
-                OUTDIR,
-            )
-            if pdf_path and pdf_path.exists():
-                with open(pdf_path, "rb") as fh:
-                    st.download_button(
-                        "⬇️ Download yearly time-series (PDF)",
-                        data=fh.read(),
-                        file_name=pdf_path.name,
-                        mime="application/pdf",
+            # --- Expander 1: State summary statistics (like district Risk summary) ---
+            with st.expander("State summary statistics", expanded=True):
+                if ensemble.get("n_districts", 0) > 0:
+                    stat_rows = [
+                        {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
+                        {"Statistic": "median", "Value": f"{ensemble['median']:.2f}"},
+                        {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
+                        {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
+                        {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
+                        {"Statistic": "n_districts", "Value": int(ensemble["n_districts"])},
+                    ]
+                    st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
+                else:
+                    st.info("No numeric district values found for this state & selection.")
+
+                if not per_model_df.empty:
+                    st.markdown("**Per-model state averages**")
+                    st.dataframe(
+                        per_model_df.rename(
+                            columns={"value": "state_avg", "n_districts": "n_districts_used"}
+                        ),
                         use_container_width=True,
-                        key="btn_state_pdf_dl",
                     )
-                open_in_new_tab_link(
-                    pdf_path, "🗎 Open yearly figure in a new tab", mime="application/pdf"
+
+                if sel_districts_gdf is not None and not sel_districts_gdf.empty:
+                    st.caption(f"Districts used: {len(sel_districts_gdf)}")
+
+
+
+            # --- Expander 3: Trend over time (state-average) ---
+            with st.expander("Trend over time (state average)", expanded=False):
+                _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
+                pdf_path = _make_state_yearly_pdf(
+                    _yearly_df,
+                    selected_state,
+                    sel_scenario,
+                    VARIABLES[VARIABLE_SLUG]["label"],
+                    PROCESSED_ROOT / "pdf_plots",
                 )
-            else:
-                st.caption("No yearly time-series available for this state/scenario.")
+                if pdf_path is not None and pdf_path.exists():
+                    with open(pdf_path, "rb") as fh:
+                        st.download_button(
+                            "⬇️ Download yearly time-series (PDF)",
+                            data=fh.read(),
+                            file_name=pdf_path.name,
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="btn_state_pdf_dl",
+                        )
+                    open_in_new_tab_link(
+                        pdf_path, "🗎 Open yearly figure in a new tab", mime="application/pdf"
+                    )
+                else:
+                    st.caption("No yearly time-series available for this state/scenario.")
         else:
             st.info(
                 "Click a district on the map or pick one from the sidebar to see full metrics here."

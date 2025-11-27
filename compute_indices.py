@@ -85,22 +85,13 @@ MIN_YEARS_ABSOLUTE = 5
 # params: args passed to the compute function
 METRICS = [
     {
-        "name": "Days > 32 °C (tas)",
-        "slug": "tas_gt32",
-        "var": "tas",
-        "value_col": "days_gt_32C",
+        "name": "Summer Days",
+        "slug": "tasmax_gt30",
+        "var": "tasmax",
+        "value_col": "days_gt_30C",
         "units": "days",
         "compute": "count_days_above_threshold",
-        "params": {"thresh_k": 32.0 + 273.15},  # 305.15 K
-    },
-    {
-        "name": "Rainy Day > 2.5 mm (pr)",
-        "slug": "rain_gt_2p5mm",
-        "var": "pr",
-        "value_col": "days_rain_gt_2p5mm",
-        "units": "days",
-        "compute": "count_rainy_days",
-        "params": {"thresh_mm": 2.5},
+        "params": {"thresh_k": 30.0 + 273.15},  # 305.15 K
     },
     {
         "name": "Consecutive Summer Days (tasmax > 30 °C)",
@@ -110,6 +101,15 @@ METRICS = [
         "units": "days",
         "compute": "max_consecutive_summer_days",
         "params": {"thresh_k": 30.0 + 273.15},
+    },
+    {
+        "name": "Rainy Day > 2.5 mm (pr)",
+        "slug": "rain_gt_2p5mm",
+        "var": "pr",
+        "value_col": "days_rain_gt_2p5mm",
+        "units": "days",
+        "compute": "count_rainy_days",
+        "params": {"thresh_mm": 2.5},
     },
     {
         "name": "Tropical Nights (tasmin > 20 °C)",
@@ -164,6 +164,58 @@ METRICS = [
         "params": {
             "quantile": 0.9,
             "min_spell_days": 5,
+        },
+    },
+    {
+        "name": "Consecutive Summer Day Events (tasmax > 30°C, spells ≥5 days)",
+        "slug": "tasmax_csd_events_gt30",
+        "var": "tasmax",
+        "value_col": "csd_events_gt_30C",
+        "units": "events/year",
+        "compute": "consecutive_summer_day_events",
+        "params": {
+            "thresh_k": 30.0 + 273.15,
+            "min_len": 5,
+        },
+    },
+    {
+        "name": "Annual Max Temperature (tasmax)",
+        "slug": "tasmax_annual_mean",
+        "var": "tasmax",
+        "value_col": "annual_tasmax_mean_C",
+        "units": "°C",
+        "compute": "annual_mean_temperature",
+        "params": {},
+    },
+    {
+        "name": "Summer Max Temperature (tasmax, Mar–May)",
+        "slug": "tasmax_summer_mean",
+        "var": "tasmax",
+        "value_col": "summer_tasmax_mean_C",
+        "units": "°C",
+        "compute": "seasonal_mean_temperature",
+        "params": {
+            "months": [3, 4, 5],
+        },
+    },
+    {
+        "name": "Annual Min Temperature (tasmin)",
+        "slug": "tasmin_annual_mean",
+        "var": "tasmin",
+        "value_col": "annual_tasmin_mean_C",
+        "units": "°C",
+        "compute": "annual_mean_temperature",
+        "params": {},
+    },
+    {
+        "name": "Winter Min Temperature (tasmin, Dec–Feb)",
+        "slug": "tasmin_winter_mean",
+        "var": "tasmin",
+        "value_col": "winter_tasmin_mean_C",
+        "units": "°C",
+        "compute": "seasonal_mean_temperature",
+        "params": {
+            "months": [12, 1, 2],
         },
     },
 ]
@@ -339,6 +391,90 @@ def _count_events(mask: np.ndarray, min_len: int) -> int:
     if run_len >= min_len:
         events += 1
 
+    return int(events)
+
+def annual_mean_temperature(
+    da_temp: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """
+    Annual mean temperature (°C) for a single district and year.
+
+    Works for tas, tasmax, tasmin (K). Returns mean in °C.
+    """
+    temp_masked = da_temp.where(mask)
+    daily_mean = temp_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    if "time" not in daily_mean.dims:
+        raise ValueError("Expected 'time' dimension in temperature DataArray.")
+
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+    if daily_mean.size == 0:
+        return np.nan
+
+    annual_mean_k = float(daily_mean.mean(dim="time").item())
+    return annual_mean_k - 273.15
+
+
+def seasonal_mean_temperature(
+    da_temp: xr.DataArray,
+    mask: xr.DataArray,
+    months: list[int],
+) -> float:
+    """
+    Seasonal mean temperature (°C) for a given list of months.
+
+    E.g. months=[3,4,5] for MAM, months=[12,1,2] for DJF-like.
+    """
+    temp_masked = da_temp.where(mask)
+
+    if "time" not in temp_masked.dims:
+        raise ValueError("Expected 'time' dimension in temperature DataArray.")
+
+    # Filter by months
+    month_idx = temp_masked["time"].dt.month
+    temp_season = temp_masked.sel(time=month_idx.isin(months))
+
+    if temp_season.sizes.get("time", 0) == 0:
+        return np.nan
+
+    daily_mean = temp_season.mean(dim=("lat", "lon"), skipna=True)
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+    if daily_mean.size == 0:
+        return np.nan
+
+    seasonal_mean_k = float(daily_mean.mean(dim="time").item())
+    return seasonal_mean_k - 273.15
+
+
+def consecutive_summer_day_events(
+    da_tasmax: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_k: float = 30.0 + 273.15,
+    min_len: int = 5,
+) -> int:
+    """
+    Consecutive Summer Day Events:
+      Number of distinct spells (events) of length >= min_len where
+      district-mean daily tasmax > thresh_k.
+
+    This is the "events" counterpart of the Consecutive Summer Days index.
+    """
+    tasmax_masked = da_tasmax.where(mask)
+    daily_mean = tasmax_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    if "time" not in daily_mean.dims:
+        raise ValueError("Expected 'time' dimension in tasmax DataArray.")
+
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+    if daily_mean.size == 0:
+        return 0
+
+    summer = daily_mean > thresh_k
+    summer = summer.fillna(False)
+    arr = np.asarray(summer.values, dtype=bool)
+
+    events = _count_events(arr, min_len=min_len)
     return int(events)
 
 def heatwave_duration_index(
