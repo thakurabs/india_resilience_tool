@@ -55,22 +55,8 @@ VARIABLES = {
         "label": "Summer Days",
         "periods_metric_col": "days_gt_32C",
         "description": (
-            "Number of days in a year on which the district-average daily near-surface "
-            "air temperature exceeds 32 °C."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "rain_gt_2p5mm": {
-        "label": "Rainy days (pr > 2.5 mm)",
-        "periods_metric_col": "days_rain_gt_2p5mm",
-        "description": (
-            "Number of days in a year on which the district-average daily rainfall "
-            "exceeds 2.5 mm/day."
+            "Number of days in a year on which the district-average daily maximum near-surface "
+            "air temperature exceeds 30 °C."
         ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
@@ -80,11 +66,26 @@ VARIABLES = {
         ],
     },
     "tasmax_csd_gt30": {
-        "label": "Consecutive Summer Days (tasmax > 30°C)",
+        "label": "Consecutive Summer Days",
         "periods_metric_col": "consec_summer_days_gt_30C",
         "description": (
             "For each year, the maximum length (in days) of any spell of consecutive days "
-            "on which the district-average daily maximum temperature (tasmax) exceeds 30 °C."
+            "on which the district-average daily maximum temperature exceeds 30 °C."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "tasmax_csd_events_gt30": {
+        "label": "Consecutive Summer Day Events",
+        "periods_metric_col": "csd_events_gt_30C",
+        "description": (
+            "Number of distinct ‘Consecutive Summer Day’ spells per year, where each spell "
+            "is a run of at least 5 consecutive days on which the district-average daily "
+            "maximum temperature exceeds 30 °C."
         ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
@@ -94,11 +95,11 @@ VARIABLES = {
         ],
     },
     "tasmin_tropical_nights_gt20": {
-        "label": "Tropical Nights (tasmin > 20°C)",
+        "label": "Tropical Nights",
         "periods_metric_col": "tropical_nights_gt_20C",
         "description": (
             "Number of nights in a year on which the district-average daily minimum "
-            "temperature (tasmin) exceeds 20 °C."
+            "temperature exceeds 20 °C."
         ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
@@ -108,7 +109,7 @@ VARIABLES = {
         ],
     },
     "hwdi_tasmax_plus5C": {
-        "label": "Heat Wave Duration Index (HWDI)",
+        "label": "Heat Wave Duration Index (HWDI, #Days)",
         "periods_metric_col": "hwdi_max_spell_len",
         "description": (
             "For each year, the length (in days) of the longest heat-wave spell. "
@@ -124,7 +125,7 @@ VARIABLES = {
         ],
     },
     "hwfi_tmean_90p": {
-        "label": "Heat Wave Frequency Index (HWFI)",
+        "label": "Heat Wave Frequency Index (HWFI, #Days)",
         "periods_metric_col": "hwfi_days_in_spells",
         "description": (
             "For each year, the total number of days that occur inside heat-wave spells. "
@@ -140,7 +141,7 @@ VARIABLES = {
         ],
     },
     "hwdi_events_tasmax_plus5C": {
-        "label": "Heat Wave Duration Events (HWDI, # events)",
+        "label": "Heat Wave Duration Index (HWDI, #Events)",
         "periods_metric_col": "hwdi_events_count",
         "description": (
             "Number of distinct heat-wave spells per year for the HWDI definition "
@@ -155,7 +156,7 @@ VARIABLES = {
         ],
     },
     "hwfi_events_tmean_90p": {
-        "label": "Heat Wave Frequency Events (HWFI, # events)",
+        "label": "Heat Wave Frequency Index (HWFI, #Events)",
         "periods_metric_col": "hwfi_events_count",
         "description": (
             "Number of distinct heat-wave spells per year for the HWFI definition "
@@ -169,23 +170,8 @@ VARIABLES = {
             "{root}/{state}/state_yearly_ensemble_stats.csv"
         ],
     },
-    "tasmax_csd_events_gt30": {
-        "label": "Consecutive Summer Day Events (tasmax > 30°C, spells ≥5 days)",
-        "periods_metric_col": "csd_events_gt_30C",
-        "description": (
-            "Number of distinct ‘Consecutive Summer Day’ spells per year, where each spell "
-            "is a run of at least 5 consecutive days on which the district-average daily "
-            "maximum temperature exceeds 30 °C."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
     "tasmax_annual_mean": {
-        "label": "Annual Max Temperature (tasmax)",
+        "label": "Annual Max Temperature",
         "periods_metric_col": "annual_tasmax_mean_C",
         "description": (
             "Annual mean of daily maximum near-surface air temperature (tasmax), in °C, "
@@ -199,7 +185,7 @@ VARIABLES = {
         ],
     },
     "tasmax_summer_mean": {
-        "label": "Summer Max Temperature (tasmax, Mar–May)",
+        "label": "Summer Max Temperature",
         "periods_metric_col": "summer_tasmax_mean_C",
         "description": (
             "Mean of daily maximum temperature (tasmax), in °C, averaged over the "
@@ -213,7 +199,7 @@ VARIABLES = {
         ],
     },
     "tasmin_annual_mean": {
-        "label": "Annual Min Temperature (tasmin)",
+        "label": "Annual Min Temperature",
         "periods_metric_col": "annual_tasmin_mean_C",
         "description": (
             "Annual mean of daily minimum near-surface air temperature (tasmin), in °C, "
@@ -227,11 +213,25 @@ VARIABLES = {
         ],
     },
     "tasmin_winter_mean": {
-        "label": "Winter Min Temperature (tasmin, Dec–Feb)",
+        "label": "Winter Min Temperature",
         "periods_metric_col": "winter_tasmin_mean_C",
         "description": (
             "Mean of daily minimum temperature (tasmin), in °C, averaged over the winter "
             "season (December–February) for each year and district."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "rain_gt_2p5mm": {
+        "label": "Rainy days",
+        "periods_metric_col": "days_rain_gt_2p5mm",
+        "description": (
+            "Number of days in a year on which the district-average daily rainfall "
+            "exceeds 2.5 mm/day."
         ),
         "district_yearly_candidates": [
             "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
@@ -1947,7 +1947,7 @@ with col2:
             )
 
             # --- Expander 2: District-wise distribution across models (boxplot) ---
-            with st.expander("District-wise distribution across models", expanded=False):
+            with st.expander("District-wise distribution across models", expanded=True):
                 fig_box = make_state_boxplot_for_districts(
                     sel_districts_gdf=sel_districts_gdf,
                     metric_col=metric_col,
@@ -2041,7 +2041,7 @@ with col2:
                 return pdf_path
 
             # --- Expander 1: State summary statistics (like district Risk summary) ---
-            with st.expander("State summary statistics", expanded=True):
+            with st.expander("State summary statistics", expanded=False):
                 if ensemble.get("n_districts", 0) > 0:
                     stat_rows = [
                         {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
@@ -2055,8 +2055,9 @@ with col2:
                 else:
                     st.info("No numeric district values found for this state & selection.")
 
+            with st.expander("Per-model state averages", expanded=False):
                 if not per_model_df.empty:
-                    st.markdown("**Per-model state averages**")
+                    # st.markdown("**Per-model state averages**")
                     st.dataframe(
                         per_model_df.rename(
                             columns={"value": "state_avg", "n_districts": "n_districts_used"}
