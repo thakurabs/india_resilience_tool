@@ -4,6 +4,7 @@ import io, os, re, json, zipfile, shutil, subprocess, unicodedata, difflib
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
+from functools import lru_cache  # NEW
 
 import numpy as np
 import pandas as pd
@@ -329,33 +330,119 @@ def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         adm1["shapeName"] = adm1["state_name"]
     return adm1.reset_index(drop=True)
 
-# -------------------------
-# Color precompute
-# -------------------------
 @st.cache_data
-def precompute_fillcolor(merged_json: str, metric_col: str, vmin: float, vmax: float, cmap_name: str = "Reds") -> str:
-    merged_gdf = gpd.read_file(io.StringIO(merged_json))
+def enrich_adm2_with_state_names(
+    _adm2_gdf: gpd.GeoDataFrame,
+    _adm1_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Attach/clean state_name for each district using a single spatial join.
+    Cached so we don't redo expensive GeoPandas operations on every rerun.
+
+    Note: leading underscores on arguments tell Streamlit *not* to hash
+    these (GeoDataFrames are unhashable), so they are effectively treated
+    as "external state" for caching purposes.
+    """
+    # Work on local copies so we don't mutate the originals
+    adm2_gdf = _adm2_gdf.copy()
+    adm1_gdf = _adm1_gdf.copy()
+
+    if "state_name" not in adm2_gdf.columns:
+        adm2_gdf["state_name"] = "Unknown"
+    if "district_name" not in adm2_gdf.columns:
+        adm2_gdf["district_name"] = adm2_gdf.index.astype(str)
+
+    # Representative points for robust join
+    adm2_pts = adm2_gdf.copy()
+    adm2_pts["geometry"] = adm2_pts.geometry.representative_point()
+
+    try:
+        joined = gpd.sjoin(
+            adm2_pts[["geometry"]],
+            adm1_gdf[["geometry", "shapeName"]],
+            how="left",
+            predicate="within",
+        )
+        if "shapeName" in joined.columns:
+            mapping = joined["shapeName"].to_dict()
+            for adm2_idx, state_name_val in mapping.items():
+                if pd.notna(state_name_val):
+                    adm2_gdf.at[adm2_idx, "state_name"] = str(state_name_val).strip()
+    except Exception:
+        # If for some reason sjoin fails, fall back to existing state_name values.
+        pass
+
+    # Robust fallback: ensure no missing/blank state_name
+    missing = adm2_gdf["state_name"].isna() | (
+        adm2_gdf["state_name"].astype(str).str.strip() == ""
+    )
+    if missing.any():
+        for idx in adm2_gdf[missing].index:
+            val = adm2_gdf.at[idx, "state_name"]
+            if not (pd.notna(val) and str(val).strip()):
+                adm2_gdf.at[idx, "state_name"] = "Unknown"
+
+    return adm2_gdf
+
+# -------------------------
+# Color helpers (no GeoJSON round-trip)
+# -------------------------
+@lru_cache(maxsize=16)
+def _get_cmap_hex_list(cmap_name: str) -> list[str]:
+    """
+    Small helper to cache colormap → list of hex colors.
+    This avoids re-instantiating colormaps on every interaction.
+    """
     try:
         cmap = mpcm.get_cmap(cmap_name)
     except Exception:
         import matplotlib as mpl
         cmap = mpl.colormaps.get_cmap(cmap_name)
     nsteps = 256
-    hex_colors = [mcolors.to_hex(cmap(i / (nsteps - 1))) for i in range(nsteps)]
+    return [mcolors.to_hex(cmap(i / (nsteps - 1))) for i in range(nsteps)]
+
+
+def apply_fillcolor(
+    merged_gdf: gpd.GeoDataFrame,
+    metric_col: str,
+    vmin: float,
+    vmax: float,
+    cmap_name: str = "Reds",
+) -> gpd.GeoDataFrame:
+    """
+    Add a 'fillColor' column directly to the existing GeoDataFrame,
+    avoiding expensive GeoJSON → GeoDataFrame conversions.
+
+    - merged_gdf is modified in-place and also returned for convenience.
+    - 'metric_col' is the column to color by (e.g. absolute or delta).
+    """
+    # Robust numeric series
+    vals = pd.to_numeric(
+        merged_gdf.get(metric_col, pd.Series([], dtype=float)),
+        errors="coerce",
+    )
+
+    hex_colors = _get_cmap_hex_list(cmap_name)
+    nsteps = len(hex_colors)
 
     def color_for_val(v):
         if pd.isna(v):
             return "#cccccc"
         try:
-            t = (float(v) - vmin) / (vmax - vmin) if vmax != vmin else 0.5
+            if vmax == vmin:
+                t = 0.5
+            else:
+                t = (float(v) - vmin) / (vmax - vmin)
             t = max(0.0, min(1.0, t))
-            return hex_colors[int(t * (nsteps - 1))]
+            idx = int(t * (nsteps - 1))
+            return hex_colors[idx]
         except Exception:
             return "#cccccc"
 
-    merged_gdf["fillColor"] = merged_gdf[metric_col].apply(color_for_val)
-    merged_gdf["_metric_val"] = pd.to_numeric(merged_gdf[metric_col], errors="coerce")
-    return merged_gdf.to_json()
+    merged_gdf["fillColor"] = vals.apply(color_for_val)
+    merged_gdf["_metric_val"] = vals
+    return merged_gdf
+
 
 # -------------------------
 # State metrics helper
@@ -1090,11 +1177,44 @@ with metric_ui_placeholder.container():
         )
         st.stop()
 
-    # Load + parse schema (for scenario/period/stat only)
-    with st.spinner("Loading master CSV..."):
-        df = load_master_csv(str(MASTER_CSV_PATH))
-    df = normalize_master_columns(df)
-    schema_items, metrics, by_metric = parse_master_schema(df.columns)
+    # Load + parse schema (for scenario/period/stat only), cached by file mtime
+    def _load_master_and_schema(master_path: Path, slug: str):
+        cache = st.session_state.setdefault("_master_cache", {})
+        try:
+            mtime = master_path.stat().st_mtime
+        except Exception:
+            mtime = None
+
+        entry = cache.get(slug)
+        if entry is not None and entry.get("mtime") == mtime:
+            return (
+                entry["df"],
+                entry["schema_items"],
+                entry["metrics"],
+                entry["by_metric"],
+            )
+
+        # (Re)load from disk
+        with st.spinner("Loading master CSV..."):
+            df_local = load_master_csv(str(master_path))
+
+        df_local = normalize_master_columns(df_local)
+        schema_items_local, metrics_local, by_metric_local = parse_master_schema(
+            df_local.columns
+        )
+
+        cache[slug] = {
+            "df": df_local,
+            "schema_items": schema_items_local,
+            "metrics": metrics_local,
+            "by_metric": by_metric_local,
+            "mtime": mtime,
+        }
+        return df_local, schema_items_local, metrics_local, by_metric_local
+
+    df, schema_items, metrics, by_metric = _load_master_and_schema(
+        MASTER_CSV_PATH, VARIABLE_SLUG
+    )
     if not metrics:
         st.error("No ensemble statistic columns found in the master CSV. Did the builder run?")
         st.stop()
@@ -1195,31 +1315,9 @@ if force_btn:
 # Build adm1 & enrich adm2 state names
 # -------------------------
 adm1 = build_adm1_from_adm2(adm2)
-if "state_name" not in adm2.columns:
-    adm2["state_name"] = "Unknown"
-if "district_name" not in adm2.columns:
-    adm2["district_name"] = adm2.index.astype(str)
 
 with st.spinner("Enriching district data with state names..."):
-    adm2_pts = adm2.copy()
-    adm2_pts["geometry"] = adm2_pts.geometry.representative_point()
-    joined = gpd.sjoin(
-        adm2_pts[["geometry"]], adm1[["geometry", "shapeName"]], how="left", predicate="within"
-    )
-    if "shapeName" in joined.columns:
-        mapping = joined["shapeName"].to_dict()
-        for adm2_idx, state_name_val in mapping.items():
-            if pd.notna(state_name_val):
-                adm2.at[adm2_idx, "state_name"] = str(state_name_val).strip()
-    # robust fallback
-    missing = adm2["state_name"].isna() | (adm2["state_name"].astype(str).str.strip() == "")
-    if missing.any():
-        for idx in adm2[missing].index:
-            adm2.at[idx, "state_name"] = (
-                adm2.at[idx, "state_name"]
-                if pd.notna(adm2.at[idx, "state_name"])
-                else "Unknown"
-            )
+    adm2 = enrich_adm2_with_state_names(adm2, adm1)
 
 # Sync pending selections
 if "pending_selected_state" in st.session_state:
@@ -1398,10 +1496,14 @@ else:
     )
 
 with st.spinner("Computing colors..."):
-    merged_json = precompute_fillcolor(
-        merged.to_json(), map_value_col, vmin, vmax, cmap_name=cmap_name
+    merged = apply_fillcolor(
+        merged,
+        map_value_col,
+        vmin,
+        vmax,
+        cmap_name=cmap_name,
     )
-    merged = gpd.read_file(io.StringIO(merged_json))
+
 
 # -------------------------
 # Build ranking table (district-level)
