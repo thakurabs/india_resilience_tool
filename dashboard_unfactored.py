@@ -29,9 +29,10 @@ def dbg(*args, **kwargs):
 # -------------------------
 # CONFIG
 # -------------------------
-PROJECT_ROOT = Path(__file__).resolve().parent
-DATA_DIR = Path(r"D:\projects\irt_data\\")
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+# PROJECT_ROOT = Path(__file__).resolve().parent
+# DATA_DIR = Path(r"D:\projects\irt_data\\")
+# DATA_DIR.mkdir(parents=True, exist_ok=True)
+from paths import DATA_DIR
 
 ADM2_GEOJSON = DATA_DIR / "districts_4326.geojson"
 ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None

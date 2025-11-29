@@ -35,14 +35,16 @@ import json
 # CONFIG
 # -----------------------------------------------------------------------------
 
-# Root where all model/scenario data live
-DATA_ROOT = Path(r"D:\projects\irt_data\r1i1p1f1")
+# # Root where all model/scenario data live
+# DATA_ROOT = Path(r"D:\projects\irt_data\r1i1p1f1")
 
-# Shapefile / GeoJSON with all India districts
-DISTRICTS_PATH = Path(r"D:\projects\irt_data\districts_4326.geojson")
+# # Shapefile / GeoJSON with all India districts
+# DISTRICTS_PATH = Path(r"D:\projects\irt_data\districts_4326.geojson")
 
-# Base output root; each metric uses its own subfolder under this
-BASE_OUTPUT_ROOT = Path(r"D:\projects\irt_data\processed")
+# # Base output root; each metric uses its own subfolder under this
+# BASE_OUTPUT_ROOT = Path(r"D:\projects\irt_data\processed")
+
+from paths import DATA_ROOT, DISTRICTS_PATH, BASE_OUTPUT_ROOT
 
 # Scenarios (periods define requested averaging windows)
 SCENARIOS = {
