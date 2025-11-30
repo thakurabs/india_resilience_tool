@@ -561,6 +561,54 @@ def open_in_new_tab_link(file_path: Path, label: str, mime: str = "application/p
         unsafe_allow_html=True,
     )
 
+def get_or_build_merged_for_index(
+    adm2: gpd.GeoDataFrame,
+    df: pd.DataFrame,
+    slug: str,
+    master_path: Path,
+) -> gpd.GeoDataFrame:
+    """Return a merged GeoDataFrame for this index, cached by master CSV mtime.
+
+    This does the deterministic ADM2↔district join once per (slug, master_path.mtime)
+    and reuses the result on subsequent reruns, instead of re-merging on every interaction.
+    It also restricts ADM2 to states that actually appear in the master CSV.
+    """
+    merged_cache = st.session_state.setdefault("_merged_cache", {})
+
+    try:
+        mtime = master_path.stat().st_mtime
+    except Exception:
+        mtime = None
+
+    cache_entry = merged_cache.get(slug)
+    if cache_entry is not None and cache_entry.get("mtime") == mtime:
+        return cache_entry["gdf"]
+
+    adm2c = adm2.copy()
+    dfc = df.copy()
+
+    # Restrict ADM2 to states that occur in the master CSV (for this index)
+    if "state_name" in adm2c.columns and "state" in dfc.columns:
+        state_keys = dfc["state"].astype(str).map(alias)
+        valid_states = set(state_keys.dropna().tolist())
+        if valid_states:
+            adm2c = adm2c[
+                adm2c["state_name"].astype(str).map(alias).isin(valid_states)
+            ].copy()
+
+    # Deterministic district-level join using normalized keys
+    if "__key" not in adm2c.columns:
+        adm2c["__key"] = adm2c["district_name"].map(alias)
+    dfc["__key"] = dfc["district"].map(alias)
+
+    merged = adm2c.merge(dfc, on="__key", how="left", suffixes=("", "_csv")).drop(
+        columns=["__key"]
+    )
+
+    merged_cache[slug] = {"mtime": mtime, "gdf": merged}
+    return merged
+
+
 # -------------------------
 # Master CSV freshness helpers (variable-agnostic)
 # -------------------------
@@ -1069,32 +1117,8 @@ st.title("India Resilience Tool")
 # Pilot state default
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
-# -------------------------
-# Pre-build master CSVs for all indices (on app launch)
-# -------------------------
-for slug, cfg in VARIABLES.items():
-    processed_root = Path(
-        os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / slug)
-    ).resolve()
-    (processed_root / PILOT_STATE).mkdir(parents=True, exist_ok=True)
-    master_path = processed_root / PILOT_STATE / "master_metrics_by_district.csv"
-
-    try:
-        if master_needs_rebuild(master_path, processed_root, PILOT_STATE):
-            # Build quietly, without user-facing spinner.
-            from build_master_metrics import build_master_metrics
-
-            build_master_metrics(
-                str(processed_root),
-                PILOT_STATE,
-                metric_col_in_periods=cfg["periods_metric_col"],
-                out_path=str(master_path),
-                attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
-                verbose=False,
-            )
-    except Exception as e:
-        # Don't break the app if one index fails; the per-index fallback below will handle it.
-        print(f"[WARN] Pre-build of master CSV failed for index '{slug}': {e}")
+# Pilot state default
+PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
 # -------------------------
 # Unified Index selection (single dropdown)
@@ -1412,18 +1436,12 @@ if "district" not in df.columns:
     st.error("Master CSV must contain a 'district' column to join with ADM2.")
     st.stop()
 
-with st.spinner("Merging geometries with CSV attributes (deterministic join)..."):
-    adm2c = adm2.copy()
-    dfc = df.copy()
-    if "state" in dfc.columns:
-        dfc = dfc[
-            dfc["state"].astype(str).str.strip().str.lower() == PILOT_STATE.lower()
-        ].copy()
-    if "__key" not in adm2c.columns:
-        adm2c["__key"] = adm2c["district_name"].map(alias)
-    dfc["__key"] = dfc["district"].map(alias)
-    merged = adm2c.merge(dfc, on="__key", how="left", suffixes=("", "_csv")).drop(
-        columns=["__key"]
+with st.spinner("Preparing merged geometries with CSV attributes..."):
+    merged = get_or_build_merged_for_index(
+        adm2=adm2,
+        df=df,
+        slug=VARIABLE_SLUG,
+        master_path=MASTER_CSV_PATH,
     )
 
 # --- Baseline column for this metric + stat (used by map & table) ---
@@ -1651,8 +1669,10 @@ tooltip = folium.features.GeoJsonTooltip(
     sticky=True,
 )
 
+geo_source = display_gdf if not display_gdf.empty else merged
+
 folium.GeoJson(
-    data=json.loads(merged.to_json()),
+    data=json.loads(geo_source.to_json()),
     name="Districts",
     style_function=style_fn,
     tooltip=tooltip,
