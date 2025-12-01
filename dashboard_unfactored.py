@@ -387,17 +387,16 @@ def enrich_adm2_with_state_names(
 # -------------------------
 # Color helpers (no GeoJSON round-trip)
 # -------------------------
+
+import matplotlib as mpl
+
 @lru_cache(maxsize=16)
 def _get_cmap_hex_list(cmap_name: str) -> list[str]:
     """
     Small helper to cache colormap → list of hex colors.
     This avoids re-instantiating colormaps on every interaction.
     """
-    try:
-        cmap = mpcm.get_cmap(cmap_name)
-    except Exception:
-        import matplotlib as mpl
-        cmap = mpl.colormaps.get_cmap(cmap_name)
+    cmap = mpl.colormaps.get_cmap(cmap_name)
     nsteps = 256
     return [mcolors.to_hex(cmap(i / (nsteps - 1))) for i in range(nsteps)]
 
@@ -1322,13 +1321,14 @@ with map_mode_placeholder.container():
     )
 
     map_mode = st.radio(
-        label="",
+        "Map mode",  # non-empty label for accessibility
         options=[
             "Absolute value",
             "Change from 1990-2010 baseline",
         ],
         index=0,
         key="map_mode",
+        label_visibility="collapsed",  # keeps UI same as before
     )
 
 # -------------------------
@@ -1711,8 +1711,8 @@ MAP_WIDTH, MAP_HEIGHT = 780, 700
 bar_height_px = int(MAP_HEIGHT * 0.92)
 bar_width_px = 28
 label_font = "12px"
-cmap = mpcm.get_cmap(cmap_name)
-legend_colors = [mcolors.to_hex(cmap(i / 255)) for i in range(256)]
+cmap = mpl.colormaps.get_cmap(cmap_name)
+legend_colors = _get_cmap_hex_list(cmap_name)
 gradient_colors = ", ".join(legend_colors)
 legend_html = f"""
 <div id="legend-fixed" style="position: fixed; right: 95px; top: 50%; transform: translateY(-50%);
@@ -1954,7 +1954,7 @@ with col1:
 
             st.dataframe(
                 df_display,
-                use_container_width=True,
+                width="stretch",
             )
 
             st.caption(
@@ -2111,7 +2111,7 @@ with col2:
                         sel_stat=sel_stat,
                     )
                     if fig_box is not None:
-                        st.pyplot(fig_box, use_container_width=True)
+                        st.pyplot(fig_box, width="stretch")
                     else:
                         st.info(
                             "Per-model district data is not available for this index, "
@@ -2204,7 +2204,7 @@ with col2:
                         {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
                         {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
                         {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
-                        {"Statistic": "n_districts", "Value": int(ensemble["n_districts"])},
+                        {"Statistic": "n_districts", "Value": str(int(ensemble["n_districts"]))},
                     ]
                     st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
                 else:
@@ -2217,7 +2217,7 @@ with col2:
                         per_model_df.rename(
                             columns={"value": "state_avg", "n_districts": "n_districts_used"}
                         ),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
                 if sel_districts_gdf is not None and not sel_districts_gdf.empty:
@@ -2315,7 +2315,8 @@ with col2:
                 st.markdown("**Current value**")
                 if current_val_f is not None:
                     st.metric(
-                        label="",
+                        label="Current Value",
+                        label_visibility="collapsed",
                         value=f"{current_val_f:.2f}",
                         help=f"{VARIABLES[VARIABLE_SLUG]['label']} ({sel_scenario}, {sel_period}, {sel_stat})",
                     )
@@ -2347,10 +2348,10 @@ with col2:
                         baseline_desc = "not found"
 
                     st.metric(
-                        label="",
+                        label="Change Vs Baseline",
+                        label_visibility="collapsed",
                         value=f"{baseline_val_f:.2f}",
                         delta=delta_str,
-                        # add \n if you want a line break after "Baseline:"
                         help=f"Baseline: {baseline_desc}",
                     )
                 else:
@@ -2372,9 +2373,11 @@ with col2:
                             f"(higher values = higher rank)."
                         )
                     st.metric(
-                        label="",
-                        value=rank_label,
-                        help=help_text,
+                        label="Baseline value",
+                        label_visibility="collapsed",
+                        value=f"{baseline_val_f:.2f}",
+                        delta=delta_str,
+                        help=f"Baseline: {baseline_desc}",
                     )
                 else:
                     st.write("Insufficient data")
@@ -3005,12 +3008,10 @@ with col2:
                     }
                 )
 
-            st.markdown(
-                f"**Index:** {VARIABLES[VARIABLE_SLUG]['label']}  \n"
-                f"**Scenario:** {sel_scenario}  \n"
-                f"**Period:** {sel_period}"
-            )
-            st.table(pd.DataFrame(rows_stats).set_index("Statistic"))
+            df_stats_state = pd.DataFrame(rows_stats)
+            # Make sure Value is numeric where possible; this avoids Arrow complaining
+            df_stats_state["Value"] = pd.to_numeric(df_stats_state["Value"], errors="coerce")
+            st.table(df_stats_state.set_index("Statistic"))
 
             # -----------------------------
             # Optional PDF generation + reuse via session_state
