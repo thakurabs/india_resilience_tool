@@ -4,6 +4,7 @@ import io, os, re, json, zipfile, shutil, subprocess, unicodedata, difflib
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
+from functools import lru_cache  # NEW
 
 import numpy as np
 import pandas as pd
@@ -329,33 +330,142 @@ def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         adm1["shapeName"] = adm1["state_name"]
     return adm1.reset_index(drop=True)
 
-# -------------------------
-# Color precompute
-# -------------------------
 @st.cache_data
-def precompute_fillcolor(merged_json: str, metric_col: str, vmin: float, vmax: float, cmap_name: str = "Reds") -> str:
-    merged_gdf = gpd.read_file(io.StringIO(merged_json))
+def enrich_adm2_with_state_names(
+    _adm2_gdf: gpd.GeoDataFrame,
+    _adm1_gdf: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """
+    Attach/clean state_name for each district using a single spatial join.
+    Cached so we don't redo expensive GeoPandas operations on every rerun.
+
+    Note: leading underscores on arguments tell Streamlit *not* to hash
+    these (GeoDataFrames are unhashable), so they are effectively treated
+    as "external state" for caching purposes.
+    """
+    # Work on local copies so we don't mutate the originals
+    adm2_gdf = _adm2_gdf.copy()
+    adm1_gdf = _adm1_gdf.copy()
+
+    if "state_name" not in adm2_gdf.columns:
+        adm2_gdf["state_name"] = "Unknown"
+    if "district_name" not in adm2_gdf.columns:
+        adm2_gdf["district_name"] = adm2_gdf.index.astype(str)
+
+    # Representative points for robust join
+    adm2_pts = adm2_gdf.copy()
+    adm2_pts["geometry"] = adm2_pts.geometry.representative_point()
+
+    try:
+        joined = gpd.sjoin(
+            adm2_pts[["geometry"]],
+            adm1_gdf[["geometry", "shapeName"]],
+            how="left",
+            predicate="within",
+        )
+        if "shapeName" in joined.columns:
+            mapping = joined["shapeName"].to_dict()
+            for adm2_idx, state_name_val in mapping.items():
+                if pd.notna(state_name_val):
+                    adm2_gdf.at[adm2_idx, "state_name"] = str(state_name_val).strip()
+    except Exception:
+        # If for some reason sjoin fails, fall back to existing state_name values.
+        pass
+
+    # Robust fallback: ensure no missing/blank state_name
+    missing = adm2_gdf["state_name"].isna() | (
+        adm2_gdf["state_name"].astype(str).str.strip() == ""
+    )
+    if missing.any():
+        for idx in adm2_gdf[missing].index:
+            val = adm2_gdf.at[idx, "state_name"]
+            if not (pd.notna(val) and str(val).strip()):
+                adm2_gdf.at[idx, "state_name"] = "Unknown"
+
+    return adm2_gdf
+
+# -------------------------
+# Color helpers (no GeoJSON round-trip)
+# -------------------------
+@lru_cache(maxsize=16)
+def _get_cmap_hex_list(cmap_name: str) -> list[str]:
+    """
+    Small helper to cache colormap → list of hex colors.
+    This avoids re-instantiating colormaps on every interaction.
+    """
     try:
         cmap = mpcm.get_cmap(cmap_name)
     except Exception:
         import matplotlib as mpl
         cmap = mpl.colormaps.get_cmap(cmap_name)
     nsteps = 256
-    hex_colors = [mcolors.to_hex(cmap(i / (nsteps - 1))) for i in range(nsteps)]
+    return [mcolors.to_hex(cmap(i / (nsteps - 1))) for i in range(nsteps)]
 
-    def color_for_val(v):
-        if pd.isna(v):
-            return "#cccccc"
-        try:
-            t = (float(v) - vmin) / (vmax - vmin) if vmax != vmin else 0.5
-            t = max(0.0, min(1.0, t))
-            return hex_colors[int(t * (nsteps - 1))]
-        except Exception:
-            return "#cccccc"
 
-    merged_gdf["fillColor"] = merged_gdf[metric_col].apply(color_for_val)
-    merged_gdf["_metric_val"] = pd.to_numeric(merged_gdf[metric_col], errors="coerce")
-    return merged_gdf.to_json()
+def apply_fillcolor(
+    merged_gdf: gpd.GeoDataFrame,
+    metric_col: str,
+    vmin: float,
+    vmax: float,
+    cmap_name: str = "Reds",
+) -> gpd.GeoDataFrame:
+    """
+    Add a 'fillColor' column directly to the existing GeoDataFrame,
+    avoiding expensive GeoJSON → GeoDataFrame conversions.
+
+    - merged_gdf is modified in-place and also returned for convenience.
+    - 'metric_col' is the column to color by (e.g. absolute or delta).
+    """
+    # Robust numeric series (align with merged_gdf index)
+    vals = pd.to_numeric(
+        merged_gdf.get(metric_col, pd.Series(index=merged_gdf.index, dtype=float)),
+        errors="coerce",
+    )
+
+    # Default all fills to light grey
+    arr = vals.to_numpy(dtype=float)
+    fill = np.full(arr.shape, "#cccccc", dtype=object)
+
+    # Handle valid values
+    mask_valid = np.isfinite(arr)
+    if np.any(mask_valid):
+        vmin_eff = vmin
+        vmax_eff = vmax
+
+        # If vmin/vmax aren't sensible, fall back to data-driven ones
+        if not np.isfinite(vmin_eff) or not np.isfinite(vmax_eff):
+            vmin_eff = float(np.nanmin(arr[mask_valid]))
+            vmax_eff = float(np.nanmax(arr[mask_valid]))
+
+        if (
+            not np.isfinite(vmin_eff)
+            or not np.isfinite(vmax_eff)
+            or vmin_eff == vmax_eff
+        ):
+            # Degenerate range – use mid-point for all
+            t = np.full(arr.shape, 0.5, dtype=float)
+        else:
+            t = (arr - vmin_eff) / (vmax_eff - vmin_eff)
+
+        # Clip to [0, 1]
+        t = np.clip(t, 0.0, 1.0)
+
+        # Map to colors only for valid entries
+        cmap = plt.get_cmap(cmap_name)
+        rgba = cmap(t[mask_valid])
+        hex_valid = np.array(
+            [
+                "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+                for r, g, b, _ in rgba
+            ],
+            dtype=object,
+        )
+        fill[mask_valid] = hex_valid
+
+    merged_gdf["fillColor"] = fill
+    merged_gdf["_metric_val"] = vals
+    return merged_gdf
+
 
 # -------------------------
 # State metrics helper
@@ -473,6 +583,54 @@ def open_in_new_tab_link(file_path: Path, label: str, mime: str = "application/p
         f'<a href="{href}" target="_blank" rel="noopener" download="{Path(file_path).name}">{label}</a>',
         unsafe_allow_html=True,
     )
+
+def get_or_build_merged_for_index(
+    adm2: gpd.GeoDataFrame,
+    df: pd.DataFrame,
+    slug: str,
+    master_path: Path,
+) -> gpd.GeoDataFrame:
+    """Return a merged GeoDataFrame for this index, cached by master CSV mtime.
+
+    This does the deterministic ADM2↔district join once per (slug, master_path.mtime)
+    and reuses the result on subsequent reruns, instead of re-merging on every interaction.
+    It also restricts ADM2 to states that actually appear in the master CSV.
+    """
+    merged_cache = st.session_state.setdefault("_merged_cache", {})
+
+    try:
+        mtime = master_path.stat().st_mtime
+    except Exception:
+        mtime = None
+
+    cache_entry = merged_cache.get(slug)
+    if cache_entry is not None and cache_entry.get("mtime") == mtime:
+        return cache_entry["gdf"]
+
+    adm2c = adm2.copy()
+    dfc = df.copy()
+
+    # Restrict ADM2 to states that occur in the master CSV (for this index)
+    if "state_name" in adm2c.columns and "state" in dfc.columns:
+        state_keys = dfc["state"].astype(str).map(alias)
+        valid_states = set(state_keys.dropna().tolist())
+        if valid_states:
+            adm2c = adm2c[
+                adm2c["state_name"].astype(str).map(alias).isin(valid_states)
+            ].copy()
+
+    # Deterministic district-level join using normalized keys
+    if "__key" not in adm2c.columns:
+        adm2c["__key"] = adm2c["district_name"].map(alias)
+    dfc["__key"] = dfc["district"].map(alias)
+
+    merged = adm2c.merge(dfc, on="__key", how="left", suffixes=("", "_csv")).drop(
+        columns=["__key"]
+    )
+
+    merged_cache[slug] = {"mtime": mtime, "gdf": merged}
+    return merged
+
 
 # -------------------------
 # Master CSV freshness helpers (variable-agnostic)
@@ -982,32 +1140,8 @@ st.title("India Resilience Tool")
 # Pilot state default
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
-# -------------------------
-# Pre-build master CSVs for all indices (on app launch)
-# -------------------------
-for slug, cfg in VARIABLES.items():
-    processed_root = Path(
-        os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / slug)
-    ).resolve()
-    (processed_root / PILOT_STATE).mkdir(parents=True, exist_ok=True)
-    master_path = processed_root / PILOT_STATE / "master_metrics_by_district.csv"
-
-    try:
-        if master_needs_rebuild(master_path, processed_root, PILOT_STATE):
-            # Build quietly, without user-facing spinner.
-            from build_master_metrics import build_master_metrics
-
-            build_master_metrics(
-                str(processed_root),
-                PILOT_STATE,
-                metric_col_in_periods=cfg["periods_metric_col"],
-                out_path=str(master_path),
-                attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
-                verbose=False,
-            )
-    except Exception as e:
-        # Don't break the app if one index fails; the per-index fallback below will handle it.
-        print(f"[WARN] Pre-build of master CSV failed for index '{slug}': {e}")
+# Pilot state default
+PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
 # -------------------------
 # Unified Index selection (single dropdown)
@@ -1090,11 +1224,44 @@ with metric_ui_placeholder.container():
         )
         st.stop()
 
-    # Load + parse schema (for scenario/period/stat only)
-    with st.spinner("Loading master CSV..."):
-        df = load_master_csv(str(MASTER_CSV_PATH))
-    df = normalize_master_columns(df)
-    schema_items, metrics, by_metric = parse_master_schema(df.columns)
+    # Load + parse schema (for scenario/period/stat only), cached by file mtime
+    def _load_master_and_schema(master_path: Path, slug: str):
+        cache = st.session_state.setdefault("_master_cache", {})
+        try:
+            mtime = master_path.stat().st_mtime
+        except Exception:
+            mtime = None
+
+        entry = cache.get(slug)
+        if entry is not None and entry.get("mtime") == mtime:
+            return (
+                entry["df"],
+                entry["schema_items"],
+                entry["metrics"],
+                entry["by_metric"],
+            )
+
+        # (Re)load from disk
+        with st.spinner("Loading master CSV..."):
+            df_local = load_master_csv(str(master_path))
+
+        df_local = normalize_master_columns(df_local)
+        schema_items_local, metrics_local, by_metric_local = parse_master_schema(
+            df_local.columns
+        )
+
+        cache[slug] = {
+            "df": df_local,
+            "schema_items": schema_items_local,
+            "metrics": metrics_local,
+            "by_metric": by_metric_local,
+            "mtime": mtime,
+        }
+        return df_local, schema_items_local, metrics_local, by_metric_local
+
+    df, schema_items, metrics, by_metric = _load_master_and_schema(
+        MASTER_CSV_PATH, VARIABLE_SLUG
+    )
     if not metrics:
         st.error("No ensemble statistic columns found in the master CSV. Did the builder run?")
         st.stop()
@@ -1195,31 +1362,9 @@ if force_btn:
 # Build adm1 & enrich adm2 state names
 # -------------------------
 adm1 = build_adm1_from_adm2(adm2)
-if "state_name" not in adm2.columns:
-    adm2["state_name"] = "Unknown"
-if "district_name" not in adm2.columns:
-    adm2["district_name"] = adm2.index.astype(str)
 
 with st.spinner("Enriching district data with state names..."):
-    adm2_pts = adm2.copy()
-    adm2_pts["geometry"] = adm2_pts.geometry.representative_point()
-    joined = gpd.sjoin(
-        adm2_pts[["geometry"]], adm1[["geometry", "shapeName"]], how="left", predicate="within"
-    )
-    if "shapeName" in joined.columns:
-        mapping = joined["shapeName"].to_dict()
-        for adm2_idx, state_name_val in mapping.items():
-            if pd.notna(state_name_val):
-                adm2.at[adm2_idx, "state_name"] = str(state_name_val).strip()
-    # robust fallback
-    missing = adm2["state_name"].isna() | (adm2["state_name"].astype(str).str.strip() == "")
-    if missing.any():
-        for idx in adm2[missing].index:
-            adm2.at[idx, "state_name"] = (
-                adm2.at[idx, "state_name"]
-                if pd.notna(adm2.at[idx, "state_name"])
-                else "Unknown"
-            )
+    adm2 = enrich_adm2_with_state_names(adm2, adm1)
 
 # Sync pending selections
 if "pending_selected_state" in st.session_state:
@@ -1314,18 +1459,12 @@ if "district" not in df.columns:
     st.error("Master CSV must contain a 'district' column to join with ADM2.")
     st.stop()
 
-with st.spinner("Merging geometries with CSV attributes (deterministic join)..."):
-    adm2c = adm2.copy()
-    dfc = df.copy()
-    if "state" in dfc.columns:
-        dfc = dfc[
-            dfc["state"].astype(str).str.strip().str.lower() == PILOT_STATE.lower()
-        ].copy()
-    if "__key" not in adm2c.columns:
-        adm2c["__key"] = adm2c["district_name"].map(alias)
-    dfc["__key"] = dfc["district"].map(alias)
-    merged = adm2c.merge(dfc, on="__key", how="left", suffixes=("", "_csv")).drop(
-        columns=["__key"]
+with st.spinner("Preparing merged geometries with CSV attributes..."):
+    merged = get_or_build_merged_for_index(
+        adm2=adm2,
+        df=df,
+        slug=VARIABLE_SLUG,
+        master_path=MASTER_CSV_PATH,
     )
 
 # --- Baseline column for this metric + stat (used by map & table) ---
@@ -1398,10 +1537,14 @@ else:
     )
 
 with st.spinner("Computing colors..."):
-    merged_json = precompute_fillcolor(
-        merged.to_json(), map_value_col, vmin, vmax, cmap_name=cmap_name
+    merged = apply_fillcolor(
+        merged,
+        map_value_col,
+        vmin,
+        vmax,
+        cmap_name=cmap_name,
     )
-    merged = gpd.read_file(io.StringIO(merged_json))
+
 
 # -------------------------
 # Build ranking table (district-level)
@@ -1549,8 +1692,10 @@ tooltip = folium.features.GeoJsonTooltip(
     sticky=True,
 )
 
+geo_source = display_gdf if not display_gdf.empty else merged
+
 folium.GeoJson(
-    data=json.loads(merged.to_json()),
+    data=json.loads(geo_source.to_json()),
     name="Districts",
     style_function=style_fn,
     tooltip=tooltip,
@@ -1613,7 +1758,6 @@ with col1:
                 "last_clicked",
                 "center",
                 "zoom",
-                "last_active_drawing",
             ],
         )
 
@@ -1948,23 +2092,33 @@ with col2:
             )
 
             # --- Expander 2: District-wise distribution across models (boxplot) ---
-            with st.expander("District-wise distribution across models", expanded=True):
-                fig_box = make_state_boxplot_for_districts(
-                    sel_districts_gdf=sel_districts_gdf,
-                    metric_col=metric_col,
-                    metric_label=VARIABLES[VARIABLE_SLUG]["label"],
-                    sel_state=selected_state,
-                    sel_scenario=sel_scenario,
-                    sel_period=sel_period,
-                    sel_stat=sel_stat,
+            with st.expander("District-wise distribution across models", expanded=False):
+                st.caption(
+                    "This figure can be slow to generate because it uses per-model "
+                    "distributions for each district."
                 )
-                if fig_box is not None:
-                    st.pyplot(fig_box, use_container_width=True)
-                else:
-                    st.info(
-                        "Per-model district data is not available for this index, "
-                        "so the boxplot could not be generated."
+                if st.button(
+                    "Generate district-wise boxplot",
+                    key=f"btn_state_boxplot_{VARIABLE_SLUG}_{selected_state}_{sel_scenario}_{sel_period}_{sel_stat}",
+                ):
+                    fig_box = make_state_boxplot_for_districts(
+                        sel_districts_gdf=sel_districts_gdf,
+                        metric_col=metric_col,
+                        metric_label=VARIABLES[VARIABLE_SLUG]["label"],
+                        sel_state=selected_state,
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
                     )
+                    if fig_box is not None:
+                        st.pyplot(fig_box, use_container_width=True)
+                    else:
+                        st.info(
+                            "Per-model district data is not available for this index, "
+                            "so the boxplot could not be generated."
+                        )
+                # else:
+                #     st.info("Click the button above to generate the boxplot when needed.")
 
             # --- Helper functions for state-level yearly time-series (unchanged) ---
             @st.cache_data
@@ -2073,33 +2227,39 @@ with col2:
 
             # --- Expander 3: Trend over time (state-average) ---
             with st.expander("Trend over time (state average)", expanded=False):
-                _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
-                pdf_path = _make_state_yearly_pdf(
-                    _yearly_df,
-                    selected_state,
-                    sel_scenario,
-                    VARIABLES[VARIABLE_SLUG]["label"],
-                    PROCESSED_ROOT / "pdf_plots",
+                st.caption(
+                    "Generates a state-average yearly trend plot and PDF for the "
+                    "selected index, scenario, and period."
                 )
-                if pdf_path is not None and pdf_path.exists():
-                    with open(pdf_path, "rb") as fh:
-                        st.download_button(
-                            "⬇️ Download yearly time-series (PDF)",
-                            data=fh.read(),
-                            file_name=pdf_path.name,
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="btn_state_pdf_dl",
-                        )
-                    open_in_new_tab_link(
-                        pdf_path, "🗎 Open yearly figure in a new tab", mime="application/pdf"
+
+                if st.button(
+                    "Generate state-average trend PDF",
+                    key=f"btn_state_trend_{VARIABLE_SLUG}_{selected_state}_{sel_scenario}",
+                ):
+                    _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
+                    pdf_path = _make_state_yearly_pdf(
+                        _yearly_df,
+                        selected_state,
+                        sel_scenario,
+                        VARIABLES[VARIABLE_SLUG]["label"],
+                        PROCESSED_ROOT / "pdf_plots",
                     )
-                else:
-                    st.caption("No yearly time-series available for this state/scenario.")
-        else:
-            st.info(
-                "Click a district on the map or pick one from the sidebar to see full metrics here."
-            )
+                    if pdf_path is not None and pdf_path.exists():
+                        with open(pdf_path, "rb") as fh:
+                            st.download_button(
+                                "⬇️ Download state-average time-series (PDF)",
+                                fh.read(),
+                                file_name=pdf_path.name,
+                                mime="application/pdf",
+                            )
+                    else:
+                        st.info(
+                            "State-average yearly time-series is not available for this combination."
+                        )
+                # else:
+                #     st.info(
+                #         "Click the button above to generate the state-average trend plot when needed."
+                #     )
 
     # ----------- DISTRICT DETAILS MODE (enhanced) -----------
     else:
@@ -2832,6 +2992,7 @@ with col2:
 
         # ---- Detailed statistics (collapsible) ----
         with st.expander("Detailed statistics for selected district", expanded=False):
+            # Basic stats table
             stats_list = ["mean", "median", "p05", "p95", "std"]
             rows_stats = []
             for sname in stats_list:
@@ -2840,9 +3001,10 @@ with col2:
                 rows_stats.append(
                     {
                         "Statistic": sname,
-                        "Value": "No data" if pd.isna(val) else f"{float(val):.2f}",
+                        "Value": val,
                     }
                 )
+
             st.markdown(
                 f"**Index:** {VARIABLES[VARIABLE_SLUG]['label']}  \n"
                 f"**Scenario:** {sel_scenario}  \n"
@@ -2850,33 +3012,64 @@ with col2:
             )
             st.table(pd.DataFrame(rows_stats).set_index("Statistic"))
 
-            # District-level yearly PDF (scenario-specific)
-            pdf_path_d = _make_district_yearly_pdf(
-                df_yearly=_district_yearly_scen,
-                state_name=state_to_show,
-                district_name=row.get("district_name", selected_district),
-                scenario_name=sel_scenario,
-                metric_label=VARIABLES[VARIABLE_SLUG]["label"],
-                out_dir=OUTDIR,
+            # -----------------------------
+            # Optional PDF generation + reuse via session_state
+            # -----------------------------
+            st.caption(
+                "You can optionally generate a PDF of the district's yearly "
+                "time-series for the selected scenario."
             )
 
+            # Unique key for storing the PDF path for this district/scenario
+            pdf_state_key = (
+                f"district_pdf_path_"
+                f"{VARIABLE_SLUG}_{state_to_show}_{selected_district}_{sel_scenario}"
+            )
+            pdf_path_d = st.session_state.get(pdf_state_key)
+
+            # Button to (re)generate the PDF
+            if st.button(
+                "Generate district yearly time-series PDF",
+                key=f"btn_district_pdf_{VARIABLE_SLUG}_{state_to_show}_{selected_district}_{sel_scenario}",
+            ):
+                pdf_path_d = _make_district_yearly_pdf(
+                    df_yearly=_district_yearly_scen,
+                    state_name=state_to_show,
+                    district_name=row.get("district_name", selected_district),
+                    scenario_name=sel_scenario,
+                    metric_label=VARIABLES[VARIABLE_SLUG]["label"],
+                    out_dir=OUTDIR,
+                )
+
+                # Store or clear in session_state depending on success
+                if pdf_path_d and pdf_path_d.exists():
+                    st.session_state[pdf_state_key] = pdf_path_d
+                else:
+                    st.session_state.pop(pdf_state_key, None)
+                    pdf_path_d = None
+
+            # Show download + open-in-new-tab link if we have a valid PDF
             if pdf_path_d and pdf_path_d.exists():
                 with open(pdf_path_d, "rb") as fh:
                     st.download_button(
                         "⬇️ Download district yearly time-series (PDF)",
-                        data=fh.read(),
+                        fh.read(),
                         file_name=pdf_path_d.name,
                         mime="application/pdf",
-                        use_container_width=True,
                         key="btn_dist_pdf_dl",
                     )
+
                 abs_url_d = pdf_path_d.resolve().as_uri()
                 st.markdown(
-                    f'<a href="{abs_url_d}" target="_blank" rel="noopener">🗎 Open district yearly figure in a new tab</a>',
+                    f'<a href="{abs_url_d}" target="_blank" rel="noopener">'
+                    f"🗎 Open district yearly figure in a new tab</a>",
                     unsafe_allow_html=True,
                 )
             else:
-                st.caption("No yearly time-series available for this district/scenario.")
+                st.caption(
+                    "No yearly time-series PDF is currently available for this "
+                    "district/scenario. Click the button above to generate it."
+                )
 
         # st.markdown("---")
 
