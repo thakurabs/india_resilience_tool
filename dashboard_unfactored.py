@@ -416,30 +416,53 @@ def apply_fillcolor(
     - merged_gdf is modified in-place and also returned for convenience.
     - 'metric_col' is the column to color by (e.g. absolute or delta).
     """
-    # Robust numeric series
+    # Robust numeric series (align with merged_gdf index)
     vals = pd.to_numeric(
-        merged_gdf.get(metric_col, pd.Series([], dtype=float)),
+        merged_gdf.get(metric_col, pd.Series(index=merged_gdf.index, dtype=float)),
         errors="coerce",
     )
 
-    hex_colors = _get_cmap_hex_list(cmap_name)
-    nsteps = len(hex_colors)
+    # Default all fills to light grey
+    arr = vals.to_numpy(dtype=float)
+    fill = np.full(arr.shape, "#cccccc", dtype=object)
 
-    def color_for_val(v):
-        if pd.isna(v):
-            return "#cccccc"
-        try:
-            if vmax == vmin:
-                t = 0.5
-            else:
-                t = (float(v) - vmin) / (vmax - vmin)
-            t = max(0.0, min(1.0, t))
-            idx = int(t * (nsteps - 1))
-            return hex_colors[idx]
-        except Exception:
-            return "#cccccc"
+    # Handle valid values
+    mask_valid = np.isfinite(arr)
+    if np.any(mask_valid):
+        vmin_eff = vmin
+        vmax_eff = vmax
 
-    merged_gdf["fillColor"] = vals.apply(color_for_val)
+        # If vmin/vmax aren't sensible, fall back to data-driven ones
+        if not np.isfinite(vmin_eff) or not np.isfinite(vmax_eff):
+            vmin_eff = float(np.nanmin(arr[mask_valid]))
+            vmax_eff = float(np.nanmax(arr[mask_valid]))
+
+        if (
+            not np.isfinite(vmin_eff)
+            or not np.isfinite(vmax_eff)
+            or vmin_eff == vmax_eff
+        ):
+            # Degenerate range – use mid-point for all
+            t = np.full(arr.shape, 0.5, dtype=float)
+        else:
+            t = (arr - vmin_eff) / (vmax_eff - vmin_eff)
+
+        # Clip to [0, 1]
+        t = np.clip(t, 0.0, 1.0)
+
+        # Map to colors only for valid entries
+        cmap = plt.get_cmap(cmap_name)
+        rgba = cmap(t[mask_valid])
+        hex_valid = np.array(
+            [
+                "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+                for r, g, b, _ in rgba
+            ],
+            dtype=object,
+        )
+        fill[mask_valid] = hex_valid
+
+    merged_gdf["fillColor"] = fill
     merged_gdf["_metric_val"] = vals
     return merged_gdf
 
@@ -1735,7 +1758,6 @@ with col1:
                 "last_clicked",
                 "center",
                 "zoom",
-                "last_active_drawing",
             ],
         )
 
@@ -2070,23 +2092,33 @@ with col2:
             )
 
             # --- Expander 2: District-wise distribution across models (boxplot) ---
-            with st.expander("District-wise distribution across models", expanded=True):
-                fig_box = make_state_boxplot_for_districts(
-                    sel_districts_gdf=sel_districts_gdf,
-                    metric_col=metric_col,
-                    metric_label=VARIABLES[VARIABLE_SLUG]["label"],
-                    sel_state=selected_state,
-                    sel_scenario=sel_scenario,
-                    sel_period=sel_period,
-                    sel_stat=sel_stat,
+            with st.expander("District-wise distribution across models", expanded=False):
+                st.caption(
+                    "This figure can be slow to generate because it uses per-model "
+                    "distributions for each district."
                 )
-                if fig_box is not None:
-                    st.pyplot(fig_box, use_container_width=True)
-                else:
-                    st.info(
-                        "Per-model district data is not available for this index, "
-                        "so the boxplot could not be generated."
+                if st.button(
+                    "Generate district-wise boxplot",
+                    key=f"btn_state_boxplot_{VARIABLE_SLUG}_{selected_state}_{sel_scenario}_{sel_period}_{sel_stat}",
+                ):
+                    fig_box = make_state_boxplot_for_districts(
+                        sel_districts_gdf=sel_districts_gdf,
+                        metric_col=metric_col,
+                        metric_label=VARIABLES[VARIABLE_SLUG]["label"],
+                        sel_state=selected_state,
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
                     )
+                    if fig_box is not None:
+                        st.pyplot(fig_box, use_container_width=True)
+                    else:
+                        st.info(
+                            "Per-model district data is not available for this index, "
+                            "so the boxplot could not be generated."
+                        )
+                # else:
+                #     st.info("Click the button above to generate the boxplot when needed.")
 
             # --- Helper functions for state-level yearly time-series (unchanged) ---
             @st.cache_data
@@ -2195,33 +2227,39 @@ with col2:
 
             # --- Expander 3: Trend over time (state-average) ---
             with st.expander("Trend over time (state average)", expanded=False):
-                _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
-                pdf_path = _make_state_yearly_pdf(
-                    _yearly_df,
-                    selected_state,
-                    sel_scenario,
-                    VARIABLES[VARIABLE_SLUG]["label"],
-                    PROCESSED_ROOT / "pdf_plots",
+                st.caption(
+                    "Generates a state-average yearly trend plot and PDF for the "
+                    "selected index, scenario, and period."
                 )
-                if pdf_path is not None and pdf_path.exists():
-                    with open(pdf_path, "rb") as fh:
-                        st.download_button(
-                            "⬇️ Download yearly time-series (PDF)",
-                            data=fh.read(),
-                            file_name=pdf_path.name,
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="btn_state_pdf_dl",
-                        )
-                    open_in_new_tab_link(
-                        pdf_path, "🗎 Open yearly figure in a new tab", mime="application/pdf"
+
+                if st.button(
+                    "Generate state-average trend PDF",
+                    key=f"btn_state_trend_{VARIABLE_SLUG}_{selected_state}_{sel_scenario}",
+                ):
+                    _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
+                    pdf_path = _make_state_yearly_pdf(
+                        _yearly_df,
+                        selected_state,
+                        sel_scenario,
+                        VARIABLES[VARIABLE_SLUG]["label"],
+                        PROCESSED_ROOT / "pdf_plots",
                     )
-                else:
-                    st.caption("No yearly time-series available for this state/scenario.")
-        else:
-            st.info(
-                "Click a district on the map or pick one from the sidebar to see full metrics here."
-            )
+                    if pdf_path is not None and pdf_path.exists():
+                        with open(pdf_path, "rb") as fh:
+                            st.download_button(
+                                "⬇️ Download state-average time-series (PDF)",
+                                fh.read(),
+                                file_name=pdf_path.name,
+                                mime="application/pdf",
+                            )
+                    else:
+                        st.info(
+                            "State-average yearly time-series is not available for this combination."
+                        )
+                # else:
+                #     st.info(
+                #         "Click the button above to generate the state-average trend plot when needed."
+                #     )
 
     # ----------- DISTRICT DETAILS MODE (enhanced) -----------
     else:
@@ -2954,6 +2992,7 @@ with col2:
 
         # ---- Detailed statistics (collapsible) ----
         with st.expander("Detailed statistics for selected district", expanded=False):
+            # Basic stats table
             stats_list = ["mean", "median", "p05", "p95", "std"]
             rows_stats = []
             for sname in stats_list:
@@ -2962,9 +3001,10 @@ with col2:
                 rows_stats.append(
                     {
                         "Statistic": sname,
-                        "Value": "No data" if pd.isna(val) else f"{float(val):.2f}",
+                        "Value": val,
                     }
                 )
+
             st.markdown(
                 f"**Index:** {VARIABLES[VARIABLE_SLUG]['label']}  \n"
                 f"**Scenario:** {sel_scenario}  \n"
@@ -2972,33 +3012,64 @@ with col2:
             )
             st.table(pd.DataFrame(rows_stats).set_index("Statistic"))
 
-            # District-level yearly PDF (scenario-specific)
-            pdf_path_d = _make_district_yearly_pdf(
-                df_yearly=_district_yearly_scen,
-                state_name=state_to_show,
-                district_name=row.get("district_name", selected_district),
-                scenario_name=sel_scenario,
-                metric_label=VARIABLES[VARIABLE_SLUG]["label"],
-                out_dir=OUTDIR,
+            # -----------------------------
+            # Optional PDF generation + reuse via session_state
+            # -----------------------------
+            st.caption(
+                "You can optionally generate a PDF of the district's yearly "
+                "time-series for the selected scenario."
             )
 
+            # Unique key for storing the PDF path for this district/scenario
+            pdf_state_key = (
+                f"district_pdf_path_"
+                f"{VARIABLE_SLUG}_{state_to_show}_{selected_district}_{sel_scenario}"
+            )
+            pdf_path_d = st.session_state.get(pdf_state_key)
+
+            # Button to (re)generate the PDF
+            if st.button(
+                "Generate district yearly time-series PDF",
+                key=f"btn_district_pdf_{VARIABLE_SLUG}_{state_to_show}_{selected_district}_{sel_scenario}",
+            ):
+                pdf_path_d = _make_district_yearly_pdf(
+                    df_yearly=_district_yearly_scen,
+                    state_name=state_to_show,
+                    district_name=row.get("district_name", selected_district),
+                    scenario_name=sel_scenario,
+                    metric_label=VARIABLES[VARIABLE_SLUG]["label"],
+                    out_dir=OUTDIR,
+                )
+
+                # Store or clear in session_state depending on success
+                if pdf_path_d and pdf_path_d.exists():
+                    st.session_state[pdf_state_key] = pdf_path_d
+                else:
+                    st.session_state.pop(pdf_state_key, None)
+                    pdf_path_d = None
+
+            # Show download + open-in-new-tab link if we have a valid PDF
             if pdf_path_d and pdf_path_d.exists():
                 with open(pdf_path_d, "rb") as fh:
                     st.download_button(
                         "⬇️ Download district yearly time-series (PDF)",
-                        data=fh.read(),
+                        fh.read(),
                         file_name=pdf_path_d.name,
                         mime="application/pdf",
-                        use_container_width=True,
                         key="btn_dist_pdf_dl",
                     )
+
                 abs_url_d = pdf_path_d.resolve().as_uri()
                 st.markdown(
-                    f'<a href="{abs_url_d}" target="_blank" rel="noopener">🗎 Open district yearly figure in a new tab</a>',
+                    f'<a href="{abs_url_d}" target="_blank" rel="noopener">'
+                    f"🗎 Open district yearly figure in a new tab</a>",
                     unsafe_allow_html=True,
                 )
             else:
-                st.caption("No yearly time-series available for this district/scenario.")
+                st.caption(
+                    "No yearly time-series PDF is currently available for this "
+                    "district/scenario. Click the button above to generate it."
+                )
 
         # st.markdown("---")
 
