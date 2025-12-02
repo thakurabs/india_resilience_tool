@@ -105,15 +105,6 @@ METRICS = [
         "params": {"thresh_k": 30.0 + 273.15},
     },
     {
-        "name": "Rainy Day > 2.5 mm (pr)",
-        "slug": "rain_gt_2p5mm",
-        "var": "pr",
-        "value_col": "days_rain_gt_2p5mm",
-        "units": "days",
-        "compute": "count_rainy_days",
-        "params": {"thresh_mm": 2.5},
-    },
-    {
         "name": "Tropical Nights (tasmin > 20 °C)",
         "slug": "tasmin_tropical_nights_gt20",
         "var": "tasmin",
@@ -219,6 +210,96 @@ METRICS = [
         "params": {
             "months": [12, 1, 2],
         },
+    },
+    {
+        "name": "Rainy Day > 2.5 mm (pr)",
+        "slug": "rain_gt_2p5mm",
+        "var": "pr",
+        "value_col": "days_rain_gt_2p5mm",
+        "units": "days",
+        "compute": "count_rainy_days",
+        "params": {"thresh_mm": 2.5},
+    },
+    {
+        "name": "Simple Daily Intensity (pr ≥ 1 mm)",
+        "slug": "pr_simple_daily_intensity",
+        "var": "pr",
+        "value_col": "simple_daily_intensity_mm_per_day",
+        "units": "mm/day",
+        "compute": "simple_daily_intensity",
+        "params": {"wet_thresh_mm": 1.0},
+    },
+    {
+        "name": "Maximum 1-day Precipitation",
+        "slug": "pr_max_1day_precip",
+        "var": "pr",
+        "value_col": "max_1day_precip_mm",
+        "units": "mm",
+        "compute": "max_1day_precip",
+        "params": {},
+    },
+    {
+        "name": "Highest Consecutive 5-day Precipitation",
+        "slug": "pr_max_5day_precip",
+        "var": "pr",
+        "value_col": "max_5day_precip_mm",
+        "units": "mm",
+        "compute": "max_5day_precip",
+        "params": {"window_days": 5},
+    },
+    {
+        "name": "Consecutive 5-day Precipitation Events (> 50 mm)",
+        "slug": "pr_5day_precip_events_gt50mm",
+        "var": "pr",
+        "value_col": "consec_5day_precip_events",
+        "units": "events",
+        "compute": "consecutive_5day_precip_events",
+        "params": {"window_days": 5, "thresh_total_mm": 50.0},
+    },
+    {
+        "name": "Heavy Precipitation Days (pr > 10 mm)",
+        "slug": "pr_heavy_precip_days_gt10mm",
+        "var": "pr",
+        "value_col": "heavy_precip_days_gt_10mm",
+        "units": "days",
+        "compute": "count_rainy_days",
+        "params": {"thresh_mm": 10.0},
+    },
+    {
+        "name": "Very Heavy Precipitation Days (pr > 25 mm)",
+        "slug": "pr_very_heavy_precip_days_gt25mm",
+        "var": "pr",
+        "value_col": "very_heavy_precip_days_gt_25mm",
+        "units": "days",
+        "compute": "count_rainy_days",
+        "params": {"thresh_mm": 25.0},
+    },
+    {
+        "name": "Consecutive Dry Days (pr < 1 mm)",
+        "slug": "pr_consecutive_dry_days_lt1mm",
+        "var": "pr",
+        "value_col": "consecutive_dry_days",
+        "units": "days",
+        "compute": "max_consecutive_dry_days",
+        "params": {"dry_thresh_mm": 1.0},
+    },
+    {
+        "name": "Consecutive Dry Day Events (> 5 days, pr < 1 mm)",
+        "slug": "pr_consecutive_dry_day_events_gt5",
+        "var": "pr",
+        "value_col": "consecutive_dry_day_events",
+        "units": "events",
+        "compute": "consecutive_dry_day_events",
+        "params": {"dry_thresh_mm": 1.0, "min_event_days": 6},
+    },
+    {
+        "name": "Tropical Nights (tasmin > 20 °C)",
+        "slug": "tasmin_tropical_nights_gt20",
+        "var": "tasmin",
+        "value_col": "tropical_nights_gt_20C",
+        "units": "days",
+        "compute": "count_days_above_threshold",
+        "params": {"thresh_k": 20.0 + 273.15},
     },
 ]
 
@@ -341,6 +422,105 @@ def count_rainy_days(da_pr: xr.DataArray, mask: xr.DataArray, thresh_mm: float =
     pr_mmday = pr_to_mm_per_day(da_pr)
     daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
     return int((daily_mean > thresh_mm).sum().item())
+
+def simple_daily_intensity(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    wet_thresh_mm: float = 1.0,
+) -> float:
+    """
+    Simple Daily Intensity:
+    Ratio of total precipitation to number of wet days (>= wet_thresh_mm).
+    Units: mm/day.
+    """
+    pr_mmday = pr_to_mm_per_day(da_pr)
+    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
+
+    total = float(daily_mean.sum().item())
+    wet_days = int((daily_mean >= wet_thresh_mm).sum().item())
+    if wet_days == 0:
+        return float("nan")
+    return total / wet_days
+
+
+def max_1day_precip(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """
+    Maximum 1-day precipitation (mm) of the year.
+    """
+    pr_mmday = pr_to_mm_per_day(da_pr)
+    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
+    return float(daily_mean.max().item())
+
+
+def max_5day_precip(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    window_days: int = 5,
+) -> float:
+    """
+    Maximum total precipitation accumulated over any consecutive `window_days`
+    (default 5) days (mm).
+    """
+    pr_mmday = pr_to_mm_per_day(da_pr)
+    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
+    rolling = daily_mean.rolling(time=window_days, min_periods=window_days).sum()
+    return float(rolling.max().item())
+
+
+def consecutive_5day_precip_events(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    window_days: int = 5,
+    thresh_total_mm: float = 50.0,
+) -> int:
+    """
+    Number of separate 5-day periods where total precipitation exceeds
+    `thresh_total_mm` (default 50 mm).
+
+    We:
+      - compute rolling `window_days` sums,
+      - flag days where the 5-day sum >= threshold,
+      - count contiguous True-runs as separate events.
+    """
+    pr_mmday = pr_to_mm_per_day(da_pr)
+    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
+    rolling = daily_mean.rolling(time=window_days, min_periods=window_days).sum()
+    is_event = (rolling >= thresh_total_mm).fillna(False).values
+    return _count_events(is_event, min_len=1)
+
+
+def max_consecutive_dry_days(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    dry_thresh_mm: float = 1.0,
+) -> int:
+    """
+    Longest stretch of consecutive dry days with daily precipitation < dry_thresh_mm.
+    """
+    pr_mmday = pr_to_mm_per_day(da_pr)
+    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
+    dry_mask = (daily_mean < dry_thresh_mm).values
+    max_run, _ = _run_length_stats(dry_mask, min_len=1)
+    return int(max_run)
+
+
+def consecutive_dry_day_events(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    dry_thresh_mm: float = 1.0,
+    min_event_days: int = 6,
+) -> int:
+    """
+    Number of separate periods with more than 5 consecutive dry days
+    (i.e. runs of length >= min_event_days) with daily precipitation < dry_thresh_mm.
+    """
+    pr_mmday = pr_to_mm_per_day(da_pr)
+    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
+    dry_mask = (daily_mean < dry_thresh_mm).values
+    return _count_events(dry_mask, min_len=min_event_days)
 
 def _run_length_stats(mask: np.ndarray, min_len: int) -> tuple[int, int]:
     """
