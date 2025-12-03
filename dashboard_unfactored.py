@@ -55,6 +55,7 @@ MIN_LAT, MAX_LAT = 5, 45.0
 VARIABLES = {
     "tas_gt32": {
         "label": "Summer Days",
+        "group": "temperature",
         "periods_metric_col": "days_gt_32C",
         "description": (
             "Number of days in a year on which the district-average daily maximum near-surface "
@@ -69,6 +70,7 @@ VARIABLES = {
     },
     "tasmax_csd_gt30": {
         "label": "Consecutive Summer Days",
+        "group": "temperature",
         "periods_metric_col": "consec_summer_days_gt_30C",
         "description": (
             "For each year, the maximum length (in days) of any spell of consecutive days "
@@ -83,6 +85,7 @@ VARIABLES = {
     },
     "tasmax_csd_events_gt30": {
         "label": "Consecutive Summer Day Events",
+        "group": "temperature",
         "periods_metric_col": "csd_events_gt_30C",
         "description": (
             "Number of distinct ‘Consecutive Summer Day’ spells per year, where each spell "
@@ -98,6 +101,7 @@ VARIABLES = {
     },
     "tasmin_tropical_nights_gt20": {
         "label": "Tropical Nights",
+        "group": "temperature",
         "periods_metric_col": "tropical_nights_gt_20C",
         "description": (
             "Number of nights in a year on which the district-average daily minimum "
@@ -112,6 +116,7 @@ VARIABLES = {
     },
     "hwdi_tasmax_plus5C": {
         "label": "Heat Wave Duration Index (HWDI, #Days)",
+        "group": "temperature",
         "periods_metric_col": "hwdi_max_spell_len",
         "description": (
             "For each year, the length (in days) of the longest heat-wave spell. "
@@ -128,6 +133,7 @@ VARIABLES = {
     },
     "hwfi_tmean_90p": {
         "label": "Heat Wave Frequency Index (HWFI, #Days)",
+        "group": "temperature",
         "periods_metric_col": "hwfi_days_in_spells",
         "description": (
             "For each year, the total number of days that occur inside heat-wave spells. "
@@ -144,6 +150,7 @@ VARIABLES = {
     },
     "hwdi_events_tasmax_plus5C": {
         "label": "Heat Wave Duration Index (HWDI, #Events)",
+        "group": "temperature",
         "periods_metric_col": "hwdi_events_count",
         "description": (
             "Number of distinct heat-wave spells per year for the HWDI definition "
@@ -159,6 +166,7 @@ VARIABLES = {
     },
     "hwfi_events_tmean_90p": {
         "label": "Heat Wave Frequency Index (HWFI, #Events)",
+        "group": "temperature",
         "periods_metric_col": "hwfi_events_count",
         "description": (
             "Number of distinct heat-wave spells per year for the HWFI definition "
@@ -174,6 +182,7 @@ VARIABLES = {
     },
     "tasmax_annual_mean": {
         "label": "Annual Max Temperature",
+        "group": "temperature",
         "periods_metric_col": "annual_tasmax_mean_C",
         "description": (
             "Annual mean of daily maximum near-surface air temperature (tasmax), in °C, "
@@ -188,6 +197,7 @@ VARIABLES = {
     },
     "tasmax_summer_mean": {
         "label": "Summer Max Temperature",
+        "group": "temperature",
         "periods_metric_col": "summer_tasmax_mean_C",
         "description": (
             "Mean of daily maximum temperature (tasmax), in °C, averaged over the "
@@ -202,6 +212,7 @@ VARIABLES = {
     },
     "tasmin_annual_mean": {
         "label": "Annual Min Temperature",
+        "group": "temperature",
         "periods_metric_col": "annual_tasmin_mean_C",
         "description": (
             "Annual mean of daily minimum near-surface air temperature (tasmin), in °C, "
@@ -216,6 +227,7 @@ VARIABLES = {
     },
     "tasmin_winter_mean": {
         "label": "Winter Min Temperature",
+        "group": "temperature",
         "periods_metric_col": "winter_tasmin_mean_C",
         "description": (
             "Mean of daily minimum temperature (tasmin), in °C, averaged over the winter "
@@ -230,6 +242,7 @@ VARIABLES = {
     },
     "rain_gt_2p5mm": {
         "label": "Rainy days",
+        "group": "rain",
         "periods_metric_col": "days_rain_gt_2p5mm",
         "description": (
             "Number of days in a year on which the district-average daily rainfall "
@@ -242,9 +255,133 @@ VARIABLES = {
             "{root}/{state}/state_yearly_ensemble_stats.csv"
         ],
     },
+        "pr_simple_daily_intensity": {
+        "label": "Simple Daily Intensity",
+        "group": "rain",
+        "periods_metric_col": "simple_daily_intensity_mm_per_day",
+        "description": (
+            "Ratio of total precipitation to the number of days with precipitation "
+            "≥ 1 mm, over the selected period (mm/day)."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "pr_max_1day_precip": {
+        "label": "Maximum 1-day Precipitation",
+        "group": "rain",
+        "periods_metric_col": "max_1day_precip_mm",
+        "description": (
+            "Seasonal or period-wise maximum of district-average daily precipitation "
+            "over any single day (mm)."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "pr_max_5day_precip": {
+        "label": "Highest Consecutive 5-day Precipitation",
+        "group": "rain",
+        "periods_metric_col": "max_5day_precip_mm",
+        "description": (
+            "Maximum total precipitation accumulated over any consecutive 5-day period "
+            "within the selected years (mm)."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "pr_5day_precip_events_gt50mm": {
+        "label": "Consecutive 5-day Precipitation Events (> 50 mm)",
+        "group": "rain",
+        "periods_metric_col": "consec_5day_precip_events",
+        "description": (
+            "Number of separate 5-day periods in which the total precipitation "
+            "exceeds 50 mm (events per period)."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "pr_heavy_precip_days_gt10mm": {
+        "label": "Heavy Precipitation Days (> 10 mm)",
+        "group": "rain",
+        "periods_metric_col": "heavy_precip_days_gt_10mm",
+        "description": (
+            "Number of days in the year with district-average daily precipitation "
+            "greater than 10 mm."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "pr_very_heavy_precip_days_gt25mm": {
+        "label": "Very Heavy Precipitation Days (> 25 mm)",
+        "group": "rain",
+        "periods_metric_col": "very_heavy_precip_days_gt_25mm",
+        "description": (
+            "Number of days in the year with district-average daily precipitation "
+            "greater than 25 mm."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "pr_consecutive_dry_days_lt1mm": {
+        "label": "Consecutive Dry Days (< 1 mm)",
+        "group": "rain",
+        "periods_metric_col": "consecutive_dry_days",
+        "description": (
+            "Longest stretch within the period of consecutive dry days with "
+            "daily precipitation less than 1 mm."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+    "pr_consecutive_dry_day_events_gt5": {
+        "label": "Consecutive Dry Day Events (> 5 days)",
+        "group": "rain",
+        "periods_metric_col": "consecutive_dry_day_events",
+        "description": (
+            "Number of separate periods with more than 5 consecutive dry days "
+            "(daily precipitation < 1 mm)."
+        ),
+        "district_yearly_candidates": [
+            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+        ],
+        "state_yearly_candidates": [
+            "{root}/{state}/state_yearly_ensemble_stats.csv"
+        ],
+    },
+
 }
 
-
+INDEX_GROUP_LABELS = {
+    "temperature": "Temperature",
+    "rain": "Rainfall",
+}
 
 
 # ---------- Name normalization / aliases ----------
@@ -1148,13 +1285,51 @@ PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 with metric_ui_placeholder.container():
     st.markdown("### Metric selection")
 
-    # Show all available indices in a single dropdown labeled "Index"
-    index_slugs = list(VARIABLES.keys())
+    # --- NEW: first pick an index group (Temperature / Rainfall / etc.) ---
+    raw_groups = {cfg.get("group", "other") for cfg in VARIABLES.values()}
+
+    # Deterministic ordering: Temperature, Rain, then any others alphabetically
+    preferred_order = ["temperature", "rain"]
+    all_groups: list[str] = []
+    for g in preferred_order:
+        if g in raw_groups:
+            all_groups.append(g)
+    for g in sorted(raw_groups):
+        if g not in all_groups:
+            all_groups.append(g)
+
+    default_group = st.session_state.get("selected_index_group")
+    if default_group not in all_groups:
+        default_group = "temperature" if "temperature" in all_groups else all_groups[0]
+
+    selected_group = st.radio(
+        "Index group",
+        options=all_groups,
+        index=all_groups.index(default_group),
+        key="selected_index_group",
+        format_func=lambda g: INDEX_GROUP_LABELS.get(g, str(g).title()),
+    )
+
+    # Filter indices by the chosen group
+    index_slugs = [
+        slug
+        for slug, cfg in VARIABLES.items()
+        if cfg.get("group", "other") == selected_group
+    ]
+
+    # Safety fallback: if something goes wrong, show all indices
+    if not index_slugs:
+        index_slugs = list(VARIABLES.keys())
+
+    # Previously selected index might not be in this group; clamp it
     default_slug = st.session_state.get("selected_var", index_slugs[0])
+    if default_slug not in index_slugs:
+        default_slug = index_slugs[0]
+
     selected_var = st.selectbox(
         "Index",
         options=index_slugs,
-        index=index_slugs.index(default_slug) if default_slug in index_slugs else 0,
+        index=index_slugs.index(default_slug),
         key="selected_var",
         format_func=lambda k: VARIABLES[k]["label"],
     )
@@ -1344,19 +1519,23 @@ with master_controls_placeholder.container():
 
 if auto_check:
     ok, msg = rebuild_master_csv_if_needed(
-        force=False, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON
+        force=False,
+        attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
     )
-    st.success("Master CSV rebuilt or already up-to-date.") if ok else st.info(
-        f"Master CSV status: {msg}"
-    )
+    if ok:
+        st.success("Master CSV rebuilt or already up-to-date.")
+    else:
+        st.info(f"Master CSV status: {msg}")
 
 if force_btn:
     ok, msg = rebuild_master_csv_if_needed(
-        force=True, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON
+        force=True,
+        attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
     )
-    st.success("Master CSV force-rebuilt.") if ok else st.error(
-        f"Forced rebuild failed: {msg}"
-    )
+    if ok:
+        st.success("Master CSV force-rebuilt.")
+    else:
+        st.error(f"Forced rebuild failed: {msg}")
 
 # -------------------------
 # Build adm1 & enrich adm2 state names
@@ -3254,6 +3433,6 @@ if publish_btn:
 
 st.markdown("---")
 st.caption(
-    "Notes: single ‘Index’ picker in the sidebar now lists all indices. "
+    "Notes: first choose an Index group (e.g. Temperature vs Rainfall), then an Index within that group. "
     "Details panel shows risk cards, trends, narrative, and a comparison option."
 )
