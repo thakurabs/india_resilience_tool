@@ -1254,6 +1254,14 @@ def risk_class_from_percentile(p: float) -> str:
 # -------------------------
 st.set_page_config(page_title="India Resilience Tool", layout="wide")
 
+# Initialise analysis mode and portfolio storage in session state
+if "analysis_mode" not in st.session_state:
+    st.session_state["analysis_mode"] = "Single district focus"
+
+if "portfolio_districts" not in st.session_state:
+    # Will store a list of (state_name, district_name) tuples
+    st.session_state["portfolio_districts"] = []
+
 with st.sidebar:
     try:
         st.image(LOGO_PATH, width=220)
@@ -1265,6 +1273,7 @@ with st.sidebar:
     district_placeholder = st.empty()
 
     metric_ui_placeholder = st.empty()  # unified "Index" UI
+    analysis_mode_placeholder = st.empty()  # Single vs multi-district analysis
     map_mode_placeholder = st.empty()   # NEW: absolute vs change toggle
     color_slider_placeholder = st.empty()
     st.markdown("---")
@@ -1491,6 +1500,26 @@ pretty_metric_label = (
     f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {sel_period} · {sel_stat}"
 )
 
+# -------------------------
+# Analysis focus (single vs multi-district)
+# -------------------------
+with analysis_mode_placeholder.container():
+    st.markdown(
+        "<div style='font-weight:600; font-size:1rem; margin-bottom:-0.35rem;'>Analysis focus</div>",
+        unsafe_allow_html=True,
+    )
+    analysis_mode = st.radio(
+        "Analysis focus",
+        options=[
+            "Single district focus",
+            "Multi-district portfolio",
+        ],
+        index=0,
+        key="analysis_mode",
+        label_visibility="collapsed",
+    )
+
+
 with map_mode_placeholder.container():
     # Tight "Map mode" label with no extra space before the radio
     st.markdown(
@@ -1606,14 +1635,86 @@ else:
 districts = ["All"] + sorted(
     gdf_state_districts["district_name"].astype(str).unique().tolist()
 )
-if "selected_district" not in st.session_state or st.session_state["selected_district"] not in districts:
+
+# Ensure we always have a valid value in session state
+if (
+    "selected_district" not in st.session_state
+    or st.session_state["selected_district"] not in districts
+):
     st.session_state["selected_district"] = "All"
-selected_district = district_placeholder.selectbox(
-    "District",
-    options=districts,
-    index=districts.index(st.session_state["selected_district"]),
-    key="selected_district",
+
+analysis_mode = st.session_state.get(
+    "analysis_mode", "Single district focus"
 )
+
+if analysis_mode == "Single district focus":
+    # Normal behaviour: user chooses the district from the sidebar
+    selected_district = district_placeholder.selectbox(
+        "District",
+        options=districts,
+        index=districts.index(st.session_state["selected_district"]),
+        key="selected_district",
+    )
+else:
+    # Portfolio mode: freeze district selection to "All" and explain why
+    st.session_state["selected_district"] = "All"
+    selected_district = "All"
+    with district_placeholder.container():
+        st.markdown(
+            "<div style='font-size:0.9rem;'>"
+            "<strong>District selection</strong> is controlled from the "
+            "<em>📊 Rankings table</em> (and map, later) when you choose "
+            "<strong>Multi-district portfolio</strong> as the analysis focus."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+# -------------------------
+# Portfolio selection helpers (multi-district)
+# -------------------------
+
+if "portfolio_districts" not in st.session_state:
+    # List of {"state": ..., "district": ...}
+    st.session_state["portfolio_districts"] = []
+
+
+def _portfolio_normalize(text: str) -> str:
+    """Normalize a state/district name for comparison."""
+    return str(text or "").strip().lower()
+
+
+def _portfolio_key(state_name: str, district_name: str) -> tuple[str, str]:
+    return (_portfolio_normalize(state_name), _portfolio_normalize(district_name))
+
+
+def _portfolio_add(state_name: str, district_name: str) -> None:
+    """Add a (state, district) pair to the portfolio if not already present."""
+    if not state_name or not district_name or district_name == "All":
+        return
+    items = st.session_state.get("portfolio_districts", [])
+    new_norm = _portfolio_key(state_name, district_name)
+    for item in items:
+        if _portfolio_key(item.get("state"), item.get("district")) == new_norm:
+            return
+    items.append({"state": state_name, "district": district_name})
+    st.session_state["portfolio_districts"] = items
+
+
+def _portfolio_remove(state_name: str, district_name: str) -> None:
+    """Remove a (state, district) pair from the portfolio."""
+    items = st.session_state.get("portfolio_districts", [])
+    norm = _portfolio_key(state_name, district_name)
+    items = [
+        item
+        for item in items
+        if _portfolio_key(item.get("state"), item.get("district")) != norm
+    ]
+    st.session_state["portfolio_districts"] = items
+
+
+def _portfolio_clear() -> None:
+    """Clear all districts from the portfolio."""
+    st.session_state["portfolio_districts"] = []
 
 if "map_center" not in st.session_state:
     st.session_state["map_center"] = [25.0, 82.5]
@@ -2134,12 +2235,7 @@ with col1:
                 }
             )
 
-            st.dataframe(
-                df_display,
-                width="stretch",
-            )
-
-            st.caption(
+            caption_text = (
                 f"Ranking based on **{VARIABLES[VARIABLE_SLUG]['label']}**, "
                 f"**{sel_scenario}**, **{sel_period}**, **{sel_stat}**. "
                 f"Change vs baseline uses historical **1990–2010** where available. "
@@ -2149,6 +2245,86 @@ with col1:
                     else "Showing all states."
                 )
             )
+
+            analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+
+            if analysis_mode == "Multi-district portfolio":
+                # --- Portfolio-builder view: clickable table with checkboxes ---
+                df_port = df_display.copy()
+
+                # Add a boolean column for portfolio selection if not present
+                if "Add to portfolio" not in df_port.columns:
+                    df_port["Add to portfolio"] = False
+
+                edited_df = st.data_editor(
+                    df_port,
+                    width="stretch",
+                    key=f"rankings_portfolio_editor_{VARIABLE_SLUG}_{sel_scenario}_{sel_period}_{sel_stat}",
+                    num_rows="fixed",
+                    disabled=[c for c in df_port.columns if c != "Add to portfolio"],
+                )
+
+                st.caption(caption_text)
+
+                st.markdown("---")
+                st.markdown("#### Portfolio builder (from rankings table)")
+
+                if st.button(
+                    "➕ Add checked districts to portfolio",
+                    key=f"btn_add_portfolio_from_table_{VARIABLE_SLUG}_{sel_scenario}_{sel_period}_{sel_stat}",
+                ):
+                    added = 0
+                    for _, row in edited_df.iterrows():
+                        if not row.get("Add to portfolio"):
+                            continue
+                        district_label = row.get("District")
+                        state_label = row.get("State")
+                        if pd.isna(district_label) or pd.isna(state_label):
+                            continue
+                        _portfolio_add(str(state_label), str(district_label))
+                        added += 1
+
+                    if added > 0:
+                        st.success(f"Added {added} district(s) to portfolio.")
+                    else:
+                        st.info("No new districts were added to the portfolio.")
+
+                # Show current portfolio summary below
+                portfolio = st.session_state.get("portfolio_districts", [])
+                if portfolio:
+                    st.markdown("**Current portfolio (districts)**")
+                    try:
+                        # If you used dicts {"state":..., "district":...}
+                        if isinstance(portfolio[0], dict):
+                            port_df = pd.DataFrame(portfolio).rename(
+                                columns={"state": "State", "district": "District"}
+                            )
+                        else:
+                            # If you used tuple/list (state, district)
+                            port_df = pd.DataFrame(
+                                portfolio, columns=["State", "District"]
+                            )
+                    except Exception:
+                        port_df = pd.DataFrame(columns=["State", "District"])
+                    st.dataframe(
+                        port_df,
+                        hide_index=True,
+                        use_container_width=True,
+                    )
+
+                else:
+                    st.caption(
+                        "No districts in portfolio yet. Check one or more rows in the table "
+                        "above and click **Add checked districts to portfolio**."
+                    )
+
+            else:
+                # --- Default single-district view: simple rankings table ---
+                st.dataframe(
+                    df_display,
+                    width="stretch",
+                )
+                st.caption(caption_text)
 
 
 # -------------------------
@@ -2455,6 +2631,15 @@ with col2:
 
         st.subheader(district_name)
         st.markdown(f"**State:** {state_to_show}")
+
+        # --- Portfolio add button (for multi-district analysis) ---
+        if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
+            if st.button(
+                "➕ Add this district to portfolio",
+                key=f"btn_add_portfolio_single_{state_to_show}_{district_name}",
+            ):
+                _portfolio_add(state_to_show, district_name)
+                st.success(f"Added {district_name}, {state_to_show} to portfolio.")
 
         # ---- Risk cards (1.1) ----
         current_val = row.get(metric_col)
@@ -3945,6 +4130,96 @@ with col2:
                             )
             else:
                 st.caption("No other districts found in this state for comparison.")
+
+with col2:
+    # -------------------------
+    # Portfolio analysis (multi-district)
+    # -------------------------
+    if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
+        with st.expander("Portfolio analysis (multi-district)", expanded=False):
+            portfolio = st.session_state.get("portfolio_districts", [])
+
+            if not portfolio:
+                st.info(
+                    "No districts in the portfolio yet. "
+                    "Add districts from the Climate Profile panel or the Rankings table."
+                )
+            else:
+                portfolio_df = pd.DataFrame(portfolio)
+                st.markdown("**Selected districts**")
+                st.dataframe(
+                    portfolio_df.rename(
+                        columns={"state": "State", "district": "District"}
+                    ),
+                    use_container_width=True,
+                )
+
+                # Use the already-built ranking table (table_df) to show
+                # current index values for only the portfolio districts
+                if table_df is not None and not table_df.empty:
+                    key_set = {
+                        _portfolio_key(item["state"], item["district"])
+                        for item in portfolio
+                    }
+
+                    def _row_in_portfolio(r: pd.Series) -> bool:
+                        return _portfolio_key(
+                            r.get("state_name"), r.get("district_name")
+                        ) in key_set
+
+                    portfolio_metric_df = table_df[table_df.apply(_row_in_portfolio, axis=1)].copy()
+
+                    if portfolio_metric_df.empty:
+                        st.caption(
+                            "No data for the selected index for the current portfolio."
+                        )
+                    else:
+                        show_cols = [
+                            c
+                            for c in [
+                                "district_name",
+                                "state_name",
+                                "value",
+                                "baseline",
+                                "delta_abs",
+                                "delta_pct",
+                                "percentile_value",
+                                "risk_class",
+                            ]
+                            if c in portfolio_metric_df.columns
+                        ]
+                        st.markdown("**Current index values for portfolio**")
+                        st.dataframe(
+                            portfolio_metric_df[show_cols].rename(
+                                columns={
+                                    "district_name": "District",
+                                    "state_name": "State",
+                                    "value": pretty_metric_label,
+                                }
+                            ),
+                            use_container_width=True,
+                        )
+
+                        # CSV download for portfolio & current index
+                        csv_bytes = portfolio_metric_df.to_csv(index=False).encode("utf-8")
+                        st.download_button(
+                            "⬇️ Download portfolio data (current index only, CSV)",
+                            data=csv_bytes,
+                            file_name=(
+                                f"portfolio_{VARIABLE_SLUG}_{sel_scenario}_"
+                                f"{sel_period}_{sel_stat}.csv"
+                            ),
+                            mime="text/csv",
+                        )
+                else:
+                    st.caption(
+                        "Ranking table is not available for the current index selection."
+                    )
+
+                # Clear portfolio button
+                if st.button("🧹 Clear portfolio", key="btn_portfolio_clear"):
+                    _portfolio_clear()
+                    st.success("Cleared portfolio selection.")
 
 # -------------------------
 # Publish: HTML/PNG/TXT ZIP
