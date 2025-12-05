@@ -1262,6 +1262,10 @@ if "portfolio_districts" not in st.session_state:
     # Will store a list of (state_name, district_name) tuples
     st.session_state["portfolio_districts"] = []
 
+# Which main view is active in the left column: map vs rankings
+if "active_view" not in st.session_state:
+    st.session_state["active_view"] = "🗺 Map view"
+
 with st.sidebar:
     try:
         st.image(LOGO_PATH, width=220)
@@ -2015,6 +2019,9 @@ z-index: 9999; pointer-events: none; display: flex; align-items: center; gap: 10
 """
 m.get_root().html.add_child(folium.Element(legend_html))
 
+# Ensure `returned` always exists, even if the map tab didn't run yet
+returned = None
+
 col1, col2 = st.columns([5, 3])
 
 with col1:
@@ -2027,11 +2034,23 @@ with col1:
             st.session_state["pending_selected_district"] = "All"
             st.session_state["map_reset_requested"] = True
 
-    # Tabs: Map view + Rankings table
-    tab_map, tab_table = st.tabs(["🗺 Map view", "📊 Rankings table"])
+    # Main view selector: Map vs Rankings (replaces tabs)
+    view_options = ["🗺 Map view", "📊 Rankings table"]
+    current_view = st.session_state.get("active_view", view_options[0])
+    if current_view not in view_options:
+        current_view = view_options[0]
 
-    # ---------- TAB 1: MAP VIEW ----------
-    with tab_map:
+    view = st.radio(
+        "View",
+        options=view_options,
+        index=view_options.index(current_view),
+        key="main_view_selector",
+        horizontal=True,
+    )
+    st.session_state["active_view"] = view
+
+    # ---------- VIEW 1: MAP ----------
+    if view == "🗺 Map view":
         returned = st_folium(
             m,
             width=MAP_WIDTH,
@@ -2157,8 +2176,8 @@ with col1:
                         st.session_state["pending_selected_state"] = "All"
                 st.rerun()
 
-    # ---------- TAB 2: RANKINGS TABLE ----------
-    with tab_table:
+    # ---------- VIEW 2: RANKINGS TABLE ----------
+    elif view == "📊 Rankings table":
         st.subheader("District rankings")
 
         if table_df is None or table_df.empty:
@@ -4137,12 +4156,20 @@ with col2:
     # -------------------------
     if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
         with st.expander("Portfolio analysis (multi-district)", expanded=False):
+
+            # NEW: Button to jump to the Rankings view to select districts
+            if st.button("📋 Select districts", key="btn_portfolio_select_from_rankings"):
+                # Ask the left-hand view selector to show the Rankings table
+                st.session_state["active_view"] = "📊 Rankings table"
+                st.rerun()
+
             portfolio = st.session_state.get("portfolio_districts", [])
 
             if not portfolio:
                 st.info(
                     "No districts in the portfolio yet. "
-                    "Add districts from the Climate Profile panel or the Rankings table."
+                    "Use **Select districts** above to open the Rankings view, "
+                    "then check rows in the 'Add to portfolio' column."
                 )
             else:
                 portfolio_df = pd.DataFrame(portfolio)
@@ -4167,7 +4194,9 @@ with col2:
                             r.get("state_name"), r.get("district_name")
                         ) in key_set
 
-                    portfolio_metric_df = table_df[table_df.apply(_row_in_portfolio, axis=1)].copy()
+                    portfolio_metric_df = table_df[
+                        table_df.apply(_row_in_portfolio, axis=1)
+                    ].copy()
 
                     if portfolio_metric_df.empty:
                         st.caption(
@@ -4231,7 +4260,7 @@ if publish_btn:
         map_html = OUTDIR / f"export_map_{ts}.html"
 
         try:
-            if returned:
+            if returned is not None:
                 center = returned.get("center") or returned.get("map_center")
                 zoom = returned.get("zoom") or returned.get("map_zoom")
                 if center and isinstance(center, (list, tuple)) and len(center) == 2:
