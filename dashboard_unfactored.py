@@ -2476,12 +2476,6 @@ with col2:
         # else pick lexicographically earliest period
         candidates.sort(key=lambda x: x[1])
         return candidates[0][0]
-    
-    # If the sidebar says "District = All" and a state is selected,
-    # we intentionally ignore any previous map click and go into
-    # state-summary mode.
-    if selected_state != "All" and st.session_state.get("selected_district", "All") == "All":
-        matched_row = None
 
     # ----------- STATE SUMMARY MODE (no district selected) -----------
     if matched_row is None or matched_row.empty:
