@@ -985,82 +985,102 @@ def make_scenario_comparison_figure(
     sel_period: str,
     sel_stat: str,
     district_name: str,
+    ax=None,
+    figsize: tuple[float, float] = (6.0, 3.0),
 ):
     """
     Build a compact bar chart:
-      - 1 blue bar for Historical 1990-2010 (if available)
-      - 2 bars (yellow, red) for SSP2-4.5 / SSP5-8.5 in 2020-2040
-      - 2 bars (yellow, red) for SSP2-4.5 / SSP5-8.5 in 2040-2060
 
-    Bars are grouped visually: [Historical] [2020-2040 pair] [2040-2060 pair].
-    The bar matching the *current map selection* (sel_scenario, sel_period, sel_stat)
-    is slightly emphasized.
+      - Historical 1990–2010 as a single bar (if available)
+      - SSP2-4.5 and SSP5-8.5 bars for 2020–2040
+      - SSP2-4.5 and SSP5-8.5 bars for 2040–2060
+
+    Bars are grouped visually by period:
+        [1990–2010]   [2020–2040 pair]   [2040–2060 pair]
+
+    The bar corresponding to the *current selection* (sel_scenario, sel_period)
+    is given a darker edge to emphasize it.
+
+    If `ax` is provided, the chart is drawn into that axis (useful for PDFs).
+    Otherwise, a new (fig, ax) pair is created.
     """
     import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
 
     if panel_df is None or panel_df.empty:
         return None, None
 
-    # Canonicalize selection for matching
+    # Canonicalise selection for matching
     sel_scen_norm = str(sel_scenario).strip().lower()
     sel_period_norm = canonical_period_label(sel_period)
 
-    # Colors per scenario
+    # Normalise periods in the data as well
+    dfp = panel_df.copy()
+    dfp["period"] = dfp["period"].map(canonical_period_label)
+    dfp["scenario_norm"] = dfp["scenario"].astype(str).str.strip().str.lower()
+
+    # Colours per scenario
     scenario_colors = {
         "historical": "tab:blue",
-        "ssp245": "gold",    # yellow-like
+        "ssp245": "gold",      # yellow-like
         "ssp585": "tab:red",
     }
 
-    # Define the exact combinations we care about for the 5-bar layout
-    combos = []
-    # Historical 1990-2010 as a single bar (if present)
-    combos.append(("historical", "1990-2010"))
-    # Futures: SSP2-4.5 & SSP5-8.5 in each future period
-    for p in ["2020-2040", "2040-2060"]:
-        for s in ["ssp245", "ssp585"]:
-            combos.append((s, p))
+    # Build the list of (scenario, period) combos that actually exist
+    combos: list[tuple[str, str]] = []
+    for scen in SCENARIO_ORDER:
+        for period in PERIOD_ORDER:
+            mask = (
+                (dfp["scenario_norm"] == scen)
+                & (dfp["period"] == period)
+            )
+            if mask.any():
+                combos.append((scen, period))
 
-    # Assign x positions with gaps: [0] [2,3] [5,6]
-    x_positions = {}
+    if not combos:
+        return None, None
+
+    # Assign x positions with group spacing by period
+    group_spacing = 1.5
+    within_spacing = 0.5
+    x_positions: dict[tuple[str, str], float] = {}
     x = 0.0
-    group_spacing = 1.0
-    within_spacing = 1.0
 
-    for scen, period in combos:
-        if period == "1990-2010":
-            x_positions[(scen, period)] = x
-            x += group_spacing  # gap to next group
-        elif period == "2020-2040":
-            x_positions[(scen, period)] = x
-            x += within_spacing
-        else:  # 2040-2060 group
-            # on first bar of this group, ensure we bump a bit for visual gap
-            if (scen, period) == ("ssp245", "2040-2060"):
-                x += group_spacing
-            x_positions[(scen, period)] = x
-            x += within_spacing
+    for period in PERIOD_ORDER:
+        scen_here = [sc for (sc, p) in combos if p == period]
+        if not scen_here:
+            continue
+        for i, scen in enumerate(scen_here):
+            x_positions[(scen, period)] = x + i * within_spacing
+        x += group_spacing
 
-    # Collect actual data + positions
-    xs, ys, colors, edgecolors, labels = [], [], [], [], []
-    highlight_idx = []  # indices of bars that match the current selection
+    # Collect data for bars
+    xs: list[float] = []
+    ys: list[float] = []
+    colors: list[str] = []
+    edgecolors: list[str] = []
+    labels: list[str] = []
+    highlight_idx: list[int] = []
 
-    for idx, (scen, period) in enumerate(combos):
+    for (scen, period) in combos:
         mask = (
-            (panel_df["scenario"] == scen)
-            & (panel_df["period"] == period)
+            (dfp["scenario_norm"] == scen)
+            & (dfp["period"] == period)
         )
         if not mask.any():
             continue
-        val = float(panel_df.loc[mask, "value"].iloc[0])
-        xs.append(x_positions[(scen, period)])
+        val = float(dfp.loc[mask, "value"].iloc[0])
+        x_val = x_positions.get((scen, period))
+        if x_val is None:
+            continue
+
+        xs.append(x_val)
         ys.append(val)
         colors.append(scenario_colors.get(scen, "grey"))
-        # Basic label: for tooltip-like use if needed
-        labels.append(f"{SCENARIO_DISPLAY.get(scen, scen)} {period}")
+        labels.append(f"{SCENARIO_DISPLAY.get(scen, scen)}\n{period}")
 
-        # Emphasize the bar matching current map selection
-        if (scen == sel_scen_norm) and (period == sel_period_norm):
+        # Highlight the bar corresponding to the current selection
+        if scen == sel_scen_norm and canonical_period_label(period) == sel_period_norm:
             edgecolors.append("black")
             highlight_idx.append(len(xs) - 1)
         else:
@@ -1069,54 +1089,47 @@ def make_scenario_comparison_figure(
     if not xs:
         return None, None
 
-    # Compute x-ticks to "group" periods visually
-    # We know positions: 0 ~ historical, around 2-3 ~ 2020-2040, 5-6 ~ 2040-2060
-    # We'll derive ticks by the midpoints of each period group actually present.
-    period_to_x = {}
-    for (scen, period), xp in x_positions.items():
-        if period not in period_to_x:
-            period_to_x[period] = []
-        if (scen, period) in [k for k in zip(panel_df["scenario"], panel_df["period"])]:
-            period_to_x[period].append(xp)
+    # Create / reuse axis
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
 
-    xticks = []
-    xticklabels = []
-    for p in PERIOD_ORDER:
-        xs_p = [x_positions[(s, p)] for s in ["historical", "ssp245", "ssp585"]
-                if (s, p) in x_positions and (panel_df["scenario"] == s).any()]
-        if not xs_p:
-            continue
-        xticks.append(sum(xs_p) / len(xs_p))
-        if p == "1990-2010":
-            xticklabels.append("Historical\n1990–2010")
-        else:
-            xticklabels.append(p.replace("-", "–"))
+    bars = ax.bar(xs, ys, color=colors, edgecolor=edgecolors, linewidth=1.0)
 
-    fig, ax = plt.subplots(figsize=(4.8, 2.6), dpi=150)
-    bars = ax.bar(xs, ys, color=colors, edgecolor=edgecolors, linewidth=1.2)
+    # Y-axis label and grid
+    ax.set_ylabel(metric_label, fontsize=9)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
 
-    ax.set_ylabel(f"{metric_label} ({sel_stat})")
-    ax.set_xticks(xticks)
-    ax.set_xticklabels(xticklabels)
-    ax.set_title(f"Scenario comparison – {district_name}", fontsize=9)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.25)
+    # X tick labels at group centres (periods)
+    group_centres: dict[str, float] = {}
+    for period in PERIOD_ORDER:
+        xs_p = [x_positions[(sc, period)] for (sc, p) in x_positions.keys() if p == period]
+        if xs_p:
+            group_centres[period] = sum(xs_p) / len(xs_p)
 
-    # Light legend keyed by scenario
+    if group_centres:
+        ax.set_xticks(list(group_centres.values()))
+        ax.set_xticklabels(PERIOD_ORDER, fontsize=8)
+
+    # Title
+    ax.set_title(
+        f"Scenario comparison – {district_name}",
+        fontsize=9,
+    )
+
+    # Legend: one patch per scenario present
     legend_handles = []
     legend_labels = []
+    scen_seen = {scen for (scen, _) in combos}
     for scen in SCENARIO_ORDER:
-        if (panel_df["scenario"] == scen).any():
+        if scen in scen_seen:
             legend_handles.append(
-                plt.Line2D([0], [0],
-                           marker="s",
-                           linestyle="none",
-                           markersize=7,
-                           markerfacecolor=scenario_colors.get(scen, "grey"),
-                           markeredgecolor="none")
+                mpatches.Patch(color=scenario_colors.get(scen, "grey"))
             )
             legend_labels.append(SCENARIO_DISPLAY.get(scen, scen))
     if legend_handles:
-        ax.legend(legend_handles, legend_labels, frameon=False, fontsize=8, ncol=3)
+        ax.legend(legend_handles, legend_labels, frameon=False, fontsize=8, ncol=len(legend_handles))
 
     # Clean spines
     for spine in ax.spines.values():
@@ -1266,9 +1279,19 @@ if "portfolio_districts" not in st.session_state:
 if "active_view" not in st.session_state:
     st.session_state["active_view"] = "🗺 Map view"
 
+# If a downstream control requested to jump to the Rankings table,
+# honour it BEFORE the main_view_selector radio is created.
+if st.session_state.get("jump_to_rankings", False):
+    st.session_state["active_view"] = "📊 Rankings table"
+    # Also sync the radio widget state so the UI reflects this jump
+    st.session_state["main_view_selector"] = "📊 Rankings table"
+    # Reset the flag so it only applies once
+    st.session_state["jump_to_rankings"] = False
+
 with st.sidebar:
     try:
         st.image(LOGO_PATH, width=220)
+
     except Exception:
         pass
     # st.markdown("---")
@@ -2036,17 +2059,28 @@ with col1:
 
     # Main view selector: Map vs Rankings (replaces tabs)
     view_options = ["🗺 Map view", "📊 Rankings table"]
-    current_view = st.session_state.get("active_view", view_options[0])
-    if current_view not in view_options:
-        current_view = view_options[0]
+
+    # Initialise widget + logical view defaults once
+    if "main_view_selector" not in st.session_state:
+        st.session_state["main_view_selector"] = view_options[0]
+    if "active_view" not in st.session_state:
+        st.session_state["active_view"] = st.session_state["main_view_selector"]
+
+    # One-shot hook: if some downstream control requested a jump to the
+    # Rankings table, honour it *before* the radio is instantiated.
+    if st.session_state.get("jump_to_rankings", False):
+        st.session_state["main_view_selector"] = "📊 Rankings table"
+        st.session_state["active_view"] = "📊 Rankings table"
+        st.session_state["jump_to_rankings"] = False
 
     view = st.radio(
         "View",
         options=view_options,
-        index=view_options.index(current_view),
         key="main_view_selector",
         horizontal=True,
     )
+
+    # Keep logical view in sync with the widget
     st.session_state["active_view"] = view
 
     # ---------- VIEW 1: MAP ----------
@@ -2186,7 +2220,7 @@ with col1:
             )
         else:
             # Ranking mode selector
-            options = ["Top 20 hottest", "Top 20 biggest increases", "All"]
+            options = ["Top 20 biggest increases", "All"]
             rank_mode = st.radio(
                 "Show:",
                 options=options,
@@ -2196,13 +2230,8 @@ with col1:
 
             df_to_show = table_df.copy()
 
-            if rank_mode == "Top 20 hottest":
-                if "rank_value" in df_to_show.columns:
-                    df_to_show = df_to_show.sort_values("rank_value").head(20)
-                else:
-                    df_to_show = df_to_show.sort_values("value", ascending=False).head(20)
 
-            elif rank_mode == "Top 20 biggest increases":
+            if rank_mode == "Top 20 biggest increases":
                 if has_baseline and ("rank_delta" in df_to_show.columns):
                     df_to_show = df_to_show.dropna(subset=["delta_abs"]).copy()
                     if df_to_show.empty:
@@ -2572,71 +2601,74 @@ with col2:
                 plt.close(fig)
                 return pdf_path
 
-            # --- Expander 1: State summary statistics (like district Risk summary) ---
-            with st.expander("State summary statistics", expanded=False):
-                if ensemble.get("n_districts", 0) > 0:
-                    stat_rows = [
-                        {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
-                        {"Statistic": "median", "Value": f"{ensemble['median']:.2f}"},
-                        {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
-                        {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
-                        {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
-                        {"Statistic": "n_districts", "Value": str(int(ensemble["n_districts"]))},
-                    ]
-                    st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
-                else:
-                    st.info("No numeric district values found for this state & selection.")
+            # Only show these state-summary expanders when NOT in multi-district portfolio mode
+            analysis_mode_state = st.session_state.get("analysis_mode", "Single district focus")
 
-            with st.expander("Per-model state averages", expanded=False):
-                if not per_model_df.empty:
-                    # st.markdown("**Per-model state averages**")
-                    st.dataframe(
-                        per_model_df.rename(
-                            columns={"value": "state_avg", "n_districts": "n_districts_used"}
-                        ),
-                        width="stretch",
-                    )
+            if analysis_mode_state != "Multi-district portfolio":
 
-                if sel_districts_gdf is not None and not sel_districts_gdf.empty:
-                    st.caption(f"Districts used: {len(sel_districts_gdf)}")
-
-
-
-            # --- Expander 3: Trend over time (state-average) ---
-            with st.expander("Trend over time (state average)", expanded=False):
-                st.caption(
-                    "Generates a state-average yearly trend plot and PDF for the "
-                    "selected index, scenario, and period."
-                )
-
-                if st.button(
-                    "Generate state-average trend PDF",
-                    key=f"btn_state_trend_{VARIABLE_SLUG}_{selected_state}_{sel_scenario}",
-                ):
-                    _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
-                    pdf_path = _make_state_yearly_pdf(
-                        _yearly_df,
-                        selected_state,
-                        sel_scenario,
-                        VARIABLES[VARIABLE_SLUG]["label"],
-                        PROCESSED_ROOT / "pdf_plots",
-                    )
-                    if pdf_path is not None and pdf_path.exists():
-                        with open(pdf_path, "rb") as fh:
-                            st.download_button(
-                                "⬇️ Download state-average time-series (PDF)",
-                                fh.read(),
-                                file_name=pdf_path.name,
-                                mime="application/pdf",
-                            )
+                # --- Expander 1: State summary statistics (like district Risk summary) ---
+                with st.expander("State summary statistics", expanded=False):
+                    if ensemble.get("n_districts", 0) > 0:
+                        stat_rows = [
+                            {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
+                            {"Statistic": "median", "Value": f"{ensemble['median']:.2f}"},
+                            {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
+                            {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
+                            {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
+                            {
+                                "Statistic": "n_districts",
+                                "Value": str(int(ensemble["n_districts"])),
+                            },
+                        ]
+                        st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
                     else:
-                        st.info(
-                            "State-average yearly time-series is not available for this combination."
+                        st.info("No numeric district values found for this state & selection.")
+
+                # --- Expander 2: Per-model state averages ---
+                with st.expander("Per-model state averages", expanded=False):
+                    if not per_model_df.empty:
+                        # st.markdown("**Per-model state averages**")
+                        st.dataframe(
+                            per_model_df.rename(
+                                columns={"value": "state_avg", "n_districts": "n_districts_used"}
+                            ),
+                            width="stretch",
                         )
-                # else:
-                #     st.info(
-                #         "Click the button above to generate the state-average trend plot when needed."
-                #     )
+
+                    if sel_districts_gdf is not None and not sel_districts_gdf.empty:
+                        st.caption(f"Districts used: {len(sel_districts_gdf)}")
+
+                # --- Expander 3: Trend over time (state-average) ---
+                with st.expander("Trend over time (state average)", expanded=False):
+                    st.caption(
+                        "Generates a state-average yearly trend plot and PDF for the "
+                        "selected index, scenario, and period."
+                    )
+
+                    if st.button(
+                        "Generate state-average trend PDF",
+                        key=f"btn_state_trend_{VARIABLE_SLUG}_{selected_state}_{sel_scenario}",
+                    ):
+                        _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
+                        pdf_path = _make_state_yearly_pdf(
+                            _yearly_df,
+                            selected_state,
+                            sel_scenario,
+                            VARIABLES[VARIABLE_SLUG]["label"],
+                            PROCESSED_ROOT / "pdf_plots",
+                        )
+                        if pdf_path is not None and pdf_path.exists():
+                            with open(pdf_path, "rb") as fh:
+                                st.download_button(
+                                    "⬇️ Download state-average time-series (PDF)",
+                                    fh.read(),
+                                    file_name=pdf_path.name,
+                                    mime="application/pdf",
+                                )
+                        else:
+                            st.info(
+                                "State-average yearly time-series is not available for this combination."
+                            )
 
     # ----------- DISTRICT DETAILS MODE (enhanced) -----------
     else:
@@ -3417,6 +3449,7 @@ with col2:
 
             Page 1  : A4 cover + summary table
             Page 2+ : One full A4 page per index with trend figure + short narrative
+                    + compact scenario comparison panel (if available)
             """
             if summary_df is None or summary_df.empty:
                 return b""
@@ -3461,7 +3494,7 @@ with col2:
                     if c in summary_to_show.columns:
                         summary_to_show[c] = summary_to_show[c].apply(
                             lambda x: f"{x:.2f}"
-                            if isinstance(x, (int, float, float)) and not pd.isna(x)
+                            if isinstance(x, (int, float)) and not pd.isna(x)
                             else ""
                         )
 
@@ -3516,7 +3549,7 @@ with col2:
                 pdf.savefig(fig)
                 plt.close(fig)
 
-                # ---- One full A4 page per index with trend + narrative ----
+                # ---- One full A4 page per index with trend + narrative + scenario panel ----
                 for _, row_idx in summary_df.sort_values("index_label").iterrows():
                     slug = row_idx["index_slug"]
                     idx_label = row_idx.get("index_label", slug)
@@ -3537,10 +3570,11 @@ with col2:
 
                     # Resize to A4 and move axes to upper half of the page
                     fig_ts.set_size_inches(8.27, 11.69)  # A4
+                    ax_ts = None
                     if fig_ts.axes:
                         ax_ts = fig_ts.axes[0]
                         # [left, bottom, width, height] in figure fraction
-                        ax_ts.set_position([0.12, 0.48, 0.78, 0.40])
+                        ax_ts.set_position([0.12, 0.55, 0.78, 0.32])
 
                     # Title at top of page
                     fig_ts.suptitle(
@@ -3582,7 +3616,7 @@ with col2:
                             )
                             fig_ts.text(
                                 0.10,
-                                0.30,
+                                0.40,
                                 narrative,
                                 fontsize=9,
                                 va="top",
@@ -3592,9 +3626,27 @@ with col2:
                     except Exception:
                         pass
 
-                    # Optional: scenario/period mean bullets from panel_df
+                    # Scenario comparison: compact chart + bullet summary at the bottom
                     try:
                         if panel_df is not None and not panel_df.empty:
+                            # Small scenario comparison chart in the lower band
+                            # [left, bottom, width, height]
+                            ax_sc = fig_ts.add_axes([0.12, 0.18, 0.78, 0.18])
+
+                            # Reuse existing helper that powers the UI expander
+                            make_scenario_comparison_figure(
+                                panel_df=panel_df,
+                                metric_label=idx_label,
+                                sel_scenario=sel_scenario,
+                                sel_period=sel_period,
+                                sel_stat=sel_stat,
+                                district_name=district_name,
+                                # draw into this specific axis; function should use it if present
+                                ax=ax_sc,        # <-- requires make_scenario_comparison_figure to accept ax=
+                                figsize=fig_ts.get_size_inches(),
+                            )
+
+                            # Bullet text as caption under the chart
                             panel_sorted = panel_df.sort_values(["period", "scenario"])
                             lines = []
                             for _, r in panel_sorted.iterrows():
@@ -3602,8 +3654,12 @@ with col2:
                                     r["scenario"],
                                     str(r["scenario"]),
                                 )
+                                try:
+                                    val_str = f"{float(r['value']):.2f}"
+                                except Exception:
+                                    val_str = str(r["value"])
                                 lines.append(
-                                    f"{scen_label} {r['period']}: {r['value']:.2f}"
+                                    f"{scen_label} {r['period']}: {val_str}"
                                 )
                             if lines:
                                 text_sc = (
@@ -3612,7 +3668,7 @@ with col2:
                                 )
                                 fig_ts.text(
                                     0.10,
-                                    0.12,
+                                    0.08,
                                     text_sc,
                                     fontsize=8,
                                     va="top",
@@ -4159,7 +4215,9 @@ with col2:
 
             # Optional: jump to Rankings to select districts
             if st.button("📋 Select districts", key="btn_portfolio_select_from_rankings"):
-                st.session_state["active_view"] = "📊 Rankings table"
+                # Just set a one-shot flag; the main view selector block
+                # will read this and switch to Rankings before building the radio.
+                st.session_state["jump_to_rankings"] = True
                 st.rerun()
 
             portfolio = st.session_state.get("portfolio_districts", [])
