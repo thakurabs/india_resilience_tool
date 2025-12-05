@@ -4157,9 +4157,8 @@ with col2:
     if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
         with st.expander("Portfolio analysis (multi-district)", expanded=False):
 
-            # NEW: Button to jump to the Rankings view to select districts
+            # Optional: jump to Rankings to select districts
             if st.button("📋 Select districts", key="btn_portfolio_select_from_rankings"):
-                # Ask the left-hand view selector to show the Rankings table
                 st.session_state["active_view"] = "📊 Rankings table"
                 st.rerun()
 
@@ -4240,15 +4239,136 @@ with col2:
                             ),
                             mime="text/csv",
                         )
+
+                        # -------------------------------------------------
+                        # NEW: Multi-index comparison across portfolio
+                        # -------------------------------------------------
+                        st.markdown("---")
+                        st.markdown("#### Multi-index comparison for portfolio")
+
+                        index_options = list(VARIABLES.keys())
+                        default_multi = st.session_state.get(
+                            "portfolio_multiindex_selection",
+                            [VARIABLE_SLUG]
+                            if VARIABLE_SLUG in index_options
+                            else index_options[:1],
+                        )
+                        selected_index_slugs = st.multiselect(
+                            "Indices to include",
+                            options=index_options,
+                            default=default_multi,
+                            format_func=lambda s: VARIABLES[s]["label"],
+                            key="portfolio_multiindex_selection",
+                        )
+
+                        if selected_index_slugs:
+                            if st.button(
+                                "Build multi-index portfolio table",
+                                key=f"btn_build_portfolio_multiindex_{sel_scenario}_{sel_period}_{sel_stat}",
+                            ):
+                                records = []
+                                for item in portfolio:
+                                    state_name = item.get("state")
+                                    district_name = item.get("district")
+                                    if not state_name or not district_name:
+                                        continue
+
+                                    summary_df_cs, _, _ = _build_district_case_study_data(
+                                        state_name=state_name,
+                                        district_name=district_name,
+                                        index_slugs=selected_index_slugs,
+                                        sel_scenario=sel_scenario,
+                                        sel_period=sel_period,
+                                        sel_stat=sel_stat,
+                                    )
+
+                                    if isinstance(summary_df_cs, pd.DataFrame) and not summary_df_cs.empty:
+                                        df_local = summary_df_cs.copy()
+                                        df_local["state"] = state_name
+                                        df_local["district"] = district_name
+                                        records.append(df_local)
+
+                                if records:
+                                    portfolio_multiindex_df = pd.concat(records, ignore_index=True)
+                                    st.session_state["portfolio_multiindex_df"] = portfolio_multiindex_df
+                                    st.success(
+                                        f"Built multi-index table for {len(portfolio)} district(s) "
+                                        f"and {len(selected_index_slugs)} index/indices."
+                                    )
+                                else:
+                                    st.warning(
+                                        "No data found for the selected indices and portfolio districts. "
+                                        "Try a different combination of indices or scenario/period/statistic."
+                                    )
+
+                            portfolio_multiindex_df = st.session_state.get("portfolio_multiindex_df")
+                            if (
+                                isinstance(portfolio_multiindex_df, pd.DataFrame)
+                                and not portfolio_multiindex_df.empty
+                            ):
+                                cols_display = [
+                                    "state",
+                                    "district",
+                                    "index_label",
+                                    "group",
+                                    "current",
+                                    "baseline",
+                                    "delta_abs",
+                                    "delta_pct",
+                                    "rank_in_state",
+                                    "percentile_in_state",
+                                    "risk_class",
+                                ]
+                                cols_display = [
+                                    c
+                                    for c in cols_display
+                                    if c in portfolio_multiindex_df.columns
+                                ]
+
+                                st.markdown("**Portfolio – multi-index summary**")
+                                st.dataframe(
+                                    portfolio_multiindex_df[cols_display].rename(
+                                        columns={
+                                            "state": "State",
+                                            "district": "District",
+                                            "index_label": "Index",
+                                            "group": "Group",
+                                            "current": "Current value",
+                                            "baseline": "Baseline",
+                                            "delta_abs": "Δ vs baseline",
+                                            "delta_pct": "%Δ vs baseline",
+                                            "rank_in_state": "Rank in state",
+                                            "percentile_in_state": "Percentile in state",
+                                            "risk_class": "Risk class",
+                                        }
+                                    ),
+                                    use_container_width=True,
+                                )
+
+                                csv_multi = portfolio_multiindex_df.to_csv(index=False).encode("utf-8")
+                                st.download_button(
+                                    "⬇️ Download portfolio data (multi-index, CSV)",
+                                    data=csv_multi,
+                                    file_name=(
+                                        f"portfolio_multiindex_{sel_scenario}_{sel_period}_{sel_stat}.csv"
+                                    ),
+                                    mime="text/csv",
+                                    key="btn_portfolio_multiindex_csv",
+                                )
+                        else:
+                            st.caption(
+                                "Select at least one index to build a multi-index portfolio table."
+                            )
                 else:
                     st.caption(
                         "Ranking table is not available for the current index selection."
                     )
 
-                # Clear portfolio button
+                # Clear portfolio button (after the table_df if/else)
                 if st.button("🧹 Clear portfolio", key="btn_portfolio_clear"):
                     _portfolio_clear()
                     st.success("Cleared portfolio selection.")
+
 
 # -------------------------
 # Publish: HTML/PNG/TXT ZIP
