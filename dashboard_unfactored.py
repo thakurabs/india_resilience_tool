@@ -2122,94 +2122,6 @@ with col1:
                             return str(val), (str(state_val) if state_val else None)
             return None, None
 
-        clicked_name, clicked_state = extract_district_name_from_returned(returned)
-        if clicked_name:
-            cur = st.session_state.get("selected_district", "All")
-            if clicked_name != cur:
-                lc = clicked_name.strip().lower()
-                matches = merged[merged["district_name"].astype(str).str.lower() == lc]
-                if not matches.empty:
-                    canonical = matches.iloc[0]["district_name"]
-                    canonical_state = matches.iloc[0].get("state_name")
-                    geom_for_lookup = matches.iloc[0].geometry
-                else:
-                    cont = merged[
-                        merged["district_name"]
-                        .astype(str)
-                        .str.lower()
-                        .str.contains(lc)
-                    ]
-                    if not cont.empty:
-                        canonical = cont.iloc[0]["district_name"]
-                        canonical_state = cont.iloc[0].get("state_name")
-                        geom_for_lookup = cont.iloc[0].geometry
-                    else:
-                        canonical = clicked_name
-                        canonical_state = clicked_state
-                        geom_for_lookup = None
-                adm1_name_to_set = None
-                try:
-                    if geom_for_lookup is not None:
-                        pt = geom_for_lookup.representative_point()
-                        contains = adm1[adm1.geometry.contains(pt)]
-                        if not contains.empty:
-                            adm1_name_to_set = (
-                                contains.iloc[0].get("shapeName")
-                                or contains.iloc[0].get("shapeGroup")
-                            )
-                    if adm1_name_to_set is None and canonical_state:
-                        cs = str(canonical_state).strip().lower()
-                        exact = adm1[
-                            adm1["shapeName"]
-                            .astype(str)
-                            .str.strip()
-                            .str.lower()
-                            == cs
-                        ]
-                        if not exact.empty:
-                            adm1_name_to_set = exact.iloc[0]["shapeName"]
-                        else:
-                            subs = adm1[
-                                adm1["shapeName"]
-                                .astype(str)
-                                .str.strip()
-                                .str.lower()
-                                .str.contains(cs, na=False)
-                            ]
-                            if not subs.empty:
-                                adm1_name_to_set = subs.iloc[0]["shapeName"]
-                            else:
-                                candidates = adm1["shapeName"].astype(str).tolist()
-                                close = difflib.get_close_matches(
-                                    canonical_state, candidates, n=1, cutoff=0.7
-                                )
-                                if close:
-                                    adm1_name_to_set = close[0]
-                except Exception:
-                    adm1_name_to_set = None
-
-                if adm1_name_to_set is None:
-                    adm1_name_to_set = canonical_state or "All"
-                st.session_state["pending_selected_district"] = canonical
-
-                states_list = ["All"] + sorted(
-                    adm1["shapeName"].astype(str).str.strip().unique().tolist()
-                )
-                if adm1_name_to_set and adm1_name_to_set in states_list:
-                    st.session_state["pending_selected_state"] = adm1_name_to_set
-                else:
-                    lowered = {s.strip().lower(): s for s in states_list}
-                    if (
-                        adm1_name_to_set
-                        and adm1_name_to_set.strip().lower() in lowered
-                    ):
-                        st.session_state["pending_selected_state"] = lowered[
-                            adm1_name_to_set.strip().lower()
-                        ]
-                    else:
-                        st.session_state["pending_selected_state"] = "All"
-                st.rerun()
-
     # ---------- VIEW 2: RANKINGS TABLE ----------
     elif view == "📊 Rankings table":
         st.subheader("District rankings")
@@ -2478,7 +2390,7 @@ with col2:
         return candidates[0][0]
 
     # ----------- STATE SUMMARY MODE (no district selected) -----------
-    if matched_row is None or matched_row.empty:
+    if (matched_row is None or matched_row.empty) and selected_district == "All":
         if selected_state != "All":
             ensemble, per_model_df, sel_districts_gdf = compute_state_metrics_from_merged(
                 merged, adm1, metric_col, selected_state
@@ -4207,10 +4119,11 @@ with col2:
     if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
         with st.expander("Portfolio analysis (multi-district)", expanded=False):
 
-            # Optional: jump to Rankings to select districts
-            if st.button("📋 Select districts", key="btn_portfolio_select_from_rankings"):
-                # Just set a one-shot flag; the main view selector block
-                # will read this and switch to Rankings before building the radio.
+            if st.button(
+                "📋 Select districts from table",
+                key="btn_portfolio_select_from_rankings",
+            ):
+                # Set a one-shot flag; the top-level / view hook will honour this
                 st.session_state["jump_to_rankings"] = True
                 st.rerun()
 
@@ -4219,8 +4132,10 @@ with col2:
             if not portfolio:
                 st.info(
                     "No districts in the portfolio yet. "
-                    "Use **Select districts** above to open the Rankings view, "
-                    "then check rows in the 'Add to portfolio' column."
+                    "Use **Select districts from table** above to open the Rankings view, "
+                    "then check rows in the 'Add to portfolio' column. "
+                    "You can also click districts on the map and use "
+                    "**Add this district to portfolio** in the Climate Profile panel."
                 )
             else:
                 portfolio_df = pd.DataFrame(portfolio)
