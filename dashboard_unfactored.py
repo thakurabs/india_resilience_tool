@@ -4233,30 +4233,161 @@ with col2:
                                 "Build multi-index portfolio table",
                                 key=f"btn_build_portfolio_multiindex_{sel_scenario}_{sel_period}_{sel_stat}",
                             ):
-                                records = []
+                                records: list[dict] = []
                                 for item in portfolio:
                                     state_name = item.get("state")
                                     district_name = item.get("district")
                                     if not state_name or not district_name:
                                         continue
 
-                                    summary_df_cs, _, _ = _build_district_case_study_data(
-                                        state_name=state_name,
-                                        district_name=district_name,
-                                        index_slugs=selected_index_slugs,
-                                        sel_scenario=sel_scenario,
-                                        sel_period=sel_period,
-                                        sel_stat=sel_stat,
-                                    )
+                                    for slug in selected_index_slugs:
+                                        varcfg = VARIABLES.get(slug)
+                                        if not varcfg:
+                                            continue
 
-                                    if isinstance(summary_df_cs, pd.DataFrame) and not summary_df_cs.empty:
-                                        df_local = summary_df_cs.copy()
-                                        df_local["state"] = state_name
-                                        df_local["district"] = district_name
-                                        records.append(df_local)
+                                        # Determine processed root for this index, similar to PROCESSED_ROOT logic
+                                        env_root = os.getenv("IRT_PROCESSED_ROOT")
+                                        if env_root:
+                                            base_path = Path(env_root)
+                                            if base_path.name.lower() == slug.lower():
+                                                proc_root = base_path
+                                            else:
+                                                proc_root = base_path / slug
+                                        else:
+                                            proc_root = DATA_DIR / "processed" / slug
+                                        proc_root = proc_root.resolve()
+
+                                        master_path = proc_root / PILOT_STATE / "master_metrics_by_district.csv"
+                                        if not master_path.exists():
+                                            continue
+
+                                        try:
+                                            df_master, schema_items_local, metrics_local, by_metric_local = _load_master_and_schema(
+                                                master_path, slug
+                                            )
+                                        except Exception:
+                                            continue
+
+                                        if df_master is None or df_master.empty:
+                                            continue
+
+                                        # Decide metric name for this slug (align with normalized metrics)
+                                        registry_metric = varcfg.get("periods_metric_col")
+                                        available_metrics = set(metrics_local or [])
+                                        if not available_metrics:
+                                            continue
+                                        if registry_metric not in available_metrics:
+                                            m_lower = {m.lower(): m for m in available_metrics}
+                                            registry_metric = m_lower.get(
+                                                str(registry_metric).lower(), next(iter(available_metrics))
+                                            )
+
+                                        metric_col = f"{registry_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
+                                        if metric_col not in df_master.columns:
+                                            # skip this index if we don't have the requested scenario/period/stat
+                                            continue
+
+                                        # Robust match for a single state+district row
+                                        dm = df_master.copy()
+                                        if "state" not in dm.columns or "district" not in dm.columns:
+                                            continue
+
+                                        def _n(s: str) -> str:
+                                            return alias(s)
+
+                                        dm["_state_key"] = dm["state"].astype(str).map(_n)
+                                        dm["_district_key"] = dm["district"].astype(str).map(_n)
+
+                                        target_state = _n(state_name)
+                                        target_dist = _n(district_name)
+
+                                        mask = (dm["_state_key"] == target_state) & (dm["_district_key"] == target_dist)
+                                        if not mask.any():
+                                            # fall back to contains on district name within same state
+                                            mask = (dm["_state_key"] == target_state) & dm["_district_key"].str.contains(
+                                                target_dist, na=False
+                                            )
+                                        if not mask.any():
+                                            continue
+
+                                        row_local = dm.loc[mask].iloc[0]
+
+                                        current_val = row_local.get(metric_col)
+                                        current_val_f = pd.to_numeric([current_val], errors="coerce")[0]
+                                        if pd.isna(current_val_f):
+                                            current_val_f = None
+
+                                        # Baseline for same metric/stat in historical baseline period
+                                        baseline_col = find_baseline_column_for_stat(
+                                            dm.columns, registry_metric, sel_stat
+                                        )
+                                        baseline_val_f = None
+                                        if baseline_col and baseline_col in dm.columns:
+                                            baseline_val = row_local.get(baseline_col)
+                                            baseline_val_f = pd.to_numeric(
+                                                [baseline_val], errors="coerce"
+                                            )[0]
+                                            if pd.isna(baseline_val_f):
+                                                baseline_val_f = None
+
+                                        delta_abs = None
+                                        delta_pct = None
+                                        if current_val_f is not None and baseline_val_f is not None:
+                                            delta_abs = current_val_f - baseline_val_f
+                                            if abs(baseline_val_f) > 1e-6:
+                                                delta_pct = delta_abs / baseline_val_f * 100.0
+
+                                        # Rank and percentile within state
+                                        rank_in_state = None
+                                        percentile_in_state = None
+                                        n_in_state = None
+                                        try:
+                                            state_mask = dm["_state_key"] == target_state
+                                            state_vals = pd.to_numeric(
+                                                dm.loc[state_mask, metric_col], errors="coerce"
+                                            ).dropna()
+                                            n_in_state = int(state_vals.size) if state_vals.size else None
+                                            if (
+                                                n_in_state
+                                                and current_val_f is not None
+                                                and n_in_state > 0
+                                            ):
+                                                rank_in_state = int((state_vals > current_val_f).sum() + 1)
+                                                percentile_in_state = float(
+                                                    (state_vals < current_val_f).sum() / n_in_state * 100.0
+                                                )
+                                        except Exception:
+                                            pass
+
+                                        risk_class = (
+                                            risk_class_from_percentile(percentile_in_state)
+                                            if percentile_in_state is not None
+                                            else "Unknown"
+                                        )
+
+                                        records.append(
+                                            {
+                                                "state": state_name,
+                                                "district": district_name,
+                                                "index_slug": slug,
+                                                "index_label": varcfg.get("label", slug),
+                                                "group": varcfg.get("group"),
+                                                "scenario": sel_scenario,
+                                                "period": sel_period,
+                                                "stat": sel_stat,
+                                                "current": current_val_f,
+                                                "baseline": baseline_val_f,
+                                                "delta_abs": delta_abs,
+                                                "delta_pct": delta_pct,
+                                                "rank_in_state": rank_in_state,
+                                                "percentile_in_state": percentile_in_state,
+                                                "n_in_state": n_in_state,
+                                                "risk_class": risk_class,
+                                            }
+                                        )
 
                                 if records:
-                                    portfolio_multiindex_df = pd.concat(records, ignore_index=True)
+                                    portfolio_multiindex_df = pd.DataFrame.from_records(records)
                                     st.session_state["portfolio_multiindex_df"] = portfolio_multiindex_df
                                     st.success(
                                         f"Built multi-index table for {len(portfolio)} district(s) "
