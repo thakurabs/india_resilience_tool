@@ -2124,9 +2124,26 @@ with col1:
             "analysis_mode", "Single district focus"
         )
 
+        # In Multi-district portfolio mode, draw multi-point markers (if any)
         if analysis_mode == "Multi-district portfolio":
-            # If a point has been selected (via manual lat–lon or map selection),
-            # show it on the map as a marker.
+            # Multi-point collection (saved points)
+            points = st.session_state.get("point_query_points", [])
+            if isinstance(points, list):
+                for idx, pt in enumerate(points, start=1):
+                    if not isinstance(pt, dict):
+                        continue
+                    try:
+                        lat_p = float(pt.get("lat"))
+                        lon_p = float(pt.get("lon"))
+                    except (TypeError, ValueError):
+                        continue
+
+                    folium.Marker(
+                        location=[lat_p, lon_p],
+                        tooltip=f"Point {idx}: {lat_p:.4f}, {lon_p:.4f}",
+                    ).add_to(m)
+
+            # Active point (current point used in the Climate Profile)
             point_query = st.session_state.get("point_query_latlon")
             if isinstance(point_query, dict):
                 try:
@@ -2134,7 +2151,7 @@ with col1:
                     lon_q = float(point_query.get("lon"))
                     folium.Marker(
                         location=[lat_q, lon_q],
-                        tooltip=f"Point query: {lat_q:.4f}, {lon_q:.4f}",
+                        tooltip=f"Active point: {lat_q:.4f}, {lon_q:.4f}",
                     ).add_to(m)
                 except (TypeError, ValueError):
                     # Ignore invalid/partial values silently
@@ -2151,6 +2168,7 @@ with col1:
                 "zoom",
             ],
         )
+
 
         def extract_district_name_from_returned(
             ret,
@@ -2364,20 +2382,28 @@ with col2:
         minx, maxx = -180.0, 180.0
         default_lat, default_lon = 20.0, 78.0
 
+    # Ensure we know the current analysis mode
+    analysis_mode = st.session_state.get(
+        "analysis_mode", "Single district focus"
+    )
+
     clear_clicked = False
 
     # Show Point Query controls only in Multi-district portfolio mode
     if analysis_mode == "Multi-district portfolio":
+        # Container for multi-point saved list
+        if "point_query_points" not in st.session_state:
+            st.session_state["point_query_points"] = []
+
         with st.expander("📍 Point query (lat–lon)", expanded=False):
+            # --- Manual lat / lon input ---
             col_lat, col_lon = st.columns(2)
             with col_lat:
                 lat_input = st.number_input(
                     "Latitude",
                     min_value=float(miny),
                     max_value=float(maxy),
-                    value=float(
-                        st.session_state.get("point_query_lat", default_lat)
-                    ),
+                    value=float(st.session_state.get("point_query_lat", default_lat)),
                     format="%.4f",
                 )
             with col_lon:
@@ -2385,34 +2411,31 @@ with col2:
                     "Longitude",
                     min_value=float(minx),
                     max_value=float(maxx),
-                    value=float(
-                        st.session_state.get("point_query_lon", default_lon)
-                    ),
+                    value=float(st.session_state.get("point_query_lon", default_lon)),
                     format="%.4f",
                 )
 
-            col_btn1, col_btn2, col_btn3 = st.columns(3)
+            # --- Single-point actions ---
+            col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+
+            # 1) Use manually entered lat/lon as current point
             with col_btn1:
                 if st.button("Use this point", key="btn_use_latlon"):
                     lat_f = float(lat_input)
                     lon_f = float(lon_input)
                     st.session_state["point_query_lat"] = lat_f
                     st.session_state["point_query_lon"] = lon_f
-                    st.session_state["point_query_latlon"] = {
-                        "lat": lat_f,
-                        "lon": lon_f,
-                    }
-                    # Immediately rerun so the map marker updates in the same user click
-                    st.rerun()
+                    st.session_state["point_query_latlon"] = {"lat": lat_f, "lon": lon_f}
 
+            # 2) Enable one-shot map selection
             with col_btn2:
                 if st.button("Select on map", key="btn_select_on_map"):
-                    # Enable one-shot map selection mode. The next map click
-                    # will set the point and then disable this flag.
+                    # Next map click will set the point and then turn this flag off
                     st.session_state["point_query_select_on_map"] = True
 
+            # 3) Clear current point selection
             with col_btn3:
-                if st.button("Clear selection", key="btn_clear_point"):
+                if st.button("Clear point", key="btn_clear_point"):
                     # Clear any previously stored point selection and marker
                     for _k in (
                         "point_query_lat",
@@ -2422,13 +2445,98 @@ with col2:
                     ):
                         st.session_state.pop(_k, None)
                     clear_clicked = True
-                    # Rerun so the cleared state is reflected immediately on the map
-                    st.rerun()
 
+            # 4) Add current point to saved list (multi-point)
+            with col_btn4:
+                if st.button("Save point", key="btn_save_point"):
+                    try:
+                        lat_f = float(lat_input)
+                        lon_f = float(lon_input)
+                    except (TypeError, ValueError):
+                        lat_f, lon_f = None, None
+
+                    if lat_f is not None and lon_f is not None:
+                        pts = st.session_state.get("point_query_points", [])
+                        # Avoid exact duplicates
+                        exists = any(
+                            abs(p.get("lat") - lat_f) < 1e-6
+                            and abs(p.get("lon") - lon_f) < 1e-6
+                            for p in pts
+                        )
+                        if not exists:
+                            pts.append({"lat": lat_f, "lon": lon_f})
+                            st.session_state["point_query_points"] = pts
+
+            # Helper text when map-selection mode is active
             if st.session_state.get("point_query_select_on_map", False):
                 st.info(
                     "Map selection active: click once on the map to choose a point. "
                     "The next click will set the point and turn off selection."
+                )
+
+            # ---- Saved multi-point list + portfolio glue ----
+            saved_points = st.session_state.get("point_query_points", [])
+            if saved_points:
+                st.markdown("**Saved points for portfolio selection**")
+                saved_points_df = pd.DataFrame(saved_points)
+                saved_points_df.index = saved_points_df.index + 1
+                st.dataframe(
+                    saved_points_df.rename(
+                        columns={"lat": "Latitude", "lon": "Longitude"}
+                    ),
+                    use_container_width=True,
+                )
+
+                col_sp1, col_sp2 = st.columns(2)
+                with col_sp1:
+                    if st.button("Clear saved points", key="btn_clear_saved_points"):
+                        st.session_state["point_query_points"] = []
+
+                with col_sp2:
+                    if st.button(
+                        "Add saved points' districts to portfolio",
+                        key="btn_points_to_portfolio",
+                    ):
+                        added = 0
+                        pts = st.session_state.get("point_query_points", [])
+                        for p in pts:
+                            plat = p.get("lat")
+                            plon = p.get("lon")
+                            if plat is None or plon is None:
+                                continue
+                            try:
+                                pt = Point(float(plon), float(plat))
+                            except (TypeError, ValueError):
+                                continue
+
+                            # Use the same geometry logic as the main point query:
+                            try:
+                                contains_mask = merged.geometry.contains(pt)
+                                if contains_mask.any():
+                                    row = merged[contains_mask].iloc[0]
+                                else:
+                                    centroids = merged.geometry.centroid
+                                    dists = centroids.distance(pt)
+                                    idx = dists.idxmin()
+                                    row = merged.loc[idx]
+                            except Exception:
+                                continue
+
+                            state_name = str(row.get("state_name", "")).strip()
+                            district_name = str(row.get("district_name", "")).strip()
+                            if state_name and district_name:
+                                _portfolio_add(state_name, district_name)
+                                added += 1
+
+                        st.success(
+                            f"Added {added} district(s) to portfolio from saved points."
+                            if added
+                            else "No districts were added (could not match points to districts)."
+                        )
+            else:
+                st.caption(
+                    "Use **Save point** to build a list of locations and then "
+                    "send their districts into the multi-district portfolio."
                 )
 
     clicked_feature = None
