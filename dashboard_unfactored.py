@@ -1291,16 +1291,22 @@ if st.session_state.get("jump_to_rankings", False):
 with st.sidebar:
     try:
         st.image(LOGO_PATH, width=220)
-
     except Exception:
         pass
-    # st.markdown("---")
+
+    # Toggle for enabling/disabling hover highlight + tooltip, just under the logo
+    st.checkbox(
+        "Enable hover highlight & tooltip",
+        key="hover_enabled",
+        value=st.session_state.get("hover_enabled", True),
+    )
+
+    analysis_mode_placeholder = st.empty()  # Single vs multi-district analysis
 
     state_placeholder = st.empty()
     district_placeholder = st.empty()
 
     metric_ui_placeholder = st.empty()  # unified "Index" UI
-    analysis_mode_placeholder = st.empty()  # Single vs multi-district analysis
     map_mode_placeholder = st.empty()   # NEW: absolute vs change toggle
     color_slider_placeholder = st.empty()
     st.markdown("---")
@@ -1322,200 +1328,201 @@ PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 # Unified Index selection (single dropdown)
 # -------------------------
 with metric_ui_placeholder.container():
-    st.markdown("### Metric selection")
+    with st.expander("Metric selection", expanded=True):
+        st.markdown("### Metric selection")
 
-    # --- NEW: first pick an index group (Temperature / Rainfall / etc.) ---
-    raw_groups = {cfg.get("group", "other") for cfg in VARIABLES.values()}
+        # --- NEW: first pick an index group (Temperature / Rainfall / etc.) ---
+        raw_groups = {cfg.get("group", "other") for cfg in VARIABLES.values()}
 
-    # Deterministic ordering: Temperature, Rain, then any others alphabetically
-    preferred_order = ["temperature", "rain"]
-    all_groups: list[str] = []
-    for g in preferred_order:
-        if g in raw_groups:
-            all_groups.append(g)
-    for g in sorted(raw_groups):
-        if g not in all_groups:
-            all_groups.append(g)
+        # Deterministic ordering: Temperature, Rain, then any others alphabetically
+        preferred_order = ["temperature", "rain"]
+        all_groups: list[str] = []
+        for g in preferred_order:
+            if g in raw_groups:
+                all_groups.append(g)
+        for g in sorted(raw_groups):
+            if g not in all_groups:
+                all_groups.append(g)
 
-    default_group = st.session_state.get("selected_index_group")
-    if default_group not in all_groups:
-        default_group = "temperature" if "temperature" in all_groups else all_groups[0]
+        default_group = st.session_state.get("selected_index_group")
+        if default_group not in all_groups:
+            default_group = "temperature" if "temperature" in all_groups else all_groups[0]
 
-    selected_group = st.radio(
-        "Index group",
-        options=all_groups,
-        index=all_groups.index(default_group),
-        key="selected_index_group",
-        format_func=lambda g: INDEX_GROUP_LABELS.get(g, str(g).title()),
-    )
+        selected_group = st.radio(
+            "Index group",
+            options=all_groups,
+            index=all_groups.index(default_group),
+            key="selected_index_group",
+            format_func=lambda g: INDEX_GROUP_LABELS.get(g, str(g).title()),
+        )
 
-    # Filter indices by the chosen group
-    index_slugs = [
-        slug
-        for slug, cfg in VARIABLES.items()
-        if cfg.get("group", "other") == selected_group
-    ]
+        # Filter indices by the chosen group
+        index_slugs = [
+            slug
+            for slug, cfg in VARIABLES.items()
+            if cfg.get("group", "other") == selected_group
+        ]
 
-    # Safety fallback: if something goes wrong, show all indices
-    if not index_slugs:
-        index_slugs = list(VARIABLES.keys())
+        # Safety fallback: if something goes wrong, show all indices
+        if not index_slugs:
+            index_slugs = list(VARIABLES.keys())
 
-    # Previously selected index might not be in this group; clamp it
-    default_slug = st.session_state.get("selected_var", index_slugs[0])
-    if default_slug not in index_slugs:
-        default_slug = index_slugs[0]
+        # Previously selected index might not be in this group; clamp it
+        default_slug = st.session_state.get("selected_var", index_slugs[0])
+        if default_slug not in index_slugs:
+            default_slug = index_slugs[0]
 
-    selected_var = st.selectbox(
-        "Index",
-        options=index_slugs,
-        index=index_slugs.index(default_slug),
-        key="selected_var",
-        format_func=lambda k: VARIABLES[k]["label"],
-    )
+        selected_var = st.selectbox(
+            "Index",
+            options=index_slugs,
+            index=index_slugs.index(default_slug),
+            key="selected_var",
+            format_func=lambda k: VARIABLES[k]["label"],
+        )
 
-    # Resolve per-index config
-    VARIABLE_SLUG = selected_var
-    VARCFG = VARIABLES[VARIABLE_SLUG]
+        # Resolve per-index config
+        VARIABLE_SLUG = selected_var
+        VARCFG = VARIABLES[VARIABLE_SLUG]
 
-    # --- NEW: small info button + text description for the selected index ---
-    desc = VARCFG.get("description", "").strip()
-    if desc:
-        # # A tiny ℹ️ button with a tooltip on hover
-        # info_col, _ = st.columns([0.12, 0.88])
-        # with info_col:
-        #     st.button("ℹ️", help=desc)
-        # # And a short textual caption under the dropdown
-        st.caption(desc)
+        # --- NEW: small info button + text description for the selected index ---
+        desc = VARCFG.get("description", "").strip()
+        if desc:
+            # # A tiny ℹ️ button with a tooltip on hover
+            # info_col, _ = st.columns([0.12, 0.88])
+            # with info_col:
+            #     st.button("ℹ️", help=desc)
+            # # And a short textual caption under the dropdown
+            st.caption(desc)
 
-    PROCESSED_ROOT = Path(
-        os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / VARIABLE_SLUG)
-    ).resolve()
-    (PROCESSED_ROOT / PILOT_STATE).mkdir(parents=True, exist_ok=True)
-    MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / "master_metrics_by_district.csv"
+        PROCESSED_ROOT = Path(
+            os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / VARIABLE_SLUG)
+        ).resolve()
+        (PROCESSED_ROOT / PILOT_STATE).mkdir(parents=True, exist_ok=True)
+        MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / "master_metrics_by_district.csv"
 
-    # Rebuilder bound to this index
-    def rebuild_master_csv_if_needed(
-        force: bool = False, attach_centroid_geojson: str | None = None
-    ):
-        needs = force or master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE)
-        if not needs:
-            return False, "up-to-date"
-        try:
-            from build_master_metrics import build_master_metrics
-        except Exception as e:
-            return False, f"builder import failed: {e}"
-        try:
-            build_master_metrics(
-                str(PROCESSED_ROOT),
-                PILOT_STATE,
-                metric_col_in_periods=VARCFG["periods_metric_col"],
-                out_path=str(MASTER_CSV_PATH),
-                attach_centroid_geojson=attach_centroid_geojson,
-                verbose=True,
-            )
-            return True, "rebuilt"
-        except Exception as e:
-            return False, f"rebuild failed: {e}"
-
-    # Ensure master exists/fresh for this index
-    try:
-        if master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE):
-            with st.spinner("Master CSV missing or stale — rebuilding now..."):
-                ok, msg = rebuild_master_csv_if_needed(
-                    force=False, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON
+        # Rebuilder bound to this index
+        def rebuild_master_csv_if_needed(
+            force: bool = False, attach_centroid_geojson: str | None = None
+        ):
+            needs = force or master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE)
+            if not needs:
+                return False, "up-to-date"
+            try:
+                from build_master_metrics import build_master_metrics
+            except Exception as e:
+                return False, f"builder import failed: {e}"
+            try:
+                build_master_metrics(
+                    str(PROCESSED_ROOT),
+                    PILOT_STATE,
+                    metric_col_in_periods=VARCFG["periods_metric_col"],
+                    out_path=str(MASTER_CSV_PATH),
+                    attach_centroid_geojson=attach_centroid_geojson,
+                    verbose=True,
                 )
-                st.success("Master CSV rebuilt.") if ok else st.error(
-                    f"Auto-rebuild failed: {msg}"
-                )
-    except Exception as e:
-        st.warning(f"Could not check master CSV freshness: {e}")
+                return True, "rebuilt"
+            except Exception as e:
+                return False, f"rebuild failed: {e}"
 
-    if not MASTER_CSV_PATH.exists():
-        st.error(
-            f"Master CSV not found for {VARIABLES[VARIABLE_SLUG]['label']} at {MASTER_CSV_PATH}. "
-            f"Click 'Rebuild now' below."
-        )
-        st.stop()
-
-    # Load + parse schema (for scenario/period/stat only), cached by file mtime
-    def _load_master_and_schema(master_path: Path, slug: str):
-        cache = st.session_state.setdefault("_master_cache", {})
+        # Ensure master exists/fresh for this index
         try:
-            mtime = master_path.stat().st_mtime
-        except Exception:
-            mtime = None
+            if master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE):
+                with st.spinner("Master CSV missing or stale — rebuilding now..."):
+                    ok, msg = rebuild_master_csv_if_needed(
+                        force=False, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON
+                    )
+                    st.success("Master CSV rebuilt.") if ok else st.error(
+                        f"Auto-rebuild failed: {msg}"
+                    )
+        except Exception as e:
+            st.warning(f"Could not check master CSV freshness: {e}")
 
-        entry = cache.get(slug)
-        if entry is not None and entry.get("mtime") == mtime:
-            return (
-                entry["df"],
-                entry["schema_items"],
-                entry["metrics"],
-                entry["by_metric"],
+        if not MASTER_CSV_PATH.exists():
+            st.error(
+                f"Master CSV not found for {VARIABLES[VARIABLE_SLUG]['label']} at {MASTER_CSV_PATH}. "
+                f"Click 'Rebuild now' below."
+            )
+            st.stop()
+
+        # Load + parse schema (for scenario/period/stat only), cached by file mtime
+        def _load_master_and_schema(master_path: Path, slug: str):
+            cache = st.session_state.setdefault("_master_cache", {})
+            try:
+                mtime = master_path.stat().st_mtime
+            except Exception:
+                mtime = None
+
+            entry = cache.get(slug)
+            if entry is not None and entry.get("mtime") == mtime:
+                return (
+                    entry["df"],
+                    entry["schema_items"],
+                    entry["metrics"],
+                    entry["by_metric"],
+                )
+
+            # (Re)load from disk
+            with st.spinner("Loading master CSV..."):
+                df_local = load_master_csv(str(master_path))
+
+            df_local = normalize_master_columns(df_local)
+            schema_items_local, metrics_local, by_metric_local = parse_master_schema(
+                df_local.columns
             )
 
-        # (Re)load from disk
-        with st.spinner("Loading master CSV..."):
-            df_local = load_master_csv(str(master_path))
+            cache[slug] = {
+                "df": df_local,
+                "schema_items": schema_items_local,
+                "metrics": metrics_local,
+                "by_metric": by_metric_local,
+                "mtime": mtime,
+            }
+            return df_local, schema_items_local, metrics_local, by_metric_local
 
-        df_local = normalize_master_columns(df_local)
-        schema_items_local, metrics_local, by_metric_local = parse_master_schema(
-            df_local.columns
+        df, schema_items, metrics, by_metric = _load_master_and_schema(
+            MASTER_CSV_PATH, VARIABLE_SLUG
+        )
+        if not metrics:
+            st.error("No ensemble statistic columns found in the master CSV. Did the builder run?")
+            st.stop()
+
+        # Choose the internal metric name from the registry (no separate Metric dropdown)
+        registry_metric = VARCFG["periods_metric_col"]
+        # If normalized columns changed the metric name casing, align it:
+        available_metrics = set(metrics)
+        if registry_metric not in available_metrics:
+            m_lower = {m.lower(): m for m in available_metrics}
+            registry_metric = m_lower.get(VARCFG["periods_metric_col"].lower(), next(iter(available_metrics)))
+
+        # Scenario / Period / Statistic pickers remain
+        items_for_m = by_metric.get(registry_metric, [])
+        all_scenarios = (
+            sorted(set(i["scenario"] for i in items_for_m))
+            if items_for_m
+            else sorted(set(i["scenario"] for i in schema_items))
         )
 
-        cache[slug] = {
-            "df": df_local,
-            "schema_items": schema_items_local,
-            "metrics": metrics_local,
-            "by_metric": by_metric_local,
-            "mtime": mtime,
-        }
-        return df_local, schema_items_local, metrics_local, by_metric_local
+        # Only allow SSP245 and SSP585 in the UI
+        allowed = {"ssp245", "ssp585"}
+        scenarios = [s for s in all_scenarios if str(s).strip().lower() in allowed]
 
-    df, schema_items, metrics, by_metric = _load_master_and_schema(
-        MASTER_CSV_PATH, VARIABLE_SLUG
-    )
-    if not metrics:
-        st.error("No ensemble statistic columns found in the master CSV. Did the builder run?")
-        st.stop()
+        if not scenarios:
+            st.error("No SSP245/SSP585 data found for this index in the master CSV.")
+            st.stop()
 
-    # Choose the internal metric name from the registry (no separate Metric dropdown)
-    registry_metric = VARCFG["periods_metric_col"]
-    # If normalized columns changed the metric name casing, align it:
-    available_metrics = set(metrics)
-    if registry_metric not in available_metrics:
-        m_lower = {m.lower(): m for m in available_metrics}
-        registry_metric = m_lower.get(VARCFG["periods_metric_col"].lower(), next(iter(available_metrics)))
-
-    # Scenario / Period / Statistic pickers remain
-    items_for_m = by_metric.get(registry_metric, [])
-    all_scenarios = (
-        sorted(set(i["scenario"] for i in items_for_m))
-        if items_for_m
-        else sorted(set(i["scenario"] for i in schema_items))
-    )
-
-    # Only allow SSP245 and SSP585 in the UI
-    allowed = {"ssp245", "ssp585"}
-    scenarios = [s for s in all_scenarios if str(s).strip().lower() in allowed]
-
-    if not scenarios:
-        st.error("No SSP245/SSP585 data found for this index in the master CSV.")
-        st.stop()
-
-    sel_scenario = st.selectbox("Scenario", scenarios, index=0, key="sel_scenario")
+        sel_scenario = st.selectbox("Scenario", scenarios, index=0, key="sel_scenario")
 
 
-    periods = sorted(
-        set(
-            i["period"]
-            for i in (by_metric.get(registry_metric, []) or schema_items)
-            if i["scenario"] == sel_scenario
+        periods = sorted(
+            set(
+                i["period"]
+                for i in (by_metric.get(registry_metric, []) or schema_items)
+                if i["scenario"] == sel_scenario
+            )
         )
-    )
-    sel_period = st.selectbox("Period", periods, index=0, key="sel_period")
-    stats = ["mean", "median", "p05", "p95", "std"]
-    sel_stat = st.selectbox("Statistic", stats, index=0, key="sel_stat")
+        sel_period = st.selectbox("Period", periods, index=0, key="sel_period")
+        stats = ["mean", "median", "p05", "p95", "std"]
+        sel_stat = st.selectbox("Statistic", stats, index=0, key="sel_stat")
 
 # Column chosen to plot
 sel_metric = registry_metric  # internal name
@@ -1531,39 +1538,41 @@ pretty_metric_label = (
 # Analysis focus (single vs multi-district)
 # -------------------------
 with analysis_mode_placeholder.container():
-    st.markdown(
-        "<div style='font-weight:600; font-size:1rem; margin-bottom:-0.35rem;'>Analysis focus</div>",
-        unsafe_allow_html=True,
-    )
-    analysis_mode = st.radio(
-        "Analysis focus",
-        options=[
-            "Single district focus",
-            "Multi-district portfolio",
-        ],
-        index=0,
-        key="analysis_mode",
-        label_visibility="collapsed",
-    )
+    with st.expander("Analysis focus", expanded=True):
+        st.markdown(
+            "<div style='font-weight:600; font-size:1rem; margin-bottom:-0.35rem;'>Analysis focus</div>",
+            unsafe_allow_html=True,
+        )
+        analysis_mode = st.radio(
+            "Analysis focus",
+            options=[
+                "Single district focus",
+                "Multi-district portfolio",
+            ],
+            index=0,
+            key="analysis_mode",
+            label_visibility="collapsed",
+        )
 
 
 with map_mode_placeholder.container():
     # Tight "Map mode" label with no extra space before the radio
-    st.markdown(
-        "<div style='font-weight:600; font-size:1rem; margin-bottom:-0.35rem;'>Map mode</div>",
-        unsafe_allow_html=True,
-    )
+    with st.expander("Chloropleth settings", expanded=True):
+        st.markdown(
+            "<div style='font-weight:600; font-size:1rem; margin-bottom:-0.35rem;'>Map mode</div>",
+            unsafe_allow_html=True,
+        )
 
-    map_mode = st.radio(
-        "Map mode",  # non-empty label for accessibility
-        options=[
-            "Absolute value",
-            "Change from 1990-2010 baseline",
-        ],
-        index=0,
-        key="map_mode",
-        label_visibility="collapsed",  # keeps UI same as before
-    )
+        map_mode = st.radio(
+            "Map mode",  # non-empty label for accessibility
+            options=[
+                "Absolute value",
+                "Change from 1990-2010 baseline",
+            ],
+            index=0,
+            key="map_mode",
+            label_visibility="collapsed",  # keeps UI same as before
+        )
 
 # -------------------------
 # Master dataset controls (bound to chosen Index)
@@ -1610,91 +1619,107 @@ if "pending_selected_state" in st.session_state:
 if "pending_selected_district" in st.session_state:
     st.session_state["selected_district"] = st.session_state.pop("pending_selected_district")
 
-# State/district selectors
-states = ["All"] + sorted(adm1["shapeName"].astype(str).str.strip().unique().tolist())
-if "selected_state" not in st.session_state or st.session_state["selected_state"] not in states:
-    st.session_state["selected_state"] = "Telangana" if "Telangana" in states else "All"
-selected_state = state_placeholder.selectbox(
-    "State",
-    options=states,
-    index=states.index(st.session_state["selected_state"]),
-    key="selected_state",
-)
-
-if selected_state != "All":
-    sel_state_norm = selected_state.strip().lower()
-    state_row = adm1[adm1["shapeName"].astype(str).str.strip().str.lower() == sel_state_norm]
-    if state_row.empty:
-        state_row = adm1[
-            adm1["shapeName"]
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .str.contains(sel_state_norm, na=False)
-        ]
-    if not state_row.empty:
-        state_geom = state_row.iloc[0].geometry
-        try:
-            gdf_state_districts = adm2[adm2.geometry.within(state_geom.buffer(0.001))].copy()
-        except Exception:
-            gdf_state_districts = adm2[
-                adm2.geometry.centroid.within(state_geom.buffer(0.001))
-            ].copy()
-        if gdf_state_districts.empty:
-            gdf_state_districts = adm2[
-                adm2["state_name"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
-                .str.contains(sel_state_norm, na=False)
-            ].copy()
-    else:
-        gdf_state_districts = adm2[
-            adm2["state_name"]
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .str.contains(sel_state_norm, na=False)
-        ].copy()
-else:
-    gdf_state_districts = adm2.copy()
-
-districts = ["All"] + sorted(
-    gdf_state_districts["district_name"].astype(str).unique().tolist()
-)
-
-# Ensure we always have a valid value in session state
-if (
-    "selected_district" not in st.session_state
-    or st.session_state["selected_district"] not in districts
-):
-    st.session_state["selected_district"] = "All"
-
-analysis_mode = st.session_state.get(
-    "analysis_mode", "Single district focus"
-)
-
-if analysis_mode == "Single district focus":
-    # Normal behaviour: user chooses the district from the sidebar
-    selected_district = district_placeholder.selectbox(
-        "District",
-        options=districts,
-        index=districts.index(st.session_state["selected_district"]),
-        key="selected_district",
-    )
-else:
-    # Portfolio mode: freeze district selection to "All" and explain why
-    st.session_state["selected_district"] = "All"
-    selected_district = "All"
-    with district_placeholder.container():
-        st.markdown(
-            "<div style='font-size:0.9rem;'>"
-            "<strong>District selection</strong> is controlled from the "
-            "<em>📊 Rankings table</em> (and map, later) when you choose "
-            "<strong>Multi-district portfolio</strong> as the analysis focus."
-            "</div>",
-            unsafe_allow_html=True,
+# State/district selectors (Geography block in sidebar)
+with state_placeholder.container():
+    with st.expander("Geography", expanded=True):
+        states = ["All"] + sorted(
+            adm1["shapeName"].astype(str).str.strip().unique().tolist()
         )
+        if (
+            "selected_state" not in st.session_state
+            or st.session_state["selected_state"] not in states
+        ):
+            st.session_state["selected_state"] = (
+                "Telangana" if "Telangana" in states else "All"
+            )
+
+        selected_state = st.selectbox(
+            "State",
+            options=states,
+            index=states.index(st.session_state["selected_state"]),
+            key="selected_state",
+        )
+
+        if selected_state != "All":
+            sel_state_norm = selected_state.strip().lower()
+            state_row = adm1[
+                adm1["shapeName"].astype(str).str.strip().str.lower()
+                == sel_state_norm
+            ]
+            if state_row.empty:
+                state_row = adm1[
+                    adm1["shapeName"]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .str.contains(sel_state_norm, na=False)
+                ]
+            if not state_row.empty:
+                state_geom = state_row.iloc[0].geometry
+                try:
+                    gdf_state_districts = adm2[
+                        adm2.geometry.within(state_geom.buffer(0.001))
+                    ].copy()
+                except Exception:
+                    gdf_state_districts = adm2[
+                        adm2.geometry.centroid.within(state_geom.buffer(0.001))
+                    ].copy()
+                if gdf_state_districts.empty:
+                    gdf_state_districts = adm2[
+                        adm2["state_name"]
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                        .str.contains(sel_state_norm, na=False)
+                    ].copy()
+            else:
+                gdf_state_districts = adm2[
+                    adm2["state_name"]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .str.contains(sel_state_norm, na=False)
+                ].copy()
+        else:
+            gdf_state_districts = adm2.copy()
+
+        districts = [
+            "All"
+        ] + sorted(
+            gdf_state_districts["district_name"].astype(str).unique().tolist()
+        )
+
+        # Ensure we always have a valid value in session state
+        if (
+            "selected_district" not in st.session_state
+            or st.session_state["selected_district"] not in districts
+        ):
+            st.session_state["selected_district"] = "All"
+
+        analysis_mode = st.session_state.get(
+            "analysis_mode", "Single district focus"
+        )
+
+        if analysis_mode == "Single district focus":
+            # Normal behaviour: user chooses the district from the sidebar
+            selected_district = st.selectbox(
+                "District",
+                options=districts,
+                index=districts.index(st.session_state["selected_district"]),
+                key="selected_district",
+            )
+        else:
+            # Portfolio mode: freeze district selection to "All" and explain why
+            st.session_state["selected_district"] = "All"
+            selected_district = "All"
+            st.markdown(
+                "<div style='font-size:0.9rem;'>"
+                "<strong>District selection</strong> is controlled from the "
+                "<em>📊 Rankings table</em> (and map, later) when you choose "
+                "<strong>Multi-district portfolio</strong> as the analysis focus."
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
 # -------------------------
 # Portfolio selection helpers (multi-district)
@@ -1995,26 +2020,36 @@ else:
     tooltip_fields = ["district_name", metric_col]
     tooltip_aliases = ["District", "Value"]
 
-tooltip = folium.features.GeoJsonTooltip(
-    fields=tooltip_fields,
-    aliases=tooltip_aliases,
-    localize=True,
-    sticky=True,
+hover_enabled = st.session_state.get("hover_enabled", True)
+
+tooltip = (
+    folium.features.GeoJsonTooltip(
+        fields=tooltip_fields,
+        aliases=tooltip_aliases,
+        localize=True,
+        sticky=True,
+    )
+    if hover_enabled
+    else None
 )
 
 geo_source = display_gdf if not display_gdf.empty else merged
+
+highlight_fn = None
+if hover_enabled:
+    highlight_fn = lambda f: {
+        "fillColor": "#ffff00",
+        "color": "#000",
+        "weight": 2,
+        "fillOpacity": 0.9,
+    }
 
 folium.GeoJson(
     data=json.loads(geo_source.to_json()),
     name="Districts",
     style_function=style_fn,
     tooltip=tooltip,
-    highlight_function=lambda f: {
-        "fillColor": "#ffff00",
-        "color": "#000",
-        "weight": 2,
-        "fillOpacity": 0.9,
-    },
+    highlight_function=highlight_fn,
 ).add_to(m)
 
 MAP_WIDTH, MAP_HEIGHT = 780, 700
@@ -2083,8 +2118,28 @@ with col1:
     # Keep logical view in sync with the widget
     st.session_state["active_view"] = view
 
-    # ---------- VIEW 1: MAP ----------
+# ---------- VIEW 1: MAP ----------
     if view == "🗺 Map view":
+        analysis_mode = st.session_state.get(
+            "analysis_mode", "Single district focus"
+        )
+
+        if analysis_mode == "Multi-district portfolio":
+            # If a point has been selected (via manual lat–lon or map selection),
+            # show it on the map as a marker.
+            point_query = st.session_state.get("point_query_latlon")
+            if isinstance(point_query, dict):
+                try:
+                    lat_q = float(point_query.get("lat"))
+                    lon_q = float(point_query.get("lon"))
+                    folium.Marker(
+                        location=[lat_q, lon_q],
+                        tooltip=f"Point query: {lat_q:.4f}, {lon_q:.4f}",
+                    ).add_to(m)
+                except (TypeError, ValueError):
+                    # Ignore invalid/partial values silently
+                    pass
+
         returned = st_folium(
             m,
             width=MAP_WIDTH,
@@ -2293,6 +2348,85 @@ with col1:
 with col2:
     st.header("Climate Profile")
 
+    # Read current analysis mode (single vs multi-district)
+    analysis_mode = st.session_state.get(
+        "analysis_mode", "Single district focus"
+    )
+
+    # --- Point-level query controls (lat–lon and map selection) ---
+    try:
+        minx, miny, maxx, maxy = merged.total_bounds
+        default_lat = float((miny + maxy) / 2.0)
+        default_lon = float((minx + maxx) / 2.0)
+    except Exception:
+        # Fallback to broad defaults if geometry bounds are unavailable
+        miny, maxy = -90.0, 90.0
+        minx, maxx = -180.0, 180.0
+        default_lat, default_lon = 20.0, 78.0
+
+    clear_clicked = False
+
+    # Show Point Query controls only in Multi-district portfolio mode
+    if analysis_mode == "Multi-district portfolio":
+        with st.expander("📍 Point query (lat–lon)", expanded=False):
+            col_lat, col_lon = st.columns(2)
+            with col_lat:
+                lat_input = st.number_input(
+                    "Latitude",
+                    min_value=float(miny),
+                    max_value=float(maxy),
+                    value=float(
+                        st.session_state.get("point_query_lat", default_lat)
+                    ),
+                    format="%.4f",
+                )
+            with col_lon:
+                lon_input = st.number_input(
+                    "Longitude",
+                    min_value=float(minx),
+                    max_value=float(maxx),
+                    value=float(
+                        st.session_state.get("point_query_lon", default_lon)
+                    ),
+                    format="%.4f",
+                )
+
+            col_btn1, col_btn2, col_btn3 = st.columns(3)
+            with col_btn1:
+                if st.button("Use this point", key="btn_use_latlon"):
+                    lat_f = float(lat_input)
+                    lon_f = float(lon_input)
+                    st.session_state["point_query_lat"] = lat_f
+                    st.session_state["point_query_lon"] = lon_f
+                    st.session_state["point_query_latlon"] = {
+                        "lat": lat_f,
+                        "lon": lon_f,
+                    }
+
+            with col_btn2:
+                if st.button("Select on map", key="btn_select_on_map"):
+                    # Enable one-shot map selection mode. The next map click
+                    # will set the point and then disable this flag.
+                    st.session_state["point_query_select_on_map"] = True
+
+            with col_btn3:
+                if st.button("Clear selection", key="btn_clear_point"):
+                    # Clear any previously stored point selection and marker
+                    for _k in (
+                        "point_query_lat",
+                        "point_query_lon",
+                        "point_query_latlon",
+                        "point_query_select_on_map",
+                    ):
+                        st.session_state.pop(_k, None)
+                    clear_clicked = True
+
+            if st.session_state.get("point_query_select_on_map", False):
+                st.info(
+                    "Map selection active: click once on the map to choose a point. "
+                    "The next click will set the point and turn off selection."
+                )
+
     clicked_feature = None
     click_coords = None
     if returned:
@@ -2319,6 +2453,37 @@ with col2:
                     break
                 except Exception:
                     pass
+
+    if analysis_mode == "Multi-district portfolio":
+        # If map selection mode is active, use the next map click as the
+        # point-query location and then disable the mode (one-shot behaviour).
+        if click_coords is not None and st.session_state.get(
+            "point_query_select_on_map", False
+        ):
+            lat_click, lon_click = click_coords
+            st.session_state["point_query_lat"] = lat_click
+            st.session_state["point_query_lon"] = lon_click
+            st.session_state["point_query_latlon"] = {
+                "lat": lat_click,
+                "lon": lon_click,
+            }
+            st.session_state["point_query_select_on_map"] = False
+
+        # If we cleared the point selection this run, ignore any stored
+        # point-query coordinates.
+        if clear_clicked:
+            click_coords = None
+        # If we have no current map click but do have a stored point query,
+        # reuse the stored point for district lookup.
+        elif click_coords is None:
+            point_query = st.session_state.get("point_query_latlon")
+            if isinstance(point_query, dict):
+                try:
+                    lat_q = float(point_query.get("lat"))
+                    lon_q = float(point_query.get("lon"))
+                    click_coords = (lat_q, lon_q)
+                except (TypeError, ValueError):
+                    click_coords = None
 
     clicked_name2 = extract_name_from_feature(clicked_feature) if clicked_feature else None
     matched_row = None
@@ -2588,6 +2753,13 @@ with col2:
 
         st.subheader(district_name)
         st.markdown(f"**State:** {state_to_show}")
+
+        # If this view was triggered by a point query, show the coordinates used.
+        if click_coords is not None:
+            st.caption(
+                f"Point location used: lat {click_coords[0]:.4f}, "
+                f"lon {click_coords[1]:.4f} (assigned to this district)."
+            )
 
         # --- Portfolio add button (for multi-district analysis) ---
         if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
