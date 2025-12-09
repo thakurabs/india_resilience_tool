@@ -2402,6 +2402,8 @@ with col2:
                         "lat": lat_f,
                         "lon": lon_f,
                     }
+                    # Immediately rerun so the map marker updates in the same user click
+                    st.rerun()
 
             with col_btn2:
                 if st.button("Select on map", key="btn_select_on_map"):
@@ -2420,6 +2422,8 @@ with col2:
                     ):
                         st.session_state.pop(_k, None)
                     clear_clicked = True
+                    # Rerun so the cleared state is reflected immediately on the map
+                    st.rerun()
 
             if st.session_state.get("point_query_select_on_map", False):
                 st.info(
@@ -2468,6 +2472,8 @@ with col2:
                 "lon": lon_click,
             }
             st.session_state["point_query_select_on_map"] = False
+            # Rerun so the newly selected point is rendered immediately
+            st.rerun()
 
         # If we cleared the point selection this run, ignore any stored
         # point-query coordinates.
