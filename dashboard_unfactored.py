@@ -49,6 +49,16 @@ SIMPLIFY_TOL_ADM1 = 0.01
 MIN_LON, MAX_LON = 68.0, 97.5
 MIN_LAT, MAX_LAT = 5, 45.0
 
+# ---- Figure / font styling for dashboard panels ----
+# These are used for the main small-panel figures (trend + scenario comparison)
+FIG_SIZE_PANEL: tuple[float, float] = (4.8, 2.4)  # width, height in inches
+FIG_DPI_PANEL: int = 150
+
+FONT_SIZE_TITLE: int = 9
+FONT_SIZE_LABEL: int = 8
+FONT_SIZE_TICKS: int = 8
+FONT_SIZE_LEGEND: int = 8
+
 # ---- Variable/Index registry ----
 # Each entry maps an "index slug" to:
 #  - label: what the user sees in the Index dropdown
@@ -986,7 +996,7 @@ def make_scenario_comparison_figure(
     sel_stat: str,
     district_name: str,
     ax=None,
-    figsize: tuple[float, float] = (6.0, 3.0),
+    figsize: tuple[float, float] = FIG_SIZE_PANEL,
 ):
     """
     Build a compact bar chart showing period-mean values for each scenario.
@@ -994,15 +1004,14 @@ def make_scenario_comparison_figure(
     - Bars are grouped by period (e.g. 1990–2010, 2020–2040, 2040–2060).
     - Within each group, scenarios (historical / SSP2-4.5 / SSP5-8.5) appear
       side by side with clean, symmetric spacing.
-    - All bars have the same black outline thickness (no thicker border for
-      the selected bar), for a consistent visual look.
+    - All bars have the same black outline thickness (no special thicker bar).
     - Numeric value labels are drawn above each bar.
 
-    Font sizes are aligned with the trend figure:
-      - Title: ~9
-      - Axis labels: 8
-      - Tick labels: 8
-      - Legend: 8
+    Font sizes follow the shared dashboard style:
+      - Title: FONT_SIZE_TITLE
+      - Axis labels: FONT_SIZE_LABEL
+      - Tick labels: FONT_SIZE_TICKS
+      - Legend: FONT_SIZE_LEGEND
     """
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
@@ -1011,7 +1020,8 @@ def make_scenario_comparison_figure(
     if panel_df is None or panel_df.empty:
         return None, None
 
-    # Canonicalise selection for matching
+    # Canonicalise selection for matching (not used for styling now, but kept
+    # in case we want to highlight the selected bar later)
     sel_scen_norm = str(sel_scenario).strip().lower()
     sel_period_norm = canonical_period_label(sel_period)
 
@@ -1094,7 +1104,7 @@ def make_scenario_comparison_figure(
 
     # Create / reuse axis
     if ax is None:
-        fig, ax = plt.subplots(figsize=figsize, dpi=150)
+        fig, ax = plt.subplots(figsize=figsize, dpi=FIG_DPI_PANEL)
     else:
         fig = ax.figure
 
@@ -1119,15 +1129,15 @@ def make_scenario_comparison_figure(
         group_labels.append(period)
 
     ax.set_xticks(group_centres)
-    ax.set_xticklabels(group_labels, fontsize=8)
+    ax.set_xticklabels(group_labels, fontsize=FONT_SIZE_TICKS)
 
     # Y-axis label: metric name (units should be baked into metric_label if needed)
-    ax.set_ylabel(metric_label, fontsize=8)
+    ax.set_ylabel(metric_label, fontsize=FONT_SIZE_LABEL)
 
     # Subtle horizontal grid for readability
     ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
-    ax.tick_params(axis="y", labelsize=8)
-    ax.tick_params(axis="x", labelsize=8)
+    ax.tick_params(axis="y", labelsize=FONT_SIZE_TICKS)
+    ax.tick_params(axis="x", labelsize=FONT_SIZE_TICKS)
 
     # Numeric labels above each bar
     for x_val, y_val in zip(xs, ys):
@@ -1139,13 +1149,13 @@ def make_scenario_comparison_figure(
             f"{y_val:.1f}",
             ha="center",
             va="bottom",
-            fontsize=8,
+            fontsize=FONT_SIZE_TICKS,
         )
 
     # Title
     ax.set_title(
         f"Scenario comparison – {district_name}",
-        fontsize=9,
+        fontsize=FONT_SIZE_TITLE,
         pad=6,
     )
 
@@ -1165,7 +1175,7 @@ def make_scenario_comparison_figure(
             legend_handles,
             legend_labels,
             frameon=False,
-            fontsize=8,
+            fontsize=FONT_SIZE_LEGEND,
             ncol=len(legend_handles),
             loc="upper left",
             bbox_to_anchor=(0.0, 1.02),
@@ -3335,8 +3345,12 @@ with col2:
             """
             Create the same 'Trend over time' figure used in the Climate Profile
             panel, but without any Streamlit calls, so we can also reuse it in PDFs.
+
+            Uses the shared dashboard styling constants:
+            - FIG_SIZE_PANEL / FIG_DPI_PANEL
+            - FONT_SIZE_TITLE / FONT_SIZE_LABEL / FONT_SIZE_TICKS / FONT_SIZE_LEGEND
             """
-            fig_ts, ax_ts = plt.subplots(figsize=(4.8, 2.4), dpi=150)
+            fig_ts, ax_ts = plt.subplots(figsize=FIG_SIZE_PANEL, dpi=FIG_DPI_PANEL)
 
             has_any = False
 
@@ -3359,7 +3373,7 @@ with col2:
                     )
                 has_any = True
 
-            # Scenario: 2020–2060 in red + band
+            # Scenario: future in red + band
             if scen_ts is not None and not scen_ts.empty:
                 ax_ts.plot(
                     scen_ts["year"],
@@ -3404,8 +3418,12 @@ with col2:
                 )
                 has_any = True
 
-            ax_ts.set_xlabel("Year")
-            ax_ts.set_ylabel(idx_label)
+            # Axis labels with consistent font sizes
+            ax_ts.set_xlabel("Year", fontsize=FONT_SIZE_LABEL)
+            ax_ts.set_ylabel(idx_label, fontsize=FONT_SIZE_LABEL)
+
+            # Tick fonts
+            ax_ts.tick_params(axis="both", labelsize=FONT_SIZE_TICKS)
 
             if has_any:
                 ax_ts.grid(True, linestyle="--", alpha=0.25)
@@ -3413,7 +3431,11 @@ with col2:
                     spine.set_visible(False)
                 handles, labels = ax_ts.get_legend_handles_labels()
                 if handles:
-                    ax_ts.legend(frameon=False, fontsize=8, ncol=3)
+                    ax_ts.legend(
+                        frameon=False,
+                        fontsize=FONT_SIZE_LEGEND,
+                        ncol=3,
+                    )
 
             fig_ts.tight_layout()
             return fig_ts
