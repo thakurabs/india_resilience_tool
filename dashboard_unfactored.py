@@ -2970,7 +2970,9 @@ with col2:
             with colc3:
                 st.markdown("**Position in state**")
                 if rank_in_state is not None and n_in_state is not None:
+                    # Display as "3/33" style rank
                     rank_label = f"{rank_in_state}/{n_in_state}"
+
                     if percentile_state is not None:
                         help_text = (
                             f"Approximate percentile: {percentile_state:.0f}th\n"
@@ -2982,12 +2984,12 @@ with col2:
                             f"Computed among {n_in_state} districts in {state_to_show} "
                             f"(higher values = higher rank)."
                         )
+
                     st.metric(
-                        label="Baseline value",
+                        label="Rank in state",
                         label_visibility="collapsed",
-                        value=f"{baseline_val_f:.2f}",
-                        delta=delta_str,
-                        help=f"Baseline: {baseline_desc}",
+                        value=rank_label,
+                        help=help_text,
                     )
                 else:
                     st.write("Insufficient data")
