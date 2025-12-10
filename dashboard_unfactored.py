@@ -3341,20 +3341,46 @@ with col2:
             scen_ts: pd.DataFrame,
             idx_label: str,
             scenario_name: str,
+            ax: "plt.Axes | None" = None,
+            figsize: tuple[float, float] = (4.8, 2.4),
         ):
             """
-            Create the same 'Trend over time' figure used in the Climate Profile
-            panel, but without any Streamlit calls, so we can also reuse it in PDFs.
+            Create the same 'Trend over time' figure used in the Climate Profile panel.
 
-            Uses the shared dashboard styling constants:
-            - FIG_SIZE_PANEL / FIG_DPI_PANEL
-            - FONT_SIZE_TITLE / FONT_SIZE_LABEL / FONT_SIZE_TICKS / FONT_SIZE_LEGEND
+            If ``ax`` is provided, the plot is drawn into that axis and the parent
+            figure is returned. Otherwise, a new figure is created with the given
+            ``figsize`` and returned.
+
+            Parameters
+            ----------
+            hist_ts : pd.DataFrame
+                Historical time series with at least 'year' and 'mean' columns.
+                Optional columns: 'p05', 'p95'.
+            scen_ts : pd.DataFrame
+                Scenario time series with the same columns as hist_ts.
+            idx_label : str
+                Label for the y-axis (index name).
+            scenario_name : str
+                Scenario slug, e.g., 'ssp245' or 'ssp585'.
+            ax : matplotlib.axes.Axes, optional
+                If provided, draw into this axis instead of creating a new figure.
+            figsize : tuple[float, float]
+                Figure size if a new figure is created.
+
+            Returns
+            -------
+            matplotlib.figure.Figure
+                Figure that contains the trend plot.
             """
-            fig_ts, ax_ts = plt.subplots(figsize=FIG_SIZE_PANEL, dpi=FIG_DPI_PANEL)
+            if ax is None:
+                fig_ts, ax_ts = plt.subplots(figsize=figsize, dpi=150)
+            else:
+                ax_ts = ax
+                fig_ts = ax_ts.figure
 
             has_any = False
 
-            # Historical: 1990–2010 in blue + band
+            # Historical: 1990–2010 (or whatever range is in hist_ts) in blue + band
             if hist_ts is not None and not hist_ts.empty:
                 ax_ts.plot(
                     hist_ts["year"],
@@ -3373,14 +3399,15 @@ with col2:
                     )
                 has_any = True
 
-            # Scenario: future in red + band
+            # Scenario: 2020–2060 (or whatever range) in red + band
             if scen_ts is not None and not scen_ts.empty:
+                scen_label = (scenario_name or "scenario").upper()
                 ax_ts.plot(
                     scen_ts["year"],
                     scen_ts["mean"],
                     linewidth=2.0,
                     color="tab:red",
-                    label=scenario_name.upper(),
+                    label=scen_label,
                 )
                 if {"p05", "p95"}.issubset(scen_ts.columns):
                     ax_ts.fill_between(
@@ -3399,31 +3426,29 @@ with col2:
                 and not hist_ts.empty
                 and not scen_ts.empty
             ):
-                last_hist_year = int(hist_ts["year"].max())
-                last_hist = hist_ts.loc[hist_ts["year"] == last_hist_year].iloc[-1]
+                try:
+                    last_hist_year = int(hist_ts["year"].max())
+                    last_hist = hist_ts.loc[hist_ts["year"] == last_hist_year].iloc[-1]
 
-                target_year = 2020
-                if target_year in scen_ts["year"].values:
-                    first_scen = scen_ts.loc[scen_ts["year"] == target_year].iloc[0]
-                else:
-                    first_scen = scen_ts.loc[scen_ts["year"].idxmin()]
+                    target_year = 2020
+                    if "year" in scen_ts.columns and target_year in scen_ts["year"].values:
+                        first_scen = scen_ts.loc[scen_ts["year"] == target_year].iloc[0]
+                    else:
+                        first_scen = scen_ts.loc[scen_ts["year"].idxmin()]
 
-                ax_ts.plot(
-                    [last_hist["year"], first_scen["year"]],
-                    [last_hist["mean"], first_scen["mean"]],
-                    color="grey",
-                    linestyle="--",
-                    linewidth=1.5,
-                    label="Transition",
-                )
-                has_any = True
+                    ax_ts.plot(
+                        [last_hist["year"], first_scen["year"]],
+                        [last_hist["mean"], first_scen["mean"]],
+                        color="grey",
+                        linestyle="--",
+                        linewidth=1.5,
+                    )
+                except Exception:
+                    # If something odd happens (e.g. missing values), don't kill the plot
+                    pass
 
-            # Axis labels with consistent font sizes
-            ax_ts.set_xlabel("Year", fontsize=FONT_SIZE_LABEL)
-            ax_ts.set_ylabel(idx_label, fontsize=FONT_SIZE_LABEL)
-
-            # Tick fonts
-            ax_ts.tick_params(axis="both", labelsize=FONT_SIZE_TICKS)
+            ax_ts.set_xlabel("Year")
+            ax_ts.set_ylabel(idx_label)
 
             if has_any:
                 ax_ts.grid(True, linestyle="--", alpha=0.25)
@@ -3431,13 +3456,11 @@ with col2:
                     spine.set_visible(False)
                 handles, labels = ax_ts.get_legend_handles_labels()
                 if handles:
-                    ax_ts.legend(
-                        frameon=False,
-                        fontsize=FONT_SIZE_LEGEND,
-                        ncol=3,
-                    )
+                    ax_ts.legend(frameon=False, fontsize=8, ncol=3)
 
-            fig_ts.tight_layout()
+            if ax is None:
+                fig_ts.tight_layout()
+
             return fig_ts
 
         def _build_district_case_study_data(
@@ -3704,17 +3727,22 @@ with col2:
             Build a multi-page PDF for a single district and multiple indices.
 
             Page 1  : A4 cover + summary table
-            Page 2+ : One full A4 page per index with trend figure + short narrative
-                    + compact scenario comparison panel (if available)
+            Page 2+ : One full A4 page per index with:
+
+                    Row 1 – yearly trend plot (historical + scenario)
+                    Row 2 – period-mean scenario comparison bar chart
+                    Row 3 – short narrative + scenario bullets
             """
             if summary_df is None or summary_df.empty:
                 return b""
 
             buf = io.BytesIO()
             with PdfPages(buf) as pdf:
-                # ---- Cover / summary page (A4) ----
-                fig, ax = plt.subplots(figsize=(8.27, 11.69), dpi=150)
-                ax.axis("off")
+                # ------------------------------------------------------------------
+                # Cover / summary page (A4)
+                # ------------------------------------------------------------------
+                fig = plt.figure(figsize=(8.27, 11.69), dpi=150)
+                fig.patch.set_facecolor("white")
 
                 title = f"{district_name}, {state_name} — Climate profile"
                 fig.text(
@@ -3805,7 +3833,9 @@ with col2:
                 pdf.savefig(fig)
                 plt.close(fig)
 
-                # ---- One full A4 page per index with trend + narrative + scenario panel ----
+                # ------------------------------------------------------------------
+                # Per-index pages
+                # ------------------------------------------------------------------
                 for _, row_idx in summary_df.sort_values("index_label").iterrows():
                     slug = row_idx["index_slug"]
                     idx_label = row_idx.get("index_label", slug)
@@ -3816,30 +3846,117 @@ with col2:
 
                     panel_df = panel_dict.get(slug)
 
-                    # Base figure: same as UI trend plot
-                    fig_ts = _create_trend_figure_for_index(
-                        hist_ts=hist_ts,
-                        scen_ts=scen_ts,
-                        idx_label=idx_label,
-                        scenario_name=sel_scenario,
+                    # Fresh A4 page with 3 vertically stacked rows
+                    fig_idx = plt.figure(figsize=(8.27, 11.69), dpi=150)
+                    fig_idx.patch.set_facecolor("white")
+                    gs = fig_idx.add_gridspec(
+                        nrows=3,
+                        ncols=1,
+                        height_ratios=[3.0, 2.0, 1.3],
+                        hspace=0.4,
                     )
 
-                    # Resize to A4 and move axes to upper half of the page
-                    fig_ts.set_size_inches(8.27, 11.69)  # A4
-                    ax_ts = None
-                    if fig_ts.axes:
-                        ax_ts = fig_ts.axes[0]
-                        # [left, bottom, width, height] in figure fraction
-                        ax_ts.set_position([0.12, 0.55, 0.78, 0.32])
+                    ax_trend = fig_idx.add_subplot(gs[0, 0])
+                    ax_bar = fig_idx.add_subplot(gs[1, 0])
+                    ax_text = fig_idx.add_subplot(gs[2, 0])
+                    ax_text.axis("off")
 
-                    # Title at top of page
-                    fig_ts.suptitle(
+                    # Page title
+                    fig_idx.suptitle(
                         f"{idx_label} — {district_name}, {state_name}",
                         fontsize=12,
-                        y=0.97,
+                        y=0.98,
                     )
 
-                    # Short narrative based on combined historical + scenario series
+                    # 1) Trend plot on the top row
+                    try:
+                        if (hist_ts is not None and not hist_ts.empty) or (
+                            scen_ts is not None and not scen_ts.empty
+                        ):
+                            _create_trend_figure_for_index(
+                                hist_ts=hist_ts,
+                                scen_ts=scen_ts,
+                                idx_label=idx_label,
+                                scenario_name=sel_scenario,
+                                ax=ax_trend,
+                                figsize=(6.0, 3.0),
+                            )
+                        else:
+                            ax_trend.text(
+                                0.5,
+                                0.5,
+                                "No yearly time series available for this index.",
+                                ha="center",
+                                va="center",
+                                fontsize=9,
+                            )
+                            ax_trend.set_axis_off()
+                    except Exception:
+                        # Fail softly: don't break PDF generation for one bad index
+                        ax_trend.text(
+                            0.5,
+                            0.5,
+                            "Trend plot could not be generated.",
+                            ha="center",
+                            va="center",
+                            fontsize=9,
+                        )
+                        ax_trend.set_axis_off()
+
+                    # 2) Scenario comparison bar chart in the middle row
+                    bullet_lines: list[str] = []
+                    try:
+                        if panel_df is not None and not panel_df.empty:
+                            make_scenario_comparison_figure(
+                                panel_df=panel_df,
+                                metric_label=idx_label,
+                                sel_scenario=sel_scenario,
+                                sel_period=sel_period,
+                                sel_stat=sel_stat,
+                                district_name=district_name,
+                                ax=ax_bar,
+                                figsize=(6.0, 3.0),
+                            )
+
+                            # Build short bullet-style lines from panel values
+                            panel_sorted = panel_df.sort_values(["period", "scenario"])
+                            for _, r in panel_sorted.iterrows():
+                                scen_label = SCENARIO_DISPLAY.get(
+                                    r["scenario"],
+                                    str(r["scenario"]),
+                                )
+                                try:
+                                    val_str = f"{float(r['value']):.2f}"
+                                except Exception:
+                                    val_str = str(r["value"])
+
+                                period_label = canonical_period_label(str(r.get("period", "")))
+                                bullet_lines.append(
+                                    f"• {scen_label} — {period_label}: {val_str}"
+                                )
+                        else:
+                            ax_bar.text(
+                                0.5,
+                                0.5,
+                                "No period-mean scenario data available.",
+                                ha="center",
+                                va="center",
+                                fontsize=9,
+                            )
+                            ax_bar.set_axis_off()
+                    except Exception:
+                        ax_bar.text(
+                            0.5,
+                            0.5,
+                            "Scenario comparison chart could not be generated.",
+                            ha="center",
+                            va="center",
+                            fontsize=9,
+                        )
+                        ax_bar.set_axis_off()
+
+                    # 3) Narrative + bullets in the bottom row
+                    narrative_lines: list[str] = []
                     try:
                         parts = []
                         if hist_ts is not None and not hist_ts.empty:
@@ -3865,78 +3982,55 @@ with col2:
                             else:
                                 trend_word = "has decreased"
 
-                            narrative = (
+                            narrative_lines.append(
                                 f"Between {start_year} and {end_year}, "
                                 f"{idx_label.lower()} in {district_name} {trend_word}, "
                                 f"from about {start_val:.1f} to about {end_val:.1f}."
                             )
-                            fig_ts.text(
-                                0.10,
-                                0.40,
-                                narrative,
-                                fontsize=9,
+                    except Exception:
+                        # If something goes wrong, just skip the narrative
+                        pass
+
+                    y_text = 0.95
+                    if narrative_lines:
+                        ax_text.text(
+                            0.01,
+                            y_text,
+                            narrative_lines[0],
+                            fontsize=9,
+                            va="top",
+                            ha="left",
+                            wrap=True,
+                            transform=ax_text.transAxes,
+                        )
+                        y_text -= 0.25
+
+                    if bullet_lines:
+                        ax_text.text(
+                            0.01,
+                            y_text,
+                            "Scenario / period mean values:",
+                            fontsize=9,
+                            va="top",
+                            ha="left",
+                            transform=ax_text.transAxes,
+                        )
+                        y_text -= 0.08
+                        for line in bullet_lines:
+                            ax_text.text(
+                                0.03,
+                                y_text,
+                                line,
+                                fontsize=8,
                                 va="top",
                                 ha="left",
-                                wrap=True,
+                                transform=ax_text.transAxes,
                             )
-                    except Exception:
-                        pass
+                            y_text -= 0.06
 
-                    # Scenario comparison: compact chart + bullet summary at the bottom
-                    try:
-                        if panel_df is not None and not panel_df.empty:
-                            # Small scenario comparison chart in the lower band
-                            # [left, bottom, width, height]
-                            ax_sc = fig_ts.add_axes([0.12, 0.18, 0.78, 0.18])
+                    pdf.savefig(fig_idx)
+                    plt.close(fig_idx)
 
-                            # Reuse existing helper that powers the UI expander
-                            make_scenario_comparison_figure(
-                                panel_df=panel_df,
-                                metric_label=idx_label,
-                                sel_scenario=sel_scenario,
-                                sel_period=sel_period,
-                                sel_stat=sel_stat,
-                                district_name=district_name,
-                                # draw into this specific axis; function should use it if present
-                                ax=ax_sc,        # <-- requires make_scenario_comparison_figure to accept ax=
-                                figsize=fig_ts.get_size_inches(),
-                            )
-
-                            # Bullet text as caption under the chart
-                            panel_sorted = panel_df.sort_values(["period", "scenario"])
-                            lines = []
-                            for _, r in panel_sorted.iterrows():
-                                scen_label = SCENARIO_DISPLAY.get(
-                                    r["scenario"],
-                                    str(r["scenario"]),
-                                )
-                                try:
-                                    val_str = f"{float(r['value']):.2f}"
-                                except Exception:
-                                    val_str = str(r["value"])
-                                lines.append(
-                                    f"{scen_label} {r['period']}: {val_str}"
-                                )
-                            if lines:
-                                text_sc = (
-                                    "Scenario / period mean values:\n"
-                                    + "\n".join(f"• {ln}" for ln in lines)
-                                )
-                                fig_ts.text(
-                                    0.10,
-                                    0.08,
-                                    text_sc,
-                                    fontsize=8,
-                                    va="top",
-                                    ha="left",
-                                )
-                    except Exception:
-                        pass
-
-                    pdf.savefig(fig_ts)
-                    plt.close(fig_ts)
-
-            buf.seek(0)
             return buf.getvalue()
 
         # --- Load historical + selected scenario series separately ---
