@@ -989,23 +989,24 @@ def make_scenario_comparison_figure(
     figsize: tuple[float, float] = (6.0, 3.0),
 ):
     """
-    Build a compact bar chart:
+    Build a compact bar chart showing period-mean values for each scenario.
 
-      - Historical 1990–2010 as a single bar (if available)
-      - SSP2-4.5 and SSP5-8.5 bars for 2020–2040
-      - SSP2-4.5 and SSP5-8.5 bars for 2040–2060
+    - Bars are grouped by period (e.g. 1990–2010, 2020–2040, 2040–2060).
+    - Within each group, scenarios (historical / SSP2-4.5 / SSP5-8.5) appear
+      side by side with clean, symmetric spacing.
+    - All bars have the same black outline thickness (no thicker border for
+      the selected bar), for a consistent visual look.
+    - Numeric value labels are drawn above each bar.
 
-    Bars are grouped visually by period:
-        [1990–2010]   [2020–2040 pair]   [2040–2060 pair]
-
-    The bar corresponding to the *current selection* (sel_scenario, sel_period)
-    is given a darker edge to emphasize it.
-
-    If `ax` is provided, the chart is drawn into that axis (useful for PDFs).
-    Otherwise, a new (fig, ax) pair is created.
+    Font sizes are aligned with the trend figure:
+      - Title: ~9
+      - Axis labels: 8
+      - Tick labels: 8
+      - Legend: 8
     """
     import matplotlib.pyplot as plt
     import matplotlib.patches as mpatches
+    import numpy as np
 
     if panel_df is None or panel_df.empty:
         return None, None
@@ -1014,7 +1015,7 @@ def make_scenario_comparison_figure(
     sel_scen_norm = str(sel_scenario).strip().lower()
     sel_period_norm = canonical_period_label(sel_period)
 
-    # Normalise periods in the data as well
+    # Normalise periods and scenario labels in the data
     dfp = panel_df.copy()
     dfp["period"] = dfp["period"].map(canonical_period_label)
     dfp["scenario_norm"] = dfp["scenario"].astype(str).str.strip().str.lower()
@@ -1029,107 +1030,146 @@ def make_scenario_comparison_figure(
     # Build the list of (scenario, period) combos that actually exist
     combos: list[tuple[str, str]] = []
     for scen in SCENARIO_ORDER:
+        scen_norm = str(scen).strip().lower()
         for period in PERIOD_ORDER:
-            mask = (
-                (dfp["scenario_norm"] == scen)
-                & (dfp["period"] == period)
-            )
+            mask = (dfp["scenario_norm"] == scen_norm) & (dfp["period"] == period)
             if mask.any():
-                combos.append((scen, period))
+                combos.append((scen_norm, period))
 
     if not combos:
         return None, None
 
-    # Assign x positions with group spacing by period
-    group_spacing = 1.5
-    within_spacing = 0.5
-    x_positions: dict[tuple[str, str], float] = {}
-    x = 0.0
-
+    # Periods that actually appear in the data, in canonical order
+    periods_present: list[str] = []
     for period in PERIOD_ORDER:
+        if any(p == period for (_, p) in combos):
+            periods_present.append(period)
+
+    if not periods_present:
+        return None, None
+
+    # Assign x positions with clean grouping by period.
+    # Each period group is centred, with scenarios spaced symmetrically.
+    group_spacing = 2.0
+    within_spacing = 0.6
+    x_positions: dict[tuple[str, str], float] = {}
+
+    for p_idx, period in enumerate(periods_present):
         scen_here = [sc for (sc, p) in combos if p == period]
         if not scen_here:
             continue
-        for i, scen in enumerate(scen_here):
-            x_positions[(scen, period)] = x + i * within_spacing
-        x += group_spacing
 
-    # Collect data for bars
+        n_scen = len(scen_here)
+        group_center = p_idx * group_spacing
+
+        for i, scen_norm in enumerate(scen_here):
+            # Offset scenarios so the middle of the group stays on group_center
+            offset = (i - (n_scen - 1) / 2.0) * within_spacing
+            x_positions[(scen_norm, period)] = group_center + offset
+
     xs: list[float] = []
     ys: list[float] = []
     colors: list[str] = []
-    edgecolors: list[str] = []
-    labels: list[str] = []
-    highlight_idx: list[int] = []
 
-    for (scen, period) in combos:
-        mask = (
-            (dfp["scenario_norm"] == scen)
-            & (dfp["period"] == period)
-        )
+    for (scen_norm, period) in combos:
+        mask = (dfp["scenario_norm"] == scen_norm) & (dfp["period"] == period)
         if not mask.any():
             continue
-        val = float(dfp.loc[mask, "value"].iloc[0])
-        x_val = x_positions.get((scen, period))
+
+        try:
+            val = float(dfp.loc[mask, "value"].iloc[0])
+        except Exception:
+            continue
+
+        x_val = x_positions.get((scen_norm, period))
         if x_val is None:
             continue
 
         xs.append(x_val)
         ys.append(val)
-        colors.append(scenario_colors.get(scen, "grey"))
-        labels.append(f"{SCENARIO_DISPLAY.get(scen, scen)}\n{period}")
-
-        # Highlight the bar corresponding to the current selection
-        if scen == sel_scen_norm and canonical_period_label(period) == sel_period_norm:
-            edgecolors.append("black")
-            highlight_idx.append(len(xs) - 1)
-        else:
-            edgecolors.append("none")
+        colors.append(scenario_colors.get(scen_norm, "grey"))
 
     if not xs:
         return None, None
 
     # Create / reuse axis
     if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
+        fig, ax = plt.subplots(figsize=figsize, dpi=150)
     else:
         fig = ax.figure
 
-    bars = ax.bar(xs, ys, color=colors, edgecolor=edgecolors, linewidth=1.0)
+    # Uniform bar width and uniform black outline for all bars
+    bar_edgecolor = "black"
+    bar_linewidth = 0.9
 
-    # Y-axis label and grid
-    ax.set_ylabel(metric_label, fontsize=9)
-    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    bars = ax.bar(
+        xs,
+        ys,
+        color=colors,
+        edgecolor=bar_edgecolor,
+        linewidth=bar_linewidth,
+        width=0.45,
+    )
 
-    # X tick labels at group centres (periods)
-    group_centres: dict[str, float] = {}
-    for period in PERIOD_ORDER:
-        xs_p = [x_positions[(sc, period)] for (sc, p) in x_positions.keys() if p == period]
-        if xs_p:
-            group_centres[period] = sum(xs_p) / len(xs_p)
+    # X-axis: tick per period group, with human-readable labels
+    group_centres: list[float] = []
+    group_labels: list[str] = []
+    for p_idx, period in enumerate(periods_present):
+        group_centres.append(p_idx * group_spacing)
+        group_labels.append(period)
 
-    if group_centres:
-        ax.set_xticks(list(group_centres.values()))
-        ax.set_xticklabels(PERIOD_ORDER, fontsize=8)
+    ax.set_xticks(group_centres)
+    ax.set_xticklabels(group_labels, fontsize=8)
+
+    # Y-axis label: metric name (units should be baked into metric_label if needed)
+    ax.set_ylabel(metric_label, fontsize=8)
+
+    # Subtle horizontal grid for readability
+    ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
+    ax.tick_params(axis="y", labelsize=8)
+    ax.tick_params(axis="x", labelsize=8)
+
+    # Numeric labels above each bar
+    for x_val, y_val in zip(xs, ys):
+        if y_val is None or (isinstance(y_val, float) and not np.isfinite(y_val)):
+            continue
+        ax.text(
+            x_val,
+            y_val,
+            f"{y_val:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+        )
 
     # Title
     ax.set_title(
         f"Scenario comparison – {district_name}",
         fontsize=9,
+        pad=6,
     )
 
-    # Legend: one patch per scenario present
-    legend_handles = []
-    legend_labels = []
-    scen_seen = {scen for (scen, _) in combos}
+    # Build a compact legend keyed by scenario (not (scenario, period))
+    legend_handles: list[mpatches.Patch] = []
+    legend_labels: list[str] = []
+    scen_seen = {sc for (sc, _) in combos}
     for scen in SCENARIO_ORDER:
-        if scen in scen_seen:
+        scen_norm = str(scen).strip().lower()
+        if scen_norm in scen_seen:
             legend_handles.append(
-                mpatches.Patch(color=scenario_colors.get(scen, "grey"))
+                mpatches.Patch(color=scenario_colors.get(scen_norm, "grey"))
             )
-            legend_labels.append(SCENARIO_DISPLAY.get(scen, scen))
+            legend_labels.append(SCENARIO_DISPLAY.get(scen_norm, scen_norm))
     if legend_handles:
-        ax.legend(legend_handles, legend_labels, frameon=False, fontsize=8, ncol=len(legend_handles))
+        ax.legend(
+            legend_handles,
+            legend_labels,
+            frameon=False,
+            fontsize=8,
+            ncol=len(legend_handles),
+            loc="upper left",
+            bbox_to_anchor=(0.0, 1.02),
+        )
 
     # Clean spines
     for spine in ax.spines.values():
