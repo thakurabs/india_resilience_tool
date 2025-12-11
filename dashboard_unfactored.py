@@ -1555,26 +1555,6 @@ pretty_metric_label = (
     f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {sel_period} · {sel_stat}"
 )
 
-# -------------------------
-# Analysis focus (single vs multi-district)
-# -------------------------
-with analysis_mode_placeholder.container():
-    with st.expander("Analysis focus", expanded=True):
-        st.markdown(
-            "<div style='font-weight:600; font-size:1rem; margin-bottom:-0.35rem;'>Analysis focus</div>",
-            unsafe_allow_html=True,
-        )
-        analysis_mode = st.radio(
-            "Analysis focus",
-            options=[
-                "Single district focus",
-                "Multi-district portfolio",
-            ],
-            index=0,
-            key="analysis_mode",
-            label_visibility="collapsed",
-        )
-
 
 with map_mode_placeholder.container():
     # Tight "Map mode" label with no extra space before the radio
@@ -1640,9 +1620,10 @@ if "pending_selected_state" in st.session_state:
 if "pending_selected_district" in st.session_state:
     st.session_state["selected_district"] = st.session_state.pop("pending_selected_district")
 
-# State/district selectors (Geography block in sidebar)
+# State/district selectors + analysis focus (combined block in sidebar)
 with state_placeholder.container():
-    with st.expander("Geography", expanded=True):
+    with st.expander("Geography & analysis focus", expanded=True):
+        # ---- Step 1: State selection ----
         states = ["All"] + sorted(
             adm1["shapeName"].astype(str).str.strip().unique().tolist()
         )
@@ -1661,6 +1642,7 @@ with state_placeholder.container():
             key="selected_state",
         )
 
+        # Build per-state district GeoDataFrame
         if selected_state != "All":
             sel_state_norm = selected_state.strip().lower()
             state_row = adm1[
@@ -1710,17 +1692,32 @@ with state_placeholder.container():
             gdf_state_districts["district_name"].astype(str).unique().tolist()
         )
 
-        # Ensure we always have a valid value in session state
+        # Ensure we always have a valid district in session state
         if (
             "selected_district" not in st.session_state
             or st.session_state["selected_district"] not in districts
         ):
             st.session_state["selected_district"] = "All"
 
-        analysis_mode = st.session_state.get(
-            "analysis_mode", "Single district focus"
+        # ---- Step 2: Analysis focus (single vs multi-district) ----
+        st.markdown(
+            "<div style='font-weight:600; font-size:1rem; "
+            "margin-top:0.5rem; margin-bottom:-0.35rem;'>"
+            "Analysis focus</div>",
+            unsafe_allow_html=True,
+        )
+        analysis_mode = st.radio(
+            "Analysis focus",  # non-empty label for accessibility
+            options=[
+                "Single district focus",
+                "Multi-district portfolio",
+            ],
+            index=0,
+            key="analysis_mode",
+            label_visibility="collapsed",
         )
 
+        # ---- Step 3: District selection (only for single-district mode) ----
         if analysis_mode == "Single district focus":
             # Normal behaviour: user chooses the district from the sidebar
             selected_district = st.selectbox(
@@ -1733,14 +1730,14 @@ with state_placeholder.container():
             # Portfolio mode: freeze district selection to "All" and explain why
             st.session_state["selected_district"] = "All"
             selected_district = "All"
-            st.markdown(
-                "<div style='font-size:0.9rem;'>"
-                "<strong>District selection</strong> is controlled from the "
-                "<em>📊 Rankings table</em> (and map, later) when you choose "
-                "<strong>Multi-district portfolio</strong> as the analysis focus."
-                "</div>",
-                unsafe_allow_html=True,
-            )
+            # st.markdown(
+            #     "<div style='font-size:0.9rem;'>"
+            #     "<strong>District selection</strong> is controlled from the "
+            #     "<em>📊 Rankings table</em> (and map, later) when you choose "
+            #     "<strong>Multi-district portfolio</strong> as the analysis focus."
+            #     "</div>",
+            #     unsafe_allow_html=True,
+            # )
 
 # -------------------------
 # Portfolio selection helpers (multi-district)
