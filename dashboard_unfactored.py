@@ -1781,6 +1781,20 @@ def _portfolio_remove(state_name: str, district_name: str) -> None:
     ]
     st.session_state["portfolio_districts"] = items
 
+def _portfolio_contains(state_name: str, district_name: str) -> bool:
+    """
+    Return True if the (state, district) pair is already present
+    in the current portfolio_districts list.
+    """
+    if not state_name or not district_name or district_name == "All":
+        return False
+
+    items = st.session_state.get("portfolio_districts", [])
+    norm = _portfolio_key(state_name, district_name)
+    for item in items:
+        if _portfolio_key(item.get("state"), item.get("district")) == norm:
+            return True
+    return False
 
 def _portfolio_clear() -> None:
     """Clear all districts from the portfolio."""
@@ -2413,8 +2427,17 @@ with col2:
         if "point_query_points" not in st.session_state:
             st.session_state["point_query_points"] = []
 
-        with st.expander("📍 Point query (lat–lon)", expanded=False):
-            # --- Manual lat / lon input ---
+        with st.expander("📍 Point selection", expanded=True):
+            st.caption(
+                "Choose locations either by typing coordinates or by clicking on the map, "
+                "and optionally save them as candidate points for your portfolio."
+            )
+
+            # -------------------------------
+            # Option 1 — Type coordinates
+            # -------------------------------
+            st.markdown("**Option 1 — Type coordinates**")
+
             col_lat, col_lon = st.columns(2)
             with col_lat:
                 lat_input = st.number_input(
@@ -2433,39 +2456,22 @@ with col2:
                     format="%.4f",
                 )
 
-            # --- Single-point actions ---
-            col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
+            # Actions for the typed point:
+            # - Show on map (set as active point)
+            # - Save to list (for portfolio later)
+            col_set_active, col_save_point = st.columns(2)
 
-            # 1) Use manually entered lat/lon as current point
-            with col_btn1:
-                if st.button("Use this point", key="btn_use_latlon"):
+            # 1) Show this point on the map (set active point)
+            with col_set_active:
+                if st.button("Show on map", key="btn_use_latlon"):
                     lat_f = float(lat_input)
                     lon_f = float(lon_input)
                     st.session_state["point_query_lat"] = lat_f
                     st.session_state["point_query_lon"] = lon_f
                     st.session_state["point_query_latlon"] = {"lat": lat_f, "lon": lon_f}
 
-            # 2) Enable one-shot map selection
-            with col_btn2:
-                if st.button("Select on map", key="btn_select_on_map"):
-                    # Next map click will set the point and then turn this flag off
-                    st.session_state["point_query_select_on_map"] = True
-
-            # 3) Clear current point selection
-            with col_btn3:
-                if st.button("Clear point", key="btn_clear_point"):
-                    # Clear any previously stored point selection and marker
-                    for _k in (
-                        "point_query_lat",
-                        "point_query_lon",
-                        "point_query_latlon",
-                        "point_query_select_on_map",
-                    ):
-                        st.session_state.pop(_k, None)
-                    clear_clicked = True
-
-            # 4) Add current point to saved list (multi-point)
-            with col_btn4:
+            # 2) Add current typed point to saved list (multi-point / portfolio)
+            with col_save_point:
                 if st.button("Save point", key="btn_save_point"):
                     try:
                         lat_f = float(lat_input)
@@ -2485,6 +2491,34 @@ with col2:
                             pts.append({"lat": lat_f, "lon": lon_f})
                             st.session_state["point_query_points"] = pts
 
+            st.markdown("---")
+
+            # -------------------------------
+            # Option 2 — Select from map
+            # -------------------------------
+            st.markdown("**Option 2 — Select from map**")
+
+            col_pick_on_map, col_clear_point = st.columns(2)
+
+            # 3) Enable one-shot map selection
+            with col_pick_on_map:
+                if st.button("Click on map to choose", key="btn_select_on_map"):
+                    # Next map click will set the point and then turn this flag off
+                    st.session_state["point_query_select_on_map"] = True
+
+            # 4) Clear current active point
+            with col_clear_point:
+                if st.button("Clear active point", key="btn_clear_point"):
+                    # Clear any previously stored point selection and marker
+                    for _k in (
+                        "point_query_lat",
+                        "point_query_lon",
+                        "point_query_latlon",
+                        "point_query_select_on_map",
+                    ):
+                        st.session_state.pop(_k, None)
+                    clear_clicked = True
+
             # Helper text when map-selection mode is active
             if st.session_state.get("point_query_select_on_map", False):
                 st.info(
@@ -2496,6 +2530,10 @@ with col2:
             saved_points = st.session_state.get("point_query_points", [])
             if saved_points:
                 st.markdown("**Saved points for portfolio selection**")
+                st.caption(
+                    "These points remember locations you care about. "
+                    "You can map them to districts and add those districts to the portfolio."
+                )
                 saved_points_df = pd.DataFrame(saved_points)
                 saved_points_df.index = saved_points_df.index + 1
                 st.dataframe(
@@ -2883,6 +2921,31 @@ with col2:
             else (row.get("state_name") or "Unknown")
         )
 
+        analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+
+        # --- Compact selection view in Multi-district portfolio mode ---
+        if analysis_mode == "Multi-district portfolio":
+            st.subheader("Selected district for portfolio")
+            st.markdown(f"**District:** {district_name}")
+            st.markdown(f"**State:** {state_to_show}")
+
+            if click_coords is not None:
+                st.caption(
+                    f"Selected via map click at lat {click_coords[0]:.4f}, "
+                    f"lon {click_coords[1]:.4f} (assigned to this district)."
+                )
+
+            if st.button(
+                "➕ Add this district to portfolio",
+                key=f"btn_add_portfolio_portfolio_mode_{state_to_show}_{district_name}",
+            ):
+                _portfolio_add(state_to_show, district_name)
+                st.success(f"Added {district_name}, {state_to_show} to portfolio.")
+
+            # In portfolio mode, do NOT render the full climate profile below.
+            st.stop()
+
+        # --- Full district climate profile (single-district focus mode) ---
         st.subheader(district_name)
         st.markdown(f"**State:** {state_to_show}")
 
@@ -2894,7 +2957,7 @@ with col2:
             )
 
         # --- Portfolio add button (for multi-district analysis) ---
-        if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
+        if analysis_mode == "Multi-district portfolio":
             if st.button(
                 "➕ Add this district to portfolio",
                 key=f"btn_add_portfolio_single_{state_to_show}_{district_name}",
