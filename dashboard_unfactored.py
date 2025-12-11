@@ -1715,7 +1715,29 @@ with state_placeholder.container():
             index=0,
             key="analysis_mode",
             label_visibility="collapsed",
+            help=(
+                "Choose “Single district focus” to explore one district at a time, "
+                "or “Multi-district portfolio” to build and compare a set of districts."
+            ),
         )
+
+        # Brief helper text so the mode explains itself
+        if analysis_mode == "Single district focus":
+            st.caption(
+                "Inspect one district at a time. Use the **District** dropdown below "
+                "to pick which district you want to explore in detail."
+            )
+        else:
+            st.markdown(
+                "<div style='font-size:0.9rem; margin-top:0.25rem; margin-bottom:0.1rem;'>"
+                "In <strong>Multi-district portfolio</strong> mode you build a set of districts "
+                "for comparison. Districts are added from the <em>🗺 Map view</em>, the "
+                "<em>📊 Rankings table</em>, or from saved point locations. "
+                "The <strong>District</strong> dropdown is fixed to <strong>All</strong> here "
+                "because selection now happens directly from the map and table."
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
         # ---- Step 3: District selection (only for single-district mode) ----
         if analysis_mode == "Single district focus":
@@ -1727,17 +1749,9 @@ with state_placeholder.container():
                 key="selected_district",
             )
         else:
-            # Portfolio mode: freeze district selection to "All" and explain why
+            # Portfolio mode: freeze district selection to "All"
             st.session_state["selected_district"] = "All"
             selected_district = "All"
-            # st.markdown(
-            #     "<div style='font-size:0.9rem;'>"
-            #     "<strong>District selection</strong> is controlled from the "
-            #     "<em>📊 Rankings table</em> (and map, later) when you choose "
-            #     "<strong>Multi-district portfolio</strong> as the analysis focus."
-            #     "</div>",
-            #     unsafe_allow_html=True,
-            # )
 
 # -------------------------
 # Portfolio selection helpers (multi-district)
@@ -2964,6 +2978,35 @@ with col2:
             ):
                 _portfolio_add(state_to_show, district_name)
                 st.success(f"Added {district_name}, {state_to_show} to portfolio.")
+
+            # Always show current portfolio below the button
+            portfolio_current = st.session_state.get("portfolio_districts", [])
+            if portfolio_current:
+                st.markdown("**Current portfolio (districts)**")
+                try:
+                    # Usual case: list of dicts {"state": ..., "district": ...}
+                    if isinstance(portfolio_current[0], dict):
+                        port_df = (
+                            pd.DataFrame(portfolio_current)
+                            .rename(columns={"state": "State", "district": "District"})
+                        )
+                    else:
+                        # Fallback: list of (state, district) tuples/lists
+                        port_df = pd.DataFrame(
+                            portfolio_current, columns=["State", "District"]
+                        )
+                except Exception:
+                    port_df = pd.DataFrame(columns=["State", "District"])
+
+                st.dataframe(
+                    port_df,
+                    use_container_width=True,
+                )
+            else:
+                st.caption(
+                    "No districts in the portfolio yet. "
+                    "Use the button above or the Rankings table to add districts."
+                )
 
         # ---- Risk cards (1.1) ----
         current_val = row.get(metric_col)
@@ -4592,7 +4635,7 @@ with col2:
     # Portfolio analysis (multi-district)
     # -------------------------
     if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
-        with st.expander("Portfolio analysis (multi-district)", expanded=False):
+        with st.expander("Portfolio analysis (multi-district)", expanded=True):
 
             if st.button(
                 "📋 Select districts from table",
