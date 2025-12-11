@@ -41,7 +41,7 @@ from paths import DATA_DIR
 ADM2_GEOJSON = DATA_DIR / "districts_4326.geojson"
 ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 OUTDIR = DATA_DIR
-LOGO_PATH = "./resilience_actions_logo.png"
+LOGO_PATH = "./resilience_actions_logo_transparent.png"
 
 SIMPLIFY_TOL_ADM2 = 0.015
 SIMPLIFY_TOL_ADM1 = 0.01
