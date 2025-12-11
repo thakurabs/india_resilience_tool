@@ -2405,11 +2405,438 @@ with col1:
                 )
                 st.caption(caption_text)
 
-
 # -------------------------
-# Details panel (with risk cards, sparkline + comparison)
+# Details panel (portfolio + risk cards, sparkline + comparison)
 # -------------------------
 with col2:
+    # -------------------------
+    # Portfolio analysis (multi-district) – shown at top in portfolio mode
+    # -------------------------
+    if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
+        with st.expander("Portfolio analysis (multi-district)", expanded=True):
+
+            # ---- STEP 1: Centralised instructions for building the portfolio ----
+            st.markdown("### Step 1 – Build your district portfolio")
+            st.caption(
+                "Use any of the options below to add districts to the portfolio. "
+                "Once you have a portfolio, you can review and compare it in this panel."
+            )
+
+            st.markdown(
+                "- **From the rankings table**: click the button below to open the "
+                "📊 Rankings view in the left panel, then tick rows in the "
+                "**Add to portfolio** column and click **Add checked districts to portfolio**."
+            )
+            st.markdown(
+                "- **From the map**: in the 🗺 **Map view**, click a district and use "
+                "**Add this district to portfolio** in the right-hand panel."
+            )
+            st.markdown(
+                "- **From saved points**: use the **📍 Point selection** expander "
+                "to save locations by coordinates or map clicks, then send their "
+                "districts into the portfolio."
+            )
+
+            st.markdown("---")
+
+            # Primary CTA to jump to Rankings as part of Step 1
+            if st.button(
+                "📋 Open rankings table to pick districts",
+                key="btn_portfolio_select_from_rankings",
+            ):
+                # Set a one-shot flag; the top-level / view hook will honour this
+                st.session_state["jump_to_rankings"] = True
+                st.rerun()
+
+            # ---- STEP 2: Show and analyse the current portfolio ----
+            portfolio = st.session_state.get("portfolio_districts", [])
+
+            if not portfolio:
+                st.info(
+                    "No districts in the portfolio yet. Start by selecting districts "
+                    "from the rankings table, the map, or saved points as described above."
+                )
+            else:
+                st.markdown("### Step 2 – Review current portfolio")
+
+                # Basic portfolio table
+                portfolio_df = pd.DataFrame(portfolio)
+                st.markdown("**Selected districts**")
+                st.dataframe(
+                    portfolio_df.rename(
+                        columns={"state": "State", "district": "District"}
+                    ),
+                    use_container_width=True,
+                )
+
+                # Use the already-built ranking table (table_df) to show
+                # current index values for only the portfolio districts
+                if table_df is not None and not table_df.empty:
+                    key_set = {
+                        _portfolio_key(item["state"], item["district"])
+                        for item in portfolio
+                    }
+
+                    def _row_in_portfolio(r: pd.Series) -> bool:
+                        return _portfolio_key(
+                            r.get("state_name"), r.get("district_name")
+                        ) in key_set
+
+                    portfolio_metric_df = table_df[
+                        table_df.apply(_row_in_portfolio, axis=1)
+                    ].copy()
+
+                    if portfolio_metric_df.empty:
+                        st.caption(
+                            "No data for the selected index for the current portfolio."
+                        )
+                    else:
+                        show_cols = [
+                            c
+                            for c in [
+                                "district_name",
+                                "state_name",
+                                "value",
+                                "baseline",
+                                "delta_abs",
+                                "delta_pct",
+                                "percentile_value",
+                                "risk_class",
+                            ]
+                            if c in portfolio_metric_df.columns
+                        ]
+                        st.markdown("**Current index values for portfolio**")
+                        st.dataframe(
+                            portfolio_metric_df[show_cols].rename(
+                                columns={
+                                    "district_name": "District",
+                                    "state_name": "State",
+                                    "value": pretty_metric_label,
+                                }
+                            ),
+                            use_container_width=True,
+                        )
+
+                        # CSV download for portfolio & current index
+                        csv_bytes = portfolio_metric_df.to_csv(index=False).encode("utf-8")
+                        st.download_button(
+                            "⬇️ Download portfolio data (current index only, CSV)",
+                            data=csv_bytes,
+                            file_name=(
+                                f"portfolio_{VARIABLE_SLUG}_{sel_scenario}_"
+                                f"{sel_period}_{sel_stat}.csv"
+                            ),
+                            mime="text/csv",
+                        )
+
+                        # -------------------------------------------------
+                        # Multi-index comparison across portfolio
+                        # -------------------------------------------------
+                        st.markdown("---")
+                        st.markdown("#### Multi-index comparison for portfolio")
+
+                        index_options = list(VARIABLES.keys())
+                        default_multi = st.session_state.get(
+                            "portfolio_multiindex_selection",
+                            [VARIABLE_SLUG]
+                            if VARIABLE_SLUG in index_options
+                            else index_options[:1],
+                        )
+                        selected_index_slugs = st.multiselect(
+                            "Indices to include",
+                            options=index_options,
+                            default=default_multi,
+                            format_func=lambda s: VARIABLES[s]["label"],
+                            key="portfolio_multiindex_selection",
+                        )
+
+                        if selected_index_slugs:
+                            if st.button(
+                                "Build multi-index portfolio table",
+                                key=f"btn_build_portfolio_multiindex_{sel_scenario}_{sel_period}_{sel_stat}",
+                            ):
+                                records: list[dict] = []
+                                for item in portfolio:
+                                    state_name = item.get("state")
+                                    district_name = item.get("district")
+                                    if not state_name or not district_name:
+                                        continue
+
+                                    for slug in selected_index_slugs:
+                                        varcfg = VARIABLES.get(slug)
+                                        if not varcfg:
+                                            continue
+
+                                        # Determine processed root for this index, similar to PROCESSED_ROOT logic
+                                        env_root = os.getenv("IRT_PROCESSED_ROOT")
+                                        if env_root:
+                                            base_path = Path(env_root)
+                                            if base_path.name.lower() == slug.lower():
+                                                proc_root = base_path
+                                            else:
+                                                proc_root = base_path / slug
+                                        else:
+                                            proc_root = DATA_DIR / "processed" / slug
+                                        proc_root = proc_root.resolve()
+
+                                        master_path = (
+                                            proc_root
+                                            / PILOT_STATE
+                                            / "master_metrics_by_district.csv"
+                                        )
+                                        if not master_path.exists():
+                                            continue
+
+                                        try:
+                                            (
+                                                df_master,
+                                                schema_items_local,
+                                                metrics_local,
+                                                by_metric_local,
+                                            ) = _load_master_and_schema(master_path, slug)
+                                        except Exception:
+                                            continue
+
+                                        if df_master is None or df_master.empty:
+                                            continue
+
+                                        # Decide metric name for this slug (align with normalized metrics)
+                                        registry_metric = varcfg.get("periods_metric_col")
+                                        available_metrics = set(metrics_local or [])
+                                        if not available_metrics:
+                                            continue
+                                        if registry_metric not in available_metrics:
+                                            m_lower = {m.lower(): m for m in available_metrics}
+                                            registry_metric = m_lower.get(
+                                                str(registry_metric).lower(),
+                                                next(iter(available_metrics)),
+                                            )
+
+                                        metric_col = (
+                                            f"{registry_metric}__{sel_scenario}__"
+                                            f"{sel_period}__{sel_stat}"
+                                        )
+                                        if metric_col not in df_master.columns:
+                                            # skip this index if we don't have the requested scenario/period/stat
+                                            continue
+
+                                        # Robust match for a single state+district row
+                                        dm = df_master.copy()
+                                        if "state" not in dm.columns or "district" not in dm.columns:
+                                            # master CSV is not in the expected format
+                                            continue
+
+                                        def _n(s: str) -> str:
+                                            return alias(s)
+
+                                        dm["_state_key"] = dm["state"].astype(str).map(_n)
+                                        dm["_district_key"] = dm["district"].astype(str).map(_n)
+
+                                        target_state = _n(state_name)
+                                        target_dist = _n(district_name)
+
+                                        mask = (
+                                            (dm["_state_key"] == target_state)
+                                            & (dm["_district_key"] == target_dist)
+                                        )
+                                        if not mask.any():
+                                            # fall back to 'contains' on district within same state
+                                            mask = (
+                                                dm["_state_key"] == target_state
+                                            ) & dm["_district_key"].str.contains(
+                                                target_dist, na=False
+                                            )
+                                        if not mask.any():
+                                            continue
+
+                                        row_local = dm.loc[mask].iloc[0]
+
+                                        # Current value
+                                        current_val = row_local.get(metric_col)
+                                        current_val_f = pd.to_numeric(
+                                            [current_val], errors="coerce"
+                                        )[0]
+                                        if pd.isna(current_val_f):
+                                            current_val_f = None
+
+                                        # Baseline for same metric/stat in historical baseline period
+                                        baseline_col = find_baseline_column_for_stat(
+                                            dm.columns, registry_metric, sel_stat
+                                        )
+                                        baseline_val_f = None
+                                        if baseline_col and baseline_col in dm.columns:
+                                            baseline_val = row_local.get(baseline_col)
+                                            baseline_val_f = pd.to_numeric(
+                                                [baseline_val], errors="coerce"
+                                            )[0]
+                                            if pd.isna(baseline_val_f):
+                                                baseline_val_f = None
+
+                                        # Deltas
+                                        delta_abs = None
+                                        delta_pct = None
+                                        if (
+                                            current_val_f is not None
+                                            and baseline_val_f is not None
+                                        ):
+                                            delta_abs = current_val_f - baseline_val_f
+                                            if baseline_val_f != 0:
+                                                delta_pct = delta_abs / baseline_val_f * 100.0
+
+                                        # Rank and percentile within state (for this metric)
+                                        rank_in_state = None
+                                        percentile_in_state = None
+                                        n_in_state = None
+                                        try:
+                                            state_mask = dm["_state_key"] == target_state
+                                            state_vals = pd.to_numeric(
+                                                dm.loc[state_mask, metric_col],
+                                                errors="coerce",
+                                            ).dropna()
+                                            n_in_state = (
+                                                int(state_vals.size)
+                                                if state_vals.size
+                                                else None
+                                            )
+                                            if (
+                                                n_in_state
+                                                and current_val_f is not None
+                                                and n_in_state > 0
+                                            ):
+                                                rank_in_state = int(
+                                                    (state_vals > current_val_f).sum()
+                                                    + 1
+                                                )
+                                                percentile_in_state = float(
+                                                    (state_vals < current_val_f).sum()
+                                                    / n_in_state
+                                                    * 100.0
+                                                )
+                                        except Exception:
+                                            pass
+
+                                        risk_class = (
+                                            risk_class_from_percentile(
+                                                percentile_in_state
+                                            )
+                                            if percentile_in_state is not None
+                                            else "Unknown"
+                                        )
+
+                                        records.append(
+                                            {
+                                                "state": state_name,
+                                                "district": district_name,
+                                                "index_slug": slug,
+                                                "index_label": varcfg.get("label", slug),
+                                                "group": varcfg.get("group"),
+                                                "scenario": sel_scenario,
+                                                "period": sel_period,
+                                                "stat": sel_stat,
+                                                "current": current_val_f,
+                                                "baseline": baseline_val_f,
+                                                "delta_abs": delta_abs,
+                                                "delta_pct": delta_pct,
+                                                "rank_in_state": rank_in_state,
+                                                "percentile_in_state": percentile_in_state,
+                                                "n_in_state": n_in_state,
+                                                "risk_class": risk_class,
+                                            }
+                                        )
+
+                                if records:
+                                    portfolio_multiindex_df = pd.DataFrame.from_records(
+                                        records
+                                    )
+                                    st.session_state[
+                                        "portfolio_multiindex_df"
+                                    ] = portfolio_multiindex_df
+                                    st.success(
+                                        f"Built multi-index table for {len(portfolio)} district(s) "
+                                        f"and {len(selected_index_slugs)} index/indices."
+                                    )
+                                else:
+                                    st.warning(
+                                        "No data found for the selected indices and portfolio districts. "
+                                        "Try a different combination of indices or scenario/period/statistic."
+                                    )
+
+                            portfolio_multiindex_df = st.session_state.get(
+                                "portfolio_multiindex_df"
+                            )
+                            if (
+                                isinstance(portfolio_multiindex_df, pd.DataFrame)
+                                and not portfolio_multiindex_df.empty
+                            ):
+                                cols_display = [
+                                    "state",
+                                    "district",
+                                    "index_label",
+                                    "group",
+                                    "current",
+                                    "baseline",
+                                    "delta_abs",
+                                    "delta_pct",
+                                    "rank_in_state",
+                                    "percentile_in_state",
+                                    "risk_class",
+                                ]
+                                cols_display = [
+                                    c
+                                    for c in cols_display
+                                    if c in portfolio_multiindex_df.columns
+                                ]
+
+                                st.markdown("**Portfolio – multi-index summary**")
+                                st.dataframe(
+                                    portfolio_multiindex_df[cols_display].rename(
+                                        columns={
+                                            "state": "State",
+                                            "district": "District",
+                                            "index_label": "Index",
+                                            "group": "Group",
+                                            "current": "Current value",
+                                            "baseline": "Baseline",
+                                            "delta_abs": "Δ vs baseline",
+                                            "delta_pct": "%Δ vs baseline",
+                                            "rank_in_state": "Rank in state",
+                                            "percentile_in_state": "Percentile in state",
+                                            "risk_class": "Risk class",
+                                        }
+                                    ),
+                                    use_container_width=True,
+                                )
+
+                                csv_multi = portfolio_multiindex_df.to_csv(
+                                    index=False
+                                ).encode("utf-8")
+                                st.download_button(
+                                    "⬇️ Download portfolio data (multi-index, CSV)",
+                                    data=csv_multi,
+                                    file_name=(
+                                        f"portfolio_multiindex_{sel_scenario}_"
+                                        f"{sel_period}_{sel_stat}.csv"
+                                    ),
+                                    mime="text/csv",
+                                    key="btn_portfolio_multiindex_csv",
+                                )
+                        else:
+                            st.caption(
+                                "Select at least one index to build a multi-index portfolio table."
+                            )
+                else:
+                    st.caption(
+                        "Ranking table is not available for the current index selection."
+                    )
+
+                # Clear portfolio button (after the table_df if/else)
+                if st.button("🧹 Clear portfolio", key="btn_portfolio_clear"):
+                    _portfolio_clear()
+                    st.success("Cleared portfolio selection.")
+
+    # -------------------------
+    # Climate profile / point query panel
+    # -------------------------
     st.header("Climate Profile")
 
     # Read current analysis mode (single vs multi-district)
@@ -2984,7 +3411,7 @@ with col2:
             if portfolio_current:
                 st.markdown("**Current portfolio (districts)**")
                 try:
-                    # Usual case: list of dicts {"state": ..., "district": ...}
+                    # Usual case: list of dicts {"state": . "district": .}
                     if isinstance(portfolio_current[0], dict):
                         port_df = (
                             pd.DataFrame(portfolio_current)
@@ -4629,361 +5056,6 @@ with col2:
                             )
             else:
                 st.caption("No other districts found in this state for comparison.")
-
-with col2:
-    # -------------------------
-    # Portfolio analysis (multi-district)
-    # -------------------------
-    if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
-        with st.expander("Portfolio analysis (multi-district)", expanded=True):
-
-            if st.button(
-                "📋 Select districts from table",
-                key="btn_portfolio_select_from_rankings",
-            ):
-                # Set a one-shot flag; the top-level / view hook will honour this
-                st.session_state["jump_to_rankings"] = True
-                st.rerun()
-
-            portfolio = st.session_state.get("portfolio_districts", [])
-
-            if not portfolio:
-                st.info(
-                    "No districts in the portfolio yet. "
-                    "Use **Select districts from table** above to open the Rankings view, "
-                    "then check rows in the 'Add to portfolio' column. "
-                    "You can also click districts on the map and use "
-                    "**Add this district to portfolio** in the Climate Profile panel."
-                )
-            else:
-                portfolio_df = pd.DataFrame(portfolio)
-                st.markdown("**Selected districts**")
-                st.dataframe(
-                    portfolio_df.rename(
-                        columns={"state": "State", "district": "District"}
-                    ),
-                    use_container_width=True,
-                )
-
-                # Use the already-built ranking table (table_df) to show
-                # current index values for only the portfolio districts
-                if table_df is not None and not table_df.empty:
-                    key_set = {
-                        _portfolio_key(item["state"], item["district"])
-                        for item in portfolio
-                    }
-
-                    def _row_in_portfolio(r: pd.Series) -> bool:
-                        return _portfolio_key(
-                            r.get("state_name"), r.get("district_name")
-                        ) in key_set
-
-                    portfolio_metric_df = table_df[
-                        table_df.apply(_row_in_portfolio, axis=1)
-                    ].copy()
-
-                    if portfolio_metric_df.empty:
-                        st.caption(
-                            "No data for the selected index for the current portfolio."
-                        )
-                    else:
-                        show_cols = [
-                            c
-                            for c in [
-                                "district_name",
-                                "state_name",
-                                "value",
-                                "baseline",
-                                "delta_abs",
-                                "delta_pct",
-                                "percentile_value",
-                                "risk_class",
-                            ]
-                            if c in portfolio_metric_df.columns
-                        ]
-                        st.markdown("**Current index values for portfolio**")
-                        st.dataframe(
-                            portfolio_metric_df[show_cols].rename(
-                                columns={
-                                    "district_name": "District",
-                                    "state_name": "State",
-                                    "value": pretty_metric_label,
-                                }
-                            ),
-                            use_container_width=True,
-                        )
-
-                        # CSV download for portfolio & current index
-                        csv_bytes = portfolio_metric_df.to_csv(index=False).encode("utf-8")
-                        st.download_button(
-                            "⬇️ Download portfolio data (current index only, CSV)",
-                            data=csv_bytes,
-                            file_name=(
-                                f"portfolio_{VARIABLE_SLUG}_{sel_scenario}_"
-                                f"{sel_period}_{sel_stat}.csv"
-                            ),
-                            mime="text/csv",
-                        )
-
-                        # -------------------------------------------------
-                        # NEW: Multi-index comparison across portfolio
-                        # -------------------------------------------------
-                        st.markdown("---")
-                        st.markdown("#### Multi-index comparison for portfolio")
-
-                        index_options = list(VARIABLES.keys())
-                        default_multi = st.session_state.get(
-                            "portfolio_multiindex_selection",
-                            [VARIABLE_SLUG]
-                            if VARIABLE_SLUG in index_options
-                            else index_options[:1],
-                        )
-                        selected_index_slugs = st.multiselect(
-                            "Indices to include",
-                            options=index_options,
-                            default=default_multi,
-                            format_func=lambda s: VARIABLES[s]["label"],
-                            key="portfolio_multiindex_selection",
-                        )
-
-                        if selected_index_slugs:
-                            if st.button(
-                                "Build multi-index portfolio table",
-                                key=f"btn_build_portfolio_multiindex_{sel_scenario}_{sel_period}_{sel_stat}",
-                            ):
-                                records: list[dict] = []
-                                for item in portfolio:
-                                    state_name = item.get("state")
-                                    district_name = item.get("district")
-                                    if not state_name or not district_name:
-                                        continue
-
-                                    for slug in selected_index_slugs:
-                                        varcfg = VARIABLES.get(slug)
-                                        if not varcfg:
-                                            continue
-
-                                        # Determine processed root for this index, similar to PROCESSED_ROOT logic
-                                        env_root = os.getenv("IRT_PROCESSED_ROOT")
-                                        if env_root:
-                                            base_path = Path(env_root)
-                                            if base_path.name.lower() == slug.lower():
-                                                proc_root = base_path
-                                            else:
-                                                proc_root = base_path / slug
-                                        else:
-                                            proc_root = DATA_DIR / "processed" / slug
-                                        proc_root = proc_root.resolve()
-
-                                        master_path = proc_root / PILOT_STATE / "master_metrics_by_district.csv"
-                                        if not master_path.exists():
-                                            continue
-
-                                        try:
-                                            df_master, schema_items_local, metrics_local, by_metric_local = _load_master_and_schema(
-                                                master_path, slug
-                                            )
-                                        except Exception:
-                                            continue
-
-                                        if df_master is None or df_master.empty:
-                                            continue
-
-                                        # Decide metric name for this slug (align with normalized metrics)
-                                        registry_metric = varcfg.get("periods_metric_col")
-                                        available_metrics = set(metrics_local or [])
-                                        if not available_metrics:
-                                            continue
-                                        if registry_metric not in available_metrics:
-                                            m_lower = {m.lower(): m for m in available_metrics}
-                                            registry_metric = m_lower.get(
-                                                str(registry_metric).lower(), next(iter(available_metrics))
-                                            )
-
-                                        metric_col = f"{registry_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
-                                        if metric_col not in df_master.columns:
-                                            # skip this index if we don't have the requested scenario/period/stat
-                                            continue
-
-                                        # Robust match for a single state+district row
-                                        dm = df_master.copy()
-                                        if "state" not in dm.columns or "district" not in dm.columns:
-                                            continue
-
-                                        def _n(s: str) -> str:
-                                            return alias(s)
-
-                                        dm["_state_key"] = dm["state"].astype(str).map(_n)
-                                        dm["_district_key"] = dm["district"].astype(str).map(_n)
-
-                                        target_state = _n(state_name)
-                                        target_dist = _n(district_name)
-
-                                        mask = (dm["_state_key"] == target_state) & (dm["_district_key"] == target_dist)
-                                        if not mask.any():
-                                            # fall back to contains on district name within same state
-                                            mask = (dm["_state_key"] == target_state) & dm["_district_key"].str.contains(
-                                                target_dist, na=False
-                                            )
-                                        if not mask.any():
-                                            continue
-
-                                        row_local = dm.loc[mask].iloc[0]
-
-                                        current_val = row_local.get(metric_col)
-                                        current_val_f = pd.to_numeric([current_val], errors="coerce")[0]
-                                        if pd.isna(current_val_f):
-                                            current_val_f = None
-
-                                        # Baseline for same metric/stat in historical baseline period
-                                        baseline_col = find_baseline_column_for_stat(
-                                            dm.columns, registry_metric, sel_stat
-                                        )
-                                        baseline_val_f = None
-                                        if baseline_col and baseline_col in dm.columns:
-                                            baseline_val = row_local.get(baseline_col)
-                                            baseline_val_f = pd.to_numeric(
-                                                [baseline_val], errors="coerce"
-                                            )[0]
-                                            if pd.isna(baseline_val_f):
-                                                baseline_val_f = None
-
-                                        delta_abs = None
-                                        delta_pct = None
-                                        if current_val_f is not None and baseline_val_f is not None:
-                                            delta_abs = current_val_f - baseline_val_f
-                                            if abs(baseline_val_f) > 1e-6:
-                                                delta_pct = delta_abs / baseline_val_f * 100.0
-
-                                        # Rank and percentile within state
-                                        rank_in_state = None
-                                        percentile_in_state = None
-                                        n_in_state = None
-                                        try:
-                                            state_mask = dm["_state_key"] == target_state
-                                            state_vals = pd.to_numeric(
-                                                dm.loc[state_mask, metric_col], errors="coerce"
-                                            ).dropna()
-                                            n_in_state = int(state_vals.size) if state_vals.size else None
-                                            if (
-                                                n_in_state
-                                                and current_val_f is not None
-                                                and n_in_state > 0
-                                            ):
-                                                rank_in_state = int((state_vals > current_val_f).sum() + 1)
-                                                percentile_in_state = float(
-                                                    (state_vals < current_val_f).sum() / n_in_state * 100.0
-                                                )
-                                        except Exception:
-                                            pass
-
-                                        risk_class = (
-                                            risk_class_from_percentile(percentile_in_state)
-                                            if percentile_in_state is not None
-                                            else "Unknown"
-                                        )
-
-                                        records.append(
-                                            {
-                                                "state": state_name,
-                                                "district": district_name,
-                                                "index_slug": slug,
-                                                "index_label": varcfg.get("label", slug),
-                                                "group": varcfg.get("group"),
-                                                "scenario": sel_scenario,
-                                                "period": sel_period,
-                                                "stat": sel_stat,
-                                                "current": current_val_f,
-                                                "baseline": baseline_val_f,
-                                                "delta_abs": delta_abs,
-                                                "delta_pct": delta_pct,
-                                                "rank_in_state": rank_in_state,
-                                                "percentile_in_state": percentile_in_state,
-                                                "n_in_state": n_in_state,
-                                                "risk_class": risk_class,
-                                            }
-                                        )
-
-                                if records:
-                                    portfolio_multiindex_df = pd.DataFrame.from_records(records)
-                                    st.session_state["portfolio_multiindex_df"] = portfolio_multiindex_df
-                                    st.success(
-                                        f"Built multi-index table for {len(portfolio)} district(s) "
-                                        f"and {len(selected_index_slugs)} index/indices."
-                                    )
-                                else:
-                                    st.warning(
-                                        "No data found for the selected indices and portfolio districts. "
-                                        "Try a different combination of indices or scenario/period/statistic."
-                                    )
-
-                            portfolio_multiindex_df = st.session_state.get("portfolio_multiindex_df")
-                            if (
-                                isinstance(portfolio_multiindex_df, pd.DataFrame)
-                                and not portfolio_multiindex_df.empty
-                            ):
-                                cols_display = [
-                                    "state",
-                                    "district",
-                                    "index_label",
-                                    "group",
-                                    "current",
-                                    "baseline",
-                                    "delta_abs",
-                                    "delta_pct",
-                                    "rank_in_state",
-                                    "percentile_in_state",
-                                    "risk_class",
-                                ]
-                                cols_display = [
-                                    c
-                                    for c in cols_display
-                                    if c in portfolio_multiindex_df.columns
-                                ]
-
-                                st.markdown("**Portfolio – multi-index summary**")
-                                st.dataframe(
-                                    portfolio_multiindex_df[cols_display].rename(
-                                        columns={
-                                            "state": "State",
-                                            "district": "District",
-                                            "index_label": "Index",
-                                            "group": "Group",
-                                            "current": "Current value",
-                                            "baseline": "Baseline",
-                                            "delta_abs": "Δ vs baseline",
-                                            "delta_pct": "%Δ vs baseline",
-                                            "rank_in_state": "Rank in state",
-                                            "percentile_in_state": "Percentile in state",
-                                            "risk_class": "Risk class",
-                                        }
-                                    ),
-                                    use_container_width=True,
-                                )
-
-                                csv_multi = portfolio_multiindex_df.to_csv(index=False).encode("utf-8")
-                                st.download_button(
-                                    "⬇️ Download portfolio data (multi-index, CSV)",
-                                    data=csv_multi,
-                                    file_name=(
-                                        f"portfolio_multiindex_{sel_scenario}_{sel_period}_{sel_stat}.csv"
-                                    ),
-                                    mime="text/csv",
-                                    key="btn_portfolio_multiindex_csv",
-                                )
-                        else:
-                            st.caption(
-                                "Select at least one index to build a multi-index portfolio table."
-                            )
-                else:
-                    st.caption(
-                        "Ranking table is not available for the current index selection."
-                    )
-
-                # Clear portfolio button (after the table_df if/else)
-                if st.button("🧹 Clear portfolio", key="btn_portfolio_clear"):
-                    _portfolio_clear()
-                    st.success("Cleared portfolio selection.")
 
 st.markdown("---")
 st.caption(
