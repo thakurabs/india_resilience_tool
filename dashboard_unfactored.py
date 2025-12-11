@@ -696,42 +696,6 @@ def extract_name_from_feature(feat):
 # -------------------------
 # Helpers for export
 # -------------------------
-def find_chrome_executable() -> Optional[str]:
-    for name in ("google-chrome", "chrome", "chromium", "chromium-browser"):
-        p = shutil.which(name)
-        if p:
-            return p
-    return None
-
-def chrome_screenshot(html_path: Path, png_out: Path, width=3000, height=2000, timeout=60) -> bool:
-    exe = find_chrome_executable()
-    if not exe:
-        return False
-    file_url = f"file://{html_path.resolve()}"
-    cmd = [
-        exe,
-        "--headless",
-        "--hide-scrollbars",
-        f"--window-size={width},{height}",
-        f"--screenshot={png_out}",
-        file_url,
-    ]
-    try:
-        subprocess.run(cmd, check=True, timeout=timeout)
-        return png_out.exists()
-    except Exception:
-        return False
-
-def open_in_new_tab_link(file_path: Path, label: str, mime: str = "application/pdf"):
-    import base64
-
-    data = Path(file_path).read_bytes()
-    b64 = base64.b64encode(data).decode("ascii")
-    href = f"data:{mime};base64,{b64}"
-    st.markdown(
-        f'<a href="{href}" target="_blank" rel="noopener" download="{Path(file_path).name}">{label}</a>',
-        unsafe_allow_html=True,
-    )
 
 def get_or_build_merged_for_index(
     adm2: gpd.GeoDataFrame,
@@ -1363,8 +1327,6 @@ with st.sidebar:
 
     master_controls_placeholder = st.empty()
     st.markdown("---")
-
-    publish_btn = st.button("Publish (export map + info)", key="btn_publish")
 
 st.title("India Resilience Tool")
 
@@ -4910,92 +4872,6 @@ with col2:
                 if st.button("🧹 Clear portfolio", key="btn_portfolio_clear"):
                     _portfolio_clear()
                     st.success("Cleared portfolio selection.")
-
-
-# -------------------------
-# Publish: HTML/PNG/TXT ZIP
-# -------------------------
-if publish_btn:
-    with st.spinner("Preparing export (HTML + PNG + summary)..."):
-        OUTDIR.mkdir(parents=True, exist_ok=True)
-        ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        map_html = OUTDIR / f"export_map_{ts}.html"
-
-        try:
-            if returned is not None:
-                center = returned.get("center") or returned.get("map_center")
-                zoom = returned.get("zoom") or returned.get("map_zoom")
-                if center and isinstance(center, (list, tuple)) and len(center) == 2:
-                    m.location = [float(center[0]), float(center[1])]
-                if zoom:
-                    m.zoom_start = int(zoom)
-        except Exception:
-            pass
-
-        m.save(str(map_html))
-        summary_lines = [
-            f"Export generated: {ts}",
-            f"Layer: {pretty_metric_label}",
-            f"State filter: {st.session_state.get('selected_state','All')}",
-            f"District filter: {st.session_state.get('selected_district','All')}",
-            "",
-        ]
-        last_clicked_name = None
-        if returned:
-            for k in (
-                "last_object_clicked",
-                "clicked_feature",
-                "last_active_drawing",
-                "last_object",
-            ):
-                if returned.get(k):
-                    feat = returned.get(k)
-                    props = feat.get("properties") or feat
-                    last_clicked_name = (
-                        props.get("district_name") or props.get("shapeName") or None
-                    )
-                    break
-        if last_clicked_name:
-            summary_lines.append(f"Clicked district: {last_clicked_name}")
-            rr = merged[
-                merged["district_name"].astype(str).str.lower()
-                == str(last_clicked_name).lower()
-            ]
-            if not rr.empty:
-                r = rr.iloc[0]
-                for sname in ["mean", "median", "p05", "p95", "std"]:
-                    ccol = f"{sel_metric}__{sel_scenario}__{sel_period}__{sname}"
-                    if ccol in r.index:
-                        summary_lines.append(f"{ccol}: {r.get(ccol)}")
-        else:
-            summary_lines.append("No district clicked; map shows current view.")
-
-        txt_path = OUTDIR / f"export_summary_{ts}.txt"
-        txt_path.write_text("\n".join(map(str, summary_lines)), encoding="utf-8")
-
-        png_out = OUTDIR / f"export_map_{ts}.png"
-        chrome_ok = chrome_screenshot(
-            map_html, png_out, width=3000, height=2000, timeout=60
-        )
-
-        zip_path = OUTDIR / f"irt_export_{ts}.zip"
-        with zipfile.ZipFile(
-            zip_path, "w", compression=zipfile.ZIP_DEFLATED
-        ) as zf:
-            zf.write(map_html, arcname="map.html")
-            zf.write(txt_path, arcname="summary.txt")
-            if chrome_ok and png_out.exists():
-                zf.write(png_out, arcname="map.png")
-
-        with open(zip_path, "rb") as fh:
-            st.download_button(
-                "Download export (ZIP)",
-                data=fh,
-                file_name=zip_path.name,
-                mime="application/zip",
-                key="btn_export_zip",
-            )
-        st.success("Export created (HTML + summary + PNG if headless Chrome is available).")
 
 st.markdown("---")
 st.caption(
