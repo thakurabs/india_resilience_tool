@@ -1308,12 +1308,21 @@ with st.sidebar:
     except Exception:
         pass
 
-    # Toggle for enabling/disabling hover highlight + tooltip, just under the logo
-    st.checkbox(
-        "Enable hover highlight & tooltip",
-        key="hover_enabled",
-        value=st.session_state.get("hover_enabled", True),
+    # Read current analysis mode (default: Single district focus)
+    analysis_mode_current = st.session_state.get(
+        "analysis_mode", "Single district focus"
     )
+
+    # Show hover toggle only in Multi-district portfolio mode
+    if analysis_mode_current == "Multi-district portfolio":
+        st.checkbox(
+            "Enable hover highlight & tooltip",
+            key="hover_enabled",
+            value=st.session_state.get("hover_enabled", True),
+        )
+    else:
+        # Optional: enforce a default behaviour outside portfolio mode
+        st.session_state.setdefault("hover_enabled", True)
 
     analysis_mode_placeholder = st.empty()  # Single vs multi-district analysis
 
