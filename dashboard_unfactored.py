@@ -4,8 +4,10 @@ import io, os, re, json, zipfile, shutil, subprocess, unicodedata, difflib
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
+from contextlib import contextmanager
 from functools import lru_cache
 import textwrap
+import time
 
 import numpy as np
 import pandas as pd
@@ -29,6 +31,65 @@ DEBUG = bool(int(os.getenv("IRT_DEBUG", "0")))
 def dbg(*args, **kwargs):
     if DEBUG:
         st.write(*args, **kwargs)
+
+# -------------------------
+# PERFORMANCE TIMING (opt-in)
+# -------------------------
+def _perf_is_enabled() -> bool:
+    """Return True if perf timing is enabled for this session."""
+    return bool(st.session_state.get("perf_enabled", False))
+
+
+def perf_reset() -> None:
+    """Clear per-rerun performance records (call once near app start)."""
+    if _perf_is_enabled():
+        st.session_state["_perf_records"] = []
+
+
+def perf_start(section: str) -> Optional[float]:
+    """Start timing and return a token (start time)."""
+    if not _perf_is_enabled():
+        return None
+    return time.perf_counter()
+
+
+def perf_end(section: str, start: Optional[float]) -> None:
+    """Stop timing for `section` using the token from perf_start()."""
+    if start is None or not _perf_is_enabled():
+        return
+    elapsed = time.perf_counter() - start
+    st.session_state.setdefault("_perf_records", []).append(
+        {"section": section, "seconds": float(elapsed)}
+    )
+
+
+@contextmanager
+def perf_section(section: str):
+    """Context manager wrapper around perf_start/perf_end."""
+    start = perf_start(section)
+    try:
+        yield
+    finally:
+        perf_end(section, start)
+
+
+def render_perf_panel(container) -> None:
+    """Render the timing table into a Streamlit container/placeholder."""
+    if not _perf_is_enabled():
+        return
+
+    records = st.session_state.get("_perf_records", [])
+    with container:
+        with st.expander("⏱ Performance timings", expanded=False):
+            if not records:
+                st.caption("No timings recorded for this rerun yet.")
+                return
+
+            df_perf = pd.DataFrame(records)
+            df_perf["ms"] = (df_perf["seconds"] * 1000.0).round(1)
+            df_perf = df_perf.drop(columns=["seconds"])
+            st.dataframe(df_perf, hide_index=True, use_container_width=True)
+            st.caption(f"Total: {df_perf['ms'].sum():.1f} ms")
 
 # -------------------------
 # CONFIG
@@ -1293,6 +1354,10 @@ if "portfolio_districts" not in st.session_state:
 if "active_view" not in st.session_state:
     st.session_state["active_view"] = "🗺 Map view"
 
+# Perf timing toggle (developer)
+st.session_state.setdefault("perf_enabled", DEBUG)
+perf_reset()
+
 # If a downstream control requested to jump to the Rankings table,
 # honour it BEFORE the main_view_selector radio is created.
 if st.session_state.get("jump_to_rankings", False):
@@ -1336,6 +1401,17 @@ with st.sidebar:
 
     master_controls_placeholder = st.empty()
     st.markdown("---")
+
+    with st.expander("Developer", expanded=False):
+        st.checkbox(
+            "Show performance timings",
+            key="perf_enabled",
+            value=st.session_state.get("perf_enabled", DEBUG),
+            help="Shows per-section timings for the current rerun.",
+        )
+
+    perf_panel_placeholder = st.empty()
+
 
 st.title("India Resilience Tool")
 
@@ -1483,13 +1559,17 @@ with metric_ui_placeholder.container():
                 )
 
             # (Re)load from disk
-            with st.spinner("Loading master CSV..."):
-                df_local = load_master_csv(str(master_path))
+            with perf_section("master: read csv"):
+                with st.spinner("Loading master CSV..."):
+                    df_local = load_master_csv(str(master_path))
 
-            df_local = normalize_master_columns(df_local)
-            schema_items_local, metrics_local, by_metric_local = parse_master_schema(
-                df_local.columns
-            )
+            with perf_section("master: normalize columns"):
+                df_local = normalize_master_columns(df_local)
+
+            with perf_section("master: parse schema"):
+                schema_items_local, metrics_local, by_metric_local = parse_master_schema(
+                    df_local.columns
+                )
 
             cache[slug] = {
                 "df": df_local,
@@ -1840,13 +1920,14 @@ if "district" not in df.columns:
     st.error("Master CSV must contain a 'district' column to join with ADM2.")
     st.stop()
 
-with st.spinner("Preparing merged geometries with CSV attributes..."):
-    merged = get_or_build_merged_for_index(
-        adm2=adm2,
-        df=df,
-        slug=VARIABLE_SLUG,
-        master_path=MASTER_CSV_PATH,
-    )
+with perf_section("merge: build merged gdf"):
+    with st.spinner("Preparing merged geometries with CSV attributes..."):
+        merged = get_or_build_merged_for_index(
+            adm2=adm2,
+            df=df,
+            slug=VARIABLE_SLUG,
+            master_path=MASTER_CSV_PATH,
+        )
 
 # --- Baseline column for this metric + stat (used by map & table) ---
 baseline_col = find_baseline_column_for_stat(df.columns, sel_metric, sel_stat)
@@ -1857,15 +1938,16 @@ map_value_col = metric_col  # default: absolute values
 
 if map_mode == "Change from 1990-2010 baseline":
     if baseline_col and (baseline_col in merged.columns):
-        # Compute Δ = current - baseline, per district
-        merged["_baseline_value"] = pd.to_numeric(
-            merged[baseline_col], errors="coerce"
-        )
-        merged["_current_value"] = pd.to_numeric(
-            merged[metric_col], errors="coerce"
-        )
-        merged["_map_delta"] = merged["_current_value"] - merged["_baseline_value"]
-        map_value_col = "_map_delta"
+        with perf_section("map: compute baseline delta"):
+            # Compute Δ = current - baseline, per district
+            merged["_baseline_value"] = pd.to_numeric(
+                merged[baseline_col], errors="coerce"
+            )
+            merged["_current_value"] = pd.to_numeric(
+                merged[metric_col], errors="coerce"
+            )
+            merged["_map_delta"] = merged["_current_value"] - merged["_baseline_value"]
+            map_value_col = "_map_delta"
     else:
         st.warning(
             "Baseline (historical 1990-2010) column not found for this metric/stat; "
@@ -1917,19 +1999,22 @@ else:
         f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {sel_period} · {sel_stat}"
     )
 
-with st.spinner("Computing colors..."):
-    merged = apply_fillcolor(
-        merged,
-        map_value_col,
-        vmin,
-        vmax,
-        cmap_name=cmap_name,
-    )
+with perf_section("colors: apply_fillcolor"):
+    with st.spinner("Computing colors..."):
+        merged = apply_fillcolor(
+            merged,
+            map_value_col,
+            vmin,
+            vmax,
+            cmap_name=cmap_name,
+        )
 
 
 # -------------------------
 # Build ranking table (district-level)
 # -------------------------
+_t_rank = perf_start("rank_table: build")
+
 # Filter for ranking: respect selected_state, but ignore selected_district
 if selected_state != "All":
     rank_mask = (
@@ -2000,6 +2085,9 @@ if not ranking_gdf.empty and (metric_col in ranking_gdf.columns):
 else:
     has_baseline = False
 
+perf_end("rank_table: build", _t_rank)
+
+_t_disp = perf_start("map: filter display_gdf")
 
 display_gdf = merged.copy()
 if selected_state != "All":
@@ -2017,6 +2105,8 @@ if selected_district != "All":
     display_gdf = display_gdf[
         display_gdf["district_name"].astype(str) == selected_district
     ]
+
+perf_end("map: filter display_gdf", _t_disp)
 
 m = folium.Map(
     location=st.session_state["map_center"],
@@ -2090,6 +2180,7 @@ if hover_enabled:
         "fillOpacity": 0.9,
     }
 
+_t_geojson = perf_start("map: GeoJSON serialize+add layer")
 folium.GeoJson(
     data=json.loads(geo_source.to_json()),
     name="Districts",
@@ -2097,6 +2188,7 @@ folium.GeoJson(
     tooltip=tooltip,
     highlight_function=highlight_fn,
 ).add_to(m)
+perf_end("map: GeoJSON serialize+add layer", _t_geojson)
 
 MAP_WIDTH, MAP_HEIGHT = 780, 700
 bar_height_px = int(MAP_HEIGHT * 0.92)
@@ -2202,18 +2294,19 @@ with col1:
                 except (TypeError, ValueError):
                     # Ignore invalid/partial values silently
                     pass
-
-        returned = st_folium(
-            m,
-            width=MAP_WIDTH,
-            height=MAP_HEIGHT,
-            returned_objects=[
-                "last_object_clicked",
-                "last_clicked",
-                "center",
-                "zoom",
-            ],
-        )
+    
+        with perf_section("map: render st_folium"):
+            returned = st_folium(
+                m,
+                width=MAP_WIDTH,
+                height=MAP_HEIGHT,
+                returned_objects=[
+                    "last_object_clicked",
+                    "last_clicked",
+                    "center",
+                    "zoom",
+                ],
+            )
 
 
         def extract_district_name_from_returned(
@@ -5057,6 +5150,7 @@ with col2:
             else:
                 st.caption("No other districts found in this state for comparison.")
 
+render_perf_panel(perf_panel_placeholder)
 st.markdown("---")
 st.caption(
     "Notes: first choose an Index group (e.g. Temperature vs Rainfall), then an Index within that group. "
