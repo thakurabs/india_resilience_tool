@@ -1733,8 +1733,8 @@ with state_placeholder.container():
                 "In <strong>Multi-district portfolio</strong> mode you build a set of districts "
                 "for comparison. Districts are added from the <em>🗺 Map view</em>, the "
                 "<em>📊 Rankings table</em>, or from saved point locations. "
-                "The <strong>District</strong> dropdown is fixed to <strong>All</strong> here "
-                "because selection now happens directly from the map and table."
+                # "The <strong>District</strong> dropdown is fixed to <strong>All</strong> here "
+                # "because selection now happens directly from the map and table."
                 "</div>",
                 unsafe_allow_html=True,
             )
