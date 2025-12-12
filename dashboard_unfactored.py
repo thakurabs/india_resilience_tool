@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import io, os, re, json, zipfile, shutil, subprocess, unicodedata, difflib
+import io, os, re, json, zipfile, shutil, subprocess, unicodedata, difflib, copy
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Tuple
@@ -530,6 +530,39 @@ if not ADM2_GEOJSON.exists():
 
 adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
 adm2["__key"] = adm2["district_name"].map(alias)
+
+@st.cache_data(ttl=3600)
+def build_adm2_geojson_by_state(
+    path: str,
+    tolerance: float,
+    mtime: float,
+) -> dict[str, dict]:
+    """
+    Build and cache an ADM2 FeatureCollection per state (geometry + identifiers only).
+
+    Cached by (path, tolerance, mtime) so it invalidates automatically when the
+    source GeoJSON changes or simplification tolerance is updated.
+    """
+    _ = mtime  # mtime is used only to invalidate Streamlit's cache
+
+    gdf = load_local_adm2(path, tolerance=tolerance)
+    if "__key" not in gdf.columns:
+        gdf["__key"] = gdf["district_name"].map(alias)
+
+    base = gdf[["district_name", "state_name", "__key", "geometry"]].copy()
+
+    fc_all = json.loads(base.to_json())
+    by_state: dict[str, dict] = {}
+
+    for feat in fc_all.get("features", []):
+        props = feat.get("properties") or {}
+        state_name = props.get("state_name", "Unknown")
+        state_key = normalize_name(state_name) or "unknown"
+        by_state.setdefault(state_key, {"type": "FeatureCollection", "features": []})
+        by_state[state_key]["features"].append(feat)
+
+    by_state["all"] = fc_all
+    return by_state
 
 @st.cache_data
 def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -2115,6 +2148,7 @@ m = folium.Map(
     control_scale=True,
     min_zoom=4,
     max_zoom=12,
+    prefer_canvas=True,
 )
 
 try:
@@ -2169,7 +2203,94 @@ tooltip = (
     else None
 )
 
-geo_source = display_gdf if not display_gdf.empty else merged
+# -------------------------
+# Step 5: GeoJSON-by-state cache (geometry cached; properties patched per rerun)
+# -------------------------
+adm2_mtime = float(ADM2_GEOJSON.stat().st_mtime)
+geojson_by_state = build_adm2_geojson_by_state(
+    path=str(ADM2_GEOJSON),
+    tolerance=SIMPLIFY_TOL_ADM2,
+    mtime=adm2_mtime,
+)
+
+state_key = "all" if selected_state == "All" else (normalize_name(selected_state) or "unknown")
+fc = copy.deepcopy(geojson_by_state.get(state_key, geojson_by_state["all"]))
+
+# If a single district is selected, keep only that feature
+if selected_district != "All":
+    dist_key = alias(selected_district)
+    fc["features"] = [
+        f
+        for f in fc.get("features", [])
+        if alias(((f.get("properties") or {}).get("district_name", ""))) == dist_key
+    ]
+
+# Patch feature properties (fillColor + value columns) from the current display_gdf/merged
+prop_gdf = display_gdf if not display_gdf.empty else merged
+prop_work = prop_gdf.copy()
+if "__key" not in prop_work.columns:
+    prop_work["__key"] = prop_work["district_name"].map(alias)
+
+value_cols: list[str] = []
+for _c in (metric_col, map_value_col):
+    if _c and (_c not in value_cols) and (_c in prop_work.columns):
+        value_cols.append(_c)
+
+keep_cols = ["__key", "district_name"]
+if "fillColor" in prop_work.columns:
+    keep_cols.append("fillColor")
+keep_cols.extend(value_cols)
+
+prop_work = prop_work[keep_cols].copy()
+
+props_map: dict[str, dict] = {}
+for _, r in prop_work.iterrows():
+    k = r.get("__key")
+    if not isinstance(k, str) or not k:
+        continue
+
+    upd: dict = {"district_name": r.get("district_name")}
+    fill = r.get("fillColor")
+    upd["fillColor"] = fill if isinstance(fill, str) and fill else "#cccccc"
+
+    for c in value_cols:
+        v = r.get(c)
+        upd[c] = None if pd.isna(v) else v
+
+    props_map[k] = upd
+
+# --- Reduce GeoJSON to only districts present in the current data ---
+valid_keys = set(props_map.keys())
+if valid_keys:
+    fc["features"] = [
+        f
+        for f in fc.get("features", [])
+        if (
+            ((f.get("properties") or {}).get("__key") in valid_keys)
+            or (alias(((f.get("properties") or {}).get("district_name", ""))) in valid_keys)
+        )
+    ]
+
+for feat in fc.get("features", []):
+    props = feat.get("properties") or {}
+
+    k = props.get("__key")
+    if not isinstance(k, str) or not k:
+        k = alias(props.get("district_name", ""))
+        props["__key"] = k
+
+    upd = props_map.get(k)
+    if upd:
+        props.update(upd)
+    else:
+        props.setdefault("fillColor", "#cccccc")
+
+    # IMPORTANT: Folium tooltip asserts if a listed field key is missing.
+    # Ensure these exist on every feature even if values are NaN/missing.
+    for c in value_cols:
+        props.setdefault(c, None)
+
+    feat["properties"] = props
 
 highlight_fn = None
 if hover_enabled:
@@ -2182,11 +2303,13 @@ if hover_enabled:
 
 _t_geojson = perf_start("map: GeoJSON serialize+add layer")
 folium.GeoJson(
-    data=json.loads(geo_source.to_json()),
+    data=fc,
     name="Districts",
     style_function=style_fn,
     tooltip=tooltip,
     highlight_function=highlight_fn,
+    smooth_factor=0.8,
+    zoom_on_click=False,
 ).add_to(m)
 perf_end("map: GeoJSON serialize+add layer", _t_geojson)
 
@@ -2296,6 +2419,10 @@ with col1:
                     pass
     
         with perf_section("map: render st_folium"):
+            _state_key = str(selected_state).strip().lower().replace(" ", "_")
+            _district_key = str(selected_district).strip().lower().replace(" ", "_")
+            map_key = f"main_map_{VARIABLE_SLUG}_{map_mode}_{sel_scenario}_{sel_period}_{sel_stat}_{_state_key}_{_district_key}"
+
             returned = st_folium(
                 m,
                 width=MAP_WIDTH,
@@ -2303,9 +2430,8 @@ with col1:
                 returned_objects=[
                     "last_object_clicked",
                     "last_clicked",
-                    "center",
-                    "zoom",
                 ],
+                key=map_key,
             )
 
 
