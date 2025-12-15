@@ -91,6 +91,26 @@ def render_perf_panel(container) -> None:
             st.dataframe(df_perf, hide_index=True, use_container_width=True)
             st.caption(f"Total: {df_perf['ms'].sum():.1f} ms")
 
+def render_perf_panel_safe() -> None:
+    """Best-effort performance panel render.
+
+    This makes the perf panel resilient to early `st.stop()` branches by
+    rendering into a sidebar placeholder if available.
+    """
+    if not _perf_is_enabled():
+        return
+
+    placeholder = globals().get("perf_panel_placeholder")
+    if placeholder is None:
+        # Prefer the sidebar so the UI matches the developer control location.
+        try:
+            placeholder = st.sidebar.empty()
+        except Exception:
+            placeholder = st.empty()
+        globals()["perf_panel_placeholder"] = placeholder
+
+    render_perf_panel(placeholder)
+
 # -------------------------
 # CONFIG
 # -------------------------
@@ -914,6 +934,61 @@ def parse_master_schema(cols):
     by_metric = {m: [i for i in items if i["metric"] == m] for m in metrics}
     return items, metrics, by_metric
 
+def resolve_metric_column(
+    df_or_cols,
+    base_metric: str,
+    scenario: str,
+    period: str,
+    stat: str,
+) -> Optional[str]:
+    """
+    Resolve the actual master CSV column name for a metric/scenario/period/stat.
+
+    Master columns are expected to be normalized to:
+        <metric>__<scenario>__<period>__<stat>
+
+    Returns the matching column name (preserving original casing) if found,
+    otherwise returns None.
+    """
+    if not base_metric:
+        return None
+
+    # Accept a DataFrame/GeoDataFrame or an iterable of column names.
+    try:
+        cols = list(df_or_cols.columns)  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            cols = list(df_or_cols)
+        except Exception:
+            return None
+
+    scen = str(scenario).strip().lower()
+    per = str(period).strip().replace("_", "-").replace("–", "-")
+    stt = str(stat).strip().lower()
+
+    col_map = {str(c).lower(): str(c) for c in cols}
+    candidate = f"{str(base_metric).strip()}__{scen}__{per}__{stt}".lower()
+
+    if candidate in col_map:
+        return col_map[candidate]
+
+    # Fallback: match by pieces (handles minor period formatting differences).
+    try:
+        pat = re.compile(
+            rf"^{re.escape(str(base_metric).strip())}__{re.escape(scen)}__.+__{re.escape(stt)}$",
+            flags=re.IGNORECASE,
+        )
+        matches = [str(c) for c in cols if pat.match(str(c))]
+        if not matches:
+            return None
+
+        per_l = per.lower()
+        for c in matches:
+            if per_l in c.lower():
+                return c
+        return matches[0]
+    except Exception:
+        return None
 
 # -------------------------
 # Baseline (historical) helper for any index/stat
@@ -1383,6 +1458,12 @@ if "portfolio_districts" not in st.session_state:
     # Will store a list of (state_name, district_name) tuples
     st.session_state["portfolio_districts"] = []
 
+# Portfolio-build UX router state (multi-district portfolio mode)
+st.session_state.setdefault("portfolio_build_route", None)  # None | "rankings" | "map" | "saved_points"
+st.session_state.setdefault("jump_to_rankings", False)
+st.session_state.setdefault("jump_to_map", False)
+st.session_state.setdefault("_analysis_mode_prev", st.session_state.get("analysis_mode", "Single district focus"))
+
 # Which main view is active in the left column: map vs rankings
 if "active_view" not in st.session_state:
     st.session_state["active_view"] = "🗺 Map view"
@@ -1391,7 +1472,7 @@ if "active_view" not in st.session_state:
 st.session_state.setdefault("perf_enabled", DEBUG)
 perf_reset()
 
-# If a downstream control requested to jump to the Rankings table,
+# If a downstream control requested to jump to a specific left-panel view,
 # honour it BEFORE the main_view_selector radio is created.
 if st.session_state.get("jump_to_rankings", False):
     st.session_state["active_view"] = "📊 Rankings table"
@@ -1399,6 +1480,12 @@ if st.session_state.get("jump_to_rankings", False):
     st.session_state["main_view_selector"] = "📊 Rankings table"
     # Reset the flag so it only applies once
     st.session_state["jump_to_rankings"] = False
+elif st.session_state.get("jump_to_map", False):
+    st.session_state["active_view"] = "🗺 Map view"
+    # Also sync the radio widget state so the UI reflects this jump
+    st.session_state["main_view_selector"] = "🗺 Map view"
+    # Reset the flag so it only applies once
+    st.session_state["jump_to_map"] = False
 
 with st.sidebar:
     try:
@@ -1514,6 +1601,10 @@ with metric_ui_placeholder.container():
         VARIABLE_SLUG = selected_var
         VARCFG = VARIABLES[VARIABLE_SLUG]
 
+        # Default registry metric (prevents NameError if downstream master/schema logic short-circuits)
+        registry_metric = str(VARCFG.get("periods_metric_col", "")).strip()
+        st.session_state["registry_metric"] = registry_metric
+
         # --- NEW: small info button + text description for the selected index ---
         desc = VARCFG.get("description", "").strip()
         if desc:
@@ -1572,6 +1663,7 @@ with metric_ui_placeholder.container():
                 f"Master CSV not found for {VARIABLES[VARIABLE_SLUG]['label']} at {MASTER_CSV_PATH}. "
                 f"Click 'Rebuild now' below."
             )
+            render_perf_panel_safe()
             st.stop()
 
         # Load + parse schema (for scenario/period/stat only), cached by file mtime
@@ -1617,16 +1709,25 @@ with metric_ui_placeholder.container():
             MASTER_CSV_PATH, VARIABLE_SLUG
         )
         if not metrics:
-            st.error("No ensemble statistic columns found in the master CSV. Did the builder run?")
+            st.error(
+                "No ensemble statistic columns found in the master CSV. Did the builder run?"
+            )
+            render_perf_panel_safe()
             st.stop()
 
         # Choose the internal metric name from the registry (no separate Metric dropdown)
-        registry_metric = VARCFG["periods_metric_col"]
-        # If normalized columns changed the metric name casing, align it:
+        registry_metric = str(VARCFG.get("periods_metric_col", "")).strip()
+
+        # If normalized columns changed the metric name casing, align it
         available_metrics = set(metrics)
-        if registry_metric not in available_metrics:
-            m_lower = {m.lower(): m for m in available_metrics}
-            registry_metric = m_lower.get(VARCFG["periods_metric_col"].lower(), next(iter(available_metrics)))
+        if registry_metric not in available_metrics and available_metrics:
+            m_lower = {str(m).lower(): m for m in available_metrics}
+            registry_metric = m_lower.get(
+                str(registry_metric).lower(), next(iter(available_metrics))
+            )
+
+        # Persist so downstream code can always access it safely
+        st.session_state["registry_metric"] = registry_metric
 
         # Scenario / Period / Statistic pickers remain
         items_for_m = by_metric.get(registry_metric, [])
@@ -1642,27 +1743,33 @@ with metric_ui_placeholder.container():
 
         if not scenarios:
             st.error("No SSP245/SSP585 data found for this index in the master CSV.")
+            render_perf_panel_safe()
             st.stop()
 
         sel_scenario = st.selectbox("Scenario", scenarios, index=0, key="sel_scenario")
 
-
         periods = sorted(
-            set(
+            {
                 i["period"]
                 for i in (by_metric.get(registry_metric, []) or schema_items)
                 if i["scenario"] == sel_scenario
-            )
+            }
         )
+        if not periods:
+            st.error("No periods found for the selected scenario in the master CSV.")
+            render_perf_panel_safe()
+            st.stop()
+
         sel_period = st.selectbox("Period", periods, index=0, key="sel_period")
         stats = ["mean", "median", "p05", "p95", "std"]
         sel_stat = st.selectbox("Statistic", stats, index=0, key="sel_stat")
 
 # Column chosen to plot
-sel_metric = registry_metric  # internal name
+sel_metric = st.session_state.get("registry_metric", registry_metric)  # internal name
 metric_col = f"{sel_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
 if metric_col not in df.columns:
     st.error(f"Selected column '{metric_col}' not found in master CSV.")
+    render_perf_panel_safe()
     st.stop()
 pretty_metric_label = (
     f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {sel_period} · {sel_stat}"
@@ -1834,6 +1941,15 @@ with state_placeholder.container():
             ),
         )
 
+        # Reset portfolio route state when switching analysis focus modes
+        prev_mode = st.session_state.get("_analysis_mode_prev", analysis_mode)
+        if analysis_mode != prev_mode:
+            st.session_state["_analysis_mode_prev"] = analysis_mode
+            # Clear any previously selected portfolio-build route and pending view jumps
+            st.session_state["portfolio_build_route"] = None
+            st.session_state["jump_to_rankings"] = False
+            st.session_state["jump_to_map"] = False
+
         # Brief helper text so the mode explains itself
         if analysis_mode == "Single district focus":
             st.caption(
@@ -1876,8 +1992,15 @@ if "portfolio_districts" not in st.session_state:
 
 
 def _portfolio_normalize(text: str) -> str:
-    """Normalize a state/district name for comparison."""
-    return str(text or "").strip().lower()
+    """
+    Normalize a state/district name for robust comparison across data sources.
+
+    - ASCII fold + lowercase (via normalize_name)
+    - Apply NAME_ALIASES (via alias)
+    - Remove spaces to handle cases like "Sanga Reddy" vs "Sangareddy"
+    """
+    norm = alias(text)  # alias() already calls normalize_name() + NAME_ALIASES
+    return norm.replace(" ", "")
 
 
 def _portfolio_key(state_name: str, district_name: str) -> tuple[str, str]:
@@ -1927,6 +2050,14 @@ def _portfolio_clear() -> None:
     """Clear all districts from the portfolio."""
     st.session_state["portfolio_districts"] = []
 
+
+def _portfolio_set_flash(message: str, level: str = "success") -> None:
+    """Store a one-shot UI message to be rendered at the top of the right panel."""
+    st.session_state["_portfolio_flash"] = {
+        "message": str(message),
+        "level": str(level or "success"),
+    }
+
 if "map_center" not in st.session_state:
     st.session_state["map_center"] = [25.0, 82.5]
 if "map_zoom" not in st.session_state:
@@ -1951,6 +2082,7 @@ else:
 # Merge attributes
 if "district" not in df.columns:
     st.error("Master CSV must contain a 'district' column to join with ADM2.")
+    render_perf_panel_safe()
     st.stop()
 
 with perf_section("merge: build merged gdf"):
@@ -1995,6 +2127,7 @@ numeric_vals = pd.to_numeric(
 ).dropna()
 if numeric_vals.empty:
     st.error("No numeric values found for selected index & selection.")
+    render_perf_panel_safe()
     st.stop()
 
 # Default min/max from data
@@ -2362,12 +2495,16 @@ with col1:
     if "active_view" not in st.session_state:
         st.session_state["active_view"] = st.session_state["main_view_selector"]
 
-    # One-shot hook: if some downstream control requested a jump to the
-    # Rankings table, honour it *before* the radio is instantiated.
+    # One-shot hook: if some downstream control requested a jump to a specific
+    # left-panel view, honour it *before* the radio is instantiated.
     if st.session_state.get("jump_to_rankings", False):
         st.session_state["main_view_selector"] = "📊 Rankings table"
         st.session_state["active_view"] = "📊 Rankings table"
         st.session_state["jump_to_rankings"] = False
+    elif st.session_state.get("jump_to_map", False):
+        st.session_state["main_view_selector"] = "🗺 Map view"
+        st.session_state["active_view"] = "🗺 Map view"
+        st.session_state["jump_to_map"] = False
 
     view = st.radio(
         "View",
@@ -2628,464 +2765,603 @@ with col1:
 # Details panel (portfolio + risk cards, sparkline + comparison)
 # -------------------------
 with col2:
+
+    # Reserved slot: "Selected district for portfolio" (map route) should appear ABOVE
+    # the Portfolio analysis expander even though it's determined later in the script.
+    portfolio_selected_slot = st.empty()
+
     # -------------------------
-    # Portfolio analysis (multi-district) – shown at top in portfolio mode
+    # Multi-district portfolio mode: show a clean, guided right-panel flow
     # -------------------------
-    if st.session_state.get("analysis_mode", "Single district focus") == "Multi-district portfolio":
+    analysis_mode_rhs = st.session_state.get("analysis_mode", "Single district focus")
+    portfolio_route = st.session_state.get("portfolio_build_route", None)
+
+    if analysis_mode_rhs == "Multi-district portfolio":
+        # Ensure saved-points container exists even if the Point selection UI is hidden
+        st.session_state.setdefault("point_query_points", [])
+
+        # ---- State summary (shown first in portfolio mode; hide once a build method is chosen) ----
+        if portfolio_route is None:
+            st.subheader(f"{selected_state} — State summary")
+            st.markdown(
+                f"**Index:** {VARIABLES[VARIABLE_SLUG]['label']}  \n"
+                f"**Scenario:** {sel_scenario}  \n"
+                f"**Period:** {sel_period}"
+            )
+
+            if selected_state == "All":
+                st.info("Select a state in the left panel to see a state summary and build a portfolio.")
+            else:
+                try:
+                    ensemble_port, _, _ = compute_state_metrics_from_merged(
+                        merged, adm1, metric_col, selected_state
+                    )
+                except Exception:
+                    ensemble_port = {
+                        "mean": None,
+                        "median": None,
+                        "p05": None,
+                        "p95": None,
+                        "std": None,
+                        "n_districts": 0,
+                    }
+
+                def _fmt_metric(v: object) -> str:
+                    try:
+                        x = float(v)  # type: ignore[arg-type]
+                        if np.isnan(x):
+                            return "—"
+                        return f"{x:.2f}"
+                    except Exception:
+                        return "—"
+
+                if ensemble_port.get("n_districts", 0) > 0:
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Mean", _fmt_metric(ensemble_port.get("mean")))
+                    c2.metric("Median", _fmt_metric(ensemble_port.get("median")))
+                    c3.metric("P05", _fmt_metric(ensemble_port.get("p05")))
+                    c4.metric("P95", _fmt_metric(ensemble_port.get("p95")))
+                    st.caption(f"Districts used: {int(ensemble_port.get('n_districts', 0))}")
+                else:
+                    st.caption("No numeric district values found for this state & selection.")
+
+        # Keep consistent spacing between top section and the Portfolio analysis expander
+        st.markdown("---")
+
+        # ---- Portfolio analysis expander (shown second) ----
         with st.expander("Portfolio analysis (multi-district)", expanded=True):
 
-            # ---- STEP 1: Centralised instructions for building the portfolio ----
+            # ---- STEP 1: Choose how to build the portfolio ----
             st.markdown("### Step 1 – Build your district portfolio")
             st.caption(
-                "Use any of the options below to add districts to the portfolio. "
-                "Once you have a portfolio, you can review and compare it in this panel."
+                "Choose one method to start adding districts. The dashboard will guide you through the relevant path."
             )
 
-            st.markdown(
-                "- **From the rankings table**: click the button below to open the "
-                "📊 Rankings view in the left panel, then tick rows in the "
-                "**Add to portfolio** column and click **Add checked districts to portfolio**."
-            )
-            st.markdown(
-                "- **From the map**: in the 🗺 **Map view**, click a district and use "
-                "**Add this district to portfolio** in the right-hand panel."
-            )
-            st.markdown(
-                "- **From saved points**: use the **📍 Point selection** expander "
-                "to save locations by coordinates or map clicks, then send their "
-                "districts into the portfolio."
-            )
+            col_route_1, col_route_2, col_route_3 = st.columns(3)
+            with col_route_1:
+                if st.button(
+                    "📊 From the rankings table",
+                    key="btn_portfolio_route_rankings",
+                    use_container_width=True,
+                ):
+                    st.session_state["portfolio_build_route"] = "rankings"
+                    st.session_state["jump_to_rankings"] = True
+                    st.session_state["jump_to_map"] = False
+                    st.rerun()
+            with col_route_2:
+                if st.button(
+                    "🗺 From the map",
+                    key="btn_portfolio_route_map",
+                    use_container_width=True,
+                ):
+                    st.session_state["portfolio_build_route"] = "map"
+                    st.session_state["jump_to_map"] = True
+                    st.session_state["jump_to_rankings"] = False
+                    st.rerun()
+            with col_route_3:
+                if st.button(
+                    "📍 From saved points",
+                    key="btn_portfolio_route_saved_points",
+                    use_container_width=True,
+                ):
+                    st.session_state["portfolio_build_route"] = "saved_points"
+                    st.session_state["jump_to_rankings"] = False
+                    st.session_state["jump_to_map"] = False
+                    st.rerun()
+
+            route = st.session_state.get("portfolio_build_route", None)
+
+            route_label_map = {
+                "rankings": "From the rankings table",
+                "map": "From the map",
+                "saved_points": "From saved points",
+            }
+
+            if route in route_label_map:
+                st.caption(f"Selected method: **{route_label_map[route]}**")
+                if st.button("↩ Change method", key="btn_portfolio_route_reset"):
+                    st.session_state["portfolio_build_route"] = None
+                    st.session_state["jump_to_rankings"] = False
+                    st.session_state["jump_to_map"] = False
+                    st.rerun()
+
+            # Always fetch portfolio (even if route is None)
+            portfolio = st.session_state.get("portfolio_districts", [])
+
+            # Route hint (but do NOT gate analysis if portfolio already exists)
+            if route is None:
+                if portfolio:
+                    st.caption(
+                        f"Current portfolio: **{len(portfolio)}** district(s). "
+                        "You can continue to Step 2 below, or choose a method above to add more."
+                    )
+                else:
+                    st.caption("Choose a method above to start building your portfolio.")
+            elif route == "rankings":
+                st.caption(
+                    "Add districts from the **Rankings table** (left) and come back here to analyse."
+                )
+            elif route == "map":
+                st.caption(
+                    "Add districts by selecting them on the **Map** (left) and clicking **Add to portfolio**."
+                )
+            elif route == "saved_points":
+                st.caption("Add districts using the **Saved points** panel below.")
 
             st.markdown("---")
 
-            # Primary CTA to jump to Rankings as part of Step 1
-            if st.button(
-                "📋 Open rankings table to pick districts",
-                key="btn_portfolio_select_from_rankings",
-            ):
-                # Set a one-shot flag; the top-level / view hook will honour this
-                st.session_state["jump_to_rankings"] = True
-                st.rerun()
-
-            # ---- STEP 2: Show and analyse the current portfolio ----
-            portfolio = st.session_state.get("portfolio_districts", [])
-
+            # ---- Always show portfolio + analysis steps whenever portfolio is non-empty ----
             if not portfolio:
                 st.info(
-                    "No districts in the portfolio yet. Start by selecting districts "
-                    "from the rankings table, the map, or saved points as described above."
+                    "No districts in portfolio yet. Add districts via **From the rankings table**, "
+                    "**From the map**, or **From saved points**."
                 )
             else:
-                st.markdown("### Step 2 – Review current portfolio")
-
-                # Basic portfolio table
-                portfolio_df = pd.DataFrame(portfolio)
-                st.markdown("**Selected districts**")
-                st.dataframe(
-                    portfolio_df.rename(
-                        columns={"state": "State", "district": "District"}
-                    ),
-                    use_container_width=True,
+                # ---- STEP 2: Select indices for portfolio comparison ----
+                st.markdown("### Step 2 – Select indices for portfolio analysis")
+                st.caption(
+                    "Pick one or more indices to compare across the portfolio. "
+                    "This is the main lever for portfolio comparison."
                 )
 
-                # Use the already-built ranking table (table_df) to show
-                # current index values for only the portfolio districts
-                if table_df is not None and not table_df.empty:
-                    key_set = {
-                        _portfolio_key(item["state"], item["district"])
-                        for item in portfolio
+                available_indices = [(slug, meta["label"]) for slug, meta in VARIABLES.items()]
+                default_sel = st.session_state.get("portfolio_multiindex_selection", [])
+                selected_slugs = st.multiselect(
+                    "Select indices",
+                    options=[s for s, _ in available_indices],
+                    default=default_sel if default_sel else [VARIABLE_SLUG],
+                    format_func=lambda s: VARIABLES[s]["label"] if s in VARIABLES else str(s),
+                    key="portfolio_multiindex_selection",
+                )
+
+                # ---- STEP 3: Multi-index comparison for portfolio (build + results) ----
+                if not selected_slugs:
+                    st.warning("Select at least one index to build a portfolio comparison.")
+                else:
+                    st.markdown("### Step 3 – Portfolio comparison (multi-index)")
+                    st.caption(
+                        "Build a combined table across all selected indices for the districts in your portfolio."
+                    )
+
+                    st.markdown("#### Multi-index comparison for portfolio")
+
+                    def _resolve_proc_root_for_slug(slug: str) -> Path:
+                        """
+                        Resolve processed root for a given index slug.
+
+                        If IRT_PROCESSED_ROOT is set:
+                          - if it already points to .../<slug>, use it
+                          - else assume it's a base dir and append /<slug>
+                        Else default to DATA_DIR/processed/<slug>.
+                        """
+                        env_root = os.getenv("IRT_PROCESSED_ROOT")
+                        if env_root:
+                            base_path = Path(env_root)
+                            if base_path.name == slug:
+                                proc_root = base_path
+                            else:
+                                proc_root = base_path / slug
+                        else:
+                            proc_root = DATA_DIR / "processed" / slug
+                        return proc_root.resolve()
+
+                    def _load_master_and_schema_for_slug(slug: str) -> tuple[pd.DataFrame, list, list, dict]:
+                        """
+                        Load master_metrics_by_district.csv for a slug, normalize columns,
+                        and parse schema. Cached by (slug, master_path, mtime).
+                        """
+                        proc_root = _resolve_proc_root_for_slug(slug)
+                        master_path = proc_root / PILOT_STATE / "master_metrics_by_district.csv"
+
+                        cache = st.session_state.setdefault("_portfolio_master_cache", {})
+
+                        try:
+                            mtime = master_path.stat().st_mtime
+                        except Exception:
+                            mtime = None
+
+                        cache_key = f"{slug}::{str(master_path)}"
+                        entry = cache.get(cache_key)
+                        if entry is not None and entry.get("mtime") == mtime:
+                            return (
+                                entry["df"],
+                                entry["schema_items"],
+                                entry["metrics"],
+                                entry["by_metric"],
+                            )
+
+                        if not master_path.exists():
+                            empty_df = pd.DataFrame()
+                            cache[cache_key] = {
+                                "df": empty_df,
+                                "schema_items": [],
+                                "metrics": [],
+                                "by_metric": {},
+                                "mtime": mtime,
+                            }
+                            return empty_df, [], [], {}
+
+                        # Load + normalize + schema
+                        df_local = load_master_csv(str(master_path))
+                        df_local = normalize_master_columns(df_local)
+                        schema_items_local, metrics_local, by_metric_local = parse_master_schema(df_local.columns)
+
+                        cache[cache_key] = {
+                            "df": df_local,
+                            "schema_items": schema_items_local,
+                            "metrics": metrics_local,
+                            "by_metric": by_metric_local,
+                            "mtime": mtime,
+                        }
+                        return df_local, schema_items_local, metrics_local, by_metric_local
+
+                    def _match_row_idx(df_local: pd.DataFrame, st_name: str, dist_name: str) -> Optional[int]:
+                        """
+                        Robustly match (state, district) in a master df that has columns
+                        ['state', 'district'] using normalized comparisons + contains fallback.
+                        """
+                        if df_local is None or df_local.empty:
+                            return None
+                        if "state" not in df_local.columns or "district" not in df_local.columns:
+                            return None
+
+                        st_norm = _portfolio_normalize(st_name)
+                        dist_norm = _portfolio_normalize(dist_name)
+
+                        state_norm = df_local["state"].astype(str).map(_portfolio_normalize)
+                        dist_norm_series = df_local["district"].astype(str).map(_portfolio_normalize)
+
+                        exact = (state_norm == st_norm) & (dist_norm_series == dist_norm)
+                        if exact.any():
+                            return int(df_local.index[exact][0])
+
+                        # Fallback: contains (handles minor naming differences)
+                        # e.g., "north 24 parganas" vs "24 parganas north" style mismatches (rare but helpful)
+                        try:
+                            contains_1 = dist_norm_series.str.contains(dist_norm, na=False)
+                            contains_2 = pd.Series(
+                                [dist_norm in str(x) for x in dist_norm_series.tolist()],
+                                index=df_local.index,
+                            )
+                            fallback = (state_norm == st_norm) & (contains_1 | contains_2)
+                            if fallback.any():
+                                return int(df_local.index[fallback][0])
+                        except Exception:
+                            pass
+
+                        return None
+
+                    def _compute_rank_and_percentile(
+                        df_local: pd.DataFrame,
+                        st_name: str,
+                        metric_col: str,
+                        value: float,
+                    ) -> tuple[Optional[int], Optional[float]]:
+                        """
+                        Rank is 1..N within state (descending; higher value => rank 1).
+                        Percentile is 0..100 where higher value => higher percentile.
+                        """
+                        if df_local is None or df_local.empty:
+                            return None, None
+                        if "state" not in df_local.columns:
+                            return None, None
+                        if metric_col not in df_local.columns:
+                            return None, None
+                        if pd.isna(value):
+                            return None, None
+
+                        st_norm = _portfolio_normalize(st_name)
+                        state_norm = df_local["state"].astype(str).map(_portfolio_normalize)
+                        m_state = state_norm == st_norm
+
+                        vals = pd.to_numeric(df_local.loc[m_state, metric_col], errors="coerce").dropna()
+                        if vals.empty:
+                            return None, None
+
+                        # Rank (descending)
+                        rank_series = vals.rank(ascending=False, method="min")
+                        # Percentile: fraction of state values <= this value (so max -> 100)
+                        try:
+                            percentile = float((vals <= float(value)).mean() * 100.0)
+                        except Exception:
+                            percentile = None
+
+                        # Rank for this value: approximate by locating the closest match within vals
+                        # (avoids needing the exact row index here)
+                        try:
+                            # number of values strictly greater + 1
+                            rank = int((vals > float(value)).sum() + 1)
+                        except Exception:
+                            rank = None
+
+                        return rank, percentile
+
+                    def _build_portfolio_multiindex_df() -> pd.DataFrame:
+                        rows_out: list[dict] = []
+
+                        for item in portfolio:
+                            if isinstance(item, dict):
+                                st_name = str(item.get("state", "")).strip()
+                                dist_name = str(item.get("district", "")).strip()
+                            else:
+                                try:
+                                    st_name, dist_name = item
+                                    st_name = str(st_name).strip()
+                                    dist_name = str(dist_name).strip()
+                                except Exception:
+                                    st_name, dist_name = "", ""
+
+                            for slug in selected_slugs:
+                                cfg = VARIABLES.get(slug, {})
+                                idx_label = cfg.get("label", str(slug))
+                                idx_group = cfg.get("group", "other")
+                                idx_group_label = INDEX_GROUP_LABELS.get(idx_group, str(idx_group).title())
+
+                                registry_metric_i = str(cfg.get("periods_metric_col", "")).strip()
+
+                                df_local, _, metrics_local, _ = _load_master_and_schema_for_slug(slug)
+
+                                # Resolve the actual master column robustly (handles minor period formatting
+                                # differences and metric naming variants across indices).
+                                used_metric = registry_metric_i
+                                metric_col = None
+                                if used_metric:
+                                    metric_col = resolve_metric_column(
+                                        df_local, used_metric, sel_scenario, sel_period, sel_stat
+                                    )
+
+                                # Fuzzy fallback: if the configured periods_metric_col doesn't exist as a base metric
+                                # in this master file, try the closest available base metric.
+                                if metric_col is None and registry_metric_i and metrics_local:
+                                    base_norm = _portfolio_normalize(registry_metric_i)
+                                    candidates = [
+                                        m for m in metrics_local
+                                        if base_norm and base_norm in _portfolio_normalize(m)
+                                    ]
+                                    if not candidates:
+                                        candidates = difflib.get_close_matches(
+                                            registry_metric_i, metrics_local, n=1, cutoff=0.6
+                                        )
+                                    if candidates:
+                                        used_metric = candidates[0]
+                                        metric_col = resolve_metric_column(
+                                            df_local, used_metric, sel_scenario, sel_period, sel_stat
+                                        )
+
+                                baseline_col = None
+                                if used_metric and df_local is not None and not df_local.empty:
+                                    baseline_col = find_baseline_column_for_stat(
+                                        df_local.columns, used_metric, sel_stat
+                                    )
+
+                                # Default outputs
+                                value = np.nan
+                                baseline = np.nan
+                                delta_abs = np.nan
+                                delta_pct = np.nan
+                                rank_in_state = None
+                                percentile_in_state = np.nan
+                                risk_class = "Unknown"
+
+                                if (
+                                    df_local is not None
+                                    and not df_local.empty
+                                    and metric_col
+                                    and metric_col in df_local.columns
+                                ):
+                                    idx_row = _match_row_idx(df_local, st_name, dist_name)
+                                    if idx_row is not None:
+                                        try:
+                                            value = float(pd.to_numeric(df_local.loc[idx_row, metric_col], errors="coerce"))
+                                        except Exception:
+                                            value = np.nan
+
+                                        if baseline_col and baseline_col in df_local.columns:
+                                            try:
+                                                baseline = float(
+                                                    pd.to_numeric(df_local.loc[idx_row, baseline_col], errors="coerce")
+                                                )
+                                            except Exception:
+                                                baseline = np.nan
+
+                                        if not pd.isna(value) and not pd.isna(baseline):
+                                            delta_abs = value - baseline
+                                            if baseline != 0:
+                                                delta_pct = (delta_abs / baseline) * 100.0
+
+                                        rank_in_state, percentile = _compute_rank_and_percentile(
+                                            df_local=df_local,
+                                            st_name=st_name,
+                                            metric_col=metric_col,
+                                            value=value,
+                                        )
+                                        if percentile is not None:
+                                            percentile_in_state = percentile
+                                            risk_class = risk_class_from_percentile(percentile_in_state)
+
+                                rows_out.append(
+                                    {
+                                        "State": st_name,
+                                        "District": dist_name,
+                                        "Index": idx_label,
+                                        "Group": idx_group_label,
+                                        "Current value": value,
+                                        "Baseline": baseline,
+                                        "Δ": delta_abs,
+                                        "%Δ": delta_pct,
+                                        "Rank in state": rank_in_state,
+                                        "Percentile": percentile_in_state,
+                                        "Risk class": risk_class,
+                                    }
+                                )
+
+                        return pd.DataFrame(rows_out)
+
+                    # If the selection context changed, prompt rebuild (avoid showing stale table)
+                    context_now = {
+                        "slugs": list(selected_slugs),
+                        "scenario": sel_scenario,
+                        "period": sel_period,
+                        "stat": sel_stat,
                     }
+                    prev_context = st.session_state.get("portfolio_multiindex_context")
+                    if prev_context != context_now:
+                        st.session_state.pop("portfolio_multiindex_df", None)
+                        st.session_state["portfolio_multiindex_context"] = context_now
 
-                    def _row_in_portfolio(r: pd.Series) -> bool:
-                        return _portfolio_key(
-                            r.get("state_name"), r.get("district_name")
-                        ) in key_set
+                    if st.button(
+                        "Build multi-index portfolio table",
+                        key="btn_build_multiindex_portfolio_table",
+                        use_container_width=True,
+                    ):
+                        with st.spinner("Building multi-index portfolio table..."):
+                            st.session_state["portfolio_multiindex_df"] = _build_portfolio_multiindex_df()
 
-                    portfolio_metric_df = table_df[
-                        table_df.apply(_row_in_portfolio, axis=1)
-                    ].copy()
+                    portfolio_multiindex_df = st.session_state.get("portfolio_multiindex_df")
+                    if isinstance(portfolio_multiindex_df, pd.DataFrame) and not portfolio_multiindex_df.empty:
+                        st.markdown("#### Portfolio – multi-index summary")
+                        st.dataframe(portfolio_multiindex_df, hide_index=True, use_container_width=True)
 
-                    if portfolio_metric_df.empty:
-                        st.caption(
-                            "No data for the selected index for the current portfolio."
-                        )
-                    else:
-                        show_cols = [
-                            c
-                            for c in [
-                                "district_name",
-                                "state_name",
-                                "value",
-                                "baseline",
-                                "delta_abs",
-                                "delta_pct",
-                                "percentile_value",
-                                "risk_class",
-                            ]
-                            if c in portfolio_metric_df.columns
-                        ]
-                        st.markdown("**Current index values for portfolio**")
-                        st.dataframe(
-                            portfolio_metric_df[show_cols].rename(
-                                columns={
-                                    "district_name": "District",
-                                    "state_name": "State",
-                                    "value": pretty_metric_label,
-                                }
-                            ),
+                        st.download_button(
+                            "⬇️ Download portfolio data (multi-index, CSV)",
+                            data=portfolio_multiindex_df.to_csv(index=False).encode("utf-8"),
+                            file_name="portfolio_multiindex_summary.csv",
+                            mime="text/csv",
                             use_container_width=True,
                         )
 
-                        # CSV download for portfolio & current index
-                        csv_bytes = portfolio_metric_df.to_csv(index=False).encode("utf-8")
-                        st.download_button(
-                            "⬇️ Download portfolio data (current index only, CSV)",
-                            data=csv_bytes,
-                            file_name=(
-                                f"portfolio_{VARIABLE_SLUG}_{sel_scenario}_"
-                                f"{sel_period}_{sel_stat}.csv"
-                            ),
-                            mime="text/csv",
+                        if st.button(
+                            "📊 Open rankings table (portfolio view)",
+                            key="btn_open_rankings_from_summary",
+                        ):
+                            st.session_state["jump_to_rankings"] = True
+                            st.rerun()
+                    else:
+                        st.info(
+                            "Click **Build multi-index portfolio table** to generate the comparison table."
                         )
 
-                        # -------------------------------------------------
-                        # Multi-index comparison across portfolio
-                        # -------------------------------------------------
-                        st.markdown("---")
-                        st.markdown("#### Multi-index comparison for portfolio")
 
-                        index_options = list(VARIABLES.keys())
-                        default_multi = st.session_state.get(
-                            "portfolio_multiindex_selection",
-                            [VARIABLE_SLUG]
-                            if VARIABLE_SLUG in index_options
-                            else index_options[:1],
-                        )
-                        selected_index_slugs = st.multiselect(
-                            "Indices to include",
-                            options=index_options,
-                            default=default_multi,
-                            format_func=lambda s: VARIABLES[s]["label"],
-                            key="portfolio_multiindex_selection",
-                        )
+                # ---- STEP 4: Review / edit portfolio (keep editing controls tucked away) ----
+                with st.expander("Step 4 – Review and edit portfolio districts", expanded=False):
+                    st.caption("Remove individual districts or remove all.")
 
-                        if selected_index_slugs:
-                            if st.button(
-                                "Build multi-index portfolio table",
-                                key=f"btn_build_portfolio_multiindex_{sel_scenario}_{sel_period}_{sel_stat}",
-                            ):
-                                records: list[dict] = []
-                                for item in portfolio:
-                                    state_name = item.get("state")
-                                    district_name = item.get("district")
-                                    if not state_name or not district_name:
-                                        continue
+                    flash_msg = st.session_state.pop("portfolio_flash", None)
+                    if flash_msg:
+                        st.success(flash_msg)
 
-                                    for slug in selected_index_slugs:
-                                        varcfg = VARIABLES.get(slug)
-                                        if not varcfg:
-                                            continue
+                    st.session_state.setdefault("confirm_clear_portfolio", False)
 
-                                        # Determine processed root for this index, similar to PROCESSED_ROOT logic
-                                        env_root = os.getenv("IRT_PROCESSED_ROOT")
-                                        if env_root:
-                                            base_path = Path(env_root)
-                                            if base_path.name.lower() == slug.lower():
-                                                proc_root = base_path
-                                            else:
-                                                proc_root = base_path / slug
-                                        else:
-                                            proc_root = DATA_DIR / "processed" / slug
-                                        proc_root = proc_root.resolve()
-
-                                        master_path = (
-                                            proc_root
-                                            / PILOT_STATE
-                                            / "master_metrics_by_district.csv"
-                                        )
-                                        if not master_path.exists():
-                                            continue
-
-                                        try:
-                                            (
-                                                df_master,
-                                                schema_items_local,
-                                                metrics_local,
-                                                by_metric_local,
-                                            ) = _load_master_and_schema(master_path, slug)
-                                        except Exception:
-                                            continue
-
-                                        if df_master is None or df_master.empty:
-                                            continue
-
-                                        # Decide metric name for this slug (align with normalized metrics)
-                                        registry_metric = varcfg.get("periods_metric_col")
-                                        available_metrics = set(metrics_local or [])
-                                        if not available_metrics:
-                                            continue
-                                        if registry_metric not in available_metrics:
-                                            m_lower = {m.lower(): m for m in available_metrics}
-                                            registry_metric = m_lower.get(
-                                                str(registry_metric).lower(),
-                                                next(iter(available_metrics)),
-                                            )
-
-                                        metric_col = (
-                                            f"{registry_metric}__{sel_scenario}__"
-                                            f"{sel_period}__{sel_stat}"
-                                        )
-                                        if metric_col not in df_master.columns:
-                                            # skip this index if we don't have the requested scenario/period/stat
-                                            continue
-
-                                        # Robust match for a single state+district row
-                                        dm = df_master.copy()
-                                        if "state" not in dm.columns or "district" not in dm.columns:
-                                            # master CSV is not in the expected format
-                                            continue
-
-                                        def _n(s: str) -> str:
-                                            return alias(s)
-
-                                        dm["_state_key"] = dm["state"].astype(str).map(_n)
-                                        dm["_district_key"] = dm["district"].astype(str).map(_n)
-
-                                        target_state = _n(state_name)
-                                        target_dist = _n(district_name)
-
-                                        mask = (
-                                            (dm["_state_key"] == target_state)
-                                            & (dm["_district_key"] == target_dist)
-                                        )
-                                        if not mask.any():
-                                            # fall back to 'contains' on district within same state
-                                            mask = (
-                                                dm["_state_key"] == target_state
-                                            ) & dm["_district_key"].str.contains(
-                                                target_dist, na=False
-                                            )
-                                        if not mask.any():
-                                            continue
-
-                                        row_local = dm.loc[mask].iloc[0]
-
-                                        # Current value
-                                        current_val = row_local.get(metric_col)
-                                        current_val_f = pd.to_numeric(
-                                            [current_val], errors="coerce"
-                                        )[0]
-                                        if pd.isna(current_val_f):
-                                            current_val_f = None
-
-                                        # Baseline for same metric/stat in historical baseline period
-                                        baseline_col = find_baseline_column_for_stat(
-                                            dm.columns, registry_metric, sel_stat
-                                        )
-                                        baseline_val_f = None
-                                        if baseline_col and baseline_col in dm.columns:
-                                            baseline_val = row_local.get(baseline_col)
-                                            baseline_val_f = pd.to_numeric(
-                                                [baseline_val], errors="coerce"
-                                            )[0]
-                                            if pd.isna(baseline_val_f):
-                                                baseline_val_f = None
-
-                                        # Deltas
-                                        delta_abs = None
-                                        delta_pct = None
-                                        if (
-                                            current_val_f is not None
-                                            and baseline_val_f is not None
-                                        ):
-                                            delta_abs = current_val_f - baseline_val_f
-                                            if baseline_val_f != 0:
-                                                delta_pct = delta_abs / baseline_val_f * 100.0
-
-                                        # Rank and percentile within state (for this metric)
-                                        rank_in_state = None
-                                        percentile_in_state = None
-                                        n_in_state = None
-                                        try:
-                                            state_mask = dm["_state_key"] == target_state
-                                            state_vals = pd.to_numeric(
-                                                dm.loc[state_mask, metric_col],
-                                                errors="coerce",
-                                            ).dropna()
-                                            n_in_state = (
-                                                int(state_vals.size)
-                                                if state_vals.size
-                                                else None
-                                            )
-                                            if (
-                                                n_in_state
-                                                and current_val_f is not None
-                                                and n_in_state > 0
-                                            ):
-                                                rank_in_state = int(
-                                                    (state_vals > current_val_f).sum()
-                                                    + 1
-                                                )
-                                                percentile_in_state = float(
-                                                    (state_vals < current_val_f).sum()
-                                                    / n_in_state
-                                                    * 100.0
-                                                )
-                                        except Exception:
-                                            pass
-
-                                        risk_class = (
-                                            risk_class_from_percentile(
-                                                percentile_in_state
-                                            )
-                                            if percentile_in_state is not None
-                                            else "Unknown"
-                                        )
-
-                                        records.append(
-                                            {
-                                                "state": state_name,
-                                                "district": district_name,
-                                                "index_slug": slug,
-                                                "index_label": varcfg.get("label", slug),
-                                                "group": varcfg.get("group"),
-                                                "scenario": sel_scenario,
-                                                "period": sel_period,
-                                                "stat": sel_stat,
-                                                "current": current_val_f,
-                                                "baseline": baseline_val_f,
-                                                "delta_abs": delta_abs,
-                                                "delta_pct": delta_pct,
-                                                "rank_in_state": rank_in_state,
-                                                "percentile_in_state": percentile_in_state,
-                                                "n_in_state": n_in_state,
-                                                "risk_class": risk_class,
-                                            }
-                                        )
-
-                                if records:
-                                    portfolio_multiindex_df = pd.DataFrame.from_records(
-                                        records
-                                    )
-                                    st.session_state[
-                                        "portfolio_multiindex_df"
-                                    ] = portfolio_multiindex_df
-                                    st.success(
-                                        f"Built multi-index table for {len(portfolio)} district(s) "
-                                        f"and {len(selected_index_slugs)} index/indices."
-                                    )
-                                else:
-                                    st.warning(
-                                        "No data found for the selected indices and portfolio districts. "
-                                        "Try a different combination of indices or scenario/period/statistic."
-                                    )
-
-                            portfolio_multiindex_df = st.session_state.get(
-                                "portfolio_multiindex_df"
-                            )
-                            if (
-                                isinstance(portfolio_multiindex_df, pd.DataFrame)
-                                and not portfolio_multiindex_df.empty
-                            ):
-                                cols_display = [
-                                    "state",
-                                    "district",
-                                    "index_label",
-                                    "group",
-                                    "current",
-                                    "baseline",
-                                    "delta_abs",
-                                    "delta_pct",
-                                    "rank_in_state",
-                                    "percentile_in_state",
-                                    "risk_class",
-                                ]
-                                cols_display = [
-                                    c
-                                    for c in cols_display
-                                    if c in portfolio_multiindex_df.columns
-                                ]
-
-                                st.markdown("**Portfolio – multi-index summary**")
-                                st.dataframe(
-                                    portfolio_multiindex_df[cols_display].rename(
-                                        columns={
-                                            "state": "State",
-                                            "district": "District",
-                                            "index_label": "Index",
-                                            "group": "Group",
-                                            "current": "Current value",
-                                            "baseline": "Baseline",
-                                            "delta_abs": "Δ vs baseline",
-                                            "delta_pct": "%Δ vs baseline",
-                                            "rank_in_state": "Rank in state",
-                                            "percentile_in_state": "Percentile in state",
-                                            "risk_class": "Risk class",
-                                        }
-                                    ),
-                                    use_container_width=True,
-                                )
-
-                                csv_multi = portfolio_multiindex_df.to_csv(
-                                    index=False
-                                ).encode("utf-8")
-                                st.download_button(
-                                    "⬇️ Download portfolio data (multi-index, CSV)",
-                                    data=csv_multi,
-                                    file_name=(
-                                        f"portfolio_multiindex_{sel_scenario}_"
-                                        f"{sel_period}_{sel_stat}.csv"
-                                    ),
-                                    mime="text/csv",
-                                    key="btn_portfolio_multiindex_csv",
-                                )
+                    top_l, top_r = st.columns([3, 2])
+                    with top_l:
+                        st.markdown(f"**Portfolio districts ({len(df_summary) if 'df_summary' in locals() else len(portfolio)})**")
+                    with top_r:
+                        if not st.session_state["confirm_clear_portfolio"]:
+                            if st.button("🧹 Remove all", key="btn_portfolio_remove_all"):
+                                st.session_state["confirm_clear_portfolio"] = True
+                                st.rerun()
                         else:
-                            st.caption(
-                                "Select at least one index to build a multi-index portfolio table."
-                            )
-                else:
-                    st.caption(
-                        "Ranking table is not available for the current index selection."
-                    )
+                            st.warning("Remove all districts from the portfolio?")
+                            c_yes, c_no = st.columns(2)
+                            with c_yes:
+                                if st.button("✅ Confirm", key="btn_portfolio_remove_all_confirm"):
+                                    _portfolio_remove_all()
+                                    st.session_state["confirm_clear_portfolio"] = False
+                                    st.session_state["portfolio_flash"] = "Cleared portfolio selection."
+                                    st.rerun()
+                            with c_no:
+                                if st.button("✖ Cancel", key="btn_portfolio_remove_all_cancel"):
+                                    st.session_state["confirm_clear_portfolio"] = False
+                                    st.rerun()
 
-                # Clear portfolio button (after the table_df if/else)
-                if st.button("🧹 Clear portfolio", key="btn_portfolio_clear"):
-                    _portfolio_clear()
-                    st.success("Cleared portfolio selection.")
+                    # Show editable list (robust even if df_summary isn't built yet)
+                    try:
+                        table_df = df_summary[["District", "State"]].copy() if "df_summary" in locals() else pd.DataFrame(
+                            [{"District": (d.get("district") if isinstance(d, dict) else d[1]),
+                              "State": (d.get("state") if isinstance(d, dict) else d[0])}
+                             for d in portfolio]
+                        )
+                    except Exception:
+                        table_df = pd.DataFrame()
+
+                    if table_df.empty:
+                        st.warning("Portfolio exists but could not be displayed in table format.")
+                    else:
+                        for i, row in table_df.iterrows():
+                            district_i = str(row.get("District", "")).strip()
+                            state_i = str(row.get("State", "")).strip()
+                            c1, c2, c3 = st.columns([4, 4, 2])
+                            with c1:
+                                st.write(district_i)
+                            with c2:
+                                st.write(state_i)
+                            with c3:
+                                if st.button(
+                                    "🗑 Remove",
+                                    key=f"btn_portfolio_remove_{_portfolio_normalize(state_i)}_{_portfolio_normalize(district_i)}",
+                                ):
+                                    _portfolio_remove(state_i, district_i)
+                                    st.session_state["portfolio_flash"] = (
+                                        f"Removed {district_i}, {state_i} from portfolio."
+                                    )
+                                    st.rerun()
+
+
+
+    else:
+        # In non-portfolio modes, the right panel content is rendered by the
+        # district/state details logic below.
+        pass
 
     # -------------------------
     # Climate profile / point query panel
     # -------------------------
-    st.header("Climate Profile")
-
-    # Read current analysis mode (single vs multi-district)
-    analysis_mode = st.session_state.get(
-        "analysis_mode", "Single district focus"
-    )
-
-    # --- Point-level query controls (lat–lon and map selection) ---
-    try:
-        minx, miny, maxx, maxy = merged.total_bounds
-        default_lat = float((miny + maxy) / 2.0)
-        default_lon = float((minx + maxx) / 2.0)
-    except Exception:
-        # Fallback to broad defaults if geometry bounds are unavailable
-        miny, maxy = -90.0, 90.0
-        minx, maxx = -180.0, 180.0
-        default_lat, default_lon = 20.0, 78.0
-
-    # Ensure we know the current analysis mode
-    analysis_mode = st.session_state.get(
-        "analysis_mode", "Single district focus"
-    )
-
+    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+    portfolio_route = st.session_state.get("portfolio_build_route", None)
     clear_clicked = False
 
-    # Show Point Query controls only in Multi-district portfolio mode
-    if analysis_mode == "Multi-district portfolio":
+    # In portfolio mode, we keep the right panel clean by default (no Climate Profile header).
+    if analysis_mode != "Multi-district portfolio":
+        st.header("Climate Profile")
+
+    # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
+    if analysis_mode == "Multi-district portfolio" and portfolio_route == "saved_points":
         # Container for multi-point saved list
         if "point_query_points" not in st.session_state:
             st.session_state["point_query_points"] = []
+
+        # --- Point-level query controls (lat–lon and map selection) ---
+        try:
+            minx, miny, maxx, maxy = merged.total_bounds
+            default_lat = float((miny + maxy) / 2.0)
+            default_lon = float((minx + maxx) / 2.0)
+        except Exception:
+            # Fallback to broad defaults if geometry bounds are unavailable
+            miny, maxy = -90.0, 90.0
+            minx, maxx = -180.0, 180.0
+            default_lat, default_lon = 20.0, 78.0
+
+        st.subheader("Saved points")
 
         with st.expander("📍 Point selection", expanded=True):
             st.caption(
@@ -3124,11 +3400,22 @@ with col2:
             # 1) Show this point on the map (set active point)
             with col_set_active:
                 if st.button("Show on map", key="btn_use_latlon"):
-                    lat_f = float(lat_input)
-                    lon_f = float(lon_input)
+                    try:
+                        lat_f = float(lat_input)
+                        lon_f = float(lon_input)
+                    except (TypeError, ValueError):
+                        _portfolio_set_flash("Invalid latitude/longitude.", level="warning")
+                        st.rerun()
+
                     st.session_state["point_query_lat"] = lat_f
                     st.session_state["point_query_lon"] = lon_f
                     st.session_state["point_query_latlon"] = {"lat": lat_f, "lon": lon_f}
+
+                    # Ensure the user is looking at the map; then rerun so the marker renders immediately.
+                    st.session_state["jump_to_map"] = True
+                    st.session_state["jump_to_rankings"] = False
+                    st.session_state["active_view"] = "🗺 Map view"
+                    st.rerun()
 
             # 2) Add current typed point to saved list (multi-point / portfolio)
             with col_save_point:
@@ -3197,9 +3484,7 @@ with col2:
                 saved_points_df = pd.DataFrame(saved_points)
                 saved_points_df.index = saved_points_df.index + 1
                 st.dataframe(
-                    saved_points_df.rename(
-                        columns={"lat": "Latitude", "lon": "Longitude"}
-                    ),
+                    saved_points_df.rename(columns={"lat": "Latitude", "lon": "Longitude"}),
                     use_container_width=True,
                 )
 
@@ -3213,8 +3498,23 @@ with col2:
                         "Add saved points' districts to portfolio",
                         key="btn_points_to_portfolio",
                     ):
-                        added = 0
                         pts = st.session_state.get("point_query_points", [])
+                        if not pts:
+                            _portfolio_set_flash(
+                                "No saved points found. Save at least one point first.",
+                                level="warning",
+                            )
+                            st.rerun()
+
+                        # Track what was already in the portfolio so we can count "new" additions.
+                        before_items = st.session_state.get("portfolio_districts", [])
+                        before_keys = set()
+                        for it in before_items:
+                            if isinstance(it, dict):
+                                before_keys.add(_portfolio_key(it.get("state"), it.get("district")))
+
+                        added_new = 0
+
                         for p in pts:
                             plat = p.get("lat")
                             plon = p.get("lon")
@@ -3240,15 +3540,30 @@ with col2:
 
                             state_name = str(row.get("state_name", "")).strip()
                             district_name = str(row.get("district_name", "")).strip()
-                            if state_name and district_name:
-                                _portfolio_add(state_name, district_name)
-                                added += 1
+                            if not (state_name and district_name):
+                                continue
 
-                        st.success(
-                            f"Added {added} district(s) to portfolio from saved points."
-                            if added
-                            else "No districts were added (could not match points to districts)."
-                        )
+                            k = _portfolio_key(state_name, district_name)
+                            if k not in before_keys:
+                                before_keys.add(k)
+                                added_new += 1
+
+                            _portfolio_add(state_name, district_name)
+
+                        if added_new > 0:
+                            _portfolio_set_flash(
+                                f"Added {added_new} new district(s) to the portfolio from saved points.",
+                                level="success",
+                            )
+                        else:
+                            _portfolio_set_flash(
+                                "No new districts were added (they may already be in the portfolio).",
+                                level="info",
+                            )
+
+                        # Force a rerun so the Portfolio analysis panel (above) re-renders with the updated list.
+                        st.rerun()
+
             else:
                 st.caption(
                     "Use **Save point** to build a list of locations and then "
@@ -3258,13 +3573,8 @@ with col2:
     clicked_feature = None
     click_coords = None
     if returned:
-        for k in (
-            "last_object_clicked",
-            "clicked_feature",
-            "last_active_drawing",
-            "last_object",
-        ):
-            if returned.get(k):
+        for k in ("last_active_drawing", "last_object_clicked", "last_object"):
+            if returned.get(k) is not None:
                 clicked_feature = returned.get(k)
                 break
         for k in ("last_clicked", "latlng", "last_latlng"):
@@ -3282,19 +3592,14 @@ with col2:
                 except Exception:
                     pass
 
-    if analysis_mode == "Multi-district portfolio":
+    if analysis_mode == "Multi-district portfolio" and portfolio_route == "saved_points":
         # If map selection mode is active, use the next map click as the
         # point-query location and then disable the mode (one-shot behaviour).
-        if click_coords is not None and st.session_state.get(
-            "point_query_select_on_map", False
-        ):
+        if click_coords is not None and st.session_state.get("point_query_select_on_map", False):
             lat_click, lon_click = click_coords
             st.session_state["point_query_lat"] = lat_click
             st.session_state["point_query_lon"] = lon_click
-            st.session_state["point_query_latlon"] = {
-                "lat": lat_click,
-                "lon": lon_click,
-            }
+            st.session_state["point_query_latlon"] = {"lat": lat_click, "lon": lon_click}
             st.session_state["point_query_select_on_map"] = False
             # Rerun so the newly selected point is rendered immediately
             st.rerun()
@@ -3348,12 +3653,15 @@ with col2:
         matched_row is None
         or matched_row.empty
     ) and st.session_state.get("selected_district", "All") != "All":
-        mask = (
-            merged["district_name"]
-            .astype(str)
-            .str.lower()
-            == str(st.session_state["selected_district"]).lower()
-        )
+        sel_district_raw = st.session_state.get("selected_district", "All")
+        # Some UI controls store values like "District, State" — match on the district token.
+        sel_district_norm = str(sel_district_raw).split(",")[0].strip().lower()
+
+        district_series = merged["district_name"].astype(str).str.strip().str.lower()
+        mask = district_series == sel_district_norm
+        if (not mask.any()) and sel_district_norm:
+            mask = district_series.str.contains(re.escape(sel_district_norm), na=False)
+
         if mask.any():
             matched_row = merged[mask].iloc[0:1]
 
@@ -3385,8 +3693,17 @@ with col2:
         return candidates[0][0]
 
     # ----------- STATE SUMMARY MODE (no district selected) -----------
-    if (matched_row is None or matched_row.empty) and selected_district == "All":
-        if selected_state != "All":
+    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+
+    if (
+        (matched_row is None or matched_row.empty)
+        and selected_district == "All"
+    ):
+        if analysis_mode == "Multi-district portfolio":
+            # In portfolio mode, we suppress the large state-summary panel here.
+            # Portfolio results should be driven by the Portfolio analysis panel.
+            pass
+        elif selected_state != "All":
             ensemble, per_model_df, sel_districts_gdf = compute_state_metrics_from_merged(
                 merged, adm1, metric_col, selected_state
             )
@@ -3573,6 +3890,22 @@ with col2:
 
     # ----------- DISTRICT DETAILS MODE (enhanced) -----------
     else:
+        analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+
+        if matched_row is None or getattr(matched_row, "empty", True):
+            st.warning("No district-level data found for the current selection.")
+            if analysis_mode == "Multi-district portfolio":
+                st.info(
+                    "In portfolio mode, add districts via **From the map**, **From saved points**, "
+                    "or **From the rankings table** (Portfolio analysis panel)."
+                )
+            else:
+                st.info(
+                    "Please choose a different district from the sidebar, or select **All** "
+                    "to view the state summary."
+                )
+            st.stop()
+
         row = matched_row.iloc[0]
         district_name = row.get("district_name", "Unknown")
         state_to_show = (
@@ -3581,28 +3914,61 @@ with col2:
             else (row.get("state_name") or "Unknown")
         )
 
-        analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-
         # --- Compact selection view in Multi-district portfolio mode ---
         if analysis_mode == "Multi-district portfolio":
-            st.subheader("Selected district for portfolio")
-            st.markdown(f"**District:** {district_name}")
-            st.markdown(f"**State:** {state_to_show}")
+            portfolio_route = st.session_state.get("portfolio_build_route", None)
 
-            if click_coords is not None:
-                st.caption(
-                    f"Selected via map click at lat {click_coords[0]:.4f}, "
-                    f"lon {click_coords[1]:.4f} (assigned to this district)."
-                )
+            # Only show the "selected district" panel when the user explicitly chose
+            # the "From the map" route.
+            if portfolio_route == "map":
+                with portfolio_selected_slot.container():
+                    st.subheader("Selected district for portfolio")
+                    st.markdown(f"**District:** {district_name}")
+                    st.markdown(f"**State:** {state_to_show}")
 
-            if st.button(
-                "➕ Add this district to portfolio",
-                key=f"btn_add_portfolio_portfolio_mode_{state_to_show}_{district_name}",
-            ):
-                _portfolio_add(state_to_show, district_name)
-                st.success(f"Added {district_name}, {state_to_show} to portfolio.")
+                    if click_coords is not None:
+                        st.caption(
+                            f"Selected via map click at lat {click_coords[0]:.4f}, "
+                            f"lon {click_coords[1]:.4f} (assigned to this district)."
+                        )
+
+                    already_in = _portfolio_contains(state_to_show, district_name)
+
+                    c_add, c_remove = st.columns(2)
+                    with c_add:
+                        if not already_in:
+                            if st.button(
+                                "➕ Add to portfolio",
+                                key=f"btn_add_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
+                                use_container_width=True,
+                            ):
+                                _portfolio_add(state_to_show, district_name)
+                                # Flash message is shown in your Step 2 portfolio panel
+                                st.session_state["portfolio_flash"] = (
+                                    f"Added {district_name}, {state_to_show} to portfolio."
+                                )
+                                # Force a fresh rerun so the portfolio panel re-renders with new state
+                                st.rerun()
+                        else:
+                            st.success("Already in portfolio")
+
+                    with c_remove:
+                        if already_in:
+                            if st.button(
+                                "🗑 Remove",
+                                key=f"btn_remove_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
+                                use_container_width=True,
+                            ):
+                                _portfolio_remove(state_to_show, district_name)
+                                st.session_state["portfolio_flash"] = (
+                                    f"Removed {district_name}, {state_to_show} from portfolio."
+                                )
+                                st.rerun()
+
+                    st.caption(f"Portfolio size: {len(st.session_state.get('portfolio_districts', []))} district(s)")
 
             # In portfolio mode, do NOT render the full climate profile below.
+            render_perf_panel_safe()
             st.stop()
 
         # --- Full district climate profile (single-district focus mode) ---
@@ -4242,17 +4608,61 @@ with col2:
 
                 # Decide metric name for this slug (align with normalized metrics)
                 registry_metric = varcfg.get("periods_metric_col")
-                available_metrics = set(metrics_local or [])
+                available_metrics = list(metrics_local or [])
                 if not available_metrics:
                     continue
-                if registry_metric not in available_metrics:
-                    m_lower = {m.lower(): m for m in available_metrics}
-                    registry_metric = m_lower.get(str(registry_metric).lower(), next(iter(available_metrics)))
 
-                metric_col = f"{registry_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
-                if metric_col not in df_master.columns:
-                    # skip this index if we don't have the requested scenario/period/stat
-                    continue
+                def _metric_norm(m: str) -> str:
+                    # remove spaces AND underscores so:
+                    # "gt_25mm" and "gt25mm" can be matched
+                    return _portfolio_normalize(m).replace("_", "")
+
+                if registry_metric not in available_metrics:
+                    # Exact lower-case match first
+                    m_lower = {str(m).lower(): m for m in available_metrics}
+                    registry_metric = m_lower.get(str(registry_metric).lower())
+
+                if registry_metric not in available_metrics:
+                    # Normalized equality / contains fallback
+                    target_norm = _metric_norm(str(registry_metric))
+                    eq_matches = [
+                        m for m in available_metrics
+                        if _metric_norm(str(m)) == target_norm
+                    ]
+                    if eq_matches:
+                        registry_metric = eq_matches[0]
+                    else:
+                        contains_matches = [
+                            m for m in available_metrics
+                            if target_norm and target_norm in _metric_norm(str(m))
+                        ]
+                        registry_metric = contains_matches[0] if contains_matches else available_metrics[0]
+
+                # Candidate column set for this metric + scenario + period (stat may vary)
+                prefix = f"{registry_metric}__{sel_scenario}__{sel_period}__"
+                metric_col_candidates = [
+                    c for c in df_master.columns
+                    if isinstance(c, str) and c.startswith(prefix)
+                ]
+
+                desired_col = f"{registry_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
+                metric_col = desired_col if desired_col in df_master.columns else None
+
+                if metric_col is None:
+                    if not metric_col_candidates:
+                        continue
+
+                    def _stat_norm(s: str) -> str:
+                        return _portfolio_normalize(s).replace("_", "")
+
+                    sel_stat_norm = _stat_norm(str(sel_stat))
+                    stat_matches = [
+                        c for c in metric_col_candidates
+                        if _stat_norm(c.split("__")[-1]) == sel_stat_norm
+                    ]
+                    metric_col = stat_matches[0] if stat_matches else metric_col_candidates[0]
+
+                used_stat = str(metric_col).split("__")[-1]
 
                 # Robust match for a single state+district row
                 dm = df_master.copy()
@@ -4279,12 +4689,31 @@ with col2:
 
                 row_local = dm.loc[mask].iloc[0]
 
+                # Current value (try fallback columns if the chosen one is NaN)
+                current_val_f = None
+
                 current_val = row_local.get(metric_col)
-                current_val_f = pd.to_numeric([current_val], errors="coerce")[0]
-                if pd.isna(current_val_f):
-                    current_val_f = None
+                current_val_try = pd.to_numeric([current_val], errors="coerce")[0]
+                if not pd.isna(current_val_try):
+                    current_val_f = float(current_val_try)
+                else:
+                    # Try alternate stat columns for the same metric/scenario/period
+                    for alt_col in metric_col_candidates:
+                        if alt_col == metric_col:
+                            continue
+                        alt_val = row_local.get(alt_col)
+                        alt_try = pd.to_numeric([alt_val], errors="coerce")[0]
+                        if not pd.isna(alt_try):
+                            metric_col = alt_col
+                            used_stat = str(metric_col).split("__")[-1]
+                            current_val_f = float(alt_try)
+                            break
 
                 # Baseline for same metric/stat in historical baseline period
+                baseline_col = find_baseline_column_for_stat(
+                    dm.columns, registry_metric, used_stat
+                )
+
                 baseline_col = find_baseline_column_for_stat(dm.columns, registry_metric, sel_stat)
                 baseline_val_f = None
                 if baseline_col and baseline_col in dm.columns:
@@ -5276,7 +5705,7 @@ with col2:
             else:
                 st.caption("No other districts found in this state for comparison.")
 
-render_perf_panel(perf_panel_placeholder)
+render_perf_panel_safe()
 st.markdown("---")
 st.caption(
     "Notes: first choose an Index group (e.g. Temperature vs Rainfall), then an Index within that group. "
