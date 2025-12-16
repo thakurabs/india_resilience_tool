@@ -498,28 +498,7 @@ INDEX_GROUP_LABELS = {
 
 
 # ---------- Name normalization / aliases ----------
-def normalize_name(s: str) -> str:
-    if s is None:
-        return ""
-    s = unicodedata.normalize("NFKD", str(s)).encode("ascii", "ignore").decode("ascii")
-    s = s.lower()
-    s = re.sub(r"[_\-]+", " ", s)
-    s = re.sub(r"[^a-z0-9 ]+", "", s)
-    s = re.sub(r"\s+", " ", s).strip()
-    return s
-
-NAME_ALIASES = {
-    "hanamkonda": "hanumakonda",
-    "j b r bhupalpally": "jayashankar bhupalpalli",
-    "jayashankar bhupalpally": "jayashankar bhupalpalli",
-    "b r ambedkar bhupalpalli": "jayashankar bhupalpalli",
-    "bhadradri kothagudem": "bhadradri kothagudem",
-    "jogulamba gadwal": "jogulamba gadwal",
-}
-
-def alias(s: str) -> str:
-    k = normalize_name(s)
-    return NAME_ALIASES.get(k, k)
+from india_resilience_tool.utils.naming import NAME_ALIASES, alias, normalize_name, normalize_compact
 
 # -------------------------
 # Geo load / prep
@@ -583,83 +562,12 @@ def enrich_adm2_with_state_names(
 # -------------------------
 # Color helpers (no GeoJSON round-trip)
 # -------------------------
+from india_resilience_tool.viz.colors import (
+    apply_fillcolor,
+    build_vertical_gradient_legend_html,
+    get_cmap_hex_list as _get_cmap_hex_list,
+)
 
-import matplotlib as mpl
-
-@lru_cache(maxsize=16)
-def _get_cmap_hex_list(cmap_name: str) -> list[str]:
-    """
-    Small helper to cache colormap → list of hex colors.
-    This avoids re-instantiating colormaps on every interaction.
-    """
-    cmap = mpl.colormaps.get_cmap(cmap_name)
-    nsteps = 256
-    return [mcolors.to_hex(cmap(i / (nsteps - 1))) for i in range(nsteps)]
-
-
-def apply_fillcolor(
-    merged_gdf: gpd.GeoDataFrame,
-    metric_col: str,
-    vmin: float,
-    vmax: float,
-    cmap_name: str = "Reds",
-) -> gpd.GeoDataFrame:
-    """
-    Add a 'fillColor' column directly to the existing GeoDataFrame,
-    avoiding expensive GeoJSON → GeoDataFrame conversions.
-
-    - merged_gdf is modified in-place and also returned for convenience.
-    - 'metric_col' is the column to color by (e.g. absolute or delta).
-    """
-    # Robust numeric series (align with merged_gdf index)
-    vals = pd.to_numeric(
-        merged_gdf.get(metric_col, pd.Series(index=merged_gdf.index, dtype=float)),
-        errors="coerce",
-    )
-
-    # Default all fills to light grey
-    arr = vals.to_numpy(dtype=float)
-    fill = np.full(arr.shape, "#cccccc", dtype=object)
-
-    # Handle valid values
-    mask_valid = np.isfinite(arr)
-    if np.any(mask_valid):
-        vmin_eff = vmin
-        vmax_eff = vmax
-
-        # If vmin/vmax aren't sensible, fall back to data-driven ones
-        if not np.isfinite(vmin_eff) or not np.isfinite(vmax_eff):
-            vmin_eff = float(np.nanmin(arr[mask_valid]))
-            vmax_eff = float(np.nanmax(arr[mask_valid]))
-
-        if (
-            not np.isfinite(vmin_eff)
-            or not np.isfinite(vmax_eff)
-            or vmin_eff == vmax_eff
-        ):
-            # Degenerate range – use mid-point for all
-            t = np.full(arr.shape, 0.5, dtype=float)
-        else:
-            t = (arr - vmin_eff) / (vmax_eff - vmin_eff)
-
-        # Clip to [0, 1]
-        t = np.clip(t, 0.0, 1.0)
-
-        # Map to colors only for valid entries
-        cmap = plt.get_cmap(cmap_name)
-        rgba = cmap(t[mask_valid])
-        hex_valid = np.array(
-            [
-                "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
-                for r, g, b, _ in rgba
-            ],
-            dtype=object,
-        )
-        fill[mask_valid] = hex_valid
-
-    merged_gdf["fillColor"] = fill
-    merged_gdf["_metric_val"] = vals
-    return merged_gdf
 
 
 # -------------------------
@@ -2292,28 +2200,15 @@ folium.GeoJson(
 perf_end("map: GeoJSON serialize+add layer", _t_geojson)
 
 MAP_WIDTH, MAP_HEIGHT = 780, 700
-bar_height_px = int(MAP_HEIGHT * 0.92)
-bar_width_px = 28
-label_font = "12px"
-cmap = mpl.colormaps.get_cmap(cmap_name)
-legend_colors = _get_cmap_hex_list(cmap_name)
-gradient_colors = ", ".join(legend_colors)
-legend_html = f"""
-<div id="legend-fixed" style="position: fixed; right: 95px; top: 50%; transform: translateY(-50%);
-z-index: 9999; pointer-events: none; display: flex; align-items: center; gap: 10px; font-family: Arial, Helvetica, sans-serif;">
-  <div style="position: relative; display: flex; align-items: center; height: {bar_height_px}px;">
-    <div style="display: flex; flex-direction: column; justify-content: space-between; height: {bar_height_px}px; margin-right:8px; font-size:{label_font}; color:#000;">
-      <div style="text-align: right;">{vmax:.1f}</div>
-      <div style="text-align: right;">{vmin:.1f}</div>
-    </div>
-    <div id="legend-bar" style="height: {bar_height_px}px; width: {bar_width_px}px; border-radius: 6px;
-         box-shadow: 0 2px 6px rgba(0,0,0,0.28); background: linear-gradient(to top, {gradient_colors}); display: block;"></div>
-  </div>
-  <div id="legend-title" style="writing-mode: vertical-rl; transform: rotate(180deg); font-size: {label_font}; white-space: nowrap; align-self: center; color: #000;">
-    {pretty_metric_label}
-  </div>
-</div>
-"""
+
+legend_html = build_vertical_gradient_legend_html(
+    pretty_metric_label=pretty_metric_label,
+    vmin=vmin,
+    vmax=vmax,
+    cmap_name=cmap_name,
+    map_width=MAP_WIDTH,
+    map_height=MAP_HEIGHT,
+)
 m.get_root().html.add_child(folium.Element(legend_html))
 
 # Ensure `returned` always exists, even if the map tab didn't run yet
