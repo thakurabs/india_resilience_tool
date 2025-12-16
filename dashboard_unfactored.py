@@ -21,6 +21,17 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Point
 from shapely.ops import transform
 
+from india_resilience_tool.data.adm2_loader import (
+    build_adm1_from_adm2 as _build_adm1_from_adm2,
+    enrich_adm2_with_state_names as _enrich_adm2_with_state_names,
+    ensure_key_column as _ensure_key_column,
+    featurecollections_by_state as _featurecollections_by_state,
+    load_local_adm2 as _load_local_adm2,
+)
+from india_resilience_tool.data.merge import (
+    get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
+)
+
 from matplotlib.backends.backend_pdf import PdfPages
 
 # -------------------------
@@ -506,41 +517,14 @@ def alias(s: str) -> str:
 # Geo load / prep
 # -------------------------
 @st.cache_data
+@st.cache_data
 def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
-    gdf = gpd.read_file(path)
-
-    def drop_z(geom):
-        try:
-            return transform(lambda x, y, z=None: (x, y), geom)
-        except Exception:
-            return geom
-
-    gdf["geometry"] = gdf["geometry"].apply(drop_z)
-    gdf = gdf.set_crs("EPSG:4326") if gdf.crs is None else gdf.to_crs("EPSG:4326")
-
-    if "DISTRICT" in gdf.columns:
-        gdf["district_name"] = gdf["DISTRICT"].astype(str).str.strip()
-    else:
-        txt_cols = [c for c in gdf.columns if gdf[c].dtype == object and c != "geometry"]
-        gdf["district_name"] = gdf[txt_cols[0]].astype(str).str.strip() if txt_cols else gdf.index.astype(str)
-
-    if "STATE_UT" in gdf.columns:
-        gdf["state_name"] = gdf["STATE_UT"].astype(str).str.strip()
-    elif "STATE_LGD" in gdf.columns:
-        gdf["state_name"] = gdf["STATE_LGD"].astype(str)
-    else:
-        gdf["state_name"] = "Unknown"
-
-    try:
-        gdf = gdf.cx[MIN_LON:MAX_LON, MIN_LAT:MAX_LAT]
-    except Exception:
-        gdf = gdf[
-            gdf.geometry.centroid.x.between(MIN_LON, MAX_LON)
-            & gdf.geometry.centroid.y.between(MIN_LAT, MAX_LAT)
-        ]
-
-    gdf["geometry"] = gdf["geometry"].simplify(tolerance, preserve_topology=True)
-    gdf = gdf[gdf.geometry.area > 0.0003].reset_index(drop=True)
+    gdf = _load_local_adm2(
+        path=path,
+        tolerance=float(tolerance),
+        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
+        min_area=0.0003,
+    )
     return gdf
 
 if not ADM2_GEOJSON.exists():
@@ -567,86 +551,26 @@ def build_adm2_geojson_by_state(
 
     gdf = load_local_adm2(path, tolerance=tolerance)
     if "__key" not in gdf.columns:
-        gdf["__key"] = gdf["district_name"].map(alias)
+        gdf = _ensure_key_column(gdf, district_col="district_name", alias_fn=alias, key_col="__key")
 
-    base = gdf[["district_name", "state_name", "__key", "geometry"]].copy()
-
-    fc_all = json.loads(base.to_json())
-    by_state: dict[str, dict] = {}
-
-    for feat in fc_all.get("features", []):
-        props = feat.get("properties") or {}
-        state_name = props.get("state_name", "Unknown")
-        state_key = normalize_name(state_name) or "unknown"
-        by_state.setdefault(state_key, {"type": "FeatureCollection", "features": []})
-        by_state[state_key]["features"].append(feat)
-
-    by_state["all"] = fc_all
+    by_state = _featurecollections_by_state(
+        gdf,
+        state_col="state_name",
+        normalize_state_fn=normalize_name,
+        keep_cols=["district_name", "state_name", "__key", "geometry"],
+    )
     return by_state
 
 @st.cache_data
 def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    adm2_gdf = _adm2_gdf.copy()
-    adm1 = adm2_gdf.dissolve(by="state_name", as_index=False)
-    if "state_name" not in adm1.columns and "index" in adm1.columns:
-        adm1 = adm1.rename(columns={"index": "state_name"})
-    if "shapeName" not in adm1.columns:
-        adm1["shapeName"] = adm1["state_name"]
-    return adm1.reset_index(drop=True)
+    return _build_adm1_from_adm2(_adm2_gdf, state_col="state_name")
 
 @st.cache_data
 def enrich_adm2_with_state_names(
     _adm2_gdf: gpd.GeoDataFrame,
     _adm1_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
-    """
-    Attach/clean state_name for each district using a single spatial join.
-    Cached so we don't redo expensive GeoPandas operations on every rerun.
-
-    Note: leading underscores on arguments tell Streamlit *not* to hash
-    these (GeoDataFrames are unhashable), so they are effectively treated
-    as "external state" for caching purposes.
-    """
-    # Work on local copies so we don't mutate the originals
-    adm2_gdf = _adm2_gdf.copy()
-    adm1_gdf = _adm1_gdf.copy()
-
-    if "state_name" not in adm2_gdf.columns:
-        adm2_gdf["state_name"] = "Unknown"
-    if "district_name" not in adm2_gdf.columns:
-        adm2_gdf["district_name"] = adm2_gdf.index.astype(str)
-
-    # Representative points for robust join
-    adm2_pts = adm2_gdf.copy()
-    adm2_pts["geometry"] = adm2_pts.geometry.representative_point()
-
-    try:
-        joined = gpd.sjoin(
-            adm2_pts[["geometry"]],
-            adm1_gdf[["geometry", "shapeName"]],
-            how="left",
-            predicate="within",
-        )
-        if "shapeName" in joined.columns:
-            mapping = joined["shapeName"].to_dict()
-            for adm2_idx, state_name_val in mapping.items():
-                if pd.notna(state_name_val):
-                    adm2_gdf.at[adm2_idx, "state_name"] = str(state_name_val).strip()
-    except Exception:
-        # If for some reason sjoin fails, fall back to existing state_name values.
-        pass
-
-    # Robust fallback: ensure no missing/blank state_name
-    missing = adm2_gdf["state_name"].isna() | (
-        adm2_gdf["state_name"].astype(str).str.strip() == ""
-    )
-    if missing.any():
-        for idx in adm2_gdf[missing].index:
-            val = adm2_gdf.at[idx, "state_name"]
-            if not (pd.notna(val) and str(val).strip()):
-                adm2_gdf.at[idx, "state_name"] = "Unknown"
-
-    return adm2_gdf
+    return _enrich_adm2_with_state_names(_adm2_gdf, _adm1_gdf, state_col="state_name", adm1_name_col="shapeName")
 
 # -------------------------
 # Color helpers (no GeoJSON round-trip)
@@ -817,46 +741,23 @@ def get_or_build_merged_for_index(
     slug: str,
     master_path: Path,
 ) -> gpd.GeoDataFrame:
-    """Return a merged GeoDataFrame for this index, cached by master CSV mtime.
-
-    This does the deterministic ADM2↔district join once per (slug, master_path.mtime)
-    and reuses the result on subsequent reruns, instead of re-merging on every interaction.
-    It also restricts ADM2 to states that actually appear in the master CSV.
     """
-    merged_cache = st.session_state.setdefault("_merged_cache", {})
+    Backward-compatible wrapper: preserves caching semantics and deterministic merge.
 
-    try:
-        mtime = master_path.stat().st_mtime
-    except Exception:
-        mtime = None
-
-    cache_entry = merged_cache.get(slug)
-    if cache_entry is not None and cache_entry.get("mtime") == mtime:
-        return cache_entry["gdf"]
-
-    adm2c = adm2.copy()
-    dfc = df.copy()
-
-    # Restrict ADM2 to states that occur in the master CSV (for this index)
-    if "state_name" in adm2c.columns and "state" in dfc.columns:
-        state_keys = dfc["state"].astype(str).map(alias)
-        valid_states = set(state_keys.dropna().tolist())
-        if valid_states:
-            adm2c = adm2c[
-                adm2c["state_name"].astype(str).map(alias).isin(valid_states)
-            ].copy()
-
-    # Deterministic district-level join using normalized keys
-    if "__key" not in adm2c.columns:
-        adm2c["__key"] = adm2c["district_name"].map(alias)
-    dfc["__key"] = dfc["district"].map(alias)
-
-    merged = adm2c.merge(dfc, on="__key", how="left", suffixes=("", "_csv")).drop(
-        columns=["__key"]
+    Cached by master mtime in st.session_state["_merged_cache"][slug].
+    """
+    merged = _get_or_build_merged_for_index_cached(
+        adm2,
+        df,
+        slug=slug,
+        master_path=master_path,
+        session_state=st.session_state,
+        alias_fn=alias,
+        adm2_state_col="state_name",
+        master_state_col="state",
     )
-
-    merged_cache[slug] = {"mtime": mtime, "gdf": merged}
-    return merged
+    # typing: cached function returns DataFrame; in practice this is a GeoDataFrame when adm2 is one
+    return merged  # type: ignore[return-value]
 
 
 # -------------------------
