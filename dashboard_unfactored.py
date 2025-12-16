@@ -1286,19 +1286,7 @@ def make_state_boxplot_for_districts(
 # -------------------------
 # Risk class helper (percentile → label)
 # -------------------------
-def risk_class_from_percentile(p: float) -> str:
-    if pd.isna(p):
-        return "Unknown"
-    if p >= 80:
-        return "Very High"
-    elif p >= 60:
-        return "High"
-    elif p >= 40:
-        return "Medium"
-    elif p >= 20:
-        return "Low"
-    else:
-        return "Very Low"
+from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 
 
 
@@ -2908,6 +2896,8 @@ with col2:
 
                         return None
 
+                    from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
+
                     def _compute_rank_and_percentile(
                         df_local: pd.DataFrame,
                         st_name: str,
@@ -2917,41 +2907,18 @@ with col2:
                         """
                         Rank is 1..N within state (descending; higher value => rank 1).
                         Percentile is 0..100 where higher value => higher percentile.
+
+                        Delegates to shared analysis.metrics to keep behavior consistent.
                         """
-                        if df_local is None or df_local.empty:
-                            return None, None
-                        if "state" not in df_local.columns:
-                            return None, None
-                        if metric_col not in df_local.columns:
-                            return None, None
-                        if pd.isna(value):
-                            return None, None
-
-                        st_norm = _portfolio_normalize(st_name)
-                        state_norm = df_local["state"].astype(str).map(_portfolio_normalize)
-                        m_state = state_norm == st_norm
-
-                        vals = pd.to_numeric(df_local.loc[m_state, metric_col], errors="coerce").dropna()
-                        if vals.empty:
-                            return None, None
-
-                        # Rank (descending)
-                        rank_series = vals.rank(ascending=False, method="min")
-                        # Percentile: fraction of state values <= this value (so max -> 100)
-                        try:
-                            percentile = float((vals <= float(value)).mean() * 100.0)
-                        except Exception:
-                            percentile = None
-
-                        # Rank for this value: approximate by locating the closest match within vals
-                        # (avoids needing the exact row index here)
-                        try:
-                            # number of values strictly greater + 1
-                            rank = int((vals > float(value)).sum() + 1)
-                        except Exception:
-                            rank = None
-
-                        return rank, percentile
+                        return compute_rank_and_percentile(
+                            df_local,
+                            st_name,
+                            metric_col,
+                            value,
+                            state_col="state",
+                            normalize_fn=_portfolio_normalize,
+                            percentile_method="le",
+                        )
 
                     def _build_portfolio_multiindex_df() -> pd.DataFrame:
                         rows_out: list[dict] = []
@@ -4596,9 +4563,8 @@ with col2:
                 percentile_in_state = None
                 if n_in_state and current_val_f is not None:
                     rank_in_state = int((state_vals > current_val_f).sum() + 1)
-                    percentile_in_state = float(
-                        (state_vals < current_val_f).sum() / n_in_state * 100.0
-                    )
+                    from india_resilience_tool.analysis.metrics import compute_percentile_in_state
+                    percentile_in_state = compute_percentile_in_state(state_vals, current_val_f, method="lt")
                 risk_class = (
                     risk_class_from_percentile(percentile_in_state)
                     if percentile_in_state is not None
