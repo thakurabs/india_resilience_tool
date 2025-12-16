@@ -884,55 +884,11 @@ def master_needs_rebuild(master_path: Path, processed_root: Path, state: str) ->
     return latest_processed_periods_mtime(processed_root, state) > (master_mtime + 1.0)
 
 @st.cache_data
-def load_master_csv(path: str) -> pd.DataFrame:
-    return pd.read_csv(path)
-
-# Normalize master columns to <metric>__<scenario>__<period>__<suffix>
-def normalize_master_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Rename columns like
-        days_gt_32C_ssp585_2020_2040__mean
-    to
-        days_gt_32C__ssp585__2020-2040__mean
-
-    and likewise for:
-        __median, __std, __p05, __p95, __n_models, __models, __values_per_model.
-    """
-    mapping = {}
-    pat = re.compile(
-        r"^(.+?)_"
-        r"(historical|ssp119|ssp126|ssp245|ssp370|ssp434|ssp460|ssp585)_"
-        r"(\d{4})_(\d{4})__"
-        r"(mean|median|std|p05|p95|n_models|models|values_per_model)$",
-        re.I,
-    )
-
-    for c in df.columns:
-        s = str(c).strip()
-        m = pat.match(s)
-        if not m:
-            continue
-        metric, scen, y0, y1, suffix = m.groups()
-        new = f"{metric.strip()}__{scen.lower().strip()}__{y0}-{y1}__{suffix.lower().strip()}"
-        mapping[c] = new
-
-    if mapping:
-        return df.rename(columns=mapping)
-    return df
-
-
-def parse_master_schema(cols):
-    pat = re.compile(
-        r"^(?P<metric>[^_][^:]*)__(?P<scenario>[^_]+)__(?P<period>[^_]+)__(?P<stat>mean|median|std|p05|p95)$"
-    )
-    items = []
-    for c in cols:
-        m = pat.match(str(c))
-        if m:
-            items.append(m.groupdict() | {"column": c})
-    metrics = sorted(set(i["metric"] for i in items))
-    by_metric = {m: [i for i in items if i["metric"] == m] for m in metrics}
-    return items, metrics, by_metric
+from india_resilience_tool.data.master_loader import (
+    load_master_csv,
+    normalize_master_columns,
+    parse_master_schema,
+)
 
 def resolve_metric_column(
     df_or_cols,
