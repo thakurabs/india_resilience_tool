@@ -3468,15 +3468,13 @@ with col2:
             # --- Helper functions for state-level yearly time-series (unchanged) ---
             @st.cache_data
             def _load_state_yearly(ts_root_str: str, state_dir: str) -> pd.DataFrame:
-                f = Path(ts_root_str) / state_dir / "state_yearly_ensemble_stats.csv"
-                if not f.exists():
-                    return pd.DataFrame()
-                for enc in (None, "ISO-8859-1"):
-                    try:
-                        return pd.read_csv(f, encoding=enc) if enc else pd.read_csv(f)
-                    except Exception:
-                        pass
-                return pd.read_csv(f, encoding="utf-8", errors="replace")
+                from india_resilience_tool.analysis.timeseries import load_state_yearly
+
+                return load_state_yearly(
+                    ts_root=Path(ts_root_str),
+                    state_dir=state_dir,
+                    varcfg=None,
+                )
 
             def _make_state_yearly_pdf(
                 df_yearly: pd.DataFrame,
@@ -3855,20 +3853,10 @@ with col2:
 
         @st.cache_data
         def _read_yearly_csv(fpath: Path) -> pd.DataFrame:
-            d = None
-            for enc in (None, "ISO-8859-1"):
-                try:
-                    d = pd.read_csv(fpath, encoding=enc) if enc else pd.read_csv(fpath)
-                    break
-                except Exception:
-                    d = None
-            if d is None:
-                try:
-                    d = pd.read_csv(fpath, encoding="utf-8", errors="replace")
-                except Exception:
-                    return pd.DataFrame()
-            required = {"district", "scenario", "year", "mean"}
-            return d if required.issubset(set(map(str, d.columns))) else pd.DataFrame()
+            from india_resilience_tool.analysis.timeseries import read_yearly_csv_robust, prepare_yearly_series
+
+            df = read_yearly_csv_robust(fpath)
+            return prepare_yearly_series(df)
 
         def _slugify_fs(s: str) -> str:
             s = (
@@ -3890,124 +3878,21 @@ with col2:
         ) -> pd.DataFrame:
             """
             Load the *scenario-specific* yearly ensemble CSV for a district.
+
+            Delegates to india_resilience_tool.analysis.timeseries for robust discovery.
             """
-            base = Path(ts_root) / state_dir
-            if not base.exists():
-                return pd.DataFrame()
-            try:
-                existing_dirs = [p for p in base.iterdir() if p.is_dir()]
-            except Exception:
-                existing_dirs = []
+            from india_resilience_tool.analysis.timeseries import load_district_yearly
 
-            disp = str(district_display).strip()
-            scenario = str(scenario_name).strip()
-            root = str(Path(ts_root))
-            district_u = _slugify_fs(disp)
-            district_underscored = disp.replace(" ", "_")
+            return load_district_yearly(
+                ts_root=ts_root,
+                state_dir=state_dir,
+                district_display=district_display,
+                scenario_name=scenario_name,
+                varcfg=varcfg,
+                aliases=aliases,
+                normalize_fn=_norm,  # preserves your existing normalization behavior
+            )
 
-            # direct candidates by registry
-            cands = []
-            for pat in varcfg.get("district_yearly_candidates", []):
-                cands.append(
-                    pat.format(
-                        root=root,
-                        state=state_dir,
-                        district=disp,
-                        district_underscored=district_underscored,
-                        scenario=scenario,
-                    )
-                )
-            seen = set()
-            cands = [c for c in cands if not (c in seen or seen.add(c))]
-            for full in cands:
-                f = Path(full)
-                if f.exists():
-                    df_local = _read_yearly_csv(f)
-                    if not df_local.empty:
-                        return df_local
-
-            # fallbacks by folder scanning (generic stats file)
-            def _norm(s: str) -> str:
-                s = (
-                    unicodedata.normalize("NFKD", str(s))
-                    .encode("ascii", "ignore")
-                    .decode("ascii")
-                )
-                s = s.lower()
-                s = re.sub(r"[_\-\W]+", " ", s)
-                s = re.sub(r"\s+", " ", s).strip()
-                return s
-
-            disp_norm = _norm(disp)
-            cand_names = [
-                disp,
-                disp.replace(" ", "_"),
-                disp.replace("_", " "),
-                re.sub(r"\s+", "_", disp_norm),
-                disp_norm,
-            ]
-            aliases = aliases or {}
-            ali = aliases.get(disp_norm)
-            if ali:
-                cand_names += [
-                    ali,
-                    ali.replace(" ", "_"),
-                    re.sub(r"\s+", "_", _norm(ali)),
-                ]
-            seen = set()
-            cand_names = [c for c in cand_names if not (c in seen or seen.add(c))]
-
-            for name in cand_names:
-                p = base / name
-                f = p / "district_yearly_ensemble_stats.csv"
-                if f.exists():
-                    df_local = _read_yearly_csv(f)
-                    if not df_local.empty:
-                        # filter by scenario if needed
-                        if "scenario" in df_local.columns:
-                            df_local = df_local[
-                                df_local["scenario"]
-                                .astype(str)
-                                .str.strip()
-                                .str.lower()
-                                == scenario.lower()
-                            ]
-                        return df_local
-
-            contains_hits = [p for p in existing_dirs if disp_norm in _norm(p.name)]
-            for p in contains_hits:
-                f = p / "district_yearly_ensemble_stats.csv"
-                if f.exists():
-                    df_local = _read_yearly_csv(f)
-                    if not df_local.empty:
-                        if "scenario" in df_local.columns:
-                            df_local = df_local[
-                                df_local["scenario"]
-                                .astype(str)
-                                .str.strip()
-                                .str.lower()
-                                == scenario.lower()
-                            ]
-                        return df_local
-
-            folder_names = [p.name for p in existing_dirs]
-            best = difflib.get_close_matches(disp, folder_names, n=1, cutoff=0.72)
-            if best:
-                p = base / best[0]
-                f = p / "district_yearly_ensemble_stats.csv"
-                if f.exists():
-                    df_local = _read_yearly_csv(f)
-                    if not df_local.empty:
-                        if "scenario" in df_local.columns:
-                            df_local = df_local[
-                                df_local["scenario"]
-                                .astype(str)
-                                .str.strip()
-                                .str.lower()
-                                == scenario.lower()
-                            ]
-                        return df_local
-            return pd.DataFrame()
 
         def _filter_series_for_trend(
             df: pd.DataFrame, state_name: str, district_name: str
