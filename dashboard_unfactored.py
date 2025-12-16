@@ -883,7 +883,7 @@ def master_needs_rebuild(master_path: Path, processed_root: Path, state: str) ->
         return True
     return latest_processed_periods_mtime(processed_root, state) > (master_mtime + 1.0)
 
-@st.cache_data
+# @st.cache_data
 from india_resilience_tool.data.master_loader import (
     load_master_csv,
     normalize_master_columns,

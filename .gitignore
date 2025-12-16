@@ -48,7 +48,7 @@ Thumbs.db
 # --------------------------------
 # Data / outputs (generic)
 # --------------------------------
-data/
+# data/
 raw_data/
 processed/
 outputs/
