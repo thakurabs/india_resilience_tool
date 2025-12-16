@@ -40,6 +40,10 @@ from india_resilience_tool.analysis.portfolio import (
     portfolio_remove as _portfolio_remove_impl,
 )
 
+from india_resilience_tool.viz.tables import build_rankings_table_df as _build_rankings_table_df
+
+from india_resilience_tool.utils.naming import alias
+
 from matplotlib.backends.backend_pdf import PdfPages
 
 # -------------------------
@@ -803,296 +807,17 @@ def find_baseline_column_for_stat(
     candidates.sort(key=lambda x: x[1])
     return candidates[0][0]
 
-
-
 # -------------------------
 # Scenario / period helpers (global, index-agnostic)
 # -------------------------
-SCENARIO_ORDER = ["historical", "ssp245", "ssp585"]
-SCENARIO_DISPLAY = {
-    "historical": "Historical",
-    "ssp245": "SSP2-4.5",
-    "ssp585": "SSP5-8.5",
-}
-
-# Fixed period nomenclature used across the dashboard
-PERIOD_ORDER = ["1990-2010", "2020-2040", "2040-2060"]
-
-def canonical_period_label(raw: str) -> str:
-    """
-    Normalize period strings to a canonical 'YYYY-YYYY' representation.
-    This lets you handle minor differences like '1990_2010' if they ever appear.
-    """
-    s = str(raw).strip()
-    m = re.match(r"^(\d{4})\D+(\d{4})$", s)
-    if m:
-        return f"{m.group(1)}-{m.group(2)}"
-    return s
-
-def build_scenario_comparison_panel_for_row(
-    row: pd.Series,
-    schema_items: list[dict],
-    metric_name: str,
-    sel_stat: str,
-) -> pd.DataFrame:
-    """
-    Build a tidy table with:
-      scenario, period, value, column
-    for the given metric and statistic, across
-    (historical, SSP2-4.5, SSP5-8.5) and periods
-    (1990-2010, 2020-2040, 2040-2060) if present.
-
-    This is index-agnostic: works for days_gt_32C, days_rain_gt_2p5mm, etc.
-    """
-    records = []
-
-    for item in schema_items:
-        if item.get("metric") != metric_name:
-            continue
-        if item.get("stat") != sel_stat:
-            continue
-
-        scen_raw = str(item.get("scenario", "")).strip().lower()
-        if scen_raw not in SCENARIO_ORDER:
-            continue
-
-        period_raw = canonical_period_label(item.get("period", ""))
-        if period_raw not in PERIOD_ORDER:
-            continue
-
-        col = item.get("column")
-        if col not in row.index:
-            continue
-
-        val = row.get(col)
-        # Robust numeric conversion for a single value
-        try:
-            val_f = float(pd.to_numeric(val, errors="coerce"))
-        except Exception:
-            val_f = float("nan")
-
-        if pd.isna(val_f):
-            continue
-
-        records.append(
-            {
-                "scenario": scen_raw,
-                "period": period_raw,
-                "value": float(val_f),
-                "column": col,
-            }
-        )
-
-    if not records:
-        return pd.DataFrame()
-
-    dfp = pd.DataFrame(records)
-    dfp["scenario_display"] = dfp["scenario"].map(SCENARIO_DISPLAY).fillna(dfp["scenario"])
-    dfp["period"] = pd.Categorical(dfp["period"], PERIOD_ORDER, ordered=True)
-    dfp["scenario"] = pd.Categorical(dfp["scenario"], SCENARIO_ORDER, ordered=True)
-    dfp = dfp.sort_values(["period", "scenario"]).reset_index(drop=True)
-    return dfp
-
-
-def make_scenario_comparison_figure(
-    panel_df: pd.DataFrame,
-    metric_label: str,
-    sel_scenario: str,
-    sel_period: str,
-    sel_stat: str,
-    district_name: str,
-    ax=None,
-    figsize: tuple[float, float] = FIG_SIZE_PANEL,
-):
-    """
-    Build a compact bar chart showing period-mean values for each scenario.
-
-    - Bars are grouped by period (e.g. 1990–2010, 2020–2040, 2040–2060).
-    - Within each group, scenarios (historical / SSP2-4.5 / SSP5-8.5) appear
-      side by side with clean, symmetric spacing.
-    - All bars have the same black outline thickness (no special thicker bar).
-    - Numeric value labels are drawn above each bar.
-
-    Font sizes follow the shared dashboard style:
-      - Title: FONT_SIZE_TITLE
-      - Axis labels: FONT_SIZE_LABEL
-      - Tick labels: FONT_SIZE_TICKS
-      - Legend: FONT_SIZE_LEGEND
-    """
-    import matplotlib.pyplot as plt
-    import matplotlib.patches as mpatches
-    import numpy as np
-
-    if panel_df is None or panel_df.empty:
-        return None, None
-
-    # Canonicalise selection for matching (not used for styling now, but kept
-    # in case we want to highlight the selected bar later)
-    sel_scen_norm = str(sel_scenario).strip().lower()
-    sel_period_norm = canonical_period_label(sel_period)
-
-    # Normalise periods and scenario labels in the data
-    dfp = panel_df.copy()
-    dfp["period"] = dfp["period"].map(canonical_period_label)
-    dfp["scenario_norm"] = dfp["scenario"].astype(str).str.strip().str.lower()
-
-    # Colours per scenario
-    scenario_colors = {
-        "historical": "tab:blue",
-        "ssp245": "gold",      # yellow-like
-        "ssp585": "tab:red",
-    }
-
-    # Build the list of (scenario, period) combos that actually exist
-    combos: list[tuple[str, str]] = []
-    for scen in SCENARIO_ORDER:
-        scen_norm = str(scen).strip().lower()
-        for period in PERIOD_ORDER:
-            mask = (dfp["scenario_norm"] == scen_norm) & (dfp["period"] == period)
-            if mask.any():
-                combos.append((scen_norm, period))
-
-    if not combos:
-        return None, None
-
-    # Periods that actually appear in the data, in canonical order
-    periods_present: list[str] = []
-    for period in PERIOD_ORDER:
-        if any(p == period for (_, p) in combos):
-            periods_present.append(period)
-
-    if not periods_present:
-        return None, None
-
-    # Assign x positions with clean grouping by period.
-    # Each period group is centred, with scenarios spaced symmetrically.
-    group_spacing = 2.0
-    within_spacing = 0.6
-    x_positions: dict[tuple[str, str], float] = {}
-
-    for p_idx, period in enumerate(periods_present):
-        scen_here = [sc for (sc, p) in combos if p == period]
-        if not scen_here:
-            continue
-
-        n_scen = len(scen_here)
-        group_center = p_idx * group_spacing
-
-        for i, scen_norm in enumerate(scen_here):
-            # Offset scenarios so the middle of the group stays on group_center
-            offset = (i - (n_scen - 1) / 2.0) * within_spacing
-            x_positions[(scen_norm, period)] = group_center + offset
-
-    xs: list[float] = []
-    ys: list[float] = []
-    colors: list[str] = []
-
-    for (scen_norm, period) in combos:
-        mask = (dfp["scenario_norm"] == scen_norm) & (dfp["period"] == period)
-        if not mask.any():
-            continue
-
-        try:
-            val = float(dfp.loc[mask, "value"].iloc[0])
-        except Exception:
-            continue
-
-        x_val = x_positions.get((scen_norm, period))
-        if x_val is None:
-            continue
-
-        xs.append(x_val)
-        ys.append(val)
-        colors.append(scenario_colors.get(scen_norm, "grey"))
-
-    if not xs:
-        return None, None
-
-    # Create / reuse axis
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize, dpi=FIG_DPI_PANEL)
-    else:
-        fig = ax.figure
-
-    # Uniform bar width and uniform black outline for all bars
-    bar_edgecolor = "black"
-    bar_linewidth = 0.9
-
-    bars = ax.bar(
-        xs,
-        ys,
-        color=colors,
-        edgecolor=bar_edgecolor,
-        linewidth=bar_linewidth,
-        width=0.45,
-    )
-
-    # X-axis: tick per period group, with human-readable labels
-    group_centres: list[float] = []
-    group_labels: list[str] = []
-    for p_idx, period in enumerate(periods_present):
-        group_centres.append(p_idx * group_spacing)
-        group_labels.append(period)
-
-    ax.set_xticks(group_centres)
-    ax.set_xticklabels(group_labels, fontsize=FONT_SIZE_TICKS)
-
-    # Y-axis label: metric name (units should be baked into metric_label if needed)
-    ax.set_ylabel(metric_label, fontsize=FONT_SIZE_LABEL)
-
-    # Subtle horizontal grid for readability
-    ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
-    ax.tick_params(axis="y", labelsize=FONT_SIZE_TICKS)
-    ax.tick_params(axis="x", labelsize=FONT_SIZE_TICKS)
-
-    # Numeric labels above each bar
-    for x_val, y_val in zip(xs, ys):
-        if y_val is None or (isinstance(y_val, float) and not np.isfinite(y_val)):
-            continue
-        ax.text(
-            x_val,
-            y_val,
-            f"{y_val:.1f}",
-            ha="center",
-            va="bottom",
-            fontsize=FONT_SIZE_TICKS,
-        )
-
-    # Title
-    ax.set_title(
-        f"Scenario comparison – {district_name}",
-        fontsize=FONT_SIZE_TITLE,
-        pad=6,
-    )
-
-    # Build a compact legend keyed by scenario (not (scenario, period))
-    legend_handles: list[mpatches.Patch] = []
-    legend_labels: list[str] = []
-    scen_seen = {sc for (sc, _) in combos}
-    for scen in SCENARIO_ORDER:
-        scen_norm = str(scen).strip().lower()
-        if scen_norm in scen_seen:
-            legend_handles.append(
-                mpatches.Patch(color=scenario_colors.get(scen_norm, "grey"))
-            )
-            legend_labels.append(SCENARIO_DISPLAY.get(scen_norm, scen_norm))
-    if legend_handles:
-        ax.legend(
-            legend_handles,
-            legend_labels,
-            frameon=False,
-            fontsize=FONT_SIZE_LEGEND,
-            ncol=len(legend_handles),
-            loc="upper left",
-            bbox_to_anchor=(0.0, 1.02),
-        )
-
-    # Clean spines
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-
-    fig.tight_layout()
-    return fig, ax
+from india_resilience_tool.viz.charts import (
+    PERIOD_ORDER,
+    SCENARIO_DISPLAY,
+    SCENARIO_ORDER,
+    build_scenario_comparison_panel_for_row,
+    canonical_period_label,
+    make_scenario_comparison_figure,
+)
 
 def make_state_boxplot_for_districts(
     sel_districts_gdf: gpd.GeoDataFrame,
@@ -1928,81 +1653,21 @@ with perf_section("colors: apply_fillcolor"):
             cmap_name=cmap_name,
         )
 
-
 # -------------------------
 # Build ranking table (district-level)
 # -------------------------
 _t_rank = perf_start("rank_table: build")
 
-# Filter for ranking: respect selected_state, but ignore selected_district
-if selected_state != "All":
-    rank_mask = (
-        merged["state_name"].astype(str).str.strip().str.lower()
-        == selected_state.strip().lower()
-    )
-    ranking_gdf = merged.loc[rank_mask].copy()
-else:
-    ranking_gdf = merged.copy()
-
-# Base table: District, State, and index value for current selection
-table_df = pd.DataFrame()
-if not ranking_gdf.empty and (metric_col in ranking_gdf.columns):
-    table_df = ranking_gdf[["district_name", "state_name"]].copy()
-    # Absolute value for selected scenario/period/stat
-    value_series = pd.to_numeric(
-        ranking_gdf[metric_col], errors="coerce"
-    )
-    table_df["value"] = value_series
-
-    # Baseline & change columns (if available)
-    has_baseline = baseline_col and (baseline_col in ranking_gdf.columns)
-    if has_baseline:
-        baseline_series = pd.to_numeric(
-            ranking_gdf[baseline_col], errors="coerce"
-        )
-        table_df["baseline"] = baseline_series
-        # Absolute change
-        table_df["delta_abs"] = table_df["value"] - table_df["baseline"]
-        # Percent change (avoid division by 0)
-        table_df["delta_pct"] = np.where(
-            (baseline_series != 0) & (~baseline_series.isna()),
-            100.0 * table_df["delta_abs"] / baseline_series,
-            np.nan,
-        )
-    else:
-        has_baseline = False
-
-    # Drop rows with no value at all
-    table_df = table_df[~table_df["value"].isna()].copy()
-    if not table_df.empty:
-        # Rank by absolute value (1 = hottest / wettest, highest index)
-        table_df["rank_value"] = table_df["value"].rank(
-            ascending=False, method="min"
-        ).astype(int)
-
-        # Percentile of value within this ranking set (0–100)
-        table_df["percentile_value"] = (
-            table_df["value"].rank(pct=True) * 100.0
-        )
-
-        # Risk class based on percentile
-        table_df["risk_class"] = table_df["percentile_value"].apply(
-            risk_class_from_percentile
-        )
-
-        # Rank by increase (if baseline present)
-        if has_baseline and "delta_abs" in table_df.columns:
-            valid_delta = table_df["delta_abs"].dropna()
-            if not valid_delta.empty:
-                table_df["rank_delta"] = table_df["delta_abs"].rank(
-                    ascending=False, method="min"
-                ).astype(int)
-
-        # Keep aspirational flag if present
-        if "aspirational" in ranking_gdf.columns:
-            table_df["aspirational"] = ranking_gdf["aspirational"].values
-else:
-    has_baseline = False
+table_df, has_baseline = _build_rankings_table_df(
+    merged,
+    metric_col=metric_col,
+    baseline_col=baseline_col,
+    selected_state=selected_state,
+    risk_class_from_percentile=risk_class_from_percentile,
+    district_col="district_name",
+    state_col="state_name",
+    aspirational_col="aspirational",
+)
 
 perf_end("rank_table: build", _t_rank)
 
@@ -3785,7 +3450,7 @@ with col2:
                 scenario_name=scenario_name,
                 varcfg=varcfg,
                 aliases=aliases,
-                normalize_fn=_norm,  # preserves your existing normalization behavior
+                normalize_fn=alias,  # shared normalization + NAME_ALIASES (Step 9)
             )
 
 
@@ -3923,132 +3588,9 @@ with col2:
             plt.close(fig)
             return pdf_path
 
-        def _create_trend_figure_for_index(
-            hist_ts: pd.DataFrame,
-            scen_ts: pd.DataFrame,
-            idx_label: str,
-            scenario_name: str,
-            ax: "plt.Axes | None" = None,
-            figsize: tuple[float, float] = (4.8, 2.4),
-        ):
-            """
-            Create the same 'Trend over time' figure used in the Climate Profile panel.
-
-            If ``ax`` is provided, the plot is drawn into that axis and the parent
-            figure is returned. Otherwise, a new figure is created with the given
-            ``figsize`` and returned.
-
-            Parameters
-            ----------
-            hist_ts : pd.DataFrame
-                Historical time series with at least 'year' and 'mean' columns.
-                Optional columns: 'p05', 'p95'.
-            scen_ts : pd.DataFrame
-                Scenario time series with the same columns as hist_ts.
-            idx_label : str
-                Label for the y-axis (index name).
-            scenario_name : str
-                Scenario slug, e.g., 'ssp245' or 'ssp585'.
-            ax : matplotlib.axes.Axes, optional
-                If provided, draw into this axis instead of creating a new figure.
-            figsize : tuple[float, float]
-                Figure size if a new figure is created.
-
-            Returns
-            -------
-            matplotlib.figure.Figure
-                Figure that contains the trend plot.
-            """
-            if ax is None:
-                fig_ts, ax_ts = plt.subplots(figsize=figsize, dpi=150)
-            else:
-                ax_ts = ax
-                fig_ts = ax_ts.figure
-
-            has_any = False
-
-            # Historical: 1990–2010 (or whatever range is in hist_ts) in blue + band
-            if hist_ts is not None and not hist_ts.empty:
-                ax_ts.plot(
-                    hist_ts["year"],
-                    hist_ts["mean"],
-                    linewidth=2.0,
-                    color="tab:blue",
-                    label="Historical",
-                )
-                if {"p05", "p95"}.issubset(hist_ts.columns):
-                    ax_ts.fill_between(
-                        hist_ts["year"],
-                        hist_ts["p05"],
-                        hist_ts["p95"],
-                        alpha=0.2,
-                        color="tab:blue",
-                    )
-                has_any = True
-
-            # Scenario: 2020–2060 (or whatever range) in red + band
-            if scen_ts is not None and not scen_ts.empty:
-                scen_label = (scenario_name or "scenario").upper()
-                ax_ts.plot(
-                    scen_ts["year"],
-                    scen_ts["mean"],
-                    linewidth=2.0,
-                    color="tab:red",
-                    label=scen_label,
-                )
-                if {"p05", "p95"}.issubset(scen_ts.columns):
-                    ax_ts.fill_between(
-                        scen_ts["year"],
-                        scen_ts["p05"],
-                        scen_ts["p95"],
-                        alpha=0.2,
-                        color="tab:red",
-                    )
-                has_any = True
-
-            # Transition line: last historical → first scenario in grey dashed
-            if (
-                hist_ts is not None
-                and scen_ts is not None
-                and not hist_ts.empty
-                and not scen_ts.empty
-            ):
-                try:
-                    last_hist_year = int(hist_ts["year"].max())
-                    last_hist = hist_ts.loc[hist_ts["year"] == last_hist_year].iloc[-1]
-
-                    target_year = 2020
-                    if "year" in scen_ts.columns and target_year in scen_ts["year"].values:
-                        first_scen = scen_ts.loc[scen_ts["year"] == target_year].iloc[0]
-                    else:
-                        first_scen = scen_ts.loc[scen_ts["year"].idxmin()]
-
-                    ax_ts.plot(
-                        [last_hist["year"], first_scen["year"]],
-                        [last_hist["mean"], first_scen["mean"]],
-                        color="grey",
-                        linestyle="--",
-                        linewidth=1.5,
-                    )
-                except Exception:
-                    # If something odd happens (e.g. missing values), don't kill the plot
-                    pass
-
-            ax_ts.set_xlabel("Year")
-            ax_ts.set_ylabel(idx_label)
-
-            if has_any:
-                ax_ts.grid(True, linestyle="--", alpha=0.25)
-                for spine in ax_ts.spines.values():
-                    spine.set_visible(False)
-                handles, labels = ax_ts.get_legend_handles_labels()
-                if handles:
-                    ax_ts.legend(frameon=False, fontsize=8, ncol=3)
-
-            if ax is None:
-                fig_ts.tight_layout()
-
-            return fig_ts
+        from india_resilience_tool.viz.charts import (
+            create_trend_figure_for_index as _create_trend_figure_for_index,
+        )
 
         def _build_district_case_study_data(
             state_name: str,
@@ -4565,6 +4107,11 @@ with col2:
                                 district_name=district_name,
                                 ax=ax_bar,
                                 figsize=(6.0, 3.0),
+                                fig_dpi=FIG_DPI_PANEL,
+                                font_size_title=FONT_SIZE_TITLE,
+                                font_size_label=FONT_SIZE_LABEL,
+                                font_size_ticks=FONT_SIZE_TICKS,
+                                font_size_legend=FONT_SIZE_LEGEND,
                             )
 
                             # Build short bullet-style lines from panel values
@@ -4792,6 +4339,12 @@ with col2:
                     sel_period=sel_period,
                     sel_stat=sel_stat,
                     district_name=district_name,
+                    figsize=FIG_SIZE_PANEL,
+                    fig_dpi=FIG_DPI_PANEL,
+                    font_size_title=FONT_SIZE_TITLE,
+                    font_size_label=FONT_SIZE_LABEL,
+                    font_size_ticks=FONT_SIZE_TICKS,
+                    font_size_legend=FONT_SIZE_LEGEND,
                 )
 
                 if fig_sc is not None:
