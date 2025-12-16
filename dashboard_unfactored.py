@@ -3858,51 +3858,22 @@ with col2:
             panel_dict: dict[str, pd.DataFrame],
             pdf_bytes: bytes,
         ) -> bytes:
-            """
-            Build a ZIP (as bytes) containing:
-              - summary.csv
-              - timeseries_<index>_<scenario>.csv
-              - scenario_mean_<index>.csv
-              - climate_profile_<state>__<district>.pdf
-            """
-            buf = io.BytesIO()
-            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                if summary_df is not None and not summary_df.empty:
-                    zf.writestr(
-                        "summary.csv",
-                        summary_df.to_csv(index=False).encode("utf-8"),
-                    )
+            from india_resilience_tool.viz.exports import make_case_study_zip
 
-                for slug, parts in (ts_dict or {}).items():
-                    for scen_key, ts_df in (parts or {}).items():
-                        if ts_df is None or ts_df.empty:
-                            continue
-                        df_out = ts_df.copy()
-                        if "scenario" not in df_out.columns:
-                            df_out["scenario"] = scen_key
-                        df_out["index_slug"] = slug
-                        df_out["index_label"] = VARIABLES.get(slug, {}).get("label", slug)
-                        name = f"timeseries_{_slugify_fs(slug)}_{scen_key}.csv"
-                        zf.writestr(name, df_out.to_csv(index=False).encode("utf-8"))
+            # Preserve exported CSV labels exactly like the legacy dashboard did
+            label_lookup: dict[str, str] = {}
+            for slug in set(list((ts_dict or {}).keys()) + list((panel_dict or {}).keys())):
+                label_lookup[slug] = VARIABLES.get(slug, {}).get("label", slug)
 
-                for slug, panel_df in (panel_dict or {}).items():
-                    if panel_df is None or panel_df.empty:
-                        continue
-                    df_out = panel_df.copy()
-                    df_out["index_slug"] = slug
-                    df_out["index_label"] = VARIABLES.get(slug, {}).get("label", slug)
-                    name = f"scenario_mean_{_slugify_fs(slug)}.csv"
-                    zf.writestr(name, df_out.to_csv(index=False).encode("utf-8"))
-
-                if pdf_bytes:
-                    safe_state = _slugify_fs(state_name)
-                    safe_dist = _slugify_fs(district_name)
-                    zf.writestr(
-                        f"climate_profile_{safe_state}__{safe_dist}.pdf",
-                        pdf_bytes,
-                    )
-            buf.seek(0)
-            return buf.getvalue()
+            return make_case_study_zip(
+                state_name=state_name,
+                district_name=district_name,
+                summary_df=summary_df,
+                ts_dict=ts_dict,
+                panel_dict=panel_dict,
+                pdf_bytes=pdf_bytes,
+                index_label_lookup=label_lookup,
+            )
 
         def _make_district_case_study_pdf(
             state_name: str,
@@ -3914,320 +3885,18 @@ with col2:
             sel_period: str,
             sel_stat: str,
         ) -> bytes:
-            """
-            Build a multi-page PDF for a single district and multiple indices.
+            from india_resilience_tool.viz.exports import make_district_case_study_pdf
 
-            Page 1  : A4 cover + summary table
-            Page 2+ : One full A4 page per index with:
-
-                    Row 1 – yearly trend plot (historical + scenario)
-                    Row 2 – period-mean scenario comparison bar chart
-                    Row 3 – short narrative + scenario bullets
-            """
-            if summary_df is None or summary_df.empty:
-                return b""
-
-            buf = io.BytesIO()
-            with PdfPages(buf) as pdf:
-                # ------------------------------------------------------------------
-                # Cover / summary page (A4)
-                # ------------------------------------------------------------------
-                fig = plt.figure(figsize=(8.27, 11.69), dpi=150)
-                fig.patch.set_facecolor("white")
-
-                title = f"{district_name}, {state_name} — Climate profile"
-                fig.text(
-                    0.5,
-                    0.92,
-                    title,
-                    ha="center",
-                    va="top",
-                    fontsize=16,
-                    fontweight="bold",
-                )
-
-                subtitle = (
-                    f"Scenario: {sel_scenario.upper()}   |   "
-                    f"Period: {sel_period}   |   Statistic: {sel_stat}"
-                )
-                fig.text(0.5, 0.88, subtitle, ha="center", va="top", fontsize=10)
-
-                fig.text(
-                    0.5,
-                    0.84,
-                    f"Generated on {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
-                    ha="center",
-                    va="top",
-                    fontsize=8,
-                )
-
-                summary_to_show = summary_df.copy()
-
-                # 1) Format numeric columns
-                num_cols = ["current", "baseline", "delta_abs", "delta_pct", "percentile_in_state"]
-                for c in num_cols:
-                    if c in summary_to_show.columns:
-                        summary_to_show[c] = summary_to_show[c].apply(
-                            lambda x: f"{x:.2f}"
-                            if isinstance(x, (int, float)) and not pd.isna(x)
-                            else ""
-                        )
-
-                # 2) Select & order columns
-                cols_order = [
-                    "index_label",
-                    "group",
-                    "current",
-                    "baseline",
-                    "delta_abs",
-                    "delta_pct",
-                    "rank_in_state",
-                    "percentile_in_state",
-                    "risk_class",
-                ]
-                cols_existing = [c for c in cols_order if c in summary_to_show.columns]
-                summary_to_show = summary_to_show[cols_existing]
-
-                # 3) Wrap long text so it doesn't overflow table cells
-                def _wrap_text(val: object, width: int) -> object:
-                    if not isinstance(val, str):
-                        return val
-                    return "\n".join(textwrap.wrap(val, width=width)) if val else val
-
-                if "index_label" in summary_to_show.columns:
-                    summary_to_show["index_label"] = summary_to_show["index_label"].map(
-                        lambda x: _wrap_text(x, width=18)
-                    )
-                if "group" in summary_to_show.columns:
-                    summary_to_show["group"] = summary_to_show["group"].map(
-                        lambda x: _wrap_text(x, width=10)
-                    )
-                if "risk_class" in summary_to_show.columns:
-                    summary_to_show["risk_class"] = summary_to_show["risk_class"].map(
-                        lambda x: _wrap_text(x, width=12)
-                    )
-
-                # Draw table in middle of the cover page
-                ax_table = fig.add_axes([0.05, 0.10, 0.9, 0.70])
-                ax_table.axis("off")
-                table = ax_table.table(
-                    cellText=summary_to_show.values,
-                    colLabels=[c.replace("_", " ").title() for c in summary_to_show.columns],
-                    loc="center",
-                    cellLoc="center",
-                )
-                table.auto_set_font_size(False)
-                table.set_fontsize(8)
-                # Slightly shrink horizontally, stretch vertically to reduce overflow
-                table.scale(0.9, 1.2)
-
-                pdf.savefig(fig)
-                plt.close(fig)
-
-                # ------------------------------------------------------------------
-                # Per-index pages
-                # ------------------------------------------------------------------
-                for _, row_idx in summary_df.sort_values("index_label").iterrows():
-                    slug = row_idx["index_slug"]
-                    idx_label = row_idx.get("index_label", slug)
-
-                    ts = ts_dict.get(slug, {}) or {}
-                    hist_ts = ts.get("historical", pd.DataFrame())
-                    scen_ts = ts.get("scenario", pd.DataFrame())
-
-                    panel_df = panel_dict.get(slug)
-
-                    # Fresh A4 page with 3 vertically stacked rows
-                    fig_idx = plt.figure(figsize=(8.27, 11.69), dpi=150)
-                    fig_idx.patch.set_facecolor("white")
-                    gs = fig_idx.add_gridspec(
-                        nrows=3,
-                        ncols=1,
-                        height_ratios=[3.0, 2.0, 1.3],
-                        hspace=0.4,
-                    )
-
-                    ax_trend = fig_idx.add_subplot(gs[0, 0])
-                    ax_bar = fig_idx.add_subplot(gs[1, 0])
-                    ax_text = fig_idx.add_subplot(gs[2, 0])
-                    ax_text.axis("off")
-
-                    # Page title
-                    fig_idx.suptitle(
-                        f"{idx_label} — {district_name}, {state_name}",
-                        fontsize=12,
-                        y=0.98,
-                    )
-
-                    # 1) Trend plot on the top row
-                    try:
-                        if (hist_ts is not None and not hist_ts.empty) or (
-                            scen_ts is not None and not scen_ts.empty
-                        ):
-                            _create_trend_figure_for_index(
-                                hist_ts=hist_ts,
-                                scen_ts=scen_ts,
-                                idx_label=idx_label,
-                                scenario_name=sel_scenario,
-                                ax=ax_trend,
-                                figsize=(6.0, 3.0),
-                            )
-                        else:
-                            ax_trend.text(
-                                0.5,
-                                0.5,
-                                "No yearly time series available for this index.",
-                                ha="center",
-                                va="center",
-                                fontsize=9,
-                            )
-                            ax_trend.set_axis_off()
-                    except Exception:
-                        # Fail softly: don't break PDF generation for one bad index
-                        ax_trend.text(
-                            0.5,
-                            0.5,
-                            "Trend plot could not be generated.",
-                            ha="center",
-                            va="center",
-                            fontsize=9,
-                        )
-                        ax_trend.set_axis_off()
-
-                    # 2) Scenario comparison bar chart in the middle row
-                    bullet_lines: list[str] = []
-                    try:
-                        if panel_df is not None and not panel_df.empty:
-                            make_scenario_comparison_figure(
-                                panel_df=panel_df,
-                                metric_label=idx_label,
-                                sel_scenario=sel_scenario,
-                                sel_period=sel_period,
-                                sel_stat=sel_stat,
-                                district_name=district_name,
-                                ax=ax_bar,
-                                figsize=(6.0, 3.0),
-                                fig_dpi=FIG_DPI_PANEL,
-                                font_size_title=FONT_SIZE_TITLE,
-                                font_size_label=FONT_SIZE_LABEL,
-                                font_size_ticks=FONT_SIZE_TICKS,
-                                font_size_legend=FONT_SIZE_LEGEND,
-                            )
-
-                            # Build short bullet-style lines from panel values
-                            panel_sorted = panel_df.sort_values(["period", "scenario"])
-                            for _, r in panel_sorted.iterrows():
-                                scen_label = SCENARIO_DISPLAY.get(
-                                    r["scenario"],
-                                    str(r["scenario"]),
-                                )
-                                try:
-                                    val_str = f"{float(r['value']):.2f}"
-                                except Exception:
-                                    val_str = str(r["value"])
-
-                                period_label = canonical_period_label(str(r.get("period", "")))
-                                bullet_lines.append(
-                                    f"• {scen_label} — {period_label}: {val_str}"
-                                )
-                        else:
-                            ax_bar.text(
-                                0.5,
-                                0.5,
-                                "No period-mean scenario data available.",
-                                ha="center",
-                                va="center",
-                                fontsize=9,
-                            )
-                            ax_bar.set_axis_off()
-                    except Exception:
-                        ax_bar.text(
-                            0.5,
-                            0.5,
-                            "Scenario comparison chart could not be generated.",
-                            ha="center",
-                            va="center",
-                            fontsize=9,
-                        )
-                        ax_bar.set_axis_off()
-
-                    # 3) Narrative + bullets in the bottom row
-                    narrative_lines: list[str] = []
-                    try:
-                        parts = []
-                        if hist_ts is not None and not hist_ts.empty:
-                            parts.append(hist_ts[["year", "mean"]])
-                        if scen_ts is not None and not scen_ts.empty:
-                            parts.append(scen_ts[["year", "mean"]])
-
-                        if parts:
-                            combined = (
-                                pd.concat(parts, ignore_index=True)
-                                .sort_values("year")
-                            )
-                            start_year = int(combined["year"].iloc[0])
-                            end_year = int(combined["year"].iloc[-1])
-                            start_val = float(combined["mean"].iloc[0])
-                            end_val = float(combined["mean"].iloc[-1])
-                            delta = end_val - start_val
-
-                            if abs(delta) < 0.1:
-                                trend_word = "has remained broadly stable"
-                            elif delta > 0:
-                                trend_word = "has increased"
-                            else:
-                                trend_word = "has decreased"
-
-                            narrative_lines.append(
-                                f"Between {start_year} and {end_year}, "
-                                f"{idx_label.lower()} in {district_name} {trend_word}, "
-                                f"from about {start_val:.1f} to about {end_val:.1f}."
-                            )
-                    except Exception:
-                        # If something goes wrong, just skip the narrative
-                        pass
-
-                    y_text = 0.95
-                    if narrative_lines:
-                        ax_text.text(
-                            0.01,
-                            y_text,
-                            narrative_lines[0],
-                            fontsize=9,
-                            va="top",
-                            ha="left",
-                            wrap=True,
-                            transform=ax_text.transAxes,
-                        )
-                        y_text -= 0.25
-
-                    if bullet_lines:
-                        ax_text.text(
-                            0.01,
-                            y_text,
-                            "Scenario / period mean values:",
-                            fontsize=9,
-                            va="top",
-                            ha="left",
-                            transform=ax_text.transAxes,
-                        )
-                        y_text -= 0.08
-                        for line in bullet_lines:
-                            ax_text.text(
-                                0.03,
-                                y_text,
-                                line,
-                                fontsize=8,
-                                va="top",
-                                ha="left",
-                                transform=ax_text.transAxes,
-                            )
-                            y_text -= 0.06
-
-                    pdf.savefig(fig_idx)
-                    plt.close(fig_idx)
-
-            return buf.getvalue()
+            return make_district_case_study_pdf(
+                state_name=state_name,
+                district_name=district_name,
+                summary_df=summary_df,
+                ts_dict=ts_dict,
+                panel_dict=panel_dict,
+                sel_scenario=sel_scenario,
+                sel_period=sel_period,
+                sel_stat=sel_stat,
+            )
 
         # --- Load historical + selected scenario series separately ---
         requested_state_dir = (
@@ -4380,9 +4049,6 @@ with col2:
 
         # st.markdown("---")
 
-
-
-
         def _make_district_yearly_pdf(
             df_yearly: pd.DataFrame,
             state_name: str,
@@ -4391,101 +4057,16 @@ with col2:
             metric_label: str,
             out_dir: Path,
         ) -> Optional[Path]:
-            if df_yearly is None or df_yearly.empty:
-                return None
-            d = df_yearly.copy()
-            cols = set(map(str, d.columns))
-            # We need at least these columns to proceed
-            if not {"district", "scenario", "year", "mean"}.issubset(cols):
-                return None
-            # Ensure state column exists
-            if "state" not in d.columns:
-                d["state"] = state_name
-            has_p05, has_p95 = ("p05" in d.columns), ("p95" in d.columns)
+            from india_resilience_tool.viz.exports import make_district_yearly_pdf
 
-            def _n(s: str) -> str:
-                return alias(s)
-
-            # Normalised keys for matching
-            d["_state_key"] = d["state"].astype(str).map(_n)
-            d["_district_key"] = d["district"].astype(str).map(_n)
-            d["_scen_key"] = d["scenario"].astype(str).str.strip().str.lower()
-
-            # First try exact state+district+scenario match
-            mask = (
-                (d["_state_key"] == _n(state_name))
-                & (d["_district_key"] == _n(district_name))
-                & (d["_scen_key"] == scenario_name.strip().lower())
+            return make_district_yearly_pdf(
+                df_yearly=df_yearly,
+                state_name=state_name,
+                district_name=district_name,
+                scenario_name=scenario_name,
+                metric_label=metric_label,
+                out_dir=out_dir,
             )
-            # Fallback: contains match on district
-            if not mask.any():
-                mask = (
-                    (d["_state_key"] == _n(state_name))
-                    & d["_district_key"].str.contains(_n(district_name), na=False)
-                    & (d["_scen_key"] == scenario_name.strip().lower())
-                )
-            # Second fallback: fuzzy match on district within state+scenario
-            if not mask.any():
-                cand = d.loc[
-                    (d["_state_key"] == _n(state_name))
-                    & (d["_scen_key"] == scenario_name.strip().lower()),
-                    "_district_key",
-                ].dropna().unique().tolist()
-                best = difflib.get_close_matches(_n(district_name), cand, n=1, cutoff=0.72)
-                if best:
-                    mask = (
-                        (d["_state_key"] == _n(state_name))
-                        & (d["_district_key"] == best[0])
-                        & (d["_scen_key"] == scenario_name.strip().lower())
-                    )
-
-            d = d[mask]
-            if d.empty:
-                return None
-
-            # Clean numeric types
-            for c in ("year", "mean"):
-                d[c] = pd.to_numeric(d[c], errors="coerce")
-            if has_p05:
-                d["p05"] = pd.to_numeric(d.get("p05"), errors="coerce")
-            if has_p95:
-                d["p95"] = pd.to_numeric(d.get("p95"), errors="coerce")
-
-            d = d.dropna(subset=["year"]).sort_values("year")
-            if d.empty:
-                return None
-
-            fig, ax = plt.subplots(figsize=(7.5, 4.5), dpi=150)
-            ax.plot(d["year"], d["mean"], linewidth=3.0, label="Mean")
-            if has_p05:
-                ax.plot(d["year"], d["p05"], linewidth=1.5, label="5th percentile")
-            if has_p95:
-                ax.plot(d["year"], d["p95"], linewidth=1.5, label="95th percentile")
-
-            ax.set_xlabel("Year")
-            ax.set_ylabel(metric_label)
-            ax.set_title(
-                f"{district_name}, {state_name} • {metric_label} • {scenario_name}"
-            )
-            ax.grid(True, linestyle="--", alpha=0.35)
-            ax.legend(frameon=False, ncol=3, fontsize=9)
-
-            out_dir.mkdir(parents=True, exist_ok=True)
-
-            safe = lambda s: "".join(
-                c if c.isalnum() or c in ("-", "_") else "_" for c in str(s)
-            )
-            pdf_path = (
-                out_dir
-                / f"{safe(state_name)}__{safe(district_name)}__"
-                  f"{safe(metric_label)}__{safe(scenario_name)}__yearly_timeseries.pdf"
-            )
-            fig.tight_layout()
-            fig.savefig(pdf_path, format="pdf")
-            plt.close(fig)
-            return pdf_path
-
-
 
         # ---- Detailed statistics (collapsible) ----
         with st.expander("Detailed statistics for selected district", expanded=False):
