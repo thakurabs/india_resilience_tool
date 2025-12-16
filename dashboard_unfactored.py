@@ -31,6 +31,14 @@ from india_resilience_tool.data.adm2_loader import (
 from india_resilience_tool.data.merge import (
     get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
 )
+from india_resilience_tool.analysis.portfolio import (
+    build_portfolio_multiindex_df as _build_portfolio_multiindex_df_impl,
+    portfolio_add as _portfolio_add_impl,
+    portfolio_clear as _portfolio_clear_impl,
+    portfolio_contains as _portfolio_contains_impl,
+    portfolio_normalize as _portfolio_normalize_impl,
+    portfolio_remove as _portfolio_remove_impl,
+)
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -1840,12 +1848,9 @@ def _portfolio_normalize(text: str) -> str:
     """
     Normalize a state/district name for robust comparison across data sources.
 
-    - ASCII fold + lowercase (via normalize_name)
-    - Apply NAME_ALIASES (via alias)
-    - Remove spaces to handle cases like "Sanga Reddy" vs "Sangareddy"
+    Delegates to india_resilience_tool.analysis.portfolio to keep logic centralized.
     """
-    norm = alias(text)  # alias() already calls normalize_name() + NAME_ALIASES
-    return norm.replace(" ", "")
+    return _portfolio_normalize_impl(text, alias_fn=alias)
 
 
 def _portfolio_key(state_name: str, district_name: str) -> tuple[str, str]:
@@ -1854,46 +1859,41 @@ def _portfolio_key(state_name: str, district_name: str) -> tuple[str, str]:
 
 def _portfolio_add(state_name: str, district_name: str) -> None:
     """Add a (state, district) pair to the portfolio if not already present."""
-    if not state_name or not district_name or district_name == "All":
-        return
-    items = st.session_state.get("portfolio_districts", [])
-    new_norm = _portfolio_key(state_name, district_name)
-    for item in items:
-        if _portfolio_key(item.get("state"), item.get("district")) == new_norm:
-            return
-    items.append({"state": state_name, "district": district_name})
-    st.session_state["portfolio_districts"] = items
+    _portfolio_add_impl(
+        st.session_state,
+        state_name,
+        district_name,
+        normalize_fn=_portfolio_normalize,
+        state_key="portfolio_districts",
+    )
 
 
 def _portfolio_remove(state_name: str, district_name: str) -> None:
     """Remove a (state, district) pair from the portfolio."""
-    items = st.session_state.get("portfolio_districts", [])
-    norm = _portfolio_key(state_name, district_name)
-    items = [
-        item
-        for item in items
-        if _portfolio_key(item.get("state"), item.get("district")) != norm
-    ]
-    st.session_state["portfolio_districts"] = items
+    _portfolio_remove_impl(
+        st.session_state,
+        state_name,
+        district_name,
+        normalize_fn=_portfolio_normalize,
+        state_key="portfolio_districts",
+    )
 
 def _portfolio_contains(state_name: str, district_name: str) -> bool:
     """
     Return True if the (state, district) pair is already present
     in the current portfolio_districts list.
     """
-    if not state_name or not district_name or district_name == "All":
-        return False
-
-    items = st.session_state.get("portfolio_districts", [])
-    norm = _portfolio_key(state_name, district_name)
-    for item in items:
-        if _portfolio_key(item.get("state"), item.get("district")) == norm:
-            return True
-    return False
+    return _portfolio_contains_impl(
+        st.session_state,
+        state_name,
+        district_name,
+        normalize_fn=_portfolio_normalize,
+        state_key="portfolio_districts",
+    )
 
 def _portfolio_clear() -> None:
     """Clear all districts from the portfolio."""
-    st.session_state["portfolio_districts"] = []
+    _portfolio_clear_impl(st.session_state, state_key="portfolio_districts")
 
 
 def _portfolio_set_flash(message: str, level: str = "success") -> None:
@@ -2921,125 +2921,22 @@ with col2:
                         )
 
                     def _build_portfolio_multiindex_df() -> pd.DataFrame:
-                        rows_out: list[dict] = []
-
-                        for item in portfolio:
-                            if isinstance(item, dict):
-                                st_name = str(item.get("state", "")).strip()
-                                dist_name = str(item.get("district", "")).strip()
-                            else:
-                                try:
-                                    st_name, dist_name = item
-                                    st_name = str(st_name).strip()
-                                    dist_name = str(dist_name).strip()
-                                except Exception:
-                                    st_name, dist_name = "", ""
-
-                            for slug in selected_slugs:
-                                cfg = VARIABLES.get(slug, {})
-                                idx_label = cfg.get("label", str(slug))
-                                idx_group = cfg.get("group", "other")
-                                idx_group_label = INDEX_GROUP_LABELS.get(idx_group, str(idx_group).title())
-
-                                registry_metric_i = str(cfg.get("periods_metric_col", "")).strip()
-
-                                df_local, _, metrics_local, _ = _load_master_and_schema_for_slug(slug)
-
-                                # Resolve the actual master column robustly (handles minor period formatting
-                                # differences and metric naming variants across indices).
-                                used_metric = registry_metric_i
-                                metric_col = None
-                                if used_metric:
-                                    metric_col = resolve_metric_column(
-                                        df_local, used_metric, sel_scenario, sel_period, sel_stat
-                                    )
-
-                                # Fuzzy fallback: if the configured periods_metric_col doesn't exist as a base metric
-                                # in this master file, try the closest available base metric.
-                                if metric_col is None and registry_metric_i and metrics_local:
-                                    base_norm = _portfolio_normalize(registry_metric_i)
-                                    candidates = [
-                                        m for m in metrics_local
-                                        if base_norm and base_norm in _portfolio_normalize(m)
-                                    ]
-                                    if not candidates:
-                                        candidates = difflib.get_close_matches(
-                                            registry_metric_i, metrics_local, n=1, cutoff=0.6
-                                        )
-                                    if candidates:
-                                        used_metric = candidates[0]
-                                        metric_col = resolve_metric_column(
-                                            df_local, used_metric, sel_scenario, sel_period, sel_stat
-                                        )
-
-                                baseline_col = None
-                                if used_metric and df_local is not None and not df_local.empty:
-                                    baseline_col = find_baseline_column_for_stat(
-                                        df_local.columns, used_metric, sel_stat
-                                    )
-
-                                # Default outputs
-                                value = np.nan
-                                baseline = np.nan
-                                delta_abs = np.nan
-                                delta_pct = np.nan
-                                rank_in_state = None
-                                percentile_in_state = np.nan
-                                risk_class = "Unknown"
-
-                                if (
-                                    df_local is not None
-                                    and not df_local.empty
-                                    and metric_col
-                                    and metric_col in df_local.columns
-                                ):
-                                    idx_row = _match_row_idx(df_local, st_name, dist_name)
-                                    if idx_row is not None:
-                                        try:
-                                            value = float(pd.to_numeric(df_local.loc[idx_row, metric_col], errors="coerce"))
-                                        except Exception:
-                                            value = np.nan
-
-                                        if baseline_col and baseline_col in df_local.columns:
-                                            try:
-                                                baseline = float(
-                                                    pd.to_numeric(df_local.loc[idx_row, baseline_col], errors="coerce")
-                                                )
-                                            except Exception:
-                                                baseline = np.nan
-
-                                        if not pd.isna(value) and not pd.isna(baseline):
-                                            delta_abs = value - baseline
-                                            if baseline != 0:
-                                                delta_pct = (delta_abs / baseline) * 100.0
-
-                                        rank_in_state, percentile = _compute_rank_and_percentile(
-                                            df_local=df_local,
-                                            st_name=st_name,
-                                            metric_col=metric_col,
-                                            value=value,
-                                        )
-                                        if percentile is not None:
-                                            percentile_in_state = percentile
-                                            risk_class = risk_class_from_percentile(percentile_in_state)
-
-                                rows_out.append(
-                                    {
-                                        "State": st_name,
-                                        "District": dist_name,
-                                        "Index": idx_label,
-                                        "Group": idx_group_label,
-                                        "Current value": value,
-                                        "Baseline": baseline,
-                                        "Δ": delta_abs,
-                                        "%Δ": delta_pct,
-                                        "Rank in state": rank_in_state,
-                                        "Percentile": percentile_in_state,
-                                        "Risk class": risk_class,
-                                    }
-                                )
-
-                        return pd.DataFrame(rows_out)
+                        return _build_portfolio_multiindex_df_impl(
+                            portfolio=portfolio,
+                            selected_slugs=selected_slugs,
+                            variables=VARIABLES,
+                            index_group_labels=INDEX_GROUP_LABELS,
+                            sel_scenario=sel_scenario,
+                            sel_period=sel_period,
+                            sel_stat=sel_stat,
+                            load_master_and_schema_for_slug=_load_master_and_schema_for_slug,
+                            resolve_metric_column=resolve_metric_column,
+                            find_baseline_column_for_stat=find_baseline_column_for_stat,
+                            match_row_idx=_match_row_idx,
+                            compute_rank_and_percentile=_compute_rank_and_percentile,
+                            risk_class_from_percentile=risk_class_from_percentile,
+                            normalize_fn=_portfolio_normalize,
+                        )
 
                     # If the selection context changed, prompt rebuild (avoid showing stale table)
                     context_now = {
