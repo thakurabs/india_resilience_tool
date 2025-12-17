@@ -44,6 +44,12 @@ from india_resilience_tool.viz.tables import build_rankings_table_df as _build_r
 
 from india_resilience_tool.utils.naming import alias
 
+from india_resilience_tool.app.sidebar import (
+    render_analysis_mode_selector,
+    render_hover_toggle_if_portfolio,
+    render_view_selector,
+)
+
 from matplotlib.backends.backend_pdf import PdfPages
 
 # -------------------------
@@ -985,14 +991,10 @@ with st.sidebar:
     )
 
     # Show hover toggle only in Multi-district portfolio mode
-    if analysis_mode_current == "Multi-district portfolio":
-        st.checkbox(
-            "Enable hover highlight & tooltip",
-            key="hover_enabled",
-            value=st.session_state.get("hover_enabled", True),
-        )
-    else:
-        # Optional: enforce a default behaviour outside portfolio mode
+    _ = render_hover_toggle_if_portfolio(analysis_mode_current)
+
+    # Preserve legacy behavior outside portfolio mode
+    if analysis_mode_current != "Multi-district portfolio":
         st.session_state.setdefault("hover_enabled", True)
 
     analysis_mode_placeholder = st.empty()  # Single vs multi-district analysis
@@ -1405,26 +1407,22 @@ with state_placeholder.container():
         ):
             st.session_state["selected_district"] = "All"
 
+        from india_resilience_tool.app.sidebar import render_analysis_mode_selector
+
         # ---- Step 2: Analysis focus (single vs multi-district) ----
-        st.markdown(
-            "<div style='font-weight:600; font-size:1rem; "
-            "margin-top:0.5rem; margin-bottom:-0.35rem;'>"
-            "Analysis focus</div>",
-            unsafe_allow_html=True,
-        )
-        analysis_mode = st.radio(
-            "Analysis focus",  # non-empty label for accessibility
+        analysis_mode = render_analysis_mode_selector(
+            label="Analysis focus",
             options=[
                 "Single district focus",
                 "Multi-district portfolio",
             ],
             index=0,
-            key="analysis_mode",
-            label_visibility="collapsed",
-            help=(
+            help_text=(
                 "Choose “Single district focus” to explore one district at a time, "
                 "or “Multi-district portfolio” to build and compare a set of districts."
             ),
+            label_visibility="collapsed",
+            use_markdown_header=True,
         )
 
         # Reset portfolio route state when switching analysis focus modes
@@ -1894,32 +1892,10 @@ with col1:
     # Main view selector: Map vs Rankings (replaces tabs)
     view_options = ["🗺 Map view", "📊 Rankings table"]
 
-    # Initialise widget + logical view defaults once
-    if "main_view_selector" not in st.session_state:
-        st.session_state["main_view_selector"] = view_options[0]
-    if "active_view" not in st.session_state:
-        st.session_state["active_view"] = st.session_state["main_view_selector"]
+    from india_resilience_tool.app.sidebar import render_view_selector
 
-    # One-shot hook: if some downstream control requested a jump to a specific
-    # left-panel view, honour it *before* the radio is instantiated.
-    if st.session_state.get("jump_to_rankings", False):
-        st.session_state["main_view_selector"] = "📊 Rankings table"
-        st.session_state["active_view"] = "📊 Rankings table"
-        st.session_state["jump_to_rankings"] = False
-    elif st.session_state.get("jump_to_map", False):
-        st.session_state["main_view_selector"] = "🗺 Map view"
-        st.session_state["active_view"] = "🗺 Map view"
-        st.session_state["jump_to_map"] = False
-
-    view = st.radio(
-        "View",
-        options=view_options,
-        key="main_view_selector",
-        horizontal=True,
-    )
-
-    # Keep logical view in sync with the widget
-    st.session_state["active_view"] = view
+    # Preserve the exact widget key + option strings; keep horizontal=True like legacy
+    view = render_view_selector(label="View", horizontal=True)
 
 # ---------- VIEW 1: MAP ----------
     if view == "🗺 Map view":
