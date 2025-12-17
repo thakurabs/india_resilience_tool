@@ -51,6 +51,8 @@ from india_resilience_tool.app.sidebar import (
     render_view_selector,
 )
 
+from india_resilience_tool.app.views.map_view import render_map_view
+
 from matplotlib.backends.backend_pdf import PdfPages
 
 # -------------------------
@@ -1887,84 +1889,25 @@ with col1:
 
 # ---------- VIEW 1: MAP ----------
     if view == "🗺 Map view":
-        analysis_mode = st.session_state.get(
-            "analysis_mode", "Single district focus"
+
+        returned, clicked_district, clicked_state = render_map_view(
+            m=m,
+            variable_slug=VARIABLE_SLUG,
+            map_mode=map_mode,
+            sel_scenario=sel_scenario,
+            sel_period=sel_period,
+            sel_stat=sel_stat,
+            selected_state=selected_state,
+            selected_district=selected_district,
+            map_width=MAP_WIDTH,
+            map_height=MAP_HEIGHT,
+            perf_section=perf_section,
         )
 
-        # In Multi-district portfolio mode, draw multi-point markers (if any)
-        if analysis_mode == "Multi-district portfolio":
-            # Multi-point collection (saved points)
-            points = st.session_state.get("point_query_points", [])
-            if isinstance(points, list):
-                for idx, pt in enumerate(points, start=1):
-                    if not isinstance(pt, dict):
-                        continue
-                    try:
-                        lat_p = float(pt.get("lat"))
-                        lon_p = float(pt.get("lon"))
-                    except (TypeError, ValueError):
-                        continue
-
-                    folium.Marker(
-                        location=[lat_p, lon_p],
-                        tooltip=f"Point {idx}: {lat_p:.4f}, {lon_p:.4f}",
-                    ).add_to(m)
-
-            # Active point (current point used in the Climate Profile)
-            point_query = st.session_state.get("point_query_latlon")
-            if isinstance(point_query, dict):
-                try:
-                    lat_q = float(point_query.get("lat"))
-                    lon_q = float(point_query.get("lon"))
-                    folium.Marker(
-                        location=[lat_q, lon_q],
-                        tooltip=f"Active point: {lat_q:.4f}, {lon_q:.4f}",
-                    ).add_to(m)
-                except (TypeError, ValueError):
-                    # Ignore invalid/partial values silently
-                    pass
-    
-        with perf_section("map: render st_folium"):
-            _state_key = str(selected_state).strip().lower().replace(" ", "_")
-            _district_key = str(selected_district).strip().lower().replace(" ", "_")
-            map_key = f"main_map_{VARIABLE_SLUG}_{map_mode}_{sel_scenario}_{sel_period}_{sel_stat}_{_state_key}_{_district_key}"
-
-            returned = st_folium(
-                m,
-                width=MAP_WIDTH,
-                height=MAP_HEIGHT,
-                returned_objects=[
-                    "last_object_clicked",
-                    "last_clicked",
-                ],
-                key=map_key,
-            )
-
-
-        def extract_district_name_from_returned(
-            ret,
-        ) -> Tuple[Optional[str], Optional[str]]:
-            if not ret:
-                return None, None
-            for key in (
-                "last_object_clicked",
-                "clicked_feature",
-                "last_active_drawing",
-                "last_object",
-            ):
-                feat = ret.get(key)
-                if isinstance(feat, dict):
-                    props = feat.get("properties") or feat
-                    for pk in ("district_name", "shapeName", "NAME", "name", "SHAPE_NAME"):
-                        val = props.get(pk) if isinstance(props, dict) else None
-                        if val:
-                            state_val = (
-                                props.get("state_name")
-                                or props.get("shapeGroup")
-                                or props.get("shapeName_0")
-                            )
-                            return str(val), (str(state_val) if state_val else None)
-            return None, None
+        if clicked_district:
+            st.session_state["pending_selected_district"] = clicked_district
+            if clicked_state:
+                st.session_state["pending_selected_state"] = clicked_state
 
     # ---------- VIEW 2: RANKINGS TABLE ----------
     elif view == "📊 Rankings table":
