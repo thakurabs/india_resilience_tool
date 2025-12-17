@@ -30,7 +30,8 @@ def apply_jump_once_flags() -> None:
     Contract:
     - If jump_to_rankings is True: set active_view + main_view_selector to Rankings
     - If jump_to_map is True: set active_view + main_view_selector to Map
-    - Always reset the corresponding jump flag to False immediately
+    - Reset jump flags immediately so the jump only applies once.
+    - If both flags are (accidentally) set, Rankings wins (legacy precedence).
     """
     import streamlit as st
 
@@ -40,8 +41,9 @@ def apply_jump_once_flags() -> None:
         ss["active_view"] = VIEW_RANKINGS
         ss["main_view_selector"] = VIEW_RANKINGS
         ss["jump_to_rankings"] = False
-
-    if ss.get("jump_to_map"):
+        # Prevent a later map jump overriding the rankings jump in the same run
+        ss["jump_to_map"] = False
+    elif ss.get("jump_to_map"):
         ss["active_view"] = VIEW_MAP
         ss["main_view_selector"] = VIEW_MAP
         ss["jump_to_map"] = False
@@ -102,7 +104,9 @@ def render_hover_toggle_if_portfolio(
 
     Contract:
       - key must remain 'hover_enabled'
-      - in single-district mode, do not show the checkbox
+      - checkbox rendered only in portfolio mode
+      - outside portfolio mode, preserve legacy behavior:
+        st.session_state.setdefault("hover_enabled", True)
 
     Returns:
         hover_enabled if rendered, else None
@@ -110,6 +114,8 @@ def render_hover_toggle_if_portfolio(
     import streamlit as st
 
     if analysis_mode != ANALYSIS_MODE_PORTFOLIO:
+        # Legacy: enforce default behavior outside portfolio mode
+        st.session_state.setdefault("hover_enabled", True)
         return None
 
     hover_enabled = st.checkbox(
@@ -118,6 +124,7 @@ def render_hover_toggle_if_portfolio(
         key="hover_enabled",
     )
     return hover_enabled
+
 
 
 def render_view_selector(

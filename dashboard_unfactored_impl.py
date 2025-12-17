@@ -45,6 +45,7 @@ from india_resilience_tool.viz.tables import build_rankings_table_df as _build_r
 from india_resilience_tool.utils.naming import alias
 
 from india_resilience_tool.app.sidebar import (
+    apply_jump_once_flags,
     render_analysis_mode_selector,
     render_hover_toggle_if_portfolio,
     render_view_selector,
@@ -966,18 +967,7 @@ perf_reset()
 
 # If a downstream control requested to jump to a specific left-panel view,
 # honour it BEFORE the main_view_selector radio is created.
-if st.session_state.get("jump_to_rankings", False):
-    st.session_state["active_view"] = "📊 Rankings table"
-    # Also sync the radio widget state so the UI reflects this jump
-    st.session_state["main_view_selector"] = "📊 Rankings table"
-    # Reset the flag so it only applies once
-    st.session_state["jump_to_rankings"] = False
-elif st.session_state.get("jump_to_map", False):
-    st.session_state["active_view"] = "🗺 Map view"
-    # Also sync the radio widget state so the UI reflects this jump
-    st.session_state["main_view_selector"] = "🗺 Map view"
-    # Reset the flag so it only applies once
-    st.session_state["jump_to_map"] = False
+apply_jump_once_flags()
 
 with st.sidebar:
     try:
@@ -991,11 +981,9 @@ with st.sidebar:
     )
 
     # Show hover toggle only in Multi-district portfolio mode
+    # (function also preserves legacy default outside portfolio mode)
     _ = render_hover_toggle_if_portfolio(analysis_mode_current)
 
-    # Preserve legacy behavior outside portfolio mode
-    if analysis_mode_current != "Multi-district portfolio":
-        st.session_state.setdefault("hover_enabled", True)
 
     analysis_mode_placeholder = st.empty()  # Single vs multi-district analysis
 
