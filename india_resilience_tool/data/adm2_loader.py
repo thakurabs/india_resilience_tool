@@ -145,37 +145,70 @@ def ensure_key_column(
 
 
 def featurecollections_by_state(
-    gdf: gpd.GeoDataFrame,
+    gdf,
     *,
     state_col: str,
-    normalize_state_fn: Callable[[str], str],
-    keep_cols: Optional[list[str]] = None,
+    normalize_state_fn,
+    keep_cols: list[str],
 ) -> dict[str, dict]:
     """
-    Build FeatureCollection per state (plus "all") using only identifiers + geometry.
+    Build a FeatureCollection per normalized state.
+
+    IMPORTANT: include non-geometry keep_cols as feature.properties.
+    Folium GeoJsonTooltip asserts if requested tooltip fields are missing from properties.
+
+    Args:
+        gdf: GeoDataFrame with at least state_col, geometry, and keep_cols.
+        state_col: column containing state names.
+        normalize_state_fn: function to normalize state names for dictionary keys.
+        keep_cols: columns to preserve; geometry will become feature.geometry,
+                   all other keep_cols become feature.properties.
 
     Returns:
-        dict[state_key] -> FeatureCollection
-        dict["all"] -> FeatureCollection
+        Dict: normalized_state -> GeoJSON FeatureCollection dict
     """
-    base = gdf.copy()
-    if keep_cols is None:
-        keep_cols = ["district_name", "state_name", "__key", "geometry"]
+    # Defensive: ensure we always have geometry
+    if "geometry" not in keep_cols:
+        keep_cols = [*keep_cols, "geometry"]
 
-    keep_cols = [c for c in keep_cols if c in base.columns]
-    base = base[keep_cols].copy()
+    props_cols = [c for c in keep_cols if c != "geometry" and c in gdf.columns]
 
-    fc_all = json.loads(base.to_json())
     by_state: dict[str, dict] = {}
 
-    for feat in fc_all.get("features", []):
-        props = feat.get("properties") or {}
-        state_name = props.get(state_col, "Unknown")
-        state_key = normalize_state_fn(str(state_name)) or "unknown"
-        by_state.setdefault(state_key, {"type": "FeatureCollection", "features": []})
-        by_state[state_key]["features"].append(feat)
+    # Group by raw state names (as present in data)
+    for raw_state, g in gdf.groupby(state_col, dropna=False):
+        norm_state = normalize_state_fn(str(raw_state)) if raw_state is not None else "unknown"
 
-    by_state["all"] = fc_all
+        features: list[dict] = []
+        for _, row in g.iterrows():
+            geom = row["geometry"]
+            if geom is None:
+                continue
+
+            # Build properties dict from requested cols (excluding geometry)
+            props: dict = {}
+            for c in props_cols:
+                v = row.get(c)
+                # make JSON-serializable / stable
+                if pd.isna(v):
+                    v = None
+                elif hasattr(v, "item"):  # numpy scalar
+                    v = v.item()
+                props[c] = v
+
+            features.append(
+                {
+                    "type": "Feature",
+                    "properties": props,
+                    "geometry": geom.__geo_interface__,
+                }
+            )
+
+        by_state[norm_state] = {
+            "type": "FeatureCollection",
+            "features": features,
+        }
+
     return by_state
 
 
