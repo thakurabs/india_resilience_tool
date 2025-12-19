@@ -1,11 +1,8 @@
 """
-Configuration modules (paths, scenarios, metrics registry) for IRT.
+Configuration package for India Resilience Tool.
 
-This namespace must not import from `india_resilience_tool.app` to avoid
-circular imports.
-
-Author: Abu Bakar Siddiqui Thakur
-Email: absthakur@resilience.org.in
+This package contains application constants and variable registry definitions.
 """
 
-from __future__ import annotations
+from india_resilience_tool.config.constants import *
+from india_resilience_tool.config.variables import *

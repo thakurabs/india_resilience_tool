@@ -54,7 +54,9 @@ from india_resilience_tool.app.sidebar import (
 from india_resilience_tool.app.views.map_view import render_map_view
 from india_resilience_tool.app.views.rankings_view import render_rankings_view
 from india_resilience_tool.app.views.details_panel import render_details_panel
+from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
 from india_resilience_tool.app.portfolio_ui import render_portfolio_panel
+from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -149,368 +151,33 @@ def render_perf_panel_safe() -> None:
 # -------------------------
 # CONFIG
 # -------------------------
-# PROJECT_ROOT = Path(__file__).resolve().parent
-# DATA_DIR = Path(r"D:\projects\irt_data\\")
-# DATA_DIR.mkdir(parents=True, exist_ok=True)
 from paths import DATA_DIR
 
+from india_resilience_tool.config.constants import (
+    SIMPLIFY_TOL_ADM2,
+    SIMPLIFY_TOL_ADM1,
+    MIN_LON,
+    MAX_LON,
+    MIN_LAT,
+    MAX_LAT,
+    FIG_SIZE_PANEL,
+    FIG_DPI_PANEL,
+    FONT_SIZE_TITLE,
+    FONT_SIZE_LABEL,
+    FONT_SIZE_TICKS,
+    FONT_SIZE_LEGEND,
+    LOGO_PATH,
+)
+
+from india_resilience_tool.config.variables import (
+    VARIABLES,
+    INDEX_GROUP_LABELS,
+)
+
+# Data paths derived from DATA_DIR
 ADM2_GEOJSON = DATA_DIR / "districts_4326.geojson"
 ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 OUTDIR = DATA_DIR
-LOGO_PATH = "./resilience_actions_logo_transparent.png"
-
-SIMPLIFY_TOL_ADM2 = 0.015
-SIMPLIFY_TOL_ADM1 = 0.01
-
-MIN_LON, MAX_LON = 68.0, 97.5
-MIN_LAT, MAX_LAT = 5, 45.0
-
-# ---- Figure / font styling for dashboard panels ----
-# These are used for the main small-panel figures (trend + scenario comparison)
-FIG_SIZE_PANEL: tuple[float, float] = (4.8, 2.4)  # width, height in inches
-FIG_DPI_PANEL: int = 150
-
-FONT_SIZE_TITLE: int = 9
-FONT_SIZE_LABEL: int = 8
-FONT_SIZE_TICKS: int = 8
-FONT_SIZE_LEGEND: int = 8
-
-# ---- Variable/Index registry ----
-# Each entry maps an "index slug" to:
-#  - label: what the user sees in the Index dropdown
-#  - periods_metric_col: the base metric name in master CSV (<metric>__<scenario>__<period>__<stat>)
-#  - description: human-readable definition used in tooltips
-#  - file patterns for district/state yearly series discovery
-VARIABLES = {
-    "tas_gt32": {
-        "label": "Summer Days",
-        "group": "temperature",
-        "periods_metric_col": "days_gt_32C",
-        "description": (
-            "Number of days in a year on which the district-average daily maximum near-surface "
-            "air temperature exceeds 30 °C."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "tasmax_csd_gt30": {
-        "label": "Consecutive Summer Days",
-        "group": "temperature",
-        "periods_metric_col": "consec_summer_days_gt_30C",
-        "description": (
-            "For each year, the maximum length (in days) of any spell of consecutive days "
-            "on which the district-average daily maximum temperature exceeds 30 °C."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "tasmax_csd_events_gt30": {
-        "label": "Consecutive Summer Day Events",
-        "group": "temperature",
-        "periods_metric_col": "csd_events_gt_30C",
-        "description": (
-            "Number of distinct ‘Consecutive Summer Day’ spells per year, where each spell "
-            "is a run of at least 5 consecutive days on which the district-average daily "
-            "maximum temperature exceeds 30 °C."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "tasmin_tropical_nights_gt20": {
-        "label": "Tropical Nights",
-        "group": "temperature",
-        "periods_metric_col": "tropical_nights_gt_20C",
-        "description": (
-            "Number of nights in a year on which the district-average daily minimum "
-            "temperature exceeds 20 °C."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "hwdi_tasmax_plus5C": {
-        "label": "Heat Wave Duration Index (HWDI, #Days)",
-        "group": "temperature",
-        "periods_metric_col": "hwdi_max_spell_len",
-        "description": (
-            "For each year, the length (in days) of the longest heat-wave spell. "
-            "Heat-wave spells are defined from days on which the district-average daily "
-            "maximum temperature is at least about 5 °C warmer than its local historical "
-            "normal (i.e. persistent, unusually hot days)."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "hwfi_tmean_90p": {
-        "label": "Heat Wave Frequency Index (HWFI, #Days)",
-        "group": "temperature",
-        "periods_metric_col": "hwfi_days_in_spells",
-        "description": (
-            "For each year, the total number of days that occur inside heat-wave spells. "
-            "Heat-wave spells are identified using the district-average daily mean "
-            "temperature exceeding a high threshold (around the 90th percentile of the "
-            "historical distribution) and persisting for several consecutive days."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "hwdi_events_tasmax_plus5C": {
-        "label": "Heat Wave Duration Index (HWDI, #Events)",
-        "group": "temperature",
-        "periods_metric_col": "hwdi_events_count",
-        "description": (
-            "Number of distinct heat-wave spells per year for the HWDI definition "
-            "(spells of unusually hot days based on daily maximum temperature being "
-            "roughly ≥5 °C above its local historical normal)."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "hwfi_events_tmean_90p": {
-        "label": "Heat Wave Frequency Index (HWFI, #Events)",
-        "group": "temperature",
-        "periods_metric_col": "hwfi_events_count",
-        "description": (
-            "Number of distinct heat-wave spells per year for the HWFI definition "
-            "(spells of several consecutive days on which the district-average daily "
-            "mean temperature exceeds a high percentile threshold, ~90th percentile)."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "tasmax_annual_mean": {
-        "label": "Annual Max Temperature",
-        "group": "temperature",
-        "periods_metric_col": "annual_tasmax_mean_C",
-        "description": (
-            "Annual mean of daily maximum near-surface air temperature (tasmax), in °C, "
-            "averaged over all days in the year for each district."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "tasmax_summer_mean": {
-        "label": "Summer Max Temperature",
-        "group": "temperature",
-        "periods_metric_col": "summer_tasmax_mean_C",
-        "description": (
-            "Mean of daily maximum temperature (tasmax), in °C, averaged over the "
-            "summer season (March–May) for each year and district."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "tasmin_annual_mean": {
-        "label": "Annual Min Temperature",
-        "group": "temperature",
-        "periods_metric_col": "annual_tasmin_mean_C",
-        "description": (
-            "Annual mean of daily minimum near-surface air temperature (tasmin), in °C, "
-            "averaged over all days in the year for each district."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "tasmin_winter_mean": {
-        "label": "Winter Min Temperature",
-        "group": "temperature",
-        "periods_metric_col": "winter_tasmin_mean_C",
-        "description": (
-            "Mean of daily minimum temperature (tasmin), in °C, averaged over the winter "
-            "season (December–February) for each year and district."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "rain_gt_2p5mm": {
-        "label": "Rainy days",
-        "group": "rain",
-        "periods_metric_col": "days_rain_gt_2p5mm",
-        "description": (
-            "Number of days in a year on which the district-average daily rainfall "
-            "exceeds 2.5 mm/day."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-        "pr_simple_daily_intensity": {
-        "label": "Simple Daily Intensity",
-        "group": "rain",
-        "periods_metric_col": "simple_daily_intensity_mm_per_day",
-        "description": (
-            "Ratio of total precipitation to the number of days with precipitation "
-            "≥ 1 mm, over the selected period (mm/day)."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "pr_max_1day_precip": {
-        "label": "Maximum 1-day Precipitation",
-        "group": "rain",
-        "periods_metric_col": "max_1day_precip_mm",
-        "description": (
-            "Seasonal or period-wise maximum of district-average daily precipitation "
-            "over any single day (mm)."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "pr_max_5day_precip": {
-        "label": "Highest Consecutive 5-day Precipitation",
-        "group": "rain",
-        "periods_metric_col": "max_5day_precip_mm",
-        "description": (
-            "Maximum total precipitation accumulated over any consecutive 5-day period "
-            "within the selected years (mm)."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "pr_5day_precip_events_gt50mm": {
-        "label": "Consecutive 5-day Precipitation Events (> 50 mm)",
-        "group": "rain",
-        "periods_metric_col": "consec_5day_precip_events",
-        "description": (
-            "Number of separate 5-day periods in which the total precipitation "
-            "exceeds 50 mm (events per period)."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "pr_heavy_precip_days_gt10mm": {
-        "label": "Heavy Precipitation Days (> 10 mm)",
-        "group": "rain",
-        "periods_metric_col": "heavy_precip_days_gt_10mm",
-        "description": (
-            "Number of days in the year with district-average daily precipitation "
-            "greater than 10 mm."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "pr_very_heavy_precip_days_gt25mm": {
-        "label": "Very Heavy Precipitation Days (> 25 mm)",
-        "group": "rain",
-        "periods_metric_col": "very_heavy_precip_days_gt_25mm",
-        "description": (
-            "Number of days in the year with district-average daily precipitation "
-            "greater than 25 mm."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "pr_consecutive_dry_days_lt1mm": {
-        "label": "Consecutive Dry Days (< 1 mm)",
-        "group": "rain",
-        "periods_metric_col": "consecutive_dry_days",
-        "description": (
-            "Longest stretch within the period of consecutive dry days with "
-            "daily precipitation less than 1 mm."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-    "pr_consecutive_dry_day_events_gt5": {
-        "label": "Consecutive Dry Day Events (> 5 days)",
-        "group": "rain",
-        "periods_metric_col": "consecutive_dry_day_events",
-        "description": (
-            "Number of separate periods with more than 5 consecutive dry days "
-            "(daily precipitation < 1 mm)."
-        ),
-        "district_yearly_candidates": [
-            "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
-        ],
-        "state_yearly_candidates": [
-            "{root}/{state}/state_yearly_ensemble_stats.csv"
-        ],
-    },
-
-}
-
-INDEX_GROUP_LABELS = {
-    "temperature": "Temperature",
-    "rain": "Rainfall",
-}
 
 
 # ---------- Name normalization / aliases ----------
@@ -2040,229 +1707,13 @@ with col2:
 
     # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
     if analysis_mode == "Multi-district portfolio" and portfolio_route == "saved_points":
-        # Container for multi-point saved list
-        if "point_query_points" not in st.session_state:
-            st.session_state["point_query_points"] = []
-
-        # --- Point-level query controls (lat–lon and map selection) ---
-        try:
-            minx, miny, maxx, maxy = merged.total_bounds
-            default_lat = float((miny + maxy) / 2.0)
-            default_lon = float((minx + maxx) / 2.0)
-        except Exception:
-            # Fallback to broad defaults if geometry bounds are unavailable
-            miny, maxy = -90.0, 90.0
-            minx, maxx = -180.0, 180.0
-            default_lat, default_lon = 20.0, 78.0
-
-        st.subheader("Saved points")
-
-        with st.expander("📍 Point selection", expanded=True):
-            st.caption(
-                "Choose locations either by typing coordinates or by clicking on the map, "
-                "and optionally save them as candidate points for your portfolio."
-            )
-
-            # -------------------------------
-            # Option 1 — Type coordinates
-            # -------------------------------
-            st.markdown("**Option 1 — Type coordinates**")
-
-            col_lat, col_lon = st.columns(2)
-            with col_lat:
-                lat_input = st.number_input(
-                    "Latitude",
-                    min_value=float(miny),
-                    max_value=float(maxy),
-                    value=float(st.session_state.get("point_query_lat", default_lat)),
-                    format="%.4f",
-                )
-            with col_lon:
-                lon_input = st.number_input(
-                    "Longitude",
-                    min_value=float(minx),
-                    max_value=float(maxx),
-                    value=float(st.session_state.get("point_query_lon", default_lon)),
-                    format="%.4f",
-                )
-
-            # Actions for the typed point:
-            # - Show on map (set as active point)
-            # - Save to list (for portfolio later)
-            col_set_active, col_save_point = st.columns(2)
-
-            # 1) Show this point on the map (set active point)
-            with col_set_active:
-                if st.button("Show on map", key="btn_use_latlon"):
-                    try:
-                        lat_f = float(lat_input)
-                        lon_f = float(lon_input)
-                    except (TypeError, ValueError):
-                        _portfolio_set_flash("Invalid latitude/longitude.", level="warning")
-                        st.rerun()
-
-                    st.session_state["point_query_lat"] = lat_f
-                    st.session_state["point_query_lon"] = lon_f
-                    st.session_state["point_query_latlon"] = {"lat": lat_f, "lon": lon_f}
-
-                    # Ensure the user is looking at the map; then rerun so the marker renders immediately.
-                    st.session_state["jump_to_map"] = True
-                    st.session_state["jump_to_rankings"] = False
-                    st.session_state["active_view"] = "🗺 Map view"
-                    st.rerun()
-
-            # 2) Add current typed point to saved list (multi-point / portfolio)
-            with col_save_point:
-                if st.button("Save point", key="btn_save_point"):
-                    try:
-                        lat_f = float(lat_input)
-                        lon_f = float(lon_input)
-                    except (TypeError, ValueError):
-                        lat_f, lon_f = None, None
-
-                    if lat_f is not None and lon_f is not None:
-                        pts = st.session_state.get("point_query_points", [])
-                        # Avoid exact duplicates
-                        exists = any(
-                            abs(p.get("lat") - lat_f) < 1e-6
-                            and abs(p.get("lon") - lon_f) < 1e-6
-                            for p in pts
-                        )
-                        if not exists:
-                            pts.append({"lat": lat_f, "lon": lon_f})
-                            st.session_state["point_query_points"] = pts
-
-            st.markdown("---")
-
-            # -------------------------------
-            # Option 2 — Select from map
-            # -------------------------------
-            st.markdown("**Option 2 — Select from map**")
-
-            col_pick_on_map, col_clear_point = st.columns(2)
-
-            # 3) Enable one-shot map selection
-            with col_pick_on_map:
-                if st.button("Click on map to choose", key="btn_select_on_map"):
-                    # Next map click will set the point and then turn this flag off
-                    st.session_state["point_query_select_on_map"] = True
-
-            # 4) Clear current active point
-            with col_clear_point:
-                if st.button("Clear active point", key="btn_clear_point"):
-                    # Clear any previously stored point selection and marker
-                    for _k in (
-                        "point_query_lat",
-                        "point_query_lon",
-                        "point_query_latlon",
-                        "point_query_select_on_map",
-                    ):
-                        st.session_state.pop(_k, None)
-                    clear_clicked = True
-
-            # Helper text when map-selection mode is active
-            if st.session_state.get("point_query_select_on_map", False):
-                st.info(
-                    "Map selection active: click once on the map to choose a point. "
-                    "The next click will set the point and turn off selection."
-                )
-
-            # ---- Saved multi-point list + portfolio glue ----
-            saved_points = st.session_state.get("point_query_points", [])
-            if saved_points:
-                st.markdown("**Saved points for portfolio selection**")
-                st.caption(
-                    "These points remember locations you care about. "
-                    "You can map them to districts and add those districts to the portfolio."
-                )
-                saved_points_df = pd.DataFrame(saved_points)
-                saved_points_df.index = saved_points_df.index + 1
-                st.dataframe(
-                    saved_points_df.rename(columns={"lat": "Latitude", "lon": "Longitude"}),
-                    use_container_width=True,
-                )
-
-                col_sp1, col_sp2 = st.columns(2)
-                with col_sp1:
-                    if st.button("Clear saved points", key="btn_clear_saved_points"):
-                        st.session_state["point_query_points"] = []
-
-                with col_sp2:
-                    if st.button(
-                        "Add saved points' districts to portfolio",
-                        key="btn_points_to_portfolio",
-                    ):
-                        pts = st.session_state.get("point_query_points", [])
-                        if not pts:
-                            _portfolio_set_flash(
-                                "No saved points found. Save at least one point first.",
-                                level="warning",
-                            )
-                            st.rerun()
-
-                        # Track what was already in the portfolio so we can count "new" additions.
-                        before_items = st.session_state.get("portfolio_districts", [])
-                        before_keys = set()
-                        for it in before_items:
-                            if isinstance(it, dict):
-                                before_keys.add(_portfolio_key(it.get("state"), it.get("district")))
-
-                        added_new = 0
-
-                        for p in pts:
-                            plat = p.get("lat")
-                            plon = p.get("lon")
-                            if plat is None or plon is None:
-                                continue
-                            try:
-                                pt = Point(float(plon), float(plat))
-                            except (TypeError, ValueError):
-                                continue
-
-                            # Use the same geometry logic as the main point query:
-                            try:
-                                contains_mask = merged.geometry.contains(pt)
-                                if contains_mask.any():
-                                    row = merged[contains_mask].iloc[0]
-                                else:
-                                    centroids = merged.geometry.centroid
-                                    dists = centroids.distance(pt)
-                                    idx = dists.idxmin()
-                                    row = merged.loc[idx]
-                            except Exception:
-                                continue
-
-                            state_name = str(row.get("state_name", "")).strip()
-                            district_name = str(row.get("district_name", "")).strip()
-                            if not (state_name and district_name):
-                                continue
-
-                            k = _portfolio_key(state_name, district_name)
-                            if k not in before_keys:
-                                before_keys.add(k)
-                                added_new += 1
-
-                            _portfolio_add(state_name, district_name)
-
-                        if added_new > 0:
-                            _portfolio_set_flash(
-                                f"Added {added_new} new district(s) to the portfolio from saved points.",
-                                level="success",
-                            )
-                        else:
-                            _portfolio_set_flash(
-                                "No new districts were added (they may already be in the portfolio).",
-                                level="info",
-                            )
-
-                        # Force a rerun so the Portfolio analysis panel (above) re-renders with the updated list.
-                        st.rerun()
-
-            else:
-                st.caption(
-                    "Use **Save point** to build a list of locations and then "
-                    "send their districts into the multi-district portfolio."
-                )
+        # ---- POINT SELECTION PANEL (extracted to point_selection_ui.py) ----
+        clear_clicked = render_point_selection_panel(
+            merged=merged,
+            portfolio_add_fn=_portfolio_add,
+            portfolio_key_fn=_portfolio_key,
+            portfolio_set_flash_fn=_portfolio_set_flash,
+        )
 
     clicked_feature = None
     click_coords = None
@@ -2402,183 +1853,27 @@ with col2:
                 merged, adm1, metric_col, selected_state
             )
 
-            st.subheader(f"{selected_state} — State summary")
-            st.markdown(
-                f"**Index:** {VARIABLES[VARIABLE_SLUG]['label']}  \n"
-                f"**Scenario:** {sel_scenario}  \n"
-                f"**Period:** {sel_period}"
+            # ---- STATE SUMMARY VIEW (extracted to state_summary_view.py) ----
+            render_state_summary_view(
+                # State/selection context
+                selected_state=selected_state,
+                # Variable/metric context
+                variables=VARIABLES,
+                variable_slug=VARIABLE_SLUG,
+                sel_scenario=sel_scenario,
+                sel_period=sel_period,
+                sel_stat=sel_stat,
+                metric_col=metric_col,
+                # Pre-computed metrics
+                ensemble=ensemble,
+                per_model_df=per_model_df,
+                sel_districts_gdf=sel_districts_gdf,
+                # Config
+                processed_root=PROCESSED_ROOT,
+                pilot_state=PILOT_STATE,
+                # Callable dependencies
+                make_state_boxplot_fn=make_state_boxplot_for_districts,
             )
-
-            # --- Expander 2: District-wise distribution across models (boxplot) ---
-            with st.expander("District-wise distribution across models", expanded=False):
-                st.caption(
-                    "This figure can be slow to generate because it uses per-model "
-                    "distributions for each district."
-                )
-                if st.button(
-                    "Generate district-wise boxplot",
-                    key=f"btn_state_boxplot_{VARIABLE_SLUG}_{selected_state}_{sel_scenario}_{sel_period}_{sel_stat}",
-                ):
-                    fig_box = make_state_boxplot_for_districts(
-                        sel_districts_gdf=sel_districts_gdf,
-                        metric_col=metric_col,
-                        metric_label=VARIABLES[VARIABLE_SLUG]["label"],
-                        sel_state=selected_state,
-                        sel_scenario=sel_scenario,
-                        sel_period=sel_period,
-                        sel_stat=sel_stat,
-                    )
-                    if fig_box is not None:
-                        st.pyplot(fig_box, width="stretch")
-                    else:
-                        st.info(
-                            "Per-model district data is not available for this index, "
-                            "so the boxplot could not be generated."
-                        )
-                # else:
-                #     st.info("Click the button above to generate the boxplot when needed.")
-
-            # --- Helper functions for state-level yearly time-series (unchanged) ---
-            @st.cache_data
-            def _load_state_yearly(ts_root_str: str, state_dir: str) -> pd.DataFrame:
-                from india_resilience_tool.analysis.timeseries import load_state_yearly
-
-                return load_state_yearly(
-                    ts_root=Path(ts_root_str),
-                    state_dir=state_dir,
-                    varcfg=None,
-                )
-
-            def _make_state_yearly_pdf(
-                df_yearly: pd.DataFrame,
-                state_name: str,
-                scenario_name: str,
-                metric_label: str,
-                out_dir: Path,
-            ) -> Optional[Path]:
-                if df_yearly is None or df_yearly.empty:
-                    return None
-                d = df_yearly.copy()
-                d = d[
-                    (d["state"].astype(str).str.strip().str.lower() == state_name.strip().lower())
-                    & (
-                        d["scenario"]
-                        .astype(str)
-                        .str.strip()
-                        .str.lower()
-                        == scenario_name.strip().lower()
-                    )
-                ]
-                if d.empty:
-                    return None
-                for c in ("year", "mean", "p05", "p95"):
-                    if c in d.columns:
-                        d[c] = pd.to_numeric(d[c], errors="coerce")
-                d = d.dropna(subset=["year"]).sort_values("year")
-                if d.empty:
-                    return None
-
-                fig, ax = plt.subplots(figsize=(7.5, 4.5), dpi=150)
-                x = d["year"]
-                y = d["mean"]
-                ax.plot(x, y, marker="o", linewidth=1.5, label="Mean")
-
-                if "p05" in d.columns and "p95" in d.columns:
-                    ax.fill_between(
-                        x,
-                        d["p05"],
-                        d["p95"],
-                        alpha=0.2,
-                        label="5–95% range",
-                    )
-
-                ax.set_xlabel("Year")
-                ax.set_ylabel(metric_label)
-                ax.set_title(f"{state_name} — {metric_label} ({scenario_name})")
-                ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-                ax.legend(frameon=False, ncol=3, fontsize=9)
-                out_dir.mkdir(parents=True, exist_ok=True)
-
-                safe = lambda s: "".join(
-                    c if c.isalnum() or c in ("-", "_") else "_" for c in str(s)
-                )
-                pdf_path = (
-                    out_dir
-                    / f"{safe(state_name)}__{safe(metric_label)}__{safe(scenario_name)}__yearly_timeseries.pdf"
-                )
-                fig.tight_layout()
-                fig.savefig(pdf_path, format="pdf")
-                plt.close(fig)
-                return pdf_path
-
-            # Only show these state-summary expanders when NOT in multi-district portfolio mode
-            analysis_mode_state = st.session_state.get("analysis_mode", "Single district focus")
-
-            if analysis_mode_state != "Multi-district portfolio":
-
-                # --- Expander 1: State summary statistics (like district Risk summary) ---
-                with st.expander("State summary statistics", expanded=False):
-                    if ensemble.get("n_districts", 0) > 0:
-                        stat_rows = [
-                            {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
-                            {"Statistic": "median", "Value": f"{ensemble['median']:.2f}"},
-                            {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
-                            {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
-                            {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
-                            {
-                                "Statistic": "n_districts",
-                                "Value": str(int(ensemble["n_districts"])),
-                            },
-                        ]
-                        st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
-                    else:
-                        st.info("No numeric district values found for this state & selection.")
-
-                # --- Expander 2: Per-model state averages ---
-                with st.expander("Per-model state averages", expanded=False):
-                    if not per_model_df.empty:
-                        # st.markdown("**Per-model state averages**")
-                        st.dataframe(
-                            per_model_df.rename(
-                                columns={"value": "state_avg", "n_districts": "n_districts_used"}
-                            ),
-                            width="stretch",
-                        )
-
-                    if sel_districts_gdf is not None and not sel_districts_gdf.empty:
-                        st.caption(f"Districts used: {len(sel_districts_gdf)}")
-
-                # --- Expander 3: Trend over time (state-average) ---
-                with st.expander("Trend over time (state average)", expanded=False):
-                    st.caption(
-                        "Generates a state-average yearly trend plot and PDF for the "
-                        "selected index, scenario, and period."
-                    )
-
-                    if st.button(
-                        "Generate state-average trend PDF",
-                        key=f"btn_state_trend_{VARIABLE_SLUG}_{selected_state}_{sel_scenario}",
-                    ):
-                        _yearly_df = _load_state_yearly(str(PROCESSED_ROOT), PILOT_STATE)
-                        pdf_path = _make_state_yearly_pdf(
-                            _yearly_df,
-                            selected_state,
-                            sel_scenario,
-                            VARIABLES[VARIABLE_SLUG]["label"],
-                            PROCESSED_ROOT / "pdf_plots",
-                        )
-                        if pdf_path is not None and pdf_path.exists():
-                            with open(pdf_path, "rb") as fh:
-                                st.download_button(
-                                    "⬇️ Download state-average time-series (PDF)",
-                                    fh.read(),
-                                    file_name=pdf_path.name,
-                                    mime="application/pdf",
-                                )
-                        else:
-                            st.info(
-                                "State-average yearly time-series is not available for this combination."
-                            )
 
     # ----------- DISTRICT DETAILS MODE (enhanced) -----------
     else:
