@@ -53,6 +53,7 @@ from india_resilience_tool.app.sidebar import (
 
 from india_resilience_tool.app.views.map_view import render_map_view
 from india_resilience_tool.app.views.rankings_view import render_rankings_view
+from india_resilience_tool.app.views.details_panel import render_details_panel
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -3091,84 +3092,7 @@ with col2:
         except Exception:
             pass
 
-        # ---- Wrap risk cards in an expander slab ----
-        with st.expander("Risk summary", expanded=True):
-
-            colc1, colc2, colc3 = st.columns(3)
-            with colc1:
-                st.markdown("**Current value**")
-                if current_val_f is not None:
-                    st.metric(
-                        label="Current Value",
-                        label_visibility="collapsed",
-                        value=f"{current_val_f:.2f}",
-                        help=f"{VARIABLES[VARIABLE_SLUG]['label']} ({sel_scenario}, {sel_period}, {sel_stat})",
-                    )
-                else:
-                    st.write("No data")
-
-            with colc2:
-                st.markdown("**Change vs baseline**")
-                if current_val_f is not None and baseline_val_f is not None:
-                    diff_abs = current_val_f - baseline_val_f
-                    diff_pct = (
-                        (diff_abs / baseline_val_f * 100.0)
-                        if baseline_val_f not in (0.0, None)
-                        else None
-                    )
-                    delta_str = f"{diff_abs:+.2f}"
-                    if diff_pct is not None:
-                        delta_str += f" ({diff_pct:+.1f}%)"
-
-                    # Pretty baseline descriptor: only scenario, period, stat
-                    if baseline_col:
-                        parts = str(baseline_col).split("__")
-                        if len(parts) == 4:
-                            _, base_scenario, base_period, base_stat = parts
-                            baseline_desc = f"{base_scenario}, {base_period}, {base_stat}"
-                        else:
-                            baseline_desc = str(baseline_col)
-                    else:
-                        baseline_desc = "not found"
-
-                    st.metric(
-                        label="Change Vs Baseline",
-                        label_visibility="collapsed",
-                        value=f"{baseline_val_f:.2f}",
-                        delta=delta_str,
-                        help=f"Baseline: {baseline_desc}",
-                    )
-                else:
-                    st.write("Baseline not available")
-
-            with colc3:
-                st.markdown("**Position in state**")
-                if rank_in_state is not None and n_in_state is not None:
-                    # Display as "3/33" style rank
-                    rank_label = f"{rank_in_state}/{n_in_state}"
-
-                    if percentile_state is not None:
-                        help_text = (
-                            f"Approximate percentile: {percentile_state:.0f}th\n"
-                            f"Computed among {n_in_state} districts in {state_to_show} "
-                            f"for this index (higher values = higher rank)."
-                        )
-                    else:
-                        help_text = (
-                            f"Computed among {n_in_state} districts in {state_to_show} "
-                            f"(higher values = higher rank)."
-                        )
-
-                    st.metric(
-                        label="Rank in state",
-                        label_visibility="collapsed",
-                        value=rank_label,
-                        help=help_text,
-                    )
-                else:
-                    st.write("Insufficient data")
-
-        # ---- Sparkline + uncertainty band (1.2) & narrative (1.3) ----
+        # ---- Helper functions for time series and case study ----
 
         @st.cache_data
         def _read_yearly_csv(fpath: Path) -> pd.DataFrame:
@@ -3253,103 +3177,6 @@ with col2:
                     d[c] = pd.to_numeric(d[c], errors="coerce")
             d = d.dropna(subset=["year", "mean"]).sort_values("year")
             return d
-
-        def _make_district_yearly_pdf(
-            df_yearly: pd.DataFrame,
-            state_name: str,
-            district_name: str,
-            scenario_name: str,
-            metric_label: str,
-            out_dir: Path,
-        ) -> Optional[Path]:
-            """
-            Make a PDF for a *single scenario* time series (reused for download).
-            """
-            if df_yearly is None or df_yearly.empty:
-                return None
-            d = df_yearly.copy()
-            cols = set(map(str, d.columns))
-            if not {"district", "scenario", "year", "mean"}.issubset(cols):
-                return None
-            if "state" not in d.columns:
-                d["state"] = state_name
-            has_p05, has_p95 = ("p05" in d.columns), ("p95" in d.columns)
-
-            def _n(s: str) -> str:
-                return alias(s)
-
-            d["_state_key"] = d["state"].astype(str).map(_n)
-            d["_district_key"] = d["district"].astype(str).map(_n)
-            d["_scen_key"] = d["scenario"].astype(str).str.strip().str.lower()
-            mask = (
-                (d["_state_key"] == _n(state_name))
-                & (d["_district_key"] == _n(district_name))
-                & (d["_scen_key"] == scenario_name.strip().lower())
-            )
-            if not mask.any():
-                mask = (
-                    (d["_state_key"] == _n(state_name))
-                    & d["_district_key"].str.contains(_n(district_name), na=False)
-                    & (d["_scen_key"] == scenario_name.strip().lower())
-                )
-            if not mask.any():
-                cand = d.loc[
-                    (d["_state_key"] == _n(state_name))
-                    & (d["_scen_key"] == scenario_name.strip().lower()),
-                    "_district_key",
-                ].dropna().unique().tolist()
-                best = difflib.get_close_matches(_n(district_name), cand, n=1, cutoff=0.72)
-                if best:
-                    mask = (
-                        (d["_state_key"] == _n(state_name))
-                        & (d["_district_key"] == best[0])
-                        & (d["_scen_key"] == scenario_name.strip().lower())
-                    )
-
-            d = d[mask]
-            if d.empty:
-                return None
-
-            for c in ("year", "mean"):
-                d[c] = pd.to_numeric(d[c], errors="coerce")
-            if has_p05:
-                d["p05"] = pd.to_numeric(d.get("p05"), errors="coerce")
-            if has_p95:
-                d["p95"] = pd.to_numeric(d.get("p95"), errors="coerce")
-            d = d.dropna(subset=["year"]).sort_values("year")
-            if d.empty:
-                return None
-
-            fig, ax = plt.subplots(figsize=(7.5, 4.5), dpi=150)
-            ax.plot(d["year"], d["mean"], linewidth=3.0, label="Mean")
-            if has_p05:
-                ax.plot(d["p05"], linewidth=1.5, label="5th percentile")
-            if has_p95:
-                ax.plot(d["p95"], linewidth=1.5, label="95th percentile")
-            ax.set_xlabel("Year")
-            ax.set_ylabel(metric_label)
-            ax.set_title(
-                f"{district_name}, {state_name} • {metric_label} • {scenario_name}"
-            )
-            ax.grid(True, linestyle="--", alpha=0.35)
-            ax.legend(frameon=False, ncol=3, fontsize=9)
-            out_dir.mkdir(parents=True, exist_ok=True)
-            safe = lambda s: "".join(
-                c if c.isalnum() or c in ("-", "_") else "_" for c in str(s)
-            )
-            pdf_path = (
-                out_dir
-                / f"{safe(state_name)}__{safe(district_name)}__"
-                  f"{safe(metric_label)}__{safe(scenario_name)}__yearly_timeseries.pdf"
-            )
-            fig.tight_layout()
-            fig.savefig(pdf_path, format="pdf")
-            plt.close(fig)
-            return pdf_path
-
-        from india_resilience_tool.viz.charts import (
-            create_trend_figure_for_index as _create_trend_figure_for_index,
-        )
 
         def _build_district_case_study_data(
             state_name: str,
@@ -3448,9 +3275,9 @@ with col2:
                 ]
 
                 desired_col = f"{registry_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
-                metric_col = desired_col if desired_col in df_master.columns else None
+                metric_col_local = desired_col if desired_col in df_master.columns else None
 
-                if metric_col is None:
+                if metric_col_local is None:
                     if not metric_col_candidates:
                         continue
 
@@ -3462,9 +3289,9 @@ with col2:
                         c for c in metric_col_candidates
                         if _stat_norm(c.split("__")[-1]) == sel_stat_norm
                     ]
-                    metric_col = stat_matches[0] if stat_matches else metric_col_candidates[0]
+                    metric_col_local = stat_matches[0] if stat_matches else metric_col_candidates[0]
 
-                used_stat = str(metric_col).split("__")[-1]
+                used_stat = str(metric_col_local).split("__")[-1]
 
                 # Robust match for a single state+district row
                 dm = df_master.copy()
@@ -3492,57 +3319,57 @@ with col2:
                 row_local = dm.loc[mask].iloc[0]
 
                 # Current value (try fallback columns if the chosen one is NaN)
-                current_val_f = None
+                current_val_f_local = None
 
-                current_val = row_local.get(metric_col)
-                current_val_try = pd.to_numeric([current_val], errors="coerce")[0]
+                current_val_local = row_local.get(metric_col_local)
+                current_val_try = pd.to_numeric([current_val_local], errors="coerce")[0]
                 if not pd.isna(current_val_try):
-                    current_val_f = float(current_val_try)
+                    current_val_f_local = float(current_val_try)
                 else:
                     # Try alternate stat columns for the same metric/scenario/period
                     for alt_col in metric_col_candidates:
-                        if alt_col == metric_col:
+                        if alt_col == metric_col_local:
                             continue
                         alt_val = row_local.get(alt_col)
                         alt_try = pd.to_numeric([alt_val], errors="coerce")[0]
                         if not pd.isna(alt_try):
-                            metric_col = alt_col
-                            used_stat = str(metric_col).split("__")[-1]
-                            current_val_f = float(alt_try)
+                            metric_col_local = alt_col
+                            used_stat = str(metric_col_local).split("__")[-1]
+                            current_val_f_local = float(alt_try)
                             break
 
                 # Baseline for same metric/stat in historical baseline period
-                baseline_col = find_baseline_column_for_stat(
+                baseline_col_local = find_baseline_column_for_stat(
                     dm.columns, registry_metric, used_stat
                 )
 
-                baseline_col = find_baseline_column_for_stat(dm.columns, registry_metric, sel_stat)
-                baseline_val_f = None
-                if baseline_col and baseline_col in dm.columns:
-                    baseline_val = row_local.get(baseline_col)
-                    baseline_val_f = pd.to_numeric([baseline_val], errors="coerce")[0]
-                    if pd.isna(baseline_val_f):
-                        baseline_val_f = None
+                baseline_col_local = find_baseline_column_for_stat(dm.columns, registry_metric, sel_stat)
+                baseline_val_f_local = None
+                if baseline_col_local and baseline_col_local in dm.columns:
+                    baseline_val_local = row_local.get(baseline_col_local)
+                    baseline_val_f_local = pd.to_numeric([baseline_val_local], errors="coerce")[0]
+                    if pd.isna(baseline_val_f_local):
+                        baseline_val_f_local = None
 
-                if current_val_f is not None and baseline_val_f is not None:
-                    delta_abs = current_val_f - baseline_val_f
+                if current_val_f_local is not None and baseline_val_f_local is not None:
+                    delta_abs = current_val_f_local - baseline_val_f_local
                     delta_pct = None
-                    if baseline_val_f not in (0.0,):
-                        delta_pct = (delta_abs / baseline_val_f) * 100.0
+                    if baseline_val_f_local not in (0.0,):
+                        delta_pct = (delta_abs / baseline_val_f_local) * 100.0
                 else:
                     delta_abs = None
                     delta_pct = None
 
                 # Ranking within state
                 state_mask = dm["_state_key"] == target_state
-                state_vals = pd.to_numeric(dm.loc[state_mask, metric_col], errors="coerce").dropna()
-                n_in_state = int(len(state_vals)) if len(state_vals) else None
-                rank_in_state = None
+                state_vals_local = pd.to_numeric(dm.loc[state_mask, metric_col_local], errors="coerce").dropna()
+                n_in_state_local = int(len(state_vals_local)) if len(state_vals_local) else None
+                rank_in_state_local = None
                 percentile_in_state = None
-                if n_in_state and current_val_f is not None:
-                    rank_in_state = int((state_vals > current_val_f).sum() + 1)
+                if n_in_state_local and current_val_f_local is not None:
+                    rank_in_state_local = int((state_vals_local > current_val_f_local).sum() + 1)
                     from india_resilience_tool.analysis.metrics import compute_percentile_in_state
-                    percentile_in_state = compute_percentile_in_state(state_vals, current_val_f, method="lt")
+                    percentile_in_state = compute_percentile_in_state(state_vals_local, current_val_f_local, method="lt")
                 risk_class = (
                     risk_class_from_percentile(percentile_in_state)
                     if percentile_in_state is not None
@@ -3557,13 +3384,13 @@ with col2:
                         "scenario": sel_scenario,
                         "period": sel_period,
                         "stat": sel_stat,
-                        "current": current_val_f,
-                        "baseline": baseline_val_f,
+                        "current": current_val_f_local,
+                        "baseline": baseline_val_f_local,
                         "delta_abs": delta_abs,
                         "delta_pct": delta_pct,
-                        "rank_in_state": rank_in_state,
+                        "rank_in_state": rank_in_state_local,
                         "percentile_in_state": percentile_in_state,
-                        "n_in_state": n_in_state,
+                        "n_in_state": n_in_state_local,
                         "risk_class": risk_class,
                     }
                 )
@@ -3586,11 +3413,11 @@ with col2:
                     varcfg=varcfg,
                     aliases=NAME_ALIASES,
                 )
-                hist_ts = _filter_series_for_trend(hist_df, state_name, district_name)
-                scen_ts = _filter_series_for_trend(scen_df, state_name, district_name)
+                hist_ts_local = _filter_series_for_trend(hist_df, state_name, district_name)
+                scen_ts_local = _filter_series_for_trend(scen_df, state_name, district_name)
                 timeseries_by_index[slug] = {
-                    "historical": hist_ts,
-                    "scenario": scen_ts,
+                    "historical": hist_ts_local,
+                    "scenario": scen_ts_local,
                 }
 
                 # Scenario comparison panel (period-mean across scenarios)
@@ -3686,417 +3513,75 @@ with col2:
             aliases=NAME_ALIASES,
         )
 
-        # ---- Trend over time (collapsible) ----
-        with st.expander("Trend over time", expanded=False):
-            st.caption(
-                f"Looking for yearly CSVs under: {state_dir_for_fs} / {district_for_fs} "
-                f"(historical + {sel_scenario})"
-            )
+        # Prepare time series for the details panel
+        hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name)
+        scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name)
 
-            # Prepare clean series for plotting
-            hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name)
-            scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name)
+        # Import required functions for details panel
+        from india_resilience_tool.viz.charts import (
+            create_trend_figure_for_index as _create_trend_figure_for_index,
+        )
+        from india_resilience_tool.viz.exports import (
+            make_district_yearly_pdf,
+            make_district_case_study_pdf as _make_district_case_study_pdf_impl,
+            make_case_study_zip as _make_case_study_zip_impl,
+        )
+        from india_resilience_tool.data.discovery import slugify_fs
 
-            if not hist_ts.empty or not scen_ts.empty:
-                st.markdown("**Trend over time**")
-
-                fig_ts = _create_trend_figure_for_index(
-                    hist_ts=hist_ts,
-                    scen_ts=scen_ts,
-                    idx_label=VARIABLES[VARIABLE_SLUG]["label"],
-                    scenario_name=sel_scenario,
-                )
-                st.pyplot(fig_ts)
-
-                # Narrative: use combined range (historical + scenario if available)
-                try:
-                    parts = []
-                    if not hist_ts.empty:
-                        parts.append(hist_ts[["year", "mean"]])
-                    if not scen_ts.empty:
-                        parts.append(scen_ts[["year", "mean"]])
-                    if parts:
-                        combined = pd.concat(parts, ignore_index=True).sort_values("year")
-                        start_year = int(combined["year"].iloc[0])
-                        end_year = int(combined["year"].iloc[-1])
-                        start_val = float(combined["mean"].iloc[0])
-                        end_val = float(combined["mean"].iloc[-1])
-                        delta = end_val - start_val
-                        pct = (delta / start_val * 100.0) if start_val not in (0.0, None) else None
-
-                        if abs(delta) < 0.1:
-                            trend_word = "has remained broadly stable"
-                        elif delta > 0:
-                            trend_word = "has increased"
-                        else:
-                            trend_word = "has decreased"
-
-                        if pct is not None:
-                            st.markdown(
-                                f"**Narrative:** Between **{start_year}** and **{end_year}**, "
-                                f"{VARIABLES[VARIABLE_SLUG]['label'].lower()} in **{district_name}** "
-                                f"{trend_word}, from about **{start_val:.1f}** to **{end_val:.1f}** "
-                                f"({pct:+.1f}% change)."
-                            )
-                        else:
-                            st.markdown(
-                                f"**Narrative:** Between **{start_year}** and **{end_year}**, "
-                                f"{VARIABLES[VARIABLE_SLUG]['label'].lower()} in **{district_name}** "
-                                f"{trend_word}."
-                            )
-                except Exception:
-                    pass
-            else:
-                st.caption("No yearly time-series available for this district (historical or scenario).")
-
-        # ---- Scenario comparison mini-panel (period-mean across scenarios) ----
-        with st.expander("Scenario comparison (period-mean)", expanded=False):
-            panel_df = build_scenario_comparison_panel_for_row(
-                row=row,
-                schema_items=schema_items,
-                metric_name=sel_metric,
-                sel_stat=sel_stat,
-            )
-
-            if panel_df is not None and not panel_df.empty:
-
-                fig_sc, ax_sc = make_scenario_comparison_figure(
-                    panel_df=panel_df,
-                    metric_label=VARIABLES[VARIABLE_SLUG]["label"],
-                    sel_scenario=sel_scenario,
-                    sel_period=sel_period,
-                    sel_stat=sel_stat,
-                    district_name=district_name,
-                    figsize=FIG_SIZE_PANEL,
-                    fig_dpi=FIG_DPI_PANEL,
-                    font_size_title=FONT_SIZE_TITLE,
-                    font_size_label=FONT_SIZE_LABEL,
-                    font_size_ticks=FONT_SIZE_TICKS,
-                    font_size_legend=FONT_SIZE_LEGEND,
-                )
-
-                if fig_sc is not None:
-                    st.pyplot(fig_sc)
-
-                # Optional numeric summary in text, IPCC-style
-                # (uses global PERIOD_ORDER to ensure consistent ordering)
-                lines = []
-                for period in PERIOD_ORDER:
-                    sub = panel_df[panel_df["period"] == period]
-                    if sub.empty:
-                        continue
-                    # Collect scenario=value pairs for this period
-                    parts = []
-                    for scen in ["historical", "ssp245", "ssp585"]:
-                        sub_s = sub[sub["scenario"] == scen]
-                        if sub_s.empty:
-                            continue
-                        val = sub_s["value"].iloc[0]
-                        parts.append(f"{SCENARIO_DISPLAY.get(scen, scen)} = {val:.1f}")
-                    if parts:
-                        lines.append(f"- **{period}**: " + ", ".join(parts))
-
-                if lines:
-                    st.markdown(
-                        "For this district and selected statistic, the **period-average** values are:\n"
-                        + "\n".join(lines)
-                    )
-            else:
-                st.caption(
-                    "Scenario comparison (period-mean) not available for this district/index combination."
-                )
-
-        # st.markdown("---")
-
-        def _make_district_yearly_pdf(
-            df_yearly: pd.DataFrame,
-            state_name: str,
-            district_name: str,
-            scenario_name: str,
-            metric_label: str,
-            out_dir: Path,
-        ) -> Optional[Path]:
-            from india_resilience_tool.viz.exports import make_district_yearly_pdf
-
-            return make_district_yearly_pdf(
-                df_yearly=df_yearly,
-                state_name=state_name,
-                district_name=district_name,
-                scenario_name=scenario_name,
-                metric_label=metric_label,
-                out_dir=out_dir,
-            )
-
-        # ---- Detailed statistics (collapsible) ----
-        with st.expander("Detailed statistics for selected district", expanded=False):
-            # Basic stats table
-            stats_list = ["mean", "median", "p05", "p95", "std"]
-            rows_stats = []
-            for sname in stats_list:
-                coln = f"{sel_metric}__{sel_scenario}__{sel_period}__{sname}"
-                val = row.get(coln)
-                rows_stats.append(
-                    {
-                        "Statistic": sname,
-                        "Value": val,
-                    }
-                )
-
-            df_stats_state = pd.DataFrame(rows_stats)
-            # Make sure Value is numeric where possible; this avoids Arrow complaining
-            df_stats_state["Value"] = pd.to_numeric(df_stats_state["Value"], errors="coerce")
-            st.table(df_stats_state.set_index("Statistic"))
-
-            # -----------------------------
-            # Optional PDF generation + reuse via session_state
-            # -----------------------------
-            st.caption(
-                "You can optionally generate a PDF of the district's yearly "
-                "time-series for the selected scenario."
-            )
-
-            # Unique key for storing the PDF path for this district/scenario
-            pdf_state_key = (
-                f"district_pdf_path_"
-                f"{VARIABLE_SLUG}_{state_to_show}_{selected_district}_{sel_scenario}"
-            )
-            pdf_path_d = st.session_state.get(pdf_state_key)
-
-            # Button to (re)generate the PDF
-            if st.button(
-                "Generate district yearly time-series PDF",
-                key=f"btn_district_pdf_{VARIABLE_SLUG}_{state_to_show}_{selected_district}_{sel_scenario}",
-            ):
-                pdf_path_d = _make_district_yearly_pdf(
-                    df_yearly=_district_yearly_scen,
-                    state_name=state_to_show,
-                    district_name=row.get("district_name", selected_district),
-                    scenario_name=sel_scenario,
-                    metric_label=VARIABLES[VARIABLE_SLUG]["label"],
-                    out_dir=OUTDIR,
-                )
-
-                # Store or clear in session_state depending on success
-                if pdf_path_d and pdf_path_d.exists():
-                    st.session_state[pdf_state_key] = pdf_path_d
-                else:
-                    st.session_state.pop(pdf_state_key, None)
-                    pdf_path_d = None
-
-            # Show download + open-in-new-tab link if we have a valid PDF
-            if pdf_path_d and pdf_path_d.exists():
-                with open(pdf_path_d, "rb") as fh:
-                    st.download_button(
-                        "⬇️ Download district yearly time-series (PDF)",
-                        fh.read(),
-                        file_name=pdf_path_d.name,
-                        mime="application/pdf",
-                        key="btn_dist_pdf_dl",
-                    )
-
-                abs_url_d = pdf_path_d.resolve().as_uri()
-                st.markdown(
-                    f'<a href="{abs_url_d}" target="_blank" rel="noopener">'
-                    f"🗎 Open district yearly figure in a new tab</a>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.caption(
-                    "No yearly time-series PDF is currently available for this "
-                    "district/scenario. Click the button above to generate it."
-                )
-
-        # st.markdown("---")
-
-        # ---- Case study export: single district, multi-index (MVP) ----
-        with st.expander("📄 Case study export (single district, multi-index)", expanded=False):
-            st.caption(
-                "Build a case-study style report for the selected district across "
-                "multiple climate indices (experimental)."
-            )
-
-            index_options = list(VARIABLES.keys())
-            default_indices = (
-                [VARIABLE_SLUG] if VARIABLE_SLUG in index_options else index_options[:1]
-            )
-            selected_index_slugs = st.multiselect(
-                "Indices to include in the report",
-                options=index_options,
-                default=default_indices,
-                format_func=lambda s: VARIABLES[s]["label"],
-                key="case_study_indices",
-            )
-
-            if not selected_index_slugs:
-                st.info("Select at least one index to build the case-study report.")
-            else:
-                if st.button(
-                    "Build case-study data for this district",
-                    key="btn_build_case_study",
-                ):
-                    with st.spinner("Assembling climate profile for selected indices..."):
-                        summary_df_cs, ts_dict_cs, panel_dict_cs = _build_district_case_study_data(
-                            state_name=state_to_show,
-                            district_name=district_name,
-                            index_slugs=selected_index_slugs,
-                            sel_scenario=sel_scenario,
-                            sel_period=sel_period,
-                            sel_stat=sel_stat,
-                        )
-                        if summary_df_cs is None or summary_df_cs.empty:
-                            st.warning(
-                                "No data found for the selected index/district combination. "
-                                "Try including fewer indices or a different scenario/period/statistic."
-                            )
-                        else:
-                            st.session_state["case_study_summary"] = summary_df_cs
-                            st.session_state["case_study_ts"] = ts_dict_cs
-                            st.session_state["case_study_panels"] = panel_dict_cs
-
-                summary_df_cs = st.session_state.get("case_study_summary")
-                ts_dict_cs = st.session_state.get("case_study_ts")
-                panel_dict_cs = st.session_state.get("case_study_panels")
-
-                if isinstance(summary_df_cs, pd.DataFrame) and not summary_df_cs.empty:
-                    st.markdown("**Preview of case-study summary table**")
-                    st.dataframe(summary_df_cs)
-
-                    pdf_bytes = _make_district_case_study_pdf(
-                        state_name=state_to_show,
-                        district_name=district_name,
-                        summary_df=summary_df_cs,
-                        ts_dict=ts_dict_cs or {},
-                        panel_dict=panel_dict_cs or {},
-                        sel_scenario=sel_scenario,
-                        sel_period=sel_period,
-                        sel_stat=sel_stat,
-                    )
-
-                    if pdf_bytes:
-                        safe_state = _slugify_fs(state_to_show)
-                        safe_dist = _slugify_fs(district_name)
-                        pdf_filename = f"climate_profile_{safe_state}__{safe_dist}.pdf"
-
-                        st.download_button(
-                            label="⬇️ Download case-study PDF",
-                            data=pdf_bytes,
-                            file_name=pdf_filename,
-                            mime="application/pdf",
-                            key="download_case_study_pdf",
-                        )
-
-                        zip_bytes = _make_case_study_zip(
-                            state_name=state_to_show,
-                            district_name=district_name,
-                            summary_df=summary_df_cs,
-                            ts_dict=ts_dict_cs or {},
-                            panel_dict=panel_dict_cs or {},
-                            pdf_bytes=pdf_bytes,
-                        )
-                        st.download_button(
-                            label="⬇️ Download PDF + CSVs as ZIP",
-                            data=zip_bytes,
-                            file_name=f"climate_profile_{safe_state}__{safe_dist}__with_data.zip",
-                            mime="application/zip",
-                            key="download_case_study_zip",
-                        )
-                else:
-                    st.caption(
-                        "Build the case-study data using the button above to enable downloads."
-                    )
-
-        # ---- District comparison (1.5) ----
-        with st.expander("Compare with another district", expanded=False):
-        # st.markdown("### Compare with another district")
-            same_state_mask = (
-                merged["state_name"].astype(str).str.strip().str.lower()
-                == str(state_to_show).strip().lower()
-            )
-            compare_candidates = (
-                merged.loc[same_state_mask, "district_name"]
-                .astype(str)
-                .sort_values()
-                .unique()
-                .tolist()
-            )
-            compare_candidates = [
-                d for d in compare_candidates if d != district_name
-            ]
-
-            if compare_candidates:
-                comp_choice = st.selectbox(
-                    "Compare with",
-                    options=["(None)"] + compare_candidates,
-                    index=0,
-                    key="compare_district",
-                )
-
-                if comp_choice != "(None)":
-                    mask_c = (
-                        merged["district_name"].astype(str).str.strip()
-                        == str(comp_choice).strip()
-                    )
-                    comp_row = merged[mask_c].iloc[0] if mask_c.any() else None
-
-                    if comp_row is not None:
-                        # <-- these two lines MUST be before the if (val_this...) check
-                        val_this = current_val_f
-                        val_other = comp_row.get(metric_col)
-                        val_other_f = float(val_other) if not pd.isna(val_other) else None
-
-                        if (val_this is not None) and (val_other_f is not None):
-                            diff = val_this - val_other_f
-                            direction = (
-                                "higher than"
-                                if diff > 0
-                                else "lower than"
-                                if diff < 0
-                                else "the same as"
-                            )
-                            st.markdown(
-                                f"- **{VARIABLES[VARIABLE_SLUG]['label']}** in **{district_name}** "
-                                f"is **{abs(diff):.2f}** {direction} in **{comp_choice}** "
-                                f"for the selected scenario and period."
-                            )
-
-                            # Small visual comparison: two bars side by side
-                            fig_cmp, ax_cmp = plt.subplots(figsize=(3.6, 2.2), dpi=150)
-                            labels_cmp = [district_name, comp_choice]
-                            values_cmp = [val_this, val_other_f]
-
-                            colors_cmp = ["tab:blue", "tab:grey"]
-                            bars = ax_cmp.bar(labels_cmp, values_cmp, color=colors_cmp)
-
-                            ax_cmp.set_ylabel(
-                                f"{VARIABLES[VARIABLE_SLUG]['label']} ({sel_stat})"
-                            )
-                            ax_cmp.set_title("District comparison", fontsize=9)
-                            ax_cmp.grid(True, axis="y", linestyle="--", alpha=0.25)
-
-                            # Annotate values on top of bars
-                            for b in bars:
-                                height = b.get_height()
-                                ax_cmp.text(
-                                    b.get_x() + b.get_width() / 2,
-                                    height,
-                                    f"{height:.1f}",
-                                    ha="center",
-                                    va="bottom",
-                                    fontsize=8,
-                                )
-
-                            # Clean spines
-                            for spine in ax_cmp.spines.values():
-                                spine.set_visible(False)
-
-                            fig_cmp.tight_layout()
-                            st.pyplot(fig_cmp)
-                        else:
-                            st.caption(
-                                "Comparison data not fully available for the selected index."
-                            )
-            else:
-                st.caption("No other districts found in this state for comparison.")
+        # ---- SINGLE-DISTRICT DETAILS PANEL (extracted to details_panel.py) ----
+        render_details_panel(
+            # Core district/state context
+            row=row,
+            district_name=district_name,
+            state_to_show=state_to_show,
+            selected_district=selected_district,
+            # Metric / variable context
+            variables=VARIABLES,
+            variable_slug=VARIABLE_SLUG,
+            metric_col=metric_col,
+            sel_metric=sel_metric,
+            sel_scenario=sel_scenario,
+            sel_period=sel_period,
+            sel_stat=sel_stat,
+            # Risk summary data
+            current_val_f=current_val_f,
+            baseline_val_f=baseline_val_f,
+            baseline_col=baseline_col,
+            rank_in_state=rank_in_state,
+            n_in_state=n_in_state,
+            percentile_state=percentile_state,
+            # Time series data
+            hist_ts=hist_ts,
+            scen_ts=scen_ts,
+            district_yearly_scen=_district_yearly_scen,
+            # Schema for scenario comparison
+            schema_items=schema_items,
+            # GeoDataFrame for district comparison
+            merged=merged,
+            # Figure styling
+            fig_size_panel=FIG_SIZE_PANEL,
+            fig_dpi_panel=FIG_DPI_PANEL,
+            font_size_title=FONT_SIZE_TITLE,
+            font_size_label=FONT_SIZE_LABEL,
+            font_size_ticks=FONT_SIZE_TICKS,
+            font_size_legend=FONT_SIZE_LEGEND,
+            # Constants
+            period_order=PERIOD_ORDER,
+            scenario_display=SCENARIO_DISPLAY,
+            out_dir=OUTDIR,
+            # Callable dependencies
+            create_trend_figure_fn=_create_trend_figure_for_index,
+            build_scenario_panel_fn=build_scenario_comparison_panel_for_row,
+            make_scenario_figure_fn=make_scenario_comparison_figure,
+            make_district_yearly_pdf_fn=make_district_yearly_pdf,
+            build_case_study_data_fn=_build_district_case_study_data,
+            make_case_study_pdf_fn=_make_district_case_study_pdf,
+            make_case_study_zip_fn=_make_case_study_zip,
+            slugify_fs_fn=slugify_fs,
+            # Optional filesystem paths
+            state_dir_for_fs=state_dir_for_fs,
+            district_for_fs=district_for_fs,
+        )
 
 render_perf_panel_safe()
 st.markdown("---")
