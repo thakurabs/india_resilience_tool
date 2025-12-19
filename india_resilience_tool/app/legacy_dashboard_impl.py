@@ -1791,6 +1791,17 @@ geojson_by_state = build_adm2_geojson_by_state(
 )
 
 state_key = "all" if selected_state == "All" else (normalize_name(selected_state) or "unknown")
+
+# Legacy contract: callers expect geojson_by_state["all"] to exist as a fallback.
+# Some implementations return only per-state FeatureCollections, so we synthesize "all" once.
+if "all" not in geojson_by_state:
+    all_features: list[dict] = []
+    for k in sorted(geojson_by_state.keys()):
+        _fc = geojson_by_state.get(k) or {}
+        all_features.extend(_fc.get("features", []) or [])
+    geojson_by_state = dict(geojson_by_state)
+    geojson_by_state["all"] = {"type": "FeatureCollection", "features": all_features}
+
 fc = copy.deepcopy(geojson_by_state.get(state_key, geojson_by_state["all"]))
 
 # If a single district is selected, keep only that feature
