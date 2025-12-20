@@ -268,7 +268,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Contact
 
 **Author:** Abu Bakar Siddiqui Thakur  
-**Email:** absthakur@resilience.org.in
+**Email:** abs.thakur@resilience.org.in
 
 ## Acknowledgments
 
