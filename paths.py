@@ -1,35 +1,45 @@
+"""
+Compatibility shim for legacy imports.
+
+The dashboard currently imports:
+    from paths import DATA_DIR
+
+This module preserves those public names while delegating the actual semantics
+to `india_resilience_tool.config.paths`.
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
+"""
+
+from __future__ import annotations
+
 from pathlib import Path
 
-def find_repo_root(start: Path | None = None) -> Path:
-    """
-    Walk up from `start` until we find something that looks like the repo root.
-    Falls back to the directory of this file if no marker is found.
-    """
-    if start is None:
-        start = Path(__file__).resolve()
+from india_resilience_tool.config.paths import (
+    BASE_OUTPUT_ROOT,
+    DATA_DIR,
+    DATA_ROOT,
+    DISTRICTS_PATH,
+    PROJECTS_ROOT,
+    REPO_ROOT,
+    debug_enabled_default,
+    find_repo_root,
+    get_paths_config,
+    pilot_state_default,
+    resolve_processed_root,
+)
 
-    # Markers that usually live in the repo root
-    markers = [".git", "pyproject.toml", "setup.cfg", "requirements.txt"]
-
-    for parent in [start] + list(start.parents):
-        if any((parent / m).exists() for m in markers):
-            return parent
-
-    # Fallback: directory containing this file
-    return Path(__file__).resolve().parent
-
-
-# 1. Repo root: e.g. D:\projects\india_resilience_tool
-REPO_ROOT = find_repo_root()
-
-# 2. Parent of repo root: e.g. D:\projects
-PROJECTS_ROOT = REPO_ROOT.parent
-
-# 3. Data dir: sibling folder of the repo: e.g. D:\projects\irt_data
-DATA_DIR = (PROJECTS_ROOT / "irt_data").resolve()
-
-
-# 4. All other paths built *relative* to DATA_DIR
-DATA_ROOT = DATA_DIR / "r1i1p1f1"
-DISTRICTS_PATH = DATA_DIR / "districts_4326.geojson"
-BASE_OUTPUT_ROOT = DATA_DIR / "processed"
+__all__ = [
+    "Path",
+    "find_repo_root",
+    "get_paths_config",
+    "resolve_processed_root",
+    "pilot_state_default",
+    "debug_enabled_default",
+    "REPO_ROOT",
+    "PROJECTS_ROOT",
+    "DATA_DIR",
+    "DATA_ROOT",
+    "DISTRICTS_PATH",
+    "BASE_OUTPUT_ROOT",
+]
