@@ -69,7 +69,7 @@ METRICS = PIPELINE_METRICS_RAW
 # -----------------------------------------------------------------------------
 # LOGGING
 # -----------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logging.basicConfig(level=logging.ERROR, format="%(levelname)s: %(message)s")
 
 # -----------------------------------------------------------------------------
 # HELPERS
@@ -631,6 +631,281 @@ def max_consecutive_summer_days(
 
     return int(max_run)
 
+def longest_consecutive_run_above_threshold(
+    da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh: float | None = None,
+    thresh_k: float | None = None,
+    thresh_mm: float | None = None,
+    threshold: float | None = None,
+    min_len: int = 1,
+    op: str = "gt",
+) -> int:
+    """
+    Generic helper: longest consecutive run where district-mean daily series
+    is above (or below) a threshold.
+
+    This is designed to be registry-friendly, since different metrics may pass
+    the threshold under different parameter names (thresh / thresh_k / thresh_mm / threshold).
+
+    Args:
+        da: Daily DataArray with 'time' dimension.
+        mask: District mask (lat, lon).
+        thresh/thresh_k/thresh_mm/threshold: Threshold value (first non-None is used).
+        min_len: Minimum run length to count (default 1).
+        op: One of {"gt","ge","lt","le"} controlling the comparison.
+
+    Returns:
+        Longest qualifying run length (int). Returns 0 if no data.
+    """
+    # Resolve threshold from any accepted parameter name
+    thr = next((v for v in (thresh, thresh_k, thresh_mm, threshold) if v is not None), None)
+    if thr is None:
+        raise ValueError("No threshold provided to longest_consecutive_run_above_threshold().")
+
+    series = da
+
+    # Unit safety for precipitation-like inputs (kg m-2 s-1 -> mm/day)
+    units = (getattr(series, "attrs", {}).get("units", "") or "").strip().lower()
+    if series.name == "pr" or units in {"kg m-2 s-1", "kg m-2 s^-1", "kg/m^2/s"}:
+        series = pr_to_mm_per_day(series)
+
+    series_masked = series.where(mask)
+    daily_mean = series_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    if "time" not in daily_mean.dims:
+        raise ValueError("Expected 'time' dimension in input DataArray.")
+
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+    if daily_mean.size == 0:
+        return 0
+
+    op_l = (op or "gt").strip().lower()
+    if op_l == "gt":
+        cond = daily_mean > float(thr)
+    elif op_l == "ge":
+        cond = daily_mean >= float(thr)
+    elif op_l == "lt":
+        cond = daily_mean < float(thr)
+    elif op_l == "le":
+        cond = daily_mean <= float(thr)
+    else:
+        raise ValueError(f"Unsupported op='{op}'. Use one of gt/ge/lt/le.")
+
+    arr = np.asarray(cond.fillna(False).values, dtype=bool)
+    max_run, _ = _run_length_stats(arr, min_len=int(min_len))
+    return int(max_run)
+
+def _temp_threshold_to_k(threshold: float) -> float:
+    """
+    Convert a temperature threshold to Kelvin if it looks like Celsius.
+
+    Heuristic: values < 200 are treated as °C; otherwise assumed Kelvin.
+    """
+    thr = float(threshold)
+    return thr + 273.15 if thr < 200.0 else thr
+
+
+def annual_mean(da: xr.DataArray, mask: xr.DataArray, **_: object) -> float:
+    """
+    Registry alias: annual mean for temperature variables.
+    """
+    return annual_mean_temperature(da, mask)
+
+
+def seasonal_mean(
+    da: xr.DataArray,
+    mask: xr.DataArray,
+    months: list[int] | tuple[int, ...] | None = None,
+    season: str | None = None,
+    **_: object,
+) -> float:
+    """
+    Registry alias: seasonal mean temperature.
+
+    Accepts either explicit `months=[...]` or `season="summer"/"winter"/"monsoon"/"post_monsoon"`.
+    """
+    if months is None:
+        season_l = (season or "").strip().lower()
+        season_to_months: dict[str, list[int]] = {
+            "winter": [12, 1, 2],
+            "summer": [3, 4, 5],
+            "monsoon": [6, 7, 8, 9],
+            "post_monsoon": [10, 11],
+        }
+        months = season_to_months.get(season_l)
+
+    if not months:
+        raise ValueError("seasonal_mean requires `months` or a supported `season`.")
+
+    return seasonal_mean_temperature(da, mask, months=list(months))
+
+
+def simple_daily_intensity_index(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    wet_thresh_mm: float = 1.0,
+    **_: object,
+) -> float:
+    """
+    Registry alias: SDII (Simple Daily Intensity Index).
+    """
+    return simple_daily_intensity(da_pr, mask, wet_thresh_mm=float(wet_thresh_mm))
+
+
+def rx1day(da_pr: xr.DataArray, mask: xr.DataArray, **_: object) -> float:
+    """
+    Registry alias: RX1day.
+    """
+    return max_1day_precip(da_pr, mask)
+
+
+def rx5day(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    window_days: int = 5,
+    **_: object,
+) -> float:
+    """
+    Registry alias: RX5day.
+    """
+    return max_5day_precip(da_pr, mask, window_days=int(window_days))
+
+
+def rx5day_events_over_threshold(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    window_days: int = 5,
+    thresh_total_mm: float = 50.0,
+    **_: object,
+) -> int:
+    """
+    Registry alias: count of 5-day precip events where rolling-sum exceeds threshold.
+    """
+    return consecutive_5day_precip_events(
+        da_pr,
+        mask,
+        window_days=int(window_days),
+        thresh_total_mm=float(thresh_total_mm),
+    )
+
+
+def consecutive_dry_days(
+    da_pr: xr.DataArray,
+    mask: xr.DataArray,
+    dry_thresh_mm: float = 1.0,
+    **_: object,
+) -> int:
+    """
+    Registry alias: CDD (maximum consecutive dry days).
+    """
+    return max_consecutive_dry_days(da_pr, mask, dry_thresh_mm=float(dry_thresh_mm))
+
+
+def consecutive_run_events_above_threshold(
+    da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_k: float | None = None,
+    threshold: float | None = None,
+    min_event_days: int | None = None,
+    min_len: int | None = None,
+    min_spell_days: int | None = None,
+    op: str = "gt",
+    **_: object,
+) -> int:
+    """
+    Registry helper: number of events where district-mean daily series is above a threshold
+    for at least N consecutive days.
+
+    Used for things like "tasmax_csd_events_gt30" (count of hot-spell events).
+    """
+    thr_raw = thresh_k if thresh_k is not None else threshold
+    if thr_raw is None:
+        raise ValueError("consecutive_run_events_above_threshold requires `thresh_k` or `threshold`.")
+
+    # assume temperature thresholds unless caller already passes Kelvin
+    thr_k = _temp_threshold_to_k(float(thr_raw))
+
+    n = (
+        int(min_event_days)
+        if min_event_days is not None
+        else int(min_len) if min_len is not None
+        else int(min_spell_days) if min_spell_days is not None
+        else 1
+    )
+
+    series_masked = da.where(mask)
+    daily_mean = series_masked.mean(dim=("lat", "lon"), skipna=True)
+
+    if "time" not in daily_mean.dims:
+        raise ValueError("Expected 'time' dimension in input DataArray.")
+
+    daily_mean = daily_mean.dropna(dim="time", how="all")
+    if daily_mean.size == 0:
+        return 0
+
+    op_l = (op or "gt").strip().lower()
+    if op_l == "gt":
+        cond = daily_mean > thr_k
+    elif op_l == "ge":
+        cond = daily_mean >= thr_k
+    elif op_l == "lt":
+        cond = daily_mean < thr_k
+    elif op_l == "le":
+        cond = daily_mean <= thr_k
+    else:
+        raise ValueError(f"Unsupported op='{op}'. Use one of gt/ge/lt/le.")
+
+    arr = np.asarray(cond.fillna(False).values, dtype=bool)
+    return int(_count_events(arr, min_len=n))
+
+
+def heatwave_frequency_percentile(
+    da_tas: xr.DataArray,
+    mask: xr.DataArray,
+    quantile: float = 0.9,
+    min_spell_days: int = 5,
+    **_: object,
+) -> int:
+    """
+    Registry alias: HWFI based on percentile threshold (returns total hot-spell days).
+    """
+    return heatwave_frequency_index(da_tas, mask, quantile=float(quantile), min_spell_days=int(min_spell_days))
+
+
+def heatwave_event_count_percentile(
+    da_tas: xr.DataArray,
+    mask: xr.DataArray,
+    quantile: float = 0.9,
+    min_spell_days: int = 5,
+    **_: object,
+) -> int:
+    """
+    Registry alias: number of percentile-based heatwave events (hot-spell runs).
+    """
+    return heatwave_frequency_events_index(da_tas, mask, quantile=float(quantile), min_spell_days=int(min_spell_days))
+
+
+def heatwave_event_count(
+    da_tasmax: xr.DataArray,
+    mask: xr.DataArray,
+    anomaly_thresh_k: float = 5.0,
+    abs_thresh_k: float = 40.0 + 273.15,
+    min_spell_days: int = 5,
+    **_: object,
+) -> int:
+    """
+    Registry alias: number of tasmax-based heatwave events (HWDI_events style).
+    """
+    return heatwave_duration_events_index(
+        da_tasmax,
+        mask,
+        anomaly_thresh_k=float(anomaly_thresh_k),
+        abs_thresh_k=float(abs_thresh_k),
+        min_spell_days=int(min_spell_days),
+    )
+
+
 def yearly_files_for_dir(dirpath: Path) -> dict:
     files = glob.glob(str(dirpath / "*.nc"))
     out = {}
@@ -763,7 +1038,16 @@ def process_metric_for_model_scenario(metric: dict,
     slug       = metric["slug"]
     var        = metric["var"]
     value_col  = metric["value_col"]
-    compute_fn = globals()[metric["compute"]]
+
+    compute_name = metric.get("compute")
+    compute_fn = globals().get(compute_name)
+    if compute_fn is None:
+        logging.error(
+            f"[{slug}] Unknown compute function '{compute_name}'. "
+            "Define it in compute_indices.py or fix metrics_registry."
+        )
+        return
+
     params     = metric.get("params", {})
 
     metric_root_path = metric_root(slug)

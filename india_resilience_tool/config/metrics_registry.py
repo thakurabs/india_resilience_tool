@@ -383,15 +383,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "compute": "consecutive_dry_day_events",
         "params": {"dry_thresh_mm": 1.0, "min_event_days": 6},
     },
-    {
-        "name": "Tropical Nights (tasmin > 20 °C)",
-        "slug": "tasmin_tropical_nights_gt20",
-        "var": "tasmin",
-        "value_col": "tropical_nights_gt_20C",
-        "units": "days",
-        "compute": "count_days_above_threshold",
-        "params": {"thresh_k": 20.0 + 273.15},
-    },
 ]
 
 # Typed views derived from pipeline metrics
