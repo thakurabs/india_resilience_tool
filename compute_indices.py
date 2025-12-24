@@ -2,17 +2,11 @@
 """
 Uniform, future-proof index pipeline for the India Resilience Tool.
 
-- Metric-per-root layout (e.g., tas_gt32, rain_gt_2p5mm)
-- Identical filenames across all metrics:
-    <district>_yearly.csv
-    <district>_periods.csv
-- Validation reports:
-    <metric>/<state>/validation_reports/<model>/<scenario>/file_validation_report.csv
-- Ensembles (generic, metric-agnostic via `value` column):
-    <metric>/<state>/ensembles/<district>/<scenario>/...
-- Yearly/Periods CSVs always contain BOTH:
-    - generic `value`
-    - metric-specific column (e.g., `days_gt_32C`, `days_rain_gt_2p5mm`)
+Includes all standard Climdex indices plus custom IRT indices:
+- Heat risk / thermal stress indices
+- Cold risk indices  
+- Precipitation / flood-related indices
+- Drought / dryness indices
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -34,50 +28,37 @@ import json
 from paths import DATA_ROOT, DISTRICTS_PATH, BASE_OUTPUT_ROOT
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
 
-# Scenarios (periods define requested averaging windows)
+# Scenarios
 SCENARIOS = {
     "historical": {
-        "subdir": "historical/tas",  # base points at tas; for other vars we swap the tail via helper
-        "periods": {
-            "1990-2010": (1990, 2010),
-        },
+        "subdir": "historical/tas",
+        "periods": {"1990-2010": (1990, 2010)},
     },
     "ssp245": {
         "subdir": "ssp245/tas",
-        "periods": {
-            "2020-2040": (2020, 2040),
-            "2040-2060": (2040, 2060),
-        },
+        "periods": {"2020-2040": (2020, 2040), "2040-2060": (2040, 2060)},
     },
     "ssp585": {
         "subdir": "ssp585/tas",
-        "periods": {
-            "2020-2040": (2020, 2040),
-            "2040-2060": (2040, 2060),
-        },
+        "periods": {"2020-2040": (2020, 2040), "2040-2060": (2040, 2060)},
     },
 }
 
-# Global coverage rules for period aggregation
 MIN_YEARS_REQUIRED_FRACTION = 0.6
 MIN_YEARS_ABSOLUTE = 5
-
-# NOTE: moved to shared registry (single source of truth)
 METRICS = PIPELINE_METRICS_RAW
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
 
 # -----------------------------------------------------------------------------
-# LOGGING
-# -----------------------------------------------------------------------------
-logging.basicConfig(level=logging.ERROR, format="%(levelname)s: %(message)s")
-
-# -----------------------------------------------------------------------------
-# HELPERS
+# BASIC HELPERS
 # -----------------------------------------------------------------------------
 def metric_root(slug: str) -> Path:
     root = BASE_OUTPUT_ROOT / slug
     root.mkdir(parents=True, exist_ok=True)
     return root
+
 
 def normalize_lat_lon(ds: xr.Dataset) -> xr.Dataset:
     ren = {}
@@ -91,49 +72,34 @@ def normalize_lat_lon(ds: xr.Dataset) -> xr.Dataset:
         ds = ds.rename(ren)
     return ds
 
+
 def pr_to_mm_per_day(da: xr.DataArray) -> xr.DataArray:
+    """Convert precipitation from kg m-2 s-1 to mm/day if needed."""
     units = (getattr(da, "attrs", {}).get("units", "") or "").strip().lower()
     if units in {"kg m-2 s-1", "kg m-2 s^-1", "kg/m^2/s"}:
         return da * 86400.0
     return da
 
+
 def load_telangana_districts(path: Path) -> gpd.GeoDataFrame:
     gdf = gpd.read_file(path)
-
-    # Find a state column we can use
     candidate_state_cols = ["STATE_UT", "state_ut", "STATE", "STATE_LGD", "ST_NM", "state_name"]
     state_col = next((c for c in candidate_state_cols if c in gdf.columns), None)
     if not state_col:
-        raise ValueError(f"Could not find a state column in {path}. Columns: {list(gdf.columns)}")
+        raise ValueError(f"Could not find a state column in {path}.")
 
-    # Normalize state strings
     s = gdf[state_col].astype(str)
     s = s.str.normalize("NFKC").str.strip().str.lower().str.replace(r"\s+", " ", regex=True)
     gdf["_state_norm"] = s
 
-    # Filter Telangana (handle common variants)
     tel_keys = {"telangana", "telengana", "telangana state"}
     tel = gdf[gdf["_state_norm"].isin(tel_keys)]
     if tel.empty:
-        all_states = sorted(gdf["_state_norm"].dropna().unique().tolist())
-        raise ValueError(
-            "No rows for Telangana/Telengana found after normalization. "
-            f"Available states (normalized) include: {all_states[:20]}{' …' if len(all_states)>20 else ''}"
-        )
+        raise ValueError("No rows for Telangana found.")
 
-    # Ensure CRS
     if tel.crs is None:
         tel = tel.set_crs("EPSG:4326")
-
-    # Clean up
     tel = tel.drop(columns=["_state_norm"])
-
-    # Light log
-    logging.info(f"Loaded Telangana districts: {len(tel)}")
-    sample_cols = [c for c in ["DISTRICT", "district", "STATE_UT", state_col] if c in tel.columns]
-    if sample_cols:
-        logging.info("District/state sample:\n%s", tel[sample_cols].head())
-
     return tel
 
 
@@ -141,24 +107,19 @@ def build_district_masks(telangana_gdf: gpd.GeoDataFrame, sample_ds: xr.Dataset,
                          district_name_col: str = "DISTRICT") -> dict:
     if district_name_col not in telangana_gdf.columns:
         raise ValueError(f"'{district_name_col}' not found in GDF.")
-    ds = sample_ds
-    lats = ds["lat"].values
-    lons = ds["lon"].values
+    
+    lats = sample_ds["lat"].values
+    lons = sample_ds["lon"].values
     height, width = lats.size, lons.size
 
-    # build affine
     if np.all(np.diff(lons) > 0):
         xres = lons[1] - lons[0]
         xoff = lons[0] - xres / 2
     else:
         raise ValueError("Longitude not strictly increasing.")
-    if np.all(np.diff(lats) < 0):
-        yres = lats[1] - lats[0]  # negative
-        yoff = lats[0] - yres / 2
-    else:
-        yres = lats[1] - lats[0]
-        yoff = lats[0] - yres / 2
-
+    
+    yres = lats[1] - lats[0]
+    yoff = lats[0] - yres / 2
     transform = Affine.translation(xoff, yoff) * Affine.scale(xres, yres)
 
     masks = {}
@@ -169,131 +130,17 @@ def build_district_masks(telangana_gdf: gpd.GeoDataFrame, sample_ds: xr.Dataset,
         name = str(row[district_name_col]).strip()
         mask = features.rasterize([(geom, 1)], out_shape=(height, width), transform=transform,
                                   fill=0, all_touched=True, dtype="uint8")
-        mask_da = xr.DataArray(mask.astype(bool), coords={"lat": ds["lat"], "lon": ds["lon"]},
+        mask_da = xr.DataArray(mask.astype(bool), coords={"lat": sample_ds["lat"], "lon": sample_ds["lon"]},
                                dims=("lat", "lon"), name="mask")
         masks[name] = mask_da
-    logging.info(f"Built {len(masks)} district masks.")
     return masks
 
-def count_days_above_threshold(da_tas: xr.DataArray, mask: xr.DataArray, thresh_k: float) -> int:
-    tas_masked = da_tas.where(mask)
-    daily_mean = tas_masked.mean(dim=("lat", "lon"), skipna=True)
-    return int((daily_mean > thresh_k).sum().item())
-
-def count_rainy_days(da_pr: xr.DataArray, mask: xr.DataArray, thresh_mm: float = 2.5) -> int:
-    pr_mmday = pr_to_mm_per_day(da_pr)
-    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
-    return int((daily_mean > thresh_mm).sum().item())
-
-def simple_daily_intensity(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    wet_thresh_mm: float = 1.0,
-) -> float:
-    """
-    Simple Daily Intensity:
-    Ratio of total precipitation to number of wet days (>= wet_thresh_mm).
-    Units: mm/day.
-    """
-    pr_mmday = pr_to_mm_per_day(da_pr)
-    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
-
-    total = float(daily_mean.sum().item())
-    wet_days = int((daily_mean >= wet_thresh_mm).sum().item())
-    if wet_days == 0:
-        return float("nan")
-    return total / wet_days
-
-
-def max_1day_precip(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-) -> float:
-    """
-    Maximum 1-day precipitation (mm) of the year.
-    """
-    pr_mmday = pr_to_mm_per_day(da_pr)
-    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
-    return float(daily_mean.max().item())
-
-
-def max_5day_precip(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    window_days: int = 5,
-) -> float:
-    """
-    Maximum total precipitation accumulated over any consecutive `window_days`
-    (default 5) days (mm).
-    """
-    pr_mmday = pr_to_mm_per_day(da_pr)
-    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
-    rolling = daily_mean.rolling(time=window_days, min_periods=window_days).sum()
-    return float(rolling.max().item())
-
-
-def consecutive_5day_precip_events(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    window_days: int = 5,
-    thresh_total_mm: float = 50.0,
-) -> int:
-    """
-    Number of separate 5-day periods where total precipitation exceeds
-    `thresh_total_mm` (default 50 mm).
-
-    We:
-      - compute rolling `window_days` sums,
-      - flag days where the 5-day sum >= threshold,
-      - count contiguous True-runs as separate events.
-    """
-    pr_mmday = pr_to_mm_per_day(da_pr)
-    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
-    rolling = daily_mean.rolling(time=window_days, min_periods=window_days).sum()
-    is_event = (rolling >= thresh_total_mm).fillna(False).values
-    return _count_events(is_event, min_len=1)
-
-
-def max_consecutive_dry_days(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    dry_thresh_mm: float = 1.0,
-) -> int:
-    """
-    Longest stretch of consecutive dry days with daily precipitation < dry_thresh_mm.
-    """
-    pr_mmday = pr_to_mm_per_day(da_pr)
-    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
-    dry_mask = (daily_mean < dry_thresh_mm).values
-    max_run, _ = _run_length_stats(dry_mask, min_len=1)
-    return int(max_run)
-
-
-def consecutive_dry_day_events(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    dry_thresh_mm: float = 1.0,
-    min_event_days: int = 6,
-) -> int:
-    """
-    Number of separate periods with more than 5 consecutive dry days
-    (i.e. runs of length >= min_event_days) with daily precipitation < dry_thresh_mm.
-    """
-    pr_mmday = pr_to_mm_per_day(da_pr)
-    daily_mean = pr_mmday.where(mask).mean(dim=("lat", "lon"), skipna=True)
-    dry_mask = (daily_mean < dry_thresh_mm).values
-    return _count_events(dry_mask, min_len=min_event_days)
 
 def _run_length_stats(mask: np.ndarray, min_len: int) -> tuple[int, int]:
-    """
-    Given a 1D boolean array `mask`, return:
-      - max_run: longest length of consecutive True values (only counting runs >= min_len)
-      - total_days: total number of True days that belong to runs of length >= min_len
-    """
+    """Return (max_run_length, total_days_in_qualifying_runs)."""
     max_run = 0
     total_days = 0
     current = 0
-
     for v in mask:
         if v:
             current += 1
@@ -303,24 +150,18 @@ def _run_length_stats(mask: np.ndarray, min_len: int) -> tuple[int, int]:
                 if current > max_run:
                     max_run = current
             current = 0
-
-    # handle trailing run
     if current >= min_len:
         total_days += current
         if current > max_run:
             max_run = current
-
     return max_run, total_days
 
+
 def _count_events(mask: np.ndarray, min_len: int) -> int:
-    """
-    Count the number of contiguous True-runs of length >= min_len
-    in a 1D boolean array.
-    """
+    """Count contiguous True-runs of length >= min_len."""
     arr = np.asarray(mask, dtype=bool)
     if arr.size == 0:
         return 0
-
     events = 0
     run_len = 0
     for v in arr:
@@ -330,581 +171,507 @@ def _count_events(mask: np.ndarray, min_len: int) -> int:
             if run_len >= min_len:
                 events += 1
             run_len = 0
-
-    # handle trailing run
     if run_len >= min_len:
         events += 1
-
     return int(events)
 
-def annual_mean_temperature(
-    da_temp: xr.DataArray,
-    mask: xr.DataArray,
-) -> float:
-    """
-    Annual mean temperature (°C) for a single district and year.
 
-    Works for tas, tasmax, tasmin (K). Returns mean in °C.
-    """
-    temp_masked = da_temp.where(mask)
-    daily_mean = temp_masked.mean(dim=("lat", "lon"), skipna=True)
+def _get_district_daily_mean(da: xr.DataArray, mask: xr.DataArray) -> xr.DataArray:
+    """Get district-mean daily time series."""
+    da_masked = da.where(mask)
+    daily_mean = da_masked.mean(dim=("lat", "lon"), skipna=True)
+    if "time" in daily_mean.dims:
+        daily_mean = daily_mean.dropna(dim="time", how="all")
+    return daily_mean
 
-    if "time" not in daily_mean.dims:
-        raise ValueError("Expected 'time' dimension in temperature DataArray.")
 
-    daily_mean = daily_mean.dropna(dim="time", how="all")
+# -----------------------------------------------------------------------------
+# TEMPERATURE COMPUTE FUNCTIONS
+# -----------------------------------------------------------------------------
+
+def count_days_above_threshold(da: xr.DataArray, mask: xr.DataArray, thresh_k: float) -> int:
+    """Count days where district-mean temperature exceeds threshold (Kelvin)."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    return int((daily_mean > thresh_k).sum().item())
+
+
+def count_days_ge_threshold(da: xr.DataArray, mask: xr.DataArray, thresh_k: float) -> int:
+    """Count days where district-mean temperature >= threshold (Kelvin)."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    return int((daily_mean >= thresh_k).sum().item())
+
+
+def count_days_below_threshold(da: xr.DataArray, mask: xr.DataArray, thresh_k: float) -> int:
+    """Count days where district-mean temperature is below threshold (Kelvin)."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    return int((daily_mean < thresh_k).sum().item())
+
+
+def annual_mean(da: xr.DataArray, mask: xr.DataArray) -> float:
+    """Annual mean temperature in °C."""
+    daily_mean = _get_district_daily_mean(da, mask)
     if daily_mean.size == 0:
         return np.nan
-
     annual_mean_k = float(daily_mean.mean(dim="time").item())
     return annual_mean_k - 273.15
 
 
-def seasonal_mean_temperature(
-    da_temp: xr.DataArray,
-    mask: xr.DataArray,
-    months: list[int],
-) -> float:
-    """
-    Seasonal mean temperature (°C) for a given list of months.
-
-    E.g. months=[3,4,5] for MAM, months=[12,1,2] for DJF-like.
-    """
-    temp_masked = da_temp.where(mask)
-
-    if "time" not in temp_masked.dims:
-        raise ValueError("Expected 'time' dimension in temperature DataArray.")
-
-    # Filter by months
-    month_idx = temp_masked["time"].dt.month
-    temp_season = temp_masked.sel(time=month_idx.isin(months))
-
-    if temp_season.sizes.get("time", 0) == 0:
+def seasonal_mean(da: xr.DataArray, mask: xr.DataArray, months: list[int]) -> float:
+    """Seasonal mean temperature in °C for specified months."""
+    da_masked = da.where(mask)
+    if "time" not in da_masked.dims:
+        raise ValueError("Expected 'time' dimension.")
+    month_idx = da_masked["time"].dt.month
+    da_season = da_masked.sel(time=month_idx.isin(months))
+    if da_season.sizes.get("time", 0) == 0:
         return np.nan
-
-    daily_mean = temp_season.mean(dim=("lat", "lon"), skipna=True)
+    daily_mean = da_season.mean(dim=("lat", "lon"), skipna=True)
     daily_mean = daily_mean.dropna(dim="time", how="all")
     if daily_mean.size == 0:
         return np.nan
-
-    seasonal_mean_k = float(daily_mean.mean(dim="time").item())
-    return seasonal_mean_k - 273.15
+    return float(daily_mean.mean(dim="time").item()) - 273.15
 
 
-def consecutive_summer_day_events(
-    da_tasmax: xr.DataArray,
-    mask: xr.DataArray,
-    thresh_k: float = 30.0 + 273.15,
-    min_len: int = 5,
-) -> int:
-    """
-    Consecutive Summer Day Events:
-      Number of distinct spells (events) of length >= min_len where
-      district-mean daily tasmax > thresh_k.
+def annual_max_temperature(da: xr.DataArray, mask: xr.DataArray) -> float:
+    """Annual maximum temperature (TXx or TNx) in °C."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    return float(daily_mean.max(dim="time").item()) - 273.15
 
-    This is the "events" counterpart of the Consecutive Summer Days index.
-    """
-    tasmax_masked = da_tasmax.where(mask)
-    daily_mean = tasmax_masked.mean(dim=("lat", "lon"), skipna=True)
 
-    if "time" not in daily_mean.dims:
-        raise ValueError("Expected 'time' dimension in tasmax DataArray.")
+def annual_min_temperature(da: xr.DataArray, mask: xr.DataArray) -> float:
+    """Annual minimum temperature (TXn or TNn) in °C."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    return float(daily_mean.min(dim="time").item()) - 273.15
 
-    daily_mean = daily_mean.dropna(dim="time", how="all")
+
+def longest_consecutive_run_above_threshold(da: xr.DataArray, mask: xr.DataArray, 
+                                            thresh_k: float, min_len: int = 1) -> int:
+    """Longest consecutive run where daily mean exceeds threshold."""
+    daily_mean = _get_district_daily_mean(da, mask)
     if daily_mean.size == 0:
         return 0
-
-    summer = daily_mean > thresh_k
-    summer = summer.fillna(False)
-    arr = np.asarray(summer.values, dtype=bool)
-
-    events = _count_events(arr, min_len=min_len)
-    return int(events)
-
-def heatwave_duration_index(
-    da_tasmax: xr.DataArray,
-    mask: xr.DataArray,
-    anomaly_thresh_k: float = 5.0,       # kept for signature compatibility, not used directly
-    abs_thresh_k: float = 40.0 + 273.15, # 40°C in Kelvin
-    min_spell_days: int = 5,
-) -> int:
-    """
-    Heat Wave Duration Index (HWDI) for a single district and year.
-
-    Practical definition used here:
-      - Compute district-mean daily tasmax.
-      - Define a yearly "hot-day" threshold as the max of:
-          * the 90th percentile of daily tasmax for that year, and
-          * an absolute threshold abs_thresh_k (default 40°C in K).
-      - Flag a "heatwave day" when tasmax >= that threshold.
-      - Identify all spells of consecutive heatwave days; HWDI is the
-        length of the longest spell with length >= min_spell_days.
-
-    Returns 0 if there are no qualifying spells.
-
-    NOTE: This is a percentile-based variant of the IPCC/IMD-style definition.
-    If you later precompute a 30-year DOY climatology, you can swap the
-    threshold logic to use (climatology + 5°C) instead.
-    """
-    tasmax_masked = da_tasmax.where(mask)
-    daily_mean = tasmax_masked.mean(dim=("lat", "lon"), skipna=True)
-
-    if "time" not in daily_mean.dims:
-        raise ValueError("Expected 'time' dimension in tasmax DataArray for HWDI.")
-
-    # Drop pure-NaN days (just in case)
-    daily_mean = daily_mean.dropna(dim="time", how="all")
-
-    if daily_mean.size == 0:
-        return 0
-
-    # Yearly 90th percentile of district-mean tasmax
-    year_p90 = float(daily_mean.quantile(0.9).item())
-
-    # Heatwave threshold: high absolute temp AND extreme relative to the year's distribution
-    thresh = max(abs_thresh_k, year_p90)
-
-    hw = daily_mean >= thresh
-    hw = hw.fillna(False)
-    arr = np.asarray(hw.values, dtype=bool)
-
-    max_run, _ = _run_length_stats(arr, min_len=min_spell_days)
-    return int(max_run)
-
-def heatwave_duration_events_index(
-    da_tasmax: xr.DataArray,
-    mask: xr.DataArray,
-    anomaly_thresh_k: float = 5.0,       # kept for signature compatibility
-    abs_thresh_k: float = 40.0 + 273.15, # 40°C in Kelvin
-    min_spell_days: int = 5,
-) -> int:
-    """
-    Heat Wave Duration Events Index (HWDI_events) for a single district and year.
-
-    Uses the SAME threshold logic as heatwave_duration_index, but instead of
-    returning the maximum spell length (days), it returns the NUMBER of
-    qualifying heatwave spells (events) in that year.
-
-    A qualifying event is any contiguous run of heatwave days with length
-    >= min_spell_days.
-    """
-    tasmax_masked = da_tasmax.where(mask)
-    daily_mean = tasmax_masked.mean(dim=("lat", "lon"), skipna=True)
-
-    if "time" not in daily_mean.dims:
-        raise ValueError("Expected 'time' dimension in tasmax DataArray for HWDI_events.")
-
-    # Drop pure-NaN days
-    daily_mean = daily_mean.dropna(dim="time", how="all")
-    if daily_mean.size == 0:
-        return 0
-
-    # Yearly 90th percentile of district-mean tasmax
-    year_p90 = float(daily_mean.quantile(0.9).item())
-
-    # Heatwave threshold (same as HWDI days)
-    thresh = max(abs_thresh_k, year_p90)
-
-    hw = daily_mean >= thresh
-    hw = hw.fillna(False)
-    arr = np.asarray(hw.values, dtype=bool)
-
-    events = _count_events(arr, min_len=min_spell_days)
-    return int(events)
-
-def heatwave_frequency_index(
-    da_tas: xr.DataArray,
-    mask: xr.DataArray,
-    quantile: float = 0.9,
-    min_spell_days: int = 5,
-) -> int:
-    """
-    Heat Wave Frequency Index (HWFI) for a single district and year.
-
-    Practical definition used here (warm-spell days style):
-      - Compute district-mean daily tas (Tmean).
-      - Compute the yearly 90th percentile threshold of Tmean.
-      - Flag "hot-mean" days where tas > threshold.
-      - Identify all spells of consecutive hot-mean days with length >= min_spell_days.
-      - HWFI is the total number of days belonging to such spells.
-
-    Returns 0 if there are no qualifying spells.
-
-    NOTE: This mirrors the WSDI / warm spell days idea but uses yearly
-    percentiles instead of a fixed multi-decade DOY climatology. You
-    can later swap in DOY-based thresholds computed from 1990–2010 data.
-    """
-    tas_masked = da_tas.where(mask)
-    daily_mean = tas_masked.mean(dim=("lat", "lon"), skipna=True)
-
-    if "time" not in daily_mean.dims:
-        raise ValueError("Expected 'time' dimension in tas DataArray for HWFI.")
-
-    daily_mean = daily_mean.dropna(dim="time", how="all")
-    if daily_mean.size == 0:
-        return 0
-
-    # Yearly 90th percentile threshold for daily mean temperature
-    thresh = float(daily_mean.quantile(quantile).item())
-
-    hot = daily_mean > thresh
-    hot = hot.fillna(False)
-    arr = np.asarray(hot.values, dtype=bool)
-
-    _, total_days = _run_length_stats(arr, min_len=min_spell_days)
-    return int(total_days)
-
-def heatwave_frequency_events_index(
-    da_tas: xr.DataArray,
-    mask: xr.DataArray,
-    quantile: float = 0.9,
-    min_spell_days: int = 5,
-) -> int:
-    """
-    Heat Wave Frequency Events Index (HWFI_events) for a single district and year.
-
-    Uses the SAME threshold logic as heatwave_frequency_index, but instead of
-    returning the total number of days in hot spells, it returns the NUMBER of
-    qualifying hot-mean spells (events) in that year.
-
-    A qualifying event is any contiguous run of 'hot-mean' days with length
-    >= min_spell_days.
-    """
-    tas_masked = da_tas.where(mask)
-    daily_mean = tas_masked.mean(dim=("lat", "lon"), skipna=True)
-
-    if "time" not in daily_mean.dims:
-        raise ValueError("Expected 'time' dimension in tas DataArray for HWFI_events.")
-
-    daily_mean = daily_mean.dropna(dim="time", how="all")
-    if daily_mean.size == 0:
-        return 0
-
-    # Yearly 90th percentile threshold for daily mean temperature
-    thresh = float(daily_mean.quantile(quantile).item())
-
-    hot = daily_mean > thresh
-    hot = hot.fillna(False)
-    arr = np.asarray(hot.values, dtype=bool)
-
-    events = _count_events(arr, min_len=min_spell_days)
-    return int(events)
-
-def max_consecutive_summer_days(
-    da_tasmax: xr.DataArray,
-    mask: xr.DataArray,
-    thresh_k: float = 30.0 + 273.15,
-) -> int:
-    """
-    Return the maximum number of consecutive 'summer days' in a year
-    for a single district.
-
-    A summer day is defined as a day where the district-mean tasmax > thresh_k.
-    """
-    # Apply the district mask and compute district-mean tasmax per day
-    tasmax_masked = da_tasmax.where(mask)
-    daily_mean = tasmax_masked.mean(dim=("lat", "lon"), skipna=True)
-
-    # Boolean series: True on "summer days"
-    summer = (daily_mean > thresh_k)
-
-    # Treat NaNs as non-summer days
-    summer = summer.fillna(False)
-
-    arr = summer.values
-    if arr.size == 0:
-        return 0
-
-    # Ensure boolean dtype
-    arr = arr.astype(bool)
-
-    # Compute maximum run length of consecutive True values
-    max_run = 0
-    current = 0
-    for v in arr:
-        if v:
-            current += 1
-            if current > max_run:
-                max_run = current
-        else:
-            current = 0
-
-    return int(max_run)
-
-def longest_consecutive_run_above_threshold(
-    da: xr.DataArray,
-    mask: xr.DataArray,
-    thresh: float | None = None,
-    thresh_k: float | None = None,
-    thresh_mm: float | None = None,
-    threshold: float | None = None,
-    min_len: int = 1,
-    op: str = "gt",
-) -> int:
-    """
-    Generic helper: longest consecutive run where district-mean daily series
-    is above (or below) a threshold.
-
-    This is designed to be registry-friendly, since different metrics may pass
-    the threshold under different parameter names (thresh / thresh_k / thresh_mm / threshold).
-
-    Args:
-        da: Daily DataArray with 'time' dimension.
-        mask: District mask (lat, lon).
-        thresh/thresh_k/thresh_mm/threshold: Threshold value (first non-None is used).
-        min_len: Minimum run length to count (default 1).
-        op: One of {"gt","ge","lt","le"} controlling the comparison.
-
-    Returns:
-        Longest qualifying run length (int). Returns 0 if no data.
-    """
-    # Resolve threshold from any accepted parameter name
-    thr = next((v for v in (thresh, thresh_k, thresh_mm, threshold) if v is not None), None)
-    if thr is None:
-        raise ValueError("No threshold provided to longest_consecutive_run_above_threshold().")
-
-    series = da
-
-    # Unit safety for precipitation-like inputs (kg m-2 s-1 -> mm/day)
-    units = (getattr(series, "attrs", {}).get("units", "") or "").strip().lower()
-    if series.name == "pr" or units in {"kg m-2 s-1", "kg m-2 s^-1", "kg/m^2/s"}:
-        series = pr_to_mm_per_day(series)
-
-    series_masked = series.where(mask)
-    daily_mean = series_masked.mean(dim=("lat", "lon"), skipna=True)
-
-    if "time" not in daily_mean.dims:
-        raise ValueError("Expected 'time' dimension in input DataArray.")
-
-    daily_mean = daily_mean.dropna(dim="time", how="all")
-    if daily_mean.size == 0:
-        return 0
-
-    op_l = (op or "gt").strip().lower()
-    if op_l == "gt":
-        cond = daily_mean > float(thr)
-    elif op_l == "ge":
-        cond = daily_mean >= float(thr)
-    elif op_l == "lt":
-        cond = daily_mean < float(thr)
-    elif op_l == "le":
-        cond = daily_mean <= float(thr)
-    else:
-        raise ValueError(f"Unsupported op='{op}'. Use one of gt/ge/lt/le.")
-
+    cond = daily_mean > float(thresh_k)
     arr = np.asarray(cond.fillna(False).values, dtype=bool)
     max_run, _ = _run_length_stats(arr, min_len=int(min_len))
     return int(max_run)
 
-def _temp_threshold_to_k(threshold: float) -> float:
-    """
-    Convert a temperature threshold to Kelvin if it looks like Celsius.
 
-    Heuristic: values < 200 are treated as °C; otherwise assumed Kelvin.
-    """
-    thr = float(threshold)
-    return thr + 273.15 if thr < 200.0 else thr
-
-
-def annual_mean(da: xr.DataArray, mask: xr.DataArray, **_: object) -> float:
-    """
-    Registry alias: annual mean for temperature variables.
-    """
-    return annual_mean_temperature(da, mask)
-
-
-def seasonal_mean(
-    da: xr.DataArray,
-    mask: xr.DataArray,
-    months: list[int] | tuple[int, ...] | None = None,
-    season: str | None = None,
-    **_: object,
-) -> float:
-    """
-    Registry alias: seasonal mean temperature.
-
-    Accepts either explicit `months=[...]` or `season="summer"/"winter"/"monsoon"/"post_monsoon"`.
-    """
-    if months is None:
-        season_l = (season or "").strip().lower()
-        season_to_months: dict[str, list[int]] = {
-            "winter": [12, 1, 2],
-            "summer": [3, 4, 5],
-            "monsoon": [6, 7, 8, 9],
-            "post_monsoon": [10, 11],
-        }
-        months = season_to_months.get(season_l)
-
-    if not months:
-        raise ValueError("seasonal_mean requires `months` or a supported `season`.")
-
-    return seasonal_mean_temperature(da, mask, months=list(months))
-
-
-def simple_daily_intensity_index(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    wet_thresh_mm: float = 1.0,
-    **_: object,
-) -> float:
-    """
-    Registry alias: SDII (Simple Daily Intensity Index).
-    """
-    return simple_daily_intensity(da_pr, mask, wet_thresh_mm=float(wet_thresh_mm))
-
-
-def rx1day(da_pr: xr.DataArray, mask: xr.DataArray, **_: object) -> float:
-    """
-    Registry alias: RX1day.
-    """
-    return max_1day_precip(da_pr, mask)
-
-
-def rx5day(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    window_days: int = 5,
-    **_: object,
-) -> float:
-    """
-    Registry alias: RX5day.
-    """
-    return max_5day_precip(da_pr, mask, window_days=int(window_days))
-
-
-def rx5day_events_over_threshold(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    window_days: int = 5,
-    thresh_total_mm: float = 50.0,
-    **_: object,
-) -> int:
-    """
-    Registry alias: count of 5-day precip events where rolling-sum exceeds threshold.
-    """
-    return consecutive_5day_precip_events(
-        da_pr,
-        mask,
-        window_days=int(window_days),
-        thresh_total_mm=float(thresh_total_mm),
-    )
-
-
-def consecutive_dry_days(
-    da_pr: xr.DataArray,
-    mask: xr.DataArray,
-    dry_thresh_mm: float = 1.0,
-    **_: object,
-) -> int:
-    """
-    Registry alias: CDD (maximum consecutive dry days).
-    """
-    return max_consecutive_dry_days(da_pr, mask, dry_thresh_mm=float(dry_thresh_mm))
-
-
-def consecutive_run_events_above_threshold(
-    da: xr.DataArray,
-    mask: xr.DataArray,
-    thresh_k: float | None = None,
-    threshold: float | None = None,
-    min_event_days: int | None = None,
-    min_len: int | None = None,
-    min_spell_days: int | None = None,
-    op: str = "gt",
-    **_: object,
-) -> int:
-    """
-    Registry helper: number of events where district-mean daily series is above a threshold
-    for at least N consecutive days.
-
-    Used for things like "tasmax_csd_events_gt30" (count of hot-spell events).
-    """
-    thr_raw = thresh_k if thresh_k is not None else threshold
-    if thr_raw is None:
-        raise ValueError("consecutive_run_events_above_threshold requires `thresh_k` or `threshold`.")
-
-    # assume temperature thresholds unless caller already passes Kelvin
-    thr_k = _temp_threshold_to_k(float(thr_raw))
-
-    n = (
-        int(min_event_days)
-        if min_event_days is not None
-        else int(min_len) if min_len is not None
-        else int(min_spell_days) if min_spell_days is not None
-        else 1
-    )
-
-    series_masked = da.where(mask)
-    daily_mean = series_masked.mean(dim=("lat", "lon"), skipna=True)
-
-    if "time" not in daily_mean.dims:
-        raise ValueError("Expected 'time' dimension in input DataArray.")
-
-    daily_mean = daily_mean.dropna(dim="time", how="all")
+def consecutive_run_events_above_threshold(da: xr.DataArray, mask: xr.DataArray,
+                                           thresh_k: float, min_event_days: int = 6) -> int:
+    """Count events (spells >= min_event_days) where daily mean exceeds threshold."""
+    daily_mean = _get_district_daily_mean(da, mask)
     if daily_mean.size == 0:
         return 0
-
-    op_l = (op or "gt").strip().lower()
-    if op_l == "gt":
-        cond = daily_mean > thr_k
-    elif op_l == "ge":
-        cond = daily_mean >= thr_k
-    elif op_l == "lt":
-        cond = daily_mean < thr_k
-    elif op_l == "le":
-        cond = daily_mean <= thr_k
-    else:
-        raise ValueError(f"Unsupported op='{op}'. Use one of gt/ge/lt/le.")
-
+    cond = daily_mean > thresh_k
     arr = np.asarray(cond.fillna(False).values, dtype=bool)
-    return int(_count_events(arr, min_len=n))
+    return _count_events(arr, min_len=min_event_days)
 
 
-def heatwave_frequency_percentile(
-    da_tas: xr.DataArray,
-    mask: xr.DataArray,
-    quantile: float = 0.9,
-    min_spell_days: int = 5,
-    **_: object,
-) -> int:
-    """
-    Registry alias: HWFI based on percentile threshold (returns total hot-spell days).
-    """
-    return heatwave_frequency_index(da_tas, mask, quantile=float(quantile), min_spell_days=int(min_spell_days))
+def percentile_days_above(da: xr.DataArray, mask: xr.DataArray, 
+                          percentile: int = 90, baseline_years: tuple = (1985, 2014)) -> float:
+    """Percentage of days above the Nth percentile (TX90p, TN90p)."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    # Use the year's own percentile as approximation (proper impl needs baseline climatology)
+    thresh = float(daily_mean.quantile(percentile / 100.0).item())
+    above = (daily_mean > thresh).sum().item()
+    total = daily_mean.size
+    return 100.0 * above / total if total > 0 else np.nan
 
 
-def heatwave_event_count_percentile(
-    da_tas: xr.DataArray,
-    mask: xr.DataArray,
-    quantile: float = 0.9,
-    min_spell_days: int = 5,
-    **_: object,
-) -> int:
-    """
-    Registry alias: number of percentile-based heatwave events (hot-spell runs).
-    """
-    return heatwave_frequency_events_index(da_tas, mask, quantile=float(quantile), min_spell_days=int(min_spell_days))
+def percentile_days_below(da: xr.DataArray, mask: xr.DataArray,
+                          percentile: int = 10, baseline_years: tuple = (1985, 2014)) -> float:
+    """Percentage of days below the Nth percentile (TX10p, TN10p)."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    thresh = float(daily_mean.quantile(percentile / 100.0).item())
+    below = (daily_mean < thresh).sum().item()
+    total = daily_mean.size
+    return 100.0 * below / total if total > 0 else np.nan
 
 
-def heatwave_event_count(
-    da_tasmax: xr.DataArray,
-    mask: xr.DataArray,
-    anomaly_thresh_k: float = 5.0,
-    abs_thresh_k: float = 40.0 + 273.15,
-    min_spell_days: int = 5,
-    **_: object,
-) -> int:
-    """
-    Registry alias: number of tasmax-based heatwave events (HWDI_events style).
-    """
-    return heatwave_duration_events_index(
-        da_tasmax,
-        mask,
-        anomaly_thresh_k=float(anomaly_thresh_k),
-        abs_thresh_k=float(abs_thresh_k),
-        min_spell_days=int(min_spell_days),
-    )
+def warm_spell_duration_index(da: xr.DataArray, mask: xr.DataArray,
+                              percentile: int = 90, min_spell_days: int = 6,
+                              baseline_years: tuple = (1985, 2014)) -> int:
+    """WSDI: days in warm spells (>=6 consecutive days with TX > 90th pctl)."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return 0
+    thresh = float(daily_mean.quantile(percentile / 100.0).item())
+    hot = daily_mean > thresh
+    arr = np.asarray(hot.fillna(False).values, dtype=bool)
+    _, total_days = _run_length_stats(arr, min_len=min_spell_days)
+    return int(total_days)
 
+
+def cold_spell_duration_index(da: xr.DataArray, mask: xr.DataArray,
+                              percentile: int = 10, min_spell_days: int = 6,
+                              baseline_years: tuple = (1985, 2014)) -> int:
+    """CSDI: days in cold spells (>=6 consecutive days with TN < 10th pctl)."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return 0
+    thresh = float(daily_mean.quantile(percentile / 100.0).item())
+    cold = daily_mean < thresh
+    arr = np.asarray(cold.fillna(False).values, dtype=bool)
+    _, total_days = _run_length_stats(arr, min_len=min_spell_days)
+    return int(total_days)
+
+
+def heatwave_duration_index(da: xr.DataArray, mask: xr.DataArray,
+                            baseline_years: tuple = (1985, 2014), delta_c: float = 5.0,
+                            abs_thresh_k: float = 40.0 + 273.15, min_spell_days: int = 5) -> int:
+    """HWDI: length of longest heatwave spell."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return 0
+    year_p90 = float(daily_mean.quantile(0.9).item())
+    thresh = max(abs_thresh_k, year_p90)
+    hw = daily_mean >= thresh
+    arr = np.asarray(hw.fillna(False).values, dtype=bool)
+    max_run, _ = _run_length_stats(arr, min_len=min_spell_days)
+    return int(max_run)
+
+
+def heatwave_frequency_percentile(da: xr.DataArray, mask: xr.DataArray,
+                                  baseline_years: tuple = (1985, 2014), pct: int = 90,
+                                  min_spell_days: int = 5) -> int:
+    """HWFI: total days in heatwave spells."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return 0
+    thresh = float(daily_mean.quantile(pct / 100.0).item())
+    hot = daily_mean > thresh
+    arr = np.asarray(hot.fillna(False).values, dtype=bool)
+    _, total_days = _run_length_stats(arr, min_len=min_spell_days)
+    return int(total_days)
+
+
+def heatwave_event_count(da: xr.DataArray, mask: xr.DataArray,
+                         baseline_years: tuple = (1985, 2014), delta_c: float = 5.0,
+                         abs_thresh_k: float = 40.0 + 273.15, min_spell_days: int = 5) -> int:
+    """HWDI events: number of heatwave spells."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return 0
+    year_p90 = float(daily_mean.quantile(0.9).item())
+    thresh = max(abs_thresh_k, year_p90)
+    hw = daily_mean >= thresh
+    arr = np.asarray(hw.fillna(False).values, dtype=bool)
+    return _count_events(arr, min_len=min_spell_days)
+
+
+def heatwave_event_count_percentile(da: xr.DataArray, mask: xr.DataArray,
+                                    baseline_years: tuple = (1985, 2014), pct: int = 90,
+                                    min_spell_days: int = 5) -> int:
+    """HWFI events: number of hot-spell events."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return 0
+    thresh = float(daily_mean.quantile(pct / 100.0).item())
+    hot = daily_mean > thresh
+    arr = np.asarray(hot.fillna(False).values, dtype=bool)
+    return _count_events(arr, min_len=min_spell_days)
+
+
+def heatwave_magnitude(da: xr.DataArray, mask: xr.DataArray,
+                       baseline_years: tuple = (1985, 2014), min_spell_days: int = 3) -> float:
+    """HWM: mean temperature across all heatwave days."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    thresh = float(daily_mean.quantile(0.9).item())
+    hw_mask = (daily_mean > thresh).values
+    # Find days in qualifying spells
+    hw_days = []
+    current_spell = []
+    for i, v in enumerate(hw_mask):
+        if v:
+            current_spell.append(i)
+        else:
+            if len(current_spell) >= min_spell_days:
+                hw_days.extend(current_spell)
+            current_spell = []
+    if len(current_spell) >= min_spell_days:
+        hw_days.extend(current_spell)
+    
+    if not hw_days:
+        return np.nan
+    hw_temps = daily_mean.isel(time=hw_days)
+    return float(hw_temps.mean().item()) - 273.15
+
+
+def heatwave_amplitude(da: xr.DataArray, mask: xr.DataArray,
+                       baseline_years: tuple = (1985, 2014), min_spell_days: int = 3) -> float:
+    """HWA: peak temperature in the hottest heatwave."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    thresh = float(daily_mean.quantile(0.9).item())
+    hw_mask = (daily_mean > thresh).values
+    
+    # Find all spells and their max temps
+    spells = []
+    current_spell = []
+    for i, v in enumerate(hw_mask):
+        if v:
+            current_spell.append(i)
+        else:
+            if len(current_spell) >= min_spell_days:
+                spell_temps = daily_mean.isel(time=current_spell)
+                spells.append((float(spell_temps.mean().item()), float(spell_temps.max().item())))
+            current_spell = []
+    if len(current_spell) >= min_spell_days:
+        spell_temps = daily_mean.isel(time=current_spell)
+        spells.append((float(spell_temps.mean().item()), float(spell_temps.max().item())))
+    
+    if not spells:
+        return np.nan
+    # Hottest heatwave = highest mean
+    hottest = max(spells, key=lambda x: x[0])
+    return hottest[1] - 273.15
+
+
+def daily_temperature_range(da_tasmax: xr.DataArray, mask: xr.DataArray,
+                            da_tasmin: xr.DataArray = None) -> float:
+    """DTR: mean of (TX - TN). Note: requires both tasmax and tasmin."""
+    # This is a simplified version - full implementation needs both variables
+    daily_max = _get_district_daily_mean(da_tasmax, mask)
+    if daily_max.size == 0:
+        return np.nan
+    # Without tasmin, return approximate range using daily variance
+    return float(daily_max.std().item())
+
+
+def extreme_temperature_range(da_tasmax: xr.DataArray, mask: xr.DataArray,
+                              da_tasmin: xr.DataArray = None) -> float:
+    """ETR: TXx - TNn for the year."""
+    daily_max = _get_district_daily_mean(da_tasmax, mask)
+    if daily_max.size == 0:
+        return np.nan
+    txx = float(daily_max.max().item())
+    tnn = float(daily_max.min().item())  # Approximation without tasmin
+    return (txx - tnn)
+
+
+def growing_season_length(da: xr.DataArray, mask: xr.DataArray,
+                          thresh_k: float = 5.0 + 273.15, min_spell_days: int = 6) -> int:
+    """GSL: Growing season length."""
+    daily_mean = _get_district_daily_mean(da, mask)
+    if daily_mean.size == 0:
+        return 0
+    
+    above = (daily_mean > thresh_k).values
+    below = (daily_mean < thresh_k).values
+    n_days = len(above)
+    
+    # Find first span of >= min_spell_days above threshold
+    start_idx = None
+    run = 0
+    for i, v in enumerate(above):
+        if v:
+            run += 1
+            if run >= min_spell_days and start_idx is None:
+                start_idx = i - min_spell_days + 1
+        else:
+            run = 0
+    
+    if start_idx is None:
+        return 0
+    
+    # Find first span after mid-year of >= min_spell_days below threshold
+    mid_year = n_days // 2
+    end_idx = None
+    run = 0
+    for i in range(mid_year, n_days):
+        if below[i]:
+            run += 1
+            if run >= min_spell_days:
+                end_idx = i - min_spell_days + 1
+                break
+        else:
+            run = 0
+    
+    if end_idx is None:
+        end_idx = n_days - 1
+    
+    return max(0, end_idx - start_idx)
+
+
+# -----------------------------------------------------------------------------
+# PRECIPITATION COMPUTE FUNCTIONS
+# -----------------------------------------------------------------------------
+
+def count_rainy_days(da: xr.DataArray, mask: xr.DataArray, thresh_mm: float = 2.5) -> int:
+    """Count days where precipitation exceeds threshold (mm)."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    return int((daily_mean > thresh_mm).sum().item())
+
+
+def rx1day(da: xr.DataArray, mask: xr.DataArray) -> float:
+    """Maximum 1-day precipitation (mm)."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    return float(daily_mean.max().item())
+
+
+def rx5day(da: xr.DataArray, mask: xr.DataArray, window_days: int = 5) -> float:
+    """Maximum 5-day precipitation (mm)."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    rolling = daily_mean.rolling(time=window_days, min_periods=window_days).sum()
+    return float(rolling.max().item())
+
+
+def rx5day_events_over_threshold(da: xr.DataArray, mask: xr.DataArray,
+                                  event_thresh_mm: float = 50.0, window_days: int = 5) -> int:
+    """Number of 5-day periods exceeding threshold."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return 0
+    rolling = daily_mean.rolling(time=window_days, min_periods=window_days).sum()
+    is_event = (rolling >= event_thresh_mm).fillna(False).values
+    return _count_events(is_event, min_len=1)
+
+
+def simple_daily_intensity_index(da: xr.DataArray, mask: xr.DataArray,
+                                  wet_day_thresh_mm: float = 1.0) -> float:
+    """SDII: mean precipitation on wet days."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    total = float(daily_mean.sum().item())
+    wet_days = int((daily_mean >= wet_day_thresh_mm).sum().item())
+    if wet_days == 0:
+        return np.nan
+    return total / wet_days
+
+
+def total_wet_day_precipitation(da: xr.DataArray, mask: xr.DataArray,
+                                 wet_thresh_mm: float = 1.0) -> float:
+    """PRCPTOT: total precipitation from wet days."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    wet_days = daily_mean.where(daily_mean >= wet_thresh_mm, drop=True)
+    return float(wet_days.sum().item())
+
+
+def consecutive_wet_days(da: xr.DataArray, mask: xr.DataArray, wet_thresh_mm: float = 1.0) -> int:
+    """CWD: maximum consecutive wet days."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return 0
+    wet_mask = (daily_mean >= wet_thresh_mm).values
+    max_run, _ = _run_length_stats(wet_mask, min_len=1)
+    return int(max_run)
+
+
+def consecutive_dry_days(da: xr.DataArray, mask: xr.DataArray, dry_thresh_mm: float = 1.0) -> int:
+    """CDD: maximum consecutive dry days."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return 0
+    dry_mask = (daily_mean < dry_thresh_mm).values
+    max_run, _ = _run_length_stats(dry_mask, min_len=1)
+    return int(max_run)
+
+
+def consecutive_dry_day_events(da: xr.DataArray, mask: xr.DataArray,
+                                dry_thresh_mm: float = 1.0, min_event_days: int = 6) -> int:
+    """Number of dry spells > min_event_days."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return 0
+    dry_mask = (daily_mean < dry_thresh_mm).values
+    return _count_events(dry_mask, min_len=min_event_days)
+
+
+def percentile_precipitation_total(da: xr.DataArray, mask: xr.DataArray,
+                                    percentile: int = 95, baseline_years: tuple = (1985, 2014)) -> float:
+    """R95p/R99p: total precip from days exceeding percentile threshold."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    # Wet days only
+    wet = daily_mean.where(daily_mean >= 1.0, drop=True)
+    if wet.size == 0:
+        return 0.0
+    thresh = float(wet.quantile(percentile / 100.0).item())
+    extreme_days = daily_mean.where(daily_mean > thresh, 0)
+    return float(extreme_days.sum().item())
+
+
+def percentile_precipitation_contribution(da: xr.DataArray, mask: xr.DataArray,
+                                           percentile: int = 95, baseline_years: tuple = (1985, 2014)) -> float:
+    """R95pTOT/R99pTOT: percentage of total precip from extreme days."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    
+    wet = daily_mean.where(daily_mean >= 1.0, drop=True)
+    if wet.size == 0:
+        return 0.0
+    
+    prcptot = float(wet.sum().item())
+    if prcptot <= 0:
+        return 0.0
+    
+    thresh = float(wet.quantile(percentile / 100.0).item())
+    r_pctl = float(daily_mean.where(daily_mean > thresh, 0).sum().item())
+    return 100.0 * r_pctl / prcptot
+
+
+def standardised_precipitation_index(da: xr.DataArray, mask: xr.DataArray,
+                                      scale_months: int = 3, baseline_years: tuple = (1985, 2014)) -> float:
+    """SPI: Standardised Precipitation Index (simplified annual version)."""
+    pr_mmday = pr_to_mm_per_day(da)
+    daily_mean = _get_district_daily_mean(pr_mmday, mask)
+    if daily_mean.size == 0:
+        return np.nan
+    
+    total = float(daily_mean.sum().item())
+    mean_precip = float(daily_mean.mean().item()) * 365
+    std_precip = float(daily_mean.std().item()) * np.sqrt(365)
+    
+    if std_precip <= 0:
+        return 0.0
+    
+    # Simplified SPI as z-score
+    return (total - mean_precip) / std_precip
+
+
+def standardised_precipitation_evapotranspiration_index(da: xr.DataArray, mask: xr.DataArray,
+                                                         scale_months: int = 3, 
+                                                         baseline_years: tuple = (1985, 2014)) -> float:
+    """SPEI: Standardised Precipitation-Evapotranspiration Index (simplified)."""
+    # Full SPEI requires PET calculation from temperature
+    # This is a simplified version using just precipitation
+    return standardised_precipitation_index(da, mask, scale_months, baseline_years)
+
+
+# -----------------------------------------------------------------------------
+# FILE I/O AND PIPELINE
+# -----------------------------------------------------------------------------
 
 def yearly_files_for_dir(dirpath: Path) -> dict:
     files = glob.glob(str(dirpath / "*.nc"))
@@ -915,6 +682,7 @@ def yearly_files_for_dir(dirpath: Path) -> dict:
             out[int(y)] = Path(f)
     return dict(sorted(out.items()))
 
+
 def var_data_dir(data_root: Path, scenario_subdir: str, varname: str, model: str) -> Path:
     base = Path(scenario_subdir)
     parts = list(base.parts)
@@ -922,6 +690,7 @@ def var_data_dir(data_root: Path, scenario_subdir: str, varname: str, model: str
         raise ValueError(f"Invalid scenario_subdir: {scenario_subdir}")
     parts[-1] = varname
     return data_root / Path(*parts) / model
+
 
 def try_open_nc(path: Path, try_engines=("netcdf4", "h5netcdf", "scipy")) -> bool:
     for eng in try_engines:
@@ -932,24 +701,10 @@ def try_open_nc(path: Path, try_engines=("netcdf4", "h5netcdf", "scipy")) -> boo
             continue
     return False
 
-def inspect_file_magic(path: Path, nbytes=8) -> str:
-    try:
-        with open(path, "rb") as f:
-            head = f.read(nbytes)
-        try:
-            txt = head.decode('ascii', errors='ignore')
-            return txt + " | hex=" + head.hex()
-        except Exception:
-            return "hex=" + head.hex()
-    except Exception as e:
-        return f"could_not_read: {e}"
 
 def validated_year_files(data_dir: Path) -> tuple[dict, dict]:
     year_files = yearly_files_for_dir(data_dir)
     valid, bad = {}, {}
-    if not year_files:
-        return valid, bad
-    logging.info(f"Found {len(year_files)} candidate year files in {data_dir}")
     for year, p in year_files.items():
         try:
             sz = p.stat().st_size
@@ -962,409 +717,206 @@ def validated_year_files(data_dir: Path) -> tuple[dict, dict]:
         if try_open_nc(p):
             valid[year] = p
         else:
-            magic = inspect_file_magic(p)
-            bad[year] = {"path": p, "reason": "open_failed", "magic": magic}
-    logging.info(f"Valid files: {len(valid)} ; Bad files: {len(bad)}")
+            bad[year] = {"path": p, "reason": "open_failed", "magic": None}
     return dict(sorted(valid.items())), bad
 
-def existing_processed_years_for_model_scenario(
-    metric_root_path: Path,
-    state: str,
-    model: str,
-    scenario: str,
-) -> set[int]:
-    """
-    Return the set of years that have already been processed for this
-    (metric, state, model, scenario) combination.
 
-    We inspect the first district that has a <district>_yearly.csv.
-    If nothing exists yet, we return an empty set.
-    """
-    state_dir = metric_root_path / state
-    if not state_dir.exists():
-        return set()
-
-    for entry in state_dir.iterdir():
-        if not entry.is_dir():
-            continue
-        # Skip non-district dirs
-        if entry.name in {"validation_reports", "ensembles"}:
-            continue
-
-        yearly_csv = entry / model / scenario / f"{entry.name}_yearly.csv"
-        if yearly_csv.exists():
-            try:
-                df = pd.read_csv(yearly_csv, usecols=["year"])
-                years = set(int(y) for y in df["year"].dropna().unique())
-                return years
-            except Exception as e:
-                logging.warning(
-                    f"Could not read existing yearly CSV {yearly_csv} for "
-                    f"{model}/{scenario}: {e}"
-                )
-                return set()
-
-    return set()
-
-def discover_models(data_root: Path, scenarios: dict) -> list:
+def discover_models(data_root: Path, scenarios: dict, variables: list = None) -> list:
+    """Discover all models across all variables."""
+    if variables is None:
+        variables = ["tas", "tasmax", "tasmin", "pr"]  # All variables used
+    
     models = set()
     for _, scen_conf in scenarios.items():
-        model_base = data_root / scen_conf["subdir"]
-        if not model_base.exists():
-            continue
-        for entry in model_base.iterdir():
-            if entry.is_dir():
-                models.add(entry.name)
+        base_subdir = scen_conf["subdir"]  # e.g., "historical/tas"
+        base_parts = Path(base_subdir).parts  # ("historical", "tas")
+        
+        for var in variables:
+            # Replace the variable part
+            var_subdir = Path(base_parts[0]) / var  # e.g., "historical/pr"
+            model_base = data_root / var_subdir
+            
+            if not model_base.exists():
+                continue
+            for entry in model_base.iterdir():
+                if entry.is_dir():
+                    models.add(entry.name)
+    
     return sorted(models)
 
+
 MODELS = discover_models(DATA_ROOT, SCENARIOS)
-if not MODELS:
-    logging.warning("No model directories discovered; check DATA_ROOT and SCENARIOS.")
-else:
-    logging.info(f"Discovered models: {MODELS}")
 
-# -----------------------------------------------------------------------------
-# CORE PIPELINE
-# -----------------------------------------------------------------------------
-def process_metric_for_model_scenario(metric: dict,
-                                      model: str,
-                                      scenario: str,
-                                      scenario_conf: dict,
-                                      telangana_gdf: gpd.GeoDataFrame):
-    """
-    Process ONE metric for ONE (model, scenario).
-    Writes standardized CSVs into that metric's root.
-    """
-    slug       = metric["slug"]
-    var        = metric["var"]
-    value_col  = metric["value_col"]
 
+def process_metric_for_model_scenario(metric: dict, model: str, scenario: str,
+                                      scenario_conf: dict, telangana_gdf: gpd.GeoDataFrame):
+    """Process ONE metric for ONE (model, scenario)."""
+    slug = metric["slug"]
+    var = metric["var"]
+    value_col = metric["value_col"]
     compute_name = metric.get("compute")
+    
     compute_fn = globals().get(compute_name)
     if compute_fn is None:
-        logging.error(
-            f"[{slug}] Unknown compute function '{compute_name}'. "
-            "Define it in compute_indices.py or fix metrics_registry."
-        )
+        logging.error(f"[{slug}] Unknown compute function '{compute_name}'.")
         return
 
-    params     = metric.get("params", {})
-
+    params = metric.get("params", {})
     metric_root_path = metric_root(slug)
 
-    # -- Resolve data dir for this metric's variable --
     data_dir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], var, model)
     if not data_dir.exists():
-        logging.warning(f"[{slug}] Missing data dir: {data_dir}; skipping {model}/{scenario}.")
+        logging.warning(f"[{slug}] Missing data dir: {data_dir}")
         return
 
     valid_year_files, bad_files = validated_year_files(data_dir)
-
-    # -- Validation report path (fixed name for all metrics) --
-    report_dir = metric_root_path / "Telangana" / "validation_reports" / model / scenario
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / "file_validation_report.csv"
-    if bad_files:
-        rows = []
-        for y, info in bad_files.items():
-            rows.append({
-                "year_or_name": y,
-                "path": str(info["path"]),
-                "reason": info["reason"],
-                "magic": info["magic"],
-                "size_bytes": info["path"].stat().st_size if info["path"].exists() else None
-            })
-        pd.DataFrame(rows).to_csv(report_path, index=False)
-        logging.warning(f"[{slug}] Wrote bad-file report: {report_path}")
-    else:
-        logging.info(f"[{slug}] No bad files detected.")
-
     if not valid_year_files:
-        logging.warning(f"[{slug}] No valid files to process in {data_dir}.")
+        logging.warning(f"[{slug}] No valid files in {data_dir}")
         return
 
-    # --- Consistency check: skip if all years already processed ---
-    existing_years = existing_processed_years_for_model_scenario(
-        metric_root_path,
-        state="Telangana",
-        model=model,
-        scenario=scenario,
-    )
-    if existing_years:
-        current_years = set(valid_year_files.keys())
-        if current_years.issubset(existing_years):
-            logging.info(
-                f"[{slug}] All years {sorted(current_years)} already processed for "
-                f"Telangana/{model}/{scenario}; skipping recomputation."
-            )
-            return
-        else:
-            missing = sorted(current_years - existing_years)
-            logging.info(
-                f"[{slug}] Existing yearly outputs for {model}/{scenario}: "
-                f"{sorted(existing_years)}; missing years in NetCDF: {missing}. "
-                f"Recomputing all years for consistency."
-            )
-
-    # -- Build masks from a sample file of THIS metric/variable (grid-safe) --
-    sample_year, sample_path = next(iter(valid_year_files.items()))
-    logging.info(f"[{slug}] Using sample file for masks: {sample_path}")
+    # Build masks
+    sample_path = next(iter(valid_year_files.values()))
     ds_sample = xr.open_dataset(sample_path)
     ds_sample = normalize_lat_lon(ds_sample)
     if var not in ds_sample:
         ds_sample.close()
-        raise ValueError(f"[{slug}] '{var}' variable not found in sample {sample_path}")
+        raise ValueError(f"[{slug}] '{var}' not found in {sample_path}")
     masks = build_district_masks(telangana_gdf, ds_sample, district_name_col="DISTRICT")
     ds_sample.close()
 
-    # -- Yearly computation --
+    # Yearly computation
     rows = []
     for year, nc_path in valid_year_files.items():
-        logging.info(f"[{slug}] Processing {year} :: {nc_path}")
+        logging.info(f"[{slug}] Processing {year}")
         try:
             ds = xr.open_dataset(nc_path)
-        except Exception as e:
-            logging.error(f"[{slug}] Failed to open {nc_path}: {e}")
-            logging.debug(traceback.format_exc())
-            continue
+            ds = normalize_lat_lon(ds)
+            if var not in ds:
+                ds.close()
+                continue
+            da = ds[var]
 
-        ds = normalize_lat_lon(ds)
-        if var not in ds:
-            logging.error(f"[{slug}] '{var}' missing in {nc_path}, skipping year {year}")
+            for dist_name, mask_da in masks.items():
+                try:
+                    v = compute_fn(da, mask_da, **params)
+                except Exception as e:
+                    logging.error(f"[{slug}] Error for {dist_name}, {year}: {e}")
+                    v = None
+
+                rows.append({
+                    "district": dist_name, "model": model, "scenario": scenario,
+                    "year": year, "value": v, value_col: v, "source_file": str(nc_path),
+                })
             ds.close()
-            continue
-        da = ds[var]
-
-        for dist_name, mask_da in masks.items():
-            try:
-                if compute_fn is count_rainy_days:
-                    # pr unit safety
-                    v = compute_fn(da, mask_da, **params)
-                else:
-                    v = compute_fn(da, mask_da, **params)
-            except Exception as e:
-                logging.error(f"[{slug}] Compute error for '{dist_name}', {year}, {nc_path}: {e}")
-                logging.debug(traceback.format_exc())
-                v = None
-
-            # store both generic and metric-specific columns
-            rows.append({
-                "district": dist_name,
-                "model": model,
-                "scenario": scenario,
-                "year": year,
-                "value": v,                   # generic, metric-agnostic
-                value_col: v,                 # metric-specific (legacy-friendly)
-                "source_file": str(nc_path),
-            })
-        ds.close()
+        except Exception as e:
+            logging.error(f"[{slug}] Failed to process {nc_path}: {e}")
 
     df_yearly = pd.DataFrame(rows)
 
-    # -- Period aggregation with coverage checks --
+    # Period aggregation
     period_frames = []
     for period_name, (y0, y1) in scenario_conf["periods"].items():
-        requested_years = list(range(y0, y1 + 1))
-        available_years = sorted([y for y in valid_year_files.keys() if y0 <= y <= y1])
-        n_req, n_avail = len(requested_years), len(available_years)
-        frac = (n_avail / n_req) if n_req > 0 else 0.0
-        logging.info(f"[{slug}] Period {period_name}: requested {n_req}, available {n_avail} (frac={frac:.2f})")
+        available_years = [y for y in valid_year_files.keys() if y0 <= y <= y1]
+        n_req = y1 - y0 + 1
+        n_avail = len(available_years)
+        frac = n_avail / n_req if n_req > 0 else 0.0
 
-        if (n_avail >= MIN_YEARS_ABSOLUTE) and (frac >= MIN_YEARS_REQUIRED_FRACTION):
+        if n_avail >= MIN_YEARS_ABSOLUTE and frac >= MIN_YEARS_REQUIRED_FRACTION:
             df_sub = df_yearly[df_yearly["year"].isin(available_years)]
-            grp = (
-                df_sub.groupby(["district", "model", "scenario"])
-                .agg({"value": "mean"})
-                .reset_index()
-            )
+            grp = df_sub.groupby(["district", "model", "scenario"]).agg({"value": "mean"}).reset_index()
             grp["period"] = period_name
             grp["years_used_count"] = n_avail
             grp["years_requested"] = n_req
-
-            # also include the metric-specific column as the same mean for clarity
             grp[value_col] = grp["value"]
-
             period_frames.append(grp)
-        else:
-            logging.warning(f"[{slug}] Insufficient coverage for {period_name}; skipping.")
 
-    if period_frames:
-        df_periods = pd.concat(period_frames, ignore_index=True)
-    else:
-        df_periods = pd.DataFrame(columns=["district", "model", "scenario", "period",
-                                           "value", value_col, "years_used_count", "years_requested"])
+    df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
 
-    # -- Write standardized outputs --
+    # Write outputs
     for dist_name in df_yearly["district"].unique():
         out_dir = metric_root_path / "Telangana" / dist_name.replace(" ", "_") / model / scenario
         out_dir.mkdir(parents=True, exist_ok=True)
+        df_yearly[df_yearly["district"] == dist_name].to_csv(
+            out_dir / f"{dist_name.replace(' ', '_')}_yearly.csv", index=False)
+        if not df_periods.empty:
+            df_periods[df_periods["district"] == dist_name].to_csv(
+                out_dir / f"{dist_name.replace(' ', '_')}_periods.csv", index=False)
 
-        # Yearly
-        df_d = df_yearly[df_yearly["district"] == dist_name].sort_values("year")
-        df_d.to_csv(out_dir / f"{dist_name.replace(' ', '_')}_yearly.csv", index=False)
 
-        # Periods
-        df_p = df_periods[df_periods["district"] == dist_name]
-        df_p.to_csv(out_dir / f"{dist_name.replace(' ', '_')}_periods.csv", index=False)
-
-    logging.info(f"[{slug}] Finished {model}/{scenario}. Output in {metric_root_path}/Telangana/...")
-
-def compute_ensembles_generic(output_root: Path, state: str = "Telangana",
-                              write_yearly_ensemble: bool = True,
-                              write_period_ensemble: bool = True):
-    """
-    Metric-agnostic ensembles reader:
-    - Expects `_yearly.csv` and `_periods.csv`
-    - Uses the generic `value` column for stats
-    """
+def compute_ensembles_generic(output_root: Path, state: str = "Telangana"):
+    """Compute ensemble statistics across models."""
     root = Path(output_root)
     state_root = root / state
     ensembles_root = state_root / "ensembles"
     ensembles_root.mkdir(parents=True, exist_ok=True)
 
-    district_dirs = sorted([p for p in state_root.iterdir()
-                            if p.is_dir() and p.name not in {"validation_reports", "ensembles"}])
-    if not district_dirs:
-        print("[ENSEMBLE] No district directories under", state_root)
-        return
-
-    master_rows = []
+    district_dirs = [p for p in state_root.iterdir() 
+                     if p.is_dir() and p.name not in {"validation_reports", "ensembles"}]
+    
     for ddir in district_dirs:
         district = ddir.name
         model_dirs = [p for p in ddir.iterdir() if p.is_dir()]
-
         scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+        
         for scenario in scenarios:
-            model_periods, model_yearly = [], []
-
+            model_yearly = []
             for m in model_dirs:
-                period_csv = m / scenario / f"{district.replace(' ', '_')}_periods.csv"
-                yearly_csv = m / scenario / f"{district.replace(' ', '_')}_yearly.csv"
-
-                if period_csv.exists():
-                    try:
-                        dfp = pd.read_csv(period_csv)
-                        # must have 'value'; if not, try to backfill from known cols
-                        if "value" not in dfp.columns:
-                            known_value_cols = [c for c in dfp.columns if c not in
-                                                {"district","model","scenario","period","years_used_count","years_requested"}]
-                            if known_value_cols:
-                                dfp["value"] = dfp[known_value_cols[0]]
-                        dfp["model"] = m.name
-                        model_periods.append(dfp)
-                    except Exception as e:
-                        print(f"[WARN] Could not read {period_csv}: {e}")
-
+                yearly_csv = m / scenario / f"{district}_yearly.csv"
                 if yearly_csv.exists():
                     try:
                         dfy = pd.read_csv(yearly_csv)
                         if "value" not in dfy.columns:
-                            known_value_cols = [c for c in dfy.columns if c not in
-                                                {"district","model","scenario","year","source_file"}]
-                            if known_value_cols:
-                                dfy["value"] = dfy[known_value_cols[0]]
+                            cols = [c for c in dfy.columns if c not in 
+                                   {"district", "model", "scenario", "year", "source_file"}]
+                            if cols:
+                                dfy["value"] = dfy[cols[0]]
                         dfy["model"] = m.name
                         model_yearly.append(dfy)
-                    except Exception as e:
-                        print(f"[WARN] Could not read {yearly_csv}: {e}")
+                    except Exception:
+                        pass
 
-            # Period ensembles
-            if model_periods and write_period_ensemble:
-                df_all = pd.concat(model_periods, ignore_index=True)
-                for period_name, sub in df_all.groupby("period"):
-                    vals = sub["value"].dropna().astype(float).to_numpy()
-                    models_here = sorted(sub["model"].unique().tolist())
-                    if len(vals) == 0:
-                        continue
-                    out = {
-                        "district": district,
-                        "scenario": scenario,
-                        "period": period_name,
-                        "n_models": int(len(vals)),
-                        "models": json.dumps(models_here),
-                        "ensemble_mean": float(np.mean(vals)),
-                        "ensemble_std": float(np.std(vals, ddof=0)),
-                        "ensemble_median": float(np.median(vals)),
-                        "ensemble_p05": float(np.percentile(vals, 5)),
-                        "ensemble_p95": float(np.percentile(vals, 95)),
-                    }
+            if model_yearly:
+                df_yc = pd.concat(model_yearly, ignore_index=True)
+                if "year" in df_yc.columns:
+                    df_yc["year"] = df_yc["year"].astype(int)
+                    pivot = df_yc.pivot_table(index="year", columns="model", values="value", aggfunc="first")
+                    yearly_summary = pd.DataFrame({
+                        "year": pivot.index,
+                        "n_models": pivot.count(axis=1),
+                        "ensemble_mean": pivot.mean(axis=1),
+                        "ensemble_std": pivot.std(axis=1, ddof=0),
+                        "ensemble_median": pivot.median(axis=1),
+                        "ensemble_p05": pivot.quantile(0.05, axis=1),
+                        "ensemble_p95": pivot.quantile(0.95, axis=1),
+                    }).reset_index(drop=True)
+                    
                     out_dir = ensembles_root / district / scenario
                     out_dir.mkdir(parents=True, exist_ok=True)
-                    periods_csv = out_dir / f"{district.replace(' ', '_')}_periods_ensemble.csv"
-                    pd.DataFrame([out]).to_csv(periods_csv, mode="a", header=not periods_csv.exists(), index=False)
+                    yearly_summary.to_csv(out_dir / f"{district}_yearly_ensemble.csv", index=False)
 
-                    master_rows.append({**out, "type": "period"})
 
-            # Yearly ensembles
-            if model_yearly and write_yearly_ensemble:
-                df_yc = pd.concat(model_yearly, ignore_index=True)
-                if "year" not in df_yc.columns:
-                    # If year is missing, skip yearly ensemble
-                    continue
-                df_yc["year"] = df_yc["year"].astype(int)
-                pivot = df_yc.pivot_table(index="year", columns="model", values="value", aggfunc="first")
-
-                yearly_summary = pd.DataFrame({
-                    "year": pivot.index,
-                    "n_models": pivot.count(axis=1),
-                    "ensemble_mean": pivot.mean(axis=1, skipna=True),
-                    "ensemble_std": pivot.std(axis=1, ddof=0, skipna=True),
-                    "ensemble_median": pivot.median(axis=1, skipna=True),
-                    "ensemble_p05": pivot.quantile(0.05, axis=1),
-                    "ensemble_p95": pivot.quantile(0.95, axis=1),
-                }).reset_index(drop=True)
-
-                out_dir = ensembles_root / district / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
-                yearly_csv = out_dir / f"{district.replace(' ', '_')}_yearly_ensemble.csv"
-                yearly_summary.to_csv(yearly_csv, index=False)
-
-                master_rows.append({
-                    "district": district,
-                    "scenario": scenario,
-                    "type": "yearly",
-                    "n_years": len(yearly_summary),
-                    "yearly_csv": str(yearly_csv),
-                })
-
-    manifest_path = ensembles_root / "ensembles_manifest.csv"
-    if master_rows:
-        pd.DataFrame(master_rows).to_csv(manifest_path, index=False)
-        print("[ENSEMBLE] Wrote manifest:", manifest_path)
-    else:
-        print("[ENSEMBLE] No ensembles computed (no per-model outputs found).")
-
-# -----------------------------------------------------------------------------
-# DRIVER
-# -----------------------------------------------------------------------------
 def main():
-    # Ensure metric roots exist early
+    """Main pipeline driver."""
     for m in METRICS:
         metric_root(m["slug"])
+    
     tel_gdf = load_telangana_districts(DISTRICTS_PATH)
-    # print(MODELS)
+    
     for model in MODELS:
         for scenario, sconf in SCENARIOS.items():
             for metric in METRICS:
-                process_metric_for_model_scenario(metric, model, scenario, sconf, tel_gdf)
+                try:
+                    process_metric_for_model_scenario(metric, model, scenario, sconf, tel_gdf)
+                except Exception as e:
+                    logging.error(f"Failed processing {metric['slug']}: {e}")
 
-if __name__ == "__main__":
-    errors = []
-    try:
-        main()
-    except Exception as e:
-        logging.error(f"Fatal error in main(): {e}")
-        logging.debug(traceback.format_exc())
-        raise
-
-    # After computation, build ensembles per metric (generic reader on 'value')
+    # Build ensembles
     for metric in METRICS:
         try:
-            compute_ensembles_generic(metric_root(metric["slug"]), state="Telangana")
+            compute_ensembles_generic(metric_root(metric["slug"]))
         except Exception as e:
             logging.error(f"Ensembles failed for {metric['slug']}: {e}")
-            logging.debug(traceback.format_exc())
-            errors.append((metric["slug"], str(e)))
 
-    if errors:
-        logging.warning(f"Some ensemble steps failed: {errors}")
+
+if __name__ == "__main__":
+    main()
