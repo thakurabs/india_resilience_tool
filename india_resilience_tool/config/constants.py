@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import Tuple
 
 # ---- Geo simplification tolerances ----
-SIMPLIFY_TOL_ADM2: float = 0.015
-SIMPLIFY_TOL_ADM1: float = 0.01
+SIMPLIFY_TOL_ADM2: float = 0.025
+SIMPLIFY_TOL_ADM1: float = 0.015
 
 # ---- Bounding box for India ----
 MIN_LON: float = 68.0

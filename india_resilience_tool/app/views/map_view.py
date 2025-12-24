@@ -133,23 +133,16 @@ def render_map_view(
     ctx = perf_section("map: render st_folium") if perf_section is not None else nullcontext()
 
     with ctx:
-        _state_key = str(selected_state).strip().lower().replace(" ", "_")
-        _district_key = str(selected_district).strip().lower().replace(" ", "_")
-
-        map_key = (
-            f"main_map_{variable_slug}_{map_mode}_"
-            f"{sel_scenario}_{sel_period}_{sel_stat}_"
-            f"{_state_key}_{_district_key}"
-        )
+        # Simplified key - only include what actually changes the map content
+        # Reduces unnecessary re-renders when unrelated state changes
+        map_key = f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{selected_state}_{selected_district}"
 
         returned = st_folium(
             m,
             width=map_width,
             height=map_height,
-            returned_objects=[
-                "last_object_clicked",
-                "last_clicked",
-            ],
+            returned_objects=["last_object_clicked"],  # Reduced from 2 to 1 - only need clicks
+            use_container_width=False,  # Explicit - avoids resize calculations
             key=map_key,
         )
 

@@ -1335,18 +1335,18 @@ perf_end("rank_table: build", _t_rank)
 
 _t_disp = perf_start("map: filter display_gdf")
 
-display_gdf = merged.copy()
+display_gdf = merged
 if selected_state != "All":
-    row_state = adm1[adm1["shapeName"].astype(str).str.strip() == selected_state]
-    if not row_state.empty:
-        geom = row_state.iloc[0].geometry
-        display_gdf = display_gdf[display_gdf.geometry.within(geom.buffer(0.001))]
-    else:
-        display_gdf = display_gdf[
+    state_mask = display_gdf["state_name"].astype(str).str.strip() == selected_state
+    if not state_mask.any():
+        # Fallback to case-insensitive contains
+        state_mask = (
             display_gdf["state_name"]
             .astype(str)
             .str.contains(selected_state, case=False, na=False)
-        ]
+        )
+    display_gdf = display_gdf[state_mask]
+
 if selected_district != "All":
     display_gdf = display_gdf[
         display_gdf["district_name"].astype(str) == selected_district
@@ -1358,10 +1358,13 @@ m = folium.Map(
     location=st.session_state["map_center"],
     zoom_start=st.session_state["map_zoom"],
     tiles="CartoDB positron",
-    control_scale=True,
+    control_scale=False,      # Disable scale control - minor speedup
     min_zoom=4,
     max_zoom=12,
-    prefer_canvas=True,
+    prefer_canvas=True,       # Already good - uses Canvas instead of SVG
+    zoom_control=True,
+    dragging=True,
+    scrollWheelZoom=True,
 )
 
 try:
@@ -1563,8 +1566,9 @@ folium.GeoJson(
     style_function=style_fn,
     tooltip=tooltip,
     highlight_function=highlight_fn,
-    smooth_factor=0.8,
+    smooth_factor=1.5,        # Increased from 0.8 - reduces polygon vertices for faster render
     zoom_on_click=False,
+    bubblingMouseEvents=False,  # Prevents event propagation overhead
 ).add_to(m)
 perf_end("map: GeoJSON serialize+add layer", _t_geojson)
 
