@@ -2434,6 +2434,7 @@ with col2:
                 sel_scenario=sel_scenario,
                 sel_period=sel_period,
                 sel_stat=sel_stat,
+                logo_path=LOGO_PATH,
             )
 
         # --- Load historical + selected scenario series separately ---
@@ -2480,6 +2481,10 @@ with col2:
         )
         from india_resilience_tool.data.discovery import slugify_fs
 
+        from india_resilience_tool.viz.style import ensure_16x9_figsize
+
+        _fig_size_panel = ensure_16x9_figsize(FIG_SIZE_PANEL, mode="fit_width")
+
         # ---- SINGLE-DISTRICT DETAILS PANEL (extracted to details_panel.py) ----
         render_details_panel(
             # Core district/state context
@@ -2511,7 +2516,7 @@ with col2:
             # GeoDataFrame for district comparison
             merged=merged,
             # Figure styling
-            fig_size_panel=FIG_SIZE_PANEL,
+            fig_size_panel=_fig_size_panel,
             fig_dpi_panel=FIG_DPI_PANEL,
             font_size_title=FONT_SIZE_TITLE,
             font_size_label=FONT_SIZE_LABEL,
@@ -2533,6 +2538,7 @@ with col2:
             # Optional filesystem paths
             state_dir_for_fs=state_dir_for_fs,
             district_for_fs=district_for_fs,
+            logo_path=LOGO_PATH,
         )
 
 render_perf_panel_safe()

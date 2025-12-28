@@ -17,10 +17,21 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 import re
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from pathlib import Path
+from typing import Any, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import pandas as pd
+
+from india_resilience_tool.viz.style import (
+    IRTFigureStyle,
+    add_ra_logo,
+    ensure_16x9_figsize,
+    irt_style_context,
+    strip_spines,
+)
+
+PathLike = Union[str, Path]
 
 
 # -------------------------
@@ -118,23 +129,31 @@ def make_scenario_comparison_figure(
     sel_stat: str,
     district_name: str,
     ax=None,
-    figsize: tuple[float, float] = (4.8, 2.4),
+    figsize: Optional[tuple[float, float]] = None,
     fig_dpi: int = 150,
     font_size_title: int = 11,
     font_size_label: int = 10,
     font_size_ticks: int = 9,
     font_size_legend: int = 9,
+    *,
+    logo_path: Optional[PathLike] = None,
+    style: Optional[IRTFigureStyle] = None,
 ) -> Tuple[Optional[Any], Optional[Any]]:
     """
     Build a compact bar chart showing period-mean values for each scenario.
 
-    Intentionally aligned with the legacy dashboard implementation.
+    Notes:
+    - If `ax` is provided, the caller owns figure sizing; this function will not
+      add the logo to avoid duplicating it on multi-axes pages (e.g., A4 PDFs).
     """
     import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
 
     if panel_df is None or panel_df.empty:
         return None, None
+
+    s = style or IRTFigureStyle()
+    figsize_eff = figsize or ensure_16x9_figsize(s.panel_figsize, mode="fit_width")
 
     # Keep these canonicalisations for compatibility/future highlighting
     _ = str(sel_scenario).strip().lower()
@@ -207,79 +226,85 @@ def make_scenario_comparison_figure(
     if not xs:
         return None, None
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize, dpi=fig_dpi)
-    else:
-        fig = ax.figure
+    with irt_style_context(s):
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize_eff, dpi=fig_dpi)
+        else:
+            fig = ax.figure
 
-    ax.bar(
-        xs,
-        ys,
-        color=colors,
-        edgecolor="black",
-        linewidth=0.9,
-        width=0.45,
-    )
-
-    group_centres: list[float] = []
-    group_labels: list[str] = []
-    for p_idx, period in enumerate(periods_present):
-        group_centres.append(p_idx * group_spacing)
-        group_labels.append(period)
-
-    ax.set_xticks(group_centres)
-    ax.set_xticklabels(group_labels, fontsize=font_size_ticks)
-    ax.set_ylabel(metric_label, fontsize=font_size_label)
-
-    ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
-    ax.tick_params(axis="y", labelsize=font_size_ticks)
-    ax.tick_params(axis="x", labelsize=font_size_ticks)
-
-    for x_val, y_val in zip(xs, ys):
-        if y_val is None or (isinstance(y_val, float) and not np.isfinite(y_val)):
-            continue
-        ax.text(
-            x_val,
-            y_val,
-            f"{y_val:.1f}",
-            ha="center",
-            va="bottom",
-            fontsize=font_size_ticks,
+        ax.bar(
+            xs,
+            ys,
+            color=colors,
+            edgecolor="black",
+            linewidth=0.9,
+            width=0.45,
         )
 
-    ax.set_title(
-        f"Scenario comparison – {district_name}",
-        fontsize=font_size_title,
-        pad=6,
-    )
+        group_centres: list[float] = []
+        group_labels: list[str] = []
+        for p_idx, period in enumerate(periods_present):
+            group_centres.append(p_idx * group_spacing)
+            group_labels.append(period)
 
-    legend_handles: list[Any] = []
-    legend_labels: list[str] = []
-    scen_seen = {sc for (sc, _) in combos}
-    for scen in SCENARIO_ORDER:
-        scen_norm = str(scen).strip().lower()
-        if scen_norm in scen_seen:
-            legend_handles.append(
-                mpatches.Patch(color=scenario_colors.get(scen_norm, "grey"))
+        ax.set_xticks(group_centres)
+        ax.set_xticklabels(group_labels, fontsize=font_size_ticks)
+        ax.set_ylabel(metric_label, fontsize=font_size_label)
+
+        ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
+        ax.tick_params(axis="y", labelsize=font_size_ticks)
+        ax.tick_params(axis="x", labelsize=font_size_ticks)
+
+        for x_val, y_val in zip(xs, ys):
+            if y_val is None or (isinstance(y_val, float) and not np.isfinite(y_val)):
+                continue
+            ax.text(
+                x_val,
+                y_val,
+                f"{y_val:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=font_size_ticks,
             )
-            legend_labels.append(SCENARIO_DISPLAY.get(scen_norm, scen_norm))
 
-    if legend_handles:
-        ax.legend(
-            legend_handles,
-            legend_labels,
-            frameon=False,
-            fontsize=font_size_legend,
-            ncol=len(legend_handles),
-            loc="upper left",
-            bbox_to_anchor=(0.0, 1.02),
+        ax.set_title(
+            f"Scenario comparison – {district_name}",
+            fontsize=font_size_title,
+            pad=6,
         )
 
-    for spine in ax.spines.values():
-        spine.set_visible(False)
+        legend_handles: list[Any] = []
+        legend_labels: list[str] = []
+        scen_seen = {sc for (sc, _) in combos}
+        for scen in SCENARIO_ORDER:
+            scen_norm = str(scen).strip().lower()
+            if scen_norm in scen_seen:
+                legend_handles.append(
+                    mpatches.Patch(color=scenario_colors.get(scen_norm, "grey"))
+                )
+                legend_labels.append(SCENARIO_DISPLAY.get(scen_norm, scen_norm))
 
-    fig.tight_layout()
-    return fig, ax
+        if legend_handles:
+            ax.legend(
+                legend_handles,
+                legend_labels,
+                frameon=False,
+                fontsize=font_size_legend,
+                ncol=len(legend_handles),
+                loc="upper left",
+                bbox_to_anchor=(0.0, 1.02),
+            )
+
+        strip_spines(ax)
+        try:
+            fig.tight_layout()
+        except Exception:
+            pass
+
+        if ax is None and logo_path:
+            add_ra_logo(fig, logo_path)
+
+        return fig, ax
 
 
 def create_trend_figure_for_index(
@@ -288,104 +313,120 @@ def create_trend_figure_for_index(
     idx_label: str,
     scenario_name: str,
     ax=None,
-    figsize: tuple[float, float] = (4.8, 2.4),
+    figsize: Optional[tuple[float, float]] = None,
     fig_dpi: int = 150,
     font_size_legend: int = 8,
+    *,
+    logo_path: Optional[PathLike] = None,
+    style: Optional[IRTFigureStyle] = None,
 ) -> Any:
-    """Create the 'Trend over time' figure (historical + scenario + bands)."""
+    """Create the 'Trend over time' figure (historical + scenario + bands).
+
+    Notes:
+    - If `ax` is provided, the caller owns figure sizing; this function will not
+      add the logo to avoid duplicating it on multi-axes pages (e.g., A4 PDFs).
+    """
     import matplotlib.pyplot as plt
 
-    if ax is None:
-        fig_ts, ax_ts = plt.subplots(figsize=figsize, dpi=fig_dpi)
-    else:
-        ax_ts = ax
-        fig_ts = ax_ts.figure
+    s = style or IRTFigureStyle()
+    figsize_eff = figsize or ensure_16x9_figsize(s.panel_figsize, mode="fit_width")
 
-    has_any = False
+    with irt_style_context(s):
+        if ax is None:
+            fig_ts, ax_ts = plt.subplots(figsize=figsize_eff, dpi=fig_dpi)
+        else:
+            ax_ts = ax
+            fig_ts = ax_ts.figure
 
-    if hist_ts is not None and not hist_ts.empty:
-        xh = pd.to_numeric(hist_ts["year"], errors="coerce").to_numpy(dtype=float)
-        yh = pd.to_numeric(hist_ts["mean"], errors="coerce").to_numpy(dtype=float)
-        ax_ts.plot(
-            xh,
-            yh,
-            linewidth=2.0,
-            color="tab:blue",
-            label="Historical",
-        )
-        if {"p05", "p95"}.issubset(hist_ts.columns):
-            y05 = pd.to_numeric(hist_ts["p05"], errors="coerce").to_numpy(dtype=float)
-            y95 = pd.to_numeric(hist_ts["p95"], errors="coerce").to_numpy(dtype=float)
-            ax_ts.fill_between(
-                xh,
-                y05,
-                y95,
-                alpha=0.2,
-                color="tab:blue",
-            )
-        has_any = True
+        has_any = False
 
-    if scen_ts is not None and not scen_ts.empty:
-        scen_label = (scenario_name or "scenario").upper()
-        xs = pd.to_numeric(scen_ts["year"], errors="coerce").to_numpy(dtype=float)
-        ys = pd.to_numeric(scen_ts["mean"], errors="coerce").to_numpy(dtype=float)
-        ax_ts.plot(
-            xs,
-            ys,
-            linewidth=2.0,
-            color="tab:red",
-            label=scen_label,
-        )
-        if {"p05", "p95"}.issubset(scen_ts.columns):
-            y05 = pd.to_numeric(scen_ts["p05"], errors="coerce").to_numpy(dtype=float)
-            y95 = pd.to_numeric(scen_ts["p95"], errors="coerce").to_numpy(dtype=float)
-            ax_ts.fill_between(
-                xs,
-                y05,
-                y95,
-                alpha=0.2,
-                color="tab:red",
-            )
-        has_any = True
-
-    if (
-        hist_ts is not None
-        and scen_ts is not None
-        and not hist_ts.empty
-        and not scen_ts.empty
-    ):
-        try:
-            last_hist_year = int(hist_ts["year"].max())
-            last_hist = hist_ts.loc[hist_ts["year"] == last_hist_year].iloc[-1]
-
-            target_year = 2020
-            if "year" in scen_ts.columns and target_year in scen_ts["year"].values:
-                first_scen = scen_ts.loc[scen_ts["year"] == target_year].iloc[0]
-            else:
-                first_scen = scen_ts.loc[scen_ts["year"].idxmin()]
-
+        if hist_ts is not None and not hist_ts.empty:
+            xh = pd.to_numeric(hist_ts["year"], errors="coerce").to_numpy(dtype=float)
+            yh = pd.to_numeric(hist_ts["mean"], errors="coerce").to_numpy(dtype=float)
             ax_ts.plot(
-                [float(last_hist["year"]), float(first_scen["year"])],
-                [float(last_hist["mean"]), float(first_scen["mean"])],
-                color="grey",
-                linestyle="--",
-                linewidth=1.5,
+                xh,
+                yh,
+                linewidth=s.line_width,
+                color="tab:blue",
+                label="Historical",
             )
-        except Exception:
-            pass
+            if {"p05", "p95"}.issubset(hist_ts.columns):
+                y05 = pd.to_numeric(hist_ts["p05"], errors="coerce").to_numpy(dtype=float)
+                y95 = pd.to_numeric(hist_ts["p95"], errors="coerce").to_numpy(dtype=float)
+                ax_ts.fill_between(
+                    xh,
+                    y05,
+                    y95,
+                    alpha=0.20,
+                    color="tab:blue",
+                )
+            has_any = True
 
-    ax_ts.set_xlabel("Year")
-    ax_ts.set_ylabel(idx_label)
+        if scen_ts is not None and not scen_ts.empty:
+            scen_label = (scenario_name or "scenario").upper()
+            xs = pd.to_numeric(scen_ts["year"], errors="coerce").to_numpy(dtype=float)
+            ys = pd.to_numeric(scen_ts["mean"], errors="coerce").to_numpy(dtype=float)
+            ax_ts.plot(
+                xs,
+                ys,
+                linewidth=s.line_width,
+                color="tab:red",
+                label=scen_label,
+            )
+            if {"p05", "p95"}.issubset(scen_ts.columns):
+                y05 = pd.to_numeric(scen_ts["p05"], errors="coerce").to_numpy(dtype=float)
+                y95 = pd.to_numeric(scen_ts["p95"], errors="coerce").to_numpy(dtype=float)
+                ax_ts.fill_between(
+                    xs,
+                    y05,
+                    y95,
+                    alpha=0.20,
+                    color="tab:red",
+                )
+            has_any = True
 
-    if has_any:
-        ax_ts.grid(True, linestyle="--", alpha=0.25)
-        for spine in ax_ts.spines.values():
-            spine.set_visible(False)
-        handles, _labels = ax_ts.get_legend_handles_labels()
-        if handles:
-            ax_ts.legend(frameon=False, fontsize=font_size_legend, ncol=3)
+        if (
+            hist_ts is not None
+            and scen_ts is not None
+            and not hist_ts.empty
+            and not scen_ts.empty
+        ):
+            try:
+                last_hist_year = int(hist_ts["year"].max())
+                last_hist = hist_ts.loc[hist_ts["year"] == last_hist_year].iloc[-1]
 
-    if ax is None:
-        fig_ts.tight_layout()
+                target_year = 2020
+                if "year" in scen_ts.columns and target_year in scen_ts["year"].values:
+                    first_scen = scen_ts.loc[scen_ts["year"] == target_year].iloc[0]
+                else:
+                    first_scen = scen_ts.loc[scen_ts["year"].idxmin()]
 
-    return fig_ts
+                ax_ts.plot(
+                    [float(last_hist["year"]), float(first_scen["year"])],
+                    [float(last_hist["mean"]), float(first_scen["mean"])],
+                    color="grey",
+                    linestyle="--",
+                    linewidth=1.5,
+                )
+            except Exception:
+                pass
+
+        ax_ts.set_xlabel("Year")
+        ax_ts.set_ylabel(idx_label)
+
+        if has_any:
+            ax_ts.grid(True, linestyle=s.grid_linestyle, alpha=s.grid_alpha, linewidth=s.grid_linewidth)
+            strip_spines(ax_ts)
+            handles, _labels = ax_ts.get_legend_handles_labels()
+            if handles:
+                ax_ts.legend(frameon=False, fontsize=font_size_legend, ncol=3)
+
+        if ax is None:
+            try:
+                fig_ts.tight_layout()
+            except Exception:
+                pass
+            if logo_path:
+                add_ra_logo(fig_ts, logo_path)
+
+        return fig_ts

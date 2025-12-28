@@ -138,6 +138,10 @@ def render_trend_over_time(
     district_name: str,
     state_dir_for_fs: str,
     district_for_fs: str,
+    fig_size_panel: tuple[float, float],
+    fig_dpi_panel: int,
+    font_size_legend: int,
+    logo_path: Optional[Path] = None,
     create_trend_figure_fn: Callable[..., Any],
 ) -> None:
     """Render the Trend over time expander with sparkline + narrative."""
@@ -152,13 +156,33 @@ def render_trend_over_time(
         if not hist_ts.empty or not scen_ts.empty:
             st.markdown("**Trend over time**")
 
-            fig_ts = create_trend_figure_fn(
-                hist_ts=hist_ts,
-                scen_ts=scen_ts,
-                idx_label=variable_label,
-                scenario_name=sel_scenario,
-            )
-            st.pyplot(fig_ts)
+            try:
+                fig_ts = create_trend_figure_fn(
+                    hist_ts=hist_ts,
+                    scen_ts=scen_ts,
+                    idx_label=variable_label,
+                    scenario_name=sel_scenario,
+                    figsize=fig_size_panel,
+                    fig_dpi=fig_dpi_panel,
+                    font_size_legend=font_size_legend,
+                    logo_path=logo_path,
+                )
+            except TypeError:
+                # Backward-compatible fallback if chart fn doesn't accept the new kwargs
+                fig_ts = create_trend_figure_fn(
+                    hist_ts=hist_ts,
+                    scen_ts=scen_ts,
+                    idx_label=variable_label,
+                    scenario_name=sel_scenario,
+                )
+                try:
+                    from india_resilience_tool.viz.style import add_ra_logo
+
+                    add_ra_logo(fig_ts, logo_path)
+                except Exception:
+                    pass
+
+            st.pyplot(fig_ts, use_container_width=True)
 
             # Narrative
             try:
@@ -218,6 +242,7 @@ def render_scenario_comparison(
     font_size_label: int,
     font_size_ticks: int,
     font_size_legend: int,
+    logo_path: Optional[Path] = None,
     period_order: Sequence[str],
     scenario_display: Mapping[str, str],
     build_scenario_panel_fn: Callable[..., pd.DataFrame],
@@ -235,23 +260,46 @@ def render_scenario_comparison(
         )
 
         if panel_df is not None and not panel_df.empty:
-            fig_sc, ax_sc = make_scenario_figure_fn(
-                panel_df=panel_df,
-                metric_label=variable_label,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                district_name=district_name,
-                figsize=fig_size_panel,
-                fig_dpi=fig_dpi_panel,
-                font_size_title=font_size_title,
-                font_size_label=font_size_label,
-                font_size_ticks=font_size_ticks,
-                font_size_legend=font_size_legend,
-            )
+            try:
+                fig_sc, ax_sc = make_scenario_figure_fn(
+                    panel_df=panel_df,
+                    metric_label=variable_label,
+                    sel_scenario=sel_scenario,
+                    sel_period=sel_period,
+                    sel_stat=sel_stat,
+                    district_name=district_name,
+                    figsize=fig_size_panel,
+                    fig_dpi=fig_dpi_panel,
+                    font_size_title=font_size_title,
+                    font_size_label=font_size_label,
+                    font_size_ticks=font_size_ticks,
+                    font_size_legend=font_size_legend,
+                    logo_path=logo_path,
+                )
+            except TypeError:
+                fig_sc, ax_sc = make_scenario_figure_fn(
+                    panel_df=panel_df,
+                    metric_label=variable_label,
+                    sel_scenario=sel_scenario,
+                    sel_period=sel_period,
+                    sel_stat=sel_stat,
+                    district_name=district_name,
+                    figsize=fig_size_panel,
+                    fig_dpi=fig_dpi_panel,
+                    font_size_title=font_size_title,
+                    font_size_label=font_size_label,
+                    font_size_ticks=font_size_ticks,
+                    font_size_legend=font_size_legend,
+                )
+                try:
+                    from india_resilience_tool.viz.style import add_ra_logo
+
+                    add_ra_logo(fig_sc, logo_path)
+                except Exception:
+                    pass
 
             if fig_sc is not None:
-                st.pyplot(fig_sc)
+                st.pyplot(fig_sc, use_container_width=True)
 
             # Numeric summary in text
             lines = []
@@ -292,6 +340,7 @@ def render_detailed_statistics(
     selected_district: str,
     district_yearly_scen: pd.DataFrame,
     out_dir: Path,
+    logo_path: Optional[Path] = None,
     make_district_yearly_pdf_fn: Callable[..., Optional[Path]],
 ) -> None:
     """Render the Detailed statistics expander with optional PDF generation."""
@@ -332,8 +381,8 @@ def render_detailed_statistics(
                 scenario_name=sel_scenario,
                 metric_label=variable_label,
                 out_dir=out_dir,
+                logo_path=logo_path,
             )
-
             if pdf_path_d and pdf_path_d.exists():
                 st.session_state[pdf_state_key] = pdf_path_d
             else:
@@ -372,6 +421,7 @@ def render_case_study_export(
     sel_scenario: str,
     sel_period: str,
     sel_stat: str,
+    logo_path: Optional[Path] = None,
     build_case_study_data_fn: Callable[..., tuple[pd.DataFrame, dict, dict]],
     make_case_study_pdf_fn: Callable[..., bytes],
     make_case_study_zip_fn: Callable[..., bytes],
@@ -432,16 +482,29 @@ def render_case_study_export(
                 st.markdown("**Preview of case-study summary table**")
                 st.dataframe(summary_df_cs)
 
-                pdf_bytes = make_case_study_pdf_fn(
-                    state_name=state_to_show,
-                    district_name=district_name,
-                    summary_df=summary_df_cs,
-                    ts_dict=ts_dict_cs or {},
-                    panel_dict=panel_dict_cs or {},
-                    sel_scenario=sel_scenario,
-                    sel_period=sel_period,
-                    sel_stat=sel_stat,
-                )
+                try:
+                    pdf_bytes = make_case_study_pdf_fn(
+                        state_name=state_to_show,
+                        district_name=district_name,
+                        summary_df=summary_df_cs,
+                        ts_dict=ts_dict_cs or {},
+                        panel_dict=panel_dict_cs or {},
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
+                        logo_path=logo_path,
+                    )
+                except TypeError:
+                    pdf_bytes = make_case_study_pdf_fn(
+                        state_name=state_to_show,
+                        district_name=district_name,
+                        summary_df=summary_df_cs,
+                        ts_dict=ts_dict_cs or {},
+                        panel_dict=panel_dict_cs or {},
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
+                    )
 
                 if pdf_bytes:
                     safe_state = slugify_fs_fn(state_to_show)
@@ -486,11 +549,17 @@ def render_district_comparison(
     current_val_f: Optional[float],
     variable_label: str,
     sel_stat: str,
+    fig_size_mini: tuple[float, float],
+    fig_dpi_panel: int,
+    font_size_title: int,
+    font_size_label: int,
+    font_size_ticks: int,
+    logo_path: Optional[Path] = None,
 ) -> None:
     """Render the Compare with another district expander."""
     import matplotlib.pyplot as plt
-    import numpy as np
     import streamlit as st
+    from india_resilience_tool.viz.style import add_ra_logo, strip_spines
 
     with st.expander("Compare with another district", expanded=False):
         same_state_mask = (
@@ -542,15 +611,17 @@ def render_district_comparison(
                         )
 
                         # Small visual comparison: two bars side by side
-                        fig_cmp, ax_cmp = plt.subplots(figsize=(3.6, 2.2), dpi=150)
+                        fig_cmp, ax_cmp = plt.subplots(figsize=fig_size_mini, dpi=fig_dpi_panel)
                         labels_cmp = [district_name, comp_choice]
                         values_cmp = [val_this, val_other_f]
 
                         colors_cmp = ["tab:blue", "tab:grey"]
                         bars = ax_cmp.bar(labels_cmp, values_cmp, color=colors_cmp)
 
-                        ax_cmp.set_ylabel(f"{variable_label} ({sel_stat})")
-                        ax_cmp.set_title("District comparison", fontsize=9)
+                        ax_cmp.set_ylabel(f"{variable_label} ({sel_stat})", fontsize=font_size_label)
+                        ax_cmp.set_title("District comparison", fontsize=font_size_title)
+                        ax_cmp.tick_params(axis="x", labelsize=font_size_ticks)
+                        ax_cmp.tick_params(axis="y", labelsize=font_size_ticks)
                         ax_cmp.grid(True, axis="y", linestyle="--", alpha=0.25)
 
                         # Annotate values on top of bars
@@ -565,12 +636,16 @@ def render_district_comparison(
                                 fontsize=8,
                             )
 
-                        # Clean spines
-                        for spine in ax_cmp.spines.values():
-                            spine.set_visible(False)
+                        strip_spines(ax_cmp)
 
-                        fig_cmp.tight_layout()
-                        st.pyplot(fig_cmp)
+                        try:
+                            fig_cmp.tight_layout()
+                        except Exception:
+                            pass
+
+                        add_ra_logo(fig_cmp, logo_path, width_frac=0.14, pad_frac=0.012, alpha=0.95)
+                        st.pyplot(fig_cmp, use_container_width=True)
+
                     else:
                         st.caption(
                             "Comparison data not fully available for the selected index."
@@ -632,6 +707,8 @@ def render_details_panel(
     # Optional: filesystem paths for caption
     state_dir_for_fs: Optional[str] = None,
     district_for_fs: Optional[str] = None,
+    # Optional: Resilience Actions logo
+    logo_path: Optional[Path] = None,
 ) -> None:
     """
     Render the complete single-district details panel (right column).
@@ -644,6 +721,26 @@ def render_details_panel(
     - Takes explicit inputs rather than relying on globals
     """
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
+
+    # Normalize panel figure size to 16:9 (dashboard style contract)
+    fig_size_panel_169 = fig_size_panel
+    try:
+        from india_resilience_tool.viz.style import ensure_16x9_figsize
+
+        fig_size_panel_169 = ensure_16x9_figsize(fig_size_panel, mode="fit_width")
+    except Exception:
+        try:
+            w = float(fig_size_panel[0])
+            fig_size_panel_169 = (w, w * (9.0 / 16.0))
+        except Exception:
+            fig_size_panel_169 = fig_size_panel
+
+    # Mini figures (also 16:9), slightly smaller than the main panel
+    try:
+        w_mini = float(fig_size_panel_169[0]) * 0.85
+        fig_size_mini_169 = (w_mini, w_mini * (9.0 / 16.0))
+    except Exception:
+        fig_size_mini_169 = fig_size_panel_169
 
     # 1. Risk summary
     render_risk_summary(
@@ -669,6 +766,10 @@ def render_details_panel(
         district_name=district_name,
         state_dir_for_fs=state_dir_for_fs or state_to_show,
         district_for_fs=district_for_fs or district_name,
+        fig_size_panel=fig_size_panel_169,
+        fig_dpi_panel=fig_dpi_panel,
+        font_size_legend=font_size_legend,
+        logo_path=logo_path,
         create_trend_figure_fn=create_trend_figure_fn,
     )
 
@@ -682,12 +783,13 @@ def render_details_panel(
         sel_stat=sel_stat,
         variable_label=variable_label,
         district_name=district_name,
-        fig_size_panel=fig_size_panel,
+        fig_size_panel=fig_size_panel_169,
         fig_dpi_panel=fig_dpi_panel,
         font_size_title=font_size_title,
         font_size_label=font_size_label,
         font_size_ticks=font_size_ticks,
         font_size_legend=font_size_legend,
+        logo_path=logo_path,
         period_order=period_order,
         scenario_display=scenario_display,
         build_scenario_panel_fn=build_scenario_panel_fn,
@@ -706,6 +808,7 @@ def render_details_panel(
         selected_district=selected_district,
         district_yearly_scen=district_yearly_scen,
         out_dir=out_dir,
+        logo_path=logo_path,
         make_district_yearly_pdf_fn=make_district_yearly_pdf_fn,
     )
 
@@ -718,6 +821,7 @@ def render_details_panel(
         sel_scenario=sel_scenario,
         sel_period=sel_period,
         sel_stat=sel_stat,
+        logo_path=logo_path,
         build_case_study_data_fn=build_case_study_data_fn,
         make_case_study_pdf_fn=make_case_study_pdf_fn,
         make_case_study_zip_fn=make_case_study_zip_fn,
@@ -733,4 +837,10 @@ def render_details_panel(
         current_val_f=current_val_f,
         variable_label=variable_label,
         sel_stat=sel_stat,
+        fig_size_mini=fig_size_mini_169,
+        fig_dpi_panel=fig_dpi_panel,
+        font_size_title=font_size_title,
+        font_size_label=font_size_label,
+        font_size_ticks=font_size_ticks,
+        logo_path=logo_path,
     )
