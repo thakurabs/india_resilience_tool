@@ -655,8 +655,7 @@ with st.sidebar:
         "analysis_mode", "Single district focus"
     )
 
-    # Show hover toggle only in Multi-district portfolio mode
-    # (function also preserves legacy default outside portfolio mode)
+    # Show hover toggle (always visible, not just in portfolio mode)
     _ = render_hover_toggle_if_portfolio(analysis_mode_current)
 
 
@@ -1240,22 +1239,29 @@ with perf_section("merge: build merged gdf"):
 # --- Baseline column for this metric + stat (used by map & table) ---
 baseline_col = find_baseline_column_for_stat(df.columns, sel_metric, sel_stat)
 
+# --- Compute current/baseline/delta columns once (used by map + tooltip) ---
+with perf_section("map: compute current/baseline/delta"):
+    merged["_current_value"] = pd.to_numeric(merged.get(metric_col), errors="coerce")
+
+    if baseline_col and (baseline_col in merged.columns):
+        merged["_baseline_value"] = pd.to_numeric(merged.get(baseline_col), errors="coerce")
+        merged["_delta_abs"] = merged["_current_value"] - merged["_baseline_value"]
+
+        # % change only when baseline is non-zero
+        denom = merged["_baseline_value"].where(merged["_baseline_value"] != 0)
+        merged["_delta_pct"] = (merged["_delta_abs"] / denom) * 100.0
+    else:
+        merged["_baseline_value"] = pd.Series([pd.NA] * len(merged), index=merged.index, dtype="Float64")
+        merged["_delta_abs"] = pd.Series([pd.NA] * len(merged), index=merged.index, dtype="Float64")
+        merged["_delta_pct"] = pd.Series([pd.NA] * len(merged), index=merged.index, dtype="Float64")
+
 # --- Decide which column the map will actually show ---
 map_mode = st.session_state.get("map_mode", "Absolute value")
 map_value_col = metric_col  # default: absolute values
 
 if map_mode == "Change from 1990-2010 baseline":
     if baseline_col and (baseline_col in merged.columns):
-        with perf_section("map: compute baseline delta"):
-            # Compute Δ = current - baseline, per district
-            merged["_baseline_value"] = pd.to_numeric(
-                merged[baseline_col], errors="coerce"
-            )
-            merged["_current_value"] = pd.to_numeric(
-                merged[metric_col], errors="coerce"
-            )
-            merged["_map_delta"] = merged["_current_value"] - merged["_baseline_value"]
-            map_value_col = "_map_delta"
+        map_value_col = "_delta_abs"
     else:
         st.warning(
             "Baseline (historical 1990-2010) column not found for this metric/stat; "
@@ -1264,6 +1270,65 @@ if map_mode == "Change from 1990-2010 baseline":
         map_mode = "Absolute value"
         st.session_state["map_mode"] = map_mode
         map_value_col = metric_col
+
+# --- Compute rank/percentile/risk class per state for tooltip quick-glance ---
+with perf_section("map: compute rank + risk class"):
+    state_series = merged.get("state_name")
+    if state_series is None:
+        state_series = pd.Series(["Unknown"] * len(merged), index=merged.index)
+    state_key = state_series.astype(str).fillna("Unknown")
+
+    # Rank is computed on the *current* value (absolute), regardless of map mode.
+    # Rank 1 = highest value within that state.
+    v = merged["_current_value"]
+    merged["_rank_in_state"] = v.groupby(state_key).rank(method="min", ascending=False)
+
+    # Percentile: higher values -> higher percentile (0..100)
+    merged["_percentile_state"] = v.groupby(state_key).rank(pct=True, ascending=True) * 100.0
+
+    def _risk_label(p: float) -> str:
+        try:
+            if pd.isna(p):
+                return "Unknown"
+            return str(risk_class_from_percentile(float(p)))
+        except Exception:
+            return "Unknown"
+
+    merged["_risk_class"] = merged["_percentile_state"].apply(_risk_label)
+
+# --- Human-friendly tooltip strings (avoid raw NaN/long floats) ---
+def _fmt_number(x) -> str:
+    if x is None or (isinstance(x, float) and pd.isna(x)) or pd.isna(x):
+        return "—"
+    try:
+        xf = float(x)
+    except Exception:
+        return "—"
+    if abs(xf - round(xf)) < 1e-9 and abs(xf) < 1e9:
+        return f"{int(round(xf)):,}"
+    return f"{xf:,.2f}"
+
+with perf_section("map: build tooltip strings"):
+    # Main value shown depends on map mode
+    if map_mode == "Change from 1990-2010 baseline":
+        merged["_tooltip_value"] = merged["_delta_abs"].apply(_fmt_number)
+        merged["_tooltip_value_label"] = "Δ vs 1990–2010"
+    else:
+        merged["_tooltip_value"] = merged["_current_value"].apply(_fmt_number)
+        merged["_tooltip_value_label"] = "Value"
+
+    merged["_tooltip_baseline"] = merged["_baseline_value"].apply(_fmt_number)
+    merged["_tooltip_delta"] = merged["_delta_abs"].apply(_fmt_number)
+
+    def _fmt_rank(r) -> str:
+        if r is None or pd.isna(r):
+            return "—"
+        try:
+            return str(int(round(float(r))))
+        except Exception:
+            return "—"
+
+    merged["_tooltip_rank"] = merged["_rank_in_state"].apply(_fmt_rank)
 
 numeric_vals = pd.to_numeric(
     merged.get(map_value_col, pd.Series([], dtype=float)), errors="coerce"
@@ -1402,56 +1467,9 @@ def style_fn(feature):
         "fillOpacity": 0.7,
     }
 
-# Tooltip fields must exist in every feature's properties, otherwise Folium asserts.
-# In some optimized GeoJSON paths, feature properties may be empty {} (geometry-only),
-# so we gracefully degrade to showing only the value field.
-if map_mode == "Change from 1990-2010 baseline":
-    value_field = map_value_col
-    value_alias = "Δ vs 1990–2010"
-else:
-    value_field = metric_col
-    value_alias = "Value"
-
-# If the requested value_field isn't actually present in the current data columns,
-# fall back to metric_col (which should exist for the active variable).
-try:
-    if value_field not in display_gdf.columns and value_field not in merged.columns:
-        value_field = metric_col
-        value_alias = "Value"
-except Exception:
-    # Be conservative: keep metric_col if anything is weird
-    value_field = metric_col
-    value_alias = "Value"
-
-# Determine whether district_name exists in the GeoJSON properties we will render
-has_district_name = False
-try:
-    _features = fc.get("features", [])
-    if _features:
-        _props0 = (_features[0].get("properties") or {})
-        has_district_name = isinstance(_props0, dict) and ("district_name" in _props0)
-except Exception:
-    has_district_name = False
-
-if has_district_name:
-    tooltip_fields = ["district_name", value_field]
-    tooltip_aliases = ["District", value_alias]
-else:
-    tooltip_fields = [value_field]
-    tooltip_aliases = [value_alias]
-
+# Hover settings (tooltip is built AFTER fc properties are finalized)
 hover_enabled = st.session_state.get("hover_enabled", True)
-
-tooltip = (
-    folium.features.GeoJsonTooltip(
-        fields=tooltip_fields,
-        aliases=tooltip_aliases,
-        localize=True,
-        sticky=True,
-    )
-    if hover_enabled
-    else None
-)
+tooltip = None
 
 # -------------------------
 # Step 5: GeoJSON-by-state cache (geometry cached; properties patched per rerun)
@@ -1492,15 +1510,25 @@ prop_work = prop_gdf.copy()
 if "__key" not in prop_work.columns:
     prop_work["__key"] = prop_work["district_name"].map(alias)
 
+# Numeric columns we want available on every feature (even if None)
 value_cols: list[str] = []
-for _c in (metric_col, map_value_col):
+for _c in (metric_col, map_value_col, "_baseline_value", "_delta_abs", "_delta_pct", "_rank_in_state", "_percentile_state"):
     if _c and (_c not in value_cols) and (_c in prop_work.columns):
         value_cols.append(_c)
 
+# Text tooltip fields we want available on every feature
+text_cols: list[str] = []
+for _c in ("_risk_class", "_tooltip_value", "_tooltip_baseline", "_tooltip_delta", "_tooltip_rank"):
+    if _c in prop_work.columns:
+        text_cols.append(_c)
+
 keep_cols = ["__key", "district_name"]
+if "state_name" in prop_work.columns:
+    keep_cols.append("state_name")
 if "fillColor" in prop_work.columns:
     keep_cols.append("fillColor")
 keep_cols.extend(value_cols)
+keep_cols.extend(text_cols)
 
 prop_work = prop_work[keep_cols].copy()
 
@@ -1510,11 +1538,19 @@ for _, r in prop_work.iterrows():
     if not isinstance(k, str) or not k:
         continue
 
-    upd: dict = {"district_name": r.get("district_name")}
+    upd: dict = {
+        "district_name": r.get("district_name"),
+        "state_name": r.get("state_name") if "state_name" in prop_work.columns else None,
+    }
+
     fill = r.get("fillColor")
     upd["fillColor"] = fill if isinstance(fill, str) and fill else "#cccccc"
 
     for c in value_cols:
+        v = r.get(c)
+        upd[c] = None if pd.isna(v) else v
+
+    for c in text_cols:
         v = r.get(c)
         upd[c] = None if pd.isna(v) else v
 
@@ -1548,13 +1584,53 @@ for feat in fc.get("features", []):
 
     # IMPORTANT: Folium tooltip asserts if a listed field key is missing.
     # Ensure these exist on every feature even if values are NaN/missing.
+    props.setdefault("district_name", None)
+    props.setdefault("state_name", None)
+
     for c in value_cols:
+        props.setdefault(c, None)
+
+    # Tooltip text fields
+    for c in ("_risk_class", "_tooltip_value", "_tooltip_baseline", "_tooltip_delta", "_tooltip_rank"):
         props.setdefault(c, None)
 
     feat["properties"] = props
 
+# Build tooltip now that fc properties are finalized (district/state + selection context)
 highlight_fn = None
+tooltip = None
+
 if hover_enabled:
+    # Main label depends on map mode (absolute vs baseline change)
+    main_label = "Δ vs 1990–2010" if map_mode == "Change from 1990-2010 baseline" else "Value"
+
+    tooltip_fields = [
+        "district_name",
+        "state_name",
+        "_tooltip_value",
+    ]
+    tooltip_aliases = [
+        "District",
+        "State",
+        main_label,
+    ]
+
+    # Show baseline + delta if baseline exists in this dataset
+    if baseline_col and (baseline_col in merged.columns):
+        tooltip_fields += ["_tooltip_baseline", "_tooltip_delta"]
+        tooltip_aliases += ["Baseline (1990–2010)", "Δ vs baseline"]
+
+    # Risk/rank quick glance
+    tooltip_fields += ["_risk_class", "_tooltip_rank"]
+    tooltip_aliases += ["Risk class", "Rank in state"]
+
+    tooltip = folium.features.GeoJsonTooltip(
+        fields=tooltip_fields,
+        aliases=tooltip_aliases,
+        localize=True,
+        sticky=True,
+    )
+
     highlight_fn = lambda f: {
         "fillColor": "#ffff00",
         "color": "#000",

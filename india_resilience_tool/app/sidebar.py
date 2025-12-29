@@ -109,22 +109,17 @@ def render_hover_toggle_if_portfolio(
     label: str = "Enable hover highlight & tooltip",
 ) -> Optional[bool]:
     """
-    Render hover toggle ONLY in portfolio mode.
+    Render hover toggle checkbox.
 
     Contract:
       - key must remain 'hover_enabled'
-      - checkbox rendered only in portfolio mode
-      - outside portfolio mode, preserve legacy behavior:
-        st.session_state.setdefault("hover_enabled", True)
+      - checkbox is always rendered (regardless of mode)
+      - defaults to True if not set
 
     Returns:
-        hover_enabled if rendered, else None
+        hover_enabled value
     """
     import streamlit as st
-
-    if analysis_mode != ANALYSIS_MODE_PORTFOLIO:
-        st.session_state.setdefault("hover_enabled", True)
-        return None
 
     hover_enabled = st.checkbox(
         label,
