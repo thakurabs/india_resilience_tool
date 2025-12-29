@@ -430,3 +430,392 @@ def create_trend_figure_for_index(
                 add_ra_logo(fig_ts, logo_path)
 
         return fig_ts
+
+
+# =============================================================================
+# Portfolio Comparison Visualizations
+# =============================================================================
+
+def make_portfolio_heatmap(
+    df: pd.DataFrame,
+    value_col: str = "Current value",
+    *,
+    normalize_per_index: bool = True,
+    cmap: str = "RdYlGn_r",
+    figsize: Optional[Tuple[float, float]] = None,
+    fig_dpi: int = 100,
+    annot_fontsize: int = 9,
+    label_fontsize: int = 10,
+    title_fontsize: int = 12,
+    title: Optional[str] = None,
+) -> Optional[Any]:
+    """
+    Create a heatmap showing Districts (rows) × Indices (columns).
+    
+    Args:
+        df: DataFrame from build_portfolio_multiindex_df with columns:
+            State, District, Index, Group, Current value, Baseline, Δ, %Δ, 
+            Rank in state, Percentile, Risk class
+        value_col: Column to use for cell values. Options:
+            - "Current value": Raw metric value
+            - "Percentile": Percentile within state (0-100)
+            - "%Δ": Percent change from baseline
+            - "Δ": Absolute change from baseline
+        normalize_per_index: If True, normalize values within each index column
+            for better cross-index comparison. Only applies to "Current value".
+        cmap: Matplotlib colormap name
+        figsize: Figure size (width, height). Auto-calculated if None.
+        fig_dpi: Figure DPI
+        annot_fontsize: Font size for cell annotations
+        label_fontsize: Font size for axis labels
+        title_fontsize: Font size for title
+        title: Optional title override
+    
+    Returns:
+        matplotlib Figure or None if data is insufficient
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.colors as mcolors
+    
+    if df is None or df.empty:
+        return None
+    
+    # Check required columns
+    required = {"District", "Index", value_col}
+    if not required.issubset(df.columns):
+        return None
+    
+    # Create district label (District, State)
+    if "State" in df.columns:
+        df = df.copy()
+        df["_district_label"] = df["District"] + ", " + df["State"]
+    else:
+        df = df.copy()
+        df["_district_label"] = df["District"]
+    
+    # Pivot to matrix form
+    try:
+        pivot = df.pivot_table(
+            index="_district_label",
+            columns="Index",
+            values=value_col,
+            aggfunc="first",
+        )
+    except Exception:
+        return None
+    
+    if pivot.empty or pivot.shape[0] < 1 or pivot.shape[1] < 1:
+        return None
+    
+    # Normalize per index if requested (only for Current value)
+    display_values = pivot.copy()
+    normalized_pivot = pivot.copy()
+    
+    if normalize_per_index and value_col == "Current value":
+        for col in normalized_pivot.columns:
+            col_data = normalized_pivot[col]
+            col_min = col_data.min()
+            col_max = col_data.max()
+            if col_max != col_min:
+                normalized_pivot[col] = (col_data - col_min) / (col_max - col_min)
+            else:
+                normalized_pivot[col] = 0.5
+    
+    # Calculate figure size
+    n_rows, n_cols = pivot.shape
+    if figsize is None:
+        width = max(6, min(14, 2 + n_cols * 1.5))
+        height = max(4, min(12, 1.5 + n_rows * 0.6))
+        figsize = (width, height)
+    
+    fig, ax = plt.subplots(figsize=figsize, dpi=fig_dpi)
+    
+    # Create heatmap using imshow
+    data_for_color = normalized_pivot.to_numpy(dtype=float)
+    
+    # Handle NaN for colormap
+    masked_data = np.ma.masked_invalid(data_for_color)
+    
+    # Choose colormap based on value_col
+    if value_col in ("%Δ", "Δ"):
+        # Diverging colormap centered at 0 for change values
+        cmap_obj = plt.get_cmap("RdBu_r")
+        vmax = np.nanmax(np.abs(data_for_color))
+        vmin = -vmax
+        norm = mcolors.TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
+    elif value_col == "Percentile":
+        # Fixed 0-100 scale for percentile
+        cmap_obj = plt.get_cmap(cmap)
+        norm = mcolors.Normalize(vmin=0, vmax=100)
+    else:
+        # Standard normalization
+        cmap_obj = plt.get_cmap(cmap)
+        norm = None
+    
+    im = ax.imshow(masked_data, cmap=cmap_obj, aspect="auto", norm=norm)
+    
+    # Add colorbar
+    cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+    cbar_label = {
+        "Current value": "Value (normalized)" if normalize_per_index else "Value",
+        "Percentile": "Percentile",
+        "%Δ": "% Change from Baseline",
+        "Δ": "Change from Baseline",
+    }.get(value_col, value_col)
+    cbar.set_label(cbar_label, fontsize=label_fontsize)
+    
+    # Set ticks and labels
+    ax.set_xticks(np.arange(n_cols))
+    ax.set_yticks(np.arange(n_rows))
+    ax.set_xticklabels(pivot.columns, fontsize=label_fontsize, rotation=45, ha="right")
+    ax.set_yticklabels(pivot.index, fontsize=label_fontsize)
+    
+    # Add cell annotations with actual values
+    for i in range(n_rows):
+        for j in range(n_cols):
+            val = display_values.iloc[i, j]
+            if pd.notna(val):
+                # Format based on value type
+                if value_col == "Percentile":
+                    text = f"{val:.0f}"
+                elif value_col == "%Δ":
+                    text = f"{val:+.1f}%"
+                elif value_col == "Δ":
+                    text = f"{val:+.1f}"
+                else:
+                    text = f"{val:.1f}"
+                
+                # Choose text color based on background
+                bg_val = masked_data[i, j]
+                if np.ma.is_masked(bg_val) or np.isnan(bg_val):
+                    text_color = "black"
+                else:
+                    # Use white text on dark backgrounds
+                    if norm:
+                        normalized_bg = norm(bg_val)
+                    else:
+                        data_min = np.nanmin(data_for_color)
+                        data_max = np.nanmax(data_for_color)
+                        if data_max != data_min:
+                            normalized_bg = (bg_val - data_min) / (data_max - data_min)
+                        else:
+                            normalized_bg = 0.5
+                    text_color = "white" if 0.3 < normalized_bg < 0.7 else "black"
+                
+                ax.text(j, i, text, ha="center", va="center", 
+                       fontsize=annot_fontsize, color=text_color)
+    
+    # Title
+    if title is None:
+        title = f"Portfolio Comparison: {value_col}"
+    ax.set_title(title, fontsize=title_fontsize, pad=12)
+    
+    # Grid lines between cells
+    ax.set_xticks(np.arange(-0.5, n_cols, 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, n_rows, 1), minor=True)
+    ax.grid(which="minor", color="white", linestyle="-", linewidth=2)
+    ax.tick_params(which="minor", size=0)
+    
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    
+    return fig
+
+
+def make_portfolio_grouped_bar(
+    df: pd.DataFrame,
+    value_col: str = "Current value",
+    *,
+    max_districts: int = 10,
+    max_indices: int = 6,
+    figsize: Optional[Tuple[float, float]] = None,
+    fig_dpi: int = 100,
+    bar_width: float = 0.8,
+    label_fontsize: int = 10,
+    tick_fontsize: int = 9,
+    title_fontsize: int = 12,
+    legend_fontsize: int = 9,
+    title: Optional[str] = None,
+    show_values: bool = True,
+    horizontal: bool = False,
+) -> Optional[Any]:
+    """
+    Create a grouped bar chart comparing indices across districts.
+    
+    Args:
+        df: DataFrame from build_portfolio_multiindex_df
+        value_col: Column to use for bar heights. Options:
+            - "Current value": Raw metric value
+            - "Percentile": Percentile within state (0-100)
+            - "%Δ": Percent change from baseline
+        max_districts: Maximum number of districts to show
+        max_indices: Maximum number of indices to show
+        figsize: Figure size. Auto-calculated if None.
+        fig_dpi: Figure DPI
+        bar_width: Total width of bar group (0-1)
+        label_fontsize: Font size for axis labels
+        tick_fontsize: Font size for tick labels
+        title_fontsize: Font size for title
+        legend_fontsize: Font size for legend
+        title: Optional title override
+        show_values: Whether to show values on bars
+        horizontal: If True, create horizontal bars
+    
+    Returns:
+        matplotlib Figure or None if data is insufficient
+    """
+    import matplotlib.pyplot as plt
+    
+    if df is None or df.empty:
+        return None
+    
+    # Check required columns
+    required = {"District", "Index", value_col}
+    if not required.issubset(df.columns):
+        return None
+    
+    # Create district label
+    if "State" in df.columns:
+        df = df.copy()
+        df["_district_label"] = df["District"] + "\n(" + df["State"].str[:3] + ")"
+    else:
+        df = df.copy()
+        df["_district_label"] = df["District"]
+    
+    # Get unique districts and indices
+    districts = df["_district_label"].unique()[:max_districts]
+    indices = df["Index"].unique()[:max_indices]
+    
+    n_districts = len(districts)
+    n_indices = len(indices)
+    
+    if n_districts < 1 or n_indices < 1:
+        return None
+    
+    # Calculate figure size
+    if figsize is None:
+        if horizontal:
+            width = max(8, min(14, 4 + n_indices * 0.5))
+            height = max(4, min(12, 1 + n_districts * 0.8))
+        else:
+            width = max(8, min(14, 2 + n_districts * 1.2))
+            height = max(4, min(10, 4 + n_indices * 0.3))
+        figsize = (width, height)
+    
+    fig, ax = plt.subplots(figsize=figsize, dpi=fig_dpi)
+    
+    # Color palette for indices
+    colors = plt.cm.Set2(np.linspace(0, 1, n_indices))
+    
+    # Calculate bar positions
+    x = np.arange(n_districts)
+    width_per_bar = bar_width / n_indices
+    
+    # Plot bars for each index
+    for i, idx_name in enumerate(indices):
+        idx_data = df[df["Index"] == idx_name]
+        
+        values = []
+        for district in districts:
+            match = idx_data[idx_data["_district_label"] == district]
+            if not match.empty:
+                val = match[value_col].iloc[0]
+                values.append(val if pd.notna(val) else 0)
+            else:
+                values.append(0)
+        
+        offset = (i - n_indices / 2 + 0.5) * width_per_bar
+        
+        if horizontal:
+            bars = ax.barh(x + offset, values, height=width_per_bar * 0.9, 
+                          label=idx_name, color=colors[i], edgecolor="white", linewidth=0.5)
+        else:
+            bars = ax.bar(x + offset, values, width=width_per_bar * 0.9,
+                         label=idx_name, color=colors[i], edgecolor="white", linewidth=0.5)
+        
+        # Add value labels if requested
+        if show_values:
+            for bar, val in zip(bars, values):
+                if val == 0 or pd.isna(val):
+                    continue
+                
+                if value_col == "Percentile":
+                    text = f"{val:.0f}"
+                elif value_col == "%Δ":
+                    text = f"{val:+.0f}%"
+                else:
+                    text = f"{val:.0f}" if abs(val) >= 10 else f"{val:.1f}"
+                
+                if horizontal:
+                    x_pos = bar.get_width()
+                    y_pos = bar.get_y() + bar.get_height() / 2
+                    ha = "left" if val >= 0 else "right"
+                    ax.text(x_pos, y_pos, f" {text}", ha=ha, va="center", 
+                           fontsize=tick_fontsize - 1)
+                else:
+                    x_pos = bar.get_x() + bar.get_width() / 2
+                    y_pos = bar.get_height()
+                    va = "bottom" if val >= 0 else "top"
+                    ax.text(x_pos, y_pos, text, ha="center", va=va,
+                           fontsize=tick_fontsize - 1, rotation=90 if n_indices > 4 else 0)
+    
+    # Set labels and ticks
+    if horizontal:
+        ax.set_yticks(x)
+        ax.set_yticklabels(districts, fontsize=tick_fontsize)
+        ax.set_xlabel(_get_value_label(value_col), fontsize=label_fontsize)
+        ax.invert_yaxis()  # Top to bottom
+    else:
+        ax.set_xticks(x)
+        ax.set_xticklabels(districts, fontsize=tick_fontsize, rotation=45, ha="right")
+        ax.set_ylabel(_get_value_label(value_col), fontsize=label_fontsize)
+    
+    # Add reference line at 0 for change values
+    if value_col in ("%Δ", "Δ"):
+        if horizontal:
+            ax.axvline(x=0, color="black", linestyle="-", linewidth=0.8, alpha=0.5)
+        else:
+            ax.axhline(y=0, color="black", linestyle="-", linewidth=0.8, alpha=0.5)
+    
+    # Title
+    if title is None:
+        title = f"Portfolio Comparison: {_get_value_label(value_col)}"
+    ax.set_title(title, fontsize=title_fontsize, pad=12)
+    
+    # Legend
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        fontsize=legend_fontsize,
+        frameon=False,
+        title="Index",
+        title_fontsize=legend_fontsize,
+    )
+    
+    # Grid
+    if horizontal:
+        ax.xaxis.grid(True, linestyle="--", alpha=0.5)
+    else:
+        ax.yaxis.grid(True, linestyle="--", alpha=0.5)
+    
+    ax.set_axisbelow(True)
+    
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    
+    return fig
+
+
+def _get_value_label(value_col: str) -> str:
+    """Helper to get human-readable label for value column."""
+    return {
+        "Current value": "Value",
+        "Percentile": "Percentile (within state)",
+        "%Δ": "% Change from Baseline",
+        "Δ": "Change from Baseline",
+        "Baseline": "Baseline Value",
+    }.get(value_col, value_col)

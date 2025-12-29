@@ -367,6 +367,248 @@ def render_comparison_table(
 
 
 # =============================================================================
+# Portfolio Visualizations
+# =============================================================================
+
+# Available value columns for visualization
+VIZ_VALUE_OPTIONS = {
+    "Current value": "Current Value",
+    "Percentile": "Percentile (within state)",
+    "%Δ": "% Change from Baseline",
+    "Δ": "Absolute Change",
+}
+
+# Available chart types
+CHART_TYPES = {
+    "heatmap": "🔥 Heatmap",
+    "grouped_bar": "📊 Grouped Bar Chart",
+    "both": "📈 Both Charts",
+}
+
+
+def render_portfolio_visualizations(
+    df: pd.DataFrame,
+    *,
+    default_value_col: str = "Percentile",
+    default_chart_type: str = "heatmap",
+) -> None:
+    """
+    Render interactive portfolio comparison visualizations.
+    
+    Args:
+        df: DataFrame from build_portfolio_multiindex_df with columns:
+            State, District, Index, Group, Current value, Baseline, Δ, %Δ,
+            Rank in state, Percentile, Risk class
+        default_value_col: Default value column to visualize
+        default_chart_type: Default chart type to show
+    """
+    import streamlit as st
+    
+    if df is None or df.empty:
+        st.info("Add districts and select indices to see visualizations.")
+        return
+    
+    # Check minimum data requirements
+    n_districts = df["District"].nunique() if "District" in df.columns else 0
+    n_indices = df["Index"].nunique() if "Index" in df.columns else 0
+    
+    if n_districts < 1 or n_indices < 1:
+        st.info("Need at least 1 district and 1 index for visualizations.")
+        return
+    
+    # Filter value options to those with valid data
+    available_value_cols = {}
+    for col_key, col_label in VIZ_VALUE_OPTIONS.items():
+        if col_key in df.columns:
+            # Check if column has any non-null values
+            if df[col_key].notna().any():
+                available_value_cols[col_key] = col_label
+    
+    if not available_value_cols:
+        st.warning("No valid data columns available for visualization.")
+        return
+    
+    # Controls row
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Chart type selector
+        chart_type = st.selectbox(
+            "Chart type",
+            options=list(CHART_TYPES.keys()),
+            format_func=lambda x: CHART_TYPES[x],
+            index=list(CHART_TYPES.keys()).index(default_chart_type) if default_chart_type in CHART_TYPES else 0,
+            key="_viz_chart_type",
+        )
+    
+    with col2:
+        # Value column selector
+        value_col_options = list(available_value_cols.keys())
+        default_idx = value_col_options.index(default_value_col) if default_value_col in value_col_options else 0
+        
+        value_col = st.selectbox(
+            "Show values",
+            options=value_col_options,
+            format_func=lambda x: available_value_cols[x],
+            index=default_idx,
+            key="_viz_value_col",
+        )
+    
+    # Import chart functions
+    from india_resilience_tool.viz.charts import (
+        make_portfolio_heatmap,
+        make_portfolio_grouped_bar,
+    )
+    
+    # Render selected chart(s)
+    if chart_type in ("heatmap", "both"):
+        _render_heatmap_section(df, value_col, make_portfolio_heatmap)
+    
+    if chart_type in ("grouped_bar", "both"):
+        _render_grouped_bar_section(df, value_col, make_portfolio_grouped_bar)
+
+
+def _render_heatmap_section(
+    df: pd.DataFrame,
+    value_col: str,
+    make_heatmap_fn: Callable,
+) -> None:
+    """Render the heatmap visualization section."""
+    import streamlit as st
+    
+    st.markdown("#### 🔥 Heatmap")
+    
+    # Heatmap-specific options
+    with st.expander("Heatmap options", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            normalize = st.checkbox(
+                "Normalize per index",
+                value=True if value_col == "Current value" else False,
+                disabled=value_col != "Current value",
+                help="Scale values within each index column for better comparison",
+                key="_heatmap_normalize",
+            )
+        with col2:
+            cmap = st.selectbox(
+                "Color scheme",
+                options=["RdYlGn_r", "RdYlBu_r", "YlOrRd", "Blues", "Reds", "viridis"],
+                index=0,
+                key="_heatmap_cmap",
+                disabled=value_col in ("%Δ", "Δ"),  # Diverging maps forced for change
+            )
+    
+    # Generate heatmap
+    try:
+        fig = make_heatmap_fn(
+            df,
+            value_col=value_col,
+            normalize_per_index=normalize if value_col == "Current value" else False,
+            cmap=cmap,
+        )
+        
+        if fig is not None:
+            st.pyplot(fig)
+            
+            # Download button for the figure
+            _offer_figure_download(fig, "portfolio_heatmap.png", "Download heatmap")
+        else:
+            st.warning("Could not generate heatmap. Check data availability.")
+    except Exception as e:
+        st.error(f"Error generating heatmap: {e}")
+
+
+def _render_grouped_bar_section(
+    df: pd.DataFrame,
+    value_col: str,
+    make_bar_fn: Callable,
+) -> None:
+    """Render the grouped bar chart visualization section."""
+    import streamlit as st
+    
+    st.markdown("#### 📊 Grouped Bar Chart")
+    
+    # Count data dimensions
+    n_districts = df["District"].nunique() if "District" in df.columns else 0
+    n_indices = df["Index"].nunique() if "Index" in df.columns else 0
+    
+    # Bar chart-specific options
+    with st.expander("Bar chart options", expanded=False):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            max_districts = st.slider(
+                "Max districts",
+                min_value=1,
+                max_value=min(15, max(n_districts, 1)),
+                value=min(10, n_districts),
+                key="_bar_max_districts",
+            )
+        with col2:
+            max_indices = st.slider(
+                "Max indices",
+                min_value=1,
+                max_value=min(10, max(n_indices, 1)),
+                value=min(6, n_indices),
+                key="_bar_max_indices",
+            )
+        with col3:
+            horizontal = st.checkbox(
+                "Horizontal bars",
+                value=n_districts > 5,
+                help="Better for many districts",
+                key="_bar_horizontal",
+            )
+        
+        show_values = st.checkbox(
+            "Show values on bars",
+            value=True,
+            key="_bar_show_values",
+        )
+    
+    # Generate bar chart
+    try:
+        fig = make_bar_fn(
+            df,
+            value_col=value_col,
+            max_districts=max_districts,
+            max_indices=max_indices,
+            horizontal=horizontal,
+            show_values=show_values,
+        )
+        
+        if fig is not None:
+            st.pyplot(fig)
+            
+            # Download button for the figure
+            _offer_figure_download(fig, "portfolio_bar_chart.png", "Download bar chart")
+        else:
+            st.warning("Could not generate bar chart. Check data availability.")
+    except Exception as e:
+        st.error(f"Error generating bar chart: {e}")
+
+
+def _offer_figure_download(fig: Any, filename: str, label: str) -> None:
+    """Offer a download button for a matplotlib figure."""
+    import streamlit as st
+    import io
+    
+    try:
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+        buf.seek(0)
+        
+        st.download_button(
+            f"⬇️ {label}",
+            data=buf.getvalue(),
+            file_name=filename,
+            mime="image/png",
+            key=f"_download_{filename}",
+        )
+    except Exception:
+        pass  # Silently fail download if there's an issue
+
+
+# =============================================================================
 # Coordinate Lookup - Import from point_selection_ui
 # =============================================================================
 
@@ -526,7 +768,7 @@ def render_portfolio_panel(
         if not selected_slugs:
             st.info("Select at least one index to compare.")
         else:
-            render_comparison_table(
+            cached_df = render_comparison_table(
                 portfolio=portfolio,
                 selected_slugs=selected_slugs,
                 variables=variables,
@@ -550,6 +792,16 @@ def render_portfolio_panel(
                 f"Comparing {len(portfolio)} districts across {len(selected_slugs)} indices • "
                 f"{sel_scenario} • {sel_period} • {sel_stat}"
             )
+            
+            # Section 4: Visualizations (when we have comparison data)
+            if cached_df is not None and not cached_df.empty:
+                st.markdown("---")
+                with st.expander("📈 Visualizations", expanded=True):
+                    render_portfolio_visualizations(
+                        cached_df,
+                        default_value_col="Percentile",
+                        default_chart_type="heatmap",
+                    )
         
         # Coordinate lookup also available when portfolio not empty
         st.markdown("---")
