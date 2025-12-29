@@ -1,38 +1,26 @@
 """
 Multi-district portfolio panel (right column) for IRT.
 
-This module extracts the portfolio-mode right-column UI from
-dashboard_unfactored_impl.py. It includes:
-- State summary (shown when portfolio_route is None)
-- Step 1: Route chooser buttons (rankings/map/saved_points)
-- Step 2: Index selection for portfolio comparison
-- Step 3: Multi-index comparison table builder
-- Step 4: Review and edit portfolio districts
+This module renders the portfolio-mode right-column UI including:
+- Portfolio summary badge (always visible)
+- Portfolio district list with remove buttons
+- Index selection for comparison
+- Multi-index comparison table (auto-rebuilds)
+- Coordinate-based district lookup
+
+Key improvements over previous version:
+- Removed mandatory route selection (rankings/map/saved_points)
+- All add methods available simultaneously
+- Auto-rebuild comparison table on changes
+- Portfolio list always visible
+- Simplified point selection integrated
 
 Widget keys preserved:
-- btn_portfolio_route_rankings
-- btn_portfolio_route_map
-- btn_portfolio_route_saved_points
-- btn_portfolio_route_reset
 - portfolio_multiindex_selection
-- btn_build_multiindex_portfolio_table
-- btn_open_rankings_from_summary
 - btn_portfolio_remove_all
 - btn_portfolio_remove_all_confirm
 - btn_portfolio_remove_all_cancel
 - btn_portfolio_remove_{state}_{district}
-
-Session state keys used:
-- portfolio_build_route
-- portfolio_districts
-- portfolio_multiindex_selection
-- portfolio_multiindex_df
-- portfolio_multiindex_context
-- portfolio_flash
-- confirm_clear_portfolio
-- jump_to_rankings
-- jump_to_map
-- point_query_points
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -41,190 +29,190 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, Callable, List, Mapping, Optional, Sequence
 
 import numpy as np
 import pandas as pd
 
 
-def render_state_summary(
-    *,
-    selected_state: str,
-    variable_label: str,
-    sel_scenario: str,
-    sel_period: str,
-    merged: Any,  # GeoDataFrame
-    adm1: Any,  # GeoDataFrame
-    metric_col: str,
-    compute_state_metrics_fn: Callable[..., tuple[dict, Any, Any]],
-) -> None:
-    """Render the state summary section (shown when portfolio_route is None)."""
-    import streamlit as st
+# =============================================================================
+# Portfolio Badge & Summary
+# =============================================================================
 
-    st.subheader(f"{selected_state} — State summary")
-    st.markdown(
-        f"**Index:** {variable_label}  \n"
-        f"**Scenario:** {sel_scenario}  \n"
-        f"**Period:** {sel_period}"
-    )
-
-    if selected_state == "All":
-        st.info("Select a state in the left panel to see a state summary and build a portfolio.")
-    else:
-        try:
-            ensemble_port, _, _ = compute_state_metrics_fn(
-                merged, adm1, metric_col, selected_state
-            )
-        except Exception:
-            ensemble_port = {
-                "mean": None,
-                "median": None,
-                "p05": None,
-                "p95": None,
-                "std": None,
-                "n_districts": 0,
-            }
-
-        def _fmt_metric(v: object) -> str:
-            try:
-                x = float(v)  # type: ignore[arg-type]
-                if np.isnan(x):
-                    return "—"
-                return f"{x:.2f}"
-            except Exception:
-                return "—"
-
-        if ensemble_port.get("n_districts", 0) > 0:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Mean", _fmt_metric(ensemble_port.get("mean")))
-            c2.metric("Median", _fmt_metric(ensemble_port.get("median")))
-            c3.metric("P05", _fmt_metric(ensemble_port.get("p05")))
-            c4.metric("P95", _fmt_metric(ensemble_port.get("p95")))
-            st.caption(f"Districts used: {int(ensemble_port.get('n_districts', 0))}")
-        else:
-            st.caption("No numeric district values found for this state & selection.")
-
-
-def render_route_chooser() -> Optional[str]:
+def render_portfolio_badge(portfolio_count: int) -> None:
     """
-    Render Step 1 - route chooser buttons for portfolio building.
+    Render a compact portfolio summary badge.
+    """
+    import streamlit as st
     
-    Returns the current route (or None if not selected).
+    if portfolio_count == 0:
+        st.markdown(
+            """<div style="padding: 8px 12px; background: #f0f2f6; border-radius: 8px; 
+            text-align: center; color: #666;">
+            <span style="font-size: 1.1em;">📋</span> 
+            <strong>Portfolio empty</strong> — Click districts to add
+            </div>""",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f"""<div style="padding: 8px 12px; background: #e8f4e8; border-radius: 8px; 
+            text-align: center; color: #2d5a2d;">
+            <span style="font-size: 1.1em;">📋</span> 
+            <strong>{portfolio_count} district{'s' if portfolio_count != 1 else ''}</strong> in portfolio
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+
+# =============================================================================
+# Portfolio District List
+# =============================================================================
+
+def render_portfolio_list(
+    *,
+    portfolio: Sequence[Any],
+    portfolio_remove_fn: Callable[[str, str], None],
+    normalize_fn: Callable[[str], str],
+    max_visible: int = 8,
+) -> None:
+    """
+    Render the portfolio district list with remove buttons.
     """
     import streamlit as st
-
-    st.markdown("### Step 1 – Build your district portfolio")
-    st.caption(
-        "Choose one method to start adding districts. The dashboard will guide you through the relevant path."
-    )
-
-    col_route_1, col_route_2, col_route_3 = st.columns(3)
-    with col_route_1:
-        if st.button(
-            "📊 From the rankings table",
-            key="btn_portfolio_route_rankings",
-            use_container_width=True,
-        ):
-            st.session_state["portfolio_build_route"] = "rankings"
-            st.session_state["jump_to_rankings"] = True
-            st.session_state["jump_to_map"] = False
-            st.rerun()
-    with col_route_2:
-        if st.button(
-            "🗺 From the map",
-            key="btn_portfolio_route_map",
-            use_container_width=True,
-        ):
-            st.session_state["portfolio_build_route"] = "map"
-            st.session_state["jump_to_map"] = True
-            st.session_state["jump_to_rankings"] = False
-            st.rerun()
-    with col_route_3:
-        if st.button(
-            "📍 From saved points",
-            key="btn_portfolio_route_saved_points",
-            use_container_width=True,
-        ):
-            st.session_state["portfolio_build_route"] = "saved_points"
-            st.session_state["jump_to_rankings"] = False
-            st.session_state["jump_to_map"] = False
-            st.rerun()
-
-    route = st.session_state.get("portfolio_build_route", None)
-
-    route_label_map = {
-        "rankings": "From the rankings table",
-        "map": "From the map",
-        "saved_points": "From saved points",
-    }
-
-    if route in route_label_map:
-        st.caption(f"Selected method: **{route_label_map[route]}**")
-        if st.button("↩ Change method", key="btn_portfolio_route_reset"):
-            st.session_state["portfolio_build_route"] = None
-            st.session_state["jump_to_rankings"] = False
-            st.session_state["jump_to_map"] = False
-            st.rerun()
-
-    return route
-
-
-def render_route_hints(route: Optional[str], portfolio: Sequence[Any]) -> None:
-    """Render hints based on the selected route."""
-    import streamlit as st
-
-    if route is None:
-        if portfolio:
-            st.caption(
-                f"Current portfolio: **{len(portfolio)}** district(s). "
-                "You can continue to Step 2 below, or choose a method above to add more."
-            )
+    
+    if not portfolio:
+        st.caption("No districts selected yet. Add districts from the map or rankings table.")
+        return
+    
+    # Convert to list of dicts
+    districts = []
+    for d in portfolio:
+        if isinstance(d, dict):
+            districts.append(d)
+        elif isinstance(d, (list, tuple)) and len(d) >= 2:
+            districts.append({"state": d[0], "district": d[1]})
+    
+    # Determine what to show
+    show_all = st.session_state.get("_portfolio_show_all", False) or len(districts) <= max_visible
+    display_districts = districts if show_all else districts[:max_visible]
+    
+    for d in display_districts:
+        state_i = str(d.get("state", "")).strip()
+        district_i = str(d.get("district", "")).strip()
+        
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.markdown(f"**{district_i}**, {state_i}")
+        with col2:
+            key = f"btn_portfolio_remove_{normalize_fn(state_i)}_{normalize_fn(district_i)}"
+            if st.button("×", key=key, help=f"Remove {district_i}"):
+                portfolio_remove_fn(state_i, district_i)
+                st.rerun()
+    
+    # Show more/less toggle
+    if len(districts) > max_visible:
+        remaining = len(districts) - max_visible
+        if show_all:
+            if st.button("Show less", key="_portfolio_show_less"):
+                st.session_state["_portfolio_show_all"] = False
+                st.rerun()
         else:
-            st.caption("Choose a method above to start building your portfolio.")
-    elif route == "rankings":
-        st.caption(
-            "Add districts from the **Rankings table** (left) and come back here to analyse."
-        )
-    elif route == "map":
-        st.caption(
-            "Add districts by selecting them on the **Map** (left) and clicking **Add to portfolio**."
-        )
-    elif route == "saved_points":
-        st.caption("Add districts using the **Saved points** panel below.")
+            if st.button(f"Show {remaining} more...", key="_portfolio_show_more"):
+                st.session_state["_portfolio_show_all"] = True
+                st.rerun()
 
 
-def render_index_selection(
+# =============================================================================
+# Clear Portfolio Button
+# =============================================================================
+
+def render_clear_portfolio_button(
+    *,
+    portfolio_count: int,
+    clear_fn: Callable[[], None],
+    set_flash_fn: Callable[[str, str], None],
+) -> None:
+    """Render clear all button with inline confirmation."""
+    import streamlit as st
+    
+    if portfolio_count == 0:
+        return
+    
+    confirm_state = st.session_state.get("confirm_clear_portfolio", False)
+    
+    if not confirm_state:
+        if st.button("🗑 Clear all", key="btn_portfolio_remove_all", type="secondary"):
+            st.session_state["confirm_clear_portfolio"] = True
+            st.rerun()
+    else:
+        st.warning(f"Remove all {portfolio_count} districts?")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("✓ Yes, clear", key="btn_portfolio_remove_all_confirm", type="primary"):
+                clear_fn()
+                st.session_state["confirm_clear_portfolio"] = False
+                set_flash_fn("Portfolio cleared.", "success")
+                st.rerun()
+        with col2:
+            if st.button("Cancel", key="btn_portfolio_remove_all_cancel"):
+                st.session_state["confirm_clear_portfolio"] = False
+                st.rerun()
+
+
+# =============================================================================
+# Index Selector
+# =============================================================================
+
+def render_index_selector(
     *,
     variables: Mapping[str, Mapping[str, Any]],
-    variable_slug: str,
-) -> Sequence[str]:
+    current_slug: str,
+    selected_slugs: List[str],
+) -> List[str]:
     """
-    Render Step 2 - index selection for portfolio comparison.
+    Render index multi-select for portfolio comparison.
     
-    Returns the list of selected index slugs.
+    Ensures the current index is always selected by default.
     """
     import streamlit as st
-
-    st.markdown("### Step 2 – Select indices for portfolio analysis")
-    st.caption(
-        "Pick one or more indices to compare across the portfolio. "
-        "This is the main lever for portfolio comparison."
-    )
-
-    available_indices = [(slug, meta["label"]) for slug, meta in variables.items()]
-    default_sel = st.session_state.get("portfolio_multiindex_selection", [])
-    selected_slugs = st.multiselect(
-        "Select indices",
-        options=[s for s, _ in available_indices],
-        default=default_sel if default_sel else [variable_slug],
-        format_func=lambda s: variables[s]["label"] if s in variables else str(s),
+    
+    available = [(slug, meta["label"]) for slug, meta in variables.items()]
+    available_slugs = [s for s, _ in available]
+    
+    # Determine default: use existing selection if valid, otherwise current slug
+    if selected_slugs and any(s in available_slugs for s in selected_slugs):
+        default = [s for s in selected_slugs if s in available_slugs]
+    else:
+        # Default to current index
+        default = [current_slug] if current_slug in available_slugs else []
+    
+    # Ensure we always have at least the current slug selected initially
+    if not default and current_slug in available_slugs:
+        default = [current_slug]
+    
+    selected = st.multiselect(
+        "Compare across indices",
+        options=available_slugs,
+        default=default,
+        format_func=lambda s: variables[s]["label"] if s in variables else s,
         key="portfolio_multiindex_selection",
+        help="Select one or more climate indices to compare across your portfolio districts",
     )
+    
+    # If user clears all selections, return current slug as fallback
+    # This ensures table always has something to show
+    if not selected and current_slug in available_slugs:
+        return [current_slug]
+    
+    return selected
 
-    return selected_slugs
 
+# =============================================================================
+# Comparison Table (Auto-rebuild)
+# =============================================================================
 
-def render_multiindex_comparison(
+def render_comparison_table(
     *,
     portfolio: Sequence[Any],
     selected_slugs: Sequence[str],
@@ -235,287 +223,230 @@ def render_multiindex_comparison(
     sel_stat: str,
     pilot_state: str,
     data_dir: Path,
-    # Callable dependencies
     load_master_csv_fn: Callable[[str], pd.DataFrame],
     normalize_master_columns_fn: Callable[[pd.DataFrame], pd.DataFrame],
     parse_master_schema_fn: Callable[[Any], tuple[list, list, dict]],
     resolve_metric_column_fn: Callable[..., Optional[str]],
     find_baseline_column_for_stat_fn: Callable[..., Optional[str]],
     risk_class_from_percentile_fn: Callable[[float], str],
-    portfolio_normalize_fn: Callable[[str], str],
+    normalize_fn: Callable[[str], str],
     build_portfolio_multiindex_df_fn: Callable[..., pd.DataFrame],
-) -> None:
-    """Render Step 3 - multi-index comparison table builder."""
+) -> Optional[pd.DataFrame]:
+    """
+    Render the comparison table with auto-rebuild on changes.
+    """
     import streamlit as st
-    
-    from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
     import os
-
-    st.markdown("### Step 3 – Portfolio comparison (multi-index)")
-    st.caption(
-        "Build a combined table across all selected indices for the districts in your portfolio."
-    )
-
-    st.markdown("#### Multi-index comparison for portfolio")
-
-    def _resolve_proc_root_for_slug(slug: str) -> Path:
-        """
-        Resolve processed root for a given index slug.
-        """
-        env_root = os.getenv("IRT_PROCESSED_ROOT")
-        if env_root:
-            base_path = Path(env_root)
-            if base_path.name == slug:
-                proc_root = base_path
-            else:
-                proc_root = base_path / slug
-        else:
-            proc_root = data_dir / "processed" / slug
-        return proc_root.resolve()
-
-    def _load_master_and_schema_for_slug(slug: str) -> tuple[pd.DataFrame, list, list, dict]:
-        """
-        Load master_metrics_by_district.csv for a slug, normalize columns,
-        and parse schema. Cached by (slug, master_path, mtime).
-        """
-        proc_root = _resolve_proc_root_for_slug(slug)
-        master_path = proc_root / pilot_state / "master_metrics_by_district.csv"
-
-        cache = st.session_state.setdefault("_portfolio_master_cache", {})
-
-        try:
-            mtime = master_path.stat().st_mtime
-        except Exception:
-            mtime = None
-
-        cache_key = f"{slug}::{str(master_path)}"
-        entry = cache.get(cache_key)
-        if entry is not None and entry.get("mtime") == mtime:
-            return (
-                entry["df"],
-                entry["schema_items"],
-                entry["metrics"],
-                entry["by_metric"],
-            )
-
-        if not master_path.exists():
-            empty_df = pd.DataFrame()
-            cache[cache_key] = {
-                "df": empty_df,
-                "schema_items": [],
-                "metrics": [],
-                "by_metric": {},
-                "mtime": mtime,
-            }
-            return empty_df, [], [], {}
-
-        # Load + normalize + schema
-        df_local = load_master_csv_fn(str(master_path))
-        df_local = normalize_master_columns_fn(df_local)
-        schema_items_local, metrics_local, by_metric_local = parse_master_schema_fn(df_local.columns)
-
-        cache[cache_key] = {
-            "df": df_local,
-            "schema_items": schema_items_local,
-            "metrics": metrics_local,
-            "by_metric": by_metric_local,
-            "mtime": mtime,
-        }
-        return df_local, schema_items_local, metrics_local, by_metric_local
-
-    def _match_row_idx(df_local: pd.DataFrame, st_name: str, dist_name: str) -> Optional[int]:
-        """
-        Robustly match (state, district) in a master df.
-        """
-        if df_local is None or df_local.empty:
-            return None
-        if "state" not in df_local.columns or "district" not in df_local.columns:
-            return None
-
-        st_norm = portfolio_normalize_fn(st_name)
-        dist_norm = portfolio_normalize_fn(dist_name)
-
-        state_norm = df_local["state"].astype(str).map(portfolio_normalize_fn)
-        dist_norm_series = df_local["district"].astype(str).map(portfolio_normalize_fn)
-
-        exact = (state_norm == st_norm) & (dist_norm_series == dist_norm)
-        if exact.any():
-            return int(df_local.index[exact][0])
-
-        # Fallback: contains
-        try:
-            contains_1 = dist_norm_series.str.contains(dist_norm, na=False)
-            contains_2 = pd.Series(
-                [dist_norm in str(x) for x in dist_norm_series.tolist()],
-                index=df_local.index,
-            )
-            fallback = (state_norm == st_norm) & (contains_1 | contains_2)
-            if fallback.any():
-                return int(df_local.index[fallback][0])
-        except Exception:
-            pass
-
+    from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
+    
+    if not portfolio or not selected_slugs:
         return None
-
-    def _compute_rank_and_percentile(
-        df_local: pd.DataFrame,
-        st_name: str,
-        metric_col: str,
-        value: float,
-    ) -> tuple[Optional[int], Optional[float]]:
-        """Compute rank and percentile within state."""
-        return compute_rank_and_percentile(
-            df_local,
-            st_name,
-            metric_col,
-            value,
-            state_col="state",
-            normalize_fn=portfolio_normalize_fn,
-            percentile_method="le",
-        )
-
-    def _build_portfolio_multiindex_df() -> pd.DataFrame:
-        return build_portfolio_multiindex_df_fn(
-            portfolio=portfolio,
-            selected_slugs=selected_slugs,
-            variables=variables,
-            index_group_labels=index_group_labels,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            load_master_and_schema_for_slug=_load_master_and_schema_for_slug,
-            resolve_metric_column=resolve_metric_column_fn,
-            find_baseline_column_for_stat=find_baseline_column_for_stat_fn,
-            match_row_idx=_match_row_idx,
-            compute_rank_and_percentile=_compute_rank_and_percentile,
-            risk_class_from_percentile=risk_class_from_percentile_fn,
-            normalize_fn=portfolio_normalize_fn,
-        )
-
-    # If the selection context changed, prompt rebuild
-    context_now = {
+    
+    # Build context for cache invalidation
+    context = {
+        "districts": [
+            (d.get("state"), d.get("district")) if isinstance(d, dict) else tuple(d[:2])
+            for d in portfolio
+        ],
         "slugs": list(selected_slugs),
         "scenario": sel_scenario,
         "period": sel_period,
         "stat": sel_stat,
     }
+    
+    # Check if rebuild needed
     prev_context = st.session_state.get("portfolio_multiindex_context")
-    if prev_context != context_now:
-        st.session_state.pop("portfolio_multiindex_df", None)
-        st.session_state["portfolio_multiindex_context"] = context_now
+    cached_df = st.session_state.get("portfolio_multiindex_df")
+    needs_rebuild = cached_df is None or prev_context != context
+    
+    # Helper functions
+    def _resolve_proc_root_for_slug(slug: str) -> Path:
+        env_root = os.getenv("IRT_PROCESSED_ROOT")
+        if env_root:
+            base_path = Path(env_root)
+            if base_path.name == slug:
+                return base_path.resolve()
+            return (base_path / slug).resolve()
+        return (data_dir / "processed" / slug).resolve()
 
-    if st.button(
-        "Build multi-index portfolio table",
-        key="btn_build_multiindex_portfolio_table",
-        use_container_width=True,
-    ):
-        with st.spinner("Building multi-index portfolio table..."):
-            st.session_state["portfolio_multiindex_df"] = _build_portfolio_multiindex_df()
-
-    portfolio_multiindex_df = st.session_state.get("portfolio_multiindex_df")
-    if isinstance(portfolio_multiindex_df, pd.DataFrame) and not portfolio_multiindex_df.empty:
-        st.markdown("#### Portfolio – multi-index summary")
-        st.dataframe(portfolio_multiindex_df, hide_index=True, use_container_width=True)
-
-        st.download_button(
-            "⬇️ Download portfolio data (multi-index, CSV)",
-            data=portfolio_multiindex_df.to_csv(index=False).encode("utf-8"),
-            file_name="portfolio_multiindex_summary.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
-
-        if st.button(
-            "📊 Open rankings table (portfolio view)",
-            key="btn_open_rankings_from_summary",
-        ):
-            st.session_state["jump_to_rankings"] = True
-            st.rerun()
-    else:
-        st.info(
-            "Click **Build multi-index portfolio table** to generate the comparison table."
-        )
-
-
-def render_portfolio_editor(
-    *,
-    portfolio: Sequence[Any],
-    portfolio_remove_fn: Callable[[str, str], None],
-    portfolio_remove_all_fn: Callable[[], None],
-    portfolio_normalize_fn: Callable[[str], str],
-) -> None:
-    """Render Step 4 - review and edit portfolio districts."""
-    import streamlit as st
-
-    with st.expander("Step 4 – Review and edit portfolio districts", expanded=False):
-        st.caption("Remove individual districts or remove all.")
-
-        flash_msg = st.session_state.pop("portfolio_flash", None)
-        if flash_msg:
-            st.success(flash_msg)
-
-        st.session_state.setdefault("confirm_clear_portfolio", False)
-
-        top_l, top_r = st.columns([3, 2])
-        with top_l:
-            st.markdown(f"**Portfolio districts ({len(portfolio)})**")
-        with top_r:
-            if not st.session_state["confirm_clear_portfolio"]:
-                if st.button("🧹 Remove all", key="btn_portfolio_remove_all"):
-                    st.session_state["confirm_clear_portfolio"] = True
-                    st.rerun()
-            else:
-                st.warning("Remove all districts from the portfolio?")
-                c_yes, c_no = st.columns(2)
-                with c_yes:
-                    if st.button("✅ Confirm", key="btn_portfolio_remove_all_confirm"):
-                        portfolio_remove_all_fn()
-                        st.session_state["confirm_clear_portfolio"] = False
-                        st.session_state["portfolio_flash"] = "Cleared portfolio selection."
-                        st.rerun()
-                with c_no:
-                    if st.button("✖ Cancel", key="btn_portfolio_remove_all_cancel"):
-                        st.session_state["confirm_clear_portfolio"] = False
-                        st.rerun()
-
-        # Show editable list
+    def _load_master_and_schema_for_slug(slug: str):
+        proc_root = _resolve_proc_root_for_slug(slug)
+        master_path = proc_root / pilot_state / "master_metrics_by_district.csv"
+        
+        cache = st.session_state.setdefault("_portfolio_master_cache", {})
+        cache_key = f"{slug}::{master_path}"
+        
         try:
-            table_df = pd.DataFrame(
-                [{"District": (d.get("district") if isinstance(d, dict) else d[1]),
-                  "State": (d.get("state") if isinstance(d, dict) else d[0])}
-                 for d in portfolio]
-            )
+            mtime = master_path.stat().st_mtime
         except Exception:
-            table_df = pd.DataFrame()
+            mtime = None
+        
+        entry = cache.get(cache_key)
+        if entry and entry.get("mtime") == mtime:
+            return entry["df"], entry["schema_items"], entry["metrics"], entry["by_metric"]
+        
+        if not master_path.exists():
+            empty = pd.DataFrame()
+            cache[cache_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "mtime": mtime}
+            return empty, [], [], {}
+        
+        df = load_master_csv_fn(str(master_path))
+        df = normalize_master_columns_fn(df)
+        schema, metrics, by_metric = parse_master_schema_fn(df.columns)
+        
+        cache[cache_key] = {"df": df, "schema_items": schema, "metrics": metrics, "by_metric": by_metric, "mtime": mtime}
+        return df, schema, metrics, by_metric
 
-        if table_df.empty:
-            st.warning("Portfolio exists but could not be displayed in table format.")
+    def _match_row_idx(df_local, st_name, dist_name):
+        if df_local is None or df_local.empty:
+            return None
+        if "state" not in df_local.columns or "district" not in df_local.columns:
+            return None
+        
+        st_norm = normalize_fn(st_name)
+        dist_norm = normalize_fn(dist_name)
+        state_col = df_local["state"].astype(str).map(normalize_fn)
+        dist_col = df_local["district"].astype(str).map(normalize_fn)
+        
+        exact = (state_col == st_norm) & (dist_col == dist_norm)
+        if exact.any():
+            return int(df_local.index[exact][0])
+        
+        try:
+            contains = dist_col.str.contains(dist_norm, na=False)
+            fallback = (state_col == st_norm) & contains
+            if fallback.any():
+                return int(df_local.index[fallback][0])
+        except Exception:
+            pass
+        return None
+
+    def _compute_rank_and_percentile(df_local, st_name, metric_col, value):
+        return compute_rank_and_percentile(
+            df_local, st_name, metric_col, value,
+            state_col="state", normalize_fn=normalize_fn, percentile_method="le"
+        )
+
+    # Build or use cached table
+    if needs_rebuild:
+        with st.spinner("Building comparison table..."):
+            df = build_portfolio_multiindex_df_fn(
+                portfolio=portfolio,
+                selected_slugs=selected_slugs,
+                variables=variables,
+                index_group_labels=index_group_labels,
+                sel_scenario=sel_scenario,
+                sel_period=sel_period,
+                sel_stat=sel_stat,
+                load_master_and_schema_for_slug=_load_master_and_schema_for_slug,
+                resolve_metric_column=resolve_metric_column_fn,
+                find_baseline_column_for_stat=find_baseline_column_for_stat_fn,
+                match_row_idx=_match_row_idx,
+                compute_rank_and_percentile=_compute_rank_and_percentile,
+                risk_class_from_percentile=risk_class_from_percentile_fn,
+                normalize_fn=normalize_fn,
+            )
+            st.session_state["portfolio_multiindex_df"] = df
+            st.session_state["portfolio_multiindex_context"] = context
+            cached_df = df
+    
+    # Display table
+    if cached_df is not None and not cached_df.empty:
+        st.dataframe(cached_df, hide_index=True, use_container_width=True)
+        
+        st.download_button(
+            "⬇️ Download as CSV",
+            data=cached_df.to_csv(index=False).encode("utf-8"),
+            file_name="portfolio_comparison.csv",
+            mime="text/csv",
+        )
+        
+        return cached_df
+    
+    return None
+
+
+# =============================================================================
+# Coordinate Lookup (Simplified)
+# =============================================================================
+
+def render_coordinate_lookup(
+    *,
+    merged: Any,
+    portfolio_add_fn: Callable[[str, str], None],
+    set_flash_fn: Callable[[str, str], None],
+) -> None:
+    """
+    Render coordinate-based district lookup.
+    """
+    import streamlit as st
+    from shapely.geometry import Point
+    
+    # Get bounds from data
+    try:
+        minx, miny, maxx, maxy = merged.total_bounds
+        default_lat = float((miny + maxy) / 2.0)
+        default_lon = float((minx + maxx) / 2.0)
+    except Exception:
+        miny, maxy = 6.0, 38.0
+        minx, maxx = 68.0, 98.0
+        default_lat, default_lon = 17.385, 78.4867
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        lat = st.number_input(
+            "Latitude",
+            min_value=float(miny),
+            max_value=float(maxy),
+            value=default_lat,
+            format="%.4f",
+            key="_coord_lat",
+        )
+    with col2:
+        lon = st.number_input(
+            "Longitude",
+            min_value=float(minx),
+            max_value=float(maxx),
+            value=default_lon,
+            format="%.4f",
+            key="_coord_lon",
+        )
+    
+    # Preview district
+    try:
+        pt = Point(float(lon), float(lat))
+        mask = merged.geometry.contains(pt)
+        if mask.any():
+            row = merged[mask].iloc[0]
         else:
-            for i, row in table_df.iterrows():
-                district_i = str(row.get("District", "")).strip()
-                state_i = str(row.get("State", "")).strip()
-                c1, c2, c3 = st.columns([4, 4, 2])
-                with c1:
-                    st.write(district_i)
-                with c2:
-                    st.write(state_i)
-                with c3:
-                    if st.button(
-                        "🗑 Remove",
-                        key=f"btn_portfolio_remove_{portfolio_normalize_fn(state_i)}_{portfolio_normalize_fn(district_i)}",
-                    ):
-                        portfolio_remove_fn(state_i, district_i)
-                        st.session_state["portfolio_flash"] = (
-                            f"Removed {district_i}, {state_i} from portfolio."
-                        )
-                        st.rerun()
+            dists = merged.geometry.centroid.distance(pt)
+            row = merged.loc[dists.idxmin()]
+        
+        state_name = str(row.get("state_name", "")).strip()
+        district_name = str(row.get("district_name", "")).strip()
+        
+        if state_name and district_name:
+            st.info(f"📍 Location: **{district_name}**, {state_name}")
+            
+            if st.button("➕ Add to portfolio", key="_coord_add", type="primary"):
+                portfolio_add_fn(state_name, district_name)
+                set_flash_fn(f"Added {district_name}, {state_name}", "success")
+                st.rerun()
+        else:
+            st.warning("Could not identify district")
+    except Exception as e:
+        st.warning(f"Could not identify district: {e}")
 
+
+# =============================================================================
+# Main Portfolio Panel
+# =============================================================================
 
 def render_portfolio_panel(
     *,
     # State/selection context
     selected_state: str,
-    portfolio_route: Optional[str],
+    portfolio_route: Optional[str],  # Kept for backward compat, ignored
     # Variable/metric context
     variables: Mapping[str, Mapping[str, Any]],
     variable_slug: str,
@@ -525,8 +456,8 @@ def render_portfolio_panel(
     sel_stat: str,
     metric_col: str,
     # Data
-    merged: Any,  # GeoDataFrame
-    adm1: Any,  # GeoDataFrame
+    merged: Any,
+    adm1: Any,
     # Config
     pilot_state: str,
     data_dir: Path,
@@ -544,92 +475,120 @@ def render_portfolio_panel(
     build_portfolio_multiindex_df_fn: Callable[..., pd.DataFrame],
 ) -> None:
     """
-    Render the complete multi-district portfolio panel (right column).
-
-    This is the main entry point for the portfolio panel, composing all sub-renderers.
-
-    Contract:
-    - Preserves all widget keys from the legacy dashboard
-    - Preserves all session_state keys
-    - Takes explicit inputs rather than relying on globals
+    Render the complete multi-district portfolio panel.
+    
+    Note: portfolio_route parameter is kept for backward compatibility but ignored.
+    The new design doesn't require mandatory route selection.
     """
     import streamlit as st
-
-    # Ensure saved-points container exists
-    st.session_state.setdefault("point_query_points", [])
-
-    variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
-
-    # 1. State summary (shown when portfolio_route is None)
-    if portfolio_route is None:
-        render_state_summary(
-            selected_state=selected_state,
-            variable_label=variable_label,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            merged=merged,
-            adm1=adm1,
-            metric_col=metric_col,
-            compute_state_metrics_fn=compute_state_metrics_fn,
-        )
-
-    # Separator
-    st.markdown("---")
-
-    # 2. Portfolio analysis expander
-    with st.expander("Portfolio analysis (multi-district)", expanded=True):
-        # Step 1: Route chooser
-        route = render_route_chooser()
-
-        # Get current portfolio
-        portfolio = st.session_state.get("portfolio_districts", [])
-
-        # Route hints
-        render_route_hints(route, portfolio)
-
-        st.markdown("---")
-
-        # Check if portfolio is empty
-        if not portfolio:
-            st.info(
-                "No districts in portfolio yet. Add districts via **From the rankings table**, "
-                "**From the map**, or **From saved points**."
-            )
+    from india_resilience_tool.analysis.portfolio import portfolio_add, portfolio_contains
+    
+    # Helper functions for add/contains
+    def _add(state: str, district: str) -> None:
+        portfolio_add(st.session_state, state, district, normalize_fn=portfolio_normalize_fn)
+    
+    def _contains(state: str, district: str) -> bool:
+        return portfolio_contains(st.session_state, state, district, normalize_fn=portfolio_normalize_fn)
+    
+    def _set_flash(msg: str, level: str) -> None:
+        st.session_state["_portfolio_flash"] = {"message": msg, "level": level}
+    
+    portfolio = st.session_state.get("portfolio_districts", [])
+    
+    # Flash messages
+    flash = st.session_state.pop("_portfolio_flash", None)
+    if flash:
+        level = flash.get("level", "success")
+        msg = flash.get("message", "")
+        if level == "success":
+            st.success(msg)
+        elif level == "warning":
+            st.warning(msg)
+        elif level == "error":
+            st.error(msg)
         else:
-            # Step 2: Index selection
-            selected_slugs = render_index_selection(
-                variables=variables,
-                variable_slug=variable_slug,
-            )
-
-            # Step 3: Multi-index comparison
-            if not selected_slugs:
-                st.warning("Select at least one index to build a portfolio comparison.")
-            else:
-                render_multiindex_comparison(
-                    portfolio=portfolio,
-                    selected_slugs=selected_slugs,
-                    variables=variables,
-                    index_group_labels=index_group_labels,
-                    sel_scenario=sel_scenario,
-                    sel_period=sel_period,
-                    sel_stat=sel_stat,
-                    pilot_state=pilot_state,
-                    data_dir=data_dir,
-                    load_master_csv_fn=load_master_csv_fn,
-                    normalize_master_columns_fn=normalize_master_columns_fn,
-                    parse_master_schema_fn=parse_master_schema_fn,
-                    resolve_metric_column_fn=resolve_metric_column_fn,
-                    find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
-                    risk_class_from_percentile_fn=risk_class_from_percentile_fn,
-                    portfolio_normalize_fn=portfolio_normalize_fn,
-                    build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
-                )
-
-            # Step 4: Review and edit portfolio
-            render_portfolio_editor(
+            st.info(msg)
+    
+    # Section 1: Portfolio Summary
+    st.markdown("### 📋 Your Portfolio")
+    render_portfolio_badge(len(portfolio))
+    
+    if portfolio:
+        with st.expander("Manage portfolio districts", expanded=False):
+            render_portfolio_list(
                 portfolio=portfolio,
                 portfolio_remove_fn=portfolio_remove_fn,
-                portfolio_remove_all_fn=portfolio_remove_all_fn,
-                portfolio_normalize_fn=portfolio_normalize_fn,
+                normalize_fn=portfolio_normalize_fn,
+                max_visible=8,
+            )
+            st.markdown("---")
+            render_clear_portfolio_button(
+                portfolio_count=len(portfolio),
+                clear_fn=portfolio_remove_all_fn,
+                set_flash_fn=_set_flash,
+            )
+    
+    st.markdown("---")
+    
+    # Section 2: How to Add (when empty)
+    if not portfolio:
+        st.markdown("#### How to add districts")
+        st.markdown("""
+        **From the map:** Click any district, then click **+ Add to portfolio**
+        
+        **From rankings:** Use the **+ Add** buttons in the rankings table
+        """)
+        
+        with st.expander("🔍 Find by coordinates", expanded=False):
+            render_coordinate_lookup(
+                merged=merged,
+                portfolio_add_fn=_add,
+                set_flash_fn=_set_flash,
+            )
+    
+    # Section 3: Comparison Analysis (when portfolio has districts)
+    if portfolio:
+        st.markdown("### 📊 Portfolio Comparison")
+        
+        current_selection = st.session_state.get("portfolio_multiindex_selection", [variable_slug])
+        selected_slugs = render_index_selector(
+            variables=variables,
+            current_slug=variable_slug,
+            selected_slugs=current_selection,
+        )
+        
+        if not selected_slugs:
+            st.info("Select at least one index to compare.")
+        else:
+            render_comparison_table(
+                portfolio=portfolio,
+                selected_slugs=selected_slugs,
+                variables=variables,
+                index_group_labels=index_group_labels,
+                sel_scenario=sel_scenario,
+                sel_period=sel_period,
+                sel_stat=sel_stat,
+                pilot_state=pilot_state,
+                data_dir=data_dir,
+                load_master_csv_fn=load_master_csv_fn,
+                normalize_master_columns_fn=normalize_master_columns_fn,
+                parse_master_schema_fn=parse_master_schema_fn,
+                resolve_metric_column_fn=resolve_metric_column_fn,
+                find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
+                risk_class_from_percentile_fn=risk_class_from_percentile_fn,
+                normalize_fn=portfolio_normalize_fn,
+                build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
+            )
+            
+            st.caption(
+                f"Comparing {len(portfolio)} districts across {len(selected_slugs)} indices • "
+                f"{sel_scenario} • {sel_period} • {sel_stat}"
+            )
+        
+        # Coordinate lookup also available when portfolio not empty
+        with st.expander("🔍 Add by coordinates", expanded=False):
+            render_coordinate_lookup(
+                merged=merged,
+                portfolio_add_fn=_add,
+                set_flash_fn=_set_flash,
             )

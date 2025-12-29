@@ -1,11 +1,11 @@
 """
-Rankings table view (full UI).
+Rankings table view for IRT.
 
-Includes:
-- rank-mode selector ("Top 20 biggest increases" vs "All") with key="rank_mode"
-- display column selection + renaming
-- portfolio-mode table editor + add button + portfolio summary
-- single-district mode simple dataframe
+This module provides:
+- District rankings table with sorting options
+- Per-row add/remove buttons in portfolio mode
+- Visual indicators for portfolio membership
+- Download functionality
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -32,41 +32,175 @@ def render_rankings_view(
     portfolio_add: Callable[[str, str], None],
 ) -> None:
     """
-    Render the Rankings view. Designed to be called from dashboard_unfactored_impl.py.
+    Render the Rankings view.
+
+    In portfolio mode, shows per-row add/remove buttons instead of
+    the checkbox + batch button approach.
 
     Contract:
-    - Preserves widget keys:
-        - "rank_mode"
-        - rankings editor key: f"rankings_portfolio_editor_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}"
-        - add button key: f"btn_add_portfolio_from_table_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}"
-    - Preserves session_state keys used elsewhere:
-        - "analysis_mode"
-        - "portfolio_districts"
+    - Preserves widget key "rank_mode"
+    - Detects portfolio mode from session_state["analysis_mode"]
     """
     import streamlit as st
 
     if view != "📊 Rankings table":
         return
 
-    st.subheader("District rankings")
+    st.subheader("District Rankings")
 
     if table_df is None or table_df.empty:
-        st.caption("No ranking data available for this index, scenario, period and selection.")
+        st.caption("No ranking data available for this selection.")
         return
 
-    # Ranking mode selector (key preserved)
+    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+    is_portfolio_mode = analysis_mode == "Multi-district portfolio"
+
+    if is_portfolio_mode:
+        _render_portfolio_rankings(
+            table_df=table_df,
+            has_baseline=has_baseline,
+            variables=variables,
+            variable_slug=variable_slug,
+            sel_scenario=sel_scenario,
+            sel_period=sel_period,
+            sel_stat=sel_stat,
+            selected_state=selected_state,
+            portfolio_add_fn=portfolio_add,
+        )
+    else:
+        _render_simple_rankings(
+            table_df=table_df,
+            has_baseline=has_baseline,
+            variables=variables,
+            variable_slug=variable_slug,
+            sel_scenario=sel_scenario,
+            sel_period=sel_period,
+            sel_stat=sel_stat,
+            selected_state=selected_state,
+        )
+
+
+def _render_simple_rankings(
+    *,
+    table_df: pd.DataFrame,
+    has_baseline: bool,
+    variables: Mapping[str, Mapping[str, Any]],
+    variable_slug: str,
+    sel_scenario: str,
+    sel_period: str,
+    sel_stat: str,
+    selected_state: str,
+) -> None:
+    """Render simple rankings view for non-portfolio mode."""
+    import streamlit as st
+
+    # Mode selector
     options = ["Top 20 biggest increases", "All"]
     rank_mode = st.radio(
         "Show:",
         options=options,
         index=0,
         key="rank_mode",
+        horizontal=True,
+    )
+
+    df = table_df.copy()
+
+    if rank_mode == "Top 20 biggest increases":
+        if has_baseline and "rank_delta" in df.columns:
+            df = df.dropna(subset=["delta_abs"]).copy()
+            if df.empty:
+                st.info("No valid baseline/change values. Showing by value instead.")
+                df = table_df.sort_values("value", ascending=False).head(20)
+            else:
+                df = df.sort_values("rank_delta").head(20)
+        else:
+            st.info("Baseline not available. Showing by value instead.")
+            if "rank_value" in df.columns:
+                df = df.sort_values("rank_value").head(20)
+            else:
+                df = df.sort_values("value", ascending=False).head(20)
+    else:
+        if "rank_value" in df.columns:
+            df = df.sort_values("rank_value")
+        else:
+            df = df.sort_values("value", ascending=False)
+
+    # Build display columns
+    display_cols = ["rank_value", "district_name", "state_name", "value"]
+    if has_baseline and "baseline" in df.columns:
+        display_cols += ["delta_abs", "delta_pct"]
+    if "percentile_value" in df.columns:
+        display_cols.append("percentile_value")
+    if "risk_class" in df.columns:
+        display_cols.append("risk_class")
+    if "aspirational" in df.columns:
+        display_cols.append("aspirational")
+
+    display_cols = [c for c in display_cols if c in df.columns]
+
+    df_display = df[display_cols].rename(columns={
+        "rank_value": "Rank (value)",
+        "district_name": "District",
+        "state_name": "State",
+        "value": "Index value",
+        "baseline": "Baseline (1990–2010)",
+        "delta_abs": "Δ vs baseline",
+        "delta_pct": "%Δ vs baseline",
+        "percentile_value": "Percentile",
+        "risk_class": "Risk class",
+        "aspirational": "Aspirational",
+    })
+
+    st.dataframe(df_display, hide_index=True, use_container_width=True)
+
+    metric_label = variables.get(variable_slug, {}).get("label", variable_slug)
+    st.caption(
+        f"**{metric_label}** • {sel_scenario} • {sel_period} • {sel_stat}"
+        + (f" • Filtered to {selected_state}" if selected_state != "All" else "")
+    )
+
+
+def _render_portfolio_rankings(
+    *,
+    table_df: pd.DataFrame,
+    has_baseline: bool,
+    variables: Mapping[str, Mapping[str, Any]],
+    variable_slug: str,
+    sel_scenario: str,
+    sel_period: str,
+    sel_stat: str,
+    selected_state: str,
+    portfolio_add_fn: Callable[[str, str], None],
+) -> None:
+    """Render rankings view with per-row add/remove buttons using st.data_editor."""
+    import streamlit as st
+    from india_resilience_tool.analysis.portfolio import portfolio_contains, portfolio_remove
+    from india_resilience_tool.utils.naming import alias
+
+    def _normalize(s: str) -> str:
+        return alias(s).replace(" ", "")
+
+    def _contains(state: str, district: str) -> bool:
+        return portfolio_contains(st.session_state, state, district, normalize_fn=_normalize)
+
+    def _remove(state: str, district: str) -> None:
+        portfolio_remove(st.session_state, state, district, normalize_fn=_normalize)
+
+    # Mode selector - use same options as original
+    options = ["Top 20 biggest increases", "All"]
+    rank_mode = st.radio(
+        "Show:",
+        options=options,
+        index=0,
+        key="rank_mode",
+        horizontal=True,
     )
 
     df_to_show = table_df.copy()
 
     if rank_mode == "Top 20 biggest increases":
-        if has_baseline and ("rank_delta" in df_to_show.columns):
+        if has_baseline and "rank_delta" in df_to_show.columns:
             df_to_show = df_to_show.dropna(subset=["delta_abs"]).copy()
             if df_to_show.empty:
                 st.info("No valid baseline/change values to rank by increase.")
@@ -84,7 +218,7 @@ def render_rankings_view(
         else:
             df_to_show = df_to_show.sort_values("value", ascending=False)
 
-    # Decide which columns to display (preserve your exact logic)
+    # Build display columns - include all relevant columns like original
     display_cols = ["rank_value", "district_name", "state_name", "value"]
     if has_baseline and "baseline" in df_to_show.columns:
         display_cols += ["delta_abs", "delta_pct"]
@@ -96,6 +230,9 @@ def render_rankings_view(
         display_cols.append("aspirational")
 
     display_cols = [c for c in display_cols if c in df_to_show.columns]
+
+    # Reset index to ensure alignment between df_to_show and df_display/df_port
+    df_to_show = df_to_show.reset_index(drop=True)
 
     df_display = df_to_show[display_cols].rename(
         columns={
@@ -120,63 +257,101 @@ def render_rankings_view(
         + (f"Filtered to state: **{selected_state}**." if selected_state != "All" else "Showing all states.")
     )
 
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+    # Add "In portfolio" column to show current status
+    df_port = df_display.copy()
+    
+    # Check portfolio status for each row
+    in_portfolio_status = []
+    for _, row in df_to_show.iterrows():
+        district = str(row.get("district_name", "")).strip()
+        state = str(row.get("state_name", "")).strip()
+        in_portfolio_status.append(_contains(state, district))
+    
+    df_port.insert(0, "In portfolio", in_portfolio_status)
+    df_port["Add to portfolio"] = False  # Checkbox column for adding
 
-    if analysis_mode == "Multi-district portfolio":
-        df_port = df_display.copy()
-        if "Add to portfolio" not in df_port.columns:
-            df_port["Add to portfolio"] = False
+    # Portfolio stats
+    portfolio = st.session_state.get("portfolio_districts", [])
+    st.markdown(
+        f"<div style='text-align: right; color: #666; margin-bottom: 8px;'>"
+        f"📋 {len(portfolio)} district{'s' if len(portfolio) != 1 else ''} in portfolio"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
 
-        edited_df = st.data_editor(
-            df_port,
-            width="stretch",
-            key=f"rankings_portfolio_editor_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}",
-            num_rows="fixed",
-            disabled=[c for c in df_port.columns if c != "Add to portfolio"],
-        )
+    # Use data_editor for better table experience
+    edited_df = st.data_editor(
+        df_port,
+        use_container_width=True,
+        key=f"rankings_portfolio_editor_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}",
+        num_rows="fixed",
+        disabled=[c for c in df_port.columns if c not in ("Add to portfolio",)],
+        column_config={
+            "In portfolio": st.column_config.CheckboxColumn(
+                "✓",
+                help="Already in portfolio",
+                disabled=True,
+            ),
+            "Add to portfolio": st.column_config.CheckboxColumn(
+                "Add",
+                help="Check to add to portfolio",
+            ),
+            "Percentile": st.column_config.NumberColumn(
+                "Percentile",
+                format="%.1f",
+            ),
+            "Index value": st.column_config.NumberColumn(
+                "Index value",
+                format="%.2f",
+            ),
+            "Δ vs baseline": st.column_config.NumberColumn(
+                "Δ vs baseline",
+                format="%.2f",
+            ),
+            "%Δ vs baseline": st.column_config.NumberColumn(
+                "%Δ vs baseline",
+                format="%.1f%%",
+            ),
+        },
+        hide_index=True,
+    )
 
-        st.caption(caption_text)
+    st.caption(caption_text)
 
-        st.markdown("---")
-        st.markdown("#### Portfolio builder (from rankings table)")
+    st.markdown("---")
 
+    # Add button to add checked districts
+    col1, col2 = st.columns([2, 1])
+    with col1:
         if st.button(
             "➕ Add checked districts to portfolio",
             key=f"btn_add_portfolio_from_table_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}",
+            type="primary",
         ):
             added = 0
-            for _, row in edited_df.iterrows():
+            
+            for i, row in edited_df.iterrows():
                 if not row.get("Add to portfolio"):
                     continue
-                district_label = row.get("District")
-                state_label = row.get("State")
-                if pd.isna(district_label) or pd.isna(state_label):
+                # Get original data for this row - indices are aligned since we reset earlier
+                if i >= len(df_to_show):
                     continue
-                portfolio_add(str(state_label), str(district_label))
-                added += 1
+                orig_row = df_to_show.iloc[i]
+                district_label = str(orig_row.get("district_name", "")).strip()
+                state_label = str(orig_row.get("state_name", "")).strip()
+                if not district_label or not state_label:
+                    continue
+                if not _contains(state_label, district_label):
+                    portfolio_add_fn(state_label, district_label)
+                    added += 1
 
             if added > 0:
                 st.success(f"Added {added} district(s) to portfolio.")
+                st.rerun()
             else:
-                st.info("No new districts were added to the portfolio.")
+                st.info("No new districts were added (they may already be in the portfolio).")
 
-        portfolio = st.session_state.get("portfolio_districts", [])
-        if portfolio:
-            st.markdown("**Current portfolio (districts)**")
-            try:
-                if isinstance(portfolio[0], dict):
-                    port_df = pd.DataFrame(portfolio).rename(columns={"state": "State", "district": "District"})
-                else:
-                    port_df = pd.DataFrame(portfolio, columns=["State", "District"])
-            except Exception:
-                port_df = pd.DataFrame(columns=["State", "District"])
-
-            st.dataframe(port_df, hide_index=True, use_container_width=True)
-        else:
-            st.caption(
-                "No districts in portfolio yet. Check one or more rows in the table "
-                "above and click **Add checked districts to portfolio**."
-            )
-    else:
-        st.dataframe(df_display, width="stretch")
-        st.caption(caption_text)
+    # Show current portfolio summary
+    if portfolio:
+        with col2:
+            st.markdown(f"**{len(portfolio)}** in portfolio")

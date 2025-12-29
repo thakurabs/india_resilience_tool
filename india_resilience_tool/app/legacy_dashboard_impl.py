@@ -51,7 +51,10 @@ from india_resilience_tool.app.sidebar import (
     render_view_selector,
 )
 
-from india_resilience_tool.app.views.map_view import render_map_view
+from india_resilience_tool.app.views.map_view import (
+    render_map_view,
+    render_district_add_to_portfolio,  # ADD THIS IMPORT
+)
 from india_resilience_tool.app.views.rankings_view import render_rankings_view
 from india_resilience_tool.app.views.details_panel import render_details_panel
 from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
@@ -1623,6 +1626,27 @@ with col1:
             map_height=MAP_HEIGHT,
             perf_section=perf_section,
         )
+
+        # DEBUG - remove after testing
+        st.write("DEBUG - returned:", returned)
+        st.write("DEBUG - clicked_district:", clicked_district)
+        st.write("DEBUG - clicked_state:", clicked_state)
+
+        # === NEW CODE START ===
+        # Show add-to-portfolio button when a district is clicked in portfolio mode
+        if analysis_mode == "Multi-district portfolio":
+            render_district_add_to_portfolio(
+                clicked_district=clicked_district,
+                clicked_state=clicked_state,
+                selected_state=selected_state,
+                portfolio_add_fn=_portfolio_add,
+                portfolio_remove_fn=_portfolio_remove,
+                portfolio_contains_fn=_portfolio_contains,
+                normalize_fn=_portfolio_normalize,
+                returned=returned,   # NEW - pass the st_folium return value
+                merged=merged,       # NEW - pass the GeoDataFrame for coordinate lookup
+            )
+        # === NEW CODE END ===
 
         if clicked_district:
             st.session_state["pending_selected_district"] = clicked_district
