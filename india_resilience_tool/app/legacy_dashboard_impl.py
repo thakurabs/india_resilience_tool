@@ -1627,11 +1627,6 @@ with col1:
             perf_section=perf_section,
         )
 
-        # DEBUG - remove after testing
-        st.write("DEBUG - returned:", returned)
-        st.write("DEBUG - clicked_district:", clicked_district)
-        st.write("DEBUG - clicked_state:", clicked_state)
-
         # === NEW CODE START ===
         # Show add-to-portfolio button when a district is clicked in portfolio mode
         if analysis_mode == "Multi-district portfolio":

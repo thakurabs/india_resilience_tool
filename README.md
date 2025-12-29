@@ -11,9 +11,47 @@ A Streamlit-based dashboard for exploring climate resilience metrics across Indi
 - **Interactive Map View**: Choropleth visualization of climate metrics across districts
 - **Rankings Table**: Sortable district rankings with risk classification
 - **District Details**: In-depth analysis with scenario comparisons and time series
-- **Multi-District Portfolio**: Build and compare sets of districts
+- **Multi-District Portfolio**: Build and compare sets of districts with multiple add methods
 - **PDF Export**: Generate case study reports for districts
 - **Multiple Climate Indices**: Temperature and rainfall metrics from CMIP6 ensemble
+
+### Multi-District Portfolio Mode
+
+Build and compare sets of districts with three ways to add:
+
+**From the Map:**
+- Click any district on the choropleth map
+- Click "+ Add to portfolio" button that appears below the map
+- Districts in portfolio are highlighted with blue borders
+
+**From Rankings Table:**
+- Switch to Rankings view
+- Check the "Add" column for districts you want
+- Click "Add checked districts to portfolio"
+- Districts already in portfolio show ✓ in the "In portfolio" column
+
+**By Coordinates:**
+- Use the "Add by Location" panel
+- **Single Coordinate:** Enter lat/lon, preview the district, add directly or show on map
+- **Batch Input:** Paste multiple coordinates (one per line), preview all, add all at once
+- **Saved Points:** Build a list of locations for batch adding later
+
+### Portfolio Comparison Table
+
+Once you have districts in your portfolio:
+- Select one or more climate indices to compare
+- Table auto-rebuilds when portfolio or selection changes
+- Shows: District, State, Index value, Baseline, Change (Δ), Percentile, Risk class
+- Download comparison as CSV
+
+### Map Visualization
+
+- **Choropleth coloring** based on selected climate metric
+- **Portfolio highlighting** with blue borders for districts in your portfolio
+- **Preview markers:**
+  - Red star: Single location from "Show on map"
+  - Green markers: Batch locations from "Show all on map"
+  - Blue markers: Saved points
 
 ## Quick Start
 
@@ -120,6 +158,45 @@ DATA_DIR = Path("/path/to/your/data")
 1. **Single District Focus**: Explore one district at a time with detailed metrics
 2. **Multi-District Portfolio**: Build a set of districts for comparison
 
+### Portfolio Workflow
+
+1. **Switch to Portfolio Mode:** Select "Multi-district portfolio" in the sidebar
+
+2. **Add Districts:** Use any combination of:
+   - Click on map → "+ Add to portfolio" button
+   - Rankings table → Check boxes → "Add checked districts"
+   - Coordinates panel → Enter lat/lon → "Add to portfolio"
+
+3. **View Portfolio:**
+   - Badge shows count: "📋 X districts in portfolio"
+   - Expand "Manage portfolio districts" to see list
+   - Remove individual districts with × button
+   - Clear all with "Clear all" button (requires confirmation)
+
+4. **Compare Districts:**
+   - Select indices to compare (defaults to current index)
+   - Table shows all districts × all selected indices
+   - Download as CSV for external analysis
+
+5. **Visualize Locations:**
+   - "Show on map" places a marker at coordinates
+   - Portfolio districts highlighted with blue borders
+   - Jump between Map and Rankings views freely
+
+### Coordinate Input Formats
+
+The batch input panel accepts:
+```
+17.3850, 78.4867
+18.1124, 79.0193, Warangal Office
+16.5062 80.6480
+```
+
+- Latitude first, then longitude
+- Comma or space separated
+- Optional label after coordinates
+- One coordinate pair per line
+
 ### Available Indices
 
 **Temperature**
@@ -147,23 +224,41 @@ DATA_DIR = Path("/path/to/your/data")
 
 ```
 india_resilience_tool/
-├── analysis/           # Data analysis & computation
-├── app/                # Streamlit application
-│   ├── views/          # View renderers (map, rankings, details)
-│   └── *.py            # App components
-├── config/             # Configuration
-│   ├── constants.py    # App constants
-│   └── variables.py    # Climate index registry
-├── data/               # Data loading
-├── utils/              # Utilities
-└── viz/                # Visualization
+├── analysis/
+│   ├── portfolio.py            # Portfolio state & comparison table builder
+│   ├── metrics.py              # Risk classification
+│   └── timeseries.py           # Time series data loading
+├── app/
+│   ├── state.py                # Session state defaults & constants
+│   ├── sidebar.py              # Sidebar controls & navigation
+│   ├── portfolio_ui.py         # Portfolio panel (right column)
+│   ├── point_selection_ui.py   # Coordinate input with batch support
+│   └── views/
+│       ├── map_view.py         # Map with portfolio highlighting
+│       ├── rankings_view.py    # Rankings with add buttons
+│       ├── details_panel.py    # District details
+│       └── state_summary_view.py
+├── config/
+│   ├── constants.py            # App constants
+│   └── variables.py            # Climate index registry
+├── data/
+│   ├── adm2_loader.py          # GeoJSON loading
+│   ├── master_loader.py        # CSV loading
+│   └── merge.py                # Data merging
+├── utils/
+│   └── naming.py               # Name normalization
+└── viz/
+    ├── charts.py               # Figure generation
+    ├── colors.py               # Color scales
+    ├── exports.py              # PDF export
+    └── tables.py               # Table formatting
 
 Root files:
-├── dashboard_unfactored.py  # Entry point
-├── paths.py                 # Data directory config
-├── build_master_metrics.py  # CSV builder
-├── MANIFEST.md              # Detailed codebase guide
-└── README.md                # This file
+├── dashboard_unfactored.py     # Entry point
+├── paths.py                    # Data directory config
+├── build_master_metrics.py     # CSV builder
+├── MANIFEST.md                 # Detailed codebase guide
+└── README.md                   # This file
 ```
 
 For detailed module documentation, see [MANIFEST.md](MANIFEST.md).
@@ -253,6 +348,10 @@ dashboard_unfactored.py
 - Ensure `india_resilience_tool/config/__init__.py` exists
 - Run `pip install -e .` for editable install
 
+**Map click not showing add button**
+- Ensure you're in "Multi-district portfolio" mode
+- The button appears below the map after clicking a district
+
 ## Contributing
 
 1. Fork the repository
@@ -275,3 +374,32 @@ MIT License - see [LICENSE](LICENSE) for details.
 - Climate data from CMIP6 ensemble models
 - District boundaries from administrative datasets
 - Built with [Streamlit](https://streamlit.io/), [Folium](https://python-visualization.github.io/folium/), [GeoPandas](https://geopandas.org/)
+
+## Changelog
+
+### v2.1 - Portfolio UX Improvements (2024-12)
+
+**New Features:**
+- Add districts directly from map clicks
+- Batch coordinate input with preview
+- "Show on map" for coordinate preview
+- Auto-rebuilding comparison table
+- Portfolio district highlighting on map
+
+**Improvements:**
+- Removed mandatory route selection (rankings/map/saved_points)
+- All add methods available simultaneously
+- Rankings table shows all columns including percentile
+- Consistent add/remove UX across all entry points
+
+**Bug Fixes:**
+- Fixed rankings table index alignment for batch adding
+- Fixed coordinate-based district lookup from map clicks
+
+### v2.0 - Modular Refactoring (2024-12)
+- Refactored monolithic dashboard to modular structure
+- ~38% code reduction through consolidation
+- Improved testability with dependency injection
+
+### v1.0 - Initial Release (2024-Q4)
+- Initial monolithic dashboard implementation

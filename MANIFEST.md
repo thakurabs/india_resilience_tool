@@ -36,22 +36,23 @@ india_resilience_tool/
 ├── analysis/                    # Data analysis & computation
 │   ├── __init__.py
 │   ├── metrics.py              # Risk classification
-│   ├── portfolio.py            # Multi-district portfolio logic
+│   ├── portfolio.py            # Multi-district portfolio logic & state
 │   └── timeseries.py           # Time series data loading
 ├── app/                         # Streamlit application
 │   ├── __init__.py
 │   ├── dashboard.py            # Dashboard entry wrapper
-│   ├── legacy_dashboard_impl.py # Main orchestrator (2,538 lines)
+│   ├── legacy_dashboard_impl.py # Main orchestrator
 │   ├── main.py                 # CLI entry point
 │   ├── orchestrator.py         # Module executor
-│   ├── point_selection_ui.py   # Saved points UI panel
-│   ├── portfolio_ui.py         # Portfolio management UI
-│   ├── sidebar.py              # Sidebar utilities
+│   ├── point_selection_ui.py   # Coordinate input & batch support
+│   ├── portfolio_ui.py         # Portfolio management panel
+│   ├── sidebar.py              # Sidebar controls & navigation
+│   ├── state.py                # Session state defaults & constants
 │   └── views/                  # View renderers
 │       ├── __init__.py
 │       ├── details_panel.py    # District details view
-│       ├── map_view.py         # Choropleth map view
-│       ├── rankings_view.py    # Rankings table view
+│       ├── map_view.py         # Choropleth map with portfolio features
+│       ├── rankings_view.py    # Rankings table with add buttons
 │       └── state_summary_view.py # State summary view
 ├── config/                      # Configuration
 │   ├── __init__.py
@@ -159,7 +160,22 @@ Example: `days_gt_32C__ssp245__2041-2060__mean`
 ### 3. Analysis Layer (`india_resilience_tool/analysis/`)
 
 #### `portfolio.py`
-**Purpose:** Multi-district portfolio management.
+**Purpose:** Multi-district portfolio management with unified state handling.
+
+**Key Classes:**
+- `PortfolioState` — Unified portfolio state manager wrapping session_state
+  - `add_district(state, district)` — Add district, returns True if added
+  - `remove_district(state, district)` — Remove district, returns True if removed
+  - `contains_district(state, district)` — Check membership
+  - `toggle_district(state, district)` — Toggle, returns True if now in portfolio
+  - `clear_districts()` — Clear all, returns count removed
+  - `get_district_keys()` — Get normalized keys set
+  - `districts` — Property returning list of district dicts
+  - `district_count` — Property returning count
+  - `saved_points` — Property for coordinate-based saved points
+  - `set_flash(message, level)` / `pop_flash()` — One-shot flash messages
+  - `comparison_table` — Cached comparison DataFrame
+  - `needs_table_rebuild(context)` — Check if rebuild needed
 
 **Key Functions:**
 - `portfolio_add(session_state, state, district, ...)` — Add district to portfolio
@@ -167,15 +183,23 @@ Example: `days_gt_32C__ssp245__2041-2060__mean`
 - `portfolio_contains(session_state, state, district, ...)` — Check membership
 - `portfolio_clear(session_state)` — Clear all districts
 - `portfolio_normalize(text, alias_fn)` — Normalize names for comparison
-- `build_portfolio_multiindex_df(merged, districts, metric_col)` — Build comparison DataFrame
+- `portfolio_key(state, district, normalize_fn)` — Create normalized key tuple
+- `get_portfolio_district_keys(session_state, normalize_fn)` — Get all portfolio keys as set
+- `build_portfolio_multiindex_df(...)` — Build multi-index comparison DataFrame
 
-**Session state key:** `portfolio_districts` — List of `{"state": ..., "district": ...}` dicts
+**Session state keys:**
+- `portfolio_districts` — List of `{"state": ..., "district": ...}` dicts
+- `point_query_points` — Saved coordinate points list
+- `portfolio_multiindex_selection` — Selected indices for comparison
+- `portfolio_multiindex_df` — Cached comparison table
+- `portfolio_multiindex_context` — Cache invalidation context
 
 #### `metrics.py`
 **Purpose:** Risk classification utilities.
 
 **Key Functions:**
 - `risk_class_from_percentile(percentile) -> str` — Map percentile to risk class (low/moderate/high)
+- `compute_rank_and_percentile(df, state, metric_col, value, ...)` — Compute rank and percentile within state
 
 #### `timeseries.py`
 **Purpose:** Load yearly time series data.
@@ -228,8 +252,6 @@ Example: `days_gt_32C__ssp245__2041-2060__mean`
 #### `legacy_dashboard_impl.py` (Main Orchestrator)
 **Purpose:** Primary dashboard logic — coordinates all components.
 
-**Current size:** ~2,538 lines
-
 **Key responsibilities:**
 - Page configuration and layout
 - Sidebar controls (metric, scenario, period, geography selection)
@@ -244,39 +266,68 @@ Example: `days_gt_32C__ssp245__2041-2060__mean`
 - `find_baseline_column_for_stat(...)` — Find baseline period column
 - `_portfolio_add/remove/contains/clear(...)` — Portfolio wrappers
 
-**Session state keys used:**
-- `analysis_mode` — "Single district focus" | "Multi-district portfolio"
-- `portfolio_districts` — List of selected districts
-- `selected_state`, `selected_district` — Current geography
-- `selected_var` — Current index slug
-- `sel_scenario`, `sel_period`, `sel_stat` — Current metric parameters
-- `active_view` — "🗺 Map view" | "📊 Rankings view"
-- `map_mode` — "Absolute value" | "Change from 1990-2010 baseline"
+#### `state.py`
+**Purpose:** Session state defaults and key registry.
+
+**Key Functions:**
+- `ensure_session_state(session_state, perf_default)` — Initialize all keys with defaults
+
+**Key Exports:**
+- `SESSION_DEFAULTS` — Dict of all default values
+- `VIEW_MAP`, `VIEW_RANKINGS` — View constants
+- `ANALYSIS_MODE_SINGLE`, `ANALYSIS_MODE_PORTFOLIO` — Mode constants
+
+#### `sidebar.py`
+**Purpose:** Sidebar controls and navigation.
+
+**Key Functions:**
+- `render_analysis_mode_selector(...)` — Single/Multi-district toggle
+- `render_view_selector(...)` — Map/Rankings toggle
+- `render_hover_toggle_if_portfolio(...)` — Hover behavior toggle
+- `render_portfolio_quick_stats()` — Portfolio count in sidebar
+- `apply_jump_once_flags()` — Handle view jump requests
 
 #### `views/map_view.py`
-**Purpose:** Render the choropleth map with Folium.
+**Purpose:** Render the choropleth map with Folium and portfolio features.
 
 **Key Functions:**
-- `render_map_view(...)` — Main map renderer
+- `render_map_view(...)` — Main map renderer with st_folium
+- `extract_clicked_district_state(ret)` — Extract district/state from click payload
+- `extract_click_coordinates(ret)` — Extract lat/lon from click payload
+- `find_district_at_coordinates(merged, lat, lon)` — Reverse geocode to district
+- `create_portfolio_style_function(portfolio_keys, normalize_fn)` — Style function for portfolio highlighting
+- `add_portfolio_legend_to_map(m, portfolio_count)` — Add portfolio legend HTML
+- `render_district_add_to_portfolio(...)` — Inline add/remove button for clicked district
 
 **Features:**
-- State/district boundaries
-- Color-coded metric values
-- Click handling for district selection
-- Active point markers
-- Portfolio district highlighting
+- State/district boundaries with color-coded metrics
+- Click handling with coordinate-based district lookup
+- Portfolio district highlighting (blue borders)
+- Preview markers (red star for single, green for batch)
+- Saved point markers (blue)
+- Portfolio legend showing count
+
+**Marker Types:**
+| Type | Color | Icon | Session Key |
+|------|-------|------|-------------|
+| Single preview | Red | Star | `map_preview_marker` |
+| Batch preview | Green | Map marker | `map_preview_markers` |
+| Saved points | Blue | Info sign | `point_query_points` |
 
 #### `views/rankings_view.py`
-**Purpose:** Render the rankings table.
+**Purpose:** Render the rankings table with portfolio integration.
 
 **Key Functions:**
-- `render_rankings_view(...)` — Main rankings renderer
+- `render_rankings_view(...)` — Main rankings renderer (routes to mode-specific)
+- `_render_simple_rankings(...)` — Single-district mode table
+- `_render_portfolio_rankings(...)` — Portfolio mode with st.data_editor
 
 **Features:**
-- Sortable district rankings
-- Risk class indicators
-- Portfolio add/remove buttons
-- Export functionality
+- Sortable district rankings by value or change
+- Full column display: Rank, District, State, Value, Δ, %Δ, Percentile, Risk class
+- Portfolio mode: "In portfolio" status column, "Add to portfolio" checkbox column
+- Batch add button: "Add checked districts to portfolio"
+- Download as CSV
 
 #### `views/details_panel.py`
 **Purpose:** Render district detail panel.
@@ -303,51 +354,52 @@ Example: `days_gt_32C__ssp245__2041-2060__mean`
 - State trend over time
 
 #### `point_selection_ui.py`
-**Purpose:** Saved points panel for portfolio mode.
+**Purpose:** Coordinate-based district lookup with batch input support.
 
 **Key Functions:**
-- `render_point_selection_panel(...)` — Main panel renderer
+- `render_point_selection_panel(...)` — Full panel with tabs
+- `find_district_at_point(merged, lat, lon)` — Find district at coordinates
+- `parse_batch_coordinates(text)` — Parse multi-line coordinate input
 
 **Features:**
-- Coordinate input (lat/lon)
-- Map click selection
-- Saved points list
-- Add points' districts to portfolio
+- **Single Coordinate tab:**
+  - Lat/lon number inputs
+  - District preview
+  - "Add to portfolio" button
+  - "Show on map" button (places red star marker)
+  - "Save point" button
+- **Batch Input tab:**
+  - Text area for pasting multiple coordinates
+  - Supports formats: `lat, lon` / `lat, lon, label` / `lat lon`
+  - Preview table with district lookup
+  - "Add all to portfolio" button
+  - "Show all on map" button (places green markers)
+  - "Save all points" button
+- **Saved Points section:**
+  - Table of saved points with labels
+  - "Add all to portfolio" button
+  - "Show on map" button
+  - "Clear all" button
 
 #### `portfolio_ui.py`
-**Purpose:** Portfolio management panel.
+**Purpose:** Portfolio management panel (right column in portfolio mode).
 
 **Key Functions:**
-- `render_portfolio_panel(...)` — Main portfolio renderer
+- `render_portfolio_panel(...)` — Main panel orchestrator
+- `render_portfolio_badge(portfolio_count)` — Compact count display
+- `render_portfolio_list(...)` — District list with remove buttons
+- `render_clear_portfolio_button(...)` — Clear all with confirmation
+- `render_index_selector(...)` — Multi-select for comparison indices
+- `render_comparison_table(...)` — Auto-rebuilding comparison table
+- `render_coordinate_lookup(...)` — Wrapper for point_selection_ui
 
 **Features:**
-- Portfolio district list
-- Comparison metrics table
-- Export functionality
-
-#### `sidebar.py`
-**Purpose:** Sidebar utilities.
-
-**Key Functions:**
-- `render_analysis_mode_selector(...)` — Single/Multi-district toggle
-- `render_view_selector(...)` — Map/Rankings toggle
-- `render_hover_toggle_if_portfolio(...)` — Hover behavior toggle
-- `apply_jump_once_flags()` — Handle view jump requests
-
----
-
-### 6. Utilities (`india_resilience_tool/utils/`)
-
-#### `naming.py`
-**Purpose:** Name normalization for fuzzy matching.
-
-**Key Functions:**
-- `alias(name) -> str` — Normalize district/state name
-- `normalize_name(name) -> str` — Basic normalization
-- `normalize_compact(name) -> str` — Compact normalization
-
-**Key Exports:**
-- `NAME_ALIASES: dict` — Known name aliases/mappings
+- Portfolio badge showing district count
+- Expandable district list with per-item remove buttons
+- Clear all with confirmation dialog
+- Index multi-select for comparison
+- Auto-rebuilding comparison table (no manual "Build" button needed)
+- Integrated coordinate lookup panel with tabs
 
 ---
 
@@ -409,6 +461,11 @@ Example: `days_gt_32C__ssp245__2041-2060__mean`
 | Change rankings table | `app/views/rankings_view.py` | `viz/tables.py` |
 | Update district details | `app/views/details_panel.py` | `viz/charts.py`, `viz/exports.py` |
 | Modify portfolio logic | `analysis/portfolio.py` | `app/portfolio_ui.py` |
+| Add district from map click | `app/views/map_view.py` | `analysis/portfolio.py` |
+| Add districts from rankings | `app/views/rankings_view.py` | `analysis/portfolio.py` |
+| Add districts by coordinates | `app/point_selection_ui.py` | `analysis/portfolio.py` |
+| Show markers on map | `app/views/map_view.py` | `app/point_selection_ui.py` |
+| Build comparison table | `app/portfolio_ui.py` | `analysis/portfolio.py` |
 | Add sidebar control | `app/legacy_dashboard_impl.py` | `app/sidebar.py` |
 | Change data loading | `data/master_loader.py`, `data/adm2_loader.py` | `data/merge.py` |
 | Modify PDF exports | `viz/exports.py` | `viz/charts.py` |
@@ -452,6 +509,12 @@ python -m pytest --cov=india_resilience_tool
 |-----|------|---------|
 | `analysis_mode` | str | "Single district focus" or "Multi-district portfolio" |
 | `portfolio_districts` | list[dict] | List of `{"state": ..., "district": ...}` |
+| `point_query_points` | list[dict] | Saved coordinate points with labels |
+| `map_preview_marker` | dict | Single preview marker from "Show on map" |
+| `map_preview_markers` | list[dict] | Batch preview markers from "Show all on map" |
+| `portfolio_multiindex_selection` | list[str] | Selected index slugs for comparison |
+| `portfolio_multiindex_df` | DataFrame | Cached comparison table |
+| `portfolio_multiindex_context` | dict | Cache invalidation context |
 | `selected_state` | str | Currently selected state ("All" or state name) |
 | `selected_district` | str | Currently selected district ("All" or district name) |
 | `selected_var` | str | Current index slug (e.g., "tas_gt32") |
@@ -461,10 +524,8 @@ python -m pytest --cov=india_resilience_tool
 | `sel_stat` | str | Current statistic ("mean", "median", "p05", "p95", "std") |
 | `active_view` | str | "🗺 Map view" or "📊 Rankings view" |
 | `map_mode` | str | "Absolute value" or "Change from 1990-2010 baseline" |
-| `portfolio_build_route` | str | "rankings", "map", or "saved_points" |
-| `point_query_lat/lon` | float | Current point coordinates |
-| `point_query_points` | list[dict] | Saved points list |
-| `jump_to_map/rankings` | bool | View jump flags |
+| `jump_to_map` | bool | Flag to switch to map view |
+| `jump_to_rankings` | bool | Flag to switch to rankings view |
 
 ---
 
@@ -476,6 +537,8 @@ Widget keys follow patterns to ensure uniqueness:
 - Expanders: `exp_{section}_{context}`
 - Selectboxes: `sel_{field}` — e.g., `sel_scenario`, `sel_period`
 - State summary: `btn_state_boxplot_{slug}_{state}_{scenario}_{period}_{stat}`
+- Rankings editor: `rankings_portfolio_editor_{slug}_{scenario}_{period}_{stat}`
+- Point selection: `_point_lat`, `_point_lon`, `_batch_coords_input`
 
 ---
 
@@ -524,6 +587,7 @@ This allows:
 |---------|------|---------|
 | 1.0 | 2024-Q4 | Initial monolithic dashboard |
 | 2.0 | 2024-12 | Refactored to modular structure (~38% reduction) |
+| 2.1 | 2024-12 | Portfolio UX improvements: map click add, batch coordinates, auto-rebuild table |
 
 ---
 
