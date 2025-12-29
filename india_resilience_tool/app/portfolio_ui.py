@@ -367,8 +367,11 @@ def render_comparison_table(
 
 
 # =============================================================================
-# Coordinate Lookup (Simplified)
+# Coordinate Lookup - Import from point_selection_ui
 # =============================================================================
+
+# The full coordinate lookup with tabs, batch input, and show-on-map features
+# is in point_selection_ui.py. We import and wrap it here for use in the panel.
 
 def render_coordinate_lookup(
     *,
@@ -378,64 +381,26 @@ def render_coordinate_lookup(
 ) -> None:
     """
     Render coordinate-based district lookup.
+    
+    This wraps the full render_point_selection_panel from point_selection_ui.py
+    which includes:
+    - Single coordinate entry with preview
+    - Batch coordinate input (paste multiple)
+    - Show on map functionality
+    - Saved points management
     """
-    import streamlit as st
-    from shapely.geometry import Point
+    from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
     
-    # Get bounds from data
-    try:
-        minx, miny, maxx, maxy = merged.total_bounds
-        default_lat = float((miny + maxy) / 2.0)
-        default_lon = float((minx + maxx) / 2.0)
-    except Exception:
-        miny, maxy = 6.0, 38.0
-        minx, maxx = 68.0, 98.0
-        default_lat, default_lon = 17.385, 78.4867
+    # Create a key function (required by render_point_selection_panel but not used for much)
+    def _portfolio_key_fn(state: str, district: str) -> tuple:
+        return (state.lower().replace(" ", ""), district.lower().replace(" ", ""))
     
-    col1, col2 = st.columns(2)
-    with col1:
-        lat = st.number_input(
-            "Latitude",
-            min_value=float(miny),
-            max_value=float(maxy),
-            value=default_lat,
-            format="%.4f",
-            key="_coord_lat",
-        )
-    with col2:
-        lon = st.number_input(
-            "Longitude",
-            min_value=float(minx),
-            max_value=float(maxx),
-            value=default_lon,
-            format="%.4f",
-            key="_coord_lon",
-        )
-    
-    # Preview district
-    try:
-        pt = Point(float(lon), float(lat))
-        mask = merged.geometry.contains(pt)
-        if mask.any():
-            row = merged[mask].iloc[0]
-        else:
-            dists = merged.geometry.centroid.distance(pt)
-            row = merged.loc[dists.idxmin()]
-        
-        state_name = str(row.get("state_name", "")).strip()
-        district_name = str(row.get("district_name", "")).strip()
-        
-        if state_name and district_name:
-            st.info(f"📍 Location: **{district_name}**, {state_name}")
-            
-            if st.button("➕ Add to portfolio", key="_coord_add", type="primary"):
-                portfolio_add_fn(state_name, district_name)
-                set_flash_fn(f"Added {district_name}, {state_name}", "success")
-                st.rerun()
-        else:
-            st.warning("Could not identify district")
-    except Exception as e:
-        st.warning(f"Could not identify district: {e}")
+    render_point_selection_panel(
+        merged=merged,
+        portfolio_add_fn=portfolio_add_fn,
+        portfolio_key_fn=_portfolio_key_fn,
+        portfolio_set_flash_fn=set_flash_fn,
+    )
 
 
 # =============================================================================
@@ -537,14 +502,15 @@ def render_portfolio_panel(
         **From the map:** Click any district, then click **+ Add to portfolio**
         
         **From rankings:** Use the **+ Add** buttons in the rankings table
+        
+        **By coordinates:** Use the location panel below
         """)
         
-        with st.expander("🔍 Find by coordinates", expanded=False):
-            render_coordinate_lookup(
-                merged=merged,
-                portfolio_add_fn=_add,
-                set_flash_fn=_set_flash,
-            )
+        render_coordinate_lookup(
+            merged=merged,
+            portfolio_add_fn=_add,
+            set_flash_fn=_set_flash,
+        )
     
     # Section 3: Comparison Analysis (when portfolio has districts)
     if portfolio:
@@ -586,9 +552,9 @@ def render_portfolio_panel(
             )
         
         # Coordinate lookup also available when portfolio not empty
-        with st.expander("🔍 Add by coordinates", expanded=False):
-            render_coordinate_lookup(
-                merged=merged,
-                portfolio_add_fn=_add,
-                set_flash_fn=_set_flash,
-            )
+        st.markdown("---")
+        render_coordinate_lookup(
+            merged=merged,
+            portfolio_add_fn=_add,
+            set_flash_fn=_set_flash,
+        )

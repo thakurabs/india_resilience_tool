@@ -262,7 +262,7 @@ def render_map_view(
 
     # In Multi-district portfolio mode, draw markers and legend
     if analysis_mode == "Multi-district portfolio":
-        # Saved point markers
+        # Saved point markers (blue)
         points = st.session_state.get("point_query_points", [])
         if isinstance(points, list):
             for idx, pt in enumerate(points, start=1):
@@ -273,14 +273,18 @@ def render_map_view(
                     lon_p = float(pt.get("lon"))
                 except (TypeError, ValueError):
                     continue
+                
+                label = pt.get("label") or f"Point {idx}"
+                district = pt.get("district", "")
+                tooltip_text = f"{label}: {district}" if district else f"{label}: {lat_p:.4f}, {lon_p:.4f}"
 
                 folium.Marker(
                     location=[lat_p, lon_p],
-                    tooltip=f"Point {idx}: {lat_p:.4f}, {lon_p:.4f}",
+                    tooltip=tooltip_text,
                     icon=folium.Icon(color="blue", icon="info-sign"),
                 ).add_to(m)
 
-        # Active point marker
+        # Active point marker (legacy)
         point_query = st.session_state.get("point_query_latlon")
         if isinstance(point_query, dict):
             try:
@@ -293,6 +297,49 @@ def render_map_view(
                 ).add_to(m)
             except (TypeError, ValueError):
                 pass
+        
+        # Single preview marker (red star) - from "Show on map" button
+        preview_marker = st.session_state.get("map_preview_marker")
+        if isinstance(preview_marker, dict):
+            try:
+                lat_m = float(preview_marker.get("lat"))
+                lon_m = float(preview_marker.get("lon"))
+                district = preview_marker.get("district", "")
+                state = preview_marker.get("state", "")
+                tooltip_text = f"📍 {district}, {state}" if district else f"📍 {lat_m:.4f}, {lon_m:.4f}"
+                
+                folium.Marker(
+                    location=[lat_m, lon_m],
+                    tooltip=tooltip_text,
+                    popup=f"<b>{district}</b><br>{state}<br>({lat_m:.4f}, {lon_m:.4f})",
+                    icon=folium.Icon(color="red", icon="star"),
+                ).add_to(m)
+            except (TypeError, ValueError):
+                pass
+        
+        # Multiple preview markers (green) - from batch "Show all on map" button
+        preview_markers = st.session_state.get("map_preview_markers")
+        if isinstance(preview_markers, list):
+            for idx, marker in enumerate(preview_markers, start=1):
+                if not isinstance(marker, dict):
+                    continue
+                try:
+                    lat_m = float(marker.get("lat"))
+                    lon_m = float(marker.get("lon"))
+                except (TypeError, ValueError):
+                    continue
+                
+                label = marker.get("label") or f"#{idx}"
+                district = marker.get("district", "")
+                state = marker.get("state", "")
+                tooltip_text = f"📍 {label}: {district}" if district else f"📍 {label}: {lat_m:.4f}, {lon_m:.4f}"
+                
+                folium.Marker(
+                    location=[lat_m, lon_m],
+                    tooltip=tooltip_text,
+                    popup=f"<b>{label}</b><br>{district}, {state}<br>({lat_m:.4f}, {lon_m:.4f})",
+                    icon=folium.Icon(color="green", icon="map-marker"),
+                ).add_to(m)
         
         # Portfolio legend
         portfolio = st.session_state.get("portfolio_districts", [])
