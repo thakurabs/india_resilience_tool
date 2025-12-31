@@ -12,7 +12,7 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
-from typing import Any, MutableMapping, Optional
+from typing import Any, Literal, MutableMapping, Optional
 
 
 VIEW_MAP = "🗺 Map view"
@@ -20,6 +20,12 @@ VIEW_RANKINGS = "📊 Rankings table"
 
 ANALYSIS_MODE_SINGLE = "Single district focus"
 ANALYSIS_MODE_PORTFOLIO = "Multi-district portfolio"
+
+# Administrative level constants (NEW)
+ADMIN_LEVEL_DISTRICT = "district"
+ADMIN_LEVEL_BLOCK = "block"
+
+AdminLevel = Literal["district", "block"]
 
 SESSION_DEFAULTS: dict[str, Any] = {
     # Core mode/router keys
@@ -30,6 +36,10 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "jump_to_map": False,
     "active_view": VIEW_MAP,
     "main_view_selector": VIEW_MAP,
+
+    # Administrative level (NEW)
+    "admin_level": ADMIN_LEVEL_DISTRICT,
+    "selected_block": "All",  # For block-level selection
 
     # Other stable keys (widget keys / caches)
     # NOTE: Do NOT pre-seed unified metric selection keys here. The legacy dashboard
@@ -45,6 +55,7 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "_master_cache": {},
     "_merged_cache": {},
     "_portfolio_master_cache": {},
+    "_adm3_cache": None,  # NEW: block boundary cache
 }
 
 
@@ -86,3 +97,111 @@ def ensure_session_state(
     # Allow perf_default override without clobbering user choice
     if perf_default is not None and "perf_enabled" not in session_state:
         session_state["perf_enabled"] = bool(perf_default)
+
+
+# -----------------------------------------------------------------------------
+# Level-aware helpers (NEW)
+# -----------------------------------------------------------------------------
+
+def get_current_level(session_state: Optional[MutableMapping[str, Any]] = None) -> AdminLevel:
+    """Get the current administrative level from session state."""
+    if session_state is None:
+        import streamlit as st
+        session_state = st.session_state
+    return session_state.get("admin_level", ADMIN_LEVEL_DISTRICT)
+
+
+def set_level(
+    session_state: Optional[MutableMapping[str, Any]] = None,
+    level: AdminLevel = ADMIN_LEVEL_DISTRICT,
+) -> None:
+    """
+    Set the administrative level and reset dependent state.
+    
+    When switching levels, we need to reset:
+    - Selected district/block
+    - Portfolio (since items are level-specific)
+    - Cached merged data
+    """
+    if session_state is None:
+        import streamlit as st
+        session_state = st.session_state
+    
+    old_level = session_state.get("admin_level", ADMIN_LEVEL_DISTRICT)
+    
+    if old_level != level:
+        session_state["admin_level"] = level
+        session_state["selected_district"] = "All"
+        session_state["selected_block"] = "All"
+        
+        # Clear portfolio when switching levels
+        session_state["portfolio_districts"] = []
+        session_state["portfolio_multiindex_df"] = None
+        session_state["portfolio_multiindex_context"] = None
+        
+        # Clear merged cache
+        session_state["_merged_cache"] = {}
+
+
+def get_unit_selection_key(level: AdminLevel) -> str:
+    """Get the session state key for unit selection based on level."""
+    return "selected_block" if level == "block" else "selected_district"
+
+
+def get_selected_unit(
+    session_state: Optional[MutableMapping[str, Any]] = None,
+    level: Optional[AdminLevel] = None,
+) -> str:
+    """Get the currently selected unit name based on level."""
+    if session_state is None:
+        import streamlit as st
+        session_state = st.session_state
+    
+    if level is None:
+        level = get_current_level(session_state)
+    
+    key = get_unit_selection_key(level)
+    return session_state.get(key, "All")
+
+
+def set_selected_unit(
+    session_state: Optional[MutableMapping[str, Any]] = None,
+    level: Optional[AdminLevel] = None,
+    unit_name: str = "All",
+) -> None:
+    """Set the selected unit based on level."""
+    if session_state is None:
+        import streamlit as st
+        session_state = st.session_state
+    
+    if level is None:
+        level = get_current_level(session_state)
+    
+    key = get_unit_selection_key(level)
+    session_state[key] = unit_name
+
+
+def get_level_display_name(level: AdminLevel) -> str:
+    """Get display name for a level."""
+    return "Block" if level == "block" else "District"
+
+
+def get_level_display_name_plural(level: AdminLevel) -> str:
+    """Get plural display name for a level."""
+    return "Blocks" if level == "block" else "Districts"
+
+
+def get_master_csv_key(level: AdminLevel) -> str:
+    """Get the master CSV filename suffix based on level."""
+    return "block" if level == "block" else "district"
+
+
+def get_portfolio_unit_key(level: AdminLevel) -> str:
+    """
+    Get the key used in portfolio items for the unit name.
+    
+    Portfolio items are dicts like:
+    - District level: {"state": "...", "district": "..."}
+    - Block level: {"state": "...", "district": "...", "block": "..."}
+    """
+    return "block" if level == "block" else "district"

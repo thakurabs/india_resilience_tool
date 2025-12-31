@@ -48,9 +48,44 @@ def read_yearly_csv_robust(path: PathLike) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def _normalize_ensemble_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize column names from ensemble CSVs to standard names.
+    
+    Maps:
+    - ensemble_mean -> mean
+    - ensemble_std -> std
+    - ensemble_median -> median
+    - ensemble_p05 -> p05
+    - ensemble_p95 -> p95
+    """
+    if df is None or df.empty:
+        return df
+    
+    out = df.copy()
+    
+    # Column mapping: ensemble format -> standard format
+    rename_map = {
+        "ensemble_mean": "mean",
+        "ensemble_std": "std",
+        "ensemble_median": "median",
+        "ensemble_p05": "p05",
+        "ensemble_p95": "p95",
+    }
+    
+    # Only rename columns that exist
+    columns_to_rename = {k: v for k, v in rename_map.items() if k in out.columns}
+    
+    if columns_to_rename:
+        out = out.rename(columns=columns_to_rename)
+    
+    return out
+
+
 def prepare_yearly_series(df: pd.DataFrame) -> pd.DataFrame:
     """
     Minimal cleaning:
+      - normalize ensemble column names (ensemble_mean -> mean)
       - ensure year numeric
       - ensure mean numeric
       - drop rows missing year/mean
@@ -59,7 +94,8 @@ def prepare_yearly_series(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
 
-    out = df.copy()
+    # First normalize column names
+    out = _normalize_ensemble_columns(df)
 
     if "year" in out.columns:
         out["year"] = pd.to_numeric(out["year"], errors="coerce")
@@ -88,6 +124,10 @@ def load_state_yearly(
         return pd.DataFrame()
 
     df = read_yearly_csv_robust(f)
+    
+    # Normalize ensemble column names
+    df = _normalize_ensemble_columns(df)
+    
     return df
 
 
@@ -124,6 +164,9 @@ def load_district_yearly(
     df = read_yearly_csv_robust(f)
     if df.empty:
         return pd.DataFrame()
+
+    # Normalize ensemble column names (ensemble_mean -> mean, etc.)
+    df = _normalize_ensemble_columns(df)
 
     # Infer missing id columns
     if "district" not in df.columns:

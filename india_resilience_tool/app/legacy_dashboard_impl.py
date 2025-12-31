@@ -189,7 +189,7 @@ from india_resilience_tool.utils.naming import NAME_ALIASES, alias, normalize_na
 # -------------------------
 # Geo load / prep
 # -------------------------
-@st.cache_data
+# @st.cache_data
 @st.cache_data
 def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
     gdf = _load_local_adm2(
@@ -365,14 +365,19 @@ def get_or_build_merged_for_index(
 # -------------------------
 # Master CSV freshness helpers (variable-agnostic)
 # -------------------------
-def latest_processed_periods_mtime(processed_root: Path, state: str) -> float:
-    base = processed_root / state
+@st.cache_data(ttl=300)
+def latest_processed_periods_mtime(processed_root_str: str, state: str) -> float:
+    base = Path(processed_root_str) / state  # Convert string back to Path here
     if not base.exists():
         return 0.0
     latest = 0.0
+    count = 0
     for f in base.rglob("*_periods.csv"):
         try:
             latest = max(latest, f.stat().st_mtime)
+            count += 1
+            if count >= 50:
+                break
         except Exception:
             pass
     return latest
@@ -384,7 +389,7 @@ def master_needs_rebuild(master_path: Path, processed_root: Path, state: str) ->
         master_mtime = master_path.stat().st_mtime
     except Exception:
         return True
-    return latest_processed_periods_mtime(processed_root, state) > (master_mtime + 1.0)
+    return latest_processed_periods_mtime(str(processed_root), state) > (master_mtime + 1.0)
 
 # @st.cache_data
 from india_resilience_tool.data.master_loader import (

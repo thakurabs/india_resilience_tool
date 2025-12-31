@@ -59,4 +59,4 @@ RISK_THRESHOLDS: dict[str, Tuple[float, float]] = {
 }
 
 # ---- Logo path ----
-LOGO_PATH: str = "./resilience_actions_logo_transparent.png"
+LOGO_PATH: str = str(Path(__file__).parent.parent.parent / "resilience_actions_logo_transparent.png")

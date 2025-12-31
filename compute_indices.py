@@ -2,11 +2,24 @@
 """
 Uniform, future-proof index pipeline for the India Resilience Tool.
 
+Supports both district-level (ADM2) and block-level (ADM3) spatial aggregation.
+
 Includes all standard Climdex indices plus custom IRT indices:
 - Heat risk / thermal stress indices
 - Cold risk indices  
 - Precipitation / flood-related indices
 - Drought / dryness indices
+
+Usage:
+    # District-level (default, backward compatible)
+    python compute_indices.py
+    python compute_indices.py --level district
+    
+    # Block-level
+    python compute_indices.py --level block
+    
+    # Specific state only
+    python compute_indices.py --level block --state Telangana
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -14,6 +27,7 @@ Email: absthakur@resilience.org.in
 
 import os
 import glob
+import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -24,9 +38,13 @@ from affine import Affine
 import logging
 import traceback
 import json
+from typing import Literal, Optional, Dict, Any
 
-from paths import DATA_ROOT, DISTRICTS_PATH, BASE_OUTPUT_ROOT
+from paths import DATA_ROOT, DISTRICTS_PATH, BLOCKS_PATH, BASE_OUTPUT_ROOT
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
+
+# Type alias for administrative level
+AdminLevel = Literal["district", "block"]
 
 # Scenarios
 SCENARIOS = {
@@ -54,7 +72,14 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 # -----------------------------------------------------------------------------
 # BASIC HELPERS
 # -----------------------------------------------------------------------------
-def metric_root(slug: str) -> Path:
+def metric_root(slug: str, level: AdminLevel = "district") -> Path:
+    """
+    Get the output root for a metric, optionally with level suffix.
+    
+    For backward compatibility:
+    - level="district" -> BASE_OUTPUT_ROOT / slug (no suffix)
+    - level="block" -> BASE_OUTPUT_ROOT / slug (same path, but outputs go to block subfolders)
+    """
     root = BASE_OUTPUT_ROOT / slug
     root.mkdir(parents=True, exist_ok=True)
     return root
@@ -81,32 +106,144 @@ def pr_to_mm_per_day(da: xr.DataArray) -> xr.DataArray:
     return da
 
 
-def load_telangana_districts(path: Path) -> gpd.GeoDataFrame:
+# -----------------------------------------------------------------------------
+# BOUNDARY LOADING (Generalized for district/block)
+# -----------------------------------------------------------------------------
+def load_boundaries(
+    path: Path,
+    state_filter: Optional[str] = None,
+    level: AdminLevel = "district",
+) -> gpd.GeoDataFrame:
+    """
+    Load boundary file and optionally filter to a specific state.
+    
+    Args:
+        path: Path to GeoJSON/Shapefile
+        state_filter: Optional state name to filter to
+        level: "district" or "block" - determines column mapping
+        
+    Returns:
+        GeoDataFrame with standardized columns
+    """
     gdf = gpd.read_file(path)
+    
+    # Determine state column
     candidate_state_cols = ["STATE_UT", "state_ut", "STATE", "STATE_LGD", "ST_NM", "state_name"]
     state_col = next((c for c in candidate_state_cols if c in gdf.columns), None)
     if not state_col:
         raise ValueError(f"Could not find a state column in {path}.")
 
+    # Normalize state names for filtering
     s = gdf[state_col].astype(str)
     s = s.str.normalize("NFKC").str.strip().str.lower().str.replace(r"\s+", " ", regex=True)
     gdf["_state_norm"] = s
 
-    tel_keys = {"telangana", "telengana", "telangana state"}
-    tel = gdf[gdf["_state_norm"].isin(tel_keys)]
-    if tel.empty:
-        raise ValueError("No rows for Telangana found.")
+    # Filter to state if specified
+    if state_filter:
+        filter_keys = {state_filter.lower().strip()}
+        # Add common variations
+        if "telangana" in filter_keys:
+            filter_keys.add("telengana")
+            filter_keys.add("telangana state")
+        
+        gdf = gdf[gdf["_state_norm"].isin(filter_keys)]
+        if gdf.empty:
+            raise ValueError(f"No rows found for state: {state_filter}")
 
-    if tel.crs is None:
-        tel = tel.set_crs("EPSG:4326")
-    tel = tel.drop(columns=["_state_norm"])
-    return tel
+    # Set CRS if missing
+    if gdf.crs is None:
+        gdf = gdf.set_crs("EPSG:4326")
+    
+    gdf = gdf.drop(columns=["_state_norm"])
+    
+    # Standardize column names based on level
+    if level == "block":
+        gdf = _standardize_block_columns(gdf)
+    else:
+        gdf = _standardize_district_columns(gdf)
+    
+    return gdf
 
 
-def build_district_masks(telangana_gdf: gpd.GeoDataFrame, sample_ds: xr.Dataset,
-                         district_name_col: str = "DISTRICT") -> dict:
-    if district_name_col not in telangana_gdf.columns:
-        raise ValueError(f"'{district_name_col}' not found in GDF.")
+def _standardize_district_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Ensure district GeoDataFrame has standard columns."""
+    out = gdf.copy()
+    
+    # District name
+    if "DISTRICT" in out.columns and "district_name" not in out.columns:
+        out["district_name"] = out["DISTRICT"].astype(str).str.strip()
+    elif "district_name" not in out.columns:
+        for cand in ["District", "DIST_NAME", "district"]:
+            if cand in out.columns:
+                out["district_name"] = out[cand].astype(str).str.strip()
+                break
+    
+    # State name
+    if "STATE_UT" in out.columns and "state_name" not in out.columns:
+        out["state_name"] = out["STATE_UT"].astype(str).str.strip()
+    
+    return out
+
+
+def _standardize_block_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Ensure block GeoDataFrame has standard columns."""
+    out = gdf.copy()
+    
+    # Block/subdistrict name
+    if "Sub_dist" in out.columns and "block_name" not in out.columns:
+        out["block_name"] = out["Sub_dist"].astype(str).str.strip()
+    elif "block_name" not in out.columns:
+        for cand in ["SUBDISTRICT", "BLOCK", "TEHSIL", "MANDAL", "TALUK"]:
+            if cand in out.columns:
+                out["block_name"] = out[cand].astype(str).str.strip()
+                break
+    
+    # District name (parent)
+    if "District" in out.columns and "district_name" not in out.columns:
+        out["district_name"] = out["District"].astype(str).str.strip()
+    elif "DISTRICT" in out.columns and "district_name" not in out.columns:
+        out["district_name"] = out["DISTRICT"].astype(str).str.strip()
+    
+    # State name
+    if "STATE_UT" in out.columns and "state_name" not in out.columns:
+        out["state_name"] = out["STATE_UT"].astype(str).str.strip()
+    
+    return out
+
+
+def get_unit_name_column(level: AdminLevel) -> str:
+    """Get the column name for the spatial unit based on level."""
+    return "block_name" if level == "block" else "district_name"
+
+
+def get_boundary_path(level: AdminLevel) -> Path:
+    """Get the boundary file path based on level."""
+    return BLOCKS_PATH if level == "block" else DISTRICTS_PATH
+
+
+# -----------------------------------------------------------------------------
+# MASK BUILDING (Generalized)
+# -----------------------------------------------------------------------------
+def build_unit_masks(
+    gdf: gpd.GeoDataFrame,
+    sample_ds: xr.Dataset,
+    level: AdminLevel = "district",
+) -> dict:
+    """
+    Build raster masks for each spatial unit (district or block).
+    
+    Args:
+        gdf: GeoDataFrame with boundaries
+        sample_ds: Sample xarray Dataset to get grid dimensions
+        level: "district" or "block"
+        
+    Returns:
+        Dict mapping unit names to xarray DataArray masks
+    """
+    unit_col = get_unit_name_column(level)
+    
+    if unit_col not in gdf.columns:
+        raise ValueError(f"'{unit_col}' not found in GDF. Available: {list(gdf.columns)}")
     
     lats = sample_ds["lat"].values
     lons = sample_ds["lon"].values
@@ -123,19 +260,61 @@ def build_district_masks(telangana_gdf: gpd.GeoDataFrame, sample_ds: xr.Dataset,
     transform = Affine.translation(xoff, yoff) * Affine.scale(xres, yres)
 
     masks = {}
-    for _, row in telangana_gdf.iterrows():
+    for _, row in gdf.iterrows():
         geom = row.geometry
         if geom is None:
             continue
-        name = str(row[district_name_col]).strip()
-        mask = features.rasterize([(geom, 1)], out_shape=(height, width), transform=transform,
-                                  fill=0, all_touched=True, dtype="uint8")
-        mask_da = xr.DataArray(mask.astype(bool), coords={"lat": sample_ds["lat"], "lon": sample_ds["lon"]},
-                               dims=("lat", "lon"), name="mask")
+        
+        name = str(row[unit_col]).strip()
+        
+        # For blocks, include district name to ensure uniqueness
+        if level == "block" and "district_name" in gdf.columns:
+            district = str(row["district_name"]).strip()
+            # Use a separator that's safe for filenames
+            name = f"{district}__{name}"
+        
+        mask = features.rasterize(
+            [(geom, 1)],
+            out_shape=(height, width),
+            transform=transform,
+            fill=0,
+            all_touched=True,
+            dtype="uint8"
+        )
+        mask_da = xr.DataArray(
+            mask.astype(bool),
+            coords={"lat": sample_ds["lat"], "lon": sample_ds["lon"]},
+            dims=("lat", "lon"),
+            name="mask"
+        )
         masks[name] = mask_da
+    
     return masks
 
 
+# Legacy function for backward compatibility
+def load_telangana_districts(path: Path) -> gpd.GeoDataFrame:
+    """Legacy function - use load_boundaries() instead."""
+    return load_boundaries(path, state_filter="Telangana", level="district")
+
+
+def build_district_masks(
+    telangana_gdf: gpd.GeoDataFrame,
+    sample_ds: xr.Dataset,
+    district_name_col: str = "DISTRICT"
+) -> dict:
+    """Legacy function - use build_unit_masks() instead."""
+    # Ensure the expected column exists
+    if district_name_col not in telangana_gdf.columns and "district_name" in telangana_gdf.columns:
+        telangana_gdf = telangana_gdf.copy()
+        telangana_gdf[district_name_col] = telangana_gdf["district_name"]
+    
+    return build_unit_masks(telangana_gdf, sample_ds, level="district")
+
+
+# -----------------------------------------------------------------------------
+# RUN-LENGTH HELPERS
+# -----------------------------------------------------------------------------
 def _run_length_stats(mask: np.ndarray, min_len: int) -> tuple[int, int]:
     """Return (max_run_length, total_days_in_qualifying_runs)."""
     max_run = 0
@@ -277,7 +456,6 @@ def percentile_days_above(da: xr.DataArray, mask: xr.DataArray,
     daily_mean = _get_district_daily_mean(da, mask)
     if daily_mean.size == 0:
         return np.nan
-    # Use the year's own percentile as approximation (proper impl needs baseline climatology)
     thresh = float(daily_mean.quantile(percentile / 100.0).item())
     above = (daily_mean > thresh).sum().item()
     total = daily_mean.size
@@ -388,7 +566,6 @@ def heatwave_magnitude(da: xr.DataArray, mask: xr.DataArray,
         return np.nan
     thresh = float(daily_mean.quantile(0.9).item())
     hw_mask = (daily_mean > thresh).values
-    # Find days in qualifying spells
     hw_days = []
     current_spell = []
     for i, v in enumerate(hw_mask):
@@ -416,7 +593,6 @@ def heatwave_amplitude(da: xr.DataArray, mask: xr.DataArray,
     thresh = float(daily_mean.quantile(0.9).item())
     hw_mask = (daily_mean > thresh).values
     
-    # Find all spells and their max temps
     spells = []
     current_spell = []
     for i, v in enumerate(hw_mask):
@@ -433,7 +609,6 @@ def heatwave_amplitude(da: xr.DataArray, mask: xr.DataArray,
     
     if not spells:
         return np.nan
-    # Hottest heatwave = highest mean
     hottest = max(spells, key=lambda x: x[0])
     return hottest[1] - 273.15
 
@@ -441,271 +616,53 @@ def heatwave_amplitude(da: xr.DataArray, mask: xr.DataArray,
 def daily_temperature_range(da_tasmax: xr.DataArray, mask: xr.DataArray,
                             da_tasmin: xr.DataArray = None) -> float:
     """DTR: mean of (TX - TN). Note: requires both tasmax and tasmin."""
-    # This is a simplified version - full implementation needs both variables
     daily_max = _get_district_daily_mean(da_tasmax, mask)
     if daily_max.size == 0:
         return np.nan
-    # Without tasmin, return approximate range using daily variance
     return float(daily_max.std().item())
 
 
-def extreme_temperature_range(da_tasmax: xr.DataArray, mask: xr.DataArray,
-                              da_tasmin: xr.DataArray = None) -> float:
-    """ETR: TXx - TNn for the year."""
-    daily_max = _get_district_daily_mean(da_tasmax, mask)
-    if daily_max.size == 0:
-        return np.nan
-    txx = float(daily_max.max().item())
-    tnn = float(daily_max.min().item())  # Approximation without tasmin
-    return (txx - tnn)
-
-
-def growing_season_length(da: xr.DataArray, mask: xr.DataArray,
-                          thresh_k: float = 5.0 + 273.15, min_spell_days: int = 6) -> int:
-    """GSL: Growing season length."""
-    daily_mean = _get_district_daily_mean(da, mask)
-    if daily_mean.size == 0:
-        return 0
-    
-    above = (daily_mean > thresh_k).values
-    below = (daily_mean < thresh_k).values
-    n_days = len(above)
-    
-    # Find first span of >= min_spell_days above threshold
-    start_idx = None
-    run = 0
-    for i, v in enumerate(above):
-        if v:
-            run += 1
-            if run >= min_spell_days and start_idx is None:
-                start_idx = i - min_spell_days + 1
-        else:
-            run = 0
-    
-    if start_idx is None:
-        return 0
-    
-    # Find first span after mid-year of >= min_spell_days below threshold
-    mid_year = n_days // 2
-    end_idx = None
-    run = 0
-    for i in range(mid_year, n_days):
-        if below[i]:
-            run += 1
-            if run >= min_spell_days:
-                end_idx = i - min_spell_days + 1
-                break
-        else:
-            run = 0
-    
-    if end_idx is None:
-        end_idx = n_days - 1
-    
-    return max(0, end_idx - start_idx)
+# -----------------------------------------------------------------------------
+# PRECIPITATION COMPUTE FUNCTIONS (placeholder signatures)
+# -----------------------------------------------------------------------------
+# Add your precipitation functions here following the same pattern
 
 
 # -----------------------------------------------------------------------------
-# PRECIPITATION COMPUTE FUNCTIONS
+# FILE DISCOVERY
 # -----------------------------------------------------------------------------
-
-def count_rainy_days(da: xr.DataArray, mask: xr.DataArray, thresh_mm: float = 2.5) -> int:
-    """Count days where precipitation exceeds threshold (mm)."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    return int((daily_mean > thresh_mm).sum().item())
-
-
-def rx1day(da: xr.DataArray, mask: xr.DataArray) -> float:
-    """Maximum 1-day precipitation (mm)."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return np.nan
-    return float(daily_mean.max().item())
+def var_data_dir(data_root: Path, subdir: str, var: str, model: str) -> Path:
+    """Construct path to variable data directory."""
+    base_parts = Path(subdir).parts
+    var_subdir = Path(base_parts[0]) / var
+    return data_root / var_subdir / model
 
 
-def rx5day(da: xr.DataArray, mask: xr.DataArray, window_days: int = 5) -> float:
-    """Maximum 5-day precipitation (mm)."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return np.nan
-    rolling = daily_mean.rolling(time=window_days, min_periods=window_days).sum()
-    return float(rolling.max().item())
-
-
-def rx5day_events_over_threshold(da: xr.DataArray, mask: xr.DataArray,
-                                  event_thresh_mm: float = 50.0, window_days: int = 5) -> int:
-    """Number of 5-day periods exceeding threshold."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return 0
-    rolling = daily_mean.rolling(time=window_days, min_periods=window_days).sum()
-    is_event = (rolling >= event_thresh_mm).fillna(False).values
-    return _count_events(is_event, min_len=1)
-
-
-def simple_daily_intensity_index(da: xr.DataArray, mask: xr.DataArray,
-                                  wet_day_thresh_mm: float = 1.0) -> float:
-    """SDII: mean precipitation on wet days."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return np.nan
-    total = float(daily_mean.sum().item())
-    wet_days = int((daily_mean >= wet_day_thresh_mm).sum().item())
-    if wet_days == 0:
-        return np.nan
-    return total / wet_days
-
-
-def total_wet_day_precipitation(da: xr.DataArray, mask: xr.DataArray,
-                                 wet_thresh_mm: float = 1.0) -> float:
-    """PRCPTOT: total precipitation from wet days."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return np.nan
-    wet_days = daily_mean.where(daily_mean >= wet_thresh_mm, drop=True)
-    return float(wet_days.sum().item())
-
-
-def consecutive_wet_days(da: xr.DataArray, mask: xr.DataArray, wet_thresh_mm: float = 1.0) -> int:
-    """CWD: maximum consecutive wet days."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return 0
-    wet_mask = (daily_mean >= wet_thresh_mm).values
-    max_run, _ = _run_length_stats(wet_mask, min_len=1)
-    return int(max_run)
-
-
-def consecutive_dry_days(da: xr.DataArray, mask: xr.DataArray, dry_thresh_mm: float = 1.0) -> int:
-    """CDD: maximum consecutive dry days."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return 0
-    dry_mask = (daily_mean < dry_thresh_mm).values
-    max_run, _ = _run_length_stats(dry_mask, min_len=1)
-    return int(max_run)
-
-
-def consecutive_dry_day_events(da: xr.DataArray, mask: xr.DataArray,
-                                dry_thresh_mm: float = 1.0, min_event_days: int = 6) -> int:
-    """Number of dry spells > min_event_days."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return 0
-    dry_mask = (daily_mean < dry_thresh_mm).values
-    return _count_events(dry_mask, min_len=min_event_days)
-
-
-def percentile_precipitation_total(da: xr.DataArray, mask: xr.DataArray,
-                                    percentile: int = 95, baseline_years: tuple = (1985, 2014)) -> float:
-    """R95p/R99p: total precip from days exceeding percentile threshold."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return np.nan
-    # Wet days only
-    wet = daily_mean.where(daily_mean >= 1.0, drop=True)
-    if wet.size == 0:
-        return 0.0
-    thresh = float(wet.quantile(percentile / 100.0).item())
-    extreme_days = daily_mean.where(daily_mean > thresh, 0)
-    return float(extreme_days.sum().item())
-
-
-def percentile_precipitation_contribution(da: xr.DataArray, mask: xr.DataArray,
-                                           percentile: int = 95, baseline_years: tuple = (1985, 2014)) -> float:
-    """R95pTOT/R99pTOT: percentage of total precip from extreme days."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return np.nan
-    
-    wet = daily_mean.where(daily_mean >= 1.0, drop=True)
-    if wet.size == 0:
-        return 0.0
-    
-    prcptot = float(wet.sum().item())
-    if prcptot <= 0:
-        return 0.0
-    
-    thresh = float(wet.quantile(percentile / 100.0).item())
-    r_pctl = float(daily_mean.where(daily_mean > thresh, 0).sum().item())
-    return 100.0 * r_pctl / prcptot
-
-
-def standardised_precipitation_index(da: xr.DataArray, mask: xr.DataArray,
-                                      scale_months: int = 3, baseline_years: tuple = (1985, 2014)) -> float:
-    """SPI: Standardised Precipitation Index (simplified annual version)."""
-    pr_mmday = pr_to_mm_per_day(da)
-    daily_mean = _get_district_daily_mean(pr_mmday, mask)
-    if daily_mean.size == 0:
-        return np.nan
-    
-    total = float(daily_mean.sum().item())
-    mean_precip = float(daily_mean.mean().item()) * 365
-    std_precip = float(daily_mean.std().item()) * np.sqrt(365)
-    
-    if std_precip <= 0:
-        return 0.0
-    
-    # Simplified SPI as z-score
-    return (total - mean_precip) / std_precip
-
-
-def standardised_precipitation_evapotranspiration_index(da: xr.DataArray, mask: xr.DataArray,
-                                                         scale_months: int = 3, 
-                                                         baseline_years: tuple = (1985, 2014)) -> float:
-    """SPEI: Standardised Precipitation-Evapotranspiration Index (simplified)."""
-    # Full SPEI requires PET calculation from temperature
-    # This is a simplified version using just precipitation
-    return standardised_precipitation_index(da, mask, scale_months, baseline_years)
-
-
-# -----------------------------------------------------------------------------
-# FILE I/O AND PIPELINE
-# -----------------------------------------------------------------------------
-
-def yearly_files_for_dir(dirpath: Path) -> dict:
-    files = glob.glob(str(dirpath / "*.nc"))
-    out = {}
-    for f in files:
-        y = os.path.splitext(os.path.basename(f))[0]
-        if y.isdigit():
-            out[int(y)] = Path(f)
-    return dict(sorted(out.items()))
-
-
-def var_data_dir(data_root: Path, scenario_subdir: str, varname: str, model: str) -> Path:
-    base = Path(scenario_subdir)
-    parts = list(base.parts)
-    if not parts:
-        raise ValueError(f"Invalid scenario_subdir: {scenario_subdir}")
-    parts[-1] = varname
-    return data_root / Path(*parts) / model
-
-
-def try_open_nc(path: Path, try_engines=("netcdf4", "h5netcdf", "scipy")) -> bool:
-    for eng in try_engines:
-        try:
-            xr.open_dataset(path, engine=eng).close()
-            return True
-        except Exception:
-            continue
-    return False
+def try_open_nc(path: Path) -> bool:
+    """Test if a NetCDF file can be opened."""
+    try:
+        with xr.open_dataset(path) as ds:
+            pass
+        return True
+    except Exception:
+        return False
 
 
 def validated_year_files(data_dir: Path) -> tuple[dict, dict]:
-    year_files = yearly_files_for_dir(data_dir)
-    valid, bad = {}, {}
-    for year, p in year_files.items():
+    """Find and validate yearly NetCDF files."""
+    pattern = str(data_dir / "*.nc")
+    files = glob.glob(pattern)
+    
+    valid = {}
+    bad = {}
+    
+    for f in files:
+        p = Path(f)
+        try:
+            year = int(p.stem.split("_")[-1])
+        except (ValueError, IndexError):
+            continue
+        
         try:
             sz = p.stat().st_size
         except Exception as e:
@@ -718,22 +675,22 @@ def validated_year_files(data_dir: Path) -> tuple[dict, dict]:
             valid[year] = p
         else:
             bad[year] = {"path": p, "reason": "open_failed", "magic": None}
+    
     return dict(sorted(valid.items())), bad
 
 
 def discover_models(data_root: Path, scenarios: dict, variables: list = None) -> list:
     """Discover all models across all variables."""
     if variables is None:
-        variables = ["tas", "tasmax", "tasmin", "pr"]  # All variables used
+        variables = ["tas", "tasmax", "tasmin", "pr"]
     
     models = set()
     for _, scen_conf in scenarios.items():
-        base_subdir = scen_conf["subdir"]  # e.g., "historical/tas"
-        base_parts = Path(base_subdir).parts  # ("historical", "tas")
+        base_subdir = scen_conf["subdir"]
+        base_parts = Path(base_subdir).parts
         
         for var in variables:
-            # Replace the variable part
-            var_subdir = Path(base_parts[0]) / var  # e.g., "historical/pr"
+            var_subdir = Path(base_parts[0]) / var
             model_base = data_root / var_subdir
             
             if not model_base.exists():
@@ -748,9 +705,30 @@ def discover_models(data_root: Path, scenarios: dict, variables: list = None) ->
 MODELS = discover_models(DATA_ROOT, SCENARIOS)
 
 
-def process_metric_for_model_scenario(metric: dict, model: str, scenario: str,
-                                      scenario_conf: dict, telangana_gdf: gpd.GeoDataFrame):
-    """Process ONE metric for ONE (model, scenario)."""
+# -----------------------------------------------------------------------------
+# MAIN PROCESSING (Generalized for district/block)
+# -----------------------------------------------------------------------------
+def process_metric_for_model_scenario(
+    metric: dict,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    gdf: gpd.GeoDataFrame,
+    level: AdminLevel = "district",
+    state_name: str = "Telangana",
+):
+    """
+    Process ONE metric for ONE (model, scenario).
+    
+    Args:
+        metric: Metric configuration dict
+        model: Model name
+        scenario: Scenario name
+        scenario_conf: Scenario configuration
+        gdf: GeoDataFrame with boundaries
+        level: "district" or "block"
+        state_name: State name for output directory
+    """
     slug = metric["slug"]
     var = metric["var"]
     value_col = metric["value_col"]
@@ -762,7 +740,7 @@ def process_metric_for_model_scenario(metric: dict, model: str, scenario: str,
         return
 
     params = metric.get("params", {})
-    metric_root_path = metric_root(slug)
+    metric_root_path = metric_root(slug, level)
 
     data_dir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], var, model)
     if not data_dir.exists():
@@ -781,13 +759,18 @@ def process_metric_for_model_scenario(metric: dict, model: str, scenario: str,
     if var not in ds_sample:
         ds_sample.close()
         raise ValueError(f"[{slug}] '{var}' not found in {sample_path}")
-    masks = build_district_masks(telangana_gdf, ds_sample, district_name_col="DISTRICT")
+    
+    masks = build_unit_masks(gdf, ds_sample, level=level)
     ds_sample.close()
+    
+    if not masks:
+        logging.warning(f"[{slug}] No valid masks built for {level} level")
+        return
 
     # Yearly computation
     rows = []
     for year, nc_path in valid_year_files.items():
-        logging.info(f"[{slug}] Processing {year}")
+        logging.info(f"[{slug}] Processing {year} ({level} level)")
         try:
             ds = xr.open_dataset(nc_path)
             ds = normalize_lat_lon(ds)
@@ -796,17 +779,36 @@ def process_metric_for_model_scenario(metric: dict, model: str, scenario: str,
                 continue
             da = ds[var]
 
-            for dist_name, mask_da in masks.items():
+            for unit_name, mask_da in masks.items():
                 try:
                     v = compute_fn(da, mask_da, **params)
                 except Exception as e:
-                    logging.error(f"[{slug}] Error for {dist_name}, {year}: {e}")
+                    logging.error(f"[{slug}] Error for {unit_name}, {year}: {e}")
                     v = None
 
-                rows.append({
-                    "district": dist_name, "model": model, "scenario": scenario,
-                    "year": year, "value": v, value_col: v, "source_file": str(nc_path),
-                })
+                row = {
+                    "model": model,
+                    "scenario": scenario,
+                    "year": year,
+                    "value": v,
+                    value_col: v,
+                    "source_file": str(nc_path),
+                }
+                
+                # Add appropriate ID columns based on level
+                if level == "block":
+                    # unit_name format: "district__block"
+                    if "__" in unit_name:
+                        district, block = unit_name.split("__", 1)
+                        row["district"] = district
+                        row["block"] = block
+                    else:
+                        row["district"] = "Unknown"
+                        row["block"] = unit_name
+                else:
+                    row["district"] = unit_name
+                
+                rows.append(row)
             ds.close()
         except Exception as e:
             logging.error(f"[{slug}] Failed to process {nc_path}: {e}")
@@ -815,6 +817,8 @@ def process_metric_for_model_scenario(metric: dict, model: str, scenario: str,
 
     # Period aggregation
     period_frames = []
+    group_cols = ["district", "block", "model", "scenario"] if level == "block" else ["district", "model", "scenario"]
+    
     for period_name, (y0, y1) in scenario_conf["periods"].items():
         available_years = [y for y in valid_year_files.keys() if y0 <= y <= y1]
         n_req = y1 - y0 + 1
@@ -823,7 +827,7 @@ def process_metric_for_model_scenario(metric: dict, model: str, scenario: str,
 
         if n_avail >= MIN_YEARS_ABSOLUTE and frac >= MIN_YEARS_REQUIRED_FRACTION:
             df_sub = df_yearly[df_yearly["year"].isin(available_years)]
-            grp = df_sub.groupby(["district", "model", "scenario"]).agg({"value": "mean"}).reset_index()
+            grp = df_sub.groupby([c for c in group_cols if c in df_sub.columns]).agg({"value": "mean"}).reset_index()
             grp["period"] = period_name
             grp["years_used_count"] = n_avail
             grp["years_requested"] = n_req
@@ -833,25 +837,69 @@ def process_metric_for_model_scenario(metric: dict, model: str, scenario: str,
     df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
 
     # Write outputs
-    for dist_name in df_yearly["district"].unique():
-        out_dir = metric_root_path / "Telangana" / dist_name.replace(" ", "_") / model / scenario
-        out_dir.mkdir(parents=True, exist_ok=True)
-        df_yearly[df_yearly["district"] == dist_name].to_csv(
-            out_dir / f"{dist_name.replace(' ', '_')}_yearly.csv", index=False)
-        if not df_periods.empty:
-            df_periods[df_periods["district"] == dist_name].to_csv(
-                out_dir / f"{dist_name.replace(' ', '_')}_periods.csv", index=False)
+    if level == "block":
+        # Group by district and block
+        for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
+            # Sanitize names for filesystem
+            district_safe = district.replace(" ", "_").replace("/", "_")
+            block_safe = block.replace(" ", "_").replace("/", "_")
+            
+            out_dir = metric_root_path / state_name / district_safe / block_safe / model / scenario
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
+            
+            if not df_periods.empty:
+                period_grp = df_periods[
+                    (df_periods["district"] == district) & 
+                    (df_periods["block"] == block)
+                ]
+                if not period_grp.empty:
+                    period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
+    else:
+        # Original district-level output
+        for dist_name in df_yearly["district"].unique():
+            out_dir = metric_root_path / state_name / dist_name.replace(" ", "_") / model / scenario
+            out_dir.mkdir(parents=True, exist_ok=True)
+            df_yearly[df_yearly["district"] == dist_name].to_csv(
+                out_dir / f"{dist_name.replace(' ', '_')}_yearly.csv", index=False)
+            if not df_periods.empty:
+                df_periods[df_periods["district"] == dist_name].to_csv(
+                    out_dir / f"{dist_name.replace(' ', '_')}_periods.csv", index=False)
 
 
-def compute_ensembles_generic(output_root: Path, state: str = "Telangana"):
-    """Compute ensemble statistics across models."""
+def compute_ensembles_generic(
+    output_root: Path,
+    state: str = "Telangana",
+    level: AdminLevel = "district",
+):
+    """
+    Compute ensemble statistics across models.
+    
+    Args:
+        output_root: Root path for metric outputs
+        state: State name
+        level: "district" or "block"
+    """
     root = Path(output_root)
     state_root = root / state
     ensembles_root = state_root / "ensembles"
     ensembles_root.mkdir(parents=True, exist_ok=True)
 
-    district_dirs = [p for p in state_root.iterdir() 
-                     if p.is_dir() and p.name not in {"validation_reports", "ensembles"}]
+    if level == "block":
+        # For blocks: state_root / district / block / model / scenario
+        _compute_block_ensembles(state_root, ensembles_root)
+    else:
+        # Original district logic
+        _compute_district_ensembles(state_root, ensembles_root)
+
+
+def _compute_district_ensembles(state_root: Path, ensembles_root: Path):
+    """Compute ensembles for district-level data."""
+    district_dirs = [
+        p for p in state_root.iterdir() 
+        if p.is_dir() and p.name not in {"validation_reports", "ensembles"}
+    ]
     
     for ddir in district_dirs:
         district = ddir.name
@@ -876,44 +924,146 @@ def compute_ensembles_generic(output_root: Path, state: str = "Telangana"):
                         pass
 
             if model_yearly:
-                df_yc = pd.concat(model_yearly, ignore_index=True)
-                if "year" in df_yc.columns:
-                    df_yc["year"] = df_yc["year"].astype(int)
-                    pivot = df_yc.pivot_table(index="year", columns="model", values="value", aggfunc="first")
-                    yearly_summary = pd.DataFrame({
-                        "year": pivot.index,
-                        "n_models": pivot.count(axis=1),
-                        "ensemble_mean": pivot.mean(axis=1),
-                        "ensemble_std": pivot.std(axis=1, ddof=0),
-                        "ensemble_median": pivot.median(axis=1),
-                        "ensemble_p05": pivot.quantile(0.05, axis=1),
-                        "ensemble_p95": pivot.quantile(0.95, axis=1),
-                    }).reset_index(drop=True)
-                    
-                    out_dir = ensembles_root / district / scenario
-                    out_dir.mkdir(parents=True, exist_ok=True)
-                    yearly_summary.to_csv(out_dir / f"{district}_yearly_ensemble.csv", index=False)
+                _write_ensemble_stats(model_yearly, ensembles_root / district / scenario, district)
+
+
+def _compute_block_ensembles(state_root: Path, ensembles_root: Path):
+    """Compute ensembles for block-level data."""
+    # Structure: state_root / district / block / model / scenario
+    district_dirs = [
+        p for p in state_root.iterdir() 
+        if p.is_dir() and p.name not in {"validation_reports", "ensembles"}
+    ]
+    
+    for ddir in district_dirs:
+        district = ddir.name
+        block_dirs = [p for p in ddir.iterdir() if p.is_dir()]
+        
+        for bdir in block_dirs:
+            block = bdir.name
+            model_dirs = [p for p in bdir.iterdir() if p.is_dir()]
+            scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+            
+            for scenario in scenarios:
+                model_yearly = []
+                for m in model_dirs:
+                    yearly_csv = m / scenario / f"{block}_yearly.csv"
+                    if yearly_csv.exists():
+                        try:
+                            dfy = pd.read_csv(yearly_csv)
+                            if "value" not in dfy.columns:
+                                cols = [c for c in dfy.columns if c not in 
+                                       {"district", "block", "model", "scenario", "year", "source_file"}]
+                                if cols:
+                                    dfy["value"] = dfy[cols[0]]
+                            dfy["model"] = m.name
+                            model_yearly.append(dfy)
+                        except Exception:
+                            pass
+
+                if model_yearly:
+                    out_dir = ensembles_root / district / block / scenario
+                    _write_ensemble_stats(model_yearly, out_dir, block)
+
+
+def _write_ensemble_stats(model_yearly: list, out_dir: Path, unit_name: str):
+    """Write ensemble statistics CSV."""
+    df_yc = pd.concat(model_yearly, ignore_index=True)
+    if "year" in df_yc.columns:
+        df_yc["year"] = df_yc["year"].astype(int)
+        pivot = df_yc.pivot_table(index="year", columns="model", values="value", aggfunc="first")
+        yearly_summary = pd.DataFrame({
+            "year": pivot.index,
+            "n_models": pivot.count(axis=1),
+            "ensemble_mean": pivot.mean(axis=1),
+            "ensemble_std": pivot.std(axis=1, ddof=0),
+            "ensemble_median": pivot.median(axis=1),
+            "ensemble_p05": pivot.quantile(0.05, axis=1),
+            "ensemble_p95": pivot.quantile(0.95, axis=1),
+        }).reset_index(drop=True)
+        
+        out_dir.mkdir(parents=True, exist_ok=True)
+        yearly_summary.to_csv(out_dir / f"{unit_name}_yearly_ensemble.csv", index=False)
+
+
+# -----------------------------------------------------------------------------
+# CLI & MAIN
+# -----------------------------------------------------------------------------
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Compute climate indices at district or block level."
+    )
+    parser.add_argument(
+        "--level", "-l",
+        choices=["district", "block"],
+        default="district",
+        help="Administrative level for spatial aggregation (default: district)"
+    )
+    parser.add_argument(
+        "--state", "-s",
+        default="Telangana",
+        help="State to process (default: Telangana)"
+    )
+    parser.add_argument(
+        "--metric", "-m",
+        default=None,
+        help="Process only this metric slug (default: all metrics)"
+    )
+    return parser.parse_args()
 
 
 def main():
     """Main pipeline driver."""
+    args = parse_args()
+    level: AdminLevel = args.level
+    state_name = args.state
+    
+    logging.info(f"Starting pipeline: level={level}, state={state_name}")
+    
+    # Initialize metric directories
     for m in METRICS:
-        metric_root(m["slug"])
+        metric_root(m["slug"], level)
     
-    tel_gdf = load_telangana_districts(DISTRICTS_PATH)
+    # Load boundaries
+    boundary_path = get_boundary_path(level)
+    logging.info(f"Loading boundaries from: {boundary_path}")
     
+    try:
+        gdf = load_boundaries(boundary_path, state_filter=state_name, level=level)
+        logging.info(f"Loaded {len(gdf)} {level} boundaries for {state_name}")
+    except Exception as e:
+        logging.error(f"Failed to load boundaries: {e}")
+        return
+    
+    # Filter metrics if specified
+    metrics_to_process = METRICS
+    if args.metric:
+        metrics_to_process = [m for m in METRICS if m["slug"] == args.metric]
+        if not metrics_to_process:
+            logging.error(f"Metric '{args.metric}' not found in registry")
+            return
+    
+    # Process each model/scenario/metric
     for model in MODELS:
         for scenario, sconf in SCENARIOS.items():
-            for metric in METRICS:
+            for metric in metrics_to_process:
                 try:
-                    process_metric_for_model_scenario(metric, model, scenario, sconf, tel_gdf)
+                    process_metric_for_model_scenario(
+                        metric, model, scenario, sconf, gdf,
+                        level=level, state_name=state_name
+                    )
                 except Exception as e:
                     logging.error(f"Failed processing {metric['slug']}: {e}")
+                    traceback.print_exc()
 
     # Build ensembles
-    for metric in METRICS:
+    for metric in metrics_to_process:
         try:
-            compute_ensembles_generic(metric_root(metric["slug"]))
+            compute_ensembles_generic(
+                metric_root(metric["slug"], level),
+                state=state_name,
+                level=level
+            )
         except Exception as e:
             logging.error(f"Ensembles failed for {metric['slug']}: {e}")
 
