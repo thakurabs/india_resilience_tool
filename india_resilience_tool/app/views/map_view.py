@@ -56,6 +56,62 @@ def extract_clicked_district_state(ret: Optional[Mapping[str, Any]]) -> Tuple[Op
     return None, None
 
 
+def extract_clicked_block_district_state(
+    ret: Optional[Mapping[str, Any]],
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Extract (block_name, district_name, state_name) from st_folium return payload.
+
+    Notes:
+        st_folium payloads vary by version. We scan common keys and then inspect
+        properties for likely block/district/state fields.
+
+    Returns:
+        (block_name, district_name, state_name) if found else (None, None, None)
+    """
+    if not ret:
+        return None, None, None
+
+    candidates = (
+        "last_object_clicked",
+        "clicked_feature",
+        "last_active_drawing",
+        "last_object",
+    )
+
+    for key in candidates:
+        feat = ret.get(key)
+        if not isinstance(feat, dict):
+            continue
+
+        props = feat.get("properties") if isinstance(feat.get("properties"), dict) else feat
+        if not isinstance(props, dict):
+            continue
+
+        # Block name candidates (ADM3)
+        block_val: Optional[str] = None
+        for pk in (
+            "block_name",
+            "subdistrict_name",
+            "adm3_name",
+            "NAME_3",
+            "name_3",
+            "NAME3",
+            "shapeName_3",
+        ):
+            v = props.get(pk)
+            if v:
+                block_val = str(v).strip()
+                break
+
+        if block_val:
+            district_val = props.get("district_name") or props.get("district") or props.get("shapeName_1") or props.get("shapeName_2")
+            state_val = props.get("state_name") or props.get("state") or props.get("shapeGroup") or props.get("shapeName_0")
+            return block_val, (str(district_val).strip() if district_val else None), (str(state_val).strip() if state_val else None)
+
+    return None, None, None
+
+
 def extract_click_coordinates(ret: Optional[Mapping[str, Any]]) -> Tuple[Optional[float], Optional[float]]:
     """
     Extract (lat, lon) from st_folium return payload.
@@ -120,41 +176,88 @@ def find_district_at_coordinates(
     return None, None
 
 
+def find_block_at_coordinates(
+    merged: Any,  # GeoDataFrame
+    lat: float,
+    lon: float,
+) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Find block (ADM3) containing or nearest to given coordinates.
+
+    Args:
+        merged: GeoDataFrame with block geometries and block_name/district_name/state_name columns
+        lat: Latitude
+        lon: Longitude
+
+    Returns:
+        (block_name, district_name, state_name) if found else (None, None, None)
+    """
+    from shapely.geometry import Point
+
+    try:
+        pt = Point(float(lon), float(lat))
+
+        # Try exact containment first
+        mask = merged.geometry.contains(pt)
+        if mask.any():
+            row = merged[mask].iloc[0]
+        else:
+            # Fall back to nearest centroid
+            dists = merged.geometry.centroid.distance(pt)
+            row = merged.loc[dists.idxmin()]
+
+        block = str(row.get("block_name", "")).strip()
+        district = str(row.get("district_name", "")).strip()
+        state = str(row.get("state_name", "")).strip()
+
+        if block and district and state:
+            return block, district, state
+    except Exception:
+        pass
+
+    return None, None, None
+
+
 def create_portfolio_style_function(
     portfolio_keys: set,
     normalize_fn: Callable[[str], str],
     *,
+    level: str = "district",
     portfolio_border_color: str = "#2563eb",
     portfolio_border_weight: int = 3,
     default_border_color: str = "#666666",
     default_border_weight: float = 0.3,
 ) -> Callable[[dict], dict]:
     """
-    Create a style function that highlights portfolio districts.
-    
-    Portfolio districts get a distinct blue border.
-    
-    Args:
-        portfolio_keys: Set of (normalized_state, normalized_district) tuples
-        normalize_fn: Function to normalize state/district names
-        portfolio_border_color: Border color for portfolio districts
-        portfolio_border_weight: Border weight for portfolio districts
-        default_border_color: Border color for non-portfolio districts
-        default_border_weight: Border weight for non-portfolio districts
-    
-    Returns:
-        Style function for folium.GeoJson
+    Create a style function that highlights portfolio units.
+
+    District mode:
+        portfolio_keys contains (state, district)
+
+    Block mode:
+        portfolio_keys contains (state, district, block)
     """
+    level_norm = str(level).strip().lower()
+
     def style_fn(feature: dict) -> dict:
         props = feature.get("properties", {})
         fill_color = props.get("fillColor", "#cccccc")
-        
+
         state_name = props.get("state_name", "")
         district_name = props.get("district_name", "")
-        
-        key = (normalize_fn(state_name), normalize_fn(district_name))
+
+        if level_norm == "block":
+            block_name = props.get("block_name", "") or props.get("subdistrict_name", "") or props.get("adm3_name", "")
+            key = (
+                normalize_fn(state_name),
+                normalize_fn(district_name),
+                normalize_fn(str(block_name)),
+            )
+        else:
+            key = (normalize_fn(state_name), normalize_fn(district_name))
+
         is_in_portfolio = key in portfolio_keys
-        
+
         if is_in_portfolio:
             return {
                 "fillColor": fill_color,
@@ -163,30 +266,35 @@ def create_portfolio_style_function(
                 "fillOpacity": 0.8,
                 "dashArray": None,
             }
-        else:
-            return {
-                "fillColor": fill_color,
-                "color": default_border_color,
-                "weight": default_border_weight,
-                "fillOpacity": 0.7,
-            }
-    
+
+        return {
+            "fillColor": fill_color,
+            "color": default_border_color,
+            "weight": default_border_weight,
+            "fillOpacity": 0.8,
+            "dashArray": None,
+        }
+
     return style_fn
 
 
 def add_portfolio_legend_to_map(
     m: Any,
     portfolio_count: int,
+    *,
+    level: str = "district",
     portfolio_border_color: str = "#2563eb",
 ) -> None:
     """
-    Add a legend item indicating portfolio districts.
+    Add a legend item indicating portfolio units.
     """
     import folium
-    
+
     if portfolio_count == 0:
         return
-    
+
+    unit_label = "block" if str(level).strip().lower() == "block" else "district"
+
     legend_html = f"""
     <div style="
         position: fixed;
@@ -206,7 +314,7 @@ def add_portfolio_legend_to_map(
                 border: 3px solid {portfolio_border_color};
                 background: #f0f0f0;
             "></div>
-            <span>In portfolio ({portfolio_count})</span>
+            <span>In portfolio ({portfolio_count} {unit_label}{'s' if portfolio_count != 1 else ''})</span>
         </div>
     </div>
     """
@@ -225,6 +333,8 @@ def render_map_view(
     selected_district: str,
     map_width: int,
     map_height: int,
+    selected_block: str = "All",
+    level: str = "district",
     perf_section: Optional[Callable[[str], Any]] = None,
 ) -> Tuple[Mapping[str, Any], Optional[str], Optional[str]]:
     """
@@ -342,13 +452,14 @@ def render_map_view(
                 ).add_to(m)
         
         # Portfolio legend
-        portfolio = st.session_state.get("portfolio_districts", [])
-        add_portfolio_legend_to_map(m, len(portfolio))
+        portfolio_state_key = "portfolio_blocks" if str(level).strip().lower() == "block" else "portfolio_districts"
+        portfolio = st.session_state.get(portfolio_state_key, [])
+        add_portfolio_legend_to_map(m, len(portfolio) if isinstance(portfolio, list) else 0, level=level)
 
     ctx = perf_section("map: render st_folium") if perf_section is not None else nullcontext()
 
     with ctx:
-        map_key = f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{selected_state}_{selected_district}"
+        map_key = f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{selected_state}_{selected_district}_{selected_block}_{str(level).strip().lower()}"
 
         returned = st_folium(
             m,
@@ -362,8 +473,143 @@ def render_map_view(
     if not isinstance(returned, dict):
         returned = {}
 
+    # Default (district) click extraction
     clicked_district, clicked_state = extract_clicked_district_state(returned)
+
+    # Block-aware click extraction (stores clicked_block in session_state)
+    clicked_block: Optional[str] = None
+    if str(level).strip().lower() == "block":
+        b, d, s = extract_clicked_block_district_state(returned)
+        clicked_block = b
+        clicked_district = d or clicked_district
+        clicked_state = s or clicked_state
+        st.session_state["clicked_block"] = clicked_block
+    else:
+        # Ensure stale value isn't carried across toggles
+        if "clicked_block" in st.session_state:
+            st.session_state.pop("clicked_block")
+
     return returned, clicked_district, clicked_state
+
+
+def render_unit_add_to_portfolio(
+    *,
+    clicked_district: Optional[str],
+    clicked_state: Optional[str],
+    clicked_block: Optional[str] = None,
+    selected_state: str,
+    portfolio_add_fn: Callable[..., None],
+    portfolio_remove_fn: Callable[..., None],
+    portfolio_contains_fn: Callable[..., bool],
+    normalize_fn: Callable[[str], str],
+    # Optional parameters for coordinate-based lookup
+    returned: Optional[Mapping[str, Any]] = None,
+    merged: Optional[Any] = None,  # GeoDataFrame
+    level: str = "district",
+) -> bool:
+    """
+    Render inline add/remove button for a clicked unit in portfolio mode.
+
+    District mode:
+        Uses (state, district)
+
+    Block mode:
+        Uses (state, district, block)
+    """
+    import streamlit as st
+
+    level_norm = str(level).strip().lower()
+
+    # Resolve click coordinates if needed
+    resolved_district = clicked_district
+    resolved_state = clicked_state
+    resolved_block = clicked_block
+
+    if level_norm == "block":
+        if not resolved_block and returned is not None:
+            b, d, s = extract_clicked_block_district_state(returned)
+            resolved_block = b or resolved_block
+            resolved_district = d or resolved_district
+            resolved_state = s or resolved_state
+
+        if (not resolved_block) and (merged is not None) and (returned is not None):
+            lat, lon = extract_click_coordinates(returned)
+            if lat is not None and lon is not None:
+                b2, d2, s2 = find_block_at_coordinates(merged, lat, lon)
+                resolved_block = b2 or resolved_block
+                resolved_district = d2 or resolved_district
+                resolved_state = s2 or resolved_state
+    else:
+        if (not resolved_district) and (merged is not None) and (returned is not None):
+            lat, lon = extract_click_coordinates(returned)
+            if lat is not None and lon is not None:
+                d2, s2 = find_district_at_coordinates(merged, lat, lon)
+                resolved_district = d2 or resolved_district
+                resolved_state = s2 or resolved_state
+
+    if level_norm == "block":
+        if not resolved_block or not resolved_district:
+            return False
+    else:
+        if not resolved_district:
+            return False
+
+    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+    if analysis_mode != "Multi-district portfolio":
+        return False
+
+    state_for_add = (resolved_state or selected_state or "").strip()
+    if not state_for_add or state_for_add == "All":
+        return False
+
+    unit_label = "block" if level_norm == "block" else "district"
+    name_for_display = resolved_block if level_norm == "block" else resolved_district
+
+    # Portfolio membership check
+    if level_norm == "block":
+        is_in_portfolio = bool(portfolio_contains_fn(state_for_add, resolved_district, resolved_block))
+        key_suffix = f"{normalize_fn(state_for_add)}_{normalize_fn(resolved_district)}_{normalize_fn(resolved_block)}"
+    else:
+        is_in_portfolio = bool(portfolio_contains_fn(state_for_add, resolved_district))
+        key_suffix = f"{normalize_fn(state_for_add)}_{normalize_fn(resolved_district)}"
+
+    st.markdown(f"**{name_for_display}** ({state_for_add})")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        if is_in_portfolio:
+            if st.button(
+                f"✓ Remove {unit_label} from portfolio",
+                key=f"map_remove_{key_suffix}",
+                type="secondary",
+                use_container_width=True,
+            ):
+                if level_norm == "block":
+                    portfolio_remove_fn(state_for_add, resolved_district, resolved_block)
+                else:
+                    portfolio_remove_fn(state_for_add, resolved_district)
+                st.success(f"Removed {name_for_display}")
+                st.rerun()
+                return True
+        else:
+            if st.button(
+                f"+ Add {unit_label} to portfolio",
+                key=f"map_add_{key_suffix}",
+                type="primary",
+                use_container_width=True,
+            ):
+                if level_norm == "block":
+                    portfolio_add_fn(state_for_add, resolved_district, resolved_block)
+                else:
+                    portfolio_add_fn(state_for_add, resolved_district)
+                st.success(f"Added {name_for_display}")
+                st.rerun()
+                return True
+
+    with col2:
+        st.caption("Portfolio mode")
+
+    return False
 
 
 def render_district_add_to_portfolio(
@@ -375,89 +621,22 @@ def render_district_add_to_portfolio(
     portfolio_remove_fn: Callable[[str, str], None],
     portfolio_contains_fn: Callable[[str, str], bool],
     normalize_fn: Callable[[str], str],
-    # New optional parameters for coordinate-based lookup
     returned: Optional[Mapping[str, Any]] = None,
     merged: Optional[Any] = None,  # GeoDataFrame
 ) -> bool:
     """
-    Render inline add/remove button for a clicked district in portfolio mode.
-    
-    If clicked_district is None but returned and merged are provided,
-    will attempt to find the district using click coordinates.
-    
-    Returns True if portfolio was changed.
+    Backward-compatible wrapper for district-mode inline portfolio controls.
     """
-    import streamlit as st
-    
-    # If no district from properties, try coordinate lookup
-    if not clicked_district and returned is not None and merged is not None:
-        lat, lon = extract_click_coordinates(returned)
-        if lat is not None and lon is not None:
-            clicked_district, clicked_state = find_district_at_coordinates(merged, lat, lon)
-    
-    if not clicked_district:
-        return False
-    
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-    if analysis_mode != "Multi-district portfolio":
-        return False
-    
-    state_for_add = clicked_state or selected_state
-    if not state_for_add or state_for_add == "All":
-        return False
-    
-    is_in_portfolio = portfolio_contains_fn(state_for_add, clicked_district)
-    
-    # Action box
-    bg_color = "#e8f4e8" if not is_in_portfolio else "#fff3cd"
-    border_color = "#28a745" if not is_in_portfolio else "#ffc107"
-    
-    st.markdown(
-        f"""<div style="
-            padding: 12px;
-            background: {bg_color};
-            border-radius: 8px;
-            margin: 8px 0;
-            border-left: 4px solid {border_color};
-        ">
-            <strong>{clicked_district}</strong>, {state_for_add}
-        </div>""",
-        unsafe_allow_html=True,
+    return render_unit_add_to_portfolio(
+        clicked_district=clicked_district,
+        clicked_state=clicked_state,
+        clicked_block=None,
+        selected_state=selected_state,
+        portfolio_add_fn=portfolio_add_fn,
+        portfolio_remove_fn=portfolio_remove_fn,
+        portfolio_contains_fn=portfolio_contains_fn,
+        normalize_fn=normalize_fn,
+        returned=returned,
+        merged=merged,
+        level="district",
     )
-    
-    col1, col2 = st.columns(2)
-    key_suffix = f"{normalize_fn(state_for_add)}_{normalize_fn(clicked_district)}"
-    
-    with col1:
-        if is_in_portfolio:
-            if st.button(
-                "✓ Remove from portfolio",
-                key=f"map_remove_{key_suffix}",
-                type="secondary",
-                use_container_width=True,
-            ):
-                portfolio_remove_fn(state_for_add, clicked_district)
-                st.success(f"Removed {clicked_district}")
-                st.rerun()
-                return True
-        else:
-            if st.button(
-                "+ Add to portfolio",
-                key=f"map_add_{key_suffix}",
-                type="primary",
-                use_container_width=True,
-            ):
-                portfolio_add_fn(state_for_add, clicked_district)
-                st.success(f"Added {clicked_district}")
-                st.rerun()
-                return True
-    
-    with col2:
-        portfolio = st.session_state.get("portfolio_districts", [])
-        st.markdown(
-            f"<div style='text-align: center; padding: 8px; color: #666;'>"
-            f"📋 {len(portfolio)} in portfolio</div>",
-            unsafe_allow_html=True,
-        )
-    
-    return False
