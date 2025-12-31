@@ -134,8 +134,9 @@ def set_level(
         session_state["selected_district"] = "All"
         session_state["selected_block"] = "All"
         
-        # Clear portfolio when switching levels
+        # Clear portfolio when switching levels (level-specific lists)
         session_state["portfolio_districts"] = []
+        session_state["portfolio_blocks"] = []
         session_state["portfolio_multiindex_df"] = None
         session_state["portfolio_multiindex_context"] = None
         

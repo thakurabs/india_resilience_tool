@@ -28,6 +28,8 @@ from india_resilience_tool.data.adm2_loader import (
     featurecollections_by_state as _featurecollections_by_state,
     load_local_adm2 as _load_local_adm2,
 )
+from india_resilience_tool.data.adm3_loader import load_local_adm3 as _load_local_adm3
+
 from india_resilience_tool.data.merge import (
     get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
 )
@@ -46,7 +48,9 @@ from india_resilience_tool.utils.naming import alias
 
 from india_resilience_tool.app.sidebar import (
     apply_jump_once_flags,
+    render_admin_level_selector,
     render_analysis_mode_selector,
+    render_block_selector,
     render_hover_toggle_if_portfolio,
     render_view_selector,
 )
@@ -154,7 +158,7 @@ def render_perf_panel_safe() -> None:
 # -------------------------
 # CONFIG
 # -------------------------
-from paths import DATA_DIR
+from paths import BLOCKS_PATH, DATA_DIR
 
 from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_ADM2,
@@ -197,6 +201,23 @@ def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoD
         tolerance=float(tolerance),
         bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
         min_area=0.0003,
+    )
+    return gdf
+
+
+@st.cache_data
+def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
+    """
+    Load ADM3 (blocks/subdistricts) for optional block-level UI controls.
+
+    Note: This is used only for populating the Block dropdown during Phase 3 activation.
+    Full block-level map/rankings wiring happens in later phases.
+    """
+    gdf = _load_local_adm3(
+        path=path,
+        tolerance=float(tolerance),
+        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
+        min_area=0.0,
     )
     return gdf
 
@@ -655,6 +676,9 @@ with st.sidebar:
     except Exception:
         pass
 
+    # Admin level selector (District vs Block) — Phase 3 activation
+    _ = render_admin_level_selector(label_visibility="collapsed")
+
     # Read current analysis mode (default: Single district focus)
     analysis_mode_current = st.session_state.get(
         "analysis_mode", "Single district focus"
@@ -1084,10 +1108,6 @@ with state_placeholder.container():
                 "Multi-district portfolio",
             ],
             index=0,
-            help_text=(
-                "Choose “Single district focus” to explore one district at a time, "
-                "or “Multi-district portfolio” to build and compare a set of districts."
-            ),
             label_visibility="collapsed",
             use_markdown_header=True,
         )
@@ -1128,6 +1148,52 @@ with state_placeholder.container():
                 index=districts.index(st.session_state["selected_district"]),
                 key="selected_district",
             )
+
+            # Block selector (shown only when admin_level == 'block')
+            if st.session_state.get("admin_level") == "block":
+                blocks_list: list[str] = []
+                if not BLOCKS_PATH.exists():
+                    st.caption(f"⚠️ Blocks boundary file not found at: {BLOCKS_PATH}")
+                else:
+                    try:
+                        adm3 = load_local_adm3(str(BLOCKS_PATH), tolerance=SIMPLIFY_TOL_ADM2)
+
+                        # Filter to the current state + district for a clean dropdown
+                        mask = pd.Series([True] * len(adm3))
+                        if selected_state != "All" and "state_name" in adm3.columns:
+                            mask &= (
+                                adm3["state_name"].astype(str).str.strip().str.lower()
+                                == selected_state.strip().lower()
+                            )
+                        if "district_name" in adm3.columns:
+                            mask &= (
+                                adm3["district_name"].astype(str).str.strip().str.lower()
+                                == selected_district.strip().lower()
+                            )
+
+                        blocks_list = (
+                            adm3.loc[mask, "block_name"]
+                            .astype(str)
+                            .str.strip()
+                            .dropna()
+                            .unique()
+                            .tolist()
+                            if "block_name" in adm3.columns
+                            else []
+                        )
+                    except Exception as e:
+                        st.caption(f"⚠️ Could not load blocks list: {e}")
+
+                _ = render_block_selector(
+                    blocks_list,
+                    selected_district,
+                    label="Block",
+                    label_visibility="collapsed",
+                    help_text="Select a block/subdistrict within the chosen district.",
+                )
+            else:
+                st.session_state["selected_block"] = "All"
+
         else:
             # Portfolio mode: freeze district selection to "All"
             st.session_state["selected_district"] = "All"
