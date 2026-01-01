@@ -59,6 +59,45 @@ def find_district_at_point(
     return None
 
 
+def find_block_at_point(
+    merged: Any,
+    lat: float,
+    lon: float,
+) -> Optional[Tuple[str, str, str]]:
+    """
+    Find block containing or nearest to a point.
+
+    Returns (state_name, district_name, block_name) or None if not found.
+    """
+    try:
+        pt = Point(float(lon), float(lat))
+
+        # Try exact containment first
+        mask = merged.geometry.contains(pt)
+        if mask.any():
+            row = merged[mask].iloc[0]
+        else:
+            dists = merged.geometry.centroid.distance(pt)
+            row = merged.loc[dists.idxmin()]
+
+        def _first_nonempty(keys: list[str]) -> str:
+            for k in keys:
+                if k in row and str(row.get(k, "")).strip():
+                    return str(row.get(k, "")).strip()
+            return ""
+
+        state = _first_nonempty(["state_name", "state", "adm1_name", "STATE"])
+        district = _first_nonempty(["district_name", "district", "adm2_name", "DISTRICT"])
+        block = _first_nonempty(["block_name", "block", "adm3_name", "BLOCK"])
+
+        if state and district and block:
+            return (state, district, block)
+    except Exception:
+        pass
+
+    return None
+
+
 def parse_batch_coordinates(text: str) -> List[Tuple[float, float, Optional[str]]]:
     """
     Parse batch coordinate input.
@@ -107,41 +146,33 @@ def parse_batch_coordinates(text: str) -> List[Tuple[float, float, Optional[str]
 def render_point_selection_panel(
     *,
     merged: Any,
-    portfolio_add_fn: Callable[[str, str], None],
-    portfolio_key_fn: Callable[[str, str], Tuple[str, str]],
+    portfolio_add_fn: Callable[..., None],
+    portfolio_key_fn: Callable[..., tuple],
     portfolio_set_flash_fn: Callable[[str, str], None],
+    level: str = "district",
 ) -> bool:
     """
     Render the point selection panel for portfolio mode.
 
-    Features:
-    1. Single coordinate entry with preview
-    2. Show on map button to visualize location
-    3. Batch coordinate input for multiple points
-    4. Save points for later batch adding
-
-    Args:
-        merged: GeoDataFrame with district geometries
-        portfolio_add_fn: Function to add a district to portfolio
-        portfolio_key_fn: Function to create a normalized key
-        portfolio_set_flash_fn: Function to set a flash message
-
-    Returns:
-        clear_clicked: Always False (kept for backward compatibility)
+    Supports both district and block admin levels:
+      - district: resolves (state, district)
+      - block: resolves (state, district, block)
     """
     import streamlit as st
 
-    # Initialize session state
-    if "point_query_points" not in st.session_state:
-        st.session_state["point_query_points"] = []
-    if "map_preview_marker" not in st.session_state:
-        st.session_state["map_preview_marker"] = None
+    level_norm = (level or "district").strip().lower()
+    is_block = level_norm == "block"
 
-    saved_points = st.session_state["point_query_points"]
+    # Initialize saved points in session state
+    saved_points = st.session_state.get("point_query_points", [])
+    if saved_points is None:
+        saved_points = []
+        st.session_state["point_query_points"] = saved_points
 
-    # Get bounds for validation
+    # Determine bounds for input defaults from merged geometry
     try:
-        minx, miny, maxx, maxy = merged.total_bounds
+        bounds = merged.total_bounds  # [minx, miny, maxx, maxy]
+        minx, miny, maxx, maxy = bounds
         default_lat = float((miny + maxy) / 2.0)
         default_lon = float((minx + maxx) / 2.0)
     except Exception:
@@ -149,19 +180,29 @@ def render_point_selection_panel(
         minx, maxx = 68.0, 98.0
         default_lat, default_lon = 17.385, 78.4867
 
+    def _find_unit(lat: float, lon: float) -> Optional[tuple[str, str, Optional[str]]]:
+        if is_block:
+            ret = find_block_at_point(merged, lat, lon)
+            if not ret:
+                return None
+            st_name, dist_name, blk_name = ret
+            return (st_name, dist_name, blk_name)
+        ret = find_district_at_point(merged, lat, lon)
+        if not ret:
+            return None
+        st_name, dist_name = ret
+        return (st_name, dist_name, None)
+
     st.subheader("📍 Add by Location")
-    
-    # Create tabs for single vs batch input
+
     tab_single, tab_batch = st.tabs(["Single Coordinate", "Batch Input"])
-    
+
     # =========================================================================
     # TAB 1: Single Coordinate Entry
     # =========================================================================
     with tab_single:
-        st.caption("Enter coordinates to find and add a district to your portfolio.")
-        
-        # Coordinate input
         col_lat, col_lon = st.columns(2)
+
         with col_lat:
             lat_input = st.number_input(
                 "Latitude",
@@ -181,268 +222,212 @@ def render_point_selection_panel(
                 key="_point_lon",
             )
 
-        # Preview district
-        result = find_district_at_point(merged, lat_input, lon_input)
-        
+        result = _find_unit(lat_input, lon_input)
+
         if result:
-            state_name, district_name = result
-            st.info(f"📍 This location is in **{district_name}**, {state_name}")
-            
-            # Action buttons - 3 columns
+            state_name, district_name, block_name = result
+
+            if is_block and block_name:
+                st.info(f"📍 This location is in **{block_name}** (District: {district_name}), {state_name}")
+            else:
+                st.info(f"📍 This location is in **{district_name}**, {state_name}")
+
             col1, col2, col3 = st.columns(3)
-            
+
             with col1:
                 if st.button("➕ Add to portfolio", key="_point_add_direct", type="primary", use_container_width=True):
-                    portfolio_add_fn(state_name, district_name)
-                    portfolio_set_flash_fn(f"Added {district_name}, {state_name}", "success")
+                    try:
+                        if is_block and block_name:
+                            portfolio_add_fn(state_name, district_name, block_name)
+                            portfolio_set_flash_fn(f"Added {block_name} ({district_name}), {state_name}", "success")
+                        else:
+                            portfolio_add_fn(state_name, district_name)
+                            portfolio_set_flash_fn(f"Added {district_name}, {state_name}", "success")
+                    except TypeError:
+                        portfolio_add_fn(state_name, district_name)
+                        portfolio_set_flash_fn(f"Added {district_name}, {state_name}", "success")
                     st.rerun()
-            
+
             with col2:
                 if st.button("🗺️ Show on map", key="_point_show_map", use_container_width=True):
-                    # Set the marker for the map to display
                     st.session_state["map_preview_marker"] = {
                         "lat": lat_input,
                         "lon": lon_input,
                         "district": district_name,
                         "state": state_name,
+                        "block": block_name,
                     }
-                    portfolio_set_flash_fn(f"📍 Showing {district_name} on map", "info")
-                    # Set flag to jump to map view
+                    if is_block and block_name:
+                        portfolio_set_flash_fn(f"📍 Showing {block_name} on map", "info")
+                    else:
+                        portfolio_set_flash_fn(f"📍 Showing {district_name} on map", "info")
                     st.session_state["jump_to_map"] = True
                     st.rerun()
-            
+
             with col3:
                 if st.button("💾 Save point", key="btn_save_point", use_container_width=True):
-                    # Check for duplicates
                     is_dup = any(
-                        abs(p.get("lat", 0) - lat_input) < 1e-6 and 
-                        abs(p.get("lon", 0) - lon_input) < 1e-6
+                        abs(p.get("lat", 0) - lat_input) < 1e-6 and abs(p.get("lon", 0) - lon_input) < 1e-6
                         for p in saved_points
                     )
                     if is_dup:
                         st.warning("This point is already saved")
                     else:
-                        saved_points.append({
-                            "lat": lat_input, 
+                        entry = {
+                            "lat": lat_input,
                             "lon": lon_input,
                             "label": None,
                             "district": district_name,
                             "state": state_name,
-                        })
+                        }
+                        if is_block and block_name:
+                            entry["block"] = block_name
+                        saved_points.append(entry)
                         st.session_state["point_query_points"] = saved_points
                         st.success("Point saved!")
                         st.rerun()
         else:
-            st.warning("Could not identify a district at this location")
-        
-        # Show current map marker status
+            st.warning("Could not identify a unit at this location")
+
         current_marker = st.session_state.get("map_preview_marker")
         if current_marker:
-            st.caption(
-                f"🗺️ Map marker active: {current_marker.get('district')}, "
-                f"{current_marker.get('state')} ({current_marker.get('lat'):.4f}, {current_marker.get('lon'):.4f})"
-            )
-            if st.button("✕ Clear map marker", key="_clear_map_marker", type="secondary"):
-                st.session_state["map_preview_marker"] = None
-                st.rerun()
+            label = current_marker.get("block") or current_marker.get("district")
+            if label:
+                st.caption(f"Map preview active: {label}. Switch to Map view to see marker.")
+        else:
+            st.caption("Tip: Use **Show on map** to preview the coordinate on the map.")
 
     # =========================================================================
-    # TAB 2: Batch Coordinate Input
+    # TAB 2: Batch Coordinate Entry
     # =========================================================================
     with tab_batch:
-        st.caption("Paste multiple coordinates to add several districts at once.")
-        
-        st.markdown("""
-        **Supported formats:**
-        - `lat, lon` (one per line)
-        - `lat, lon, label` (with optional label)
-        - `lat lon` (space-separated)
-        """)
-        
-        batch_input = st.text_area(
-            "Paste coordinates",
-            placeholder="17.3850, 78.4867\n18.1124, 79.0193, Warangal Office\n16.5062, 80.6480",
-            height=120,
-            key="_batch_coords_input",
+        st.markdown(
+            """
+            Paste multiple coordinates (one per line). Supported formats:
+            - `lat, lon`
+            - `lat, lon, label`
+            - `lat lon`
+            """
         )
-        
-        if batch_input.strip():
-            parsed = parse_batch_coordinates(batch_input)
-            
-            if parsed:
-                st.success(f"✓ Parsed {len(parsed)} coordinate(s)")
-                
-                # Preview parsed coordinates
-                preview_data = []
-                for lat, lon, label in parsed:
-                    result = find_district_at_point(merged, lat, lon)
-                    if result:
-                        state_name, district_name = result
-                        preview_data.append({
-                            "Label": label or "—",
-                            "Lat": f"{lat:.4f}",
-                            "Lon": f"{lon:.4f}",
-                            "District": district_name,
-                            "State": state_name,
-                        })
-                    else:
-                        preview_data.append({
-                            "Label": label or "—",
-                            "Lat": f"{lat:.4f}",
-                            "Lon": f"{lon:.4f}",
-                            "District": "Not found",
-                            "State": "—",
-                        })
-                
-                st.dataframe(
-                    pd.DataFrame(preview_data),
-                    hide_index=True,
-                    use_container_width=True,
-                )
-                
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    if st.button("➕ Add all to portfolio", key="_batch_add_all", type="primary", use_container_width=True):
-                        added = 0
-                        for lat, lon, label in parsed:
-                            result = find_district_at_point(merged, lat, lon)
-                            if result:
-                                portfolio_add_fn(result[0], result[1])
-                                added += 1
-                        
-                        if added > 0:
-                            portfolio_set_flash_fn(f"Added {added} district(s) to portfolio", "success")
-                        else:
-                            portfolio_set_flash_fn("No districts could be identified", "warning")
-                        st.rerun()
-                
-                with col2:
-                    if st.button("🗺️ Show all on map", key="_batch_show_map", use_container_width=True):
-                        # Add all points as markers
-                        markers = []
-                        for lat, lon, label in parsed:
-                            result = find_district_at_point(merged, lat, lon)
-                            if result:
-                                markers.append({
-                                    "lat": lat,
-                                    "lon": lon,
-                                    "label": label,
-                                    "district": result[1],
-                                    "state": result[0],
-                                })
-                        if markers:
-                            st.session_state["map_preview_markers"] = markers
-                            portfolio_set_flash_fn(f"📍 Showing {len(markers)} location(s) on map", "info")
-                            st.session_state["jump_to_map"] = True
-                            st.rerun()
-                
-                with col3:
-                    if st.button("💾 Save all points", key="_batch_save_all", use_container_width=True):
-                        saved_count = 0
-                        for lat, lon, label in parsed:
-                            # Check for duplicates
-                            is_dup = any(
-                                abs(p.get("lat", 0) - lat) < 1e-6 and 
-                                abs(p.get("lon", 0) - lon) < 1e-6
-                                for p in saved_points
-                            )
-                            if not is_dup:
-                                result = find_district_at_point(merged, lat, lon)
-                                saved_points.append({
-                                    "lat": lat,
-                                    "lon": lon,
-                                    "label": label,
-                                    "district": result[1] if result else None,
-                                    "state": result[0] if result else None,
-                                })
-                                saved_count += 1
-                        
-                        st.session_state["point_query_points"] = saved_points
-                        if saved_count > 0:
-                            st.success(f"Saved {saved_count} new point(s)")
-                            st.rerun()
-                        else:
-                            st.info("All points were already saved")
-            else:
-                st.warning("Could not parse any valid coordinates. Please check the format.")
 
-    # =========================================================================
-    # Saved Points Section (shown in both tabs)
-    # =========================================================================
-    if saved_points:
-        st.markdown("---")
-        st.markdown(f"**📌 Saved Points ({len(saved_points)})**")
-        
-        points_df_data = []
-        for idx, pt in enumerate(saved_points):
-            lat = pt.get("lat")
-            lon = pt.get("lon")
-            label = pt.get("label")
-            # Use cached district/state if available, otherwise look up
-            district = pt.get("district")
-            state = pt.get("state")
-            if not district or not state:
-                result = find_district_at_point(merged, lat, lon) if lat and lon else None
-                if result:
-                    state, district = result
-            
-            district_info = f"{district}, {state}" if district and state else "Unknown"
-            points_df_data.append({
-                "#": idx + 1,
-                "Label": label or "—",
-                "Lat": f"{lat:.4f}" if lat else "—",
-                "Lon": f"{lon:.4f}" if lon else "—",
-                "District": district_info,
-            })
-        
-        st.dataframe(
-            pd.DataFrame(points_df_data),
-            hide_index=True,
-            use_container_width=True,
+        batch_text = st.text_area(
+            "Batch coordinates",
+            value=st.session_state.get("point_query_batch_text", ""),
+            height=140,
+            key="_point_batch_text",
+            placeholder="17.3850, 78.4867, Home\n16.5062, 80.6480, Site B",
         )
+
+        colA, colB = st.columns(2)
+        with colA:
+            if st.button("Preview batch", key="btn_preview_batch", use_container_width=True):
+                pts = parse_batch_coordinates(batch_text)
+                previews = []
+                for lat, lon, label in pts:
+                    hit = _find_unit(lat, lon)
+                    if not hit:
+                        continue
+                    st_name, dist_name, blk_name = hit
+                    row = {"lat": lat, "lon": lon, "label": label, "state": st_name, "district": dist_name}
+                    if is_block and blk_name:
+                        row["block"] = blk_name
+                    previews.append(row)
+                st.session_state["point_query_batch_preview"] = previews
+                st.success(f"Previewed {len(previews)} point(s)")
+
+        with colB:
+            if st.button("Add batch to saved points", key="btn_batch_save_points", use_container_width=True):
+                pts = parse_batch_coordinates(batch_text)
+                added = 0
+                for lat, lon, label in pts:
+                    hit = _find_unit(lat, lon)
+                    if not hit:
+                        continue
+                    st_name, dist_name, blk_name = hit
+                    is_dup = any(abs(p.get("lat", 0) - lat) < 1e-6 and abs(p.get("lon", 0) - lon) < 1e-6 for p in saved_points)
+                    if is_dup:
+                        continue
+                    entry = {"lat": lat, "lon": lon, "label": label, "district": dist_name, "state": st_name}
+                    if is_block and blk_name:
+                        entry["block"] = blk_name
+                    saved_points.append(entry)
+                    added += 1
+                st.session_state["point_query_points"] = saved_points
+                st.success(f"Saved {added} point(s)")
+                st.rerun()
+
+        preview_rows = st.session_state.get("point_query_batch_preview", [])
+        if preview_rows:
+            st.markdown("**Preview**")
+            st.dataframe(preview_rows, hide_index=True, use_container_width=True)
+
+    st.markdown("---")
+    st.markdown("#### Saved points")
+
+    if saved_points:
+        display_rows = []
+        for p in saved_points:
+            row = {
+                "Label": p.get("label") or "",
+                "Lat": p.get("lat"),
+                "Lon": p.get("lon"),
+                "State": p.get("state"),
+                "District": p.get("district"),
+            }
+            if is_block:
+                row["Block"] = p.get("block", "")
+            display_rows.append(row)
+
+        st.dataframe(display_rows, hide_index=True, use_container_width=True)
 
         col1, col2, col3 = st.columns(3)
+
         with col1:
-            if st.button("➕ Add all to portfolio", key="_points_add_all", type="primary", use_container_width=True):
+            if st.button("➕ Add all to portfolio", key="btn_add_all_saved_points", type="primary", use_container_width=True):
                 added = 0
                 for pt in saved_points:
-                    state = pt.get("state")
-                    district = pt.get("district")
-                    if not state or not district:
-                        result = find_district_at_point(merged, pt.get("lat"), pt.get("lon"))
-                        if result:
-                            state, district = result
-                    if state and district:
-                        portfolio_add_fn(state, district)
+                    st_name = pt.get("state")
+                    dist_name = pt.get("district")
+                    blk_name = pt.get("block")
+                    if not st_name or not dist_name:
+                        continue
+                    try:
+                        if is_block and blk_name:
+                            portfolio_add_fn(st_name, dist_name, blk_name)
+                        else:
+                            portfolio_add_fn(st_name, dist_name)
                         added += 1
-                
-                if added > 0:
-                    portfolio_set_flash_fn(f"Added {added} district(s) to portfolio", "success")
-                else:
-                    portfolio_set_flash_fn("No districts could be identified", "warning")
+                    except TypeError:
+                        portfolio_add_fn(st_name, dist_name)
+                        added += 1
+                portfolio_set_flash_fn(f"Added {added} item(s) to portfolio", "success")
                 st.rerun()
-        
+
         with col2:
             if st.button("🗺️ Show on map", key="_points_show_map", use_container_width=True):
                 markers = []
                 for pt in saved_points:
                     lat = pt.get("lat")
                     lon = pt.get("lon")
-                    if lat and lon:
-                        markers.append({
+                    if lat is None or lon is None:
+                        continue
+                    markers.append(
+                        {
                             "lat": lat,
                             "lon": lon,
                             "label": pt.get("label"),
                             "district": pt.get("district"),
                             "state": pt.get("state"),
-                        })
+                            "block": pt.get("block"),
+                        }
+                    )
+
                 if markers:
                     st.session_state["map_preview_markers"] = markers
                     portfolio_set_flash_fn(f"📍 Showing {len(markers)} saved point(s) on map", "info")
                     st.session_state["jump_to_map"] = True
                     st.rerun()
-        
+
         with col3:
             if st.button("🗑 Clear all", key="btn_clear_saved_points", use_container_width=True):
                 st.session_state["point_query_points"] = []

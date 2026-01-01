@@ -39,31 +39,38 @@ import pandas as pd
 # Portfolio Badge & Summary
 # =============================================================================
 
-def render_portfolio_badge(portfolio_count: int) -> None:
+def render_portfolio_badge(portfolio_count: int, level: str = "district") -> None:
     """
     Render a compact portfolio summary badge.
+
+    Args:
+        portfolio_count: Number of units in the portfolio.
+        level: "district" or "block".
     """
     import streamlit as st
-    
+
+    level_norm = (level or "district").strip().lower()
+    unit_singular = "block" if level_norm == "block" else "district"
+    unit_plural = "blocks" if level_norm == "block" else "districts"
+
     if portfolio_count == 0:
         st.markdown(
-            """<div style="padding: 8px 12px; background: #f0f2f6; border-radius: 8px; 
+            f"""<div style="padding: 8px 12px; background: #f0f2f6; border-radius: 8px;
             text-align: center; color: #666;">
-            <span style="font-size: 1.1em;">📋</span> 
-            <strong>Portfolio empty</strong> — Click districts to add
+            <span style="font-size: 1.1em;">📋</span>
+            <strong>Portfolio empty</strong> — Click {unit_plural} to add
             </div>""",
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
-            f"""<div style="padding: 8px 12px; background: #e8f4e8; border-radius: 8px; 
+            f"""<div style="padding: 8px 12px; background: #e8f4e8; border-radius: 8px;
             text-align: center; color: #2d5a2d;">
-            <span style="font-size: 1.1em;">📋</span> 
-            <strong>{portfolio_count} district{'s' if portfolio_count != 1 else ''}</strong> in portfolio
+            <span style="font-size: 1.1em;">📋</span>
+            <strong>{portfolio_count} {unit_singular}{'s' if portfolio_count != 1 else ''}</strong> in portfolio
             </div>""",
             unsafe_allow_html=True,
         )
-
 
 # =============================================================================
 # Portfolio District List
@@ -72,47 +79,80 @@ def render_portfolio_badge(portfolio_count: int) -> None:
 def render_portfolio_list(
     *,
     portfolio: Sequence[Any],
-    portfolio_remove_fn: Callable[[str, str], None],
+    portfolio_remove_fn: Callable[..., None],
     normalize_fn: Callable[[str], str],
     max_visible: int = 8,
+    level: str = "district",
 ) -> None:
     """
-    Render the portfolio district list with remove buttons.
+    Render the portfolio unit list (districts or blocks) with remove buttons.
     """
     import streamlit as st
-    
+
+    level_norm = (level or "district").strip().lower()
+    is_block = level_norm == "block"
+
     if not portfolio:
-        st.caption("No districts selected yet. Add districts from the map or rankings table.")
+        st.caption(
+            "No blocks selected yet. Add blocks from the map, rankings table, or by coordinates."
+            if is_block
+            else "No districts selected yet. Add districts from the map, rankings table, or by coordinates."
+        )
         return
-    
-    # Convert to list of dicts
-    districts = []
+
+    # Normalize portfolio items into dicts: {"state": ..., "district": ..., "block": ...}
+    items: list[dict[str, str]] = []
     for d in portfolio:
         if isinstance(d, dict):
-            districts.append(d)
-        elif isinstance(d, (list, tuple)) and len(d) >= 2:
-            districts.append({"state": d[0], "district": d[1]})
-    
-    # Determine what to show
-    show_all = st.session_state.get("_portfolio_show_all", False) or len(districts) <= max_visible
-    display_districts = districts if show_all else districts[:max_visible]
-    
-    for d in display_districts:
-        state_i = str(d.get("state", "")).strip()
-        district_i = str(d.get("district", "")).strip()
-        
+            items.append(
+                {
+                    "state": str(d.get("state", "")).strip(),
+                    "district": str(d.get("district", "")).strip(),
+                    "block": str(d.get("block", "")).strip(),
+                }
+            )
+        elif isinstance(d, (list, tuple)):
+            if len(d) >= 3:
+                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": str(d[2]).strip()})
+            elif len(d) >= 2:
+                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": ""})
+
+    items = [x for x in items if x.get("state") and x.get("district") and (not is_block or x.get("block"))]
+
+    show_all = st.session_state.get("_portfolio_show_all", False) or len(items) <= max_visible
+    display_items = items if show_all else items[:max_visible]
+
+    for d in display_items:
+        state_i = d.get("state", "")
+        district_i = d.get("district", "")
+        block_i = d.get("block", "")
+
         col1, col2 = st.columns([5, 1])
         with col1:
-            st.markdown(f"**{district_i}**, {state_i}")
+            if is_block:
+                st.markdown(f"**{block_i}** ({district_i}, {state_i})")
+            else:
+                st.markdown(f"**{district_i}**, {state_i}")
         with col2:
-            key = f"btn_portfolio_remove_{normalize_fn(state_i)}_{normalize_fn(district_i)}"
-            if st.button("×", key=key, help=f"Remove {district_i}"):
-                portfolio_remove_fn(state_i, district_i)
+            key_parts = [normalize_fn(state_i), normalize_fn(district_i)]
+            if is_block:
+                key_parts.append(normalize_fn(block_i))
+            key = "btn_portfolio_remove_" + "_".join(key_parts)
+
+            if st.button("×", key=key, help=f"Remove {block_i if is_block else district_i}"):
+                try:
+                    if is_block:
+                        portfolio_remove_fn(state_i, district_i, block_i)
+                    else:
+                        portfolio_remove_fn(state_i, district_i)
+                except TypeError:
+                    # Backward-compat: older remove functions only accept (state, district)
+                    portfolio_remove_fn(state_i, district_i)
                 st.rerun()
-    
+
     # Show more/less toggle
-    if len(districts) > max_visible:
-        remaining = len(districts) - max_visible
+    if len(items) > max_visible:
+        remaining = len(items) - max_visible
         if show_all:
             if st.button("Show less", key="_portfolio_show_less"):
                 st.session_state["_portfolio_show_all"] = False
@@ -132,21 +172,25 @@ def render_clear_portfolio_button(
     portfolio_count: int,
     clear_fn: Callable[[], None],
     set_flash_fn: Callable[[str, str], None],
+    level: str = "district",
 ) -> None:
     """Render clear all button with inline confirmation."""
     import streamlit as st
-    
+
     if portfolio_count == 0:
         return
-    
+
+    level_norm = (level or "district").strip().lower()
+    unit_plural = "blocks" if level_norm == "block" else "districts"
+
     confirm_state = st.session_state.get("confirm_clear_portfolio", False)
-    
+
     if not confirm_state:
         if st.button("🗑 Clear all", key="btn_portfolio_remove_all", type="secondary"):
             st.session_state["confirm_clear_portfolio"] = True
             st.rerun()
     else:
-        st.warning(f"Remove all {portfolio_count} districts?")
+        st.warning(f"Remove all {portfolio_count} {unit_plural}?")
         col1, col2 = st.columns(2)
         with col1:
             if st.button("✓ Yes, clear", key="btn_portfolio_remove_all_confirm", type="primary"):
@@ -231,34 +275,56 @@ def render_comparison_table(
     risk_class_from_percentile_fn: Callable[[float], str],
     normalize_fn: Callable[[str], str],
     build_portfolio_multiindex_df_fn: Callable[..., pd.DataFrame],
+    level: str = "district",
 ) -> Optional[pd.DataFrame]:
     """
     Render the comparison table with auto-rebuild on changes.
+
+    District mode:
+      - loads master_metrics_by_district.csv
+      - matches rows on (state, district)
+
+    Block mode:
+      - loads master_metrics_by_block.csv
+      - matches rows on (state, district, block)
     """
     import streamlit as st
     import os
     from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
-    
+
+    level_norm = (level or "district").strip().lower()
+    is_block = level_norm == "block"
+
     if not portfolio or not selected_slugs:
         return None
-    
-    # Build context for cache invalidation
+
+    # Build context for cache invalidation (level-aware)
+    def _unit_tuple(item: Any) -> tuple:
+        if isinstance(item, dict):
+            st_name = item.get("state")
+            dist_name = item.get("district")
+            blk_name = item.get("block")
+        else:
+            tup = tuple(item)
+            st_name = tup[0] if len(tup) > 0 else None
+            dist_name = tup[1] if len(tup) > 1 else None
+            blk_name = tup[2] if len(tup) > 2 else None
+
+        return (st_name, dist_name, blk_name) if is_block else (st_name, dist_name)
+
     context = {
-        "districts": [
-            (d.get("state"), d.get("district")) if isinstance(d, dict) else tuple(d[:2])
-            for d in portfolio
-        ],
+        "level": level_norm,
+        "units": [_unit_tuple(d) for d in portfolio],
         "slugs": list(selected_slugs),
         "scenario": sel_scenario,
         "period": sel_period,
         "stat": sel_stat,
     }
-    
-    # Check if rebuild needed
+
     prev_context = st.session_state.get("portfolio_multiindex_context")
     cached_df = st.session_state.get("portfolio_multiindex_df")
     needs_rebuild = cached_df is None or prev_context != context
-    
+
     # Helper functions
     def _resolve_proc_root_for_slug(slug: str) -> Path:
         env_root = os.getenv("IRT_PROCESSED_ROOT")
@@ -271,47 +337,80 @@ def render_comparison_table(
 
     def _load_master_and_schema_for_slug(slug: str):
         proc_root = _resolve_proc_root_for_slug(slug)
-        master_path = proc_root / pilot_state / "master_metrics_by_district.csv"
-        
+        master_fname = "master_metrics_by_block.csv" if is_block else "master_metrics_by_district.csv"
+        master_path = proc_root / pilot_state / master_fname
+
         cache = st.session_state.setdefault("_portfolio_master_cache", {})
         cache_key = f"{slug}::{master_path}"
-        
+
         try:
             mtime = master_path.stat().st_mtime
         except Exception:
             mtime = None
-        
+
         entry = cache.get(cache_key)
         if entry and entry.get("mtime") == mtime:
             return entry["df"], entry["schema_items"], entry["metrics"], entry["by_metric"]
-        
+
         if not master_path.exists():
             empty = pd.DataFrame()
             cache[cache_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "mtime": mtime}
             return empty, [], [], {}
-        
+
         df = load_master_csv_fn(str(master_path))
         df = normalize_master_columns_fn(df)
-        schema, metrics, by_metric = parse_master_schema_fn(df.columns)
-        
-        cache[cache_key] = {"df": df, "schema_items": schema, "metrics": metrics, "by_metric": by_metric, "mtime": mtime}
-        return df, schema, metrics, by_metric
 
-    def _match_row_idx(df_local, st_name, dist_name):
+        # Your schema parser expects columns, keep that contract
+        schema_items, metrics, by_metric = parse_master_schema_fn(df.columns)
+
+        cache[cache_key] = {"df": df, "schema_items": schema_items, "metrics": metrics, "by_metric": by_metric, "mtime": mtime}
+        return df, schema_items, metrics, by_metric
+
+    def _match_row_idx(df_local, st_name, dist_name, blk_name: Optional[str] = None):
         if df_local is None or df_local.empty:
             return None
-        if "state" not in df_local.columns or "district" not in df_local.columns:
+
+        # Support both naming styles (some loaders may use *_name)
+        state_col_name = "state" if "state" in df_local.columns else ("state_name" if "state_name" in df_local.columns else None)
+        district_col_name = "district" if "district" in df_local.columns else ("district_name" if "district_name" in df_local.columns else None)
+        block_col_name = None
+        if is_block:
+            block_col_name = "block" if "block" in df_local.columns else ("block_name" if "block_name" in df_local.columns else None)
+
+        if state_col_name is None or district_col_name is None:
             return None
-        
+        if is_block and block_col_name is None:
+            return None
+
         st_norm = normalize_fn(st_name)
         dist_norm = normalize_fn(dist_name)
-        state_col = df_local["state"].astype(str).map(normalize_fn)
-        dist_col = df_local["district"].astype(str).map(normalize_fn)
-        
+        state_col = df_local[state_col_name].astype(str).map(normalize_fn)
+        dist_col = df_local[district_col_name].astype(str).map(normalize_fn)
+
+        if is_block:
+            if not blk_name:
+                return None
+            blk_norm = normalize_fn(blk_name)
+            blk_col = df_local[block_col_name].astype(str).map(normalize_fn)
+
+            exact = (state_col == st_norm) & (dist_col == dist_norm) & (blk_col == blk_norm)
+            if exact.any():
+                return int(df_local.index[exact][0])
+
+            try:
+                contains = blk_col.str.contains(blk_norm, na=False)
+                fallback = (state_col == st_norm) & (dist_col == dist_norm) & contains
+                if fallback.any():
+                    return int(df_local.index[fallback][0])
+            except Exception:
+                pass
+
+            return None
+
         exact = (state_col == st_norm) & (dist_col == dist_norm)
         if exact.any():
             return int(df_local.index[exact][0])
-        
+
         try:
             contains = dist_col.str.contains(dist_norm, na=False)
             fallback = (state_col == st_norm) & contains
@@ -319,18 +418,25 @@ def render_comparison_table(
                 return int(df_local.index[fallback][0])
         except Exception:
             pass
+
         return None
 
     def _compute_rank_and_percentile(df_local, st_name, metric_col, value):
+        state_col_name = "state" if "state" in df_local.columns else ("state_name" if "state_name" in df_local.columns else "state")
         return compute_rank_and_percentile(
-            df_local, st_name, metric_col, value,
-            state_col="state", normalize_fn=normalize_fn, percentile_method="le"
+            df_local,
+            st_name,
+            metric_col,
+            value,
+            state_col=state_col_name,
+            normalize_fn=normalize_fn,
+            percentile_method="le",
         )
 
     # Build or use cached table
     if needs_rebuild:
         with st.spinner("Building comparison table..."):
-            df = build_portfolio_multiindex_df_fn(
+            kwargs = dict(
                 portfolio=portfolio,
                 selected_slugs=selected_slugs,
                 variables=variables,
@@ -346,23 +452,30 @@ def render_comparison_table(
                 risk_class_from_percentile=risk_class_from_percentile_fn,
                 normalize_fn=normalize_fn,
             )
+
+            # Prefer passing level if the builder supports it; fallback if not
+            try:
+                df = build_portfolio_multiindex_df_fn(**kwargs, level=level_norm)
+            except TypeError:
+                df = build_portfolio_multiindex_df_fn(**kwargs)
+
             st.session_state["portfolio_multiindex_df"] = df
             st.session_state["portfolio_multiindex_context"] = context
             cached_df = df
-    
+
     # Display table
     if cached_df is not None and not cached_df.empty:
         st.dataframe(cached_df, hide_index=True, use_container_width=True)
-        
+
         st.download_button(
             "⬇️ Download as CSV",
             data=cached_df.to_csv(index=False).encode("utf-8"),
-            file_name="portfolio_comparison.csv",
+            file_name=f"portfolio_comparison_{level_norm}.csv",
             mime="text/csv",
         )
-        
+
         return cached_df
-    
+
     return None
 
 
@@ -618,27 +731,32 @@ def _offer_figure_download(fig: Any, filename: str, label: str) -> None:
 def render_coordinate_lookup(
     *,
     merged: Any,
-    portfolio_add_fn: Callable[[str, str], None],
+    portfolio_add_fn: Callable[..., None],
     set_flash_fn: Callable[[str, str], None],
+    level: str = "district",
 ) -> None:
     """
-    Render coordinate-based district lookup.
-    
-    This wraps the full render_point_selection_panel from point_selection_ui.py
-    which includes:
-    - Single coordinate entry with preview
-    - Batch coordinate input (paste multiple)
-    - Show on map functionality
-    - Saved points management
+    Render coordinate-based unit lookup.
+
+    This wraps render_point_selection_panel from point_selection_ui.py
+    and forwards admin level so the panel can resolve district vs block.
     """
     from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
-    
-    # Create a key function (required by render_point_selection_panel but not used for much)
-    def _portfolio_key_fn(state: str, district: str) -> tuple:
-        return (state.lower().replace(" ", ""), district.lower().replace(" ", ""))
-    
+
+    level_norm = (level or "district").strip().lower()
+    is_block = level_norm == "block"
+
+    def _portfolio_key_fn(state: str, district: str, block: Optional[str] = None) -> tuple:
+        s = state.lower().replace(" ", "")
+        d = district.lower().replace(" ", "")
+        if is_block:
+            b = (block or "").lower().replace(" ", "")
+            return (s, d, b)
+        return (s, d)
+
     render_point_selection_panel(
         merged=merged,
+        level=level_norm,
         portfolio_add_fn=portfolio_add_fn,
         portfolio_key_fn=_portfolio_key_fn,
         portfolio_set_flash_fn=set_flash_fn,
@@ -654,6 +772,7 @@ def render_portfolio_panel(
     # State/selection context
     selected_state: str,
     portfolio_route: Optional[str],  # Kept for backward compat, ignored
+    level: str = "district",
     # Variable/metric context
     variables: Mapping[str, Mapping[str, Any]],
     variable_slug: str,
@@ -677,94 +796,104 @@ def render_portfolio_panel(
     find_baseline_column_for_stat_fn: Callable[..., Optional[str]],
     risk_class_from_percentile_fn: Callable[[float], str],
     portfolio_normalize_fn: Callable[[str], str],
-    portfolio_remove_fn: Callable[[str, str], None],
+    portfolio_remove_fn: Callable[..., None],
     portfolio_remove_all_fn: Callable[[], None],
     build_portfolio_multiindex_df_fn: Callable[..., pd.DataFrame],
 ) -> None:
     """
-    Render the complete multi-district portfolio panel.
-    
+    Render the complete portfolio panel (district or block).
+
     Note: portfolio_route parameter is kept for backward compatibility but ignored.
-    The new design doesn't require mandatory route selection.
     """
     import streamlit as st
     from india_resilience_tool.analysis.portfolio import portfolio_add, portfolio_contains
-    
-    # Helper functions for add/contains
-    def _add(state: str, district: str) -> None:
-        portfolio_add(st.session_state, state, district, normalize_fn=portfolio_normalize_fn)
-    
-    def _contains(state: str, district: str) -> bool:
-        return portfolio_contains(st.session_state, state, district, normalize_fn=portfolio_normalize_fn)
-    
-    def _set_flash(msg: str, level: str) -> None:
-        st.session_state["_portfolio_flash"] = {"message": msg, "level": level}
-    
-    portfolio = st.session_state.get("portfolio_districts", [])
-    
-    # Flash messages
+
+    level_norm = (level or "district").strip().lower()
+    is_block = level_norm == "block"
+    unit_plural = "blocks" if is_block else "districts"
+
+    def _add(state: str, district: str, block: Optional[str] = None) -> None:
+        try:
+            portfolio_add(st.session_state, state, district, block=block, level=level_norm, normalize_fn=portfolio_normalize_fn)
+        except TypeError:
+            portfolio_add(st.session_state, state, district, normalize_fn=portfolio_normalize_fn)
+
+    def _contains(state: str, district: str, block: Optional[str] = None) -> bool:
+        try:
+            return bool(portfolio_contains(st.session_state, state, district, block=block, level=level_norm, normalize_fn=portfolio_normalize_fn))
+        except TypeError:
+            return bool(portfolio_contains(st.session_state, state, district, normalize_fn=portfolio_normalize_fn))
+
+    def _set_flash(msg: str, level_: str) -> None:
+        st.session_state["_portfolio_flash"] = {"message": msg, "level": level_}
+
+    storage_key = "portfolio_blocks" if is_block else "portfolio_districts"
+    portfolio = st.session_state.get(storage_key, [])
+
     flash = st.session_state.pop("_portfolio_flash", None)
     if flash:
-        level = flash.get("level", "success")
+        lvl = flash.get("level", "success")
         msg = flash.get("message", "")
-        if level == "success":
+        if lvl == "success":
             st.success(msg)
-        elif level == "warning":
+        elif lvl == "warning":
             st.warning(msg)
-        elif level == "error":
+        elif lvl == "error":
             st.error(msg)
         else:
             st.info(msg)
-    
-    # Section 1: Portfolio Summary
+
     st.markdown("### 📋 Your Portfolio")
-    render_portfolio_badge(len(portfolio))
-    
+    render_portfolio_badge(len(portfolio), level=level_norm)
+
     if portfolio:
-        with st.expander("Manage portfolio districts", expanded=False):
+        with st.expander(f"Manage portfolio {unit_plural}", expanded=False):
             render_portfolio_list(
                 portfolio=portfolio,
                 portfolio_remove_fn=portfolio_remove_fn,
                 normalize_fn=portfolio_normalize_fn,
                 max_visible=8,
+                level=level_norm,
             )
             st.markdown("---")
             render_clear_portfolio_button(
                 portfolio_count=len(portfolio),
                 clear_fn=portfolio_remove_all_fn,
                 set_flash_fn=_set_flash,
+                level=level_norm,
             )
-    
+
     st.markdown("---")
-    
-    # Section 2: How to Add (when empty)
+
     if not portfolio:
-        st.markdown("#### How to add districts")
-        st.markdown("""
-        **From the map:** Click any district, then click **+ Add to portfolio**
-        
+        st.markdown(f"#### How to add {unit_plural}")
+        st.markdown(
+            f"""
+        **From the map:** Click any {('block' if is_block else 'district')}, then click **+ Add to portfolio**
+
         **From rankings:** Use the **+ Add** buttons in the rankings table
-        
+
         **By coordinates:** Use the location panel below
-        """)
-        
+        """
+        )
+
         render_coordinate_lookup(
             merged=merged,
+            level=level_norm,
             portfolio_add_fn=_add,
             set_flash_fn=_set_flash,
         )
-    
-    # Section 3: Comparison Analysis (when portfolio has districts)
+
     if portfolio:
         st.markdown("### 📊 Portfolio Comparison")
-        
+
         current_selection = st.session_state.get("portfolio_multiindex_selection", [variable_slug])
         selected_slugs = render_index_selector(
             variables=variables,
             current_slug=variable_slug,
             selected_slugs=current_selection,
         )
-        
+
         if not selected_slugs:
             st.info("Select at least one index to compare.")
         else:
@@ -786,14 +915,14 @@ def render_portfolio_panel(
                 risk_class_from_percentile_fn=risk_class_from_percentile_fn,
                 normalize_fn=portfolio_normalize_fn,
                 build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
+                level=level_norm,
             )
-            
+
             st.caption(
-                f"Comparing {len(portfolio)} districts across {len(selected_slugs)} indices • "
+                f"Comparing {len(portfolio)} {unit_plural} across {len(selected_slugs)} indices • "
                 f"{sel_scenario} • {sel_period} • {sel_stat}"
             )
-            
-            # Section 4: Visualizations (when we have comparison data)
+
             if cached_df is not None and not cached_df.empty:
                 st.markdown("---")
                 with st.expander("📈 Visualizations", expanded=True):
@@ -802,11 +931,11 @@ def render_portfolio_panel(
                         default_value_col="Percentile",
                         default_chart_type="heatmap",
                     )
-        
-        # Coordinate lookup also available when portfolio not empty
+
         st.markdown("---")
         render_coordinate_lookup(
             merged=merged,
+            level=level_norm,
             portfolio_add_fn=_add,
             set_flash_fn=_set_flash,
         )
