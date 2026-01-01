@@ -50,14 +50,36 @@ def render_risk_summary(
     sel_period: str,
     sel_stat: str,
     state_to_show: str,
+    level: str = "district",
+    parent_district_name: Optional[str] = None,
+    rank_in_district: Optional[int] = None,
+    n_in_district: Optional[int] = None,
+    percentile_district: Optional[float] = None,
 ) -> None:
-    """Render the Risk summary expander with three metric cards."""
+    """
+    Render the Risk summary expander.
+
+    District mode:
+        - Current value
+        - Change vs baseline
+        - Position in state
+
+    Block mode:
+        - Current value
+        - Change vs baseline
+        - Position in district
+        - Position in state
+    """
     import streamlit as st
 
-    with st.expander("Risk summary", expanded=True):
-        colc1, colc2, colc3 = st.columns(3)
+    level_norm = str(level).strip().lower()
+    is_block = level_norm == "block"
 
-        with colc1:
+    with st.expander("Risk summary", expanded=True):
+        cols = st.columns(4) if is_block else st.columns(3)
+
+        # --- Current value ---
+        with cols[0]:
             st.markdown("**Current value**")
             if current_val_f is not None:
                 st.metric(
@@ -69,7 +91,8 @@ def render_risk_summary(
             else:
                 st.write("No data")
 
-        with colc2:
+        # --- Change vs baseline ---
+        with cols[1]:
             st.markdown("**Change vs baseline**")
             if current_val_f is not None and baseline_val_f is not None:
                 diff_abs = current_val_f - baseline_val_f
@@ -82,7 +105,6 @@ def render_risk_summary(
                 if diff_pct is not None:
                     delta_str += f" ({diff_pct:+.1f}%)"
 
-                # Pretty baseline descriptor
                 if baseline_col:
                     parts = str(baseline_col).split("__")
                     if len(parts) == 4:
@@ -103,19 +125,53 @@ def render_risk_summary(
             else:
                 st.write("Baseline not available")
 
-        with colc3:
+        # --- Position in district (block mode only) ---
+        if is_block:
+            with cols[2]:
+                st.markdown("**Position in district**")
+                if rank_in_district is not None and n_in_district is not None:
+                    rank_label = f"{rank_in_district}/{n_in_district}"
+                    district_label = parent_district_name or "selected district"
+                    if percentile_district is not None:
+                        help_text = (
+                            f"Approximate percentile: {percentile_district:.0f}th\n"
+                            f"Computed among {n_in_district} blocks in {district_label} "
+                            f"for this index (higher values = higher rank)."
+                        )
+                    else:
+                        help_text = (
+                            f"Computed among {n_in_district} blocks in {district_label} "
+                            f"(higher values = higher rank)."
+                        )
+
+                    st.metric(
+                        label="Rank in district",
+                        label_visibility="collapsed",
+                        value=rank_label,
+                        help=help_text,
+                    )
+                else:
+                    st.write("Insufficient data")
+
+            pos_state_col = cols[3]
+        else:
+            pos_state_col = cols[2]
+
+        # --- Position in state ---
+        with pos_state_col:
             st.markdown("**Position in state**")
             if rank_in_state is not None and n_in_state is not None:
                 rank_label = f"{rank_in_state}/{n_in_state}"
+                unit_word = "blocks" if is_block else "districts"
                 if percentile_state is not None:
                     help_text = (
                         f"Approximate percentile: {percentile_state:.0f}th\n"
-                        f"Computed among {n_in_state} districts in {state_to_show} "
+                        f"Computed among {n_in_state} {unit_word} in {state_to_show} "
                         f"for this index (higher values = higher rank)."
                     )
                 else:
                     help_text = (
-                        f"Computed among {n_in_state} districts in {state_to_show} "
+                        f"Computed among {n_in_state} {unit_word} in {state_to_show} "
                         f"(higher values = higher rank)."
                     )
 
@@ -709,7 +765,15 @@ def render_details_panel(
     district_for_fs: Optional[str] = None,
     # Optional: Resilience Actions logo
     logo_path: Optional[Path] = None,
+    # Block-level support
+    level: str = "district",
+    block_name: Optional[str] = None,
+    parent_district_name: Optional[str] = None,
+    rank_in_district: Optional[int] = None,
+    n_in_district: Optional[int] = None,
+    percentile_district: Optional[float] = None,
 ) -> None:
+
     """
     Render the complete single-district details panel (right column).
 
@@ -720,7 +784,30 @@ def render_details_panel(
     - Preserves all session_state keys
     - Takes explicit inputs rather than relying on globals
     """
+    import streamlit as st
+
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
+
+    level_norm = str(level).strip().lower()
+    is_block = level_norm == "block"
+
+    # Header (block-aware)
+    if is_block:
+        unit_name = (
+            block_name
+            or (str(row.get("block_name")).strip() if "block_name" in row else "")
+            or district_name
+        )
+        parent_dist = (
+            parent_district_name
+            or (str(row.get("district_name")).strip() if "district_name" in row else "")
+            or selected_district
+        )
+        st.subheader(f"{unit_name} (Block)")
+        st.caption(f"District: {parent_dist} | State: {state_to_show}")
+    else:
+        st.subheader(f"{district_name} (District)")
+        st.caption(f"State: {state_to_show}")
 
     # Normalize panel figure size to 16:9 (dashboard style contract)
     fig_size_panel_169 = fig_size_panel
@@ -755,6 +842,11 @@ def render_details_panel(
         sel_period=sel_period,
         sel_stat=sel_stat,
         state_to_show=state_to_show,
+        level=level,
+        parent_district_name=parent_district_name,
+        rank_in_district=rank_in_district,
+        n_in_district=n_in_district,
+        percentile_district=percentile_district,
     )
 
     # 2. Trend over time
@@ -828,19 +920,25 @@ def render_details_panel(
         slugify_fs_fn=slugify_fs_fn,
     )
 
-    # 6. District comparison
-    render_district_comparison(
-        merged=merged,
-        state_to_show=state_to_show,
-        district_name=district_name,
-        metric_col=metric_col,
-        current_val_f=current_val_f,
-        variable_label=variable_label,
-        sel_stat=sel_stat,
-        fig_size_mini=fig_size_mini_169,
-        fig_dpi_panel=fig_dpi_panel,
-        font_size_title=font_size_title,
-        font_size_label=font_size_label,
-        font_size_ticks=font_size_ticks,
-        logo_path=logo_path,
-    )
+    # 6. District comparison (district-mode only)
+    if str(level).strip().lower() != "block":
+        render_district_comparison(
+            merged=merged,
+            state_to_show=state_to_show,
+            district_name=district_name,
+            metric_col=metric_col,
+            current_val_f=current_val_f,
+            variable_label=variable_label,
+            sel_stat=sel_stat,
+            fig_size_mini=fig_size_mini_169,
+            fig_dpi_panel=fig_dpi_panel,
+            font_size_title=font_size_title,
+            font_size_label=font_size_label,
+            font_size_ticks=font_size_ticks,
+            logo_path=logo_path,
+        )
+    else:
+        import streamlit as st
+
+        with st.expander("District comparison", expanded=False):
+            st.caption("District comparison is not available in block mode yet.")

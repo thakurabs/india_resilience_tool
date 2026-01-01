@@ -33,6 +33,7 @@ def render_state_summary_view(
     *,
     # State/selection context
     selected_state: str,
+    selected_district: str = "All",
     # Variable/metric context
     variables: Mapping[str, Mapping[str, Any]],
     variable_slug: str,
@@ -43,12 +44,14 @@ def render_state_summary_view(
     # Pre-computed metrics
     ensemble: dict,
     per_model_df: pd.DataFrame,
-    sel_districts_gdf: Any,  # GeoDataFrame or None
+    sel_districts_gdf: Any,  # GeoDataFrame or None (districts OR blocks depending on level)
     # Config
     processed_root: Path,
     pilot_state: str,
     # Callable dependencies
     make_state_boxplot_fn: Callable[..., Any],
+    # Block-level support
+    level: str = "district",
 ) -> None:
     """
     Render the state summary view (shown when no district is selected).
@@ -61,22 +64,48 @@ def render_state_summary_view(
 
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
 
-    st.subheader(f"{selected_state} — State summary")
-    st.markdown(
-        f"**Index:** {variable_label}  \n"
-        f"**Scenario:** {sel_scenario}  \n"
-        f"**Period:** {sel_period}"
-    )
+    level_norm = str(level).strip().lower()
+    is_block = level_norm == "block"
 
-    # --- Expander 1: District-wise distribution across models (boxplot) ---
-    with st.expander("District-wise distribution across models", expanded=False):
+    if is_block and selected_district != "All":
+        st.subheader(f"{selected_district} — District summary (Blocks)")
+        st.markdown(
+            f"**State:** {selected_state}  \n"
+            f"**District:** {selected_district}  \n"
+            f"**Index:** {variable_label}  \n"
+            f"**Scenario:** {sel_scenario}  \n"
+            f"**Period:** {sel_period}"
+        )
+        n_units = (
+            ensemble.get("n_blocks")
+            or ensemble.get("n_units")
+            or ensemble.get("n_districts")
+            or 0
+        )
+        st.caption(f"Showing {int(n_units)} blocks in {selected_district} district")
+        exp_title = "Block-wise distribution across models"
+        btn_label = "Generate block-wise boxplot"
+        btn_key = f"btn_block_boxplot_{variable_slug}_{selected_state}_{selected_district}_{sel_scenario}_{sel_period}_{sel_stat}"
+    else:
+        st.subheader(f"{selected_state} — State summary")
+        st.markdown(
+            f"**Index:** {variable_label}  \n"
+            f"**Scenario:** {sel_scenario}  \n"
+            f"**Period:** {sel_period}"
+        )
+        exp_title = "District-wise distribution across models"
+        btn_label = "Generate district-wise boxplot"
+        btn_key = f"btn_state_boxplot_{variable_slug}_{selected_state}_{sel_scenario}_{sel_period}_{sel_stat}"
+
+    # --- Expander 1: Unit-wise distribution across models (boxplot) ---
+    with st.expander(exp_title, expanded=False):
         st.caption(
             "This figure can be slow to generate because it uses per-model "
             "distributions for each district."
         )
         if st.button(
-            "Generate district-wise boxplot",
-            key=f"btn_state_boxplot_{variable_slug}_{selected_state}_{sel_scenario}_{sel_period}_{sel_stat}",
+            btn_label,
+            key=btn_key,
         ):
             fig_box = make_state_boxplot_fn(
                 sel_districts_gdf=sel_districts_gdf,
