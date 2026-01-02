@@ -218,10 +218,18 @@ def _make_state_yearly_pdf(
     if df_yearly is None or df_yearly.empty:
         return None
     d = df_yearly.copy()
+    
+    # Handle both 'state' and 'state_name' column naming conventions
+    state_col = "state" if "state" in d.columns else ("state_name" if "state_name" in d.columns else None)
+    scenario_col = "scenario" if "scenario" in d.columns else None
+    
+    if state_col is None or scenario_col is None:
+        return None
+    
     d = d[
-        (d["state"].astype(str).str.strip().str.lower() == state_name.strip().lower())
+        (d[state_col].astype(str).str.strip().str.lower() == state_name.strip().lower())
         & (
-            d["scenario"]
+            d[scenario_col]
             .astype(str)
             .str.strip()
             .str.lower()

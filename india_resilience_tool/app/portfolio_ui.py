@@ -649,21 +649,31 @@ def _render_grouped_bar_section(
     with st.expander("Bar chart options", expanded=False):
         col1, col2, col3 = st.columns(3)
         with col1:
-            max_districts = st.slider(
-                "Max districts",
-                min_value=1,
-                max_value=min(15, max(n_districts, 1)),
-                value=min(10, n_districts),
-                key="_bar_max_districts",
-            )
+            max_districts_max = min(15, max(n_districts, 1))
+            if max_districts_max <= 1:
+                max_districts = 1
+                st.caption("Max districts: 1")
+            else:
+                max_districts = st.slider(
+                    "Max districts",
+                    min_value=1,
+                    max_value=max_districts_max,
+                    value=min(10, max_districts_max),
+                    key="_bar_max_districts",
+                )
         with col2:
-            max_indices = st.slider(
-                "Max indices",
-                min_value=1,
-                max_value=min(10, max(n_indices, 1)),
-                value=min(6, n_indices),
-                key="_bar_max_indices",
-            )
+            max_indices_max = min(10, max(n_indices, 1))
+            if max_indices_max <= 1:
+                max_indices = 1
+                st.caption("Max indices: 1")
+            else:
+                max_indices = st.slider(
+                    "Max indices",
+                    min_value=1,
+                    max_value=max_indices_max,
+                    value=min(6, max_indices_max),
+                    key="_bar_max_indices",
+                )
         with col3:
             horizontal = st.checkbox(
                 "Horizontal bars",
@@ -814,13 +824,13 @@ def render_portfolio_panel(
 
     def _add(state: str, district: str, block: Optional[str] = None) -> None:
         try:
-            portfolio_add(st.session_state, state, district, block=block, level=level_norm, normalize_fn=portfolio_normalize_fn)
+            portfolio_add(st.session_state, state, district, block_name=block, level=level_norm, normalize_fn=portfolio_normalize_fn)
         except TypeError:
             portfolio_add(st.session_state, state, district, normalize_fn=portfolio_normalize_fn)
 
     def _contains(state: str, district: str, block: Optional[str] = None) -> bool:
         try:
-            return bool(portfolio_contains(st.session_state, state, district, block=block, level=level_norm, normalize_fn=portfolio_normalize_fn))
+            return bool(portfolio_contains(st.session_state, state, district, block_name=block, level=level_norm, normalize_fn=portfolio_normalize_fn))
         except TypeError:
             return bool(portfolio_contains(st.session_state, state, district, normalize_fn=portfolio_normalize_fn))
 

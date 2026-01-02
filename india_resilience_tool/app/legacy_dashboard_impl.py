@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+"""
+Legacy Streamlit dashboard orchestrator for the India Resilience Tool.
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
+"""
 from __future__ import annotations
 import io, os, re, json, zipfile, shutil, subprocess, unicodedata, difflib, copy
 from datetime import datetime
@@ -28,7 +34,11 @@ from india_resilience_tool.data.adm2_loader import (
     featurecollections_by_state as _featurecollections_by_state,
     load_local_adm2 as _load_local_adm2,
 )
-from india_resilience_tool.data.adm3_loader import load_local_adm3 as _load_local_adm3
+
+from india_resilience_tool.data.adm3_loader import (
+    load_local_adm3 as _load_local_adm3,
+    get_blocks_for_district as _get_blocks_for_district,
+)
 
 from india_resilience_tool.data.merge import (
     get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
@@ -57,7 +67,7 @@ from india_resilience_tool.app.sidebar import (
 
 from india_resilience_tool.app.views.map_view import (
     render_map_view,
-    render_district_add_to_portfolio,  # ADD THIS IMPORT
+    render_unit_add_to_portfolio,
 )
 from india_resilience_tool.app.views.rankings_view import render_rankings_view
 from india_resilience_tool.app.views.details_panel import render_details_panel
@@ -158,7 +168,7 @@ def render_perf_panel_safe() -> None:
 # -------------------------
 # CONFIG
 # -------------------------
-from paths import BLOCKS_PATH, DATA_DIR
+from paths import DATA_DIR, DISTRICTS_PATH, BLOCKS_PATH
 
 from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_ADM2,
@@ -182,10 +192,13 @@ from india_resilience_tool.config.variables import (
 )
 
 # Data paths derived from DATA_DIR
-ADM2_GEOJSON = DATA_DIR / "districts_4326.geojson"
-ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
-OUTDIR = DATA_DIR
+ADM2_GEOJSON = DISTRICTS_PATH
+ADM3_GEOJSON = BLOCKS_PATH
 
+ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
+ATTACH_BLOCK_GEOJSON = str(ADM3_GEOJSON) if ADM3_GEOJSON.exists() else None
+
+OUTDIR = DATA_DIR
 
 # ---------- Name normalization / aliases ----------
 from india_resilience_tool.utils.naming import NAME_ALIASES, alias, normalize_name, normalize_compact
@@ -205,21 +218,23 @@ def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoD
     return gdf
 
 
-@st.cache_data
+@st.cache_data(ttl=3600)
 def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
     """
-    Load ADM3 (blocks/subdistricts) for optional block-level UI controls.
+    Load ADM3 (blocks) with the same bbox + simplification strategy as ADM2.
 
-    Note: This is used only for populating the Block dropdown during Phase 3 activation.
-    Full block-level map/rankings wiring happens in later phases.
+    Notes:
+      - tolerant of large files via caching
+      - does NOT require a __key column (merge.py builds composite keys for blocks)
     """
     gdf = _load_local_adm3(
         path=path,
         tolerance=float(tolerance),
         bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
-        min_area=0.0,
+        min_area=0.00005,
     )
     return gdf
+
 
 if not ADM2_GEOJSON.exists():
     st.set_page_config(page_title="India Resilience Tool", layout="wide")
@@ -359,18 +374,28 @@ def extract_name_from_feature(feat):
 # -------------------------
 
 def get_or_build_merged_for_index(
-    adm2: gpd.GeoDataFrame,
+    *,
+    adm2: Optional[gpd.GeoDataFrame],
+    adm3: Optional[gpd.GeoDataFrame],
     df: pd.DataFrame,
     slug: str,
     master_path: Path,
+    level: str = "district",
 ) -> gpd.GeoDataFrame:
     """
-    Backward-compatible wrapper: preserves caching semantics and deterministic merge.
+    Level-aware wrapper around get_or_build_merged_for_index_cached().
 
-    Cached by master mtime in st.session_state["_merged_cache"][slug].
+    - level="district": merges master (district rows) onto ADM2 boundaries
+    - level="block":    merges master (block rows) onto ADM3 boundaries
     """
+    level_norm = str(level or "district").strip().lower()
+    boundary_gdf = adm3 if level_norm == "block" else adm2
+
+    if boundary_gdf is None:
+        raise ValueError(f"Boundary GeoDataFrame is required for level={level_norm!r}")
+
     merged = _get_or_build_merged_for_index_cached(
-        adm2,
+        boundary_gdf,
         df,
         slug=slug,
         master_path=master_path,
@@ -378,8 +403,8 @@ def get_or_build_merged_for_index(
         alias_fn=alias,
         adm2_state_col="state_name",
         master_state_col="state",
+        level=level_norm,
     )
-    # typing: cached function returns DataFrame; in practice this is a GeoDataFrame when adm2 is one
     return merged  # type: ignore[return-value]
 
 
@@ -676,22 +701,21 @@ with st.sidebar:
     except Exception:
         pass
 
-    # Admin level selector (District vs Block) — Phase 3 activation
-    _ = render_admin_level_selector(label_visibility="collapsed")
+    # Admin level selector (District vs Block)
+    admin_level = render_admin_level_selector(label_visibility="collapsed")
 
-    # Read current analysis mode (default: Single district focus)
-    analysis_mode_current = st.session_state.get(
-        "analysis_mode", "Single district focus"
-    )
 
-    # Show hover toggle (always visible, not just in portfolio mode)
+    # Read current analysis mode (default depends on admin level)
+    default_mode = "Single block focus" if admin_level == "block" else "Single district focus"
+    analysis_mode_current = st.session_state.get("analysis_mode", default_mode)
+
+    # Show hover toggle (always visible)
     _ = render_hover_toggle_if_portfolio(analysis_mode_current)
 
-
-    analysis_mode_placeholder = st.empty()  # Single vs multi-district analysis
-
+    analysis_mode_placeholder = st.empty()  # Single vs portfolio
     state_placeholder = st.empty()
     district_placeholder = st.empty()
+    block_placeholder = st.empty()
 
     metric_ui_placeholder = st.empty()  # unified "Index" UI
     map_mode_placeholder = st.empty()   # NEW: absolute vs change toggle
@@ -798,7 +822,9 @@ with metric_ui_placeholder.container():
             os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / VARIABLE_SLUG)
         ).resolve()
         (PROCESSED_ROOT / PILOT_STATE).mkdir(parents=True, exist_ok=True)
-        MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / "master_metrics_by_district.csv"
+        _master_name = "master_metrics_by_block.csv" if st.session_state.get("admin_level", "district") == "block" else "master_metrics_by_district.csv"
+        MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / _master_name
+
 
         # Rebuilder bound to this index
         def rebuild_master_csv_if_needed(
@@ -1100,16 +1126,76 @@ with state_placeholder.container():
 
         from india_resilience_tool.app.sidebar import render_analysis_mode_selector
 
-        # ---- Step 2: Analysis focus (single vs multi-district) ----
+        admin_level = st.session_state.get("admin_level", "district")
+
+        # ---- Step 2: District selection (always shown, required before block in block mode) ----
+        # Ensure we always have a valid district in session state
+        if (
+            "selected_district" not in st.session_state
+            or st.session_state["selected_district"] not in districts
+        ):
+            st.session_state["selected_district"] = "All"
+
+        selected_district = st.selectbox(
+            "District",
+            options=districts,
+            index=districts.index(st.session_state["selected_district"]),
+            key="selected_district",
+        )
+
+        # ---- Step 3: Block selection (only when admin_level == block AND district selected) ----
+        selected_block = "All"
+        if admin_level == "block":
+            if not ADM3_GEOJSON.exists():
+                st.error(f"ADM3 geojson not found at {ADM3_GEOJSON}. Please provide block_4326.geojson.")
+                st.stop()
+
+            # Load ADM3 boundaries for block selection
+            adm3_sidebar = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+
+            block_options = ["All"]
+            if selected_state != "All" and selected_district != "All":
+                try:
+                    blocks = _get_blocks_for_district(adm3_sidebar, selected_state, selected_district, normalize_fn=alias)
+                    block_options = ["All"] + sorted([str(b).strip() for b in blocks if str(b).strip()])
+                except Exception:
+                    block_options = ["All"]
+
+                if "selected_block" not in st.session_state or st.session_state["selected_block"] not in block_options:
+                    st.session_state["selected_block"] = "All"
+
+                selected_block = st.selectbox(
+                    "Block",
+                    options=block_options,
+                    index=block_options.index(st.session_state.get("selected_block", "All")),
+                    key="selected_block",
+                )
+            else:
+                # Show disabled/info when district not selected
+                if selected_district == "All":
+                    st.caption("ℹ️ Select a district to see blocks")
+                st.session_state["selected_block"] = "All"
+        else:
+            st.session_state.pop("selected_block", None)
+
+        # ---- Step 4: Analysis focus (single vs portfolio; labels depend on admin_level) ----
+        analysis_options = (
+            ["Single block focus", "Multi-block portfolio"]
+            if admin_level == "block"
+            else ["Single district focus", "Multi-district portfolio"]
+        )
+
         analysis_mode = render_analysis_mode_selector(
             label="Analysis focus",
-            options=[
-                "Single district focus",
-                "Multi-district portfolio",
-            ],
+            options=analysis_options,
             index=0,
+            help_text=(
+                "Choose a single-unit focus to explore one unit at a time, "
+                "or portfolio mode to build and compare a set of units."
+            ),
             label_visibility="collapsed",
             use_markdown_header=True,
+            level=admin_level,
         )
 
         # Reset portfolio route state when switching analysis focus modes
@@ -1121,81 +1207,29 @@ with state_placeholder.container():
             st.session_state["jump_to_rankings"] = False
             st.session_state["jump_to_map"] = False
 
-        # Brief helper text so the mode explains itself
-        if analysis_mode == "Single district focus":
+        # Brief helper text so the mode explains itself (level-aware)
+        unit_singular = "block" if admin_level == "block" else "district"
+        unit_plural = "blocks" if admin_level == "block" else "districts"
+        
+        if "Single" in analysis_mode:
             st.caption(
-                "Inspect one district at a time. Use the **District** dropdown below "
-                "to pick which district you want to explore in detail."
+                f"Inspect one {unit_singular} at a time. Use the dropdowns above "
+                f"to pick which {unit_singular} you want to explore in detail."
             )
         else:
             st.markdown(
-                "<div style='font-size:0.9rem; margin-top:0.25rem; margin-bottom:0.1rem;'>"
-                "In <strong>Multi-district portfolio</strong> mode you build a set of districts "
-                "for comparison. Districts are added from the <em>🗺 Map view</em>, the "
-                "<em>📊 Rankings table</em>, or from saved point locations. "
-                # "The <strong>District</strong> dropdown is fixed to <strong>All</strong> here "
-                # "because selection now happens directly from the map and table."
-                "</div>",
+                f"<div style='font-size:0.9rem; margin-top:0.25rem; margin-bottom:0.1rem;'>"
+                f"In <strong>Multi-{unit_singular} portfolio</strong> mode you build a set of {unit_plural} "
+                f"for comparison. {unit_plural.title()} are added from the <em>🗺 Map view</em>, the "
+                f"<em>📊 Rankings table</em>, or from saved point locations. "
+                f"</div>",
                 unsafe_allow_html=True,
             )
 
-        # ---- Step 3: District selection (only for single-district mode) ----
-        if analysis_mode == "Single district focus":
-            # Normal behaviour: user chooses the district from the sidebar
-            selected_district = st.selectbox(
-                "District",
-                options=districts,
-                index=districts.index(st.session_state["selected_district"]),
-                key="selected_district",
-            )
-
-            # Block selector (shown only when admin_level == 'block')
-            if st.session_state.get("admin_level") == "block":
-                blocks_list: list[str] = []
-                if not BLOCKS_PATH.exists():
-                    st.caption(f"⚠️ Blocks boundary file not found at: {BLOCKS_PATH}")
-                else:
-                    try:
-                        adm3 = load_local_adm3(str(BLOCKS_PATH), tolerance=SIMPLIFY_TOL_ADM2)
-
-                        # Filter to the current state + district for a clean dropdown
-                        mask = pd.Series([True] * len(adm3))
-                        if selected_state != "All" and "state_name" in adm3.columns:
-                            mask &= (
-                                adm3["state_name"].astype(str).str.strip().str.lower()
-                                == selected_state.strip().lower()
-                            )
-                        if "district_name" in adm3.columns:
-                            mask &= (
-                                adm3["district_name"].astype(str).str.strip().str.lower()
-                                == selected_district.strip().lower()
-                            )
-
-                        blocks_list = (
-                            adm3.loc[mask, "block_name"]
-                            .astype(str)
-                            .str.strip()
-                            .dropna()
-                            .unique()
-                            .tolist()
-                            if "block_name" in adm3.columns
-                            else []
-                        )
-                    except Exception as e:
-                        st.caption(f"⚠️ Could not load blocks list: {e}")
-
-                _ = render_block_selector(
-                    blocks_list,
-                    selected_district,
-                    label="Block",
-                    label_visibility="collapsed",
-                    help_text="Select a block/subdistrict within the chosen district.",
-                )
-            else:
-                st.session_state["selected_block"] = "All"
-
-        else:
-            # Portfolio mode: freeze district selection to "All"
+        # Portfolio mode behavior for district selection:
+        # - In district-level portfolio mode: freeze district to "All"
+        # - In block-level portfolio mode: allow district selection (needed to navigate blocks)
+        if "Multi" in analysis_mode and admin_level != "block":
             st.session_state["selected_district"] = "All"
             selected_district = "All"
 
@@ -1207,6 +1241,10 @@ if "portfolio_districts" not in st.session_state:
     # List of {"state": ..., "district": ...}
     st.session_state["portfolio_districts"] = []
 
+if "portfolio_blocks" not in st.session_state:
+    # List of {"state": ..., "district": ..., "block": ...}
+    st.session_state["portfolio_blocks"] = []
+
 
 def _portfolio_normalize(text: str) -> str:
     """
@@ -1217,47 +1255,80 @@ def _portfolio_normalize(text: str) -> str:
     return _portfolio_normalize_impl(text, alias_fn=alias)
 
 
-def _portfolio_key(state_name: str, district_name: str) -> tuple[str, str]:
+def _portfolio_state_key() -> str:
+    return "portfolio_blocks" if st.session_state.get("admin_level", "district") == "block" else "portfolio_districts"
+
+
+def _portfolio_key(state_name: str, district_name: str, block_name: Optional[str] = None) -> tuple:
+    if st.session_state.get("admin_level", "district") == "block":
+        return (
+            _portfolio_normalize(state_name),
+            _portfolio_normalize(district_name),
+            _portfolio_normalize(block_name or ""),
+        )
     return (_portfolio_normalize(state_name), _portfolio_normalize(district_name))
 
 
-def _portfolio_add(state_name: str, district_name: str) -> None:
-    """Add a (state, district) pair to the portfolio if not already present."""
+def _portfolio_add(state_name: str, district_name: str, block_name: Optional[str] = None) -> None:
+    """Add a unit (district or block) to the active portfolio."""
+    level = st.session_state.get("admin_level", "district")
+    state_key = _portfolio_state_key()
+
     _portfolio_add_impl(
         st.session_state,
         state_name,
         district_name,
         normalize_fn=_portfolio_normalize,
-        state_key="portfolio_districts",
+        block_name=block_name,
+        level=level,
+        state_key=state_key,
     )
 
 
-def _portfolio_remove(state_name: str, district_name: str) -> None:
-    """Remove a (state, district) pair from the portfolio."""
+def _portfolio_remove(state_name: str, district_name: str, block_name: Optional[str] = None) -> None:
+    """Remove a unit (district or block) from the active portfolio."""
+    level = st.session_state.get("admin_level", "district")
+    state_key = _portfolio_state_key()
+
     _portfolio_remove_impl(
         st.session_state,
         state_name,
         district_name,
         normalize_fn=_portfolio_normalize,
-        state_key="portfolio_districts",
+        block_name=block_name,
+        level=level,
+        state_key=state_key,
     )
 
-def _portfolio_contains(state_name: str, district_name: str) -> bool:
-    """
-    Return True if the (state, district) pair is already present
-    in the current portfolio_districts list.
-    """
-    return _portfolio_contains_impl(
-        st.session_state,
-        state_name,
-        district_name,
-        normalize_fn=_portfolio_normalize,
-        state_key="portfolio_districts",
+
+def _portfolio_contains(state_name: str, district_name: str, block_name: Optional[str] = None) -> bool:
+    """Return True if the unit is already present in the active portfolio."""
+    level = st.session_state.get("admin_level", "district")
+    state_key = _portfolio_state_key()
+
+    return bool(
+        _portfolio_contains_impl(
+            st.session_state,
+            state_name,
+            district_name,
+            normalize_fn=_portfolio_normalize,
+            block_name=block_name,
+            level=level,
+            state_key=state_key,
+        )
     )
+
 
 def _portfolio_clear() -> None:
-    """Clear all districts from the portfolio."""
-    _portfolio_clear_impl(st.session_state, state_key="portfolio_districts")
+    """Clear all units from the active portfolio (districts or blocks)."""
+    level = st.session_state.get("admin_level", "district")
+    state_key = _portfolio_state_key()
+
+    _portfolio_clear_impl(
+        st.session_state,
+        level=level,
+        state_key=state_key,
+    )
 
 
 # Alias for backward compatibility with portfolio_ui
@@ -1276,39 +1347,113 @@ if "map_center" not in st.session_state:
 if "map_zoom" not in st.session_state:
     st.session_state["map_zoom"] = 4.0
 
-if selected_district != "All":
+# Map zoom logic: handle district and block selections
+_admin_level_for_zoom = st.session_state.get("admin_level", "district")
+_admin_level_for_zoom = str(_admin_level_for_zoom or "district").strip().lower()
+
+if _admin_level_for_zoom == "block" and selected_block != "All" and selected_district != "All":
+    # Block mode with specific block selected: zoom to that block
+    # Need to use adm3 boundaries (loaded later, so we'll set a flag to zoom after merge)
+    st.session_state["_pending_block_zoom"] = {
+        "state": selected_state,
+        "district": selected_district,
+        "block": selected_block,
+    }
+elif selected_district != "All":
     district_row = gdf_state_districts[gdf_state_districts["district_name"] == selected_district]
     if not district_row.empty:
         centroid = district_row.iloc[0].geometry.centroid
         st.session_state["map_center"] = [centroid.y, centroid.x]
-        st.session_state["map_zoom"] = 9
+        # In block mode with district selected, zoom in more to see blocks
+        st.session_state["map_zoom"] = 10 if _admin_level_for_zoom == "block" else 9
+    st.session_state.pop("_pending_block_zoom", None)
 elif selected_state != "All":
     state_row = adm1[adm1["shapeName"].astype(str).str.strip() == selected_state]
     if not state_row.empty:
         b = state_row.iloc[0].geometry.bounds
         st.session_state["map_center"] = [(b[1] + b[3]) / 2, (b[0] + b[2]) / 2]
         st.session_state["map_zoom"] = 7
+    st.session_state.pop("_pending_block_zoom", None)
 else:
     st.session_state["map_center"] = [22.0, 82.5]
     st.session_state["map_zoom"] = 4.8
+    st.session_state.pop("_pending_block_zoom", None)
 
-# Merge attributes
+# Merge attributes (district vs block)
+_admin_level = st.session_state.get("admin_level", "district")
+_admin_level = str(_admin_level or "district").strip().lower()
+
 if "district" not in df.columns:
-    st.error("Master CSV must contain a 'district' column to join with ADM2.")
+    st.error("Master CSV must contain a 'district' column.")
     render_perf_panel_safe()
     st.stop()
+
+# In block mode, master must also contain a block column
+if _admin_level == "block":
+    block_col_candidates = ["block", "block_name"]
+    block_col = next((c for c in block_col_candidates if c in df.columns), None)
+    if block_col is None:
+        st.error("Block mode requires master CSV to contain a 'block' (or 'block_name') column.")
+        render_perf_panel_safe()
+        st.stop()
+
+    if not ADM3_GEOJSON.exists():
+        st.error(f"ADM3 geojson not found at {ADM3_GEOJSON}. Please provide block_4326.geojson.")
+        render_perf_panel_safe()
+        st.stop()
+
+    adm3 = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+else:
+    adm3 = None
 
 with perf_section("merge: build merged gdf"):
     with st.spinner("Preparing merged geometries with CSV attributes..."):
         merged = get_or_build_merged_for_index(
             adm2=adm2,
+            adm3=adm3,
             df=df,
             slug=VARIABLE_SLUG,
             master_path=MASTER_CSV_PATH,
+            level=_admin_level,
         )
+
+# Handle pending block zoom (needs merged GeoDataFrame with block geometries)
+pending_zoom = st.session_state.pop("_pending_block_zoom", None)
+if pending_zoom and "block_name" in merged.columns:
+    zoom_state = pending_zoom.get("state", "")
+    zoom_district = pending_zoom.get("district", "")
+    zoom_block = pending_zoom.get("block", "")
+    
+    # Find the block row
+    block_mask = (
+        (merged["state_name"].astype(str).str.strip().str.lower() == zoom_state.strip().lower())
+        & (merged["district_name"].astype(str).str.strip().str.lower() == zoom_district.strip().lower())
+        & (merged["block_name"].astype(str).str.strip().str.lower() == zoom_block.strip().lower())
+    )
+    block_rows = merged[block_mask]
+    
+    if not block_rows.empty:
+        block_geom = block_rows.iloc[0].geometry
+        if block_geom is not None:
+            centroid = block_geom.centroid
+            st.session_state["map_center"] = [centroid.y, centroid.x]
+            st.session_state["map_zoom"] = 11  # Zoom in closer for block view
 
 # --- Baseline column for this metric + stat (used by map & table) ---
 baseline_col = find_baseline_column_for_stat(df.columns, sel_metric, sel_stat)
+
+# Debug: Show merged DataFrame info in block mode
+if DEBUG and _admin_level == "block":
+    st.sidebar.write(f"**DEBUG: merged has {len(merged)} rows**")
+    st.sidebar.write(f"Columns: {list(merged.columns[:10])}...")
+    if "block_name" in merged.columns:
+        st.sidebar.write(f"block_name column exists ✓")
+        st.sidebar.write(f"Sample blocks: {merged['block_name'].head(3).tolist()}")
+    else:
+        st.sidebar.write("❌ block_name column MISSING!")
+    if metric_col in merged.columns:
+        non_null = merged[metric_col].notna().sum()
+        st.sidebar.write(f"metric_col '{metric_col}' has {non_null} non-null values")
 
 # --- Compute current/baseline/delta columns once (used by map + tooltip) ---
 with perf_section("map: compute current/baseline/delta"):
@@ -1459,13 +1604,16 @@ with perf_section("colors: apply_fillcolor"):
 # -------------------------
 _t_rank = perf_start("rank_table: build")
 
+_admin_level = st.session_state.get("admin_level", "district")
+_unit_col = "block_name" if _admin_level == "block" else "district_name"
+
 table_df, has_baseline = _build_rankings_table_df(
     merged,
     metric_col=metric_col,
     baseline_col=baseline_col,
     selected_state=selected_state,
     risk_class_from_percentile=risk_class_from_percentile,
-    district_col="district_name",
+    district_col=_unit_col,
     state_col="state_name",
     aspirational_col="aspirational",
 )
@@ -1769,26 +1917,33 @@ with col1:
             sel_stat=sel_stat,
             selected_state=selected_state,
             selected_district=selected_district,
+            selected_block=selected_block,
             map_width=MAP_WIDTH,
             map_height=MAP_HEIGHT,
             perf_section=perf_section,
+            level=_admin_level,
         )
 
-        # === NEW CODE START ===
-        # Show add-to-portfolio button when a district is clicked in portfolio mode
-        if analysis_mode == "Multi-district portfolio":
-            render_district_add_to_portfolio(
+        # Show add-to-portfolio button when a unit is clicked in portfolio mode
+        if "Multi" in analysis_mode:
+            from india_resilience_tool.app.views.map_view import render_unit_add_to_portfolio
+            
+            # Get clicked block from session state (set by render_map_view in block mode)
+            clicked_block = st.session_state.get("clicked_block") if _admin_level == "block" else None
+            
+            render_unit_add_to_portfolio(
                 clicked_district=clicked_district,
                 clicked_state=clicked_state,
+                clicked_block=clicked_block,
                 selected_state=selected_state,
                 portfolio_add_fn=_portfolio_add,
                 portfolio_remove_fn=_portfolio_remove,
                 portfolio_contains_fn=_portfolio_contains,
                 normalize_fn=_portfolio_normalize,
-                returned=returned,   # NEW - pass the st_folium return value
-                merged=merged,       # NEW - pass the GeoDataFrame for coordinate lookup
+                returned=returned,
+                merged=merged,
+                level=_admin_level,
             )
-        # === NEW CODE END ===
 
         if clicked_district:
             st.session_state["pending_selected_district"] = clicked_district
@@ -1808,6 +1963,9 @@ with col1:
             sel_stat=sel_stat,
             selected_state=selected_state,
             portfolio_add=_portfolio_add,
+            portfolio_contains=_portfolio_contains,
+            portfolio_remove=_portfolio_remove,
+            level=_admin_level,
         )
 
 # -------------------------
@@ -1820,17 +1978,18 @@ with col2:
     portfolio_selected_slot = st.empty()
 
     # -------------------------
-    # Multi-district portfolio mode: show a clean, guided right-panel flow
+    # Multi-district/block portfolio mode: show a clean, guided right-panel flow
     # -------------------------
     analysis_mode_rhs = st.session_state.get("analysis_mode", "Single district focus")
     portfolio_route = st.session_state.get("portfolio_build_route", None)
 
-    if analysis_mode_rhs == "Multi-district portfolio":
-        # ---- MULTI-DISTRICT PORTFOLIO PANEL (extracted to portfolio_ui.py) ----
+    if "Multi" in analysis_mode_rhs:
+        # ---- MULTI-UNIT PORTFOLIO PANEL (extracted to portfolio_ui.py) ----
         render_portfolio_panel(
             # State/selection context
             selected_state=selected_state,
             portfolio_route=portfolio_route,
+            level=_admin_level,
             # Variable/metric context
             variables=VARIABLES,
             variable_slug=VARIABLE_SLUG,
@@ -1876,13 +2035,14 @@ with col2:
         st.header("Climate Profile")
 
     # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
-    if analysis_mode == "Multi-district portfolio" and portfolio_route == "saved_points":
+    if "Multi" in analysis_mode and portfolio_route == "saved_points":
         # ---- POINT SELECTION PANEL (extracted to point_selection_ui.py) ----
         clear_clicked = render_point_selection_panel(
             merged=merged,
             portfolio_add_fn=_portfolio_add,
             portfolio_key_fn=_portfolio_key,
             portfolio_set_flash_fn=_portfolio_set_flash,
+            level=_admin_level,
         )
 
     clicked_feature = None
@@ -1907,7 +2067,7 @@ with col2:
                 except Exception:
                     pass
 
-    if analysis_mode == "Multi-district portfolio" and portfolio_route == "saved_points":
+    if "Multi" in analysis_mode and portfolio_route == "saved_points":
         # If map selection mode is active, use the next map click as the
         # point-query location and then disable the mode (one-shot behaviour).
         if click_coords is not None and st.session_state.get("point_query_select_on_map", False):
@@ -1977,6 +2137,18 @@ with col2:
         if (not mask.any()) and sel_district_norm:
             mask = district_series.str.contains(re.escape(sel_district_norm), na=False)
 
+        # In block mode, also filter by selected_block
+        if _admin_level == "block" and st.session_state.get("selected_block", "All") != "All":
+            sel_block_raw = st.session_state.get("selected_block", "All")
+            sel_block_norm = str(sel_block_raw).split(",")[0].strip().lower()
+            
+            if "block_name" in merged.columns:
+                block_series = merged["block_name"].astype(str).str.strip().str.lower()
+                block_mask = block_series == sel_block_norm
+                if not block_mask.any() and sel_block_norm:
+                    block_mask = block_series.str.contains(re.escape(sel_block_norm), na=False)
+                mask = mask & block_mask
+
         if mask.any():
             matched_row = merged[mask].iloc[0:1]
 
@@ -2007,26 +2179,44 @@ with col2:
         candidates.sort(key=lambda x: x[1])
         return candidates[0][0]
 
-    # ----------- STATE SUMMARY MODE (no district selected) -----------
+    # ----------- STATE/DISTRICT SUMMARY MODE (no unit selected) -----------
     analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
 
-    if (
-        (matched_row is None or matched_row.empty)
-        and selected_district == "All"
-    ):
-        if analysis_mode == "Multi-district portfolio":
-            # In portfolio mode, we suppress the large state-summary panel here.
+    # Determine if we should show state/district summary
+    # In block mode: show district summary when block is "All" but district is selected
+    # In district mode: show state summary when district is "All"
+    show_summary = False
+    summary_context = None
+    
+    if _admin_level == "block":
+        # Block mode: show district summary (block distribution) when district selected but block is All
+        if selected_district != "All" and selected_block == "All":
+            show_summary = True
+            summary_context = "district"  # Show district summary with block distribution
+        elif selected_district == "All" and selected_state != "All":
+            show_summary = True
+            summary_context = "state"  # Show state summary with district distribution
+    else:
+        # District mode: show state summary when district is All
+        if selected_district == "All" and selected_state != "All":
+            show_summary = True
+            summary_context = "state"
+
+    if (matched_row is None or matched_row.empty) and show_summary:
+        if "Multi" in analysis_mode:
+            # In portfolio mode, we suppress the large summary panel here.
             # Portfolio results should be driven by the Portfolio analysis panel.
             pass
-        elif selected_state != "All":
+        else:
             ensemble, per_model_df, sel_districts_gdf = compute_state_metrics_from_merged(
                 merged, adm1, metric_col, selected_state
             )
 
-            # ---- STATE SUMMARY VIEW (extracted to state_summary_view.py) ----
+            # ---- STATE/DISTRICT SUMMARY VIEW (extracted to state_summary_view.py) ----
             render_state_summary_view(
                 # State/selection context
                 selected_state=selected_state,
+                selected_district=selected_district,
                 # Variable/metric context
                 variables=VARIABLES,
                 variable_slug=VARIABLE_SLUG,
@@ -2043,36 +2233,40 @@ with col2:
                 pilot_state=PILOT_STATE,
                 # Callable dependencies
                 make_state_boxplot_fn=make_state_boxplot_for_districts,
+                # Block-level support
+                level=_admin_level,
             )
 
-    # ----------- DISTRICT DETAILS MODE (enhanced) -----------
+    # ----------- UNIT DETAILS MODE (district or block) -----------
     else:
         analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+        unit_label = "block" if _admin_level == "block" else "district"
 
         if matched_row is None or getattr(matched_row, "empty", True):
-            st.warning("No district-level data found for the current selection.")
-            if analysis_mode == "Multi-district portfolio":
+            st.warning(f"No {unit_label}-level data found for the current selection.")
+            if "Multi" in analysis_mode:
                 st.info(
-                    "In portfolio mode, add districts via **From the map**, **From saved points**, "
-                    "or **From the rankings table** (Portfolio analysis panel)."
+                    f"In portfolio mode, add {unit_label}s via **From the map**, **From saved points**, "
+                    f"or **From the rankings table** (Portfolio analysis panel)."
                 )
             else:
                 st.info(
-                    "Please choose a different district from the sidebar, or select **All** "
-                    "to view the state summary."
+                    f"Please choose a different {unit_label} from the sidebar, or select **All** "
+                    f"to view the {'district' if _admin_level == 'block' else 'state'} summary."
                 )
             st.stop()
 
         row = matched_row.iloc[0]
         district_name = row.get("district_name", "Unknown")
+        block_name = row.get("block_name", "Unknown") if _admin_level == "block" else None
         state_to_show = (
             st.session_state.get("selected_state")
             if st.session_state.get("selected_state") != "All"
             else (row.get("state_name") or "Unknown")
         )
 
-        # --- Compact selection view in Multi-district portfolio mode ---
-        if analysis_mode == "Multi-district portfolio":
+        # --- Compact selection view in Multi-unit portfolio mode ---
+        if "Multi" in analysis_mode:
             portfolio_route = st.session_state.get("portfolio_build_route", None)
 
             # Only show the "selected district" panel when the user explicitly chose
@@ -2128,53 +2322,69 @@ with col2:
             render_perf_panel_safe()
             st.stop()
 
-        # --- Full district climate profile (single-district focus mode) ---
-        st.subheader(district_name)
-        st.markdown(f"**State:** {state_to_show}")
+        # --- Full unit climate profile (single-district/block focus mode) ---
+        if _admin_level == "block" and block_name:
+            # Block mode: show block name as main header
+            st.subheader(block_name)
+            st.markdown(f"**District:** {district_name}")
+            st.markdown(f"**State:** {state_to_show}")
+        else:
+            # District mode: show district name as main header
+            st.subheader(district_name)
+            st.markdown(f"**State:** {state_to_show}")
 
         # If this view was triggered by a point query, show the coordinates used.
         if click_coords is not None:
+            unit_label_display = "block" if _admin_level == "block" else "district"
             st.caption(
                 f"Point location used: lat {click_coords[0]:.4f}, "
-                f"lon {click_coords[1]:.4f} (assigned to this district)."
+                f"lon {click_coords[1]:.4f} (assigned to this {unit_label_display})."
             )
 
-        # --- Portfolio add button (for multi-district analysis) ---
-        if analysis_mode == "Multi-district portfolio":
+        # --- Portfolio add button (for multi-unit analysis) ---
+        if "Multi" in analysis_mode:
+            unit_label_btn = "block" if _admin_level == "block" else "district"
+            display_name = block_name if _admin_level == "block" else district_name
+            
             if st.button(
-                "➕ Add this district to portfolio",
-                key=f"btn_add_portfolio_single_{state_to_show}_{district_name}",
+                f"➕ Add this {unit_label_btn} to portfolio",
+                key=f"btn_add_portfolio_single_{state_to_show}_{district_name}_{block_name or 'na'}",
             ):
-                _portfolio_add(state_to_show, district_name)
-                st.success(f"Added {district_name}, {state_to_show} to portfolio.")
+                _portfolio_add(state_to_show, district_name, block_name)
+                st.success(f"Added {display_name}, {state_to_show} to portfolio.")
 
             # Always show current portfolio below the button
-            portfolio_current = st.session_state.get("portfolio_districts", [])
+            portfolio_key = "portfolio_blocks" if _admin_level == "block" else "portfolio_districts"
+            portfolio_current = st.session_state.get(portfolio_key, [])
             if portfolio_current:
-                st.markdown("**Current portfolio (districts)**")
+                unit_label_plural = "blocks" if _admin_level == "block" else "districts"
+                st.markdown(f"**Current portfolio ({unit_label_plural})**")
                 try:
-                    # Usual case: list of dicts {"state": . "district": .}
                     if isinstance(portfolio_current[0], dict):
-                        port_df = (
-                            pd.DataFrame(portfolio_current)
-                            .rename(columns={"state": "State", "district": "District"})
-                        )
+                        if _admin_level == "block":
+                            port_df = (
+                                pd.DataFrame(portfolio_current)
+                                .rename(columns={"state": "State", "district": "District", "block": "Block"})
+                            )
+                        else:
+                            port_df = (
+                                pd.DataFrame(portfolio_current)
+                                .rename(columns={"state": "State", "district": "District"})
+                            )
                     else:
-                        # Fallback: list of (state, district) tuples/lists
-                        port_df = pd.DataFrame(
-                            portfolio_current, columns=["State", "District"]
-                        )
+                        port_df = pd.DataFrame(portfolio_current)
                 except Exception:
-                    port_df = pd.DataFrame(columns=["State", "District"])
+                    port_df = pd.DataFrame()
 
                 st.dataframe(
                     port_df,
                     use_container_width=True,
                 )
             else:
+                unit_label_plural = "blocks" if _admin_level == "block" else "districts"
                 st.caption(
-                    "No districts in the portfolio yet. "
-                    "Use the button above or the Rankings table to add districts."
+                    f"No {unit_label_plural} in the portfolio yet. "
+                    f"Use the button above or the Rankings table to add {unit_label_plural}."
                 )
 
         # ---- Risk cards (1.1) ----
@@ -2186,29 +2396,47 @@ with col2:
         baseline_val = row.get(baseline_col) if baseline_col else np.nan
         baseline_val_f = float(baseline_val) if not pd.isna(baseline_val) else None
 
-        # position within state: rank + percentile
-        percentile_state = None
-        rank_in_state = None
-        n_in_state = None
+        # position within parent unit: rank + percentile
+        # For districts: within state
+        # For blocks: within district
+        percentile_in_parent = None
+        rank_in_parent = None
+        n_in_parent = None
+        parent_label = "district" if _admin_level == "block" else "state"
+        
         try:
-            in_state_mask = (
-                merged["state_name"].astype(str).str.strip().str.lower()
-                == str(state_to_show).strip().lower()
-            )
-            state_vals = pd.to_numeric(
-                merged.loc[in_state_mask, metric_col], errors="coerce"
+            if _admin_level == "block":
+                # Block mode: rank within district
+                in_parent_mask = (
+                    (merged["state_name"].astype(str).str.strip().str.lower() == str(state_to_show).strip().lower())
+                    & (merged["district_name"].astype(str).str.strip().str.lower() == str(district_name).strip().lower())
+                )
+            else:
+                # District mode: rank within state
+                in_parent_mask = (
+                    merged["state_name"].astype(str).str.strip().str.lower()
+                    == str(state_to_show).strip().lower()
+                )
+            
+            parent_vals = pd.to_numeric(
+                merged.loc[in_parent_mask, metric_col], errors="coerce"
             ).dropna()
 
-            if current_val_f is not None and not state_vals.empty:
-                n_in_state = int(len(state_vals))
-                # percentile: fraction of districts with lower value
-                percentile_state = float(
-                    (state_vals < current_val_f).sum() / n_in_state * 100.0
+            if current_val_f is not None and not parent_vals.empty:
+                n_in_parent = int(len(parent_vals))
+                # percentile: fraction of units with lower value
+                percentile_in_parent = float(
+                    (parent_vals < current_val_f).sum() / n_in_parent * 100.0
                 )
                 # rank: 1 = highest value (most extreme / highest risk)
-                rank_in_state = int((state_vals > current_val_f).sum() + 1)
+                rank_in_parent = int((parent_vals > current_val_f).sum() + 1)
         except Exception:
             pass
+        
+        # Backward compatibility aliases
+        percentile_state = percentile_in_parent
+        rank_in_state = rank_in_parent
+        n_in_state = n_in_parent
 
         # ---- Helper functions for time series and case study ----
 

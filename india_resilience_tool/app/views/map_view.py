@@ -370,8 +370,8 @@ def render_map_view(
 
     analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
 
-    # In Multi-district portfolio mode, draw markers and legend
-    if analysis_mode == "Multi-district portfolio":
+    # In Multi-district/block portfolio mode, draw markers and legend
+    if "Multi" in analysis_mode:
         # Saved point markers (blue)
         points = st.session_state.get("point_query_points", [])
         if isinstance(points, list):
@@ -555,7 +555,7 @@ def render_unit_add_to_portfolio(
             return False
 
     analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-    if analysis_mode != "Multi-district portfolio":
+    if "Multi" not in analysis_mode:
         return False
 
     state_for_add = (resolved_state or selected_state or "").strip()
