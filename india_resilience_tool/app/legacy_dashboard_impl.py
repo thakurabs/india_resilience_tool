@@ -270,6 +270,54 @@ def build_adm2_geojson_by_state(
     )
     return by_state
 
+@st.cache_data(ttl=3600)
+def build_adm3_geojson_by_state(
+    path: str,
+    tolerance: float,
+    mtime: float,
+) -> dict[str, dict]:
+    """
+    Build and cache an ADM3 FeatureCollection per state (geometry + identifiers only).
+
+    Cached by (path, tolerance, mtime) so it invalidates automatically when the
+    source GeoJSON changes or simplification tolerance is updated.
+    """
+    _ = mtime  # mtime is used only to invalidate Streamlit's cache
+
+    gdf = load_local_adm3(path, tolerance=tolerance)
+
+    # Tolerate alternate ADM3 naming conventions
+    if "block_name" not in gdf.columns:
+        for c in ("block", "adm3_name", "subdistrict_name", "name"):
+            if c in gdf.columns:
+                gdf["block_name"] = gdf[c]
+                break
+    if "district_name" not in gdf.columns:
+        for c in ("district", "adm2_name", "shapeName_2", "shapeName_1"):
+            if c in gdf.columns:
+                gdf["district_name"] = gdf[c]
+                break
+    if "state_name" not in gdf.columns:
+        for c in ("state", "adm1_name", "shapeName_0", "shapeGroup"):
+            if c in gdf.columns:
+                gdf["state_name"] = gdf[c]
+                break
+
+    # Build a composite key: state|district|block (normalized via alias)
+    if "__bkey" not in gdf.columns:
+        def _mk_bkey(r) -> str:
+            return f"{alias(r.get('state_name', ''))}|{alias(r.get('district_name', ''))}|{alias(r.get('block_name', ''))}"
+
+        gdf["__bkey"] = gdf.apply(_mk_bkey, axis=1)
+
+    by_state = _featurecollections_by_state(
+        gdf,
+        state_col="state_name",
+        normalize_state_fn=normalize_name,
+        keep_cols=["block_name", "district_name", "state_name", "__bkey", "geometry"],
+    )
+    return by_state
+
 @st.cache_data
 def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return _build_adm1_from_adm2(_adm2_gdf, state_col="state_name")
@@ -1492,15 +1540,25 @@ with perf_section("map: compute rank + risk class"):
     state_series = merged.get("state_name")
     if state_series is None:
         state_series = pd.Series(["Unknown"] * len(merged), index=merged.index)
-    state_key = state_series.astype(str).fillna("Unknown")
+    state_series = state_series.astype(str).fillna("Unknown")
+
+    # In block mode, rank/percentile should be computed within the parent district
+    # (state|district) so the tooltip + risk quick-glance remain meaningful.
+    rank_scope_label = "state"
+    if _admin_level == "block" and "district_name" in merged.columns:
+        district_series = merged["district_name"].astype(str).fillna("Unknown")
+        group_key = state_series.map(alias) + "|" + district_series.map(alias)
+        rank_scope_label = "district"
+    else:
+        group_key = state_series
 
     # Rank is computed on the *current* value (absolute), regardless of map mode.
-    # Rank 1 = highest value within that state.
+    # Rank 1 = highest value within the grouping scope.
     v = merged["_current_value"]
-    merged["_rank_in_state"] = v.groupby(state_key).rank(method="min", ascending=False)
+    merged["_rank_in_state"] = v.groupby(group_key).rank(method="min", ascending=False)
 
     # Percentile: higher values -> higher percentile (0..100)
-    merged["_percentile_state"] = v.groupby(state_key).rank(pct=True, ascending=True) * 100.0
+    merged["_percentile_state"] = v.groupby(group_key).rank(pct=True, ascending=True) * 100.0
 
     def _risk_label(p: float) -> str:
         try:
@@ -1693,12 +1751,20 @@ tooltip = None
 # -------------------------
 # Step 5: GeoJSON-by-state cache (geometry cached; properties patched per rerun)
 # -------------------------
-adm2_mtime = float(ADM2_GEOJSON.stat().st_mtime)
-geojson_by_state = build_adm2_geojson_by_state(
-    path=str(ADM2_GEOJSON),
-    tolerance=SIMPLIFY_TOL_ADM2,
-    mtime=adm2_mtime,
-)
+if _admin_level == "block":
+    adm3_mtime = float(ADM3_GEOJSON.stat().st_mtime)
+    geojson_by_state = build_adm3_geojson_by_state(
+        path=str(ADM3_GEOJSON),
+        tolerance=SIMPLIFY_TOL_ADM2,
+        mtime=adm3_mtime,
+    )
+else:
+    adm2_mtime = float(ADM2_GEOJSON.stat().st_mtime)
+    geojson_by_state = build_adm2_geojson_by_state(
+        path=str(ADM2_GEOJSON),
+        tolerance=SIMPLIFY_TOL_ADM2,
+        mtime=adm2_mtime,
+    )
 
 state_key = "all" if selected_state == "All" else (normalize_name(selected_state) or "unknown")
 
@@ -1726,12 +1792,35 @@ if selected_district != "All":
 # Patch feature properties (fillColor + value columns) from the current display_gdf/merged
 prop_gdf = display_gdf if not display_gdf.empty else merged
 prop_work = prop_gdf.copy()
-if "__key" not in prop_work.columns:
-    prop_work["__key"] = prop_work["district_name"].map(alias)
+
+is_block_level = _admin_level == "block"
+feature_key_col = "__bkey" if is_block_level else "__key"
+
+# Ensure identifier columns exist
+if is_block_level:
+    if "block_name" not in prop_work.columns and "block" in prop_work.columns:
+        prop_work["block_name"] = prop_work["block"]
+
+    if feature_key_col not in prop_work.columns:
+        def _mk_bkey_row(r) -> str:
+            return f"{alias(r.get('state_name', ''))}|{alias(r.get('district_name', ''))}|{alias(r.get('block_name', ''))}"
+
+        prop_work[feature_key_col] = prop_work.apply(_mk_bkey_row, axis=1)
+else:
+    if feature_key_col not in prop_work.columns:
+        prop_work[feature_key_col] = prop_work["district_name"].map(alias)
 
 # Numeric columns we want available on every feature (even if None)
 value_cols: list[str] = []
-for _c in (metric_col, map_value_col, "_baseline_value", "_delta_abs", "_delta_pct", "_rank_in_state", "_percentile_state"):
+for _c in (
+    metric_col,
+    map_value_col,
+    "_baseline_value",
+    "_delta_abs",
+    "_delta_pct",
+    "_rank_in_state",
+    "_percentile_state",
+):
     if _c and (_c not in value_cols) and (_c in prop_work.columns):
         value_cols.append(_c)
 
@@ -1741,9 +1830,15 @@ for _c in ("_risk_class", "_tooltip_value", "_tooltip_baseline", "_tooltip_delta
     if _c in prop_work.columns:
         text_cols.append(_c)
 
-keep_cols = ["__key", "district_name"]
+keep_cols: list[str] = []
+if is_block_level:
+    if "block_name" in prop_work.columns:
+        keep_cols.append("block_name")
+keep_cols.append("district_name")
 if "state_name" in prop_work.columns:
     keep_cols.append("state_name")
+keep_cols.append(feature_key_col)
+
 if "fillColor" in prop_work.columns:
     keep_cols.append("fillColor")
 keep_cols.extend(value_cols)
@@ -1753,7 +1848,7 @@ prop_work = prop_work[keep_cols].copy()
 
 props_map: dict[str, dict] = {}
 for _, r in prop_work.iterrows():
-    k = r.get("__key")
+    k = r.get(feature_key_col)
     if not isinstance(k, str) or not k:
         continue
 
@@ -1761,6 +1856,8 @@ for _, r in prop_work.iterrows():
         "district_name": r.get("district_name"),
         "state_name": r.get("state_name") if "state_name" in prop_work.columns else None,
     }
+    if is_block_level and "block_name" in prop_work.columns:
+        upd["block_name"] = r.get("block_name")
 
     fill = r.get("fillColor")
     upd["fillColor"] = fill if isinstance(fill, str) and fill else "#cccccc"
@@ -1775,25 +1872,21 @@ for _, r in prop_work.iterrows():
 
     props_map[k] = upd
 
-# --- Reduce GeoJSON to only districts present in the current data ---
-valid_keys = set(props_map.keys())
-if valid_keys:
-    fc["features"] = [
-        f
-        for f in fc.get("features", [])
-        if (
-            ((f.get("properties") or {}).get("__key") in valid_keys)
-            or (alias(((f.get("properties") or {}).get("district_name", ""))) in valid_keys)
-        )
-    ]
-
+# Patch feature properties (fillColor + value columns) from the current display_gdf/merged
 for feat in fc.get("features", []):
     props = feat.get("properties") or {}
 
-    k = props.get("__key")
+    k = props.get(feature_key_col)
     if not isinstance(k, str) or not k:
-        k = alias(props.get("district_name", ""))
-        props["__key"] = k
+        if is_block_level:
+            props["block_name"] = props.get("block_name") or props.get("block") or props.get("adm3_name") or props.get("name")
+            props["district_name"] = props.get("district_name") or props.get("district") or props.get("adm2_name") or props.get("shapeName_2") or props.get("shapeName_1")
+            props["state_name"] = props.get("state_name") or props.get("state") or props.get("adm1_name") or props.get("shapeName_0") or props.get("shapeGroup")
+            k = f"{alias(props.get('state_name', ''))}|{alias(props.get('district_name', ''))}|{alias(props.get('block_name', ''))}"
+        else:
+            k = alias(props.get("district_name", ""))
+
+        props[feature_key_col] = k
 
     upd = props_map.get(k)
     if upd:
@@ -1801,47 +1894,36 @@ for feat in fc.get("features", []):
     else:
         props.setdefault("fillColor", "#cccccc")
 
-    # IMPORTANT: Folium tooltip asserts if a listed field key is missing.
-    # Ensure these exist on every feature even if values are NaN/missing.
-    props.setdefault("district_name", None)
-    props.setdefault("state_name", None)
-
-    for c in value_cols:
-        props.setdefault(c, None)
-
     # Tooltip text fields
     for c in ("_risk_class", "_tooltip_value", "_tooltip_baseline", "_tooltip_delta", "_tooltip_rank"):
         props.setdefault(c, None)
 
     feat["properties"] = props
 
-# Build tooltip now that fc properties are finalized (district/state + selection context)
+# Build tooltip now that fc properties are finalized (unit/state + selection context)
 highlight_fn = None
 tooltip = None
+layer_name = "Blocks" if is_block_level else "Districts"
 
 if hover_enabled:
     # Main label depends on map mode (absolute vs baseline change)
     main_label = "Δ vs 1990–2010" if map_mode == "Change from 1990-2010 baseline" else "Value"
 
-    tooltip_fields = [
-        "district_name",
-        "state_name",
-        "_tooltip_value",
-    ]
-    tooltip_aliases = [
-        "District",
-        "State",
-        main_label,
-    ]
+    if is_block_level:
+        tooltip_fields = ["block_name", "district_name", "state_name", "_tooltip_value"]
+        tooltip_aliases = ["Block", "District", "State", main_label]
+    else:
+        tooltip_fields = ["district_name", "state_name", "_tooltip_value"]
+        tooltip_aliases = ["District", "State", main_label]
 
     # Show baseline + delta if baseline exists in this dataset
     if baseline_col and (baseline_col in merged.columns):
         tooltip_fields += ["_tooltip_baseline", "_tooltip_delta"]
         tooltip_aliases += ["Baseline (1990–2010)", "Δ vs baseline"]
 
-    # Risk/rank quick glance
+    # Risk/rank quick glance (rank scope is state for ADM2; district for ADM3)
     tooltip_fields += ["_risk_class", "_tooltip_rank"]
-    tooltip_aliases += ["Risk class", "Rank in state"]
+    tooltip_aliases += ["Risk class", f"Rank in {rank_scope_label}"]
 
     tooltip = folium.features.GeoJsonTooltip(
         fields=tooltip_fields,
@@ -1860,7 +1942,7 @@ if hover_enabled:
 _t_geojson = perf_start("map: GeoJSON serialize+add layer")
 folium.GeoJson(
     data=fc,
-    name="Districts",
+    name=layer_name,
     style_function=style_fn,
     tooltip=tooltip,
     highlight_function=highlight_fn,
@@ -2482,38 +2564,83 @@ with col2:
                 normalize_fn=alias,  # shared normalization + NAME_ALIASES (Step 9)
             )
 
-
-        def _filter_series_for_trend(
-            df: pd.DataFrame, state_name: str, district_name: str
+        @st.cache_data
+        def _load_block_yearly(
+            ts_root: Path,
+            state_dir: str,
+            district_display: str,
+            block_display: str,
+            scenario_name: str,
+            varcfg: dict,
+            aliases: dict | None = None,
         ) -> pd.DataFrame:
             """
-            Extract a clean time series for a single state+district from a
+            Load the *scenario-specific* yearly ensemble CSV for a block.
+
+            Delegates to india_resilience_tool.analysis.timeseries for robust discovery.
+            """
+            from india_resilience_tool.analysis.timeseries import load_block_yearly
+
+            return load_block_yearly(
+                ts_root=ts_root,
+                state_dir=state_dir,
+                district_display=district_display,
+                block_display=block_display,
+                scenario_name=scenario_name,
+                varcfg=varcfg,
+                aliases=aliases,
+                normalize_fn=alias,
+            )
+
+        def _filter_series_for_trend(
+            df: pd.DataFrame,
+            state_name: str,
+            district_name: str,
+            block_name: Optional[str] = None,
+        ) -> pd.DataFrame:
+            """
+            Extract a clean time series for a single unit from a
             scenario-specific yearly dataframe.
+
+            In district mode: filters to (state, district)
+            In block mode:    filters to (state, district, block) when block_name is provided
             """
             if df is None or df.empty:
                 return pd.DataFrame()
+
             d = df.copy()
-            cols = set(map(str, d.columns))
-            if not {"district", "year", "mean"}.issubset(cols):
-                return pd.DataFrame()
-            if "state" not in d.columns:
-                d["state"] = state_name
+
+            # Normalize id columns (tolerate 'block_name' vs 'block')
+            if "block_name" in d.columns and "block" not in d.columns:
+                d["block"] = d["block_name"]
 
             def _n(s: str) -> str:
                 return alias(s)
 
-            d["_state_key"] = d["state"].astype(str).map(_n)
-            d["_district_key"] = d["district"].astype(str).map(_n)
+            if "state" in d.columns:
+                d["_state_key"] = d["state"].astype(str).map(_n)
+            else:
+                d["_state_key"] = pd.Series([""] * len(d), index=d.index)
 
-            mask = (
-                (d["_state_key"] == _n(state_name))
-                & (d["_district_key"] == _n(district_name))
-            )
+            if "district" in d.columns:
+                d["_district_key"] = d["district"].astype(str).map(_n)
+            else:
+                d["_district_key"] = pd.Series([""] * len(d), index=d.index)
+
+            mask = (d["_state_key"] == _n(state_name)) & (d["_district_key"] == _n(district_name))
+
+            # Optional block filter when present + requested
+            if block_name and ("block" in d.columns):
+                d["_block_key"] = d["block"].astype(str).map(_n)
+                mask = mask & (d["_block_key"] == _n(block_name))
+
             if not mask.any():
-                mask = (
-                    (d["_state_key"] == _n(state_name))
-                    & d["_district_key"].str.contains(_n(district_name), na=False)
-                )
+                # Soft fallback: allow partial matches on district (and block if provided)
+                mask = (d["_state_key"] == _n(state_name)) & d["_district_key"].str.contains(_n(district_name), na=False)
+                if block_name and ("block" in d.columns):
+                    d["_block_key"] = d["block"].astype(str).map(_n)
+                    mask = mask & d["_block_key"].str.contains(_n(block_name), na=False)
+
             d = d[mask]
             if d.empty:
                 return d
@@ -2840,29 +2967,58 @@ with col2:
         state_dir_for_fs = requested_state_dir
         district_for_fs = row.get("district_name") or selected_district
 
-        # Historical (1990–2010)
-        _district_yearly_hist = _load_district_yearly(
-            ts_root=PROCESSED_ROOT,
-            state_dir=str(state_dir_for_fs),
-            district_display=str(district_for_fs),
-            scenario_name="historical",
-            varcfg=VARCFG,
-            aliases=NAME_ALIASES,
-        )
+        block_for_fs = row.get("block_name") or selected_block
 
-        # Selected SSP scenario (2020–2060)
-        _district_yearly_scen = _load_district_yearly(
-            ts_root=PROCESSED_ROOT,
-            state_dir=str(state_dir_for_fs),
-            district_display=str(district_for_fs),
-            scenario_name=sel_scenario,
-            varcfg=VARCFG,
-            aliases=NAME_ALIASES,
-        )
+        if _admin_level == "block" and selected_block != "All":
+            # Historical (1990–2010) - block level
+            _district_yearly_hist = _load_block_yearly(
+                ts_root=PROCESSED_ROOT,
+                state_dir=str(state_dir_for_fs),
+                district_display=str(district_for_fs),
+                block_display=str(block_for_fs),
+                scenario_name="historical",
+                varcfg=VARCFG,
+                aliases=NAME_ALIASES,
+            )
 
-        # Prepare time series for the details panel
-        hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name)
-        scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name)
+            # Selected SSP scenario (2020–2060) - block level
+            _district_yearly_scen = _load_block_yearly(
+                ts_root=PROCESSED_ROOT,
+                state_dir=str(state_dir_for_fs),
+                district_display=str(district_for_fs),
+                block_display=str(block_for_fs),
+                scenario_name=sel_scenario,
+                varcfg=VARCFG,
+                aliases=NAME_ALIASES,
+            )
+
+            # Prepare time series for the details panel (block filter)
+            hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name, str(block_for_fs))
+            scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name, str(block_for_fs))
+        else:
+            # Historical (1990–2010) - district level
+            _district_yearly_hist = _load_district_yearly(
+                ts_root=PROCESSED_ROOT,
+                state_dir=str(state_dir_for_fs),
+                district_display=str(district_for_fs),
+                scenario_name="historical",
+                varcfg=VARCFG,
+                aliases=NAME_ALIASES,
+            )
+
+            # Selected SSP scenario (2020–2060) - district level
+            _district_yearly_scen = _load_district_yearly(
+                ts_root=PROCESSED_ROOT,
+                state_dir=str(state_dir_for_fs),
+                district_display=str(district_for_fs),
+                scenario_name=sel_scenario,
+                varcfg=VARCFG,
+                aliases=NAME_ALIASES,
+            )
+
+            # Prepare time series for the details panel
+            hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name)
+            scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name)
 
         # Import required functions for details panel
         from india_resilience_tool.viz.charts import (
