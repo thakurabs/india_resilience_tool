@@ -964,8 +964,19 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(PIPELINE_M
 # -----------------------------------------------------------------------------
 # DASHBOARD DISCOVERY TEMPLATES
 # -----------------------------------------------------------------------------
+# These templates define where to look for yearly ensemble CSVs.
+# The actual data structure is:
+#   {root}/{state}/districts/ensembles/{district}/{scenario}/{district}_yearly_ensemble.csv
 DEFAULT_DISTRICT_YEARLY_CANDIDATES = [
+    # NEW structure (current data layout)
+    "{root}/{state}/districts/ensembles/{district}/{scenario}/{district}_yearly_ensemble.csv",
+    "{root}/{state}/districts/ensembles/{district_underscored}/{scenario}/{district_underscored}_yearly_ensemble.csv",
+    # OLD structure (legacy fallback)
     "{root}/{state}/{district_underscored}/ensembles/{scenario}/{district_underscored}_yearly_ensemble.csv",
+    "{root}/{state}/{district}/ensembles/{scenario}/{district}_yearly_ensemble.csv",
+    # Legacy single-file structure
+    "{root}/{state}/{district_underscored}/district_yearly_ensemble_stats.csv",
+    "{root}/{state}/{district}/district_yearly_ensemble_stats.csv",
 ]
 
 DEFAULT_STATE_YEARLY_CANDIDATES = [

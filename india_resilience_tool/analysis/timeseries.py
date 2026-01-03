@@ -184,6 +184,8 @@ def load_district_yearly(
     df = _normalize_ensemble_columns(df)
 
     # Infer missing id columns
+    if "state" not in df.columns:
+        df["state"] = str(state_dir).strip()
     if "district" not in df.columns:
         df["district"] = str(district_display).strip()
     if "scenario" not in df.columns:
@@ -254,6 +256,9 @@ def load_block_yearly(
     df = _normalize_ensemble_columns(df)
 
     # Infer missing id columns
+    # Infer missing id columns
+    if "state" not in df.columns:
+        df["state"] = str(state_dir).strip()
     if "block" not in df.columns:
         df["block"] = str(block_display).strip()
     if "district" not in df.columns:

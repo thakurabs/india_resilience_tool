@@ -168,7 +168,7 @@ def render_perf_panel_safe() -> None:
 # -------------------------
 # CONFIG
 # -------------------------
-from paths import DATA_DIR, DISTRICTS_PATH, BLOCKS_PATH
+from paths import DATA_DIR, DISTRICTS_PATH, BLOCKS_PATH, resolve_processed_root
 
 from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_ADM2,
@@ -866,9 +866,9 @@ with metric_ui_placeholder.container():
             # # And a short textual caption under the dropdown
             st.caption(desc)
 
-        PROCESSED_ROOT = Path(
-            os.getenv("IRT_PROCESSED_ROOT", DATA_DIR / "processed" / VARIABLE_SLUG)
-        ).resolve()
+        PROCESSED_ROOT = resolve_processed_root(
+            VARIABLE_SLUG, data_dir=DATA_DIR, mode="portfolio"
+        )
         (PROCESSED_ROOT / PILOT_STATE).mkdir(parents=True, exist_ok=True)
         _master_name = "master_metrics_by_block.csv" if st.session_state.get("admin_level", "district") == "block" else "master_metrics_by_district.csv"
         MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / _master_name
