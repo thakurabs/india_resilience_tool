@@ -59,8 +59,9 @@ def render_rankings_view(
         st.caption("No ranking data available for this selection.")
         return
 
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-    is_portfolio_mode = analysis_mode == "Multi-district portfolio"
+    default_mode = "Single block focus" if level_norm == "block" else "Single district focus"
+    analysis_mode = st.session_state.get("analysis_mode", default_mode)
+    is_portfolio_mode = "Multi" in str(analysis_mode)
 
     if is_portfolio_mode:
         _render_portfolio_rankings(
