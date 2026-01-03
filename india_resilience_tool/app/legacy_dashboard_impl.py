@@ -1184,6 +1184,14 @@ with state_placeholder.container():
         ):
             st.session_state["selected_district"] = "All"
 
+        # Portfolio mode behavior for district selection:
+        # - In district-level portfolio mode: freeze district to "All"
+        # - In block-level portfolio mode: allow district selection (needed to navigate blocks)
+        # Check this BEFORE creating the widget to avoid Streamlit session state errors
+        _current_analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+        if "Multi" in _current_analysis_mode and admin_level != "block":
+            st.session_state["selected_district"] = "All"
+
         selected_district = st.selectbox(
             "District",
             options=districts,
@@ -1274,11 +1282,13 @@ with state_placeholder.container():
                 unsafe_allow_html=True,
             )
 
-        # Portfolio mode behavior for district selection:
-        # - In district-level portfolio mode: freeze district to "All"
-        # - In block-level portfolio mode: allow district selection (needed to navigate blocks)
+        # Note: Portfolio mode behavior for district selection is now handled BEFORE
+        # the selectbox widget is created (around line 1186) to avoid Streamlit
+        # session state modification errors.
+        # In district-level portfolio mode: district is frozen to "All"
+        # In block-level portfolio mode: district selection is allowed (needed to navigate blocks)
         if "Multi" in analysis_mode and admin_level != "block":
-            st.session_state["selected_district"] = "All"
+            # Just update the local variable; session_state was already set before widget
             selected_district = "All"
 
 # -------------------------
