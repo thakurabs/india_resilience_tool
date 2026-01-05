@@ -1,62 +1,69 @@
 # India Resilience Tool (IRT)
 
-A Streamlit-based dashboard for exploring climate resilience metrics across Indian districts. The tool visualizes ensemble climate model outputs, enabling comparison of temperature and rainfall indices across scenarios and time periods.
+A Streamlit-based dashboard for exploring climate resilience metrics across **Indian administrative units at two levels**:
+
+- **Districts (ADM2)**
+- **Blocks / Sub-districts (ADM3)**
+
+The tool visualizes **ensemble climate model outputs** and derived indices (temperature and rainfall), enabling comparison across **scenarios** and **time periods**, plus portfolio-style comparison of multiple districts **or blocks**.
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
+---
+
 ## Features
 
-- **Interactive Map View**: Choropleth visualization of climate metrics across districts
-- **Rankings Table**: Sortable district rankings with risk classification
-- **District Details**: In-depth analysis with scenario comparisons and time series
-- **Multi-District Portfolio**: Build and compare sets of districts with multiple add methods
-- **PDF Export**: Generate case study reports for districts
-- **Multiple Climate Indices**: Temperature and rainfall metrics from CMIP6 ensemble
+### Core exploration
+- **Admin level toggle**: District ↔ Block
+- **Interactive Map View**: Choropleth visualization with hover highlight + tooltip
+- **Rankings Table**:
+  - District-wise rankings (ADM2)
+  - Block-wise rankings (ADM3)
+  - Risk classification + percentiles
+- **Details panel (Climate Profile)**:
+  - Risk summary
+  - Scenario comparison (period-mean)
+  - Trend over time (yearly series, when available)
+  - Detailed statistics and exports (availability depends on branch)
 
-### Multi-District Portfolio Mode
+### Portfolio mode (districts and blocks)
+Portfolio mode exists at **both** admin levels:
 
-Build and compare sets of districts with three ways to add:
+- **Multi-district portfolio**: build and compare sets of districts
+- **Multi-block portfolio**: build and compare sets of blocks (within the selected state)
 
-**From the Map:**
-- Click any district on the choropleth map
-- Click "+ Add to portfolio" button that appears below the map
-- Districts in portfolio are highlighted with blue borders
+You can add units to your portfolio in three ways (same UX in district and block modes):
 
-**From Rankings Table:**
+**From the Map**
+- Click a district/block on the choropleth map
+- Use the "+ Add to portfolio" control that appears below the map
+- Portfolio units are highlighted (e.g., blue borders)
+
+**From the Rankings Table**
 - Switch to Rankings view
-- Check the "Add" column for districts you want
-- Click "Add checked districts to portfolio"
-- Districts already in portfolio show ✓ in the "In portfolio" column
+- Select rows to add (checkboxes / editor column)
+- Click “Add checked … to portfolio”
+- Units already in portfolio show ✓ in “In portfolio”
 
-**By Coordinates:**
-- Use the "Add by Location" panel
-- **Single Coordinate:** Enter lat/lon, preview the district, add directly or show on map
-- **Batch Input:** Paste multiple coordinates (one per line), preview all, add all at once
-- **Saved Points:** Build a list of locations for batch adding later
+**By Coordinates (Point Selection)**
+- Use the “Add by Location” panel (single + batch)
+- Preview which district/block contains the point
+- Add to portfolio or show markers on the map
 
-### Portfolio Comparison Table
-
-Once you have districts in your portfolio:
-- Select one or more climate indices to compare
+### Portfolio comparison
+Once you have items in your portfolio:
+- Select one or more indices to compare
 - Table auto-rebuilds when portfolio or selection changes
-- Shows: District, State, Index value, Baseline, Change (Δ), Percentile, Risk class
 - Download comparison as CSV
+- Visualizations (e.g., heatmap) for quick comparison
 
-### Map Visualization
-
-- **Choropleth coloring** based on selected climate metric
-- **Portfolio highlighting** with blue borders for districts in your portfolio
-- **Preview markers:**
-  - Red star: Single location from "Show on map"
-  - Green markers: Batch locations from "Show all on map"
-  - Blue markers: Saved points
+---
 
 ## Quick Start
 
 ### Prerequisites
-
 - Python 3.10+
 - Processed climate data (see [Data Setup](#data-setup))
 
@@ -68,185 +75,157 @@ git clone https://github.com/your-org/india-resilience-tool.git
 cd india-resilience-tool
 ```
 
-**Option 1: Using Conda (Recommended)**
+**Option 1: Conda (recommended)**
 
 ```bash
-# Create environment from yml file
 conda env create -f environment.yml
-
-# Activate environment
 conda activate irt
 ```
 
-**Option 2: Using pip**
+**Option 2: pip**
 
 ```bash
-# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### Running the Dashboard
+### Running the dashboard
 
 ```bash
 streamlit run dashboard_unfactored.py
 ```
 
-The dashboard will open in your browser at `http://localhost:8501`.
+Open in a browser: `http://localhost:8501`
+
+---
 
 ## Data Setup
 
-### Required Data Files
+### Required boundary files (EPSG:4326)
 
-1. **District Boundaries** (`districts_4326.geojson`)
-   - ADM2 (district) level GeoJSON in EPSG:4326
-   - Place in `DATA_DIR` (configured in `paths.py`)
+Place these in `DATA_DIR` (configured in `paths.py`, or overridden via `IRT_DATA_DIR`):
 
-2. **Master Metrics CSV** (auto-generated)
-   - Location: `DATA_DIR/processed/{index}/{state}/master_metrics_by_district.csv`
-   - Generated by `build_master_metrics.py`
+1. **District boundaries**: `districts_4326.geojson` (ADM2)
+2. **Block boundaries**: `block_4326.geojson` (ADM3)
 
-### Directory Structure
+> Block mode requires `block_4326.geojson`.
+
+### Processed outputs directory structure
+
+Processed artifacts are organized **by index slug** (e.g., `tas_gt32`) and state.
 
 ```
 DATA_DIR/
 ├── districts_4326.geojson
+├── block_4326.geojson
 └── processed/
-    └── {index_slug}/           # e.g., tas_gt32
-        └── {state}/            # e.g., Telangana
+    └── {index_slug}/                 # e.g., tas_gt32
+        └── {state}/                  # e.g., Telangana
             ├── master_metrics_by_district.csv
-            ├── state_yearly_ensemble_stats.csv
-            └── {district}/
-                └── ensembles/
-                    └── {scenario}/
-                        └── {district}_yearly_ensemble.csv
+            ├── master_metrics_by_block.csv
+            ├── districts/
+            │   ├── {district}/{model}/{scenario}/
+            │   │   ├── {district}_yearly.csv
+            │   │   └── {district}_periods.csv
+            │   └── ensembles/{district}/{scenario}/
+            │       └── {district}_yearly_ensemble.csv
+            └── blocks/
+                ├── {district}/{block}/{model}/{scenario}/
+                │   ├── {block}_yearly.csv
+                │   └── {block}_periods.csv
+                └── ensembles/{district}/{block}/{scenario}/
+                    └── {block}_yearly_ensemble.csv
 ```
 
-### Building Master CSV
+Notes:
+- Windows may show `.csv` as “Microsoft Excel CSV”; they’re normal CSVs.
+- The dashboard uses **master metrics** for maps/rankings and **ensemble yearly** files for trends.
+
+### Building master CSVs (district + block)
 
 ```bash
 python build_master_metrics.py
 ```
 
-Or use the dashboard's "Rebuild now" button in the sidebar.
+Or use the dashboard’s “Rebuild now” control if exposed in your branch.
+
+---
+
+## Usage Guide
+
+### Admin level selection
+Use the left sidebar toggle:
+- **District**: explore districts and build district portfolios
+- **Block**: explore blocks and build block portfolios
+
+### Analysis modes
+Each admin level supports:
+1. **Single focus**: explore one district/block at a time
+2. **Portfolio focus**:
+   - Multi-district portfolio
+   - Multi-block portfolio
+
+### Trend over time (yearly series)
+The Trend panel looks for **ensemble yearly** time-series:
+
+- District trend: `districts/ensembles/{district}/{scenario}/{district}_yearly_ensemble.csv`
+- Block trend: `blocks/ensembles/{district}/{block}/{scenario}/{block}_yearly_ensemble.csv`
+
+Some ensemble-yearly CSVs may not include identifier columns (e.g., `state`, `district`, `block`). The loader injects missing identifiers from the path context so filtering stays consistent in-memory.
+
+If Trend shows “No yearly time-series available…”:
+- confirm the `*_yearly_ensemble.csv` exists under the `ensembles/` path
+- confirm it contains `year` and at least one usable value column (commonly `ensemble_mean`, `mean`, or `value`)
+
+---
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+|---|---|---|
 | `IRT_PILOT_STATE` | `Telangana` | Default state to load |
-| `IRT_PROCESSED_ROOT` | `DATA_DIR/processed/{index}` | Processed data location |
+| `IRT_DATA_DIR` | (from `paths.py`) | Base data directory for boundary + processed |
+| `IRT_PROCESSED_ROOT` | `DATA_DIR/processed/{index}` | Processed data location override |
 | `IRT_DEBUG` | `0` | Enable debug output (1=on) |
 
-### Data Directory
-
-Edit `paths.py` to set your data directory:
+### Data directory
+Edit `paths.py` to set `DATA_DIR`, or set `IRT_DATA_DIR`.
 
 ```python
 DATA_DIR = Path("/path/to/your/data")
 ```
 
-## Usage Guide
+---
 
-### Analysis Modes
-
-1. **Single District Focus**: Explore one district at a time with detailed metrics
-2. **Multi-District Portfolio**: Build a set of districts for comparison
-
-### Portfolio Workflow
-
-1. **Switch to Portfolio Mode:** Select "Multi-district portfolio" in the sidebar
-
-2. **Add Districts:** Use any combination of:
-   - Click on map → "+ Add to portfolio" button
-   - Rankings table → Check boxes → "Add checked districts"
-   - Coordinates panel → Enter lat/lon → "Add to portfolio"
-
-3. **View Portfolio:**
-   - Badge shows count: "📋 X districts in portfolio"
-   - Expand "Manage portfolio districts" to see list
-   - Remove individual districts with × button
-   - Clear all with "Clear all" button (requires confirmation)
-
-4. **Compare Districts:**
-   - Select indices to compare (defaults to current index)
-   - Table shows all districts × all selected indices
-   - Download as CSV for external analysis
-
-5. **Visualize Locations:**
-   - "Show on map" places a marker at coordinates
-   - Portfolio districts highlighted with blue borders
-   - Jump between Map and Rankings views freely
-
-### Coordinate Input Formats
-
-The batch input panel accepts:
-```
-17.3850, 78.4867
-18.1124, 79.0193, Warangal Office
-16.5062 80.6480
-```
-
-- Latitude first, then longitude
-- Comma or space separated
-- Optional label after coordinates
-- One coordinate pair per line
-
-### Available Indices
-
-**Temperature**
-- Summer Days (days > 32°C)
-- Consecutive Summer Days
-- Tropical Nights
-- Heat Wave Duration Index (HWDI)
-- Heat Wave Frequency Index (HWFI)
-- Annual/Summer Max Temperature
-- Annual/Winter Min Temperature
-
-**Rainfall**
-- Rainy Days (> 2.5mm)
-- Simple Daily Intensity
-- Maximum 1-day/5-day Precipitation
-- Heavy/Very Heavy Precipitation Days
-- Consecutive Dry Days
-
-### Scenarios & Periods
-
-- **Scenarios**: SSP2-4.5 (moderate), SSP5-8.5 (high emissions)
-- **Periods**: 1995-2014, 2021-2040, 2041-2060, 2061-2080, 2081-2100
-
-## Project Structure
+## Project Structure (high level)
 
 ```
 india_resilience_tool/
 ├── analysis/
-│   ├── portfolio.py            # Portfolio state & comparison table builder
-│   ├── metrics.py              # Risk classification
-│   └── timeseries.py           # Time series data loading
+│   ├── portfolio.py            # Portfolio state & comparison builders (district + block)
+│   ├── metrics.py              # Risk classification utilities
+│   └── timeseries.py           # District/block time-series loaders
 ├── app/
-│   ├── state.py                # Session state defaults & constants
-│   ├── sidebar.py              # Sidebar controls & navigation
-│   ├── portfolio_ui.py         # Portfolio panel (right column)
-│   ├── point_selection_ui.py   # Coordinate input with batch support
+│   ├── legacy_dashboard_impl.py # Main orchestrator (district + block flows)
+│   ├── sidebar.py              # Sidebar controls (admin level, analysis mode, selection)
+│   ├── portfolio_ui.py         # Portfolio panel for districts + blocks
+│   ├── point_selection_ui.py   # Coordinate input with batch support (district + block)
 │   └── views/
-│       ├── map_view.py         # Map with portfolio highlighting
-│       ├── rankings_view.py    # Rankings with add buttons
-│       ├── details_panel.py    # District details
+│       ├── map_view.py         # Map rendering for districts + blocks
+│       ├── rankings_view.py    # Rankings with add-to-portfolio (district + block)
+│       ├── details_panel.py    # Details panel (district + block; some panels may be district-first)
 │       └── state_summary_view.py
 ├── config/
 │   ├── constants.py            # App constants
 │   └── variables.py            # Climate index registry
 ├── data/
-│   ├── adm2_loader.py          # GeoJSON loading
-│   ├── master_loader.py        # CSV loading
-│   └── merge.py                # Data merging
-├── utils/
-│   └── naming.py               # Name normalization
+│   ├── adm2_loader.py          # District boundary loading
+│   ├── adm3_loader.py          # Block boundary loading
+│   ├── master_loader.py        # Master CSV loading
+│   └── merge.py                # Merge master ↔ boundaries (ADM2/ADM3)
 └── viz/
     ├── charts.py               # Figure generation
     ├── colors.py               # Color scales
@@ -263,143 +242,51 @@ Root files:
 
 For detailed module documentation, see [MANIFEST.md](MANIFEST.md).
 
+---
+
 ## Development
 
-### Running Tests
+### Running tests
 
 ```bash
-# All tests
 python -m pytest -q
-
-# With coverage
 python -m pytest --cov=india_resilience_tool
-
-# Specific test file
-python -m pytest tests/test_config.py -v
 ```
 
-### Code Style
+### Code style
 
 ```bash
-# Format code
 black india_resilience_tool/
-
-# Type checking
-mypy india_resilience_tool/
-
-# Linting
 ruff check india_resilience_tool/
+mypy india_resilience_tool/
 ```
 
-### Adding a New Climate Index
+---
 
-1. Add entry to `india_resilience_tool/config/variables.py`:
+## Changelog (high level)
 
-```python
-VARIABLES["new_index_slug"] = {
-    "label": "Display Name",
-    "group": "temperature",  # or "rain"
-    "periods_metric_col": "column_name_in_csv",
-    "description": "Human-readable description",
-    "district_yearly_candidates": [...],
-    "state_yearly_candidates": [...],
-}
-```
+### v2.2 — Block-level visualization + portfolio parity (2026-01)
+- Added **ADM3 Block** support across map, rankings, and portfolio comparison.
+- Block rankings table now supports **add-to-portfolio** with the same UX as district mode.
+- Trend over time supports **block ensemble yearly** series when present.
+- Time-series loader injects missing identifiers (e.g., state) for consistent filtering.
 
-2. Ensure processed data exists with matching column names
-3. Rebuild master CSV if needed
+### v2.1 — Portfolio UX improvements (2024-12)
+- Add districts from map clicks, rankings table, and coordinates
+- Batch coordinates + saved points
+- Auto-rebuilding comparison table
 
-## Architecture
+### v2.0 — Modular refactor (2024-12)
+- Refactored from monolithic dashboard to modular structure
 
-### Entry Point Chain
-
-```
-dashboard_unfactored.py
-    → india_resilience_tool.app.main.run()
-    → india_resilience_tool.app.dashboard.run_dashboard()
-    → india_resilience_tool.app.orchestrator.run_app()
-    → executes legacy_dashboard_impl.py
-```
-
-### Key Design Patterns
-
-- **Dependency Injection**: View renderers receive callbacks as parameters
-- **Session State**: Streamlit session state for UI persistence
-- **Caching**: `@st.cache_data` for expensive computations
-- **Lazy Imports**: Streamlit imported inside functions to enable testing
-
-## Troubleshooting
-
-### Common Issues
-
-**"Master CSV not found"**
-- Run `python build_master_metrics.py` or click "Rebuild now" in sidebar
-- Check `IRT_PROCESSED_ROOT` environment variable
-
-**"ADM2 geojson not found"**
-- Place `districts_4326.geojson` in `DATA_DIR`
-- Check `paths.py` configuration
-
-**Slow map rendering**
-- Reduce `SIMPLIFY_TOL_ADM2` in `config/constants.py`
-- Use state-level view instead of "All" states
-
-**Import errors after refactoring**
-- Ensure `india_resilience_tool/config/__init__.py` exists
-- Run `pip install -e .` for editable install
-
-**Map click not showing add button**
-- Ensure you're in "Multi-district portfolio" mode
-- The button appears below the map after clicking a district
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+---
 
 ## License
+MIT License — see [LICENSE](LICENSE) for details.
 
-MIT License - see [LICENSE](LICENSE) for details.
+---
 
 ## Contact
 
 **Author:** Abu Bakar Siddiqui Thakur  
-**Email:** abs.thakur@resilience.org.in
-
-## Acknowledgments
-
-- Climate data from CMIP6 ensemble models
-- District boundaries from administrative datasets
-- Built with [Streamlit](https://streamlit.io/), [Folium](https://python-visualization.github.io/folium/), [GeoPandas](https://geopandas.org/)
-
-## Changelog
-
-### v2.1 - Portfolio UX Improvements (2024-12)
-
-**New Features:**
-- Add districts directly from map clicks
-- Batch coordinate input with preview
-- "Show on map" for coordinate preview
-- Auto-rebuilding comparison table
-- Portfolio district highlighting on map
-
-**Improvements:**
-- Removed mandatory route selection (rankings/map/saved_points)
-- All add methods available simultaneously
-- Rankings table shows all columns including percentile
-- Consistent add/remove UX across all entry points
-
-**Bug Fixes:**
-- Fixed rankings table index alignment for batch adding
-- Fixed coordinate-based district lookup from map clicks
-
-### v2.0 - Modular Refactoring (2024-12)
-- Refactored monolithic dashboard to modular structure
-- ~38% code reduction through consolidation
-- Improved testability with dependency injection
-
-### v1.0 - Initial Release (2024-Q4)
-- Initial monolithic dashboard implementation
+**Email:** absthakur@resilience.org.in
