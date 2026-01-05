@@ -33,8 +33,9 @@ Output Structure:
                 └── {block}_yearly_ensemble.csv
 
 Usage:
-  python compute_indices_multiprocess.py                        # Default (district level, 75% CPUs)
-  python compute_indices_multiprocess.py --level block          # Block level
+  python compute_indices_multiprocess.py                        # Default (district + block, 75% CPUs)
+  python compute_indices_multiprocess.py --level district       # District only
+  python compute_indices_multiprocess.py --level block          # Block only
   python compute_indices_multiprocess.py -w 8                   # Use 8 workers
   python compute_indices_multiprocess.py -w 1 -v                # Sequential + verbose
   python compute_indices_multiprocess.py --list-metrics         # List available metrics
@@ -1012,8 +1013,13 @@ def main():
                         help=f"Number of worker processes (default: {DEFAULT_WORKERS})")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Enable verbose/debug logging")
-    parser.add_argument("-l", "--level", choices=["district", "block"], default="district",
-                        help="Administrative level for spatial aggregation (default: district)")
+    parser.add_argument(
+        "-l",
+        "--level",
+        choices=["district", "block", "both"],
+        default="both",
+        help="Administrative level for spatial aggregation (default: both)",
+    )
     parser.add_argument("-s", "--state", default="Telangana",
                         help="State to process (default: Telangana)")
     parser.add_argument("--metrics", nargs="+",
@@ -1042,15 +1048,26 @@ def main():
         print(f"Total: {len(MODELS)}")
         return
     
-    run_pipeline_parallel(
-        num_workers=args.workers,
-        verbose=args.verbose,
-        metrics_filter=args.metrics,
-        models_filter=args.models,
-        scenarios_filter=args.scenarios,
-        level=args.level,
-        state=args.state,
-    )
+    # Ensure our banners use the same log format as the pipeline itself
+    setup_logging(args.verbose)
+
+    levels_to_run = ["district", "block"] if args.level == "both" else [args.level]
+    total_runs = len(levels_to_run)
+
+    for run_idx, lvl in enumerate(levels_to_run, start=1):
+        logging.info("#" * 78)
+        logging.info(f"RUN {run_idx}/{total_runs}: {lvl.upper()} LEVEL")
+        logging.info("#" * 78)
+
+        run_pipeline_parallel(
+            num_workers=args.workers,
+            verbose=args.verbose,
+            metrics_filter=args.metrics,
+            models_filter=args.models,
+            scenarios_filter=args.scenarios,
+            level=lvl,
+            state=args.state,
+        )
 
 if __name__ == "__main__":
     main()

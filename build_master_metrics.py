@@ -13,8 +13,11 @@ For blocks, only supports NEW structure:
 - {state}/blocks/{district}/{block}/{model}/{scenario}/
 
 Usage:
-    python build_master_metrics.py --level block --state Telangana
-    python build_master_metrics.py --level district --state Telangana
+Usage:
+    python build_master_metrics.py                         # Default: district + block
+    python build_master_metrics.py --level district         # District only
+    python build_master_metrics.py --level block            # Block only
+    python build_master_metrics.py --state Telangana        # Filter to a state (batch mode)
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -34,6 +37,7 @@ import pandas as pd
 
 
 AdminLevel = Literal["district", "block"]
+CLILevel = Literal["district", "block", "both"]
 
 # Folder names for clean separation
 DISTRICT_FOLDER = "districts"
@@ -793,8 +797,13 @@ def build_all_master_metrics(
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build master_metrics CSV(s) from processed outputs.")
     
-    p.add_argument("--level", "-l", choices=["district", "block"], default="district",
-                   help="Administrative level (default: district)")
+    p.add_argument(
+        "--level",
+        "-l",
+        choices=["district", "block", "both"],
+        default="both",
+        help="Administrative level (default: both)",
+    )
     p.add_argument("--processed-root", "-p", default=None,
                    help="Processed root directory")
     p.add_argument("--state", "-s", default=None,
@@ -815,42 +824,60 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     verbose = not bool(args.quiet)
-    level: AdminLevel = args.level
-    
+
+    cli_level: CLILevel = args.level
+    levels_to_run: List[AdminLevel] = ["district", "block"] if cli_level == "both" else [cli_level]  # type: ignore[list-item]
+
     state_filter = [s.strip() for s in str(args.state).split(",") if s.strip()] if args.state else None
-    
+
+    def _print_run_banner(run_idx: int, total: int, lvl: AdminLevel) -> None:
+        if not verbose:
+            return
+        print("#" * 78)
+        print(f"RUN {run_idx}/{total}: {lvl.upper()} LEVEL")
+        print("#" * 78)
+
     # Single-metric mode
     if args.output_root:
         if not args.state:
             raise SystemExit("Single-metric mode requires --state")
+
         metric_col = args.metric or "value"
-        master_filename = get_master_csv_filename(level)
-        default_out = Path(args.output_root) / str(args.state) / master_filename
-        build_master_metrics(
-            args.output_root,
-            str(args.state),
-            metric_col_in_periods=metric_col,
-            out_path=str(default_out),
-            attach_centroid_geojson=args.district_geojson,
-            verbose=verbose,
-            metric_col_candidates=[metric_col, "value"],
-            level=level,
-        )
+        total_runs = len(levels_to_run)
+
+        for run_idx, level in enumerate(levels_to_run, start=1):
+            _print_run_banner(run_idx, total_runs, level)
+            master_filename = get_master_csv_filename(level)
+            default_out = Path(args.output_root) / str(args.state) / master_filename
+
+            build_master_metrics(
+                args.output_root,
+                str(args.state),
+                metric_col_in_periods=metric_col,
+                out_path=str(default_out),
+                attach_centroid_geojson=args.district_geojson,
+                verbose=verbose,
+                metric_col_candidates=[metric_col, "value"],
+                level=level,
+            )
         return
-    
+
     # Batch mode
     processed_root = Path(args.processed_root) if args.processed_root else _try_import_processed_root()
     if processed_root is None:
         raise SystemExit("Batch mode needs --processed-root or paths.BASE_OUTPUT_ROOT")
-    
-    build_all_master_metrics(
-        processed_root,
-        level=level,
-        state_filter=state_filter,
-        district_geojson=args.district_geojson,
-        verbose=verbose,
-        skip_existing=bool(args.skip_existing),
-    )
+
+    total_runs = len(levels_to_run)
+    for run_idx, level in enumerate(levels_to_run, start=1):
+        _print_run_banner(run_idx, total_runs, level)
+        build_all_master_metrics(
+            processed_root,
+            level=level,
+            state_filter=state_filter,
+            district_geojson=args.district_geojson,
+            verbose=verbose,
+            skip_existing=bool(args.skip_existing),
+        )
 
 
 if __name__ == "__main__":
