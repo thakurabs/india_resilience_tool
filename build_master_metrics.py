@@ -668,7 +668,7 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
         level_path = state_dir / BLOCK_FOLDER
         if not level_path.exists():
             return False
-        patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
+        patterns = ("*/*/*/*/*_periods.csv", "*/*/*/*/*_yearly.csv")
         for pat in patterns:
             try:
                 for _ in level_path.glob(pat):
@@ -680,7 +680,7 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
         # Check for new structure first
         level_path = state_dir / DISTRICT_FOLDER
         if level_path.exists():
-            patterns = ("*/*/*_periods.csv", "*/*/*_yearly.csv")
+            patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
             for pat in patterns:
                 try:
                     for _ in level_path.glob(pat):
@@ -689,7 +689,7 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
                     continue
         
         # Check for old structure
-        patterns = ("*/*/*_periods.csv", "*/*/*_yearly.csv")
+        patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
         for pat in patterns:
             try:
                 for _ in state_dir.glob(pat):
