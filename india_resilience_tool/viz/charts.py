@@ -481,22 +481,37 @@ def make_portfolio_heatmap(
         return None
     
     # Check required columns
-    required = {"District", "Index", value_col}
-    if not required.issubset(df.columns):
+    required_base = {"Index", value_col}
+    if not required_base.issubset(df.columns):
         return None
-    
-    # Create district label (District, State)
-    if "State" in df.columns:
-        df = df.copy()
-        df["_district_label"] = df["District"] + ", " + df["State"]
+    if not (("District" in df.columns) or ("Block" in df.columns)):
+        return None
+
+    # Create unit label:
+    # - Block portfolio: "Block, District, State"
+    # - District portfolio: "District, State"
+    df = df.copy()
+    has_block = ("Block" in df.columns) and df["Block"].notna().any()
+
+    if has_block:
+        if "State" in df.columns and "District" in df.columns:
+            df["_unit_label"] = (
+                df["Block"].astype(str) + ", " + df["District"].astype(str) + ", " + df["State"].astype(str)
+            )
+        elif "District" in df.columns:
+            df["_unit_label"] = df["Block"].astype(str) + ", " + df["District"].astype(str)
+        else:
+            df["_unit_label"] = df["Block"].astype(str)
     else:
-        df = df.copy()
-        df["_district_label"] = df["District"]
-    
+        if "State" in df.columns and "District" in df.columns:
+            df["_unit_label"] = df["District"].astype(str) + ", " + df["State"].astype(str)
+        else:
+            df["_unit_label"] = df["District"].astype(str)
+
     # Pivot to matrix form
     try:
         pivot = df.pivot_table(
-            index="_district_label",
+            index="_unit_label",
             columns="Index",
             values=value_col,
             aggfunc="first",
@@ -672,20 +687,34 @@ def make_portfolio_grouped_bar(
         return None
     
     # Check required columns
-    required = {"District", "Index", value_col}
-    if not required.issubset(df.columns):
+    required_base = {"Index", value_col}
+    if not required_base.issubset(df.columns):
         return None
-    
-    # Create district label
-    if "State" in df.columns:
-        df = df.copy()
-        df["_district_label"] = df["District"] + "\n(" + df["State"].str[:3] + ")"
+    if not (("District" in df.columns) or ("Block" in df.columns)):
+        return None
+
+    # Create unit label
+    df = df.copy()
+    has_block = ("Block" in df.columns) and df["Block"].notna().any()
+
+    if has_block:
+        # Keep labels compact but unique
+        if "State" in df.columns and "District" in df.columns:
+            df["_unit_label"] = (
+                df["Block"].astype(str) + "\n" + df["District"].astype(str) + " (" + df["State"].astype(str).str[:3] + ")"
+            )
+        elif "District" in df.columns:
+            df["_unit_label"] = df["Block"].astype(str) + "\n" + df["District"].astype(str)
+        else:
+            df["_unit_label"] = df["Block"].astype(str)
     else:
-        df = df.copy()
-        df["_district_label"] = df["District"]
-    
-    # Get unique districts and indices
-    districts = df["_district_label"].unique()[:max_districts]
+        if "State" in df.columns and "District" in df.columns:
+            df["_unit_label"] = df["District"].astype(str) + "\n(" + df["State"].astype(str).str[:3] + ")"
+        else:
+            df["_unit_label"] = df["District"].astype(str)
+
+    # Get unique units and indices
+    districts = df["_unit_label"].unique()[:max_districts]
     indices = df["Index"].unique()[:max_indices]
     
     n_districts = len(districts)
@@ -719,7 +748,7 @@ def make_portfolio_grouped_bar(
         
         values = []
         for district in districts:
-            match = idx_data[idx_data["_district_label"] == district]
+            match = idx_data[idx_data["_unit_label"] == district]
             if not match.empty:
                 val = match[value_col].iloc[0]
                 values.append(val if pd.notna(val) else 0)

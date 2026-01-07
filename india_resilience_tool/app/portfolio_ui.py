@@ -465,11 +465,39 @@ def render_comparison_table(
 
     # Display table
     if cached_df is not None and not cached_df.empty:
-        st.dataframe(cached_df, hide_index=True, use_container_width=True)
+        # Reorder columns for nicer UX (esp. block mode)
+        display_df = cached_df.copy()
+        preferred: list[str] = []
+
+        for c in ("State", "District"):
+            if c in display_df.columns:
+                preferred.append(c)
+
+        if is_block and "Block" in display_df.columns:
+            preferred.append("Block")
+
+        for c in (
+            "Index",
+            "Group",
+            "Current value",
+            "Baseline",
+            "Δ",
+            "%Δ",
+            "Rank in state",
+            "Percentile",
+            "Risk class",
+        ):
+            if c in display_df.columns and c not in preferred:
+                preferred.append(c)
+
+        remaining = [c for c in display_df.columns if c not in preferred]
+        display_df = display_df[preferred + remaining]
+
+        st.dataframe(display_df, hide_index=True, use_container_width=True)
 
         st.download_button(
             "⬇️ Download as CSV",
-            data=cached_df.to_csv(index=False).encode("utf-8"),
+            data=display_df.to_csv(index=False).encode("utf-8"),
             file_name=f"portfolio_comparison_{level_norm}.csv",
             mime="text/csv",
         )
