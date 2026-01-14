@@ -189,6 +189,11 @@ from india_resilience_tool.config.constants import (
 from india_resilience_tool.config.variables import (
     VARIABLES,
     INDEX_GROUP_LABELS,
+    # Bundle imports (NEW)
+    get_bundles,
+    get_metrics_for_bundle,
+    get_bundle_description,
+    get_default_bundle,
 )
 
 # Data paths derived from DATA_DIR
@@ -793,59 +798,58 @@ PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
 # -------------------------
-# Unified Index selection (single dropdown)
+# Unified Index selection (bundle → metric)
 # -------------------------
 with metric_ui_placeholder.container():
     with st.expander("Metric selection", expanded=True):
         st.markdown("### Metric selection")
 
-        # --- NEW: first pick an index group (Temperature / Rainfall / etc.) ---
-        raw_groups = {cfg.get("group", "other") for cfg in VARIABLES.values()}
-
-        # Deterministic ordering: Temperature, Rain, then any others alphabetically
-        preferred_order = ["temperature", "rain"]
-        all_groups: list[str] = []
-        for g in preferred_order:
-            if g in raw_groups:
-                all_groups.append(g)
-        for g in sorted(raw_groups):
-            if g not in all_groups:
-                all_groups.append(g)
-
-        default_group = st.session_state.get("selected_index_group")
-        if default_group not in all_groups:
-            default_group = "temperature" if "temperature" in all_groups else all_groups[0]
-
-        selected_group = st.radio(
-            "Index group",
-            options=all_groups,
-            index=all_groups.index(default_group),
-            key="selected_index_group",
-            format_func=lambda g: INDEX_GROUP_LABELS.get(g, str(g).title()),
+        # --- Bundle selection (replaces old group-based selection) ---
+        all_bundles = get_bundles()
+        
+        # Get default bundle from session state or use system default
+        default_bundle = st.session_state.get("selected_bundle")
+        if default_bundle not in all_bundles:
+            default_bundle = get_default_bundle()
+            if default_bundle not in all_bundles:
+                default_bundle = all_bundles[0] if all_bundles else None
+        
+        if not all_bundles:
+            st.error("No bundles defined in metrics_registry.py")
+            st.stop()
+        
+        selected_bundle = st.selectbox(
+            "Risk domain",
+            options=all_bundles,
+            index=all_bundles.index(default_bundle) if default_bundle in all_bundles else 0,
+            key="selected_bundle",
+            help="Select a thematic bundle to filter available metrics",
         )
+        
+        # Show bundle description as tooltip/caption
+        bundle_desc = get_bundle_description(selected_bundle)
+        if bundle_desc:
+            st.caption(bundle_desc)
 
-        # Filter indices by the chosen group
-        index_slugs = [
-            slug
-            for slug, cfg in VARIABLES.items()
-            if cfg.get("group", "other") == selected_group
-        ]
+        # Filter indices by the chosen bundle
+        index_slugs = get_metrics_for_bundle(selected_bundle)
 
         # Safety fallback: if something goes wrong, show all indices
         if not index_slugs:
             index_slugs = list(VARIABLES.keys())
+            st.warning(f"Bundle '{selected_bundle}' has no metrics; showing all indices.")
 
-        # Previously selected index might not be in this group; clamp it
+        # Previously selected index might not be in this bundle; clamp it
         default_slug = st.session_state.get("selected_var", index_slugs[0])
         if default_slug not in index_slugs:
             default_slug = index_slugs[0]
 
         selected_var = st.selectbox(
-            "Index",
+            "Metric",
             options=index_slugs,
             index=index_slugs.index(default_slug),
             key="selected_var",
-            format_func=lambda k: VARIABLES[k]["label"],
+            format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
         )
 
         # Resolve per-index config
@@ -856,15 +860,10 @@ with metric_ui_placeholder.container():
         registry_metric = str(VARCFG.get("periods_metric_col", "")).strip()
         st.session_state["registry_metric"] = registry_metric
 
-        # --- NEW: small info button + text description for the selected index ---
+        # --- Metric description ---
         desc = VARCFG.get("description", "").strip()
         if desc:
-            # # A tiny ℹ️ button with a tooltip on hover
-            # info_col, _ = st.columns([0.12, 0.88])
-            # with info_col:
-            #     st.button("ℹ️", help=desc)
-            # # And a short textual caption under the dropdown
-            st.caption(desc)
+            st.caption(f"ℹ️ {desc}")
 
         PROCESSED_ROOT = resolve_processed_root(
             VARIABLE_SLUG, data_dir=DATA_DIR, mode="portfolio"
@@ -3104,6 +3103,6 @@ with col2:
 render_perf_panel_safe()
 st.markdown("---")
 st.caption(
-    "Notes: first choose an Index group (e.g. Temperature vs Rainfall), then an Index within that group. "
+    "Notes: first choose a Risk domain (e.g. Heat Risk, Drought Risk), then a Metric within that bundle. "
     "Details panel shows risk cards, trends, narrative, and a comparison option."
 )

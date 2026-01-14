@@ -4,6 +4,7 @@ Shared metrics registry for the India Resilience Tool (IRT).
 This module unifies:
 - Dashboard metric registry needs (slug/label/group/periods_metric_col + discovery templates)
 - Pipeline metric specs (var/value_col/compute/params/units)
+- Thematic bundles for dashboard UI organization
 
 Includes all standard Climdex indices plus custom IRT indices.
 
@@ -962,6 +963,155 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(PIPELINE_M
 
 
 # -----------------------------------------------------------------------------
+# THEMATIC BUNDLES FOR DASHBOARD UI
+# -----------------------------------------------------------------------------
+# Bundles organize metrics into risk-domain groupings for user-friendly selection.
+# Each bundle maps to a list of metric slugs. Metrics may appear in multiple bundles.
+# Sub-groupings within bundles are documented via inline comments.
+
+BUNDLES: dict[str, list[str]] = {
+    "Heat Risk": [
+        # Heat thresholds (absolute temperature thresholds)
+        "tas_gt32",
+        "txge30_hot_days",
+        "txge35_extreme_heat_days",
+        "su_summer_days_gt25",
+        "tasmin_tropical_nights_gt20",
+        # Heat percentiles (relative to baseline)
+        "tx90p_hot_days_pct",
+        "tn90p_warm_nights_pct",
+        # Heatwaves & persistence
+        "wsdi_warm_spell_days",
+        "tasmax_csd_gt30",
+        "tasmax_csd_events_gt30",
+        "hwdi_tasmax_plus5C",
+        "hwfi_tmean_90p",
+        "hwdi_events_tasmax_plus5C",
+        "hwfi_events_tmean_90p",
+        "hwm_heatwave_magnitude",
+        "hwa_heatwave_amplitude",
+        # Heat baseline context (annual/seasonal means and extremes)
+        "txx_annual_max",
+        "tnx_annual_max",
+        "tasmax_summer_mean",
+        "tasmax_annual_mean",
+        "tasmin_annual_mean",
+    ],
+    "Cold Risk": [
+        # Cold thresholds
+        "fd_frost_days",
+        "id_icing_days",
+        "tnlt2_cold_nights",
+        "tnltm2_very_cold_nights",
+        # Cold percentiles & persistence
+        "tx10p_cool_days_pct",
+        "tn10p_cool_nights_pct",
+        "csdi_cold_spell_days",
+        # Cold baseline context
+        "txn_annual_min",
+        "tnn_annual_min",
+        "tasmin_winter_mean",
+    ],
+    "Agriculture & Growing Conditions": [
+        # Growing season
+        "gsl_growing_season",
+        # Supporting seasonal context
+        "tasmax_summer_mean",
+        "tasmin_winter_mean",
+        "dtr_daily_temp_range",
+    ],
+    "Flood & Extreme Rainfall Risk": [
+        # Peak intensity
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        # Heavy rain day frequency
+        "pr_heavy_precip_days_gt10mm",
+        "r20mm_very_heavy_precip_days",
+        "pr_very_heavy_precip_days_gt25mm",
+        "rain_gt_2p5mm",
+        # Very wet / extremely wet contribution
+        "r95p_very_wet_precip",
+        "r99p_extreme_wet_precip",
+        "r95ptot_contribution_pct",
+        "r99ptot_contribution_pct",
+        # Wet-spell persistence
+        "cwd_consecutive_wet_days",
+        "pr_5day_precip_events_gt50mm",
+    ],
+    "Rainfall Totals & Typical Wetness": [
+        # Annual totals and intensity
+        "prcptot_annual_total",
+        "pr_simple_daily_intensity",
+        "rain_gt_2p5mm",
+    ],
+    "Drought Risk": [
+        # Dry spell persistence
+        "pr_consecutive_dry_days_lt1mm",
+        "pr_consecutive_dry_day_events_gt5",
+        # Meteorological drought (SPI)
+        "spi3_drought_index",
+        "spi6_drought_index",
+        "spi12_drought_index",
+        # Climatic water-balance drought (SPEI)
+        "spei3_drought_index",
+        "spei6_drought_index",
+        "spei12_drought_index",
+    ],
+    "Temperature Variability": [
+        # Daily and annual variability
+        "dtr_daily_temp_range",
+        "etr_extreme_temp_range",
+    ],
+}
+
+# Bundle display order for UI
+BUNDLE_ORDER: list[str] = [
+    "Heat Risk",
+    "Cold Risk",
+    "Agriculture & Growing Conditions",
+    "Flood & Extreme Rainfall Risk",
+    "Rainfall Totals & Typical Wetness",
+    "Drought Risk",
+    "Temperature Variability",
+]
+
+# Default bundle for single-focus mode
+DEFAULT_BUNDLE: str = "Heat Risk"
+
+# Bundle descriptions for UI tooltips/help text
+BUNDLE_DESCRIPTIONS: dict[str, str] = {
+    "Heat Risk": (
+        "Metrics related to extreme heat, heatwaves, and thermal stress. "
+        "Includes threshold-based indices, percentile extremes, and heatwave persistence."
+    ),
+    "Cold Risk": (
+        "Metrics related to cold extremes, frost, and cold spells. "
+        "Includes frost days, icing days, and cold spell duration."
+    ),
+    "Agriculture & Growing Conditions": (
+        "Metrics relevant to crop suitability and growing season length. "
+        "Useful for non-disaster framing of climate impacts on agriculture."
+    ),
+    "Flood & Extreme Rainfall Risk": (
+        "Metrics related to extreme precipitation events and flood risk. "
+        "Includes peak intensity, heavy rain frequency, and wet spell persistence."
+    ),
+    "Rainfall Totals & Typical Wetness": (
+        "Metrics for overall water availability and typical rainfall patterns. "
+        "Distinct from flood extremes; useful for water resource planning."
+    ),
+    "Drought Risk": (
+        "Metrics related to dry spells and drought conditions. "
+        "Includes SPI and SPEI indices at multiple timescales."
+    ),
+    "Temperature Variability": (
+        "Metrics for daily and annual temperature variability. "
+        "Useful for understanding climate stability and interpreting heat stress."
+    ),
+}
+
+
+# -----------------------------------------------------------------------------
 # DASHBOARD DISCOVERY TEMPLATES
 # -----------------------------------------------------------------------------
 # These templates define where to look for yearly ensemble CSVs.
@@ -1016,3 +1166,156 @@ def get_metric_count() -> dict[str, int]:
     """Return count of metrics per group."""
     groups = get_metrics_by_group()
     return {g: len(slugs) for g, slugs in groups.items()}
+
+
+# -----------------------------------------------------------------------------
+# BUNDLE HELPER FUNCTIONS
+# -----------------------------------------------------------------------------
+
+def get_bundles() -> list[str]:
+    """
+    Return ordered list of bundle names for UI display.
+    
+    Returns:
+        List of bundle names in display order.
+    """
+    return list(BUNDLE_ORDER)
+
+
+def get_metrics_for_bundle(bundle: str) -> list[str]:
+    """
+    Return list of metric slugs for a given bundle.
+    
+    Args:
+        bundle: Bundle name (e.g., "Heat Risk").
+        
+    Returns:
+        List of metric slugs in the bundle. Empty list if bundle not found.
+    """
+    return list(BUNDLES.get(bundle, []))
+
+
+def get_bundle_for_metric(slug: str) -> list[str]:
+    """
+    Return list of bundles that contain a given metric slug.
+    
+    Args:
+        slug: Metric slug (e.g., "txx_annual_max").
+        
+    Returns:
+        List of bundle names containing this metric. Empty if not in any bundle.
+    """
+    return [bundle for bundle, slugs in BUNDLES.items() if slug in slugs]
+
+
+def get_bundle_description(bundle: str) -> str:
+    """
+    Return description for a bundle.
+    
+    Args:
+        bundle: Bundle name.
+        
+    Returns:
+        Description string, or empty string if not found.
+    """
+    return BUNDLE_DESCRIPTIONS.get(bundle, "")
+
+
+def get_default_bundle() -> str:
+    """
+    Return the default bundle for single-focus mode.
+    
+    Returns:
+        Default bundle name.
+    """
+    return DEFAULT_BUNDLE
+
+
+def get_metric_options_for_bundle(bundle: str) -> list[tuple[str, str]]:
+    """
+    Return (slug, label) tuples for metrics in a bundle, suitable for dropdown options.
+    
+    Args:
+        bundle: Bundle name.
+        
+    Returns:
+        List of (slug, label) tuples for the bundle's metrics.
+    """
+    slugs = get_metrics_for_bundle(bundle)
+    options = []
+    for slug in slugs:
+        spec = METRICS_BY_SLUG.get(slug)
+        if spec:
+            options.append((slug, spec.label))
+    return options
+
+
+def validate_bundles() -> list[str]:
+    """
+    Validate that all bundle definitions are consistent with the registry.
+    
+    Checks:
+    - All slugs in bundles exist in METRICS_BY_SLUG
+    - All bundles in BUNDLE_ORDER exist in BUNDLES
+    - All bundles in BUNDLES appear in BUNDLE_ORDER
+    
+    Returns:
+        List of validation issues. Empty if all valid.
+    """
+    issues: list[str] = []
+    
+    # Check all slugs in bundles exist
+    for bundle, slugs in BUNDLES.items():
+        for slug in slugs:
+            if slug not in METRICS_BY_SLUG:
+                issues.append(f"Bundle '{bundle}' references unknown slug: '{slug}'")
+    
+    # Check BUNDLE_ORDER matches BUNDLES
+    for bundle in BUNDLE_ORDER:
+        if bundle not in BUNDLES:
+            issues.append(f"BUNDLE_ORDER contains unknown bundle: '{bundle}'")
+    
+    for bundle in BUNDLES:
+        if bundle not in BUNDLE_ORDER:
+            issues.append(f"Bundle '{bundle}' missing from BUNDLE_ORDER")
+    
+    # Check DEFAULT_BUNDLE is valid
+    if DEFAULT_BUNDLE not in BUNDLES:
+        issues.append(f"DEFAULT_BUNDLE '{DEFAULT_BUNDLE}' not in BUNDLES")
+    
+    return issues
+
+
+def print_bundle_summary() -> None:
+    """Print a summary of bundle definitions."""
+    print(f"\n{'='*60}")
+    print("India Resilience Tool - Bundle Summary")
+    print(f"{'='*60}")
+    print(f"Total bundles: {len(BUNDLES)}")
+    print(f"Default bundle: {DEFAULT_BUNDLE}")
+    
+    print(f"\n{'='*60}")
+    print("Bundle contents:")
+    print(f"{'='*60}")
+    
+    for bundle in BUNDLE_ORDER:
+        slugs = BUNDLES.get(bundle, [])
+        print(f"\n{bundle} ({len(slugs)} metrics):")
+        for slug in slugs:
+            spec = METRICS_BY_SLUG.get(slug)
+            label = spec.label if spec else "(unknown)"
+            print(f"  - {label} ({slug})")
+
+
+if __name__ == "__main__":
+    # Run validation and print summary when executed directly
+    print("Validating metrics registry...")
+    issues = validate_bundles()
+    if issues:
+        print("Bundle validation issues found:")
+        for issue in issues:
+            print(f"  - {issue}")
+    else:
+        print("All bundles validated successfully!")
+    
+    print_bundle_summary()

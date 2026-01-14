@@ -22,6 +22,18 @@ from india_resilience_tool.config.metrics_registry import (
     get_dashboard_variables,
     get_metrics_by_group,
     get_metric_count,
+    # Bundle exports (NEW)
+    BUNDLES,
+    BUNDLE_ORDER,
+    BUNDLE_DESCRIPTIONS,
+    DEFAULT_BUNDLE,
+    get_bundles,
+    get_metrics_for_bundle,
+    get_bundle_for_metric,
+    get_bundle_description,
+    get_default_bundle,
+    get_metric_options_for_bundle,
+    validate_bundles,
 )
 
 # ---- Variable/Index registry ----
@@ -74,6 +86,10 @@ def validate_variables() -> list[str]:
         if not cfg.get("periods_metric_col"):
             issues.append(f"Slug '{slug}' has empty periods_metric_col")
     
+    # Also validate bundles
+    bundle_issues = validate_bundles()
+    issues.extend(bundle_issues)
+    
     return issues
 
 
@@ -103,6 +119,14 @@ def print_index_summary():
             for slug in groups[group]:
                 cfg = VARIABLES[slug]
                 print(f"  - {cfg['label']} ({slug})")
+    
+    # Also print bundle summary
+    print(f"\n{'='*60}")
+    print("Bundles:")
+    print(f"{'='*60}")
+    for bundle in get_bundles():
+        slugs = get_metrics_for_bundle(bundle)
+        print(f"\n{bundle} ({len(slugs)} metrics)")
 
 
 if __name__ == "__main__":

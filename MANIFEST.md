@@ -53,7 +53,7 @@ india_resilience_tool/
 │   ├── main.py                 # CLI entry point
 │   ├── orchestrator.py         # Module executor
 │   ├── point_selection_ui.py   # Coordinate input & batch support (district + block)
-│   ├── portfolio_ui.py         # Portfolio management panel (district + block)
+│   ├── portfolio_ui.py         # Portfolio management panel (district + block + bundles)
 │   ├── sidebar.py              # Sidebar controls & navigation (admin level + focus)
 │   ├── state.py                # Session state defaults & constants
 │   └── views/                  # View renderers
@@ -65,7 +65,8 @@ india_resilience_tool/
 ├── config/                      # Configuration
 │   ├── __init__.py
 │   ├── constants.py            # App constants & styling
-│   └── variables.py            # Climate index registry
+│   ├── metrics_registry.py     # Unified metric definitions + bundles (single source of truth)
+│   └── variables.py            # Dashboard variable registry (imports from metrics_registry)
 ├── data/                        # Data loading & processing
 │   ├── __init__.py
 │   ├── adm2_loader.py          # GeoJSON district loading (ADM2)
@@ -136,21 +137,47 @@ The master tables include identifier columns:
 
 ---
 
-## Module Reference (updated for block support)
+## Module Reference (updated for block support + bundles)
 
 ### 1) Configuration (`india_resilience_tool/config/`)
 
-#### `variables.py`
-**Purpose:** Central registry of all indices/metrics.
+#### `metrics_registry.py` (NEW: single source of truth)
+**Purpose:** Unified metric definitions used by both dashboard and pipeline.
 
 Key exports:
-- `VARIABLES`: index definitions (label, group, descriptions, candidate file patterns)
-- `get_index_groups()`, `get_indices_for_group(...)`
+- `PIPELINE_METRICS_RAW`: list of metric definition dicts
+- `METRICS_BY_SLUG`: dict of `slug → MetricSpec`
+- `MetricSpec`: dataclass with all metric attributes
+- `BUNDLES`: thematic bundle → slug mapping
+- `BUNDLE_ORDER`: UI display order for bundles
+- `BUNDLE_DESCRIPTIONS`: help text for each bundle
+- `DEFAULT_BUNDLE`: default bundle for single-focus mode ("Heat Risk")
+
+Bundle helper functions:
+- `get_bundles()` → list of bundle names in display order
+- `get_metrics_for_bundle(bundle)` → list of slugs
+- `get_bundle_for_metric(slug)` → list of bundles containing metric
+- `get_bundle_description(bundle)` → description string
+- `get_default_bundle()` → default bundle name
+- `get_metric_options_for_bundle(bundle)` → list of (slug, label) tuples
+- `validate_bundles()` → validation issues list
 
 When to modify:
-- add new index slug
-- update metric column names or descriptions
-- adjust file discovery candidates
+- Add new metric: add to `PIPELINE_METRICS_RAW`
+- Add/modify bundle: update `BUNDLES`, `BUNDLE_ORDER`, `BUNDLE_DESCRIPTIONS`
+- Change default bundle: update `DEFAULT_BUNDLE`
+
+#### `variables.py`
+**Purpose:** Dashboard-facing variable registry (thin wrapper around metrics_registry).
+
+Key exports:
+- `VARIABLES`: index definitions (auto-generated from metrics_registry)
+- `INDEX_GROUP_LABELS`: display labels for base groups (temperature/rain)
+- `get_index_groups()`, `get_indices_for_group(...)`: legacy group-based access
+- All bundle exports re-exported from metrics_registry
+
+When to modify:
+- Rarely; prefer modifying metrics_registry.py directly
 
 #### `constants.py`
 App styling and constants; no admin-level-specific logic.
@@ -215,6 +242,7 @@ Unchanged structurally, but used by both district and block details/portfolio pa
 #### `legacy_dashboard_impl.py`
 Main orchestrator. Responsibilities:
 - admin level toggle (district/block)
+- **bundle → metric selection** (two-step: select risk domain, then metric)
 - state/district/block selection widgets
 - data root resolution (`PROCESSED_ROOT` per index slug)
 - chooses correct master table by admin level:
@@ -226,10 +254,23 @@ Main orchestrator. Responsibilities:
 Renders:
 - admin level (district/block) selection
 - analysis mode:
-  - “Single district focus” / “Multi-district portfolio”
-  - “Single block focus” / “Multi-block portfolio”
+  - "Single district focus" / "Multi-district portfolio"
+  - "Single block focus" / "Multi-block portfolio"
 - scenario/period/stat selectors
 - hover toggle
+
+#### `portfolio_ui.py`
+Renders portfolio panel with:
+- portfolio badge and list management
+- **bundle-first metric selection** for comparison (multi-select bundles → auto-expand to metrics)
+- optional manual metric refinement
+- comparison table with heatmap visualization
+- coordinate-based unit lookup
+
+Key widget keys:
+- `portfolio_bundle_selection`: selected bundles for comparison
+- `portfolio_manual_refinement`: whether manual metric selection is enabled
+- `portfolio_multiindex_selection`: final list of metric slugs
 
 #### `views/map_view.py`
 Renders choropleth map and handles click payload.
@@ -240,10 +281,53 @@ Renders choropleth map and handles click payload.
 #### `views/rankings_view.py`
 Rankings table renderer with portfolio integration.
 - district and block rankings supported
-- portfolio mode detection is level-agnostic (so “Multi-block portfolio” behaves like “Multi-district portfolio”)
+- portfolio mode detection is level-agnostic (so "Multi-block portfolio" behaves like "Multi-district portfolio")
 
 #### `point_selection_ui.py`
 Coordinate-based lookup supports adding units to portfolio in both district and block mode (exact mapping depends on available geometry for the current admin level).
+
+---
+
+## Thematic Bundles
+
+Bundles organize metrics into risk-domain groupings for user-friendly selection. A metric may appear in multiple bundles.
+
+### Available Bundles
+
+| Bundle | Metrics | Description |
+|--------|---------|-------------|
+| Heat Risk | 21 | Heat thresholds, percentiles, heatwaves, baseline context |
+| Cold Risk | 10 | Cold thresholds, frost days, cold spells |
+| Agriculture & Growing Conditions | 4 | Growing season, seasonal temperatures, DTR |
+| Flood & Extreme Rainfall Risk | 12 | Peak intensity, heavy rain days, wet spells |
+| Rainfall Totals & Typical Wetness | 3 | Annual totals, intensity, rainy days |
+| Drought Risk | 8 | Dry spells, SPI, SPEI indices |
+| Temperature Variability | 2 | DTR, ETR |
+
+### Bundle Usage in UI
+
+**Single-focus mode (sidebar):**
+1. Select "Risk domain" (bundle dropdown)
+2. Select "Metric" (filtered to bundle)
+
+**Portfolio mode (comparison panel):**
+1. Select one or more bundles (multi-select)
+2. Metrics auto-expand from selected bundles
+3. Optional: enable "Manually refine" to add/remove individual metrics
+
+### Adding a New Bundle
+
+1. Edit `metrics_registry.py`:
+   ```python
+   BUNDLES["New Bundle Name"] = [
+       "slug1",
+       "slug2",
+       # ...
+   ]
+   ```
+2. Add to `BUNDLE_ORDER` for UI ordering
+3. Add description to `BUNDLE_DESCRIPTIONS`
+4. Run validation: `python -c "from india_resilience_tool.config.metrics_registry import validate_bundles; print(validate_bundles())"`
 
 ---
 
@@ -251,7 +335,7 @@ Coordinate-based lookup supports adding units to portfolio in both district and 
 
 High-level flow is the same; the admin level controls which geometry and master table are used:
 
-1) Sidebar selection → (admin level, state, district, block, index, scenario, period, stat)
+1) Sidebar selection → (admin level, state, district, block, **bundle**, metric, scenario, period, stat)
 2) Load boundaries (ADM2/ADM3) and master table (district/block)
 3) Merge → `merged` GeoDataFrame
 4) Render view (map / rankings / details / portfolio)
@@ -259,11 +343,14 @@ High-level flow is the same; the admin level controls which geometry and master 
 
 ---
 
-## Common tasks (district + block)
+## Common tasks (district + block + bundles)
 
 | Task | Primary Module(s) | Notes |
 |------|-------------------|------|
-| Add new index | `config/variables.py` | update registry + ensure processed data exists |
+| Add new metric | `config/metrics_registry.py` | Add to `PIPELINE_METRICS_RAW` + ensure processed data exists |
+| Add metric to bundle | `config/metrics_registry.py` | Add slug to appropriate `BUNDLES[...]` list |
+| Create new bundle | `config/metrics_registry.py` | Add to `BUNDLES`, `BUNDLE_ORDER`, `BUNDLE_DESCRIPTIONS` |
+| Change default bundle | `config/metrics_registry.py` | Update `DEFAULT_BUNDLE` |
 | Build block master metrics | `build_master_metrics.py` | produces `master_metrics_by_block.csv` |
 | Update block tooltip/map click | `app/views/map_view.py` | ensure block identifiers flow to state |
 | Enable add-to-portfolio from block rankings | `app/views/rankings_view.py` | portfolio parity with district |
@@ -280,9 +367,14 @@ Core keys (typical):
   - `"Single district focus"` / `"Multi-district portfolio"`
   - `"Single block focus"` / `"Multi-block portfolio"`
 - `selected_state`, `selected_district`, `selected_block`
+- `selected_bundle`: currently selected risk domain (sidebar)
+- `selected_var`: currently selected metric slug
 - `portfolio_districts`, `portfolio_blocks`
+- `portfolio_bundle_selection`: bundles selected for portfolio comparison
+- `portfolio_manual_refinement`: whether manual metric selection is enabled
+- `portfolio_multiindex_selection`: final metric slugs for comparison
 
-Other UI keys vary by panel (map markers, selected indices for comparison, etc.).
+Other UI keys vary by panel (map markers, etc.).
 
 ---
 
@@ -305,6 +397,7 @@ Other UI keys vary by panel (map markers, selected indices for comparison, etc.)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.3 | 2026-01 | Thematic bundles for metric organization + bundle-first selection UI |
 | 2.2 | 2026-01 | Block (ADM3) map + rankings + portfolio parity + trend support |
 | 2.1 | 2024-12 | Portfolio UX improvements |
 | 2.0 | 2024-12 | Modular refactor |

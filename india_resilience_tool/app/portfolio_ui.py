@@ -4,7 +4,7 @@ Multi-district portfolio panel (right column) for IRT.
 This module renders the portfolio-mode right-column UI including:
 - Portfolio summary badge (always visible)
 - Portfolio district list with remove buttons
-- Index selection for comparison
+- Bundle-first index selection for comparison (NEW)
 - Multi-index comparison table (auto-rebuilds)
 - Coordinate-based district lookup
 
@@ -14,9 +14,12 @@ Key improvements over previous version:
 - Auto-rebuild comparison table on changes
 - Portfolio list always visible
 - Simplified point selection integrated
+- Bundle-first metric selection with optional manual refinement (NEW)
 
 Widget keys preserved:
 - portfolio_multiindex_selection
+- portfolio_bundle_selection (NEW)
+- portfolio_manual_refinement (NEW)
 - btn_portfolio_remove_all
 - btn_portfolio_remove_all_confirm
 - btn_portfolio_remove_all_cancel
@@ -205,7 +208,7 @@ def render_clear_portfolio_button(
 
 
 # =============================================================================
-# Index Selector
+# Index Selector (Bundle-first with optional manual refinement)
 # =============================================================================
 
 def render_index_selector(
@@ -215,41 +218,135 @@ def render_index_selector(
     selected_slugs: List[str],
 ) -> List[str]:
     """
-    Render index multi-select for portfolio comparison.
+    Render bundle-first index selection for portfolio comparison.
     
-    Ensures the current index is always selected by default.
+    Pattern 2 implementation:
+    1. User selects one or more bundles (multi-select)
+    2. Metrics from selected bundles are auto-expanded
+    3. Optional: user can manually refine the metric list
+    
+    Ensures the current index is always included by default.
+    
+    Widget keys used:
+    - portfolio_bundle_selection: selected bundles
+    - portfolio_manual_refinement: whether manual mode is enabled
+    - portfolio_multiindex_selection: final metric selection
     """
     import streamlit as st
     
-    available = [(slug, meta["label"]) for slug, meta in variables.items()]
-    available_slugs = [s for s, _ in available]
-    
-    # Determine default: use existing selection if valid, otherwise current slug
-    if selected_slugs and any(s in available_slugs for s in selected_slugs):
-        default = [s for s in selected_slugs if s in available_slugs]
-    else:
-        # Default to current index
-        default = [current_slug] if current_slug in available_slugs else []
-    
-    # Ensure we always have at least the current slug selected initially
-    if not default and current_slug in available_slugs:
-        default = [current_slug]
-    
-    selected = st.multiselect(
-        "Compare across indices",
-        options=available_slugs,
-        default=default,
-        format_func=lambda s: variables[s]["label"] if s in variables else s,
-        key="portfolio_multiindex_selection",
-        help="Select one or more climate indices to compare across your portfolio districts",
+    # Import bundle functions
+    from india_resilience_tool.config.variables import (
+        get_bundles,
+        get_metrics_for_bundle,
+        get_bundle_for_metric,
+        get_default_bundle,
     )
     
-    # If user clears all selections, return current slug as fallback
-    # This ensures table always has something to show
-    if not selected and current_slug in available_slugs:
-        return [current_slug]
+    all_bundles = get_bundles()
+    available_slugs = list(variables.keys())
     
-    return selected
+    # --- Determine default bundle(s) based on current metric ---
+    # If user has an existing bundle selection, use that
+    # Otherwise, select the bundle(s) containing the current metric
+    current_bundle_selection = st.session_state.get("portfolio_bundle_selection")
+    
+    if current_bundle_selection is None:
+        # First load: select bundle(s) containing the current metric
+        bundles_for_current = get_bundle_for_metric(current_slug)
+        if bundles_for_current:
+            default_bundles = [bundles_for_current[0]]  # Use first matching bundle
+        else:
+            default_bundles = [get_default_bundle()]
+    else:
+        # Use existing selection, filtering out invalid bundles
+        default_bundles = [b for b in current_bundle_selection if b in all_bundles]
+        if not default_bundles:
+            default_bundles = [get_default_bundle()]
+    
+    # --- Bundle multi-select ---
+    selected_bundles = st.multiselect(
+        "Select risk domains to compare",
+        options=all_bundles,
+        default=default_bundles,
+        key="portfolio_bundle_selection",
+        help="Select one or more risk domains. Metrics from all selected domains will be included.",
+    )
+    
+    # --- Expand bundles to metrics ---
+    if selected_bundles:
+        expanded_slugs: list[str] = []
+        for bundle in selected_bundles:
+            for slug in get_metrics_for_bundle(bundle):
+                if slug in available_slugs and slug not in expanded_slugs:
+                    expanded_slugs.append(slug)
+        
+        # Show count of expanded metrics
+        st.caption(f"📊 {len(expanded_slugs)} metrics from {len(selected_bundles)} domain(s)")
+    else:
+        # No bundles selected - fall back to current metric only
+        expanded_slugs = [current_slug] if current_slug in available_slugs else []
+    
+    # --- Optional manual refinement ---
+    manual_mode = st.checkbox(
+        "Manually refine metric selection",
+        value=st.session_state.get("portfolio_manual_refinement", False),
+        key="portfolio_manual_refinement",
+        help="Enable to manually add/remove individual metrics from the comparison",
+    )
+    
+    if manual_mode:
+        # Show multi-select with expanded slugs as default
+        # But allow user to pick any metric
+        
+        # Determine default for manual selection
+        existing_manual = st.session_state.get("portfolio_multiindex_selection", [])
+        if existing_manual and any(s in available_slugs for s in existing_manual):
+            # User has made manual selections - preserve them
+            default_manual = [s for s in existing_manual if s in available_slugs]
+        else:
+            # Use expanded slugs as default
+            default_manual = expanded_slugs
+        
+        # Ensure current slug is in the default
+        if current_slug in available_slugs and current_slug not in default_manual:
+            default_manual = [current_slug] + default_manual
+        
+        selected = st.multiselect(
+            "Metrics to compare",
+            options=available_slugs,
+            default=default_manual,
+            format_func=lambda s: variables[s]["label"] if s in variables else s,
+            key="portfolio_multiindex_selection",
+            help="Select specific metrics to include in the comparison",
+        )
+        
+        # If user clears all, fall back to current slug
+        if not selected and current_slug in available_slugs:
+            return [current_slug]
+        
+        return selected
+    else:
+        # Auto mode: use expanded slugs directly
+        # Ensure current slug is included
+        if current_slug in available_slugs and current_slug not in expanded_slugs:
+            expanded_slugs = [current_slug] + expanded_slugs
+        
+        # Update session state for cache invalidation tracking
+        st.session_state["portfolio_multiindex_selection"] = expanded_slugs
+        
+        # Show which metrics are included (collapsed by default)
+        if expanded_slugs:
+            with st.expander(f"View {len(expanded_slugs)} included metrics", expanded=False):
+                # Group by bundle for display
+                for bundle in selected_bundles:
+                    bundle_metrics = [s for s in get_metrics_for_bundle(bundle) if s in expanded_slugs]
+                    if bundle_metrics:
+                        st.markdown(f"**{bundle}** ({len(bundle_metrics)})")
+                        for slug in bundle_metrics:
+                            label = variables.get(slug, {}).get("label", slug)
+                            st.caption(f"  • {label}")
+        
+        return expanded_slugs
 
 
 # =============================================================================
