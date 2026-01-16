@@ -43,6 +43,7 @@ class MetricSpec:
 
     # Pipeline fields
     var: Optional[str] = None
+    vars: Optional[Sequence[str]] = None
     value_col: Optional[str] = None
     units: Optional[str] = None
     compute: Optional[str] = None
@@ -62,6 +63,8 @@ class MetricSpec:
         """Create a MetricSpec from a pipeline metric dict."""
         slug = str(d["slug"])
         var = str(d.get("var", "") or "")
+        vars_raw = d.get("vars")
+        vars_list = [str(v) for v in vars_raw] if isinstance(vars_raw, (list, tuple)) else None
         value_col = str(d.get("value_col", "") or "")
         label = str(d.get("label") or d.get("name") or slug)
         group = str(d.get("group") or infer_group_from_var(var))
@@ -73,6 +76,7 @@ class MetricSpec:
             group=group,
             periods_metric_col=periods_metric_col,
             var=var or None,
+            vars=tuple(vars_list) if vars_list else None,
             value_col=value_col or None,
             units=str(d.get("units") or "") or None,
             compute=str(d.get("compute") or "") or None,
@@ -301,6 +305,51 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "India-specific higher threshold for summer days."
         ),
     },
+{
+    "name": "Wet-Bulb Temperature (Annual Mean)",
+    "slug": "twb_annual_mean",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "twb_annual_mean_C",
+    "units": "°C",
+    "compute": "wet_bulb_annual_mean_stull",
+    "params": {},
+    "group": "temperature",
+    "description": (
+        "Annual mean wet-bulb temperature (°C) derived from near-surface air temperature (tas) "
+        "and relative humidity (hurs) using the Stull (2011) approximation."
+    ),
+},
+{
+    "name": "Wet-Bulb Temperature (Annual Max)",
+    "slug": "twb_annual_max",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "twb_annual_max_C",
+    "units": "°C",
+    "compute": "wet_bulb_annual_max_stull",
+    "params": {},
+    "group": "temperature",
+    "description": (
+        "Annual maximum wet-bulb temperature (°C) derived from near-surface air temperature (tas) "
+        "and relative humidity (hurs) using the Stull (2011) approximation."
+    ),
+},
+{
+    "name": "Wet-Bulb Days (Twb ≥ 30°C)",
+    "slug": "twb_days_ge_30",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "twb_days_ge_30_days",
+    "units": "days",
+    "compute": "wet_bulb_days_ge_threshold_stull",
+    "params": {"thresh_c": 30.0},
+    "group": "temperature",
+    "description": (
+        "Number of days per year with wet-bulb temperature ≥ 30°C, derived from tas and hurs "
+        "using the Stull (2011) approximation."
+    ),
+},
     {
         "name": "Hot Days (TX ≥ 30°C)",
         "slug": "txge30_hot_days",
@@ -977,6 +1026,10 @@ BUNDLES: dict[str, list[str]] = {
         "txge35_extreme_heat_days",
         "su_summer_days_gt25",
         "tasmin_tropical_nights_gt20",
+        # Wet-bulb thermal stress
+        "twb_annual_mean",
+        "twb_annual_max",
+        "twb_days_ge_30",
         # Heat percentiles (relative to baseline)
         "tx90p_hot_days_pct",
         "tn90p_warm_nights_pct",

@@ -310,6 +310,67 @@ def _get_district_daily_mean(da: xr.DataArray, mask: xr.DataArray) -> xr.DataArr
     return daily_mean.dropna(dim="time", how="all") if "time" in daily_mean.dims else daily_mean
 
 # -----------------------------------------------------------------------------
+# WET-BULB TEMPERATURE (Stull 2011 approximation)
+# -----------------------------------------------------------------------------
+def _wet_bulb_stull_c(t_c: xr.DataArray, rh_pct: xr.DataArray) -> xr.DataArray:
+    """
+    Approximate wet-bulb temperature (°C) from air temperature (°C) and RH (%).
+
+    Uses the Stull (2011) approximation, valid for typical near-surface conditions.
+
+    Args:
+        t_c: Air temperature in °C (time series).
+        rh_pct: Relative humidity in % (0-100) (time series).
+
+    Returns:
+        Wet-bulb temperature in °C (time series).
+    """
+    rh = rh_pct.clip(min=0.0, max=100.0)
+    # Stull (2011) approximation
+    return (
+        t_c * np.arctan(0.151977 * np.sqrt(rh + 8.313659))
+        + np.arctan(t_c + rh)
+        - np.arctan(rh - 1.676331)
+        + 0.00391838 * (rh ** 1.5) * np.arctan(0.023101 * rh)
+        - 4.686035
+    )
+
+
+def wet_bulb_annual_mean_stull(tas_da: xr.DataArray, hurs_da: xr.DataArray, mask: xr.DataArray) -> float:
+    """Annual mean wet-bulb temperature (°C) using Stull approximation."""
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    rh = _get_district_daily_mean(hurs_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return np.nan
+    twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
+    return float(twb.mean(dim="time", skipna=True).item())
+
+
+def wet_bulb_annual_max_stull(tas_da: xr.DataArray, hurs_da: xr.DataArray, mask: xr.DataArray) -> float:
+    """Annual maximum wet-bulb temperature (°C) using Stull approximation."""
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    rh = _get_district_daily_mean(hurs_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return np.nan
+    twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
+    return float(twb.max(dim="time", skipna=True).item())
+
+
+def wet_bulb_days_ge_threshold_stull(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_c: float = 30.0,
+) -> int:
+    """Count of days per year where wet-bulb temperature (°C) is >= `thresh_c` (Stull)."""
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    rh = _get_district_daily_mean(hurs_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return 0
+    twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
+    return int((twb >= float(thresh_c)).sum(dim="time", skipna=True).item())
+
+# -----------------------------------------------------------------------------
 # TEMPERATURE COMPUTE FUNCTIONS
 # -----------------------------------------------------------------------------
 def count_days_above_threshold(da, mask, thresh_k): return int((_get_district_daily_mean(da, mask) > thresh_k).sum().item())
@@ -586,6 +647,15 @@ def discover_models(data_root: Path, scenarios: dict, variables: list = None) ->
 
 MODELS = discover_models(DATA_ROOT, SCENARIOS)
 
+def required_vars_for_metric(metric: dict) -> list[str]:
+    """Return required CMIP variables for a metric dict (supports multi-var metrics)."""
+    vars_field = metric.get("vars")
+    if isinstance(vars_field, (list, tuple)) and vars_field:
+        return [str(v) for v in vars_field]
+    v = metric.get("var")
+    return [str(v)] if v else []
+
+
 # -----------------------------------------------------------------------------
 # CORE PROCESSING FUNCTION (Generalized for district/block)
 # -----------------------------------------------------------------------------
@@ -599,63 +669,105 @@ def process_metric_for_model_scenario(
     state_name: str = "Telangana",
 ):
     """Process ONE metric for ONE (model, scenario) at specified level."""
-    slug, var, value_col = metric["slug"], metric["var"], metric["value_col"]
+    slug = metric["slug"]
+    value_col = metric["value_col"]
+    req_vars = required_vars_for_metric(metric)
+    primary_var = metric.get("var") or (req_vars[0] if req_vars else None)
+    if not primary_var:
+        logging.error(f"[{slug}] Metric has no var/vars defined")
+        return
+
     compute_fn = globals().get(metric.get("compute"))
     if compute_fn is None:
         logging.error(f"[{slug}] Unknown compute '{metric.get('compute')}'")
         return
-    
+
     params = metric.get("params", {})
     metric_root_path = metric_root(slug)
-    data_dir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], var, model)
-    if not data_dir.exists():
+
+    # Resolve year files (supports multi-var metrics like wet-bulb temperature)
+    year_to_paths: dict[int, dict[str, Path]] = {}
+
+    if len(req_vars) <= 1:
+        data_dir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], primary_var, model)
+        if not data_dir.exists():
+            return
+        valid_year_files, _bad_year_files = validated_year_files(data_dir)
+        if not valid_year_files:
+            return
+        year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()}
+    else:
+        valid_by_var: dict[str, dict[int, Path]] = {}
+        for v in req_vars:
+            vdir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], v, model)
+            if not vdir.exists():
+                logging.info(f"[{slug}] Skipping {model}/{scenario}: missing variable directory '{v}'")
+                return
+            valid_year_files, _bad_year_files = validated_year_files(vdir)
+            if not valid_year_files:
+                logging.info(f"[{slug}] Skipping {model}/{scenario}: no valid yearly files for '{v}'")
+                return
+            valid_by_var[v] = valid_year_files
+
+        common_years = set.intersection(*(set(d.keys()) for d in valid_by_var.values()))
+        if not common_years:
+            logging.info(f"[{slug}] Skipping {model}/{scenario}: no overlapping years across {req_vars}")
+            return
+
+        for y in sorted(common_years):
+            year_to_paths[y] = {v: valid_by_var[v][y] for v in req_vars}
+
+    if not year_to_paths:
         return
-    
-    valid_year_files, _ = validated_year_files(data_dir)
-    if not valid_year_files:
-        return
-    
-    sample_path = next(iter(valid_year_files.values()))
+
+    # Build masks using a sample file from the primary variable
+    sample_year = next(iter(year_to_paths.keys()))
+    sample_path = year_to_paths[sample_year].get(primary_var)
+    if sample_path is None:
+        sample_path = next(iter(year_to_paths[sample_year].values()))
+
     ds_sample = normalize_lat_lon(xr.open_dataset(sample_path))
-    if var not in ds_sample:
+    if primary_var not in ds_sample:
         ds_sample.close()
         return
-    
+
     masks = build_unit_masks(gdf, ds_sample, level=level)
     ds_sample.close()
-    
+
     if not masks:
         logging.warning(f"[{slug}] No valid masks built for {level} level")
         return
-    
+
     # Get the level subfolder
-    level_folder = get_level_folder(level)
-    
+    level_folder = BLOCK_FOLDER if level == "block" else DISTRICT_FOLDER
+
     rows = []
-    for year, nc_path in valid_year_files.items():
+    for year, paths_by_var in year_to_paths.items():
+        ds_by_var: dict[str, xr.Dataset] = {}
+        da_by_var: dict[str, xr.DataArray] = {}
+
         try:
-            ds = normalize_lat_lon(xr.open_dataset(nc_path))
-            if var not in ds:
-                ds.close()
-                continue
-            da = ds[var]
-            
-            for unit_key, mask_da in masks.items():
-                try:
-                    v = compute_fn(da, mask_da, **params)
-                except Exception as e:
-                    logging.debug(f"[{slug}] Error {unit_key}/{year}: {e}")
-                    v = None
-                
+            for v, nc_path in paths_by_var.items():
+                ds = normalize_lat_lon(xr.open_dataset(nc_path))
+                if v not in ds:
+                    raise KeyError(f"Variable '{v}' not found in {nc_path}")
+                ds_by_var[v] = ds
+                da_by_var[v] = ds[v]
+
+            for unit_key, mask in masks.items():
+                if len(req_vars) <= 1:
+                    v = compute_fn(da_by_var[primary_var], mask, **params)
+                else:
+                    # Wet-bulb and other multi-var metrics (currently assumes two vars)
+                    v = compute_fn(da_by_var[req_vars[0]], da_by_var[req_vars[1]], mask, **params)
+
                 row = {
-                    "model": model,
-                    "scenario": scenario,
                     "year": year,
                     "value": v,
                     value_col: v,
-                    "source_file": str(nc_path),
+                    "source_file": str(paths_by_var.get(primary_var) or next(iter(paths_by_var.values()))),
                 }
-                
+
                 # Parse unit_key based on level
                 if level == "block":
                     # Key format: "district||block"
@@ -668,23 +780,29 @@ def process_metric_for_model_scenario(
                         row["block"] = unit_key
                 else:
                     row["district"] = unit_key
-                
+
                 rows.append(row)
-            ds.close()
+
         except Exception as e:
-            logging.debug(f"[{slug}] Failed {nc_path}: {e}")
-    
+            logging.debug(f"[{slug}] Failed {model}/{scenario}/{year}: {e}")
+        finally:
+            for ds in ds_by_var.values():
+                try:
+                    ds.close()
+                except Exception:
+                    pass
+
     if not rows:
         return
-    
+
     df_yearly = pd.DataFrame(rows)
-    
-    # Period aggregation
+
+    # Period aggregation (mean over years used, consistent with other day-count metrics)
     group_cols = ["district", "block", "model", "scenario"] if level == "block" else ["district", "model", "scenario"]
     period_frames = []
-    
+
     for period_name, (y0, y1) in scenario_conf["periods"].items():
-        avail = [y for y in valid_year_files.keys() if y0 <= y <= y1]
+        avail = [y for y in year_to_paths.keys() if y0 <= y <= y1]
         n_req, n_avail = y1 - y0 + 1, len(avail)
         if n_avail >= MIN_YEARS_ABSOLUTE and n_avail / n_req >= MIN_YEARS_REQUIRED_FRACTION:
             grp = df_yearly[df_yearly["year"].isin(avail)].groupby(
@@ -695,43 +813,55 @@ def process_metric_for_model_scenario(
             grp["years_requested"] = n_req
             grp[value_col] = grp["value"]
             period_frames.append(grp)
-    
+
     df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
-    
+
     # Write outputs with clean folder structure
     if level == "block":
         # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
         for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
             district_safe = district.replace(" ", "_").replace("/", "_")
             block_safe = block.replace(" ", "_").replace("/", "_")
-            
+
             out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
             out_dir.mkdir(parents=True, exist_ok=True)
-            
+            grp_df["model"] = model
+            grp_df["scenario"] = scenario
+
             grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
-            
+
             if not df_periods.empty:
-                period_grp = df_periods[
-                    (df_periods["district"] == district) & 
+                period_mask = (
+                    (df_periods["district"] == district) &
                     (df_periods["block"] == block)
-                ]
+                )
+                period_grp = df_periods.loc[period_mask].copy()
+
                 if not period_grp.empty:
+                    # Avoid pandas SettingWithCopyWarning by working on an explicit copy.
+                    period_grp["model"] = model
+                    period_grp["scenario"] = scenario
                     period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
     else:
         # Structure: {metric}/{state}/districts/{district}/{model}/{scenario}/
         for dist_name in df_yearly["district"].unique():
             dist_safe = dist_name.replace(" ", "_").replace("/", "_")
-            
+
             out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
             out_dir.mkdir(parents=True, exist_ok=True)
-            
-            df_yearly[df_yearly["district"] == dist_name].to_csv(
-                out_dir / f"{dist_safe}_yearly.csv", index=False
-            )
+
+            dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
+            dist_df["model"] = model
+            dist_df["scenario"] = scenario
+            dist_df.to_csv(out_dir / f"{dist_safe}_yearly.csv", index=False)
+
             if not df_periods.empty:
-                df_periods[df_periods["district"] == dist_name].to_csv(
-                    out_dir / f"{dist_safe}_periods.csv", index=False
-                )
+                period_df = df_periods[df_periods["district"] == dist_name].copy()
+                if not period_df.empty:
+                    period_df["model"] = model
+                    period_df["scenario"] = scenario
+                    period_df.to_csv(out_dir / f"{dist_safe}_periods.csv", index=False)
+
 
 # -----------------------------------------------------------------------------
 # ENSEMBLE COMPUTATION (Generalized)
@@ -906,6 +1036,7 @@ def _compute_ensembles_for_metric(args: tuple) -> dict:
         result["error"] = str(e)
     return result
 
+
 def run_pipeline_parallel(
     num_workers: int = DEFAULT_WORKERS,
     verbose: bool = False,
@@ -924,18 +1055,60 @@ def run_pipeline_parallel(
     
     for _, m in metrics_to_process:
         metric_root(m["slug"])
-    
     tasks = []
+
+    # Cache available years per (model, scenario, var) to avoid repeated disk scans
+    years_cache: dict[tuple[str, str, str], set[int]] = {}
+    skipped = 0
+
+    def _years_for(model_name: str, scenario_name: str, sconf: dict, varname: str) -> set[int]:
+        key = (model_name, scenario_name, varname)
+        if key in years_cache:
+            return years_cache[key]
+        d = var_data_dir(DATA_ROOT, sconf["subdir"], varname, model_name)
+        yrs = set(yearly_files_for_dir(d).keys()) if d.exists() else set()
+        years_cache[key] = yrs
+        return yrs
+
     for model in models_to_process:
         for scenario, sconf in scenarios_to_process.items():
-            for midx, _ in metrics_to_process:
-                tasks.append(ProcessingTask(
-                    midx, model, scenario, sconf, len(tasks), 0,
-                    level=level, state_name=state
-                ))
+            for midx, metric in metrics_to_process:
+                req_vars = required_vars_for_metric(metric)
+                if not req_vars:
+                    skipped += 1
+                    continue
+
+                year_sets = [_years_for(model, scenario, sconf, v) for v in req_vars]
+                if any(len(s) == 0 for s in year_sets):
+                    skipped += 1
+                    continue
+
+                common_years = set.intersection(*year_sets) if year_sets else set()
+                if not common_years:
+                    skipped += 1
+                    continue
+
+                tasks.append(
+                    ProcessingTask(
+                        midx,
+                        model,
+                        scenario,
+                        sconf,
+                        len(tasks),
+                        0,
+                        level=level,
+                        state_name=state,
+                    )
+                )
+
     for t in tasks:
         t.total_tasks = len(tasks)
-    
+
+    if skipped:
+        logging.info(
+            f"Task builder skipped {skipped} (metric, model, scenario) combinations due to missing required variables/years"
+        )
+
     level_display = "Block" if level == "block" else "District"
     level_folder = get_level_folder(level)
     
@@ -1071,3 +1244,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
