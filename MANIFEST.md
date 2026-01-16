@@ -144,6 +144,14 @@ The master tables include identifier columns:
 #### `metrics_registry.py` (NEW: single source of truth)
 **Purpose:** Unified metric definitions used by both dashboard and pipeline.
 
+**Recent addition (Heat Risk): Wet-bulb temperature indices**
+- `twb_annual_mean` (°C): Annual mean wet-bulb temperature
+- `twb_annual_max` (°C): Annual maximum wet-bulb temperature
+- `twb_days_ge_30` (days): Count of days with wet-bulb temperature ≥ 30°C
+
+**Multi-variable metrics:** Some metrics depend on multiple raw variables and may specify `vars` (e.g., `["tas", "hurs"]`) instead of a single `var`. The compute pipeline schedules such metrics only for model/scenario combinations where *all required variables exist* and processes only years available across all required variables (intersection).
+
+
 Key exports:
 - `PIPELINE_METRICS_RAW`: list of metric definition dicts
 - `METRICS_BY_SLUG`: dict of `slug → MetricSpec`

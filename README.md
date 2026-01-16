@@ -35,13 +35,15 @@ Metrics are organized into **thematic bundles** for easier navigation:
 
 | Bundle | Metrics | Focus |
 |--------|---------|-------|
-| 🔥 Heat Risk | 21 | Heat extremes, heatwaves, thermal stress |
+| 🔥 Heat Risk | 24 | Heat extremes, heatwaves, thermal stress |
 | ❄️ Cold Risk | 10 | Frost, cold spells, cold extremes |
 | 🌾 Agriculture & Growing Conditions | 4 | Growing season, crop suitability |
 | 🌊 Flood & Extreme Rainfall Risk | 12 | Heavy rain, wet spells, flood potential |
 | 💧 Rainfall Totals & Typical Wetness | 3 | Annual totals, water availability |
 | 🏜️ Drought Risk | 8 | Dry spells, SPI/SPEI indices |
 | 🌡️ Temperature Variability | 2 | Daily/annual temperature range |
+
+> **New (Wet-bulb temperature):** Heat Risk now includes wet-bulb temperature indices computed from **tas + hurs** using the **Stull approximation** (near-surface). Added slugs: `twb_annual_mean`, `twb_annual_max`, `twb_days_ge_30`. Availability is limited to models/scenarios where **both tas and hurs exist**.
 
 **Single-focus mode**: Select a risk domain, then choose a specific metric within that domain.
 
@@ -184,7 +186,7 @@ Use the left sidebar toggle:
 
 **Step 1: Select a risk domain**
 Choose from 7 thematic bundles in the "Risk domain" dropdown:
-- Heat Risk (21 metrics)
+- Heat Risk (24 metrics)
 - Cold Risk (10 metrics)
 - Agriculture & Growing Conditions (4 metrics)
 - Flood & Extreme Rainfall Risk (12 metrics)
