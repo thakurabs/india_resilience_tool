@@ -309,6 +309,35 @@ def _get_district_daily_mean(da: xr.DataArray, mask: xr.DataArray) -> xr.DataArr
     daily_mean = da.where(mask).mean(dim=("lat", "lon"), skipna=True)
     return daily_mean.dropna(dim="time", how="all") if "time" in daily_mean.dims else daily_mean
 
+
+def _filter_to_baseline(da: xr.DataArray, baseline_years: tuple[int, int]) -> xr.DataArray:
+    """
+    Filter a time-indexed DataArray to only include data within baseline years.
+    
+    Args:
+        da: DataArray with 'time' dimension
+        baseline_years: Tuple of (start_year, end_year) inclusive
+        
+    Returns:
+        DataArray filtered to baseline period, or original if filtering fails
+    """
+    if da.size == 0 or "time" not in da.dims:
+        return da
+    
+    start_year, end_year = baseline_years
+    try:
+        years = da["time"].dt.year
+        mask = (years >= start_year) & (years <= end_year)
+        filtered = da.where(mask, drop=True)
+        # If baseline period has no data, fall back to full series
+        if filtered.size == 0:
+            return da
+        return filtered
+    except Exception:
+        # If filtering fails (e.g., no time coordinate), return original
+        return da
+
+
 # -----------------------------------------------------------------------------
 # WET-BULB TEMPERATURE (Stull 2011 approximation)
 # -----------------------------------------------------------------------------
@@ -412,59 +441,77 @@ def consecutive_run_events_above_threshold(da, mask, thresh_k, min_event_days=6)
 def percentile_days_above(da, mask, percentile=90, baseline_years=(1985, 2014)):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
-    thresh = float(dm.quantile(percentile / 100.0).item())
+    # Calculate threshold from baseline period only
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     return 100.0 * (dm > thresh).sum().item() / dm.size
 
 def percentile_days_below(da, mask, percentile=10, baseline_years=(1985, 2014)):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
-    thresh = float(dm.quantile(percentile / 100.0).item())
+    # Calculate threshold from baseline period only
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     return 100.0 * (dm < thresh).sum().item() / dm.size
 
 def warm_spell_duration_index(da, mask, percentile=90, min_spell_days=6, baseline_years=(1985, 2014)):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return 0
-    thresh = float(dm.quantile(percentile / 100.0).item())
+    # Calculate threshold from baseline period only
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     _, total = _run_length_stats(np.asarray((dm > thresh).fillna(False).values, dtype=bool), min_spell_days)
     return int(total)
 
 def cold_spell_duration_index(da, mask, percentile=10, min_spell_days=6, baseline_years=(1985, 2014)):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return 0
-    thresh = float(dm.quantile(percentile / 100.0).item())
+    # Calculate threshold from baseline period only
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     _, total = _run_length_stats(np.asarray((dm < thresh).fillna(False).values, dtype=bool), min_spell_days)
     return int(total)
 
 def heatwave_duration_index(da, mask, baseline_years=(1985, 2014), delta_c=5.0, abs_thresh_k=313.15, min_spell_days=5):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return 0
-    thresh = max(abs_thresh_k, float(dm.quantile(0.9).item()))
+    # Calculate 90th percentile threshold from baseline period
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = max(abs_thresh_k, float(baseline_dm.quantile(0.9).item()))
     max_run, _ = _run_length_stats(np.asarray((dm >= thresh).fillna(False).values, dtype=bool), min_spell_days)
     return int(max_run)
 
 def heatwave_frequency_percentile(da, mask, baseline_years=(1985, 2014), pct=90, min_spell_days=5):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return 0
-    thresh = float(dm.quantile(pct / 100.0).item())
+    # Calculate threshold from baseline period only
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = float(baseline_dm.quantile(pct / 100.0).item())
     _, total = _run_length_stats(np.asarray((dm > thresh).fillna(False).values, dtype=bool), min_spell_days)
     return int(total)
 
 def heatwave_event_count(da, mask, baseline_years=(1985, 2014), delta_c=5.0, abs_thresh_k=313.15, min_spell_days=5):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return 0
-    thresh = max(abs_thresh_k, float(dm.quantile(0.9).item()))
+    # Calculate 90th percentile threshold from baseline period
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = max(abs_thresh_k, float(baseline_dm.quantile(0.9).item()))
     return _count_events(np.asarray((dm >= thresh).fillna(False).values, dtype=bool), min_spell_days)
 
 def heatwave_event_count_percentile(da, mask, baseline_years=(1985, 2014), pct=90, min_spell_days=5):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return 0
-    thresh = float(dm.quantile(pct / 100.0).item())
+    # Calculate threshold from baseline period only
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = float(baseline_dm.quantile(pct / 100.0).item())
     return _count_events(np.asarray((dm > thresh).fillna(False).values, dtype=bool), min_spell_days)
 
 def heatwave_magnitude(da, mask, baseline_years=(1985, 2014), min_spell_days=3):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
-    thresh = float(dm.quantile(0.9).item())
+    # Calculate 90th percentile threshold from baseline period
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = float(baseline_dm.quantile(0.9).item())
     hw_mask = (dm > thresh).values
     hw_days, spell = [], []
     for i, v in enumerate(hw_mask):
@@ -479,7 +526,9 @@ def heatwave_magnitude(da, mask, baseline_years=(1985, 2014), min_spell_days=3):
 def heatwave_amplitude(da, mask, baseline_years=(1985, 2014), min_spell_days=3):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
-    thresh = float(dm.quantile(0.9).item())
+    # Calculate 90th percentile threshold from baseline period
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    thresh = float(baseline_dm.quantile(0.9).item())
     hw_mask = (dm > thresh).values
     spells, spell = [], []
     for i, v in enumerate(hw_mask):
@@ -495,13 +544,46 @@ def heatwave_amplitude(da, mask, baseline_years=(1985, 2014), min_spell_days=3):
     if not spells: return np.nan
     return max(spells, key=lambda x: x[0])[1] - 273.15
 
-def daily_temperature_range(da, mask, da_tasmin=None):
-    dm = _get_district_daily_mean(da, mask)
-    return float(dm.std().item()) if dm.size > 0 else np.nan
+def daily_temperature_range(
+    da_tasmax: xr.DataArray,
+    da_tasmin: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """DTR: mean of (tasmax - tasmin) over the year.
 
-def extreme_temperature_range(da, mask, da_tasmin=None):
-    dm = _get_district_daily_mean(da, mask)
-    return float(dm.max().item()) - float(dm.min().item()) if dm.size > 0 else np.nan
+    Notes:
+        Temperatures are expected in Kelvin (CMIP-style), but the *difference*
+        is identical in K and °C.
+    """
+    tx = _get_district_daily_mean(da_tasmax, mask)
+    tn = _get_district_daily_mean(da_tasmin, mask)
+    if tx.size == 0 or tn.size == 0:
+        return np.nan
+    tx, tn = xr.align(tx, tn, join="inner")
+    if tx.size == 0:
+        return np.nan
+    return float((tx - tn).mean().item())
+
+
+def extreme_temperature_range(
+    da_tasmax: xr.DataArray,
+    da_tasmin: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """ETR: max(tasmax) - min(tasmin) within the year.
+
+    Notes:
+        Temperatures are expected in Kelvin (CMIP-style), but the *difference*
+        is identical in K and °C.
+    """
+    tx = _get_district_daily_mean(da_tasmax, mask)
+    tn = _get_district_daily_mean(da_tasmin, mask)
+    if tx.size == 0 or tn.size == 0:
+        return np.nan
+    tx, tn = xr.align(tx, tn, join="inner")
+    if tx.size == 0:
+        return np.nan
+    return float(tx.max().item()) - float(tn.min().item())
 
 def growing_season_length(da, mask, thresh_k=278.15, min_spell_days=6):
     dm = _get_district_daily_mean(da, mask)
@@ -577,7 +659,11 @@ def percentile_precipitation_total(da, mask, percentile=95, baseline_years=(1985
     if dm.size == 0: return np.nan
     wet = dm.where(dm >= 1.0, drop=True)
     if wet.size == 0: return 0.0
-    thresh = float(wet.quantile(percentile / 100.0).item())
+    # Calculate threshold from baseline period only (wet days in baseline)
+    baseline_wet = _filter_to_baseline(wet, baseline_years)
+    if baseline_wet.size == 0:
+        baseline_wet = wet  # Fall back to full series if no baseline data
+    thresh = float(baseline_wet.quantile(percentile / 100.0).item())
     return float(dm.where(dm > thresh, 0).sum().item())
 
 def percentile_precipitation_contribution(da, mask, percentile=95, baseline_years=(1985, 2014)):
@@ -587,14 +673,20 @@ def percentile_precipitation_contribution(da, mask, percentile=95, baseline_year
     if wet.size == 0: return 0.0
     prcptot = float(wet.sum().item())
     if prcptot <= 0: return 0.0
-    thresh = float(wet.quantile(percentile / 100.0).item())
+    # Calculate threshold from baseline period only (wet days in baseline)
+    baseline_wet = _filter_to_baseline(wet, baseline_years)
+    if baseline_wet.size == 0:
+        baseline_wet = wet  # Fall back to full series if no baseline data
+    thresh = float(baseline_wet.quantile(percentile / 100.0).item())
     return 100.0 * float(dm.where(dm > thresh, 0).sum().item()) / prcptot
 
 def standardised_precipitation_index(da, mask, scale_months=3, baseline_years=(1985, 2014)):
     dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
     if dm.size == 0: return np.nan
     total = float(dm.sum().item())
-    mean_p, std_p = float(dm.mean().item()) * 365, float(dm.std().item()) * np.sqrt(365)
+    # Calculate mean and std from baseline period only
+    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    mean_p, std_p = float(baseline_dm.mean().item()) * 365, float(baseline_dm.std().item()) * np.sqrt(365)
     return (total - mean_p) / std_p if std_p > 0 else 0.0
 
 def standardised_precipitation_evapotranspiration_index(da, mask, scale_months=3, baseline_years=(1985, 2014)):
@@ -753,6 +845,15 @@ def process_metric_for_model_scenario(
                     raise KeyError(f"Variable '{v}' not found in {nc_path}")
                 ds_by_var[v] = ds
                 da_by_var[v] = ds[v]
+            for v, nc_path in paths_by_var.items():
+                ds = normalize_lat_lon(xr.open_dataset(nc_path))
+                if v not in ds:
+                    raise KeyError(f"Variable '{v}' not found in {nc_path}")
+                ds_by_var[v] = ds
+                da_by_var[v] = ds[v]
+                ## Following lines for debugging
+                # if v == "tasmin" and year == 2000:
+                #     da_by_var[v] = xr.full_like(da_by_var[v], 300.0)  # 300 K constant
 
             for unit_key, mask in masks.items():
                 if len(req_vars) <= 1:
@@ -1244,5 +1345,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

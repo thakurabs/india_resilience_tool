@@ -15,9 +15,9 @@ S3_PREFIX = "NEX-GDDP-CMIP6"
 # Configuration (keep DEFAULT_MEMBER if you want to override in code)
 DEFAULT_MEMBER = "r1i1p1f1"
 EXPERIMENTS = ["historical", "ssp245", "ssp585"]
-LAT_MIN, LAT_MAX = 17.0, 22.0
-LON_MIN, LON_MAX = 78.0, 85.0
-OUTDIR = r"D:\projects\irt\aspirational_districts_data"
+LAT_MIN, LAT_MAX = 15.0, 21.0
+LON_MIN, LON_MAX = 76.5, 82.0
+OUTDIR = r"D:\projects\irt_data"
 SLEEP_BETWEEN = 0.5
 
 def s3_client():
@@ -31,11 +31,18 @@ def years_for_experiment_fixed(exp):
     - ssp245, ssp585 => 2020-2060
     """
     if exp == "historical":
-        return list(range(1990, 2010 + 1))
+        return list(range(1951, 2015))
     elif exp in ("ssp245", "ssp585"):
-        return list(range(2020, 2060 + 1))
+        return list(range(2015, 2100 + 1))
     else:
         return []
+    
+    # if exp == "historical":
+    #     return list(range(1951, 1990))
+    # elif exp in ("ssp245", "ssp585"):
+    #     return list(range(2061, 2100 + 1))
+    # else:
+    #     return []
 
 def list_available_members(model, exp, var):
     """List all available ensemble members for a given model/exp/var."""

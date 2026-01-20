@@ -613,13 +613,46 @@ def heatwave_amplitude(da: xr.DataArray, mask: xr.DataArray,
     return hottest[1] - 273.15
 
 
-def daily_temperature_range(da_tasmax: xr.DataArray, mask: xr.DataArray,
-                            da_tasmin: xr.DataArray = None) -> float:
-    """DTR: mean of (TX - TN). Note: requires both tasmax and tasmin."""
-    daily_max = _get_district_daily_mean(da_tasmax, mask)
-    if daily_max.size == 0:
+def daily_temperature_range(
+    da_tasmax: xr.DataArray,
+    da_tasmin: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """DTR: mean of (tasmax - tasmin) over the year.
+
+    Notes:
+        Temperatures are expected in Kelvin (CMIP-style), but the *difference*
+        is identical in K and °C.
+    """
+    tx = _get_district_daily_mean(da_tasmax, mask)
+    tn = _get_district_daily_mean(da_tasmin, mask)
+    if tx.size == 0 or tn.size == 0:
         return np.nan
-    return float(daily_max.std().item())
+    tx, tn = xr.align(tx, tn, join="inner")
+    if tx.size == 0:
+        return np.nan
+    return float((tx - tn).mean().item())
+
+
+def extreme_temperature_range(
+    da_tasmax: xr.DataArray,
+    da_tasmin: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """ETR: max(tasmax) - min(tasmin) within the year.
+
+    Notes:
+        Temperatures are expected in Kelvin (CMIP-style), but the *difference*
+        is identical in K and °C.
+    """
+    tx = _get_district_daily_mean(da_tasmax, mask)
+    tn = _get_district_daily_mean(da_tasmin, mask)
+    if tx.size == 0 or tn.size == 0:
+        return np.nan
+    tx, tn = xr.align(tx, tn, join="inner")
+    if tx.size == 0:
+        return np.nan
+    return float(tx.max().item()) - float(tn.min().item())
 
 
 # -----------------------------------------------------------------------------
@@ -708,6 +741,7 @@ MODELS = discover_models(DATA_ROOT, SCENARIOS)
 # -----------------------------------------------------------------------------
 # MAIN PROCESSING (Generalized for district/block)
 # -----------------------------------------------------------------------------
+
 def process_metric_for_model_scenario(
     metric: dict,
     model: str,
@@ -719,21 +753,21 @@ def process_metric_for_model_scenario(
 ):
     """
     Process ONE metric for ONE (model, scenario).
-    
-    Args:
-        metric: Metric configuration dict
-        model: Model name
-        scenario: Scenario name
-        scenario_conf: Scenario configuration
-        gdf: GeoDataFrame with boundaries
-        level: "district" or "block"
-        state_name: State name for output directory
+
+    Supports both single-var metrics (metric["var"]) and multi-var metrics
+    (metric["vars"]) such as DTR/ETR.
     """
     slug = metric["slug"]
-    var = metric["var"]
     value_col = metric["value_col"]
+
+    req_vars = metric.get("vars") or ([metric.get("var")] if metric.get("var") else [])
+    req_vars = [v for v in req_vars if v]
+    primary_var = metric.get("var") or (req_vars[0] if req_vars else None)
+    if not primary_var:
+        logging.error(f"[{slug}] Metric has no var/vars defined")
+        return
+
     compute_name = metric.get("compute")
-    
     compute_fn = globals().get(compute_name)
     if compute_fn is None:
         logging.error(f"[{slug}] Unknown compute function '{compute_name}'.")
@@ -742,59 +776,97 @@ def process_metric_for_model_scenario(
     params = metric.get("params", {})
     metric_root_path = metric_root(slug, level)
 
-    data_dir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], var, model)
-    if not data_dir.exists():
-        logging.warning(f"[{slug}] Missing data dir: {data_dir}")
+    # Resolve year files (supports multi-var metrics)
+    year_to_paths: dict[int, dict[str, Path]] = {}
+
+    if len(req_vars) <= 1:
+        data_dir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], primary_var, model)
+        if not data_dir.exists():
+            logging.warning(f"[{slug}] Missing data dir: {data_dir}")
+            return
+        valid_year_files, _bad_files = validated_year_files(data_dir)
+        if not valid_year_files:
+            logging.warning(f"[{slug}] No valid files in {data_dir}")
+            return
+        year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()}
+    else:
+        valid_by_var: dict[str, dict[int, Path]] = {}
+        for v in req_vars:
+            vdir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], v, model)
+            if not vdir.exists():
+                logging.warning(f"[{slug}] Missing data dir for var '{v}': {vdir}")
+                return
+            valid_year_files, _bad_files = validated_year_files(vdir)
+            if not valid_year_files:
+                logging.warning(f"[{slug}] No valid files in {vdir}")
+                return
+            valid_by_var[v] = valid_year_files
+
+        common_years = set.intersection(*(set(d.keys()) for d in valid_by_var.values()))
+        if not common_years:
+            logging.warning(f"[{slug}] No overlapping years across vars: {req_vars}")
+            return
+
+        for y in sorted(common_years):
+            year_to_paths[y] = {v: valid_by_var[v][y] for v in req_vars}
+
+    if not year_to_paths:
         return
 
-    valid_year_files, bad_files = validated_year_files(data_dir)
-    if not valid_year_files:
-        logging.warning(f"[{slug}] No valid files in {data_dir}")
-        return
+    # Build masks using a sample file from the primary variable
+    sample_year = next(iter(year_to_paths.keys()))
+    sample_path = year_to_paths[sample_year].get(primary_var) or next(iter(year_to_paths[sample_year].values()))
 
-    # Build masks
-    sample_path = next(iter(valid_year_files.values()))
     ds_sample = xr.open_dataset(sample_path)
     ds_sample = normalize_lat_lon(ds_sample)
-    if var not in ds_sample:
+    if primary_var not in ds_sample:
         ds_sample.close()
-        raise ValueError(f"[{slug}] '{var}' not found in {sample_path}")
-    
+        logging.warning(f"[{slug}] '{primary_var}' not found in {sample_path}")
+        return
+
     masks = build_unit_masks(gdf, ds_sample, level=level)
     ds_sample.close()
-    
+
     if not masks:
         logging.warning(f"[{slug}] No valid masks built for {level} level")
         return
 
     # Yearly computation
-    rows = []
-    for year, nc_path in valid_year_files.items():
+    rows: list[dict] = []
+    for year, paths_by_var in year_to_paths.items():
         logging.info(f"[{slug}] Processing {year} ({level} level)")
+        ds_by_var: dict[str, xr.Dataset] = {}
+        da_by_var: dict[str, xr.DataArray] = {}
+
         try:
-            ds = xr.open_dataset(nc_path)
-            ds = normalize_lat_lon(ds)
-            if var not in ds:
-                ds.close()
-                continue
-            da = ds[var]
+            for v, nc_path in paths_by_var.items():
+                ds = xr.open_dataset(nc_path)
+                ds = normalize_lat_lon(ds)
+                if v not in ds:
+                    raise KeyError(f"Variable '{v}' not found in {nc_path}")
+                ds_by_var[v] = ds
+                da_by_var[v] = ds[v]
 
             for unit_name, mask_da in masks.items():
                 try:
-                    v = compute_fn(da, mask_da, **params)
+                    if len(req_vars) <= 1:
+                        v_out = compute_fn(da_by_var[primary_var], mask_da, **params)
+                    else:
+                        # Currently assumes two input variables (e.g., DTR/ETR)
+                        v_out = compute_fn(da_by_var[req_vars[0]], da_by_var[req_vars[1]], mask_da, **params)
                 except Exception as e:
                     logging.error(f"[{slug}] Error for {unit_name}, {year}: {e}")
-                    v = None
+                    v_out = None
 
                 row = {
                     "model": model,
                     "scenario": scenario,
                     "year": year,
-                    "value": v,
-                    value_col: v,
-                    "source_file": str(nc_path),
+                    "value": v_out,
+                    value_col: v_out,
+                    "source_file": str(paths_by_var.get(primary_var) or next(iter(paths_by_var.values()))),
                 }
-                
+
                 # Add appropriate ID columns based on level
                 if level == "block":
                     # unit_name format: "district__block"
@@ -807,20 +879,29 @@ def process_metric_for_model_scenario(
                         row["block"] = unit_name
                 else:
                     row["district"] = unit_name
-                
+
                 rows.append(row)
-            ds.close()
+
         except Exception as e:
-            logging.error(f"[{slug}] Failed to process {nc_path}: {e}")
+            logging.error(f"[{slug}] Failed to process {model}/{scenario}/{year}: {e}")
+        finally:
+            for ds in ds_by_var.values():
+                try:
+                    ds.close()
+                except Exception:
+                    pass
+
+    if not rows:
+        return
 
     df_yearly = pd.DataFrame(rows)
 
     # Period aggregation
     period_frames = []
     group_cols = ["district", "block", "model", "scenario"] if level == "block" else ["district", "model", "scenario"]
-    
+
     for period_name, (y0, y1) in scenario_conf["periods"].items():
-        available_years = [y for y in valid_year_files.keys() if y0 <= y <= y1]
+        available_years = [y for y in year_to_paths.keys() if y0 <= y <= y1]
         n_req = y1 - y0 + 1
         n_avail = len(available_years)
         frac = n_avail / n_req if n_req > 0 else 0.0
@@ -838,34 +919,35 @@ def process_metric_for_model_scenario(
 
     # Write outputs
     if level == "block":
-        # Group by district and block
         for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
-            # Sanitize names for filesystem
             district_safe = district.replace(" ", "_").replace("/", "_")
             block_safe = block.replace(" ", "_").replace("/", "_")
-            
+
             out_dir = metric_root_path / state_name / district_safe / block_safe / model / scenario
             out_dir.mkdir(parents=True, exist_ok=True)
-            
+
             grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
-            
+
             if not df_periods.empty:
                 period_grp = df_periods[
-                    (df_periods["district"] == district) & 
+                    (df_periods["district"] == district) &
                     (df_periods["block"] == block)
                 ]
                 if not period_grp.empty:
                     period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
     else:
-        # Original district-level output
         for dist_name in df_yearly["district"].unique():
             out_dir = metric_root_path / state_name / dist_name.replace(" ", "_") / model / scenario
             out_dir.mkdir(parents=True, exist_ok=True)
+
             df_yearly[df_yearly["district"] == dist_name].to_csv(
-                out_dir / f"{dist_name.replace(' ', '_')}_yearly.csv", index=False)
+                out_dir / f"{dist_name.replace(' ', '_')}_yearly.csv", index=False
+            )
+
             if not df_periods.empty:
                 df_periods[df_periods["district"] == dist_name].to_csv(
-                    out_dir / f"{dist_name.replace(' ', '_')}_periods.csv", index=False)
+                    out_dir / f"{dist_name.replace(' ', '_')}_periods.csv", index=False
+                )
 
 
 def compute_ensembles_generic(

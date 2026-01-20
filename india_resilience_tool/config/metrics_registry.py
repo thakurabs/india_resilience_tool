@@ -189,20 +189,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Indicates warmest night. Climdex index TNx."
         ),
     },
-    {
-        "name": "Annual Minimum of Daily Maximum Temperature (TXn)",
-        "slug": "txn_annual_min",
-        "var": "tasmax",
-        "value_col": "txn_annual_min_C",
-        "units": "°C",
-        "compute": "annual_min_temperature",
-        "params": {},
-        "group": "temperature",
-        "description": (
-            "The lowest daily maximum temperature recorded in the year (°C). "
-            "Indicates coldest daytime. Climdex index TXn."
-        ),
-    },
+    # {
+    #     "name": "Annual Minimum of Daily Maximum Temperature (TXn)",
+    #     "slug": "txn_annual_min",
+    #     "var": "tasmax",
+    #     "value_col": "txn_annual_min_C",
+    #     "units": "°C",
+    #     "compute": "annual_min_temperature",
+    #     "params": {},
+    #     "group": "temperature",
+    #     "description": (
+    #         "The lowest daily maximum temperature recorded in the year (°C). "
+    #         "Indicates coldest daytime. Climdex index TXn."
+    #     ),
+    # },
     {
         "name": "Annual Minimum of Daily Minimum Temperature (TNn)",
         "slug": "tnn_annual_min",
@@ -277,49 +277,49 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     },
     
     # --- Threshold-based Heat Indices ---
-    {
-        "name": "Summer Days (SU, TX > 25°C)",
-        "slug": "su_summer_days_gt25",
-        "var": "tasmax",
-        "value_col": "su_days_gt_25C",
-        "units": "days",
-        "compute": "count_days_above_threshold",
-        "params": {"thresh_k": 25.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of days when daily maximum temperature exceeds 25°C. "
-            "Standard Climdex SU index."
-        ),
-    },
-    {
-        "name": "Summer Days (TX > 32°C)",
-        "slug": "tas_gt32",
-        "var": "tasmax",
-        "value_col": "days_gt_32C",
-        "units": "days",
-        "compute": "count_days_above_threshold",
-        "params": {"thresh_k": 32.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of days when daily maximum temperature exceeds 32°C. "
-            "India-specific higher threshold for summer days."
-        ),
-    },
-{
-    "name": "Wet-Bulb Temperature (Annual Mean)",
-    "slug": "twb_annual_mean",
-    "var": "tas",
-    "vars": ["tas", "hurs"],
-    "value_col": "twb_annual_mean_C",
-    "units": "°C",
-    "compute": "wet_bulb_annual_mean_stull",
-    "params": {},
-    "group": "temperature",
-    "description": (
-        "Annual mean wet-bulb temperature (°C) derived from near-surface air temperature (tas) "
-        "and relative humidity (hurs) using the Stull (2011) approximation."
-    ),
-},
+    # {
+    #     "name": "Summer Days (SU, TX > 25°C)",
+    #     "slug": "su_summer_days_gt25",
+    #     "var": "tasmax",
+    #     "value_col": "su_days_gt_25C",
+    #     "units": "days",
+    #     "compute": "count_days_above_threshold",
+    #     "params": {"thresh_k": 25.0 + 273.15},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Number of days when daily maximum temperature exceeds 25°C. "
+    #         "Standard Climdex SU index."
+    #     ),
+    # },
+    # {
+    #     "name": "Summer Days (TX > 32°C)",
+    #     "slug": "tas_gt32",
+    #     "var": "tasmax",
+    #     "value_col": "days_gt_32C",
+    #     "units": "days",
+    #     "compute": "count_days_above_threshold",
+    #     "params": {"thresh_k": 32.0 + 273.15},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Number of days when daily maximum temperature exceeds 32°C. "
+    #         "India-specific higher threshold for summer days."
+    #     ),
+    # },
+# {
+#     "name": "Wet-Bulb Temperature (Annual Mean)",
+#     "slug": "twb_annual_mean",
+#     "var": "tas",
+#     "vars": ["tas", "hurs"],
+#     "value_col": "twb_annual_mean_C",
+#     "units": "°C",
+#     "compute": "wet_bulb_annual_mean_stull",
+#     "params": {},
+#     "group": "temperature",
+#     "description": (
+#         "Annual mean wet-bulb temperature (°C) derived from near-surface air temperature (tas) "
+#         "and relative humidity (hurs) using the Stull (2011) approximation."
+#     ),
+# },
 {
     "name": "Wet-Bulb Temperature (Annual Max)",
     "slug": "twb_annual_max",
@@ -394,62 +394,62 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     },
     
     # --- Warm/Heat Spell Indices ---
-    {
-        "name": "Warm Spell Duration Index (WSDI)",
-        "slug": "wsdi_warm_spell_days",
-        "var": "tasmax",
-        "value_col": "wsdi_days",
-        "units": "days",
-        "compute": "warm_spell_duration_index",
-        "params": {"percentile": 90, "min_spell_days": 6, "baseline_years": (1985, 2014)},
-        "group": "temperature",
-        "description": (
-            "Annual count of days contributing to warm spells, where a warm spell "
-            "is ≥6 consecutive days with TX > 90th percentile. Climdex WSDI."
-        ),
-    },
-    {
-        "name": "Consecutive Summer Days (TX > 30°C)",
-        "slug": "tasmax_csd_gt30",
-        "var": "tasmax",
-        "value_col": "consec_summer_days_gt_30C",
-        "units": "days",
-        "compute": "longest_consecutive_run_above_threshold",
-        "params": {"thresh_k": 30.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Maximum length of consecutive days when daily maximum temperature "
-            "exceeds 30°C."
-        ),
-    },
-    {
-        "name": "Consecutive Summer Day Events (TX > 30°C)",
-        "slug": "tasmax_csd_events_gt30",
-        "var": "tasmax",
-        "value_col": "csd_events_gt_30C",
-        "units": "events",
-        "compute": "consecutive_run_events_above_threshold",
-        "params": {"thresh_k": 30.0 + 273.15, "min_event_days": 6},
-        "group": "temperature",
-        "description": (
-            "Number of distinct spells of ≥6 consecutive days when daily maximum "
-            "temperature exceeds 30°C."
-        ),
-    },
-    {
-        "name": "Heat Wave Duration Index (HWDI, #Days)",
-        "slug": "hwdi_tasmax_plus5C",
-        "var": "tasmax",
-        "value_col": "hwdi_max_spell_len",
-        "units": "days",
-        "compute": "heatwave_duration_index",
-        "params": {"baseline_years": (1985, 2014), "delta_c": 5.0},
-        "group": "temperature",
-        "description": (
-            "Length of the longest heat-wave spell in the year. Heat-wave days "
-            "defined as TX ≥ 5°C above historical normal."
-        ),
-    },
+    # {
+    #     "name": "Warm Spell Duration Index (WSDI)",
+    #     "slug": "wsdi_warm_spell_days",
+    #     "var": "tasmax",
+    #     "value_col": "wsdi_days",
+    #     "units": "days",
+    #     "compute": "warm_spell_duration_index",
+    #     "params": {"percentile": 90, "min_spell_days": 6, "baseline_years": (1985, 2014)},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Annual count of days contributing to warm spells, where a warm spell "
+    #         "is ≥6 consecutive days with TX > 90th percentile. Climdex WSDI."
+    #     ),
+    # },
+    # {
+    #     "name": "Consecutive Summer Days (TX > 30°C)",
+    #     "slug": "tasmax_csd_gt30",
+    #     "var": "tasmax",
+    #     "value_col": "consec_summer_days_gt_30C",
+    #     "units": "days",
+    #     "compute": "longest_consecutive_run_above_threshold",
+    #     "params": {"thresh_k": 30.0 + 273.15},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Maximum length of consecutive days when daily maximum temperature "
+    #         "exceeds 30°C."
+    #     ),
+    # },
+    # {
+    #     "name": "Consecutive Summer Day Events (TX > 30°C)",
+    #     "slug": "tasmax_csd_events_gt30",
+    #     "var": "tasmax",
+    #     "value_col": "csd_events_gt_30C",
+    #     "units": "events",
+    #     "compute": "consecutive_run_events_above_threshold",
+    #     "params": {"thresh_k": 30.0 + 273.15, "min_event_days": 6},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Number of distinct spells of ≥6 consecutive days when daily maximum "
+    #         "temperature exceeds 30°C."
+    #     ),
+    # },
+    # {
+    #     "name": "Heat Wave Duration Index (HWDI, #Days)",
+    #     "slug": "hwdi_tasmax_plus5C",
+    #     "var": "tasmax",
+    #     "value_col": "hwdi_max_spell_len",
+    #     "units": "days",
+    #     "compute": "heatwave_duration_index",
+    #     "params": {"baseline_years": (1985, 2014), "delta_c": 5.0},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Length of the longest heat-wave spell in the year. Heat-wave days "
+    #         "defined as TX ≥ 5°C above historical normal."
+    #     ),
+    # },
     {
         "name": "Heat Wave Frequency Index (HWFI, #Days)",
         "slug": "hwfi_tmean_90p",
@@ -464,19 +464,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "days with mean temperature > 90th percentile."
         ),
     },
-    {
-        "name": "Heat Wave Duration Index (HWDI, #Events)",
-        "slug": "hwdi_events_tasmax_plus5C",
-        "var": "tasmax",
-        "value_col": "hwdi_events_count",
-        "units": "events",
-        "compute": "heatwave_event_count",
-        "params": {"baseline_years": (1985, 2014), "delta_c": 5.0},
-        "group": "temperature",
-        "description": (
-            "Number of distinct heat-wave spells per year (HWDI definition)."
-        ),
-    },
+    # {
+    #     "name": "Heat Wave Duration Index (HWDI, #Events)",
+    #     "slug": "hwdi_events_tasmax_plus5C",
+    #     "var": "tasmax",
+    #     "value_col": "hwdi_events_count",
+    #     "units": "events",
+    #     "compute": "heatwave_event_count",
+    #     "params": {"baseline_years": (1985, 2014), "delta_c": 5.0},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Number of distinct heat-wave spells per year (HWDI definition)."
+    #     ),
+    # },
     {
         "name": "Heat Wave Frequency Index (HWFI, #Events)",
         "slug": "hwfi_events_tmean_90p",
@@ -490,20 +490,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Number of distinct heat-wave spells per year (HWFI definition)."
         ),
     },
-    {
-        "name": "Heatwave Magnitude (HWM)",
-        "slug": "hwm_heatwave_magnitude",
-        "var": "tasmax",
-        "value_col": "hwm_mean_temp_C",
-        "units": "°C",
-        "compute": "heatwave_magnitude",
-        "params": {"baseline_years": (1985, 2014), "min_spell_days": 3},
-        "group": "temperature",
-        "description": (
-            "Mean temperature across all heatwave days in the year. "
-            "Climdex HWM index."
-        ),
-    },
+    # {
+    #     "name": "Heatwave Magnitude (HWM)",
+    #     "slug": "hwm_heatwave_magnitude",
+    #     "var": "tasmax",
+    #     "value_col": "hwm_mean_temp_C",
+    #     "units": "°C",
+    #     "compute": "heatwave_magnitude",
+    #     "params": {"baseline_years": (1985, 2014), "min_spell_days": 3},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Mean temperature across all heatwave days in the year. "
+    #         "Climdex HWM index."
+    #     ),
+    # },
     {
         "name": "Heatwave Amplitude (HWA)",
         "slug": "hwa_heatwave_amplitude",
@@ -520,19 +520,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     },
     
     # --- Mean Temperature Indices ---
-    {
-        "name": "Annual Max Temperature (Mean)",
-        "slug": "tasmax_annual_mean",
-        "var": "tasmax",
-        "value_col": "annual_tasmax_mean_C",
-        "units": "°C",
-        "compute": "annual_mean",
-        "params": {},
-        "group": "temperature",
-        "description": (
-            "Annual mean of daily maximum temperature (°C). Climdex TXm."
-        ),
-    },
+    # {
+    #     "name": "Annual Max Temperature (Mean)",
+    #     "slug": "tasmax_annual_mean",
+    #     "var": "tasmax",
+    #     "value_col": "annual_tasmax_mean_C",
+    #     "units": "°C",
+    #     "compute": "annual_mean",
+    #     "params": {},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Annual mean of daily maximum temperature (°C). Climdex TXm."
+    #     ),
+    # },
     {
         "name": "Summer Max Temperature (MAM Mean)",
         "slug": "tasmax_summer_mean",
@@ -546,19 +546,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Mean of daily maximum temperature during summer (March–May)."
         ),
     },
-    {
-        "name": "Annual Min Temperature (Mean)",
-        "slug": "tasmin_annual_mean",
-        "var": "tasmin",
-        "value_col": "annual_tasmin_mean_C",
-        "units": "°C",
-        "compute": "annual_mean",
-        "params": {},
-        "group": "temperature",
-        "description": (
-            "Annual mean of daily minimum temperature (°C). Climdex TNm."
-        ),
-    },
+    # {
+    #     "name": "Annual Min Temperature (Mean)",
+    #     "slug": "tasmin_annual_mean",
+    #     "var": "tasmin",
+    #     "value_col": "annual_tasmin_mean_C",
+    #     "units": "°C",
+    #     "compute": "annual_mean",
+    #     "params": {},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Annual mean of daily minimum temperature (°C). Climdex TNm."
+    #     ),
+    # },
     {
         "name": "Winter Min Temperature (DJF Mean)",
         "slug": "tasmin_winter_mean",
@@ -575,7 +575,8 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Daily Temperature Range (DTR)",
         "slug": "dtr_daily_temp_range",
-        "var": "tasmax",  # Requires both tasmax and tasmin
+        "var": "tasmax",  # Primary var (also requires tasmin)
+        "vars": ["tasmax", "tasmin"],
         "value_col": "dtr_mean_C",
         "units": "°C",
         "compute": "daily_temperature_range",
@@ -589,7 +590,8 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Extreme Temperature Range (ETR)",
         "slug": "etr_extreme_temp_range",
-        "var": "tasmax",  # Requires both tasmax and tasmin
+        "var": "tasmax",  # Primary var (also requires tasmin)
+        "vars": ["tasmax", "tasmin"],
         "value_col": "etr_range_C",
         "units": "°C",
         "compute": "extreme_temperature_range",
@@ -618,20 +620,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Climdex FD index. Critical for agriculture."
         ),
     },
-    {
-        "name": "Icing Days (ID, TX < 0°C)",
-        "slug": "id_icing_days",
-        "var": "tasmax",
-        "value_col": "icing_days",
-        "units": "days",
-        "compute": "count_days_below_threshold",
-        "params": {"thresh_k": 0.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of days when daily maximum temperature is below 0°C. "
-            "Climdex ID index. Indicates severe cold."
-        ),
-    },
+    # {
+    #     "name": "Icing Days (ID, TX < 0°C)",
+    #     "slug": "id_icing_days",
+    #     "var": "tasmax",
+    #     "value_col": "icing_days",
+    #     "units": "days",
+    #     "compute": "count_days_below_threshold",
+    #     "params": {"thresh_k": 0.0 + 273.15},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Number of days when daily maximum temperature is below 0°C. "
+    #         "Climdex ID index. Indicates severe cold."
+    #     ),
+    # },
     {
         "name": "Cold Nights (TN < 2°C)",
         "slug": "tnlt2_cold_nights",
@@ -646,20 +648,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Climdex TNlt2 index."
         ),
     },
-    {
-        "name": "Very Cold Nights (TN < -2°C)",
-        "slug": "tnltm2_very_cold_nights",
-        "var": "tasmin",
-        "value_col": "days_tn_lt_m2C",
-        "units": "days",
-        "compute": "count_days_below_threshold",
-        "params": {"thresh_k": -2.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of days when daily minimum temperature is below -2°C. "
-            "Climdex TNltm2 index."
-        ),
-    },
+    # {
+    #     "name": "Very Cold Nights (TN < -2°C)",
+    #     "slug": "tnltm2_very_cold_nights",
+    #     "var": "tasmin",
+    #     "value_col": "days_tn_lt_m2C",
+    #     "units": "days",
+    #     "compute": "count_days_below_threshold",
+    #     "params": {"thresh_k": -2.0 + 273.15},
+    #     "group": "temperature",
+    #     "description": (
+    #         "Number of days when daily minimum temperature is below -2°C. "
+    #         "Climdex TNltm2 index."
+    #     ),
+    # },
     {
         "name": "Cold Spell Duration Index (CSDI)",
         "slug": "csdi_cold_spell_days",
@@ -737,19 +739,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Number of days with precipitation exceeding 2.5mm."
         ),
     },
-    {
-        "name": "Heavy Precipitation Days (R10mm)",
-        "slug": "pr_heavy_precip_days_gt10mm",
-        "var": "pr",
-        "value_col": "heavy_precip_days_gt_10mm",
-        "units": "days",
-        "compute": "count_rainy_days",
-        "params": {"thresh_mm": 10.0},
-        "group": "rain",
-        "description": (
-            "Number of days with precipitation ≥ 10mm. Climdex R10mm index."
-        ),
-    },
+    # {
+    #     "name": "Heavy Precipitation Days (R10mm)",
+    #     "slug": "pr_heavy_precip_days_gt10mm",
+    #     "var": "pr",
+    #     "value_col": "heavy_precip_days_gt_10mm",
+    #     "units": "days",
+    #     "compute": "count_rainy_days",
+    #     "params": {"thresh_mm": 10.0},
+    #     "group": "rain",
+    #     "description": (
+    #         "Number of days with precipitation ≥ 10mm. Climdex R10mm index."
+    #     ),
+    # },
     {
         "name": "Very Heavy Precipitation Days (R20mm)",
         "slug": "r20mm_very_heavy_precip_days",
@@ -763,19 +765,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Number of days with precipitation ≥ 20mm. Climdex R20mm index."
         ),
     },
-    {
-        "name": "Extreme Precipitation Days (PR > 25mm)",
-        "slug": "pr_very_heavy_precip_days_gt25mm",
-        "var": "pr",
-        "value_col": "very_heavy_precip_days_gt_25mm",
-        "units": "days",
-        "compute": "count_rainy_days",
-        "params": {"thresh_mm": 25.0},
-        "group": "rain",
-        "description": (
-            "Number of days with precipitation exceeding 25mm."
-        ),
-    },
+    # {
+    #     "name": "Extreme Precipitation Days (PR > 25mm)",
+    #     "slug": "pr_very_heavy_precip_days_gt25mm",
+    #     "var": "pr",
+    #     "value_col": "very_heavy_precip_days_gt_25mm",
+    #     "units": "days",
+    #     "compute": "count_rainy_days",
+    #     "params": {"thresh_mm": 25.0},
+    #     "group": "rain",
+    #     "description": (
+    #         "Number of days with precipitation exceeding 25mm."
+    #     ),
+    # },
     
     # --- Percentile-based Precipitation Indices ---
     {
@@ -792,20 +794,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "wet-day precipitation. Climdex R95p index."
         ),
     },
-    {
-        "name": "Extremely Wet Day Precipitation (R99p)",
-        "slug": "r99p_extreme_wet_precip",
-        "var": "pr",
-        "value_col": "r99p_mm",
-        "units": "mm",
-        "compute": "percentile_precipitation_total",
-        "params": {"percentile": 99, "baseline_years": (1985, 2014)},
-        "group": "rain",
-        "description": (
-            "Total precipitation on days exceeding the 99th percentile of "
-            "wet-day precipitation. Climdex R99p index."
-        ),
-    },
+    # {
+    #     "name": "Extremely Wet Day Precipitation (R99p)",
+    #     "slug": "r99p_extreme_wet_precip",
+    #     "var": "pr",
+    #     "value_col": "r99p_mm",
+    #     "units": "mm",
+    #     "compute": "percentile_precipitation_total",
+    #     "params": {"percentile": 99, "baseline_years": (1985, 2014)},
+    #     "group": "rain",
+    #     "description": (
+    #         "Total precipitation on days exceeding the 99th percentile of "
+    #         "wet-day precipitation. Climdex R99p index."
+    #     ),
+    # },
     {
         "name": "Very Wet Day Contribution (R95pTOT)",
         "slug": "r95ptot_contribution_pct",
@@ -820,20 +822,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Climdex R95pTOT = 100 × R95p / PRCPTOT."
         ),
     },
-    {
-        "name": "Extremely Wet Day Contribution (R99pTOT)",
-        "slug": "r99ptot_contribution_pct",
-        "var": "pr",
-        "value_col": "r99ptot_pct",
-        "units": "%",
-        "compute": "percentile_precipitation_contribution",
-        "params": {"percentile": 99, "baseline_years": (1985, 2014)},
-        "group": "rain",
-        "description": (
-            "Percentage of total precipitation from extremely wet days (> 99th pctl). "
-            "Climdex R99pTOT = 100 × R99p / PRCPTOT."
-        ),
-    },
+    # {
+    #     "name": "Extremely Wet Day Contribution (R99pTOT)",
+    #     "slug": "r99ptot_contribution_pct",
+    #     "var": "pr",
+    #     "value_col": "r99ptot_pct",
+    #     "units": "%",
+    #     "compute": "percentile_precipitation_contribution",
+    #     "params": {"percentile": 99, "baseline_years": (1985, 2014)},
+    #     "group": "rain",
+    #     "description": (
+    #         "Percentage of total precipitation from extremely wet days (> 99th pctl). "
+    #         "Climdex R99pTOT = 100 × R99p / PRCPTOT."
+    #     ),
+    # },
     
     # --- Precipitation Intensity & Totals ---
     {
@@ -879,19 +881,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Climdex CWD index."
         ),
     },
-    {
-        "name": "Consecutive 5-day Precipitation Events (> 50mm)",
-        "slug": "pr_5day_precip_events_gt50mm",
-        "var": "pr",
-        "value_col": "consec_5day_precip_events",
-        "units": "events",
-        "compute": "rx5day_events_over_threshold",
-        "params": {"event_thresh_mm": 50.0},
-        "group": "rain",
-        "description": (
-            "Number of 5-day periods where total precipitation exceeds 50mm."
-        ),
-    },
+    # {
+    #     "name": "Consecutive 5-day Precipitation Events (> 50mm)",
+    #     "slug": "pr_5day_precip_events_gt50mm",
+    #     "var": "pr",
+    #     "value_col": "consec_5day_precip_events",
+    #     "units": "events",
+    #     "compute": "rx5day_events_over_threshold",
+    #     "params": {"event_thresh_mm": 50.0},
+    #     "group": "rain",
+    #     "description": (
+    #         "Number of 5-day periods where total precipitation exceeds 50mm."
+    #     ),
+    # },
     
     # =========================================================================
     # 4. DROUGHT / DRYNESS INDICES
@@ -909,19 +911,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Maximum consecutive days with precipitation < 1mm. Climdex CDD index."
         ),
     },
-    {
-        "name": "Consecutive Dry Day Events (> 5 days)",
-        "slug": "pr_consecutive_dry_day_events_gt5",
-        "var": "pr",
-        "value_col": "consecutive_dry_day_events",
-        "units": "events",
-        "compute": "consecutive_dry_day_events",
-        "params": {"dry_thresh_mm": 1.0, "min_event_days": 6},
-        "group": "rain",
-        "description": (
-            "Number of dry spells lasting more than 5 consecutive days."
-        ),
-    },
+    # {
+    #     "name": "Consecutive Dry Day Events (> 5 days)",
+    #     "slug": "pr_consecutive_dry_day_events_gt5",
+    #     "var": "pr",
+    #     "value_col": "consecutive_dry_day_events",
+    #     "units": "events",
+    #     "compute": "consecutive_dry_day_events",
+    #     "params": {"dry_thresh_mm": 1.0, "min_event_days": 6},
+    #     "group": "rain",
+    #     "description": (
+    #         "Number of dry spells lasting more than 5 consecutive days."
+    #     ),
+    # },
     {
         "name": "Standardised Precipitation Index 3-month (SPI3)",
         "slug": "spi3_drought_index",
@@ -936,20 +938,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "drought conditions. Climdex SPI."
         ),
     },
-    {
-        "name": "Standardised Precipitation Index 6-month (SPI6)",
-        "slug": "spi6_drought_index",
-        "var": "pr",
-        "value_col": "spi6_index",
-        "units": "index",
-        "compute": "standardised_precipitation_index",
-        "params": {"scale_months": 6, "baseline_years": (1985, 2014)},
-        "group": "rain",
-        "description": (
-            "6-month Standardised Precipitation Index. Measures medium-term "
-            "drought conditions. Climdex SPI."
-        ),
-    },
+    # {
+    #     "name": "Standardised Precipitation Index 6-month (SPI6)",
+    #     "slug": "spi6_drought_index",
+    #     "var": "pr",
+    #     "value_col": "spi6_index",
+    #     "units": "index",
+    #     "compute": "standardised_precipitation_index",
+    #     "params": {"scale_months": 6, "baseline_years": (1985, 2014)},
+    #     "group": "rain",
+    #     "description": (
+    #         "6-month Standardised Precipitation Index. Measures medium-term "
+    #         "drought conditions. Climdex SPI."
+    #     ),
+    # },
     {
         "name": "Standardised Precipitation Index 12-month (SPI12)",
         "slug": "spi12_drought_index",
@@ -978,19 +980,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "drought measure than SPI. Climdex SPEI."
         ),
     },
-    {
-        "name": "Standardised Precip-Evapotranspiration Index 6-month (SPEI6)",
-        "slug": "spei6_drought_index",
-        "var": "pr",
-        "value_col": "spei6_index",
-        "units": "index",
-        "compute": "standardised_precipitation_evapotranspiration_index",
-        "params": {"scale_months": 6, "baseline_years": (1985, 2014)},
-        "group": "rain",
-        "description": (
-            "6-month SPEI incorporating evapotranspiration. Climdex SPEI."
-        ),
-    },
+    # {
+    #     "name": "Standardised Precip-Evapotranspiration Index 6-month (SPEI6)",
+    #     "slug": "spei6_drought_index",
+    #     "var": "pr",
+    #     "value_col": "spei6_index",
+    #     "units": "index",
+    #     "compute": "standardised_precipitation_evapotranspiration_index",
+    #     "params": {"scale_months": 6, "baseline_years": (1985, 2014)},
+    #     "group": "rain",
+    #     "description": (
+    #         "6-month SPEI incorporating evapotranspiration. Climdex SPEI."
+    #     ),
+    # },
     {
         "name": "Standardised Precip-Evapotranspiration Index 12-month (SPEI12)",
         "slug": "spei12_drought_index",
@@ -1021,47 +1023,47 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(PIPELINE_M
 BUNDLES: dict[str, list[str]] = {
     "Heat Risk": [
         # Heat thresholds (absolute temperature thresholds)
-        "tas_gt32",
+        # "tas_gt32",
         "txge30_hot_days",
         "txge35_extreme_heat_days",
-        "su_summer_days_gt25",
+        # "su_summer_days_gt25",
         "tasmin_tropical_nights_gt20",
         # Wet-bulb thermal stress
-        "twb_annual_mean",
+        # "twb_annual_mean",
         "twb_annual_max",
         "twb_days_ge_30",
         # Heat percentiles (relative to baseline)
         "tx90p_hot_days_pct",
         "tn90p_warm_nights_pct",
         # Heatwaves & persistence
-        "wsdi_warm_spell_days",
-        "tasmax_csd_gt30",
-        "tasmax_csd_events_gt30",
-        "hwdi_tasmax_plus5C",
+        # "wsdi_warm_spell_days",
+        # "tasmax_csd_gt30",
+        # "tasmax_csd_events_gt30",
+        # "hwdi_tasmax_plus5C",
         "hwfi_tmean_90p",
-        "hwdi_events_tasmax_plus5C",
+        # "hwdi_events_tasmax_plus5C",
         "hwfi_events_tmean_90p",
-        "hwm_heatwave_magnitude",
+        # "hwm_heatwave_magnitude",
         "hwa_heatwave_amplitude",
         # Heat baseline context (annual/seasonal means and extremes)
         "txx_annual_max",
         "tnx_annual_max",
         "tasmax_summer_mean",
-        "tasmax_annual_mean",
-        "tasmin_annual_mean",
+        # "tasmax_annual_mean",
+        # "tasmin_annual_mean",
     ],
     "Cold Risk": [
         # Cold thresholds
         "fd_frost_days",
-        "id_icing_days",
+        # "id_icing_days",
         "tnlt2_cold_nights",
-        "tnltm2_very_cold_nights",
+        # "tnltm2_very_cold_nights",
         # Cold percentiles & persistence
         "tx10p_cool_days_pct",
         "tn10p_cool_nights_pct",
         "csdi_cold_spell_days",
         # Cold baseline context
-        "txn_annual_min",
+        # "txn_annual_min",
         "tnn_annual_min",
         "tasmin_winter_mean",
     ],
@@ -1078,18 +1080,18 @@ BUNDLES: dict[str, list[str]] = {
         "pr_max_1day_precip",
         "pr_max_5day_precip",
         # Heavy rain day frequency
-        "pr_heavy_precip_days_gt10mm",
+        # "pr_heavy_precip_days_gt10mm",
         "r20mm_very_heavy_precip_days",
-        "pr_very_heavy_precip_days_gt25mm",
-        "rain_gt_2p5mm",
+        # "pr_very_heavy_precip_days_gt25mm",
+        # "rain_gt_2p5mm",
         # Very wet / extremely wet contribution
         "r95p_very_wet_precip",
-        "r99p_extreme_wet_precip",
+        # "r99p_extreme_wet_precip",
         "r95ptot_contribution_pct",
-        "r99ptot_contribution_pct",
+        # "r99ptot_contribution_pct",
         # Wet-spell persistence
         "cwd_consecutive_wet_days",
-        "pr_5day_precip_events_gt50mm",
+        # "pr_5day_precip_events_gt50mm",
     ],
     "Rainfall Totals & Typical Wetness": [
         # Annual totals and intensity
@@ -1100,14 +1102,14 @@ BUNDLES: dict[str, list[str]] = {
     "Drought Risk": [
         # Dry spell persistence
         "pr_consecutive_dry_days_lt1mm",
-        "pr_consecutive_dry_day_events_gt5",
+        # "pr_consecutive_dry_day_events_gt5",
         # Meteorological drought (SPI)
         "spi3_drought_index",
-        "spi6_drought_index",
+        # "spi6_drought_index",
         "spi12_drought_index",
         # Climatic water-balance drought (SPEI)
         "spei3_drought_index",
-        "spei6_drought_index",
+        # "spei6_drought_index",
         "spei12_drought_index",
     ],
     "Temperature Variability": [
