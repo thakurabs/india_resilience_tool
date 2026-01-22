@@ -226,7 +226,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "tx90p_pct",
         "units": "%",
         "compute": "percentile_days_above",
-        "params": {"percentile": 90, "baseline_years": (1985, 2014)},
+        "params": {"percentile": 90, "baseline_years": (1981, 2010)},
         "group": "temperature",
         "description": (
             "Percentage of days when daily maximum temperature exceeds the 90th "
@@ -240,7 +240,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "tn90p_pct",
         "units": "%",
         "compute": "percentile_days_above",
-        "params": {"percentile": 90, "baseline_years": (1985, 2014)},
+        "params": {"percentile": 90, "baseline_years": (1981, 2010)},
         "group": "temperature",
         "description": (
             "Percentage of days when daily minimum temperature exceeds the 90th "
@@ -254,7 +254,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "tx10p_pct",
         "units": "%",
         "compute": "percentile_days_below",
-        "params": {"percentile": 10, "baseline_years": (1985, 2014)},
+        "params": {"percentile": 10, "baseline_years": (1981, 2010)},
         "group": "temperature",
         "description": (
             "Percentage of days when daily maximum temperature is below the 10th "
@@ -268,7 +268,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "tn10p_pct",
         "units": "%",
         "compute": "percentile_days_below",
-        "params": {"percentile": 10, "baseline_years": (1985, 2014)},
+        "params": {"percentile": 10, "baseline_years": (1981, 2010)},
         "group": "temperature",
         "description": (
             "Percentage of days when daily minimum temperature is below the 10th "
@@ -401,7 +401,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "wsdi_days",
     #     "units": "days",
     #     "compute": "warm_spell_duration_index",
-    #     "params": {"percentile": 90, "min_spell_days": 6, "baseline_years": (1985, 2014)},
+    #     "params": {"percentile": 90, "min_spell_days": 6, "baseline_years": (1981, 2010)},
     #     "group": "temperature",
     #     "description": (
     #         "Annual count of days contributing to warm spells, where a warm spell "
@@ -443,7 +443,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "hwdi_max_spell_len",
     #     "units": "days",
     #     "compute": "heatwave_duration_index",
-    #     "params": {"baseline_years": (1985, 2014), "delta_c": 5.0},
+    #     "params": {"baseline_years": (1981, 2010), "delta_c": 5.0},
     #     "group": "temperature",
     #     "description": (
     #         "Length of the longest heat-wave spell in the year. Heat-wave days "
@@ -457,7 +457,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "hwfi_days_in_spells",
         "units": "days",
         "compute": "heatwave_frequency_percentile",
-        "params": {"baseline_years": (1985, 2014), "pct": 90},
+        "params": {"baseline_years": (1981, 2010), "pct": 90},
         "group": "temperature",
         "description": (
             "Total days inside heat-wave spells, where spells are consecutive "
@@ -471,7 +471,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "hwdi_events_count",
     #     "units": "events",
     #     "compute": "heatwave_event_count",
-    #     "params": {"baseline_years": (1985, 2014), "delta_c": 5.0},
+    #     "params": {"baseline_years": (1981, 2010), "delta_c": 5.0},
     #     "group": "temperature",
     #     "description": (
     #         "Number of distinct heat-wave spells per year (HWDI definition)."
@@ -484,7 +484,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "hwfi_events_count",
         "units": "events",
         "compute": "heatwave_event_count_percentile",
-        "params": {"baseline_years": (1985, 2014), "pct": 90},
+        "params": {"baseline_years": (1981, 2010), "pct": 90},
         "group": "temperature",
         "description": (
             "Number of distinct heat-wave spells per year (HWFI definition)."
@@ -497,7 +497,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "hwm_mean_temp_C",
     #     "units": "°C",
     #     "compute": "heatwave_magnitude",
-    #     "params": {"baseline_years": (1985, 2014), "min_spell_days": 3},
+    #     "params": {"baseline_years": (1981, 2010), "min_spell_days": 3},
     #     "group": "temperature",
     #     "description": (
     #         "Mean temperature across all heatwave days in the year. "
@@ -511,7 +511,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "hwa_peak_temp_C",
         "units": "°C",
         "compute": "heatwave_amplitude",
-        "params": {"baseline_years": (1985, 2014), "min_spell_days": 3},
+        "params": {"baseline_years": (1981, 2010), "min_spell_days": 3},
         "group": "temperature",
         "description": (
             "Peak daily temperature in the hottest heatwave of the year. "
@@ -669,7 +669,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "csdi_days",
         "units": "days",
         "compute": "cold_spell_duration_index",
-        "params": {"percentile": 10, "min_spell_days": 6, "baseline_years": (1985, 2014)},
+        "params": {"percentile": 10, "min_spell_days": 6, "baseline_years": (1981, 2010)},
         "group": "temperature",
         "description": (
             "Annual count of days contributing to cold spells, where a cold spell "
@@ -787,7 +787,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "r95p_mm",
         "units": "mm",
         "compute": "percentile_precipitation_total",
-        "params": {"percentile": 95, "baseline_years": (1985, 2014)},
+        "params": {"percentile": 95, "baseline_years": (1981, 2010)},
         "group": "rain",
         "description": (
             "Total precipitation on days exceeding the 95th percentile of "
@@ -801,7 +801,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "r99p_mm",
     #     "units": "mm",
     #     "compute": "percentile_precipitation_total",
-    #     "params": {"percentile": 99, "baseline_years": (1985, 2014)},
+    #     "params": {"percentile": 99, "baseline_years": (1981, 2010)},
     #     "group": "rain",
     #     "description": (
     #         "Total precipitation on days exceeding the 99th percentile of "
@@ -815,7 +815,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "r95ptot_pct",
         "units": "%",
         "compute": "percentile_precipitation_contribution",
-        "params": {"percentile": 95, "baseline_years": (1985, 2014)},
+        "params": {"percentile": 95, "baseline_years": (1981, 2010)},
         "group": "rain",
         "description": (
             "Percentage of total precipitation from very wet days (> 95th pctl). "
@@ -829,7 +829,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "r99ptot_pct",
     #     "units": "%",
     #     "compute": "percentile_precipitation_contribution",
-    #     "params": {"percentile": 99, "baseline_years": (1985, 2014)},
+    #     "params": {"percentile": 99, "baseline_years": (1981, 2010)},
     #     "group": "rain",
     #     "description": (
     #         "Percentage of total precipitation from extremely wet days (> 99th pctl). "
@@ -931,27 +931,27 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "spi3_index",
         "units": "index",
         "compute": "standardised_precipitation_index",
-        "params": {"scale_months": 3, "baseline_years": (1985, 2014)},
+        "params": {"scale_months": 3, "baseline_years": (1981, 2010)},
         "group": "rain",
         "description": (
             "3-month Standardised Precipitation Index. Measures short-term "
             "drought conditions. Climdex SPI."
         ),
     },
-    # {
-    #     "name": "Standardised Precipitation Index 6-month (SPI6)",
-    #     "slug": "spi6_drought_index",
-    #     "var": "pr",
-    #     "value_col": "spi6_index",
-    #     "units": "index",
-    #     "compute": "standardised_precipitation_index",
-    #     "params": {"scale_months": 6, "baseline_years": (1985, 2014)},
-    #     "group": "rain",
-    #     "description": (
-    #         "6-month Standardised Precipitation Index. Measures medium-term "
-    #         "drought conditions. Climdex SPI."
-    #     ),
-    # },
+    {
+        "name": "Standardised Precipitation Index 6-month (SPI6)",
+        "slug": "spi6_drought_index",
+        "var": "pr",
+        "value_col": "spi6_index",
+        "units": "index",
+        "compute": "standardised_precipitation_index",
+        "params": {"scale_months": 6, "baseline_years": (1981, 2010)},
+        "group": "rain",
+        "description": (
+            "6-month Standardised Precipitation Index. Measures medium-term "
+            "drought conditions. Climdex SPI."
+        ),
+    },
     {
         "name": "Standardised Precipitation Index 12-month (SPI12)",
         "slug": "spi12_drought_index",
@@ -959,27 +959,27 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "spi12_index",
         "units": "index",
         "compute": "standardised_precipitation_index",
-        "params": {"scale_months": 12, "baseline_years": (1985, 2014)},
+        "params": {"scale_months": 12, "baseline_years": (1981, 2010)},
         "group": "rain",
         "description": (
             "12-month Standardised Precipitation Index. Measures long-term "
             "drought conditions. Climdex SPI."
         ),
     },
-    {
-        "name": "Standardised Precip-Evapotranspiration Index 3-month (SPEI3)",
-        "slug": "spei3_drought_index",
-        "var": "pr",  # Also requires tasmax/tasmin for ET calculation
-        "value_col": "spei3_index",
-        "units": "index",
-        "compute": "standardised_precipitation_evapotranspiration_index",
-        "params": {"scale_months": 3, "baseline_years": (1985, 2014)},
-        "group": "rain",
-        "description": (
-            "3-month SPEI incorporating evapotranspiration. More comprehensive "
-            "drought measure than SPI. Climdex SPEI."
-        ),
-    },
+    # {
+    #     "name": "Standardised Precip-Evapotranspiration Index 3-month (SPEI3)",
+    #     "slug": "spei3_drought_index",
+    #     "var": "pr",  # Also requires tasmax/tasmin for ET calculation
+    #     "value_col": "spei3_index",
+    #     "units": "index",
+    #     "compute": "standardised_precipitation_evapotranspiration_index",
+    #     "params": {"scale_months": 3, "baseline_years": (1981, 2010)},
+    #     "group": "rain",
+    #     "description": (
+    #         "3-month SPEI incorporating evapotranspiration. More comprehensive "
+    #         "drought measure than SPI. Climdex SPEI."
+    #     ),
+    # },
     # {
     #     "name": "Standardised Precip-Evapotranspiration Index 6-month (SPEI6)",
     #     "slug": "spei6_drought_index",
@@ -987,25 +987,25 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "spei6_index",
     #     "units": "index",
     #     "compute": "standardised_precipitation_evapotranspiration_index",
-    #     "params": {"scale_months": 6, "baseline_years": (1985, 2014)},
+    #     "params": {"scale_months": 6, "baseline_years": (1981, 2010)},
     #     "group": "rain",
     #     "description": (
     #         "6-month SPEI incorporating evapotranspiration. Climdex SPEI."
     #     ),
     # },
-    {
-        "name": "Standardised Precip-Evapotranspiration Index 12-month (SPEI12)",
-        "slug": "spei12_drought_index",
-        "var": "pr",
-        "value_col": "spei12_index",
-        "units": "index",
-        "compute": "standardised_precipitation_evapotranspiration_index",
-        "params": {"scale_months": 12, "baseline_years": (1985, 2014)},
-        "group": "rain",
-        "description": (
-            "12-month SPEI incorporating evapotranspiration. Climdex SPEI."
-        ),
-    },
+    # {
+    #     "name": "Standardised Precip-Evapotranspiration Index 12-month (SPEI12)",
+    #     "slug": "spei12_drought_index",
+    #     "var": "pr",
+    #     "value_col": "spei12_index",
+    #     "units": "index",
+    #     "compute": "standardised_precipitation_evapotranspiration_index",
+    #     "params": {"scale_months": 12, "baseline_years": (1981, 2010)},
+    #     "group": "rain",
+    #     "description": (
+    #         "12-month SPEI incorporating evapotranspiration. Climdex SPEI."
+    #     ),
+    # },
 ]
 
 # Typed views derived from pipeline metrics
@@ -1105,12 +1105,12 @@ BUNDLES: dict[str, list[str]] = {
         # "pr_consecutive_dry_day_events_gt5",
         # Meteorological drought (SPI)
         "spi3_drought_index",
-        # "spi6_drought_index",
+        "spi6_drought_index",
         "spi12_drought_index",
         # Climatic water-balance drought (SPEI)
-        "spei3_drought_index",
+        # "spei3_drought_index",
         # "spei6_drought_index",
-        "spei12_drought_index",
+        # "spei12_drought_index",
     ],
     "Temperature Variability": [
         # Daily and annual variability

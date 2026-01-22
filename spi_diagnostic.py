@@ -1,0 +1,256 @@
+#!/usr/bin/env python3
+"""
+SPI Diagnostic Analysis Script
+
+Analyzes SPI output values to verify they make scientific sense.
+
+Expected SPI characteristics:
+- Mean ≈ 0 for the calibration period (historical)
+- Std ≈ 1 for the calibration period
+- Values typically range from -3 to +3
+- Future scenarios may show shifts if climate is changing
+
+Author: Abu Bakar Siddiqui Thakur
+"""
+
+import sys
+from pathlib import Path
+import pandas as pd
+import numpy as np
+
+# Configuration - UPDATE THESE PATHS
+BASE_OUTPUT_ROOT = Path(r"D:\projects\irt_data\processed")  # Adjust this path
+STATE = "Telangana"
+METRIC_SLUG = "spi6_drought_index"
+MODEL = "CanESM5"
+SCENARIOS = ["historical", "ssp245"]
+
+
+def load_district_yearly(base_path: Path, state: str, metric: str, district: str, model: str, scenario: str) -> pd.DataFrame:
+    """Load yearly CSV for a district/model/scenario combination."""
+    district_safe = district.replace(" ", "_").replace("/", "_")
+    csv_path = base_path / metric / state / "districts" / district_safe / model / scenario / f"{district_safe}_yearly.csv"
+    
+    if not csv_path.exists():
+        print(f"  File not found: {csv_path}")
+        return pd.DataFrame()
+    
+    df = pd.read_csv(csv_path)
+    df["scenario"] = scenario
+    return df
+
+
+def analyze_spi_values(df: pd.DataFrame, scenario: str, baseline_years: tuple = (1981, 2010)) -> dict:
+    """Compute diagnostic statistics for SPI values."""
+    if df.empty or "value" not in df.columns:
+        return {"error": "No data"}
+    
+    values = df["value"].dropna()
+    years = df["year"]
+    
+    # Overall stats
+    stats = {
+        "scenario": scenario,
+        "n_years": len(values),
+        "year_range": f"{years.min()}-{years.max()}",
+        "mean": values.mean(),
+        "std": values.std(),
+        "min": values.min(),
+        "max": values.max(),
+        "median": values.median(),
+        "pct_below_minus1": (values < -1).mean() * 100,  # Moderate drought
+        "pct_below_minus2": (values < -2).mean() * 100,  # Severe drought
+        "pct_above_plus1": (values > 1).mean() * 100,    # Moderately wet
+        "pct_above_plus2": (values > 2).mean() * 100,    # Severely wet
+    }
+    
+    # For historical, compute stats specifically for baseline period
+    if scenario == "historical":
+        baseline_mask = (years >= baseline_years[0]) & (years <= baseline_years[1])
+        baseline_values = values[baseline_mask]
+        if len(baseline_values) > 0:
+            stats["baseline_mean"] = baseline_values.mean()
+            stats["baseline_std"] = baseline_values.std()
+            stats["baseline_n_years"] = len(baseline_values)
+    
+    return stats
+
+
+def print_diagnostic_report(district: str, stats_by_scenario: dict):
+    """Print a formatted diagnostic report."""
+    print("\n" + "=" * 70)
+    print(f"SPI DIAGNOSTIC REPORT: {district}")
+    print("=" * 70)
+    
+    for scenario, stats in stats_by_scenario.items():
+        print(f"\n{'─' * 35}")
+        print(f"Scenario: {scenario.upper()}")
+        print(f"{'─' * 35}")
+        
+        if "error" in stats:
+            print(f"  ERROR: {stats['error']}")
+            continue
+        
+        print(f"  Years: {stats['year_range']} (n={stats['n_years']})")
+        print(f"  Mean:   {stats['mean']:+.3f}  (expected ≈ 0 for baseline)")
+        print(f"  Std:    {stats['std']:.3f}   (expected ≈ 1 for baseline)")
+        print(f"  Min:    {stats['min']:+.3f}")
+        print(f"  Max:    {stats['max']:+.3f}")
+        print(f"  Median: {stats['median']:+.3f}")
+        print()
+        print(f"  Drought frequency:")
+        print(f"    Moderate (SPI < -1): {stats['pct_below_minus1']:.1f}%  (expected ~16%)")
+        print(f"    Severe   (SPI < -2): {stats['pct_below_minus2']:.1f}%  (expected ~2%)")
+        print(f"  Wet frequency:")
+        print(f"    Moderate (SPI > +1): {stats['pct_above_plus1']:.1f}%  (expected ~16%)")
+        print(f"    Severe   (SPI > +2): {stats['pct_above_plus2']:.1f}%  (expected ~2%)")
+        
+        if "baseline_mean" in stats:
+            print()
+            print(f"  Baseline period ({stats.get('baseline_n_years', 'N/A')} years):")
+            print(f"    Mean: {stats['baseline_mean']:+.3f}")
+            print(f"    Std:  {stats['baseline_std']:.3f}")
+
+
+def check_scientific_validity(stats_by_scenario: dict) -> list:
+    """Check for potential issues in the SPI values."""
+    issues = []
+    
+    hist_stats = stats_by_scenario.get("historical", {})
+    
+    # Check 1: Historical baseline mean should be close to 0
+    if "baseline_mean" in hist_stats:
+        if abs(hist_stats["baseline_mean"]) > 0.3:
+            issues.append(f"⚠️  Historical baseline mean ({hist_stats['baseline_mean']:.3f}) deviates significantly from 0")
+    
+    # Check 2: Historical baseline std should be close to 1
+    if "baseline_std" in hist_stats:
+        if abs(hist_stats["baseline_std"] - 1.0) > 0.3:
+            issues.append(f"⚠️  Historical baseline std ({hist_stats['baseline_std']:.3f}) deviates significantly from 1")
+    
+    # Check 3: Values should be in reasonable range
+    for scenario, stats in stats_by_scenario.items():
+        if "min" in stats and stats["min"] < -4:
+            issues.append(f"⚠️  {scenario}: Extremely low SPI values ({stats['min']:.2f}) - check data quality")
+        if "max" in stats and stats["max"] > 4:
+            issues.append(f"⚠️  {scenario}: Extremely high SPI values ({stats['max']:.2f}) - check data quality")
+    
+    # Check 4: Compare historical vs SSP
+    ssp_stats = stats_by_scenario.get("ssp245", {})
+    if "mean" in hist_stats and "mean" in ssp_stats:
+        mean_diff = ssp_stats["mean"] - hist_stats["mean"]
+        if abs(mean_diff) > 0.5:
+            direction = "drier" if mean_diff < 0 else "wetter"
+            issues.append(f"ℹ️  SSP245 shows {direction} conditions (mean shift: {mean_diff:+.3f})")
+    
+    return issues
+
+
+def plot_timeseries(dfs: dict, district: str, output_path: Path = None):
+    """Plot SPI timeseries for visual inspection."""
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("\n(matplotlib not available - skipping plot)")
+        return
+    
+    fig, ax = plt.subplots(figsize=(14, 5))
+    
+    colors = {"historical": "blue", "ssp245": "red", "ssp585": "darkred"}
+    
+    for scenario, df in dfs.items():
+        if df.empty:
+            continue
+        color = colors.get(scenario, "gray")
+        ax.plot(df["year"], df["value"], label=scenario, color=color, alpha=0.8, linewidth=1)
+        ax.scatter(df["year"], df["value"], color=color, s=15, alpha=0.5)
+    
+    # Add reference lines
+    ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
+    ax.axhline(y=-1, color="orange", linestyle="--", linewidth=0.5, label="Moderate drought (-1)")
+    ax.axhline(y=-2, color="red", linestyle="--", linewidth=0.5, label="Severe drought (-2)")
+    ax.axhline(y=1, color="lightblue", linestyle="--", linewidth=0.5)
+    ax.axhline(y=2, color="blue", linestyle="--", linewidth=0.5)
+    
+    # Add baseline period shading
+    ax.axvspan(1981, 2010, alpha=0.1, color="green", label="Baseline period")
+    
+    ax.set_xlabel("Year")
+    ax.set_ylabel("SPI-3")
+    ax.set_title(f"SPI-3 Time Series: {district} ({MODEL})")
+    ax.legend(loc="upper left", fontsize=8)
+    ax.set_ylim(-4, 4)
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    
+    if output_path:
+        plt.savefig(output_path, dpi=150)
+        print(f"\nPlot saved to: {output_path}")
+    else:
+        plt.show()
+
+
+def main():
+    print("SPI Diagnostic Analysis")
+    print(f"Metric: {METRIC_SLUG}")
+    print(f"Model: {MODEL}")
+    print(f"State: {STATE}")
+    print(f"Base path: {BASE_OUTPUT_ROOT}")
+    
+    # Find available districts
+    districts_path = BASE_OUTPUT_ROOT / METRIC_SLUG / STATE / "districts"
+    if not districts_path.exists():
+        print(f"\nERROR: Districts path not found: {districts_path}")
+        print("Please update BASE_OUTPUT_ROOT in this script.")
+        sys.exit(1)
+    
+    available_districts = [d.name for d in districts_path.iterdir() if d.is_dir()]
+    print(f"\nFound {len(available_districts)} districts")
+    
+    if not available_districts:
+        print("No districts found!")
+        sys.exit(1)
+    
+    # Analyze first district (or specify one)
+    district = available_districts[0].replace("_", " ")
+    print(f"\nAnalyzing district: {district}")
+    
+    # Load data for each scenario
+    dfs = {}
+    stats_by_scenario = {}
+    
+    for scenario in SCENARIOS:
+        df = load_district_yearly(BASE_OUTPUT_ROOT, STATE, METRIC_SLUG, district, MODEL, scenario)
+        dfs[scenario] = df
+        stats_by_scenario[scenario] = analyze_spi_values(df, scenario)
+    
+    # Print diagnostic report
+    print_diagnostic_report(district, stats_by_scenario)
+    
+    # Check for issues
+    issues = check_scientific_validity(stats_by_scenario)
+    if issues:
+        print("\n" + "=" * 70)
+        print("VALIDATION CHECKS")
+        print("=" * 70)
+        for issue in issues:
+            print(f"  {issue}")
+    else:
+        print("\n✓ All validation checks passed!")
+    
+    # Print sample data
+    print("\n" + "=" * 70)
+    print("SAMPLE DATA (first 10 years per scenario)")
+    print("=" * 70)
+    for scenario, df in dfs.items():
+        if not df.empty:
+            print(f"\n{scenario}:")
+            print(df[["year", "value"]].head(10).to_string(index=False))
+    
+    # Try to plot
+    plot_timeseries(dfs, district)
+
+
+if __name__ == "__main__":
+    main()

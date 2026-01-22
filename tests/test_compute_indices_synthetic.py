@@ -143,23 +143,36 @@ def make_step_series(
 
 
 def make_ramp_series(
-    start_value: float,
-    end_value: float,
+    start_value: float | None = None,
+    end_value: float | None = None,
     n_days: int = 365,
     start_date: str = "2000-01-01",
     lat: list[float] | None = None,
     lon: list[float] | None = None,
+    *,
+    start_val: float | None = None,
+    end_val: float | None = None,
 ) -> tuple[xr.DataArray, xr.DataArray]:
     """
     Create a linearly ramping time series.
-    
+
+    Accepts both (start_value, end_value) and alias kwargs (start_val, end_val)
+    for backward/forward compatibility across test variants.
+
     Returns:
         (data_array, mask) tuple
     """
+    if start_value is None:
+        start_value = start_val
+    if end_value is None:
+        end_value = end_val
+    if start_value is None or end_value is None:
+        raise TypeError("make_ramp_series requires start_value/end_value (or start_val/end_val)")
+
     lat = lat or [17.0, 17.5]
     lon = lon or [78.0, 78.5]
     time = xr.date_range(start_date, periods=n_days, freq="D", use_cftime=True)
-    
+
     daily_values = np.linspace(start_value, end_value, n_days)
     data = xr.DataArray(
         np.broadcast_to(daily_values[:, None, None], (n_days, len(lat), len(lon))).copy(),

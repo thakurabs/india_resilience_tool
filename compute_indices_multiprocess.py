@@ -9,6 +9,7 @@ Features:
 - Discovers models across ALL climate variables
 - Support for both district (ADM2) and block (ADM3) level aggregation
 - Clean folder structure: districts/ and blocks/ subfolders
+- SPI/SPEI computation via climate-indices package (NOAA-validated) or legacy scipy
 
 Output Structure:
     processed/{metric}/{state}/
@@ -41,6 +42,19 @@ Usage:
   python compute_indices_multiprocess.py --list-metrics         # List available metrics
   python compute_indices_multiprocess.py --list-models          # List discovered models
   python compute_indices_multiprocess.py --state Telangana      # Specific state
+  python compute_indices_multiprocess.py --spi-legacy           # Force legacy SPI (scipy-based)
+  python compute_indices_multiprocess.py --spi-distribution pearson  # Use Pearson Type III for SPI
+
+SPI/SPEI Implementation:
+  By default, this pipeline uses the climate-indices package (https://github.com/monocongo/climate_indices)
+  for SPI/SPEI computation when available. This provides:
+  - Peer-reviewed, NOAA-developed algorithms
+  - Support for both Gamma and Pearson Type III distributions
+  - Proper zero-inflation handling
+  - Numba-accelerated performance
+  
+  If climate-indices is not installed, or --spi-legacy is specified, the pipeline
+  falls back to the legacy scipy-based implementation.
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -63,6 +77,25 @@ from affine import Affine
 from paths import DATA_ROOT, DISTRICTS_PATH, BLOCKS_PATH, BASE_OUTPUT_ROOT
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
 
+# -----------------------------------------------------------------------------
+# CLIMATE-INDICES PACKAGE INTEGRATION (SPI/SPEI)
+# -----------------------------------------------------------------------------
+# Try to import the climate-indices adapter for scientifically-validated SPI
+try:
+    from india_resilience_tool.compute.spi_adapter import (
+        compute_spi_rows_climate_indices,
+        Distribution as SPIDistribution,
+        CLIMATE_INDICES_AVAILABLE,
+    )
+except ImportError:
+    CLIMATE_INDICES_AVAILABLE = False
+    compute_spi_rows_climate_indices = None
+    SPIDistribution = None
+
+# Configuration flag: Set to True to use climate-indices package for SPI/SPEI
+# When False, falls back to the legacy scipy-based implementation
+USE_CLIMATE_INDICES_PACKAGE = CLIMATE_INDICES_AVAILABLE
+
 # Type alias for administrative level
 AdminLevel = Literal["district", "block"]
 
@@ -84,8 +117,15 @@ METRICS = PIPELINE_METRICS_RAW
 DEFAULT_WORKERS = max(1, int(cpu_count() * 0.75))
 
 def setup_logging(verbose: bool = False):
+    import sys
     level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(level=level, format="%(asctime)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        stream=sys.stdout,
+        force=True,   # critical: overwrites any pre-existing handlers
+    )
 
 # -----------------------------------------------------------------------------
 # BASIC HELPERS
@@ -692,6 +732,343 @@ def standardised_precipitation_index(da, mask, scale_months=3, baseline_years=(1
 def standardised_precipitation_evapotranspiration_index(da, mask, scale_months=3, baseline_years=(1985, 2014)):
     return standardised_precipitation_index(da, mask, scale_months, baseline_years)
 
+
+# --------------------------------------------------------------------------
+# SPI / SPEI (Option A): scientifically standard SPI using monthly accumulations
+# --------------------------------------------------------------------------
+# NOTE:
+# - We keep the legacy per-year compute functions above for unit tests / backwards-compat,
+#   but the *pipeline* routes SPI/SPEI slugs through the multi-year workflow below so
+#   percentiles/distribution fitting are done correctly on a baseline period.
+#
+# SPI algorithm (common practice):
+# 1) Aggregate daily precipitation to monthly totals.
+# 2) Compute k-month rolling totals (SPI-k).
+# 3) Fit a Gamma distribution *per calendar month* on the baseline period (with zero handling).
+# 4) Convert Gamma CDF to a standard normal deviate (SPI).
+#
+# For future scenarios: fit parameters from the model's HISTORICAL baseline period
+# (same model, baseline_years) and apply to the scenario series.
+
+SPI_COMPUTE_NAMES = {
+    "standardised_precipitation_index",
+    "standardised_precipitation_evapotranspiration_index",  # currently treated as SPI (see SPEI note below)
+}
+
+def _require_scipy_stats():
+    """Import scipy.stats only when SPI/SPEI is requested (keeps base pipeline lighter)."""
+    try:
+        from scipy.stats import gamma as _gamma_dist  # type: ignore
+        from scipy.stats import norm as _norm_dist    # type: ignore
+        return _gamma_dist, _norm_dist
+    except Exception as e:
+        raise ImportError(
+            "SPI/SPEI computation requires SciPy (scipy.stats). "
+            "Install (recommended): conda install -c conda-forge scipy "
+            "or: pip install scipy"
+        ) from e
+
+
+def _collect_monthly_totals_by_unit(
+    year_to_paths: dict[int, dict[str, Path]],
+    varname: str,
+    masks: dict[str, xr.DataArray],
+) -> dict[str, xr.DataArray]:
+    """
+    For each unit mask, build a continuous monthly total series across all available years.
+    Returns: {unit_key: DataArray(time=monthly)}
+    """
+    out: dict[str, list[xr.DataArray]] = {k: [] for k in masks.keys()}
+    if not year_to_paths:
+        return {k: xr.DataArray([], dims=("time",)) for k in masks.keys()}
+
+    for year in sorted(year_to_paths.keys()):
+        p = year_to_paths[year].get(varname)
+        if p is None:
+            continue
+        ds = None
+        try:
+            ds = normalize_lat_lon(xr.open_dataset(p))
+            if varname not in ds:
+                continue
+            da = ds[varname]
+            # SPI expects precipitation totals; convert units if needed.
+            if varname == "pr":
+                da = pr_to_mm_per_day(da)
+
+            # compute monthly totals per unit
+            for unit_key, mask in masks.items():
+                dm = _get_district_daily_mean(da, mask)
+                if dm.sizes.get("time", 0) == 0:
+                    continue
+                # monthly totals (month-start index)
+                mon = dm.resample(time="MS").sum(dim="time", skipna=True)
+                if mon.sizes.get("time", 0) == 0:
+                    continue
+                out[unit_key].append(mon)
+        except Exception:
+            # keep going; caller will see gaps as missing months/years
+            continue
+        finally:
+            try:
+                if ds is not None:
+                    ds.close()
+            except Exception:
+                pass
+
+    stitched: dict[str, xr.DataArray] = {}
+    for unit_key, parts in out.items():
+        if not parts:
+            stitched[unit_key] = xr.DataArray([], dims=("time",))
+            continue
+        s = xr.concat(parts, dim="time")
+        # ensure time sorted + unique
+        s = s.sortby("time")
+        # drop duplicates if any
+        _, idx = np.unique(s["time"].values, return_index=True)
+        stitched[unit_key] = s.isel(time=np.sort(idx))
+    return stitched
+
+
+def _fit_spi_gamma_params_by_month(
+    monthly_accum: xr.DataArray,
+    baseline_years: tuple[int, int],
+    min_samples_per_month: int = 20,
+) -> dict[int, dict]:
+    """
+    Fit Gamma params for each calendar month on baseline years, with zero handling.
+    Returns dict: month -> {"method": "gamma", "shape":..., "scale":..., "q":...}
+    Fallback method per month: {"method": "normal", "mean":..., "std":...}
+    """
+    gamma_dist, _ = _require_scipy_stats()
+
+    if monthly_accum.sizes.get("time", 0) == 0 or "time" not in monthly_accum.dims:
+        return {}
+
+    y0, y1 = baseline_years
+    try:
+        years = monthly_accum["time"].dt.year
+        base = monthly_accum.where((years >= y0) & (years <= y1), drop=True)
+    except Exception:
+        base = monthly_accum
+
+    # If baseline slice is empty, fall back to full series
+    if base.sizes.get("time", 0) == 0:
+        base = monthly_accum
+
+    params_by_month: dict[int, dict] = {}
+    for m in range(1, 13):
+        try:
+            samp = base.where(base["time"].dt.month == m, drop=True).values
+        except Exception:
+            continue
+        samp = np.asarray(samp, dtype=float)
+        samp = samp[np.isfinite(samp)]
+        if samp.size < max(5, min_samples_per_month // 4):
+            continue
+
+        # zero handling (including exact 0)
+        zeros = np.sum(samp <= 0.0)
+        q = float(zeros) / float(samp.size) if samp.size else 0.0
+        nz = samp[samp > 0.0]
+
+        if nz.size >= min_samples_per_month:
+            try:
+                # standard SPI: Gamma with loc=0 on positive values
+                shape, loc, scale = gamma_dist.fit(nz, floc=0.0)
+                if not (np.isfinite(shape) and np.isfinite(scale) and scale > 0 and shape > 0):
+                    raise ValueError("non-finite gamma params")
+                params_by_month[m] = {"method": "gamma", "shape": float(shape), "scale": float(scale), "q": float(q)}
+                continue
+            except Exception:
+                pass  # fall back to normal below
+
+        # fallback: z-score on baseline for that month
+        mu = float(np.mean(samp)) if samp.size else 0.0
+        sd = float(np.std(samp, ddof=0)) if samp.size else 0.0
+        params_by_month[m] = {"method": "normal", "mean": mu, "std": sd, "q": float(q)}
+
+    return params_by_month
+
+
+def _spi_from_monthly_accum(
+    monthly_accum: xr.DataArray,
+    params_by_month: dict[int, dict],
+    clip_prob: float = 1e-6,
+) -> xr.DataArray:
+    """Convert monthly accumulated precipitation to SPI values using fitted parameters."""
+    gamma_dist, norm_dist = _require_scipy_stats()
+
+    if monthly_accum.sizes.get("time", 0) == 0 or not params_by_month:
+        return xr.full_like(monthly_accum, np.nan)
+
+    months = monthly_accum["time"].dt.month.values
+    vals = monthly_accum.values.astype(float)
+
+    out = np.full(vals.shape, np.nan, dtype=float)
+    for i, (x, m) in enumerate(zip(vals, months)):
+        if not np.isfinite(x):
+            continue
+        p = params_by_month.get(int(m))
+        if not p:
+            continue
+
+        q = float(p.get("q", 0.0))
+        if p["method"] == "gamma":
+            shape = float(p["shape"])
+            scale = float(p["scale"])
+            # Gamma CDF on x (note: if x<=0, cdf=0)
+            g = float(gamma_dist.cdf(max(0.0, x), a=shape, loc=0.0, scale=scale))
+            H = q + (1.0 - q) * g
+        else:
+            mu = float(p.get("mean", 0.0))
+            sd = float(p.get("std", 0.0))
+            if sd <= 0:
+                # degenerate distribution; treat as "no anomaly"
+                H = 0.5
+            else:
+                # convert z-score to probability
+                z = (x - mu) / sd
+                H = float(norm_dist.cdf(z))
+
+        # Avoid infs from ppf(0/1)
+        H = min(1.0 - clip_prob, max(clip_prob, H))
+        out[i] = float(norm_dist.ppf(H))
+
+    return xr.DataArray(out, coords=monthly_accum.coords, dims=monthly_accum.dims, name="spi")
+
+
+def _annualize_spi(
+    spi_monthly: xr.DataArray,
+    min_months_per_year: int = 9,
+) -> xr.DataArray:
+    """Aggregate monthly SPI to annual values (mean over months) with a minimum months threshold."""
+    if spi_monthly.sizes.get("time", 0) == 0:
+        return xr.DataArray([], dims=("year",))
+
+    grp = spi_monthly.groupby("time.year")
+    counts = grp.count(dim="time")
+    means = grp.mean(dim="time", skipna=True)
+    # enforce minimum-month coverage
+    means = means.where(counts >= int(min_months_per_year), drop=True)
+    means.name = "spi_yearly"
+    return means
+
+
+def _compute_spi_spei_rows(
+    metric: dict,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+    level: AdminLevel,
+    baseline_years: tuple[int, int],
+    scale_months: int,
+) -> list[dict]:
+    """
+    Multi-year SPI/SPEI path.
+    - For historical: fit on (baseline_years) within historical and compute SPI for all available years.
+    - For SSPs: fit on the model's historical baseline and apply to scenario monthly accumulations.
+    """
+    slug = metric["slug"]
+    value_col = metric["value_col"]
+    varname = (metric.get("var") or "pr").strip()
+
+    if varname != "pr":
+        logging.warning(f"[{slug}] SPI path expects var 'pr' (got '{varname}'); proceeding anyway.")
+    scale_months = int(scale_months)
+
+    # Collect monthly totals for the target scenario series
+    scen_monthly_by_unit = _collect_monthly_totals_by_unit(year_to_paths, varname, masks)
+
+    # Build calibration (baseline) year_to_paths (historical of same model), unless scenario itself is historical.
+    calib_year_to_paths = year_to_paths
+    if scenario != "historical":
+        hist_conf = SCENARIOS.get("historical")
+        if hist_conf is None:
+            logging.warning(f"[{slug}] No 'historical' scenario configured; using scenario series for calibration.")
+        else:
+            hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], varname, model)
+            if not hist_dir.exists():
+                logging.warning(f"[{slug}] Historical dir missing for calibration: {hist_dir}. Using scenario series.")
+            else:
+                valid_year_files, _ = validated_year_files(hist_dir)
+                if not valid_year_files:
+                    logging.warning(f"[{slug}] No valid historical files for calibration in {hist_dir}. Using scenario series.")
+                else:
+                    calib_year_to_paths = {y: {varname: p} for y, p in valid_year_files.items()}
+
+    calib_monthly_by_unit = (
+        scen_monthly_by_unit if calib_year_to_paths is year_to_paths
+        else _collect_monthly_totals_by_unit(calib_year_to_paths, varname, masks)
+    )
+
+    # Compute SPI per unit
+    rows: list[dict] = []
+    min_months_per_year = int(metric.get("params", {}).get("min_months_per_year", 9))
+
+    for unit_key in masks.keys():
+        scen_mon = scen_monthly_by_unit.get(unit_key)
+        calib_mon = calib_monthly_by_unit.get(unit_key)
+
+        if scen_mon is None or scen_mon.sizes.get("time", 0) == 0:
+            continue
+        if calib_mon is None or calib_mon.sizes.get("time", 0) == 0:
+            continue
+
+        # k-month rolling totals
+        scen_acc = scen_mon.rolling(time=scale_months, min_periods=scale_months).sum()
+        calib_acc = calib_mon.rolling(time=scale_months, min_periods=scale_months).sum()
+
+        # Fit distribution on baseline and transform scenario
+        params_by_month = _fit_spi_gamma_params_by_month(calib_acc, baseline_years=baseline_years)
+        if not params_by_month:
+            logging.warning(f"[{slug}] Could not fit SPI params for unit={unit_key} (baseline={baseline_years}); skipping.")
+            continue
+
+        spi_mon = _spi_from_monthly_accum(scen_acc, params_by_month)
+        spi_yearly = _annualize_spi(spi_mon, min_months_per_year=min_months_per_year)
+
+        if spi_yearly.sizes.get("year", 0) == 0:
+            continue
+
+        # Emit rows in the same schema as other metrics
+        for y in spi_yearly["year"].values:
+            y_int = int(y)
+            v = float(spi_yearly.sel(year=y).item())
+            source_path = ""
+            try:
+                source_path = str(year_to_paths.get(y_int, {}).get(varname, ""))
+            except Exception:
+                source_path = ""
+            row = {
+                "year": y_int,
+                "value": v,
+                value_col: v,
+                "source_file": source_path,
+            }
+
+            # Parse unit_key based on level
+            if level == "block":
+                if "||" in unit_key:
+                    district, block = unit_key.split("||", 1)
+                    row["district"] = district
+                    row["block"] = block
+                else:
+                    row["district"] = "Unknown"
+                    row["block"] = unit_key
+            else:
+                row["district"] = unit_key
+
+            rows.append(row)
+
+    # SPEI note: true SPEI requires a PET formulation and water-balance distribution (commonly log-logistic).
+    # In the current registry, SPEI metrics are wired to 'pr' only, so they are treated as SPI here as well.
+    if metric.get("compute") == "standardised_precipitation_evapotranspiration_index":
+        logging.info(f"[{slug}] NOTE: SPEI is currently computed as SPI (registry uses only 'pr').")
+
+    return rows
 # -----------------------------------------------------------------------------
 # FILE I/O HELPERS
 # -----------------------------------------------------------------------------
@@ -834,134 +1211,216 @@ def process_metric_for_model_scenario(
     level_folder = BLOCK_FOLDER if level == "block" else DISTRICT_FOLDER
 
     rows = []
-    for year, paths_by_var in year_to_paths.items():
-        ds_by_var: dict[str, xr.Dataset] = {}
-        da_by_var: dict[str, xr.DataArray] = {}
 
+    # ------------------------------------------------------------------
+    # Special-case SPI/SPEI: multi-year baseline-calibrated SPI workflow
+    # ------------------------------------------------------------------
+    if metric.get("compute") in SPI_COMPUTE_NAMES:
+        baseline_years = tuple(params.get("baseline_years", (1981, 2010)))
+        scale_months = int(params.get("scale_months", 3))
+        
+        # Determine which implementation to use
+        use_climate_indices = (
+            USE_CLIMATE_INDICES_PACKAGE 
+            and CLIMATE_INDICES_AVAILABLE 
+            and compute_spi_rows_climate_indices is not None
+        )
+        
         try:
-            for v, nc_path in paths_by_var.items():
-                ds = normalize_lat_lon(xr.open_dataset(nc_path))
-                if v not in ds:
-                    raise KeyError(f"Variable '{v}' not found in {nc_path}")
-                ds_by_var[v] = ds
-                da_by_var[v] = ds[v]
-            for v, nc_path in paths_by_var.items():
-                ds = normalize_lat_lon(xr.open_dataset(nc_path))
-                if v not in ds:
-                    raise KeyError(f"Variable '{v}' not found in {nc_path}")
-                ds_by_var[v] = ds
-                da_by_var[v] = ds[v]
-                ## Following lines for debugging
-                # if v == "tasmin" and year == 2000:
-                #     da_by_var[v] = xr.full_like(da_by_var[v], 300.0)  # 300 K constant
-
-            for unit_key, mask in masks.items():
-                if len(req_vars) <= 1:
-                    v = compute_fn(da_by_var[primary_var], mask, **params)
-                else:
-                    # Wet-bulb and other multi-var metrics (currently assumes two vars)
-                    v = compute_fn(da_by_var[req_vars[0]], da_by_var[req_vars[1]], mask, **params)
-
-                row = {
-                    "year": year,
-                    "value": v,
-                    value_col: v,
-                    "source_file": str(paths_by_var.get(primary_var) or next(iter(paths_by_var.values()))),
-                }
-
-                # Parse unit_key based on level
-                if level == "block":
-                    # Key format: "district||block"
-                    if "||" in unit_key:
-                        district, block = unit_key.split("||", 1)
-                        row["district"] = district
-                        row["block"] = block
-                    else:
-                        row["district"] = "Unknown"
-                        row["block"] = unit_key
-                else:
-                    row["district"] = unit_key
-
-                rows.append(row)
-
+            if use_climate_indices:
+                # Use the climate-indices package (scientifically validated)
+                logging.debug(f"[{slug}] Using climate-indices package for SPI computation")
+                
+                varname = (metric.get("var") or "pr").strip()
+                
+                # Collect monthly totals for scenario
+                scen_monthly_by_unit = _collect_monthly_totals_by_unit(year_to_paths, varname, masks)
+                
+                # Build calibration data (historical for SSP scenarios)
+                calib_year_to_paths = year_to_paths
+                if scenario != "historical":
+                    hist_conf = SCENARIOS.get("historical")
+                    if hist_conf:
+                        hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], varname, model)
+                        if hist_dir.exists():
+                            valid_year_files, _ = validated_year_files(hist_dir)
+                            if valid_year_files:
+                                calib_year_to_paths = {y: {varname: p} for y, p in valid_year_files.items()}
+                
+                calib_monthly_by_unit = (
+                    scen_monthly_by_unit if calib_year_to_paths is year_to_paths
+                    else _collect_monthly_totals_by_unit(calib_year_to_paths, varname, masks)
+                )
+                
+                # Call the climate-indices adapter
+                rows = compute_spi_rows_climate_indices(
+                    metric=metric,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=scenario_conf,
+                    scen_monthly_by_unit=scen_monthly_by_unit,
+                    calib_monthly_by_unit=calib_monthly_by_unit,
+                    masks=masks,
+                    level=level,
+                    baseline_years=baseline_years,
+                    scale_months=scale_months,
+                    year_to_paths=year_to_paths,
+                )
+            else:
+                # Fallback to legacy scipy-based implementation
+                logging.debug(f"[{slug}] Using legacy SPI implementation (climate-indices not available)")
+                rows = _compute_spi_spei_rows(
+                    metric=metric,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=scenario_conf,
+                    year_to_paths=year_to_paths,
+                    masks=masks,
+                    level=level,
+                    baseline_years=baseline_years,
+                    scale_months=scale_months,
+                )
         except Exception as e:
-            logging.debug(f"[{slug}] Failed {model}/{scenario}/{year}: {e}")
-        finally:
-            for ds in ds_by_var.values():
-                try:
-                    ds.close()
-                except Exception:
-                    pass
+            logging.error(f"[{slug}] SPI/SPEI computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            return
 
+    # ------------------------------------------------------------------
+    # Default per-year metric computation
+    # ------------------------------------------------------------------
+    else:
+        for year, paths_by_var in year_to_paths.items():
+            ds_by_var: dict[str, xr.Dataset] = {}
+            da_by_var: dict[str, xr.DataArray] = {}
+
+            try:
+                # Open each required variable once for this year.
+                for v, nc_path in paths_by_var.items():
+                    ds = normalize_lat_lon(xr.open_dataset(nc_path))
+                    if v not in ds:
+                        raise KeyError(f"Variable '{v}' not found in {nc_path}")
+                    ds_by_var[v] = ds
+                    da_by_var[v] = ds[v]
+
+                for unit_key, mask in masks.items():
+                    if len(req_vars) <= 1:
+                        v = compute_fn(da_by_var[primary_var], mask, **params)
+                    else:
+                        # Multi-var metrics (currently assumes two vars)
+                        v = compute_fn(da_by_var[req_vars[0]], da_by_var[req_vars[1]], mask, **params)
+
+                    row = {
+                        "year": year,
+                        "value": v,
+                        value_col: v,
+                        "source_file": str(paths_by_var.get(primary_var) or next(iter(paths_by_var.values()))),
+                    }
+
+                    # Parse unit_key based on level
+                    if level == "block":
+                        # Key format: "district||block"
+                        if "||" in unit_key:
+                            district, block = unit_key.split("||", 1)
+                            row["district"] = district
+                            row["block"] = block
+                        else:
+                            row["district"] = "Unknown"
+                            row["block"] = unit_key
+                    else:
+                        row["district"] = unit_key
+
+                    rows.append(row)
+
+            except Exception as e:
+                logging.debug(f"[{slug}] Failed {model}/{scenario}/{year}: {e}")
+            finally:
+                for ds in ds_by_var.values():
+                    try:
+                        ds.close()
+                    except Exception:
+                        pass
     if not rows:
         return
 
     df_yearly = pd.DataFrame(rows)
 
     # Period aggregation (mean over years used, consistent with other day-count metrics)
-    group_cols = ["district", "block", "model", "scenario"] if level == "block" else ["district", "model", "scenario"]
+    # Note: For SPI, years may come from climate-indices output which may differ from year_to_paths
+    available_years = set(df_yearly["year"].unique())
+    group_cols = ["district", "block"] if level == "block" else ["district"]
     period_frames = []
 
     for period_name, (y0, y1) in scenario_conf["periods"].items():
-        avail = [y for y in year_to_paths.keys() if y0 <= y <= y1]
+        # Use years actually present in the data, not year_to_paths
+        avail = [y for y in available_years if y0 <= y <= y1]
         n_req, n_avail = y1 - y0 + 1, len(avail)
         if n_avail >= MIN_YEARS_ABSOLUTE and n_avail / n_req >= MIN_YEARS_REQUIRED_FRACTION:
-            grp = df_yearly[df_yearly["year"].isin(avail)].groupby(
-                [c for c in group_cols if c in df_yearly.columns]
-            ).agg({"value": "mean"}).reset_index()
-            grp["period"] = period_name
-            grp["years_used_count"] = n_avail
-            grp["years_requested"] = n_req
-            grp[value_col] = grp["value"]
-            period_frames.append(grp)
+            try:
+                grp = df_yearly[df_yearly["year"].isin(avail)].groupby(
+                    [c for c in group_cols if c in df_yearly.columns]
+                ).agg({"value": "mean"}).reset_index()
+                grp["period"] = period_name
+                grp["years_used_count"] = n_avail
+                grp["years_requested"] = n_req
+                grp[value_col] = grp["value"]
+                period_frames.append(grp)
+            except Exception as e:
+                logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
 
     df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
 
     # Write outputs with clean folder structure
-    if level == "block":
-        # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
-        for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
-            district_safe = district.replace(" ", "_").replace("/", "_")
-            block_safe = block.replace(" ", "_").replace("/", "_")
+    try:
+        if level == "block":
+            # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
+            for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
+                district_safe = district.replace(" ", "_").replace("/", "_")
+                block_safe = block.replace(" ", "_").replace("/", "_")
 
-            out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
-            out_dir.mkdir(parents=True, exist_ok=True)
-            grp_df["model"] = model
-            grp_df["scenario"] = scenario
+                out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
+                out_dir.mkdir(parents=True, exist_ok=True)
+                grp_df = grp_df.copy()  # Avoid SettingWithCopyWarning
+                grp_df["model"] = model
+                grp_df["scenario"] = scenario
 
-            grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
+                grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
 
-            if not df_periods.empty:
-                period_mask = (
-                    (df_periods["district"] == district) &
-                    (df_periods["block"] == block)
-                )
-                period_grp = df_periods.loc[period_mask].copy()
+                if not df_periods.empty:
+                    period_mask = (
+                        (df_periods["district"] == district) &
+                        (df_periods["block"] == block)
+                    )
+                    period_grp = df_periods.loc[period_mask].copy()
 
-                if not period_grp.empty:
-                    # Avoid pandas SettingWithCopyWarning by working on an explicit copy.
-                    period_grp["model"] = model
-                    period_grp["scenario"] = scenario
-                    period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
-    else:
-        # Structure: {metric}/{state}/districts/{district}/{model}/{scenario}/
-        for dist_name in df_yearly["district"].unique():
-            dist_safe = dist_name.replace(" ", "_").replace("/", "_")
+                    if not period_grp.empty:
+                        period_grp["model"] = model
+                        period_grp["scenario"] = scenario
+                        period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
+        else:
+            # Structure: {metric}/{state}/districts/{district}/{model}/{scenario}/
+            for dist_name in df_yearly["district"].unique():
+                dist_safe = dist_name.replace(" ", "_").replace("/", "_")
 
-            out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
-            out_dir.mkdir(parents=True, exist_ok=True)
+                out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
+                out_dir.mkdir(parents=True, exist_ok=True)
 
-            dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
-            dist_df["model"] = model
-            dist_df["scenario"] = scenario
-            dist_df.to_csv(out_dir / f"{dist_safe}_yearly.csv", index=False)
+                dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
+                dist_df["model"] = model
+                dist_df["scenario"] = scenario
+                dist_df.to_csv(out_dir / f"{dist_safe}_yearly.csv", index=False)
 
-            if not df_periods.empty:
-                period_df = df_periods[df_periods["district"] == dist_name].copy()
-                if not period_df.empty:
-                    period_df["model"] = model
-                    period_df["scenario"] = scenario
-                    period_df.to_csv(out_dir / f"{dist_safe}_periods.csv", index=False)
+                if not df_periods.empty:
+                    period_df = df_periods[df_periods["district"] == dist_name].copy()
+                    if not period_df.empty:
+                        period_df["model"] = model
+                        period_df["scenario"] = scenario
+                        period_df.to_csv(out_dir / f"{dist_safe}_periods.csv", index=False)
+        
+        logging.debug(f"[{slug}] Wrote {len(df_yearly)} yearly rows, {len(df_periods)} period rows for {model}/{scenario}")
+    except Exception as e:
+        logging.error(f"[{slug}] Failed to write output files for {model}/{scenario}: {e}")
+        logging.debug(traceback.format_exc())
+        raise
 
 
 # -----------------------------------------------------------------------------
@@ -1213,12 +1672,16 @@ def run_pipeline_parallel(
     level_display = "Block" if level == "block" else "District"
     level_folder = get_level_folder(level)
     
+    # Determine SPI implementation info
+    spi_impl = "climate-indices package" if USE_CLIMATE_INDICES_PACKAGE and CLIMATE_INDICES_AVAILABLE else "legacy (scipy)"
+    
     logging.info("=" * 60)
     logging.info("India Resilience Tool - Climate Index Pipeline")
     logging.info(f"Level: {level_display} (folder: {level_folder}/)")
     logging.info(f"State: {state}")
     logging.info(f"Metrics: {len(metrics_to_process)}, Models: {len(models_to_process)}, Scenarios: {len(scenarios_to_process)}")
     logging.info(f"Total tasks: {len(tasks)}, Workers: {num_workers}")
+    logging.info(f"SPI/SPEI implementation: {spi_impl}")
     logging.info("=" * 60)
     
     if not tasks:
@@ -1245,6 +1708,8 @@ def run_pipeline_parallel(
                 )
                 results.append({"status": "success"})
             except Exception as e:
+                logging.error(f"Task failed for {metric['slug']}/{task.model}/{task.scenario}: {e}")
+                logging.debug(traceback.format_exc())
                 results.append({"status": "failed", "error": str(e)})
                 failed += 1
             completed += 1
@@ -1306,7 +1771,21 @@ def main():
                         help="List available metrics and exit")
     parser.add_argument("--list-models", action="store_true",
                         help="List discovered models and exit")
+    parser.add_argument("--spi-legacy", action="store_true",
+                        help="Force use of legacy SPI implementation (scipy-based) instead of climate-indices package")
+    parser.add_argument("--spi-distribution", choices=["gamma", "pearson"], default="gamma",
+                        help="Distribution for SPI fitting when using climate-indices package (default: gamma)")
     args = parser.parse_args()
+    
+    # Handle SPI implementation flag
+    global USE_CLIMATE_INDICES_PACKAGE
+    if args.spi_legacy:
+        USE_CLIMATE_INDICES_PACKAGE = False
+        logging.info("SPI: Using legacy scipy-based implementation (--spi-legacy flag)")
+    elif CLIMATE_INDICES_AVAILABLE:
+        logging.info("SPI: Using climate-indices package")
+    else:
+        logging.info("SPI: Using legacy scipy-based implementation (climate-indices not installed)")
     
     if args.list_metrics:
         print("Available metrics:")
