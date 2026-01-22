@@ -924,7 +924,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #         "Number of dry spells lasting more than 5 consecutive days."
     #     ),
     # },
-    {
+{
         "name": "Standardised Precipitation Index 3-month (SPI3)",
         "slug": "spi3_drought_index",
         "var": "pr",
@@ -965,6 +965,209 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "12-month Standardised Precipitation Index. Measures long-term "
             "drought conditions. Climdex SPI."
         ),
+    },
+
+    # ------------------------------------------------------------------
+    # SPI persistence metrics: annual count of months crossing thresholds
+    # (computed from monthly SPI using climate-indices adapter)
+    # ------------------------------------------------------------------
+
+    # SPI3 counts
+    {
+        "name": "SPI3: Count of months with SPI < -1 (moderate drought)",
+        "slug": "spi3_count_months_lt_minus1",
+        "var": "pr",
+        "value_col": "spi3_months_lt_minus1",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 3,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI3 below -1 (moderate meteorological drought persistence).",
+    },
+    {
+        "name": "SPI3: Count of months with SPI < -2 (severe drought)",
+        "slug": "spi3_count_months_lt_minus2",
+        "var": "pr",
+        "value_col": "spi3_months_lt_minus2",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 3,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_lt",
+            "threshold": -2.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI3 below -2 (severe meteorological drought persistence).",
+    },
+    {
+        "name": "SPI3: Count of months with SPI > +1 (moderately wet)",
+        "slug": "spi3_count_months_gt_plus1",
+        "var": "pr",
+        "value_col": "spi3_months_gt_plus1",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 3,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_gt",
+            "threshold": 1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI3 above +1 (wet persistence).",
+    },
+    {
+        "name": "SPI3: Count of months with SPI > +2 (severely wet)",
+        "slug": "spi3_count_months_gt_plus2",
+        "var": "pr",
+        "value_col": "spi3_months_gt_plus2",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 3,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_gt",
+            "threshold": 2.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI3 above +2 (extremely wet persistence).",
+    },
+
+    # SPI6 counts
+    {
+        "name": "SPI6: Count of months with SPI < -1 (moderate drought)",
+        "slug": "spi6_count_months_lt_minus1",
+        "var": "pr",
+        "value_col": "spi6_months_lt_minus1",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 6,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI6 below -1 (moderate meteorological drought persistence).",
+    },
+    {
+        "name": "SPI6: Count of months with SPI < -2 (severe drought)",
+        "slug": "spi6_count_months_lt_minus2",
+        "var": "pr",
+        "value_col": "spi6_months_lt_minus2",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 6,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_lt",
+            "threshold": -2.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI6 below -2 (severe meteorological drought persistence).",
+    },
+    {
+        "name": "SPI6: Count of months with SPI > +1 (moderately wet)",
+        "slug": "spi6_count_months_gt_plus1",
+        "var": "pr",
+        "value_col": "spi6_months_gt_plus1",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 6,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_gt",
+            "threshold": 1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI6 above +1 (wet persistence).",
+    },
+    {
+        "name": "SPI6: Count of months with SPI > +2 (severely wet)",
+        "slug": "spi6_count_months_gt_plus2",
+        "var": "pr",
+        "value_col": "spi6_months_gt_plus2",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 6,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_gt",
+            "threshold": 2.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI6 above +2 (extremely wet persistence).",
+    },
+
+    # SPI12 counts
+    {
+        "name": "SPI12: Count of months with SPI < -1 (moderate drought)",
+        "slug": "spi12_count_months_lt_minus1",
+        "var": "pr",
+        "value_col": "spi12_months_lt_minus1",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 12,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI12 below -1 (moderate long-term drought persistence).",
+    },
+    {
+        "name": "SPI12: Count of months with SPI < -2 (severe drought)",
+        "slug": "spi12_count_months_lt_minus2",
+        "var": "pr",
+        "value_col": "spi12_months_lt_minus2",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 12,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_lt",
+            "threshold": -2.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI12 below -2 (severe long-term drought persistence).",
+    },
+    {
+        "name": "SPI12: Count of months with SPI > +1 (moderately wet)",
+        "slug": "spi12_count_months_gt_plus1",
+        "var": "pr",
+        "value_col": "spi12_months_gt_plus1",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 12,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_gt",
+            "threshold": 1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI12 above +1 (wet persistence).",
+    },
+    {
+        "name": "SPI12: Count of months with SPI > +2 (severely wet)",
+        "slug": "spi12_count_months_gt_plus2",
+        "var": "pr",
+        "value_col": "spi12_months_gt_plus2",
+        "units": "months",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 12,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_months_gt",
+            "threshold": 2.0,
+        },
+        "group": "rain",
+        "description": "Annual count of months with SPI12 above +2 (extremely wet persistence).",
     },
     # {
     #     "name": "Standardised Precip-Evapotranspiration Index 3-month (SPEI3)",
@@ -1103,10 +1306,26 @@ BUNDLES: dict[str, list[str]] = {
         # Dry spell persistence
         "pr_consecutive_dry_days_lt1mm",
         # "pr_consecutive_dry_day_events_gt5",
-        # Meteorological drought (SPI)
+
+        # Meteorological drought (SPI): baseline SPI + threshold-month counts
         "spi3_drought_index",
+        "spi3_count_months_lt_minus1",
+        "spi3_count_months_lt_minus2",
+        "spi3_count_months_gt_plus1",
+        "spi3_count_months_gt_plus2",
+
         "spi6_drought_index",
+        "spi6_count_months_lt_minus1",
+        "spi6_count_months_lt_minus2",
+        "spi6_count_months_gt_plus1",
+        "spi6_count_months_gt_plus2",
+
         "spi12_drought_index",
+        "spi12_count_months_lt_minus1",
+        "spi12_count_months_lt_minus2",
+        "spi12_count_months_gt_plus1",
+        "spi12_count_months_gt_plus2",
+
         # Climatic water-balance drought (SPEI)
         # "spei3_drought_index",
         # "spei6_drought_index",

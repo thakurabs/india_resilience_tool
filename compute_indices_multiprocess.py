@@ -96,6 +96,9 @@ except ImportError:
 # When False, falls back to the legacy scipy-based implementation
 USE_CLIMATE_INDICES_PACKAGE = CLIMATE_INDICES_AVAILABLE
 
+# SPI distribution selection for climate-indices (set from CLI via --spi-distribution)
+SPI_DISTRIBUTION: str = "gamma"
+
 # Type alias for administrative level
 AdminLevel = Literal["district", "block"]
 
@@ -1230,12 +1233,19 @@ def process_metric_for_model_scenario(
             if use_climate_indices:
                 # Use the climate-indices package (scientifically validated)
                 logging.debug(f"[{slug}] Using climate-indices package for SPI computation")
-                
-                varname = (metric.get("var") or "pr").strip()
-                
+
+                # Make a safe copy so we can inject runtime SPI params (distribution + monthly CSV settings)
+                metric_for_spi = dict(metric)
+                metric_for_spi["params"] = dict(metric.get("params") or {})
+                metric_for_spi["params"].setdefault("distribution", SPI_DISTRIBUTION)
+                metric_for_spi["params"].setdefault("write_monthly_csv", True)
+                metric_for_spi["params"].setdefault("use_monthly_cache", True)
+
+                varname = (metric_for_spi.get("var") or "pr").strip()
+
                 # Collect monthly totals for scenario
                 scen_monthly_by_unit = _collect_monthly_totals_by_unit(year_to_paths, varname, masks)
-                
+
                 # Build calibration data (historical for SSP scenarios)
                 calib_year_to_paths = year_to_paths
                 if scenario != "historical":
@@ -1246,15 +1256,15 @@ def process_metric_for_model_scenario(
                             valid_year_files, _ = validated_year_files(hist_dir)
                             if valid_year_files:
                                 calib_year_to_paths = {y: {varname: p} for y, p in valid_year_files.items()}
-                
+
                 calib_monthly_by_unit = (
                     scen_monthly_by_unit if calib_year_to_paths is year_to_paths
                     else _collect_monthly_totals_by_unit(calib_year_to_paths, varname, masks)
                 )
-                
-                # Call the climate-indices adapter
+
+                # Call the climate-indices adapter (also writes *_monthly.csv per unit)
                 rows = compute_spi_rows_climate_indices(
-                    metric=metric,
+                    metric=metric_for_spi,
                     model=model,
                     scenario=scenario,
                     scenario_conf=scenario_conf,
@@ -1265,6 +1275,9 @@ def process_metric_for_model_scenario(
                     baseline_years=baseline_years,
                     scale_months=scale_months,
                     year_to_paths=year_to_paths,
+                    metric_root_path=metric_root_path,
+                    state_name=state_name,
+                    level_folder=level_folder,
                 )
             else:
                 # Fallback to legacy scipy-based implementation
@@ -1777,8 +1790,11 @@ def main():
                         help="Distribution for SPI fitting when using climate-indices package (default: gamma)")
     args = parser.parse_args()
     
-    # Handle SPI implementation flag
+    # Handle SPI implementation + distribution flags
     global USE_CLIMATE_INDICES_PACKAGE
+    global SPI_DISTRIBUTION
+    SPI_DISTRIBUTION = args.spi_distribution
+
     if args.spi_legacy:
         USE_CLIMATE_INDICES_PACKAGE = False
         logging.info("SPI: Using legacy scipy-based implementation (--spi-legacy flag)")
