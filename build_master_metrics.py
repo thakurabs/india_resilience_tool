@@ -48,26 +48,44 @@ BLOCK_FOLDER = "blocks"
 # Imports with fallbacks
 # -----------------------------------------------------------------------------
 def _try_import_registries() -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Return (VARIABLES, METRICS_BY_SLUG) with import fallbacks."""
-    try:
-        from india_resilience_tool.config.variables import VARIABLES as _VARIABLES
-        variables = dict(_VARIABLES)
-    except Exception:
-        try:
-            from variables import VARIABLES as _VARIABLES
-            variables = dict(_VARIABLES)
-        except Exception as e:
-            raise ImportError("Could not import VARIABLES") from e
+    """Return (VARIABLES, METRICS_BY_SLUG) with robust import fallbacks.
 
-    try:
-        from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG as _METRICS_BY_SLUG
-        metrics_by_slug = dict(_METRICS_BY_SLUG)
-    except Exception:
-        try:
-            from metrics_registry import METRICS_BY_SLUG as _METRICS_BY_SLUG
-            metrics_by_slug = dict(_METRICS_BY_SLUG)
-        except Exception as e:
-            raise ImportError("Could not import METRICS_BY_SLUG") from e
+    Tries package-first imports (preferred), then legacy root-level modules.
+    On failure, raises an ImportError that includes the underlying causes.
+    """
+    import importlib
+
+    def _import_symbol(module_candidates: Sequence[str], symbol: str) -> Any:
+        errors: List[str] = []
+        for mod_name in module_candidates:
+            try:
+                mod = importlib.import_module(mod_name)
+                return getattr(mod, symbol)
+            except Exception as e:
+                errors.append(f"{mod_name}.{symbol}: {type(e).__name__}: {e}")
+        joined = "\n  - " + "\n  - ".join(errors) if errors else ""
+        raise ImportError(f"Could not import {symbol}. Tried:{joined}")
+
+    # Prefer the packaged modules; keep legacy fallbacks in case someone has root-level copies.
+    variables_obj = _import_symbol(
+        (
+            "india_resilience_tool.config.variables",
+            "config.variables",
+            "variables",
+        ),
+        "VARIABLES",
+    )
+    metrics_obj = _import_symbol(
+        (
+            "india_resilience_tool.config.metrics_registry",
+            "config.metrics_registry",
+            "metrics_registry",
+        ),
+        "METRICS_BY_SLUG",
+    )
+
+    variables = dict(variables_obj)
+    metrics_by_slug = dict(metrics_obj)
 
     return variables, metrics_by_slug
 
