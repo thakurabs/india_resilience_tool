@@ -20,8 +20,8 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 ### Entry Points
 | Command | Purpose |
 |---------|---------|
-| `streamlit run dashboard_unfactored.py` | Launch dashboard |
-| `python -m india_resilience_tool.app.main` | Alternative entry |
+| `streamlit run dashboard_unfactored.py` | Launch dashboard (recommended shim) |
+| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard (package entry) |
 | `python build_master_metrics.py` | Rebuild master CSVs (district + block) |
 | `python compute_indices_multiprocess.py` | Build processed index artifacts (district default) |
 | `python compute_indices_multiprocess.py --level block` | Build processed artifacts at block level |
@@ -40,54 +40,66 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 
 ```
 india_resilience_tool/
-├── __init__.py
-├── analysis/                    # Data analysis & computation
-│   ├── __init__.py
-│   ├── metrics.py              # Risk classification
-│   ├── portfolio.py            # Portfolio logic & state (district + block)
-│   └── timeseries.py           # Time series loading (district + block)
-├── app/                         # Streamlit application
-│   ├── __init__.py
-│   ├── dashboard.py            # Dashboard entry wrapper
-│   ├── legacy_dashboard_impl.py # Main orchestrator (district + block)
-│   ├── main.py                 # CLI entry point
-│   ├── orchestrator.py         # Module executor
-│   ├── point_selection_ui.py   # Coordinate input & batch support (district + block)
-│   ├── portfolio_ui.py         # Portfolio management panel (district + block + bundles)
-│   ├── sidebar.py              # Sidebar controls & navigation (admin level + focus)
-│   ├── state.py                # Session state defaults & constants
-│   └── views/                  # View renderers
-│       ├── __init__.py
-│       ├── details_panel.py    # Details panel (district + block; some exports are district-first)
-│       ├── map_view.py         # Choropleth map (district + block)
-│       ├── rankings_view.py    # Rankings (district + block) + portfolio add parity
-│       └── state_summary_view.py # State summary view (district-first, optional)
-├── config/                      # Configuration
-│   ├── __init__.py
-│   ├── constants.py            # App constants & styling
-│   ├── metrics_registry.py     # Unified metric definitions + bundles (single source of truth)
-│   └── variables.py            # Dashboard variable registry (imports from metrics_registry)
-├── data/                        # Data loading & processing
-│   ├── __init__.py
-│   ├── adm2_loader.py          # GeoJSON district loading (ADM2)
-│   ├── adm3_loader.py          # GeoJSON block loading (ADM3)
-│   ├── master_loader.py        # Master CSV loading (district + block)
-│   └── merge.py                # Merge utilities (ADM2/ADM3)
-├── utils/                       # Utilities
-│   ├── __init__.py
-│   └── naming.py               # Name normalization & aliases
-└── viz/                         # Visualization
-    ├── __init__.py
-    ├── charts.py               # Chart/figure generation
-    ├── colors.py               # Color scales & legends
-    ├── exports.py              # PDF export generation
-    └── tables.py               # Table formatting
+├── init.py
+├── analysis/ # Data analysis & computation
+│ ├── init.py
+│ ├── case_study.py # Case-study exports and helpers
+│ ├── metrics.py # Risk classification
+│ ├── portfolio.py # Portfolio logic & state (district + block)
+│ └── timeseries.py # Time series loading (district + block)
+├── app/ # Streamlit application
+│ ├── init.py
+│ ├── adm2_cache.py # District boundary caching/simplification
+│ ├── dashboard.py # Dashboard entry wrapper
+│ ├── legacy_dashboard_impl.py # Main orchestrator (district + block + bundles)
+│ ├── main.py # Streamlit entry module (run via Streamlit)
+│ ├── orchestrator.py # Module executor
+│ ├── point_selection_ui.py # Coordinate input & batch support (district + block)
+│ ├── portfolio_ui.py # Portfolio management panel (district + block + bundles)
+│ ├── sidebar.py # Sidebar controls & navigation (admin level + focus)
+│ ├── state.py # Session state defaults & constants
+│ └── views/ # View renderers
+│ ├── init.py
+│ ├── details_panel.py # Details panel (district + block; exports + case studies)
+│ ├── map_view.py # Choropleth map (district + block)
+│ ├── rankings_view.py # Rankings (district + block) + portfolio add parity
+│ └── state_summary_view.py # State summary view (district-first, optional)
+├── config/ # Configuration
+│ ├── init.py
+│ ├── constants.py # App constants & styling
+│ ├── metrics_registry.py # Unified metric definitions + bundles (single source of truth)
+│ ├── paths.py # Library path semantics (mirrors root paths.py)
+│ └── variables.py # Dashboard variable registry (imports from metrics_registry)
+├── data/ # Data loading & processing
+│ ├── init.py
+│ ├── adm2_loader.py # GeoJSON district loading (ADM2)
+│ ├── adm3_loader.py # GeoJSON block loading (ADM3)
+│ ├── boundary_loader.py # Unified boundary loader API
+│ ├── discovery.py # Processed-artifact discovery helpers
+│ ├── master_loader.py # Master CSV loading (district + block)
+│ └── merge.py # Merge utilities (ADM2/ADM3)
+├── utils/ # Utilities
+│ ├── init.py
+│ └── naming.py # Name normalization & aliases
+└── viz/ # Visualization
+├── init.py
+├── charts.py # Chart/figure generation
+├── colors.py # Color scales & legends
+├── exports.py # PDF/ZIP export generation
+├── style.py # Shared plotting/table styling
+└── tables.py # Table formatting
 
 Root files:
-├── dashboard_unfactored.py     # Entry point shim
-├── paths.py                    # DATA_DIR configuration
-├── build_master_metrics.py     # Master CSV builder script
-└── tests/                      # Test suite
+├── dashboard_unfactored.py # Streamlit entry shim (recommended)
+├── dashboard_unfactored_impl.py # Legacy monolithic implementation (kept for reference)
+├── paths.py # DATA_DIR + processed-root configuration (canonical)
+├── build_master_metrics.py # Master CSV builder script
+├── compute_indices.py # Single-process index compute
+├── compute_indices_multiprocess.py # Multi-process index compute
+├── environment.yml # Conda environment (pinned)
+├── requirements.txt # pip freeze (UTF-16)
+├── docs/ # Additional docs/notes
+└── tests/ # Test suite                # Test suite
 ```
 
 ---
@@ -96,7 +108,7 @@ Root files:
 
 ### Boundary Files (EPSG:4326)
 - District (ADM2): `DATA_DIR/districts_4326.geojson`
-- Block (ADM3): `DATA_DIR/block_4326.geojson`
+- Block (ADM3): `DATA_DIR/blocks_4326.geojson`
 
 The loaders normalize key fields into:
 - district: `state_name`, `district_name`, `geometry`
@@ -304,7 +316,7 @@ Bundles organize metrics into risk-domain groupings for user-friendly selection.
 
 | Bundle | Metrics | Description |
 |--------|---------|-------------|
-| Heat Risk | 21 | Heat thresholds, percentiles, heatwaves, baseline context |
+| Heat Risk | 24 | Heat extremes, heatwaves, thermal stress |
 | Cold Risk | 10 | Cold thresholds, frost days, cold spells |
 | Agriculture & Growing Conditions | 4 | Growing season, seasonal temperatures, DTR |
 | Flood & Extreme Rainfall Risk | 12 | Peak intensity, heavy rain days, wet spells |
@@ -391,7 +403,7 @@ Other UI keys vary by panel (map markers, etc.).
 | Data Type | Location |
 |-----------|----------|
 | District boundaries | `DATA_DIR/districts_4326.geojson` |
-| Block boundaries | `DATA_DIR/block_4326.geojson` |
+| Block boundaries | `DATA_DIR/blocks_4326.geojson` |
 | District master CSV | `DATA_DIR/processed/{index}/{state}/master_metrics_by_district.csv` |
 | Block master CSV | `DATA_DIR/processed/{index}/{state}/master_metrics_by_block.csv` |
 | District ensemble yearly | `.../districts/ensembles/{district}/{scenario}/{district}_yearly_ensemble.csv` |

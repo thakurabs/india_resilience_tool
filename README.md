@@ -8,7 +8,7 @@ A Streamlit-based dashboard for exploring climate resilience metrics across **In
 The tool visualizes **ensemble climate model outputs** and derived indices (temperature and rainfall), enabling comparison across **scenarios** and **time periods**, plus portfolio-style comparison of multiple districts **or blocks**.
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
-![Streamlit](https://img.shields.io/badge/streamlit-1.28+-red.svg)
+![Streamlit](https://img.shields.io/badge/streamlit-1.51.0-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 ---
@@ -26,8 +26,8 @@ The tool visualizes **ensemble climate model outputs** and derived indices (temp
 - **Details panel (Climate Profile)**:
   - Risk summary
   - Scenario comparison (period-mean)
-  - Trend over time (yearly series, when available)
-  - Detailed statistics and exports (availability depends on branch)
+  - Trend over time (ensemble yearly series)
+  - Detailed statistics and exports (CSV download + multi-index PDF/ZIP)
 
 ### Metric selection by risk domain
 
@@ -94,8 +94,8 @@ Once you have items in your portfolio:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/india-resilience-tool.git
-cd india-resilience-tool
+git clone https://github.com/thakurabs/india_resilience_tool.git
+cd india_resilience_tool
 ```
 
 **Option 1: Conda (recommended)**
@@ -130,9 +130,9 @@ Open in a browser: `http://localhost:8501`
 Place these in `DATA_DIR` (configured in `paths.py`, or overridden via `IRT_DATA_DIR`):
 
 1. **District boundaries**: `districts_4326.geojson` (ADM2)
-2. **Block boundaries**: `block_4326.geojson` (ADM3)
+2. **Block boundaries**: `blocks_4326.geojson` (ADM3)
 
-> Block mode requires `block_4326.geojson`.
+> Block mode requires `blocks_4326.geojson`.
 
 ### Processed outputs directory structure
 
@@ -141,7 +141,7 @@ Processed artifacts are organized **by index slug** (e.g., `tas_gt32`) and state
 ```
 DATA_DIR/
 ├── districts_4326.geojson
-├── block_4326.geojson
+├── blocks_4326.geojson
 └── processed/
     └── {index_slug}/                 # e.g., tas_gt32
         └── {state}/                  # e.g., Telangana
