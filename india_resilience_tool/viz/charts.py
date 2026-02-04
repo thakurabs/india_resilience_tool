@@ -45,7 +45,22 @@ SCENARIO_DISPLAY: dict[str, str] = {
     "ssp585": "SSP5-8.5",
 }
 
-PERIOD_ORDER = ["1990-2010", "2020-2040", "2040-2060"]
+PERIOD_ORDER = ["1990-2010", "2020-2040", "2040-2060",
+                #  "2060-2080",
+                ]
+
+# Human-friendly labels used in UI and chart axes (keys must match PERIOD_ORDER)
+PERIOD_DISPLAY: dict[str, str] = {
+    "1990-2010": "1990–2010",
+    "2020-2040": "Early century (2020–2040)",
+    "2040-2060": "Mid-century (2040–2060)",
+    # "2060-2080": "End-century (2060–2080)",
+}
+
+def period_display_label(period_key: str) -> str:
+    """Return a human-friendly period label for UI/plots."""
+    key = canonical_period_label(period_key)
+    return PERIOD_DISPLAY.get(key, key)
 
 
 def canonical_period_label(raw: str) -> str:
@@ -245,7 +260,7 @@ def make_scenario_comparison_figure(
         group_labels: list[str] = []
         for p_idx, period in enumerate(periods_present):
             group_centres.append(p_idx * group_spacing)
-            group_labels.append(period)
+            group_labels.append(period_display_label(period))
 
         ax.set_xticks(group_centres)
         ax.set_xticklabels(group_labels, fontsize=font_size_ticks)

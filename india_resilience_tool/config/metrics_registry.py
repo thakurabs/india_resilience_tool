@@ -1327,20 +1327,20 @@ BUNDLES: dict[str, list[str]] = {
         "spi3_drought_index",
         "spi3_count_months_lt_minus1",
         "spi3_count_months_lt_minus2",
-        "spi3_count_months_gt_plus1",
-        "spi3_count_months_gt_plus2",
+        # "spi3_count_months_gt_plus1",
+        # "spi3_count_months_gt_plus2",
 
         "spi6_drought_index",
         "spi6_count_months_lt_minus1",
         "spi6_count_months_lt_minus2",
-        "spi6_count_months_gt_plus1",
-        "spi6_count_months_gt_plus2",
+        # "spi6_count_months_gt_plus1",
+        # "spi6_count_months_gt_plus2",
 
         "spi12_drought_index",
         "spi12_count_months_lt_minus1",
         "spi12_count_months_lt_minus2",
-        "spi12_count_months_gt_plus1",
-        "spi12_count_months_gt_plus2",
+        # "spi12_count_months_gt_plus1",
+        # "spi12_count_months_gt_plus2",
 
         # Climatic water-balance drought (SPEI)
         # "spei3_drought_index",

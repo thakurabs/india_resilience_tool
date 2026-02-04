@@ -602,6 +602,7 @@ from india_resilience_tool.viz.charts import (
     SCENARIO_ORDER,
     build_scenario_comparison_panel_for_row,
     canonical_period_label,
+    period_display_label,
     make_scenario_comparison_figure,
 )
 
@@ -1000,19 +1001,22 @@ with metric_ui_placeholder.container():
 
         sel_scenario = st.selectbox("Scenario", scenarios, index=0, key="sel_scenario")
 
-        periods = sorted(
-            {
-                i["period"]
-                for i in (by_metric.get(registry_metric, []) or schema_items)
-                if i["scenario"] == sel_scenario
-            }
+        periods_found = {
+            canonical_period_label(i["period"])
+            for i in (by_metric.get(registry_metric, []) or schema_items)
+            if i["scenario"] == sel_scenario
+        }
+
+        # Keep a stable order across the app (baseline, early, mid, end-century)
+        periods = [p for p in PERIOD_ORDER if p in periods_found] + sorted(
+            [p for p in periods_found if p not in PERIOD_ORDER]
         )
+
         if not periods:
             st.error("No periods found for the selected scenario in the master CSV.")
             render_perf_panel_safe()
             st.stop()
-
-        sel_period = st.selectbox("Period", periods, index=0, key="sel_period")
+        sel_period = st.selectbox("Period", periods, index=0, key="sel_period", format_func=period_display_label,)
         stats = ["mean", "median", "p05", "p95", "std"]
         sel_stat = st.selectbox("Statistic", stats, index=0, key="sel_stat")
 
@@ -1024,7 +1028,7 @@ if metric_col not in df.columns:
     render_perf_panel_safe()
     st.stop()
 pretty_metric_label = (
-    f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {sel_period} · {sel_stat}"
+    f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
 )
 
 
@@ -1645,15 +1649,15 @@ vmin, vmax = float(vmin_vmax[0]), float(vmin_vmax[1])
 
 # Choose colormap: sequential for absolute, diverging for change
 if map_mode == "Change from 1990-2010 baseline":
-    cmap_name = "RdBu_r"   # blue-negative, red-positive
+    cmap_name = "RdBu_r"  # blue-negative, red-positive
     pretty_metric_label = (
         f"Δ {VARIABLES[VARIABLE_SLUG]['label']} vs 1990–2010 · "
-        f"{sel_scenario} · {sel_period} · {sel_stat}"
+        f"{sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
     )
 else:
     cmap_name = "Reds"
     pretty_metric_label = (
-        f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {sel_period} · {sel_stat}"
+        f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
     )
 
 with perf_section("colors: apply_fillcolor"):
