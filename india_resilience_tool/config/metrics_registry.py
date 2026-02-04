@@ -225,12 +225,28 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "var": "tasmax",
         "value_col": "tx90p_pct",
         "units": "%",
-        "compute": "percentile_days_above",
-        "params": {"percentile": 90, "baseline_years": (1981, 2010)},
+        # ETCCDI-aligned TX90p (calendar-day percentile threshold using a moving window)
+        "compute": "tx90p_etccdi",
+        "params": {
+            "percentile": 90,
+            # Match ETCCDI reference baseline you validated against
+            "baseline_years": (1961, 1990),
+            # ETCCDI-style moving window (5-day = +/-2 days around day-of-year)
+            "window_days": 5,
+            # Quantile method matters for exact matching (esp. small samples)
+            "quantile_method": "nearest",
+            # ETCCDI convention is strictly "above" the percentile; set True only if you
+            # found the reference behaves like >= for your dataset (keep False by default)
+            "exceed_ge": False,
+            # Optional: if your final best match used smoothing on daily thresholds,
+            # set an integer window (e.g., 5). Otherwise omit or keep None.
+            # "smooth": 5,
+        },
         "group": "temperature",
         "description": (
             "Percentage of days when daily maximum temperature exceeds the 90th "
-            "percentile of the baseline period. Climdex index TX90p."
+            "percentile threshold computed per calendar day from the baseline period "
+            "using a moving window (ETCCDI TX90p)."
         ),
     },
     {

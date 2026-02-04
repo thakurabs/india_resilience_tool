@@ -489,6 +489,31 @@ def percentile_days_above(da, mask, percentile=90, baseline_years=(1985, 2014)):
     thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     return 100.0 * (dm > thresh).sum().item() / dm.size
 
+def tx90p_etccdi(
+    da,
+    mask,
+    percentile=90,
+    baseline_years=(1961, 1990),
+    window_days=5,
+    exceed_ge=True,
+    quantile_method="nearest",
+    smooth=None,
+):
+    """
+    Placeholder compute_fn for tx90p in ETCCDI style.
+
+    IMPORTANT:
+    The *correct* ETCCDI tx90p needs baseline thresholds computed across many years
+    (and a +/-window around day-of-year). Because this pipeline processes one-year
+    NetCDFs, the real implementation is handled in the TX90P special-case workflow
+    (like SPI) inside process_metric_for_model_scenario().
+
+    This function exists so `compute_fn` resolution succeeds if metrics_registry.py
+    uses compute="tx90p_etccdi". It will be bypassed by the special-case path.
+    """
+    # Fallback (not ETCCDI-correct in yearly-file mode):
+    return percentile_days_above(da, mask, percentile=percentile, baseline_years=baseline_years)
+
 def percentile_days_below(da, mask, percentile=10, baseline_years=(1985, 2014)):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
@@ -756,6 +781,10 @@ def standardised_precipitation_evapotranspiration_index(da, mask, scale_months=3
 SPI_COMPUTE_NAMES = {
     "standardised_precipitation_index",
     "standardised_precipitation_evapotranspiration_index",  # currently treated as SPI (see SPEI note below)
+}
+
+TX90P_COMPUTE_NAMES = {
+    "tx90p_etccdi",
 }
 
 def _require_scipy_stats():
@@ -1072,6 +1101,288 @@ def _compute_spi_spei_rows(
         logging.info(f"[{slug}] NOTE: SPEI is currently computed as SPI (registry uses only 'pr').")
 
     return rows
+
+# ----------------------------
+# TX90P (ETCCDI-style) WORKFLOW (multi-year baseline)
+# ----------------------------
+def _drop_feb29_time(da: xr.DataArray) -> xr.DataArray:
+    """Drop Feb 29 (works for datetime64 + cftime)."""
+    month = da["time"].dt.month
+    day = da["time"].dt.day
+    keep = ~((month == 2) & (day == 29))
+    return da.sel(time=da["time"][keep])
+
+def _dayofyear_noleap(da: xr.DataArray) -> xr.DataArray:
+    """
+    Day-of-year on a 365-day basis:
+    for leap years, subtract 1 from days after Feb 28 so Mar 1 aligns.
+    """
+    t = da["time"]
+    doy = t.dt.dayofyear
+    # xarray supports .dt.is_leap_year for both datetime64 and cftime
+    is_leap = t.dt.is_leap_year
+    after_feb = t.dt.month > 2
+    adj = xr.where(is_leap & after_feb, 1, 0)
+    return doy - adj
+
+def _quantile_compat(da: xr.DataArray, q: float, dim: str, method: str = "nearest") -> xr.DataArray:
+    """
+    Quantile with compatibility across xarray versions:
+    newer: method=...
+    older: interpolation=...
+    """
+    try:
+        return da.quantile(q, dim=dim, skipna=True, method=method)
+    except TypeError:
+        return da.quantile(q, dim=dim, skipna=True, interpolation=method)
+
+def _smooth_doy_wrap(thresh: xr.DataArray, smooth: int) -> xr.DataArray:
+    """
+    Optional smoothing across doy with wrap-around.
+    smooth must be odd (e.g., 5, 11). Applies rolling mean.
+    """
+    if smooth is None:
+        return thresh
+    if smooth < 3 or smooth % 2 != 1:
+        raise ValueError("smooth must be an odd int >= 3, or None.")
+    half = smooth // 2
+    left = thresh.isel(doy=slice(-half, None))
+    right = thresh.isel(doy=slice(0, half))
+    padded = xr.concat([left, thresh, right], dim="doy_pad")
+    sm = padded.rolling(doy_pad=smooth, center=True).mean()
+    sm = sm.isel(doy_pad=slice(half, half + thresh.sizes["doy"]))
+    sm = sm.rename({"doy_pad": "doy"})
+    sm = sm.assign_coords(doy=thresh["doy"].values)
+    return sm
+
+def _collect_daily_mean_by_unit(
+    year_to_paths: dict[int, dict[str, Path]],
+    varname: str,
+    masks: dict[str, xr.DataArray],
+    years_subset: list[int] | None = None,
+) -> dict[str, xr.DataArray]:
+    """
+    Collect daily area-mean series for each unit across many years by concatenating time.
+    """
+    years = sorted(years_subset) if years_subset is not None else sorted(year_to_paths.keys())
+    series_parts: dict[str, list[xr.DataArray]] = {u: [] for u in masks.keys()}
+
+    for year in years:
+        p = year_to_paths.get(year, {}).get(varname)
+        if p is None or (not p.exists()):
+            continue
+
+        time_coder = xr.coders.CFDatetimeCoder(use_cftime=True)
+        ds = xr.open_dataset(p, decode_times=time_coder)
+        ds = normalize_lat_lon(ds)
+        if varname not in ds:
+            continue
+
+        da = ds[varname]
+        da = _drop_feb29_time(da)
+
+        for unit, mask in masks.items():
+            dm = _get_district_daily_mean(da, mask)  # -> time series
+            if dm.size > 0:
+                series_parts[unit].append(dm)
+
+    out: dict[str, xr.DataArray] = {}
+    for unit, parts in series_parts.items():
+        if not parts:
+            out[unit] = xr.DataArray(np.array([]), dims=("time",), coords={"time": []})
+        else:
+            out[unit] = xr.concat(parts, dim="time")
+
+    return out
+
+def _compute_tx90p_etccdi_yearly(
+    series: xr.DataArray,
+    baseline_years: tuple[int, int],
+    eval_years: list[int],
+    percentile: int = 90,
+    window_days: int = 5,
+    exceed_ge: bool = True,
+    quantile_method: str = "nearest",
+    smooth: int | None = None,
+) -> dict[int, float]:
+    """
+    Compute ETCCDI-style tx90p (yearly % exceedance days) from a daily series.
+      - baseline thresholds vary by day-of-year
+      - thresholds use +/- window around doy
+      - Feb 29 dropped + doy converted to 365-day basis
+    """
+    if series.size == 0:
+        return {y: np.nan for y in eval_years}
+
+    years = series["time"].dt.year
+    bs, be = baseline_years
+
+    base = series.sel(time=series["time"][(years >= bs) & (years <= be)])
+    if base.size == 0:
+        return {y: np.nan for y in eval_years}
+
+    # 365-day doy
+    base_doy = _dayofyear_noleap(base)
+    doys = np.arange(1, 366)
+
+    if window_days % 2 != 1:
+        raise ValueError("window_days must be odd (e.g., 5, 7, 11).")
+    half = window_days // 2
+    q = percentile / 100.0
+
+    thr_list = []
+    for d in doys:
+        win = np.arange(d - half, d + half + 1)
+        win = np.where(win < 1, win + 365, win)
+        win = np.where(win > 365, win - 365, win)
+
+        mask = base_doy.isin(win)
+        base_win = base.where(mask, drop=True)
+
+        thr = _quantile_compat(base_win, q=q, dim="time", method=quantile_method)
+        thr_list.append(thr)
+
+    thresh = xr.concat(thr_list, dim="doy").assign_coords(doy=doys)
+    thresh = _smooth_doy_wrap(thresh, smooth=smooth)
+
+    out: dict[int, float] = {}
+    for y in eval_years:
+        eva = series.sel(time=series["time"][years == y])
+        if eva.size == 0:
+            out[y] = np.nan
+            continue
+
+        eva = _drop_feb29_time(eva)
+        eva_doy = _dayofyear_noleap(eva)
+
+        thr_for_days = thresh.sel(doy=eva_doy)
+
+        if exceed_ge:
+            exceed = eva >= thr_for_days
+        else:
+            exceed = eva > thr_for_days
+
+        out[y] = float(exceed.mean(skipna=True).values * 100.0)
+
+    return out
+
+def _compute_tx90p_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+) -> list[dict]:
+    """
+    SPI-like special-case: compute tx90p using multi-year baseline thresholds.
+    """
+    params = metric.get("params", {}) or {}
+
+    baseline_years = tuple(params.get("baseline_years", (1961, 1990)))
+    percentile = int(params.get("percentile", 90))
+    window_days = int(params.get("window_days", 5))
+    exceed_ge = bool(params.get("exceed_ge", True))
+    quantile_method = str(params.get("quantile_method", "nearest"))
+    smooth = params.get("smooth", None)
+    if smooth is not None:
+        smooth = int(smooth)
+
+    # Which variable are we using?
+    # Prefer tasmax if present in the yearly files; otherwise use metric["var"].
+    primary_var = metric["var"]
+
+    # Eval years = years we are actually producing outputs for in this scenario
+    eval_years = sorted(year_to_paths.keys())
+
+    # Baseline source:
+    # - historical: baseline is from historical itself
+    # - non-historical: baseline must come from historical data directory
+    #   (same pattern you used for SPI)
+    if scenario == "historical":
+        baseline_year_to_paths = year_to_paths
+        baseline_var = primary_var
+    else:
+        # For SSP scenarios: thresholds must be calibrated from the model's HISTORICAL baseline years
+        hist_conf = scenario_conf.get("historical")
+        if not hist_conf:
+            # Fallback (shouldn't happen if SCENARIOS has 'historical')
+            baseline_year_to_paths = year_to_paths
+            baseline_var = primary_var
+        else:
+            hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
+            if not hist_dir.exists():
+                logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}. Using scenario series.")
+                baseline_year_to_paths = year_to_paths
+            else:
+                valid_year_files, _ = validated_year_files(hist_dir)
+                if not valid_year_files:
+                    logging.warning(f"[{metric['slug']}] No valid historical yearly files for baseline in: {hist_dir}. Using scenario series.")
+                    baseline_year_to_paths = year_to_paths
+                else:
+                    baseline_year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()}
+            baseline_var = primary_var
+
+    # Collect baseline + eval daily series per unit
+    # (we collect from *both* sources if scenario != historical)
+    # For historical scenario, these dicts point to same.
+    baseline_series_by_unit = _collect_daily_mean_by_unit(
+        baseline_year_to_paths, baseline_var, masks
+    )
+
+    if scenario == "historical":
+        full_series_by_unit = baseline_series_by_unit
+    else:
+        eval_series_by_unit = _collect_daily_mean_by_unit(
+            year_to_paths, primary_var, masks
+        )
+        full_series_by_unit = {}
+        for unit in masks.keys():
+            b = baseline_series_by_unit.get(unit)
+            e = eval_series_by_unit.get(unit)
+            if (b is None) or (b.size == 0):
+                full_series_by_unit[unit] = e
+            elif (e is None) or (e.size == 0):
+                full_series_by_unit[unit] = b
+            else:
+                full_series_by_unit[unit] = xr.concat([b, e], dim="time")
+
+    rows: list[dict] = []
+    for unit, series in full_series_by_unit.items():
+        year_vals = _compute_tx90p_etccdi_yearly(
+            series=series,
+            baseline_years=baseline_years,
+            eval_years=eval_years,
+            percentile=percentile,
+            window_days=window_days,
+            exceed_ge=exceed_ge,
+            quantile_method=quantile_method,
+            smooth=smooth,
+        )
+        value_col = metric["value_col"]
+
+        for year in eval_years:
+            v = float(year_vals.get(year, np.nan))
+
+            row = {
+                "year": int(year),
+                "value": v,
+                value_col: v,
+                "source_file": "",  # optional: you can fill with a representative file if you want
+            }
+
+            # Match the pipeline’s district/block schema (same logic as default path)
+            if "||" in unit:
+                district, block = unit.split("||", 1)
+                row["district"] = district
+                row["block"] = block
+            else:
+                row["district"] = unit
+
+            rows.append(row)
+
+    return rows
+
 # -----------------------------------------------------------------------------
 # FILE I/O HELPERS
 # -----------------------------------------------------------------------------
@@ -1296,7 +1607,22 @@ def process_metric_for_model_scenario(
         except Exception as e:
             logging.error(f"[{slug}] SPI/SPEI computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
-            return
+            raise
+
+    elif metric.get("compute") in TX90P_COMPUTE_NAMES:
+        try:
+            rows = _compute_tx90p_rows_for_metric(
+                metric=metric,
+                model=model,
+                scenario=scenario,
+                scenario_conf=SCENARIOS,   # IMPORTANT: pass the global SCENARIOS map (see note below)
+                year_to_paths=year_to_paths,
+                masks=masks,
+            )
+        except Exception as e:
+            logging.error(f"[{slug}] TX90P computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
 
     # ------------------------------------------------------------------
     # Default per-year metric computation
