@@ -21,7 +21,7 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 | Command | Purpose |
 |---------|---------|
 | `streamlit run dashboard_unfactored.py` | Launch dashboard (recommended shim) |
-| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard (package entry) |
+| `streamlit run india_resilience_tool/india_resilience_tool/app/main.py` | Launch dashboard (package entry) |
 | `python build_master_metrics.py` | Rebuild master CSVs (district + block) |
 | `python compute_indices_multiprocess.py` | Build processed index artifacts (district default) |
 | `python compute_indices_multiprocess.py --level block` | Build processed artifacts at block level |
@@ -40,38 +40,42 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 
 ```
 india_resilience_tool/
-├── init.py
+├── __init__.py
 ├── analysis/ # Data analysis & computation
-│ ├── init.py
+│ ├── __init__.py
 │ ├── case_study.py # Case-study exports and helpers
 │ ├── metrics.py # Risk classification
 │ ├── portfolio.py # Portfolio logic & state (district + block)
 │ └── timeseries.py # Time series loading (district + block)
 ├── app/ # Streamlit application
-│ ├── init.py
+│ ├── __init__.py
 │ ├── adm2_cache.py # District boundary caching/simplification
 │ ├── dashboard.py # Dashboard entry wrapper
 │ ├── legacy_dashboard_impl.py # Main orchestrator (district + block + bundles)
 │ ├── main.py # Streamlit entry module (run via Streamlit)
 │ ├── orchestrator.py # Module executor
+│ ├── perf.py # Performance helpers / timing
 │ ├── point_selection_ui.py # Coordinate input & batch support (district + block)
 │ ├── portfolio_ui.py # Portfolio management panel (district + block + bundles)
 │ ├── sidebar.py # Sidebar controls & navigation (admin level + focus)
 │ ├── state.py # Session state defaults & constants
 │ └── views/ # View renderers
-│ ├── init.py
+│ ├── __init__.py
 │ ├── details_panel.py # Details panel (district + block; exports + case studies)
 │ ├── map_view.py # Choropleth map (district + block)
 │ ├── rankings_view.py # Rankings (district + block) + portfolio add parity
 │ └── state_summary_view.py # State summary view (district-first, optional)
+├── compute/ # Computation helpers
+│ ├── __init__.py
+│ └── spi_adapter.py # SPI adapter around climate-indices
 ├── config/ # Configuration
-│ ├── init.py
+│ ├── __init__.py
 │ ├── constants.py # App constants & styling
 │ ├── metrics_registry.py # Unified metric definitions + bundles (single source of truth)
 │ ├── paths.py # Library path semantics (mirrors root paths.py)
 │ └── variables.py # Dashboard variable registry (imports from metrics_registry)
 ├── data/ # Data loading & processing
-│ ├── init.py
+│ ├── __init__.py
 │ ├── adm2_loader.py # GeoJSON district loading (ADM2)
 │ ├── adm3_loader.py # GeoJSON block loading (ADM3)
 │ ├── boundary_loader.py # Unified boundary loader API
@@ -79,10 +83,10 @@ india_resilience_tool/
 │ ├── master_loader.py # Master CSV loading (district + block)
 │ └── merge.py # Merge utilities (ADM2/ADM3)
 ├── utils/ # Utilities
-│ ├── init.py
+│ ├── __init__.py
 │ └── naming.py # Name normalization & aliases
 └── viz/ # Visualization
-├── init.py
+├── __init__.py
 ├── charts.py # Chart/figure generation
 ├── colors.py # Color scales & legends
 ├── exports.py # PDF/ZIP export generation
@@ -99,7 +103,7 @@ Root files:
 ├── environment.yml # Conda environment (pinned)
 ├── requirements.txt # pip freeze (UTF-16)
 ├── docs/ # Additional docs/notes
-└── tests/ # Test suite                # Test suite
+└── tests/ # Test suite
 ```
 
 ---
@@ -271,10 +275,7 @@ Main orchestrator. Responsibilities:
 - routes to map/rankings/details/portfolio panels
 
 #### `perf.py`
-Performance timing helpers extracted from the legacy orchestrator:
-- perf enable/disable checks via session key `perf_enabled`
-- section timing capture into `_perf_records`
-- resilient sidebar performance panel rendering (`render_perf_panel_safe`)
+Lightweight performance helpers used in the app (timing wrappers / counters) to support profiling and regressions.
 
 #### `sidebar.py`
 Renders:
@@ -313,6 +314,20 @@ Rankings table renderer with portfolio integration.
 Coordinate-based lookup supports adding units to portfolio in both district and block mode (exact mapping depends on available geometry for the current admin level).
 
 ---
+
+
+### 6) Compute layer (`india_resilience_tool/compute/`)
+
+#### `spi_adapter.py`
+**Purpose:** Adapter around the `climate-indices` package to compute SPI (and related drought indices) in a way that fits IRT's data conventions and file layout.
+
+Typical responsibilities:
+- Accept IRT-aligned precipitation time-series inputs (units and temporal aggregation are explicit in the calling code)
+- Handle edge cases (e.g., long zero-precip periods) consistently
+- Return SPI arrays/series aligned to the original time index so downstream aggregation works cleanly
+
+See also:
+- `spi_diagnostic.py` (repo root): sanity checks / distribution diagnostics for SPI outputs
 
 ## Thematic Bundles
 
