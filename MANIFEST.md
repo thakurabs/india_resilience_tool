@@ -270,6 +270,12 @@ Main orchestrator. Responsibilities:
   - block: `master_metrics_by_block.csv`
 - routes to map/rankings/details/portfolio panels
 
+#### `perf.py`
+Performance timing helpers extracted from the legacy orchestrator:
+- perf enable/disable checks via session key `perf_enabled`
+- section timing capture into `_perf_records`
+- resilient sidebar performance panel rendering (`render_perf_panel_safe`)
+
 #### `sidebar.py`
 Renders:
 - admin level (district/block) selection
