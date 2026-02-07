@@ -230,14 +230,14 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {
             "percentile": 90,
             # Match ETCCDI reference baseline you validated against
-            "baseline_years": (1961, 1990),
+            "baseline_years": (1981, 2010),
             # ETCCDI-style moving window (5-day = +/-2 days around day-of-year)
             "window_days": 5,
             # Quantile method matters for exact matching (esp. small samples)
             "quantile_method": "nearest",
             # ETCCDI convention is strictly "above" the percentile; set True only if you
             # found the reference behaves like >= for your dataset (keep False by default)
-            "exceed_ge": False,
+            "exceed_ge": True,
             # Optional: if your final best match used smoothing on daily thresholds,
             # set an integer window (e.g., 5). Otherwise omit or keep None.
             # "smooth": 5,
@@ -255,12 +255,23 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "var": "tasmin",
         "value_col": "tn90p_pct",
         "units": "%",
-        "compute": "percentile_days_above",
-        "params": {"percentile": 90, "baseline_years": (1981, 2010)},
+        # Route through the ETCCDI multi-year baseline workflow (same as TX90p)
+        "compute": "tx90p_etccdi",
+        "params": {
+            "percentile": 90,
+            "baseline_years": (1981, 2010),
+            "window_days": 5,
+            "quantile_method": "nearest",
+            # ETCCDI convention is ">" not ">="; keep False unless you intentionally chose otherwise
+            "exceed_ge": True,
+            # optional smoothing if needed later
+            # "smooth": 5,
+        },
         "group": "temperature",
         "description": (
             "Percentage of days when daily minimum temperature exceeds the 90th "
-            "percentile of the baseline period. Climdex index TN90p."
+            "percentile threshold computed per calendar day from the baseline period "
+            "using a moving window (ETCCDI TN90p-style)."
         ),
     },
     {
