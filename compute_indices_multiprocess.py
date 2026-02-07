@@ -787,6 +787,16 @@ TX90P_COMPUTE_NAMES = {
     "tx90p_etccdi",
 }
 
+HEATWAVE_PERCENTILE_COMPUTE_NAMES = {
+    "heatwave_frequency_percentile",
+    "heatwave_event_count_percentile",
+}
+
+PRECIP_PERCENTILE_COMPUTE_NAMES = {
+    "percentile_precipitation_total",
+    "percentile_precipitation_contribution",
+}
+
 def _require_scipy_stats():
     """Import scipy.stats only when SPI/SPEI is requested (keeps base pipeline lighter)."""
     try:
@@ -1204,15 +1214,41 @@ def _compute_tx90p_etccdi_yearly(
     exceed_ge: bool = True,
     quantile_method: str = "nearest",
     smooth: int | None = None,
+    direction: str = "above",
 ) -> dict[int, float]:
     """
-    Compute ETCCDI-style tx90p (yearly % exceedance days) from a daily series.
-      - baseline thresholds vary by day-of-year
-      - thresholds use +/- window around doy
-      - Feb 29 dropped + doy converted to 365-day basis
+    Compute ETCCDI-style percentile-day index (yearly % of days meeting a threshold)
+    from a daily series.
+
+    This generalizes TX90p/TN90p (direction="above") and TX10p/TN10p (direction="below"):
+
+      - Baseline thresholds vary by day-of-year (365-day basis)
+      - Thresholds use +/- window around day-of-year
+      - Feb 29 is dropped and doy is computed on a no-leap basis
+
+    Args:
+        series: Daily series (area-mean) with time coordinate.
+        baseline_years: (start_year, end_year) inclusive.
+        eval_years: Years to compute yearly percentages for.
+        percentile: Percentile (e.g., 90 for warm extremes, 10 for cool extremes).
+        window_days: Odd integer window length for day-of-year percentile thresholds.
+        exceed_ge:
+            For direction="above":
+              - True  -> count days where value >= threshold
+              - False -> count days where value >  threshold
+            For direction="below":
+              - True  -> count days where value <= threshold
+              - False -> count days where value <  threshold
+        quantile_method: Quantile method passed to _quantile_compat.
+        smooth: Optional smoothing window (odd integer) applied to doy thresholds.
+        direction: "above" or "below"
     """
     if series.size == 0:
         return {y: np.nan for y in eval_years}
+
+    direction = str(direction).strip().lower()
+    if direction not in {"above", "below"}:
+        raise ValueError(f"Invalid direction='{direction}'. Expected 'above' or 'below'.")
 
     years = series["time"].dt.year
     bs, be = baseline_years
@@ -1257,12 +1293,18 @@ def _compute_tx90p_etccdi_yearly(
 
         thr_for_days = thresh.sel(doy=eva_doy)
 
-        if exceed_ge:
-            exceed = eva >= thr_for_days
+        if direction == "above":
+            if exceed_ge:
+                sel = eva >= thr_for_days
+            else:
+                sel = eva > thr_for_days
         else:
-            exceed = eva > thr_for_days
+            if exceed_ge:
+                sel = eva <= thr_for_days
+            else:
+                sel = eva < thr_for_days
 
-        out[y] = float(exceed.mean(skipna=True).values * 100.0)
+        out[y] = float(sel.mean(skipna=True).values * 100.0)
 
     return out
 
@@ -1284,6 +1326,7 @@ def _compute_tx90p_rows_for_metric(
     window_days = int(params.get("window_days", 5))
     exceed_ge = bool(params.get("exceed_ge", True))
     quantile_method = str(params.get("quantile_method", "nearest"))
+    direction = str(params.get("direction", "above"))
     smooth = params.get("smooth", None)
     if smooth is not None:
         smooth = int(smooth)
@@ -1358,6 +1401,7 @@ def _compute_tx90p_rows_for_metric(
             exceed_ge=exceed_ge,
             quantile_method=quantile_method,
             smooth=smooth,
+            direction=direction,
         )
         value_col = metric["value_col"]
 
@@ -1382,6 +1426,278 @@ def _compute_tx90p_rows_for_metric(
             rows.append(row)
 
     return rows
+
+def _compute_heatwave_percentile_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+) -> list[dict]:
+    """
+    Special-case: heatwave metrics based on a percentile threshold must calibrate
+    thresholds from historical baseline years (multi-year), not per-year.
+
+    Uses ETCCDI-style day-of-year thresholds (windowed percentiles) consistent with TX90p/TN90p.
+    """
+    params = metric.get("params", {}) or {}
+
+    baseline_years = tuple(params.get("baseline_years", (1981, 2010)))
+    pct = int(params.get("pct", 90))
+    window_days = int(params.get("window_days", 5))
+    exceed_ge = bool(params.get("exceed_ge", True))
+    quantile_method = str(params.get("quantile_method", "nearest"))
+    min_spell_days = int(params.get("min_spell_days", 5))
+    smooth = params.get("smooth", None)
+    if smooth is not None:
+        smooth = int(smooth)
+
+    primary_var = metric["var"]
+    eval_years = sorted(year_to_paths.keys())
+
+    # Baseline source: historical for SSP scenarios
+    if scenario == "historical":
+        baseline_year_to_paths = year_to_paths
+        baseline_var = primary_var
+    else:
+        hist_conf = scenario_conf.get("historical")
+        if not hist_conf:
+            baseline_year_to_paths = year_to_paths
+            baseline_var = primary_var
+        else:
+            hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
+            if not hist_dir.exists():
+                logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}. Using scenario series.")
+                baseline_year_to_paths = year_to_paths
+            else:
+                valid_year_files, _ = validated_year_files(hist_dir)
+                baseline_year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()} if valid_year_files else year_to_paths
+            baseline_var = primary_var
+
+    baseline_series_by_unit = _collect_daily_mean_by_unit(
+        baseline_year_to_paths, baseline_var, masks
+    )
+
+    if scenario == "historical":
+        full_series_by_unit = baseline_series_by_unit
+    else:
+        eval_series_by_unit = _collect_daily_mean_by_unit(
+            year_to_paths, primary_var, masks
+        )
+        full_series_by_unit = {}
+        for unit in masks.keys():
+            b = baseline_series_by_unit.get(unit)
+            e = eval_series_by_unit.get(unit)
+            if (b is None) or (b.size == 0):
+                full_series_by_unit[unit] = e
+            elif (e is None) or (e.size == 0):
+                full_series_by_unit[unit] = b
+            else:
+                full_series_by_unit[unit] = xr.concat([b, e], dim="time")
+
+    rows: list[dict] = []
+    value_col = metric["value_col"]
+    compute_name = metric.get("compute")
+
+    for unit, series in full_series_by_unit.items():
+        # Compute day-of-year thresholds from baseline, then evaluate boolean exceedance per year
+        years = series["time"].dt.year
+        bs, be = baseline_years
+        base = series.sel(time=series["time"][(years >= bs) & (years <= be)])
+        if base.size == 0:
+            year_vals = {y: np.nan for y in eval_years}
+        else:
+            base_doy = _dayofyear_noleap(base)
+            doys = np.arange(1, 366)
+            if window_days % 2 != 1:
+                raise ValueError("window_days must be odd (e.g., 5, 7, 11).")
+            half = window_days // 2
+            q = pct / 100.0
+
+            thr_list = []
+            for d in doys:
+                win = np.arange(d - half, d + half + 1)
+                win = np.where(win < 1, win + 365, win)
+                win = np.where(win > 365, win - 365, win)
+                mask_d = base_doy.isin(win)
+                base_win = base.where(mask_d, drop=True)
+                thr = _quantile_compat(base_win, q=q, dim="time", method=quantile_method)
+                thr_list.append(thr)
+
+            thresh = xr.concat(thr_list, dim="doy").assign_coords(doy=doys)
+            thresh = _smooth_doy_wrap(thresh, smooth=smooth)
+
+            year_vals: dict[int, float] = {}
+            for y in eval_years:
+                eva = series.sel(time=series["time"][years == y])
+                if eva.size == 0:
+                    year_vals[y] = np.nan
+                    continue
+
+                eva = _drop_feb29_time(eva)
+                eva_doy = _dayofyear_noleap(eva)
+                thr_for_days = thresh.sel(doy=eva_doy)
+
+                if exceed_ge:
+                    flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
+                else:
+                    flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
+
+                if compute_name == "heatwave_frequency_percentile":
+                    _, total_days = _run_length_stats(flags, min_spell_days)
+                    year_vals[y] = float(total_days)
+                else:
+                    year_vals[y] = float(_count_events(flags, min_spell_days))
+
+        for year in eval_years:
+            v = float(year_vals.get(year, np.nan))
+            row = {
+                "year": int(year),
+                "value": v,
+                value_col: v,
+                "source_file": "",
+            }
+            if "||" in unit:
+                district, block = unit.split("||", 1)
+                row["district"] = district
+                row["block"] = block
+            else:
+                row["district"] = unit
+            rows.append(row)
+
+    return rows
+
+
+def _compute_precip_percentile_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+) -> list[dict]:
+    """
+    Special-case: precipitation percentile metrics (R95p, R95pTOT) must calibrate
+    wet-day thresholds from historical baseline years (multi-year), not per-year.
+
+    Threshold is computed from baseline wet days (>= wet_day_mm) over baseline years,
+    then applied to evaluation years.
+    """
+    params = metric.get("params", {}) or {}
+
+    baseline_years = tuple(params.get("baseline_years", (1981, 2010)))
+    percentile = int(params.get("percentile", 95))
+    quantile_method = str(params.get("quantile_method", "nearest"))
+    exceed_ge = bool(params.get("exceed_ge", True))
+    wet_day_mm = float(params.get("wet_day_mm", 1.0))
+
+    primary_var = metric["var"]
+    eval_years = sorted(year_to_paths.keys())
+
+    # Baseline source: historical for SSP scenarios
+    if scenario == "historical":
+        baseline_year_to_paths = year_to_paths
+        baseline_var = primary_var
+    else:
+        hist_conf = scenario_conf.get("historical")
+        if not hist_conf:
+            baseline_year_to_paths = year_to_paths
+            baseline_var = primary_var
+        else:
+            hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
+            if not hist_dir.exists():
+                logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}. Using scenario series.")
+                baseline_year_to_paths = year_to_paths
+            else:
+                valid_year_files, _ = validated_year_files(hist_dir)
+                baseline_year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()} if valid_year_files else year_to_paths
+            baseline_var = primary_var
+
+    baseline_series_by_unit = _collect_daily_mean_by_unit(
+        baseline_year_to_paths, baseline_var, masks
+    )
+
+    if scenario == "historical":
+        full_series_by_unit = baseline_series_by_unit
+    else:
+        eval_series_by_unit = _collect_daily_mean_by_unit(
+            year_to_paths, primary_var, masks
+        )
+        full_series_by_unit = {}
+        for unit in masks.keys():
+            b = baseline_series_by_unit.get(unit)
+            e = eval_series_by_unit.get(unit)
+            if (b is None) or (b.size == 0):
+                full_series_by_unit[unit] = e
+            elif (e is None) or (e.size == 0):
+                full_series_by_unit[unit] = b
+            else:
+                full_series_by_unit[unit] = xr.concat([b, e], dim="time")
+
+    rows: list[dict] = []
+    value_col = metric["value_col"]
+    compute_name = metric.get("compute")
+
+    for unit, series_raw in full_series_by_unit.items():
+        if series_raw is None or series_raw.size == 0:
+            year_vals = {y: np.nan for y in eval_years}
+        else:
+            # Convert precipitation to mm/day (your helper expects DataArray with units compatible)
+            series = pr_to_mm_per_day(series_raw)
+
+            years = series["time"].dt.year
+            bs, be = baseline_years
+
+            base = series.sel(time=series["time"][(years >= bs) & (years <= be)])
+            wet_base = base.where(base >= wet_day_mm, drop=True)
+
+            if wet_base.size == 0:
+                year_vals = {y: np.nan for y in eval_years}
+            else:
+                q = percentile / 100.0
+                thresh = float(_quantile_compat(wet_base, q=q, dim="time", method=quantile_method).item())
+
+                year_vals = {}
+                for y in eval_years:
+                    eva = series.sel(time=series["time"][years == y])
+                    if eva.size == 0:
+                        year_vals[y] = np.nan
+                        continue
+
+                    wet_eva = eva.where(eva >= wet_day_mm, drop=True)
+                    prcptot = float(wet_eva.sum().item()) if wet_eva.size > 0 else 0.0
+
+                    if exceed_ge:
+                        exceed = eva >= thresh
+                    else:
+                        exceed = eva > thresh
+
+                    rpx = float(eva.where(exceed, 0.0).sum().item())
+
+                    if compute_name == "percentile_precipitation_total":
+                        year_vals[y] = float(rpx)
+                    else:
+                        year_vals[y] = float(100.0 * rpx / prcptot) if prcptot > 0 else 0.0
+
+        for year in eval_years:
+            v = float(year_vals.get(year, np.nan))
+            row = {
+                "year": int(year),
+                "value": v,
+                value_col: v,
+                "source_file": "",
+            }
+            if "||" in unit:
+                district, block = unit.split("||", 1)
+                row["district"] = district
+                row["block"] = block
+            else:
+                row["district"] = unit
+            rows.append(row)
+
+    return rows
+
 
 # -----------------------------------------------------------------------------
 # FILE I/O HELPERS
@@ -1621,6 +1937,42 @@ def process_metric_for_model_scenario(
             )
         except Exception as e:
             logging.error(f"[{slug}] TX90P computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    # ------------------------------------------------------------------
+    # Special-case heatwave percentile metrics: multi-year baseline thresholds
+    # ------------------------------------------------------------------
+    elif metric.get("compute") in HEATWAVE_PERCENTILE_COMPUTE_NAMES:
+        try:
+            rows = _compute_heatwave_percentile_rows_for_metric(
+                metric=metric,
+                model=model,
+                scenario=scenario,
+                scenario_conf=SCENARIOS,
+                year_to_paths=year_to_paths,
+                masks=masks,
+            )
+        except Exception as e:
+            logging.error(f"[{slug}] Heatwave percentile computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    # ------------------------------------------------------------------
+    # Special-case precipitation percentile metrics: multi-year baseline thresholds
+    # ------------------------------------------------------------------
+    elif metric.get("compute") in PRECIP_PERCENTILE_COMPUTE_NAMES:
+        try:
+            rows = _compute_precip_percentile_rows_for_metric(
+                metric=metric,
+                model=model,
+                scenario=scenario,
+                scenario_conf=SCENARIOS,
+                year_to_paths=year_to_paths,
+                masks=masks,
+            )
+        except Exception as e:
+            logging.error(f"[{slug}] Precip percentile computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
             raise
 

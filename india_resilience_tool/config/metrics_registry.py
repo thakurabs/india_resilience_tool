@@ -280,12 +280,23 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "var": "tasmax",
         "value_col": "tx10p_pct",
         "units": "%",
-        "compute": "percentile_days_below",
-        "params": {"percentile": 10, "baseline_years": (1981, 2010)},
+        # ETCCDI-aligned TX10p using the same multi-year baseline workflow as TX90p
+        "compute": "tx90p_etccdi",
+        "params": {
+            "percentile": 10,
+            "baseline_years": (1981, 2010),
+            "window_days": 5,
+            "quantile_method": "nearest",
+            # For "below-percentile" indices, exceed_ge=True means inclusive (<= threshold)
+            "exceed_ge": True,
+            "direction": "below",
+            # "smooth": 5,
+        },
         "group": "temperature",
         "description": (
             "Percentage of days when daily maximum temperature is below the 10th "
-            "percentile of the baseline period. Climdex index TX10p."
+            "percentile threshold computed per calendar day from the baseline period "
+            "using a moving window (ETCCDI TX10p)."
         ),
     },
     {
@@ -294,12 +305,23 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "var": "tasmin",
         "value_col": "tn10p_pct",
         "units": "%",
-        "compute": "percentile_days_below",
-        "params": {"percentile": 10, "baseline_years": (1981, 2010)},
+        # ETCCDI-aligned TN10p using the same multi-year baseline workflow as TN90p
+        "compute": "tx90p_etccdi",
+        "params": {
+            "percentile": 10,
+            "baseline_years": (1981, 2010),
+            "window_days": 5,
+            "quantile_method": "nearest",
+            # For "below-percentile" indices, exceed_ge=True means inclusive (<= threshold)
+            "exceed_ge": True,
+            "direction": "below",
+            # "smooth": 5,
+        },
         "group": "temperature",
         "description": (
             "Percentage of days when daily minimum temperature is below the 10th "
-            "percentile of the baseline period. Climdex index TN10p."
+            "percentile threshold computed per calendar day from the baseline period "
+            "using a moving window (ETCCDI TN10p)."
         ),
     },
     
@@ -484,11 +506,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "hwfi_days_in_spells",
         "units": "days",
         "compute": "heatwave_frequency_percentile",
-        "params": {"baseline_years": (1981, 2010), "pct": 90},
+        "params": {
+            "baseline_years": (1981, 2010),
+            "pct": 90,
+            "window_days": 5,
+            "quantile_method": "nearest",
+            "exceed_ge": True,
+            "min_spell_days": 5,
+        },
         "group": "temperature",
         "description": (
-            "Total days inside heat-wave spells, where spells are consecutive "
-            "days with mean temperature > 90th percentile."
+            "Total days inside heat-wave spells, where spells are consecutive days "
+            "with mean temperature above a 90th-percentile threshold calibrated from "
+            "the baseline period (multi-year ETCCDI-style day-of-year thresholds)."
         ),
     },
     # {
@@ -511,10 +541,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "hwfi_events_count",
         "units": "events",
         "compute": "heatwave_event_count_percentile",
-        "params": {"baseline_years": (1981, 2010), "pct": 90},
+        "params": {
+            "baseline_years": (1981, 2010),
+            "pct": 90,
+            "window_days": 5,
+            "quantile_method": "nearest",
+            "exceed_ge": True,
+            "min_spell_days": 5,
+        },
         "group": "temperature",
         "description": (
-            "Number of distinct heat-wave spells per year (HWFI definition)."
+            "Number of distinct heat-wave spells per year, where spells are defined "
+            "as runs of consecutive days above a 90th-percentile threshold calibrated "
+            "from the baseline period (multi-year ETCCDI-style day-of-year thresholds)."
         ),
     },
     # {
@@ -814,11 +853,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "r95p_mm",
         "units": "mm",
         "compute": "percentile_precipitation_total",
-        "params": {"percentile": 95, "baseline_years": (1981, 2010)},
+        "params": {
+            "percentile": 95,
+            "baseline_years": (1981, 2010),
+            "quantile_method": "nearest",
+            # exceed_ge=True means include ties (>= threshold) for wet-day exceedance
+            "exceed_ge": True,
+            # ETCCDI wet-day threshold convention (mm/day)
+            "wet_day_mm": 1.0,
+        },
         "group": "rain",
         "description": (
-            "Total precipitation on days exceeding the 95th percentile of "
-            "wet-day precipitation. Climdex R95p index."
+            "Total precipitation from very wet days, defined as days with precipitation "
+            "exceeding the 95th percentile of wet-day precipitation in the baseline period "
+            "(ETCCDI R95p)."
         ),
     },
     # {
@@ -842,11 +890,18 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "r95ptot_pct",
         "units": "%",
         "compute": "percentile_precipitation_contribution",
-        "params": {"percentile": 95, "baseline_years": (1981, 2010)},
+        "params": {
+            "percentile": 95,
+            "baseline_years": (1981, 2010),
+            "quantile_method": "nearest",
+            "exceed_ge": True,
+            "wet_day_mm": 1.0,
+        },
         "group": "rain",
         "description": (
-            "Percentage of total precipitation from very wet days (> 95th pctl). "
-            "Climdex R95pTOT = 100 × R95p / PRCPTOT."
+            "Percentage of wet-day precipitation contributed by very wet days, where "
+            "very wet days exceed the 95th percentile of baseline wet-day precipitation "
+            "(ETCCDI R95pTOT)."
         ),
     },
     # {
