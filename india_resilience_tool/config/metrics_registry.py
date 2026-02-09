@@ -456,6 +456,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "window_days": 5,
             "quantile_method": "nearest",
             "exceed_ge": True,
+            "smooth": None,
             "min_spell_days": 6,
             "direction": "above",
         },
@@ -497,14 +498,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "name": "Heat Wave Duration Index (HWDI, #Days)",
     #     "slug": "hwdi_tasmax_plus5C",
     #     "var": "tasmax",
-    #     "value_col": "hwdi_max_spell_len",
+    #     "value_col": "hwdi_spell_days",
     #     "units": "days",
     #     "compute": "heatwave_duration_index",
-    #     "params": {"baseline_years": (1981, 2010), "delta_c": 5.0},
+    #     "params": {
+    #         "baseline_years": (1981, 2010),
+    #         "delta_c": 5.0,
+    #         "abs_thresh_k": 313.15,
+    #         "min_spell_days": 5,
+    #     },
     #     "group": "temperature",
     #     "description": (
-    #         "Length of the longest heat-wave spell in the year. Heat-wave days "
-    #         "defined as TX ≥ 5°C above historical normal."
+    #         "Total days inside heat-wave spells (≥5 consecutive days) where TX "
+    #         "exceeds max(absolute threshold, baseline mean + 5°C), with the baseline "
+    #         "mean computed from the historical reference period."
     #     ),
     # },
     {
@@ -520,6 +527,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "window_days": 5,
             "quantile_method": "nearest",
             "exceed_ge": True,
+            "smooth": None,
             "min_spell_days": 5,
         },
         "group": "temperature",
@@ -536,10 +544,16 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "hwdi_events_count",
     #     "units": "events",
     #     "compute": "heatwave_event_count",
-    #     "params": {"baseline_years": (1981, 2010), "delta_c": 5.0},
+    #     "params": {
+    #         "baseline_years": (1981, 2010),
+    #         "delta_c": 5.0,
+    #         "abs_thresh_k": 313.15,
+    #         "min_spell_days": 5,
+    #     },
     #     "group": "temperature",
     #     "description": (
-    #         "Number of distinct heat-wave spells per year (HWDI definition)."
+    #         "Number of distinct heat-wave spells per year where TX exceeds "
+    #         "max(absolute threshold, baseline mean + 5°C) for ≥5 consecutive days."
     #     ),
     # },
     {
@@ -555,6 +569,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "window_days": 5,
             "quantile_method": "nearest",
             "exceed_ge": True,
+            "smooth": None,
             "min_spell_days": 5,
         },
         "group": "temperature",
@@ -571,11 +586,19 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     "value_col": "hwm_mean_temp_C",
     #     "units": "°C",
     #     "compute": "heatwave_magnitude",
-    #     "params": {"baseline_years": (1981, 2010), "min_spell_days": 3},
+    #     "params": {
+    #         "baseline_years": (1981, 2010),
+    #         "pct": 90,
+    #         "window_days": 5,
+    #         "quantile_method": "nearest",
+    #         "exceed_ge": True,
+    #         "smooth": None,
+    #         "min_spell_days": 3,
+    #     },
     #     "group": "temperature",
     #     "description": (
-    #         "Mean temperature across all heatwave days in the year. "
-    #         "Climdex HWM index."
+    #         "Maximum mean exceedance (°C) above the baseline percentile threshold "
+    #         "across heatwave spells of ≥3 days (historical baseline DOY thresholds)."
     #     ),
     # },
     {
@@ -585,11 +608,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "hwa_peak_temp_C",
         "units": "°C",
         "compute": "heatwave_amplitude",
-        "params": {"baseline_years": (1981, 2010), "min_spell_days": 3},
+        "params": {
+            "baseline_years": (1981, 2010),
+            "pct": 90,
+            "window_days": 5,
+            "quantile_method": "nearest",
+            "exceed_ge": True,
+            "smooth": None,
+            "min_spell_days": 3,
+        },
         "group": "temperature",
         "description": (
-            "Peak daily temperature in the hottest heatwave of the year. "
-            "Climdex HWA index."
+            "Peak daily temperature (°C) within the hottest heatwave spell "
+            "(highest mean exceedance over baseline percentile thresholds), "
+            "using historical baseline day-of-year thresholds."
         ),
     },
     
@@ -749,6 +781,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "window_days": 5,
             "quantile_method": "nearest",
             "exceed_ge": True,
+            "smooth": None,
             "min_spell_days": 6,
             "direction": "below",
         },

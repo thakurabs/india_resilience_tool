@@ -353,7 +353,11 @@ def _get_district_daily_mean(da: xr.DataArray, mask: xr.DataArray) -> xr.DataArr
     return daily_mean.dropna(dim="time", how="all") if "time" in daily_mean.dims else daily_mean
 
 
-def _filter_to_baseline(da: xr.DataArray, baseline_years: tuple[int, int]) -> xr.DataArray:
+def _filter_to_baseline(
+    da: xr.DataArray,
+    baseline_years: tuple[int, int],
+    strict: bool = False,
+) -> xr.DataArray:
     """
     Filter a time-indexed DataArray to only include data within baseline years.
     
@@ -363,8 +367,11 @@ def _filter_to_baseline(da: xr.DataArray, baseline_years: tuple[int, int]) -> xr
         
     Returns:
         DataArray filtered to baseline period, or original if filtering fails
+        (unless strict=True, in which case an empty baseline is returned).
     """
     if da.size == 0 or "time" not in da.dims:
+        if strict and "time" in da.dims:
+            return da.isel(time=slice(0, 0))
         return da
     
     start_year, end_year = baseline_years
@@ -372,12 +379,22 @@ def _filter_to_baseline(da: xr.DataArray, baseline_years: tuple[int, int]) -> xr
         years = da["time"].dt.year
         mask = (years >= start_year) & (years <= end_year)
         filtered = da.where(mask, drop=True)
-        # If baseline period has no data, fall back to full series
+        # If baseline period has no data, fall back only if strict=False
         if filtered.size == 0:
+            if strict:
+                logging.warning(
+                    "Baseline years %s-%s missing from series; returning empty baseline.",
+                    start_year,
+                    end_year,
+                )
+                return filtered
             return da
         return filtered
     except Exception:
-        # If filtering fails (e.g., no time coordinate), return original
+        # If filtering fails (e.g., no time coordinate), return original unless strict
+        if strict and "time" in da.dims:
+            logging.warning("Baseline filtering failed; returning empty baseline.")
+            return da.isel(time=slice(0, 0))
         return da
 
 
@@ -485,7 +502,9 @@ def percentile_days_above(da, mask, percentile=90, baseline_years=(1985, 2014)):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
     # Calculate threshold from baseline period only
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
     thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     return 100.0 * (dm > thresh).sum().item() / dm.size
 
@@ -518,67 +537,104 @@ def percentile_days_below(da, mask, percentile=10, baseline_years=(1985, 2014)):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
     # Calculate threshold from baseline period only
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
     thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     return 100.0 * (dm < thresh).sum().item() / dm.size
 
 def warm_spell_duration_index(da, mask, percentile=90, min_spell_days=6, baseline_years=(1985, 2014)):
+    """Legacy per-year WSDI. Prefer the multi-year baseline workflow."""
     dm = _get_district_daily_mean(da, mask)
-    if dm.size == 0: return 0
+    if dm.size == 0: return np.nan
     # Calculate threshold from baseline period only
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
     thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     _, total = _run_length_stats(np.asarray((dm > thresh).fillna(False).values, dtype=bool), min_spell_days)
     return int(total)
 
 def cold_spell_duration_index(da, mask, percentile=10, min_spell_days=6, baseline_years=(1985, 2014)):
+    """Legacy per-year CSDI. Prefer the multi-year baseline workflow."""
     dm = _get_district_daily_mean(da, mask)
-    if dm.size == 0: return 0
+    if dm.size == 0: return np.nan
     # Calculate threshold from baseline period only
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
     thresh = float(baseline_dm.quantile(percentile / 100.0).item())
     _, total = _run_length_stats(np.asarray((dm < thresh).fillna(False).values, dtype=bool), min_spell_days)
     return int(total)
 
 def heatwave_duration_index(da, mask, baseline_years=(1985, 2014), delta_c=5.0, abs_thresh_k=313.15, min_spell_days=5):
+    """Legacy per-year HWDI. Prefer the baseline-aware multi-year workflow."""
     dm = _get_district_daily_mean(da, mask)
-    if dm.size == 0: return 0
-    # Calculate 90th percentile threshold from baseline period
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
-    thresh = max(abs_thresh_k, float(baseline_dm.quantile(0.9).item()))
-    max_run, _ = _run_length_stats(np.asarray((dm >= thresh).fillna(False).values, dtype=bool), min_spell_days)
-    return int(max_run)
+    if dm.size == 0: return np.nan
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
+    baseline_dm = _drop_feb29_time(baseline_dm)
+    base_doy = _dayofyear_noleap(baseline_dm).rename("doy")
+    baseline_mean = baseline_dm.groupby(base_doy).mean(dim="time", skipna=True)
+    baseline_mean = baseline_mean.reindex(doy=np.arange(1, 366))
+    delta_k = float(delta_c)
+    thresh = xr.where(baseline_mean + delta_k >= abs_thresh_k, baseline_mean + delta_k, abs_thresh_k)
+    eva = _drop_feb29_time(dm)
+    eva_doy = _dayofyear_noleap(eva)
+    thr_for_days = thresh.sel(doy=eva_doy)
+    flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
+    _, total_days = _run_length_stats(flags, min_spell_days)
+    return float(total_days)
 
 def heatwave_frequency_percentile(da, mask, baseline_years=(1985, 2014), pct=90, min_spell_days=5):
     dm = _get_district_daily_mean(da, mask)
-    if dm.size == 0: return 0
+    if dm.size == 0: return np.nan
     # Calculate threshold from baseline period only
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
     thresh = float(baseline_dm.quantile(pct / 100.0).item())
     _, total = _run_length_stats(np.asarray((dm > thresh).fillna(False).values, dtype=bool), min_spell_days)
     return int(total)
 
 def heatwave_event_count(da, mask, baseline_years=(1985, 2014), delta_c=5.0, abs_thresh_k=313.15, min_spell_days=5):
+    """Legacy per-year HWDI event count. Prefer baseline-aware multi-year workflow."""
     dm = _get_district_daily_mean(da, mask)
-    if dm.size == 0: return 0
-    # Calculate 90th percentile threshold from baseline period
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
-    thresh = max(abs_thresh_k, float(baseline_dm.quantile(0.9).item()))
-    return _count_events(np.asarray((dm >= thresh).fillna(False).values, dtype=bool), min_spell_days)
+    if dm.size == 0: return np.nan
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
+    baseline_dm = _drop_feb29_time(baseline_dm)
+    base_doy = _dayofyear_noleap(baseline_dm).rename("doy")
+    baseline_mean = baseline_dm.groupby(base_doy).mean(dim="time", skipna=True)
+    baseline_mean = baseline_mean.reindex(doy=np.arange(1, 366))
+    delta_k = float(delta_c)
+    thresh = xr.where(baseline_mean + delta_k >= abs_thresh_k, baseline_mean + delta_k, abs_thresh_k)
+    eva = _drop_feb29_time(dm)
+    eva_doy = _dayofyear_noleap(eva)
+    thr_for_days = thresh.sel(doy=eva_doy)
+    flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
+    return float(_count_events(flags, min_spell_days))
 
 def heatwave_event_count_percentile(da, mask, baseline_years=(1985, 2014), pct=90, min_spell_days=5):
     dm = _get_district_daily_mean(da, mask)
-    if dm.size == 0: return 0
+    if dm.size == 0: return np.nan
     # Calculate threshold from baseline period only
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
     thresh = float(baseline_dm.quantile(pct / 100.0).item())
     return _count_events(np.asarray((dm > thresh).fillna(False).values, dtype=bool), min_spell_days)
 
 def heatwave_magnitude(da, mask, baseline_years=(1985, 2014), min_spell_days=3):
+    """Legacy per-year HWM. Prefer the baseline-aware multi-year workflow."""
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
     # Calculate 90th percentile threshold from baseline period
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
     thresh = float(baseline_dm.quantile(0.9).item())
     hw_mask = (dm > thresh).values
     hw_days, spell = [], []
@@ -592,10 +648,13 @@ def heatwave_magnitude(da, mask, baseline_years=(1985, 2014), min_spell_days=3):
     return float(dm.isel(time=hw_days).mean().item()) - 273.15
 
 def heatwave_amplitude(da, mask, baseline_years=(1985, 2014), min_spell_days=3):
+    """Legacy per-year HWA. Prefer the baseline-aware multi-year workflow."""
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return np.nan
     # Calculate 90th percentile threshold from baseline period
-    baseline_dm = _filter_to_baseline(dm, baseline_years)
+    baseline_dm = _filter_to_baseline(dm, baseline_years, strict=True)
+    if baseline_dm.size == 0:
+        return np.nan
     thresh = float(baseline_dm.quantile(0.9).item())
     hw_mask = (dm > thresh).values
     spells, spell = [], []
@@ -795,6 +854,16 @@ SPELL_COMPUTE_NAMES = {
 HEATWAVE_PERCENTILE_COMPUTE_NAMES = {
     "heatwave_frequency_percentile",
     "heatwave_event_count_percentile",
+}
+
+HEATWAVE_BASELINE_COMPUTE_NAMES = {
+    "heatwave_amplitude",
+    "heatwave_magnitude",
+}
+
+HEATWAVE_DELTA_COMPUTE_NAMES = {
+    "heatwave_duration_index",
+    "heatwave_event_count",
 }
 
 PRECIP_PERCENTILE_COMPUTE_NAMES = {
@@ -1210,6 +1279,88 @@ def _collect_daily_mean_by_unit(
 
     return out
 
+def _resolve_baseline_year_to_paths(
+    metric: dict,
+    primary_var: str,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    year_to_paths: dict[int, dict[str, Path]],
+) -> tuple[dict[int, dict[str, Path]], bool]:
+    """
+    Resolve baseline-year files for a metric, enforcing historical-only baselines
+    for non-historical scenarios. Returns (baseline_year_to_paths, missing_baseline).
+    """
+    if scenario == "historical":
+        return year_to_paths, False
+
+    hist_conf = scenario_conf.get("historical")
+    if not hist_conf:
+        logging.warning(f"[{metric['slug']}] Missing historical scenario config for baseline.")
+        return {}, True
+
+    hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
+    if not hist_dir.exists():
+        logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}.")
+        return {}, True
+
+    valid_year_files, _ = validated_year_files(hist_dir)
+    if not valid_year_files:
+        logging.warning(f"[{metric['slug']}] No valid historical yearly files for baseline in: {hist_dir}.")
+        return {}, True
+
+    baseline_year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()}
+    return baseline_year_to_paths, False
+
+def _compute_doy_percentile_thresholds(
+    base: xr.DataArray,
+    pct: int,
+    window_days: int,
+    quantile_method: str,
+    smooth: int | None,
+) -> xr.DataArray:
+    """
+    Build day-of-year percentile thresholds (365-day) from a baseline series.
+    """
+    base = _drop_feb29_time(base)
+    base_doy = _dayofyear_noleap(base)
+    doys = np.arange(1, 366)
+
+    if window_days % 2 != 1:
+        raise ValueError("window_days must be odd (e.g., 5, 7, 11).")
+    half = window_days // 2
+    q = pct / 100.0
+
+    thr_list = []
+    for d in doys:
+        win = np.arange(d - half, d + half + 1)
+        win = np.where(win < 1, win + 365, win)
+        win = np.where(win > 365, win - 365, win)
+        mask = base_doy.isin(win)
+        base_win = base.where(mask, drop=True)
+        thr = _quantile_compat(base_win, q=q, dim="time", method=quantile_method)
+        thr_list.append(thr)
+
+    thresh = xr.concat(thr_list, dim="doy").assign_coords(doy=doys)
+    return _smooth_doy_wrap(thresh, smooth=smooth)
+
+def _spell_indices(flags: np.ndarray, min_spell_days: int) -> list[list[int]]:
+    """
+    Return index lists for spells of at least min_spell_days from a boolean mask.
+    """
+    spells: list[list[int]] = []
+    run: list[int] = []
+    for i, v in enumerate(flags):
+        if v:
+            run.append(i)
+        else:
+            if len(run) >= min_spell_days:
+                spells.append(run)
+            run = []
+    if len(run) >= min_spell_days:
+        spells.append(run)
+    return spells
+
 def _compute_tx90p_etccdi_yearly(
     series: xr.DataArray,
     baseline_years: tuple[int, int],
@@ -1464,24 +1615,15 @@ def _compute_spell_duration_rows_for_metric(
     primary_var = metric["var"]
     eval_years = sorted(year_to_paths.keys())
 
-    # Baseline source: historical for SSP scenarios
-    if scenario == "historical":
-        baseline_year_to_paths = year_to_paths
-        baseline_var = primary_var
-    else:
-        hist_conf = scenario_conf.get("historical")
-        if not hist_conf:
-            baseline_year_to_paths = year_to_paths
-            baseline_var = primary_var
-        else:
-            hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
-            if not hist_dir.exists():
-                logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}. Using scenario series.")
-                baseline_year_to_paths = year_to_paths
-            else:
-                valid_year_files, _ = validated_year_files(hist_dir)
-                baseline_year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()} if valid_year_files else year_to_paths
-            baseline_var = primary_var
+    baseline_year_to_paths, _ = _resolve_baseline_year_to_paths(
+        metric=metric,
+        primary_var=primary_var,
+        model=model,
+        scenario=scenario,
+        scenario_conf=scenario_conf,
+        year_to_paths=year_to_paths,
+    )
+    baseline_var = primary_var
 
     baseline_series_by_unit = _collect_daily_mean_by_unit(
         baseline_year_to_paths, baseline_var, masks
@@ -1510,25 +1652,13 @@ def _compute_spell_duration_rows_for_metric(
             if base.size == 0:
                 year_vals = {y: np.nan for y in eval_years}
             else:
-                base_doy = _dayofyear_noleap(base)
-                doys = np.arange(1, 366)
-                if window_days % 2 != 1:
-                    raise ValueError("window_days must be odd (e.g., 5, 7, 11).")
-                half = window_days // 2
-                q = percentile / 100.0
-
-                thr_list = []
-                for d in doys:
-                    win = np.arange(d - half, d + half + 1)
-                    win = np.where(win < 1, win + 365, win)
-                    win = np.where(win > 365, win - 365, win)
-                    mask_d = base_doy.isin(win)
-                    base_win = base.where(mask_d, drop=True)
-                    thr = _quantile_compat(base_win, q=q, dim="time", method=quantile_method)
-                    thr_list.append(thr)
-
-                thresh = xr.concat(thr_list, dim="doy").assign_coords(doy=doys)
-                thresh = _smooth_doy_wrap(thresh, smooth=smooth)
+                thresh = _compute_doy_percentile_thresholds(
+                    base=base,
+                    pct=percentile,
+                    window_days=window_days,
+                    quantile_method=quantile_method,
+                    smooth=smooth,
+                )
 
                 year_vals = {}
                 if eval_series is None or eval_series.size == 0:
@@ -1606,99 +1736,315 @@ def _compute_heatwave_percentile_rows_for_metric(
     primary_var = metric["var"]
     eval_years = sorted(year_to_paths.keys())
 
-    # Baseline source: historical for SSP scenarios
-    if scenario == "historical":
-        baseline_year_to_paths = year_to_paths
-        baseline_var = primary_var
-    else:
-        hist_conf = scenario_conf.get("historical")
-        if not hist_conf:
-            baseline_year_to_paths = year_to_paths
-            baseline_var = primary_var
-        else:
-            hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
-            if not hist_dir.exists():
-                logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}. Using scenario series.")
-                baseline_year_to_paths = year_to_paths
-            else:
-                valid_year_files, _ = validated_year_files(hist_dir)
-                baseline_year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()} if valid_year_files else year_to_paths
-            baseline_var = primary_var
+    baseline_year_to_paths, _ = _resolve_baseline_year_to_paths(
+        metric=metric,
+        primary_var=primary_var,
+        model=model,
+        scenario=scenario,
+        scenario_conf=scenario_conf,
+        year_to_paths=year_to_paths,
+    )
+    baseline_var = primary_var
 
     baseline_series_by_unit = _collect_daily_mean_by_unit(
         baseline_year_to_paths, baseline_var, masks
     )
 
     if scenario == "historical":
-        full_series_by_unit = baseline_series_by_unit
+        eval_series_by_unit = baseline_series_by_unit
     else:
         eval_series_by_unit = _collect_daily_mean_by_unit(
             year_to_paths, primary_var, masks
         )
-        full_series_by_unit = {}
-        for unit in masks.keys():
-            b = baseline_series_by_unit.get(unit)
-            e = eval_series_by_unit.get(unit)
-            if (b is None) or (b.size == 0):
-                full_series_by_unit[unit] = e
-            elif (e is None) or (e.size == 0):
-                full_series_by_unit[unit] = b
-            else:
-                full_series_by_unit[unit] = xr.concat([b, e], dim="time")
 
     rows: list[dict] = []
     value_col = metric["value_col"]
     compute_name = metric.get("compute")
 
-    for unit, series in full_series_by_unit.items():
+    for unit in masks.keys():
+        base_series = baseline_series_by_unit.get(unit)
+        eval_series = eval_series_by_unit.get(unit)
         # Compute day-of-year thresholds from baseline, then evaluate boolean exceedance per year
-        years = series["time"].dt.year
-        bs, be = baseline_years
-        base = series.sel(time=series["time"][(years >= bs) & (years <= be)])
-        if base.size == 0:
+        if base_series is None or base_series.size == 0:
             year_vals = {y: np.nan for y in eval_years}
         else:
-            base_doy = _dayofyear_noleap(base)
-            doys = np.arange(1, 366)
-            if window_days % 2 != 1:
-                raise ValueError("window_days must be odd (e.g., 5, 7, 11).")
-            half = window_days // 2
-            q = pct / 100.0
+            years = base_series["time"].dt.year
+            bs, be = baseline_years
+            base = base_series.sel(time=base_series["time"][(years >= bs) & (years <= be)])
+            if base.size == 0:
+                year_vals = {y: np.nan for y in eval_years}
+            else:
+                thresh = _compute_doy_percentile_thresholds(
+                    base=base,
+                    pct=pct,
+                    window_days=window_days,
+                    quantile_method=quantile_method,
+                    smooth=smooth,
+                )
 
-            thr_list = []
-            for d in doys:
-                win = np.arange(d - half, d + half + 1)
-                win = np.where(win < 1, win + 365, win)
-                win = np.where(win > 365, win - 365, win)
-                mask_d = base_doy.isin(win)
-                base_win = base.where(mask_d, drop=True)
-                thr = _quantile_compat(base_win, q=q, dim="time", method=quantile_method)
-                thr_list.append(thr)
+                year_vals = {}
+                for y in eval_years:
+                    if eval_series is None or eval_series.size == 0:
+                        year_vals[y] = np.nan
+                        continue
+                    eval_years_series = eval_series["time"].dt.year
+                    eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
+                    if eva.size == 0:
+                        year_vals[y] = np.nan
+                        continue
 
-            thresh = xr.concat(thr_list, dim="doy").assign_coords(doy=doys)
-            thresh = _smooth_doy_wrap(thresh, smooth=smooth)
+                    eva = _drop_feb29_time(eva)
+                    eva_doy = _dayofyear_noleap(eva)
+                    thr_for_days = thresh.sel(doy=eva_doy)
 
-            year_vals: dict[int, float] = {}
-            for y in eval_years:
-                eva = series.sel(time=series["time"][years == y])
-                if eva.size == 0:
-                    year_vals[y] = np.nan
-                    continue
+                    if exceed_ge:
+                        flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
+                    else:
+                        flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
 
-                eva = _drop_feb29_time(eva)
-                eva_doy = _dayofyear_noleap(eva)
-                thr_for_days = thresh.sel(doy=eva_doy)
+                    if compute_name == "heatwave_frequency_percentile":
+                        _, total_days = _run_length_stats(flags, min_spell_days)
+                        year_vals[y] = float(total_days)
+                    else:
+                        year_vals[y] = float(_count_events(flags, min_spell_days))
 
-                if exceed_ge:
+        for year in eval_years:
+            v = float(year_vals.get(year, np.nan))
+            row = {
+                "year": int(year),
+                "value": v,
+                value_col: v,
+                "source_file": "",
+            }
+            if "||" in unit:
+                district, block = unit.split("||", 1)
+                row["district"] = district
+                row["block"] = block
+            else:
+                row["district"] = unit
+            rows.append(row)
+
+    return rows
+
+def _compute_heatwave_baseline_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+) -> list[dict]:
+    """
+    Special-case: heatwave amplitude/magnitude metrics based on percentile thresholds
+    calibrated from historical baseline years (multi-year), applied to evaluation years.
+
+    Definitions:
+      - HWM: maximum mean exceedance above the percentile threshold across all spells.
+      - HWA: peak daily temperature (°C) within the hottest spell (highest mean exceedance).
+    """
+    params = metric.get("params", {}) or {}
+
+    baseline_years = tuple(params.get("baseline_years", (1981, 2010)))
+    pct = int(params.get("pct", params.get("percentile", 90)))
+    window_days = int(params.get("window_days", 5))
+    exceed_ge = bool(params.get("exceed_ge", True))
+    quantile_method = str(params.get("quantile_method", "nearest"))
+    min_spell_days = int(params.get("min_spell_days", 3))
+    smooth = params.get("smooth", None)
+    if smooth is not None:
+        smooth = int(smooth)
+
+    primary_var = metric["var"]
+    eval_years = sorted(year_to_paths.keys())
+    compute_name = metric.get("compute")
+
+    baseline_year_to_paths, _ = _resolve_baseline_year_to_paths(
+        metric=metric,
+        primary_var=primary_var,
+        model=model,
+        scenario=scenario,
+        scenario_conf=scenario_conf,
+        year_to_paths=year_to_paths,
+    )
+
+    baseline_series_by_unit = _collect_daily_mean_by_unit(
+        baseline_year_to_paths, primary_var, masks
+    )
+    if scenario == "historical":
+        eval_series_by_unit = baseline_series_by_unit
+    else:
+        eval_series_by_unit = _collect_daily_mean_by_unit(
+            year_to_paths, primary_var, masks
+        )
+
+    rows: list[dict] = []
+    value_col = metric["value_col"]
+
+    for unit in masks.keys():
+        base_series = baseline_series_by_unit.get(unit)
+        eval_series = eval_series_by_unit.get(unit)
+
+        if base_series is None or base_series.size == 0:
+            year_vals = {y: np.nan for y in eval_years}
+        else:
+            years = base_series["time"].dt.year
+            bs, be = baseline_years
+            base = base_series.sel(time=base_series["time"][(years >= bs) & (years <= be)])
+            if base.size == 0:
+                year_vals = {y: np.nan for y in eval_years}
+            else:
+                thresh = _compute_doy_percentile_thresholds(
+                    base=base,
+                    pct=pct,
+                    window_days=window_days,
+                    quantile_method=quantile_method,
+                    smooth=smooth,
+                )
+
+                year_vals = {}
+                for y in eval_years:
+                    if eval_series is None or eval_series.size == 0:
+                        year_vals[y] = np.nan
+                        continue
+                    eval_years_series = eval_series["time"].dt.year
+                    eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
+                    if eva.size == 0:
+                        year_vals[y] = np.nan
+                        continue
+
+                    eva = _drop_feb29_time(eva)
+                    eva_doy = _dayofyear_noleap(eva)
+                    thr_for_days = thresh.sel(doy=eva_doy)
+
+                    if exceed_ge:
+                        flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
+                    else:
+                        flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
+
+                    spells = _spell_indices(flags, min_spell_days)
+                    if not spells:
+                        year_vals[y] = np.nan
+                        continue
+
+                    event_stats: list[tuple[float, float]] = []
+                    for spell in spells:
+                        event_t = eva.isel(time=spell)
+                        event_thr = thr_for_days.isel(time=spell)
+                        mean_exceed = float((event_t - event_thr).mean(skipna=True).item())
+                        max_temp = float(event_t.max(skipna=True).item())
+                        event_stats.append((mean_exceed, max_temp))
+
+                    hottest = max(event_stats, key=lambda x: x[0])
+                    if compute_name == "heatwave_magnitude":
+                        year_vals[y] = float(hottest[0])
+                    else:
+                        year_vals[y] = float(hottest[1]) - 273.15
+
+        for year in eval_years:
+            v = float(year_vals.get(year, np.nan))
+            row = {
+                "year": int(year),
+                "value": v,
+                value_col: v,
+                "source_file": "",
+            }
+            if "||" in unit:
+                district, block = unit.split("||", 1)
+                row["district"] = district
+                row["block"] = block
+            else:
+                row["district"] = unit
+            rows.append(row)
+
+    return rows
+
+def _compute_heatwave_delta_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+) -> list[dict]:
+    """
+    Special-case: heatwave duration/event metrics using baseline mean + delta thresholds.
+
+    Threshold per day-of-year = max(abs_thresh_k, baseline_mean + delta_c).
+    """
+    params = metric.get("params", {}) or {}
+
+    baseline_years = tuple(params.get("baseline_years", (1981, 2010)))
+    delta_c = float(params.get("delta_c", 5.0))
+    abs_thresh_k = float(params.get("abs_thresh_k", 313.15))
+    min_spell_days = int(params.get("min_spell_days", 5))
+
+    primary_var = metric["var"]
+    eval_years = sorted(year_to_paths.keys())
+    compute_name = metric.get("compute")
+
+    baseline_year_to_paths, _ = _resolve_baseline_year_to_paths(
+        metric=metric,
+        primary_var=primary_var,
+        model=model,
+        scenario=scenario,
+        scenario_conf=scenario_conf,
+        year_to_paths=year_to_paths,
+    )
+
+    baseline_series_by_unit = _collect_daily_mean_by_unit(
+        baseline_year_to_paths, primary_var, masks
+    )
+    if scenario == "historical":
+        eval_series_by_unit = baseline_series_by_unit
+    else:
+        eval_series_by_unit = _collect_daily_mean_by_unit(
+            year_to_paths, primary_var, masks
+        )
+
+    rows: list[dict] = []
+    value_col = metric["value_col"]
+
+    for unit in masks.keys():
+        base_series = baseline_series_by_unit.get(unit)
+        eval_series = eval_series_by_unit.get(unit)
+
+        if base_series is None or base_series.size == 0:
+            year_vals = {y: np.nan for y in eval_years}
+        else:
+            years = base_series["time"].dt.year
+            bs, be = baseline_years
+            base = base_series.sel(time=base_series["time"][(years >= bs) & (years <= be)])
+            if base.size == 0:
+                year_vals = {y: np.nan for y in eval_years}
+            else:
+                base = _drop_feb29_time(base)
+                base_doy = _dayofyear_noleap(base).rename("doy")
+                baseline_mean = base.groupby(base_doy).mean(dim="time", skipna=True)
+                baseline_mean = baseline_mean.reindex(doy=np.arange(1, 366))
+                delta_k = float(delta_c)
+                thresh = xr.where(baseline_mean + delta_k >= abs_thresh_k, baseline_mean + delta_k, abs_thresh_k)
+
+                year_vals = {}
+                for y in eval_years:
+                    if eval_series is None or eval_series.size == 0:
+                        year_vals[y] = np.nan
+                        continue
+                    eval_years_series = eval_series["time"].dt.year
+                    eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
+                    if eva.size == 0:
+                        year_vals[y] = np.nan
+                        continue
+
+                    eva = _drop_feb29_time(eva)
+                    eva_doy = _dayofyear_noleap(eva)
+                    thr_for_days = thresh.sel(doy=eva_doy)
                     flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
-                else:
-                    flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
 
-                if compute_name == "heatwave_frequency_percentile":
-                    _, total_days = _run_length_stats(flags, min_spell_days)
-                    year_vals[y] = float(total_days)
-                else:
-                    year_vals[y] = float(_count_events(flags, min_spell_days))
+                    if compute_name == "heatwave_duration_index":
+                        _, total_days = _run_length_stats(flags, min_spell_days)
+                        year_vals[y] = float(total_days)
+                    else:
+                        year_vals[y] = float(_count_events(flags, min_spell_days))
 
         for year in eval_years:
             v = float(year_vals.get(year, np.nan))
@@ -2123,6 +2469,42 @@ def process_metric_for_model_scenario(
             )
         except Exception as e:
             logging.error(f"[{slug}] Heatwave percentile computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    # ------------------------------------------------------------------
+    # Special-case heatwave amplitude/magnitude: historical baseline thresholds
+    # ------------------------------------------------------------------
+    elif metric.get("compute") in HEATWAVE_BASELINE_COMPUTE_NAMES:
+        try:
+            rows = _compute_heatwave_baseline_rows_for_metric(
+                metric=metric,
+                model=model,
+                scenario=scenario,
+                scenario_conf=SCENARIOS,
+                year_to_paths=year_to_paths,
+                masks=masks,
+            )
+        except Exception as e:
+            logging.error(f"[{slug}] Heatwave amplitude/magnitude computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    # ------------------------------------------------------------------
+    # Special-case heatwave duration/event indices: baseline mean + delta
+    # ------------------------------------------------------------------
+    elif metric.get("compute") in HEATWAVE_DELTA_COMPUTE_NAMES:
+        try:
+            rows = _compute_heatwave_delta_rows_for_metric(
+                metric=metric,
+                model=model,
+                scenario=scenario,
+                scenario_conf=SCENARIOS,
+                year_to_paths=year_to_paths,
+                masks=masks,
+            )
+        except Exception as e:
+            logging.error(f"[{slug}] Heatwave duration/event computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
             raise
 
