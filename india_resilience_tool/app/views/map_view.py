@@ -333,6 +333,7 @@ def render_map_view(
     selected_district: str,
     map_width: int,
     map_height: int,
+    legend_block_html: Optional[str] = None,
     selected_block: str = "All",
     level: str = "district",
     perf_section: Optional[Callable[[str], Any]] = None,
@@ -461,14 +462,28 @@ def render_map_view(
     with ctx:
         map_key = f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{selected_state}_{selected_district}_{selected_block}_{str(level).strip().lower()}"
 
-        returned = st_folium(
-            m,
-            width=map_width,
-            height=map_height,
-            returned_objects=["last_object_clicked"],
-            use_container_width=False,
-            key=map_key,
-        )
+        if legend_block_html:
+            map_col, legend_col = st.columns([18, 3])
+            with map_col:
+                returned = st_folium(
+                    m,
+                    width=map_width,
+                    height=map_height,
+                    returned_objects=["last_object_clicked"],
+                    use_container_width=True,
+                    key=map_key,
+                )
+            with legend_col:
+                st.markdown(legend_block_html, unsafe_allow_html=True)
+        else:
+            returned = st_folium(
+                m,
+                width=map_width,
+                height=map_height,
+                returned_objects=["last_object_clicked"],
+                use_container_width=False,
+                key=map_key,
+            )
 
     if not isinstance(returned, dict):
         returned = {}

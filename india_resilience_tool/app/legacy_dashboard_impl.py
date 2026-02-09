@@ -269,6 +269,7 @@ def enrich_adm2_with_state_names(
 # -------------------------
 from india_resilience_tool.viz.colors import (
     apply_fillcolor,
+    build_vertical_gradient_legend_block_html,
     build_vertical_gradient_legend_html,
     get_cmap_hex_list as _get_cmap_hex_list,
 )
@@ -823,6 +824,7 @@ with metric_ui_placeholder.container():
                     out_path=str(MASTER_CSV_PATH),
                     attach_centroid_geojson=attach_centroid_geojson,
                     verbose=True,
+                    level=str(st.session_state.get("admin_level", "district")).strip().lower(),
                 )
                 return True, "rebuilt"
             except Exception as e:
@@ -1897,15 +1899,14 @@ perf_end("map: GeoJSON serialize+add layer", _t_geojson)
 
 MAP_WIDTH, MAP_HEIGHT = 780, 700
 
-legend_html = build_vertical_gradient_legend_html(
+# Build a container-relative legend block for Streamlit (stable across devices)
+legend_block_html = build_vertical_gradient_legend_block_html(
     pretty_metric_label=pretty_metric_label,
     vmin=vmin,
     vmax=vmax,
     cmap_name=cmap_name,
-    map_width=MAP_WIDTH,
     map_height=MAP_HEIGHT,
 )
-m.get_root().html.add_child(folium.Element(legend_html))
 
 # Ensure `returned` always exists, even if the map tab didn't run yet
 returned = None
@@ -1945,6 +1946,7 @@ with col1:
             selected_block=selected_block,
             map_width=MAP_WIDTH,
             map_height=MAP_HEIGHT,
+            legend_block_html=legend_block_html,
             perf_section=perf_section,
             level=_admin_level,
         )

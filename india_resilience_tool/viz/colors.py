@@ -152,3 +152,52 @@ z-index: 9999; pointer-events: none; display: flex; align-items: center; gap: 10
   </div>
 </div>
 """
+
+
+def build_vertical_gradient_legend_block_html(
+    *,
+    pretty_metric_label: str,
+    vmin: float,
+    vmax: float,
+    cmap_name: str,
+    map_height: int = 700,
+    bar_width_px: int = 22,
+    label_font: str = "12px",
+    bar_height_fraction: float = 0.92,
+) -> str:
+    """
+    Build a *non-fixed* legend block HTML intended to be placed inside Streamlit layout.
+
+    Why this exists:
+        Folium "position: fixed" legends are viewport-anchored, so their horizontal placement
+        appears to drift across devices/layouts. This block version is container-relative and
+        therefore stable when rendered in a Streamlit column next to the map.
+
+    Returns:
+        HTML string (safe to render via st.markdown(..., unsafe_allow_html=True))
+    """
+    bar_height_px = int(map_height * bar_height_fraction)
+
+    legend_colors = get_cmap_hex_list(cmap_name)
+    gradient_colors = ", ".join(legend_colors)
+
+    return f"""
+<div style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;
+            font-family: Arial, Helvetica, sans-serif; padding-top: 8px;">
+  <div style="position: relative; display: flex; align-items: center; height: {bar_height_px}px;">
+    <div style="display: flex; flex-direction: column; justify-content: space-between; height: {bar_height_px}px;
+                margin-right: 8px; font-size: {label_font}; color: #000;">
+      <div style="text-align: right;">{vmax:.1f}</div>
+      <div style="text-align: right;">{vmin:.1f}</div>
+    </div>
+    <div style="height: {bar_height_px}px; width: {bar_width_px}px; border-radius: 6px;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.20);
+                background: linear-gradient(to top, {gradient_colors}); display: block;">
+    </div>
+  </div>
+  <div style="writing-mode: vertical-rl; transform: rotate(180deg);
+              font-size: {label_font}; white-space: nowrap; align-self: center; color: #000;">
+    {pretty_metric_label}
+  </div>
+</div>
+"""
