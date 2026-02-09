@@ -787,6 +787,11 @@ TX90P_COMPUTE_NAMES = {
     "tx90p_etccdi",
 }
 
+SPELL_COMPUTE_NAMES = {
+    "warm_spell_duration_index",
+    "cold_spell_duration_index",
+}
+
 HEATWAVE_PERCENTILE_COMPUTE_NAMES = {
     "heatwave_frequency_percentile",
     "heatwave_event_count_percentile",
@@ -1427,6 +1432,151 @@ def _compute_tx90p_rows_for_metric(
 
     return rows
 
+def _compute_spell_duration_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+) -> list[dict]:
+    """
+    Special-case: warm/cold spell duration indices with ETCCDI-style
+    day-of-year percentile thresholds (multi-year baseline).
+    """
+    params = metric.get("params", {}) or {}
+
+    compute_name = str(metric.get("compute", "") or "")
+    baseline_years = tuple(params.get("baseline_years", (1981, 2010)))
+    percentile_default = 90 if compute_name == "warm_spell_duration_index" else 10
+    percentile = int(params.get("percentile", percentile_default))
+    window_days = int(params.get("window_days", 5))
+    quantile_method = str(params.get("quantile_method", "nearest"))
+    exceed_ge = bool(params.get("exceed_ge", True))
+    smooth = params.get("smooth", None)
+    if smooth is not None:
+        smooth = int(smooth)
+    min_spell_days = int(params.get("min_spell_days", 6))
+    direction = str(params.get("direction") or ("above" if compute_name == "warm_spell_duration_index" else "below"))
+    if direction not in {"above", "below"}:
+        raise ValueError(f"Invalid direction='{direction}'. Expected 'above' or 'below'.")
+
+    primary_var = metric["var"]
+    eval_years = sorted(year_to_paths.keys())
+
+    # Baseline source: historical for SSP scenarios
+    if scenario == "historical":
+        baseline_year_to_paths = year_to_paths
+        baseline_var = primary_var
+    else:
+        hist_conf = scenario_conf.get("historical")
+        if not hist_conf:
+            baseline_year_to_paths = year_to_paths
+            baseline_var = primary_var
+        else:
+            hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
+            if not hist_dir.exists():
+                logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}. Using scenario series.")
+                baseline_year_to_paths = year_to_paths
+            else:
+                valid_year_files, _ = validated_year_files(hist_dir)
+                baseline_year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()} if valid_year_files else year_to_paths
+            baseline_var = primary_var
+
+    baseline_series_by_unit = _collect_daily_mean_by_unit(
+        baseline_year_to_paths, baseline_var, masks
+    )
+
+    if scenario == "historical":
+        eval_series_by_unit = baseline_series_by_unit
+    else:
+        eval_series_by_unit = _collect_daily_mean_by_unit(
+            year_to_paths, primary_var, masks
+        )
+
+    rows: list[dict] = []
+    value_col = metric["value_col"]
+
+    for unit in masks.keys():
+        base_series = baseline_series_by_unit.get(unit)
+        eval_series = eval_series_by_unit.get(unit)
+
+        if base_series is None or base_series.size == 0:
+            year_vals = {y: np.nan for y in eval_years}
+        else:
+            years = base_series["time"].dt.year
+            bs, be = baseline_years
+            base = base_series.sel(time=base_series["time"][(years >= bs) & (years <= be)])
+            if base.size == 0:
+                year_vals = {y: np.nan for y in eval_years}
+            else:
+                base_doy = _dayofyear_noleap(base)
+                doys = np.arange(1, 366)
+                if window_days % 2 != 1:
+                    raise ValueError("window_days must be odd (e.g., 5, 7, 11).")
+                half = window_days // 2
+                q = percentile / 100.0
+
+                thr_list = []
+                for d in doys:
+                    win = np.arange(d - half, d + half + 1)
+                    win = np.where(win < 1, win + 365, win)
+                    win = np.where(win > 365, win - 365, win)
+                    mask_d = base_doy.isin(win)
+                    base_win = base.where(mask_d, drop=True)
+                    thr = _quantile_compat(base_win, q=q, dim="time", method=quantile_method)
+                    thr_list.append(thr)
+
+                thresh = xr.concat(thr_list, dim="doy").assign_coords(doy=doys)
+                thresh = _smooth_doy_wrap(thresh, smooth=smooth)
+
+                year_vals = {}
+                if eval_series is None or eval_series.size == 0:
+                    year_vals = {y: np.nan for y in eval_years}
+                else:
+                    eval_years_series = eval_series["time"].dt.year
+                    for y in eval_years:
+                        eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
+                        if eva.size == 0:
+                            year_vals[y] = np.nan
+                            continue
+
+                        eva = _drop_feb29_time(eva)
+                        eva_doy = _dayofyear_noleap(eva)
+                        thr_for_days = thresh.sel(doy=eva_doy)
+
+                        if direction == "above":
+                            if exceed_ge:
+                                flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
+                            else:
+                                flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
+                        else:
+                            if exceed_ge:
+                                flags = np.asarray((eva <= thr_for_days).fillna(False).values, dtype=bool)
+                            else:
+                                flags = np.asarray((eva < thr_for_days).fillna(False).values, dtype=bool)
+
+                        _, total_days = _run_length_stats(flags, min_spell_days)
+                        year_vals[y] = float(total_days)
+
+        for year in eval_years:
+            v = float(year_vals.get(year, np.nan))
+            row = {
+                "year": int(year),
+                "value": v,
+                value_col: v,
+                "source_file": "",
+            }
+            if "||" in unit:
+                district, block = unit.split("||", 1)
+                row["district"] = district
+                row["block"] = block
+            else:
+                row["district"] = unit
+            rows.append(row)
+
+    return rows
+
 def _compute_heatwave_percentile_rows_for_metric(
     metric: dict,
     model: str,
@@ -1937,6 +2087,24 @@ def process_metric_for_model_scenario(
             )
         except Exception as e:
             logging.error(f"[{slug}] TX90P computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    # ------------------------------------------------------------------
+    # Special-case warm/cold spell duration indices: multi-year baseline thresholds
+    # ------------------------------------------------------------------
+    elif metric.get("compute") in SPELL_COMPUTE_NAMES:
+        try:
+            rows = _compute_spell_duration_rows_for_metric(
+                metric=metric,
+                model=model,
+                scenario=scenario,
+                scenario_conf=SCENARIOS,
+                year_to_paths=year_to_paths,
+                masks=masks,
+            )
+        except Exception as e:
+            logging.error(f"[{slug}] Spell duration computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
             raise
 

@@ -443,20 +443,28 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     },
     
     # --- Warm/Heat Spell Indices ---
-    # {
-    #     "name": "Warm Spell Duration Index (WSDI)",
-    #     "slug": "wsdi_warm_spell_days",
-    #     "var": "tasmax",
-    #     "value_col": "wsdi_days",
-    #     "units": "days",
-    #     "compute": "warm_spell_duration_index",
-    #     "params": {"percentile": 90, "min_spell_days": 6, "baseline_years": (1981, 2010)},
-    #     "group": "temperature",
-    #     "description": (
-    #         "Annual count of days contributing to warm spells, where a warm spell "
-    #         "is ≥6 consecutive days with TX > 90th percentile. Climdex WSDI."
-    #     ),
-    # },
+    {
+        "name": "Warm Spell Duration Index (WSDI)",
+        "slug": "wsdi_warm_spell_days",
+        "var": "tasmax",
+        "value_col": "wsdi_days",
+        "units": "days",
+        "compute": "warm_spell_duration_index",
+        "params": {
+            "baseline_years": (1981, 2010),
+            "percentile": 90,
+            "window_days": 5,
+            "quantile_method": "nearest",
+            "exceed_ge": True,
+            "min_spell_days": 6,
+            "direction": "above",
+        },
+        "group": "temperature",
+        "description": (
+            "Annual count of days contributing to warm spells, where a warm spell "
+            "is ≥6 consecutive days with TX > 90th percentile. Climdex WSDI."
+        ),
+    },
     # {
     #     "name": "Consecutive Summer Days (TX > 30°C)",
     #     "slug": "tasmax_csd_gt30",
@@ -735,7 +743,15 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "csdi_days",
         "units": "days",
         "compute": "cold_spell_duration_index",
-        "params": {"percentile": 10, "min_spell_days": 6, "baseline_years": (1981, 2010)},
+        "params": {
+            "baseline_years": (1981, 2010),
+            "percentile": 10,
+            "window_days": 5,
+            "quantile_method": "nearest",
+            "exceed_ge": True,
+            "min_spell_days": 6,
+            "direction": "below",
+        },
         "group": "temperature",
         "description": (
             "Annual count of days contributing to cold spells, where a cold spell "
@@ -1321,7 +1337,7 @@ BUNDLES: dict[str, list[str]] = {
         "tx90p_hot_days_pct",
         "tn90p_warm_nights_pct",
         # Heatwaves & persistence
-        # "wsdi_warm_spell_days",
+        "wsdi_warm_spell_days",
         # "tasmax_csd_gt30",
         # "tasmax_csd_events_gt30",
         # "hwdi_tasmax_plus5C",
