@@ -1,3 +1,4 @@
+# build_master_metrics.py
 #!/usr/bin/env python3
 """
 build_master_metrics.py
@@ -13,7 +14,6 @@ For blocks, only supports NEW structure:
 - {state}/blocks/{district}/{block}/{model}/{scenario}/
 
 Usage:
-Usage:
     python build_master_metrics.py                         # Default: district + block
     python build_master_metrics.py --level district         # District only
     python build_master_metrics.py --level block            # Block only
@@ -28,12 +28,41 @@ from __future__ import annotations
 from pathlib import Path
 import argparse
 import json
+import math
+import os
 import sys
 import time
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
+
+
+def _get_mp_module():
+    """Return a multiprocessing-compatible module.
+
+    Prefers the external `multiprocess` library (better pickling on some
+    platforms), but falls back to Python's built-in `multiprocessing`.
+    """
+    try:
+        import multiprocess as mp  # type: ignore
+        return mp
+    except Exception:
+        import multiprocessing as mp
+        return mp
+
+
+def default_workers_75pct() -> int:
+    """Return default workers as 75% of available CPUs (min 1).
+
+    Uses floor semantics (consistent with `int(cpu * 0.75)`), but guards
+    against returning 0.
+    """
+    try:
+        cpu = os.cpu_count() or 1
+    except Exception:
+        cpu = 1
+    return max(1, int(cpu * 0.75))
 
 
 AdminLevel = Literal["district", "block"]
@@ -139,6 +168,35 @@ def compute_ensemble_stats(values_list: Sequence[float]) -> Optional[Dict[str, f
     }
 
 
+def _build_unit_row_worker(
+    args: Tuple[Dict[str, Any], Dict[Tuple[str, str], Dict[str, float]], str]
+) -> Dict[str, Any]:
+    """Worker: build a single wide-master row.
+
+    Args:
+        args: (unit_ident, scen_period_to_models, metric_col_name)
+
+    Returns:
+        Row dict for the wide-format master.
+    """
+    unit_ident, scen_period_to_models, metric_col_name = args
+    base_row: Dict[str, Any] = dict(unit_ident)
+
+    for (scenario, period), model_map in scen_period_to_models.items():
+        values = list(model_map.values())
+        stats = compute_ensemble_stats(values)
+        if not stats:
+            continue
+
+        col_prefix = f"{metric_col_name}__{scenario}__{period}"
+        for stat_name, stat_val in stats.items():
+            base_row[f"{col_prefix}__{stat_name}"] = stat_val
+        base_row[f"{col_prefix}__n_models"] = len(values)
+        base_row[f"{col_prefix}__values_per_model"] = json.dumps(model_map)
+
+    return base_row
+
+
 def _first_existing_metric_col(df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
     """Return the first metric column found in df from candidates."""
     cols = list(df.columns)
@@ -185,14 +243,17 @@ class ProgressReporter:
         self.report_every = report_every
         self.current = 0
         self.start_time = time.time()
-    
+
     def update(self, n: int = 1):
         self.current += n
         if self.current % self.report_every == 0 or self.current == self.total:
             elapsed = time.time() - self.start_time
             rate = self.current / elapsed if elapsed > 0 else 0
             eta = (self.total - self.current) / rate if rate > 0 else 0
-            print(f"  {self.prefix}: {self.current}/{self.total} ({100*self.current/self.total:.1f}%) - {rate:.1f}/s - ETA: {eta:.0f}s")
+            print(
+                f"  {self.prefix}: {self.current}/{self.total} "
+                f"({100*self.current/self.total:.1f}%) - {rate:.1f}/s - ETA: {eta:.0f}s"
+            )
 
 
 # -----------------------------------------------------------------------------
@@ -208,37 +269,33 @@ def _is_model_directory(path: Path) -> bool:
 
 
 def _detect_district_structure(state_root: Path, verbose: bool = False) -> Tuple[Optional[Path], str]:
-    """
-    Detect whether district data uses new or old folder structure.
-    
+    """Detect whether district data uses new or old folder structure.
+
     Returns:
         (data_root, structure_type) where structure_type is "new" or "old"
     """
     # Check for new structure: state/districts/{district}/{model}/{scenario}/
     new_path = state_root / DISTRICT_FOLDER
     if new_path.exists():
-        # Verify it has the expected structure
         for district_dir in new_path.iterdir():
-            if district_dir.is_dir() and district_dir.name != "ensembles":
-                # Check if it contains model directories
-                for subdir in district_dir.iterdir():
-                    if subdir.is_dir() and _is_model_directory(subdir):
-                        return new_path, "new"
-                break
-    
-    # Check for old structure: state/{district}/{model}/{scenario}/
-    # District dirs are those that contain model subdirs with scenario subdirs
-    skip_dirs = {"blocks", "districts", "ensembles", "validation_reports", "pdf_plots", "plots"}
-    
-    for item in state_root.iterdir():
-        if item.is_dir() and item.name not in skip_dirs:
-            # Check if this directory contains model directories
-            for subdir in item.iterdir():
+            if not district_dir.is_dir() or district_dir.name == "ensembles":
+                continue
+            # district_dir should contain model dirs
+            for subdir in district_dir.iterdir():
                 if subdir.is_dir() and _is_model_directory(subdir):
-                    # This is old structure - district dirs directly under state
-                    return state_root, "old"
-            break  # Only need to check one
-    
+                    return new_path, "new"
+
+    # Check for old structure: state/{district}/{model}/{scenario}/
+    skip_dirs = {"blocks", "districts", "ensembles", "validation_reports", "pdf_plots", "plots"}
+
+    for item in state_root.iterdir():
+        if not item.is_dir() or item.name in skip_dirs:
+            continue
+        # item is a district dir, should contain model dirs
+        for subdir in item.iterdir():
+            if subdir.is_dir() and _is_model_directory(subdir):
+                return state_root, "old"
+
     return None, "unknown"
 
 
@@ -251,50 +308,52 @@ def _collect_district_data(
     metric_col_candidates: Sequence[str],
     verbose: bool = True,
 ) -> Tuple[List[Dict], List[Dict]]:
-    """
-    Collect data from district-level directory structure.
+    """Collect data from district-level directory structure.
+
     Supports both old and new folder structures.
     """
-    all_rows = []
-    yearly_rows = []
-    
+    all_rows: List[Dict] = []
+    yearly_rows: List[Dict] = []
+
     # Detect structure
     data_root, structure = _detect_district_structure(state_root, verbose)
-    
+
     if data_root is None:
         if verbose:
             print(f"  ERROR: Could not detect district data structure in {state_root}")
         return [], []
-    
+
     if verbose:
         print(f"  Detected {structure.upper()} folder structure")
         if structure == "new":
             print(f"  Data root: {data_root}")
         else:
             print(f"  Data root: {data_root} (old structure - district folders at state level)")
-    
+
     skip_dirs = {"ensembles", "blocks", "districts", "validation_reports", "pdf_plots", "plots"}
     district_dirs = [p for p in data_root.iterdir() if p.is_dir() and p.name not in skip_dirs]
-    
+
     # Filter to only actual district directories (those containing model subdirs)
-    district_dirs = [d for d in district_dirs if any(_is_model_directory(p) for p in d.iterdir() if p.is_dir())]
-    
+    district_dirs = [
+        d for d in district_dirs if any(_is_model_directory(p) for p in d.iterdir() if p.is_dir())
+    ]
+
     if verbose:
         print(f"  Found {len(district_dirs)} district directories")
-    
+
     progress = ProgressReporter(len(district_dirs), "Districts") if verbose else None
-    
+
     for ddir in district_dirs:
         district = ddir.name
         model_dirs = [p for p in ddir.iterdir() if p.is_dir() and _is_model_directory(p)]
-        
+
         for mdir in model_dirs:
             model = mdir.name
             scenario_dirs = [p for p in mdir.iterdir() if p.is_dir()]
-            
+
             for sdir in scenario_dirs:
                 scenario = sdir.name
-                
+
                 # Read periods CSV
                 periods_csv = sdir / f"{district}_periods.csv"
                 if periods_csv.exists():
@@ -302,15 +361,17 @@ def _collect_district_data(
                     metric_col = _first_existing_metric_col(df_p, metric_col_candidates)
                     if metric_col and metric_col in df_p.columns:
                         for _, row in df_p.iterrows():
-                            all_rows.append({
-                                "district": district.replace("_", " "),
-                                "state": state,
-                                "model": model,
-                                "scenario": scenario,
-                                "period": row.get("period", ""),
-                                "value": row[metric_col],
-                            })
-                
+                            all_rows.append(
+                                {
+                                    "district": district.replace("_", " "),
+                                    "state": state,
+                                    "model": model,
+                                    "scenario": scenario,
+                                    "period": row.get("period", ""),
+                                    "value": row[metric_col],
+                                }
+                            )
+
                 # Read yearly CSV
                 yearly_csv = sdir / f"{district}_yearly.csv"
                 if yearly_csv.exists():
@@ -318,18 +379,20 @@ def _collect_district_data(
                     metric_col = _first_existing_metric_col(df_y, metric_col_candidates)
                     if metric_col and metric_col in df_y.columns:
                         for _, row in df_y.iterrows():
-                            yearly_rows.append({
-                                "district": district.replace("_", " "),
-                                "state": state,
-                                "model": model,
-                                "scenario": scenario,
-                                "year": row.get("year", ""),
-                                "value": row[metric_col],
-                            })
-        
+                            yearly_rows.append(
+                                {
+                                    "district": district.replace("_", " "),
+                                    "state": state,
+                                    "model": model,
+                                    "scenario": scenario,
+                                    "year": row.get("year", ""),
+                                    "value": row[metric_col],
+                                }
+                            )
+
         if progress:
             progress.update()
-    
+
     return all_rows, yearly_rows
 
 
@@ -339,55 +402,55 @@ def _collect_block_data(
     metric_col_candidates: Sequence[str],
     verbose: bool = True,
 ) -> Tuple[List[Dict], List[Dict]]:
-    """
-    Collect data from block-level directory structure with progress reporting.
-    
+    """Collect data from block-level directory structure with progress reporting.
+
     Structure: state/blocks/{district}/{block}/{model}/{scenario}/*.csv
     """
-    all_rows = []
-    yearly_rows = []
-    
+    all_rows: List[Dict] = []
+    yearly_rows: List[Dict] = []
+
     # Blocks only support new structure
     level_root = state_root / BLOCK_FOLDER
-    
+
     if not level_root.exists():
         if verbose:
             print(f"  ERROR: Block folder not found: {level_root}")
         return [], []
-    
+
     skip_dirs = {"ensembles"}
     district_dirs = [p for p in level_root.iterdir() if p.is_dir() and p.name not in skip_dirs]
-    
+
     if verbose:
         print(f"  Found {len(district_dirs)} district directories in blocks/")
-    
+
     # Count total blocks for progress
     total_blocks = 0
-    district_block_map = {}
+    district_block_map: Dict[Path, List[Path]] = {}
     for ddir in district_dirs:
         block_dirs = [p for p in ddir.iterdir() if p.is_dir()]
         district_block_map[ddir] = block_dirs
         total_blocks += len(block_dirs)
-    
+
     if verbose:
         print(f"  Found {total_blocks} total blocks across all districts")
-    
+
     progress = ProgressReporter(total_blocks, "Blocks", report_every=20) if verbose else None
-    
+
     for ddir, block_dirs in district_block_map.items():
         district = ddir.name
-        
+
         for bdir in block_dirs:
             block = bdir.name
-            model_dirs = [p for p in bdir.iterdir() if p.is_dir()]
-            
+            # IMPORTANT: only treat real model directories as models
+            model_dirs = [p for p in bdir.iterdir() if p.is_dir() and _is_model_directory(p)]
+
             for mdir in model_dirs:
                 model = mdir.name
                 scenario_dirs = [p for p in mdir.iterdir() if p.is_dir()]
-                
+
                 for sdir in scenario_dirs:
                     scenario = sdir.name
-                    
+
                     # Read periods CSV
                     periods_csv = sdir / f"{block}_periods.csv"
                     if periods_csv.exists():
@@ -395,16 +458,18 @@ def _collect_block_data(
                         metric_col = _first_existing_metric_col(df_p, metric_col_candidates)
                         if metric_col and metric_col in df_p.columns:
                             for _, row in df_p.iterrows():
-                                all_rows.append({
-                                    "block": block.replace("_", " "),
-                                    "district": district.replace("_", " "),
-                                    "state": state,
-                                    "model": model,
-                                    "scenario": scenario,
-                                    "period": row.get("period", ""),
-                                    "value": row[metric_col],
-                                })
-                    
+                                all_rows.append(
+                                    {
+                                        "block": block.replace("_", " "),
+                                        "district": district.replace("_", " "),
+                                        "state": state,
+                                        "model": model,
+                                        "scenario": scenario,
+                                        "period": row.get("period", ""),
+                                        "value": row[metric_col],
+                                    }
+                                )
+
                     # Read yearly CSV
                     yearly_csv = sdir / f"{block}_yearly.csv"
                     if yearly_csv.exists():
@@ -412,19 +477,21 @@ def _collect_block_data(
                         metric_col = _first_existing_metric_col(df_y, metric_col_candidates)
                         if metric_col and metric_col in df_y.columns:
                             for _, row in df_y.iterrows():
-                                yearly_rows.append({
-                                    "block": block.replace("_", " "),
-                                    "district": district.replace("_", " "),
-                                    "state": state,
-                                    "model": model,
-                                    "scenario": scenario,
-                                    "year": row.get("year", ""),
-                                    "value": row[metric_col],
-                                })
-            
+                                yearly_rows.append(
+                                    {
+                                        "block": block.replace("_", " "),
+                                        "district": district.replace("_", " "),
+                                        "state": state,
+                                        "model": model,
+                                        "scenario": scenario,
+                                        "year": row.get("year", ""),
+                                        "value": row[metric_col],
+                                    }
+                                )
+
             if progress:
                 progress.update()
-    
+
     return all_rows, yearly_rows
 
 
@@ -435,66 +502,96 @@ def _build_wide_master(
     df_all: pd.DataFrame,
     metric_col_name: str,
     level: AdminLevel,
+    num_workers: int = 1,
     verbose: bool = True,
 ) -> pd.DataFrame:
-    """Build wide-format master DataFrame with ensemble statistics."""
+    """Build wide-format master DataFrame with ensemble statistics.
+
+    This is typically the most CPU-intensive part of the workflow. When
+    ``num_workers > 1``, the per-unit row construction is parallelized.
+    """
     unit_col = get_unit_column_name(level)
-    
+
     if level == "block":
         id_cols = ["block", "district", "state"]
         units = df_all[id_cols].drop_duplicates()
     else:
         id_cols = ["district", "state"]
         units = df_all[id_cols].drop_duplicates()
-    
+
     if verbose:
         print(f"  Building wide master for {len(units)} {unit_col}s...")
-    
+
     progress = ProgressReporter(len(units), "Units", report_every=50) if verbose else None
-    
-    rows = []
-    for _, unit_row in units.iterrows():
-        if level == "block":
-            mask = (
-                (df_all["block"] == unit_row["block"]) &
-                (df_all["district"] == unit_row["district"]) &
-                (df_all["state"] == unit_row["state"])
-            )
+
+    # Pre-aggregate: one value per (unit, scenario, period, model)
+    # This dramatically reduces duplicated work when multiple CSV rows exist.
+    df_grp = df_all.groupby(id_cols + ["scenario", "period", "model"], as_index=False)["value"].mean()
+
+    def _unit_iter() -> Iterable[Tuple[Dict[str, Any], Dict[Tuple[str, str], Dict[str, float]]]]:
+        """Yield (unit_ident, scen_period_to_model_values)."""
+        for unit_key, unit_df in df_grp.groupby(id_cols):
+            if not isinstance(unit_key, tuple):
+                unit_key = (unit_key,)
+            unit_ident = {c: v for c, v in zip(id_cols, unit_key)}
+
+            mapping: Dict[Tuple[str, str], Dict[str, float]] = {}
+            for (scenario, period), grp in unit_df.groupby(["scenario", "period"]):
+                model_map: Dict[str, float] = {}
+                for _, r in grp.iterrows():
+                    model = str(r.get("model", "") or "")
+                    val = r.get("value")
+                    if model and pd.notna(val):
+                        model_map[model] = float(val)
+                if model_map:
+                    mapping[(str(scenario), str(period))] = model_map
+
+            yield unit_ident, mapping
+
+    tasks = [(unit_ident, mapping, metric_col_name) for unit_ident, mapping in _unit_iter()]
+
+    effective_workers = max(1, int(num_workers))
+    if verbose:
+        if effective_workers > 1:
+            print(f"  Using {effective_workers} worker(s) for wide master build")
         else:
-            mask = (
-                (df_all["district"] == unit_row["district"]) &
-                (df_all["state"] == unit_row["state"])
-            )
-        
-        unit_df = df_all[mask]
-        base_row = unit_row.to_dict()
-        
-        for (scenario, period), grp in unit_df.groupby(["scenario", "period"]):
-            values = grp["value"].dropna().tolist()
-            stats = compute_ensemble_stats(values)
-            if stats:
-                col_prefix = f"{metric_col_name}__{scenario}__{period}"
-                for stat_name, stat_val in stats.items():
-                    base_row[f"{col_prefix}__{stat_name}"] = stat_val
-                base_row[f"{col_prefix}__n_models"] = len(values)
-                
-                # Store per-model values as JSON for boxplot visualization
-                # Format: {"model_name": value, ...}
-                model_values = {}
-                for _, model_row in grp.iterrows():
-                    model_name = model_row.get("model", "")
-                    val = model_row.get("value")
-                    if model_name and pd.notna(val):
-                        model_values[model_name] = float(val)
-                if model_values:
-                    base_row[f"{col_prefix}__values_per_model"] = json.dumps(model_values)
-        
-        rows.append(base_row)
-        
-        if progress:
-            progress.update()
-    
+            print("  Using single worker for wide master build")
+
+    rows: List[Dict[str, Any]] = []
+
+    if effective_workers <= 1 or len(tasks) <= 1:
+        for unit_ident, mapping, mcol in tasks:
+            rows.append(_build_unit_row_worker((unit_ident, mapping, mcol)))
+            if progress:
+                progress.update()
+        return pd.DataFrame(rows)
+
+    mp = _get_mp_module()
+    # Use spawn for better cross-platform reliability (esp. Windows).
+    try:
+        ctx = mp.get_context("spawn")
+    except Exception:
+        ctx = mp
+
+    # Chunking: small, predictable chunks to keep progress responsive.
+    chunksize = max(1, int(math.ceil(len(tasks) / (effective_workers * 8))))
+
+    with ctx.Pool(processes=effective_workers) as pool:
+        for row in pool.imap_unordered(_build_unit_row_worker, tasks, chunksize=chunksize):
+            rows.append(row)
+            if progress:
+                progress.update()
+
     return pd.DataFrame(rows)
+
+
+def _unique_unit_count(df: pd.DataFrame, level: AdminLevel) -> int:
+    """Count unique admin units in a dataframe chunk."""
+    if df.empty:
+        return 0
+    if level == "block":
+        return int(df[["block", "district", "state"]].drop_duplicates().shape[0])
+    return int(df[["district", "state"]].drop_duplicates().shape[0])
 
 
 def _build_state_summaries(
@@ -505,64 +602,74 @@ def _build_state_summaries(
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Build all state-level summary DataFrames."""
     # State model averages (period data)
-    state_model_rows = []
+    state_model_rows: List[Dict[str, Any]] = []
     for (scenario, period, model), grp in df_all.groupby(["scenario", "period", "model"]):
         values = grp["value"].dropna().tolist()
         if values:
-            state_model_rows.append({
-                "scenario": scenario,
-                "period": period,
-                "model": model,
-                f"{metric_col_name}_mean": np.mean(values),
-                "n_units": len(values),
-            })
+            state_model_rows.append(
+                {
+                    "scenario": scenario,
+                    "period": period,
+                    "model": model,
+                    f"{metric_col_name}_mean": float(np.mean(values)),
+                    "n_units": _unique_unit_count(grp, level),
+                }
+            )
     state_model_df = pd.DataFrame(state_model_rows)
-    
+
     # State ensemble stats (period data)
-    state_ensemble_rows = []
+    state_ensemble_rows: List[Dict[str, Any]] = []
     for (scenario, period), grp in df_all.groupby(["scenario", "period"]):
         model_means = grp.groupby("model")["value"].mean().dropna().tolist()
         stats = compute_ensemble_stats(model_means)
         if stats:
-            state_ensemble_rows.append({
-                "scenario": scenario,
-                "period": period,
-                **{f"{metric_col_name}__{k}": v for k, v in stats.items()},
-                "n_models": len(model_means),
-            })
+            state_ensemble_rows.append(
+                {
+                    "scenario": scenario,
+                    "period": period,
+                    **{f"{metric_col_name}__{k}": v for k, v in stats.items()},
+                    "n_models": len(model_means),
+                    "n_units": _unique_unit_count(grp, level),
+                }
+            )
     state_ensemble_df = pd.DataFrame(state_ensemble_rows)
-    
+
     # Yearly summaries
     state_yearly_model_df = pd.DataFrame()
     state_yearly_ensemble_df = pd.DataFrame()
-    
+
     if not df_yearly.empty:
-        yearly_model_rows = []
+        yearly_model_rows: List[Dict[str, Any]] = []
         for (scenario, year, model), grp in df_yearly.groupby(["scenario", "year", "model"]):
             values = grp["value"].dropna().tolist()
             if values:
-                yearly_model_rows.append({
-                    "scenario": scenario,
-                    "year": year,
-                    "model": model,
-                    f"{metric_col_name}_mean": np.mean(values),
-                    "n_units": len(values),
-                })
+                yearly_model_rows.append(
+                    {
+                        "scenario": scenario,
+                        "year": year,
+                        "model": model,
+                        f"{metric_col_name}_mean": float(np.mean(values)),
+                        "n_units": _unique_unit_count(grp, level),
+                    }
+                )
         state_yearly_model_df = pd.DataFrame(yearly_model_rows)
-        
-        yearly_ensemble_rows = []
+
+        yearly_ensemble_rows: List[Dict[str, Any]] = []
         for (scenario, year), grp in df_yearly.groupby(["scenario", "year"]):
             model_means = grp.groupby("model")["value"].mean().dropna().tolist()
             stats = compute_ensemble_stats(model_means)
             if stats:
-                yearly_ensemble_rows.append({
-                    "scenario": scenario,
-                    "year": year,
-                    **{f"{metric_col_name}__{k}": v for k, v in stats.items()},
-                    "n_models": len(model_means),
-                })
+                yearly_ensemble_rows.append(
+                    {
+                        "scenario": scenario,
+                        "year": year,
+                        **{f"{metric_col_name}__{k}": v for k, v in stats.items()},
+                        "n_models": len(model_means),
+                        "n_units": _unique_unit_count(grp, level),
+                    }
+                )
         state_yearly_ensemble_df = pd.DataFrame(yearly_ensemble_rows)
-    
+
     return state_model_df, state_ensemble_df, state_yearly_model_df, state_yearly_ensemble_df
 
 
@@ -578,91 +685,99 @@ def build_master_metrics(
     verbose: bool = True,
     metric_col_candidates: Sequence[str] | None = None,
     level: AdminLevel = "district",
+    num_workers: int = 1,
 ) -> pd.DataFrame:
     """Build master CSV for a single metric/state combination."""
     root = Path(output_root)
     state_root = root / state
-    
+
     if not state_root.exists():
         if verbose:
             print(f"ERROR: State root not found: {state_root}", file=sys.stderr)
         return pd.DataFrame()
-    
+
     if metric_col_candidates is None:
         metric_col_candidates = [metric_col_in_periods, "value"]
-    
+
     start_time = time.time()
-    
+
     if verbose:
         print(f"\n{'='*60}")
-        print(f"Building master CSV")
+        print("Building master CSV")
         print(f"{'='*60}")
         print(f"Level: {level}")
         print(f"State: {state}")
         print(f"Metric column: {metric_col_in_periods}")
         print(f"State root: {state_root}")
         print()
-    
+
     # Collect data
     if verbose:
         print("[Step 1/3] Collecting data from CSV files...")
-    
+
     if level == "block":
         all_rows, yearly_rows = _collect_block_data(state_root, state, metric_col_candidates, verbose)
     else:
         all_rows, yearly_rows = _collect_district_data(state_root, state, metric_col_candidates, verbose)
-    
+
     if not all_rows:
         if verbose:
             print(f"ERROR: No data found for {state} at {level} level", file=sys.stderr)
         return pd.DataFrame()
-    
+
     if verbose:
         print(f"  Collected {len(all_rows)} period rows, {len(yearly_rows)} yearly rows")
         print()
-    
+
     df_all = pd.DataFrame(all_rows)
     df_yearly = pd.DataFrame(yearly_rows) if yearly_rows else pd.DataFrame()
-    
+
     # Build master
     if verbose:
         print("[Step 2/3] Building wide-format master...")
-    
-    master = _build_wide_master(df_all, metric_col_in_periods, level, verbose)
-    
+
+    master = _build_wide_master(
+        df_all,
+        metric_col_in_periods,
+        level,
+        num_workers=num_workers,
+        verbose=verbose,
+    )
+
     if verbose:
         print()
         print("[Step 3/3] Building state summaries...")
-    
-    state_model_df, state_ensemble_df, state_yearly_model_df, state_yearly_ensemble_df = \
-        _build_state_summaries(df_all, df_yearly, metric_col_in_periods, level)
-    
+
+    state_model_df, state_ensemble_df, state_yearly_model_df, state_yearly_ensemble_df = _build_state_summaries(
+        df_all, df_yearly, metric_col_in_periods, level
+    )
+
     # Write outputs (master CSV goes in state root)
     if out_path:
         outp = Path(out_path)
         outp.parent.mkdir(parents=True, exist_ok=True)
-        
+
         if verbose:
             print()
             print("Writing output files...")
-        
+
         master.to_csv(outp, index=False)
-        state_model_df.to_csv(outp.parent / f"state_model_averages.csv", index=False)
-        state_ensemble_df.to_csv(outp.parent / f"state_ensemble_stats.csv", index=False)
-        state_yearly_model_df.to_csv(outp.parent / f"state_yearly_model_averages.csv", index=False)
-        state_yearly_ensemble_df.to_csv(outp.parent / f"state_yearly_ensemble_stats.csv", index=False)
-        
+        state_model_df.to_csv(outp.parent / "state_model_averages.csv", index=False)
+        state_ensemble_df.to_csv(outp.parent / "state_ensemble_stats.csv", index=False)
+        state_yearly_model_df.to_csv(outp.parent / "state_yearly_model_averages.csv", index=False)
+        state_yearly_ensemble_df.to_csv(outp.parent / "state_yearly_ensemble_stats.csv", index=False)
+
         if verbose:
             print(f"  Master CSV -> {outp}")
             print(f"  Rows: {len(master)}, Columns: {len(master.columns)}")
-    
+
     elapsed = time.time() - start_time
     if verbose:
         print()
         print(f"{'='*60}")
         print(f"Complete! Total time: {elapsed:.1f}s")
         print(f"{'='*60}")
-    
+
     return master
 
 
@@ -680,7 +795,7 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
     """Check if directory looks like a state directory for given level."""
     if not state_dir.is_dir():
         return False
-    
+
     if level == "block":
         # Only new structure for blocks
         level_path = state_dir / BLOCK_FOLDER
@@ -694,28 +809,28 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
             except Exception:
                 continue
         return False
-    else:
-        # Check for new structure first
-        level_path = state_dir / DISTRICT_FOLDER
-        if level_path.exists():
-            patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
-            for pat in patterns:
-                try:
-                    for _ in level_path.glob(pat):
-                        return True
-                except Exception:
-                    continue
-        
-        # Check for old structure
+
+    # Districts: check for new structure first
+    level_path = state_dir / DISTRICT_FOLDER
+    if level_path.exists():
         patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
         for pat in patterns:
             try:
-                for _ in state_dir.glob(pat):
+                for _ in level_path.glob(pat):
                     return True
             except Exception:
                 continue
-        
-        return False
+
+    # Districts: old structure
+    patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
+    for pat in patterns:
+        try:
+            for _ in state_dir.glob(pat):
+                return True
+        except Exception:
+            continue
+
+    return False
 
 
 def _discover_states(metric_root: Path, level: AdminLevel = "district") -> List[str]:
@@ -738,65 +853,66 @@ def build_all_master_metrics(
     district_geojson: Optional[str] = None,
     verbose: bool = True,
     skip_existing: bool = False,
+    num_workers: int = 1,
 ) -> None:
     """Build master CSVs for all metrics under processed_root."""
     variables, metrics_by_slug = _try_import_registries()
-    
+
     metric_dirs = _discover_metric_dirs(processed_root)
     on_disk_slugs = {p.name for p in metric_dirs}
-    
+
     variables_slugs = set(variables.keys())
     registry_slugs = set(metrics_by_slug.keys())
     eligible_slugs = sorted(on_disk_slugs & variables_slugs & registry_slugs)
-    
+
     if verbose:
         print(f"[BATCH] level = {level}")
         print(f"[BATCH] processed_root = {processed_root}")
         print(f"[BATCH] eligible metrics = {len(eligible_slugs)}")
-    
+
     if not eligible_slugs:
         print("[BATCH] No eligible metrics found.", file=sys.stderr)
         return
-    
+
     state_filter_norm = {str(s).strip() for s in state_filter if str(s).strip()} if state_filter else None
     master_filename = get_master_csv_filename(level)
-    
+
     for slug in eligible_slugs:
         metric_root = processed_root / slug
         states = _discover_states(metric_root, level)
-        
+
         if state_filter_norm:
             states = [s for s in states if s in state_filter_norm]
-        
+
         if not states:
             if verbose:
                 print(f"[BATCH] {slug}: no matching states; skipping")
             continue
-        
+
         vcfg = variables.get(slug, {}) or {}
         periods_metric_col = str(vcfg.get("periods_metric_col") or "").strip()
-        
+
         reg = metrics_by_slug.get(slug)
         reg_value_col = ""
         try:
             reg_value_col = str(getattr(reg, "value_col", "") or "").strip()
         except Exception:
             pass
-        
+
         out_metric_name = periods_metric_col or reg_value_col or "value"
         read_candidates = [c for c in [periods_metric_col, reg_value_col, "value"] if c]
-        
+
         for state in states:
             out_path = metric_root / state / master_filename
-            
+
             if skip_existing and out_path.exists():
                 if verbose:
                     print(f"[BATCH] {slug}/{state}: exists; skipping")
                 continue
-            
+
             if verbose:
                 print(f"\n[BATCH] Building {slug}/{state} ({level} level)")
-            
+
             build_master_metrics(
                 str(metric_root),
                 state,
@@ -806,6 +922,7 @@ def build_all_master_metrics(
                 verbose=verbose,
                 metric_col_candidates=read_candidates,
                 level=level,
+                num_workers=num_workers,
             )
 
 
@@ -814,7 +931,7 @@ def build_all_master_metrics(
 # -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build master_metrics CSV(s) from processed outputs.")
-    
+
     p.add_argument(
         "--level",
         "-l",
@@ -822,20 +939,24 @@ def parse_args() -> argparse.Namespace:
         default="both",
         help="Administrative level (default: both)",
     )
-    p.add_argument("--processed-root", "-p", default=None,
-                   help="Processed root directory")
-    p.add_argument("--state", "-s", default=None,
-                   help="State filter (comma-separated)")
-    p.add_argument("--skip-existing", action="store_true",
-                   help="Skip if master CSV already exists")
-    p.add_argument("--output-root", "-r", default=None,
-                   help="Single-metric mode: processed variable root")
-    p.add_argument("--metric", "-m", default=None,
-                   help="Single-metric mode: metric column name")
-    p.add_argument("--district-geojson", "-g", default=None,
-                   help="Optional path to district GeoJSON for centroids")
+    p.add_argument("--processed-root", "-p", default=None, help="Processed root directory")
+    p.add_argument("--state", "-s", default=None, help="State filter (comma-separated)")
+    p.add_argument("--skip-existing", action="store_true", help="Skip if master CSV already exists")
+    p.add_argument("--output-root", "-r", default=None, help="Single-metric mode: processed variable root")
+    p.add_argument("--metric", "-m", default=None, help="Single-metric mode: metric column name")
+    p.add_argument("--district-geojson", "-g", default=None, help="Optional path to district GeoJSON for centroids")
     p.add_argument("--quiet", action="store_true", help="Reduce output")
-    
+    p.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=default_workers_75pct(),
+        help=(
+            "Number of worker processes to use for wide master build "
+            "(default: 75% of available CPUs). Set to 1 to disable parallelism."
+        ),
+    )
+
     return p.parse_args()
 
 
@@ -877,6 +998,7 @@ def main() -> None:
                 verbose=verbose,
                 metric_col_candidates=[metric_col, "value"],
                 level=level,
+                num_workers=int(args.workers),
             )
         return
 
@@ -895,6 +1017,7 @@ def main() -> None:
             district_geojson=args.district_geojson,
             verbose=verbose,
             skip_existing=bool(args.skip_existing),
+            num_workers=int(args.workers),
         )
 
 
