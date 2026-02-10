@@ -1263,6 +1263,13 @@ def _collect_daily_mean_by_unit(
             continue
 
         da = ds[varname]
+
+        # IMPORTANT: Convert precipitation from kg m-2 s-1 to mm/day BEFORE any spatial averaging.
+        # Many xarray reductions (e.g., mean) drop attrs like "units", which would break pr_to_mm_per_day()
+        # if conversion is attempted later.
+        if varname == "pr":
+            da = pr_to_mm_per_day(da)
+
         da = _drop_feb29_time(da)
 
         for unit, mask in masks.items():
@@ -2564,7 +2571,12 @@ def process_metric_for_model_scenario(
                     if v not in ds:
                         raise KeyError(f"Variable '{v}' not found in {nc_path}")
                     ds_by_var[v] = ds
-                    da_by_var[v] = ds[v]
+
+                    da = ds[v]
+                    if v == "pr":
+                        da = pr_to_mm_per_day(da)
+
+                    da_by_var[v] = da
 
                 for unit_key, mask in masks.items():
                     if len(req_vars) <= 1:
