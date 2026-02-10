@@ -557,9 +557,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #     ),
     # },
     {
-        "name": "Heat Wave Frequency Index (HWFI, #Events)",
+        "name": "Heat Wave Frequency (tasmax 90p, #Events)",
         "slug": "hwfi_events_tmean_90p",
-        "var": "tas",
+        "var": "tasmax",
         "value_col": "hwfi_events_count",
         "units": "events",
         "compute": "heatwave_event_count_percentile",
@@ -574,17 +574,18 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         },
         "group": "temperature",
         "description": (
-            "Number of distinct heat-wave spells per year, where spells are defined "
-            "as runs of consecutive days above a 90th-percentile threshold calibrated "
-            "from the baseline period (multi-year ETCCDI-style day-of-year thresholds)."
+            "Number of distinct heatwave spells per year, where spells are runs of "
+            ">= 5 consecutive days with daily maximum temperature (tasmax) above a "
+            "baseline-calibrated day-of-year 90th-percentile threshold (moving-window, "
+            "multi-year baseline)."
         ),
     },
     # {
-    #     "name": "Heatwave Magnitude (HWM)",
+    #     "name": "Heatwave Intensity (mean exceedance)",
     #     "slug": "hwm_heatwave_magnitude",
     #     "var": "tasmax",
-    #     "value_col": "hwm_mean_temp_C",
-    #     "units": "°C",
+    #     "value_col": "hwm_mean_exceedance_C",
+    #     "units": "°C above threshold",
     #     "compute": "heatwave_magnitude",
     #     "params": {
     #         "baseline_years": (1981, 2010),
@@ -593,16 +594,17 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #         "quantile_method": "nearest",
     #         "exceed_ge": True,
     #         "smooth": None,
-    #         "min_spell_days": 3,
+    #         "min_spell_days": 5,
     #     },
     #     "group": "temperature",
     #     "description": (
-    #         "Maximum mean exceedance (°C) above the baseline percentile threshold "
-    #         "across heatwave spells of ≥3 days (historical baseline DOY thresholds)."
+    #         "Maximum mean exceedance (°C above threshold) across heatwave spells of "
+    #         ">= 5 consecutive days, where the threshold is the baseline-calibrated "
+    #         "day-of-year 90th-percentile (tasmax, moving-window, multi-year baseline)."
     #     ),
     # },
     {
-        "name": "Heatwave Amplitude (HWA)",
+        "name": "Heatwave Amplitude (peak day)",
         "slug": "hwa_heatwave_amplitude",
         "var": "tasmax",
         "value_col": "hwa_peak_temp_C",
@@ -615,16 +617,15 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "quantile_method": "nearest",
             "exceed_ge": True,
             "smooth": None,
-            "min_spell_days": 3,
+            "min_spell_days": 5,
         },
         "group": "temperature",
         "description": (
-            "Peak daily temperature (°C) within the hottest heatwave spell "
-            "(highest mean exceedance over baseline percentile thresholds), "
-            "using historical baseline day-of-year thresholds."
+            "Peak daily maximum temperature (°C) within the hottest heatwave spell "
+            "(the spell with the highest mean exceedance above the baseline DOY 90p "
+            "threshold), using tasmax and >= 5-day spells."
         ),
-    },
-    
+    },    
     # --- Mean Temperature Indices ---
     # {
     #     "name": "Annual Max Temperature (Mean)",

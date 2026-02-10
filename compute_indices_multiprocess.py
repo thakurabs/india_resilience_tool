@@ -1810,11 +1810,13 @@ def _compute_heatwave_percentile_rows_for_metric(
 
         for year in eval_years:
             v = float(year_vals.get(year, np.nan))
+            src_map = baseline_year_to_paths if scenario == "historical" else year_to_paths
+            src_path = src_map.get(int(year), {}).get(primary_var)
             row = {
                 "year": int(year),
                 "value": v,
                 value_col: v,
-                "source_file": "",
+                "source_file": str(src_path) if src_path is not None else "",
             }
             if "||" in unit:
                 district, block = unit.split("||", 1)
@@ -1926,34 +1928,53 @@ def _compute_heatwave_baseline_rows_for_metric(
                         year_vals[y] = np.nan
                         continue
 
-                    event_stats: list[tuple[float, float]] = []
+                    # Track per-spell stats:
+                    #  - mean_exceed_k: mean exceedance above threshold (K; same numeric as °C differences)
+                    #  - mean_temp_c: mean temperature during the spell (°C)
+                    #  - max_temp_c:  peak temperature during the spell (°C)
+                    event_stats: list[tuple[float, float, float]] = []
                     for spell in spells:
                         event_t = eva.isel(time=spell)
                         event_thr = thr_for_days.isel(time=spell)
-                        mean_exceed = float((event_t - event_thr).mean(skipna=True).item())
-                        max_temp = float(event_t.max(skipna=True).item())
-                        event_stats.append((mean_exceed, max_temp))
 
+                        mean_exceed_k = float((event_t - event_thr).mean(skipna=True).item())
+                        mean_temp_c = float(event_t.mean(skipna=True).item()) - 273.15
+                        max_temp_c = float(event_t.max(skipna=True).item()) - 273.15
+
+                        event_stats.append((mean_exceed_k, mean_temp_c, max_temp_c))
+
+                    # Choose the "hottest" spell by mean exceedance above the threshold
                     hottest = max(event_stats, key=lambda x: x[0])
+
+                    # Output:
+                    #  - heatwave_magnitude: mean temperature (°C) during the hottest spell
+                    #  - heatwave_amplitude: peak temperature (°C) during the hottest spell
                     if compute_name == "heatwave_magnitude":
                         year_vals[y] = float(hottest[0])
                     else:
-                        year_vals[y] = float(hottest[1]) - 273.15
+                        year_vals[y] = float(hottest[2])
 
+        # Emit rows for all evaluation years for this unit
         for year in eval_years:
             v = float(year_vals.get(year, np.nan))
+
+            src_map = baseline_year_to_paths if scenario == "historical" else year_to_paths
+            src_path = src_map.get(int(year), {}).get(primary_var)
+
             row = {
                 "year": int(year),
                 "value": v,
                 value_col: v,
-                "source_file": "",
+                "source_file": str(src_path) if src_path is not None else "",
             }
+
             if "||" in unit:
                 district, block = unit.split("||", 1)
                 row["district"] = district
                 row["block"] = block
             else:
                 row["district"] = unit
+
             rows.append(row)
 
     return rows
@@ -1996,10 +2017,12 @@ def _compute_heatwave_delta_rows_for_metric(
     )
     if scenario == "historical":
         eval_series_by_unit = baseline_series_by_unit
+        eval_source_year_to_paths = baseline_year_to_paths
     else:
         eval_series_by_unit = _collect_daily_mean_by_unit(
             year_to_paths, primary_var, masks
         )
+        eval_source_year_to_paths = year_to_paths
 
     rows: list[dict] = []
     value_col = metric["value_col"]
