@@ -431,6 +431,18 @@ def wet_bulb_annual_mean_stull(tas_da: xr.DataArray, hurs_da: xr.DataArray, mask
     rh = _get_district_daily_mean(hurs_da, mask)
     if tas_k.sizes.get("time", 0) == 0:
         return np.nan
+
+    tas_k = _drop_feb29_time(tas_k)
+    rh = _drop_feb29_time(rh)
+
+    # Robust RH scaling: accept either 0–1 (fraction) or 0–100 (%).
+    try:
+        rh_max = float(rh.max(dim="time", skipna=True).item())
+        if rh_max <= 1.5:
+            rh = rh * 100.0
+    except Exception:
+        pass
+
     twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
     return float(twb.mean(dim="time", skipna=True).item())
 
@@ -441,9 +453,20 @@ def wet_bulb_annual_max_stull(tas_da: xr.DataArray, hurs_da: xr.DataArray, mask:
     rh = _get_district_daily_mean(hurs_da, mask)
     if tas_k.sizes.get("time", 0) == 0:
         return np.nan
+
+    tas_k = _drop_feb29_time(tas_k)
+    rh = _drop_feb29_time(rh)
+
+    # Robust RH scaling: accept either 0–1 (fraction) or 0–100 (%).
+    try:
+        rh_max = float(rh.max(dim="time", skipna=True).item())
+        if rh_max <= 1.5:
+            rh = rh * 100.0
+    except Exception:
+        pass
+
     twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
     return float(twb.max(dim="time", skipna=True).item())
-
 
 def wet_bulb_days_ge_threshold_stull(
     tas_da: xr.DataArray,
@@ -456,15 +479,57 @@ def wet_bulb_days_ge_threshold_stull(
     rh = _get_district_daily_mean(hurs_da, mask)
     if tas_k.sizes.get("time", 0) == 0:
         return 0
+
+    tas_k = _drop_feb29_time(tas_k)
+    rh = _drop_feb29_time(rh)
+
+    # Robust RH scaling: accept either 0–1 (fraction) or 0–100 (%).
+    try:
+        rh_max = float(rh.max(dim="time", skipna=True).item())
+        if rh_max <= 1.5:
+            rh = rh * 100.0
+    except Exception:
+        pass
+
     twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
-    return int((twb >= float(thresh_c)).sum(dim="time", skipna=True).item())
+    flags = (twb >= float(thresh_c)).fillna(False)
+    return int(flags.sum(dim="time").item())
 
 # -----------------------------------------------------------------------------
 # TEMPERATURE COMPUTE FUNCTIONS
 # -----------------------------------------------------------------------------
-def count_days_above_threshold(da, mask, thresh_k): return int((_get_district_daily_mean(da, mask) > thresh_k).sum().item())
 
-def count_days_ge_threshold(da, mask, thresh_k): return int((_get_district_daily_mean(da, mask) >= thresh_k).sum().item())
+def count_days_above_threshold(da, mask, thresh_k):
+    """
+    Count days where the (area-mean) daily series is strictly above a threshold.
+
+    Notes:
+      - Intended for temperature thresholds provided in Kelvin (e.g., 303.15 for 30°C).
+      - Treats missing values as non-events to avoid NaN-propagation.
+      - Drops Feb 29 for consistency with other day-of-year workflows.
+    """
+    dm = _get_district_daily_mean(da, mask)
+    if dm.size == 0:
+        return 0
+    dm = _drop_feb29_time(dm)
+    flags = (dm > float(thresh_k)).fillna(False)
+    return int(flags.sum(dim="time").item())
+
+def count_days_ge_threshold(da, mask, thresh_k):
+    """
+    Count days where the (area-mean) daily series is >= a threshold.
+
+    Notes:
+      - Intended for temperature thresholds provided in Kelvin.
+      - Treats missing values as non-events.
+      - Drops Feb 29 for consistency.
+    """
+    dm = _get_district_daily_mean(da, mask)
+    if dm.size == 0:
+        return 0
+    dm = _drop_feb29_time(dm)
+    flags = (dm >= float(thresh_k)).fillna(False)
+    return int(flags.sum(dim="time").item())
 
 def count_days_below_threshold(da, mask, thresh_k):
     """
@@ -702,10 +767,17 @@ def daily_temperature_range(
     tn = _get_district_daily_mean(da_tasmin, mask)
     if tx.size == 0 or tn.size == 0:
         return np.nan
+
+    # Keep consistency with other day-of-year workflows
+    tx = _drop_feb29_time(tx)
+    tn = _drop_feb29_time(tn)
+
     tx, tn = xr.align(tx, tn, join="inner")
     if tx.size == 0:
         return np.nan
-    return float((tx - tn).mean().item())
+
+    dtr = tx - tn
+    return float(dtr.mean(dim="time", skipna=True).item())
 
 
 def extreme_temperature_range(
@@ -723,10 +795,18 @@ def extreme_temperature_range(
     tn = _get_district_daily_mean(da_tasmin, mask)
     if tx.size == 0 or tn.size == 0:
         return np.nan
+
+    # Keep consistency with other day-of-year workflows
+    tx = _drop_feb29_time(tx)
+    tn = _drop_feb29_time(tn)
+
     tx, tn = xr.align(tx, tn, join="inner")
     if tx.size == 0:
         return np.nan
-    return float(tx.max().item()) - float(tn.min().item())
+
+    txx = float(tx.max(dim="time", skipna=True).item())
+    tnn = float(tn.min(dim="time", skipna=True).item())
+    return txx - tnn
 
 def growing_season_length(da, mask, thresh_k=278.15, min_spell_days=6):
     """
@@ -1117,18 +1197,46 @@ def _spi_from_monthly_accum(
 def _annualize_spi(
     spi_monthly: xr.DataArray,
     min_months_per_year: int = 9,
+    annual_aggregation: str = "mean",
+    threshold: float | None = None,
 ) -> xr.DataArray:
-    """Aggregate monthly SPI to annual values (mean over months) with a minimum months threshold."""
+    """
+    Aggregate monthly SPI to annual values with a minimum months threshold.
+
+    Supported annual_aggregation:
+      - "mean": annual mean SPI over available months
+      - "count_months_lt": count months with SPI < threshold
+      - "count_months_gt": count months with SPI > threshold
+    """
     if spi_monthly.sizes.get("time", 0) == 0:
         return xr.DataArray([], dims=("year",))
 
     grp = spi_monthly.groupby("time.year")
-    counts = grp.count(dim="time")
-    means = grp.mean(dim="time", skipna=True)
-    # enforce minimum-month coverage
-    means = means.where(counts >= int(min_months_per_year), drop=True)
-    means.name = "spi_yearly"
-    return means
+    n_valid = grp.count(dim="time")
+
+    annual_aggregation = str(annual_aggregation or "mean").strip().lower()
+
+    if annual_aggregation == "mean":
+        out = grp.mean(dim="time", skipna=True)
+        out = out.where(n_valid >= int(min_months_per_year), drop=True)
+        out.name = "spi_yearly"
+        return out
+
+    if annual_aggregation in {"count_months_lt", "count_months_gt"}:
+        if threshold is None:
+            raise ValueError(f"annual_aggregation='{annual_aggregation}' requires a numeric threshold")
+
+        if annual_aggregation == "count_months_lt":
+            flags = (spi_monthly < float(threshold)).fillna(False)
+        else:
+            flags = (spi_monthly > float(threshold)).fillna(False)
+
+        out = flags.groupby("time.year").sum(dim="time")
+        out = out.where(n_valid >= int(min_months_per_year), drop=True)
+        out.name = "spi_yearly"
+        return out
+
+    raise ValueError(f"Unsupported annual_aggregation='{annual_aggregation}'")
 
 
 def _compute_spi_spei_rows(
@@ -1204,7 +1312,15 @@ def _compute_spi_spei_rows(
             continue
 
         spi_mon = _spi_from_monthly_accum(scen_acc, params_by_month)
-        spi_yearly = _annualize_spi(spi_mon, min_months_per_year=min_months_per_year)
+        annual_aggregation = (metric.get("params", {}) or {}).get("annual_aggregation", "mean")
+        threshold = (metric.get("params", {}) or {}).get("threshold", None)
+
+        spi_yearly = _annualize_spi(
+            spi_mon,
+            min_months_per_year=min_months_per_year,
+            annual_aggregation=annual_aggregation,
+            threshold=threshold,
+        )
 
         if spi_yearly.sizes.get("year", 0) == 0:
             continue
