@@ -1435,30 +1435,29 @@ BUNDLES: dict[str, list[str]] = {
         "rain_gt_2p5mm",
     ],
     "Drought Risk": [
-        # Dry spell persistence
+        # Default, streamlined view (most interpretable):
+        # 1) Persistence (how long it lasts)
         "pr_consecutive_dry_days_lt1mm",
-        # "pr_consecutive_dry_day_events_gt5",
-
-        # Meteorological drought (SPI): baseline SPI + threshold-month counts
+        # 2) Intensity (how “dry” overall)
+        "spi6_drought_index",
+        # 3) Frequency (how often drought months occur)
+        "spi6_count_months_lt_minus1",
+    ],
+    "Drought Risk (Advanced)": [
+        # Short-term vs long-term SPI + severity splits (keep available but not default)
         "spi3_drought_index",
         "spi3_count_months_lt_minus1",
         "spi3_count_months_lt_minus2",
-        # "spi3_count_months_gt_plus1",
-        # "spi3_count_months_gt_plus2",
 
         "spi6_drought_index",
         "spi6_count_months_lt_minus1",
         "spi6_count_months_lt_minus2",
-        # "spi6_count_months_gt_plus1",
-        # "spi6_count_months_gt_plus2",
 
         "spi12_drought_index",
         "spi12_count_months_lt_minus1",
         "spi12_count_months_lt_minus2",
-        # "spi12_count_months_gt_plus1",
-        # "spi12_count_months_gt_plus2",
 
-        # Climatic water-balance drought (SPEI)
+        # Climatic water-balance drought (SPEI) – optional (currently disabled)
         # "spei3_drought_index",
         # "spei6_drought_index",
         # "spei12_drought_index",
