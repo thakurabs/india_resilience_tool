@@ -463,8 +463,24 @@ def wet_bulb_days_ge_threshold_stull(
 # TEMPERATURE COMPUTE FUNCTIONS
 # -----------------------------------------------------------------------------
 def count_days_above_threshold(da, mask, thresh_k): return int((_get_district_daily_mean(da, mask) > thresh_k).sum().item())
+
 def count_days_ge_threshold(da, mask, thresh_k): return int((_get_district_daily_mean(da, mask) >= thresh_k).sum().item())
-def count_days_below_threshold(da, mask, thresh_k): return int((_get_district_daily_mean(da, mask) < thresh_k).sum().item())
+
+def count_days_below_threshold(da, mask, thresh_k):
+    """
+    Count days where the (area-mean) daily series is below a threshold.
+
+    Notes:
+      - Assumes temperature inputs are in Kelvin when threshold is provided as Kelvin.
+      - Explicitly treats missing values as non-events to avoid NaN-propagation.
+      - Drops Feb 29 to keep consistency with other day-of-year workflows.
+    """
+    dm = _get_district_daily_mean(da, mask)
+    if dm.size == 0:
+        return 0
+    dm = _drop_feb29_time(dm)
+    flags = (dm < float(thresh_k)).fillna(False)
+    return int(flags.sum(dim="time").item())
 
 def annual_mean(da, mask):
     dm = _get_district_daily_mean(da, mask)
