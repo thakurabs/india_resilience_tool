@@ -713,24 +713,68 @@ def extreme_temperature_range(
     return float(tx.max().item()) - float(tn.min().item())
 
 def growing_season_length(da, mask, thresh_k=278.15, min_spell_days=6):
+    """
+    ETCCDI-style Growing Season Length (GSL).
+
+    Definition (standard):
+      - Start: first occurrence of at least `min_spell_days` consecutive days with TG > 5°C.
+      - End: first occurrence (after July 1) of at least `min_spell_days` consecutive days with TG < 5°C.
+      - GSL = (end_start_index - start_index) if end exists, else (n_days - start_index).
+
+    Notes:
+      - Uses a calendar-aware July 1 cutoff instead of `n_days//2`.
+      - Avoids the common off-by-one artifact that can yield constant 364.
+    """
     dm = _get_district_daily_mean(da, mask)
-    if dm.size == 0: return 0
-    above, below = (dm > thresh_k).values, (dm < thresh_k).values
-    n_days = len(above)
-    start_idx, run = None, 0
+    if dm.size == 0:
+        return 0
+
+    # Keep consistent with other day-of-year style workflows
+    dm = _drop_feb29_time(dm)
+
+    above = np.asarray((dm > float(thresh_k)).fillna(False).values, dtype=bool)
+    below = np.asarray((dm < float(thresh_k)).fillna(False).values, dtype=bool)
+    n_days = int(above.size)
+
+    # Find season start: first run of `min_spell_days` above threshold
+    start_idx = None
+    run = 0
     for i, v in enumerate(above):
         if v:
             run += 1
-            if run >= min_spell_days and start_idx is None: start_idx = i - min_spell_days + 1
-        else: run = 0
-    if start_idx is None: return 0
-    mid_year, end_idx, run = n_days // 2, None, 0
-    for i in range(mid_year, n_days):
+            if run >= int(min_spell_days) and start_idx is None:
+                start_idx = int(i) - int(min_spell_days) + 1
+        else:
+            run = 0
+
+    if start_idx is None:
+        return 0
+
+    # Find the index corresponding to July 1 (calendar-aware). Fallback to mid-year if needed.
+    search_start = n_days // 2
+    try:
+        months = dm["time"].dt.month.values
+        days = dm["time"].dt.day.values
+        idxs = np.where((months > 7) | ((months == 7) & (days >= 1)))[0]
+        if idxs.size > 0:
+            search_start = int(idxs[0])
+    except Exception:
+        pass
+
+    # Find season end: first run of `min_spell_days` below threshold starting after July 1
+    end_start = None
+    run = 0
+    for i in range(int(search_start), n_days):
         if below[i]:
             run += 1
-            if run >= min_spell_days: end_idx = i - min_spell_days + 1; break
-        else: run = 0
-    return max(0, (end_idx or n_days - 1) - start_idx)
+            if run >= int(min_spell_days):
+                end_start = int(i) - int(min_spell_days) + 1
+                break
+        else:
+            run = 0
+
+    gsl = (end_start if end_start is not None else n_days) - int(start_idx)
+    return int(max(0, gsl))
 
 # -----------------------------------------------------------------------------
 # PRECIPITATION COMPUTE FUNCTIONS
@@ -2225,6 +2269,77 @@ def _compute_precip_percentile_rows_for_metric(
     return rows
 
 
+def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+    level: AdminLevel,
+) -> list[dict]:
+    """
+    Seasonal mean for DJF computed as:
+      Dec (year-1) + Jan/Feb (year)
+
+    This avoids the common per-year-file pitfall where "DJF of year Y" is mistakenly
+    computed as Dec(Y) + Jan(Y) + Feb(Y).
+    """
+    slug = metric["slug"]
+    value_col = metric["value_col"]
+    varname = metric.get("var")
+    months = list((metric.get("params", {}) or {}).get("months", []))
+
+    # Guard: this helper is only for DJF
+    if set(months) != {12, 1, 2}:
+        raise ValueError(f"[{slug}] DJF cross-year helper called for non-DJF months={months}")
+
+    rows: list[dict] = []
+    years = sorted(year_to_paths.keys())
+
+    for unit, mask in masks.items():
+        for year in years:
+            cur_path = year_to_paths.get(year, {}).get(varname)
+            prev_path = year_to_paths.get(year - 1, {}).get(varname)
+
+            # If we don't have the previous year, we can't form DJF correctly.
+            if cur_path is None or prev_path is None:
+                v = np.nan
+            else:
+                ds_prev = normalize_lat_lon(xr.open_dataset(prev_path))
+                ds_cur = normalize_lat_lon(xr.open_dataset(cur_path))
+                try:
+                    da_prev = ds_prev[varname]
+                    da_cur = ds_cur[varname]
+
+                    # Drop Feb 29 for consistency
+                    da_prev = _drop_feb29_time(da_prev)
+                    da_cur = _drop_feb29_time(da_cur)
+
+                    # Select Dec(prev) and Jan-Feb(cur)
+                    dec_prev = da_prev.sel(time=da_prev["time"].dt.month == 12)
+                    jf_cur = da_cur.sel(time=da_cur["time"].dt.month.isin([1, 2]))
+
+                    if dec_prev.sizes.get("time", 0) == 0 or jf_cur.sizes.get("time", 0) == 0:
+                        v = np.nan
+                    else:
+                        da = xr.concat([dec_prev, jf_cur], dim="time")
+                        v = float(seasonal_mean(da, mask, months=[12, 1, 2]))
+                finally:
+                    ds_prev.close()
+                    ds_cur.close()
+
+            row = {"year": int(year), "value": float(v), value_col: float(v), "source_file": ""}
+            if "||" in unit:
+                district, block = unit.split("||", 1)
+                row["district"] = district
+                row["block"] = block
+            else:
+                row["district"] = unit
+            rows.append(row)
+
+    return rows
+
+
 # -----------------------------------------------------------------------------
 # FILE I/O HELPERS
 # -----------------------------------------------------------------------------
@@ -2557,8 +2672,26 @@ def process_metric_for_model_scenario(
             raise
 
     # ------------------------------------------------------------------
-    # Default per-year metric computation
+    # Special-case DJF seasonal mean (Dec from previous year + Jan/Feb current year)
     # ------------------------------------------------------------------
+    elif metric.get("compute") == "seasonal_mean" and set((params or {}).get("months", [])) == {12, 1, 2}:
+        try:
+            rows = _compute_seasonal_mean_djf_cross_year_rows_for_metric(
+                metric=metric,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                masks=masks,
+                level=level,
+            )
+        except Exception as e:
+            logging.error(f"[{slug}] DJF seasonal mean computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    # ------------------------------------------------------------------
+    # Default per-year metric computation
+    # --------------------------------------------------
     else:
         for year, paths_by_var in year_to_paths.items():
             ds_by_var: dict[str, xr.Dataset] = {}
