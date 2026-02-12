@@ -191,17 +191,41 @@ def render_trend_over_time(
     scen_ts: pd.DataFrame,
     variable_label: str,
     sel_scenario: str,
+    sel_period: str,
     district_name: str,
     state_dir_for_fs: str,
     district_for_fs: str,
     fig_size_panel: tuple[float, float],
     fig_dpi_panel: int,
     font_size_legend: int,
+    units: Optional[str] = None,
     logo_path: Optional[Path] = None,
     create_trend_figure_fn: Callable[..., Any],
 ) -> None:
     """Render the Trend over time expander with sparkline + narrative."""
+    import re
     import streamlit as st
+
+    def _parse_period(s: str) -> tuple[Optional[int], Optional[int]]:
+        txt = str(s or "").strip()
+        m = re.match(r"^(\d{4})\D+(\d{4})$", txt)
+        if not m:
+            return None, None
+        return int(m.group(1)), int(m.group(2))
+
+    def _period_mean_from_ts(df: pd.DataFrame, start: int, end: int) -> Optional[float]:
+        if df is None or df.empty:
+            return None
+        if "year" not in df.columns or "mean" not in df.columns:
+            return None
+        tmp = df.copy()
+        tmp["year"] = pd.to_numeric(tmp["year"], errors="coerce")
+        tmp["mean"] = pd.to_numeric(tmp["mean"], errors="coerce")
+        tmp = tmp.dropna(subset=["year", "mean"])
+        tmp = tmp[(tmp["year"] >= start) & (tmp["year"] <= end)]
+        if tmp.empty:
+            return None
+        return float(tmp["mean"].mean())
 
     with st.expander("Trend over time", expanded=False):
         st.caption(
@@ -212,12 +236,31 @@ def render_trend_over_time(
         if not hist_ts.empty or not scen_ts.empty:
             st.markdown("**Trend over time**")
 
+            # Compute compare mean for hover delta (Δ vs selected period mean)
+            p0, p1 = _parse_period(sel_period)
+            compare_period_label = str(sel_period or "").strip()
+            compare_period_mean: Optional[float] = None
+            if p0 is not None and p1 is not None:
+                # Choose which series to compute the period mean from
+                hist_max = int(pd.to_numeric(hist_ts["year"], errors="coerce").max()) if not hist_ts.empty and "year" in hist_ts.columns else None
+                if sel_scenario.strip().lower() == "historical":
+                    base_ts = hist_ts
+                elif hist_max is not None and p1 <= hist_max:
+                    base_ts = hist_ts
+                else:
+                    base_ts = scen_ts
+                compare_period_mean = _period_mean_from_ts(base_ts, p0, p1)
+
             try:
                 fig_ts = create_trend_figure_fn(
                     hist_ts=hist_ts,
                     scen_ts=scen_ts,
                     idx_label=variable_label,
                     scenario_name=sel_scenario,
+                    # Plotly function will accept these; Matplotlib function will ignore via fallback
+                    compare_period_label=compare_period_label,
+                    compare_period_mean=compare_period_mean,
+                    units=units,
                     figsize=fig_size_panel,
                     fig_dpi=fig_dpi_panel,
                     font_size_legend=font_size_legend,
@@ -238,48 +281,16 @@ def render_trend_over_time(
                 except Exception:
                     pass
 
-            st.pyplot(fig_ts, use_container_width=True)
-
-            # Narrative
+            # Render Plotly if it's a Plotly Figure; otherwise default to pyplot
             try:
-                parts = []
-                if not hist_ts.empty:
-                    parts.append(hist_ts[["year", "mean"]])
-                if not scen_ts.empty:
-                    parts.append(scen_ts[["year", "mean"]])
-                if parts:
-                    combined = pd.concat(parts, ignore_index=True).sort_values("year")
-                    start_year = int(combined["year"].iloc[0])
-                    end_year = int(combined["year"].iloc[-1])
-                    start_val = float(combined["mean"].iloc[0])
-                    end_val = float(combined["mean"].iloc[-1])
-                    delta = end_val - start_val
-                    pct = (delta / start_val * 100.0) if start_val not in (0.0, None) else None
+                import plotly.graph_objects as go
 
-                    if abs(delta) < 0.1:
-                        trend_word = "has remained broadly stable"
-                    elif delta > 0:
-                        trend_word = "has increased"
-                    else:
-                        trend_word = "has decreased"
-
-                    if pct is not None:
-                        st.markdown(
-                            f"**Narrative:** Between **{start_year}** and **{end_year}**, "
-                            f"{variable_label.lower()} in **{district_name}** "
-                            f"{trend_word}, from about **{start_val:.1f}** to **{end_val:.1f}** "
-                            f"({pct:+.1f}% change)."
-                        )
-                    else:
-                        st.markdown(
-                            f"**Narrative:** Between **{start_year}** and **{end_year}**, "
-                            f"{variable_label.lower()} in **{district_name}** "
-                            f"{trend_word}."
-                        )
+                if isinstance(fig_ts, go.Figure):
+                    st.plotly_chart(fig_ts, use_container_width=True)
+                else:
+                    st.pyplot(fig_ts, use_container_width=True)
             except Exception:
-                pass
-        else:
-            st.caption("No yearly time-series available for this district (historical or scenario).")
+                st.pyplot(fig_ts, use_container_width=True)
 
 
 def render_scenario_comparison(
@@ -787,6 +798,11 @@ def render_details_panel(
     import streamlit as st
 
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
+    units = (
+        variables.get(variable_slug, {}).get("unit")
+        or variables.get(variable_slug, {}).get("units")
+        or ""
+    )
 
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
@@ -855,12 +871,14 @@ def render_details_panel(
         scen_ts=scen_ts,
         variable_label=variable_label,
         sel_scenario=sel_scenario,
+        sel_period=sel_period,
         district_name=district_name,
         state_dir_for_fs=state_dir_for_fs or state_to_show,
         district_for_fs=district_for_fs or district_name,
         fig_size_panel=fig_size_panel_169,
         fig_dpi_panel=fig_dpi_panel,
         font_size_legend=font_size_legend,
+        units=units,
         logo_path=logo_path,
         create_trend_figure_fn=create_trend_figure_fn,
     )

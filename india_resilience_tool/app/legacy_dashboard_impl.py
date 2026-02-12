@@ -2967,7 +2967,7 @@ with col2:
 
         # Import required functions for details panel
         from india_resilience_tool.viz.charts import (
-            create_trend_figure_for_index as _create_trend_figure_for_index,
+            create_trend_figure_for_index_plotly as _create_trend_figure_for_index,
         )
         from india_resilience_tool.viz.exports import (
             make_district_yearly_pdf,

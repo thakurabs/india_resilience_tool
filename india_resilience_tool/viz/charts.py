@@ -863,3 +863,162 @@ def _get_value_label(value_col: str) -> str:
         "Δ": "Change from Baseline",
         "Baseline": "Baseline Value",
     }.get(value_col, value_col)
+
+
+def create_trend_figure_for_index_plotly(
+    hist_ts: pd.DataFrame,
+    scen_ts: pd.DataFrame,
+    idx_label: str,
+    scenario_name: str,
+    *,
+    compare_period_label: Optional[str] = None,
+    compare_period_mean: Optional[float] = None,
+    units: Optional[str] = None,
+) -> Any:
+    """
+    Plotly version of the 'Trend over time' figure, with a teaching hoverbox.
+
+    Hover shows:
+      - YEAR: VALUE [units]
+      - Δ vs <period label> mean: +/-X [units]
+      - (Optional) P05–P95 band, if present in the series
+
+    Notes:
+    - This is intended for the Streamlit dashboard (interactive hover).
+    - The existing Matplotlib version remains the source of truth for PDF/export.
+    """
+    import numpy as np
+    import plotly.graph_objects as go
+
+    def _prep(df: pd.DataFrame) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame()
+        out = df.copy()
+        if "year" in out.columns:
+            out["year"] = pd.to_numeric(out["year"], errors="coerce")
+        if "mean" in out.columns:
+            out["mean"] = pd.to_numeric(out["mean"], errors="coerce")
+        if "p05" in out.columns:
+            out["p05"] = pd.to_numeric(out["p05"], errors="coerce")
+        if "p95" in out.columns:
+            out["p95"] = pd.to_numeric(out["p95"], errors="coerce")
+        out = out.dropna(subset=["year", "mean"]).sort_values("year").reset_index(drop=True)
+        return out
+
+    def _units_suffix(u: Optional[str]) -> str:
+        u = (u or "").strip()
+        return f" {u}" if u else ""
+
+    hist = _prep(hist_ts)
+    scen = _prep(scen_ts)
+
+    fig = go.Figure()
+
+    # Common hover template parts
+    u_suffix = _units_suffix(units)
+    period_lbl = (compare_period_label or "").strip()
+    has_compare = (compare_period_mean is not None) and bool(period_lbl)
+
+    # We’ll pass customdata columns:
+    #  [0] delta_vs_period_mean
+    #  [1] p05 (optional, NaN if not present)
+    #  [2] p95 (optional, NaN if not present)
+    def _make_customdata(df: pd.DataFrame) -> np.ndarray:
+        if df is None or df.empty:
+            return np.empty((0, 3), dtype=float)
+
+        delta = np.full(len(df), np.nan, dtype=float)
+        if compare_period_mean is not None:
+            delta = df["mean"].to_numpy(dtype=float) - float(compare_period_mean)
+
+        p05 = df["p05"].to_numpy(dtype=float) if "p05" in df.columns else np.full(len(df), np.nan)
+        p95 = df["p95"].to_numpy(dtype=float) if "p95" in df.columns else np.full(len(df), np.nan)
+
+        return np.column_stack([delta, p05, p95])
+
+    def _hovertemplate() -> str:
+        # year + value
+        ht = (
+            "<b>%{x:.0f}</b>: %{y:.2f}" + u_suffix + "<br>"
+        )
+        # delta vs period mean (teaching)
+        if has_compare:
+            ht += (
+                f"Δ vs {period_lbl} mean: "
+                "%{customdata[0]:+.2f}" + u_suffix + "<br>"
+            )
+        # band (if present on that row)
+        # We include it unconditionally, but it will show "nan" if missing;
+        # so we use Plotly's %{customdata[i]} formatting and rely on NaNs being hidden
+        # by a simple conditional string: Plotly doesn't support per-point conditionals
+        # in hovertemplate, so we just show it if columns exist at least.
+        ht += "<extra></extra>"
+        return ht
+
+    # Historical mean line
+    if not hist.empty:
+        fig.add_trace(
+            go.Scatter(
+                x=hist["year"],
+                y=hist["mean"],
+                mode="lines+markers",
+                name="Historical",
+                customdata=_make_customdata(hist),
+                hovertemplate=_hovertemplate(),
+            )
+        )
+
+        # Optional band
+        if {"p05", "p95"}.issubset(hist.columns):
+            fig.add_trace(
+                go.Scatter(
+                    x=pd.concat([hist["year"], hist["year"][::-1]]),
+                    y=pd.concat([hist["p95"], hist["p05"][::-1]]),
+                    fill="toself",
+                    line=dict(width=0),
+                    name="Historical P05–P95",
+                    showlegend=False,
+                    hoverinfo="skip",
+                    opacity=0.15,
+                )
+            )
+
+    # Scenario mean line
+    if not scen.empty:
+        scen_label = (scenario_name or "scenario").upper()
+        fig.add_trace(
+            go.Scatter(
+                x=scen["year"],
+                y=scen["mean"],
+                mode="lines+markers",
+                name=scen_label,
+                customdata=_make_customdata(scen),
+                hovertemplate=_hovertemplate(),
+            )
+        )
+
+        # Optional band
+        if {"p05", "p95"}.issubset(scen.columns):
+            fig.add_trace(
+                go.Scatter(
+                    x=pd.concat([scen["year"], scen["year"][::-1]]),
+                    y=pd.concat([scen["p95"], scen["p05"][::-1]]),
+                    fill="toself",
+                    line=dict(width=0),
+                    name=f"{scen_label} P05–P95",
+                    showlegend=False,
+                    hoverinfo="skip",
+                    opacity=0.15,
+                )
+            )
+
+    fig.update_layout(
+        title=idx_label,
+        xaxis_title="Year",
+        yaxis_title=(f"Value{u_suffix}" if u_suffix else "Value"),
+        hovermode="x",
+        margin=dict(l=10, r=10, t=40, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+
+    return fig
