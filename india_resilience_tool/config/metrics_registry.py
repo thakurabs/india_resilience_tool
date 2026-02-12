@@ -653,6 +653,48 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Mean of daily maximum temperature during summer (March–May)."
         ),
     },
+    {
+        "name": "Annual Mean Temperature (TM Mean)",
+        "slug": "tas_annual_mean",
+        "var": "tas",
+        "value_col": "annual_tas_mean_C",
+        "units": "°C",
+        "compute": "annual_mean",
+        "params": {},
+        "group": "temperature",
+        "description": (
+            "Annual mean of daily mean near-surface air temperature (°C). "
+            "This is the mean daily mean temperature (TM)."
+        ),
+    },
+    {
+        "name": "Summer Mean Temperature (TM; MAM Mean)",
+        "slug": "tas_summer_mean",
+        "var": "tas",
+        "value_col": "summer_tas_mean_C",
+        "units": "°C",
+        "compute": "seasonal_mean",
+        "params": {"months": [3, 4, 5]},
+        "group": "temperature",
+        "description": (
+            "Mean of daily mean temperature during summer (March–May). "
+            "This is the seasonal TM mean."
+        ),
+    },
+    {
+        "name": "Winter Mean Temperature (TM; DJF Mean)",
+        "slug": "tas_winter_mean",
+        "var": "tas",
+        "value_col": "winter_tas_mean_C",
+        "units": "°C",
+        "compute": "seasonal_mean",
+        "params": {"months": [12, 1, 2]},
+        "group": "temperature",
+        "description": (
+            "Mean of daily mean temperature during winter (December–February). "
+            "This is the seasonal TM mean."
+        ),
+    },
     # {
     #     "name": "Annual Min Temperature (Mean)",
     #     "slug": "tasmin_annual_mean",
@@ -1384,6 +1426,9 @@ BUNDLES: dict[str, list[str]] = {
         "txx_annual_max",
         "tnx_annual_max",
         "tasmax_summer_mean",
+        "tas_annual_mean",
+        "tas_summer_mean",
+        "tas_winter_mean",
         # "tasmax_annual_mean",
         # "tasmin_annual_mean",
     ],
