@@ -176,6 +176,8 @@ def render_analysis_mode_selector(
     """
     Render analysis mode selector with the stable widget key 'analysis_mode'.
 
+    Uses a selectbox (dropdown) to avoid radio-button interaction edge cases.
+
     This is UI-preserving for the legacy dashboard:
     - can optionally render the bold markdown header
     - can collapse the widget label for accessibility while keeping non-empty label text
@@ -236,7 +238,7 @@ def render_analysis_mode_selector(
         if on_change is not None:
             on_change()
 
-    mode = st.radio(
+    mode = st.selectbox(
         label,
         options=opts,
         index=idx,

@@ -1028,7 +1028,7 @@ with map_mode_placeholder.container():
     ensure_expander_open_state("ui_chloropleth_expander_open")
     ensure_touched_flag("ui_touched_map_mode")
 
-    # Tight "Map mode" label with no extra space before the radio
+    # Map mode dropdown
     with st.expander(
         "Chloropleth settings",
         expanded=bool(st.session_state.get("ui_chloropleth_expander_open", True)),
@@ -1038,7 +1038,7 @@ with map_mode_placeholder.container():
             unsafe_allow_html=True,
         )
 
-        map_mode = st.radio(
+        map_mode = st.selectbox(
             "Map mode",  # non-empty label for accessibility
             options=[
                 "Absolute value",
