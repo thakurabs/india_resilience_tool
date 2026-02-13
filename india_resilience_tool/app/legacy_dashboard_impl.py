@@ -948,8 +948,21 @@ with metric_ui_placeholder.container():
             st.error("No periods found for the selected scenario in the master CSV.")
             render_perf_panel_safe()
             st.stop()
-        sel_period = st.selectbox("Period", periods, index=0, key="sel_period", format_func=period_display_label,)
-        stats = ["mean", "median", "p05", "p95", "std"]
+        sel_period = st.selectbox(
+            "Period",
+            periods,
+            index=0,
+            key="sel_period",
+            format_func=period_display_label,
+        )
+
+        # Limit UI statistic choices to mean/median only
+        stats = ["mean", "median"]
+
+        # If an older session stored p05/p95/std, normalize to a valid option
+        if st.session_state.get("sel_stat") not in stats:
+            st.session_state["sel_stat"] = stats[0]
+
         sel_stat = st.selectbox("Statistic", stats, index=0, key="sel_stat")
 
 # Column chosen to plot
