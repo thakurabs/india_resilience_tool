@@ -495,6 +495,36 @@ def wet_bulb_days_ge_threshold_stull(
     flags = (twb >= float(thresh_c)).fillna(False)
     return int(flags.sum(dim="time").item())
 
+
+def wet_bulb_depression_days_le_threshold_stull(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_c: float = 3.0,
+) -> int:
+    """Count of days per year where wet-bulb depression (tas - Twb) is <= `thresh_c` (Stull)."""
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    rh = _get_district_daily_mean(hurs_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return 0
+
+    tas_k = _drop_feb29_time(tas_k)
+    rh = _drop_feb29_time(rh)
+
+    # Robust RH scaling: accept either 0–1 (fraction) or 0–100 (%).
+    try:
+        rh_max = float(rh.max(dim="time", skipna=True).item())
+        if rh_max <= 1.5:
+            rh = rh * 100.0
+    except Exception:
+        pass
+
+    tas_c = tas_k - 273.15
+    twb_c = _wet_bulb_stull_c(tas_c, rh)
+    wbd = tas_c - twb_c
+    flags = (wbd <= float(thresh_c)).fillna(False)
+    return int(flags.sum(dim="time").item())
+
 # -----------------------------------------------------------------------------
 # TEMPERATURE COMPUTE FUNCTIONS
 # -----------------------------------------------------------------------------

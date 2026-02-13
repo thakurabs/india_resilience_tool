@@ -484,6 +484,37 @@ class TestTierFMultiVariable:
         res = CMP.wet_bulb_days_ge_threshold_stull(tas, hurs, mask, thresh_c=30.0)
         assert res == 5
 
+    def test_wet_bulb_depression_days_le_threshold_stull_monotonic(self) -> None:
+        """
+        Low depression (humid) days should increase monotonically with a looser threshold.
+        """
+        lat = [17.0, 17.5]
+        lon = [78.0, 78.5]
+        time = _cftime_daily_range("2000-01-01", 10)
+
+        tas_vals = np.concatenate([np.full(5, kelvin(35)), np.full(5, kelvin(20))])
+        hurs_vals = np.concatenate([np.full(5, 90.0), np.full(5, 50.0)])
+
+        tas = xr.DataArray(
+            np.broadcast_to(tas_vals[:, None, None], (10, 2, 2)).copy(),
+            coords={"time": time, "lat": lat, "lon": lon},
+            dims=("time", "lat", "lon"),
+        )
+        hurs = xr.DataArray(
+            np.broadcast_to(hurs_vals[:, None, None], (10, 2, 2)).copy(),
+            coords={"time": time, "lat": lat, "lon": lon},
+            dims=("time", "lat", "lon"),
+        )
+        mask = xr.DataArray(np.ones((2, 2), dtype=bool), coords={"lat": lat, "lon": lon}, dims=("lat", "lon"))
+
+        severe = CMP.wet_bulb_depression_days_le_threshold_stull(tas, hurs, mask, thresh_c=3.0)
+        humid = CMP.wet_bulb_depression_days_le_threshold_stull(tas, hurs, mask, thresh_c=6.0)
+
+        assert severe == 5
+        assert humid == 5
+        assert severe <= humid
+
+
 
 # =============================================================================
 # TIER G/H/I/J: PRECIP: units conversion + extremes + spells + percentiles (tight)
