@@ -399,6 +399,38 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "using the Stull (2011) approximation."
     ),
 },
+{
+    "name": "Severe Humid-Heat Days (WBD ≤ 3°C)",
+    "slug": "wbd_le_3",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "wbd_le_3_days",
+    "units": "days",
+    "compute": "wet_bulb_depression_days_le_threshold_stull",
+    "params": {"thresh_c": 3.0},
+    "group": "temperature",
+    "description": (
+        "Number of days per year where wet-bulb depression (tas − Twb) is ≤ 3°C, "
+        "derived from tas and hurs using the Stull (2011) approximation. Low depression "
+        "indicates very humid conditions and reduced evaporative cooling, increasing heat stress."
+    ),
+},
+{
+    "name": "Humid-Heat Days (WBD ≤ 6°C)",
+    "slug": "wbd_le_6",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "wbd_le_6_days",
+    "units": "days",
+    "compute": "wet_bulb_depression_days_le_threshold_stull",
+    "params": {"thresh_c": 6.0},
+    "group": "temperature",
+    "description": (
+        "Number of days per year where wet-bulb depression (tas − Twb) is ≤ 6°C, "
+        "derived from tas and hurs using the Stull (2011) approximation. Low depression "
+        "indicates humid conditions and reduced evaporative cooling."
+    ),
+},
     {
         "name": "Hot Days (TX ≥ 30°C)",
         "slug": "txge30_hot_days",
@@ -1439,6 +1471,8 @@ BUNDLES: dict[str, list[str]] = {
         "twb_annual_mean",
         "twb_annual_max",
         "twb_days_ge_30",
+        "wbd_le_3",
+        "wbd_le_6",
     ],
     "Cold Risk": [
         "tas_winter_mean",

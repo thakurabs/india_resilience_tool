@@ -40,3 +40,16 @@ def test_validate_registry_against_pipeline_reports_duplicates_but_no_mismatch()
     assert any("Duplicate pipeline metric slugs detected" in s for s in issues)
     # Should not report the fragile mismatch we care about
     assert not any("periods_metric_col" in s and "value_col" in s for s in issues)
+
+
+def test_wbd_metrics_registered() -> None:
+    assert "wbd_le_3" in METRICS_BY_SLUG
+    assert "wbd_le_6" in METRICS_BY_SLUG
+
+    severe = METRICS_BY_SLUG["wbd_le_3"]
+    humid = METRICS_BY_SLUG["wbd_le_6"]
+
+    assert severe.compute == "wet_bulb_depression_days_le_threshold_stull"
+    assert humid.compute == "wet_bulb_depression_days_le_threshold_stull"
+    assert severe.value_col == "wbd_le_3_days"
+    assert humid.value_col == "wbd_le_6_days"
