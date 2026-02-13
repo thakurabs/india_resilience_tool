@@ -6,6 +6,10 @@ build_master_metrics.py
 Build master CSVs for processed metric outputs at district or block level.
 Includes progress reporting for large datasets.
 
+Parallelism:
+    The wide-master build (row construction per admin unit) can run in parallel.
+    Control worker processes via --workers / -w (default: 75% of available CPUs).
+
 Supports BOTH folder structures for districts:
 - NEW: {state}/districts/{district}/{model}/{scenario}/
 - OLD: {state}/{district}/{model}/{scenario}/ (backward compatible)
@@ -18,6 +22,8 @@ Usage:
     python build_master_metrics.py --level district         # District only
     python build_master_metrics.py --level block            # Block only
     python build_master_metrics.py --state Telangana        # Filter to a state (batch mode)
+    python build_master_metrics.py --metrics tx90p tn90p     # Filter to a metric set (batch mode)
+    python build_master_metrics.py --workers 8               # Use 8 worker processes
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -849,6 +855,7 @@ def build_all_master_metrics(
     processed_root: Path,
     *,
     level: AdminLevel = "district",
+    metrics_filter: Optional[Sequence[str]] = None,
     state_filter: Optional[Sequence[str]] = None,
     district_geojson: Optional[str] = None,
     verbose: bool = True,
@@ -864,6 +871,15 @@ def build_all_master_metrics(
     variables_slugs = set(variables.keys())
     registry_slugs = set(metrics_by_slug.keys())
     eligible_slugs = sorted(on_disk_slugs & variables_slugs & registry_slugs)
+
+    if metrics_filter:
+        filt = {str(s).strip() for s in metrics_filter if str(s).strip()}
+        if filt:
+            eligible_set = set(eligible_slugs)
+            missing = sorted(filt - eligible_set)
+            eligible_slugs = [s for s in eligible_slugs if s in filt]
+            if verbose and missing:
+                print(f"[BATCH] requested metrics not eligible / not found: {', '.join(missing)}")
 
     if verbose:
         print(f"[BATCH] level = {level}")
@@ -941,6 +957,17 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--processed-root", "-p", default=None, help="Processed root directory")
     p.add_argument("--state", "-s", default=None, help="State filter (comma-separated)")
+    p.add_argument(
+        "--metrics",
+        nargs="+",
+        default=None,
+        help="Batch mode: filter to specific metric slugs (space-separated)",
+    )
+    p.add_argument(
+        "--list-metrics",
+        action="store_true",
+        help="Batch mode: list eligible metric slugs under processed root and exit",
+    )
     p.add_argument("--skip-existing", action="store_true", help="Skip if master CSV already exists")
     p.add_argument("--output-root", "-r", default=None, help="Single-metric mode: processed variable root")
     p.add_argument("--metric", "-m", default=None, help="Single-metric mode: metric column name")
@@ -1003,9 +1030,21 @@ def main() -> None:
         return
 
     # Batch mode
+    # Batch mode
     processed_root = Path(args.processed_root) if args.processed_root else _try_import_processed_root()
     if processed_root is None:
         raise SystemExit("Batch mode needs --processed-root or paths.BASE_OUTPUT_ROOT")
+
+    if bool(args.list_metrics):
+        variables, metrics_by_slug = _try_import_registries()
+        metric_dirs = _discover_metric_dirs(processed_root)
+        on_disk_slugs = {p.name for p in metric_dirs}
+        eligible_slugs = sorted(on_disk_slugs & set(variables.keys()) & set(metrics_by_slug.keys()))
+        print("Eligible metrics:")
+        for slug in eligible_slugs:
+            print(f"  {slug}")
+        print(f"Total: {len(eligible_slugs)}")
+        return
 
     total_runs = len(levels_to_run)
     for run_idx, level in enumerate(levels_to_run, start=1):
@@ -1013,6 +1052,7 @@ def main() -> None:
         build_all_master_metrics(
             processed_root,
             level=level,
+            metrics_filter=args.metrics,
             state_filter=state_filter,
             district_geojson=args.district_geojson,
             verbose=verbose,
