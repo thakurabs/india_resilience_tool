@@ -1576,13 +1576,19 @@ with perf_section("map: compute rank + risk class"):
     else:
         group_key = state_series
 
-    # Rank is computed on the *current* value (absolute), regardless of map mode.
-    # Rank 1 = highest value within the grouping scope.
-    v = merged["_current_value"]
-    merged["_rank_in_state"] = v.groupby(group_key).rank(method="min", ascending=False)
+    rank_higher_is_worse = bool(VARCFG.get("rank_higher_is_worse", True))
+    rank_ascending = not rank_higher_is_worse
+    percentile_ascending = rank_higher_is_worse
 
-    # Percentile: higher values -> higher percentile (0..100)
-    merged["_percentile_state"] = v.groupby(group_key).rank(pct=True, ascending=True) * 100.0
+    # Rank is computed on the *current* value (absolute), regardless of map mode.
+    # Rank 1 = worst value within the grouping scope (direction-aware).
+    v = merged["_current_value"]
+    merged["_rank_in_state"] = v.groupby(group_key).rank(method="min", ascending=rank_ascending)
+
+    # Inclusive percentile (0..100), higher = worse (direction-aware).
+    merged["_percentile_state"] = (
+        v.groupby(group_key).rank(pct=True, method="max", ascending=percentile_ascending) * 100.0
+    )
 
     def _risk_label(p: float) -> str:
         try:
@@ -2502,47 +2508,59 @@ with col2:
         baseline_val = row.get(baseline_col) if baseline_col else np.nan
         baseline_val_f = float(baseline_val) if not pd.isna(baseline_val) else None
 
-        # position within parent unit: rank + percentile
+        # position within comparison groups: rank + percentile (direction-aware)
         # For districts: within state
-        # For blocks: within district
-        percentile_in_parent = None
-        rank_in_parent = None
-        n_in_parent = None
-        parent_label = "district" if _admin_level == "block" else "state"
-        
+        # For blocks: within district AND within state
+        from india_resilience_tool.analysis.metrics import compute_position_stats
+
+        rank_higher_is_worse = bool(VARCFG.get("rank_higher_is_worse", True))
+
+        # Prefer median for ranking if available (more robust to outliers)
+        rank_metric_col = metric_col
+        try:
+            parts = str(metric_col).split("__")
+            if len(parts) == 4 and parts[-1] == "mean":
+                cand = "__".join(parts[:-1] + ["median"])
+                if cand in df.columns:
+                    rank_metric_col = cand
+        except Exception:
+            pass
+
+        # State distribution (districts or blocks)
+        rank_in_state = None
+        n_in_state = None
+        percentile_state = None
+
+        try:
+            in_state_mask = (
+                merged["state_name"].astype(str).str.strip().str.lower()
+                == str(state_to_show).strip().lower()
+            )
+            state_vals = pd.to_numeric(merged.loc[in_state_mask, rank_metric_col], errors="coerce").dropna()
+            pos_state = compute_position_stats(state_vals, current_val_f, higher_is_worse=rank_higher_is_worse)
+            rank_in_state, n_in_state, percentile_state = pos_state.rank, pos_state.n, pos_state.percentile
+        except Exception:
+            pass
+
+        # District distribution (blocks only)
+        rank_in_district = None
+        n_in_district = None
+        percentile_district = None
         try:
             if _admin_level == "block":
-                # Block mode: rank within district
-                in_parent_mask = (
+                in_dist_mask = (
                     (merged["state_name"].astype(str).str.strip().str.lower() == str(state_to_show).strip().lower())
                     & (merged["district_name"].astype(str).str.strip().str.lower() == str(district_name).strip().lower())
                 )
-            else:
-                # District mode: rank within state
-                in_parent_mask = (
-                    merged["state_name"].astype(str).str.strip().str.lower()
-                    == str(state_to_show).strip().lower()
+                dist_vals = pd.to_numeric(merged.loc[in_dist_mask, rank_metric_col], errors="coerce").dropna()
+                pos_dist = compute_position_stats(dist_vals, current_val_f, higher_is_worse=rank_higher_is_worse)
+                rank_in_district, n_in_district, percentile_district = (
+                    pos_dist.rank,
+                    pos_dist.n,
+                    pos_dist.percentile,
                 )
-            
-            parent_vals = pd.to_numeric(
-                merged.loc[in_parent_mask, metric_col], errors="coerce"
-            ).dropna()
-
-            if current_val_f is not None and not parent_vals.empty:
-                n_in_parent = int(len(parent_vals))
-                # percentile: fraction of units with lower value
-                percentile_in_parent = float(
-                    (parent_vals < current_val_f).sum() / n_in_parent * 100.0
-                )
-                # rank: 1 = highest value (most extreme / highest risk)
-                rank_in_parent = int((parent_vals > current_val_f).sum() + 1)
         except Exception:
             pass
-        
-        # Backward compatibility aliases
-        percentile_state = percentile_in_parent
-        rank_in_state = rank_in_parent
-        n_in_state = n_in_parent
 
         # ---- Helper functions for time series and case study ----
 
@@ -2839,8 +2857,6 @@ with col2:
                 baseline_col_local = find_baseline_column_for_stat(
                     dm.columns, registry_metric, used_stat
                 )
-
-                baseline_col_local = find_baseline_column_for_stat(dm.columns, registry_metric, sel_stat)
                 baseline_val_f_local = None
                 if baseline_col_local and baseline_col_local in dm.columns:
                     baseline_val_local = row_local.get(baseline_col_local)
@@ -2857,16 +2873,22 @@ with col2:
                     delta_abs = None
                     delta_pct = None
 
-                # Ranking within state
+                # Ranking within state (direction-aware, inclusive percentile)
                 state_mask = dm["_state_key"] == target_state
-                state_vals_local = pd.to_numeric(dm.loc[state_mask, metric_col_local], errors="coerce").dropna()
-                n_in_state_local = int(len(state_vals_local)) if len(state_vals_local) else None
-                rank_in_state_local = None
-                percentile_in_state = None
-                if n_in_state_local and current_val_f_local is not None:
-                    rank_in_state_local = int((state_vals_local > current_val_f_local).sum() + 1)
-                    from india_resilience_tool.analysis.metrics import compute_percentile_in_state
-                    percentile_in_state = compute_percentile_in_state(state_vals_local, current_val_f_local, method="lt")
+                state_vals_local = pd.to_numeric(
+                    dm.loc[state_mask, metric_col_local], errors="coerce"
+                ).dropna()
+                from india_resilience_tool.analysis.metrics import compute_position_stats
+
+                higher_is_worse_local = bool(varcfg.get("rank_higher_is_worse", True))
+                pos_local = compute_position_stats(
+                    state_vals_local,
+                    current_val_f_local,
+                    higher_is_worse=higher_is_worse_local,
+                )
+                n_in_state_local = pos_local.n
+                rank_in_state_local = pos_local.rank
+                percentile_in_state = pos_local.percentile
                 risk_class = (
                     risk_class_from_percentile(percentile_in_state)
                     if percentile_in_state is not None
@@ -3081,6 +3103,7 @@ with col2:
             rank_in_state=rank_in_state,
             n_in_state=n_in_state,
             percentile_state=percentile_state,
+            rank_higher_is_worse=rank_higher_is_worse,
             # Time series data
             hist_ts=hist_ts,
             scen_ts=scen_ts,
@@ -3113,6 +3136,13 @@ with col2:
             state_dir_for_fs=state_dir_for_fs,
             district_for_fs=district_for_fs,
             logo_path=LOGO_PATH,
+            # Block-level support
+            level=_admin_level,
+            block_name=str(block_for_fs) if (_admin_level == "block" and selected_block != "All") else None,
+            parent_district_name=str(district_name) if _admin_level == "block" else None,
+            rank_in_district=rank_in_district,
+            n_in_district=n_in_district,
+            percentile_district=percentile_district,
         )
 
 render_perf_panel_safe()

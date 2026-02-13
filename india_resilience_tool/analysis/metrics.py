@@ -2,9 +2,9 @@
 Core metric analytics helpers for IRT.
 
 This module centralizes:
-- rank within state (descending)
-- percentile within state (<= or < variants)
-- risk class mapping from percentile
+- Direction-aware rank/percentile within a comparison group
+- Percentile helpers used across the dashboard
+- Risk class mapping from percentile
 
 This is intentionally Streamlit-free and UI-agnostic.
 
@@ -15,14 +15,38 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional, Sequence, Tuple
+from typing import Callable, Optional, Tuple
 
 import pandas as pd
 
 
-def risk_class_from_percentile(p: float) -> str:
+@dataclass(frozen=True)
+class PositionStats:
+    """Rank/percentile summary within a comparison group.
+
+    Fields:
+        rank:
+            1..N where 1 indicates the *worst* value per `higher_is_worse`.
+            - If higher_is_worse=True: rank 1 = highest value
+            - If higher_is_worse=False: rank 1 = lowest value
+        n:
+            Number of non-missing values used.
+        percentile:
+            0..100, where higher = worse (direction-aware).
+
+    Notes:
+        - For UI stability, the default percentile definition is *inclusive*
+          so worst ties map to 100.
+        - Rank uses a competition-style definition (ties share the best rank).
     """
-    Map percentile (0..100) to UI risk class labels.
+
+    rank: Optional[int]
+    n: Optional[int]
+    percentile: Optional[float]
+
+
+def risk_class_from_percentile(p: float) -> str:
+    """Map percentile (0..100) to UI risk class labels.
 
     Contract (must match dashboard expectations exactly):
       - NaN -> "Unknown"
@@ -45,131 +69,198 @@ def risk_class_from_percentile(p: float) -> str:
     return "Very Low"
 
 
-def _default_normalize(s: str) -> str:
-    return str(s).strip().lower().replace(" ", "")
-
-
 def compute_percentile_in_state(
-    values: pd.Series,
+    state_vals: pd.Series,
     value: float,
     *,
     method: str = "le",
 ) -> Optional[float]:
-    """
-    Compute percentile of `value` within `values`.
+    """Compute percentile rank within a state distribution.
 
     Args:
-        values: Numeric-like series; NaNs ignored.
-        value: The value whose percentile to compute.
+        state_vals: Series of values in the comparison group (NaNs allowed).
+        value: Value to locate within the distribution.
         method:
-            - "le": fraction(values <= value) * 100  (inclusive; matches rankings table helper)
-            - "lt": fraction(values <  value) * 100  (strict; matches portfolio record builder)
+            - "le": percentile = fraction <= value (inclusive)
+            - "lt": percentile = fraction < value  (exclusive)
 
     Returns:
-        Percentile in [0,100] or None if undefined.
+        Percentile as a float in [0, 100], or None if inputs are insufficient.
+
+    Notes:
+        This helper is retained for backwards compatibility. For a direction-aware,
+        rank-consistent percentile, use `compute_position_stats(...).percentile` instead.
     """
-    if values is None:
+    if state_vals is None:
+        return None
+    if value is None or pd.isna(value):
         return None
 
-    vals = pd.to_numeric(values, errors="coerce").dropna()
-    if vals.empty or pd.isna(value):
+    v = pd.to_numeric(state_vals, errors="coerce").dropna()
+    if v.empty:
         return None
 
-    try:
-        v = float(value)
-    except Exception:
-        return None
-
+    method = str(method or "le").strip().lower()
     if method not in {"le", "lt"}:
         raise ValueError("method must be 'le' or 'lt'")
 
-    try:
-        if method == "le":
-            return float((vals <= v).mean() * 100.0)
-        return float((vals < v).mean() * 100.0)
-    except Exception:
-        return None
+    if method == "le":
+        frac = float((v <= value).sum()) / float(len(v))
+    else:
+        frac = float((v < value).sum()) / float(len(v))
+    return frac * 100.0
 
 
 def compute_rank_descending(values: pd.Series, value: float) -> Optional[int]:
-    """
-    Rank of `value` among `values` in descending order (higher => rank 1).
+    """Compute descending rank (1=highest) within values.
 
-    This matches the dashboard nested helper behavior:
-      rank = count(values > value) + 1
+    Args:
+        values: Series of comparison values.
+        value: Value to rank.
 
     Returns:
-        Rank (1..N) or None.
+        Rank as int (1..N) or None.
     """
     if values is None:
         return None
-
-    vals = pd.to_numeric(values, errors="coerce").dropna()
-    if vals.empty or pd.isna(value):
+    if value is None or pd.isna(value):
         return None
-
-    try:
-        v = float(value)
-    except Exception:
+    v = pd.to_numeric(values, errors="coerce").dropna()
+    if v.empty:
         return None
-
-    try:
-        return int((vals > v).sum() + 1)
-    except Exception:
-        return None
+    return int((v > value).sum() + 1)
 
 
 def compute_rank_and_percentile(
-    df_local: pd.DataFrame,
-    st_name: str,
+    df: pd.DataFrame,
+    state_name: str,
     metric_col: str,
     value: float,
     *,
     state_col: str = "state",
-    normalize_fn: Optional[Callable[[str], str]] = None,
     percentile_method: str = "le",
 ) -> Tuple[Optional[int], Optional[float]]:
+    """Compute rank (descending) and percentile within a state.
+
+    This helper matches the earlier dashboard behavior (rank 1 = highest).
+    For direction-aware logic (e.g., SPI where lower is worse), use
+    `compute_position_stats`.
     """
-    Compute (rank_in_state, percentile_in_state) for a value given a master-like table.
+    if df is None or df.empty:
+        return None, None
+    if metric_col not in df.columns or state_col not in df.columns:
+        return None, None
+
+    mask = df[state_col].astype(str).str.strip().str.lower() == str(state_name).strip().lower()
+    state_vals = pd.to_numeric(df.loc[mask, metric_col], errors="coerce").dropna()
+    if state_vals.empty:
+        return None, None
+
+    rank = compute_rank_descending(state_vals, value)
+    pct = compute_percentile_in_state(state_vals, value, method=percentile_method)
+    return rank, pct
+
+
+def compute_position_stats(
+    values: pd.Series,
+    value: Optional[float],
+    *,
+    higher_is_worse: bool = True,
+    percentile_inclusive: bool = True,
+) -> PositionStats:
+    """Compute direction-aware rank and percentile for a value.
 
     Args:
-        df_local: DataFrame containing at least `state_col` and `metric_col`.
-        st_name: State name to filter by.
-        metric_col: Column containing the metric values.
-        value: Value for which rank/percentile is computed.
-        state_col: Name of the state column (default "state").
-        normalize_fn: Function to normalize state names for matching.
-                      If None, uses a conservative default (lower + strip + remove spaces).
-        percentile_method: "le" or "lt" for percentile computation.
+        values:
+            Comparison distribution (NaNs allowed).
+        value:
+            Value to rank. If None/NaN -> all outputs None.
+        higher_is_worse:
+            If True, higher values are considered worse.
+            If False, lower values are considered worse.
+        percentile_inclusive:
+            If True, percentiles are inclusive of ties at the worst end, so worst ties map to 100.
+            If False, percentiles exclude equality (slightly smaller percentiles for ties).
 
     Returns:
-        (rank, percentile) where each may be None.
+        PositionStats with rank, n, percentile. Percentile is always defined such that
+        higher = worse (0..100).
     """
-    if df_local is None or df_local.empty:
-        return None, None
-    if state_col not in df_local.columns:
-        return None, None
-    if metric_col not in df_local.columns:
-        return None, None
-    if pd.isna(value):
-        return None, None
+    if values is None:
+        return PositionStats(rank=None, n=None, percentile=None)
 
-    norm = normalize_fn or _default_normalize
+    v = pd.to_numeric(values, errors="coerce").dropna()
+    if v.empty:
+        return PositionStats(rank=None, n=None, percentile=None)
+
+    if value is None or pd.isna(value):
+        return PositionStats(rank=None, n=int(len(v)), percentile=None)
+
+    value_f = float(value)
+    n = int(len(v))
+
+    # Rank: 1 = worst
+    if higher_is_worse:
+        rank = int((v > value_f).sum() + 1)
+        if percentile_inclusive:
+            percentile = float((v <= value_f).sum()) / float(n) * 100.0
+        else:
+            percentile = float((v < value_f).sum()) / float(n) * 100.0
+    else:
+        rank = int((v < value_f).sum() + 1)
+        if percentile_inclusive:
+            percentile = float((v >= value_f).sum()) / float(n) * 100.0
+        else:
+            percentile = float((v > value_f).sum()) / float(n) * 100.0
+
+    return PositionStats(rank=rank, n=n, percentile=percentile)
+
+
+def rank_series_within_group(
+    series: pd.Series,
+    group_key: pd.Series,
+    *,
+    higher_is_worse: bool = True,
+) -> pd.Series:
+    """Vectorized, direction-aware rank within group.
+
+    Returns a pandas Series with ranks (float) aligned to the input series.
+    NaNs in the input remain NaN in the output.
+    """
+    rank_ascending = not higher_is_worse
+    return series.groupby(group_key).rank(method="min", ascending=rank_ascending)
+
+
+def percentile_series_within_group(
+    series: pd.Series,
+    group_key: pd.Series,
+    *,
+    higher_is_worse: bool = True,
+    inclusive: bool = True,
+) -> pd.Series:
+    """Vectorized, direction-aware percentile within group.
+
+    Percentile is always returned on 0..100, where higher = worse.
+    """
+    # For percentiles, we want higher = worse.
+    # If higher_is_worse: ascending=True makes larger values have larger ranks.
+    # If lower_is_worse: ascending=False makes smaller values have larger ranks.
+    percentile_ascending = higher_is_worse
+    method = "max" if inclusive else "average"
+    return series.groupby(group_key).rank(pct=True, method=method, ascending=percentile_ascending) * 100.0
+
+
+def safe_apply_numeric(
+    series: pd.Series,
+    fn: Callable[[pd.Series], Optional[float]],
+) -> Optional[float]:
+    """Apply a numeric reducer safely after coercing to numeric and dropping NaNs."""
+    if series is None:
+        return None
+    v = pd.to_numeric(series, errors="coerce").dropna()
+    if v.empty:
+        return None
     try:
-        st_norm = norm(st_name)
-        state_norm = df_local[state_col].astype(str).map(norm)
+        return fn(v)
     except Exception:
-        return None, None
-
-    try:
-        m_state = state_norm == st_norm
-        vals = pd.to_numeric(df_local.loc[m_state, metric_col], errors="coerce").dropna()
-    except Exception:
-        return None, None
-
-    if vals.empty:
-        return None, None
-
-    rank = compute_rank_descending(vals, value)
-    percentile = compute_percentile_in_state(vals, value, method=percentile_method)
-    return rank, percentile
+        return None

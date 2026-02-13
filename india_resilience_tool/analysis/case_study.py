@@ -5,6 +5,9 @@ Extracted from the legacy dashboard logic.
 Provides:
 - build_district_case_study_data(...)
 - build_scenario_comparison_panel_for_row(...)
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
 """
 
 from __future__ import annotations
@@ -232,12 +235,13 @@ def build_district_case_study_data(
         state_vals = pd.to_numeric(
             df_master.loc[df_master["_state_key"] == target_state, metric_col], errors="coerce"
         ).dropna()
-        n_in_state = int(len(state_vals)) if len(state_vals) else None
-        rank_in_state = None
-        percentile = None
-        if n_in_state and current_f is not None:
-            rank_in_state = int((state_vals > current_f).sum() + 1)
-            percentile = compute_percentile_in_state(state_vals, current_f, method="lt")
+        from india_resilience_tool.analysis.metrics import compute_position_stats
+
+        higher_is_worse = bool(varcfg.get("rank_higher_is_worse", True))
+        pos = compute_position_stats(state_vals, current_f, higher_is_worse=higher_is_worse)
+        n_in_state = pos.n
+        rank_in_state = pos.rank
+        percentile = pos.percentile
 
         records.append(
             {

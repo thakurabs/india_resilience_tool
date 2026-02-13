@@ -41,6 +41,11 @@ class MetricSpec:
     group: str
     periods_metric_col: str
 
+    # Ranking metadata (dashboard "Position in state" / risk quick-glance)
+    # If True: higher values are ranked as worse (rank 1 = highest value).
+    # If False: lower values are ranked as worse (rank 1 = lowest value).
+    rank_higher_is_worse: bool = True
+
     # Pipeline fields
     var: Optional[str] = None
     vars: Optional[Sequence[str]] = None
@@ -75,6 +80,7 @@ class MetricSpec:
             label=label,
             group=group,
             periods_metric_col=periods_metric_col,
+            rank_higher_is_worse=bool(d.get("rank_higher_is_worse", True)),
             var=var or None,
             vars=tuple(vars_list) if vars_list else None,
             value_col=value_col or None,
@@ -869,6 +875,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Growing Season Length (GSL)",
         "slug": "gsl_growing_season",
+        "rank_higher_is_worse": False,
         "var": "tas",
         "value_col": "gsl_days",
         "units": "days",
@@ -1133,6 +1140,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
 {
         "name": "Standardised Precipitation Index 3-month (SPI3)",
         "slug": "spi3_drought_index",
+        "rank_higher_is_worse": False,
         "var": "pr",
         "value_col": "spi3_index",
         "units": "index",
@@ -1147,6 +1155,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Standardised Precipitation Index 6-month (SPI6)",
         "slug": "spi6_drought_index",
+        "rank_higher_is_worse": False,
         "var": "pr",
         "value_col": "spi6_index",
         "units": "index",
@@ -1161,6 +1170,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Standardised Precipitation Index 12-month (SPI12)",
         "slug": "spi12_drought_index",
+        "rank_higher_is_worse": False,
         "var": "pr",
         "value_col": "spi12_index",
         "units": "index",
@@ -1638,6 +1648,7 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             "label": spec.label,
             "group": spec.group,
             "periods_metric_col": spec.periods_metric_col,
+            "rank_higher_is_worse": bool(spec.rank_higher_is_worse),
             "description": spec.description or "",
             "district_yearly_candidates": list(spec.district_yearly_candidates or DEFAULT_DISTRICT_YEARLY_CANDIDATES),
             "state_yearly_candidates": list(spec.state_yearly_candidates or DEFAULT_STATE_YEARLY_CANDIDATES),

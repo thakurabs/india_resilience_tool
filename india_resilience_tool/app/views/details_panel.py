@@ -45,6 +45,7 @@ def render_risk_summary(
     rank_in_state: Optional[int],
     n_in_state: Optional[int],
     percentile_state: Optional[float],
+    rank_higher_is_worse: bool = True,
     variable_label: str,
     sel_scenario: str,
     sel_period: str,
@@ -132,16 +133,17 @@ def render_risk_summary(
                 if rank_in_district is not None and n_in_district is not None:
                     rank_label = f"{rank_in_district}/{n_in_district}"
                     district_label = parent_district_name or "selected district"
+                    rank_1_meaning = "highest" if rank_higher_is_worse else "lowest"
                     if percentile_district is not None:
                         help_text = (
-                            f"Approximate percentile: {percentile_district:.0f}th\n"
-                            f"Computed among {n_in_district} blocks in {district_label} "
-                            f"for this index (higher values = higher rank)."
+                            f"Percentile (higher = worse): {percentile_district:.0f}th\n"
+                            f"Computed among {n_in_district} blocks with available data in {district_label}. "
+                            f"Rank 1 = {rank_1_meaning} value."
                         )
                     else:
                         help_text = (
-                            f"Computed among {n_in_district} blocks in {district_label} "
-                            f"(higher values = higher rank)."
+                            f"Computed among {n_in_district} blocks with available data in {district_label}. "
+                            f"Rank 1 = {rank_1_meaning} value."
                         )
 
                     st.metric(
@@ -163,16 +165,17 @@ def render_risk_summary(
             if rank_in_state is not None and n_in_state is not None:
                 rank_label = f"{rank_in_state}/{n_in_state}"
                 unit_word = "blocks" if is_block else "districts"
+                rank_1_meaning = "highest" if rank_higher_is_worse else "lowest"
                 if percentile_state is not None:
                     help_text = (
-                        f"Approximate percentile: {percentile_state:.0f}th\n"
-                        f"Computed among {n_in_state} {unit_word} in {state_to_show} "
-                        f"for this index (higher values = higher rank)."
+                        f"Percentile (higher = worse): {percentile_state:.0f}th\n"
+                        f"Computed among {n_in_state} {unit_word} with available data in {state_to_show}. "
+                        f"Rank 1 = {rank_1_meaning} value."
                     )
                 else:
                     help_text = (
-                        f"Computed among {n_in_state} {unit_word} in {state_to_show} "
-                        f"(higher values = higher rank)."
+                        f"Computed among {n_in_state} {unit_word} with available data in {state_to_show}. "
+                        f"Rank 1 = {rank_1_meaning} value."
                     )
 
                 st.metric(
@@ -743,6 +746,7 @@ def render_details_panel(
     rank_in_state: Optional[int],
     n_in_state: Optional[int],
     percentile_state: Optional[float],
+    rank_higher_is_worse: bool = True,
     # Time series data
     hist_ts: pd.DataFrame,
     scen_ts: pd.DataFrame,
@@ -853,6 +857,7 @@ def render_details_panel(
         rank_in_state=rank_in_state,
         n_in_state=n_in_state,
         percentile_state=percentile_state,
+        rank_higher_is_worse=rank_higher_is_worse,
         variable_label=variable_label,
         sel_scenario=sel_scenario,
         sel_period=sel_period,
