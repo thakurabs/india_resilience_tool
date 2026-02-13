@@ -231,6 +231,11 @@ def render_analysis_mode_selector(
         # Generic fallback: best-effort replacement
         return str(opt).replace("districts", "blocks").replace("district", "block")
 
+    def _on_mode_change() -> None:
+        st.session_state["ui_touched_analysis_mode"] = True
+        if on_change is not None:
+            on_change()
+
     mode = st.radio(
         label,
         options=opts,
@@ -239,7 +244,7 @@ def render_analysis_mode_selector(
         label_visibility=label_visibility,
         help=help_text,
         format_func=_fmt,
-        on_change=on_change,
+        on_change=_on_mode_change,
     )
 
     # Handle mode transitions - clear route-based state
