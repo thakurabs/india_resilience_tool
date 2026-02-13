@@ -29,13 +29,16 @@ AdminLevel = Literal["district", "block"]
 
 SESSION_DEFAULTS: dict[str, Any] = {
     # Core mode/router keys
-    "analysis_mode": ANALYSIS_MODE_SINGLE,
+    # Keep mode keys empty until explicitly selected in the sidebar dropdowns.
+    # This prevents implicit defaults and enables reliable dependent-control gating.
+    "analysis_mode": None,
     "portfolio_districts": [],
     "portfolio_build_route": None,
     "jump_to_rankings": False,
     "jump_to_map": False,
     "active_view": VIEW_MAP,
     "main_view_selector": VIEW_MAP,
+    "map_mode": None,
 
     # Administrative level (NEW)
     "admin_level": ADMIN_LEVEL_DISTRICT,

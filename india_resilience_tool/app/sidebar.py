@@ -214,11 +214,8 @@ def render_analysis_mode_selector(
             unsafe_allow_html=True,
         )
 
-    current = st.session_state.get("analysis_mode", ANALYSIS_MODE_SINGLE)
-    try:
-        idx = opts.index(current)
-    except Exception:
-        idx = int(index)
+    placeholder = "Select analysis focus…"
+    current = st.session_state.get("analysis_mode")
 
     def _fmt(opt: str) -> str:
         # Preserve stored values; only change display label.
@@ -231,16 +228,27 @@ def render_analysis_mode_selector(
         # Generic fallback: best-effort replacement
         return str(opt).replace("districts", "blocks").replace("district", "block")
 
-    mode = st.radio(
+    mode_key = "analysis_mode"
+    widget_key = "analysis_mode_ui"
+    widget_options = [placeholder] + list(opts)
+
+    if current not in opts:
+        st.session_state[widget_key] = placeholder
+    else:
+        st.session_state[widget_key] = current
+
+    selected = st.selectbox(
         label,
-        options=opts,
-        index=idx,
-        key="analysis_mode",
+        options=widget_options,
+        key=widget_key,
         label_visibility=label_visibility,
         help=help_text,
-        format_func=_fmt,
+        format_func=lambda opt: opt if opt == placeholder else _fmt(opt),
         on_change=on_change,
     )
+
+    mode = None if selected == placeholder else selected
+    st.session_state[mode_key] = mode
 
     # Handle mode transitions - clear route-based state
     prev_mode = st.session_state.get("_analysis_mode_prev")

@@ -664,7 +664,12 @@ st.set_page_config(page_title="India Resilience Tool", layout="wide")
 
 # Initialise analysis mode and portfolio storage in session state
 if "analysis_mode" not in st.session_state:
-    st.session_state["analysis_mode"] = "Single district focus"
+    # Keep mode unselected until the user explicitly picks a value from the dropdown.
+    st.session_state["analysis_mode"] = None
+
+if "map_mode" not in st.session_state:
+    # Keep map mode unselected so downstream controls stay locked until chosen.
+    st.session_state["map_mode"] = None
 
 if "portfolio_districts" not in st.session_state:
     # Will store a list of (state_name, district_name) tuples
@@ -674,7 +679,7 @@ if "portfolio_districts" not in st.session_state:
 st.session_state.setdefault("portfolio_build_route", None)  # None | "rankings" | "map" | "saved_points"
 st.session_state.setdefault("jump_to_rankings", False)
 st.session_state.setdefault("jump_to_map", False)
-st.session_state.setdefault("_analysis_mode_prev", st.session_state.get("analysis_mode", "Single district focus"))
+st.session_state.setdefault("_analysis_mode_prev", st.session_state.get("analysis_mode"))
 
 # Which main view is active in the left column: map vs rankings
 if "active_view" not in st.session_state:
@@ -698,9 +703,8 @@ with st.sidebar:
     admin_level = render_admin_level_selector(label_visibility="collapsed")
 
 
-    # Read current analysis mode (default depends on admin level)
-    default_mode = "Single block focus" if admin_level == "block" else "Single district focus"
-    analysis_mode_current = st.session_state.get("analysis_mode", default_mode)
+    # Read current analysis mode (no implicit default selection).
+    analysis_mode_current = st.session_state.get("analysis_mode")
 
     # Show hover toggle (always visible)
     _ = render_hover_toggle_if_portfolio(analysis_mode_current)
@@ -742,6 +746,9 @@ with st.sidebar:
 
 st.title("India Resilience Tool")
 
+# Single source of truth for dependent-control gating.
+modes_ready = bool(st.session_state.get("analysis_mode")) and bool(st.session_state.get("map_mode"))
+
 # Pilot state default
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
@@ -756,7 +763,8 @@ with metric_ui_placeholder.container():
         st.session_state["ui_metric_expander_open"] = True
 
     def _auto_close_metric_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
+        metric_complete = bool(st.session_state.get("selected_bundle")) and bool(st.session_state.get("selected_var"))
+        if st.session_state.get("ui_auto_collapse_expanders", True) and metric_complete:
             st.session_state["ui_metric_expander_open"] = False
 
     with st.expander(
@@ -764,6 +772,8 @@ with metric_ui_placeholder.container():
         expanded=bool(st.session_state.get("ui_metric_expander_open", True)),
     ):
         st.markdown("### Metric selection")
+        if not modes_ready:
+            st.caption("Select Analysis focus and Map mode to unlock the settings below.")
 
         # --- Bundle selection (replaces old group-based selection) ---
         all_bundles = get_bundles()
@@ -786,6 +796,7 @@ with metric_ui_placeholder.container():
             key="selected_bundle",
             help="Select a thematic bundle to filter available metrics",
             on_change=_auto_close_metric_expander,
+            disabled=(not modes_ready),
         )
         
         # Show bundle description as tooltip/caption
@@ -813,6 +824,7 @@ with metric_ui_placeholder.container():
             key="selected_var",
             format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
             on_change=_auto_close_metric_expander,
+            disabled=(not modes_ready),
         )
 
         # Resolve per-index config
@@ -1013,7 +1025,7 @@ with map_mode_placeholder.container():
         st.session_state["ui_chloropleth_expander_open"] = True
 
     def _auto_close_chloropleth_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
+        if st.session_state.get("ui_auto_collapse_expanders", True) and bool(st.session_state.get("map_mode")):
             st.session_state["ui_chloropleth_expander_open"] = False
 
     # Tight "Map mode" label with no extra space before the radio
@@ -1026,28 +1038,40 @@ with map_mode_placeholder.container():
             unsafe_allow_html=True,
         )
 
-        map_mode = st.radio(
-            "Map mode",  # non-empty label for accessibility
-            options=[
-                "Absolute value",
-                "Change from 1990-2010 baseline",
-            ],
-            index=0,
-            key="map_mode",
-            label_visibility="collapsed",  # keeps UI same as before
+        map_mode_options = [
+            "Absolute value",
+            "Change from 1990-2010 baseline",
+        ]
+        map_mode_placeholder_label = "Select map mode…"
+        map_mode_widget_key = "map_mode_ui"
+        map_mode_current = st.session_state.get("map_mode")
+        st.session_state[map_mode_widget_key] = (
+            map_mode_current if map_mode_current in map_mode_options else map_mode_placeholder_label
+        )
+
+        selected_map_mode = st.selectbox(
+            "Map mode",
+            options=[map_mode_placeholder_label] + map_mode_options,
+            key=map_mode_widget_key,
+            label_visibility="collapsed",
+            format_func=lambda x: x,
             on_change=_auto_close_chloropleth_expander,
         )
+        map_mode = None if selected_map_mode == map_mode_placeholder_label else selected_map_mode
+        st.session_state["map_mode"] = map_mode
 
 # -------------------------
 # Master dataset controls (bound to chosen Index)
 # -------------------------
 with master_controls_placeholder.container():
     st.markdown("### Master dataset")
+    if not modes_ready:
+        st.caption("Select Analysis focus and Map mode to unlock the settings below.")
     col_a, col_b = st.columns([3, 2])
     with col_a:
-        auto_check = st.button("Check / Rebuild master (auto)", key="btn_auto_check")
+        auto_check = st.button("Check / Rebuild master (auto)", key="btn_auto_check", disabled=(not modes_ready))
     with col_b:
-        force_btn = st.button("Rebuild now", key="btn_force_rebuild")
+        force_btn = st.button("Rebuild now", key="btn_force_rebuild", disabled=(not modes_ready))
 
 if auto_check:
     ok, msg = rebuild_master_csv_if_needed(
@@ -1199,8 +1223,8 @@ with state_placeholder.container():
         # - In district-level portfolio mode: freeze district to "All"
         # - In block-level portfolio mode: allow district selection (needed to navigate blocks)
         # Check this BEFORE creating the widget to avoid Streamlit session state errors
-        _current_analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-        if "Multi" in _current_analysis_mode and admin_level != "block":
+        _current_analysis_mode = st.session_state.get("analysis_mode")
+        if "Multi" in str(_current_analysis_mode) and admin_level != "block":
             st.session_state["selected_district"] = "All"
 
         selected_district = st.selectbox(
@@ -1301,9 +1325,12 @@ with state_placeholder.container():
         # session state modification errors.
         # In district-level portfolio mode: district is frozen to "All"
         # In block-level portfolio mode: district selection is allowed (needed to navigate blocks)
-        if "Multi" in analysis_mode and admin_level != "block":
+        if "Multi" in str(analysis_mode) and admin_level != "block":
             # Just update the local variable; session_state was already set before widget
             selected_district = "All"
+
+# Recompute the mode-complete flag after rendering both mode dropdowns.
+modes_ready = bool(st.session_state.get("analysis_mode")) and bool(st.session_state.get("map_mode"))
 
 # -------------------------
 # Portfolio selection helpers (multi-district)
@@ -1544,10 +1571,11 @@ with perf_section("map: compute current/baseline/delta"):
         merged["_delta_pct"] = pd.Series([pd.NA] * len(merged), index=merged.index, dtype="Float64")
 
 # --- Decide which column the map will actually show ---
-map_mode = st.session_state.get("map_mode", "Absolute value")
+map_mode = st.session_state.get("map_mode")
+effective_map_mode = map_mode if map_mode in ["Absolute value", "Change from 1990-2010 baseline"] else "Absolute value"
 map_value_col = metric_col  # default: absolute values
 
-if map_mode == "Change from 1990-2010 baseline":
+if effective_map_mode == "Change from 1990-2010 baseline":
     if baseline_col and (baseline_col in merged.columns):
         map_value_col = "_delta_abs"
     else:
@@ -1555,8 +1583,7 @@ if map_mode == "Change from 1990-2010 baseline":
             "Baseline (historical 1990-2010) column not found for this metric/stat; "
             "showing absolute values instead."
         )
-        map_mode = "Absolute value"
-        st.session_state["map_mode"] = map_mode
+        effective_map_mode = "Absolute value"
         map_value_col = metric_col
 
 # --- Compute rank/percentile/risk class per state for tooltip quick-glance ---
@@ -1608,7 +1635,7 @@ def _fmt_number(x) -> str:
 
 with perf_section("map: build tooltip strings"):
     # Main value shown depends on map mode
-    if map_mode == "Change from 1990-2010 baseline":
+    if effective_map_mode == "Change from 1990-2010 baseline":
         merged["_tooltip_value"] = merged["_delta_abs"].apply(_fmt_number)
         merged["_tooltip_value_label"] = "Δ vs 1990–2010"
     else:
@@ -1647,6 +1674,8 @@ if vmin_default == vmax_default:
     vmax_default += padding
 
 with st.sidebar:
+    if not modes_ready:
+        color_slider_placeholder.caption("Select Analysis focus and Map mode to unlock the settings below.")
     vmin_vmax = color_slider_placeholder.slider(
         "Color range (min → max)",
         min_value=float(vmin_default),
@@ -1654,12 +1683,13 @@ with st.sidebar:
         value=(vmin_default, vmax_default),
         step=max((vmax_default - vmin_default) / 200.0, 0.01),
         key="color_range_slider",
+        disabled=(not modes_ready),
     )
 
 vmin, vmax = float(vmin_vmax[0]), float(vmin_vmax[1])
 
 # Choose colormap: sequential for absolute, diverging for change
-if map_mode == "Change from 1990-2010 baseline":
+if effective_map_mode == "Change from 1990-2010 baseline":
     cmap_name = "RdBu_r"  # blue-negative, red-positive
     pretty_metric_label = (
         f"Δ {VARIABLES[VARIABLE_SLUG]['label']} vs 1990–2010 · "
@@ -1931,7 +1961,7 @@ layer_name = "Blocks" if is_block_level else "Districts"
 
 if hover_enabled:
     # Main label depends on map mode (absolute vs baseline change)
-    main_label = "Δ vs 1990–2010" if map_mode == "Change from 1990-2010 baseline" else "Value"
+    main_label = "Δ vs 1990–2010" if effective_map_mode == "Change from 1990-2010 baseline" else "Value"
 
     if is_block_level:
         tooltip_fields = ["block_name", "district_name", "state_name", "_tooltip_value"]
@@ -1997,7 +2027,7 @@ with col1:
     with head_col:
         st.header(pretty_metric_label)
     with reset_col:
-        if st.button("⟲ Reset View", key="reset_map_view"):
+        if st.button("⟲ Reset View", key="reset_map_view", disabled=(not modes_ready)):
             st.session_state["pending_selected_state"] = "All"
             st.session_state["pending_selected_district"] = "All"
             st.session_state["map_reset_requested"] = True
@@ -2011,12 +2041,14 @@ with col1:
     view = render_view_selector(label="View", horizontal=True)
 
 # ---------- VIEW 1: MAP ----------
-    if view == "🗺 Map view":
+    if not modes_ready:
+        st.info("Select Analysis focus and Map mode to begin.")
+    elif view == "🗺 Map view":
 
         returned, clicked_district, clicked_state = render_map_view(
             m=m,
             variable_slug=VARIABLE_SLUG,
-            map_mode=map_mode,
+            map_mode=effective_map_mode,
             sel_scenario=sel_scenario,
             sel_period=sel_period,
             sel_stat=sel_stat,
@@ -2031,7 +2063,7 @@ with col1:
         )
 
         # Show add-to-portfolio button when a unit is clicked in portfolio mode
-        if "Multi" in analysis_mode:
+        if "Multi" in str(analysis_mode):
             from india_resilience_tool.app.views.map_view import render_unit_add_to_portfolio
             
             # Get clicked block from session state (set by render_map_view in block mode)
@@ -2086,10 +2118,12 @@ with col2:
     # -------------------------
     # Multi-district/block portfolio mode: show a clean, guided right-panel flow
     # -------------------------
-    analysis_mode_rhs = st.session_state.get("analysis_mode", "Single district focus")
+    analysis_mode_rhs = st.session_state.get("analysis_mode")
     portfolio_route = st.session_state.get("portfolio_build_route", None)
 
-    if "Multi" in analysis_mode_rhs:
+    if not modes_ready:
+        st.info("Select Analysis focus and Map mode to unlock rankings, portfolio, and export tools.")
+    elif "Multi" in str(analysis_mode_rhs):
         # ---- MULTI-UNIT PORTFOLIO PANEL (extracted to portfolio_ui.py) ----
         render_portfolio_panel(
             # State/selection context
@@ -2132,7 +2166,7 @@ with col2:
     # -------------------------
     # Climate profile / point query panel
     # -------------------------
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+    analysis_mode = st.session_state.get("analysis_mode")
     portfolio_route = st.session_state.get("portfolio_build_route", None)
     clear_clicked = False
 
@@ -2141,7 +2175,7 @@ with col2:
         st.header("Climate Profile")
 
     # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
-    if "Multi" in analysis_mode and portfolio_route == "saved_points":
+    if "Multi" in str(analysis_mode) and portfolio_route == "saved_points":
         # ---- POINT SELECTION PANEL (extracted to point_selection_ui.py) ----
         clear_clicked = render_point_selection_panel(
             merged=merged,
@@ -2173,7 +2207,7 @@ with col2:
                 except Exception:
                     pass
 
-    if "Multi" in analysis_mode and portfolio_route == "saved_points":
+    if "Multi" in str(analysis_mode) and portfolio_route == "saved_points":
         # If map selection mode is active, use the next map click as the
         # point-query location and then disable the mode (one-shot behaviour).
         if click_coords is not None and st.session_state.get("point_query_select_on_map", False):
@@ -2286,7 +2320,7 @@ with col2:
         return candidates[0][0]
 
     # ----------- STATE/DISTRICT SUMMARY MODE (no unit selected) -----------
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+    analysis_mode = st.session_state.get("analysis_mode")
 
     # Determine if we should show state/district summary
     # In block mode: show district summary when block is "All" but district is selected
@@ -2309,7 +2343,7 @@ with col2:
             summary_context = "state"
 
     if (matched_row is None or matched_row.empty) and show_summary:
-        if "Multi" in analysis_mode:
+        if "Multi" in str(analysis_mode):
             # In portfolio mode, we suppress the large summary panel here.
             # Portfolio results should be driven by the Portfolio analysis panel.
             pass
@@ -2345,12 +2379,12 @@ with col2:
 
     # ----------- UNIT DETAILS MODE (district or block) -----------
     else:
-        analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+        analysis_mode = st.session_state.get("analysis_mode")
         unit_label = "block" if _admin_level == "block" else "district"
 
         if matched_row is None or getattr(matched_row, "empty", True):
             st.warning(f"No {unit_label}-level data found for the current selection.")
-            if "Multi" in analysis_mode:
+            if "Multi" in str(analysis_mode):
                 st.info(
                     f"In portfolio mode, add {unit_label}s via **From the map**, **From saved points**, "
                     f"or **From the rankings table** (Portfolio analysis panel)."
@@ -2372,7 +2406,7 @@ with col2:
         )
 
         # --- Compact selection view in Multi-unit portfolio mode ---
-        if "Multi" in analysis_mode:
+        if "Multi" in str(analysis_mode):
             portfolio_route = st.session_state.get("portfolio_build_route", None)
 
             # Only show the "selected district" panel when the user explicitly chose
@@ -2448,7 +2482,7 @@ with col2:
             )
 
         # --- Portfolio add button (for multi-unit analysis) ---
-        if "Multi" in analysis_mode:
+        if "Multi" in str(analysis_mode):
             unit_label_btn = "block" if _admin_level == "block" else "district"
             display_name = block_name if _admin_level == "block" else district_name
             
