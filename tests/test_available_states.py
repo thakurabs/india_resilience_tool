@@ -1,0 +1,29 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from india_resilience_tool.app.geography import list_available_states_from_processed_root
+
+
+def test_available_states_new_structure(tmp_path: Path) -> None:
+    (tmp_path / "Telangana" / "districts" / "Karimnagar" / "ssp245").mkdir(parents=True)
+    (tmp_path / "Odisha" / "blocks" / "Khordha" / "Bhubaneswar" / "ssp245").mkdir(parents=True)
+    (tmp_path / "EmptyState").mkdir()
+
+    states = list_available_states_from_processed_root(str(tmp_path))
+    assert states == ["Odisha", "Telangana"]
+
+
+def test_available_states_old_structure(tmp_path: Path) -> None:
+    (tmp_path / "Telangana" / "Hyderabad" / "ssp245").mkdir(parents=True)
+    (tmp_path / "Kerala" / "districts").mkdir(parents=True)
+
+    states = list_available_states_from_processed_root(str(tmp_path))
+    assert states == ["Telangana"]
+
+
+def test_available_states_missing_or_empty_root(tmp_path: Path) -> None:
+    missing = tmp_path / "does_not_exist"
+    assert list_available_states_from_processed_root(str(missing)) == []
+
+    assert list_available_states_from_processed_root(str(tmp_path)) == []
