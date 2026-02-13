@@ -16,7 +16,7 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 
 # Re-export state module constants for convenience
 from india_resilience_tool.app.state import (
@@ -171,6 +171,7 @@ def render_analysis_mode_selector(
     label_visibility: str = "visible",
     use_markdown_header: bool = False,
     level: Optional[str] = None,
+    on_change: Optional[Callable[[], None]] = None,
 ) -> str:
     """
     Render analysis mode selector with the stable widget key 'analysis_mode'.
@@ -238,6 +239,7 @@ def render_analysis_mode_selector(
         label_visibility=label_visibility,
         help=help_text,
         format_func=_fmt,
+        on_change=on_change,
     )
 
     # Handle mode transitions - clear route-based state
