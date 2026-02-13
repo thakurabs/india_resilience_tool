@@ -62,6 +62,12 @@ from india_resilience_tool.app.sidebar import (
     render_hover_toggle_if_portfolio,
     render_view_selector,
 )
+from india_resilience_tool.app.ui.expander_autoclose import (
+    ensure_expander_state,
+    mark_expander_open,
+    maybe_collapse_expander,
+    register_widget_options,
+)
 
 from india_resilience_tool.app.views.map_view import (
     render_map_view,
@@ -744,12 +750,18 @@ PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 # Unified Index selection (bundle → metric)
 # -------------------------
 with metric_ui_placeholder.container():
-    if "ui_metric_expander_open" not in st.session_state:
-        st.session_state["ui_metric_expander_open"] = True
+    ensure_expander_state("ui_metric_expander")
 
-    def _auto_close_metric_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
-            st.session_state["ui_metric_expander_open"] = False
+    def _on_bundle_change() -> None:
+        index_slugs_local = get_metrics_for_bundle(st.session_state.get("selected_bundle"))
+        if not index_slugs_local:
+            index_slugs_local = list(VARIABLES.keys())
+
+        selected_metric = st.session_state.get("selected_var")
+        if selected_metric not in index_slugs_local:
+            st.session_state["selected_var"] = index_slugs_local[0]
+
+        mark_expander_open("ui_metric_expander")
 
     with st.expander(
         "Metric selection",
@@ -777,7 +789,7 @@ with metric_ui_placeholder.container():
             index=all_bundles.index(default_bundle) if default_bundle in all_bundles else 0,
             key="selected_bundle",
             help="Select a thematic bundle to filter available metrics",
-            on_change=_auto_close_metric_expander,
+            on_change=_on_bundle_change,
         )
         
         # Show bundle description as tooltip/caption
@@ -792,6 +804,8 @@ with metric_ui_placeholder.container():
         if not index_slugs:
             index_slugs = list(VARIABLES.keys())
             st.warning(f"Bundle '{selected_bundle}' has no metrics; showing all indices.")
+        register_widget_options("selected_bundle", all_bundles)
+        register_widget_options("selected_var", index_slugs)
 
         # Previously selected index might not be in this bundle; clamp it
         default_slug = st.session_state.get("selected_var", index_slugs[0])
@@ -804,7 +818,10 @@ with metric_ui_placeholder.container():
             index=index_slugs.index(default_slug),
             key="selected_var",
             format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
-            on_change=_auto_close_metric_expander,
+            on_change=lambda: maybe_collapse_expander(
+                "ui_metric_expander",
+                ["selected_bundle", "selected_var"],
+            ),
         )
 
         # Resolve per-index config
@@ -1001,12 +1018,7 @@ pretty_metric_label = (
 
 
 with map_mode_placeholder.container():
-    if "ui_chloropleth_expander_open" not in st.session_state:
-        st.session_state["ui_chloropleth_expander_open"] = True
-
-    def _auto_close_chloropleth_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
-            st.session_state["ui_chloropleth_expander_open"] = False
+    ensure_expander_state("ui_chloropleth_expander")
 
     # Tight "Map mode" label with no extra space before the radio
     with st.expander(
@@ -1027,7 +1039,11 @@ with map_mode_placeholder.container():
             index=0,
             key="map_mode",
             label_visibility="collapsed",  # keeps UI same as before
-            on_change=_auto_close_chloropleth_expander,
+            on_change=lambda: maybe_collapse_expander("ui_chloropleth_expander", ["map_mode"]),
+        )
+        register_widget_options(
+            "map_mode",
+            ["Absolute value", "Change from 1990-2010 baseline"],
         )
 
 # -------------------------
@@ -1077,12 +1093,16 @@ if "pending_selected_district" in st.session_state:
 
 # State/district selectors + analysis focus (combined block in sidebar)
 with state_placeholder.container():
-    if "ui_geography_expander_open" not in st.session_state:
-        st.session_state["ui_geography_expander_open"] = True
+    ensure_expander_state("ui_geography_expander")
 
-    def _auto_close_geography_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
-            st.session_state["ui_geography_expander_open"] = False
+    def _on_state_change() -> None:
+        st.session_state["selected_district"] = "All"
+        st.session_state["selected_block"] = "All"
+        mark_expander_open("ui_geography_expander")
+
+    def _on_district_change() -> None:
+        st.session_state["selected_block"] = "All"
+        mark_expander_open("ui_geography_expander")
 
     with st.expander(
         "Geography & analysis focus",
@@ -1105,8 +1125,9 @@ with state_placeholder.container():
             options=states,
             index=states.index(st.session_state["selected_state"]),
             key="selected_state",
-            on_change=_auto_close_geography_expander,
+            on_change=_on_state_change,
         )
+        register_widget_options("selected_state", states)
 
         # Build per-state district GeoDataFrame
         if selected_state != "All":
@@ -1190,8 +1211,9 @@ with state_placeholder.container():
             options=districts,
             index=districts.index(st.session_state["selected_district"]),
             key="selected_district",
-            on_change=_auto_close_geography_expander,
+            on_change=_on_district_change,
         )
+        register_widget_options("selected_district", districts)
 
         # ---- Step 3: Block selection (only when admin_level == block AND district selected) ----
         selected_block = "All"
@@ -1219,8 +1241,12 @@ with state_placeholder.container():
                     options=block_options,
                     index=block_options.index(st.session_state.get("selected_block", "All")),
                     key="selected_block",
-                    on_change=_auto_close_geography_expander,
+                    on_change=lambda: maybe_collapse_expander(
+                        "ui_geography_expander",
+                        ["selected_state", "selected_district", "analysis_mode", "selected_block"],
+                    ),
                 )
+                register_widget_options("selected_block", block_options)
             else:
                 # Show disabled/info when district not selected
                 if selected_district == "All":
@@ -1236,6 +1262,16 @@ with state_placeholder.container():
             else ["Single district focus", "Multi-district portfolio"]
         )
 
+        show_block_selector = (
+            admin_level == "block" and selected_state != "All" and selected_district != "All"
+        )
+        analysis_on_change = None
+        if not show_block_selector:
+            analysis_on_change = lambda: maybe_collapse_expander(
+                "ui_geography_expander",
+                ["selected_state", "selected_district", "analysis_mode"],
+            )
+
         analysis_mode = render_analysis_mode_selector(
             label="Analysis focus",
             options=analysis_options,
@@ -1247,8 +1283,9 @@ with state_placeholder.container():
             label_visibility="collapsed",
             use_markdown_header=True,
             level=admin_level,
-            on_change=_auto_close_geography_expander,
+            on_change=analysis_on_change,
         )
+        register_widget_options("analysis_mode", analysis_options)
 
         # Reset portfolio route state when switching analysis focus modes
         prev_mode = st.session_state.get("_analysis_mode_prev", analysis_mode)
