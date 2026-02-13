@@ -54,6 +54,8 @@ from india_resilience_tool.viz.tables import build_rankings_table_df as _build_r
 
 from india_resilience_tool.utils.naming import alias
 
+from india_resilience_tool.app.geography import list_available_states_from_processed_root
+
 from india_resilience_tool.app.sidebar import (
     apply_jump_once_flags,
     render_admin_level_selector,
@@ -253,6 +255,7 @@ def build_adm3_geojson_by_state(
     )
     return by_state
 
+
 @st.cache_data
 def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return _build_adm1_from_adm2(_adm2_gdf, state_col="state_name")
@@ -263,6 +266,11 @@ def enrich_adm2_with_state_names(
     _adm1_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     return _enrich_adm2_with_state_names(_adm2_gdf, _adm1_gdf, state_col="state_name", adm1_name_col="shapeName")
+
+
+@st.cache_data(ttl=180)
+def list_available_states_from_processed_root_cached(processed_root_str: str) -> list[str]:
+    return list_available_states_from_processed_root(processed_root_str)
 
 # -------------------------
 # Color helpers (no GeoJSON round-trip)
@@ -1088,60 +1096,64 @@ with state_placeholder.container():
         "Geography & analysis focus",
         expanded=bool(st.session_state.get("ui_geography_expander_open", True)),
     ):
-        # ---- Step 1: State selection ----
-        states = ["All"] + sorted(
-            adm1["shapeName"].astype(str).str.strip().unique().tolist()
-        )
+        # ---- Step 1: State selection (data-driven from processed root) ----
+        processed_root = PROCESSED_ROOT.resolve()
+        available_states = list_available_states_from_processed_root_cached(str(processed_root))
+
+        if not processed_root.exists() or not processed_root.is_dir():
+            st.warning(f"No processed data found under IRT_PROCESSED_ROOT={processed_root}")
+            st.stop()
+
+        if not available_states:
+            st.warning(f"No processed data found under IRT_PROCESSED_ROOT={processed_root}")
+            st.stop()
+
+        prev_state = st.session_state.get("selected_state")
+        if prev_state and prev_state not in available_states:
+            st.warning(
+                f"Previously selected state '{prev_state}' is no longer available in processed data. "
+                f"Resetting to '{available_states[0]}'."
+            )
+
         if (
             "selected_state" not in st.session_state
-            or st.session_state["selected_state"] not in states
+            or st.session_state["selected_state"] not in available_states
         ):
-            st.session_state["selected_state"] = (
-                "Telangana" if "Telangana" in states else "All"
-            )
+            st.session_state["selected_state"] = available_states[0]
 
         selected_state = st.selectbox(
             "State",
-            options=states,
-            index=states.index(st.session_state["selected_state"]),
+            options=available_states,
+            index=available_states.index(st.session_state["selected_state"]),
             key="selected_state",
             on_change=_auto_close_geography_expander,
         )
 
         # Build per-state district GeoDataFrame
-        if selected_state != "All":
-            sel_state_norm = selected_state.strip().lower()
+        sel_state_norm = selected_state.strip().lower()
+        state_row = adm1[
+            adm1["shapeName"].astype(str).str.strip().str.lower()
+            == sel_state_norm
+        ]
+        if state_row.empty:
             state_row = adm1[
-                adm1["shapeName"].astype(str).str.strip().str.lower()
-                == sel_state_norm
+                adm1["shapeName"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .str.contains(sel_state_norm, na=False)
             ]
-            if state_row.empty:
-                state_row = adm1[
-                    adm1["shapeName"]
-                    .astype(str)
-                    .str.strip()
-                    .str.lower()
-                    .str.contains(sel_state_norm, na=False)
-                ]
-            if not state_row.empty:
-                state_geom = state_row.iloc[0].geometry
-                try:
-                    gdf_state_districts = adm2[
-                        adm2.geometry.within(state_geom.buffer(0.001))
-                    ].copy()
-                except Exception:
-                    gdf_state_districts = adm2[
-                        adm2.geometry.centroid.within(state_geom.buffer(0.001))
-                    ].copy()
-                if gdf_state_districts.empty:
-                    gdf_state_districts = adm2[
-                        adm2["state_name"]
-                        .astype(str)
-                        .str.strip()
-                        .str.lower()
-                        .str.contains(sel_state_norm, na=False)
-                    ].copy()
-            else:
+        if not state_row.empty:
+            state_geom = state_row.iloc[0].geometry
+            try:
+                gdf_state_districts = adm2[
+                    adm2.geometry.within(state_geom.buffer(0.001))
+                ].copy()
+            except Exception:
+                gdf_state_districts = adm2[
+                    adm2.geometry.centroid.within(state_geom.buffer(0.001))
+                ].copy()
+            if gdf_state_districts.empty:
                 gdf_state_districts = adm2[
                     adm2["state_name"]
                     .astype(str)
@@ -1150,7 +1162,13 @@ with state_placeholder.container():
                     .str.contains(sel_state_norm, na=False)
                 ].copy()
         else:
-            gdf_state_districts = adm2.copy()
+            gdf_state_districts = adm2[
+                adm2["state_name"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .str.contains(sel_state_norm, na=False)
+            ].copy()
 
         districts = [
             "All"
@@ -1204,7 +1222,7 @@ with state_placeholder.container():
             adm3_sidebar = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
 
             block_options = ["All"]
-            if selected_state != "All" and selected_district != "All":
+            if selected_district != "All":
                 try:
                     blocks = _get_blocks_for_district(adm3_sidebar, selected_state, selected_district, normalize_fn=alias)
                     block_options = ["All"] + sorted([str(b).strip() for b in blocks if str(b).strip()])
