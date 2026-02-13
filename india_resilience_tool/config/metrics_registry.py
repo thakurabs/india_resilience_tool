@@ -176,7 +176,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
-        "name": "Annual Maximum of Daily Minimum Temperature (TNx)",
+        "name": "Warmest Night ",
         "slug": "tnx_annual_max",
         "var": "tasmin",
         "value_col": "tnx_annual_max_C",
@@ -354,21 +354,21 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #         "India-specific higher threshold for summer days."
     #     ),
     # },
-# {
-#     "name": "Wet-Bulb Temperature (Annual Mean)",
-#     "slug": "twb_annual_mean",
-#     "var": "tas",
-#     "vars": ["tas", "hurs"],
-#     "value_col": "twb_annual_mean_C",
-#     "units": "°C",
-#     "compute": "wet_bulb_annual_mean_stull",
-#     "params": {},
-#     "group": "temperature",
-#     "description": (
-#         "Annual mean wet-bulb temperature (°C) derived from near-surface air temperature (tas) "
-#         "and relative humidity (hurs) using the Stull (2011) approximation."
-#     ),
-# },
+{
+    "name": "Wet-Bulb Temperature (Annual Mean)",
+    "slug": "twb_annual_mean",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "twb_annual_mean_C",
+    "units": "°C",
+    "compute": "wet_bulb_annual_mean_stull",
+    "params": {},
+    "group": "temperature",
+    "description": (
+        "Annual mean wet-bulb temperature (°C) derived from near-surface air temperature (tas) "
+        "and relative humidity (hurs) using the Stull (2011) approximation."
+    ),
+},
 {
     "name": "Wet-Bulb Temperature (Annual Max)",
     "slug": "twb_annual_max",
@@ -1399,16 +1399,19 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(PIPELINE_M
 
 BUNDLES: dict[str, list[str]] = {
     "Heat Risk": [
+        "tas_annual_mean",
+        "txx_annual_max",        
         # Heat thresholds (absolute temperature thresholds)
         # "tas_gt32",
         "txge30_hot_days",
+        
         "txge35_extreme_heat_days",
         # "su_summer_days_gt25",
         "tasmin_tropical_nights_gt20",
         # Wet-bulb thermal stress
-        # "twb_annual_mean",
-        "twb_annual_max",
-        "twb_days_ge_30",
+        
+        
+        
         # Heat percentiles (relative to baseline)
         "tx90p_hot_days_pct",
         "tn90p_warm_nights_pct",
@@ -1423,16 +1426,23 @@ BUNDLES: dict[str, list[str]] = {
         # "hwm_heatwave_magnitude",
         "hwa_heatwave_amplitude",
         # Heat baseline context (annual/seasonal means and extremes)
-        "txx_annual_max",
+        
         "tnx_annual_max",
+        
         "tasmax_summer_mean",
-        "tas_annual_mean",
+        
         "tas_summer_mean",
-        "tas_winter_mean",
         # "tasmax_annual_mean",
         # "tasmin_annual_mean",
     ],
+    "Heat Stress": [
+        "twb_annual_mean",
+        "twb_annual_max",
+        "twb_days_ge_30",
+    ],
     "Cold Risk": [
+        "tas_winter_mean",
+        "tasmin_winter_mean",
         # Cold thresholds
         "fd_frost_days",
         # "id_icing_days",
@@ -1445,7 +1455,6 @@ BUNDLES: dict[str, list[str]] = {
         # Cold baseline context
         # "txn_annual_min",
         "tnn_annual_min",
-        "tasmin_winter_mean",
     ],
     "Agriculture & Growing Conditions": [
         # Growing season
@@ -1517,6 +1526,7 @@ BUNDLES: dict[str, list[str]] = {
 # Bundle display order for UI
 BUNDLE_ORDER: list[str] = [
     "Heat Risk",
+    "Heat Stress",
     "Cold Risk",
     "Agriculture & Growing Conditions",
     "Flood & Extreme Rainfall Risk",
