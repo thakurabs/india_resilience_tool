@@ -3087,7 +3087,32 @@ def _compute_block_ensembles(level_root: Path, ensembles_root: Path):
                 
                 if model_yearly:
                     out_dir = ensembles_root / district / block / scenario
-                    _write_ensemble_stats(model_yearly, out_dir, block)
+                    try:
+                        _write_ensemble_stats(model_yearly, out_dir, block)
+                    except Exception as e:
+                        logging.warning(
+                            "Failed to write ensemble yearly for block=%s district=%s scenario=%s: %s",
+                            block,
+                            district,
+                            scenario,
+                            e,
+                        )
+                        continue
+
+                    # After successfully writing ensemble outputs, delete per-model yearly CSVs
+                    out_csv = out_dir / f"{block}_yearly_ensemble.csv"
+                    if out_csv.exists():
+                        for m in model_dirs:
+                            ycsv = m / scenario / f"{block}_yearly.csv"
+                            if ycsv.exists():
+                                try:
+                                    ycsv.unlink()
+                                except Exception as e:
+                                    logging.debug(
+                                        "Could not delete per-model block yearly CSV: %s (%s)",
+                                        ycsv,
+                                        e,
+                                    )
 
 def _write_ensemble_stats(model_yearly: list, out_dir: Path, unit_name: str):
     """Write ensemble statistics CSV."""

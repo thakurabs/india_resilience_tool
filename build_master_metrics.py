@@ -807,7 +807,11 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
         level_path = state_dir / BLOCK_FOLDER
         if not level_path.exists():
             return False
-        patterns = ("*/*/*/*/*_periods.csv", "*/*/*/*/*_yearly.csv")
+        patterns = (
+            "*/*/*/*/*_periods.csv",
+            "*/*/*/*/*_yearly.csv",
+            "ensembles/*/*/*/*_yearly_ensemble.csv",
+        )
         for pat in patterns:
             try:
                 for _ in level_path.glob(pat):
