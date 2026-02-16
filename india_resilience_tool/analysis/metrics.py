@@ -139,19 +139,38 @@ def compute_rank_and_percentile(
     *,
     state_col: str = "state",
     percentile_method: str = "le",
+    normalize_fn: Optional[Callable[[str], str]] = None,
 ) -> Tuple[Optional[int], Optional[float]]:
     """Compute rank (descending) and percentile within a state.
 
     This helper matches the earlier dashboard behavior (rank 1 = highest).
     For direction-aware logic (e.g., SPI where lower is worse), use
     `compute_position_stats`.
+
+    Args:
+        normalize_fn:
+            Optional normalization function to apply to state names before matching.
+            If not provided, matching falls back to strip + lower.
     """
     if df is None or df.empty:
         return None, None
     if metric_col not in df.columns or state_col not in df.columns:
         return None, None
 
-    mask = df[state_col].astype(str).str.strip().str.lower() == str(state_name).strip().lower()
+    if normalize_fn is None:
+        left = df[state_col].astype(str).str.strip().str.lower()
+        right = str(state_name).strip().lower()
+    else:
+        def _safe_norm(x: object) -> str:
+            try:
+                return normalize_fn(str(x))
+            except Exception:
+                return str(x).strip().lower()
+
+        left = df[state_col].astype(str).map(_safe_norm)
+        right = _safe_norm(state_name)
+
+    mask = left == right
     state_vals = pd.to_numeric(df.loc[mask, metric_col], errors="coerce").dropna()
     if state_vals.empty:
         return None, None
