@@ -289,12 +289,21 @@ def make_scenario_comparison_figure(
                 mean = float(np.mean(y_vals))
                 eps = 1e-9
 
-                rel_spread = spread / max(abs(mean), eps)     # spread relative to level
-                closeness = y_min / max(y_max, eps)           # min close to max?
+                # Two complementary signals:
+                # 1) closeness: all bars are high relative to each other (high baseline)
+                # 2) rel_spread: spread is modest relative to the overall level
+                closeness = y_min / max(y_max, eps)                 # 0..1
+                rel_spread_mean = spread / max(abs(mean), eps)      # relative to mean
+                rel_spread_max = spread / max(y_max, eps)           # relative to max
 
-                # Trigger zoom when values are "nearly equal" relative to absolute level.
-                # These thresholds work well for temperature-like metrics and %/count indices.
-                zoomed = (y_min >= 0) and (closeness >= 0.85) and (rel_spread <= 0.08)
+                # Broader trigger: catches "tropical nights" and similar indices.
+                # - closeness >= 0.80 means min is at least 80% of max
+                # - rel_spread_mean <= 0.12 OR rel_spread_max <= 0.15 keeps zoom for modest spreads
+                zoomed = (
+                    (y_min >= 0)
+                    and (closeness >= 0.80)
+                    and ((rel_spread_mean <= 0.12) or (rel_spread_max <= 0.15))
+                )
 
         if y_vals.size > 0:
             y_min = float(np.min(y_vals))
@@ -407,14 +416,25 @@ def make_scenario_comparison_figure(
                 )
             )
         if handles:
-            ax.legend(
-                handles=handles,
-                fontsize=font_size_legend,
-                frameon=False,
-                ncol=min(3, len(handles)),
-                loc="upper left",
-                bbox_to_anchor=(0.0, 1.02),
-            )
+            if zoomed:
+                # In zoomed mode, keep the plot area clean: move legend to the right
+                ax.legend(
+                    handles=handles,
+                    fontsize=font_size_legend,
+                    frameon=False,
+                    ncol=1,
+                    loc="center left",
+                    bbox_to_anchor=(1.02, 0.5),
+                )
+            else:
+                ax.legend(
+                    handles=handles,
+                    fontsize=font_size_legend,
+                    frameon=False,
+                    ncol=min(3, len(handles)),
+                    loc="upper left",
+                    bbox_to_anchor=(0.0, 1.02),
+                )
 
         ax.grid(axis="y", linestyle="--", alpha=0.35)
         ax.set_axisbelow(True)
