@@ -14,6 +14,7 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 from functools import lru_cache
+import hashlib
 
 import numpy as np
 import pandas as pd
@@ -201,3 +202,46 @@ def build_vertical_gradient_legend_block_html(
   </div>
 </div>
 """
+
+
+# -----------------------------------------------------------------------------
+# Discrete palette helpers (for grouped bars / categorical legends)
+# -----------------------------------------------------------------------------
+
+DISCRETE_PALETTE_HEX: list[str] = [
+    "#1f77b4",  # blue
+    "#ff7f0e",  # orange
+    "#2ca02c",  # green
+    "#d62728",  # red
+    "#9467bd",  # purple
+    "#8c564b",  # brown
+    "#e377c2",  # pink
+    "#7f7f7f",  # gray
+    "#bcbd22",  # olive
+    "#17becf",  # cyan
+]
+
+
+def stable_color_for_key(key: str, *, palette: list[str] | None = None) -> str:
+    """Return a deterministic color for a given string key.
+
+    Notes:
+        This is intentionally NOT cryptographic. It is only to keep chart colors
+        stable across sessions and selection sizes.
+    """
+    pal = palette or DISCRETE_PALETTE_HEX
+    if not pal:
+        return "#777777"
+
+    k = str(key or "").strip().lower().encode("utf-8")
+    h = hashlib.md5(k).hexdigest()  # nosec - non-cryptographic use
+    idx = int(h[:8], 16) % len(pal)
+    return pal[idx]
+
+
+def stable_color_map(
+    keys: list[str] | tuple[str, ...], *, palette: list[str] | None = None
+) -> dict[str, str]:
+    """Return a deterministic mapping from keys to colors."""
+    pal = palette or DISCRETE_PALETTE_HEX
+    return {str(k): stable_color_for_key(str(k), palette=pal) for k in list(keys)}

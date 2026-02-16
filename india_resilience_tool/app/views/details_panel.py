@@ -36,6 +36,8 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 
 import pandas as pd
 
+from india_resilience_tool.viz.formatting import format_delta, format_percent, format_value
+
 
 def render_risk_summary(
     *,
@@ -56,6 +58,7 @@ def render_risk_summary(
     rank_in_district: Optional[int] = None,
     n_in_district: Optional[int] = None,
     percentile_district: Optional[float] = None,
+    units: Optional[str] = None,
 ) -> None:
     """
     Render the Risk summary expander.
@@ -86,7 +89,7 @@ def render_risk_summary(
                 st.metric(
                     label="Current Value",
                     label_visibility="collapsed",
-                    value=f"{current_val_f:.2f}",
+                    value=format_value(current_val_f, units=units),
                     help=f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})",
                 )
             else:
@@ -102,9 +105,9 @@ def render_risk_summary(
                     if baseline_val_f not in (0.0, None)
                     else None
                 )
-                delta_str = f"{diff_abs:+.2f}"
+                delta_str = format_delta(diff_abs, units=units)
                 if diff_pct is not None:
-                    delta_str += f" ({diff_pct:+.1f}%)"
+                    delta_str += f" ({format_percent(diff_pct, decimals=1, show_sign=True)})"
 
                 if baseline_col:
                     parts = str(baseline_col).split("__")
@@ -119,7 +122,7 @@ def render_risk_summary(
                 st.metric(
                     label="Change Vs Baseline",
                     label_visibility="collapsed",
-                    value=f"{baseline_val_f:.2f}",
+                    value=format_value(baseline_val_f, units=units),
                     delta=delta_str,
                     help=f"Baseline: {baseline_desc}",
                 )
@@ -289,7 +292,7 @@ def render_trend_over_time(
                 import plotly.graph_objects as go
 
                 if isinstance(fig_ts, go.Figure):
-                    st.plotly_chart(fig_ts, use_container_width=True)
+                    st.plotly_chart(fig_ts, use_container_width=True, config={"displaylogo": False, "responsive": True})
                 else:
                     st.pyplot(fig_ts, use_container_width=True)
             except Exception:
@@ -868,6 +871,7 @@ def render_details_panel(
         rank_in_district=rank_in_district,
         n_in_district=n_in_district,
         percentile_district=percentile_district,
+        units=units,
     )
 
     # 2. Trend over time

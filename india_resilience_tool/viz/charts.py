@@ -151,6 +151,7 @@ def make_scenario_comparison_figure(
     font_size_ticks: int = 9,
     font_size_legend: int = 9,
     *,
+    units: Optional[str] = None,
     logo_path: Optional[PathLike] = None,
     style: Optional[IRTFigureStyle] = None,
 ) -> Tuple[Optional[Any], Optional[Any]]:
@@ -160,30 +161,29 @@ def make_scenario_comparison_figure(
     Notes:
     - If `ax` is provided, the caller owns figure sizing; this function will not
       add the logo to avoid duplicating it on multi-axes pages (e.g., A4 PDFs).
+    - `units` is optional and only affects axis labeling/value formatting.
     """
     import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
 
+    from india_resilience_tool.viz.formatting import format_value
+
     if panel_df is None or panel_df.empty:
         return None, None
+
+    created_axes = ax is None
 
     s = style or IRTFigureStyle()
     figsize_eff = figsize or ensure_16x9_figsize(s.panel_figsize, mode="fit_width")
 
-    # Keep these canonicalisations for compatibility/future highlighting
-    _ = str(sel_scenario).strip().lower()
-    _ = canonical_period_label(sel_period)
-    _ = str(sel_stat)
+    # Canonicalise inputs for highlighting
+    sel_scenario_norm = str(sel_scenario).strip().lower()
+    sel_period_norm = canonical_period_label(sel_period)
+    sel_stat_norm = str(sel_stat)
 
     dfp = panel_df.copy()
     dfp["period"] = dfp["period"].map(canonical_period_label)
     dfp["scenario_norm"] = dfp["scenario"].astype(str).str.strip().str.lower()
-
-    scenario_colors = {
-        "historical": "tab:blue",
-        "ssp245": "gold",
-        "ssp585": "tab:red",
-    }
 
     combos: list[tuple[str, str]] = []
     for scen in SCENARIO_ORDER:
@@ -212,34 +212,38 @@ def make_scenario_comparison_figure(
         scen_here = [sc for (sc, p) in combos if p == period]
         if not scen_here:
             continue
-
         n_scen = len(scen_here)
-        group_center = p_idx * group_spacing
-        for i, scen_norm in enumerate(scen_here):
-            offset = (i - (n_scen - 1) / 2.0) * within_spacing
-            x_positions[(scen_norm, period)] = group_center + offset
+        start_x = p_idx * group_spacing - (n_scen - 1) * within_spacing / 2.0
+        for j, scen in enumerate(scen_here):
+            x_positions[(scen, period)] = start_x + j * within_spacing
 
     xs: list[float] = []
     ys: list[float] = []
     colors: list[str] = []
+    edgecolors: list[str] = []
+    linewidths: list[float] = []
+    for scen, period in combos:
+        mask = (dfp["scenario_norm"] == scen) & (dfp["period"] == period)
+        row = dfp.loc[mask].iloc[0]
+        y = row.get("value", np.nan)
 
-    for scen_norm, period in combos:
-        mask = (dfp["scenario_norm"] == scen_norm) & (dfp["period"] == period)
-        if not mask.any():
-            continue
-        try:
-            val = float(dfp.loc[mask, "value"].iloc[0])
-        except Exception:
-            continue
-        x_val = x_positions.get((scen_norm, period))
-        if x_val is None:
-            continue
-        xs.append(x_val)
-        ys.append(val)
-        colors.append(scenario_colors.get(scen_norm, "grey"))
+        xs.append(float(x_positions[(scen, period)]))
+        ys.append(float(y) if pd.notna(y) else np.nan)
+
+        base_color = SCENARIO_COLORS_HEX.get(scen, "tab:blue")
+        colors.append(base_color)
+
+        is_selected = (scen == sel_scenario_norm) and (period == sel_period_norm)
+        edgecolors.append("black" if is_selected else "rgba(0,0,0,0.35)")
+        linewidths.append(1.4 if is_selected else 0.9)
 
     if not xs:
         return None, None
+
+    y_label = metric_label
+    u = (units or "").strip()
+    if u and f"({u})" not in y_label:
+        y_label = f"{y_label} ({u})"
 
     with irt_style_context(s):
         if ax is None:
@@ -247,14 +251,27 @@ def make_scenario_comparison_figure(
         else:
             fig = ax.figure
 
-        ax.bar(
+        bars = ax.bar(
             xs,
             ys,
             color=colors,
-            edgecolor="black",
-            linewidth=0.9,
+            edgecolor=edgecolors,
+            linewidth=linewidths,
             width=0.45,
         )
+
+        # Value labels
+        for b, y in zip(bars, ys):
+            if pd.isna(y):
+                continue
+            ax.text(
+                b.get_x() + b.get_width() / 2,
+                y,
+                format_value(y, units=units),
+                ha="center",
+                va="bottom",
+                fontsize=font_size_ticks,
+            )
 
         group_centres: list[float] = []
         group_labels: list[str] = []
@@ -264,63 +281,49 @@ def make_scenario_comparison_figure(
 
         ax.set_xticks(group_centres)
         ax.set_xticklabels(group_labels, fontsize=font_size_ticks)
-        ax.set_ylabel(metric_label, fontsize=font_size_label)
-
-        ax.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.5)
-        ax.tick_params(axis="y", labelsize=font_size_ticks)
-        ax.tick_params(axis="x", labelsize=font_size_ticks)
-
-        for x_val, y_val in zip(xs, ys):
-            if y_val is None or (isinstance(y_val, float) and not np.isfinite(y_val)):
-                continue
-            ax.text(
-                x_val,
-                y_val,
-                f"{y_val:.1f}",
-                ha="center",
-                va="bottom",
-                fontsize=font_size_ticks,
-            )
-
+        ax.set_ylabel(y_label, fontsize=font_size_label)
         ax.set_title(
-            f"Scenario comparison – {district_name}",
+            f"{district_name} · Scenario comparison ({sel_stat_norm})",
             fontsize=font_size_title,
-            pad=6,
         )
 
-        legend_handles: list[Any] = []
-        legend_labels: list[str] = []
-        scen_seen = {sc for (sc, _) in combos}
+        # Legend
+        handles = []
         for scen in SCENARIO_ORDER:
             scen_norm = str(scen).strip().lower()
-            if scen_norm in scen_seen:
-                legend_handles.append(
-                    mpatches.Patch(color=scenario_colors.get(scen_norm, "grey"))
+            if not any(sc == scen_norm for (sc, _) in combos):
+                continue
+            handles.append(
+                mpatches.Patch(
+                    color=SCENARIO_COLORS_HEX.get(scen_norm, "tab:blue"),
+                    label=SCENARIO_DISPLAY.get(scen_norm, scen_norm),
                 )
-                legend_labels.append(SCENARIO_DISPLAY.get(scen_norm, scen_norm))
-
-        if legend_handles:
+            )
+        if handles:
             ax.legend(
-                legend_handles,
-                legend_labels,
-                frameon=False,
+                handles=handles,
                 fontsize=font_size_legend,
-                ncol=len(legend_handles),
+                frameon=False,
+                ncol=min(3, len(handles)),
                 loc="upper left",
-                bbox_to_anchor=(0.0, 1.02),
             )
 
+        ax.grid(axis="y", linestyle="--", alpha=0.35)
+        ax.set_axisbelow(True)
         strip_spines(ax)
+
         try:
             fig.tight_layout()
         except Exception:
             pass
 
-        if ax is None and logo_path:
-            add_ra_logo(fig, logo_path)
+        if created_axes and logo_path:
+            try:
+                add_ra_logo(fig, logo_path)
+            except Exception:
+                pass
 
         return fig, ax
-
 
 def create_trend_figure_for_index(
     hist_ts: pd.DataFrame,
@@ -332,19 +335,22 @@ def create_trend_figure_for_index(
     fig_dpi: int = 150,
     font_size_legend: int = 8,
     *,
+    units: Optional[str] = None,
     logo_path: Optional[PathLike] = None,
     style: Optional[IRTFigureStyle] = None,
 ) -> Any:
-    """Create the 'Trend over time' figure (historical + scenario + bands).
-
-    Notes:
-    - If `ax` is provided, the caller owns figure sizing; this function will not
-      add the logo to avoid duplicating it on multi-axes pages (e.g., A4 PDFs).
-    """
+    """Create the 'Trend over time' figure (historical + scenario + bands)."""
     import matplotlib.pyplot as plt
+
+    created_axes = ax is None
 
     s = style or IRTFigureStyle()
     figsize_eff = figsize or ensure_16x9_figsize(s.panel_figsize, mode="fit_width")
+
+    y_label = idx_label
+    u = (units or "").strip()
+    if u and f"({u})" not in y_label:
+        y_label = f"{y_label} ({u})"
 
     with irt_style_context(s):
         if ax is None:
@@ -362,94 +368,65 @@ def create_trend_figure_for_index(
                 xh,
                 yh,
                 linewidth=s.line_width,
-                color="tab:blue",
-                label="Historical",
+                color=SCENARIO_COLORS_HEX["historical"],
+                label=SCENARIO_DISPLAY.get("historical", "Historical"),
             )
-            if {"p05", "p95"}.issubset(hist_ts.columns):
-                y05 = pd.to_numeric(hist_ts["p05"], errors="coerce").to_numpy(dtype=float)
-                y95 = pd.to_numeric(hist_ts["p95"], errors="coerce").to_numpy(dtype=float)
+            # Optional band
+            if "p05" in hist_ts.columns and "p95" in hist_ts.columns:
+                p05 = pd.to_numeric(hist_ts["p05"], errors="coerce").to_numpy(dtype=float)
+                p95 = pd.to_numeric(hist_ts["p95"], errors="coerce").to_numpy(dtype=float)
                 ax_ts.fill_between(
                     xh,
-                    y05,
-                    y95,
-                    alpha=0.20,
-                    color="tab:blue",
+                    p05,
+                    p95,
+                    color=SCENARIO_COLORS_HEX["historical"],
+                    alpha=0.18,
+                    linewidth=0,
                 )
             has_any = True
 
+        scen_norm = str(scenario_name).strip().lower()
+        scen_color = SCENARIO_COLORS_HEX.get(scen_norm, "#d62728")
+        scen_label = SCENARIO_DISPLAY.get(scen_norm, scenario_name)
+
         if scen_ts is not None and not scen_ts.empty:
-            scen_label = (scenario_name or "scenario").upper()
             xs = pd.to_numeric(scen_ts["year"], errors="coerce").to_numpy(dtype=float)
             ys = pd.to_numeric(scen_ts["mean"], errors="coerce").to_numpy(dtype=float)
             ax_ts.plot(
                 xs,
                 ys,
                 linewidth=s.line_width,
-                color="tab:red",
+                color=scen_color,
                 label=scen_label,
             )
-            if {"p05", "p95"}.issubset(scen_ts.columns):
-                y05 = pd.to_numeric(scen_ts["p05"], errors="coerce").to_numpy(dtype=float)
-                y95 = pd.to_numeric(scen_ts["p95"], errors="coerce").to_numpy(dtype=float)
-                ax_ts.fill_between(
-                    xs,
-                    y05,
-                    y95,
-                    alpha=0.20,
-                    color="tab:red",
-                )
+            if "p05" in scen_ts.columns and "p95" in scen_ts.columns:
+                p05 = pd.to_numeric(scen_ts["p05"], errors="coerce").to_numpy(dtype=float)
+                p95 = pd.to_numeric(scen_ts["p95"], errors="coerce").to_numpy(dtype=float)
+                ax_ts.fill_between(xs, p05, p95, color=scen_color, alpha=0.18, linewidth=0)
             has_any = True
 
-        if (
-            hist_ts is not None
-            and scen_ts is not None
-            and not hist_ts.empty
-            and not scen_ts.empty
-        ):
-            try:
-                last_hist_year = int(hist_ts["year"].max())
-                last_hist = hist_ts.loc[hist_ts["year"] == last_hist_year].iloc[-1]
-
-                target_year = 2020
-                if "year" in scen_ts.columns and target_year in scen_ts["year"].values:
-                    first_scen = scen_ts.loc[scen_ts["year"] == target_year].iloc[0]
-                else:
-                    first_scen = scen_ts.loc[scen_ts["year"].idxmin()]
-
-                ax_ts.plot(
-                    [float(last_hist["year"]), float(first_scen["year"])],
-                    [float(last_hist["mean"]), float(first_scen["mean"])],
-                    color="grey",
-                    linestyle="--",
-                    linewidth=1.5,
-                )
-            except Exception:
-                pass
-
+        ax_ts.set_title("Trend over time", fontsize=s.title_fontsize)
         ax_ts.set_xlabel("Year")
-        ax_ts.set_ylabel(idx_label)
+        ax_ts.set_ylabel(y_label)
+        ax_ts.grid(True, linestyle="--", alpha=0.35)
+        ax_ts.set_axisbelow(True)
+        strip_spines(ax_ts)
 
         if has_any:
-            ax_ts.grid(True, linestyle=s.grid_linestyle, alpha=s.grid_alpha, linewidth=s.grid_linewidth)
-            strip_spines(ax_ts)
-            handles, _labels = ax_ts.get_legend_handles_labels()
-            if handles:
-                ax_ts.legend(frameon=False, fontsize=font_size_legend, ncol=3)
+            ax_ts.legend(frameon=False, fontsize=font_size_legend, loc="upper left")
 
-        if ax is None:
+        try:
+            fig_ts.tight_layout()
+        except Exception:
+            pass
+
+        if created_axes and logo_path:
             try:
-                fig_ts.tight_layout()
+                add_ra_logo(fig_ts, logo_path)
             except Exception:
                 pass
-            if logo_path:
-                add_ra_logo(fig_ts, logo_path)
 
         return fig_ts
-
-
-# =============================================================================
-# Portfolio Comparison Visualizations
-# =============================================================================
 
 def make_portfolio_heatmap(
     df: pd.DataFrame,
@@ -751,7 +728,9 @@ def make_portfolio_grouped_bar(
     fig, ax = plt.subplots(figsize=figsize, dpi=fig_dpi)
     
     # Color palette for indices
-    colors = plt.cm.Set2(np.linspace(0, 1, n_indices))
+    from india_resilience_tool.viz.colors import stable_color_map
+
+    colors_by_index = stable_color_map([str(i) for i in indices])
     
     # Calculate bar positions
     x = np.arange(n_districts)
@@ -774,10 +753,10 @@ def make_portfolio_grouped_bar(
         
         if horizontal:
             bars = ax.barh(x + offset, values, height=width_per_bar * 0.9, 
-                          label=idx_name, color=colors[i], edgecolor="white", linewidth=0.5)
+                          label=idx_name, color=colors_by_index.get(str(idx_name), "#777777"), edgecolor="white", linewidth=0.5)
         else:
             bars = ax.bar(x + offset, values, width=width_per_bar * 0.9,
-                         label=idx_name, color=colors[i], edgecolor="white", linewidth=0.5)
+                         label=idx_name, color=colors_by_index.get(str(idx_name), "#777777"), edgecolor="white", linewidth=0.5)
         
         # Add value labels if requested
         if show_values:
@@ -882,13 +861,11 @@ def create_trend_figure_for_index_plotly(
       - YEAR: VALUE [units]
       - Δ vs <period label> mean: +/-X [units]
       - (Optional) P05–P95 band, if present in the series
-
-    Notes:
-    - This is intended for the Streamlit dashboard (interactive hover).
-    - The existing Matplotlib version remains the source of truth for PDF/export.
     """
-    import numpy as np
     import plotly.graph_objects as go
+
+    from india_resilience_tool.viz.formatting import format_delta, format_value
+    from india_resilience_tool.viz.style import apply_irt_plotly_layout
 
     def _prep(df: pd.DataFrame) -> pd.DataFrame:
         if df is None or df.empty:
@@ -905,120 +882,122 @@ def create_trend_figure_for_index_plotly(
         out = out.dropna(subset=["year", "mean"]).sort_values("year").reset_index(drop=True)
         return out
 
-    def _units_suffix(u: Optional[str]) -> str:
-        u = (u or "").strip()
-        return f" {u}" if u else ""
-
     hist = _prep(hist_ts)
     scen = _prep(scen_ts)
 
     fig = go.Figure()
 
-    # Common hover template parts
-    u_suffix = _units_suffix(units)
     period_lbl = (compare_period_label or "").strip()
     has_compare = (compare_period_mean is not None) and bool(period_lbl)
 
-    # We’ll pass customdata columns:
-    #  [0] delta_vs_period_mean
-    #  [1] p05 (optional, NaN if not present)
-    #  [2] p95 (optional, NaN if not present)
-    def _make_customdata(df: pd.DataFrame) -> np.ndarray:
-        if df is None or df.empty:
-            return np.empty((0, 3), dtype=float)
-
-        delta = np.full(len(df), np.nan, dtype=float)
-        if compare_period_mean is not None:
-            delta = df["mean"].to_numpy(dtype=float) - float(compare_period_mean)
-
-        p05 = df["p05"].to_numpy(dtype=float) if "p05" in df.columns else np.full(len(df), np.nan)
-        p95 = df["p95"].to_numpy(dtype=float) if "p95" in df.columns else np.full(len(df), np.nan)
-
-        return np.column_stack([delta, p05, p95])
-
-    def _hovertemplate() -> str:
-        # year + value
-        ht = (
-            "<b>%{x:.0f}</b>: %{y:.2f}" + u_suffix + "<br>"
-        )
-        # delta vs period mean (teaching)
-        if has_compare:
-            ht += (
-                f"Δ vs {period_lbl} mean: "
-                "%{customdata[0]:+.2f}" + u_suffix + "<br>"
-            )
-        # band (if present on that row)
-        # We include it unconditionally, but it will show "nan" if missing;
-        # so we use Plotly's %{customdata[i]} formatting and rely on NaNs being hidden
-        # by a simple conditional string: Plotly doesn't support per-point conditionals
-        # in hovertemplate, so we just show it if columns exist at least.
-        ht += "<extra></extra>"
-        return ht
-
-    # Historical mean line
+    # Historical
     if not hist.empty:
+        delta = (hist["mean"] - float(compare_period_mean)) if has_compare else None
+        customdata = None
+        if has_compare:
+            customdata = delta.to_numpy().reshape(-1, 1)
+
+        hover = "<b>%{x:.0f}</b><br>" + f"Value: %{{y}}<br>"
+        if has_compare:
+            hover += f"Δ vs {period_lbl} mean: %{{customdata[0]}}<extra></extra>"
+        else:
+            hover += "<extra></extra>"
+
         fig.add_trace(
             go.Scatter(
                 x=hist["year"],
                 y=hist["mean"],
-                mode="lines+markers",
-                name="Historical",
-                customdata=_make_customdata(hist),
-                hovertemplate=_hovertemplate(),
+                mode="lines",
+                name=SCENARIO_DISPLAY.get("historical", "Historical"),
+                line={"color": SCENARIO_COLORS_HEX["historical"], "width": 2},
+                customdata=customdata,
+                hovertemplate=hover,
             )
         )
 
-        # Optional band
-        if {"p05", "p95"}.issubset(hist.columns):
+        if "p05" in hist.columns and "p95" in hist.columns:
             fig.add_trace(
                 go.Scatter(
-                    x=pd.concat([hist["year"], hist["year"][::-1]]),
-                    y=pd.concat([hist["p95"], hist["p05"][::-1]]),
-                    fill="toself",
-                    line=dict(width=0),
-                    name="Historical P05–P95",
+                    x=hist["year"],
+                    y=hist["p95"],
+                    mode="lines",
+                    line={"width": 0},
                     showlegend=False,
                     hoverinfo="skip",
-                    opacity=0.15,
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=hist["year"],
+                    y=hist["p05"],
+                    mode="lines",
+                    line={"width": 0},
+                    fill="tonexty",
+                    fillcolor="rgba(31,119,180,0.18)",
+                    showlegend=False,
+                    hoverinfo="skip",
                 )
             )
 
-    # Scenario mean line
+    scen_norm = str(scenario_name).strip().lower()
+    scen_color = SCENARIO_COLORS_HEX.get(scen_norm, "#d62728")
+    scen_label = SCENARIO_DISPLAY.get(scen_norm, scenario_name)
+
     if not scen.empty:
-        scen_label = (scenario_name or "scenario").upper()
+        delta = (scen["mean"] - float(compare_period_mean)) if has_compare else None
+        customdata = None
+        if has_compare:
+            customdata = delta.to_numpy().reshape(-1, 1)
+
+        hover = "<b>%{x:.0f}</b><br>" + "Value: %{y}<br>"
+        if has_compare:
+            hover += f"Δ vs {period_lbl} mean: %{{customdata[0]}}<extra></extra>"
+        else:
+            hover += "<extra></extra>"
+
         fig.add_trace(
             go.Scatter(
                 x=scen["year"],
                 y=scen["mean"],
-                mode="lines+markers",
+                mode="lines",
                 name=scen_label,
-                customdata=_make_customdata(scen),
-                hovertemplate=_hovertemplate(),
+                line={"color": scen_color, "width": 2},
+                customdata=customdata,
+                hovertemplate=hover,
             )
         )
 
-        # Optional band
-        if {"p05", "p95"}.issubset(scen.columns):
+        if "p05" in scen.columns and "p95" in scen.columns:
             fig.add_trace(
                 go.Scatter(
-                    x=pd.concat([scen["year"], scen["year"][::-1]]),
-                    y=pd.concat([scen["p95"], scen["p05"][::-1]]),
-                    fill="toself",
-                    line=dict(width=0),
-                    name=f"{scen_label} P05–P95",
+                    x=scen["year"],
+                    y=scen["p95"],
+                    mode="lines",
+                    line={"width": 0},
                     showlegend=False,
                     hoverinfo="skip",
-                    opacity=0.15,
+                )
+            )
+            # approximate rgba for scenario: use same alpha with hex conversion
+            fig.add_trace(
+                go.Scatter(
+                    x=scen["year"],
+                    y=scen["p05"],
+                    mode="lines",
+                    line={"width": 0},
+                    fill="tonexty",
+                    fillcolor="rgba(214,39,40,0.18)" if scen_norm == "ssp585" else "rgba(255,127,14,0.18)",
+                    showlegend=False,
+                    hoverinfo="skip",
                 )
             )
 
-    fig.update_layout(
-        title=idx_label,
-        xaxis_title="Year",
-        yaxis_title=(f"Value{u_suffix}" if u_suffix else "Value"),
-        hovermode="x",
-        margin=dict(l=10, r=10, t=40, b=10),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    )
+    y_label = idx_label
+    u = (units or "").strip()
+    if u and f"({u})" not in y_label:
+        y_label = f"{y_label} ({u})"
+
+    apply_irt_plotly_layout(fig, title="Trend over time", xaxis_title="Year", yaxis_title=y_label)
 
     return fig
+
