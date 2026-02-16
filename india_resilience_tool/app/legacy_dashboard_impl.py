@@ -700,16 +700,6 @@ with st.sidebar:
     # Show hover toggle (always visible)
     _ = render_hover_toggle_if_portfolio(analysis_mode_current)
 
-    # Global UI toggle: auto-collapse expanders after a selection is made
-    st.checkbox(
-        "Auto-collapse expanders",
-        value=bool(st.session_state.get("ui_auto_collapse_expanders", True)),
-        key="ui_auto_collapse_expanders",
-        help=(
-            "When enabled, expanders will collapse automatically after you choose an option "
-            "inside them (e.g., Metric, State/District, Map mode)."
-        ),
-    )
 
     analysis_mode_placeholder = st.empty()  # Single vs portfolio
     state_placeholder = st.empty()
@@ -1164,17 +1154,7 @@ if "pending_selected_district" in st.session_state:
 
 # State/district selectors + analysis focus (combined block in sidebar)
 with state_placeholder.container():
-    if "ui_geography_expander_open" not in st.session_state:
-        st.session_state["ui_geography_expander_open"] = True
-
-    def _auto_close_geography_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
-            st.session_state["ui_geography_expander_open"] = False
-
-    with st.expander(
-        "Geography & analysis focus",
-        expanded=bool(st.session_state.get("ui_geography_expander_open", True)),
-    ):
+    with st.expander("Geography & analysis focus", expanded=True):
         # Option A UX: disable downstream geography widgets until Analysis focus is chosen
         _analysis_mode_now = st.session_state.get("analysis_mode", SEL_PLACEHOLDER)
         analysis_ready = (_analysis_mode_now != SEL_PLACEHOLDER)
@@ -1238,8 +1218,6 @@ with state_placeholder.container():
             key="selected_state",
 
             disabled=(not analysis_ready) or (not metric_ready_for_geography),
-
-            on_change=_auto_close_geography_expander,
 
         )
 
@@ -1362,7 +1340,6 @@ with state_placeholder.container():
             index=districts.index(st.session_state["selected_district"]),
             key="selected_district",
             disabled=not analysis_ready,
-            on_change=_auto_close_geography_expander,
         )
 
         # ---- Step 3: Block selection (only when admin_level == block AND district selected) ----
@@ -1392,7 +1369,6 @@ with state_placeholder.container():
                     index=block_options.index(st.session_state.get("selected_block", "All")),
                     key="selected_block",
                     disabled=not analysis_ready,
-                    on_change=_auto_close_geography_expander,
                 )
             else:
                 # Show disabled/info when district not selected
@@ -1421,7 +1397,6 @@ with state_placeholder.container():
             label_visibility="collapsed",
             use_markdown_header=True,
             level=admin_level,
-            on_change=_auto_close_geography_expander,
         )
 
         # Reset portfolio route state when switching analysis focus modes
