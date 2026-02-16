@@ -34,9 +34,145 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
+import html
 import pandas as pd
 
+from india_resilience_tool.app.state import VIEW_RANKINGS
 from india_resilience_tool.viz.formatting import format_delta, format_percent, format_value
+
+
+_RISK_SUMMARY_CSS = """
+<style>
+/* ---------------------------
+   Risk summary stat cards
+   (big number + small units)
+---------------------------- */
+.irt-risk-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-top: 0.05rem;
+}
+
+.irt-risk-value {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.irt-risk-number {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-size: clamp(1.55rem, 1.2vw + 1.05rem, 2.35rem);
+}
+
+.irt-risk-unit {
+  font-weight: 500;
+  opacity: 0.6;
+  font-size: clamp(0.75rem, 0.45vw + 0.6rem, 0.95rem);
+}
+
+/* Delta badge (keeps the “pill” feel) */
+.irt-risk-delta {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.irt-delta-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.18rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.irt-delta-pos { background: rgba(34,197,94,0.12); color: rgb(34,197,94); }
+.irt-delta-neg { background: rgba(239,68,68,0.12); color: rgb(239,68,68); }
+.irt-delta-neutral { background: rgba(148,163,184,0.18); color: rgba(148,163,184,1); }
+
+/* ---------------------------
+   Link-styled “View rankings”
+   (scoped via aria-label + title)
+---------------------------- */
+button[aria-label="View rankings →"],
+button[title="Open the rankings table view"] {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  min-height: auto !important;
+  height: auto !important;
+  color: var(--primary-color) !important;
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+}
+
+button[aria-label="View rankings →"]:hover,
+button[title="Open the rankings table view"]:hover {
+  text-decoration: underline;
+}
+
+button[aria-label="View rankings →"]:disabled,
+button[title="Open the rankings table view"]:disabled {
+  opacity: 0.45 !important;
+  text-decoration: none !important;
+}
+</style>
+"""
+
+
+def _inject_risk_summary_css() -> None:
+    """Inject Risk Summary CSS once per session."""
+    import streamlit as st
+
+    if st.session_state.get("_irt_risk_summary_css_injected", False):
+        return
+    st.markdown(_RISK_SUMMARY_CSS, unsafe_allow_html=True)
+    st.session_state["_irt_risk_summary_css_injected"] = True
+
+
+def _risk_value_html(*, number_str: str, units: Optional[str]) -> str:
+    """Return HTML for a big number with small inline units."""
+    number_esc = html.escape(str(number_str))
+    unit = (units or "").strip()
+    unit_html = (
+        f'<span class="irt-risk-unit">{html.escape(unit)}</span>'
+        if unit
+        else ""
+    )
+    return (
+        f'<div class="irt-risk-value">'
+        f'<span class="irt-risk-number">{number_esc}</span>'
+        f'{unit_html}'
+        f"</div>"
+    )
+
+
+def _risk_metric_html(
+    *,
+    number_str: str,
+    units: Optional[str],
+    delta_text: Optional[str] = None,
+    delta_kind: str = "neutral",
+    help_text: Optional[str] = None,
+) -> str:
+    """Return a compact metric block HTML with optional delta badge."""
+    title_attr = f' title="{html.escape(help_text)}"' if help_text else ""
+    value_html = _risk_value_html(number_str=number_str, units=units)
+
+    delta_html = ""
+    if delta_text:
+        delta_html = (
+            f'<div class="irt-risk-delta">'
+            f'<span class="irt-delta-badge irt-delta-{html.escape(delta_kind)}">'
+            f"{html.escape(delta_text)}"
+            f"</span></div>"
+        )
+
+    return f'<div class="irt-risk-metric"{title_attr}>{value_html}{delta_html}</div>'
 
 
 def render_risk_summary(
@@ -76,6 +212,8 @@ def render_risk_summary(
     """
     import streamlit as st
 
+    _inject_risk_summary_css()
+
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
 
@@ -86,11 +224,15 @@ def render_risk_summary(
         with cols[0]:
             st.markdown("**Current value**")
             if current_val_f is not None:
-                st.metric(
-                    label="Current Value",
-                    label_visibility="collapsed",
-                    value=format_value(current_val_f, units=units),
-                    help=f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})",
+                number_str = format_value(current_val_f, units=None)
+                help_text = f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})"
+                st.markdown(
+                    _risk_metric_html(
+                        number_str=number_str,
+                        units=units,
+                        help_text=help_text,
+                    ),
+                    unsafe_allow_html=True,
                 )
             else:
                 st.write("No data")
@@ -119,12 +261,17 @@ def render_risk_summary(
                 else:
                     baseline_desc = "not found"
 
-                st.metric(
-                    label="Change Vs Baseline",
-                    label_visibility="collapsed",
-                    value=format_value(baseline_val_f, units=units),
-                    delta=delta_str,
-                    help=f"Baseline: {baseline_desc}",
+                number_str = format_value(baseline_val_f, units=None)
+                delta_kind = "pos" if diff_abs > 0 else ("neg" if diff_abs < 0 else "neutral")
+                st.markdown(
+                    _risk_metric_html(
+                        number_str=number_str,
+                        units=units,
+                        delta_text=delta_str,
+                        delta_kind=delta_kind,
+                        help_text=f"Baseline: {baseline_desc}",
+                    ),
+                    unsafe_allow_html=True,
                 )
             else:
                 st.write("Baseline not available")
@@ -181,12 +328,26 @@ def render_risk_summary(
                         f"Rank 1 = {rank_1_meaning} value."
                     )
 
-                st.metric(
-                    label="Rank in state",
-                    label_visibility="collapsed",
-                    value=rank_label,
-                    help=help_text,
-                )
+                rank_cols = st.columns([3, 1], gap="small")
+                with rank_cols[0]:
+                    st.metric(
+                        label="Rank in state",
+                        label_visibility="collapsed",
+                        value=rank_label,
+                        help=help_text,
+                    )
+
+                with rank_cols[1]:
+                    already_rankings = st.session_state.get("active_view") == VIEW_RANKINGS
+                    if st.button(
+                        "View rankings →",
+                        key="btn_open_rankings_from_risk_summary",
+                        help="Open the rankings table view",
+                        disabled=already_rankings,
+                    ):
+                        st.session_state["jump_to_rankings"] = True
+                        st.session_state["jump_to_map"] = False
+                        st.rerun()
             else:
                 st.write("Insufficient data")
 
