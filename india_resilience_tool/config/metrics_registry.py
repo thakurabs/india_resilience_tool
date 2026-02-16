@@ -1641,20 +1641,36 @@ DEFAULT_STATE_YEARLY_CANDIDATES = [
 def get_dashboard_variables() -> dict[str, dict[str, Any]]:
     """
     Generate the VARIABLES dict for the dashboard from the unified registry.
+
+    Notes:
+        The dashboard primarily needs:
+          - label/group (UI)
+          - periods_metric_col (master CSV schema)
+          - units (axis/legend/tooltip formatting)
+          - discovery templates (yearly files)
+
+        Adding keys here is backwards compatible for callers that only read a subset.
     """
-    variables = {}
+    variables: dict[str, dict[str, Any]] = {}
     for slug, spec in METRICS_BY_SLUG.items():
+        units = str(spec.units or "").strip()
         variables[slug] = {
             "label": spec.label,
             "group": spec.group,
             "periods_metric_col": spec.periods_metric_col,
             "rank_higher_is_worse": bool(spec.rank_higher_is_worse),
+            # Backwards compatible: some codepaths look for "unit"
+            "units": units,
+            "unit": units,
             "description": spec.description or "",
-            "district_yearly_candidates": list(spec.district_yearly_candidates or DEFAULT_DISTRICT_YEARLY_CANDIDATES),
-            "state_yearly_candidates": list(spec.state_yearly_candidates or DEFAULT_STATE_YEARLY_CANDIDATES),
+            "district_yearly_candidates": list(
+                spec.district_yearly_candidates or DEFAULT_DISTRICT_YEARLY_CANDIDATES
+            ),
+            "state_yearly_candidates": list(
+                spec.state_yearly_candidates or DEFAULT_STATE_YEARLY_CANDIDATES
+            ),
         }
     return variables
-
 
 def get_metrics_by_group() -> dict[str, list[str]]:
     """Return metrics organized by group."""

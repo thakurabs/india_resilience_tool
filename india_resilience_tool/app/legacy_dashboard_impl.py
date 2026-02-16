@@ -1009,7 +1009,15 @@ if metric_col not in df.columns:
     render_perf_panel_safe()
     st.stop()
 pretty_metric_label = (
-    f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
+    f"{VARIABLES[VARIABLE_SLUG]['label']}"
+)
+
+_units = str(VARIABLES[VARIABLE_SLUG].get("units") or VARIABLES[VARIABLE_SLUG].get("unit") or "").strip()
+if _units:
+    pretty_metric_label = f"{pretty_metric_label} ({_units})"
+
+pretty_metric_label = (
+    f"{pretty_metric_label} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
 )
 
 

@@ -248,6 +248,7 @@ def make_district_case_study_pdf(
                 continue
 
             idx_label = row_idx.get("index_label", slug)
+            units = str(row_idx.get("units") or row_idx.get("unit") or "").strip()
 
             ts = ts_dict.get(slug, {}) or {}
             hist_ts = ts.get("historical", pd.DataFrame())
@@ -285,6 +286,7 @@ def make_district_case_study_pdf(
                             scen_ts=scen_ts,
                             idx_label=str(idx_label),
                             scenario_name=sel_scenario,
+                            units=units,
                             ax=ax_trend,
                             fig_dpi=s.fig_dpi,
                         )
@@ -439,6 +441,7 @@ def make_district_yearly_pdf(
     district_name: str,
     scenario_name: str,
     metric_label: str,
+    units: Optional[str] = None,
     out_dir: Path,
     logo_path: Optional[PathLike] = None,
     style: Optional[IRTFigureStyle] = None,
@@ -543,7 +546,11 @@ def make_district_yearly_pdf(
 
         ax.set_title(f"{metric_label} — {district_name}, {state_name} ({scenario_name.upper()})", fontsize=12)
         ax.set_xlabel("Year")
-        ax.set_ylabel(metric_label)
+        u = (units or "").strip()
+        y_label = metric_label
+        if u and f"({u})" not in y_label:
+            y_label = f"{y_label} ({u})"
+        ax.set_ylabel(y_label)
         ax.grid(True, linestyle="--", alpha=0.35)
         ax.legend(frameon=False, ncol=3, fontsize=9)
 

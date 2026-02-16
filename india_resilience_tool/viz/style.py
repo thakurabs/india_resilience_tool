@@ -170,3 +170,73 @@ def add_ra_logo(
         fig.add_artist(ab)
     except Exception:
         return
+
+# -----------------------------------------------------------------------------
+# Plotly styling helpers (used for interactive dashboard charts)
+# -----------------------------------------------------------------------------
+
+def get_plotly_template() -> dict[str, Any]:
+    """Return a lightweight Plotly template that matches IRT Matplotlib styling."""
+    return {
+        "layout": {
+            "font": {"family": "Arial, Helvetica, sans-serif", "size": 12},
+            "title": {"font": {"size": 14}},
+            "paper_bgcolor": "white",
+            "plot_bgcolor": "white",
+            "hoverlabel": {"font": {"size": 12}},
+            "margin": {"l": 18, "r": 18, "t": 50, "b": 18},
+            "xaxis": {
+                "showgrid": True,
+                "gridcolor": "rgba(0,0,0,0.08)",
+                "zeroline": False,
+                "showline": False,
+            },
+            "yaxis": {
+                "showgrid": True,
+                "gridcolor": "rgba(0,0,0,0.08)",
+                "zeroline": False,
+                "showline": False,
+            },
+            "legend": {
+                "orientation": "h",
+                "yanchor": "bottom",
+                "y": 1.02,
+                "xanchor": "right",
+                "x": 1.0,
+                "bgcolor": "rgba(255,255,255,0.7)",
+            },
+        }
+    }
+
+
+def apply_irt_plotly_layout(
+    fig: Any,
+    *,
+    title: Optional[str] = None,
+    xaxis_title: Optional[str] = None,
+    yaxis_title: Optional[str] = None,
+    hovermode: str = "x unified",
+) -> Any:
+    """Apply IRT Plotly template + common layout defaults."""
+    if fig is None:
+        return fig
+
+    try:
+        import plotly.graph_objects as _go  # noqa: F401
+    except Exception:
+        return fig
+
+    template = get_plotly_template()
+    try:
+        fig.update_layout(template=template, hovermode=hovermode)
+        if title is not None:
+            fig.update_layout(title=title)
+        if xaxis_title is not None:
+            fig.update_xaxes(title_text=xaxis_title)
+        if yaxis_title is not None:
+            fig.update_yaxes(title_text=yaxis_title)
+    except Exception:
+        return fig
+
+    return fig
+
