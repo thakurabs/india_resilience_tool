@@ -662,9 +662,14 @@ from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 # -------------------------
 st.set_page_config(page_title="India Resilience Tool", layout="wide")
 
+# Selection placeholders (force deliberate choices)
+SEL_PLACEHOLDER = "— Select —"
+
 # Initialise analysis mode and portfolio storage in session state
 if "analysis_mode" not in st.session_state:
-    st.session_state["analysis_mode"] = "Single district focus"
+    st.session_state["analysis_mode"] = SEL_PLACEHOLDER
+if "map_mode" not in st.session_state:
+    st.session_state["map_mode"] = SEL_PLACEHOLDER
 
 if "portfolio_districts" not in st.session_state:
     # Will store a list of (state_name, district_name) tuples
@@ -674,7 +679,7 @@ if "portfolio_districts" not in st.session_state:
 st.session_state.setdefault("portfolio_build_route", None)  # None | "rankings" | "map" | "saved_points"
 st.session_state.setdefault("jump_to_rankings", False)
 st.session_state.setdefault("jump_to_map", False)
-st.session_state.setdefault("_analysis_mode_prev", st.session_state.get("analysis_mode", "Single district focus"))
+st.session_state.setdefault("_analysis_mode_prev", st.session_state.get("analysis_mode", SEL_PLACEHOLDER))
 
 # Which main view is active in the left column: map vs rankings
 if "active_view" not in st.session_state:
@@ -1026,15 +1031,29 @@ with map_mode_placeholder.container():
             unsafe_allow_html=True,
         )
 
-        map_mode = st.radio(
+        _analysis_mode_now = st.session_state.get("analysis_mode", SEL_PLACEHOLDER)
+        _map_disabled = (_analysis_mode_now == SEL_PLACEHOLDER)
+        if _map_disabled:
+            st.caption("Choose an Analysis focus in “Geography & analysis focus” to enable map mode.")
+
+        _map_modes = [
+            SEL_PLACEHOLDER,
+            "Absolute value",
+            "Change from 1990-2010 baseline",
+        ]
+
+        _cur = st.session_state.get("map_mode", SEL_PLACEHOLDER)
+        if _cur not in _map_modes:
+            _cur = SEL_PLACEHOLDER
+            st.session_state["map_mode"] = SEL_PLACEHOLDER
+
+        map_mode = st.selectbox(
             "Map mode",  # non-empty label for accessibility
-            options=[
-                "Absolute value",
-                "Change from 1990-2010 baseline",
-            ],
-            index=0,
+            options=_map_modes,
+            index=_map_modes.index(_cur),
             key="map_mode",
-            label_visibility="collapsed",  # keeps UI same as before
+            label_visibility="collapsed",  # keeps UI tight as before
+            disabled=_map_disabled,
             on_change=_auto_close_chloropleth_expander,
         )
 
@@ -1096,6 +1115,12 @@ with state_placeholder.container():
         "Geography & analysis focus",
         expanded=bool(st.session_state.get("ui_geography_expander_open", True)),
     ):
+        # Option A UX: disable downstream geography widgets until Analysis focus is chosen
+        _analysis_mode_now = st.session_state.get("analysis_mode", SEL_PLACEHOLDER)
+        analysis_ready = (_analysis_mode_now != SEL_PLACEHOLDER)
+        if not analysis_ready:
+            st.info("Select **Analysis focus** below to enable geography and map settings.")
+
         # ---- Step 1: State selection (data-driven from processed root) ----
         processed_root = PROCESSED_ROOT.resolve()
         available_states = list_available_states_from_processed_root_cached(str(processed_root))
@@ -1126,6 +1151,7 @@ with state_placeholder.container():
             options=available_states,
             index=available_states.index(st.session_state["selected_state"]),
             key="selected_state",
+            disabled=not analysis_ready,
             on_change=_auto_close_geography_expander,
         )
 
@@ -1208,6 +1234,7 @@ with state_placeholder.container():
             options=districts,
             index=districts.index(st.session_state["selected_district"]),
             key="selected_district",
+            disabled=not analysis_ready,
             on_change=_auto_close_geography_expander,
         )
 
@@ -1237,6 +1264,7 @@ with state_placeholder.container():
                     options=block_options,
                     index=block_options.index(st.session_state.get("selected_block", "All")),
                     key="selected_block",
+                    disabled=not analysis_ready,
                     on_change=_auto_close_geography_expander,
                 )
             else:
@@ -1257,6 +1285,7 @@ with state_placeholder.container():
         analysis_mode = render_analysis_mode_selector(
             label="Analysis focus",
             options=analysis_options,
+            placeholder=SEL_PLACEHOLDER,
             index=0,
             help_text=(
                 "Choose a single-unit focus to explore one unit at a time, "
@@ -1281,7 +1310,9 @@ with state_placeholder.container():
         unit_singular = "block" if admin_level == "block" else "district"
         unit_plural = "blocks" if admin_level == "block" else "districts"
         
-        if "Single" in analysis_mode:
+        if analysis_mode == SEL_PLACEHOLDER:
+            st.caption("ℹ️ Select an analysis focus to continue.")
+        elif "Single" in analysis_mode:
             st.caption(
                 f"Inspect one {unit_singular} at a time. Use the dropdowns above "
                 f"to pick which {unit_singular} you want to explore in detail."
@@ -1477,6 +1508,15 @@ if _admin_level == "block":
     adm3 = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
 else:
     adm3 = None
+
+# Require deliberate Analysis focus + Map mode selection before building the map
+_analysis_mode = st.session_state.get("analysis_mode", SEL_PLACEHOLDER)
+_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
+modes_ready = (_analysis_mode != SEL_PLACEHOLDER) and (_map_mode != SEL_PLACEHOLDER)
+if not modes_ready:
+    st.info("Select **Analysis focus** and **Map mode** in the sidebar to render the map.")
+    render_perf_panel_safe()
+    st.stop()
 
 with perf_section("merge: build merged gdf"):
     with st.spinner("Preparing merged geometries with CSV attributes..."):

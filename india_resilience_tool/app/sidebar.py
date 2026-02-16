@@ -172,21 +172,24 @@ def render_analysis_mode_selector(
     use_markdown_header: bool = False,
     level: Optional[str] = None,
     on_change: Optional[Callable[[], None]] = None,
+    placeholder: str = "— Select —",
+    disabled: bool = False,
 ) -> str:
     """
     Render analysis mode selector with the stable widget key 'analysis_mode'.
 
-    This is UI-preserving for the legacy dashboard:
-    - can optionally render the bold markdown header
-    - can collapse the widget label for accessibility while keeping non-empty label text
+    This selector is used by the legacy dashboard inside the "Geography & analysis focus"
+    expander. We use a placeholder-first dropdown to encourage deliberate selection.
 
     Notes:
-        We keep stored values as the legacy constants (which include the word 'district')
-        but use a format_func to display 'block' variants when level == 'block'.
+        - Stored values are preserved exactly as provided in `options` (or the defaults).
+        - When `level == "block"`, we display block-friendly labels where possible
+          without changing the stored values.
     """
     import streamlit as st
 
     opts = options or [ANALYSIS_MODE_SINGLE, ANALYSIS_MODE_PORTFOLIO]
+    opts_with_placeholder = [placeholder] + list(opts)
 
     if level is None:
         level = get_current_level(st.session_state)
@@ -214,13 +217,20 @@ def render_analysis_mode_selector(
             unsafe_allow_html=True,
         )
 
-    current = st.session_state.get("analysis_mode", ANALYSIS_MODE_SINGLE)
+    current = st.session_state.get("analysis_mode", placeholder)
+    if current is None or current not in opts_with_placeholder:
+        current = placeholder
+        st.session_state["analysis_mode"] = placeholder
+
     try:
-        idx = opts.index(current)
+        idx = opts_with_placeholder.index(current)
     except Exception:
-        idx = int(index)
+        # Fall back to placeholder; we ignore `index` because we want a deliberate choice.
+        idx = 0
 
     def _fmt(opt: str) -> str:
+        if opt == placeholder:
+            return placeholder
         # Preserve stored values; only change display label.
         if level_norm != "block":
             return opt
@@ -231,14 +241,15 @@ def render_analysis_mode_selector(
         # Generic fallback: best-effort replacement
         return str(opt).replace("districts", "blocks").replace("district", "block")
 
-    mode = st.radio(
+    mode = st.selectbox(
         label,
-        options=opts,
+        options=opts_with_placeholder,
         index=idx,
         key="analysis_mode",
         label_visibility=label_visibility,
         help=help_text,
         format_func=_fmt,
+        disabled=disabled,
         on_change=on_change,
     )
 
