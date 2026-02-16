@@ -266,8 +266,13 @@ Unchanged structurally, but used by both district and block details/portfolio pa
 #### `legacy_dashboard_impl.py`
 Main orchestrator. Responsibilities:
 - admin level toggle (district/block)
-- **bundle → metric selection** (two-step: select risk domain, then metric)
-- state/district/block selection widgets
+- **Map View ribbon** (above the map) for selecting:
+  - risk domain (bundle) → metric
+  - scenario, period, statistic (mean/median)
+  - map mode (absolute vs change from 1990–2010 baseline)
+- placeholder-first ribbon UX (`— Select —`) with safe gating (avoid invalid/partial renders)
+- state/district/block selection widgets (sidebar)
+  - available states are discovered after metric selection (processed-root depends on metric slug)
 - data root resolution (`PROCESSED_ROOT` per index slug)
 - chooses correct master table by admin level:
   - district: `master_metrics_by_district.csv`
@@ -280,10 +285,9 @@ Lightweight performance helpers used in the app (timing wrappers / counters) to 
 #### `sidebar.py`
 Renders:
 - admin level (district/block) selection
-- analysis mode:
-  - "Single district focus" / "Multi-district portfolio"
-  - "Single block focus" / "Multi-block portfolio"
-- scenario/period/stat selectors
+- analysis mode (single vs portfolio), placeholder-first
+- view selector (map vs rankings)
+- portfolio quick stats display
 - hover toggle
 
 #### `portfolio_ui.py`
@@ -347,9 +351,10 @@ Bundles organize metrics into risk-domain groupings for user-friendly selection.
 
 ### Bundle Usage in UI
 
-**Single-focus mode (sidebar):**
-1. Select "Risk domain" (bundle dropdown)
-2. Select "Metric" (filtered to bundle)
+**Single-focus mode (Map View ribbon):**
+1. Select **Risk domain** (bundle)
+2. Select **Metric** (filtered to the bundle)
+3. Complete **Scenario / Period / Statistic / Map mode** in the ribbon
 
 **Portfolio mode (comparison panel):**
 1. Select one or more bundles (multi-select)
@@ -376,7 +381,9 @@ Bundles organize metrics into risk-domain groupings for user-friendly selection.
 
 High-level flow is the same; the admin level controls which geometry and master table are used:
 
-1) Sidebar selection → (admin level, state, district, block, **bundle**, metric, scenario, period, stat)
+1) Selection →
+   - Sidebar: admin level, analysis focus, state/district/block
+   - Ribbon (Map View): bundle, metric, scenario, period, statistic, map mode
 2) Load boundaries (ADM2/ADM3) and master table (district/block)
 3) Merge → `merged` GeoDataFrame
 4) Render view (map / rankings / details / portfolio)
@@ -408,8 +415,10 @@ Core keys (typical):
   - `"Single district focus"` / `"Multi-district portfolio"`
   - `"Single block focus"` / `"Multi-block portfolio"`
 - `selected_state`, `selected_district`, `selected_block`
-- `selected_bundle`: currently selected risk domain (sidebar)
-- `selected_var`: currently selected metric slug
+- `selected_bundle`: currently selected risk domain (Map View ribbon)
+- `selected_var`: currently selected metric slug (Map View ribbon)
+- `sel_scenario`, `sel_period`, `sel_stat`: scenario/period/statistic (Map View ribbon)
+- `map_mode`: map mode (Map View ribbon)
 - `portfolio_districts`, `portfolio_blocks`
 - `portfolio_bundle_selection`: bundles selected for portfolio comparison
 - `portfolio_manual_refinement`: whether manual metric selection is enabled

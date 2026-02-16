@@ -17,7 +17,7 @@ The tool visualizes **ensemble climate model outputs** and derived indices (temp
 
 ### Core exploration
 - **Admin level toggle**: District ↔ Block
-- **Risk domain selection**: Choose from 7 thematic bundles (Heat Risk, Drought Risk, etc.)
+- **Risk domain selection (Map View ribbon)**: Choose from 7 thematic bundles (Heat Risk, Drought Risk, etc.)
 - **Interactive Map View**: Choropleth visualization with hover highlight + tooltip
 - **Rankings Table**:
   - District-wise rankings (ADM2)
@@ -29,7 +29,20 @@ The tool visualizes **ensemble climate model outputs** and derived indices (temp
   - Trend over time (ensemble yearly series)
   - Detailed statistics and exports (CSV download + multi-index PDF/ZIP)
 
-### Metric selection by risk domain
+### Metric selection ribbon (above the map)
+
+In **Map View**, the controls that determine what you see on the choropleth live in a compact **ribbon directly above the map** (replacing the old “selected metric / scenario / period / stat” summary text).
+
+The ribbon includes:
+
+- **Risk domain (bundle)**
+- **Metric (index)**
+- **Scenario**
+- **Period**
+- **Statistic** (mean/median only)
+- **Map mode** (absolute vs change from 1990–2010 baseline)
+
+All ribbon fields start with a placeholder (`— Select —`) to encourage deliberate selection. The map renders once the required ribbon fields are chosen. **Geography options** (available states/districts/blocks) are populated after you choose a metric, because the processed-root depends on the metric slug.
 
 Metrics are organized into **thematic bundles** for easier navigation:
 
@@ -45,9 +58,9 @@ Metrics are organized into **thematic bundles** for easier navigation:
 
 > **New (Wet-bulb temperature):** Heat Risk now includes wet-bulb temperature indices computed from **tas + hurs** using the **Stull approximation** (near-surface). Added slugs: `twb_annual_mean`, `twb_annual_max`, `twb_days_ge_30`. Availability is limited to models/scenarios where **both tas and hurs exist**.
 
-**Single-focus mode**: Select a risk domain, then choose a specific metric within that domain.
+**Single-focus mode**: use the **ribbon** to select a risk domain, then choose a metric within that domain.
 
-**Portfolio mode**: Select multiple risk domains to compare all their metrics across your portfolio.
+**Portfolio mode**: metric selection for portfolio comparison remains in the **Portfolio panel** (bundle multi-select → auto-expand to metrics, with optional manual refinement).
 
 ### Portfolio mode (districts and blocks)
 Portfolio mode exists at **both** admin levels:
@@ -182,20 +195,21 @@ Use the left sidebar toggle:
 - **District**: explore districts and build district portfolios
 - **Block**: explore blocks and build block portfolios
 
-### Metric selection (risk domains)
+### Metric selection (Map View ribbon)
 
-**Step 1: Select a risk domain**
-Choose from 7 thematic bundles in the "Risk domain" dropdown:
-- Heat Risk (24 metrics)
-- Cold Risk (10 metrics)
-- Agriculture & Growing Conditions (4 metrics)
-- Flood & Extreme Rainfall Risk (12 metrics)
-- Rainfall Totals & Typical Wetness (3 metrics)
-- Drought Risk (8 metrics)
-- Temperature Variability (2 metrics)
+The **Map View ribbon** (above the map) controls what is visualized. The dashboard uses placeholder-first selection (`— Select —`) and will prompt you until the required fields are chosen.
 
-**Step 2: Select a metric**
-The "Metric" dropdown shows only metrics within the selected risk domain.
+Recommended order:
+
+1. **Choose Analysis focus** in the left sidebar (required to render the map).
+2. In the **ribbon above the map**, select:
+   - **Risk domain** → **Metric**
+3. Once a metric is selected, complete the remaining ribbon fields:
+   - **Scenario**, **Period**, **Statistic** (mean/median), **Map mode**
+4. In the left sidebar **Geography & analysis focus** panel, select:
+   - **State** (and District/Block when applicable)
+
+Changing any ribbon field triggers a rerun and the map updates accordingly. If you see an info message asking you to complete ribbon selections, it means one or more fields are still set to the placeholder.
 
 ### Analysis modes
 Each admin level supports:
@@ -257,7 +271,7 @@ india_resilience_tool/
 │   └── timeseries.py            # District/block time-series loaders
 ├── app/
 │   ├── legacy_dashboard_impl.py # Main orchestrator (district + block + bundles)
-│   ├── sidebar.py               # Sidebar controls (admin level, analysis mode, selection)
+│   ├── sidebar.py               # Sidebar controls (admin level, analysis focus, view navigation)
 │   ├── portfolio_ui.py          # Portfolio panel with bundle-first selection
 │   ├── point_selection_ui.py    # Coordinate input with batch support (district + block)
 │   ├── perf.py                  # Perf helpers (timing / instrumentation)
@@ -332,6 +346,11 @@ mypy india_resilience_tool/
 ---
 
 ## Changelog (high level)
+
+### v2.4 — Map-top metric selection ribbon (2026-02)
+- Moved Map View controls into a **ribbon above the map**: risk domain, metric, scenario, period, statistic, and map mode
+- Added **placeholder-first** selection (`— Select —`) with safe gating (map renders only after required choices)
+- Sidebar expanders are **user-controlled** (auto-collapse removed)
 
 ### v2.3 — Thematic bundles + bundle-first selection (2026-01)
 - Added **7 thematic bundles** organizing 56 metrics by risk domain
