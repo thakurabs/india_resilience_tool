@@ -243,7 +243,7 @@ def make_scenario_comparison_figure(
 
         is_selected = (scen == sel_scenario_norm) and (period == sel_period_norm)
 
-        # Matplotlib expects a named color OR an (r,g,b,a) tuple with 0–1 floats.
+        # Matplotlib expects a named color or an (r, g, b, a) tuple (0–1 floats)
         edgecolors.append("black" if is_selected else (0.0, 0.0, 0.0, 0.35))
         linewidths.append(1.4 if is_selected else 0.9)
 
@@ -274,58 +274,111 @@ def make_scenario_comparison_figure(
             width=0.45,
         )
 
-        # Add headroom on y-axis so tall bars don't crowd the title/legend area
+        # ---------------------------------------------------------------------
+        # Auto-zoom y-axis only when the bars have a high baseline + small spread.
+        # This makes small differences visible without always truncating the axis.
+        # ---------------------------------------------------------------------
         y_vals = np.array([v for v in ys if pd.notna(v)], dtype=float)
+
+        zoomed = False
+        if y_vals.size >= 2:
+            y_min = float(np.min(y_vals))
+            y_max = float(np.max(y_vals))
+            if y_max > 0:
+                spread = y_max - y_min
+                mean = float(np.mean(y_vals))
+                eps = 1e-9
+
+                rel_spread = spread / max(abs(mean), eps)     # spread relative to level
+                closeness = y_min / max(y_max, eps)           # min close to max?
+
+                # Trigger zoom when values are "nearly equal" relative to absolute level.
+                # These thresholds work well for temperature-like metrics and %/count indices.
+                zoomed = (y_min >= 0) and (closeness >= 0.85) and (rel_spread <= 0.08)
+
         if y_vals.size > 0:
-            y_min = float(np.nanmin(y_vals))
-            y_max = float(np.nanmax(y_vals))
+            y_min = float(np.min(y_vals))
+            y_max = float(np.max(y_vals))
             y_range = (y_max - y_min) if (y_max != y_min) else max(abs(y_max), 1.0)
 
-            # If all positive, keep baseline at 0 (nice for "mean"/counts)
-            if y_min >= 0:
-                ax.set_ylim(0.0, y_max + 0.12 * y_range)
+            if zoomed:
+                # Tight window around values + padding so labels/ticks have room
+                pad = max(0.18 * y_range, 0.02 * max(abs(y_max), 1.0))
+                ax.set_ylim(y_min - pad, y_max + pad)
+
+                # Cue so readers know the axis is zoomed
+                ax.annotate(
+                    "Y-axis zoomed to highlight differences",
+                    xy=(0.01, 0.98),
+                    xycoords="axes fraction",
+                    ha="left",
+                    va="top",
+                    fontsize=max(8, font_size_ticks - 1),
+                    color=(0.0, 0.0, 0.0, 0.60),
+                )
             else:
-                ax.set_ylim(y_min - 0.12 * y_range, y_max + 0.12 * y_range)
+                # Standard view: anchor at 0 for positive-only values + headroom
+                if y_min >= 0:
+                    ax.set_ylim(0.0, y_max + 0.12 * y_range)
+                else:
+                    pad = max(0.12 * y_range, 0.02 * max(abs(y_max), 1.0))
+                    ax.set_ylim(y_min - pad, y_max + pad)
 
-            # Recompute top after applying limits
-            y_top = ax.get_ylim()[1]
-            headroom_thresh = y_top - 0.10 * (ax.get_ylim()[1] - ax.get_ylim()[0])
-            label_offset = 0.02 * (ax.get_ylim()[1] - ax.get_ylim()[0])
-        else:
-            headroom_thresh = None
-            label_offset = 0.0
+        y_bottom, y_top = ax.get_ylim()
+        y_span = y_top - y_bottom
+        label_offset = 0.02 * y_span
 
-        # Value labels: place INSIDE if bar is too tall (prevents clumsy top collisions)
+        # Value labels:
+        # - Zoomed mode: labels above bars (since we have a tight y-window)
+        # - Normal mode: labels inside if too close to the top, else above
         for b, y in zip(bars, ys):
             if pd.isna(y):
                 continue
 
             x_text = b.get_x() + b.get_width() / 2
 
-            if headroom_thresh is not None and y >= headroom_thresh:
-                # Put label inside the bar near the top
+            if zoomed:
+                y_text = y + label_offset
+                if y_text > (y_top - 0.01 * y_span):
+                    y_text = y - label_offset
+                    va = "top"
+                else:
+                    va = "bottom"
+
                 ax.text(
                     x_text,
-                    y - label_offset,
+                    y_text,
                     format_value(y, units=units),
                     ha="center",
-                    va="top",
+                    va=va,
                     fontsize=font_size_ticks,
-                    color="white",
+                    color="black",
                     clip_on=True,
                 )
             else:
-                # Put label above the bar
-                ax.text(
-                    x_text,
-                    y + label_offset,
-                    format_value(y, units=units),
-                    ha="center",
-                    va="bottom",
-                    fontsize=font_size_ticks,
-                    color="black",
-                    clip_on=False,
-                )
+                headroom_thresh = y_top - 0.10 * y_span
+                if y >= headroom_thresh:
+                    ax.text(
+                        x_text,
+                        y - label_offset,
+                        format_value(y, units=units),
+                        ha="center",
+                        va="top",
+                        fontsize=font_size_ticks,
+                        color="white",
+                        clip_on=True,
+                    )
+                else:
+                    ax.text(
+                        x_text,
+                        y + label_offset,
+                        format_value(y, units=units),
+                        ha="center",
+                        va="bottom",
+                        fontsize=font_size_ticks,
+                        color="black",
+                        clip_on=True,
+                    )
 
         group_centres: list[float] = []
         group_labels: list[str] = []
