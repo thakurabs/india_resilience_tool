@@ -154,7 +154,6 @@ def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoD
     )
     return gdf
 
-
 @st.cache_data(ttl=3600)
 def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
     """
@@ -171,7 +170,6 @@ def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoD
         min_area=0.00005,
     )
     return gdf
-
 
 if not ADM2_GEOJSON.exists():
     st.set_page_config(page_title="India Resilience Tool", layout="wide")
@@ -255,7 +253,6 @@ def build_adm3_geojson_by_state(
     )
     return by_state
 
-
 @st.cache_data
 def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return _build_adm1_from_adm2(_adm2_gdf, state_col="state_name")
@@ -266,7 +263,6 @@ def enrich_adm2_with_state_names(
     _adm1_gdf: gpd.GeoDataFrame,
 ) -> gpd.GeoDataFrame:
     return _enrich_adm2_with_state_names(_adm2_gdf, _adm1_gdf, state_col="state_name", adm1_name_col="shapeName")
-
 
 @st.cache_data(ttl=180)
 def list_available_states_from_processed_root_cached(processed_root_str: str) -> list[str]:
@@ -281,8 +277,6 @@ from india_resilience_tool.viz.colors import (
     build_vertical_gradient_legend_html,
     get_cmap_hex_list as _get_cmap_hex_list,
 )
-
-
 
 # -------------------------
 # State metrics helper
@@ -398,7 +392,6 @@ def get_or_build_merged_for_index(
         level=level_norm,
     )
     return merged  # type: ignore[return-value]
-
 
 # -------------------------
 # Master CSV freshness helpers (variable-agnostic)
@@ -655,8 +648,6 @@ def make_state_boxplot_for_districts(
 # -------------------------
 from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 
-
-
 # -------------------------
 # APP START
 # -------------------------
@@ -702,7 +693,6 @@ with st.sidebar:
     # Admin level selector (District vs Block)
     admin_level = render_admin_level_selector(label_visibility="collapsed")
 
-
     # Read current analysis mode (default depends on admin level)
     default_mode = "Single block focus" if admin_level == "block" else "Single district focus"
     analysis_mode_current = st.session_state.get("analysis_mode", default_mode)
@@ -710,16 +700,6 @@ with st.sidebar:
     # Show hover toggle (always visible)
     _ = render_hover_toggle_if_portfolio(analysis_mode_current)
 
-    # Global UI toggle: auto-collapse expanders after a selection is made
-    st.checkbox(
-        "Auto-collapse expanders",
-        value=bool(st.session_state.get("ui_auto_collapse_expanders", True)),
-        key="ui_auto_collapse_expanders",
-        help=(
-            "When enabled, expanders will collapse automatically after you choose an option "
-            "inside them (e.g., Metric, State/District, Map mode)."
-        ),
-    )
 
     analysis_mode_placeholder = st.empty()  # Single vs portfolio
     state_placeholder = st.empty()
@@ -744,7 +724,6 @@ with st.sidebar:
 
     perf_panel_placeholder = st.empty()
 
-
 st.title("India Resilience Tool")
 
 # Pilot state default
@@ -754,82 +733,123 @@ PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
 # -------------------------
-# Unified Index selection (bundle → metric)
+# Main layout: left (map/rankings) + right (details)
 # -------------------------
-with metric_ui_placeholder.container():
-    if "ui_metric_expander_open" not in st.session_state:
-        st.session_state["ui_metric_expander_open"] = True
+col1, col2 = st.columns([5, 3])
 
-    def _auto_close_metric_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
-            st.session_state["ui_metric_expander_open"] = False
+# -------------------------
+# Metric selection ribbon (bundle → metric → scenario/period/stat + map mode)
+# -------------------------
+# Force deliberate choices for ribbon controls
+for _k in ("selected_bundle", "selected_var", "sel_scenario", "sel_period", "sel_stat"):
+    st.session_state.setdefault(_k, SEL_PLACEHOLDER)
 
-    with st.expander(
-        "Metric selection",
-        expanded=bool(st.session_state.get("ui_metric_expander_open", True)),
-    ):
-        st.markdown("### Metric selection")
+# These are bound once a metric is selected (safe defaults otherwise)
+VARIABLE_SLUG: Optional[str] = None
+VARCFG: Optional[dict] = None
+PROCESSED_ROOT: Optional[Path] = None
+MASTER_CSV_PATH: Optional[Path] = None
 
-        # --- Bundle selection (replaces old group-based selection) ---
-        all_bundles = get_bundles()
+# Master CSV / schema outputs (safe defaults for placeholder-first UX)
+df: Optional[pd.DataFrame] = None
+schema_items: list[dict] = []
+metrics: list[str] = []
+by_metric: dict[str, list[dict]] = {}
+registry_metric: str = ""
+sel_scenario: str = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
+sel_period: str = st.session_state.get("sel_period", SEL_PLACEHOLDER)
+sel_stat: str = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
 
-        # Get default bundle from session state or use system default
-        default_bundle = st.session_state.get("selected_bundle")
-        if default_bundle not in all_bundles:
-            default_bundle = get_default_bundle()
-            if default_bundle not in all_bundles:
-                default_bundle = all_bundles[0] if all_bundles else None
+# No-op default until a metric is selected (prevents NameError in sidebar master controls)
+def rebuild_master_csv_if_needed(
+    force: bool = False, attach_centroid_geojson: str | None = None
+) -> tuple[bool, str]:
+    _ = force, attach_centroid_geojson
+    return False, "disabled (select a metric first)"
 
-        if not all_bundles:
-            st.error("No bundles defined in metrics_registry.py")
-            st.stop()
+with col1:
+    # Ribbon: two compact rows; wraps naturally on smaller widths
+    row1 = st.columns([2.2, 3.0, 1.8])
+    row2 = st.columns([2.2, 1.4, 2.4])
 
+    # --- Bundle selection ---
+    all_bundles = get_bundles()
+    if not all_bundles:
+        st.error("No bundles defined in metrics_registry.py")
+        render_perf_panel_safe()
+        st.stop()
+
+    bundle_options = [SEL_PLACEHOLDER] + all_bundles
+    cur_bundle = st.session_state.get("selected_bundle", SEL_PLACEHOLDER)
+    if cur_bundle not in bundle_options:
+        cur_bundle = SEL_PLACEHOLDER
+        st.session_state["selected_bundle"] = SEL_PLACEHOLDER
+
+    with row1[0]:
+        st.markdown("**Risk domain**")
         selected_bundle = st.selectbox(
             "Risk domain",
-            options=all_bundles,
-            index=all_bundles.index(default_bundle) if default_bundle in all_bundles else 0,
+            options=bundle_options,
+            index=bundle_options.index(cur_bundle),
             key="selected_bundle",
-            help="Select a thematic bundle to filter available metrics",
-            on_change=_auto_close_metric_expander,
+            label_visibility="collapsed",
+            help="Select a thematic bundle to filter available metrics.",
         )
-        
-        # Show bundle description as tooltip/caption
+
+    # Bundle description (only when chosen)
+    if selected_bundle != SEL_PLACEHOLDER:
         bundle_desc = get_bundle_description(selected_bundle)
         if bundle_desc:
             st.caption(bundle_desc)
 
-        # Filter indices by the chosen bundle
-        index_slugs = get_metrics_for_bundle(selected_bundle)
-
-        # Safety fallback: if something goes wrong, show all indices
+    # --- Metric selection (filtered by bundle) ---
+    metric_disabled = selected_bundle == SEL_PLACEHOLDER
+    if metric_disabled:
+        index_slugs = []
+        metric_options = [SEL_PLACEHOLDER]
+    else:
+        index_slugs = get_metrics_for_bundle(selected_bundle) or []
         if not index_slugs:
             index_slugs = list(VARIABLES.keys())
             st.warning(f"Bundle '{selected_bundle}' has no metrics; showing all indices.")
+        metric_options = [SEL_PLACEHOLDER] + index_slugs
 
-        # Previously selected index might not be in this bundle; clamp it
-        default_slug = st.session_state.get("selected_var", index_slugs[0])
-        if default_slug not in index_slugs:
-            default_slug = index_slugs[0]
+    # Preserve current behavior on bundle changes:
+    # - If the previously selected metric is invalid (and not the placeholder), clamp to first valid metric.
+    # - If it's the placeholder, keep placeholder so the user deliberately picks a metric.
+    cur_var = st.session_state.get("selected_var", SEL_PLACEHOLDER)
+    if cur_var not in metric_options:
+        if cur_var == SEL_PLACEHOLDER or not index_slugs:
+            st.session_state["selected_var"] = SEL_PLACEHOLDER
+        else:
+            st.session_state["selected_var"] = index_slugs[0]
+    cur_var = st.session_state.get("selected_var", SEL_PLACEHOLDER)
 
+    with row1[1]:
+        st.markdown("**Metric**")
         selected_var = st.selectbox(
             "Metric",
-            options=index_slugs,
-            index=index_slugs.index(default_slug),
+            options=metric_options,
+            index=metric_options.index(cur_var) if cur_var in metric_options else 0,
             key="selected_var",
+            label_visibility="collapsed",
             format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
-            on_change=_auto_close_metric_expander,
+            disabled=metric_disabled,
+            help="Select the metric to visualize on the map.",
         )
 
-        # Resolve per-index config
+    # --- Resolve per-index config (once metric selected) ---
+    metric_ready = (selected_var != SEL_PLACEHOLDER) and (selected_var in VARIABLES)
+    if metric_ready:
         VARIABLE_SLUG = selected_var
         VARCFG = VARIABLES[VARIABLE_SLUG]
 
-        # Default registry metric (prevents NameError if downstream master/schema logic short-circuits)
+        # Registry metric (prevents NameError if downstream master/schema logic short-circuits)
         registry_metric = str(VARCFG.get("periods_metric_col", "")).strip()
         st.session_state["registry_metric"] = registry_metric
 
-        # --- Metric description ---
-        desc = VARCFG.get("description", "").strip()
+        # Metric description
+        desc = str(VARCFG.get("description", "")).strip()
         if desc:
             st.caption(f"ℹ️ {desc}")
 
@@ -837,14 +857,18 @@ with metric_ui_placeholder.container():
             VARIABLE_SLUG, data_dir=DATA_DIR, mode="portfolio"
         )
         (PROCESSED_ROOT / PILOT_STATE).mkdir(parents=True, exist_ok=True)
-        _master_name = "master_metrics_by_block.csv" if st.session_state.get("admin_level", "district") == "block" else "master_metrics_by_district.csv"
+
+        _master_name = (
+            "master_metrics_by_block.csv"
+            if st.session_state.get("admin_level", "district") == "block"
+            else "master_metrics_by_district.csv"
+        )
         MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / _master_name
 
-
-        # Rebuilder bound to this index
+        # Rebuilder bound to this metric
         def rebuild_master_csv_if_needed(
             force: bool = False, attach_centroid_geojson: str | None = None
-        ):
+        ) -> tuple[bool, str]:
             needs = force or master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE)
             if not needs:
                 return False, "up-to-date"
@@ -866,12 +890,13 @@ with metric_ui_placeholder.container():
             except Exception as e:
                 return False, f"rebuild failed: {e}"
 
-        # Ensure master exists/fresh for this index
+        # Ensure master exists/fresh for this metric (only once a metric is chosen)
         try:
             if master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE):
                 with st.spinner("Master CSV missing or stale — rebuilding now..."):
                     ok, msg = rebuild_master_csv_if_needed(
-                        force=False, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON
+                        force=False,
+                        attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
                     )
                     st.success("Master CSV rebuilt.") if ok else st.error(
                         f"Auto-rebuild failed: {msg}"
@@ -882,12 +907,12 @@ with metric_ui_placeholder.container():
         if not MASTER_CSV_PATH.exists():
             st.error(
                 f"Master CSV not found for {VARIABLES[VARIABLE_SLUG]['label']} at {MASTER_CSV_PATH}. "
-                f"Click 'Rebuild now' below."
+                f"Click 'Rebuild now' in the sidebar under 'Master dataset'."
             )
             render_perf_panel_safe()
             st.stop()
 
-        # Load + parse schema (for scenario/period/stat only), cached by file mtime
+        # Load + parse schema (scenario/period/stat), cached by file mtime
         def _load_master_and_schema(master_path: Path, slug: str):
             cache = st.session_state.setdefault("_master_cache", {})
             try:
@@ -904,7 +929,6 @@ with metric_ui_placeholder.container():
                     entry["by_metric"],
                 )
 
-            # (Re)load from disk
             with perf_section("master: read csv"):
                 with st.spinner("Loading master CSV..."):
                     df_local = load_master_csv(str(master_path))
@@ -929,142 +953,217 @@ with metric_ui_placeholder.container():
         df, schema_items, metrics, by_metric = _load_master_and_schema(
             MASTER_CSV_PATH, VARIABLE_SLUG
         )
+
         if not metrics:
-            st.error(
-                "No ensemble statistic columns found in the master CSV. Did the builder run?"
-            )
+            st.error("No ensemble statistic columns found in the master CSV. Did the builder run?")
             render_perf_panel_safe()
             st.stop()
 
-        # Choose the internal metric name from the registry (no separate Metric dropdown)
-        registry_metric = str(VARCFG.get("periods_metric_col", "")).strip()
-
-        # If normalized columns changed the metric name casing, align it
+        # Align registry metric if column normalization changed casing
         available_metrics = set(metrics)
         if registry_metric not in available_metrics and available_metrics:
             m_lower = {str(m).lower(): m for m in available_metrics}
             registry_metric = m_lower.get(
                 str(registry_metric).lower(), next(iter(available_metrics))
             )
-
-        # Persist so downstream code can always access it safely
         st.session_state["registry_metric"] = registry_metric
 
-        # Scenario / Period / Statistic pickers remain
+        # Scenario list (restricted to SSP245/SSP585)
         items_for_m = by_metric.get(registry_metric, [])
         all_scenarios = (
             sorted(set(i["scenario"] for i in items_for_m))
             if items_for_m
             else sorted(set(i["scenario"] for i in schema_items))
         )
-
-        # Only allow SSP245 and SSP585 in the UI
         allowed = {"ssp245", "ssp585"}
         scenarios = [s for s in all_scenarios if str(s).strip().lower() in allowed]
-
         if not scenarios:
-            st.error("No SSP245/SSP585 data found for this index in the master CSV.")
+            st.error("No SSP245/SSP585 data found for this metric in the master CSV.")
             render_perf_panel_safe()
             st.stop()
+        scenario_options = [SEL_PLACEHOLDER] + scenarios
+    else:
+        # Metric not selected yet → keep downstream pickers disabled
+        scenario_options = [SEL_PLACEHOLDER]
 
-        sel_scenario = st.selectbox("Scenario", scenarios, index=0, key="sel_scenario")
+    # --- Scenario selection ---
+    scenario_disabled = not metric_ready
+    cur_scn = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
+    if cur_scn not in scenario_options:
+        st.session_state["sel_scenario"] = SEL_PLACEHOLDER
+    cur_scn = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
 
+    with row1[2]:
+        st.markdown("**Scenario**")
+        sel_scenario = st.selectbox(
+            "Scenario",
+            options=scenario_options,
+            index=scenario_options.index(cur_scn),
+            key="sel_scenario",
+            label_visibility="collapsed",
+            disabled=scenario_disabled,
+        )
+
+    # --- Period selection (depends on scenario) ---
+    period_disabled = (not metric_ready) or (sel_scenario == SEL_PLACEHOLDER)
+    if metric_ready and (sel_scenario != SEL_PLACEHOLDER):
         periods_found = {
             canonical_period_label(i["period"])
-            for i in (by_metric.get(registry_metric, []) or schema_items)
+            for i in (
+                by_metric.get(st.session_state.get("registry_metric", registry_metric), [])
+                or schema_items
+            )
             if i["scenario"] == sel_scenario
         }
-
-        # Keep a stable order across the app (baseline, early, mid, end-century)
         periods = [p for p in PERIOD_ORDER if p in periods_found] + sorted(
             [p for p in periods_found if p not in PERIOD_ORDER]
         )
-
         if not periods:
-            st.error("No periods found for the selected scenario in the master CSV.")
-            render_perf_panel_safe()
-            st.stop()
+            period_options = [SEL_PLACEHOLDER]
+        else:
+            period_options = [SEL_PLACEHOLDER] + periods
+    else:
+        period_options = [SEL_PLACEHOLDER]
+
+    cur_per = st.session_state.get("sel_period", SEL_PLACEHOLDER)
+    if cur_per not in period_options:
+        st.session_state["sel_period"] = SEL_PLACEHOLDER
+    cur_per = st.session_state.get("sel_period", SEL_PLACEHOLDER)
+
+    with row2[0]:
+        st.markdown("**Period**")
         sel_period = st.selectbox(
             "Period",
-            periods,
-            index=0,
+            options=period_options,
+            index=period_options.index(cur_per),
             key="sel_period",
-            format_func=period_display_label,
+            label_visibility="collapsed",
+            disabled=period_disabled,
+            format_func=lambda p: period_display_label(p) if p != SEL_PLACEHOLDER else p,
         )
 
-        # Limit UI statistic choices to mean/median only
-        stats = ["mean", "median"]
+    # --- Statistic selection (mean/median only, placeholder-first) ---
+    stat_disabled = not metric_ready
+    stat_options = [SEL_PLACEHOLDER, "mean", "median"]
+    cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
+    if cur_stat not in stat_options:
+        st.session_state["sel_stat"] = SEL_PLACEHOLDER
+    cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
 
-        # If an older session stored p05/p95/std, normalize to a valid option
-        if st.session_state.get("sel_stat") not in stats:
-            st.session_state["sel_stat"] = stats[0]
-
-        sel_stat = st.selectbox("Statistic", stats, index=0, key="sel_stat")
-
-# Column chosen to plot
-sel_metric = st.session_state.get("registry_metric", registry_metric)  # internal name
-metric_col = f"{sel_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
-if metric_col not in df.columns:
-    st.error(f"Selected column '{metric_col}' not found in master CSV.")
-    render_perf_panel_safe()
-    st.stop()
-pretty_metric_label = (
-    f"{VARIABLES[VARIABLE_SLUG]['label']}"
-)
-
-_units = str(VARIABLES[VARIABLE_SLUG].get("units") or VARIABLES[VARIABLE_SLUG].get("unit") or "").strip()
-if _units:
-    pretty_metric_label = f"{pretty_metric_label} ({_units})"
-
-pretty_metric_label = (
-    f"{pretty_metric_label} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
-)
-
-
-with map_mode_placeholder.container():
-    if "ui_chloropleth_expander_open" not in st.session_state:
-        st.session_state["ui_chloropleth_expander_open"] = True
-
-    def _auto_close_chloropleth_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
-            st.session_state["ui_chloropleth_expander_open"] = False
-
-    # Tight "Map mode" label with no extra space before the radio
-    with st.expander(
-        "Chloropleth settings",
-        expanded=bool(st.session_state.get("ui_chloropleth_expander_open", True)),
-    ):
-        st.markdown(
-            "<div style='font-weight:600; font-size:1rem; margin-bottom:-0.35rem;'>Map mode</div>",
-            unsafe_allow_html=True,
+    with row2[1]:
+        st.markdown("**Statistic**")
+        sel_stat = st.selectbox(
+            "Statistic",
+            options=stat_options,
+            index=stat_options.index(cur_stat),
+            key="sel_stat",
+            label_visibility="collapsed",
+            disabled=stat_disabled,
         )
 
-        _analysis_mode_now = st.session_state.get("analysis_mode", SEL_PLACEHOLDER)
-        _map_disabled = (_analysis_mode_now == SEL_PLACEHOLDER)
-        if _map_disabled:
-            st.caption("Choose an Analysis focus in “Geography & analysis focus” to enable map mode.")
+    # --- Map mode selection (moved into ribbon; placeholder-first) ---
+    map_mode_options = [
+        SEL_PLACEHOLDER,
+        "Absolute value",
+        "Change from 1990-2010 baseline",
+    ]
+    cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
+    if cur_map_mode not in map_mode_options:
+        st.session_state["map_mode"] = SEL_PLACEHOLDER
+    cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
 
-        _map_modes = [
-            SEL_PLACEHOLDER,
-            "Absolute value",
-            "Change from 1990-2010 baseline",
-        ]
-
-        _cur = st.session_state.get("map_mode", SEL_PLACEHOLDER)
-        if _cur not in _map_modes:
-            _cur = SEL_PLACEHOLDER
-            st.session_state["map_mode"] = SEL_PLACEHOLDER
-
+    with row2[2]:
+        st.markdown("**Map mode**")
         map_mode = st.selectbox(
-            "Map mode",  # non-empty label for accessibility
-            options=_map_modes,
-            index=_map_modes.index(_cur),
+            "Map mode",
+            options=map_mode_options,
+            index=map_mode_options.index(cur_map_mode),
             key="map_mode",
-            label_visibility="collapsed",  # keeps UI tight as before
-            disabled=_map_disabled,
-            on_change=_auto_close_chloropleth_expander,
+            label_visibility="collapsed",
+            help="Choose whether to map absolute values or change from the 1990–2010 baseline.",
         )
 
+# Column chosen to plot (only when ribbon selections are complete)
+sel_metric = str(st.session_state.get("registry_metric", registry_metric)).strip()
+metric_col = None
+pretty_metric_label = "Select a metric to visualize"
+
+_ribbon_ready = (
+    (VARIABLE_SLUG is not None)
+    and (df is not None)
+    and (sel_scenario != SEL_PLACEHOLDER)
+    and (sel_period != SEL_PLACEHOLDER)
+    and (sel_stat != SEL_PLACEHOLDER)
+    and (map_mode != SEL_PLACEHOLDER)
+)
+
+if _ribbon_ready:
+    metric_col = f"{sel_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
+    if metric_col not in df.columns:
+        st.error(f"Selected column '{metric_col}' not found in master CSV.")
+        render_perf_panel_safe()
+        st.stop()
+
+    pretty_metric_label = f"{VARIABLES[VARIABLE_SLUG]['label']}"
+    _units = str(
+        VARIABLES[VARIABLE_SLUG].get("units")
+        or VARIABLES[VARIABLE_SLUG].get("unit")
+        or ""
+    ).strip()
+    if _units:
+        pretty_metric_label = f"{pretty_metric_label} ({_units})"
+
+    pretty_metric_label = (
+        f"{pretty_metric_label} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
+    )
+
+
+    # --- Map mode selection (moved into ribbon) ---
+    map_mode_options = [
+        SEL_PLACEHOLDER,
+        "Absolute value",
+        "Change from 1990-2010 baseline",
+    ]
+    cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
+    if cur_map_mode not in map_mode_options:
+        st.session_state["map_mode"] = SEL_PLACEHOLDER
+    cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
+
+    with row2[2]:
+        st.markdown("**Map mode**")
+        map_mode = st.selectbox(
+            "Map mode",
+            options=map_mode_options,
+            index=map_mode_options.index(cur_map_mode),
+            key="map_mode",
+            label_visibility="collapsed",
+            help="Choose whether to map absolute values or change from the 1990–2010 baseline.",
+        )
+
+# Column chosen to plot (only when all ribbon selections are complete)
+sel_metric = st.session_state.get("registry_metric", registry_metric).strip()
+metric_col: Optional[str] = None
+pretty_metric_label: str = "Select a metric to visualize"
+
+_ribbon_ready = (
+    (VARIABLE_SLUG is not None)
+    and (df is not None)
+    and (sel_scenario != SEL_PLACEHOLDER)
+    and (sel_period != SEL_PLACEHOLDER)
+    and (sel_stat != SEL_PLACEHOLDER)
+    and (map_mode != SEL_PLACEHOLDER)
+)
+
+if _ribbon_ready:
+    metric_col = f"{sel_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
+    if metric_col not in df.columns:
+        st.error(f"Selected column '{metric_col}' not found in master CSV.")
+        render_perf_panel_safe()
+        st.stop()
+
+    pretty_metric_label = (
+        f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
+    )
 # -------------------------
 # Master dataset controls (bound to chosen Index)
 # -------------------------
@@ -1112,17 +1211,7 @@ if "pending_selected_district" in st.session_state:
 
 # State/district selectors + analysis focus (combined block in sidebar)
 with state_placeholder.container():
-    if "ui_geography_expander_open" not in st.session_state:
-        st.session_state["ui_geography_expander_open"] = True
-
-    def _auto_close_geography_expander() -> None:
-        if st.session_state.get("ui_auto_collapse_expanders", True):
-            st.session_state["ui_geography_expander_open"] = False
-
-    with st.expander(
-        "Geography & analysis focus",
-        expanded=bool(st.session_state.get("ui_geography_expander_open", True)),
-    ):
+    with st.expander("Geography & analysis focus", expanded=True):
         # Option A UX: disable downstream geography widgets until Analysis focus is chosen
         _analysis_mode_now = st.session_state.get("analysis_mode", SEL_PLACEHOLDER)
         analysis_ready = (_analysis_mode_now != SEL_PLACEHOLDER)
@@ -1130,79 +1219,144 @@ with state_placeholder.container():
             st.info("Select **Analysis focus** below to enable geography and map settings.")
 
         # ---- Step 1: State selection (data-driven from processed root) ----
-        processed_root = PROCESSED_ROOT.resolve()
-        available_states = list_available_states_from_processed_root_cached(str(processed_root))
 
-        if not processed_root.exists() or not processed_root.is_dir():
-            st.warning(f"No processed data found under IRT_PROCESSED_ROOT={processed_root}")
-            st.stop()
+        metric_ready_for_geography = PROCESSED_ROOT is not None
 
-        if not available_states:
-            st.warning(f"No processed data found under IRT_PROCESSED_ROOT={processed_root}")
-            st.stop()
+        if not metric_ready_for_geography:
+
+            st.info("Select a **Risk domain** and **Metric** in the ribbon above the map to load available states.")
+
+            processed_root = None
+
+            available_states = ["All"]
+
+        else:
+
+            processed_root = PROCESSED_ROOT.resolve()
+
+            available_states = list_available_states_from_processed_root_cached(str(processed_root))
+
+            if (not processed_root.exists()) or (not processed_root.is_dir()) or (not available_states):
+
+                st.warning(f"No processed data found under IRT_PROCESSED_ROOT={processed_root}")
+
+                available_states = ["All"]
 
         prev_state = st.session_state.get("selected_state")
+
         if prev_state and prev_state not in available_states:
+
             st.warning(
+
                 f"Previously selected state '{prev_state}' is no longer available in processed data. "
+
                 f"Resetting to '{available_states[0]}'."
+
             )
 
         if (
+
             "selected_state" not in st.session_state
+
             or st.session_state["selected_state"] not in available_states
+
         ):
+
             st.session_state["selected_state"] = available_states[0]
 
         selected_state = st.selectbox(
+
             "State",
+
             options=available_states,
+
             index=available_states.index(st.session_state["selected_state"]),
+
             key="selected_state",
-            disabled=not analysis_ready,
-            on_change=_auto_close_geography_expander,
+
+            disabled=(not analysis_ready) or (not metric_ready_for_geography),
+
         )
 
         # Build per-state district GeoDataFrame
-        sel_state_norm = selected_state.strip().lower()
-        state_row = adm1[
-            adm1["shapeName"].astype(str).str.strip().str.lower()
-            == sel_state_norm
-        ]
-        if state_row.empty:
-            state_row = adm1[
-                adm1["shapeName"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
-                .str.contains(sel_state_norm, na=False)
-            ]
-        if not state_row.empty:
-            state_geom = state_row.iloc[0].geometry
-            try:
-                gdf_state_districts = adm2[
-                    adm2.geometry.within(state_geom.buffer(0.001))
-                ].copy()
-            except Exception:
-                gdf_state_districts = adm2[
-                    adm2.geometry.centroid.within(state_geom.buffer(0.001))
-                ].copy()
-            if gdf_state_districts.empty:
-                gdf_state_districts = adm2[
-                    adm2["state_name"]
-                    .astype(str)
-                    .str.strip()
-                    .str.lower()
-                    .str.contains(sel_state_norm, na=False)
-                ].copy()
+
+        if selected_state == "All":
+
+            gdf_state_districts = adm2.copy()
+
         else:
-            gdf_state_districts = adm2[
-                adm2["state_name"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
-                .str.contains(sel_state_norm, na=False)
-            ].copy()
+
+            sel_state_norm = selected_state.strip().lower()
+
+            state_row = adm1[
+
+                adm1["shapeName"].astype(str).str.strip().str.lower() == sel_state_norm
+
+            ]
+
+            if state_row.empty:
+
+                state_row = adm1[
+
+                    adm1["shapeName"]
+
+                    .astype(str)
+
+                    .str.strip()
+
+                    .str.lower()
+
+                    .str.contains(sel_state_norm, na=False)
+
+                ]
+
+            if not state_row.empty:
+
+                state_geom = state_row.iloc[0].geometry
+
+                try:
+
+                    gdf_state_districts = adm2[adm2.geometry.within(state_geom.buffer(0.001))].copy()
+
+                except Exception:
+
+                    gdf_state_districts = adm2[
+
+                        adm2.geometry.centroid.within(state_geom.buffer(0.001))
+
+                    ].copy()
+
+                if gdf_state_districts.empty:
+
+                    gdf_state_districts = adm2[
+
+                        adm2["state_name"]
+
+                        .astype(str)
+
+                        .str.strip()
+
+                        .str.lower()
+
+                        .str.contains(sel_state_norm, na=False)
+
+                    ].copy()
+
+            else:
+
+                gdf_state_districts = adm2[
+
+                    adm2["state_name"]
+
+                    .astype(str)
+
+                    .str.strip()
+
+                    .str.lower()
+
+                    .str.contains(sel_state_norm, na=False)
+
+                ].copy()
 
         districts = [
             "All"
@@ -1243,7 +1397,6 @@ with state_placeholder.container():
             index=districts.index(st.session_state["selected_district"]),
             key="selected_district",
             disabled=not analysis_ready,
-            on_change=_auto_close_geography_expander,
         )
 
         # ---- Step 3: Block selection (only when admin_level == block AND district selected) ----
@@ -1273,7 +1426,6 @@ with state_placeholder.container():
                     index=block_options.index(st.session_state.get("selected_block", "All")),
                     key="selected_block",
                     disabled=not analysis_ready,
-                    on_change=_auto_close_geography_expander,
                 )
             else:
                 # Show disabled/info when district not selected
@@ -1302,7 +1454,6 @@ with state_placeholder.container():
             label_visibility="collapsed",
             use_markdown_header=True,
             level=admin_level,
-            on_change=_auto_close_geography_expander,
         )
 
         # Reset portfolio route state when switching analysis focus modes
@@ -1356,7 +1507,6 @@ if "portfolio_blocks" not in st.session_state:
     # List of {"state": ..., "district": ..., "block": ...}
     st.session_state["portfolio_blocks"] = []
 
-
 def _portfolio_normalize(text: str) -> str:
     """
     Normalize a state/district name for robust comparison across data sources.
@@ -1365,10 +1515,8 @@ def _portfolio_normalize(text: str) -> str:
     """
     return _portfolio_normalize_impl(text, alias_fn=alias)
 
-
 def _portfolio_state_key() -> str:
     return "portfolio_blocks" if st.session_state.get("admin_level", "district") == "block" else "portfolio_districts"
-
 
 def _portfolio_key(state_name: str, district_name: str, block_name: Optional[str] = None) -> tuple:
     if st.session_state.get("admin_level", "district") == "block":
@@ -1378,7 +1526,6 @@ def _portfolio_key(state_name: str, district_name: str, block_name: Optional[str
             _portfolio_normalize(block_name or ""),
         )
     return (_portfolio_normalize(state_name), _portfolio_normalize(district_name))
-
 
 def _portfolio_add(state_name: str, district_name: str, block_name: Optional[str] = None) -> None:
     """Add a unit (district or block) to the active portfolio."""
@@ -1395,7 +1542,6 @@ def _portfolio_add(state_name: str, district_name: str, block_name: Optional[str
         state_key=state_key,
     )
 
-
 def _portfolio_remove(state_name: str, district_name: str, block_name: Optional[str] = None) -> None:
     """Remove a unit (district or block) from the active portfolio."""
     level = st.session_state.get("admin_level", "district")
@@ -1410,7 +1556,6 @@ def _portfolio_remove(state_name: str, district_name: str, block_name: Optional[
         level=level,
         state_key=state_key,
     )
-
 
 def _portfolio_contains(state_name: str, district_name: str, block_name: Optional[str] = None) -> bool:
     """Return True if the unit is already present in the active portfolio."""
@@ -1429,7 +1574,6 @@ def _portfolio_contains(state_name: str, district_name: str, block_name: Optiona
         )
     )
 
-
 def _portfolio_clear() -> None:
     """Clear all units from the active portfolio (districts or blocks)."""
     level = st.session_state.get("admin_level", "district")
@@ -1441,10 +1585,8 @@ def _portfolio_clear() -> None:
         state_key=state_key,
     )
 
-
 # Alias for backward compatibility with portfolio_ui
 _portfolio_remove_all = _portfolio_clear
-
 
 def _portfolio_set_flash(message: str, level: str = "success") -> None:
     """Store a one-shot UI message to be rendered at the top of the right panel."""
@@ -1490,6 +1632,18 @@ else:
     st.session_state["map_zoom"] = 4.8
     st.session_state.pop("_pending_block_zoom", None)
 
+
+# Gate map rendering until both the ribbon selections and Analysis focus are chosen
+_ready_for_map = bool(_ribbon_ready) and bool(analysis_ready)
+if not _ready_for_map:
+    with col1:
+        st.info(
+            "Complete the selections in the **ribbon above the map** (Risk domain, Metric, Scenario, Period, Statistic, Map mode) "
+            "and choose an **Analysis focus** in the sidebar to render the map."
+        )
+    render_perf_panel_safe()
+    st.stop()
+
 # Merge attributes (district vs block)
 _admin_level = st.session_state.get("admin_level", "district")
 _admin_level = str(_admin_level or "district").strip().lower()
@@ -1522,7 +1676,7 @@ _analysis_mode = st.session_state.get("analysis_mode", SEL_PLACEHOLDER)
 _map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
 modes_ready = (_analysis_mode != SEL_PLACEHOLDER) and (_map_mode != SEL_PLACEHOLDER)
 if not modes_ready:
-    st.info("Select **Analysis focus** and **Map mode** in the sidebar to render the map.")
+    st.info("Select an **Analysis focus** in the sidebar and complete the **ribbon selections** above the map to render the map.")
     render_perf_panel_safe()
     st.stop()
 
@@ -2044,12 +2198,11 @@ legend_block_html = build_vertical_gradient_legend_block_html(
 # Ensure `returned` always exists, even if the map tab didn't run yet
 returned = None
 
-col1, col2 = st.columns([5, 3])
+# col1, col2 are defined earlier (metric ribbon layout)
 
 with col1:
-    head_col, reset_col = st.columns([4, 1])
-    with head_col:
-        st.header(pretty_metric_label)
+    # Ribbon is shown above; keep only the reset action here (right-aligned)
+    _, reset_col = st.columns([4, 1])
     with reset_col:
         if st.button("⟲ Reset View", key="reset_map_view"):
             st.session_state["pending_selected_state"] = "All"
