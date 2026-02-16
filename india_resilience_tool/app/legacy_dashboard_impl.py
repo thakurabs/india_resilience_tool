@@ -1042,7 +1042,7 @@ with col1:
             format_func=lambda p: period_display_label(p) if p != SEL_PLACEHOLDER else p,
         )
 
-    # --- Statistic selection (mean/median only) ---
+    # --- Statistic selection (mean/median only, placeholder-first) ---
     stat_disabled = not metric_ready
     stat_options = [SEL_PLACEHOLDER, "mean", "median"]
     cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
@@ -1060,6 +1060,63 @@ with col1:
             label_visibility="collapsed",
             disabled=stat_disabled,
         )
+
+    # --- Map mode selection (moved into ribbon; placeholder-first) ---
+    map_mode_options = [
+        SEL_PLACEHOLDER,
+        "Absolute value",
+        "Change from 1990-2010 baseline",
+    ]
+    cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
+    if cur_map_mode not in map_mode_options:
+        st.session_state["map_mode"] = SEL_PLACEHOLDER
+    cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
+
+    with row2[2]:
+        st.markdown("**Map mode**")
+        map_mode = st.selectbox(
+            "Map mode",
+            options=map_mode_options,
+            index=map_mode_options.index(cur_map_mode),
+            key="map_mode",
+            label_visibility="collapsed",
+            help="Choose whether to map absolute values or change from the 1990–2010 baseline.",
+        )
+
+# Column chosen to plot (only when ribbon selections are complete)
+sel_metric = str(st.session_state.get("registry_metric", registry_metric)).strip()
+metric_col = None
+pretty_metric_label = "Select a metric to visualize"
+
+_ribbon_ready = (
+    (VARIABLE_SLUG is not None)
+    and (df is not None)
+    and (sel_scenario != SEL_PLACEHOLDER)
+    and (sel_period != SEL_PLACEHOLDER)
+    and (sel_stat != SEL_PLACEHOLDER)
+    and (map_mode != SEL_PLACEHOLDER)
+)
+
+if _ribbon_ready:
+    metric_col = f"{sel_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
+    if metric_col not in df.columns:
+        st.error(f"Selected column '{metric_col}' not found in master CSV.")
+        render_perf_panel_safe()
+        st.stop()
+
+    pretty_metric_label = f"{VARIABLES[VARIABLE_SLUG]['label']}"
+    _units = str(
+        VARIABLES[VARIABLE_SLUG].get("units")
+        or VARIABLES[VARIABLE_SLUG].get("unit")
+        or ""
+    ).strip()
+    if _units:
+        pretty_metric_label = f"{pretty_metric_label} ({_units})"
+
+    pretty_metric_label = (
+        f"{pretty_metric_label} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
+    )
+
 
     # --- Map mode selection (moved into ribbon) ---
     map_mode_options = [

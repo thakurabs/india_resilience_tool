@@ -247,6 +247,7 @@ def build_district_case_study_data(
             {
                 "index_slug": slug,
                 "index_label": varcfg.get("label", slug),
+                "units": str(varcfg.get("units") or varcfg.get("unit") or "").strip(),
                 "group": varcfg.get("group"),
                 "scenario": sel_scenario,
                 "period": sel_period,
