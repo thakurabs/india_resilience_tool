@@ -39,10 +39,18 @@ PathLike = Union[str, Path]
 # -------------------------
 
 SCENARIO_ORDER = ["historical", "ssp245", "ssp585"]
-SCENARIO_DISPLAY: dict[str, str] = {
+
+SCENARIO_DISPLAY = {
     "historical": "Historical",
     "ssp245": "SSP2-4.5",
     "ssp585": "SSP5-8.5",
+}
+
+# Consistent scenario colors for Plotly + Matplotlib (module-level so it's always defined)
+SCENARIO_COLORS_HEX: dict[str, str] = {
+    "historical": "#1f77b4",  # blue
+    "ssp245": "#ff7f0e",      # orange
+    "ssp585": "#d62728",      # red
 }
 
 PERIOD_ORDER = ["1990-2010", "2020-2040", "2040-2060",
@@ -220,7 +228,7 @@ def make_scenario_comparison_figure(
     xs: list[float] = []
     ys: list[float] = []
     colors: list[str] = []
-    edgecolors: list[str] = []
+    edgecolors: list[Any] = []
     linewidths: list[float] = []
     for scen, period in combos:
         mask = (dfp["scenario_norm"] == scen) & (dfp["period"] == period)
@@ -234,7 +242,9 @@ def make_scenario_comparison_figure(
         colors.append(base_color)
 
         is_selected = (scen == sel_scenario_norm) and (period == sel_period_norm)
-        edgecolors.append("black" if is_selected else "rgba(0,0,0,0.35)")
+
+        # Matplotlib expects a named color OR an (r,g,b,a) tuple with 0–1 floats.
+        edgecolors.append("black" if is_selected else (0.0, 0.0, 0.0, 0.35))
         linewidths.append(1.4 if is_selected else 0.9)
 
     if not xs:
@@ -251,27 +261,71 @@ def make_scenario_comparison_figure(
         else:
             fig = ax.figure
 
+        # `xs` is the computed x-position array; some code paths used `x` earlier.
+        x = xs
+        y = ys
+
         bars = ax.bar(
-            xs,
-            ys,
+            x,
+            y,
             color=colors,
             edgecolor=edgecolors,
             linewidth=linewidths,
             width=0.45,
         )
 
-        # Value labels
+        # Add headroom on y-axis so tall bars don't crowd the title/legend area
+        y_vals = np.array([v for v in ys if pd.notna(v)], dtype=float)
+        if y_vals.size > 0:
+            y_min = float(np.nanmin(y_vals))
+            y_max = float(np.nanmax(y_vals))
+            y_range = (y_max - y_min) if (y_max != y_min) else max(abs(y_max), 1.0)
+
+            # If all positive, keep baseline at 0 (nice for "mean"/counts)
+            if y_min >= 0:
+                ax.set_ylim(0.0, y_max + 0.12 * y_range)
+            else:
+                ax.set_ylim(y_min - 0.12 * y_range, y_max + 0.12 * y_range)
+
+            # Recompute top after applying limits
+            y_top = ax.get_ylim()[1]
+            headroom_thresh = y_top - 0.10 * (ax.get_ylim()[1] - ax.get_ylim()[0])
+            label_offset = 0.02 * (ax.get_ylim()[1] - ax.get_ylim()[0])
+        else:
+            headroom_thresh = None
+            label_offset = 0.0
+
+        # Value labels: place INSIDE if bar is too tall (prevents clumsy top collisions)
         for b, y in zip(bars, ys):
             if pd.isna(y):
                 continue
-            ax.text(
-                b.get_x() + b.get_width() / 2,
-                y,
-                format_value(y, units=units),
-                ha="center",
-                va="bottom",
-                fontsize=font_size_ticks,
-            )
+
+            x_text = b.get_x() + b.get_width() / 2
+
+            if headroom_thresh is not None and y >= headroom_thresh:
+                # Put label inside the bar near the top
+                ax.text(
+                    x_text,
+                    y - label_offset,
+                    format_value(y, units=units),
+                    ha="center",
+                    va="top",
+                    fontsize=font_size_ticks,
+                    color="white",
+                    clip_on=True,
+                )
+            else:
+                # Put label above the bar
+                ax.text(
+                    x_text,
+                    y + label_offset,
+                    format_value(y, units=units),
+                    ha="center",
+                    va="bottom",
+                    fontsize=font_size_ticks,
+                    color="black",
+                    clip_on=False,
+                )
 
         group_centres: list[float] = []
         group_labels: list[str] = []
@@ -306,6 +360,7 @@ def make_scenario_comparison_figure(
                 frameon=False,
                 ncol=min(3, len(handles)),
                 loc="upper left",
+                bbox_to_anchor=(0.0, 1.02),
             )
 
         ax.grid(axis="y", linestyle="--", alpha=0.35)
@@ -316,12 +371,6 @@ def make_scenario_comparison_figure(
             fig.tight_layout()
         except Exception:
             pass
-
-        if created_axes and logo_path:
-            try:
-                add_ra_logo(fig, logo_path)
-            except Exception:
-                pass
 
         return fig, ax
 
