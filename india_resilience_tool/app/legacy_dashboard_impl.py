@@ -135,7 +135,6 @@ ADM3_GEOJSON = BLOCKS_PATH
 ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 ATTACH_BLOCK_GEOJSON = str(ADM3_GEOJSON) if ADM3_GEOJSON.exists() else None
 
-OUTDIR = DATA_DIR
 
 # ---------- Name normalization / aliases ----------
 from india_resilience_tool.utils.naming import NAME_ALIASES, alias, normalize_name, normalize_compact
@@ -2197,7 +2196,6 @@ with col1:
                 portfolio_contains_fn=_portfolio_contains,
                 normalize_fn=_portfolio_normalize,
                 returned=returned,
-                merged=merged,
                 level=_admin_level,
             )
 
@@ -2253,9 +2251,7 @@ with col2:
             sel_scenario=sel_scenario,
             sel_period=sel_period,
             sel_stat=sel_stat,
-            metric_col=metric_col,
             # Data
-            merged=merged,
             adm1=adm1,
             # Config
             pilot_state=PILOT_STATE,
@@ -2294,7 +2290,6 @@ with col2:
     if "Multi" in analysis_mode and portfolio_route == "saved_points":
         # ---- POINT SELECTION PANEL (extracted to point_selection_ui.py) ----
         clear_clicked = render_point_selection_panel(
-            merged=merged,
             portfolio_add_fn=_portfolio_add,
             portfolio_key_fn=_portfolio_key,
             portfolio_set_flash_fn=_portfolio_set_flash,
@@ -2479,7 +2474,6 @@ with col2:
                 sel_scenario=sel_scenario,
                 sel_period=sel_period,
                 sel_stat=sel_stat,
-                metric_col=metric_col,
                 # Pre-computed metrics
                 ensemble=ensemble,
                 per_model_df=per_model_df,
@@ -3215,7 +3209,6 @@ with col2:
             create_trend_figure_for_index_plotly as _create_trend_figure_for_index,
         )
         from india_resilience_tool.viz.exports import (
-            make_district_yearly_pdf,
             make_district_case_study_pdf as _make_district_case_study_pdf_impl,
             make_case_study_zip as _make_case_study_zip_impl,
         )
@@ -3235,7 +3228,6 @@ with col2:
             # Metric / variable context
             variables=VARIABLES,
             variable_slug=VARIABLE_SLUG,
-            metric_col=metric_col,
             sel_metric=sel_metric,
             sel_scenario=sel_scenario,
             sel_period=sel_period,
@@ -3251,11 +3243,8 @@ with col2:
             # Time series data
             hist_ts=hist_ts,
             scen_ts=scen_ts,
-            district_yearly_scen=_district_yearly_scen,
             # Schema for scenario comparison
             schema_items=schema_items,
-            # GeoDataFrame for district comparison
-            merged=merged,
             # Figure styling
             fig_size_panel=_fig_size_panel,
             fig_dpi_panel=FIG_DPI_PANEL,
@@ -3266,12 +3255,10 @@ with col2:
             # Constants
             period_order=PERIOD_ORDER,
             scenario_display=SCENARIO_DISPLAY,
-            out_dir=OUTDIR,
             # Callable dependencies
             create_trend_figure_fn=_create_trend_figure_for_index,
             build_scenario_panel_fn=build_scenario_comparison_panel_for_row,
             make_scenario_figure_fn=make_scenario_comparison_figure,
-            make_district_yearly_pdf_fn=make_district_yearly_pdf,
             build_case_study_data_fn=_build_district_case_study_data,
             make_case_study_pdf_fn=_make_district_case_study_pdf,
             make_case_study_zip_fn=_make_case_study_zip,
@@ -3293,5 +3280,5 @@ render_perf_panel_safe()
 st.markdown("---")
 st.caption(
     "Notes: first choose a Risk domain (e.g. Heat Risk, Drought Risk), then a Metric within that bundle. "
-    "Details panel shows risk cards, trends, narrative, and a comparison option."
+    "Details panel shows risk cards, trends, narrative, and case-study export."
 )

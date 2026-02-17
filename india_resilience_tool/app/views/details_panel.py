@@ -1,33 +1,17 @@
 """
-Single-district details panel (right column) for IRT.
+Single-unit details panel (right column) for IRT.
 
-This module extracts the single-district right-column UI from
-dashboard_unfactored_impl.py. It includes:
-- Risk summary (current value, change vs baseline, position in state)
-- Trend over time (historical + scenario + narrative)
+This module extracts the right-column "Climate Profile" UI from the legacy dashboard.
+It includes:
+- Risk summary (current value, change vs baseline, position in state/district)
+- Trend over time (historical + scenario)
 - Scenario comparison (period-mean bar chart)
-- Detailed statistics + PDF generation
 - Case-study export (multi-index PDF/ZIP)
-- District comparison
-
-Widget keys preserved:
-- compare_district
-- case_study_indices
-- btn_build_case_study
-- download_case_study_pdf
-- download_case_study_zip
-- btn_district_pdf_*
-- btn_dist_pdf_dl
-
-Session state keys used:
-- case_study_summary
-- case_study_ts
-- case_study_panels
-- district_pdf_path_*
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
 """
+
 
 from __future__ import annotations
 
@@ -572,88 +556,6 @@ def render_scenario_comparison(
             )
 
 
-def render_detailed_statistics(
-    *,
-    row: pd.Series,
-    sel_metric: str,
-    sel_scenario: str,
-    sel_period: str,
-    variable_slug: str,
-    variable_label: str,
-    state_to_show: str,
-    selected_district: str,
-    district_yearly_scen: pd.DataFrame,
-    out_dir: Path,
-    logo_path: Optional[Path] = None,
-    make_district_yearly_pdf_fn: Callable[..., Optional[Path]],
-) -> None:
-    """Render the Detailed statistics expander with optional PDF generation."""
-    import streamlit as st
-
-    with st.expander("Detailed statistics for selected district", expanded=False):
-        # Basic stats table
-        stats_list = ["mean", "median", "p05", "p95", "std"]
-        rows_stats = []
-        for sname in stats_list:
-            coln = f"{sel_metric}__{sel_scenario}__{sel_period}__{sname}"
-            val = row.get(coln)
-            rows_stats.append({"Statistic": sname, "Value": val})
-
-        df_stats_state = pd.DataFrame(rows_stats)
-        df_stats_state["Value"] = pd.to_numeric(df_stats_state["Value"], errors="coerce")
-        st.table(df_stats_state.set_index("Statistic"))
-
-        # PDF generation
-        st.caption(
-            "You can optionally generate a PDF of the district's yearly "
-            "time-series for the selected scenario."
-        )
-
-        pdf_state_key = (
-            f"district_pdf_path_{variable_slug}_{state_to_show}_{selected_district}_{sel_scenario}"
-        )
-        pdf_path_d = st.session_state.get(pdf_state_key)
-
-        if st.button(
-            "Generate district yearly time-series PDF",
-            key=f"btn_district_pdf_{variable_slug}_{state_to_show}_{selected_district}_{sel_scenario}",
-        ):
-            pdf_path_d = make_district_yearly_pdf_fn(
-                df_yearly=district_yearly_scen,
-                state_name=state_to_show,
-                district_name=row.get("district_name", selected_district),
-                scenario_name=sel_scenario,
-                metric_label=variable_label,
-                out_dir=out_dir,
-                logo_path=logo_path,
-            )
-            if pdf_path_d and pdf_path_d.exists():
-                st.session_state[pdf_state_key] = pdf_path_d
-            else:
-                st.session_state.pop(pdf_state_key, None)
-                pdf_path_d = None
-
-        if pdf_path_d and pdf_path_d.exists():
-            with open(pdf_path_d, "rb") as fh:
-                st.download_button(
-                    "⬇️ Download district yearly time-series (PDF)",
-                    fh.read(),
-                    file_name=pdf_path_d.name,
-                    mime="application/pdf",
-                    key="btn_dist_pdf_dl",
-                )
-
-            abs_url_d = pdf_path_d.resolve().as_uri()
-            st.markdown(
-                f'<a href="{abs_url_d}" target="_blank" rel="noopener">'
-                f"🗎 Open district yearly figure in a new tab</a>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.caption(
-                "No yearly time-series PDF is currently available for this "
-                "district/scenario. Click the button above to generate it."
-            )
 
 
 def render_case_study_export(
@@ -784,118 +686,6 @@ def render_case_study_export(
                 )
 
 
-def render_district_comparison(
-    *,
-    merged: Any,  # GeoDataFrame
-    state_to_show: str,
-    district_name: str,
-    metric_col: str,
-    current_val_f: Optional[float],
-    variable_label: str,
-    sel_stat: str,
-    fig_size_mini: tuple[float, float],
-    fig_dpi_panel: int,
-    font_size_title: int,
-    font_size_label: int,
-    font_size_ticks: int,
-    logo_path: Optional[Path] = None,
-) -> None:
-    """Render the Compare with another district expander."""
-    import matplotlib.pyplot as plt
-    import streamlit as st
-    from india_resilience_tool.viz.style import add_ra_logo, strip_spines
-
-    with st.expander("Compare with another district", expanded=False):
-        same_state_mask = (
-            merged["state_name"].astype(str).str.strip().str.lower()
-            == str(state_to_show).strip().lower()
-        )
-        compare_candidates = (
-            merged.loc[same_state_mask, "district_name"]
-            .astype(str)
-            .sort_values()
-            .unique()
-            .tolist()
-        )
-        compare_candidates = [d for d in compare_candidates if d != district_name]
-
-        if compare_candidates:
-            comp_choice = st.selectbox(
-                "Compare with",
-                options=["(None)"] + compare_candidates,
-                index=0,
-                key="compare_district",
-            )
-
-            if comp_choice != "(None)":
-                mask_c = (
-                    merged["district_name"].astype(str).str.strip()
-                    == str(comp_choice).strip()
-                )
-                comp_row = merged[mask_c].iloc[0] if mask_c.any() else None
-
-                if comp_row is not None:
-                    val_this = current_val_f
-                    val_other = comp_row.get(metric_col)
-                    val_other_f = float(val_other) if not pd.isna(val_other) else None
-
-                    if (val_this is not None) and (val_other_f is not None):
-                        diff = val_this - val_other_f
-                        direction = (
-                            "higher than"
-                            if diff > 0
-                            else "lower than"
-                            if diff < 0
-                            else "the same as"
-                        )
-                        st.markdown(
-                            f"- **{variable_label}** in **{district_name}** "
-                            f"is **{abs(diff):.2f}** {direction} in **{comp_choice}** "
-                            f"for the selected scenario and period."
-                        )
-
-                        # Small visual comparison: two bars side by side
-                        fig_cmp, ax_cmp = plt.subplots(figsize=fig_size_mini, dpi=fig_dpi_panel)
-                        labels_cmp = [district_name, comp_choice]
-                        values_cmp = [val_this, val_other_f]
-
-                        colors_cmp = ["tab:blue", "tab:grey"]
-                        bars = ax_cmp.bar(labels_cmp, values_cmp, color=colors_cmp)
-
-                        ax_cmp.set_ylabel(f"{variable_label} ({sel_stat})", fontsize=font_size_label)
-                        ax_cmp.set_title("District comparison", fontsize=font_size_title)
-                        ax_cmp.tick_params(axis="x", labelsize=font_size_ticks)
-                        ax_cmp.tick_params(axis="y", labelsize=font_size_ticks)
-                        ax_cmp.grid(True, axis="y", linestyle="--", alpha=0.25)
-
-                        # Annotate values on top of bars
-                        for b in bars:
-                            height = b.get_height()
-                            ax_cmp.text(
-                                b.get_x() + b.get_width() / 2,
-                                height,
-                                f"{height:.1f}",
-                                ha="center",
-                                va="bottom",
-                                fontsize=8,
-                            )
-
-                        strip_spines(ax_cmp)
-
-                        try:
-                            fig_cmp.tight_layout()
-                        except Exception:
-                            pass
-
-                        add_ra_logo(fig_cmp, logo_path, width_frac=0.14, pad_frac=0.012, alpha=0.95)
-                        st.pyplot(fig_cmp, use_container_width=True)
-
-                    else:
-                        st.caption(
-                            "Comparison data not fully available for the selected index."
-                        )
-        else:
-            st.caption("No other districts found in this state for comparison.")
 
 
 def render_details_panel(
@@ -908,7 +698,6 @@ def render_details_panel(
     # Metric / variable context
     variables: Mapping[str, Mapping[str, Any]],
     variable_slug: str,
-    metric_col: str,
     sel_metric: str,
     sel_scenario: str,
     sel_period: str,
@@ -924,11 +713,8 @@ def render_details_panel(
     # Time series data
     hist_ts: pd.DataFrame,
     scen_ts: pd.DataFrame,
-    district_yearly_scen: pd.DataFrame,
     # Schema for scenario comparison
     schema_items: Sequence[Mapping[str, Any]],
-    # GeoDataFrame for district comparison
-    merged: Any,
     # Figure styling
     fig_size_panel: tuple[float, float],
     fig_dpi_panel: int,
@@ -939,12 +725,10 @@ def render_details_panel(
     # Constants
     period_order: Sequence[str],
     scenario_display: Mapping[str, str],
-    out_dir: Path,
     # Callable dependencies (injected for testability)
     create_trend_figure_fn: Callable[..., Any],
     build_scenario_panel_fn: Callable[..., pd.DataFrame],
     make_scenario_figure_fn: Callable[..., tuple[Any, Any]],
-    make_district_yearly_pdf_fn: Callable[..., Optional[Path]],
     build_case_study_data_fn: Callable[..., tuple[pd.DataFrame, dict, dict]],
     make_case_study_pdf_fn: Callable[..., bytes],
     make_case_study_zip_fn: Callable[..., bytes],
@@ -964,7 +748,7 @@ def render_details_panel(
 ) -> None:
 
     """
-    Render the complete single-district details panel (right column).
+    Render the complete single-unit details panel (right column).
 
     This is the main entry point for the details panel, composing all sub-renderers.
 
@@ -1016,12 +800,6 @@ def render_details_panel(
         except Exception:
             fig_size_panel_169 = fig_size_panel
 
-    # Mini figures (also 16:9), slightly smaller than the main panel
-    try:
-        w_mini = float(fig_size_panel_169[0]) * 0.85
-        fig_size_mini_169 = (w_mini, w_mini * (9.0 / 16.0))
-    except Exception:
-        fig_size_mini_169 = fig_size_panel_169
 
     # 1. Risk summary
     render_risk_summary(
@@ -1086,23 +864,7 @@ def render_details_panel(
         make_scenario_figure_fn=make_scenario_figure_fn,
     )
 
-    # 4. Detailed statistics + PDF generation
-    render_detailed_statistics(
-        row=row,
-        sel_metric=sel_metric,
-        sel_scenario=sel_scenario,
-        sel_period=sel_period,
-        variable_slug=variable_slug,
-        variable_label=variable_label,
-        state_to_show=state_to_show,
-        selected_district=selected_district,
-        district_yearly_scen=district_yearly_scen,
-        out_dir=out_dir,
-        logo_path=logo_path,
-        make_district_yearly_pdf_fn=make_district_yearly_pdf_fn,
-    )
-
-    # 5. Case study export (multi-index)
+    # 4. Case study export (multi-index)
     render_case_study_export(
         variables=variables,
         variable_slug=variable_slug,
@@ -1117,26 +879,3 @@ def render_details_panel(
         make_case_study_zip_fn=make_case_study_zip_fn,
         slugify_fs_fn=slugify_fs_fn,
     )
-
-    # 6. District comparison (district-mode only)
-    if str(level).strip().lower() != "block":
-        render_district_comparison(
-            merged=merged,
-            state_to_show=state_to_show,
-            district_name=district_name,
-            metric_col=metric_col,
-            current_val_f=current_val_f,
-            variable_label=variable_label,
-            sel_stat=sel_stat,
-            fig_size_mini=fig_size_mini_169,
-            fig_dpi_panel=fig_dpi_panel,
-            font_size_title=font_size_title,
-            font_size_label=font_size_label,
-            font_size_ticks=font_size_ticks,
-            logo_path=logo_path,
-        )
-    else:
-        import streamlit as st
-
-        with st.expander("District comparison", expanded=False):
-            st.caption("District comparison is not available in block mode yet.")
