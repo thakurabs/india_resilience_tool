@@ -95,43 +95,43 @@ _RISK_SUMMARY_CSS = """
 .irt-delta-neutral { background: rgba(148,163,184,0.18); color: rgba(148,163,184,1); }
 
 /* ---------------------------
-   Link-styled “View rankings”
-   (scoped via aria-label + title)
+   Tiny icon button for "Open rankings table"
+   (scoped via title)
 ---------------------------- */
-button[aria-label="View rankings →"],
-button[title="Open the rankings table view"] {
+button[title="Open rankings table"] {
   background: transparent !important;
-  border: none !important;
-  padding: 0 !important;
-  min-height: auto !important;
-  height: auto !important;
+  border: 1px solid rgba(148,163,184,0.35) !important;
+  padding: 0.05rem 0.35rem !important;
+  min-height: 1.55rem !important;
+  height: 1.55rem !important;
+  line-height: 1 !important;
+  border-radius: 0.45rem !important;
+  color: rgba(100,116,139,1) !important;
+  font-weight: 800 !important;
+  font-size: 0.9rem !important;
+}
+
+button[title="Open rankings table"]:hover {
+  border-color: rgba(148,163,184,0.65) !important;
   color: var(--primary-color) !important;
-  font-weight: 600 !important;
-  font-size: 0.85rem !important;
 }
 
-button[aria-label="View rankings →"]:hover,
-button[title="Open the rankings table view"]:hover {
-  text-decoration: underline;
-}
-
-button[aria-label="View rankings →"]:disabled,
-button[title="Open the rankings table view"]:disabled {
+button[title="Open rankings table"]:disabled {
   opacity: 0.45 !important;
-  text-decoration: none !important;
 }
 </style>
 """
 
 
 def _inject_risk_summary_css() -> None:
-    """Inject Risk Summary CSS once per session."""
-    import streamlit as st
+    """
+    Inject Risk Summary CSS.
 
-    if st.session_state.get("_irt_risk_summary_css_injected", False):
-        return
+    Streamlit reruns rebuild the UI DOM on every interaction (e.g., switching Map ↔ Rankings).
+    To keep typography consistent across views, inject the CSS on every run.
+    """
+    import streamlit as st
     st.markdown(_RISK_SUMMARY_CSS, unsafe_allow_html=True)
-    st.session_state["_irt_risk_summary_css_injected"] = True
 
 
 def _risk_value_html(*, number_str: str, units: Optional[str]) -> str:
@@ -199,14 +199,14 @@ def render_risk_summary(
     """
     Render the Risk summary expander.
 
-    District mode:
-        - Current value
-        - Change vs baseline
+    District mode (left → right):
+        - Historical baseline
+        - Current value (with delta pill vs historical baseline)
         - Position in state
 
-    Block mode:
-        - Current value
-        - Change vs baseline
+    Block mode (left → right):
+        - Historical baseline
+        - Current value (with delta pill vs historical baseline)
         - Position in district
         - Position in state
     """
@@ -217,11 +217,59 @@ def render_risk_summary(
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
 
+    # Baseline descriptor for tooltip/help
+    if baseline_col:
+        parts = str(baseline_col).split("__")
+        if len(parts) == 4:
+            _, base_scenario, base_period, base_stat = parts
+            baseline_desc = f"{base_scenario}, {base_period}, {base_stat}"
+        else:
+            baseline_desc = str(baseline_col)
+    else:
+        baseline_desc = "metadata not available"
+
+    # Delta is conceptually attached to CURRENT value (vs historical baseline)
+    delta_str: Optional[str] = None
+    delta_kind = "neutral"
+    if current_val_f is not None and baseline_val_f is not None:
+        diff_abs = current_val_f - baseline_val_f
+        diff_pct = (
+            (diff_abs / baseline_val_f * 100.0)
+            if baseline_val_f not in (0.0, None)
+            else None
+        )
+        delta_str = format_delta(diff_abs, units=units)
+        if diff_pct is not None:
+            delta_str += f" ({format_percent(diff_pct, decimals=1, show_sign=True)})"
+        delta_kind = "pos" if diff_abs > 0 else ("neg" if diff_abs < 0 else "neutral")
+
     with st.expander("Risk summary", expanded=True):
         cols = st.columns(4) if is_block else st.columns(3)
 
-        # --- Current value ---
-        with cols[0]:
+        # Column mapping (keeps "Position in state" at the far right)
+        col_baseline = cols[0]
+        col_current = cols[1]
+        col_pos_district = cols[2] if is_block else None
+        col_pos_state = cols[3] if is_block else cols[2]
+
+        # --- Historical baseline (LEFT) ---
+        with col_baseline:
+            st.markdown("**Historical baseline**")
+            if baseline_val_f is not None:
+                number_str = format_value(baseline_val_f, units=None)
+                st.markdown(
+                    _risk_metric_html(
+                        number_str=number_str,
+                        units=units,
+                        help_text=f"Historical baseline: {baseline_desc}",
+                    ),
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.write("Baseline not available")
+
+        # --- Current value (MIDDLE) + delta pill (below) ---
+        with col_current:
             st.markdown("**Current value**")
             if current_val_f is not None:
                 number_str = format_value(current_val_f, units=None)
@@ -230,6 +278,8 @@ def render_risk_summary(
                     _risk_metric_html(
                         number_str=number_str,
                         units=units,
+                        delta_text=delta_str,
+                        delta_kind=delta_kind,
                         help_text=help_text,
                     ),
                     unsafe_allow_html=True,
@@ -237,51 +287,11 @@ def render_risk_summary(
             else:
                 st.write("No data")
 
-        # --- Change vs baseline ---
-        with cols[1]:
-            st.markdown("**Change vs baseline**")
-            if current_val_f is not None and baseline_val_f is not None:
-                diff_abs = current_val_f - baseline_val_f
-                diff_pct = (
-                    (diff_abs / baseline_val_f * 100.0)
-                    if baseline_val_f not in (0.0, None)
-                    else None
-                )
-                delta_str = format_delta(diff_abs, units=units)
-                if diff_pct is not None:
-                    delta_str += f" ({format_percent(diff_pct, decimals=1, show_sign=True)})"
-
-                if baseline_col:
-                    parts = str(baseline_col).split("__")
-                    if len(parts) == 4:
-                        _, base_scenario, base_period, base_stat = parts
-                        baseline_desc = f"{base_scenario}, {base_period}, {base_stat}"
-                    else:
-                        baseline_desc = str(baseline_col)
-                else:
-                    baseline_desc = "not found"
-
-                number_str = format_value(baseline_val_f, units=None)
-                delta_kind = "pos" if diff_abs > 0 else ("neg" if diff_abs < 0 else "neutral")
-                st.markdown(
-                    _risk_metric_html(
-                        number_str=number_str,
-                        units=units,
-                        delta_text=delta_str,
-                        delta_kind=delta_kind,
-                        help_text=f"Baseline: {baseline_desc}",
-                    ),
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.write("Baseline not available")
-
-        # --- Position in district (block mode only) ---
-        if is_block:
-            with cols[2]:
+        # --- Position in district (block mode only; unchanged position) ---
+        if is_block and col_pos_district is not None:
+            with col_pos_district:
                 st.markdown("**Position in district**")
                 if rank_in_district is not None and n_in_district is not None:
-                    rank_label = f"{rank_in_district}/{n_in_district}"
                     district_label = parent_district_name or "selected district"
                     rank_1_meaning = "highest" if rank_higher_is_worse else "lowest"
                     if percentile_district is not None:
@@ -296,24 +306,36 @@ def render_risk_summary(
                             f"Rank 1 = {rank_1_meaning} value."
                         )
 
-                    st.metric(
-                        label="Rank in district",
-                        label_visibility="collapsed",
-                        value=rank_label,
-                        help=help_text,
+                    st.markdown(
+                        _risk_metric_html(
+                            number_str=str(rank_in_district),
+                            units=f"/{n_in_district}",
+                            help_text=help_text,
+                        ),
+                        unsafe_allow_html=True,
                     )
                 else:
                     st.write("Insufficient data")
 
-            pos_state_col = cols[3]
-        else:
-            pos_state_col = cols[2]
+        # --- Position in state (RIGHT; keep ↗ button as-is) ---
+        with col_pos_state:
+            header_cols = st.columns([0.84, 0.16], gap="small")
+            with header_cols[0]:
+                st.markdown("**Position in state**")
 
-        # --- Position in state ---
-        with pos_state_col:
-            st.markdown("**Position in state**")
+            with header_cols[1]:
+                already_rankings = st.session_state.get("active_view") == VIEW_RANKINGS
+                if st.button(
+                    "↗",
+                    key="btn_open_rankings_from_pos_state_header",
+                    help="Open rankings table",
+                    disabled=already_rankings,
+                ):
+                    st.session_state["jump_to_rankings"] = True
+                    st.session_state["jump_to_map"] = False
+                    st.rerun()
+
             if rank_in_state is not None and n_in_state is not None:
-                rank_label = f"{rank_in_state}/{n_in_state}"
                 unit_word = "blocks" if is_block else "districts"
                 rank_1_meaning = "highest" if rank_higher_is_worse else "lowest"
                 if percentile_state is not None:
@@ -328,26 +350,14 @@ def render_risk_summary(
                         f"Rank 1 = {rank_1_meaning} value."
                     )
 
-                rank_cols = st.columns([3, 1], gap="small")
-                with rank_cols[0]:
-                    st.metric(
-                        label="Rank in state",
-                        label_visibility="collapsed",
-                        value=rank_label,
-                        help=help_text,
-                    )
-
-                with rank_cols[1]:
-                    already_rankings = st.session_state.get("active_view") == VIEW_RANKINGS
-                    if st.button(
-                        "View rankings →",
-                        key="btn_open_rankings_from_risk_summary",
-                        help="Open the rankings table view",
-                        disabled=already_rankings,
-                    ):
-                        st.session_state["jump_to_rankings"] = True
-                        st.session_state["jump_to_map"] = False
-                        st.rerun()
+                st.markdown(
+                    _risk_metric_html(
+                        number_str=str(rank_in_state),
+                        units=f"/{n_in_state}",
+                        help_text=help_text,
+                    ),
+                    unsafe_allow_html=True,
+                )
             else:
                 st.write("Insufficient data")
 
