@@ -178,7 +178,7 @@ def render_risk_summary(
     rank_in_district: Optional[int] = None,
     n_in_district: Optional[int] = None,
     percentile_district: Optional[float] = None,
-    units: Optional[str] = None,
+    units: str = "",
 ) -> None:
     """
     Render the Risk summary expander.
@@ -354,12 +354,12 @@ def render_trend_over_time(
     sel_scenario: str,
     sel_period: str,
     district_name: str,
+    units: str = "",
     state_dir_for_fs: str,
     district_for_fs: str,
     fig_size_panel: tuple[float, float],
     fig_dpi_panel: int,
     font_size_legend: int,
-    units: Optional[str] = None,
     logo_path: Optional[Path] = None,
     create_trend_figure_fn: Callable[..., Any],
 ) -> None:
@@ -464,6 +464,7 @@ def render_scenario_comparison(
     sel_stat: str,
     variable_label: str,
     district_name: str,
+    units: str = "",
     fig_size_panel: tuple[float, float],
     fig_dpi_panel: int,
     font_size_title: int,
@@ -474,7 +475,7 @@ def render_scenario_comparison(
     period_order: Sequence[str],
     scenario_display: Mapping[str, str],
     build_scenario_panel_fn: Callable[..., pd.DataFrame],
-    make_scenario_figure_fn: Callable[..., tuple[Any, Any]],
+    make_scenario_figure_fn: Callable[..., Any],
 ) -> None:
     """Render the Scenario comparison (period-mean) expander."""
     import streamlit as st
@@ -487,15 +488,20 @@ def render_scenario_comparison(
             sel_stat=sel_stat,
         )
 
+
         if panel_df is not None and not panel_df.empty:
+            fig_obj = None
+
+            # Prefer Plotly for a consistent dashboard look; fall back to Matplotlib if needed.
             try:
-                fig_sc, ax_sc = make_scenario_figure_fn(
+                fig_obj = make_scenario_figure_fn(
                     panel_df=panel_df,
                     metric_label=variable_label,
                     sel_scenario=sel_scenario,
                     sel_period=sel_period,
                     sel_stat=sel_stat,
                     district_name=district_name,
+                    units=units,
                     figsize=fig_size_panel,
                     fig_dpi=fig_dpi_panel,
                     font_size_title=font_size_title,
@@ -504,30 +510,50 @@ def render_scenario_comparison(
                     font_size_legend=font_size_legend,
                     logo_path=logo_path,
                 )
-            except TypeError:
-                fig_sc, ax_sc = make_scenario_figure_fn(
-                    panel_df=panel_df,
-                    metric_label=variable_label,
-                    sel_scenario=sel_scenario,
-                    sel_period=sel_period,
-                    sel_stat=sel_stat,
-                    district_name=district_name,
-                    figsize=fig_size_panel,
-                    fig_dpi=fig_dpi_panel,
-                    font_size_title=font_size_title,
-                    font_size_label=font_size_label,
-                    font_size_ticks=font_size_ticks,
-                    font_size_legend=font_size_legend,
-                )
+            except Exception:
+                fig_obj = None
+
+            # Some generators return (fig, ax); normalize.
+            if isinstance(fig_obj, tuple) and fig_obj:
+                fig_obj = fig_obj[0]
+
+            if fig_obj is None:
+                # Fallback to Matplotlib generator (keeps PDF exports unaffected).
                 try:
-                    from india_resilience_tool.viz.style import add_ra_logo
+                    from india_resilience_tool.viz.charts import make_scenario_comparison_figure
 
-                    add_ra_logo(fig_sc, logo_path)
+                    fig_obj, _ = make_scenario_comparison_figure(
+                        panel_df=panel_df,
+                        metric_label=variable_label,
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
+                        district_name=district_name,
+                        figsize=fig_size_panel,
+                        fig_dpi=fig_dpi_panel,
+                        font_size_title=font_size_title,
+                        font_size_label=font_size_label,
+                        font_size_ticks=font_size_ticks,
+                        font_size_legend=font_size_legend,
+                        logo_path=logo_path,
+                        units=units,
+                    )
                 except Exception:
-                    pass
+                    fig_obj = None
 
-            if fig_sc is not None:
-                st.pyplot(fig_sc, use_container_width=True)
+            if fig_obj is not None:
+                rendered = False
+                try:
+                    import plotly.graph_objects as go
+
+                    if isinstance(fig_obj, go.Figure):
+                        st.plotly_chart(fig_obj, use_container_width=True)
+                        rendered = True
+                except Exception:
+                    rendered = False
+
+                if not rendered:
+                    st.pyplot(fig_obj, use_container_width=True)
 
             # Numeric summary in text
             lines = []

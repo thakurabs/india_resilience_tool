@@ -535,6 +535,7 @@ from india_resilience_tool.viz.charts import (
     canonical_period_label,
     period_display_label,
     make_scenario_comparison_figure,
+    make_scenario_comparison_figure_plotly,
 )
 
 def make_state_boxplot_for_districts(
@@ -3258,7 +3259,7 @@ with col2:
             # Callable dependencies
             create_trend_figure_fn=_create_trend_figure_for_index,
             build_scenario_panel_fn=build_scenario_comparison_panel_for_row,
-            make_scenario_figure_fn=make_scenario_comparison_figure,
+            make_scenario_figure_fn=make_scenario_comparison_figure_plotly,
             build_case_study_data_fn=_build_district_case_study_data,
             make_case_study_pdf_fn=_make_district_case_study_pdf,
             make_case_study_zip_fn=_make_case_study_zip,
