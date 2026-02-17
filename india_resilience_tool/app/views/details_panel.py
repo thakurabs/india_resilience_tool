@@ -178,7 +178,7 @@ def render_risk_summary(
     rank_in_district: Optional[int] = None,
     n_in_district: Optional[int] = None,
     percentile_district: Optional[float] = None,
-    units: str = "",
+    units: Optional[str] = None,
 ) -> None:
     """
     Render the Risk summary expander.
@@ -354,12 +354,12 @@ def render_trend_over_time(
     sel_scenario: str,
     sel_period: str,
     district_name: str,
-    units: str = "",
     state_dir_for_fs: str,
     district_for_fs: str,
     fig_size_panel: tuple[float, float],
     fig_dpi_panel: int,
     font_size_legend: int,
+    units: Optional[str] = None,
     logo_path: Optional[Path] = None,
     create_trend_figure_fn: Callable[..., Any],
 ) -> None:
@@ -464,7 +464,6 @@ def render_scenario_comparison(
     sel_stat: str,
     variable_label: str,
     district_name: str,
-    units: str = "",
     fig_size_panel: tuple[float, float],
     fig_dpi_panel: int,
     font_size_title: int,
@@ -475,7 +474,7 @@ def render_scenario_comparison(
     period_order: Sequence[str],
     scenario_display: Mapping[str, str],
     build_scenario_panel_fn: Callable[..., pd.DataFrame],
-    make_scenario_figure_fn: Callable[..., Any],
+    make_scenario_figure_fn: Callable[..., tuple[Any, Any]],
 ) -> None:
     """Render the Scenario comparison (period-mean) expander."""
     import streamlit as st
@@ -488,20 +487,18 @@ def render_scenario_comparison(
             sel_stat=sel_stat,
         )
 
-
         if panel_df is not None and not panel_df.empty:
-            fig_obj = None
-
-            # Prefer Plotly for a consistent dashboard look; fall back to Matplotlib if needed.
+            # `make_scenario_figure_fn` may return either:
+            # - a Matplotlib figure (or a (fig, ax) tuple)
+            # - a Plotly Figure (iterable over traces, so it MUST NOT be unpacked)
             try:
-                fig_obj = make_scenario_figure_fn(
+                sc_res = make_scenario_figure_fn(
                     panel_df=panel_df,
                     metric_label=variable_label,
                     sel_scenario=sel_scenario,
                     sel_period=sel_period,
                     sel_stat=sel_stat,
                     district_name=district_name,
-                    units=units,
                     figsize=fig_size_panel,
                     fig_dpi=fig_dpi_panel,
                     font_size_title=font_size_title,
@@ -510,50 +507,56 @@ def render_scenario_comparison(
                     font_size_legend=font_size_legend,
                     logo_path=logo_path,
                 )
+            except TypeError:
+                # Backward-compatible fallback if signature differs
+                sc_res = make_scenario_figure_fn(
+                    panel_df=panel_df,
+                    metric_label=variable_label,
+                    sel_scenario=sel_scenario,
+                    sel_period=sel_period,
+                    sel_stat=sel_stat,
+                    district_name=district_name,
+                    figsize=fig_size_panel,
+                    fig_dpi=fig_dpi_panel,
+                    font_size_title=font_size_title,
+                    font_size_label=font_size_label,
+                    font_size_ticks=font_size_ticks,
+                    font_size_legend=font_size_legend,
+                )
+
+            fig_sc = None
+            is_plotly = False
+            try:
+                import plotly.graph_objects as go
+
+                if isinstance(sc_res, go.Figure):
+                    is_plotly = True
+                    fig_sc = sc_res
             except Exception:
-                fig_obj = None
+                pass
 
-            # Some generators return (fig, ax); normalize.
-            if isinstance(fig_obj, tuple) and fig_obj:
-                fig_obj = fig_obj[0]
-
-            if fig_obj is None:
-                # Fallback to Matplotlib generator (keeps PDF exports unaffected).
-                try:
-                    from india_resilience_tool.viz.charts import make_scenario_comparison_figure
-
-                    fig_obj, _ = make_scenario_comparison_figure(
-                        panel_df=panel_df,
-                        metric_label=variable_label,
-                        sel_scenario=sel_scenario,
-                        sel_period=sel_period,
-                        sel_stat=sel_stat,
-                        district_name=district_name,
-                        figsize=fig_size_panel,
-                        fig_dpi=fig_dpi_panel,
-                        font_size_title=font_size_title,
-                        font_size_label=font_size_label,
-                        font_size_ticks=font_size_ticks,
-                        font_size_legend=font_size_legend,
-                        logo_path=logo_path,
-                        units=units,
+            if is_plotly:
+                if fig_sc is not None:
+                    st.plotly_chart(
+                        fig_sc,
+                        use_container_width=True,
+                        config={"displaylogo": False, "responsive": True},
                     )
-                except Exception:
-                    fig_obj = None
+            else:
+                if isinstance(sc_res, tuple) and len(sc_res) >= 1:
+                    fig_sc = sc_res[0]
+                else:
+                    fig_sc = sc_res
 
-            if fig_obj is not None:
-                rendered = False
-                try:
-                    import plotly.graph_objects as go
+                if fig_sc is not None:
+                    try:
+                        from india_resilience_tool.viz.style import add_ra_logo
 
-                    if isinstance(fig_obj, go.Figure):
-                        st.plotly_chart(fig_obj, use_container_width=True)
-                        rendered = True
-                except Exception:
-                    rendered = False
+                        add_ra_logo(fig_sc, logo_path)
+                    except Exception:
+                        pass
 
-                if not rendered:
-                    st.pyplot(fig_obj, use_container_width=True)
+                    st.pyplot(fig_sc, use_container_width=True)
 
             # Numeric summary in text
             lines = []
@@ -608,17 +611,96 @@ def render_case_study_export(
             "multiple climate indices (experimental)."
         )
 
+        # ---------------------------------------------------------------------
+        # Bundle-first selection (parity with Portfolio mode)
+        # ---------------------------------------------------------------------
+        from india_resilience_tool.config.variables import (
+            get_bundles,
+            get_bundle_for_metric,
+            get_bundle_description,
+            get_default_bundle,
+            get_metrics_for_bundle,
+        )
+
         index_options = list(variables.keys())
-        default_indices = (
-            [variable_slug] if variable_slug in index_options else index_options[:1]
+        all_bundles = get_bundles()
+
+        bundles_for_current = get_bundle_for_metric(variable_slug)
+        default_bundle = bundles_for_current[0] if bundles_for_current else get_default_bundle()
+
+        selected_bundles = st.multiselect(
+            "Risk domains to include in the report",
+            options=all_bundles,
+            default=[default_bundle] if default_bundle in all_bundles else (all_bundles[:1] if all_bundles else []),
+            key="case_study_bundle_selection",
+            help=(
+                "Select one or more risk domains (bundles). Metrics from all selected domains "
+                "will be included in the case-study export."
+            ),
         )
-        selected_index_slugs = st.multiselect(
-            "Indices to include in the report",
-            options=index_options,
-            default=default_indices,
-            format_func=lambda s: variables[s]["label"],
-            key="case_study_indices",
+
+        expanded_slugs: list[str] = []
+        for bundle in selected_bundles:
+            for slug in get_metrics_for_bundle(bundle):
+                if slug in index_options and slug not in expanded_slugs:
+                    expanded_slugs.append(slug)
+
+        if variable_slug in index_options and variable_slug not in expanded_slugs:
+            expanded_slugs = [variable_slug] + expanded_slugs
+
+        if not expanded_slugs:
+            expanded_slugs = [variable_slug] if variable_slug in index_options else (index_options[:1] if index_options else [])
+
+        st.caption(f"📊 {len(expanded_slugs)} metric(s) selected")
+
+        manual_mode = st.checkbox(
+            "Manually refine metric selection",
+            value=st.session_state.get("case_study_manual_refinement", False),
+            key="case_study_manual_refinement",
+            help="Enable to add/remove individual metrics from the case-study report.",
         )
+
+        if manual_mode:
+            existing = st.session_state.get("case_study_indices", [])
+            default_indices = [s for s in existing if s in index_options] or expanded_slugs
+
+            selected_index_slugs = st.multiselect(
+                "Indices to include in the report",
+                options=index_options,
+                default=default_indices,
+                format_func=lambda s: variables.get(s, {}).get("label", s),
+                key="case_study_indices",
+            )
+        else:
+            selected_index_slugs = expanded_slugs
+            st.session_state["case_study_indices"] = selected_index_slugs
+
+            if selected_bundles:
+                with st.expander(f"View {len(selected_index_slugs)} included metrics", expanded=False):
+                    for bundle in selected_bundles:
+                        slugs_in_bundle = [s for s in get_metrics_for_bundle(bundle) if s in selected_index_slugs]
+                        if not slugs_in_bundle:
+                            continue
+                        desc = get_bundle_description(bundle)
+                        st.markdown(f"**{bundle}** — {desc}" if desc else f"**{bundle}**")
+                        for slug in slugs_in_bundle:
+                            st.caption(f"  • {variables.get(slug, {}).get('label', slug)}")
+
+        # Clear previously built outputs when the selection context changes (avoid stale downloads).
+        sig = (
+            tuple(selected_index_slugs),
+            str(sel_scenario),
+            str(sel_period),
+            str(sel_stat),
+            str(state_to_show),
+            str(district_name),
+        )
+        if st.session_state.get("case_study_signature") != sig:
+            st.session_state["case_study_signature"] = sig
+            st.session_state.pop("case_study_summary", None)
+            st.session_state.pop("case_study_ts", None)
+            st.session_state.pop("case_study_panels", None)
+
 
         if not selected_index_slugs:
             st.info("Select at least one index to build the case-study report.")
