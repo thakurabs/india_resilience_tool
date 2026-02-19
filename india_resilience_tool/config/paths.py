@@ -77,6 +77,18 @@ def _get_data_dir(repo_root: Path) -> Path:
     return (projects_root / "irt_data").resolve()
 
 
+def _get_processed_subdir() -> str:
+    """
+    Resolve processed subdir name under DATA_DIR.
+
+    Contract:
+      - Default is "processed" (preserves existing layout).
+      - If IRT_PROCESSED_SUBDIR is set, use it (e.g., "processed_test").
+    """
+    val = str(os.getenv("IRT_PROCESSED_SUBDIR", "processed")).strip()
+    return val or "processed"
+
+
 def get_paths_config() -> PathsConfig:
     """
     Build a PathsConfig from the current environment.
@@ -93,7 +105,7 @@ def get_paths_config() -> PathsConfig:
         data_dir=data_dir,
         data_root=data_dir / "r1i1p1f1",
         districts_path=data_dir / "districts_4326.geojson",
-        base_output_root=data_dir / "processed",
+        base_output_root=data_dir / _get_processed_subdir(),
     )
 
 
@@ -163,7 +175,7 @@ def resolve_processed_root(
     if data_dir is None:
         data_dir = get_paths_config().data_dir
 
-    return (data_dir / "processed" / slug).resolve()
+    return (data_dir / _get_processed_subdir() / slug).resolve()
 
 
 # Convenience constants matching legacy root-level paths.py exports

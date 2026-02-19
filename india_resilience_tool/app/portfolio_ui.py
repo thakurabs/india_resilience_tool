@@ -424,18 +424,16 @@ def render_comparison_table(
 
     # Helper functions
     def _resolve_proc_root_for_slug(slug: str) -> Path:
-        env_root = os.getenv("IRT_PROCESSED_ROOT")
-        if env_root:
-            base_path = Path(env_root)
-            if base_path.name == slug:
-                return base_path.resolve()
-            return (base_path / slug).resolve()
-        return (data_dir / "processed" / slug).resolve()
+        # Single source of truth for processed root resolution (supports IRT_PROCESSED_SUBDIR).
+        from india_resilience_tool.config.paths import resolve_processed_root
+
+        return resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
 
     def _load_master_and_schema_for_slug(slug: str):
         proc_root = _resolve_proc_root_for_slug(slug)
-        master_fname = "master_metrics_by_block.csv" if is_block else "master_metrics_by_district.csv"
-        master_path = proc_root / pilot_state / master_fname
+        from paths import resolve_master_metrics_path
+
+        master_path = resolve_master_metrics_path(proc_root / pilot_state, "block" if is_block else "district")
 
         cache = st.session_state.setdefault("_portfolio_master_cache", {})
         cache_key = f"{slug}::{master_path}"

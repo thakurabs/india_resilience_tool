@@ -13,25 +13,22 @@ Features:
 
 Output Structure:
     processed/{metric}/{state}/
-    ├── master_metrics_by_district.csv
-    ├── master_metrics_by_block.csv
     ├── districts/                      # District-level data
-    │   ├── {district}/
-    │   │   └── {model}/{scenario}/
-    │   │       ├── {district}_yearly.csv
-    │   │       └── {district}_periods.csv
     │   └── ensembles/
-    │       └── {district}/{scenario}/
-    │           └── {district}_yearly_ensemble.csv
+    │       └── yearly/
+    │           └── scenario=<scenario>/data.parquet
+    │   └── raw/
+    │       ├── yearly/model=<model>/scenario=<scenario>/data.parquet
+    │       └── periods/model=<model>/scenario=<scenario>/data.parquet
     └── blocks/                         # Block-level data
-        ├── {district}/
-        │   └── {block}/
-        │       └── {model}/{scenario}/
-        │           ├── {block}_yearly.csv
-        │           └── {block}_periods.csv
         └── ensembles/
-            └── {district}/{block}/{scenario}/
-                └── {block}_yearly_ensemble.csv
+            └── yearly/
+                └── scenario=<scenario>/data.parquet
+        └── raw/
+            ├── yearly/model=<model>/scenario=<scenario>/data.parquet
+            └── periods/model=<model>/scenario=<scenario>/data.parquet
+
+Master tables are produced by `build_master_metrics.py` (Parquet preferred).
 
 Usage:
   python compute_indices_multiprocess.py                        # Default (district + block, 75% CPUs)
@@ -60,7 +57,7 @@ Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
 """
 
-import os, glob, sys, time, argparse, logging, json, traceback
+import os, glob, sys, time, argparse, logging, json, traceback, shutil
 from pathlib import Path
 from typing import Literal, Optional
 from dataclasses import dataclass
@@ -76,6 +73,7 @@ from affine import Affine
 
 from paths import DATA_ROOT, DISTRICTS_PATH, BLOCKS_PATH, BASE_OUTPUT_ROOT
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
+from india_resilience_tool.utils.processed_io import read_table, write_parquet_file
 
 # -----------------------------------------------------------------------------
 # CLIMATE-INDICES PACKAGE INTEGRATION (SPI/SPEI)
@@ -119,6 +117,10 @@ MIN_YEARS_ABSOLUTE = 5
 METRICS = PIPELINE_METRICS_RAW
 DEFAULT_WORKERS = max(1, int(cpu_count() * 0.75))
 
+# Disk format controls (Parquet is the default for space efficiency).
+WRITE_LEGACY_CSV = str(os.getenv("IRT_WRITE_LEGACY_CSV", "")).strip().lower() in {"1", "true", "yes", "y"}
+PARQUET_COMPRESSION = str(os.getenv("IRT_PARQUET_COMPRESSION", "zstd")).strip() or "zstd"
+
 def setup_logging(verbose: bool = False):
     import sys
     level = logging.DEBUG if verbose else logging.INFO
@@ -137,6 +139,15 @@ def metric_root(slug: str) -> Path:
     root = BASE_OUTPUT_ROOT / slug
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _safe_clear_dir(path: Path) -> None:
+    """Best-effort delete of an output directory (avoids partition duplication on reruns)."""
+    try:
+        if path.exists():
+            shutil.rmtree(path)
+    except Exception:
+        pass
 
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
@@ -2940,54 +2951,92 @@ def process_metric_for_model_scenario(
 
     df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
 
-    # Write outputs with clean folder structure
+    # Write outputs
+    #
+    # New default: write compact Parquet "raw" datasets. This avoids millions of tiny
+    # per-unit CSVs while preserving the ability to build masters/ensembles.
+    #
+    # Optional legacy: set IRT_WRITE_LEGACY_CSV=1 to also emit the old per-unit CSVs.
     try:
-        if level == "block":
-            # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
-            for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
-                district_safe = district.replace(" ", "_").replace("/", "_")
-                block_safe = block.replace(" ", "_").replace("/", "_")
+        level_root = metric_root_path / state_name / level_folder
 
-                out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
-                grp_df = grp_df.copy()  # Avoid SettingWithCopyWarning
-                grp_df["model"] = model
-                grp_df["scenario"] = scenario
+        raw_yearly_dir = level_root / "raw" / "yearly" / f"model={model}" / f"scenario={scenario}"
+        raw_periods_dir = level_root / "raw" / "periods" / f"model={model}" / f"scenario={scenario}"
 
-                grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
+        id_cols = ["district", "block"] if level == "block" else ["district"]
 
-                if not df_periods.empty:
-                    period_mask = (
-                        (df_periods["district"] == district) &
-                        (df_periods["block"] == block)
-                    )
-                    period_grp = df_periods.loc[period_mask].copy()
+        dfy_out = df_yearly.copy()
+        dfy_out = dfy_out.drop(columns=[value_col, "source_file", "model", "scenario"], errors="ignore")
+        keep_yearly = [c for c in (id_cols + ["year", "value"]) if c in dfy_out.columns]
+        dfy_out = dfy_out[keep_yearly]
+        if "year" in dfy_out.columns:
+            dfy_out["year"] = pd.to_numeric(dfy_out["year"], errors="coerce").astype("Int64")
 
-                    if not period_grp.empty:
-                        period_grp["model"] = model
-                        period_grp["scenario"] = scenario
-                        period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
-        else:
-            # Structure: {metric}/{state}/districts/{district}/{model}/{scenario}/
-            for dist_name in df_yearly["district"].unique():
-                dist_safe = dist_name.replace(" ", "_").replace("/", "_")
+        _safe_clear_dir(raw_yearly_dir)
+        raw_yearly_dir.mkdir(parents=True, exist_ok=True)
+        write_parquet_file(dfy_out, raw_yearly_dir / "data.parquet", compression=PARQUET_COMPRESSION)
 
-                out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
+        if not df_periods.empty:
+            dfp_out = df_periods.copy()
+            dfp_out = dfp_out.drop(columns=[value_col, "source_file", "model", "scenario"], errors="ignore")
+            keep_periods = [c for c in (id_cols + ["period", "years_used_count", "years_requested", "value"]) if c in dfp_out.columns]
+            dfp_out = dfp_out[keep_periods]
 
-                dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
-                dist_df["model"] = model
-                dist_df["scenario"] = scenario
-                dist_df.to_csv(out_dir / f"{dist_safe}_yearly.csv", index=False)
+            _safe_clear_dir(raw_periods_dir)
+            raw_periods_dir.mkdir(parents=True, exist_ok=True)
+            write_parquet_file(dfp_out, raw_periods_dir / "data.parquet", compression=PARQUET_COMPRESSION)
 
-                if not df_periods.empty:
-                    period_df = df_periods[df_periods["district"] == dist_name].copy()
-                    if not period_df.empty:
-                        period_df["model"] = model
-                        period_df["scenario"] = scenario
-                        period_df.to_csv(out_dir / f"{dist_safe}_periods.csv", index=False)
-        
-        logging.debug(f"[{slug}] Wrote {len(df_yearly)} yearly rows, {len(df_periods)} period rows for {model}/{scenario}")
+        if WRITE_LEGACY_CSV:
+            if level == "block":
+                for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
+                    district_safe = district.replace(" ", "_").replace("/", "_")
+                    block_safe = block.replace(" ", "_").replace("/", "_")
+
+                    out_dir = level_root / district_safe / block_safe / model / scenario
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    grp_df = grp_df.copy().drop(columns=[value_col, "source_file"], errors="ignore")
+                    grp_df["model"] = model
+                    grp_df["scenario"] = scenario
+                    grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
+
+                    if not df_periods.empty:
+                        period_mask = (df_periods["district"] == district) & (df_periods["block"] == block)
+                        period_grp = df_periods.loc[period_mask].copy()
+                        if not period_grp.empty:
+                            period_grp = period_grp.drop(columns=[value_col, "source_file"], errors="ignore")
+                            period_grp["model"] = model
+                            period_grp["scenario"] = scenario
+                            period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
+            else:
+                for dist_name in df_yearly["district"].unique():
+                    dist_safe = dist_name.replace(" ", "_").replace("/", "_")
+
+                    out_dir = level_root / dist_safe / model / scenario
+                    out_dir.mkdir(parents=True, exist_ok=True)
+
+                    dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
+                    dist_df = dist_df.drop(columns=[value_col, "source_file"], errors="ignore")
+                    dist_df["model"] = model
+                    dist_df["scenario"] = scenario
+                    dist_df.to_csv(out_dir / f"{dist_safe}_yearly.csv", index=False)
+
+                    if not df_periods.empty:
+                        period_df = df_periods[df_periods["district"] == dist_name].copy()
+                        if not period_df.empty:
+                            period_df = period_df.drop(columns=[value_col, "source_file"], errors="ignore")
+                            period_df["model"] = model
+                            period_df["scenario"] = scenario
+                            period_df.to_csv(out_dir / f"{dist_safe}_periods.csv", index=False)
+
+        logging.debug(
+            "[%s] Wrote raw Parquet: yearly=%d, periods=%d for %s/%s (%s)",
+            slug,
+            len(dfy_out),
+            (0 if df_periods.empty else len(df_periods)),
+            model,
+            scenario,
+            level,
+        )
     except Exception as e:
         logging.error(f"[{slug}] Failed to write output files for {model}/{scenario}: {e}")
         logging.debug(traceback.format_exc())
@@ -3016,11 +3065,86 @@ def compute_ensembles_generic(
     
     ensembles_root = level_root / "ensembles"
     ensembles_root.mkdir(parents=True, exist_ok=True)
+
+    # Prefer compact raw Parquet stores when present.
+    raw_yearly_root = level_root / "raw" / "yearly"
+    if raw_yearly_root.exists():
+        try:
+            _compute_ensembles_from_raw_parquet(raw_yearly_root, ensembles_root, level)
+            return
+        except Exception as e:
+            logging.warning("Parquet ensembles failed; falling back to legacy CSV ensembles: %s", e)
     
     if level == "block":
         _compute_block_ensembles(level_root, ensembles_root)
     else:
         _compute_district_ensembles(level_root, ensembles_root)
+
+
+def _list_partition_values(dataset_root: Path, key: str) -> list[str]:
+    vals: set[str] = set()
+    try:
+        for p in Path(dataset_root).rglob(f"{key}=*"):
+            if p.is_dir():
+                name = p.name
+                if "=" in name:
+                    vals.add(name.split("=", 1)[1])
+    except Exception:
+        pass
+    return sorted(vals)
+
+
+def _compute_ensembles_from_raw_parquet(raw_yearly_root: Path, ensembles_root: Path, level: AdminLevel) -> None:
+    """
+    Compute per-unit yearly ensemble stats from the raw Parquet dataset.
+
+    Writes a hive-partitioned dataset:
+      {ensembles_root}/yearly/scenario=<scenario>/data.parquet
+    """
+    unit_cols = ["district", "block"] if level == "block" else ["district"]
+
+    scenarios = _list_partition_values(raw_yearly_root, "scenario") or list(SCENARIOS.keys())
+    out_root = ensembles_root / "yearly"
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    for scenario in scenarios:
+        df = read_table(
+            raw_yearly_root,
+            columns=unit_cols + ["year", "value", "model", "scenario"],
+            filters=[("scenario", "==", scenario)],
+        )
+        if df is None or df.empty:
+            continue
+
+        df["value"] = pd.to_numeric(df["value"], errors="coerce")
+        df = df.dropna(subset=["value"])
+        if df.empty:
+            continue
+
+        def _std0(s: pd.Series) -> float:
+            return float(s.std(ddof=0))
+
+        def _q(q: float):
+            return lambda s: float(s.quantile(q))
+
+        gb_cols = unit_cols + ["year"]
+        out = (
+            df.groupby(gb_cols, as_index=False)["value"]
+            .agg(
+                n_models="count",
+                ensemble_mean="mean",
+                ensemble_std=_std0,
+                ensemble_median="median",
+                ensemble_p05=_q(0.05),
+                ensemble_p95=_q(0.95),
+            )
+            .reset_index(drop=True)
+        )
+
+        part_dir = out_root / f"scenario={scenario}"
+        _safe_clear_dir(part_dir)
+        part_dir.mkdir(parents=True, exist_ok=True)
+        write_parquet_file(out, part_dir / "data.parquet", compression=PARQUET_COMPRESSION)
 
 def _compute_district_ensembles(level_root: Path, ensembles_root: Path):
     """Compute ensembles for district-level data."""

@@ -168,12 +168,15 @@ def build_district_case_study_data(
             continue
 
         proc_root = resolve_processed_root_for_slug(processed_root=processed_root, slug=slug)
-        master_path = proc_root / pilot_state / "master_metrics_by_district.csv"
+        from paths import resolve_master_metrics_path
+        from india_resilience_tool.data.master_loader import load_master_table
+
+        master_path = resolve_master_metrics_path(proc_root / pilot_state, "district")
         if not master_path.exists():
             continue
 
         try:
-            df_master = pd.read_csv(master_path)
+            df_master = load_master_table(master_path)
         except Exception:
             continue
 

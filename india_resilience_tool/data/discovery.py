@@ -119,6 +119,11 @@ def discover_district_yearly_file(
     # 1) Try NEW structure: {state}/districts/ensembles/{district}/{scenario}/
     ensembles_path = base / "districts" / "ensembles"
     if ensembles_path.exists():
+        # Consolidated Parquet dataset: {state}/districts/ensembles/yearly/ (partitioned by scenario)
+        consolidated = ensembles_path / "yearly"
+        if consolidated.exists() and consolidated.is_dir():
+            return consolidated
+
         for name in name_variants:
             # Try exact path
             scenario_path = ensembles_path / name / scenario
@@ -128,7 +133,11 @@ def discover_district_yearly_file(
                     f"{name}_yearly_ensemble.csv",
                     f"{name.upper()}_yearly_ensemble.csv",
                     f"{name.lower()}_yearly_ensemble.csv",
+                    f"{name}_yearly_ensemble.parquet",
+                    f"{name.upper()}_yearly_ensemble.parquet",
+                    f"{name.lower()}_yearly_ensemble.parquet",
                     "district_yearly_ensemble_stats.csv",
+                    "district_yearly_ensemble_stats.parquet",
                 ]:
                     f = scenario_path / filename
                     if f.exists():
@@ -222,6 +231,11 @@ def discover_block_yearly_file(
     if not base.exists():
         return None
 
+    # Consolidated Parquet dataset: {state}/blocks/ensembles/yearly/
+    consolidated = base / "yearly"
+    if consolidated.exists() and consolidated.is_dir():
+        return consolidated
+
     scenario = str(scenario_name).strip()
     
     # Generate name variants for both district and block
@@ -244,7 +258,11 @@ def discover_block_yearly_file(
                 f"{block_name}_yearly_ensemble.csv",
                 f"{block_name.upper()}_yearly_ensemble.csv",
                 f"{block_name.lower()}_yearly_ensemble.csv",
+                f"{block_name}_yearly_ensemble.parquet",
+                f"{block_name.upper()}_yearly_ensemble.parquet",
+                f"{block_name.lower()}_yearly_ensemble.parquet",
                 "block_yearly_ensemble_stats.csv",
+                "block_yearly_ensemble_stats.parquet",
             ]:
                 f = scenario_path / filename
                 if f.exists():
@@ -312,11 +330,16 @@ def discover_state_yearly_file(
             if f.exists():
                 return f
 
-    # Try level-specific file
-    f_level = ts_root_p / state_dir / f"state_yearly_ensemble_stats_{level}.csv"
-    if f_level.exists():
-        return f_level
+    # Try level-specific file (Parquet preferred)
+    for ext in (".parquet", ".csv"):
+        f_level = ts_root_p / state_dir / f"state_yearly_ensemble_stats_{level}{ext}"
+        if f_level.exists():
+            return f_level
 
-    # Fall back to default
-    f_default = ts_root_p / state_dir / "state_yearly_ensemble_stats.csv"
-    return f_default if f_default.exists() else None
+    # Fall back to default (Parquet preferred)
+    for ext in (".parquet", ".csv"):
+        f_default = ts_root_p / state_dir / f"state_yearly_ensemble_stats{ext}"
+        if f_default.exists():
+            return f_default
+
+    return None

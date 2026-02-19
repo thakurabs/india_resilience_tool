@@ -36,12 +36,17 @@ import argparse
 import json
 import math
 import os
+import shutil
 import sys
 import time
 from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
+
+from india_resilience_tool.utils.processed_io import read_table
+
+PARQUET_COMPRESSION = str(os.getenv("IRT_PARQUET_COMPRESSION", "zstd")).strip() or "zstd"
 
 
 def _get_mp_module():
@@ -229,6 +234,16 @@ def get_master_csv_filename(level: AdminLevel) -> str:
     return "master_metrics_by_block.csv" if level == "block" else "master_metrics_by_district.csv"
 
 
+def get_master_metrics_filename(level: AdminLevel, *, fmt: str = "parquet") -> str:
+    """Get the master metrics filename for a given administrative level and format."""
+    fmt_norm = str(fmt).strip().lower()
+    if fmt_norm not in {"parquet", "csv"}:
+        raise ValueError(f"Unsupported fmt={fmt!r}; expected 'parquet' or 'csv'")
+    ext = ".parquet" if fmt_norm == "parquet" else ".csv"
+    stem = "master_metrics_by_block" if level == "block" else "master_metrics_by_district"
+    return f"{stem}{ext}"
+
+
 def get_unit_column_name(level: AdminLevel) -> str:
     """Get the unit column name based on level."""
     return "block" if level == "block" else "district"
@@ -237,6 +252,107 @@ def get_unit_column_name(level: AdminLevel) -> str:
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
     return BLOCK_FOLDER if level == "block" else DISTRICT_FOLDER
+
+
+def _has_consolidated_parquet_ensembles(level_root: Path) -> bool:
+    yearly_root = Path(level_root) / "ensembles" / "yearly"
+    if not yearly_root.exists() or not yearly_root.is_dir():
+        return False
+    try:
+        for _f in yearly_root.rglob("data.parquet"):
+            return True
+    except Exception:
+        return False
+    return False
+
+
+def _parquet_master_path(state_root: Path, level: AdminLevel) -> Path:
+    return Path(state_root) / get_master_metrics_filename(level, fmt="parquet")
+
+
+def _should_prune_legacy_csvs(state_root: Path, level: AdminLevel) -> bool:
+    if not _parquet_master_path(state_root, level).exists():
+        return False
+    level_root = Path(state_root) / get_level_folder(level)
+    return _has_consolidated_parquet_ensembles(level_root)
+
+
+def _iter_legacy_csv_candidates(base: Path) -> Iterable[Path]:
+    """Yield legacy per-unit CSVs under base, excluding raw/ and ensembles/."""
+    if not base.exists() or not base.is_dir():
+        return
+    try:
+        for pat in ("*_yearly.csv", "*_periods.csv"):
+            for f in base.rglob(pat):
+                # Exclude parquet stores + ensembles
+                parts = set(f.parts)
+                if "raw" in parts or "ensembles" in parts:
+                    continue
+                yield f
+    except Exception:
+        return
+
+
+def _prune_legacy_yearly_period_csvs(*, state_root: Path, level: AdminLevel, verbose: bool = True) -> list[Path]:
+    """
+    Delete legacy per-unit *_yearly.csv and *_periods.csv files.
+
+    Safety gate:
+      - requires Parquet master for this level
+      - requires consolidated Parquet ensembles under {level}/ensembles/yearly/
+    """
+    state_root = Path(state_root)
+    if not _should_prune_legacy_csvs(state_root, level):
+        if verbose:
+            print("  Prune legacy CSV skipped: Parquet master/ensembles not found")
+        return []
+
+    deleted: list[Path] = []
+
+    if level == "block":
+        base = state_root / BLOCK_FOLDER
+        for f in _iter_legacy_csv_candidates(base):
+            try:
+                f.unlink()
+                deleted.append(f)
+            except Exception:
+                pass
+    else:
+        # New structure: state/districts/...
+        base_new = state_root / DISTRICT_FOLDER
+        for f in _iter_legacy_csv_candidates(base_new):
+            try:
+                f.unlink()
+                deleted.append(f)
+            except Exception:
+                pass
+
+        # Old structure: state/{district}/...
+        skip = {BLOCK_FOLDER, DISTRICT_FOLDER, "validation_reports", "pdf_plots", "plots"}
+        try:
+            for child in state_root.iterdir():
+                if not child.is_dir() or child.name.startswith(".") or child.name in skip:
+                    continue
+                for f in _iter_legacy_csv_candidates(child):
+                    try:
+                        f.unlink()
+                        deleted.append(f)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # Best-effort cleanup of now-empty directories, shallowly from leaf upwards.
+    try:
+        for f in sorted({p.parent for p in deleted}, key=lambda p: len(p.parts), reverse=True):
+            try:
+                f.rmdir()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    return deleted
 
 
 # -----------------------------------------------------------------------------
@@ -318,6 +434,37 @@ def _collect_district_data(
 
     Supports both old and new folder structures.
     """
+    # Fast path: compact Parquet "raw" store
+    raw_periods_root = state_root / DISTRICT_FOLDER / "raw" / "periods"
+    raw_yearly_root = state_root / DISTRICT_FOLDER / "raw" / "yearly"
+    if raw_periods_root.exists():
+        try:
+            df_p = read_table(
+                raw_periods_root,
+                columns=["district", "period", "value", "model", "scenario"],
+            )
+            if df_p is None or df_p.empty:
+                return [], []
+            df_p["state"] = state
+            all_rows = df_p[["district", "state", "model", "scenario", "period", "value"]].to_dict("records")
+
+            yearly_rows: list[dict] = []
+            if raw_yearly_root.exists():
+                df_y = read_table(
+                    raw_yearly_root,
+                    columns=["district", "year", "value", "model", "scenario"],
+                )
+                if df_y is not None and not df_y.empty:
+                    df_y["state"] = state
+                    yearly_rows = df_y[["district", "state", "model", "scenario", "year", "value"]].to_dict("records")
+
+            if verbose:
+                print("  Detected Parquet raw store (districts/raw/...)")
+            return all_rows, yearly_rows
+        except Exception as e:
+            if verbose:
+                print(f"  WARNING: Failed to read Parquet raw store; falling back to CSV discovery: {e}")
+
     all_rows: List[Dict] = []
     yearly_rows: List[Dict] = []
 
@@ -412,6 +559,37 @@ def _collect_block_data(
 
     Structure: state/blocks/{district}/{block}/{model}/{scenario}/*.csv
     """
+    # Fast path: compact Parquet "raw" store
+    raw_periods_root = state_root / BLOCK_FOLDER / "raw" / "periods"
+    raw_yearly_root = state_root / BLOCK_FOLDER / "raw" / "yearly"
+    if raw_periods_root.exists():
+        try:
+            df_p = read_table(
+                raw_periods_root,
+                columns=["district", "block", "period", "value", "model", "scenario"],
+            )
+            if df_p is None or df_p.empty:
+                return [], []
+            df_p["state"] = state
+            all_rows = df_p[["block", "district", "state", "model", "scenario", "period", "value"]].to_dict("records")
+
+            yearly_rows: list[dict] = []
+            if raw_yearly_root.exists():
+                df_y = read_table(
+                    raw_yearly_root,
+                    columns=["district", "block", "year", "value", "model", "scenario"],
+                )
+                if df_y is not None and not df_y.empty:
+                    df_y["state"] = state
+                    yearly_rows = df_y[["block", "district", "state", "model", "scenario", "year", "value"]].to_dict("records")
+
+            if verbose:
+                print("  Detected Parquet raw store (blocks/raw/...)")
+            return all_rows, yearly_rows
+        except Exception as e:
+            if verbose:
+                print(f"  WARNING: Failed to read Parquet raw store; falling back to CSV discovery: {e}")
+
     all_rows: List[Dict] = []
     yearly_rows: List[Dict] = []
 
@@ -692,8 +870,10 @@ def build_master_metrics(
     metric_col_candidates: Sequence[str] | None = None,
     level: AdminLevel = "district",
     num_workers: int = 1,
+    cleanup_raw: bool = False,
+    prune_legacy_csv: bool = False,
 ) -> pd.DataFrame:
-    """Build master CSV for a single metric/state combination."""
+    """Build master metrics table for a single metric/state combination."""
     root = Path(output_root)
     state_root = root / state
 
@@ -719,7 +899,7 @@ def build_master_metrics(
 
     # Collect data
     if verbose:
-        print("[Step 1/3] Collecting data from CSV files...")
+        print("[Step 1/3] Collecting data from processed outputs...")
 
     if level == "block":
         all_rows, yearly_rows = _collect_block_data(state_root, state, metric_col_candidates, verbose)
@@ -758,23 +938,83 @@ def build_master_metrics(
         df_all, df_yearly, metric_col_in_periods, level
     )
 
-    # Write outputs (master CSV goes in state root)
+    # Write outputs (master goes in state root)
     if out_path:
         outp = Path(out_path)
         outp.parent.mkdir(parents=True, exist_ok=True)
+        out_fmt = "parquet" if outp.suffix.lower() == ".parquet" else "csv"
+        ext = ".parquet" if out_fmt == "parquet" else ".csv"
 
         if verbose:
             print()
             print("Writing output files...")
 
-        master.to_csv(outp, index=False)
-        state_model_df.to_csv(outp.parent / "state_model_averages.csv", index=False)
-        state_ensemble_df.to_csv(outp.parent / "state_ensemble_stats.csv", index=False)
-        state_yearly_model_df.to_csv(outp.parent / "state_yearly_model_averages.csv", index=False)
-        state_yearly_ensemble_df.to_csv(outp.parent / "state_yearly_ensemble_stats.csv", index=False)
+        def _write(df: pd.DataFrame, path: Path) -> None:
+            if out_fmt == "parquet":
+                df.to_parquet(path, index=False, compression=PARQUET_COMPRESSION)
+            else:
+                df.to_csv(path, index=False)
+
+        _write(master, outp)
+
+        # Level-specific state summaries (avoid district/block overwrites).
+        _write(state_model_df, outp.parent / f"state_model_averages_{level}{ext}")
+        _write(state_ensemble_df, outp.parent / f"state_ensemble_stats_{level}{ext}")
+        _write(state_yearly_model_df, outp.parent / f"state_yearly_model_averages_{level}{ext}")
+        _write(state_yearly_ensemble_df, outp.parent / f"state_yearly_ensemble_stats_{level}{ext}")
+
+        # Backward-compatible aliases for district-level consumers.
+        if level == "district":
+            _write(state_model_df, outp.parent / f"state_model_averages{ext}")
+            _write(state_ensemble_df, outp.parent / f"state_ensemble_stats{ext}")
+            _write(state_yearly_model_df, outp.parent / f"state_yearly_model_averages{ext}")
+            _write(state_yearly_ensemble_df, outp.parent / f"state_yearly_ensemble_stats{ext}")
+
+        if cleanup_raw:
+            try:
+                level_root = state_root / get_level_folder(level)
+                raw_root = level_root / "raw"
+                if raw_root.exists():
+                    ensembles_root = level_root / "ensembles"
+                    has_new_ensembles = (ensembles_root / "yearly").exists()
+                    has_legacy_ensembles = False
+                    try:
+                        # Shallow check to avoid expensive traversal.
+                        for _f in ensembles_root.rglob("*_yearly_ensemble.*"):
+                            has_legacy_ensembles = True
+                            break
+                    except Exception:
+                        pass
+
+                    if has_new_ensembles or has_legacy_ensembles:
+                        for sub in ("yearly", "periods"):
+                            try:
+                                shutil.rmtree(raw_root / sub, ignore_errors=True)
+                            except Exception:
+                                pass
+                        if verbose:
+                            print(f"  Cleanup: removed {raw_root / 'yearly'} and {raw_root / 'periods'}")
+                    elif verbose:
+                        print("  Cleanup skipped: ensembles not found under level root")
+            except Exception as e:
+                if verbose:
+                    print(f"  Cleanup skipped: {e}")
+
+        if prune_legacy_csv:
+            try:
+                _deleted = _prune_legacy_yearly_period_csvs(
+                    state_root=state_root,
+                    level=level,
+                    verbose=verbose,
+                )
+                if verbose:
+                    print(f"  Prune legacy CSV: deleted {len(_deleted)} file(s)")
+            except Exception as e:
+                if verbose:
+                    print(f"  Prune legacy CSV skipped: {e}")
 
         if verbose:
-            print(f"  Master CSV -> {outp}")
+            print(f"  Master -> {outp}")
             print(f"  Rows: {len(master)}, Columns: {len(master.columns)}")
 
     elapsed = time.time() - start_time
@@ -807,6 +1047,9 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
         level_path = state_dir / BLOCK_FOLDER
         if not level_path.exists():
             return False
+        # Parquet raw/ensembles store
+        if (level_path / "raw" / "periods").exists() or (level_path / "ensembles" / "yearly").exists():
+            return True
         patterns = (
             "*/*/*/*/*_periods.csv",
             "*/*/*/*/*_yearly.csv",
@@ -823,6 +1066,8 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
     # Districts: check for new structure first
     level_path = state_dir / DISTRICT_FOLDER
     if level_path.exists():
+        if (level_path / "raw" / "periods").exists() or (level_path / "ensembles" / "yearly").exists():
+            return True
         patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
         for pat in patterns:
             try:
@@ -865,8 +1110,11 @@ def build_all_master_metrics(
     verbose: bool = True,
     skip_existing: bool = False,
     num_workers: int = 1,
+    out_format: str = "parquet",
+    cleanup_raw: bool = False,
+    prune_legacy_csv: bool = False,
 ) -> None:
-    """Build master CSVs for all metrics under processed_root."""
+    """Build master metrics tables for all metrics under processed_root."""
     variables, metrics_by_slug = _try_import_registries()
 
     metric_dirs = _discover_metric_dirs(processed_root)
@@ -895,7 +1143,7 @@ def build_all_master_metrics(
         return
 
     state_filter_norm = {str(s).strip() for s in state_filter if str(s).strip()} if state_filter else None
-    master_filename = get_master_csv_filename(level)
+    master_filename = get_master_metrics_filename(level, fmt=str(out_format))
 
     for slug in eligible_slugs:
         metric_root = processed_root / slug
@@ -943,6 +1191,8 @@ def build_all_master_metrics(
                 metric_col_candidates=read_candidates,
                 level=level,
                 num_workers=num_workers,
+                cleanup_raw=bool(cleanup_raw),
+                prune_legacy_csv=bool(prune_legacy_csv),
             )
 
 
@@ -961,6 +1211,25 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--processed-root", "-p", default=None, help="Processed root directory")
     p.add_argument("--state", "-s", default=None, help="State filter (comma-separated)")
+    p.add_argument(
+        "--format",
+        choices=["parquet", "csv"],
+        default="parquet",
+        help="Output format for master/summaries (default: parquet)",
+    )
+    p.add_argument(
+        "--cleanup-raw",
+        action="store_true",
+        help="After writing master/summaries, delete level raw/yearly and raw/periods if ensembles exist",
+    )
+    p.add_argument(
+        "--prune-legacy-csv",
+        action="store_true",
+        help=(
+            "Delete legacy per-unit *_yearly.csv and *_periods.csv only after Parquet master + "
+            "consolidated Parquet ensembles exist (safe, off by default)"
+        ),
+    )
     p.add_argument(
         "--metrics",
         nargs="+",
@@ -1017,7 +1286,7 @@ def main() -> None:
 
         for run_idx, level in enumerate(levels_to_run, start=1):
             _print_run_banner(run_idx, total_runs, level)
-            master_filename = get_master_csv_filename(level)
+            master_filename = get_master_metrics_filename(level, fmt=str(args.format))
             default_out = Path(args.output_root) / str(args.state) / master_filename
 
             build_master_metrics(
@@ -1030,6 +1299,8 @@ def main() -> None:
                 metric_col_candidates=[metric_col, "value"],
                 level=level,
                 num_workers=int(args.workers),
+                cleanup_raw=bool(args.cleanup_raw),
+                prune_legacy_csv=bool(args.prune_legacy_csv),
             )
         return
 
@@ -1062,6 +1333,9 @@ def main() -> None:
             verbose=verbose,
             skip_existing=bool(args.skip_existing),
             num_workers=int(args.workers),
+            out_format=str(args.format),
+            cleanup_raw=bool(args.cleanup_raw),
+            prune_legacy_csv=bool(args.prune_legacy_csv),
         )
 
 

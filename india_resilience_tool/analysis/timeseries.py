@@ -21,6 +21,7 @@ from typing import Any, Literal, Mapping, Optional, Union
 
 import pandas as pd
 
+from india_resilience_tool.utils.processed_io import read_table
 from india_resilience_tool.data.discovery import (
     discover_district_yearly_file,
     discover_block_yearly_file,
@@ -31,13 +32,36 @@ PathLike = Union[str, Path]
 AdminLevel = Literal["district", "block"]
 
 
-def read_yearly_csv_robust(path: PathLike) -> pd.DataFrame:
-    """
-    Read a yearly CSV with encoding fallbacks.
-    """
+def _name_variants(name: str) -> set[str]:
+    base = str(name).strip()
+    variants = {
+        base,
+        base.lower(),
+        base.upper(),
+        base.replace(" ", "_"),
+        base.replace("_", " "),
+        base.title(),
+        base.title().replace(" ", "_"),
+    }
+    return {v.strip().lower() for v in variants if str(v).strip()}
+
+
+def read_yearly_table_robust(
+    path: PathLike,
+    *,
+    columns: Optional[list[str]] = None,
+    filters: Optional[list[tuple[str, str, Any]]] = None,
+) -> pd.DataFrame:
+    """Read a yearly table from either Parquet (file/dataset) or CSV."""
     fpath = Path(path)
     if not fpath.exists():
         return pd.DataFrame()
+
+    if fpath.is_dir() or fpath.suffix.lower() == ".parquet":
+        try:
+            return read_table(fpath, columns=columns, filters=filters)
+        except Exception:
+            return pd.DataFrame()
 
     for enc in (None, "ISO-8859-1"):
         try:
@@ -145,7 +169,7 @@ def load_state_yearly(
     if not f:
         return pd.DataFrame()
 
-    df = read_yearly_csv_robust(f)
+    df = read_yearly_table_robust(f)
     
     # Normalize ensemble column names
     df = _normalize_ensemble_columns(df)
@@ -183,7 +207,10 @@ def load_district_yearly(
     if not f:
         return pd.DataFrame()
 
-    df = read_yearly_csv_robust(f)
+    if Path(f).is_dir():
+        df = read_yearly_table_robust(f, filters=[("scenario", "==", str(scenario_name).strip())])
+    else:
+        df = read_yearly_table_robust(f)
     if df.empty:
         return pd.DataFrame()
 
@@ -197,6 +224,14 @@ def load_district_yearly(
         df["district"] = str(district_display).strip()
     if "scenario" not in df.columns:
         df["scenario"] = str(scenario_name).strip()
+    elif Path(f).is_dir() and "district" in df.columns:
+        # Consolidated datasets may contain multiple districts; filter to requested district.
+        try:
+            want = _name_variants(district_display)
+            have = df["district"].astype(str).str.strip().str.lower()
+            df = df[have.isin(want)]
+        except Exception:
+            pass
 
     # If scenario column exists, filter strictly (matches existing behavior)
     scenario = str(scenario_name).strip().lower()
@@ -255,14 +290,16 @@ def load_block_yearly(
     if not f:
         return pd.DataFrame()
 
-    df = read_yearly_csv_robust(f)
+    if Path(f).is_dir():
+        df = read_yearly_table_robust(f, filters=[("scenario", "==", str(scenario_name).strip())])
+    else:
+        df = read_yearly_table_robust(f)
     if df.empty:
         return pd.DataFrame()
 
     # Normalize ensemble column names (ensemble_mean -> mean, etc.)
     df = _normalize_ensemble_columns(df)
 
-    # Infer missing id columns
     # Infer missing id columns
     if "state" not in df.columns:
         df["state"] = str(state_dir).strip()
@@ -272,6 +309,16 @@ def load_block_yearly(
         df["district"] = str(district_display).strip()
     if "scenario" not in df.columns:
         df["scenario"] = str(scenario_name).strip()
+    elif Path(f).is_dir():
+        # Consolidated datasets may contain multiple blocks/districts; filter to requested unit.
+        try:
+            want_d = _name_variants(district_display)
+            want_b = _name_variants(block_display)
+            have_d = df["district"].astype(str).str.strip().str.lower()
+            have_b = df["block"].astype(str).str.strip().str.lower()
+            df = df[have_d.isin(want_d) & have_b.isin(want_b)]
+        except Exception:
+            pass
 
     # If scenario column exists, filter strictly
     scenario = str(scenario_name).strip().lower()

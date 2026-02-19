@@ -121,11 +121,12 @@ def main():
     print()
     
     # Check master CSVs
-    print("[5] Master CSV files...")
-    district_master = state_root / "master_metrics_by_district.csv"
-    block_master = state_root / "master_metrics_by_block.csv"
-    print(f"  master_metrics_by_district.csv: {'EXISTS' if district_master.exists() else 'NOT FOUND'}")
-    print(f"  master_metrics_by_block.csv: {'EXISTS' if block_master.exists() else 'NOT FOUND'}")
+    print("[5] Master files...")
+    from paths import resolve_master_metrics_path
+    district_master = resolve_master_metrics_path(state_root, "district")
+    block_master = resolve_master_metrics_path(state_root, "block")
+    print(f"  master_metrics_by_district: {'EXISTS' if district_master.exists() else 'NOT FOUND'} ({district_master.name})")
+    print(f"  master_metrics_by_block: {'EXISTS' if block_master.exists() else 'NOT FOUND'} ({block_master.name})")
     
     print()
     print("=" * 60)

@@ -79,6 +79,18 @@ def _get_data_dir(repo_root: Path) -> Path:
     return (projects_root / "irt_data").resolve()
 
 
+def _get_processed_subdir() -> str:
+    """
+    Resolve processed subdir name under DATA_DIR.
+
+    Contract:
+      - Default is "processed" (preserves existing layout).
+      - If IRT_PROCESSED_SUBDIR is set, use it (e.g., "processed_test").
+    """
+    val = str(os.getenv("IRT_PROCESSED_SUBDIR", "processed")).strip()
+    return val or "processed"
+
+
 def get_paths_config() -> PathsConfig:
     """
     Build a PathsConfig from the current environment.
@@ -96,7 +108,7 @@ def get_paths_config() -> PathsConfig:
         data_root=data_dir / "r1i1p1f1",
         districts_path=data_dir / "districts_4326.geojson",
         blocks_path=data_dir / "blocks_4326.geojson",  # NEW
-        base_output_root=data_dir / "processed",
+        base_output_root=data_dir / _get_processed_subdir(),
     )
 
 
@@ -169,7 +181,7 @@ def resolve_processed_root(
     if data_dir is None:
         data_dir = get_paths_config().data_dir
 
-    return (data_dir / "processed" / slug).resolve()
+    return (data_dir / _get_processed_subdir() / slug).resolve()
 
 
 def get_boundary_path(level: AdminLevel) -> Path:
@@ -201,6 +213,28 @@ def get_master_csv_filename(level: AdminLevel) -> str:
     if level == "block":
         return "master_metrics_by_block.csv"
     return "master_metrics_by_district.csv"
+
+
+def get_master_metrics_filename(level: AdminLevel, *, fmt: str = "parquet") -> str:
+    fmt_norm = str(fmt).strip().lower()
+    if fmt_norm not in {"parquet", "csv"}:
+        raise ValueError(f"Unsupported fmt={fmt!r}; expected 'parquet' or 'csv'")
+    ext = ".parquet" if fmt_norm == "parquet" else ".csv"
+    stem = "master_metrics_by_block" if level == "block" else "master_metrics_by_district"
+    return f"{stem}{ext}"
+
+
+def resolve_master_metrics_path(state_root: Path, level: AdminLevel) -> Path:
+    """
+    Resolve master metrics table path under a state directory.
+
+    Prefers Parquet when present, falls back to CSV, otherwise returns the
+    Parquet path as the preferred rebuild target.
+    """
+    stem = "master_metrics_by_block" if level == "block" else "master_metrics_by_district"
+    p_parquet = Path(state_root) / f"{stem}.parquet"
+    p_csv = Path(state_root) / f"{stem}.csv"
+    return p_parquet if p_parquet.exists() or not p_csv.exists() else p_csv
 
 
 # Convenience constants matching legacy root-level paths.py exports

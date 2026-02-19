@@ -386,7 +386,7 @@ def _parse_unit_key(level: str, unit_key: str) -> tuple[str, Optional[str]]:
     return unit_key, None
 
 
-def _monthly_spi_csv_path(
+def _monthly_spi_cache_path(
     *,
     metric_root_path: Path,
     state_name: str,
@@ -401,14 +401,33 @@ def _monthly_spi_csv_path(
 
     if level == "block":
         block_safe = _safe_component(block or unit_key)
-        out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
-        return out_dir / f"{block_safe}_monthly.csv"
+        out_dir = (
+            metric_root_path
+            / state_name
+            / level_folder
+            / "raw"
+            / "spi_monthly"
+            / f"model={model}"
+            / f"scenario={scenario}"
+            / f"district={district_safe}"
+            / f"block={block_safe}"
+        )
+        return out_dir / "data.parquet"
 
-    out_dir = metric_root_path / state_name / level_folder / district_safe / model / scenario
-    return out_dir / f"{district_safe}_monthly.csv"
+    out_dir = (
+        metric_root_path
+        / state_name
+        / level_folder
+        / "raw"
+        / "spi_monthly"
+        / f"model={model}"
+        / f"scenario={scenario}"
+        / f"district={district_safe}"
+    )
+    return out_dir / "data.parquet"
 
 
-def _load_monthly_spi_csv(
+def _load_monthly_spi_table(
     path: Path,
     *,
     expected_scale_months: int,
@@ -421,9 +440,12 @@ def _load_monthly_spi_csv(
         return None
 
     try:
-        df = pd.read_csv(path)
+        if path.suffix.lower() == ".parquet":
+            df = pd.read_parquet(path)
+        else:
+            df = pd.read_csv(path)
     except Exception as e:
-        logger.warning(f"Failed to read monthly SPI CSV '{path}': {e}")
+        logger.warning(f"Failed to read monthly SPI cache '{path}': {e}")
         return None
 
     required = {
@@ -470,7 +492,7 @@ def _load_monthly_spi_csv(
         return None
 
 
-def _write_monthly_spi_csv(
+def _write_monthly_spi_parquet(
     path: Path,
     *,
     spi_monthly: xr.DataArray,
@@ -502,7 +524,7 @@ def _write_monthly_spi_csv(
             "block": block or "",
         }
     )
-    df.to_csv(path, index=False)
+    df.to_parquet(path, index=False, compression="zstd")
 
 
 def compute_spi_rows_climate_indices(
@@ -525,9 +547,9 @@ def compute_spi_rows_climate_indices(
     """
     Compute SPI-derived yearly rows for all spatial units.
 
-    Writes per-unit monthly SPI CSVs alongside yearly outputs:
-      - districts: {district_safe}_monthly.csv
-      - blocks:    {block_safe}_monthly.csv
+    Writes per-unit monthly SPI caches alongside yearly outputs (Parquet):
+      - districts: raw/spi_monthly/model=.../scenario=.../district=.../data.parquet
+      - blocks:    raw/spi_monthly/model=.../scenario=.../district=.../block=.../data.parquet
 
     If a compatible monthly file exists, it is reused as a cache.
     """
@@ -551,7 +573,7 @@ def compute_spi_rows_climate_indices(
     for unit_key in masks.keys():
         district, block = _parse_unit_key(level, unit_key)
 
-        monthly_path = _monthly_spi_csv_path(
+        monthly_path = _monthly_spi_cache_path(
             metric_root_path=metric_root_path,
             state_name=state_name,
             level_folder=level_folder,
@@ -563,7 +585,7 @@ def compute_spi_rows_climate_indices(
 
         spi_monthly: Optional[xr.DataArray] = None
         if use_monthly_cache:
-            spi_monthly = _load_monthly_spi_csv(
+            spi_monthly = _load_monthly_spi_table(
                 monthly_path,
                 expected_scale_months=scale_months,
                 expected_distribution=distribution,
@@ -601,7 +623,7 @@ def compute_spi_rows_climate_indices(
 
             if write_monthly_csv:
                 try:
-                    _write_monthly_spi_csv(
+                    _write_monthly_spi_parquet(
                         monthly_path,
                         spi_monthly=spi_monthly,
                         scale_months=scale_months,

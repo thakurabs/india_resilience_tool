@@ -402,6 +402,7 @@ def latest_processed_periods_mtime(processed_root_str: str, state: str) -> float
         return 0.0
     latest = 0.0
     count = 0
+    # Legacy per-unit CSVs
     for f in base.rglob("*_periods.csv"):
         try:
             latest = max(latest, f.stat().st_mtime)
@@ -410,7 +411,35 @@ def latest_processed_periods_mtime(processed_root_str: str, state: str) -> float
                 break
         except Exception:
             pass
+
+    # New compact Parquet store: .../<level>/raw/periods/model=.../scenario=.../data.parquet
+    for f in base.rglob("*.parquet"):
+        try:
+            s = str(f).replace("\\", "/")
+            if "/raw/periods/" not in s:
+                continue
+            latest = max(latest, f.stat().st_mtime)
+            count += 1
+            if count >= 50:
+                break
+        except Exception:
+            pass
     return latest
+
+
+def resolve_master_metrics_path(processed_root: Path, state: str, level: str) -> Path:
+    """
+    Resolve the master metrics table path (Parquet preferred, CSV fallback).
+
+    Returns the preferred Parquet path even if missing, so callers can use it as
+    a rebuild target.
+    """
+    lvl = str(level).strip().lower()
+    stem = "master_metrics_by_block" if lvl == "block" else "master_metrics_by_district"
+    base = Path(processed_root) / str(state)
+    p_parquet = base / f"{stem}.parquet"
+    p_csv = base / f"{stem}.csv"
+    return p_parquet if p_parquet.exists() or not p_csv.exists() else p_csv
 
 def master_needs_rebuild(master_path: Path, processed_root: Path, state: str) -> bool:
     if not master_path.exists():
@@ -857,18 +886,16 @@ with col1:
         )
         (PROCESSED_ROOT / PILOT_STATE).mkdir(parents=True, exist_ok=True)
 
-        _master_name = (
-            "master_metrics_by_block.csv"
-            if st.session_state.get("admin_level", "district") == "block"
-            else "master_metrics_by_district.csv"
-        )
-        MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / _master_name
+        _admin_level = str(st.session_state.get("admin_level", "district")).strip().lower()
+        _stem = "master_metrics_by_block" if _admin_level == "block" else "master_metrics_by_district"
+        MASTER_TARGET_PATH = PROCESSED_ROOT / PILOT_STATE / f"{_stem}.parquet"
+        MASTER_TABLE_PATH = resolve_master_metrics_path(PROCESSED_ROOT, PILOT_STATE, _admin_level)
 
         # Rebuilder bound to this metric
         def rebuild_master_csv_if_needed(
             force: bool = False, attach_centroid_geojson: str | None = None
         ) -> tuple[bool, str]:
-            needs = force or master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE)
+            needs = force or master_needs_rebuild(MASTER_TARGET_PATH, PROCESSED_ROOT, PILOT_STATE)
             if not needs:
                 return False, "up-to-date"
             try:
@@ -880,10 +907,11 @@ with col1:
                     str(PROCESSED_ROOT),
                     PILOT_STATE,
                     metric_col_in_periods=VARCFG["periods_metric_col"],
-                    out_path=str(MASTER_CSV_PATH),
+                    out_path=str(MASTER_TARGET_PATH),
                     attach_centroid_geojson=attach_centroid_geojson,
                     verbose=True,
-                    level=str(st.session_state.get("admin_level", "district")).strip().lower(),
+                    level=_admin_level,
+                    cleanup_raw=True,
                 )
                 return True, "rebuilt"
             except Exception as e:
@@ -891,7 +919,7 @@ with col1:
 
         # Ensure master exists/fresh for this metric (only once a metric is chosen)
         try:
-            if master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE):
+            if master_needs_rebuild(MASTER_TARGET_PATH, PROCESSED_ROOT, PILOT_STATE):
                 with st.spinner("Master CSV missing or stale — rebuilding now..."):
                     ok, msg = rebuild_master_csv_if_needed(
                         force=False,
@@ -903,9 +931,14 @@ with col1:
         except Exception as e:
             st.warning(f"Could not check master CSV freshness: {e}")
 
-        if not MASTER_CSV_PATH.exists():
+        # Prefer Parquet after rebuild, but keep CSV fallback for legacy stores.
+        MASTER_TABLE_PATH = MASTER_TARGET_PATH if MASTER_TARGET_PATH.exists() else MASTER_TABLE_PATH
+        # Keep legacy variable name for downstream code paths.
+        MASTER_CSV_PATH = MASTER_TABLE_PATH
+
+        if not MASTER_TABLE_PATH.exists():
             st.error(
-                f"Master CSV not found for {VARIABLES[VARIABLE_SLUG]['label']} at {MASTER_CSV_PATH}. "
+                f"Master dataset not found for {VARIABLES[VARIABLE_SLUG]['label']} at {MASTER_TABLE_PATH}. "
                 f"Click 'Rebuild now' in the sidebar under 'Master dataset'."
             )
             render_perf_panel_safe()
@@ -949,9 +982,7 @@ with col1:
             }
             return df_local, schema_items_local, metrics_local, by_metric_local
 
-        df, schema_items, metrics, by_metric = _load_master_and_schema(
-            MASTER_CSV_PATH, VARIABLE_SLUG
-        )
+        df, schema_items, metrics, by_metric = _load_master_and_schema(MASTER_TABLE_PATH, VARIABLE_SLUG)
 
         if not metrics:
             st.error("No ensemble statistic columns found in the master CSV. Did the builder run?")
@@ -2704,9 +2735,9 @@ with col2:
 
         @st.cache_data
         def _read_yearly_csv(fpath: Path) -> pd.DataFrame:
-            from india_resilience_tool.analysis.timeseries import read_yearly_csv_robust, prepare_yearly_series
+            from india_resilience_tool.analysis.timeseries import read_yearly_table_robust, prepare_yearly_series
 
-            df = read_yearly_csv_robust(fpath)
+            df = read_yearly_table_robust(fpath)
             return prepare_yearly_series(df)
 
         def _slugify_fs(s: str) -> str:
@@ -2862,19 +2893,10 @@ with col2:
                 if not varcfg:
                     continue
 
-                # Determine processed root for this index, similar to PROCESSED_ROOT logic
-                env_root = os.getenv("IRT_PROCESSED_ROOT")
-                if env_root:
-                    base_path = Path(env_root)
-                    if base_path.name.lower() == slug.lower():
-                        proc_root = base_path
-                    else:
-                        proc_root = base_path / slug
-                else:
-                    proc_root = DATA_DIR / "processed" / slug
-                proc_root = proc_root.resolve()
+                # Determine processed root for this index (respects IRT_PROCESSED_SUBDIR defaults).
+                proc_root = resolve_processed_root(slug, data_dir=DATA_DIR, mode="portfolio")
 
-                master_path = proc_root / PILOT_STATE / "master_metrics_by_district.csv"
+                master_path = resolve_master_metrics_path(proc_root, PILOT_STATE, "district")
                 if not master_path.exists():
                     continue
 

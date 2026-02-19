@@ -92,3 +92,34 @@ def test_load_district_yearly_infers_missing_cols(tmp_path: Path) -> None:
     assert out.shape[0] == 2
     assert set(out.columns).issuperset({"district", "scenario", "year", "mean"})
     assert (out["scenario"].astype(str).str.lower() == "ssp585").all()
+
+
+def test_load_district_yearly_from_consolidated_parquet_dataset(tmp_path: Path) -> None:
+    ts_root = tmp_path / "processed"
+    state_dir = "Telangana"
+    scenario = "ssp585"
+
+    # Consolidated dataset: {state}/districts/ensembles/yearly/scenario=<scenario>/data.parquet
+    part_dir = ts_root / state_dir / "districts" / "ensembles" / "yearly" / f"scenario={scenario}"
+    part_dir.mkdir(parents=True, exist_ok=True)
+
+    pd.DataFrame(
+        {
+            "district": ["Alpha", "Beta", "Alpha"],
+            "year": [2020, 2020, 2021],
+            "ensemble_mean": [1.0, 5.0, 2.0],
+        }
+    ).to_parquet(part_dir / "data.parquet", index=False)
+
+    out = load_district_yearly(
+        ts_root=ts_root,
+        state_dir=state_dir,
+        district_display="Alpha",
+        scenario_name=scenario,
+        varcfg={},
+    )
+
+    assert out.shape[0] == 2
+    assert out["district"].astype(str).str.strip().str.lower().eq("alpha").all()
+    assert out["scenario"].astype(str).str.strip().str.lower().eq("ssp585").all()
+    assert list(out["mean"].astype(float).values) == [1.0, 2.0]

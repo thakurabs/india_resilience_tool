@@ -15,12 +15,26 @@ import pytest
 def test_resolve_processed_root_default_no_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
     monkeypatch.delenv("IRT_DATA_DIR", raising=False)
+    monkeypatch.delenv("IRT_PROCESSED_SUBDIR", raising=False)
 
     from india_resilience_tool.config.paths import resolve_processed_root
 
     slug = "days_gt_32C"
     out = resolve_processed_root(slug, data_dir=tmp_path, mode="single")
     assert out == (tmp_path / "processed" / slug).resolve()
+
+
+def test_resolve_processed_root_respects_processed_subdir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
+    monkeypatch.setenv("IRT_PROCESSED_SUBDIR", "processed_test")
+
+    from india_resilience_tool.config.paths import resolve_processed_root
+
+    slug = "days_gt_32C"
+    out = resolve_processed_root(slug, data_dir=tmp_path, mode="single")
+    assert out == (tmp_path / "processed_test" / slug).resolve()
 
 
 def test_resolve_processed_root_env_single_mode_no_append(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

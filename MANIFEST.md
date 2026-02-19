@@ -31,7 +31,8 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 |----------|---------|---------|
 | `IRT_PILOT_STATE` | `Telangana` | Default state to load |
 | `IRT_DATA_DIR` | (from `paths.py`) | Base data directory (boundaries + processed) |
-| `IRT_PROCESSED_ROOT` | `DATA_DIR/processed/{index}` | Processed data location |
+| `IRT_PROCESSED_SUBDIR` | `processed` | Processed subdir under `DATA_DIR/` (e.g., `processed_test`) |
+| `IRT_PROCESSED_ROOT` | (unset) | Processed data location override (wins over defaults) |
 | `IRT_DEBUG` | `0` | Enable debug output |
 
 ---
@@ -118,26 +119,26 @@ The loaders normalize key fields into:
 - district: `state_name`, `district_name`, `geometry`
 - block: `state_name`, `district_name`, `block_name`, `geometry`
 
-### Processed Artifacts Layout
+### Processed Artifacts Layout (Parquet-first; CSV fallback)
 
 For each index slug (e.g., `tas_gt32`):
 
 ```
-DATA_DIR/processed/{index_slug}/{state}/
-├── master_metrics_by_district.csv
-├── master_metrics_by_block.csv
+DATA_DIR/{processed_subdir}/{index_slug}/{state}/
+├── master_metrics_by_district.parquet
+├── master_metrics_by_block.parquet
 ├── districts/
-│   ├── {district}/{model}/{scenario}/
-│   │   ├── {district}_yearly.csv
-│   │   └── {district}_periods.csv
-│   └── ensembles/{district}/{scenario}/
-│       └── {district}_yearly_ensemble.csv
+│   ├── raw/
+│   │   ├── yearly/model={model}/scenario={scenario}/data.parquet
+│   │   └── periods/model={model}/scenario={scenario}/data.parquet
+│   └── ensembles/yearly/
+│       └── scenario={scenario}/data.parquet
 └── blocks/
-    ├── {district}/{block}/{model}/{scenario}/
-    │   ├── {block}_yearly.csv
-    │   └── {block}_periods.csv
-    └── ensembles/{district}/{block}/{scenario}/
-        └── {block}_yearly_ensemble.csv
+    ├── raw/
+    │   ├── yearly/model={model}/scenario={scenario}/data.parquet
+    │   └── periods/model={model}/scenario={scenario}/data.parquet
+    └── ensembles/yearly/
+        └── scenario={scenario}/data.parquet
 ```
 
 #### Master metrics schema convention
@@ -217,9 +218,9 @@ Loads district boundaries (ADM2), simplifies geometry, builds ADM1 boundaries by
 Loads block boundaries (ADM3), standardizes naming, ensures key columns for merging and UI selection.
 
 #### `master_loader.py`
-Loads and normalizes master CSV tables for both:
-- `master_metrics_by_district.csv`
-- `master_metrics_by_block.csv`
+Loads and normalizes master metrics tables (Parquet preferred, CSV fallback) for both:
+- `master_metrics_by_district.parquet` (or `.csv`)
+- `master_metrics_by_block.parquet` (or `.csv`)
 
 #### `merge.py`
 Merges master metrics with boundaries.
@@ -244,8 +245,9 @@ Risk classification + rank/percentile helpers.
 
 #### `timeseries.py`
 Loads yearly time series for district/block:
-- district: from `districts/ensembles/.../{district}_yearly_ensemble.csv`
-- block: from `blocks/ensembles/.../{block}_yearly_ensemble.csv`
+- district (new): from `districts/ensembles/yearly/scenario={scenario}/data.parquet`
+- block (new): from `blocks/ensembles/yearly/scenario={scenario}/data.parquet`
+- legacy CSV fallback paths are still supported (per-unit `*_yearly_ensemble.csv`)
 
 Implementation detail:
 - many ensemble-yearly CSVs do not include identifier columns
@@ -275,8 +277,8 @@ Main orchestrator. Responsibilities:
   - available states are discovered after metric selection (processed-root depends on metric slug)
 - data root resolution (`PROCESSED_ROOT` per index slug)
 - chooses correct master table by admin level:
-  - district: `master_metrics_by_district.csv`
-  - block: `master_metrics_by_block.csv`
+  - district: `master_metrics_by_district.parquet` (CSV fallback)
+  - block: `master_metrics_by_block.parquet` (CSV fallback)
 - routes to map/rankings/details/portfolio panels
 
 #### `perf.py`
@@ -399,7 +401,7 @@ High-level flow is the same; the admin level controls which geometry and master 
 | Add metric to bundle | `config/metrics_registry.py` | Add slug to appropriate `BUNDLES[...]` list |
 | Create new bundle | `config/metrics_registry.py` | Add to `BUNDLES`, `BUNDLE_ORDER`, `BUNDLE_DESCRIPTIONS` |
 | Change default bundle | `config/metrics_registry.py` | Update `DEFAULT_BUNDLE` |
-| Build block master metrics | `build_master_metrics.py` | produces `master_metrics_by_block.csv` |
+| Build block master metrics | `build_master_metrics.py` | produces `master_metrics_by_block.parquet` (see `--cleanup-raw` / `--prune-legacy-csv`) |
 | Update block tooltip/map click | `app/views/map_view.py` | ensure block identifiers flow to state |
 | Enable add-to-portfolio from block rankings | `app/views/rankings_view.py` | portfolio parity with district |
 | Fix time series loading | `analysis/timeseries.py`, `data/discovery.py` | ensemble yearly discovery + id injection |
@@ -434,12 +436,12 @@ Other UI keys vary by panel (map markers, etc.).
 |-----------|----------|
 | District boundaries | `DATA_DIR/districts_4326.geojson` |
 | Block boundaries | `DATA_DIR/blocks_4326.geojson` |
-| District master CSV | `DATA_DIR/processed/{index}/{state}/master_metrics_by_district.csv` |
-| Block master CSV | `DATA_DIR/processed/{index}/{state}/master_metrics_by_block.csv` |
-| District ensemble yearly | `.../districts/ensembles/{district}/{scenario}/{district}_yearly_ensemble.csv` |
-| Block ensemble yearly | `.../blocks/ensembles/{district}/{block}/{scenario}/{block}_yearly_ensemble.csv` |
-| Per-model summaries | `.../districts/{district}/{model}/{scenario}/...` and `.../blocks/{district}/{block}/{model}/{scenario}/...` |
-| PDF exports (if enabled) | `DATA_DIR/processed/{index}/{state}/pdf_plots/` |
+| District master | `DATA_DIR/{processed_subdir}/{index}/{state}/master_metrics_by_district.parquet` |
+| Block master | `DATA_DIR/{processed_subdir}/{index}/{state}/master_metrics_by_block.parquet` |
+| District ensemble yearly | `.../districts/ensembles/yearly/scenario={scenario}/data.parquet` (CSV fallback supported) |
+| Block ensemble yearly | `.../blocks/ensembles/yearly/scenario={scenario}/data.parquet` (CSV fallback supported) |
+| Raw per-model intermediates | `.../{districts|blocks}/raw/{yearly|periods}/model={model}/scenario={scenario}/data.parquet` |
+| PDF exports (if enabled) | `DATA_DIR/{processed_subdir}/{index}/{state}/pdf_plots/` |
 
 ---
 

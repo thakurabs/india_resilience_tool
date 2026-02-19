@@ -155,34 +155,39 @@ Processed artifacts are organized **by index slug** (e.g., `tas_gt32`) and state
 DATA_DIR/
 ├── districts_4326.geojson
 ├── blocks_4326.geojson
-└── processed/
+└── processed/ (or `processed_test/` when `IRT_PROCESSED_SUBDIR=processed_test`)
     └── {index_slug}/                 # e.g., tas_gt32
         └── {state}/                  # e.g., Telangana
-            ├── master_metrics_by_district.csv
-            ├── master_metrics_by_block.csv
+            ├── master_metrics_by_district.parquet
+            ├── master_metrics_by_block.parquet
             ├── districts/
-            │   ├── {district}/{model}/{scenario}/
-            │   │   ├── {district}_yearly.csv
-            │   │   └── {district}_periods.csv
-            │   └── ensembles/{district}/{scenario}/
-            │       └── {district}_yearly_ensemble.csv
+            │   ├── raw/
+            │   │   ├── yearly/model={model}/scenario={scenario}/data.parquet
+            │   │   └── periods/model={model}/scenario={scenario}/data.parquet
+            │   └── ensembles/yearly/
+            │       └── scenario={scenario}/data.parquet
             └── blocks/
-                ├── {district}/{block}/{model}/{scenario}/
-                │   ├── {block}_yearly.csv
-                │   └── {block}_periods.csv
-                └── ensembles/{district}/{block}/{scenario}/
-                    └── {block}_yearly_ensemble.csv
+                ├── raw/
+                │   ├── yearly/model={model}/scenario={scenario}/data.parquet
+                │   └── periods/model={model}/scenario={scenario}/data.parquet
+                └── ensembles/yearly/
+                    └── scenario={scenario}/data.parquet
 ```
 
 Notes:
-- Windows may show `.csv` as "Microsoft Excel CSV"; they're normal CSVs.
-- The dashboard uses **master metrics** for maps/rankings and **ensemble yearly** files for trends.
+- Legacy CSV-only processed trees are still supported; loaders fall back to `.csv` when Parquet is absent.
+- The dashboard uses **master metrics** for maps/rankings and **ensemble yearly** tables for trends.
 
-### Building master CSVs (district + block)
+### Building master metrics (district + block)
 
 ```bash
 python build_master_metrics.py
 ```
+
+Useful flags:
+- `--format parquet` (default) or `--format csv`
+- `--cleanup-raw`: deletes Parquet `raw/yearly` and `raw/periods` for that level *after* master is written (only if ensembles exist)
+- `--prune-legacy-csv`: deletes legacy per-unit `*_yearly.csv` and `*_periods.csv` *only after* Parquet master + consolidated Parquet ensembles exist
 
 Or use the dashboard's "Rebuild now" control if exposed in your branch.
 
@@ -228,15 +233,18 @@ In portfolio mode, you can select metrics by risk domain:
 4. **View included metrics**: Expand the "View X included metrics" section to see what's selected
 
 ### Trend over time (yearly series)
-The Trend panel looks for **ensemble yearly** time-series:
+The Trend panel looks for **ensemble yearly** time-series (Parquet preferred, CSV fallback):
 
-- District trend: `districts/ensembles/{district}/{scenario}/{district}_yearly_ensemble.csv`
-- Block trend: `blocks/ensembles/{district}/{block}/{scenario}/{block}_yearly_ensemble.csv`
+- District trend (new): `districts/ensembles/yearly/scenario={scenario}/data.parquet`
+- Block trend (new): `blocks/ensembles/yearly/scenario={scenario}/data.parquet`
+- Legacy CSV fallback paths are still supported (per-unit `*_yearly_ensemble.csv`).
 
 Some ensemble-yearly CSVs may not include identifier columns (e.g., `state`, `district`, `block`). The loader injects missing identifiers from the path context so filtering stays consistent in-memory.
 
 If Trend shows "No yearly time-series available…":
-- confirm the `*_yearly_ensemble.csv` exists under the `ensembles/` path
+- confirm either:
+  - consolidated Parquet exists under `ensembles/yearly/scenario={scenario}/data.parquet`, or
+  - legacy per-unit `*_yearly_ensemble.csv` exists under the `ensembles/` path
 - confirm it contains `year` and at least one usable value column (commonly `ensemble_mean`, `mean`, or `value`)
 
 ---
@@ -249,7 +257,8 @@ If Trend shows "No yearly time-series available…":
 |---|---|---|
 | `IRT_PILOT_STATE` | `Telangana` | Default state to load |
 | `IRT_DATA_DIR` | (from `paths.py`) | Base data directory for boundary + processed |
-| `IRT_PROCESSED_ROOT` | `DATA_DIR/processed/{index}` | Processed data location override |
+| `IRT_PROCESSED_SUBDIR` | `processed` | Subdir under `DATA_DIR/` to use for processed outputs (e.g., `processed_test`) |
+| `IRT_PROCESSED_ROOT` | (unset) | Processed data location override (wins over defaults) |
 | `IRT_DEBUG` | `0` | Enable debug output (1=on) |
 
 ### Data directory

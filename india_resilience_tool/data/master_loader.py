@@ -23,6 +23,8 @@ from typing import Any, Iterable, Optional, Union
 
 import pandas as pd
 
+from india_resilience_tool.utils.processed_io import resolve_existing_table_path
+
 PathLike = Union[str, Path]
 
 
@@ -71,13 +73,30 @@ def read_csv_robust(
         raise
 
 
-def load_master_csv(path: PathLike) -> pd.DataFrame:
+def load_master_table(path: PathLike) -> pd.DataFrame:
     """
-    Load the master metrics CSV.
+    Load the master metrics table (Parquet preferred, CSV fallback).
 
-    Intentionally thin wrapper around read_csv_robust().
+    Backward compatible with legacy CSV-only processed roots.
     """
-    return read_csv_robust(path)
+    p = Path(path)
+    resolved = resolve_existing_table_path(p)
+    if resolved is None:
+        # Preserve prior behavior (raise from pandas) when nothing exists.
+        return read_csv_robust(p)
+
+    if resolved.is_dir():
+        raise ValueError(f"Master path must be a file, got directory: {resolved}")
+
+    if resolved.suffix.lower() == ".parquet":
+        return pd.read_parquet(resolved)
+
+    return read_csv_robust(resolved)
+
+
+def load_master_csv(path: PathLike) -> pd.DataFrame:
+    """Legacy name used by the dashboard; now loads Parquet or CSV."""
+    return load_master_table(path)
 
 
 def normalize_master_columns(df: pd.DataFrame) -> pd.DataFrame:
