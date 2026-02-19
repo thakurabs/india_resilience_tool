@@ -70,6 +70,8 @@ def _normalize_ensemble_columns(df: pd.DataFrame) -> pd.DataFrame:
     # Column mapping: ensemble format -> standard format
     rename_map = {
         "ensemble_mean": "mean",
+        "ensemble_value": "mean",
+        "value": "mean",
         "ensemble_std": "std",
         "ensemble_median": "median",
         "ensemble_p05": "p05",
@@ -81,7 +83,12 @@ def _normalize_ensemble_columns(df: pd.DataFrame) -> pd.DataFrame:
     
     if columns_to_rename:
         out = out.rename(columns=columns_to_rename)
-    
+
+    # If some producers emit a generic "value" column (or median-only series),
+    # provide a safe fallback so downstream trend plotting remains available.
+    if "mean" not in out.columns and "median" in out.columns:
+        out["mean"] = out["median"]
+
     return out
 
 

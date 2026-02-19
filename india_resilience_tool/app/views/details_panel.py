@@ -700,25 +700,110 @@ def render_case_study_export(
             st.session_state.pop("case_study_summary", None)
             st.session_state.pop("case_study_ts", None)
             st.session_state.pop("case_study_panels", None)
+            # Reset build-progress UI when the selection signature changes.
+            st.session_state.pop("case_study_build_state", None)
+            st.session_state.pop("case_study_build_progress", None)
+            st.session_state.pop("case_study_build_message", None)
 
+
+        # Persistent build progress UI (renders next to the build button).
+        build_state = st.session_state.get("case_study_build_state", "idle")
+        try:
+            build_progress = float(st.session_state.get("case_study_build_progress", 0.0) or 0.0)
+        except Exception:
+            build_progress = 0.0
+        build_message = str(st.session_state.get("case_study_build_message", "") or "")
 
         if not selected_index_slugs:
             st.info("Select at least one index to build the case-study report.")
+            st.session_state["case_study_build_state"] = "idle"
+            st.session_state["case_study_build_progress"] = 0.0
+            st.session_state["case_study_build_message"] = ""
         else:
-            if st.button(
-                "Build case-study data for this district",
-                key="btn_build_case_study",
-            ):
-                with st.spinner("Assembling climate profile for selected indices..."):
-                    summary_df_cs, ts_dict_cs, panel_dict_cs = build_case_study_data_fn(
-                        state_name=state_to_show,
-                        district_name=district_name,
-                        index_slugs=selected_index_slugs,
-                        sel_scenario=sel_scenario,
-                        sel_period=sel_period,
-                        sel_stat=sel_stat,
-                    )
+            col_btn, col_prog = st.columns([0.42, 0.58])
+            with col_btn:
+                clicked = st.button(
+                    "Build case-study data for this district",
+                    key="btn_build_case_study",
+                    use_container_width=True,
+                )
+
+            with col_prog:
+                prog_ph = st.empty()
+                msg_ph = st.empty()
+
+                def _clamp01(x: float) -> float:
+                    try:
+                        x = float(x)
+                    except Exception:
+                        return 0.0
+                    return max(0.0, min(1.0, x))
+
+                build_progress = _clamp01(build_progress)
+
+                if build_state in ("running", "complete", "error"):
+                    prog_ph.progress(build_progress)
+                    if build_state == "complete":
+                        msg_ph.success("Completed ✅")
+                    elif build_state == "error":
+                        msg_ph.error(build_message or "Build failed.")
+                    else:
+                        pct = int(round(build_progress * 100))
+                        msg_ph.caption(f"🕒 {pct}% — {build_message or 'Working…'}")
+
+            if clicked:
+                st.session_state["case_study_build_state"] = "running"
+                st.session_state["case_study_build_progress"] = 0.0
+                st.session_state["case_study_build_message"] = "Starting…"
+                prog_ph.progress(0.0)
+                msg_ph.caption("🕒 0% — Starting…")
+
+                def _progress_cb(frac: float, msg: str) -> None:
+                    frac = _clamp01(frac)
+                    msg_clean = str(msg or "").strip()
+                    st.session_state["case_study_build_progress"] = frac
+                    st.session_state["case_study_build_message"] = msg_clean
+                    prog_ph.progress(frac)
+                    pct = int(round(frac * 100))
+                    if msg_clean:
+                        msg_ph.caption(f"🕒 {pct}% — {msg_clean}")
+                    else:
+                        msg_ph.caption(f"🕒 {pct}%")
+
+                try:
+                    with st.spinner("Building case-study data…"):
+                        try:
+                            summary_df_cs, ts_dict_cs, panel_dict_cs = build_case_study_data_fn(
+                                state_name=state_to_show,
+                                district_name=district_name,
+                                index_slugs=selected_index_slugs,
+                                sel_scenario=sel_scenario,
+                                sel_period=sel_period,
+                                sel_stat=sel_stat,
+                                progress_cb=_progress_cb,
+                            )
+                        except TypeError:
+                            # Backward compatibility: older builders may not accept progress_cb.
+                            summary_df_cs, ts_dict_cs, panel_dict_cs = build_case_study_data_fn(
+                                state_name=state_to_show,
+                                district_name=district_name,
+                                index_slugs=selected_index_slugs,
+                                sel_scenario=sel_scenario,
+                                sel_period=sel_period,
+                                sel_stat=sel_stat,
+                            )
+                except Exception as e:
+                    st.session_state["case_study_build_state"] = "error"
+                    st.session_state["case_study_build_message"] = str(e)
+                    msg_ph.error("Build failed.")
+                    st.exception(e)
+                else:
                     if summary_df_cs is None or summary_df_cs.empty:
+                        st.session_state["case_study_build_state"] = "error"
+                        st.session_state["case_study_build_message"] = (
+                            "No data found for the selected index/district combination."
+                        )
+                        msg_ph.error("No data found.")
                         st.warning(
                             "No data found for the selected index/district combination. "
                             "Try including fewer indices or a different scenario/period/statistic."
@@ -727,6 +812,14 @@ def render_case_study_export(
                         st.session_state["case_study_summary"] = summary_df_cs
                         st.session_state["case_study_ts"] = ts_dict_cs
                         st.session_state["case_study_panels"] = panel_dict_cs
+
+                        st.session_state["case_study_build_state"] = "complete"
+                        st.session_state["case_study_build_progress"] = 1.0
+                        st.session_state["case_study_build_message"] = "Completed."
+                        prog_ph.progress(1.0)
+                        msg_ph.success("Completed ✅")
+                        if hasattr(st, "toast"):
+                            st.toast("Case-study data build completed ✅")
 
             summary_df_cs = st.session_state.get("case_study_summary")
             ts_dict_cs = st.session_state.get("case_study_ts")

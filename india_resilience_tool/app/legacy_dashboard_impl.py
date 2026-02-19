@@ -535,7 +535,6 @@ from india_resilience_tool.viz.charts import (
     canonical_period_label,
     period_display_label,
     make_scenario_comparison_figure,
-    make_scenario_comparison_figure_plotly,
 )
 
 def make_state_boxplot_for_districts(
@@ -3080,10 +3079,12 @@ with col2:
 
                 # Scenario comparison panel (period-mean across scenarios)
                 try:
+                    metric_name_for_panel = str(metric_col_local).split("__")[0] if metric_col_local else str(registry_metric)
+
                     panel_df = build_scenario_comparison_panel_for_row(
                         row=row_local,
                         schema_items=schema_items_local,
-                        metric_name=registry_metric,
+                        metric_name=metric_name_for_panel,
                         sel_stat=sel_stat,
                     )
                 except Exception:
@@ -3259,7 +3260,7 @@ with col2:
             # Callable dependencies
             create_trend_figure_fn=_create_trend_figure_for_index,
             build_scenario_panel_fn=build_scenario_comparison_panel_for_row,
-            make_scenario_figure_fn=make_scenario_comparison_figure_plotly,
+            make_scenario_figure_fn=make_scenario_comparison_figure,
             build_case_study_data_fn=_build_district_case_study_data,
             make_case_study_pdf_fn=_make_district_case_study_pdf,
             make_case_study_zip_fn=_make_case_study_zip,

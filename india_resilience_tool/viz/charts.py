@@ -162,9 +162,21 @@ def make_scenario_comparison_figure(
     units: Optional[str] = None,
     logo_path: Optional[PathLike] = None,
     style: Optional[IRTFigureStyle] = None,
+    render_context: str = "dashboard",
 ) -> Tuple[Optional[Any], Optional[Any]]:
     """
     Build a compact bar chart showing period-mean values for each scenario.
+
+    Args:
+        panel_df: DataFrame with columns at least [scenario, period, value].
+        metric_label: Human-friendly metric name for axis labeling.
+        sel_scenario: Selected scenario key (e.g. "ssp245") for highlighting.
+        sel_period: Selected period (e.g. "2020-2040") for highlighting.
+        sel_stat: Selected statistic (e.g. "mean").
+        district_name: District name (used only for dashboard titles).
+        ax: Optional Matplotlib axes to draw into.
+        render_context: "dashboard" (default) or "pdf". In PDF context we avoid
+            redundant titles/annotations and use compact axis labels.
 
     Notes:
     - If `ax` is provided, the caller owns figure sizing; this function will not
@@ -180,6 +192,9 @@ def make_scenario_comparison_figure(
         return None, None
 
     created_axes = ax is None
+
+    ctx = str(render_context).strip().lower()
+    is_pdf = ctx in {"pdf", "report", "export"}
 
     s = style or IRTFigureStyle()
     figsize_eff = figsize or ensure_16x9_figsize(s.panel_figsize, mode="fit_width")
@@ -230,6 +245,7 @@ def make_scenario_comparison_figure(
     colors: list[str] = []
     edgecolors: list[Any] = []
     linewidths: list[float] = []
+
     for scen, period in combos:
         mask = (dfp["scenario_norm"] == scen) & (dfp["period"] == period)
         row = dfp.loc[mask].iloc[0]
@@ -243,19 +259,17 @@ def make_scenario_comparison_figure(
 
         is_selected = (scen == sel_scenario_norm) and (period == sel_period_norm)
 
-        # Matplotlib expects a named color or an (r, g, b, a) tuple (0–1 floats)
-        edgecolors.append("black" if is_selected else (0.0, 0.0, 0.0, 0.35))
+        # Outlines on all bars; selected bar gets a stronger outline.
+        edgecolors.append((0.0, 0.0, 0.0, 0.75) if is_selected else (0.0, 0.0, 0.0, 0.55))
         linewidths.append(1.4 if is_selected else 0.9)
 
     if not xs:
         return None, None
 
-    # Keep the figure free of redundant context. The metric name is already shown
-    # in the UI selection + risk card; here we keep the axis label minimal.
-    y_label = "Value"
+    y_label = metric_label
     u = (units or "").strip()
-    if u:
-        y_label = f"Value ({u})"
+    if u and f"({u})" not in y_label:
+        y_label = f"{y_label} ({u})"
 
     with irt_style_context(s):
         if ax is None:
@@ -263,7 +277,6 @@ def make_scenario_comparison_figure(
         else:
             fig = ax.figure
 
-        # `xs` is the computed x-position array; some code paths used `x` earlier.
         x = xs
         y = ys
 
@@ -291,16 +304,10 @@ def make_scenario_comparison_figure(
                 mean = float(np.mean(y_vals))
                 eps = 1e-9
 
-                # Two complementary signals:
-                # 1) closeness: all bars are high relative to each other (high baseline)
-                # 2) rel_spread: spread is modest relative to the overall level
                 closeness = y_min / max(y_max, eps)                 # 0..1
                 rel_spread_mean = spread / max(abs(mean), eps)      # relative to mean
                 rel_spread_max = spread / max(y_max, eps)           # relative to max
 
-                # Broader trigger: catches "tropical nights" and similar indices.
-                # - closeness >= 0.80 means min is at least 80% of max
-                # - rel_spread_mean <= 0.12 OR rel_spread_max <= 0.15 keeps zoom for modest spreads
                 zoomed = (
                     (y_min >= 0)
                     and (closeness >= 0.80)
@@ -313,12 +320,10 @@ def make_scenario_comparison_figure(
             y_range = (y_max - y_min) if (y_max != y_min) else max(abs(y_max), 1.0)
 
             if zoomed:
-                # Tight window around values + padding so labels/ticks have room
                 pad = max(0.18 * y_range, 0.02 * max(abs(y_max), 1.0))
                 ax.set_ylim(y_min - pad, y_max + pad)
 
             else:
-                # Standard view: anchor at 0 for positive-only values + headroom
                 if y_min >= 0:
                     ax.set_ylim(0.0, y_max + 0.12 * y_range)
                 else:
@@ -329,19 +334,16 @@ def make_scenario_comparison_figure(
         y_span = y_top - y_bottom
         label_offset = 0.02 * y_span
 
-        # Value labels:
-        # - Zoomed mode: labels above bars (since we have a tight y-window)
-        # - Normal mode: labels inside if too close to the top, else above
-        for b, y in zip(bars, ys):
-            if pd.isna(y):
+        for b, y_val in zip(bars, ys):
+            if pd.isna(y_val):
                 continue
 
             x_text = b.get_x() + b.get_width() / 2
 
             if zoomed:
-                y_text = y + label_offset
+                y_text = y_val + label_offset
                 if y_text > (y_top - 0.01 * y_span):
-                    y_text = y - label_offset
+                    y_text = y_val - label_offset
                     va = "top"
                 else:
                     va = "bottom"
@@ -349,7 +351,7 @@ def make_scenario_comparison_figure(
                 ax.text(
                     x_text,
                     y_text,
-                    format_value(y, units=units),
+                    format_value(y_val, units=units),
                     ha="center",
                     va=va,
                     fontsize=font_size_ticks,
@@ -358,11 +360,11 @@ def make_scenario_comparison_figure(
                 )
             else:
                 headroom_thresh = y_top - 0.10 * y_span
-                if y >= headroom_thresh:
+                if y_val >= headroom_thresh:
                     ax.text(
                         x_text,
-                        y - label_offset,
-                        format_value(y, units=units),
+                        y_val - label_offset,
+                        format_value(y_val, units=units),
                         ha="center",
                         va="top",
                         fontsize=font_size_ticks,
@@ -372,8 +374,8 @@ def make_scenario_comparison_figure(
                 else:
                     ax.text(
                         x_text,
-                        y + label_offset,
-                        format_value(y, units=units),
+                        y_val + label_offset,
+                        format_value(y_val, units=units),
                         ha="center",
                         va="bottom",
                         fontsize=font_size_ticks,
@@ -385,11 +387,20 @@ def make_scenario_comparison_figure(
         group_labels: list[str] = []
         for p_idx, period in enumerate(periods_present):
             group_centres.append(p_idx * group_spacing)
-            group_labels.append(period_display_label(period))
+            if is_pdf:
+                group_labels.append(str(period).replace("-", "–"))
+            else:
+                group_labels.append(period_display_label(period))
 
         ax.set_xticks(group_centres)
         ax.set_xticklabels(group_labels, fontsize=font_size_ticks)
         ax.set_ylabel(y_label, fontsize=font_size_label)
+
+        if not is_pdf:
+            ax.set_title(
+                f"{district_name} · Scenario comparison ({sel_stat_norm})",
+                fontsize=font_size_title,
+            )
 
         # Legend
         handles = []
@@ -404,190 +415,56 @@ def make_scenario_comparison_figure(
                 )
             )
         if handles:
-            if zoomed:
-                # In zoomed mode, keep the plot area clean: move legend to the right
+            if is_pdf:
                 ax.legend(
                     handles=handles,
                     fontsize=font_size_legend,
                     frameon=False,
                     ncol=1,
-                    loc="center left",
-                    bbox_to_anchor=(1.02, 0.5),
+                    loc="upper right",
                 )
             else:
-                ax.legend(
-                    handles=handles,
-                    fontsize=font_size_legend,
-                    frameon=False,
-                    ncol=min(3, len(handles)),
-                    loc="upper left",
-                    bbox_to_anchor=(0.0, 1.02),
-                )
+                if zoomed:
+                    ax.legend(
+                        handles=handles,
+                        fontsize=font_size_legend,
+                        frameon=False,
+                        ncol=1,
+                        loc="center left",
+                        bbox_to_anchor=(1.02, 0.5),
+                    )
+                else:
+                    ax.legend(
+                        handles=handles,
+                        fontsize=font_size_legend,
+                        frameon=False,
+                        ncol=min(3, len(handles)),
+                        loc="upper left",
+                        bbox_to_anchor=(0.0, 1.02),
+                    )
 
         ax.grid(axis="y", linestyle="--", alpha=0.35)
         ax.set_axisbelow(True)
-        strip_spines(ax)
 
-        try:
-            fig.tight_layout()
-        except Exception:
-            pass
+        if is_pdf:
+            # Publication-style: keep left/bottom spines; hide top/right.
+            try:
+                ax.spines["top"].set_visible(False)
+                ax.spines["right"].set_visible(False)
+            except Exception:
+                pass
+        else:
+            strip_spines(ax)
+
+        # Only run tight_layout when we created the figure; otherwise it can
+        # fight the caller's gridspec/subplot layout (notably in PDFs).
+        if created_axes:
+            try:
+                fig.tight_layout()
+            except Exception:
+                pass
 
         return fig, ax
-
-def make_scenario_comparison_figure_plotly(
-    panel_df: pd.DataFrame,
-    metric_label: str,
-    sel_scenario: str,
-    sel_period: str,
-    sel_stat: str,
-    district_name: str,
-    ax=None,
-    figsize: Optional[tuple[float, float]] = None,
-    fig_dpi: int = 150,
-    font_size_title: int = 11,
-    font_size_label: int = 10,
-    font_size_ticks: int = 9,
-    font_size_legend: int = 9,
-    *,
-    units: Optional[str] = None,
-    logo_path: Optional[PathLike] = None,
-    style: Optional[IRTFigureStyle] = None,
-) -> Any:
-    """
-    Plotly version of the scenario comparison chart (period-mean).
-
-    Design goals:
-    - No redundant titles (the Streamlit expander provides context).
-    - X-axis labels are only the period ranges (e.g., 1990-2010, 2020-2040, 2040-2060).
-    - Bar outlines are visible for all bars.
-    - Fonts/layout match the Plotly trendline figure via the shared IRT Plotly layout.
-
-    Missing/invalid values are skipped (bars omitted for those scenario/period pairs).
-    """
-    try:
-        import plotly.graph_objects as go
-    except Exception:
-        # Plotly is optional; callers can fall back to the Matplotlib version.
-        return None
-
-    from india_resilience_tool.viz.formatting import format_value
-    from india_resilience_tool.viz.style import apply_irt_plotly_layout
-
-    if panel_df is None or panel_df.empty:
-        return None
-
-    dfp = panel_df.copy()
-    if "scenario" not in dfp.columns or "period" not in dfp.columns or "value" not in dfp.columns:
-        return None
-
-    # Canonicalize for stable ordering.
-    dfp["scenario_norm"] = dfp["scenario"].astype(str).str.strip().str.lower()
-    dfp["period_norm"] = dfp["period"].map(canonical_period_label)
-    dfp["value"] = pd.to_numeric(dfp["value"], errors="coerce")
-    dfp = dfp.dropna(subset=["value"])
-
-    if dfp.empty:
-        return None
-
-    periods_present = [p for p in PERIOD_ORDER if (dfp["period_norm"] == p).any()]
-    if not periods_present:
-        return None
-
-    # Use only the clean "YYYY-YYYY" period labels on the axis.
-    x_labels = [canonical_period_label(p) for p in periods_present]
-
-    fig = go.Figure()
-
-    outline_color = "rgba(0,0,0,0.70)"
-    outline_width = 1.0
-
-    for scen in SCENARIO_ORDER:
-        scen_norm = str(scen).strip().lower()
-        sub = dfp[dfp["scenario_norm"] == scen_norm]
-        if sub.empty:
-            continue
-
-        y_vals: list[Optional[float]] = []
-        text_vals: list[Optional[str]] = []
-
-        for p in periods_present:
-            mp = sub[sub["period_norm"] == p]
-            if mp.empty:
-                y_vals.append(None)
-                text_vals.append(None)
-                continue
-
-            v = float(mp["value"].iloc[0])
-            y_vals.append(v)
-            text_vals.append(format_value(v, units=units))
-
-        fig.add_trace(
-            go.Bar(
-                name=SCENARIO_DISPLAY.get(scen_norm, scen_norm),
-                x=x_labels,
-                y=y_vals,
-                text=text_vals,
-                textposition="outside",
-                cliponaxis=False,
-                marker={
-                    "color": SCENARIO_COLORS_HEX.get(scen_norm, "#1f77b4"),
-                    "line": {"color": outline_color, "width": outline_width},
-                },
-                hovertemplate=(
-                    "<b>%{x}</b><br>"
-                    + f"{SCENARIO_DISPLAY.get(scen_norm, scen_norm)}: "
-                    + "%{y}<extra></extra>"
-                ),
-            )
-        )
-
-    # Keep the y-axis title consistent with the Plotly trendline:
-    # metric label (and units if available).
-    y_title = (metric_label or "").strip() or "Value"
-    u = (units or "").strip()
-    if u:
-        y_title = f"{y_title} ({u})"
-
-    apply_irt_plotly_layout(fig, title=None, xaxis_title=None, yaxis_title=y_title, hovermode="x unified")
-
-    # Layout tuning for compact dashboard panels
-    try:
-        fig.update_layout(
-            barmode="group",
-            bargap=0.28,
-            bargroupgap=0.12,
-            legend={"orientation": "v", "x": 1.02, "y": 0.5, "xanchor": "left", "yanchor": "middle"},
-            margin={"l": 55, "r": 120, "t": 10, "b": 45},
-        )
-        fig.update_xaxes(
-            type="category",
-            categoryorder="array",
-            categoryarray=x_labels,
-            tickangle=0,
-        )
-
-        # Auto-zoom / auto-scale around available values (matches the intent of the earlier chart).
-        y_min = float(dfp["value"].min())
-        y_max = float(dfp["value"].max())
-        span = y_max - y_min
-        if span <= 0:
-            span = abs(y_max) if y_max != 0 else 1.0
-
-        pad_low = max(0.06 * span, 0.2)
-        # Extra headroom for text labels above bars.
-        pad_high = max(0.14 * span, 0.4)
-
-        fig.update_yaxes(
-            range=[y_min - pad_low, y_max + pad_high],
-            autorange=False,
-            rangemode="normal",
-        )
-    except Exception:
-        pass
-
-    return fig
-
 
 
 def create_trend_figure_for_index(
@@ -603,11 +480,15 @@ def create_trend_figure_for_index(
     units: Optional[str] = None,
     logo_path: Optional[PathLike] = None,
     style: Optional[IRTFigureStyle] = None,
+    render_context: str = "dashboard",
 ) -> Any:
     """Create the 'Trend over time' figure (historical + scenario + bands)."""
     import matplotlib.pyplot as plt
 
     created_axes = ax is None
+
+    ctx = str(render_context).strip().lower()
+    is_pdf = ctx in {"pdf", "report", "export"}
 
     s = style or IRTFigureStyle()
     figsize_eff = figsize or ensure_16x9_figsize(s.panel_figsize, mode="fit_width")
@@ -636,7 +517,6 @@ def create_trend_figure_for_index(
                 color=SCENARIO_COLORS_HEX["historical"],
                 label=SCENARIO_DISPLAY.get("historical", "Historical"),
             )
-            # Optional band
             if "p05" in hist_ts.columns and "p95" in hist_ts.columns:
                 p05 = pd.to_numeric(hist_ts["p05"], errors="coerce").to_numpy(dtype=float)
                 p95 = pd.to_numeric(hist_ts["p95"], errors="coerce").to_numpy(dtype=float)
@@ -670,20 +550,33 @@ def create_trend_figure_for_index(
                 ax_ts.fill_between(xs, p05, p95, color=scen_color, alpha=0.18, linewidth=0)
             has_any = True
 
-        ax_ts.set_title("Trend over time", fontsize=s.title_fontsize)
+        if not is_pdf:
+            ax_ts.set_title("Trend over time", fontsize=s.title_fontsize)
+
         ax_ts.set_xlabel("Year")
         ax_ts.set_ylabel(y_label)
         ax_ts.grid(True, linestyle="--", alpha=0.35)
         ax_ts.set_axisbelow(True)
-        strip_spines(ax_ts)
+
+        if is_pdf:
+            try:
+                ax_ts.spines["top"].set_visible(False)
+                ax_ts.spines["right"].set_visible(False)
+            except Exception:
+                pass
+        else:
+            strip_spines(ax_ts)
 
         if has_any:
             ax_ts.legend(frameon=False, fontsize=font_size_legend, loc="upper left")
 
-        try:
-            fig_ts.tight_layout()
-        except Exception:
-            pass
+        # Only run tight_layout when we created the figure; otherwise it can
+        # fight the caller's gridspec/subplot layout (notably in PDFs).
+        if created_axes:
+            try:
+                fig_ts.tight_layout()
+            except Exception:
+                pass
 
         if created_axes and logo_path:
             try:
@@ -1109,6 +1002,198 @@ def _get_value_label(value_col: str) -> str:
     }.get(value_col, value_col)
 
 
+def make_scenario_comparison_figure_plotly(
+    panel_df: pd.DataFrame,
+    metric_label: str,
+    sel_scenario: str,
+    sel_period: str,
+    sel_stat: str,
+    district_name: str,
+    ax: Any = None,
+    figsize: Optional[tuple[float, float]] = None,
+    fig_dpi: int = 150,
+    font_size_title: int = 11,
+    font_size_label: int = 10,
+    font_size_ticks: int = 9,
+    font_size_legend: int = 9,
+    *,
+    units: Optional[str] = None,
+    logo_path: Optional[PathLike] = None,
+    style: Optional[IRTFigureStyle] = None,
+    render_context: str = "dashboard",
+) -> Any:
+    """Plotly version of the scenario comparison (period-mean) chart.
+
+    This function exists primarily for the dashboard, where Plotly provides a
+    consistent look-and-feel with the Plotly trend chart.
+
+    Notes:
+    - Parameters like ``ax``, ``figsize``, ``fig_dpi`` and font sizes are
+      accepted for API compatibility but are not used.
+    - ``logo_path`` is ignored here; PDF exports apply logos at the page level.
+
+    Returns:
+        A Plotly Figure (or ``None`` if input is empty).
+    """
+    if panel_df is None or panel_df.empty:
+        return None
+
+    try:
+        import plotly.graph_objects as go
+    except Exception:
+        # Plotly not available; caller should fall back to Matplotlib.
+        return None
+
+    from india_resilience_tool.viz.style import apply_irt_plotly_layout
+
+    ctx = str(render_context).strip().lower()
+    is_pdf = ctx in {"pdf", "report", "export"}
+
+    dfp = panel_df.copy()
+    dfp["period"] = dfp["period"].map(canonical_period_label)
+    dfp["scenario_norm"] = dfp["scenario"].astype(str).str.strip().str.lower()
+
+    # Periods present in canonical order
+    periods_present: list[str] = []
+    for p in PERIOD_ORDER:
+        if (dfp["period"] == p).any():
+            periods_present.append(p)
+    if not periods_present:
+        return None
+
+    # X-axis labels
+    if is_pdf:
+        x_labels = [str(p).replace("-", "–") for p in periods_present]
+    else:
+        # Dashboard preference: keep just the year ranges (no "Early century" etc.)
+        x_labels = [str(p).replace("-", "–") for p in periods_present]
+
+    sel_scenario_norm = str(sel_scenario).strip().lower()
+    sel_period_norm = canonical_period_label(sel_period)
+
+    # Determine y-axis label (metric + units)
+    y_label = metric_label
+    u = (units or "").strip()
+    if u and f"({u})" not in y_label:
+        y_label = f"{y_label} ({u})"
+
+    fig = go.Figure()
+
+    # Helper to fetch a value for scenario+period
+    def _value_for(scen_norm: str, period_key: str) -> Optional[float]:
+        sub = dfp[(dfp["scenario_norm"] == scen_norm) & (dfp["period"] == period_key)]
+        if sub.empty:
+            return None
+        try:
+            v = float(pd.to_numeric(sub["value"].iloc[0], errors="coerce"))
+        except Exception:
+            return None
+        return None if pd.isna(v) else v
+
+    # Build a grouped bar per scenario
+    y_vals_all: list[float] = []
+    for scen in SCENARIO_ORDER:
+        scen_norm = str(scen).strip().lower()
+        if not (dfp["scenario_norm"] == scen_norm).any():
+            continue
+
+        y_list: list[Optional[float]] = []
+        line_w: list[float] = []
+        line_c: list[str] = []
+        for p in periods_present:
+            v = _value_for(scen_norm, p)
+            y_list.append(v)
+            if v is not None:
+                y_vals_all.append(float(v))
+
+            is_selected = (scen_norm == sel_scenario_norm) and (p == sel_period_norm)
+            line_w.append(2.0 if is_selected else 1.2)
+            line_c.append("rgba(0,0,0,0.95)" if is_selected else "rgba(0,0,0,0.65)")
+
+        # Per-bar value labels (only when value exists)
+        text: list[str] = []
+        for v in y_list:
+            if v is None:
+                text.append("")
+            else:
+                # Heuristic formatting aligned with dashboard expectations
+                if u and ("°" in u or "deg" in u.lower() or u.lower() in {"c", "°c"}):
+                    text.append(f"{v:.2f}")
+                else:
+                    text.append(f"{v:.2f}")
+
+        fig.add_trace(
+            go.Bar(
+                x=x_labels,
+                y=y_list,
+                name=SCENARIO_DISPLAY.get(scen_norm, scen_norm),
+                marker={
+                    "color": SCENARIO_COLORS_HEX.get(scen_norm, "#1f77b4"),
+                    "line": {"color": line_c, "width": line_w},
+                },
+                text=text,
+                textposition="outside",
+                cliponaxis=False,
+                hovertemplate=(
+                    "<b>%{x}</b><br>"
+                    + f"Scenario: {SCENARIO_DISPLAY.get(scen_norm, scen_norm)}<br>"
+                    + "Value: %{y}" + (f" {u}" if u else "")
+                    + "<extra></extra>"
+                ),
+            )
+        )
+
+    # Y-axis range (auto-zoom heuristic)
+    zoomed = False
+    if len(y_vals_all) >= 2:
+        y_min = float(np.min(y_vals_all))
+        y_max = float(np.max(y_vals_all))
+        if y_max > 0:
+            spread = y_max - y_min
+            mean = float(np.mean(y_vals_all))
+            eps = 1e-9
+            closeness = y_min / max(y_max, eps)
+            rel_spread_mean = spread / max(abs(mean), eps)
+            rel_spread_max = spread / max(y_max, eps)
+            zoomed = (
+                (y_min >= 0)
+                and (closeness >= 0.80)
+                and ((rel_spread_mean <= 0.12) or (rel_spread_max <= 0.15))
+            )
+
+    yaxis_range = None
+    if y_vals_all:
+        y_min = float(np.min(y_vals_all))
+        y_max = float(np.max(y_vals_all))
+        y_range = (y_max - y_min) if (y_max != y_min) else max(abs(y_max), 1.0)
+        if zoomed:
+            pad = max(0.18 * y_range, 0.02 * max(abs(y_max), 1.0))
+            yaxis_range = [y_min - pad, y_max + pad]
+        else:
+            if y_min >= 0:
+                yaxis_range = [0.0, y_max + 0.12 * y_range]
+            else:
+                pad = max(0.12 * y_range, 0.02 * max(abs(y_max), 1.0))
+                yaxis_range = [y_min - pad, y_max + pad]
+
+    apply_irt_plotly_layout(fig, title=None, xaxis_title=None, yaxis_title=y_label)
+
+    fig.update_layout(
+        barmode="group",
+        bargap=0.35,
+        bargroupgap=0.12,
+        legend={"orientation": "v", "y": 0.5, "yanchor": "middle", "x": 1.02},
+        margin={"l": 60, "r": 110, "t": 20, "b": 55},
+    )
+
+    if yaxis_range is not None:
+        fig.update_yaxes(range=yaxis_range)
+
+    fig.update_xaxes(type="category")
+
+    return fig
+
+
 def create_trend_figure_for_index_plotly(
     hist_ts: pd.DataFrame,
     scen_ts: pd.DataFrame,
@@ -1265,4 +1350,3 @@ def create_trend_figure_for_index_plotly(
     apply_irt_plotly_layout(fig, title="Trend over time", xaxis_title="Year", yaxis_title=y_label)
 
     return fig
-

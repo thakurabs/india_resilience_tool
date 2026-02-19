@@ -116,8 +116,9 @@ def add_ra_logo(
     width_frac: float = 0.12,
     pad_frac: float = 0.012,
     alpha: float = 0.95,
+    position: str = "top_right",
 ) -> None:
-    """Add the Resilience Actions logo to the top-right corner of a figure.
+    """Add the Resilience Actions logo to a figure.
 
     The logo is placed in figure fraction coordinates and overlays the figure.
     This is safe for both dashboard figures and full-page PDF figures.
@@ -126,8 +127,11 @@ def add_ra_logo(
         fig: Matplotlib figure.
         logo_path: Path to logo image (png/jpg). If None/missing, no-op.
         width_frac: Desired logo width as fraction of figure width.
-        pad_frac: Padding from top-right corner (figure fraction).
+        pad_frac: Padding from the chosen corner (figure fraction).
         alpha: Logo alpha.
+        position: Where to place the logo. Supported values:
+            - "top_right" (default)
+            - "footer_right" / "bottom_right"
     """
     if fig is None or not logo_path:
         return
@@ -158,12 +162,20 @@ def add_ra_logo(
     oi = OffsetImage(img, zoom=zoom)
     oi.set_alpha(alpha)
 
+    pos = (position or "top_right").strip().lower()
+    if pos in {"footer_right", "bottom_right", "footer"}:
+        xy = (1.0 - pad_frac, pad_frac)
+        box_alignment = (1.0, 0.0)
+    else:
+        xy = (1.0 - pad_frac, 1.0 - pad_frac)
+        box_alignment = (1.0, 1.0)
+
     ab = AnnotationBbox(
         oi,
-        (1.0 - pad_frac, 1.0 - pad_frac),
+        xy,
         xycoords="figure fraction",
         frameon=False,
-        box_alignment=(1.0, 1.0),
+        box_alignment=box_alignment,
         zorder=50,
     )
     try:
