@@ -487,6 +487,23 @@ def create_trend_figure_for_index(
 
     created_axes = ax is None
 
+    def _value_column(df: pd.DataFrame) -> str:
+        """
+        Prefer a robust central tendency for the trend line.
+
+        Many indices (e.g., spell durations) can produce occasional
+        pathological values in a single model/year (e.g., an entire year
+        flagged as a cold spell). Using the ensemble median for the trend
+        line keeps historical and scenario segments contiguous while still
+        showing variability via p05–p95 shading. Fall back to mean when a
+        median is unavailable.
+        """
+        for cand in ("median", "ensemble_median", "mean", "ensemble_mean"):
+            if cand in df.columns:
+                if pd.to_numeric(df[cand], errors="coerce").notna().any():
+                    return cand
+        return "mean"
+
     ctx = str(render_context).strip().lower()
     is_pdf = ctx in {"pdf", "report", "export"}
 
@@ -509,7 +526,8 @@ def create_trend_figure_for_index(
 
         if hist_ts is not None and not hist_ts.empty:
             xh = pd.to_numeric(hist_ts["year"], errors="coerce").to_numpy(dtype=float)
-            yh = pd.to_numeric(hist_ts["mean"], errors="coerce").to_numpy(dtype=float)
+            hist_val_col = _value_column(hist_ts)
+            yh = pd.to_numeric(hist_ts[hist_val_col], errors="coerce").to_numpy(dtype=float)
             ax_ts.plot(
                 xh,
                 yh,
@@ -536,7 +554,8 @@ def create_trend_figure_for_index(
 
         if scen_ts is not None and not scen_ts.empty:
             xs = pd.to_numeric(scen_ts["year"], errors="coerce").to_numpy(dtype=float)
-            ys = pd.to_numeric(scen_ts["mean"], errors="coerce").to_numpy(dtype=float)
+            scen_val_col = _value_column(scen_ts)
+            ys = pd.to_numeric(scen_ts[scen_val_col], errors="coerce").to_numpy(dtype=float)
             ax_ts.plot(
                 xs,
                 ys,
@@ -1221,6 +1240,14 @@ def create_trend_figure_for_index_plotly(
         if df is None or df.empty:
             return pd.DataFrame()
         out = df.copy()
+
+        # Prefer ensemble median for central tendency to avoid outlier-driven
+        # discontinuities between historical and scenario segments.
+        if "median" in out.columns and "mean" in out.columns:
+            out["mean"] = out["median"]
+        elif "ensemble_median" in out.columns and "mean" in out.columns:
+            out["mean"] = out["ensemble_median"]
+
         if "year" in out.columns:
             out["year"] = pd.to_numeric(out["year"], errors="coerce")
         if "mean" in out.columns:
