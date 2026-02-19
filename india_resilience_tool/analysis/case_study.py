@@ -224,6 +224,14 @@ def build_district_case_study_data(
         baseline_val = pd.to_numeric([row.get(baseline_col)], errors="coerce")[0] if baseline_col else pd.NA
         baseline_f = None if pd.isna(baseline_val) else float(baseline_val)
 
+        baseline_scenario = None
+        baseline_period = None
+        if baseline_col:
+            parts = str(baseline_col).split("__")
+            if len(parts) >= 4:
+                baseline_scenario = parts[1]
+                baseline_period = parts[2]
+
         delta_abs = (current_f - baseline_f) if (current_f is not None and baseline_f is not None) else None
         delta_pct = None
         if delta_abs is not None and baseline_f not in (None, 0.0):
@@ -254,6 +262,9 @@ def build_district_case_study_data(
                 "stat": sel_stat,
                 "current": current_f,
                 "baseline": baseline_f,
+                "baseline_scenario": baseline_scenario,
+                "baseline_period": baseline_period,
+                "baseline_col": baseline_col,
                 "delta_abs": delta_abs,
                 "delta_pct": delta_pct,
                 "rank_in_state": rank_in_state,
