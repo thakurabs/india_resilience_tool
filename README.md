@@ -17,7 +17,7 @@ The tool visualizes **ensemble climate model outputs** and derived indices (temp
 
 ### Core exploration
 - **Admin level toggle**: District ↔ Block
-- **Risk domain selection (Map View ribbon)**: Choose from 7 thematic bundles (Heat Risk, Drought Risk, etc.)
+- **Risk domain selection (Map View ribbon)**: Choose from 8 thematic bundles (plus an optional advanced drought bundle)
 - **Interactive Map View**: Choropleth visualization with hover highlight + tooltip
 - **Rankings Table**:
   - District-wise rankings (ADM2)
@@ -27,7 +27,7 @@ The tool visualizes **ensemble climate model outputs** and derived indices (temp
   - Risk summary
   - Scenario comparison (period-mean)
   - Trend over time (ensemble yearly series)
-  - Detailed statistics and exports (CSV download + multi-index PDF/ZIP)
+  - Case study export (single district, multi-index PDF/ZIP)
 
 ### Metric selection ribbon (above the map)
 
@@ -47,16 +47,20 @@ All ribbon fields start with a placeholder (`— Select —`) to encourage delib
 Metrics are organized into **thematic bundles** for easier navigation:
 
 | Bundle | Metrics | Focus |
-|--------|---------|-------|
-| 🔥 Heat Risk | 24 | Heat extremes, heatwaves, thermal stress |
-| ❄️ Cold Risk | 10 | Frost, cold spells, cold extremes |
-| 🌾 Agriculture & Growing Conditions | 4 | Growing season, crop suitability |
-| 🌊 Flood & Extreme Rainfall Risk | 12 | Heavy rain, wet spells, flood potential |
-| 💧 Rainfall Totals & Typical Wetness | 3 | Annual totals, water availability |
-| 🏜️ Drought Risk | 8 | Dry spells, SPI/SPEI indices |
-| 🌡️ Temperature Variability | 2 | Daily/annual temperature range |
+|--------|---------:|-------|
+| 🔥 Heat Risk | 14 | Extreme heat, heatwaves, hot days/nights, persistence. |
+| 🥵 Heat Stress | 5 | Wet-bulb temperature and wet-bulb day thresholds (heat stress). |
+| ❄️ Cold Risk | 8 | Cold extremes: frost days, cold nights, cold spells. |
+| 🌾 Agriculture & Growing Conditions | 4 | Growing season and temperature context for crops. |
+| 🌊 Flood & Extreme Rainfall Risk | 6 | Heavy rainfall intensity, very wet days, wet spells. |
+| 💧 Rainfall Totals & Typical Wetness | 3 | Annual totals, rainy days, typical wetness. |
+| 🏜️ Drought Risk | 3 | Dry spell length and SPI-6 drought indicators. |
+| 🌡️ Temperature Variability | 2 | Daily/annual temperature range and variability. |
+| 🧪 Drought Risk (Advanced) | 9 | SPI-3/6/12 indices and severity counts (optional). |
 
-> **New (Wet-bulb temperature):** Heat Risk now includes wet-bulb temperature indices computed from **tas + hurs** using the **Stull approximation** (near-surface). Added slugs: `twb_annual_mean`, `twb_annual_max`, `twb_days_ge_30`. Availability is limited to models/scenarios where **both tas and hurs exist**.
+> Note: **Drought Risk (Advanced)** is an optional bundle (not shown by default in the UI).
+
+> **Wet-bulb (Heat Stress):** Wet-bulb indices (`twb_*`, `wbd_*`) are grouped under the **Heat Stress** bundle.
 
 **Single-focus mode**: use the **ribbon** to select a risk domain, then choose a metric within that domain.
 
@@ -353,7 +357,7 @@ mypy india_resilience_tool/
 - Sidebar expanders are **user-controlled** (auto-collapse removed)
 
 ### v2.3 — Thematic bundles + bundle-first selection (2026-01)
-- Added **7 thematic bundles** organizing 56 metrics by risk domain
+- Added thematic bundles organizing metrics by risk domain (Heat Risk, Heat Stress, etc.)
 - Sidebar now uses **bundle → metric** two-step selection
 - Portfolio comparison supports **bundle multi-select** with auto-expansion
 - Optional manual refinement for fine-grained metric selection
