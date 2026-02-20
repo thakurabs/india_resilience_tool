@@ -535,7 +535,37 @@ from india_resilience_tool.viz.charts import (
     canonical_period_label,
     period_display_label,
     make_scenario_comparison_figure,
+    make_scenario_comparison_figure_plotly,
 )
+
+
+def _make_scenario_comparison_figure_dashboard(**kwargs):
+    """Return Plotly scenario comparison when available; fall back to Matplotlib.
+
+    The dashboard uses Plotly for visual consistency with the Plotly trend figure.
+    If Plotly is unavailable (or the Plotly builder fails), we fall back to the
+    Matplotlib version to avoid breaking the UI.
+
+    Args:
+        **kwargs: Passed through to the underlying figure builders. Expected keys
+            match the signature used by `render_scenario_comparison()` in
+            `app/views/details_panel.py`.
+
+    Returns:
+        - Plotly Figure when possible
+        - Otherwise the (fig, ax) tuple returned by the Matplotlib builder
+    """
+    # Prefer Plotly (cleaner titles, consistent fonts, year-only x-axis labels)
+    try:
+        fig = make_scenario_comparison_figure_plotly(render_context="dashboard", **kwargs)
+        if fig is not None:
+            return fig
+    except Exception:
+        pass
+
+    # Fallback: Matplotlib chart
+    return make_scenario_comparison_figure(render_context="dashboard", **kwargs)
+
 
 def make_state_boxplot_for_districts(
     sel_districts_gdf: gpd.GeoDataFrame,
@@ -3260,7 +3290,7 @@ with col2:
             # Callable dependencies
             create_trend_figure_fn=_create_trend_figure_for_index,
             build_scenario_panel_fn=build_scenario_comparison_panel_for_row,
-            make_scenario_figure_fn=make_scenario_comparison_figure,
+            make_scenario_figure_fn=_make_scenario_comparison_figure_dashboard,
             build_case_study_data_fn=_build_district_case_study_data,
             make_case_study_pdf_fn=_make_district_case_study_pdf,
             make_case_study_zip_fn=_make_case_study_zip,

@@ -1109,46 +1109,56 @@ def make_scenario_comparison_figure_plotly(
             return None
         return None if pd.isna(v) else v
 
-    # Build a grouped bar per scenario
+    # Build grouped bars per scenario.
+    #
+    # Important: do NOT pass None placeholders for missing scenario/period cells.
+    # Plotly reserves bar "slots" even for missing values, which makes the visible
+    # bars look shifted left/right relative to the category tick label.
     y_vals_all: list[float] = []
+    period_to_label = {p: x_labels[i] for i, p in enumerate(periods_present)}
+    outline_width = 1.2
+
     for scen in SCENARIO_ORDER:
         scen_norm = str(scen).strip().lower()
         if not (dfp["scenario_norm"] == scen_norm).any():
             continue
 
-        y_list: list[Optional[float]] = []
-        line_w: list[float] = []
+        x_s: list[str] = []
+        y_s: list[float] = []
         line_c: list[str] = []
+        text: list[str] = []
+
         for p in periods_present:
             v = _value_for(scen_norm, p)
-            y_list.append(v)
-            if v is not None:
-                y_vals_all.append(float(v))
+            if v is None:
+                continue
 
+            x_s.append(period_to_label[p])
+            y_s.append(float(v))
+            y_vals_all.append(float(v))
+
+            # Keep outline width consistent across all bars; use only a subtle
+            # outline color change to indicate the selected cell.
             is_selected = (scen_norm == sel_scenario_norm) and (p == sel_period_norm)
-            line_w.append(2.0 if is_selected else 1.2)
             line_c.append("rgba(0,0,0,0.95)" if is_selected else "rgba(0,0,0,0.65)")
 
-        # Per-bar value labels (only when value exists)
-        text: list[str] = []
-        for v in y_list:
-            if v is None:
-                text.append("")
+            # Value label formatting (dashboard expectations)
+            if u and ("°" in u or "deg" in u.lower() or u.lower() in {"c", "°c"}):
+                text.append(f"{float(v):.2f}")
             else:
-                # Heuristic formatting aligned with dashboard expectations
-                if u and ("°" in u or "deg" in u.lower() or u.lower() in {"c", "°c"}):
-                    text.append(f"{v:.2f}")
-                else:
-                    text.append(f"{v:.2f}")
+                text.append(f"{float(v):.2f}")
+
+        if not y_s:
+            continue
 
         fig.add_trace(
             go.Bar(
-                x=x_labels,
-                y=y_list,
+                x=x_s,
+                y=y_s,
                 name=SCENARIO_DISPLAY.get(scen_norm, scen_norm),
                 marker={
                     "color": SCENARIO_COLORS_HEX.get(scen_norm, "#1f77b4"),
-                    "line": {"color": line_c, "width": line_w},
+                    "line": {"color": line_c, "width": outline_width},
                 },
                 text=text,
                 textposition="outside",
@@ -1201,14 +1211,30 @@ def make_scenario_comparison_figure_plotly(
         barmode="group",
         bargap=0.35,
         bargroupgap=0.12,
-        legend={"orientation": "v", "y": 0.5, "yanchor": "middle", "x": 1.02},
-        margin={"l": 60, "r": 110, "t": 20, "b": 55},
+        # Legend at top, horizontal (dashboard polish).
+        legend={
+            "orientation": "h",
+            "x": 0.5,
+            "xanchor": "center",
+            "y": 1.12,
+            "yanchor": "bottom",
+        },
+        margin={"l": 60, "r": 20, "t": 70, "b": 55},
     )
 
     if yaxis_range is not None:
         fig.update_yaxes(range=yaxis_range)
 
-    fig.update_xaxes(type="category")
+    # Ensure x-axis categories keep the canonical order and labels are centered.
+    fig.update_xaxes(
+        type="category",
+        categoryorder="array",
+        categoryarray=x_labels,
+        tickmode="array",
+        tickvals=x_labels,
+        ticktext=x_labels,
+        ticklabelposition="outside",
+    )
 
     return fig
 
