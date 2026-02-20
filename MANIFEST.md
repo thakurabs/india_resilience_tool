@@ -22,9 +22,10 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 |---------|---------|
 | `streamlit run dashboard_unfactored.py` | Launch dashboard (recommended shim) |
 | `streamlit run india_resilience_tool/india_resilience_tool/app/main.py` | Launch dashboard (package entry) |
-| `python build_master_metrics.py` | Rebuild master CSVs (district + block) |
+| `python build_master_metrics.py` | Rebuild master metrics (Parquet default; district + block) |
 | `python compute_indices_multiprocess.py` | Build processed index artifacts (district default) |
 | `python compute_indices_multiprocess.py --level block` | Build processed artifacts at block level |
+| `python compute_indices_multiprocess.py --ensembles-only` | Rebuild ensembles from existing raw outputs |
 
 ### Key Environment Variables
 | Variable | Default | Purpose |

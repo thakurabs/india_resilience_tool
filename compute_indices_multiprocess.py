@@ -3325,6 +3325,7 @@ def run_pipeline_parallel(
     scenarios_filter: list = None,
     level: AdminLevel = "district",
     state: str = "Telangana",
+    ensembles_only: bool = False,
 ):
     """Run the pipeline with parallel processing."""
     setup_logging(verbose)
@@ -3335,6 +3336,20 @@ def run_pipeline_parallel(
     
     for _, m in metrics_to_process:
         metric_root(m["slug"])
+
+    if ensembles_only:
+        logging.info("Ensembles-only mode: skipping computation; building ensembles from existing outputs...")
+        slugs = [m["slug"] for _, m in metrics_to_process]
+        ensemble_args = [(s, level, state) for s in slugs]
+
+        if num_workers == 1:
+            for args in ensemble_args:
+                _compute_ensembles_for_metric(args)
+        else:
+            with Pool(num_workers) as pool:
+                list(pool.imap_unordered(_compute_ensembles_for_metric, ensemble_args))
+        return
+
     tasks = []
 
     # Cache available years per (model, scenario, var) to avoid repeated disk scans
@@ -3487,6 +3502,11 @@ def main():
                         help="Filter to specific models")
     parser.add_argument("--scenarios", nargs="+",
                         help="Filter to specific scenarios")
+    parser.add_argument(
+        "--ensembles-only",
+        action="store_true",
+        help="Skip computation and build ensembles from existing raw outputs",
+    )
     parser.add_argument("--list-metrics", action="store_true",
                         help="List available metrics and exit")
     parser.add_argument("--list-models", action="store_true",
@@ -3543,6 +3563,7 @@ def main():
             scenarios_filter=args.scenarios,
             level=lvl,
             state=args.state,
+            ensembles_only=bool(args.ensembles_only),
         )
 
 if __name__ == "__main__":

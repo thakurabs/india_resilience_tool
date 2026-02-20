@@ -191,6 +191,18 @@ Useful flags:
 
 Or use the dashboard's "Rebuild now" control if exposed in your branch.
 
+### Computing processed outputs (pipeline)
+
+```bash
+python compute_indices_multiprocess.py --state Telangana
+```
+
+To rebuild ensembles only (no recompute; uses existing Parquet raw outputs):
+
+```bash
+python compute_indices_multiprocess.py --state Telangana --ensembles-only
+```
+
 ---
 
 ## Usage Guide
