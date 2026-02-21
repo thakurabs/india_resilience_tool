@@ -2281,7 +2281,9 @@ with col2:
             sel_scenario=sel_scenario,
             sel_period=sel_period,
             sel_stat=sel_stat,
+            metric_col=metric_col,
             # Data
+            merged=merged,
             adm1=adm1,
             # Config
             pilot_state=PILOT_STATE,
