@@ -79,6 +79,59 @@ def render_portfolio_badge(portfolio_count: int, level: str = "district") -> Non
 # Portfolio District List
 # =============================================================================
 
+def _portfolio_items_to_dicts(portfolio: Sequence[Any], *, is_block: bool) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for d in portfolio:
+        if isinstance(d, dict):
+            items.append(
+                {
+                    "state": str(d.get("state", "")).strip(),
+                    "district": str(d.get("district", "")).strip(),
+                    "block": str(d.get("block", "")).strip(),
+                }
+            )
+        elif isinstance(d, (list, tuple)):
+            if len(d) >= 3:
+                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": str(d[2]).strip()})
+            elif len(d) >= 2:
+                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": ""})
+
+    items = [x for x in items if x.get("state") and x.get("district") and (not is_block or x.get("block"))]
+    return items
+
+
+def _filter_portfolio_items(
+    items: Sequence[dict[str, str]],
+    *,
+    query: str,
+    normalize_fn: Callable[[str], str],
+) -> list[dict[str, str]]:
+    qn = normalize_fn(str(query))
+    if not qn:
+        return list(items)
+
+    def _hit(it: dict[str, str]) -> bool:
+        base = " ".join([it.get("state", ""), it.get("district", ""), it.get("block", "")])
+        return qn in normalize_fn(base)
+
+    return [it for it in items if _hit(it)]
+
+
+def _group_portfolio_items_by_state(
+    items: Sequence[dict[str, str]],
+    *,
+    normalize_fn: Callable[[str], str],
+) -> dict[str, list[dict[str, str]]]:
+    by_state: dict[str, list[dict[str, str]]] = {}
+    for it in items:
+        by_state.setdefault(it["state"], []).append(it)
+
+    for st_name, lst in by_state.items():
+        lst.sort(key=lambda r: (normalize_fn(r.get("district", "")), normalize_fn(r.get("block", ""))))
+
+    return dict(sorted(by_state.items(), key=lambda kv: normalize_fn(kv[0])))
+
+
 def render_portfolio_list(
     *,
     portfolio: Sequence[Any],
@@ -103,59 +156,95 @@ def render_portfolio_list(
         )
         return
 
-    # Normalize portfolio items into dicts: {"state": ..., "district": ..., "block": ...}
-    items: list[dict[str, str]] = []
-    for d in portfolio:
-        if isinstance(d, dict):
-            items.append(
-                {
-                    "state": str(d.get("state", "")).strip(),
-                    "district": str(d.get("district", "")).strip(),
-                    "block": str(d.get("block", "")).strip(),
-                }
-            )
-        elif isinstance(d, (list, tuple)):
-            if len(d) >= 3:
-                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": str(d[2]).strip()})
-            elif len(d) >= 2:
-                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": ""})
+    items = _portfolio_items_to_dicts(portfolio, is_block=is_block)
 
-    items = [x for x in items if x.get("state") and x.get("district") and (not is_block or x.get("block"))]
+    # Search (kept within the manage panel for large portfolios)
+    search_key = f"portfolio_manage_search_{level_norm}"
+    q = st.text_input("Search", value=str(st.session_state.get(search_key, "")), key=search_key, placeholder="Type to filter…")
+    items = _filter_portfolio_items(items, query=q, normalize_fn=normalize_fn)
 
-    show_all = st.session_state.get("_portfolio_show_all", False) or len(items) <= max_visible
-    display_items = items if show_all else items[:max_visible]
+    # Group by state for scanability
+    by_state = _group_portfolio_items_by_state(items, normalize_fn=normalize_fn)
+    state_names = list(by_state.keys())
+    total_items = sum(len(by_state[s]) for s in state_names)
 
-    for d in display_items:
-        state_i = d.get("state", "")
-        district_i = d.get("district", "")
-        block_i = d.get("block", "")
+    show_all = st.session_state.get("_portfolio_show_all", False) or total_items <= max_visible
+    remaining_budget = total_items if show_all else max_visible
 
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            if is_block:
-                st.markdown(f"**{block_i}** ({district_i}, {state_i})")
+    for st_name in state_names:
+        state_items = by_state.get(st_name, [])
+        if not state_items:
+            continue
+
+        st.markdown(f"**{st_name}** ({len(state_items)})")
+
+        # Optional: remove all in state (confirm-inline)
+        confirm_key = f"confirm_remove_state_{level_norm}_{normalize_fn(st_name)}"
+        confirm = bool(st.session_state.get(confirm_key, False))
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            pass
+        with c2:
+            if not confirm:
+                if st.button("Remove all in state", key=f"btn_remove_state_{level_norm}_{normalize_fn(st_name)}", type="secondary"):
+                    st.session_state[confirm_key] = True
+                    st.rerun()
             else:
-                st.markdown(f"**{district_i}**, {state_i}")
-        with col2:
-            key_parts = [normalize_fn(state_i), normalize_fn(district_i)]
-            if is_block:
-                key_parts.append(normalize_fn(block_i))
-            key = "btn_portfolio_remove_" + "_".join(key_parts)
+                st.warning("Remove all?")
+                y, n = st.columns(2)
+                with y:
+                    if st.button("Yes", key=f"btn_remove_state_yes_{level_norm}_{normalize_fn(st_name)}", type="primary"):
+                        for it in list(state_items):
+                            try:
+                                if is_block:
+                                    portfolio_remove_fn(it["state"], it["district"], it["block"])
+                                else:
+                                    portfolio_remove_fn(it["state"], it["district"])
+                            except TypeError:
+                                portfolio_remove_fn(it["state"], it["district"])
+                        st.session_state[confirm_key] = False
+                        st.rerun()
+                with n:
+                    if st.button("No", key=f"btn_remove_state_no_{level_norm}_{normalize_fn(st_name)}"):
+                        st.session_state[confirm_key] = False
+                        st.rerun()
 
-            if st.button("×", key=key, help=f"Remove {block_i if is_block else district_i}"):
-                try:
-                    if is_block:
-                        portfolio_remove_fn(state_i, district_i, block_i)
-                    else:
+        for it in state_items:
+            if remaining_budget <= 0:
+                break
+            remaining_budget -= 1
+
+            state_i = it.get("state", "")
+            district_i = it.get("district", "")
+            block_i = it.get("block", "")
+
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                if is_block:
+                    st.markdown(f"**{block_i}** ({district_i})")
+                else:
+                    st.markdown(f"**{district_i}**")
+            with col2:
+                key_parts = [normalize_fn(state_i), normalize_fn(district_i)]
+                if is_block:
+                    key_parts.append(normalize_fn(block_i))
+                key = "btn_portfolio_remove_" + "_".join(key_parts)
+
+                if st.button("×", key=key, help=f"Remove {block_i if is_block else district_i}"):
+                    try:
+                        if is_block:
+                            portfolio_remove_fn(state_i, district_i, block_i)
+                        else:
+                            portfolio_remove_fn(state_i, district_i)
+                    except TypeError:
                         portfolio_remove_fn(state_i, district_i)
-                except TypeError:
-                    # Backward-compat: older remove functions only accept (state, district)
-                    portfolio_remove_fn(state_i, district_i)
-                st.rerun()
+                    st.rerun()
 
-    # Show more/less toggle
-    if len(items) > max_visible:
-        remaining = len(items) - max_visible
+        st.markdown("")
+
+    # Show more/less toggle (preserve existing session keys)
+    if total_items > max_visible:
+        remaining = total_items - max_visible
         if show_all:
             if st.button("Show less", key="_portfolio_show_less"):
                 st.session_state["_portfolio_show_all"] = False
@@ -388,12 +477,18 @@ def render_comparison_table(
     import streamlit as st
     import os
     from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
+    from india_resilience_tool.app.portfolio_multistate import (
+        compute_portfolio_summary_stats,
+        extract_states_in_portfolio,
+    )
 
     level_norm = (level or "district").strip().lower()
     is_block = level_norm == "block"
 
     if not portfolio or not selected_slugs:
         return None
+
+    states_for_master = extract_states_in_portfolio(portfolio, fallback_state=pilot_state)
 
     # Build context for cache invalidation (level-aware)
     def _unit_tuple(item: Any) -> tuple:
@@ -412,6 +507,7 @@ def render_comparison_table(
     context = {
         "level": level_norm,
         "units": [_unit_tuple(d) for d in portfolio],
+        "states": list(states_for_master),
         "slugs": list(selected_slugs),
         "scenario": sel_scenario,
         "period": sel_period,
@@ -421,6 +517,8 @@ def render_comparison_table(
     prev_context = st.session_state.get("portfolio_multiindex_context")
     cached_df = st.session_state.get("portfolio_multiindex_df")
     needs_rebuild = cached_df is None or prev_context != context
+
+    missing_master_by_slug: dict[str, list[str]] = {}
 
     # Helper functions
     def _resolve_proc_root_for_slug(slug: str) -> Path:
@@ -432,36 +530,117 @@ def render_comparison_table(
             return (base_path / slug).resolve()
         return (data_dir / "processed" / slug).resolve()
 
+    def _resolve_state_dir(proc_root: Path, state_name: str) -> str:
+        """
+        Resolve a portfolio state label to an on-disk directory name under proc_root.
+
+        This improves robustness against casing/whitespace differences.
+        """
+        key = str(proc_root.resolve()) if proc_root else str(proc_root)
+        cache = st.session_state.setdefault("_portfolio_proc_state_dirs", {})
+        mapping = cache.get(key)
+        if not isinstance(mapping, dict):
+            mapping = {}
+            try:
+                if proc_root.exists() and proc_root.is_dir():
+                    for p in proc_root.iterdir():
+                        if p.is_dir():
+                            mapping[normalize_fn(p.name)] = p.name
+            except Exception:
+                mapping = {}
+            cache[key] = mapping
+
+        return str(mapping.get(normalize_fn(state_name), state_name))
+
     def _load_master_and_schema_for_slug(slug: str):
         proc_root = _resolve_proc_root_for_slug(slug)
         master_fname = "master_metrics_by_block.csv" if is_block else "master_metrics_by_district.csv"
-        master_path = proc_root / pilot_state / master_fname
 
-        cache = st.session_state.setdefault("_portfolio_master_cache", {})
-        cache_key = f"{slug}::{master_path}"
+        file_cache = st.session_state.setdefault("_portfolio_master_cache", {})
+        concat_cache = st.session_state.setdefault("_portfolio_master_concat_cache", {})
 
-        try:
-            mtime = master_path.stat().st_mtime
-        except Exception:
-            mtime = None
+        # Resolve state directory names once per slug build.
+        state_dirs = [_resolve_state_dir(proc_root, s) for s in states_for_master] or ([pilot_state] if pilot_state else [])
+        # Cache key should be stable across portfolio ordering (output does not depend on state load order).
+        state_dirs_key = "|".join(sorted([normalize_fn(s) for s in state_dirs]))
+        concat_key = f"{slug}::{level_norm}::{master_fname}::{state_dirs_key}"
 
-        entry = cache.get(cache_key)
-        if entry and entry.get("mtime") == mtime:
-            return entry["df"], entry["schema_items"], entry["metrics"], entry["by_metric"]
+        signature: list[tuple[str, Optional[float]]] = []
+        dfs: list[pd.DataFrame] = []
+        missing_states: list[str] = []
 
-        if not master_path.exists():
+        for st_name in state_dirs:
+            master_path = proc_root / str(st_name) / master_fname
+            path_s = str(master_path)
+            try:
+                mtime = master_path.stat().st_mtime
+            except Exception:
+                mtime = None
+            signature.append((path_s, mtime))
+
+        signature_sorted = tuple(sorted(signature, key=lambda x: x[0]))
+        concat_entry = concat_cache.get(concat_key)
+        if isinstance(concat_entry, dict) and concat_entry.get("signature") == signature_sorted:
+            missing = concat_entry.get("missing_states")
+            if isinstance(missing, list) and missing:
+                missing_master_by_slug[str(slug)] = [str(x) for x in missing if str(x).strip()]
+            return concat_entry["df"], concat_entry["schema_items"], concat_entry["metrics"], concat_entry["by_metric"]
+
+        for st_name in state_dirs:
+            master_path = proc_root / str(st_name) / master_fname
+
+            file_key = f"{slug}::{master_path}"
+            try:
+                mtime = master_path.stat().st_mtime
+            except Exception:
+                mtime = None
+
+            entry = file_cache.get(file_key)
+            if entry and entry.get("mtime") == mtime:
+                df_state = entry["df"]
+                if df_state is not None and not df_state.empty:
+                    dfs.append(df_state)
+                continue
+
+            if not master_path.exists():
+                missing_states.append(str(st_name))
+                empty = pd.DataFrame()
+                file_cache[file_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "mtime": mtime}
+                continue
+
+            df_state = load_master_csv_fn(str(master_path))
+            df_state = normalize_master_columns_fn(df_state)
+            schema_items_s, metrics_s, by_metric_s = parse_master_schema_fn(df_state.columns)
+            file_cache[file_key] = {
+                "df": df_state,
+                "schema_items": schema_items_s,
+                "metrics": metrics_s,
+                "by_metric": by_metric_s,
+                "mtime": mtime,
+            }
+            if df_state is not None and not df_state.empty:
+                dfs.append(df_state)
+
+        if not dfs:
             empty = pd.DataFrame()
-            cache[cache_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "mtime": mtime}
+            concat_cache[concat_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "signature": signature_sorted, "missing_states": missing_states}
+            if missing_states:
+                missing_master_by_slug[str(slug)] = list(missing_states)
             return empty, [], [], {}
 
-        df = load_master_csv_fn(str(master_path))
-        df = normalize_master_columns_fn(df)
-
-        # Your schema parser expects columns, keep that contract
-        schema_items, metrics, by_metric = parse_master_schema_fn(df.columns)
-
-        cache[cache_key] = {"df": df, "schema_items": schema_items, "metrics": metrics, "by_metric": by_metric, "mtime": mtime}
-        return df, schema_items, metrics, by_metric
+        df_all = pd.concat(dfs, axis=0, ignore_index=True, sort=False)
+        schema_items, metrics, by_metric = parse_master_schema_fn(df_all.columns)
+        concat_cache[concat_key] = {
+            "df": df_all,
+            "schema_items": schema_items,
+            "metrics": metrics,
+            "by_metric": by_metric,
+            "signature": signature_sorted,
+            "missing_states": missing_states,
+        }
+        if missing_states:
+            missing_master_by_slug[str(slug)] = list(missing_states)
+        return df_all, schema_items, metrics, by_metric
 
     def _match_row_idx(df_local, st_name, dist_name, blk_name: Optional[str] = None):
         if df_local is None or df_local.empty:
@@ -560,6 +739,20 @@ def render_comparison_table(
             st.session_state["portfolio_multiindex_context"] = context
             cached_df = df
 
+        if missing_master_by_slug:
+            # Show a compact warning once per rebuild (avoids repeating on unrelated reruns).
+            examples: list[str] = []
+            for slug, states_missing in list(missing_master_by_slug.items())[:3]:
+                sm = [s for s in states_missing if isinstance(s, str) and s.strip()]
+                if not sm:
+                    continue
+                examples.append(f"{slug}: {', '.join(sm[:4])}" + ("…" if len(sm) > 4 else ""))
+            if examples:
+                st.warning(
+                    "Some portfolio states are missing master metrics for one or more indices; "
+                    "those rows may show blank values. " + " | ".join(examples)
+                )
+
     # Display table
     if cached_df is not None and not cached_df.empty:
         # Reorder columns for nicer UX (esp. block mode)
@@ -589,6 +782,18 @@ def render_comparison_table(
 
         remaining = [c for c in display_df.columns if c not in preferred]
         display_df = display_df[preferred + remaining]
+
+        # Summary strip (table-first orientation)
+        summary = compute_portfolio_summary_stats(display_df, level=level_norm)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Units", int(summary.get("units_count", 0)))
+        c2.metric("States", int(summary.get("states_count", 0)))
+        c3.metric("Metrics", int(summary.get("metrics_count", 0)))
+
+        risk_counts = summary.get("risk_counts") or {}
+        if isinstance(risk_counts, dict) and risk_counts:
+            rc_parts = [f"{k}: {int(v)}" for k, v in risk_counts.items()]
+            st.caption("Risk class • " + " • ".join(rc_parts))
 
         st.dataframe(display_df, hide_index=True, use_container_width=True)
 
@@ -1000,7 +1205,23 @@ def render_portfolio_panel(
 
     st.markdown("---")
 
-    if not portfolio:
+    # Split the right panel into a clean, low-scroll flow.
+    tab_key = f"portfolio_rhs_tab_{level_norm}"
+    default_tab = "Add units" if not portfolio else "Compare"
+    if tab_key not in st.session_state:
+        st.session_state[tab_key] = default_tab
+
+    tab = st.radio(
+        "Portfolio panel",
+        options=["Compare", "Add units"],
+        key=tab_key,
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+    st.markdown("---")
+
+    if tab == "Add units":
         st.markdown(f"#### How to add {unit_plural}")
         st.markdown(
             f"""
@@ -1018,59 +1239,67 @@ def render_portfolio_panel(
             portfolio_add_fn=_add,
             set_flash_fn=_set_flash,
         )
+        return
 
-    if portfolio:
-        st.markdown("### 📊 Portfolio Comparison")
+    # -------------------------
+    # Compare tab
+    # -------------------------
+    if not portfolio:
+        st.info("Your portfolio is empty. Use the **Add units** tab to add districts/blocks.")
+        return
 
-        current_selection = st.session_state.get("portfolio_multiindex_selection", [variable_slug])
-        selected_slugs = render_index_selector(
-            variables=variables,
-            current_slug=variable_slug,
-            selected_slugs=current_selection,
+    st.markdown("### 📊 Portfolio Comparison")
+
+    current_selection = st.session_state.get("portfolio_multiindex_selection", [variable_slug])
+    selected_slugs = render_index_selector(
+        variables=variables,
+        current_slug=variable_slug,
+        selected_slugs=current_selection,
+    )
+
+    if not selected_slugs:
+        st.info("Select at least one index to compare.")
+        return
+
+    cached_df = render_comparison_table(
+        portfolio=portfolio,
+        selected_slugs=selected_slugs,
+        variables=variables,
+        index_group_labels=index_group_labels,
+        sel_scenario=sel_scenario,
+        sel_period=sel_period,
+        sel_stat=sel_stat,
+        pilot_state=pilot_state,
+        data_dir=data_dir,
+        load_master_csv_fn=load_master_csv_fn,
+        normalize_master_columns_fn=normalize_master_columns_fn,
+        parse_master_schema_fn=parse_master_schema_fn,
+        resolve_metric_column_fn=resolve_metric_column_fn,
+        find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
+        risk_class_from_percentile_fn=risk_class_from_percentile_fn,
+        normalize_fn=portfolio_normalize_fn,
+        build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
+        level=level_norm,
+    )
+
+    st.caption(
+        f"Comparing {len(portfolio)} {unit_plural} across {len(selected_slugs)} indices • "
+        f"{sel_scenario} • {sel_period} • {sel_stat}"
+    )
+
+    if cached_df is not None and not cached_df.empty:
+        show_viz_key = f"portfolio_show_visualizations_{level_norm}"
+        show_viz = st.checkbox(
+            "Show visualizations",
+            value=bool(st.session_state.get(show_viz_key, False)),
+            key=show_viz_key,
         )
 
-        if not selected_slugs:
-            st.info("Select at least one index to compare.")
-        else:
-            cached_df = render_comparison_table(
-                portfolio=portfolio,
-                selected_slugs=selected_slugs,
-                variables=variables,
-                index_group_labels=index_group_labels,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                pilot_state=pilot_state,
-                data_dir=data_dir,
-                load_master_csv_fn=load_master_csv_fn,
-                normalize_master_columns_fn=normalize_master_columns_fn,
-                parse_master_schema_fn=parse_master_schema_fn,
-                resolve_metric_column_fn=resolve_metric_column_fn,
-                find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
-                risk_class_from_percentile_fn=risk_class_from_percentile_fn,
-                normalize_fn=portfolio_normalize_fn,
-                build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
-                level=level_norm,
-            )
-
-            st.caption(
-                f"Comparing {len(portfolio)} {unit_plural} across {len(selected_slugs)} indices • "
-                f"{sel_scenario} • {sel_period} • {sel_stat}"
-            )
-
-            if cached_df is not None and not cached_df.empty:
-                st.markdown("---")
-                with st.expander("📈 Visualizations", expanded=True):
-                    render_portfolio_visualizations(
-                        cached_df,
-                        default_value_col="Percentile",
-                        default_chart_type="heatmap",
-                    )
-
-        st.markdown("---")
-        render_coordinate_lookup(
-            merged=merged,
-            level=level_norm,
-            portfolio_add_fn=_add,
-            set_flash_fn=_set_flash,
-        )
+        if show_viz:
+            st.markdown("---")
+            with st.expander("📈 Visualizations", expanded=False):
+                render_portfolio_visualizations(
+                    cached_df,
+                    default_value_col="Percentile",
+                    default_chart_type="heatmap",
+                )

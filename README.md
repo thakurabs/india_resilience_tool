@@ -69,8 +69,8 @@ Metrics are organized into **thematic bundles** for easier navigation:
 ### Portfolio mode (districts and blocks)
 Portfolio mode exists at **both** admin levels:
 
-- **Multi-district portfolio**: build and compare sets of districts
-- **Multi-block portfolio**: build and compare sets of blocks (within the selected state)
+- **Multi-district portfolio**: build and compare sets of districts (portfolios can span multiple states)
+- **Multi-block portfolio**: build and compare sets of blocks (portfolios can span multiple states; switch state to add units)
 
 You can add units to your portfolio in three ways (same UX in district and block modes):
 
@@ -90,14 +90,19 @@ You can add units to your portfolio in three ways (same UX in district and block
 - Preview which district/block contains the point
 - Add to portfolio or show markers on the map
 
+In the right-side Portfolio panel, use:
+- **Compare**: summary strip + comparison table (updates live)
+- **Add units**: coordinate-based unit lookup and saved points
+
 ### Portfolio comparison
 Once you have items in your portfolio:
 - Select one or more **risk domains** to compare
 - Metrics from selected domains are automatically included
 - Optional: manually refine which metrics to include
 - Table auto-rebuilds when portfolio or selection changes
+- A summary strip shows unit/state/metric counts (and basic risk-class distribution)
 - Download comparison as CSV
-- Visualizations (e.g., heatmap) for quick comparison
+- Optional: enable visualizations (e.g., heatmap) for quick comparison (computed lazily)
 
 ---
 
