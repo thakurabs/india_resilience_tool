@@ -79,6 +79,59 @@ def render_portfolio_badge(portfolio_count: int, level: str = "district") -> Non
 # Portfolio District List
 # =============================================================================
 
+def _portfolio_items_to_dicts(portfolio: Sequence[Any], *, is_block: bool) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    for d in portfolio:
+        if isinstance(d, dict):
+            items.append(
+                {
+                    "state": str(d.get("state", "")).strip(),
+                    "district": str(d.get("district", "")).strip(),
+                    "block": str(d.get("block", "")).strip(),
+                }
+            )
+        elif isinstance(d, (list, tuple)):
+            if len(d) >= 3:
+                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": str(d[2]).strip()})
+            elif len(d) >= 2:
+                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": ""})
+
+    items = [x for x in items if x.get("state") and x.get("district") and (not is_block or x.get("block"))]
+    return items
+
+
+def _filter_portfolio_items(
+    items: Sequence[dict[str, str]],
+    *,
+    query: str,
+    normalize_fn: Callable[[str], str],
+) -> list[dict[str, str]]:
+    qn = normalize_fn(str(query))
+    if not qn:
+        return list(items)
+
+    def _hit(it: dict[str, str]) -> bool:
+        base = " ".join([it.get("state", ""), it.get("district", ""), it.get("block", "")])
+        return qn in normalize_fn(base)
+
+    return [it for it in items if _hit(it)]
+
+
+def _group_portfolio_items_by_state(
+    items: Sequence[dict[str, str]],
+    *,
+    normalize_fn: Callable[[str], str],
+) -> dict[str, list[dict[str, str]]]:
+    by_state: dict[str, list[dict[str, str]]] = {}
+    for it in items:
+        by_state.setdefault(it["state"], []).append(it)
+
+    for st_name, lst in by_state.items():
+        lst.sort(key=lambda r: (normalize_fn(r.get("district", "")), normalize_fn(r.get("block", ""))))
+
+    return dict(sorted(by_state.items(), key=lambda kv: normalize_fn(kv[0])))
+
+
 def render_portfolio_list(
     *,
     portfolio: Sequence[Any],
@@ -103,59 +156,95 @@ def render_portfolio_list(
         )
         return
 
-    # Normalize portfolio items into dicts: {"state": ..., "district": ..., "block": ...}
-    items: list[dict[str, str]] = []
-    for d in portfolio:
-        if isinstance(d, dict):
-            items.append(
-                {
-                    "state": str(d.get("state", "")).strip(),
-                    "district": str(d.get("district", "")).strip(),
-                    "block": str(d.get("block", "")).strip(),
-                }
-            )
-        elif isinstance(d, (list, tuple)):
-            if len(d) >= 3:
-                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": str(d[2]).strip()})
-            elif len(d) >= 2:
-                items.append({"state": str(d[0]).strip(), "district": str(d[1]).strip(), "block": ""})
+    items = _portfolio_items_to_dicts(portfolio, is_block=is_block)
 
-    items = [x for x in items if x.get("state") and x.get("district") and (not is_block or x.get("block"))]
+    # Search (kept within the manage panel for large portfolios)
+    search_key = f"portfolio_manage_search_{level_norm}"
+    q = st.text_input("Search", value=str(st.session_state.get(search_key, "")), key=search_key, placeholder="Type to filter…")
+    items = _filter_portfolio_items(items, query=q, normalize_fn=normalize_fn)
 
-    show_all = st.session_state.get("_portfolio_show_all", False) or len(items) <= max_visible
-    display_items = items if show_all else items[:max_visible]
+    # Group by state for scanability
+    by_state = _group_portfolio_items_by_state(items, normalize_fn=normalize_fn)
+    state_names = list(by_state.keys())
+    total_items = sum(len(by_state[s]) for s in state_names)
 
-    for d in display_items:
-        state_i = d.get("state", "")
-        district_i = d.get("district", "")
-        block_i = d.get("block", "")
+    show_all = st.session_state.get("_portfolio_show_all", False) or total_items <= max_visible
+    remaining_budget = total_items if show_all else max_visible
 
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            if is_block:
-                st.markdown(f"**{block_i}** ({district_i}, {state_i})")
+    for st_name in state_names:
+        state_items = by_state.get(st_name, [])
+        if not state_items:
+            continue
+
+        st.markdown(f"**{st_name}** ({len(state_items)})")
+
+        # Optional: remove all in state (confirm-inline)
+        confirm_key = f"confirm_remove_state_{level_norm}_{normalize_fn(st_name)}"
+        confirm = bool(st.session_state.get(confirm_key, False))
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            pass
+        with c2:
+            if not confirm:
+                if st.button("Remove all in state", key=f"btn_remove_state_{level_norm}_{normalize_fn(st_name)}", type="secondary"):
+                    st.session_state[confirm_key] = True
+                    st.rerun()
             else:
-                st.markdown(f"**{district_i}**, {state_i}")
-        with col2:
-            key_parts = [normalize_fn(state_i), normalize_fn(district_i)]
-            if is_block:
-                key_parts.append(normalize_fn(block_i))
-            key = "btn_portfolio_remove_" + "_".join(key_parts)
+                st.warning("Remove all?")
+                y, n = st.columns(2)
+                with y:
+                    if st.button("Yes", key=f"btn_remove_state_yes_{level_norm}_{normalize_fn(st_name)}", type="primary"):
+                        for it in list(state_items):
+                            try:
+                                if is_block:
+                                    portfolio_remove_fn(it["state"], it["district"], it["block"])
+                                else:
+                                    portfolio_remove_fn(it["state"], it["district"])
+                            except TypeError:
+                                portfolio_remove_fn(it["state"], it["district"])
+                        st.session_state[confirm_key] = False
+                        st.rerun()
+                with n:
+                    if st.button("No", key=f"btn_remove_state_no_{level_norm}_{normalize_fn(st_name)}"):
+                        st.session_state[confirm_key] = False
+                        st.rerun()
 
-            if st.button("×", key=key, help=f"Remove {block_i if is_block else district_i}"):
-                try:
-                    if is_block:
-                        portfolio_remove_fn(state_i, district_i, block_i)
-                    else:
+        for it in state_items:
+            if remaining_budget <= 0:
+                break
+            remaining_budget -= 1
+
+            state_i = it.get("state", "")
+            district_i = it.get("district", "")
+            block_i = it.get("block", "")
+
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                if is_block:
+                    st.markdown(f"**{block_i}** ({district_i})")
+                else:
+                    st.markdown(f"**{district_i}**")
+            with col2:
+                key_parts = [normalize_fn(state_i), normalize_fn(district_i)]
+                if is_block:
+                    key_parts.append(normalize_fn(block_i))
+                key = "btn_portfolio_remove_" + "_".join(key_parts)
+
+                if st.button("×", key=key, help=f"Remove {block_i if is_block else district_i}"):
+                    try:
+                        if is_block:
+                            portfolio_remove_fn(state_i, district_i, block_i)
+                        else:
+                            portfolio_remove_fn(state_i, district_i)
+                    except TypeError:
                         portfolio_remove_fn(state_i, district_i)
-                except TypeError:
-                    # Backward-compat: older remove functions only accept (state, district)
-                    portfolio_remove_fn(state_i, district_i)
-                st.rerun()
+                    st.rerun()
 
-    # Show more/less toggle
-    if len(items) > max_visible:
-        remaining = len(items) - max_visible
+        st.markdown("")
+
+    # Show more/less toggle (preserve existing session keys)
+    if total_items > max_visible:
+        remaining = total_items - max_visible
         if show_all:
             if st.button("Show less", key="_portfolio_show_less"):
                 st.session_state["_portfolio_show_all"] = False

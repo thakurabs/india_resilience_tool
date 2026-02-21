@@ -233,6 +233,30 @@ def _render_portfolio_rankings(
     # Work on a copy
     df_to_show = table_df.copy()
 
+    # Filter / search (helps when adding 20–50 units)
+    filter_key = f"rankings_filter_{level_norm}"
+    q = st.text_input(
+        "Filter",
+        value=str(st.session_state.get(filter_key, "")),
+        key=filter_key,
+        placeholder=f"Type to filter {plural_label}…",
+    )
+    qn = _normalize(q)
+    if qn:
+        desired = ["state_name", "district_name"]
+        if level_norm == "block" and "block_name" in df_to_show.columns:
+            desired.append("block_name")
+        cols = [c for c in desired if c in df_to_show.columns]
+        if len(cols) >= 2:
+            work = df_to_show[cols].astype(str).apply(lambda s: s.map(_normalize))
+            mask = False
+            for c in cols:
+                mask = mask | work[c].str.contains(qn, na=False)
+            df_to_show = df_to_show[mask].copy()
+            if df_to_show.empty:
+                st.info("No rows match the current filter.")
+                return
+
     # Mode selector - unique key per level
     options = ["Top 20 biggest increases", "All"]
     rank_mode = st.radio(
@@ -299,10 +323,13 @@ def _render_portfolio_rankings(
         unsafe_allow_html=True,
     )
 
+    editor_key = f"rankings_portfolio_editor_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{level_norm}"
+    action_slot = st.empty()
+
     edited_df = st.data_editor(
         df_port,
         use_container_width=True,
-        key=f"rankings_portfolio_editor_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{level_norm}",
+        key=editor_key,
         num_rows="fixed",
         disabled=[c for c in df_port.columns if c not in ("Add to portfolio",)],
         column_config={
@@ -328,10 +355,36 @@ def _render_portfolio_rankings(
 
     st.markdown("---")
 
+    if "Add to portfolio" in edited_df.columns:
+        selected_n = int(
+            pd.to_numeric(edited_df["Add to portfolio"], errors="coerce")
+            .fillna(0)
+            .astype(bool)
+            .sum()
+        )
+    else:
+        selected_n = 0
+
+    with action_slot.container():
+        c1, c2 = st.columns([3, 2])
+        with c1:
+            st.caption(f"Selected to add: **{selected_n}**")
+        with c2:
+            if st.button(
+                "Clear selections",
+                key=f"btn_rankings_clear_add_checks_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{level_norm}",
+                type="secondary",
+                use_container_width=True,
+            ):
+                st.session_state.pop(editor_key, None)
+                st.rerun()
+
     if st.button(
         f"➕ Add checked {plural_label} to portfolio",
         key=f"btn_add_portfolio_from_table_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{level_norm}",
         type="primary",
+        disabled=(selected_n == 0),
+        use_container_width=True,
     ):
         added = 0
 
