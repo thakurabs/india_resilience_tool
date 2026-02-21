@@ -58,6 +58,7 @@ india_resilience_tool/
 │ ├── perf.py # Performance helpers / timing
 │ ├── point_selection_ui.py # Coordinate input & batch support (district + block)
 │ ├── portfolio_ui.py # Portfolio management panel (district + block + bundles)
+│ ├── portfolio_multistate.py # Multi-state portfolio helpers (master concat + summary stats)
 │ ├── sidebar.py # Sidebar controls & navigation (admin level + focus)
 │ ├── state.py # Session state defaults & constants
 │ └── views/ # View renderers
@@ -293,16 +294,27 @@ Renders:
 
 #### `portfolio_ui.py`
 Renders portfolio panel with:
-- portfolio badge and list management
+- portfolio badge and list management (search + group-by-state helpers)
 - **bundle-first metric selection** for comparison (multi-select bundles → auto-expand to metrics)
 - optional manual metric refinement
-- comparison table with heatmap visualization
-- coordinate-based unit lookup
+- right-side panel tabs: **Compare | Add units**
+- comparison table (live-updating) with a summary strip above it
+- optional visualizations (e.g., heatmap) that are collapsed by default and computed lazily
+- coordinate-based unit lookup (single + batch) and saved points (Add units tab)
+- multi-state portfolio comparison loader (loads per-state master CSVs for all states present in the portfolio)
 
 Key widget keys:
 - `portfolio_bundle_selection`: selected bundles for comparison
 - `portfolio_manual_refinement`: whether manual metric selection is enabled
 - `portfolio_multiindex_selection`: final list of metric slugs
+- `portfolio_rhs_tab_{level}`: Compare vs Add units
+- `portfolio_manage_search_{level}`: portfolio list search filter
+- `portfolio_show_visualizations_{level}`: enable/disable heavy visualizations
+
+#### `portfolio_multistate.py`
+Streamlit-free helpers used by `portfolio_ui.py` to support true multi-state portfolio comparison:
+- derive the set of states present in a portfolio (districts or blocks)
+- compute portfolio summary stats for the Compare tab (unit/state/metric counts and risk-class counts)
 
 #### `views/map_view.py`
 Renders choropleth map and handles click payload.
@@ -314,6 +326,7 @@ Renders choropleth map and handles click payload.
 Rankings table renderer with portfolio integration.
 - district and block rankings supported
 - portfolio mode detection is level-agnostic (so "Multi-block portfolio" behaves like "Multi-district portfolio")
+- portfolio-mode UX includes filtering plus a selected-count/"add checked to portfolio" flow
 
 #### `point_selection_ui.py`
 Coordinate-based lookup supports adding units to portfolio in both district and block mode (exact mapping depends on available geometry for the current admin level).
