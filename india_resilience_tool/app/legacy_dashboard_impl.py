@@ -1184,11 +1184,62 @@ if "pending_selected_district" in st.session_state:
 # State/district selectors + analysis focus (combined block in sidebar)
 with state_placeholder.container():
     with st.expander("Geography & analysis focus", expanded=True):
-        # Option A UX: disable downstream geography widgets until Analysis focus is chosen
-        _analysis_mode_now = st.session_state.get("analysis_mode", SEL_PLACEHOLDER)
-        analysis_ready = (_analysis_mode_now != SEL_PLACEHOLDER)
+        # Option A UX: disable downstream geography widgets until Analysis focus is chosen.
+        # Render Analysis focus FIRST so the user understands why controls are disabled.
+
+        # ---- Step 0: Analysis focus (single vs portfolio; labels depend on admin_level) ----
+        analysis_options = (
+            ["Single block focus", "Multi-block portfolio"]
+            if admin_level == "block"
+            else ["Single district focus", "Multi-district portfolio"]
+        )
+
+        analysis_mode = render_analysis_mode_selector(
+            label="Analysis focus",
+            options=analysis_options,
+            placeholder=SEL_PLACEHOLDER,
+            index=0,
+            help_text=(
+                "Choose a single-unit focus to explore one unit at a time, "
+                "or portfolio mode to build and compare a set of units."
+            ),
+            label_visibility="collapsed",
+            use_markdown_header=True,
+            level=admin_level,
+        )
+
+        analysis_ready = (analysis_mode != SEL_PLACEHOLDER)
         if not analysis_ready:
-            st.info("Select **Analysis focus** below to enable geography and map settings.")
+            st.info("Select **Analysis focus** above to enable geography and map settings.")
+
+        # Reset jump flags when switching analysis focus modes (keep behavior stable).
+        prev_mode_for_jump_reset = st.session_state.get("_analysis_mode_prev_for_jump_reset", analysis_mode)
+        if prev_mode_for_jump_reset != analysis_mode:
+            st.session_state["_analysis_mode_prev_for_jump_reset"] = analysis_mode
+            st.session_state["portfolio_build_route"] = None
+            st.session_state["jump_to_rankings"] = False
+            st.session_state["jump_to_map"] = False
+
+        # Brief helper text so the mode explains itself (level-aware)
+        unit_singular = "block" if admin_level == "block" else "district"
+        unit_plural = "blocks" if admin_level == "block" else "districts"
+
+        if analysis_mode == SEL_PLACEHOLDER:
+            st.caption("ℹ️ Select an analysis focus to continue.")
+        elif "Single" in analysis_mode:
+            st.caption(
+                f"Inspect one {unit_singular} at a time. Use the dropdowns below "
+                f"to pick which {unit_singular} you want to explore in detail."
+            )
+        else:
+            st.markdown(
+                f"<div style='font-size:0.9rem; margin-top:0.25rem; margin-bottom:0.1rem;'>"
+                f"In <strong>Multi-{unit_singular} portfolio</strong> mode you build a set of {unit_plural} "
+                f"for comparison. {unit_plural.title()} are added from the <em>🗺 Map view</em>, the "
+                f"<em>📊 Rankings table</em>, or from saved point locations. "
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
         # ---- Step 1: State selection (data-driven from processed root) ----
 
@@ -1406,57 +1457,6 @@ with state_placeholder.container():
                 st.session_state["selected_block"] = "All"
         else:
             st.session_state.pop("selected_block", None)
-
-        # ---- Step 4: Analysis focus (single vs portfolio; labels depend on admin_level) ----
-        analysis_options = (
-            ["Single block focus", "Multi-block portfolio"]
-            if admin_level == "block"
-            else ["Single district focus", "Multi-district portfolio"]
-        )
-
-        analysis_mode = render_analysis_mode_selector(
-            label="Analysis focus",
-            options=analysis_options,
-            placeholder=SEL_PLACEHOLDER,
-            index=0,
-            help_text=(
-                "Choose a single-unit focus to explore one unit at a time, "
-                "or portfolio mode to build and compare a set of units."
-            ),
-            label_visibility="collapsed",
-            use_markdown_header=True,
-            level=admin_level,
-        )
-
-        # Reset portfolio route state when switching analysis focus modes
-        prev_mode = st.session_state.get("_analysis_mode_prev", analysis_mode)
-        if analysis_mode != prev_mode:
-            st.session_state["_analysis_mode_prev"] = analysis_mode
-            # Clear any previously selected portfolio-build route and pending view jumps
-            st.session_state["portfolio_build_route"] = None
-            st.session_state["jump_to_rankings"] = False
-            st.session_state["jump_to_map"] = False
-
-        # Brief helper text so the mode explains itself (level-aware)
-        unit_singular = "block" if admin_level == "block" else "district"
-        unit_plural = "blocks" if admin_level == "block" else "districts"
-        
-        if analysis_mode == SEL_PLACEHOLDER:
-            st.caption("ℹ️ Select an analysis focus to continue.")
-        elif "Single" in analysis_mode:
-            st.caption(
-                f"Inspect one {unit_singular} at a time. Use the dropdowns above "
-                f"to pick which {unit_singular} you want to explore in detail."
-            )
-        else:
-            st.markdown(
-                f"<div style='font-size:0.9rem; margin-top:0.25rem; margin-bottom:0.1rem;'>"
-                f"In <strong>Multi-{unit_singular} portfolio</strong> mode you build a set of {unit_plural} "
-                f"for comparison. {unit_plural.title()} are added from the <em>🗺 Map view</em>, the "
-                f"<em>📊 Rankings table</em>, or from saved point locations. "
-                f"</div>",
-                unsafe_allow_html=True,
-            )
 
         # Note: Portfolio mode behavior for district selection is now handled BEFORE
         # the selectbox widget is created (around line 1186) to avoid Streamlit
@@ -2315,9 +2315,14 @@ with col2:
     portfolio_route = st.session_state.get("portfolio_build_route", None)
     clear_clicked = False
 
-    # In portfolio mode, we keep the right panel clean by default (no Climate Profile header).
-    if analysis_mode != "Multi-district portfolio":
-        st.header("Climate Profile")
+    is_portfolio_mode = "Multi" in str(analysis_mode)
+    if is_portfolio_mode:
+        # In any portfolio mode (multi-district or multi-block), keep the right panel
+        # clean and driven by the portfolio panel above.
+        render_perf_panel_safe()
+        st.stop()
+
+    st.header("Climate Profile")
 
     # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
     if "Multi" in analysis_mode and portfolio_route == "saved_points":

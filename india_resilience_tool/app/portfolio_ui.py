@@ -1000,7 +1000,23 @@ def render_portfolio_panel(
 
     st.markdown("---")
 
-    if not portfolio:
+    # Split the right panel into a clean, low-scroll flow.
+    tab_key = f"portfolio_rhs_tab_{level_norm}"
+    default_tab = "Add units" if not portfolio else "Compare"
+    if tab_key not in st.session_state:
+        st.session_state[tab_key] = default_tab
+
+    tab = st.radio(
+        "Portfolio panel",
+        options=["Compare", "Add units"],
+        key=tab_key,
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+
+    st.markdown("---")
+
+    if tab == "Add units":
         st.markdown(f"#### How to add {unit_plural}")
         st.markdown(
             f"""
@@ -1018,59 +1034,67 @@ def render_portfolio_panel(
             portfolio_add_fn=_add,
             set_flash_fn=_set_flash,
         )
+        return
 
-    if portfolio:
-        st.markdown("### 📊 Portfolio Comparison")
+    # -------------------------
+    # Compare tab
+    # -------------------------
+    if not portfolio:
+        st.info("Your portfolio is empty. Use the **Add units** tab to add districts/blocks.")
+        return
 
-        current_selection = st.session_state.get("portfolio_multiindex_selection", [variable_slug])
-        selected_slugs = render_index_selector(
-            variables=variables,
-            current_slug=variable_slug,
-            selected_slugs=current_selection,
+    st.markdown("### 📊 Portfolio Comparison")
+
+    current_selection = st.session_state.get("portfolio_multiindex_selection", [variable_slug])
+    selected_slugs = render_index_selector(
+        variables=variables,
+        current_slug=variable_slug,
+        selected_slugs=current_selection,
+    )
+
+    if not selected_slugs:
+        st.info("Select at least one index to compare.")
+        return
+
+    cached_df = render_comparison_table(
+        portfolio=portfolio,
+        selected_slugs=selected_slugs,
+        variables=variables,
+        index_group_labels=index_group_labels,
+        sel_scenario=sel_scenario,
+        sel_period=sel_period,
+        sel_stat=sel_stat,
+        pilot_state=pilot_state,
+        data_dir=data_dir,
+        load_master_csv_fn=load_master_csv_fn,
+        normalize_master_columns_fn=normalize_master_columns_fn,
+        parse_master_schema_fn=parse_master_schema_fn,
+        resolve_metric_column_fn=resolve_metric_column_fn,
+        find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
+        risk_class_from_percentile_fn=risk_class_from_percentile_fn,
+        normalize_fn=portfolio_normalize_fn,
+        build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
+        level=level_norm,
+    )
+
+    st.caption(
+        f"Comparing {len(portfolio)} {unit_plural} across {len(selected_slugs)} indices • "
+        f"{sel_scenario} • {sel_period} • {sel_stat}"
+    )
+
+    if cached_df is not None and not cached_df.empty:
+        show_viz_key = f"portfolio_show_visualizations_{level_norm}"
+        show_viz = st.checkbox(
+            "Show visualizations",
+            value=bool(st.session_state.get(show_viz_key, False)),
+            key=show_viz_key,
         )
 
-        if not selected_slugs:
-            st.info("Select at least one index to compare.")
-        else:
-            cached_df = render_comparison_table(
-                portfolio=portfolio,
-                selected_slugs=selected_slugs,
-                variables=variables,
-                index_group_labels=index_group_labels,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                pilot_state=pilot_state,
-                data_dir=data_dir,
-                load_master_csv_fn=load_master_csv_fn,
-                normalize_master_columns_fn=normalize_master_columns_fn,
-                parse_master_schema_fn=parse_master_schema_fn,
-                resolve_metric_column_fn=resolve_metric_column_fn,
-                find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
-                risk_class_from_percentile_fn=risk_class_from_percentile_fn,
-                normalize_fn=portfolio_normalize_fn,
-                build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
-                level=level_norm,
-            )
-
-            st.caption(
-                f"Comparing {len(portfolio)} {unit_plural} across {len(selected_slugs)} indices • "
-                f"{sel_scenario} • {sel_period} • {sel_stat}"
-            )
-
-            if cached_df is not None and not cached_df.empty:
-                st.markdown("---")
-                with st.expander("📈 Visualizations", expanded=True):
-                    render_portfolio_visualizations(
-                        cached_df,
-                        default_value_col="Percentile",
-                        default_chart_type="heatmap",
-                    )
-
-        st.markdown("---")
-        render_coordinate_lookup(
-            merged=merged,
-            level=level_norm,
-            portfolio_add_fn=_add,
-            set_flash_fn=_set_flash,
-        )
+        if show_viz:
+            st.markdown("---")
+            with st.expander("📈 Visualizations", expanded=False):
+                render_portfolio_visualizations(
+                    cached_df,
+                    default_value_col="Percentile",
+                    default_chart_type="heatmap",
+                )
