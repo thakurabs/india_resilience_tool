@@ -477,12 +477,18 @@ def render_comparison_table(
     import streamlit as st
     import os
     from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
+    from india_resilience_tool.app.portfolio_multistate import (
+        compute_portfolio_summary_stats,
+        extract_states_in_portfolio,
+    )
 
     level_norm = (level or "district").strip().lower()
     is_block = level_norm == "block"
 
     if not portfolio or not selected_slugs:
         return None
+
+    states_for_master = extract_states_in_portfolio(portfolio, fallback_state=pilot_state)
 
     # Build context for cache invalidation (level-aware)
     def _unit_tuple(item: Any) -> tuple:
@@ -501,6 +507,7 @@ def render_comparison_table(
     context = {
         "level": level_norm,
         "units": [_unit_tuple(d) for d in portfolio],
+        "states": list(states_for_master),
         "slugs": list(selected_slugs),
         "scenario": sel_scenario,
         "period": sel_period,
@@ -510,6 +517,8 @@ def render_comparison_table(
     prev_context = st.session_state.get("portfolio_multiindex_context")
     cached_df = st.session_state.get("portfolio_multiindex_df")
     needs_rebuild = cached_df is None or prev_context != context
+
+    missing_master_by_slug: dict[str, list[str]] = {}
 
     # Helper functions
     def _resolve_proc_root_for_slug(slug: str) -> Path:
@@ -521,36 +530,117 @@ def render_comparison_table(
             return (base_path / slug).resolve()
         return (data_dir / "processed" / slug).resolve()
 
+    def _resolve_state_dir(proc_root: Path, state_name: str) -> str:
+        """
+        Resolve a portfolio state label to an on-disk directory name under proc_root.
+
+        This improves robustness against casing/whitespace differences.
+        """
+        key = str(proc_root.resolve()) if proc_root else str(proc_root)
+        cache = st.session_state.setdefault("_portfolio_proc_state_dirs", {})
+        mapping = cache.get(key)
+        if not isinstance(mapping, dict):
+            mapping = {}
+            try:
+                if proc_root.exists() and proc_root.is_dir():
+                    for p in proc_root.iterdir():
+                        if p.is_dir():
+                            mapping[normalize_fn(p.name)] = p.name
+            except Exception:
+                mapping = {}
+            cache[key] = mapping
+
+        return str(mapping.get(normalize_fn(state_name), state_name))
+
     def _load_master_and_schema_for_slug(slug: str):
         proc_root = _resolve_proc_root_for_slug(slug)
         master_fname = "master_metrics_by_block.csv" if is_block else "master_metrics_by_district.csv"
-        master_path = proc_root / pilot_state / master_fname
 
-        cache = st.session_state.setdefault("_portfolio_master_cache", {})
-        cache_key = f"{slug}::{master_path}"
+        file_cache = st.session_state.setdefault("_portfolio_master_cache", {})
+        concat_cache = st.session_state.setdefault("_portfolio_master_concat_cache", {})
 
-        try:
-            mtime = master_path.stat().st_mtime
-        except Exception:
-            mtime = None
+        # Resolve state directory names once per slug build.
+        state_dirs = [_resolve_state_dir(proc_root, s) for s in states_for_master] or ([pilot_state] if pilot_state else [])
+        # Cache key should be stable across portfolio ordering (output does not depend on state load order).
+        state_dirs_key = "|".join(sorted([normalize_fn(s) for s in state_dirs]))
+        concat_key = f"{slug}::{level_norm}::{master_fname}::{state_dirs_key}"
 
-        entry = cache.get(cache_key)
-        if entry and entry.get("mtime") == mtime:
-            return entry["df"], entry["schema_items"], entry["metrics"], entry["by_metric"]
+        signature: list[tuple[str, Optional[float]]] = []
+        dfs: list[pd.DataFrame] = []
+        missing_states: list[str] = []
 
-        if not master_path.exists():
+        for st_name in state_dirs:
+            master_path = proc_root / str(st_name) / master_fname
+            path_s = str(master_path)
+            try:
+                mtime = master_path.stat().st_mtime
+            except Exception:
+                mtime = None
+            signature.append((path_s, mtime))
+
+        signature_sorted = tuple(sorted(signature, key=lambda x: x[0]))
+        concat_entry = concat_cache.get(concat_key)
+        if isinstance(concat_entry, dict) and concat_entry.get("signature") == signature_sorted:
+            missing = concat_entry.get("missing_states")
+            if isinstance(missing, list) and missing:
+                missing_master_by_slug[str(slug)] = [str(x) for x in missing if str(x).strip()]
+            return concat_entry["df"], concat_entry["schema_items"], concat_entry["metrics"], concat_entry["by_metric"]
+
+        for st_name in state_dirs:
+            master_path = proc_root / str(st_name) / master_fname
+
+            file_key = f"{slug}::{master_path}"
+            try:
+                mtime = master_path.stat().st_mtime
+            except Exception:
+                mtime = None
+
+            entry = file_cache.get(file_key)
+            if entry and entry.get("mtime") == mtime:
+                df_state = entry["df"]
+                if df_state is not None and not df_state.empty:
+                    dfs.append(df_state)
+                continue
+
+            if not master_path.exists():
+                missing_states.append(str(st_name))
+                empty = pd.DataFrame()
+                file_cache[file_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "mtime": mtime}
+                continue
+
+            df_state = load_master_csv_fn(str(master_path))
+            df_state = normalize_master_columns_fn(df_state)
+            schema_items_s, metrics_s, by_metric_s = parse_master_schema_fn(df_state.columns)
+            file_cache[file_key] = {
+                "df": df_state,
+                "schema_items": schema_items_s,
+                "metrics": metrics_s,
+                "by_metric": by_metric_s,
+                "mtime": mtime,
+            }
+            if df_state is not None and not df_state.empty:
+                dfs.append(df_state)
+
+        if not dfs:
             empty = pd.DataFrame()
-            cache[cache_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "mtime": mtime}
+            concat_cache[concat_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "signature": signature_sorted, "missing_states": missing_states}
+            if missing_states:
+                missing_master_by_slug[str(slug)] = list(missing_states)
             return empty, [], [], {}
 
-        df = load_master_csv_fn(str(master_path))
-        df = normalize_master_columns_fn(df)
-
-        # Your schema parser expects columns, keep that contract
-        schema_items, metrics, by_metric = parse_master_schema_fn(df.columns)
-
-        cache[cache_key] = {"df": df, "schema_items": schema_items, "metrics": metrics, "by_metric": by_metric, "mtime": mtime}
-        return df, schema_items, metrics, by_metric
+        df_all = pd.concat(dfs, axis=0, ignore_index=True, sort=False)
+        schema_items, metrics, by_metric = parse_master_schema_fn(df_all.columns)
+        concat_cache[concat_key] = {
+            "df": df_all,
+            "schema_items": schema_items,
+            "metrics": metrics,
+            "by_metric": by_metric,
+            "signature": signature_sorted,
+            "missing_states": missing_states,
+        }
+        if missing_states:
+            missing_master_by_slug[str(slug)] = list(missing_states)
+        return df_all, schema_items, metrics, by_metric
 
     def _match_row_idx(df_local, st_name, dist_name, blk_name: Optional[str] = None):
         if df_local is None or df_local.empty:
@@ -649,6 +739,20 @@ def render_comparison_table(
             st.session_state["portfolio_multiindex_context"] = context
             cached_df = df
 
+        if missing_master_by_slug:
+            # Show a compact warning once per rebuild (avoids repeating on unrelated reruns).
+            examples: list[str] = []
+            for slug, states_missing in list(missing_master_by_slug.items())[:3]:
+                sm = [s for s in states_missing if isinstance(s, str) and s.strip()]
+                if not sm:
+                    continue
+                examples.append(f"{slug}: {', '.join(sm[:4])}" + ("…" if len(sm) > 4 else ""))
+            if examples:
+                st.warning(
+                    "Some portfolio states are missing master metrics for one or more indices; "
+                    "those rows may show blank values. " + " | ".join(examples)
+                )
+
     # Display table
     if cached_df is not None and not cached_df.empty:
         # Reorder columns for nicer UX (esp. block mode)
@@ -678,6 +782,18 @@ def render_comparison_table(
 
         remaining = [c for c in display_df.columns if c not in preferred]
         display_df = display_df[preferred + remaining]
+
+        # Summary strip (table-first orientation)
+        summary = compute_portfolio_summary_stats(display_df, level=level_norm)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Units", int(summary.get("units_count", 0)))
+        c2.metric("States", int(summary.get("states_count", 0)))
+        c3.metric("Metrics", int(summary.get("metrics_count", 0)))
+
+        risk_counts = summary.get("risk_counts") or {}
+        if isinstance(risk_counts, dict) and risk_counts:
+            rc_parts = [f"{k}: {int(v)}" for k, v in risk_counts.items()]
+            st.caption("Risk class • " + " • ".join(rc_parts))
 
         st.dataframe(display_df, hide_index=True, use_container_width=True)
 
