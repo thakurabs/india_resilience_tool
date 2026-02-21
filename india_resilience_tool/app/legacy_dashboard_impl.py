@@ -2226,6 +2226,7 @@ with col1:
                 portfolio_contains_fn=_portfolio_contains,
                 normalize_fn=_portfolio_normalize,
                 returned=returned,
+                merged=merged,
                 level=_admin_level,
             )
 
