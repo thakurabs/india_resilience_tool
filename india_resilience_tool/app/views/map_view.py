@@ -50,7 +50,13 @@ def extract_clicked_district_state(ret: Optional[Mapping[str, Any]]) -> Tuple[Op
         for pk in ("district_name", "shapeName", "NAME", "name", "SHAPE_NAME"):
             val = props.get(pk)
             if val:
-                state_val = props.get("state_name") or props.get("shapeGroup") or props.get("shapeName_0")
+                state_val = (
+                    props.get("state_name")
+                    or props.get("state")
+                    or props.get("STATE")
+                    or props.get("shapeGroup")
+                    or props.get("shapeName_0")
+                )
                 return str(val), (str(state_val) if state_val else None)
 
     return None, None
@@ -547,20 +553,44 @@ def render_unit_add_to_portfolio(
             resolved_district = d or resolved_district
             resolved_state = s or resolved_state
 
-        if (not resolved_block) and (merged is not None) and (returned is not None):
+        if (
+            (merged is not None)
+            and (returned is not None)
+            and (
+                (not resolved_block)
+                or (not resolved_district)
+                or (not resolved_state)
+                or (str(resolved_state).strip() == "All")
+            )
+        ):
             lat, lon = extract_click_coordinates(returned)
             if lat is not None and lon is not None:
                 b2, d2, s2 = find_block_at_coordinates(merged, lat, lon)
-                resolved_block = b2 or resolved_block
-                resolved_district = d2 or resolved_district
-                resolved_state = s2 or resolved_state
+                if not resolved_block and b2:
+                    resolved_block = b2
+                if not resolved_district and d2:
+                    resolved_district = d2
+                if (not resolved_state or str(resolved_state).strip() == "All") and s2:
+                    if (not resolved_district) or (d2 and normalize_fn(d2) == normalize_fn(resolved_district)):
+                        resolved_state = s2
     else:
-        if (not resolved_district) and (merged is not None) and (returned is not None):
+        if (
+            (merged is not None)
+            and (returned is not None)
+            and (
+                (not resolved_district)
+                or (not resolved_state)
+                or (str(resolved_state).strip() == "All")
+            )
+        ):
             lat, lon = extract_click_coordinates(returned)
             if lat is not None and lon is not None:
                 d2, s2 = find_district_at_coordinates(merged, lat, lon)
-                resolved_district = d2 or resolved_district
-                resolved_state = s2 or resolved_state
+                if not resolved_district and d2:
+                    resolved_district = d2
+                if (not resolved_state or str(resolved_state).strip() == "All") and s2:
+                    if (not resolved_district) or (d2 and normalize_fn(d2) == normalize_fn(resolved_district)):
+                        resolved_state = s2
 
     if level_norm == "block":
         if not resolved_block or not resolved_district:
