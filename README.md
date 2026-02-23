@@ -340,17 +340,17 @@ mypy india_resilience_tool/
 
 ### Adding a new metric
 
-1. Add metric definition to `config/metrics_registry.py` in `PIPELINE_METRICS_RAW`
+1. Add metric definition to `india_resilience_tool/config/metrics_registry.py` in `PIPELINE_METRICS_RAW`
 2. Add the slug to appropriate bundle(s) in `BUNDLES`
-3. Run validation: `python config/metrics_registry.py`
+3. Run validation: `python -m india_resilience_tool.config.metrics_registry`
 4. Ensure processed data exists for the new metric
 
 ### Adding a new bundle
 
-1. Add bundle to `BUNDLES` dict in `config/metrics_registry.py`
+1. Add bundle to `BUNDLES` dict in `india_resilience_tool/config/metrics_registry.py`
 2. Add bundle name to `BUNDLE_ORDER` list
 3. Add description to `BUNDLE_DESCRIPTIONS` dict
-4. Run validation to ensure all slugs exist
+4. Run validation: `python -m india_resilience_tool.config.metrics_registry` to ensure all slugs exist
 
 ---
 
