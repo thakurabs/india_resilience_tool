@@ -129,6 +129,13 @@ conda activate irt
 
 **Option 2: pip**
 
+> Note: `requirements.txt` may be UTF-16 encoded in this repo. If `pip install -r requirements.txt` fails with an encoding error, convert it first:
+>
+> ```bash
+> iconv -f UTF-16 -t UTF-8 requirements.txt > requirements.utf8.txt
+> pip install -r requirements.utf8.txt
+> ```
+
 ```bash
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
@@ -137,8 +144,16 @@ pip install -r requirements.txt
 
 ### Running the dashboard
 
+Recommended:
+
 ```bash
 streamlit run dashboard_unfactored.py
+```
+
+Alternative (package entry):
+
+```bash
+streamlit run india_resilience_tool/app/main.py
 ```
 
 Open in a browser: `http://localhost:8501`
