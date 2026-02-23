@@ -71,7 +71,9 @@ india_resilience_tool/
 │ └── state_summary_view.py # State summary view (district-first, optional)
 ├── compute/ # Computation helpers
 │ ├── __init__.py
-│ └── spi_adapter.py # SPI adapter around climate-indices
+│ ├── spi_adapter.py # SPI adapter around climate-indices
+│ └── tests/
+│   └── test_spi_adapter.py # SPI adapter tests
 ├── config/ # Configuration
 │ ├── __init__.py
 │ ├── constants.py # App constants & styling
@@ -109,6 +111,12 @@ Root files:
 ├── docs/ # Additional docs/notes
 └── tests/ # Test suite
 ```
+
+### Other repo utilities / notes
+
+- `AGENTS.md`: root agent workflow and guardrails for this repository.
+- `docs/HANDOFF.md`, `docs/refactor_acceptance.md`: handoff/history and refactor acceptance notes.
+- Helper scripts for maintenance/ops include `build_all_csv.ps1`, `debug_build_master.py`, and boundary/S3 helper scripts.
 
 ---
 
