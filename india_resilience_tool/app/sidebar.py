@@ -63,6 +63,8 @@ def render_admin_level_selector(
     label: str = "Administrative level",
     label_visibility: str = "collapsed",
     use_markdown_header: bool = False,
+    centered: bool = False,
+    center_layout: tuple[int, int, int] = (1, 6, 1),
 ) -> str:
     """
     Render District/Block toggle and return selected level.
@@ -91,15 +93,29 @@ def render_admin_level_selector(
     def _fmt(opt: str) -> str:
         return "Block" if opt == ADMIN_LEVEL_BLOCK else "District"
 
-    selected = st.radio(
-        label,
-        options=options,
-        index=idx,
-        key="admin_level",
-        horizontal=True,
-        label_visibility=label_visibility,
-        format_func=_fmt,
-    )
+    if centered:
+        left, mid, right = st.columns(list(center_layout))
+        _ = left, right  # intentionally unused
+        with mid:
+            selected = st.radio(
+                label,
+                options=options,
+                index=idx,
+                key="admin_level",
+                horizontal=True,
+                label_visibility=label_visibility,
+                format_func=_fmt,
+            )
+    else:
+        selected = st.radio(
+            label,
+            options=options,
+            index=idx,
+            key="admin_level",
+            horizontal=True,
+            label_visibility=label_visibility,
+            format_func=_fmt,
+        )
 
     prev = st.session_state.get("_admin_level_prev", current)
     if prev != selected:

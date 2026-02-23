@@ -771,10 +771,13 @@ with st.sidebar:
             color: rgba(85, 92, 102, 0.95);
             text-decoration-thickness: 2px;
         }
-        /* Center the District/Block selector to sidebar width (robust across Streamlit wrappers). */
-        [data-testid="stSidebar"] [data-baseweb="radio-group"],
-        [data-testid="stSidebar"] [role="radiogroup"] {
+        /* District/Block toggle: keep horizontal labels readable (no letter-by-letter wrapping). */
+        [data-testid="stSidebar"] [data-baseweb="radio-group"] {
+            flex-wrap: wrap !important; /* allow wrap by option on very narrow sidebars */
             justify-content: center !important;
+        }
+        [data-testid="stSidebar"] [data-baseweb="radio"] label {
+            white-space: nowrap !important;
         }
         </style>
         """,
@@ -807,7 +810,11 @@ with st.sidebar:
     )
 
     # Admin level selector (District vs Block)
-    admin_level = render_admin_level_selector(label_visibility="collapsed")
+    admin_level = render_admin_level_selector(
+        label_visibility="collapsed",
+        centered=True,
+        center_layout=(1, 8, 1),
+    )
 
     # Read current analysis mode (default depends on admin level)
     default_mode = "Single block focus" if admin_level == "block" else "Single district focus"
