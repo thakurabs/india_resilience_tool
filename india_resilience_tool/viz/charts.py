@@ -53,16 +53,14 @@ SCENARIO_COLORS_HEX: dict[str, str] = {
     "ssp585": "#d62728",      # red
 }
 
-PERIOD_ORDER = ["1990-2010", "2020-2040", "2040-2060",
-                #  "2060-2080",
-                ]
+PERIOD_ORDER = ["1990-2010", "2020-2040", "2040-2060", "2060-2080"]
 
 # Human-friendly labels used in UI and chart axes (keys must match PERIOD_ORDER)
 PERIOD_DISPLAY: dict[str, str] = {
     "1990-2010": "1990–2010",
     "2020-2040": "Early century (2020–2040)",
     "2040-2060": "Mid-century (2040–2060)",
-    # "2060-2080": "End-century (2060–2080)",
+    "2060-2080": "End century (2060–2080)",
 }
 
 def period_display_label(period_key: str) -> str:
