@@ -272,54 +272,73 @@ DATA_DIR = Path("/path/to/your/data")
 
 ## Project Structure (high level)
 
-```
+```text
 india_resilience_tool/
 ├── analysis/
-│   ├── portfolio.py             # Portfolio state & comparison builders (district + block)
-│   ├── metrics.py               # Risk classification utilities
-│   └── timeseries.py            # District/block time-series loaders
+│   ├── AGENTS.md
+│   ├── __init__.py
+│   ├── case_study.py
+│   ├── metrics.py
+│   ├── portfolio.py
+│   └── timeseries.py
 ├── app/
-│   ├── legacy_dashboard_impl.py # Main orchestrator (district + block + bundles)
-│   ├── sidebar.py               # Sidebar controls (admin level, analysis focus, view navigation)
-│   ├── portfolio_ui.py          # Portfolio panel with bundle-first selection
-│   ├── point_selection_ui.py    # Coordinate input with batch support (district + block)
-│   ├── perf.py                  # Perf helpers (timing / instrumentation)
+│   ├── AGENTS.md
+│   ├── __init__.py
+│   ├── adm2_cache.py
+│   ├── dashboard.py
+│   ├── geography.py
+│   ├── legacy_dashboard_impl.py
+│   ├── main.py
+│   ├── orchestrator.py
+│   ├── perf.py
+│   ├── point_selection_ui.py
+│   ├── portfolio_multistate.py
+│   ├── portfolio_ui.py
+│   ├── sidebar.py
+│   ├── state.py
 │   └── views/
-│       ├── map_view.py          # Map rendering for districts + blocks
-│       ├── rankings_view.py     # Rankings with add-to-portfolio (district + block)
-│       ├── details_panel.py     # Details panel (district + block; exports/case studies)
+│       ├── __init__.py
+│       ├── details_panel.py
+│       ├── map_view.py
+│       ├── rankings_view.py
 │       └── state_summary_view.py
 ├── compute/
-│   └── spi_adapter.py           # SPI wrapper/adapter around climate-indices package
-├── config/
-│   ├── constants.py             # App constants
-│   ├── metrics_registry.py      # Unified metrics + bundles (single source of truth)
-│   └── variables.py             # Dashboard variable registry
+│   └── tests/
+│       └── test_spi_adapter.py
 ├── data/
-│   ├── adm2_loader.py           # District boundary loading
-│   ├── adm3_loader.py           # Block boundary loading
-│   ├── master_loader.py         # Master CSV loading
-│   └── merge.py                 # Merge master ↔ boundaries (ADM2/ADM3)
+│   ├── __init__.py
+│   ├── adm2_loader.py
+│   ├── adm3_loader.py
+│   ├── boundary_loader.py
+│   ├── discovery.py
+│   ├── master_loader.py
+│   └── merge.py
+├── utils/
+│   ├── __init__.py
+│   ├── naming.py
+│   └── processed_io.py
 └── viz/
-    ├── charts.py                # Figure generation
-    ├── colors.py                # Color scales
-    ├── exports.py               # PDF export
-    └── tables.py                # Table formatting
+    ├── AGENTS.md
+    ├── __init__.py
+    ├── charts.py
+    ├── colors.py
+    ├── exports.py
+    ├── formatting.py
+    ├── style.py
+    └── tables.py
 
-Root files:
-├── dashboard_unfactored.py      # Streamlit entry point (shim)
-├── paths.py                     # Data directory config (canonical)
-├── build_master_metrics.py      # CSV builder
-├── compute_indices_multiprocess.py  # Index compute pipeline (multi-process)
-├── spi_diagnostic.py            # SPI diagnostic helper script
-├── MANIFEST.md                  # Detailed codebase guide
-└── README.md                    # This file
+Root files and docs:
+├── dashboard_unfactored.py
+├── dashboard_unfactored_impl.py
+├── compute_indices.py
+├── compute_indices_multiprocess.py
+└── docs/
+    ├── HANDOFF.md
+    └── refactor_acceptance.md
 ```
 
 For detailed module documentation, see [MANIFEST.md](MANIFEST.md).
 
-
----
 
 ## Development
 
