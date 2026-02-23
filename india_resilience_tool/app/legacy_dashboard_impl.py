@@ -713,70 +713,96 @@ perf_reset()
 # honour it BEFORE the main_view_selector radio is created.
 apply_jump_once_flags()
 
+
+@st.cache_data
+def _logo_data_url(*, path: str, mtime: float) -> str | None:
+    """
+    Return a stable data: URL for the Resilience Actions logo.
+
+    Notes:
+      - Cached by (path, mtime) so updates to the logo file invalidate automatically.
+      - We embed the logo in HTML to avoid brittle CSS targeting of Streamlit image wrappers.
+    """
+    _ = mtime  # mtime is used only to invalidate Streamlit's cache
+    import base64
+    from pathlib import Path
+
+    try:
+        raw = Path(path).read_bytes()
+    except Exception:
+        return None
+
+    b64 = base64.b64encode(raw).decode("ascii")
+    return f"data:image/png;base64,{b64}"
+
+
 with st.sidebar:
     st.markdown(
         """
         <style>
-        [data-testid="stSidebar"] [data-testid="stImage"],
-        [data-testid="stSidebar"] [data-testid="stImageContainer"],
-        [data-testid="stSidebar"] .stImage {
-            border-radius: 0 !important;
-            overflow: visible !important;
-            display: flex !important;
-            justify-content: center !important;
-            width: 100% !important;
-            max-width: 220px !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stImage"] img,
-        [data-testid="stSidebar"] [data-testid="stImageContainer"] img,
-        [data-testid="stSidebar"] .stImage img {
-            border-radius: 0 !important;
-            display: block;
-            margin: 0 auto;
-        }
-        [data-testid="stSidebar"] [data-testid="stRadio"]:first-of-type {
-            max-width: 220px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        [data-testid="stSidebar"] [data-testid="stRadio"]:first-of-type [role="radiogroup"] {
-            justify-content: center;
-        }
-        .irt-company-url {
-            display: block;
+        .irt-topcluster {
             width: 100%;
-            max-width: 220px;
-            text-align: center;
-            margin: 0.2rem auto 0.7rem auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 0.1rem;
+        }
+        .irt-logo {
+            width: 220px;
+            max-width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 0 !important;
+        }
+        .irt-link {
+            margin-top: 0.25rem;
+            margin-bottom: 0.6rem;
             font-size: 0.74rem;
             font-weight: 500;
             line-height: 1.2;
             letter-spacing: 0;
             color: rgba(85, 92, 102, 0.95);
-        }
-        .irt-company-url a {
+            text-align: center;
             text-decoration: underline;
             text-underline-offset: 0.08em;
             text-decoration-thickness: 1px;
-            color: inherit;
         }
-        .irt-company-url a:hover {
-            text-decoration: underline;
-            color: inherit;
+        .irt-link:hover {
+            color: rgba(85, 92, 102, 0.95);
+            text-decoration-thickness: 2px;
+        }
+        /* Center the District/Block selector to sidebar width (robust across Streamlit wrappers). */
+        [data-testid="stSidebar"] [data-baseweb="radio-group"],
+        [data-testid="stSidebar"] [role="radiogroup"] {
+            justify-content: center !important;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+    logo_url: str | None = None
     try:
-        st.image(LOGO_PATH, width=220)
+        _logo_p = Path(LOGO_PATH)
+        if _logo_p.exists():
+            logo_url = _logo_data_url(path=str(_logo_p), mtime=float(_logo_p.stat().st_mtime))
     except Exception:
-        pass
+        logo_url = None
+
+    logo_html = (
+        f'<img class="irt-logo" src="{logo_url}" alt="Resilience Actions logo" />'
+        if logo_url
+        else ""
+    )
     st.markdown(
-        '<div class="irt-company-url"><a href="https://www.resilience.org.in/" '
-        'target="_blank" rel="noopener noreferrer">www.resilience.org.in/</a></div>',
+        f"""
+        <div class="irt-topcluster">
+          {logo_html}
+          <a class="irt-link" href="https://www.resilience.org.in/" target="_blank" rel="noopener noreferrer">
+            www.resilience.org.in/
+          </a>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
