@@ -2606,6 +2606,7 @@ with col2:
                 sel_scenario=sel_scenario,
                 sel_period=sel_period,
                 sel_stat=sel_stat,
+                metric_col=metric_col,
                 # Pre-computed metrics
                 ensemble=ensemble,
                 per_model_df=per_model_df,
