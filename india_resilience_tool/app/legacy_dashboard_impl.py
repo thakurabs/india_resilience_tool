@@ -714,10 +714,71 @@ perf_reset()
 apply_jump_once_flags()
 
 with st.sidebar:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] [data-testid="stImage"],
+        [data-testid="stSidebar"] [data-testid="stImageContainer"],
+        [data-testid="stSidebar"] .stImage {
+            border-radius: 0 !important;
+            overflow: visible !important;
+            display: flex !important;
+            justify-content: center !important;
+            width: 100% !important;
+            max-width: 220px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stImage"] img,
+        [data-testid="stSidebar"] [data-testid="stImageContainer"] img,
+        [data-testid="stSidebar"] .stImage img {
+            border-radius: 0 !important;
+            display: block;
+            margin: 0 auto;
+        }
+        [data-testid="stSidebar"] [data-testid="stRadio"]:first-of-type {
+            max-width: 220px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        [data-testid="stSidebar"] [data-testid="stRadio"]:first-of-type [role="radiogroup"] {
+            justify-content: center;
+        }
+        .irt-company-url {
+            display: block;
+            width: 100%;
+            max-width: 220px;
+            text-align: center;
+            margin: 0.2rem auto 0.7rem auto;
+            font-size: 0.74rem;
+            font-weight: 500;
+            line-height: 1.2;
+            letter-spacing: 0;
+            color: rgba(85, 92, 102, 0.95);
+        }
+        .irt-company-url a {
+            text-decoration: underline;
+            text-underline-offset: 0.08em;
+            text-decoration-thickness: 1px;
+            color: inherit;
+        }
+        .irt-company-url a:hover {
+            text-decoration: underline;
+            color: inherit;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     try:
         st.image(LOGO_PATH, width=220)
     except Exception:
         pass
+    st.markdown(
+        '<div class="irt-company-url"><a href="https://www.resilience.org.in/" '
+        'target="_blank" rel="noopener noreferrer">www.resilience.org.in/</a></div>',
+        unsafe_allow_html=True,
+    )
 
     # Admin level selector (District vs Block)
     admin_level = render_admin_level_selector(label_visibility="collapsed")
