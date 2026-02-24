@@ -78,6 +78,93 @@ def canonical_period_label(raw: str) -> str:
     return s
 
 
+def compute_scenario_y_range(
+    values: Sequence[float],
+    *,
+    y_axis_policy: str = "auto",
+) -> tuple[bool, Optional[tuple[float, float]]]:
+    """
+    Compute a deterministic y-axis range for the scenario comparison bar chart.
+
+    The goal is to keep the chart readable across a wide range of metrics:
+    - Many indices are nonnegative and benefit from a zero baseline when the
+      range is large relative to the baseline.
+    - Some indices (e.g., temperature, counts on a high baseline) have small
+      relative differences that become hard to see on a strict zero baseline.
+    - Some indices (e.g., SPI) can be negative; for these we always use a
+      tight range around the data.
+
+    Args:
+        values: Sequence of y-values actually plotted (NaNs should be removed).
+        y_axis_policy:
+            - "auto" (default): zero-based unless a zoomed axis materially
+              improves readability for nonnegative values.
+            - "zero": force a zero baseline for nonnegative data.
+            - "tight": always zoom to the data range (+padding) for nonnegative
+              data; negative values always use tight.
+
+    Returns:
+        (zoomed, y_range):
+          - zoomed is True when the axis does not start at 0 for nonnegative
+            data (i.e., we truncated the baseline).
+          - y_range is (low, high) or None if values is empty.
+    """
+    policy = str(y_axis_policy or "auto").strip().lower()
+    if policy not in {"auto", "zero", "tight"}:
+        policy = "auto"
+
+    y_vals = np.array([float(v) for v in values if pd.notna(v)], dtype=float)
+    if y_vals.size == 0:
+        return False, None
+
+    y_min = float(np.min(y_vals))
+    y_max = float(np.max(y_vals))
+    eps = 1e-9
+
+    spread = y_max - y_min
+    if abs(spread) <= eps:
+        spread = max(abs(y_max), 1.0)
+
+    # Any negative value: do not force a zero baseline (SPI, deltas, etc.)
+    if y_min < 0:
+        pad = max(0.12 * spread, 0.02 * max(abs(y_max), 1.0))
+        return False, (y_min - pad, y_max + pad)
+
+    # Nonnegative values from here on.
+    if policy == "zero":
+        pad = max(0.12 * spread, 0.02 * max(abs(y_max), 1.0))
+        return False, (0.0, y_max + pad)
+
+    # Decide whether to zoom (truncate baseline).
+    zoom = policy == "tight"
+    if policy == "auto" and not zoom:
+        if y_max > 0:
+            closeness = y_min / max(y_max, eps)  # 0..1
+            mean = float(np.mean(y_vals))
+            rel_spread_mean = (y_max - y_min) / max(abs(mean), eps)
+            rel_spread_max = (y_max - y_min) / max(y_max, eps)
+
+            close_to_max = (closeness >= 0.80) and (
+                (rel_spread_mean <= 0.12) or (rel_spread_max <= 0.15)
+            )
+
+            # High-baseline metrics: baseline dominates spread (Image #2-like).
+            # Example: [115..173] spread ~58, min/spread ~1.96 -> zoom.
+            high_baseline = (y_min / max((y_max - y_min), eps)) >= 1.2
+
+            zoom = close_to_max or high_baseline
+
+    if zoom:
+        pad = max(0.18 * spread, 0.02 * max(abs(y_max), 1.0))
+        low = max(0.0, y_min - pad)
+        high = y_max + pad
+        zoomed = low > 0.0
+        return zoomed, (low, high)
+
+    pad = max(0.12 * spread, 0.02 * max(abs(y_max), 1.0))
+    return False, (0.0, y_max + pad)
+
+
 def build_scenario_comparison_panel_for_row(
     row: pd.Series,
     schema_items: Sequence[Mapping[str, Any]],
@@ -157,6 +244,7 @@ def make_scenario_comparison_figure(
     font_size_ticks: int = 9,
     font_size_legend: int = 9,
     *,
+    y_axis_policy: str = "auto",
     units: Optional[str] = None,
     logo_path: Optional[PathLike] = None,
     style: Optional[IRTFigureStyle] = None,
@@ -287,46 +375,13 @@ def make_scenario_comparison_figure(
             width=0.45,
         )
 
-        # ---------------------------------------------------------------------
-        # Auto-zoom y-axis only when the bars have a high baseline + small spread.
-        # This makes small differences visible without always truncating the axis.
-        # ---------------------------------------------------------------------
-        y_vals = np.array([v for v in ys if pd.notna(v)], dtype=float)
-
-        zoomed = False
-        if y_vals.size >= 2:
-            y_min = float(np.min(y_vals))
-            y_max = float(np.max(y_vals))
-            if y_max > 0:
-                spread = y_max - y_min
-                mean = float(np.mean(y_vals))
-                eps = 1e-9
-
-                closeness = y_min / max(y_max, eps)                 # 0..1
-                rel_spread_mean = spread / max(abs(mean), eps)      # relative to mean
-                rel_spread_max = spread / max(y_max, eps)           # relative to max
-
-                zoomed = (
-                    (y_min >= 0)
-                    and (closeness >= 0.80)
-                    and ((rel_spread_mean <= 0.12) or (rel_spread_max <= 0.15))
-                )
-
-        if y_vals.size > 0:
-            y_min = float(np.min(y_vals))
-            y_max = float(np.max(y_vals))
-            y_range = (y_max - y_min) if (y_max != y_min) else max(abs(y_max), 1.0)
-
-            if zoomed:
-                pad = max(0.18 * y_range, 0.02 * max(abs(y_max), 1.0))
-                ax.set_ylim(y_min - pad, y_max + pad)
-
-            else:
-                if y_min >= 0:
-                    ax.set_ylim(0.0, y_max + 0.12 * y_range)
-                else:
-                    pad = max(0.12 * y_range, 0.02 * max(abs(y_max), 1.0))
-                    ax.set_ylim(y_min - pad, y_max + pad)
+        y_range_res = compute_scenario_y_range(
+            [v for v in ys if pd.notna(v)],
+            y_axis_policy=y_axis_policy,
+        )
+        zoomed, y_range = y_range_res
+        if y_range is not None:
+            ax.set_ylim(*y_range)
 
         y_bottom, y_top = ax.get_ylim()
         y_span = y_top - y_bottom
@@ -443,6 +498,23 @@ def make_scenario_comparison_figure(
 
         ax.grid(axis="y", linestyle="--", alpha=0.35)
         ax.set_axisbelow(True)
+
+        if is_pdf and zoomed:
+            # PDF exports have no UI toggle; add a subtle disclosure that the
+            # y-axis is zoomed (does not start at zero).
+            try:
+                ax.text(
+                    0.99,
+                    0.01,
+                    "y-axis zoomed",
+                    transform=ax.transAxes,
+                    ha="right",
+                    va="bottom",
+                    fontsize=max(6, font_size_ticks - 2),
+                    color="0.4",
+                )
+            except Exception:
+                pass
 
         if is_pdf:
             # Publication-style: keep left/bottom spines; hide top/right.
@@ -1034,6 +1106,7 @@ def make_scenario_comparison_figure_plotly(
     font_size_ticks: int = 9,
     font_size_legend: int = 9,
     *,
+    y_axis_policy: str = "auto",
     units: Optional[str] = None,
     logo_path: Optional[PathLike] = None,
     style: Optional[IRTFigureStyle] = None,
@@ -1170,38 +1243,7 @@ def make_scenario_comparison_figure_plotly(
             )
         )
 
-    # Y-axis range (auto-zoom heuristic)
-    zoomed = False
-    if len(y_vals_all) >= 2:
-        y_min = float(np.min(y_vals_all))
-        y_max = float(np.max(y_vals_all))
-        if y_max > 0:
-            spread = y_max - y_min
-            mean = float(np.mean(y_vals_all))
-            eps = 1e-9
-            closeness = y_min / max(y_max, eps)
-            rel_spread_mean = spread / max(abs(mean), eps)
-            rel_spread_max = spread / max(y_max, eps)
-            zoomed = (
-                (y_min >= 0)
-                and (closeness >= 0.80)
-                and ((rel_spread_mean <= 0.12) or (rel_spread_max <= 0.15))
-            )
-
-    yaxis_range = None
-    if y_vals_all:
-        y_min = float(np.min(y_vals_all))
-        y_max = float(np.max(y_vals_all))
-        y_range = (y_max - y_min) if (y_max != y_min) else max(abs(y_max), 1.0)
-        if zoomed:
-            pad = max(0.18 * y_range, 0.02 * max(abs(y_max), 1.0))
-            yaxis_range = [y_min - pad, y_max + pad]
-        else:
-            if y_min >= 0:
-                yaxis_range = [0.0, y_max + 0.12 * y_range]
-            else:
-                pad = max(0.12 * y_range, 0.02 * max(abs(y_max), 1.0))
-                yaxis_range = [y_min - pad, y_max + pad]
+    zoomed, y_range = compute_scenario_y_range(y_vals_all, y_axis_policy=y_axis_policy)
 
     apply_irt_plotly_layout(fig, title=None, xaxis_title=None, yaxis_title=y_label)
 
@@ -1220,8 +1262,8 @@ def make_scenario_comparison_figure_plotly(
         margin={"l": 60, "r": 20, "t": 70, "b": 55},
     )
 
-    if yaxis_range is not None:
-        fig.update_yaxes(range=yaxis_range)
+    if y_range is not None:
+        fig.update_yaxes(range=list(y_range))
 
     # Ensure x-axis categories keep the canonical order and labels are centered.
     fig.update_xaxes(

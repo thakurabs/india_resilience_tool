@@ -480,6 +480,18 @@ def render_scenario_comparison(
     import streamlit as st
 
     with st.expander("Scenario comparison (period-mean)", expanded=False):
+        y_axis_zero_key = "scenario_compare_yaxis_zero"
+        force_zero_axis = st.checkbox(
+            "Start y-axis at zero",
+            value=bool(st.session_state.get(y_axis_zero_key, False)),
+            key=y_axis_zero_key,
+            help=(
+                "Enable to force a zero baseline. When disabled, the chart may "
+                "auto-zoom to make small differences visible (axis may not start at 0)."
+            ),
+        )
+        y_axis_policy = "zero" if force_zero_axis else "auto"
+
         panel_df = build_scenario_panel_fn(
             row=row,
             schema_items=schema_items,
@@ -505,6 +517,7 @@ def render_scenario_comparison(
                     font_size_label=font_size_label,
                     font_size_ticks=font_size_ticks,
                     font_size_legend=font_size_legend,
+                    y_axis_policy=y_axis_policy,
                     logo_path=logo_path,
                 )
             except TypeError:
@@ -557,6 +570,25 @@ def render_scenario_comparison(
                         pass
 
                     st.pyplot(fig_sc, use_container_width=True)
+
+            if not force_zero_axis:
+                try:
+                    from india_resilience_tool.viz.charts import compute_scenario_y_range
+
+                    y_vals = (
+                        pd.to_numeric(panel_df.get("value"), errors="coerce")
+                        .dropna()
+                        .astype(float)
+                        .tolist()
+                    )
+                    zoomed, _ = compute_scenario_y_range(y_vals, y_axis_policy="auto")
+                    if zoomed:
+                        st.caption(
+                            "Note: y-axis is auto-zoomed (does not start at 0). "
+                            "Enable “Start y-axis at zero” to compare on a zero baseline."
+                        )
+                except Exception:
+                    pass
 
             # Numeric summary in text
             lines = []
