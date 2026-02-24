@@ -15,6 +15,7 @@ from typing import Tuple
 
 # ---- Geo simplification tolerances ----
 SIMPLIFY_TOL_ADM2: float = 0.025
+SIMPLIFY_TOL_ADM3: float = 0.001
 SIMPLIFY_TOL_ADM1: float = 0.015
 
 # ---- Bounding box for India ----

@@ -104,6 +104,7 @@ from paths import DATA_DIR, DISTRICTS_PATH, BLOCKS_PATH, resolve_processed_root
 
 from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_ADM2,
+    SIMPLIFY_TOL_ADM3,
     SIMPLIFY_TOL_ADM1,
     MIN_LON,
     MAX_LON,
@@ -154,7 +155,7 @@ def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoD
     return gdf
 
 @st.cache_data(ttl=3600)
-def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
+def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM3) -> gpd.GeoDataFrame:
     """
     Load ADM3 (blocks) with the same bbox + simplification strategy as ADM2.
 
@@ -1524,7 +1525,7 @@ with state_placeholder.container():
                 st.stop()
 
             # Load ADM3 boundaries for block selection
-            adm3_sidebar = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+            adm3_sidebar = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM3)
 
             block_options = ["All"]
             if selected_district != "All":
@@ -1733,7 +1734,7 @@ if _admin_level == "block":
         render_perf_panel_safe()
         st.stop()
 
-    adm3 = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+    adm3 = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM3)
 else:
     adm3 = None
 
@@ -2053,7 +2054,7 @@ if _admin_level == "block":
     adm3_mtime = float(ADM3_GEOJSON.stat().st_mtime)
     geojson_by_state = build_adm3_geojson_by_state(
         path=str(ADM3_GEOJSON),
-        tolerance=SIMPLIFY_TOL_ADM2,
+        tolerance=SIMPLIFY_TOL_ADM3,
         mtime=adm3_mtime,
     )
 else:
