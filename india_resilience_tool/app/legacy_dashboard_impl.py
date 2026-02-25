@@ -2296,6 +2296,8 @@ legend_block_html = build_vertical_binned_legend_block_html(
     vmax=vmax,
     cmap_name=cmap_name,
     nlevels=15,
+    nticks=5,
+    include_zero_tick=True,
     map_height=MAP_HEIGHT,
     bar_width_px=18,
 )

@@ -363,6 +363,8 @@ def build_vertical_binned_legend_block_html(
     vmax: float,
     cmap_name: str,
     nlevels: int = 15,
+    nticks: int = 5,
+    include_zero_tick: bool = True,
     map_height: int = 700,
     bar_width_px: int = 18,
     label_font: str = "12px",
@@ -391,23 +393,72 @@ def build_vertical_binned_legend_block_html(
         [f'<div style="flex: 1; background: {c}; width: 100%;"></div>' for c in legend_colors]
     )
 
-    vmax_str = format_legend_value(vmax, vmin=vmin, vmax=vmax)
-    vmin_str = format_legend_value(vmin, vmin=vmin, vmax=vmax)
-
-    zero_label_html = ""
+    # Tick labels (min/max + intermediates)
+    tick_labels_html = ""
     try:
         vmin_f = float(vmin)
         vmax_f = float(vmax)
-        if np.isfinite(vmin_f) and np.isfinite(vmax_f) and (vmin_f < 0.0 < vmax_f) and (vmax_f != vmin_f):
-            zero_pos = (0.0 - vmin_f) / (vmax_f - vmin_f)  # 0..1
-            zero_pos = float(np.clip(zero_pos, 0.0, 1.0))
-            zero_str = format_legend_value(0.0, vmin=vmin_f, vmax=vmax_f)
-            zero_label_html = (
-                f'<div style="position:absolute; right:0; bottom:{zero_pos * 100.0:.1f}%;'
-                f' transform: translateY(50%); text-align:right; white-space: nowrap;">{zero_str}</div>'
-            )
+        span = vmax_f - vmin_f
+
+        if np.isfinite(vmin_f) and np.isfinite(vmax_f) and span != 0.0:
+            n = int(nticks) if int(nticks) >= 2 else 2
+            ticks = np.linspace(vmin_f, vmax_f, n).tolist()
+
+            # If the scale crosses 0 (diverging), ensure 0 is included as a tick label.
+            if include_zero_tick and (vmin_f < 0.0 < vmax_f):
+                ticks.append(0.0)
+                ticks = sorted(ticks)
+
+                # de-dupe with a tolerance (handles float round-off and exact 0 on a tick)
+                tol = max(abs(span) * 1e-9, 1e-12)
+                deduped: list[float] = []
+                for t in ticks:
+                    if not deduped or abs(t - deduped[-1]) > tol:
+                        deduped.append(t)
+                ticks = deduped
+
+                # Keep the label count stable by dropping the non-critical tick nearest to 0.
+                while len(ticks) > n:
+                    candidates = [
+                        (i, abs(t))
+                        for i, t in enumerate(ticks)
+                        if (i not in (0, len(ticks) - 1)) and (abs(t) > tol)
+                    ]
+                    if not candidates:
+                        break
+                    drop_i = min(candidates, key=lambda x: x[1])[0]
+                    ticks.pop(drop_i)
+
+            # Build absolutely positioned tick label divs
+            parts: list[str] = []
+            tol_zero = max(abs(span) * 1e-12, 1e-12)
+            for i, t in enumerate(ticks):
+                t_str = format_legend_value(t, vmin=vmin_f, vmax=vmax_f)
+                is_zero = abs(t) <= tol_zero and (vmin_f < 0.0 < vmax_f)
+                weight_css = " font-weight: 700;" if is_zero else ""
+
+                if i == 0:
+                    parts.append(
+                        f'<div style="position:absolute; bottom:0; right:0; text-align:right;'
+                        f' white-space: nowrap;{weight_css}">{t_str}</div>'
+                    )
+                elif i == len(ticks) - 1:
+                    parts.append(
+                        f'<div style="position:absolute; top:0; right:0; text-align:right;'
+                        f' white-space: nowrap;{weight_css}">{t_str}</div>'
+                    )
+                else:
+                    pos = (t - vmin_f) / span
+                    pos = float(np.clip(pos, 0.0, 1.0))
+                    parts.append(
+                        f'<div style="position:absolute; right:0; bottom:{pos * 100.0:.1f}%;'
+                        f' transform: translateY(50%); text-align:right; white-space: nowrap;{weight_css}">'
+                        f"{t_str}</div>"
+                    )
+
+            tick_labels_html = "\n".join(parts)
     except Exception:
-        zero_label_html = ""
+        tick_labels_html = ""
 
     return f"""
 <div style="display: flex; align-items: center; justify-content: flex-start; gap: 8px;
@@ -416,9 +467,7 @@ def build_vertical_binned_legend_block_html(
   <div style="position: relative; display: flex; align-items: center; height: {bar_height_px}px;">
     <div style="position: relative; width: 34px; height: {bar_height_px}px; margin-right: 6px;
                 font-size: {label_font}; color: #000;">
-      <div style="position:absolute; top:0; right:0; text-align:right; white-space: nowrap;">{vmax_str}</div>
-      {zero_label_html}
-      <div style="position:absolute; bottom:0; right:0; text-align:right; white-space: nowrap;">{vmin_str}</div>
+      {tick_labels_html}
     </div>
     <div style="height: {bar_height_px}px; width: {bar_width_px}px; border-radius: 6px;
                 border: 1px solid rgba(0,0,0,0.18);
