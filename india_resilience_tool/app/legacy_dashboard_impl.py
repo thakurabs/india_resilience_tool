@@ -2708,15 +2708,7 @@ with col2:
             st.stop()
 
         # --- Full unit climate profile (single-district/block focus mode) ---
-        if _admin_level == "block" and block_name:
-            # Block mode: show block name as main header
-            st.subheader(block_name)
-            st.markdown(f"**District:** {district_name}")
-            st.markdown(f"**State:** {state_to_show}")
-        else:
-            # District mode: show district name as main header
-            st.subheader(district_name)
-            st.markdown(f"**State:** {state_to_show}")
+        # Unit header is rendered inside render_details_panel (details_panel.py) to avoid duplication.
 
         # If this view was triggered by a point query, show the coordinates used.
         if click_coords is not None:

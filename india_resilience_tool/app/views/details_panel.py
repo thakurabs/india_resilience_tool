@@ -1002,23 +1002,41 @@ def render_details_panel(
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
 
-    # Header (block-aware)
+    # Header (single source of truth)
+    district_title = (str(district_name or "").strip() or str(selected_district or "").strip())
+    state_title = str(state_to_show or "").strip()
+
     if is_block:
-        unit_name = (
-            block_name
+        block_title = (
+            str(block_name or "").strip()
             or (str(row.get("block_name")).strip() if "block_name" in row else "")
-            or district_name
-        )
-        parent_dist = (
-            parent_district_name
+        ).strip()
+        parent_dist_title = (
+            str(parent_district_name or "").strip()
             or (str(row.get("district_name")).strip() if "district_name" in row else "")
-            or selected_district
-        )
-        st.subheader(f"{unit_name} (Block)")
-        st.caption(f"District: {parent_dist} | State: {state_to_show}")
+            or str(selected_district or "").strip()
+        ).strip()
+
+        if block_title:
+            st.subheader(block_title)
+            parts: list[str] = ["Block"]
+            if parent_dist_title:
+                parts.append(parent_dist_title)
+            if state_title:
+                parts.append(state_title)
+            st.caption(" • ".join(parts))
+        else:
+            st.subheader(district_title)
+            parts: list[str] = ["District"]
+            if state_title:
+                parts.append(state_title)
+            st.caption(" • ".join(parts))
     else:
-        st.subheader(f"{district_name} (District)")
-        st.caption(f"State: {state_to_show}")
+        st.subheader(district_title)
+        parts: list[str] = ["District"]
+        if state_title:
+            parts.append(state_title)
+        st.caption(" • ".join(parts))
 
     # Normalize panel figure size to 16:9 (dashboard style contract)
     fig_size_panel_169 = fig_size_panel
