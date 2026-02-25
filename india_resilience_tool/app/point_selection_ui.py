@@ -193,7 +193,7 @@ def render_point_selection_panel(
         st_name, dist_name = ret
         return (st_name, dist_name, None)
 
-    st.subheader("📍 Add by Location")
+    st.subheader("Add by Location")
 
     tab_single, tab_batch = st.tabs(["Single Coordinate", "Batch Input"])
 
@@ -228,14 +228,14 @@ def render_point_selection_panel(
             state_name, district_name, block_name = result
 
             if is_block and block_name:
-                st.info(f"📍 This location is in **{block_name}** (District: {district_name}), {state_name}")
+                st.info(f"This location is in **{block_name}** (District: {district_name}), {state_name}")
             else:
-                st.info(f"📍 This location is in **{district_name}**, {state_name}")
+                st.info(f"This location is in **{district_name}**, {state_name}")
 
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                if st.button("➕ Add to portfolio", key="_point_add_direct", type="primary", use_container_width=True):
+                if st.button("Add to portfolio", key="_point_add_direct", type="primary", use_container_width=True):
                     try:
                         if is_block and block_name:
                             portfolio_add_fn(state_name, district_name, block_name)
@@ -249,7 +249,7 @@ def render_point_selection_panel(
                     st.rerun()
 
             with col2:
-                if st.button("🗺️ Show on map", key="_point_show_map", use_container_width=True):
+                if st.button("Show on map", key="_point_show_map", use_container_width=True):
                     st.session_state["map_preview_marker"] = {
                         "lat": lat_input,
                         "lon": lon_input,
@@ -258,14 +258,14 @@ def render_point_selection_panel(
                         "block": block_name,
                     }
                     if is_block and block_name:
-                        portfolio_set_flash_fn(f"📍 Showing {block_name} on map", "info")
+                        portfolio_set_flash_fn(f"Showing {block_name} on map", "info")
                     else:
-                        portfolio_set_flash_fn(f"📍 Showing {district_name} on map", "info")
+                        portfolio_set_flash_fn(f"Showing {district_name} on map", "info")
                     st.session_state["jump_to_map"] = True
                     st.rerun()
 
             with col3:
-                if st.button("💾 Save point", key="btn_save_point", use_container_width=True):
+                if st.button("Save point", key="btn_save_point", use_container_width=True):
                     is_dup = any(
                         abs(p.get("lat", 0) - lat_input) < 1e-6 and abs(p.get("lon", 0) - lon_input) < 1e-6
                         for p in saved_points
@@ -383,7 +383,7 @@ def render_point_selection_panel(
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            if st.button("➕ Add all to portfolio", key="btn_add_all_saved_points", type="primary", use_container_width=True):
+            if st.button("Add all to portfolio", key="btn_add_all_saved_points", type="primary", use_container_width=True):
                 added = 0
                 for pt in saved_points:
                     st_name = pt.get("state")
@@ -404,7 +404,7 @@ def render_point_selection_panel(
                 st.rerun()
 
         with col2:
-            if st.button("🗺️ Show on map", key="_points_show_map", use_container_width=True):
+            if st.button("Show on map", key="_points_show_map", use_container_width=True):
                 markers = []
                 for pt in saved_points:
                     lat = pt.get("lat")
@@ -424,16 +424,16 @@ def render_point_selection_panel(
 
                 if markers:
                     st.session_state["map_preview_markers"] = markers
-                    portfolio_set_flash_fn(f"📍 Showing {len(markers)} saved point(s) on map", "info")
+                    portfolio_set_flash_fn(f"Showing {len(markers)} saved point(s) on map", "info")
                     st.session_state["jump_to_map"] = True
                     st.rerun()
 
         with col3:
-            if st.button("🗑 Clear all", key="btn_clear_saved_points", use_container_width=True):
+            if st.button("Clear all", key="btn_clear_saved_points", use_container_width=True):
                 st.session_state["point_query_points"] = []
                 st.session_state["map_preview_markers"] = None
                 st.rerun()
     else:
-        st.caption("💡 Use **Save point** to build a list of locations for batch adding.")
+        st.caption("Use **Save point** to build a list of locations for batch adding.")
 
     return False

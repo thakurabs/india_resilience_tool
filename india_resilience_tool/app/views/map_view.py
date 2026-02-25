@@ -423,7 +423,7 @@ def render_map_view(
                 lon_m = float(preview_marker.get("lon"))
                 district = preview_marker.get("district", "")
                 state = preview_marker.get("state", "")
-                tooltip_text = f"📍 {district}, {state}" if district else f"📍 {lat_m:.4f}, {lon_m:.4f}"
+                tooltip_text = f"Location: {district}, {state}" if district else f"Location: {lat_m:.4f}, {lon_m:.4f}"
                 
                 folium.Marker(
                     location=[lat_m, lon_m],
@@ -449,7 +449,7 @@ def render_map_view(
                 label = marker.get("label") or f"#{idx}"
                 district = marker.get("district", "")
                 state = marker.get("state", "")
-                tooltip_text = f"📍 {label}: {district}" if district else f"📍 {label}: {lat_m:.4f}, {lon_m:.4f}"
+                tooltip_text = f"Location: {label}: {district}" if district else f"Location: {label}: {lat_m:.4f}, {lon_m:.4f}"
                 
                 folium.Marker(
                     location=[lat_m, lon_m],
@@ -624,7 +624,7 @@ def render_unit_add_to_portfolio(
     with col1:
         if is_in_portfolio:
             if st.button(
-                f"✓ Remove {unit_label} from portfolio",
+                f"Remove {unit_label} from portfolio",
                 key=f"map_remove_{key_suffix}",
                 type="secondary",
                 use_container_width=True,

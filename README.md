@@ -48,15 +48,15 @@ Metrics are organized into **thematic bundles** for easier navigation:
 
 | Bundle | Metrics | Focus |
 |--------|---------:|-------|
-| 🔥 Heat Risk | 14 | Extreme heat, heatwaves, hot days/nights, persistence. |
-| 🥵 Heat Stress | 5 | Wet-bulb temperature and wet-bulb day thresholds (heat stress). |
-| ❄️ Cold Risk | 8 | Cold extremes: frost days, cold nights, cold spells. |
-| 🌾 Agriculture & Growing Conditions | 4 | Growing season and temperature context for crops. |
-| 🌊 Flood & Extreme Rainfall Risk | 6 | Heavy rainfall intensity, very wet days, wet spells. |
-| 💧 Rainfall Totals & Typical Wetness | 3 | Annual totals, rainy days, typical wetness. |
-| 🏜️ Drought Risk | 3 | Dry spell length and SPI-6 drought indicators. |
-| 🌡️ Temperature Variability | 2 | Daily/annual temperature range and variability. |
-| 🧪 Drought Risk (Advanced) | 9 | SPI-3/6/12 indices and severity counts (optional). |
+| Heat Risk | 14 | Extreme heat, heatwaves, hot days/nights, persistence. |
+| Heat Stress | 5 | Wet-bulb temperature and wet-bulb day thresholds (heat stress). |
+| Cold Risk | 8 | Cold extremes: frost days, cold nights, cold spells. |
+| Agriculture & Growing Conditions | 4 | Growing season and temperature context for crops. |
+| Flood & Extreme Rainfall Risk | 6 | Heavy rainfall intensity, very wet days, wet spells. |
+| Rainfall Totals & Typical Wetness | 3 | Annual totals, rainy days, typical wetness. |
+| Drought Risk | 3 | Dry spell length and SPI-6 drought indicators. |
+| Temperature Variability | 2 | Daily/annual temperature range and variability. |
+| Drought Risk (Advanced) | 9 | SPI-3/6/12 indices and severity counts (optional). |
 
 > Note: **Drought Risk (Advanced)** is an optional bundle (not shown by default in the UI).
 
@@ -83,7 +83,7 @@ You can add units to your portfolio in three ways (same UX in district and block
 - Switch to Rankings view
 - Select rows to add (checkboxes / editor column)
 - Click "Add checked … to portfolio"
-- Units already in portfolio show ✓ in "In portfolio"
+- Units already in portfolio show Yes in "In portfolio"
 
 **By Coordinates (Point Selection)**
 - Use the "Add by Location" panel (single + batch)

@@ -24,8 +24,8 @@ If anything in this document is violated, it is considered a **breaking change**
 - Left-panel view sync:
   - `active_view`
   - `main_view_selector` with **exact** string options:
-    - `"🗺 Map view"`
-    - `"📊 Rankings table"`
+    - `"Map view"`
+    - `"Rankings table"`
 
 ### A2) Other stable widget/session keys (must not rename)
 - Unified index selection keys:

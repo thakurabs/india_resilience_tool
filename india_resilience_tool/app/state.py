@@ -15,8 +15,8 @@ from __future__ import annotations
 from typing import Any, Literal, MutableMapping, Optional
 
 
-VIEW_MAP = "🗺 Map view"
-VIEW_RANKINGS = "📊 Rankings table"
+VIEW_MAP = "Map view"
+VIEW_RANKINGS = "Rankings table"
 
 ANALYSIS_MODE_SINGLE = "Single district focus"
 ANALYSIS_MODE_PORTFOLIO = "Multi-district portfolio"

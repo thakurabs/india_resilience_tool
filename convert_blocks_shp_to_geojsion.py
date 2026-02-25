@@ -252,7 +252,7 @@ def main() -> int:
         return 2
 
     size_mb = out.stat().st_size / (1024 * 1024)
-    print(f"✅ Wrote: {out}")
+    print(f"OK: Wrote: {out}")
     print(f"   Size: {size_mb:.2f} MB")
     print("   Schema: state, district, block, __key, geometry (EPSG:4326)")
     return 0

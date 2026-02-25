@@ -301,7 +301,7 @@ def render_risk_summary(
                 else:
                     st.write("Insufficient data")
 
-        # --- Position in state (RIGHT; keep ↗ button as-is) ---
+        # --- Position in state (RIGHT; use i button label) ---
         with col_pos_state:
             header_cols = st.columns([0.84, 0.16], gap="small")
             with header_cols[0]:
@@ -310,7 +310,7 @@ def render_risk_summary(
             with header_cols[1]:
                 already_rankings = st.session_state.get("active_view") == VIEW_RANKINGS
                 if st.button(
-                    "↗",
+                    "i",
                     key="btn_open_rankings_from_pos_state_header",
                     help="Open rankings table",
                     disabled=already_rankings,
@@ -637,7 +637,7 @@ def render_case_study_export(
     """Render the Case study export expander (single district, multi-index)."""
     import streamlit as st
 
-    with st.expander("📄 Case study export (single district, multi-index)", expanded=False):
+    with st.expander("Case study export (single district, multi-index)", expanded=False):
         st.caption(
             "Build a case-study style report for the selected district across "
             "multiple climate indices (experimental)."
@@ -683,7 +683,7 @@ def render_case_study_export(
         if not expanded_slugs:
             expanded_slugs = [variable_slug] if variable_slug in index_options else (index_options[:1] if index_options else [])
 
-        st.caption(f"📊 {len(expanded_slugs)} metric(s) selected")
+        st.caption(f"{len(expanded_slugs)} metric(s) selected")
 
         manual_mode = st.checkbox(
             "Manually refine metric selection",
@@ -776,19 +776,19 @@ def render_case_study_export(
                 if build_state in ("running", "complete", "error"):
                     prog_ph.progress(build_progress)
                     if build_state == "complete":
-                        msg_ph.success("Completed ✅")
+                        msg_ph.success("Completed")
                     elif build_state == "error":
                         msg_ph.error(build_message or "Build failed.")
                     else:
                         pct = int(round(build_progress * 100))
-                        msg_ph.caption(f"🕒 {pct}% — {build_message or 'Working…'}")
+                        msg_ph.caption(f"{pct}% - {build_message or 'Working...'}")
 
             if clicked:
                 st.session_state["case_study_build_state"] = "running"
                 st.session_state["case_study_build_progress"] = 0.0
                 st.session_state["case_study_build_message"] = "Starting…"
                 prog_ph.progress(0.0)
-                msg_ph.caption("🕒 0% — Starting…")
+                msg_ph.caption("0% - Starting...")
 
                 def _progress_cb(frac: float, msg: str) -> None:
                     frac = _clamp01(frac)
@@ -798,9 +798,9 @@ def render_case_study_export(
                     prog_ph.progress(frac)
                     pct = int(round(frac * 100))
                     if msg_clean:
-                        msg_ph.caption(f"🕒 {pct}% — {msg_clean}")
+                        msg_ph.caption(f"{pct}% - {msg_clean}")
                     else:
-                        msg_ph.caption(f"🕒 {pct}%")
+                        msg_ph.caption(f"{pct}%")
 
                 try:
                     with st.spinner("Building case-study data…"):
@@ -849,9 +849,9 @@ def render_case_study_export(
                         st.session_state["case_study_build_progress"] = 1.0
                         st.session_state["case_study_build_message"] = "Completed."
                         prog_ph.progress(1.0)
-                        msg_ph.success("Completed ✅")
+                        msg_ph.success("Completed")
                         if hasattr(st, "toast"):
-                            st.toast("Case-study data build completed ✅")
+                            st.toast("Case-study data build completed")
 
             summary_df_cs = st.session_state.get("case_study_summary")
             ts_dict_cs = st.session_state.get("case_study_ts")
@@ -891,7 +891,7 @@ def render_case_study_export(
                     pdf_filename = f"climate_profile_{safe_state}__{safe_dist}.pdf"
 
                     st.download_button(
-                        label="⬇️ Download case-study PDF",
+                        label="Download case-study PDF",
                         data=pdf_bytes,
                         file_name=pdf_filename,
                         mime="application/pdf",
@@ -907,7 +907,7 @@ def render_case_study_export(
                         pdf_bytes=pdf_bytes,
                     )
                     st.download_button(
-                        label="⬇️ Download PDF + CSVs as ZIP",
+                        label="Download PDF + CSVs as ZIP",
                         data=zip_bytes,
                         file_name=f"climate_profile_{safe_state}__{safe_dist}__with_data.zip",
                         mime="application/zip",

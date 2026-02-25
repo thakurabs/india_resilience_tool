@@ -177,7 +177,7 @@ def render_state_summary_view(
             if pdf_path is not None and pdf_path.exists():
                 with open(pdf_path, "rb") as fh:
                     st.download_button(
-                        "⬇️ Download state-average time-series (PDF)",
+                        "Download state-average time-series (PDF)",
                         fh.read(),
                         file_name=pdf_path.name,
                         mime="application/pdf",

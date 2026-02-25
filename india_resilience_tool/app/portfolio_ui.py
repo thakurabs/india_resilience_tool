@@ -60,7 +60,7 @@ def render_portfolio_badge(portfolio_count: int, level: str = "district") -> Non
         st.markdown(
             f"""<div style="padding: 8px 12px; background: #f0f2f6; border-radius: 8px;
             text-align: center; color: #666;">
-            <span style="font-size: 1.1em;">📋</span>
+            <span style="font-size: 1.1em;">Portfolio</span>
             <strong>Portfolio empty</strong> — Click {unit_plural} to add
             </div>""",
             unsafe_allow_html=True,
@@ -69,7 +69,7 @@ def render_portfolio_badge(portfolio_count: int, level: str = "district") -> Non
         st.markdown(
             f"""<div style="padding: 8px 12px; background: #e8f4e8; border-radius: 8px;
             text-align: center; color: #2d5a2d;">
-            <span style="font-size: 1.1em;">📋</span>
+            <span style="font-size: 1.1em;">Portfolio</span>
             <strong>{portfolio_count} {unit_singular}{'s' if portfolio_count != 1 else ''}</strong> in portfolio
             </div>""",
             unsafe_allow_html=True,
@@ -278,14 +278,14 @@ def render_clear_portfolio_button(
     confirm_state = st.session_state.get("confirm_clear_portfolio", False)
 
     if not confirm_state:
-        if st.button("🗑 Clear all", key="btn_portfolio_remove_all", type="secondary"):
+        if st.button("Clear all", key="btn_portfolio_remove_all", type="secondary"):
             st.session_state["confirm_clear_portfolio"] = True
             st.rerun()
     else:
         st.warning(f"Remove all {portfolio_count} {unit_plural}?")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("✓ Yes, clear", key="btn_portfolio_remove_all_confirm", type="primary"):
+            if st.button("Yes, clear", key="btn_portfolio_remove_all_confirm", type="primary"):
                 clear_fn()
                 st.session_state["confirm_clear_portfolio"] = False
                 set_flash_fn("Portfolio cleared.", "success")
@@ -370,7 +370,7 @@ def render_index_selector(
                     expanded_slugs.append(slug)
         
         # Show count of expanded metrics
-        st.caption(f"📊 {len(expanded_slugs)} metrics from {len(selected_bundles)} domain(s)")
+        st.caption(f"{len(expanded_slugs)} metrics from {len(selected_bundles)} domain(s)")
     else:
         # No bundles selected - fall back to current metric only
         expanded_slugs = [current_slug] if current_slug in available_slugs else []
@@ -798,7 +798,7 @@ def render_comparison_table(
         st.dataframe(display_df, hide_index=True, use_container_width=True)
 
         st.download_button(
-            "⬇️ Download as CSV",
+            "Download as CSV",
             data=display_df.to_csv(index=False).encode("utf-8"),
             file_name=f"portfolio_comparison_{level_norm}.csv",
             mime="text/csv",
@@ -823,9 +823,9 @@ VIZ_VALUE_OPTIONS = {
 
 # Available chart types
 CHART_TYPES = {
-    "heatmap": "🔥 Heatmap",
-    "grouped_bar": "📊 Grouped Bar Chart",
-    "both": "📈 Both Charts",
+    "heatmap": "Heatmap",
+    "grouped_bar": "Grouped Bar Chart",
+    "both": "Both Charts",
 }
 
 
@@ -919,7 +919,7 @@ def _render_heatmap_section(
     """Render the heatmap visualization section."""
     import streamlit as st
     
-    st.markdown("#### 🔥 Heatmap")
+    st.markdown("#### Heatmap")
     
     # Heatmap-specific options
     with st.expander("Heatmap options", expanded=False):
@@ -969,7 +969,7 @@ def _render_grouped_bar_section(
     """Render the grouped bar chart visualization section."""
     import streamlit as st
     
-    st.markdown("#### 📊 Grouped Bar Chart")
+    st.markdown("#### Grouped Bar Chart")
     
     # Count data dimensions
     n_districts = df["District"].nunique() if "District" in df.columns else 0
@@ -1051,7 +1051,7 @@ def _offer_figure_download(fig: Any, filename: str, label: str) -> None:
         buf.seek(0)
         
         st.download_button(
-            f"⬇️ {label}",
+            f"Download {label}",
             data=buf.getvalue(),
             file_name=filename,
             mime="image/png",
@@ -1183,7 +1183,7 @@ def render_portfolio_panel(
         else:
             st.info(msg)
 
-    st.markdown("### 📋 Your Portfolio")
+    st.markdown("### Your Portfolio")
     render_portfolio_badge(len(portfolio), level=level_norm)
 
     if portfolio:
@@ -1248,7 +1248,7 @@ def render_portfolio_panel(
         st.info("Your portfolio is empty. Use the **Add units** tab to add districts/blocks.")
         return
 
-    st.markdown("### 📊 Portfolio Comparison")
+    st.markdown("### Portfolio Comparison")
 
     current_selection = st.session_state.get("portfolio_multiindex_selection", [variable_slug])
     selected_slugs = render_index_selector(
@@ -1297,7 +1297,7 @@ def render_portfolio_panel(
 
         if show_viz:
             st.markdown("---")
-            with st.expander("📈 Visualizations", expanded=False):
+            with st.expander("Visualizations", expanded=False):
                 render_portfolio_visualizations(
                     cached_df,
                     default_value_col="Percentile",

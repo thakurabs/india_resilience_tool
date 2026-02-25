@@ -14,8 +14,8 @@ def test_ensure_session_state_sets_defaults() -> None:
     ss = {}
     ensure_session_state(ss)
     assert ss["analysis_mode"] == "Single district focus"
-    assert ss["active_view"] == "🗺 Map view"
-    assert ss["main_view_selector"] == "🗺 Map view"
+    assert ss["active_view"] == "Map view"
+    assert ss["main_view_selector"] == "Map view"
     assert isinstance(ss["portfolio_districts"], list)
     assert ss["jump_to_rankings"] is False
     assert ss["jump_to_map"] is False

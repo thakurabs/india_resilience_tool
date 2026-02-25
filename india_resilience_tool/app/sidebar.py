@@ -389,7 +389,7 @@ def render_portfolio_quick_stats(*, level: Optional[str] = None) -> None:
         st.markdown(
             '<div style="padding: 8px; background: #f5f5f5; border-radius: 4px; '
             'text-align: center; color: #666; font-size: 0.85em;">'
-            "📋 Portfolio empty</div>",
+            "Portfolio empty</div>",
             unsafe_allow_html=True,
         )
         return
@@ -406,7 +406,7 @@ def render_portfolio_quick_stats(*, level: Optional[str] = None) -> None:
     st.markdown(
         f'<div style="padding: 8px; background: #e8f4e8; border-radius: 4px; '
         f'text-align: center; color: #2d5a2d; font-size: 0.85em;">'
-        f'📋 <strong>{valid_count}</strong> {unit_label}{state_text}</div>',
+        f'<strong>{valid_count}</strong> {unit_label}{state_text}</div>',
         unsafe_allow_html=True,
     )
 

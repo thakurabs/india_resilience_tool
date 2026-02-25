@@ -17,6 +17,8 @@ from typing import Any, Callable, Literal, Mapping, Optional
 
 import pandas as pd
 
+from india_resilience_tool.app.state import VIEW_RANKINGS
+
 AdminLevel = Literal["district", "block"]
 
 
@@ -48,7 +50,7 @@ def render_rankings_view(
     """
     import streamlit as st
 
-    if view != "📊 Rankings table":
+    if view != VIEW_RANKINGS:
         return
 
     level_norm = str(level).strip().lower()
@@ -318,7 +320,7 @@ def _render_portfolio_rankings(
 
     st.markdown(
         f"<div style='text-align: right; color: #666; margin-bottom: 8px;'>"
-        f"📋 {len(portfolio_items)} {unit_label}{'s' if len(portfolio_items) != 1 else ''} in portfolio"
+        f"{len(portfolio_items)} {unit_label}{'s' if len(portfolio_items) != 1 else ''} in portfolio"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -334,7 +336,7 @@ def _render_portfolio_rankings(
         disabled=[c for c in df_port.columns if c not in ("Add to portfolio",)],
         column_config={
             "In portfolio": st.column_config.CheckboxColumn(
-                "✓",
+                "Yes",
                 help="Already in portfolio",
                 disabled=True,
             ),
@@ -380,7 +382,7 @@ def _render_portfolio_rankings(
                 st.rerun()
 
     if st.button(
-        f"➕ Add checked {plural_label} to portfolio",
+        f"Add checked {plural_label} to portfolio",
         key=f"btn_add_portfolio_from_table_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{level_norm}",
         type="primary",
         disabled=(selected_n == 0),

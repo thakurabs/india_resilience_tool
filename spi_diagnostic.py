@@ -121,19 +121,19 @@ def check_scientific_validity(stats_by_scenario: dict) -> list:
     # Check 1: Historical baseline mean should be close to 0
     if "baseline_mean" in hist_stats:
         if abs(hist_stats["baseline_mean"]) > 0.3:
-            issues.append(f"⚠️  Historical baseline mean ({hist_stats['baseline_mean']:.3f}) deviates significantly from 0")
+            issues.append(f"WARN: Historical baseline mean ({hist_stats['baseline_mean']:.3f}) deviates significantly from 0")
     
     # Check 2: Historical baseline std should be close to 1
     if "baseline_std" in hist_stats:
         if abs(hist_stats["baseline_std"] - 1.0) > 0.3:
-            issues.append(f"⚠️  Historical baseline std ({hist_stats['baseline_std']:.3f}) deviates significantly from 1")
+            issues.append(f"WARN: Historical baseline std ({hist_stats['baseline_std']:.3f}) deviates significantly from 1")
     
     # Check 3: Values should be in reasonable range
     for scenario, stats in stats_by_scenario.items():
         if "min" in stats and stats["min"] < -4:
-            issues.append(f"⚠️  {scenario}: Extremely low SPI values ({stats['min']:.2f}) - check data quality")
+            issues.append(f"WARN: {scenario}: Extremely low SPI values ({stats['min']:.2f}) - check data quality")
         if "max" in stats and stats["max"] > 4:
-            issues.append(f"⚠️  {scenario}: Extremely high SPI values ({stats['max']:.2f}) - check data quality")
+            issues.append(f"WARN: {scenario}: Extremely high SPI values ({stats['max']:.2f}) - check data quality")
     
     # Check 4: Compare historical vs SSP
     ssp_stats = stats_by_scenario.get("ssp245", {})
@@ -141,7 +141,7 @@ def check_scientific_validity(stats_by_scenario: dict) -> list:
         mean_diff = ssp_stats["mean"] - hist_stats["mean"]
         if abs(mean_diff) > 0.5:
             direction = "drier" if mean_diff < 0 else "wetter"
-            issues.append(f"ℹ️  SSP245 shows {direction} conditions (mean shift: {mean_diff:+.3f})")
+            issues.append(f"INFO: SSP245 shows {direction} conditions (mean shift: {mean_diff:+.3f})")
     
     return issues
 
@@ -237,7 +237,7 @@ def main():
         for issue in issues:
             print(f"  {issue}")
     else:
-        print("\n✓ All validation checks passed!")
+        print("\nOK: All validation checks passed!")
     
     # Print sample data
     print("\n" + "=" * 70)
