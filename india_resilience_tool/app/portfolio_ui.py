@@ -31,6 +31,7 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
 from typing import Any, Callable, List, Mapping, Optional, Sequence
 
@@ -132,6 +133,37 @@ def _group_portfolio_items_by_state(
     return dict(sorted(by_state.items(), key=lambda kv: normalize_fn(kv[0])))
 
 
+def _group_portfolio_items_by_state_and_district(
+    items: Sequence[dict[str, str]],
+    *,
+    normalize_fn: Callable[[str], str],
+) -> dict[str, dict[str, list[dict[str, str]]]]:
+    """
+    Group portfolio items into a nested State -> District -> [Items] mapping.
+
+    Sorting:
+      - States by normalize(state)
+      - Districts by normalize(district)
+      - Items (blocks) by normalize(block)
+    """
+    by_state: dict[str, dict[str, list[dict[str, str]]]] = {}
+    for it in items:
+        st_name = it.get("state", "")
+        dist_name = it.get("district", "")
+        by_state.setdefault(st_name, {}).setdefault(dist_name, []).append(it)
+
+    # Sort blocks within each district; sort districts and states
+    out: dict[str, dict[str, list[dict[str, str]]]] = {}
+    for st_name, by_district in by_state.items():
+        dist_sorted: dict[str, list[dict[str, str]]] = {}
+        for dist_name, lst in by_district.items():
+            lst_sorted = sorted(lst, key=lambda r: normalize_fn(r.get("block", "")))
+            dist_sorted[dist_name] = lst_sorted
+        out[st_name] = dict(sorted(dist_sorted.items(), key=lambda kv: normalize_fn(kv[0])))
+
+    return dict(sorted(out.items(), key=lambda kv: normalize_fn(kv[0])))
+
+
 def render_portfolio_list(
     *,
     portfolio: Sequence[Any],
@@ -156,28 +188,34 @@ def render_portfolio_list(
         )
         return
 
-    items = _portfolio_items_to_dicts(portfolio, is_block=is_block)
+    items_all = _portfolio_items_to_dicts(portfolio, is_block=is_block)
 
     # Search (kept within the manage panel for large portfolios)
     search_key = f"portfolio_manage_search_{level_norm}"
-    q = st.text_input("Search", value=str(st.session_state.get(search_key, "")), key=search_key, placeholder="Type to filter…")
-    items = _filter_portfolio_items(items, query=q, normalize_fn=normalize_fn)
+    q = st.text_input(
+        "Search",
+        value=str(st.session_state.get(search_key, "")),
+        key=search_key,
+        placeholder="Type to filter…",
+    )
+    items = _filter_portfolio_items(items_all, query=q, normalize_fn=normalize_fn)
+    if not items:
+        st.caption("No matching items. Clear search to see all.")
+        return
 
-    # Group by state for scanability
-    by_state = _group_portfolio_items_by_state(items, normalize_fn=normalize_fn)
-    state_names = list(by_state.keys())
-    total_items = sum(len(by_state[s]) for s in state_names)
+    total_items = len(items)
 
     show_all = st.session_state.get("_portfolio_show_all", False) or total_items <= max_visible
     remaining_budget = total_items if show_all else max_visible
 
-    for st_name in state_names:
-        state_items = by_state.get(st_name, [])
-        if not state_items:
-            continue
+    def _render_indented_leaf(label: str, *, padding_px: int) -> None:
+        safe = html.escape(str(label))
+        st.markdown(
+            f"<div style=\"padding-left: {int(padding_px)}px;\"><strong>{safe}</strong></div>",
+            unsafe_allow_html=True,
+        )
 
-        st.markdown(f"**{st_name}** ({len(state_items)})")
-
+    def _render_remove_all_in_state(st_name: str, *, state_items_all: Sequence[dict[str, str]]) -> None:
         # Optional: remove all in state (confirm-inline)
         confirm_key = f"confirm_remove_state_{level_norm}_{normalize_fn(st_name)}"
         confirm = bool(st.session_state.get(confirm_key, False))
@@ -186,15 +224,23 @@ def render_portfolio_list(
             pass
         with c2:
             if not confirm:
-                if st.button("Remove all in state", key=f"btn_remove_state_{level_norm}_{normalize_fn(st_name)}", type="secondary"):
+                if st.button(
+                    "Remove all in state",
+                    key=f"btn_remove_state_{level_norm}_{normalize_fn(st_name)}",
+                    type="secondary",
+                ):
                     st.session_state[confirm_key] = True
                     st.rerun()
             else:
                 st.warning("Remove all?")
                 y, n = st.columns(2)
                 with y:
-                    if st.button("Yes", key=f"btn_remove_state_yes_{level_norm}_{normalize_fn(st_name)}", type="primary"):
-                        for it in list(state_items):
+                    if st.button(
+                        "Yes",
+                        key=f"btn_remove_state_yes_{level_norm}_{normalize_fn(st_name)}",
+                        type="primary",
+                    ):
+                        for it in list(state_items_all):
                             try:
                                 if is_block:
                                     portfolio_remove_fn(it["state"], it["district"], it["block"])
@@ -209,38 +255,90 @@ def render_portfolio_list(
                         st.session_state[confirm_key] = False
                         st.rerun()
 
-        for it in state_items:
+    if is_block:
+        # Block mode: State -> District -> Blocks
+        tree_all = _group_portfolio_items_by_state_and_district(items_all, normalize_fn=normalize_fn)
+        tree = _group_portfolio_items_by_state_and_district(items, normalize_fn=normalize_fn)
+
+        for st_name, by_district in tree.items():
             if remaining_budget <= 0:
                 break
-            remaining_budget -= 1
 
-            state_i = it.get("state", "")
-            district_i = it.get("district", "")
-            block_i = it.get("block", "")
+            all_districts = tree_all.get(st_name, {})
+            state_total = sum(len(v) for v in all_districts.values())
 
-            col1, col2 = st.columns([5, 1])
-            with col1:
-                if is_block:
-                    st.markdown(f"**{block_i}** ({district_i})")
-                else:
-                    st.markdown(f"**{district_i}**")
-            with col2:
-                key_parts = [normalize_fn(state_i), normalize_fn(district_i)]
-                if is_block:
-                    key_parts.append(normalize_fn(block_i))
-                key = "btn_portfolio_remove_" + "_".join(key_parts)
+            with st.expander(f"{st_name} ({state_total})", expanded=True):
+                state_items_all = [it for lst in all_districts.values() for it in lst]
+                if state_items_all:
+                    _render_remove_all_in_state(st_name, state_items_all=state_items_all)
 
-                if st.button("×", key=key, help=f"Remove {block_i if is_block else district_i}"):
-                    try:
-                        if is_block:
-                            portfolio_remove_fn(state_i, district_i, block_i)
-                        else:
-                            portfolio_remove_fn(state_i, district_i)
-                    except TypeError:
-                        portfolio_remove_fn(state_i, district_i)
-                    st.rerun()
+                for dist_name, block_items in by_district.items():
+                    if remaining_budget <= 0:
+                        break
 
-        st.markdown("")
+                    district_total = len(all_districts.get(dist_name, []))
+                    with st.expander(f"{dist_name} ({district_total})", expanded=True):
+                        for it in block_items:
+                            if remaining_budget <= 0:
+                                break
+                            remaining_budget -= 1
+
+                            state_i = it.get("state", "")
+                            district_i = it.get("district", "")
+                            block_i = it.get("block", "")
+
+                            col1, col2 = st.columns([5, 1])
+                            with col1:
+                                _render_indented_leaf(block_i, padding_px=16)
+                            with col2:
+                                key_parts = [normalize_fn(state_i), normalize_fn(district_i), normalize_fn(block_i)]
+                                key = "btn_portfolio_remove_" + "_".join(key_parts)
+                                if st.button("×", key=key, help=f"Remove {block_i}"):
+                                    try:
+                                        portfolio_remove_fn(state_i, district_i, block_i)
+                                    except TypeError:
+                                        portfolio_remove_fn(state_i, district_i)
+                                    st.rerun()
+
+                st.markdown("")
+    else:
+        # District mode: State -> Districts
+        by_state_all = _group_portfolio_items_by_state(items_all, normalize_fn=normalize_fn)
+        by_state = _group_portfolio_items_by_state(items, normalize_fn=normalize_fn)
+
+        for st_name, state_items in by_state.items():
+            if remaining_budget <= 0:
+                break
+
+            state_total = len(by_state_all.get(st_name, []))
+
+            with st.expander(f"{st_name} ({state_total})", expanded=True):
+                state_items_all = by_state_all.get(st_name, [])
+                if state_items_all:
+                    _render_remove_all_in_state(st_name, state_items_all=state_items_all)
+
+                for it in state_items:
+                    if remaining_budget <= 0:
+                        break
+                    remaining_budget -= 1
+
+                    state_i = it.get("state", "")
+                    district_i = it.get("district", "")
+
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        _render_indented_leaf(district_i, padding_px=16)
+                    with col2:
+                        key_parts = [normalize_fn(state_i), normalize_fn(district_i)]
+                        key = "btn_portfolio_remove_" + "_".join(key_parts)
+                        if st.button("×", key=key, help=f"Remove {district_i}"):
+                            try:
+                                portfolio_remove_fn(state_i, district_i)
+                            except TypeError:
+                                portfolio_remove_fn(state_i, district_i)
+                            st.rerun()
+
+            st.markdown("")
 
     # Show more/less toggle (preserve existing session keys)
     if total_items > max_visible:
