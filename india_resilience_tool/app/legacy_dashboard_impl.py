@@ -74,6 +74,7 @@ from india_resilience_tool.app.views.details_panel import render_details_panel
 from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
 from india_resilience_tool.app.portfolio_ui import render_portfolio_panel
 from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
+from india_resilience_tool.app.state import VIEW_MAP, VIEW_RANKINGS
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -704,7 +705,7 @@ st.session_state.setdefault("_analysis_mode_prev", st.session_state.get("analysi
 
 # Which main view is active in the left column: map vs rankings
 if "active_view" not in st.session_state:
-    st.session_state["active_view"] = "🗺 Map view"
+    st.session_state["active_view"] = VIEW_MAP
 
 # Perf timing toggle (developer)
 st.session_state.setdefault("perf_enabled", DEBUG)
@@ -975,7 +976,7 @@ with col1:
         # Metric description
         desc = str(VARCFG.get("description", "")).strip()
         if desc:
-            st.caption(f"ℹ️ {desc}")
+            st.caption(f"Note: {desc}")
 
         PROCESSED_ROOT = resolve_processed_root(
             VARIABLE_SLUG, data_dir=DATA_DIR, mode="portfolio"
@@ -1320,7 +1321,7 @@ with state_placeholder.container():
         unit_plural = "blocks" if admin_level == "block" else "districts"
 
         if analysis_mode == SEL_PLACEHOLDER:
-            st.caption("ℹ️ Select an analysis focus to continue.")
+            st.caption("Select an analysis focus to continue.")
         elif "Single" in analysis_mode:
             st.caption(
                 f"Inspect one {unit_singular} at a time. Use the dropdowns below "
@@ -1330,8 +1331,8 @@ with state_placeholder.container():
             st.markdown(
                 f"<div style='font-size:0.9rem; margin-top:0.25rem; margin-bottom:0.1rem;'>"
                 f"In <strong>Multi-{unit_singular} portfolio</strong> mode you build a set of {unit_plural} "
-                f"for comparison. {unit_plural.title()} are added from the <em>🗺 Map view</em>, the "
-                f"<em>📊 Rankings table</em>, or from saved point locations. "
+                f"for comparison. {unit_plural.title()} are added from the <em>{VIEW_MAP}</em>, the "
+                f"<em>{VIEW_RANKINGS}</em>, or from saved point locations. "
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -1548,7 +1549,7 @@ with state_placeholder.container():
             else:
                 # Show disabled/info when district not selected
                 if selected_district == "All":
-                    st.caption("ℹ️ Select a district to see blocks")
+                    st.caption("Select a district to see blocks")
                 st.session_state["selected_block"] = "All"
         else:
             st.session_state.pop("selected_block", None)
@@ -1788,10 +1789,10 @@ if DEBUG and _admin_level == "block":
     st.sidebar.write(f"**DEBUG: merged has {len(merged)} rows**")
     st.sidebar.write(f"Columns: {list(merged.columns[:10])}...")
     if "block_name" in merged.columns:
-        st.sidebar.write(f"block_name column exists ✓")
+        st.sidebar.write("block_name column exists: OK")
         st.sidebar.write(f"Sample blocks: {merged['block_name'].head(3).tolist()}")
     else:
-        st.sidebar.write("❌ block_name column MISSING!")
+        st.sidebar.write("block_name column missing")
     if metric_col in merged.columns:
         non_null = merged[metric_col].notna().sum()
         st.sidebar.write(f"metric_col '{metric_col}' has {non_null} non-null values")
@@ -2277,7 +2278,7 @@ with col1:
             st.session_state["map_reset_requested"] = True
 
     # Main view selector: Map vs Rankings (replaces tabs)
-    view_options = ["🗺 Map view", "📊 Rankings table"]
+    view_options = [VIEW_MAP, VIEW_RANKINGS]
 
     from india_resilience_tool.app.sidebar import render_view_selector
 
@@ -2285,7 +2286,7 @@ with col1:
     view = render_view_selector(label="View", horizontal=True)
 
 # ---------- VIEW 1: MAP ----------
-    if view == "🗺 Map view":
+    if view == VIEW_MAP:
 
         returned, clicked_district, clicked_state = render_map_view(
             m=m,
@@ -2330,7 +2331,7 @@ with col1:
             if clicked_state:
                 st.session_state["pending_selected_state"] = clicked_state
 
-    elif view == "📊 Rankings table":
+    elif view == VIEW_RANKINGS:
 
         render_rankings_view(
             view=view,
@@ -2673,7 +2674,7 @@ with col2:
                     with c_add:
                         if not already_in:
                             if st.button(
-                                "➕ Add to portfolio",
+                                "Add to portfolio",
                                 key=f"btn_add_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
                                 use_container_width=True,
                             ):
@@ -2690,7 +2691,7 @@ with col2:
                     with c_remove:
                         if already_in:
                             if st.button(
-                                "🗑 Remove",
+                                "Remove",
                                 key=f"btn_remove_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
                                 use_container_width=True,
                             ):
@@ -2731,7 +2732,7 @@ with col2:
             display_name = block_name if _admin_level == "block" else district_name
             
             if st.button(
-                f"➕ Add this {unit_label_btn} to portfolio",
+                f"Add this {unit_label_btn} to portfolio",
                 key=f"btn_add_portfolio_single_{state_to_show}_{district_name}_{block_name or 'na'}",
             ):
                 _portfolio_add(state_to_show, district_name, block_name)

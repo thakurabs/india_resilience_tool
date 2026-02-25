@@ -133,17 +133,17 @@ def main():
     print("=" * 60)
     
     if districts_path.exists() and blocks_path.exists():
-        print("✓ Clean folder structure detected!")
+        print("OK: Clean folder structure detected!")
         print(f"  - districts/ contains district-level data")
         print(f"  - blocks/ contains block-level data")
     elif blocks_path.exists():
-        print("✓ Block-level data exists in clean structure")
+        print("OK: Block-level data exists in clean structure")
         print("  - Run compute for --level district if needed")
     elif districts_path.exists():
-        print("✓ District-level data exists in clean structure")
+        print("OK: District-level data exists in clean structure")
         print("  - Run compute for --level block if needed")
     else:
-        print("✗ Clean folder structure not found")
+        print("ERROR: Clean folder structure not found")
         print("  - Run compute_indices_multiprocess.py with new version")
     
     print()
