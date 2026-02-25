@@ -9,8 +9,6 @@ This module renders the state summary panel shown when:
 It includes:
 - State summary header with index/scenario/period
 - District-wise distribution boxplot
-- State summary statistics
-- Per-model state averages
 - Trend over time (state average)
 
 Widget keys preserved:
@@ -27,6 +25,17 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
 import pandas as pd
+
+
+def _should_show_state_aggregate_tables(selected_district: Optional[str]) -> bool:
+    """
+    Return True if state-aggregate tables should be shown.
+
+    We hide these when the user has selected a State but not yet chosen a District
+    (i.e., District is still "All"), because they are not needed in that context.
+    """
+    d = str(selected_district or "").strip().lower()
+    return bool(d) and d != "all"
 
 
 def render_state_summary_view(
@@ -66,6 +75,7 @@ def render_state_summary_view(
 
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
+    show_agg_tables = _should_show_state_aggregate_tables(selected_district)
 
     if is_block and selected_district != "All":
         st.subheader(f"{selected_district} — District summary (Blocks)")
@@ -124,36 +134,37 @@ def render_state_summary_view(
                     "so the boxplot could not be generated."
                 )
 
-    # --- Expander 2: State summary statistics ---
-    with st.expander("State summary statistics", expanded=False):
-        if ensemble.get("n_districts", 0) > 0:
-            stat_rows = [
-                {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
-                {"Statistic": "median", "Value": f"{ensemble['median']:.2f}"},
-                {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
-                {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
-                {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
-                {
-                    "Statistic": "n_districts",
-                    "Value": str(int(ensemble["n_districts"])),
-                },
-            ]
-            st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
-        else:
-            st.info("No numeric district values found for this state & selection.")
+    if show_agg_tables:
+        # --- Expander 2: State summary statistics ---
+        with st.expander("State summary statistics", expanded=False):
+            if ensemble.get("n_districts", 0) > 0:
+                stat_rows = [
+                    {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
+                    {"Statistic": "median", "Value": f"{ensemble['median']:.2f}"},
+                    {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
+                    {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
+                    {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
+                    {
+                        "Statistic": "n_districts",
+                        "Value": str(int(ensemble["n_districts"])),
+                    },
+                ]
+                st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
+            else:
+                st.info("No numeric district values found for this state & selection.")
 
-    # --- Expander 3: Per-model state averages ---
-    with st.expander("Per-model state averages", expanded=False):
-        if per_model_df is not None and not per_model_df.empty:
-            st.dataframe(
-                per_model_df.rename(
-                    columns={"value": "state_avg", "n_districts": "n_districts_used"}
-                ),
-                use_container_width=True,
-            )
+        # --- Expander 3: Per-model state averages ---
+        with st.expander("Per-model state averages", expanded=False):
+            if per_model_df is not None and not per_model_df.empty:
+                st.dataframe(
+                    per_model_df.rename(
+                        columns={"value": "state_avg", "n_districts": "n_districts_used"}
+                    ),
+                    use_container_width=True,
+                )
 
-        if sel_districts_gdf is not None and not sel_districts_gdf.empty:
-            st.caption(f"Districts used: {len(sel_districts_gdf)}")
+            if sel_districts_gdf is not None and not sel_districts_gdf.empty:
+                st.caption(f"Districts used: {len(sel_districts_gdf)}")
 
     # --- Expander 4: Trend over time (state average) ---
     with st.expander("Trend over time (state average)", expanded=False):
