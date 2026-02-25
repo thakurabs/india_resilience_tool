@@ -320,3 +320,238 @@ def discover_state_yearly_file(
     # Fall back to default
     f_default = ts_root_p / state_dir / "state_yearly_ensemble_stats.csv"
     return f_default if f_default.exists() else None
+
+
+def discover_district_model_yearly_files(
+    *,
+    ts_root: PathLike,
+    state_dir: str,
+    district_display: str,
+    scenario_name: str,
+    varcfg: Mapping[str, Any],
+    aliases: Optional[dict[str, str]] = None,
+    normalize_fn: Optional[callable] = None,
+) -> dict[str, Path]:
+    """
+    Discover per-model district yearly CSVs for a given district+scenario.
+
+    Expected structure (compute pipeline):
+      {root}/{state}/districts/{district}/{model}/{scenario}/{district}_yearly.csv
+
+    Returns:
+        Mapping of model_name -> Path to the per-model yearly CSV.
+        Returns an empty dict when not found.
+    """
+    ts_root_p = Path(ts_root)
+    base = ts_root_p / state_dir / "districts"
+    if not base.exists():
+        return {}
+
+    disp = str(district_display).strip()
+    scenario = str(scenario_name).strip()
+
+    # Generate name variants for matching (and aliases when present)
+    name_variants = _generate_name_variants(disp)
+    norm = normalize_fn or (lambda s: str(s).strip().lower())
+    disp_norm = norm(disp)
+    aliases = aliases or {}
+    if disp_norm in aliases:
+        name_variants.extend(_generate_name_variants(aliases[disp_norm]))
+        name_variants = _dedupe(name_variants)
+
+    # Resolve district directory (skip the "ensembles" folder).
+    district_dir: Optional[Path] = None
+    for name in name_variants:
+        cand = base / name
+        if cand.exists() and cand.is_dir() and cand.name.lower() != "ensembles":
+            district_dir = cand
+            break
+
+    if district_dir is None:
+        try:
+            district_dirs = [d for d in base.iterdir() if d.is_dir() and d.name.lower() != "ensembles"]
+            folder_names = [d.name for d in district_dirs]
+            best = difflib.get_close_matches(disp.upper(), folder_names, n=1, cutoff=0.7)
+            if not best:
+                best = difflib.get_close_matches(disp, folder_names, n=1, cutoff=0.7)
+            if best:
+                district_dir = base / best[0]
+        except Exception:
+            district_dir = None
+
+    if district_dir is None:
+        return {}
+
+    unit_key = district_dir.name
+    out: dict[str, Path] = {}
+    try:
+        model_dirs = sorted(
+            [p for p in district_dir.iterdir() if p.is_dir()],
+            key=lambda p: p.name.lower(),
+        )
+    except Exception:
+        model_dirs = []
+
+    for mdir in model_dirs:
+        scen_dir = mdir / scenario
+        if not scen_dir.exists():
+            continue
+
+        cands = [
+            scen_dir / f"{unit_key}_yearly.csv",
+            scen_dir / f"{unit_key.upper()}_yearly.csv",
+            scen_dir / f"{unit_key.lower()}_yearly.csv",
+        ]
+        f: Optional[Path] = None
+        for c in cands:
+            if c.exists():
+                f = c
+                break
+
+        if f is None:
+            try:
+                csvs = sorted(
+                    [
+                        p
+                        for p in scen_dir.glob("*_yearly.csv")
+                        if not p.name.endswith("_yearly_ensemble.csv")
+                    ],
+                    key=lambda p: p.name.lower(),
+                )
+                if csvs:
+                    f = csvs[0]
+            except Exception:
+                f = None
+
+        if f is not None and f.exists():
+            out[mdir.name] = f
+
+    return out
+
+
+def discover_block_model_yearly_files(
+    *,
+    ts_root: PathLike,
+    state_dir: str,
+    district_display: str,
+    block_display: str,
+    scenario_name: str,
+    varcfg: Mapping[str, Any],
+    aliases: Optional[dict[str, str]] = None,
+    normalize_fn: Optional[callable] = None,
+) -> dict[str, Path]:
+    """
+    Discover per-model block yearly CSVs for a given district+block+scenario.
+
+    Expected structure (compute pipeline):
+      {root}/{state}/blocks/{district}/{block}/{model}/{scenario}/{block}_yearly.csv
+
+    Returns:
+        Mapping of model_name -> Path to the per-model yearly CSV.
+        Returns an empty dict when not found.
+    """
+    ts_root_p = Path(ts_root)
+    base = ts_root_p / state_dir / "blocks"
+    if not base.exists():
+        return {}
+
+    scenario = str(scenario_name).strip()
+    aliases = aliases or {}
+
+    # Resolve district directory (skip "ensembles")
+    district_variants = _generate_name_variants(district_display)
+    norm = normalize_fn or (lambda s: str(s).strip().lower())
+    dist_norm = norm(str(district_display).strip())
+    if dist_norm in aliases:
+        district_variants.extend(_generate_name_variants(aliases[dist_norm]))
+        district_variants = _dedupe(district_variants)
+
+    district_dir: Optional[Path] = None
+    for dn in district_variants:
+        cand = base / dn
+        if cand.exists() and cand.is_dir() and cand.name.lower() != "ensembles":
+            district_dir = cand
+            break
+
+    if district_dir is None:
+        try:
+            district_dirs = [d for d in base.iterdir() if d.is_dir() and d.name.lower() != "ensembles"]
+            folder_names = [d.name for d in district_dirs]
+            best = difflib.get_close_matches(str(district_display).upper(), folder_names, n=1, cutoff=0.7)
+            if best:
+                district_dir = base / best[0]
+        except Exception:
+            district_dir = None
+
+    if district_dir is None:
+        return {}
+
+    # Resolve block directory within district
+    block_variants = _generate_name_variants(block_display)
+    block_dir: Optional[Path] = None
+    for bn in block_variants:
+        cand = district_dir / bn
+        if cand.exists() and cand.is_dir():
+            block_dir = cand
+            break
+
+    if block_dir is None:
+        try:
+            block_dirs = [d for d in district_dir.iterdir() if d.is_dir()]
+            folder_names = [d.name for d in block_dirs]
+            best = difflib.get_close_matches(str(block_display).upper(), folder_names, n=1, cutoff=0.7)
+            if not best:
+                best = difflib.get_close_matches(str(block_display), folder_names, n=1, cutoff=0.7)
+            if best:
+                block_dir = district_dir / best[0]
+        except Exception:
+            block_dir = None
+
+    if block_dir is None:
+        return {}
+
+    unit_key = block_dir.name
+    out: dict[str, Path] = {}
+    try:
+        model_dirs = sorted(
+            [p for p in block_dir.iterdir() if p.is_dir()],
+            key=lambda p: p.name.lower(),
+        )
+    except Exception:
+        model_dirs = []
+
+    for mdir in model_dirs:
+        scen_dir = mdir / scenario
+        if not scen_dir.exists():
+            continue
+
+        cands = [
+            scen_dir / f"{unit_key}_yearly.csv",
+            scen_dir / f"{unit_key.upper()}_yearly.csv",
+            scen_dir / f"{unit_key.lower()}_yearly.csv",
+        ]
+        f: Optional[Path] = None
+        for c in cands:
+            if c.exists():
+                f = c
+                break
+
+        if f is None:
+            try:
+                csvs = sorted(
+                    [
+                        p
+                        for p in scen_dir.glob("*_yearly.csv")
+                        if not p.name.endswith("_yearly_ensemble.csv")
+                    ],
+                    key=lambda p: p.name.lower(),
+                )
+                if csvs:
+                    f = csvs[0]
+            except Exception:
+                f = None
+
+        if f is not None and f.exists():
+            out[mdir.name] = f
+
+    return out

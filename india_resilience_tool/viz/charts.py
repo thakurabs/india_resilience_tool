@@ -53,6 +53,24 @@ SCENARIO_COLORS_HEX: dict[str, str] = {
     "ssp585": "#d62728",      # red
 }
 
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Convert a hex color (#RRGGBB) to a Plotly-friendly rgba(r,g,b,a) string."""
+    s = str(hex_color or "").strip()
+    if not s:
+        return f"rgba(0,0,0,{float(alpha):.3f})"
+    if s.startswith("#"):
+        s = s[1:]
+    if len(s) != 6:
+        return f"rgba(0,0,0,{float(alpha):.3f})"
+    try:
+        r = int(s[0:2], 16)
+        g = int(s[2:4], 16)
+        b = int(s[4:6], 16)
+    except Exception:
+        return f"rgba(0,0,0,{float(alpha):.3f})"
+    a = max(0.0, min(1.0, float(alpha)))
+    return f"rgba({r},{g},{b},{a:.3f})"
+
 PERIOD_ORDER = ["1990-2010", "2020-2040", "2040-2060", "2060-2080"]
 
 # Human-friendly labels used in UI and chart axes (keys must match PERIOD_ORDER)
@@ -1288,6 +1306,20 @@ def create_trend_figure_for_index_plotly(
     compare_period_label: Optional[str] = None,
     compare_period_mean: Optional[float] = None,
     units: Optional[str] = None,
+    # Optional: per-model series for spaghetti overlay (dashboard)
+    model_ts_hist: Optional[pd.DataFrame] = None,
+    model_ts_scen: Optional[pd.DataFrame] = None,
+    show_model_members: bool = False,
+    max_models: int = 15,
+    show_band: bool = True,
+    # Compatibility kwargs (accepted but ignored; dashboard passes these for Matplotlib parity)
+    ax: Any = None,
+    figsize: Optional[tuple[float, float]] = None,
+    fig_dpi: int = 150,
+    font_size_legend: int = 8,
+    logo_path: Optional[PathLike] = None,
+    style: Optional[IRTFigureStyle] = None,
+    render_context: str = "dashboard",
 ) -> Any:
     """
     Plotly version of the 'Trend over time' figure, with a teaching hoverbox.
@@ -1301,6 +1333,9 @@ def create_trend_figure_for_index_plotly(
 
     from india_resilience_tool.viz.formatting import format_delta, format_value
     from india_resilience_tool.viz.style import apply_irt_plotly_layout
+
+    # Silence unused-arg linters in editors; these are accepted for API compatibility.
+    _ = (ax, figsize, fig_dpi, font_size_legend, logo_path, style, render_context)
 
     def _prep(df: pd.DataFrame) -> pd.DataFrame:
         if df is None or df.empty:
@@ -1325,40 +1360,34 @@ def create_trend_figure_for_index_plotly(
         out = out.dropna(subset=["year", "mean"]).sort_values("year").reset_index(drop=True)
         return out
 
+    def _prep_models(df: Optional[pd.DataFrame]) -> pd.DataFrame:
+        if df is None or df.empty:
+            return pd.DataFrame()
+        out = df.copy()
+        if not {"year", "value", "model"}.issubset(out.columns):
+            return pd.DataFrame()
+        out["year"] = pd.to_numeric(out["year"], errors="coerce")
+        out["value"] = pd.to_numeric(out["value"], errors="coerce")
+        out["model"] = out["model"].astype(str)
+        out = out.dropna(subset=["year", "value"]).sort_values(["model", "year"]).reset_index(drop=True)
+        return out
+
     hist = _prep(hist_ts)
     scen = _prep(scen_ts)
+    models_hist = _prep_models(model_ts_hist) if show_model_members else pd.DataFrame()
+    models_scen = _prep_models(model_ts_scen) if show_model_members else pd.DataFrame()
 
     fig = go.Figure()
 
     period_lbl = (compare_period_label or "").strip()
     has_compare = (compare_period_mean is not None) and bool(period_lbl)
+    u = (units or "").strip()
 
     # Historical
     if not hist.empty:
-        delta = (hist["mean"] - float(compare_period_mean)) if has_compare else None
-        customdata = None
-        if has_compare:
-            customdata = delta.to_numpy().reshape(-1, 1)
+        hist_color = SCENARIO_COLORS_HEX["historical"]
 
-        hover = "<b>%{x:.0f}</b><br>" + f"Value: %{{y}}<br>"
-        if has_compare:
-            hover += f"Δ vs {period_lbl} mean: %{{customdata[0]}}<extra></extra>"
-        else:
-            hover += "<extra></extra>"
-
-        fig.add_trace(
-            go.Scatter(
-                x=hist["year"],
-                y=hist["mean"],
-                mode="lines",
-                name=SCENARIO_DISPLAY.get("historical", "Historical"),
-                line={"color": SCENARIO_COLORS_HEX["historical"], "width": 2},
-                customdata=customdata,
-                hovertemplate=hover,
-            )
-        )
-
-        if "p05" in hist.columns and "p95" in hist.columns:
+        if show_band and ("p05" in hist.columns) and ("p95" in hist.columns):
             fig.add_trace(
                 go.Scatter(
                     x=hist["year"],
@@ -1376,17 +1405,114 @@ def create_trend_figure_for_index_plotly(
                     mode="lines",
                     line={"width": 0},
                     fill="tonexty",
-                    fillcolor="rgba(31,119,180,0.18)",
+                    fillcolor=_hex_to_rgba(hist_color, 0.18),
                     showlegend=False,
                     hoverinfo="skip",
                 )
             )
+
+        if not models_hist.empty:
+            models = sorted(models_hist["model"].dropna().unique().tolist())
+            if max_models and len(models) > int(max_models):
+                models = models[: int(max_models)]
+            for m in models:
+                d = models_hist[models_hist["model"] == m]
+                if d.empty:
+                    continue
+                fig.add_trace(
+                    go.Scattergl(
+                        x=d["year"],
+                        y=d["value"],
+                        mode="lines",
+                        line={"color": _hex_to_rgba(hist_color, 0.16), "width": 1},
+                        meta=str(m),
+                        showlegend=False,
+                        hovertemplate=(
+                            "<b>%{meta}</b><br>"
+                            + "Year: %{x:.0f}<br>"
+                            + "Value: %{y}" + (f" {u}" if u else "")
+                            + "<extra></extra>"
+                        ),
+                    )
+                )
+
+        delta = (hist["mean"] - float(compare_period_mean)) if has_compare else None
+        customdata = None
+        if has_compare:
+            customdata = delta.to_numpy().reshape(-1, 1)
+
+        hover = "<b>%{x:.0f}</b><br>" + f"Value: %{{y}}<br>"
+        if has_compare:
+            hover += f"Δ vs {period_lbl} mean: %{{customdata[0]}}<extra></extra>"
+        else:
+            hover += "<extra></extra>"
+
+        fig.add_trace(
+            go.Scatter(
+                x=hist["year"],
+                y=hist["mean"],
+                mode="lines",
+                name=SCENARIO_DISPLAY.get("historical", "Historical"),
+                line={"color": hist_color, "width": 2},
+                customdata=customdata,
+                hovertemplate=hover,
+            )
+        )
 
     scen_norm = str(scenario_name).strip().lower()
     scen_color = SCENARIO_COLORS_HEX.get(scen_norm, "#d62728")
     scen_label = SCENARIO_DISPLAY.get(scen_norm, scenario_name)
 
     if not scen.empty:
+        if show_band and ("p05" in scen.columns) and ("p95" in scen.columns):
+            fig.add_trace(
+                go.Scatter(
+                    x=scen["year"],
+                    y=scen["p95"],
+                    mode="lines",
+                    line={"width": 0},
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=scen["year"],
+                    y=scen["p05"],
+                    mode="lines",
+                    line={"width": 0},
+                    fill="tonexty",
+                    fillcolor=_hex_to_rgba(scen_color, 0.18),
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+
+        if not models_scen.empty:
+            models = sorted(models_scen["model"].dropna().unique().tolist())
+            if max_models and len(models) > int(max_models):
+                models = models[: int(max_models)]
+            for m in models:
+                d = models_scen[models_scen["model"] == m]
+                if d.empty:
+                    continue
+                fig.add_trace(
+                    go.Scattergl(
+                        x=d["year"],
+                        y=d["value"],
+                        mode="lines",
+                        line={"color": _hex_to_rgba(scen_color, 0.16), "width": 1},
+                        meta=str(m),
+                        showlegend=False,
+                        hovertemplate=(
+                            "<b>%{meta}</b><br>"
+                            + "Year: %{x:.0f}<br>"
+                            + "Value: %{y}" + (f" {u}" if u else "")
+                            + "<extra></extra>"
+                        ),
+                    )
+                )
+
         delta = (scen["mean"] - float(compare_period_mean)) if has_compare else None
         customdata = None
         if has_compare:
@@ -1410,36 +1536,17 @@ def create_trend_figure_for_index_plotly(
             )
         )
 
-        if "p05" in scen.columns and "p95" in scen.columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=scen["year"],
-                    y=scen["p95"],
-                    mode="lines",
-                    line={"width": 0},
-                    showlegend=False,
-                    hoverinfo="skip",
-                )
-            )
-            # approximate rgba for scenario: use same alpha with hex conversion
-            fig.add_trace(
-                go.Scatter(
-                    x=scen["year"],
-                    y=scen["p05"],
-                    mode="lines",
-                    line={"width": 0},
-                    fill="tonexty",
-                    fillcolor="rgba(214,39,40,0.18)" if scen_norm == "ssp585" else "rgba(255,127,14,0.18)",
-                    showlegend=False,
-                    hoverinfo="skip",
-                )
-            )
-
     y_label = idx_label
-    u = (units or "").strip()
     if u and f"({u})" not in y_label:
         y_label = f"{y_label} ({u})"
 
-    apply_irt_plotly_layout(fig, title="Trend over time", xaxis_title="Year", yaxis_title=y_label)
+    hovermode = "closest" if show_model_members else "x unified"
+    apply_irt_plotly_layout(
+        fig,
+        title="Trend over time",
+        xaxis_title="Year",
+        yaxis_title=y_label,
+        hovermode=hovermode,
+    )
 
     return fig

@@ -16,7 +16,7 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 import html
 import pandas as pd
@@ -24,6 +24,7 @@ import pandas as pd
 from india_resilience_tool.app.state import VIEW_RANKINGS
 from india_resilience_tool.viz.formatting import format_delta, format_percent, format_value
 
+PathLike = Union[str, Path]
 
 _RISK_SUMMARY_CSS = """
 <style>
@@ -362,6 +363,11 @@ def render_trend_over_time(
     units: Optional[str] = None,
     logo_path: Optional[Path] = None,
     create_trend_figure_fn: Callable[..., Any],
+    # Optional: support per-model spaghetti overlay (requires per-model yearly CSVs on disk)
+    ts_root: Optional[PathLike] = None,
+    varcfg: Optional[Mapping[str, Any]] = None,
+    level: str = "district",
+    block_name: Optional[str] = None,
 ) -> None:
     """Render the Trend over time expander with sparkline + narrative."""
     import re
@@ -394,9 +400,183 @@ def render_trend_over_time(
             f"(historical + {sel_scenario})"
         )
 
-        if not hist_ts.empty or not scen_ts.empty:
-            st.markdown("**Trend over time**")
+        show_models = st.checkbox(
+            "Show model members",
+            value=bool(st.session_state.get("trend_show_models", False)),
+            key="trend_show_models",
+            help=(
+                "Overlay per-model yearly series as faint lines (spaghetti) behind the ensemble median. "
+                "Requires per-model yearly CSVs to be present on disk."
+            ),
+        )
 
+        level_norm = str(level or "district").strip().lower()
+        is_block = level_norm == "block" and bool(str(block_name or "").strip())
+        block_disp = str(block_name or "").strip() if is_block else None
+
+        model_files_hist: dict[str, Path] = {}
+        model_files_scen: dict[str, Path] = {}
+        max_available = 0
+        n_hist = 0
+        n_scen = 0
+
+        if show_models and ts_root:
+            from india_resilience_tool.data.discovery import (
+                discover_block_model_yearly_files,
+                discover_district_model_yearly_files,
+            )
+
+            vc = varcfg or {}
+            if is_block and block_disp:
+                model_files_hist = dict(
+                    discover_block_model_yearly_files(
+                        ts_root=ts_root,
+                        state_dir=state_dir_for_fs,
+                        district_display=district_for_fs,
+                        block_display=block_disp,
+                        scenario_name="historical",
+                        varcfg=vc,
+                    )
+                )
+                model_files_scen = dict(
+                    discover_block_model_yearly_files(
+                        ts_root=ts_root,
+                        state_dir=state_dir_for_fs,
+                        district_display=district_for_fs,
+                        block_display=block_disp,
+                        scenario_name=sel_scenario,
+                        varcfg=vc,
+                    )
+                )
+            else:
+                model_files_hist = dict(
+                    discover_district_model_yearly_files(
+                        ts_root=ts_root,
+                        state_dir=state_dir_for_fs,
+                        district_display=district_for_fs,
+                        scenario_name="historical",
+                        varcfg=vc,
+                    )
+                )
+                model_files_scen = dict(
+                    discover_district_model_yearly_files(
+                        ts_root=ts_root,
+                        state_dir=state_dir_for_fs,
+                        district_display=district_for_fs,
+                        scenario_name=sel_scenario,
+                        varcfg=vc,
+                    )
+                )
+
+            n_hist = len(model_files_hist)
+            n_scen = len(model_files_scen)
+            max_available = max(n_hist, n_scen)
+
+        max_models = 0
+        if show_models:
+            if not ts_root:
+                st.caption("Model members not available (missing processed-root path).")
+            elif max_available <= 0:
+                st.caption("Model-member series not available for this unit (only ensemble summary found).")
+            else:
+                default_val = int(st.session_state.get("trend_max_models", 15) or 15)
+                default_val = min(max(1, default_val), int(max_available))
+                max_models = int(
+                    st.slider(
+                        "Max models to draw",
+                        min_value=1,
+                        max_value=int(max_available),
+                        value=default_val,
+                        step=1,
+                        key="trend_max_models",
+                        help="Caps the number of model traces for readability and performance.",
+                    )
+                )
+
+        effective_show_models = bool(show_models and max_models > 0)
+        show_band_default = not effective_show_models
+        show_band = st.checkbox(
+            "Show percentile band (p05–p95)",
+            value=bool(st.session_state.get("trend_show_band", show_band_default)),
+            key="trend_show_band",
+            help="Show the ensemble P05–P95 shading (may be visually heavy when spaghetti is enabled).",
+        )
+
+        model_ts_hist: pd.DataFrame = pd.DataFrame()
+        model_ts_scen: pd.DataFrame = pd.DataFrame()
+
+        if effective_show_models and ts_root:
+            st.caption(
+                f"Model members found: historical {n_hist}, {sel_scenario} {n_scen} "
+                f"(showing up to {max_models})."
+            )
+
+            from india_resilience_tool.analysis.timeseries import (
+                load_unit_yearly_models_from_files,
+            )
+
+            def _take_first(d: Mapping[str, Path], k: int) -> Mapping[str, Path]:
+                if k <= 0 or not d:
+                    return {}
+                items = sorted(d.items(), key=lambda kv: str(kv[0]).lower())
+                return dict(items[:k])
+
+            model_files_hist_sel = _take_first(model_files_hist, max_models)
+            model_files_scen_sel = _take_first(model_files_scen, max_models)
+
+            def _specs(model_files: Mapping[str, Path]) -> tuple[tuple[str, str, float], ...]:
+                specs: list[tuple[str, str, float]] = []
+                for m, p in sorted(model_files.items(), key=lambda kv: str(kv[0]).lower()):
+                    try:
+                        mtime = float(Path(p).stat().st_mtime)
+                    except Exception:
+                        mtime = 0.0
+                    specs.append((str(m), str(p), mtime))
+                return tuple(specs)
+
+            @st.cache_data(show_spinner=False)
+            def _load_models_cached(
+                specs: tuple[tuple[str, str, float], ...],
+                *,
+                scenario: str,
+                level: str,
+                state: str,
+                district: str,
+                block: Optional[str],
+            ) -> pd.DataFrame:
+                file_specs = [(m, p) for (m, p, _mt) in specs]
+                return load_unit_yearly_models_from_files(
+                    file_specs,
+                    scenario_name=scenario,
+                    level=level,
+                    state_dir=state,
+                    district_display=district,
+                    block_display=block,
+                )
+
+            specs_hist = _specs(model_files_hist_sel)
+            specs_scen = _specs(model_files_scen_sel)
+
+            if specs_hist:
+                model_ts_hist = _load_models_cached(
+                    specs_hist,
+                    scenario="historical",
+                    level=("block" if is_block else "district"),
+                    state=state_dir_for_fs,
+                    district=district_for_fs,
+                    block=block_disp,
+                )
+            if specs_scen:
+                model_ts_scen = _load_models_cached(
+                    specs_scen,
+                    scenario=sel_scenario,
+                    level=("block" if is_block else "district"),
+                    state=state_dir_for_fs,
+                    district=district_for_fs,
+                    block=block_disp,
+                )
+
+        if not hist_ts.empty or not scen_ts.empty:
             # Compute compare mean for hover delta (Δ vs selected period mean)
             p0, p1 = _parse_period(sel_period)
             compare_period_label = str(sel_period or "").strip()
@@ -422,6 +602,11 @@ def render_trend_over_time(
                     compare_period_label=compare_period_label,
                     compare_period_mean=compare_period_mean,
                     units=units,
+                    model_ts_hist=model_ts_hist,
+                    model_ts_scen=model_ts_scen,
+                    show_model_members=effective_show_models,
+                    max_models=max_models,
+                    show_band=show_band,
                     figsize=fig_size_panel,
                     fig_dpi=fig_dpi_panel,
                     font_size_legend=font_size_legend,
@@ -969,6 +1154,8 @@ def render_details_panel(
     # Optional: filesystem paths for caption
     state_dir_for_fs: Optional[str] = None,
     district_for_fs: Optional[str] = None,
+    # Optional: processed root (metric-specific) for per-model trend discovery
+    ts_root: Optional[PathLike] = None,
     # Optional: Resilience Actions logo
     logo_path: Optional[Path] = None,
     # Block-level support
@@ -993,6 +1180,7 @@ def render_details_panel(
     import streamlit as st
 
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
+    varcfg = variables.get(variable_slug, {}) or {}
     units = (
         variables.get(variable_slug, {}).get("unit")
         or variables.get(variable_slug, {}).get("units")
@@ -1090,6 +1278,10 @@ def render_details_panel(
         units=units,
         logo_path=logo_path,
         create_trend_figure_fn=create_trend_figure_fn,
+        ts_root=ts_root,
+        varcfg=varcfg,
+        level=level,
+        block_name=block_name,
     )
 
     # 3. Scenario comparison

@@ -3434,6 +3434,7 @@ with col2:
             # Optional filesystem paths
             state_dir_for_fs=state_dir_for_fs,
             district_for_fs=district_for_fs,
+            ts_root=PROCESSED_ROOT,
             logo_path=LOGO_PATH,
             # Block-level support
             level=_admin_level,

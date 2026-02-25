@@ -23,7 +23,9 @@ import pandas as pd
 
 from india_resilience_tool.data.discovery import (
     discover_district_yearly_file,
+    discover_district_model_yearly_files,
     discover_block_yearly_file,
+    discover_block_model_yearly_files,
     discover_state_yearly_file,
 )
 
@@ -118,6 +120,216 @@ def prepare_yearly_series(df: pd.DataFrame) -> pd.DataFrame:
 
     out = out.dropna(subset=["year", "mean"]).sort_values("year").reset_index(drop=True)
     return out
+
+
+def prepare_model_yearly_series(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Minimal cleaning for per-model yearly series.
+
+    Expected producers:
+      - compute pipeline per-model CSVs (columns include: year, value, model, scenario, ...)
+
+    Behavior:
+      - Returns an empty DataFrame when required columns are missing or data is all-NaN.
+      - Does not raise on parse failures.
+
+    Returns:
+        DataFrame with columns: year, value (both numeric), sorted by year.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    out = df.copy()
+    if "year" not in out.columns:
+        return pd.DataFrame()
+
+    ignore = {
+        "state",
+        "district",
+        "block",
+        "model",
+        "scenario",
+        "year",
+        "source_file",
+    }
+
+    value_col: Optional[str] = None
+    if "value" in out.columns:
+        if pd.to_numeric(out["value"], errors="coerce").notna().any():
+            value_col = "value"
+
+    if value_col is None:
+        candidates = [c for c in out.columns if str(c) not in ignore]
+        for c in candidates:
+            if pd.to_numeric(out[c], errors="coerce").notna().any():
+                value_col = str(c)
+                break
+
+    if not value_col:
+        return pd.DataFrame()
+
+    out["year"] = pd.to_numeric(out["year"], errors="coerce")
+    out["value"] = pd.to_numeric(out[value_col], errors="coerce")
+    out = out.dropna(subset=["year", "value"]).sort_values("year").reset_index(drop=True)
+    if out.empty:
+        return pd.DataFrame()
+
+    return out[["year", "value"]]
+
+
+def load_unit_yearly_models_from_files(
+    file_specs: list[tuple[str, PathLike]],
+    *,
+    scenario_name: str,
+    level: AdminLevel = "district",
+    state_dir: Optional[str] = None,
+    district_display: Optional[str] = None,
+    block_display: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Load per-model yearly series from an explicit list of files.
+
+    This is a pure I/O helper: given (model_name, csv_path) pairs, it reads each CSV,
+    extracts a numeric (year, value) series, and returns a tidy long table suitable
+    for spaghetti plots.
+
+    Behavior:
+      - Skips unreadable/empty files.
+      - Returns an empty DataFrame if nothing can be loaded.
+
+    Args:
+        file_specs: list of (model_name, path) pairs.
+        scenario_name: Scenario label to attach to all rows.
+        level: "district" or "block" (affects optional id columns).
+        state_dir: Optional state label to attach.
+        district_display: Optional district label to attach.
+        block_display: Optional block label to attach (required when level="block" to be meaningful).
+
+    Returns:
+        DataFrame with columns:
+          - year (numeric)
+          - value (numeric)
+          - model (str)
+          - scenario (str)
+          - optional: state, district, block
+    """
+    if not file_specs:
+        return pd.DataFrame()
+
+    frames: list[pd.DataFrame] = []
+    scen = str(scenario_name).strip()
+
+    for model_name, path in file_specs:
+        df_raw = read_yearly_csv_robust(path)
+        df = prepare_model_yearly_series(df_raw)
+        if df.empty:
+            continue
+
+        df = df.copy()
+        df["model"] = str(model_name)
+        df["scenario"] = scen
+
+        if state_dir:
+            df["state"] = str(state_dir).strip()
+        if district_display:
+            df["district"] = str(district_display).strip()
+        if level == "block" and block_display:
+            df["block"] = str(block_display).strip()
+
+        frames.append(df)
+
+    if not frames:
+        return pd.DataFrame()
+
+    out = pd.concat(frames, ignore_index=True)
+    # Stable ordering for deterministic plots.
+    try:
+        out = out.sort_values(["model", "year"]).reset_index(drop=True)
+    except Exception:
+        pass
+    return out
+
+
+def load_district_yearly_models(
+    *,
+    ts_root: PathLike,
+    state_dir: str,
+    district_display: str,
+    scenario_name: str,
+    varcfg: Mapping[str, Any],
+    aliases: Optional[dict[str, str]] = None,
+    normalize_fn: Optional[callable] = None,
+) -> pd.DataFrame:
+    """
+    Load per-model district yearly series for a given district+scenario.
+
+    Behavior:
+      - Returns an empty DataFrame when per-model files are not present.
+      - Does not raise on missing/invalid files; unreadable models are skipped.
+    """
+    model_files = discover_district_model_yearly_files(
+        ts_root=ts_root,
+        state_dir=state_dir,
+        district_display=district_display,
+        scenario_name=scenario_name,
+        varcfg=varcfg,
+        aliases=aliases,
+        normalize_fn=normalize_fn,
+    )
+    if not model_files:
+        return pd.DataFrame()
+
+    file_specs = [(m, str(p)) for m, p in model_files.items()]
+    return load_unit_yearly_models_from_files(
+        file_specs,
+        scenario_name=scenario_name,
+        level="district",
+        state_dir=state_dir,
+        district_display=district_display,
+    )
+
+
+def load_block_yearly_models(
+    *,
+    ts_root: PathLike,
+    state_dir: str,
+    district_display: str,
+    block_display: str,
+    scenario_name: str,
+    varcfg: Mapping[str, Any],
+    aliases: Optional[dict[str, str]] = None,
+    normalize_fn: Optional[callable] = None,
+) -> pd.DataFrame:
+    """
+    Load per-model block yearly series for a given district+block+scenario.
+
+    Behavior:
+      - Returns an empty DataFrame when per-model files are not present (common when
+        block per-model files have been pruned after ensemble generation).
+      - Does not raise on missing/invalid files; unreadable models are skipped.
+    """
+    model_files = discover_block_model_yearly_files(
+        ts_root=ts_root,
+        state_dir=state_dir,
+        district_display=district_display,
+        block_display=block_display,
+        scenario_name=scenario_name,
+        varcfg=varcfg,
+        aliases=aliases,
+        normalize_fn=normalize_fn,
+    )
+    if not model_files:
+        return pd.DataFrame()
+
+    file_specs = [(m, str(p)) for m, p in model_files.items()]
+    return load_unit_yearly_models_from_files(
+        file_specs,
+        scenario_name=scenario_name,
+        level="block",
+        state_dir=state_dir,
+        district_display=district_display,
+        block_display=block_display,
+    )
 
 
 def load_state_yearly(
