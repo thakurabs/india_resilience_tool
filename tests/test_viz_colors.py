@@ -11,6 +11,8 @@ import pandas as pd
 
 from india_resilience_tool.viz.colors import (
     apply_fillcolor,
+    apply_fillcolor_binned,
+    build_vertical_binned_legend_block_html,
     build_vertical_gradient_legend_html,
     get_cmap_hex_list,
 )
@@ -45,3 +47,30 @@ def test_build_legend_html_contains_labels() -> None:
     assert "Summer Days" in html
     assert "20.0" in html
     assert "10.0" in html
+
+
+def test_apply_fillcolor_binned_handles_nan_and_limits() -> None:
+    df = pd.DataFrame({"x": [0.0, 1.5, 3.0, None]})
+    out = apply_fillcolor_binned(df, "x", vmin=0.0, vmax=3.0, cmap_name="Reds", nlevels=3)
+
+    assert "fillColor" in out.columns
+    assert out.loc[3, "fillColor"] == "#cccccc"
+
+    # vmin maps to first bin color; vmax maps to last bin color
+    colors = get_cmap_hex_list("Reds", nsteps=3)
+    assert out.loc[0, "fillColor"] == colors[0]
+    assert out.loc[2, "fillColor"] == colors[-1]
+
+
+def test_build_binned_legend_block_contains_min_max_and_title() -> None:
+    html = build_vertical_binned_legend_block_html(
+        pretty_metric_label="Δ TM Mean",
+        vmin=0.96,
+        vmax=1.11,
+        cmap_name="RdBu_r",
+        nlevels=15,
+        map_height=700,
+    )
+    assert "Δ TM Mean" in html
+    assert "1.11" in html
+    assert "0.96" in html

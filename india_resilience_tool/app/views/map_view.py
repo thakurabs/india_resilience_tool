@@ -469,7 +469,9 @@ def render_map_view(
         map_key = f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{selected_state}_{selected_district}_{selected_block}_{str(level).strip().lower()}"
 
         if legend_block_html:
-            map_col, legend_col = st.columns([18, 3])
+            # Give the legend enough width so the colorbar and labels don't get clipped
+            # on smaller screens.
+            map_col, legend_col = st.columns([17, 4])
             with map_col:
                 returned = st_folium(
                     m,
@@ -480,7 +482,15 @@ def render_map_view(
                     key=map_key,
                 )
             with legend_col:
-                st.markdown(legend_block_html, unsafe_allow_html=True)
+                # Render legend as raw HTML (not Markdown) to avoid the legend being
+                # displayed as escaped text when Markdown parsing treats parts as code.
+                import streamlit.components.v1 as components
+
+                components.html(
+                    legend_block_html,
+                    height=map_height,
+                    scrolling=False,
+                )
         else:
             returned = st_folium(
                 m,

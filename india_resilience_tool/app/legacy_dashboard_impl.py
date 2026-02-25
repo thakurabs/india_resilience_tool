@@ -273,9 +273,9 @@ def list_available_states_from_processed_root_cached(processed_root_str: str) ->
 # Color helpers (no GeoJSON round-trip)
 # -------------------------
 from india_resilience_tool.viz.colors import (
-    apply_fillcolor,
-    build_vertical_gradient_legend_block_html,
-    build_vertical_gradient_legend_html,
+    apply_fillcolor_binned,
+    build_vertical_binned_legend_block_html,
+    compute_robust_range,
     get_cmap_hex_list as _get_cmap_hex_list,
 )
 
@@ -1904,31 +1904,65 @@ with perf_section("map: build tooltip strings"):
 
     merged["_tooltip_rank"] = merged["_rank_in_state"].apply(_fmt_rank)
 
-numeric_vals = pd.to_numeric(
-    merged.get(map_value_col, pd.Series([], dtype=float)), errors="coerce"
-).dropna()
-if numeric_vals.empty:
-    st.error("No numeric values found for selected index & selection.")
+# Compute color scale defaults from *visible* units (matches the map filter),
+# then default to a robust p2–p98 range so outliers don't collapse the palette.
+scale_gdf = merged
+if selected_state != "All" and "state_name" in scale_gdf.columns:
+    state_mask = scale_gdf["state_name"].astype(str).str.strip() == selected_state
+    if not state_mask.any():
+        # Fallback to case-insensitive contains (tolerate naming/whitespace differences)
+        state_mask = (
+            scale_gdf["state_name"]
+            .astype(str)
+            .str.contains(selected_state, case=False, na=False)
+        )
+    scale_gdf = scale_gdf[state_mask]
+
+if selected_district != "All" and "district_name" in scale_gdf.columns:
+    scale_gdf = scale_gdf[scale_gdf["district_name"].astype(str) == selected_district]
+
+if _admin_level == "block" and selected_block != "All" and "block_name" in scale_gdf.columns:
+    scale_gdf = scale_gdf[scale_gdf["block_name"].astype(str) == selected_block]
+
+scale_vals = pd.to_numeric(
+    scale_gdf.get(map_value_col, pd.Series([], dtype=float)), errors="coerce"
+)
+scale_vals = scale_vals.replace([np.inf, -np.inf], np.nan).dropna()
+
+if scale_vals.empty:
+    st.error("No numeric values found for the current map selection.")
     render_perf_panel_safe()
     st.stop()
 
-# Default min/max from data
-vmin_default, vmax_default = float(numeric_vals.min()), float(numeric_vals.max())
+# Slider bounds: full min/max of visible data
+data_min, data_max = float(scale_vals.min()), float(scale_vals.max())
 
 # If there is no spread (all values identical), pad the range a bit
-if vmin_default == vmax_default:
+if data_min == data_max:
     # Use a small padding relative to the magnitude, with a sensible floor
-    padding = max(abs(vmin_default) * 0.1, 1.0)
-    vmin_default -= padding
-    vmax_default += padding
+    padding = max(abs(data_min) * 0.1, 1.0)
+    data_min -= padding
+    data_max += padding
+
+# Default slider selection: robust p2–p98 of visible data (clipped to slider bounds)
+vmin_default, vmax_default = compute_robust_range(scale_vals, low_pct=2.0, high_pct=98.0)
+if (not np.isfinite(vmin_default)) or (not np.isfinite(vmax_default)):
+    vmin_default, vmax_default = data_min, data_max
+
+vmin_default = max(data_min, min(float(vmin_default), data_max))
+vmax_default = max(data_min, min(float(vmax_default), data_max))
+if vmin_default > vmax_default:
+    vmin_default, vmax_default = vmax_default, vmin_default
+if vmin_default == vmax_default:
+    vmin_default, vmax_default = data_min, data_max
 
 with st.sidebar:
     vmin_vmax = color_slider_placeholder.slider(
         "Color range (min → max)",
-        min_value=float(vmin_default),
-        max_value=float(vmax_default),
+        min_value=float(data_min),
+        max_value=float(data_max),
         value=(vmin_default, vmax_default),
-        step=max((vmax_default - vmin_default) / 200.0, 0.01),
+        step=max((data_max - data_min) / 200.0, 0.001),
         key="color_range_slider",
     )
 
@@ -1947,14 +1981,15 @@ else:
         f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
     )
 
-with perf_section("colors: apply_fillcolor"):
+with perf_section("colors: apply_fillcolor_binned"):
     with st.spinner("Computing colors..."):
-        merged = apply_fillcolor(
+        merged = apply_fillcolor_binned(
             merged,
             map_value_col,
             vmin,
             vmax,
             cmap_name=cmap_name,
+            nlevels=15,
         )
 
 # -------------------------
@@ -2255,12 +2290,16 @@ perf_end("map: GeoJSON serialize+add layer", _t_geojson)
 MAP_WIDTH, MAP_HEIGHT = 780, 700
 
 # Build a container-relative legend block for Streamlit (stable across devices)
-legend_block_html = build_vertical_gradient_legend_block_html(
+legend_block_html = build_vertical_binned_legend_block_html(
     pretty_metric_label=pretty_metric_label,
     vmin=vmin,
     vmax=vmax,
     cmap_name=cmap_name,
+    nlevels=15,
+    nticks=5,
+    include_zero_tick=True,
     map_height=MAP_HEIGHT,
+    bar_width_px=18,
 )
 
 # Ensure `returned` always exists, even if the map tab didn't run yet
