@@ -119,6 +119,11 @@ def _render_simple_rankings(
         index=0,
         key=f"rank_mode_simple_{level_norm}",
         horizontal=True,
+        help=(
+            "Top 20 biggest increases ranks by change from baseline when available; "
+            "otherwise it falls back to absolute-value ranking. "
+            "All shows the full sorted table."
+        ),
     )
 
     df = table_df.copy()
@@ -242,6 +247,10 @@ def _render_portfolio_rankings(
         value=str(st.session_state.get(filter_key, "")),
         key=filter_key,
         placeholder=f"Type to filter {plural_label}…",
+        help=(
+            "Filters rows live by state, district, and block names (when applicable). "
+            "Matching is case-insensitive and uses normalized aliases for robust lookup."
+        ),
     )
     qn = _normalize(q)
     if qn:
@@ -267,6 +276,11 @@ def _render_portfolio_rankings(
         index=0,
         key=f"rank_mode_portfolio_{level_norm}",
         horizontal=True,
+        help=(
+            "Top 20 biggest increases ranks by change from baseline when available; "
+            "otherwise it falls back to absolute-value ranking. "
+            "All shows the full sorted table."
+        ),
     )
 
     if rank_mode == "Top 20 biggest increases":

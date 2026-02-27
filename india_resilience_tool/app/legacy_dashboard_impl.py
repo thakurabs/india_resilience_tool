@@ -1377,10 +1377,12 @@ with state_placeholder.container():
             index=0,
             help_text=(
                 "Choose a single-unit focus to explore one unit at a time, "
-                "or portfolio mode to build and compare a set of units."
+                "or portfolio mode to build and compare a set of units.\n\n"
+                "Single focus: inspect one unit in detail.\n"
+                "Portfolio: build and compare a set of units added from Map, Rankings, or coordinates."
             ),
-            label_visibility="collapsed",
-            use_markdown_header=True,
+            label_visibility="visible",
+            use_markdown_header=False,
             level=admin_level,
         )
 
@@ -1395,27 +1397,6 @@ with state_placeholder.container():
             st.session_state["portfolio_build_route"] = None
             st.session_state["jump_to_rankings"] = False
             st.session_state["jump_to_map"] = False
-
-        # Brief helper text so the mode explains itself (level-aware)
-        unit_singular = "block" if admin_level == "block" else "district"
-        unit_plural = "blocks" if admin_level == "block" else "districts"
-
-        if analysis_mode == SEL_PLACEHOLDER:
-            st.caption("Select an analysis focus to continue.")
-        elif "Single" in analysis_mode:
-            st.caption(
-                f"Inspect one {unit_singular} at a time. Use the dropdowns below "
-                f"to pick which {unit_singular} you want to explore in detail."
-            )
-        else:
-            st.markdown(
-                f"<div style='font-size:0.9rem; margin-top:0.25rem; margin-bottom:0.1rem;'>"
-                f"In <strong>Multi-{unit_singular} portfolio</strong> mode you build a set of {unit_plural} "
-                f"for comparison. {unit_plural.title()} are added from the <em>{VIEW_MAP}</em>, the "
-                f"<em>{VIEW_RANKINGS}</em>, or from saved point locations. "
-                f"</div>",
-                unsafe_allow_html=True,
-            )
 
         # ---- Step 1: State selection (data-driven from processed root) ----
 
@@ -1474,6 +1455,7 @@ with state_placeholder.container():
             key="selected_state",
 
             disabled=(not analysis_ready) or (not metric_ready_for_geography),
+            help="Select a state to filter district/block options. Choose 'All' to include every available state.",
 
         )
 
@@ -1596,9 +1578,10 @@ with state_placeholder.container():
             index=districts.index(st.session_state["selected_district"]),
             key="selected_district",
             disabled=not analysis_ready,
+            help="Select a district to focus the map/table. In block mode, choose a district to enable block selection.",
         )
 
-        # ---- Step 3: Block selection (only when admin_level == block AND district selected) ----
+        # ---- Step 3: Block selection (always shown in block mode) ----
         selected_block = "All"
         if admin_level == "block":
             if not ADM3_GEOJSON.exists():
@@ -1609,28 +1592,27 @@ with state_placeholder.container():
             adm3_sidebar = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM3)
 
             block_options = ["All"]
+            block_disabled = (not analysis_ready) or (selected_district == "All")
+            block_help = "Select a district to enable block selection."
             if selected_district != "All":
                 try:
                     blocks = _get_blocks_for_district(adm3_sidebar, selected_state, selected_district, normalize_fn=alias)
                     block_options = ["All"] + sorted([str(b).strip() for b in blocks if str(b).strip()])
                 except Exception:
                     block_options = ["All"]
+                block_help = "Select a block within the selected district."
 
-                if "selected_block" not in st.session_state or st.session_state["selected_block"] not in block_options:
-                    st.session_state["selected_block"] = "All"
-
-                selected_block = st.selectbox(
-                    "Block",
-                    options=block_options,
-                    index=block_options.index(st.session_state.get("selected_block", "All")),
-                    key="selected_block",
-                    disabled=not analysis_ready,
-                )
-            else:
-                # Show disabled/info when district not selected
-                if selected_district == "All":
-                    st.caption("Select a district to see blocks")
+            if "selected_block" not in st.session_state or st.session_state["selected_block"] not in block_options:
                 st.session_state["selected_block"] = "All"
+
+            selected_block = st.selectbox(
+                "Block",
+                options=block_options,
+                index=block_options.index(st.session_state.get("selected_block", "All")),
+                key="selected_block",
+                disabled=block_disabled,
+                help=block_help,
+            )
         else:
             st.session_state.pop("selected_block", None)
 
@@ -3527,7 +3509,3 @@ with col2:
 
 render_perf_panel_safe()
 st.markdown("---")
-st.caption(
-    "Notes: first choose a Risk domain (e.g. Heat Risk, Drought Risk), then a Metric within that bundle. "
-    "Details panel shows risk cards, trends, narrative, and case-study export."
-)

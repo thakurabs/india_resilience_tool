@@ -211,6 +211,7 @@ def render_point_selection_panel(
                 value=float(st.session_state.get("point_query_lat", default_lat)),
                 format="%.4f",
                 key="_point_lat",
+                help="Enter latitude in decimal degrees within the dataset bounds.",
             )
         with col_lon:
             lon_input = st.number_input(
@@ -220,6 +221,7 @@ def render_point_selection_panel(
                 value=float(st.session_state.get("point_query_lon", default_lon)),
                 format="%.4f",
                 key="_point_lon",
+                help="Enter longitude in decimal degrees within the dataset bounds.",
             )
 
         result = _find_unit(lat_input, lon_input)
@@ -294,28 +296,21 @@ def render_point_selection_panel(
             label = current_marker.get("block") or current_marker.get("district")
             if label:
                 st.caption(f"Map preview active: {label}. Switch to Map view to see marker.")
-        else:
-            st.caption("Tip: Use **Show on map** to preview the coordinate on the map.")
 
     # =========================================================================
     # TAB 2: Batch Coordinate Entry
     # =========================================================================
     with tab_batch:
-        st.markdown(
-            """
-            Paste multiple coordinates (one per line). Supported formats:
-            - `lat, lon`
-            - `lat, lon, label`
-            - `lat lon`
-            """
-        )
-
         batch_text = st.text_area(
             "Batch coordinates",
             value=st.session_state.get("point_query_batch_text", ""),
             height=140,
             key="_point_batch_text",
             placeholder="17.3850, 78.4867, Home\n16.5062, 80.6480, Site B",
+            help=(
+                "Supported formats (one per line): lat, lon | lat lon | lat, lon, label. "
+                "Values should be decimal degrees."
+            ),
         )
 
         colA, colB = st.columns(2)
@@ -433,7 +428,4 @@ def render_point_selection_panel(
                 st.session_state["point_query_points"] = []
                 st.session_state["map_preview_markers"] = None
                 st.rerun()
-    else:
-        st.caption("Use **Save point** to build a list of locations for batch adding.")
-
     return False

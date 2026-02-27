@@ -1314,23 +1314,16 @@ def render_portfolio_panel(
         options=["Compare", "Add units"],
         key=tab_key,
         horizontal=True,
-        label_visibility="collapsed",
+        label_visibility="visible",
+        help=(
+            "Compare: analyze selected metrics across your current portfolio.\n"
+            "Add units: add districts/blocks from map, rankings, or coordinates."
+        ),
     )
 
     st.markdown("---")
 
     if tab == "Add units":
-        st.markdown(f"#### How to add {unit_plural}")
-        st.markdown(
-            f"""
-        **From the map:** Click any {('block' if is_block else 'district')}, then click **+ Add to portfolio**
-
-        **From rankings:** Use the **+ Add** buttons in the rankings table
-
-        **By coordinates:** Use the location panel below
-        """
-        )
-
         render_coordinate_lookup(
             merged=merged,
             level=level_norm,
