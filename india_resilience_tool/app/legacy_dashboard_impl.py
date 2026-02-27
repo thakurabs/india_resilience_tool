@@ -590,6 +590,14 @@ If results look pulled by extremes, try Median.
 }
 
 
+def _help_md_to_plain_text(help_md: str) -> str:
+    """Convert short Markdown help snippets to plain text for Streamlit widget help."""
+    text = help_md.replace("### ", "").replace("#### ", "")
+    text = text.replace("**", "")
+    return text.strip()
+
+
+
 def _make_scenario_comparison_figure_dashboard(**kwargs):
     """Return Plotly scenario comparison when available; fall back to Matplotlib.
 
@@ -900,35 +908,6 @@ with st.sidebar:
 
 st.title("India Resilience Tool")
 
-st.markdown(
-    """
-    <style>
-    [data-testid="stPopover"] button {
-        background: transparent !important;
-        border: 0 !important;
-        box-shadow: none !important;
-        padding: 0.15rem 0.35rem !important;
-        min-height: auto !important;
-        color: rgba(85, 92, 102, 0.95) !important;
-        font-size: 0.85rem !important;
-        line-height: 1 !important;
-    }
-    [data-testid="stPopover"] button svg {
-        display: none !important;
-    }
-    [data-testid="stPopover"] button:hover {
-        background: rgba(0, 0, 0, 0.04) !important;
-    }
-    [data-testid="stPopover"] button:focus-visible {
-        outline: 2px solid #2563eb !important;
-        outline-offset: 2px;
-        border-radius: 6px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
 # Pilot state default
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
@@ -988,30 +967,21 @@ with col1:
         cur_bundle = SEL_PLACEHOLDER
         st.session_state["selected_bundle"] = SEL_PLACEHOLDER
 
-    with row1[0]:
-        bundle_label_col, bundle_info_col = st.columns([0.92, 0.08])
-        with bundle_label_col:
-            st.markdown("**Risk domain**")
-        with bundle_info_col:
-            bundle_help_md = RIBBON_HELP_MD["risk_domain"]
-            selected_bundle_preview = st.session_state.get("selected_bundle", SEL_PLACEHOLDER)
-            if selected_bundle_preview != SEL_PLACEHOLDER:
-                bundle_desc_preview = get_bundle_description(selected_bundle_preview)
-                if bundle_desc_preview:
-                    bundle_help_md += (
-                        "\n\n**This domain covers**\n"
-                        f"- {bundle_desc_preview}"
-                    )
-            with st.popover("?"):
-                st.markdown(bundle_help_md)
+    selected_bundle_preview = st.session_state.get("selected_bundle", SEL_PLACEHOLDER)
+    bundle_help_text = _help_md_to_plain_text(RIBBON_HELP_MD["risk_domain"])
+    if selected_bundle_preview != SEL_PLACEHOLDER:
+        bundle_desc_preview = get_bundle_description(selected_bundle_preview)
+        if bundle_desc_preview:
+            bundle_help_text += f"\n\nThis domain covers:\n- {bundle_desc_preview}"
 
+    with row1[0]:
         selected_bundle = st.selectbox(
             "Risk domain",
             options=bundle_options,
             index=bundle_options.index(cur_bundle),
             key="selected_bundle",
-            label_visibility="collapsed",
-            help="Select a thematic bundle to filter available metrics.",
+            label_visibility="visible",
+            help=bundle_help_text,
         )
 
     # Bundle description (only when chosen)
@@ -1043,33 +1013,27 @@ with col1:
             st.session_state["selected_var"] = index_slugs[0]
     cur_var = st.session_state.get("selected_var", SEL_PLACEHOLDER)
 
-    with row1[1]:
-        metric_label_col, metric_info_col = st.columns([0.92, 0.08])
-        with metric_label_col:
-            st.markdown("**Metric**")
-        with metric_info_col:
-            metric_help_md = RIBBON_HELP_MD["metric"]
-            selected_metric_preview = st.session_state.get("selected_var", SEL_PLACEHOLDER)
-            if selected_metric_preview != SEL_PLACEHOLDER and selected_metric_preview in VARIABLES:
-                metric_cfg_preview = VARIABLES[selected_metric_preview]
-                metric_desc_preview = str(metric_cfg_preview.get("description", "")).strip()
-                if metric_desc_preview:
-                    metric_help_md += f"\n\n**About this metric**\n{metric_desc_preview}"
-                metric_units_preview = str(metric_cfg_preview.get("units", "")).strip()
-                if metric_units_preview:
-                    metric_help_md += f"\n\n**Units**: {metric_units_preview}"
-            with st.popover("?"):
-                st.markdown(metric_help_md)
+    metric_help_text = _help_md_to_plain_text(RIBBON_HELP_MD["metric"])
+    selected_metric_preview = st.session_state.get("selected_var", SEL_PLACEHOLDER)
+    if selected_metric_preview != SEL_PLACEHOLDER and selected_metric_preview in VARIABLES:
+        metric_cfg_preview = VARIABLES[selected_metric_preview]
+        metric_desc_preview = str(metric_cfg_preview.get("description", "")).strip()
+        if metric_desc_preview:
+            metric_help_text += f"\n\nAbout this metric:\n{metric_desc_preview}"
+        metric_units_preview = str(metric_cfg_preview.get("units", "")).strip()
+        if metric_units_preview:
+            metric_help_text += f"\n\nUnits: {metric_units_preview}"
 
+    with row1[1]:
         selected_var = st.selectbox(
             "Metric",
             options=metric_options,
             index=metric_options.index(cur_var) if cur_var in metric_options else 0,
             key="selected_var",
-            label_visibility="collapsed",
+            label_visibility="visible",
             format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
             disabled=metric_disabled,
-            help="Select the metric to visualize on the map.",
+            help=metric_help_text,
         )
 
     # --- Resolve per-index config (once metric selected) ---
@@ -1227,28 +1191,23 @@ with col1:
         st.session_state["sel_scenario"] = SEL_PLACEHOLDER
     cur_scn = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
 
-    with row1[2]:
-        scenario_label_col, scenario_info_col = st.columns([0.92, 0.08])
-        with scenario_label_col:
-            st.markdown("**Scenario**")
-        with scenario_info_col:
-            scenario_help_md = RIBBON_HELP_MD["scenario"]
-            selected_scenario_preview = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
-            if selected_scenario_preview != SEL_PLACEHOLDER:
-                scenario_extra = SCENARIO_HELP_MD.get(selected_scenario_preview, "")
-                if scenario_extra:
-                    scenario_help_md += f"\n\n{scenario_extra}"
-            with st.popover("?"):
-                st.markdown(scenario_help_md)
+    scenario_help_text = _help_md_to_plain_text(RIBBON_HELP_MD["scenario"])
+    selected_scenario_preview = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
+    if selected_scenario_preview != SEL_PLACEHOLDER:
+        scenario_extra = SCENARIO_HELP_MD.get(selected_scenario_preview, "")
+        if scenario_extra:
+            scenario_help_text += f"\n\n{_help_md_to_plain_text(scenario_extra)}"
 
+    with row1[2]:
         sel_scenario = st.selectbox(
             "Scenario",
             options=scenario_options,
             index=scenario_options.index(cur_scn),
             key="sel_scenario",
-            label_visibility="collapsed",
+            label_visibility="visible",
             disabled=scenario_disabled,
             format_func=lambda value: SCENARIO_UI_LABEL.get(value, value),
+            help=scenario_help_text,
         )
 
     # --- Period selection (depends on scenario) ---
@@ -1278,21 +1237,15 @@ with col1:
     cur_per = st.session_state.get("sel_period", SEL_PLACEHOLDER)
 
     with row2[0]:
-        period_label_col, period_info_col = st.columns([0.92, 0.08])
-        with period_label_col:
-            st.markdown("**Period**")
-        with period_info_col:
-            with st.popover("?"):
-                st.markdown(RIBBON_HELP_MD["period"])
-
         sel_period = st.selectbox(
             "Period",
             options=period_options,
             index=period_options.index(cur_per),
             key="sel_period",
-            label_visibility="collapsed",
+            label_visibility="visible",
             disabled=period_disabled,
             format_func=lambda p: period_display_label(p) if p != SEL_PLACEHOLDER else p,
+            help=_help_md_to_plain_text(RIBBON_HELP_MD["period"]),
         )
 
     # --- Statistic selection (mean/median only, placeholder-first) ---
@@ -1304,20 +1257,14 @@ with col1:
     cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
 
     with row2[1]:
-        statistic_label_col, statistic_info_col = st.columns([0.92, 0.08])
-        with statistic_label_col:
-            st.markdown("**Statistic**")
-        with statistic_info_col:
-            with st.popover("?"):
-                st.markdown(RIBBON_HELP_MD["statistic"])
-
         sel_stat = st.selectbox(
             "Statistic",
             options=stat_options,
             index=stat_options.index(cur_stat),
             key="sel_stat",
-            label_visibility="collapsed",
+            label_visibility="visible",
             disabled=stat_disabled,
+            help=_help_md_to_plain_text(RIBBON_HELP_MD["statistic"]),
         )
 
     # --- Map mode selection (moved into ribbon) ---
@@ -1332,20 +1279,13 @@ with col1:
     cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
 
     with row2[2]:
-        map_mode_label_col, map_mode_info_col = st.columns([0.92, 0.08])
-        with map_mode_label_col:
-            st.markdown("**Map mode**")
-        with map_mode_info_col:
-            with st.popover("?"):
-                st.markdown(RIBBON_HELP_MD["map_mode"])
-
         map_mode = st.selectbox(
             "Map mode",
             options=map_mode_options,
             index=map_mode_options.index(cur_map_mode),
             key="map_mode",
-            label_visibility="collapsed",
-            help="Choose whether to map absolute values or change from the 1990–2010 baseline.",
+            label_visibility="visible",
+            help=_help_md_to_plain_text(RIBBON_HELP_MD["map_mode"]),
         )
 
 # Column chosen to plot (only when all ribbon selections are complete)
