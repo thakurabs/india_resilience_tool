@@ -118,6 +118,8 @@ from india_resilience_tool.config.constants import (
     FONT_SIZE_TICKS,
     FONT_SIZE_LEGEND,
     LOGO_PATH,
+    SCENARIO_UI_LABEL,
+    SCENARIO_HELP_MD,
 )
 
 from india_resilience_tool.config.variables import (
@@ -541,6 +543,53 @@ from india_resilience_tool.viz.charts import (
 )
 
 
+RIBBON_HELP_MD: dict[str, str] = {
+    "risk_domain": """### Risk domain
+A risk domain groups related metrics (indices) into a theme (e.g., heat risk, flood risk).
+
+**How to use**
+- Choose a domain to narrow the metric list to what you care about.
+""",
+    "metric": """### Metric
+A metric is the specific climate index you are mapping (e.g., TXx, hot days, wet spells).
+
+**How to use**
+- Pick the metric that matches your question (extremes vs averages, heat vs rainfall, etc.).
+""",
+    "scenario": """### Scenario
+Scenarios describe different global development and emissions pathways used for future climate projections.
+
+**Options in this tool**
+- Middle-of-the-road (SSP2-4.5)
+- Fossil-fuelled development (SSP5-8.5)
+
+**Tip**
+Use SSP2-4.5 for baseline planning and SSP5-8.5 to stress-test.
+""",
+    "period": """### Period
+The multi-year time window over which values are summarized.
+
+**Periods**
+- Baseline: 1995–2014
+- Early century: 2021–2040
+- Mid century: 2041–2060
+- Late century: 2061–2080
+- End century: 2081–2100
+""",
+    "statistic": """### Statistic
+- **Mean (average):** sensitive to extreme values.
+- **Median (typical):** more robust when values are skewed or have outliers.
+
+**Tip**
+If results look pulled by extremes, try Median.
+""",
+    "map_mode": """### Map mode
+- **Absolute value:** maps the metric as-is for the selected period.
+**Example**
+""",
+}
+
+
 def _make_scenario_comparison_figure_dashboard(**kwargs):
     """Return Plotly scenario comparison when available; fall back to Matplotlib.
 
@@ -911,7 +960,22 @@ with col1:
         st.session_state["selected_bundle"] = SEL_PLACEHOLDER
 
     with row1[0]:
-        st.markdown("**Risk domain**")
+        bundle_label_col, bundle_info_col = st.columns([7, 1])
+        with bundle_label_col:
+            st.markdown("**Risk domain**")
+        with bundle_info_col:
+            bundle_help_md = RIBBON_HELP_MD["risk_domain"]
+            selected_bundle_preview = st.session_state.get("selected_bundle", SEL_PLACEHOLDER)
+            if selected_bundle_preview != SEL_PLACEHOLDER:
+                bundle_desc_preview = get_bundle_description(selected_bundle_preview)
+                if bundle_desc_preview:
+                    bundle_help_md += (
+                        "\n\n**This domain covers**\n"
+                        f"- {bundle_desc_preview}"
+                    )
+            with st.popover("ⓘ", key="ribbon_info_risk_domain"):
+                st.markdown(bundle_help_md)
+
         selected_bundle = st.selectbox(
             "Risk domain",
             options=bundle_options,
@@ -951,7 +1015,23 @@ with col1:
     cur_var = st.session_state.get("selected_var", SEL_PLACEHOLDER)
 
     with row1[1]:
-        st.markdown("**Metric**")
+        metric_label_col, metric_info_col = st.columns([7, 1])
+        with metric_label_col:
+            st.markdown("**Metric**")
+        with metric_info_col:
+            metric_help_md = RIBBON_HELP_MD["metric"]
+            selected_metric_preview = st.session_state.get("selected_var", SEL_PLACEHOLDER)
+            if selected_metric_preview != SEL_PLACEHOLDER and selected_metric_preview in VARIABLES:
+                metric_cfg_preview = VARIABLES[selected_metric_preview]
+                metric_desc_preview = str(metric_cfg_preview.get("description", "")).strip()
+                if metric_desc_preview:
+                    metric_help_md += f"\n\n**About this metric**\n{metric_desc_preview}"
+                metric_units_preview = str(metric_cfg_preview.get("units", "")).strip()
+                if metric_units_preview:
+                    metric_help_md += f"\n\n**Units**: {metric_units_preview}"
+            with st.popover("ⓘ", key="ribbon_info_metric"):
+                st.markdown(metric_help_md)
+
         selected_var = st.selectbox(
             "Metric",
             options=metric_options,
@@ -1119,7 +1199,19 @@ with col1:
     cur_scn = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
 
     with row1[2]:
-        st.markdown("**Scenario**")
+        scenario_label_col, scenario_info_col = st.columns([7, 1])
+        with scenario_label_col:
+            st.markdown("**Scenario**")
+        with scenario_info_col:
+            scenario_help_md = RIBBON_HELP_MD["scenario"]
+            selected_scenario_preview = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
+            if selected_scenario_preview != SEL_PLACEHOLDER:
+                scenario_extra = SCENARIO_HELP_MD.get(selected_scenario_preview, "")
+                if scenario_extra:
+                    scenario_help_md += f"\n\n{scenario_extra}"
+            with st.popover("ⓘ", key="ribbon_info_scenario"):
+                st.markdown(scenario_help_md)
+
         sel_scenario = st.selectbox(
             "Scenario",
             options=scenario_options,
@@ -1127,6 +1219,7 @@ with col1:
             key="sel_scenario",
             label_visibility="collapsed",
             disabled=scenario_disabled,
+            format_func=lambda value: SCENARIO_UI_LABEL.get(value, value),
         )
 
     # --- Period selection (depends on scenario) ---
@@ -1156,7 +1249,13 @@ with col1:
     cur_per = st.session_state.get("sel_period", SEL_PLACEHOLDER)
 
     with row2[0]:
-        st.markdown("**Period**")
+        period_label_col, period_info_col = st.columns([7, 1])
+        with period_label_col:
+            st.markdown("**Period**")
+        with period_info_col:
+            with st.popover("ⓘ", key="ribbon_info_period"):
+                st.markdown(RIBBON_HELP_MD["period"])
+
         sel_period = st.selectbox(
             "Period",
             options=period_options,
@@ -1176,7 +1275,13 @@ with col1:
     cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
 
     with row2[1]:
-        st.markdown("**Statistic**")
+        statistic_label_col, statistic_info_col = st.columns([7, 1])
+        with statistic_label_col:
+            st.markdown("**Statistic**")
+        with statistic_info_col:
+            with st.popover("ⓘ", key="ribbon_info_statistic"):
+                st.markdown(RIBBON_HELP_MD["statistic"])
+
         sel_stat = st.selectbox(
             "Statistic",
             options=stat_options,
@@ -1198,7 +1303,13 @@ with col1:
     cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
 
     with row2[2]:
-        st.markdown("**Map mode**")
+        map_mode_label_col, map_mode_info_col = st.columns([7, 1])
+        with map_mode_label_col:
+            st.markdown("**Map mode**")
+        with map_mode_info_col:
+            with st.popover("ⓘ", key="ribbon_info_map_mode"):
+                st.markdown(RIBBON_HELP_MD["map_mode"])
+
         map_mode = st.selectbox(
             "Map mode",
             options=map_mode_options,

@@ -52,6 +52,26 @@ SCENARIO_DISPLAY: dict[str, str] = {
     "historical": "Historical",
 }
 
+SCENARIO_UI_LABEL: dict[str, str] = {
+    "ssp245": "Middle-of-the-road (SSP2-4.5)",
+    "ssp585": "Fossil-fuelled development (SSP5-8.5)",
+    "historical": "Historical",
+}
+
+SCENARIO_HELP_MD: dict[str, str] = {
+    "ssp245": """#### Middle-of-the-road (SSP2-4.5)
+A ‘middle of the road’ future where social, economic, and technological trends do not shift dramatically from historical patterns.
+
+Often used as a baseline planning scenario.
+""",
+    "ssp585": """#### Fossil-fuelled development (SSP5-8.5)
+A fossil-fuelled development future with rapid economic growth and high energy demand met largely by fossil fuels.
+
+Often used to stress-test under higher emissions.
+""",
+    "historical": "Observed / reanalysis-driven historical reference period used for comparison (not a future projection).",
+}
+
 # ---- Risk classification thresholds ----
 RISK_THRESHOLDS: dict[str, Tuple[float, float]] = {
     "low": (0.0, 33.3),
