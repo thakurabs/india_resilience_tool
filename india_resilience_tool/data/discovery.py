@@ -291,7 +291,6 @@ def discover_state_yearly_file(
     Priority:
       1) registry templates (if provided)
       2) level-specific: {state}/state_yearly_ensemble_stats_{level}.csv
-      3) default: {state}/state_yearly_ensemble_stats.csv
     """
     ts_root_p = Path(ts_root)
 
@@ -303,6 +302,7 @@ def discover_state_yearly_file(
                     pat.format(
                         root=str(ts_root_p),
                         state=state_dir,
+                        level=level,
                     )
                 )
             except Exception:
@@ -312,14 +312,30 @@ def discover_state_yearly_file(
             if f.exists():
                 return f
 
-    # Try level-specific file
     f_level = ts_root_p / state_dir / f"state_yearly_ensemble_stats_{level}.csv"
-    if f_level.exists():
-        return f_level
+    return f_level if f_level.exists() else None
 
-    # Fall back to default
-    f_default = ts_root_p / state_dir / "state_yearly_ensemble_stats.csv"
-    return f_default if f_default.exists() else None
+
+def discover_state_yearly_model_file(
+    *,
+    ts_root: PathLike,
+    state_dir: str,
+    level: AdminLevel = "district",
+) -> Optional[Path]:
+    """Discover state yearly model averages CSV for the given level."""
+    f = Path(ts_root) / state_dir / f"state_yearly_model_averages_{level}.csv"
+    return f if f.exists() else None
+
+
+def discover_state_period_ensemble_file(
+    *,
+    ts_root: PathLike,
+    state_dir: str,
+    level: AdminLevel = "district",
+) -> Optional[Path]:
+    """Discover state period ensemble stats CSV for the given level."""
+    f = Path(ts_root) / state_dir / f"state_ensemble_stats_{level}.csv"
+    return f if f.exists() else None
 
 
 def discover_district_model_yearly_files(

@@ -2632,32 +2632,23 @@ with col2:
             # Portfolio results should be driven by the Portfolio analysis panel.
             pass
         else:
-            ensemble, per_model_df, sel_districts_gdf = compute_state_metrics_from_merged(
+            _, _, sel_districts_gdf = compute_state_metrics_from_merged(
                 merged, adm1, metric_col, selected_state
             )
 
-            # ---- STATE/DISTRICT SUMMARY VIEW (extracted to state_summary_view.py) ----
+            # ---- STATE CLIMATE PROFILE VIEW ----
             render_state_summary_view(
-                # State/selection context
                 selected_state=selected_state,
                 selected_district=selected_district,
-                # Variable/metric context
                 variables=VARIABLES,
                 variable_slug=VARIABLE_SLUG,
                 sel_scenario=sel_scenario,
                 sel_period=sel_period,
                 sel_stat=sel_stat,
                 metric_col=metric_col,
-                # Pre-computed metrics
-                ensemble=ensemble,
-                per_model_df=per_model_df,
                 sel_districts_gdf=sel_districts_gdf,
-                # Config
+                merged_gdf=merged,
                 processed_root=PROCESSED_ROOT,
-                pilot_state=PILOT_STATE,
-                # Callable dependencies
-                make_state_boxplot_fn=make_state_boxplot_for_districts,
-                # Block-level support
                 level=_admin_level,
             )
 

@@ -1,290 +1,194 @@
-"""
-State summary view for IRT.
-
-This module renders the state summary panel shown when:
-- analysis_mode is "Single district focus"
-- selected_district is "All"
-- selected_state is not "All"
-
-It includes:
-- State summary header with index/scenario/period
-- District-wise distribution boxplot
-- Trend over time (state average)
-
-Widget keys preserved:
-- btn_state_boxplot_{variable_slug}_{state}_{scenario}_{period}_{stat}
-- btn_state_trend_{variable_slug}_{state}_{scenario}
-
-Author: Abu Bakar Siddiqui Thakur
-Email: absthakur@resilience.org.in
-"""
+"""State climate profile panel for selected state + all districts/blocks."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Mapping, Optional
 
 import pandas as pd
+from pyproj import Geod
 
 
-def _should_show_state_aggregate_tables(selected_district: Optional[str]) -> bool:
-    """
-    Return True if state-aggregate tables should be shown.
+def _parse_metric_parts(metric_col: str) -> tuple[str, str, str, str]:
+    parts = str(metric_col or "").split("__")
+    if len(parts) == 4:
+        return parts[0], parts[1], parts[2], parts[3]
+    return str(metric_col or ""), "", "", ""
 
-    We hide these when the user has selected a State but not yet chosen a District
-    (i.e., District is still "All"), because they are not needed in that context.
-    """
-    d = str(selected_district or "").strip().lower()
-    return bool(d) and d != "all"
+
+def _find_baseline_column(df_cols: list[str], base_metric: str) -> Optional[str]:
+    candidates: list[tuple[str, str]] = []
+    for c in df_cols:
+        p = str(c).split("__")
+        if len(p) == 4 and p[0] == base_metric and p[1].lower() == "historical" and p[3] == "mean":
+            candidates.append((c, p[2]))
+    if not candidates:
+        return None
+    for c, period in candidates:
+        if period.replace(" ", "") in ("1995-2014", "1995_2014", "1985-2014", "1990-2010"):
+            return c
+    candidates.sort(key=lambda x: x[1])
+    return candidates[0][0]
+
+
+def _with_area_weights(gdf: Any) -> pd.DataFrame:
+    geod = Geod(ellps="WGS84")
+    out = gdf.copy()
+    areas: list[float] = []
+    for geom in out.geometry:
+        if geom is None or geom.is_empty:
+            areas.append(0.0)
+            continue
+        try:
+            a, _ = geod.geometry_area_perimeter(geom)
+            areas.append(abs(float(a)))
+        except Exception:
+            areas.append(0.0)
+    out["__area_m2"] = areas
+    return out
+
+
+def _weighted_mean(df: pd.DataFrame, value_col: str) -> Optional[float]:
+    if df is None or df.empty or value_col not in df.columns:
+        return None
+    t = df[[value_col, "__area_m2"]].copy()
+    t[value_col] = pd.to_numeric(t[value_col], errors="coerce")
+    t["__area_m2"] = pd.to_numeric(t["__area_m2"], errors="coerce")
+    t = t.dropna(subset=[value_col, "__area_m2"])
+    t = t[t["__area_m2"] > 0]
+    if t.empty:
+        return None
+    return float((t[value_col] * t["__area_m2"]).sum() / t["__area_m2"].sum())
 
 
 def render_state_summary_view(
     *,
-    # State/selection context
     selected_state: str,
     selected_district: str = "All",
-    # Variable/metric context
     variables: Mapping[str, Mapping[str, Any]],
     variable_slug: str,
     sel_scenario: str,
     sel_period: str,
     sel_stat: str,
     metric_col: str,
-    # Pre-computed metrics
-    ensemble: dict,
-    per_model_df: pd.DataFrame,
-    sel_districts_gdf: Any,  # GeoDataFrame or None (districts OR blocks depending on level)
-    # Config
+    sel_districts_gdf: Any,
+    merged_gdf: Any,
     processed_root: Path,
-    pilot_state: str,
-    # Callable dependencies
-    make_state_boxplot_fn: Callable[..., Any],
-    # Block-level support
     level: str = "district",
 ) -> None:
-    """
-    Render the state summary view (shown when no district is selected).
-
-    This is shown in Single district focus mode when selected_district == "All"
-    but selected_state != "All".
-    """
-    import matplotlib.pyplot as plt
+    """Render state climate profile (risk summary + trend + scenario comparison)."""
     import streamlit as st
+    import plotly.graph_objects as go
+    from india_resilience_tool.analysis.metrics import compute_position_stats
+    from india_resilience_tool.analysis.timeseries import load_state_yearly
+    from india_resilience_tool.data.discovery import (
+        discover_state_period_ensemble_file,
+        discover_state_yearly_model_file,
+    )
 
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
-
+    units = variables.get(variable_slug, {}).get("units") or variables.get(variable_slug, {}).get("unit")
     level_norm = str(level).strip().lower()
-    is_block = level_norm == "block"
-    show_agg_tables = _should_show_state_aggregate_tables(selected_district)
+    rank_higher_is_worse = bool(variables.get(variable_slug, {}).get("rank_higher_is_worse", True))
 
-    if is_block and selected_district != "All":
-        st.subheader(f"{selected_district} — District summary (Blocks)")
-        st.markdown(
-            f"**State:** {selected_state}  \n"
-            f"**District:** {selected_district}  \n"
-            f"**Index:** {variable_label}  \n"
-            f"**Scenario:** {sel_scenario}  \n"
-            f"**Period:** {sel_period}"
-        )
-        n_units = (
-            ensemble.get("n_blocks")
-            or ensemble.get("n_units")
-            or ensemble.get("n_districts")
-            or 0
-        )
-        st.caption(f"Showing {int(n_units)} blocks in {selected_district} district")
-        exp_title = "Block-wise distribution across models"
-        btn_label = "Generate block-wise boxplot"
-        btn_key = f"btn_block_boxplot_{variable_slug}_{selected_state}_{selected_district}_{sel_scenario}_{sel_period}_{sel_stat}"
-    else:
-        st.subheader(f"{selected_state} — State summary")
-        st.markdown(
-            f"**Index:** {variable_label}  \n"
-            f"**Scenario:** {sel_scenario}  \n"
-            f"**Period:** {sel_period}"
-        )
-        exp_title = "District-wise distribution across models"
-        btn_label = "Generate district-wise boxplot"
-        btn_key = f"btn_state_boxplot_{variable_slug}_{selected_state}_{sel_scenario}_{sel_period}_{sel_stat}"
+    st.subheader(f"{selected_state} — State Climate Profile")
+    st.markdown(f"**Index:** {variable_label}  \n**Scenario:** {sel_scenario}  \n**Period:** {sel_period}")
 
-    # --- Expander 1: Unit-wise distribution across models (boxplot) ---
-    with st.expander(exp_title, expanded=False):
-        st.caption(
-            "This figure can be slow to generate because it uses per-model "
-            "distributions for each district."
-        )
-        if st.button(
-            btn_label,
-            key=btn_key,
-        ):
-            fig_box = make_state_boxplot_fn(
-                sel_districts_gdf=sel_districts_gdf,
-                metric_col=metric_col,
-                metric_label=variable_label,
-                sel_state=selected_state,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-            )
-            if fig_box is not None:
-                st.pyplot(fig_box, use_container_width=True)
+    df_state = _with_area_weights(sel_districts_gdf)
+    df_all = _with_area_weights(merged_gdf)
+
+    base_metric, _, _, _ = _parse_metric_parts(metric_col)
+    baseline_col = _find_baseline_column(list(df_all.columns), base_metric)
+
+    current_val = _weighted_mean(df_state, metric_col)
+    baseline_val = _weighted_mean(df_state, baseline_col) if baseline_col else None
+
+    per_state_vals: list[float] = []
+    state_col = "state_name" if "state_name" in df_all.columns else "state"
+    for _, grp in df_all.groupby(state_col):
+        wv = _weighted_mean(grp, metric_col)
+        if wv is not None:
+            per_state_vals.append(float(wv))
+
+    pos = compute_position_stats(pd.Series(per_state_vals, dtype=float), current_val, higher_is_worse=rank_higher_is_worse)
+
+    with st.expander("Risk summary", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.markdown("**Historical baseline**")
+            st.metric("", f"{baseline_val:.2f} {units or ''}" if baseline_val is not None else "N/A")
+        with c2:
+            st.markdown("**Current value**")
+            delta = (current_val - baseline_val) if (current_val is not None and baseline_val is not None) else None
+            st.metric("", f"{current_val:.2f} {units or ''}" if current_val is not None else "N/A", f"{delta:+.2f}" if delta is not None else None)
+        with c3:
+            st.markdown("**Position in India**")
+            if pos.rank is not None and pos.n is not None:
+                st.metric("", f"#{pos.rank} / {pos.n}")
             else:
-                st.info(
-                    "Per-model district data is not available for this index, "
-                    "so the boxplot could not be generated."
-                )
+                st.write("N/A")
 
-    if show_agg_tables:
-        # --- Expander 2: State summary statistics ---
-        with st.expander("State summary statistics", expanded=False):
-            if ensemble.get("n_districts", 0) > 0:
-                stat_rows = [
-                    {"Statistic": "mean", "Value": f"{ensemble['mean']:.2f}"},
-                    {"Statistic": "median", "Value": f"{ensemble['median']:.2f}"},
-                    {"Statistic": "p05", "Value": f"{ensemble['p05']:.2f}"},
-                    {"Statistic": "p95", "Value": f"{ensemble['p95']:.2f}"},
-                    {"Statistic": "std", "Value": f"{ensemble['std']:.2f}"},
-                    {
-                        "Statistic": "n_districts",
-                        "Value": str(int(ensemble["n_districts"])),
-                    },
-                ]
-                st.table(pd.DataFrame(stat_rows).set_index("Statistic"))
-            else:
-                st.info("No numeric district values found for this state & selection.")
-
-        # --- Expander 3: Per-model state averages ---
-        with st.expander("Per-model state averages", expanded=False):
-            if per_model_df is not None and not per_model_df.empty:
-                st.dataframe(
-                    per_model_df.rename(
-                        columns={"value": "state_avg", "n_districts": "n_districts_used"}
-                    ),
-                    use_container_width=True,
-                )
-
-            if sel_districts_gdf is not None and not sel_districts_gdf.empty:
-                st.caption(f"Districts used: {len(sel_districts_gdf)}")
-
-    # --- Expander 4: Trend over time (state average) ---
     with st.expander("Trend over time (state average)", expanded=False):
-        st.caption(
-            "Generates a state-average yearly trend plot and PDF for the "
-            "selected index, scenario, and period."
-        )
+        yearly_df = load_state_yearly(ts_root=processed_root, state_dir=selected_state, varcfg=None, level=level_norm)
+        if yearly_df is None or yearly_df.empty:
+            st.info("State yearly ensemble data not available.")
+        else:
+            d = yearly_df.copy()
+            d["scenario"] = d["scenario"].astype(str).str.strip()
+            d["year"] = pd.to_numeric(d["year"], errors="coerce")
+            d["mean"] = pd.to_numeric(d["mean"], errors="coerce")
+            d = d.dropna(subset=["year", "mean"])
 
-        if st.button(
-            "Generate state-average trend PDF",
-            key=f"btn_state_trend_{variable_slug}_{selected_state}_{sel_scenario}",
-        ):
-            _yearly_df = _load_state_yearly_cached(str(processed_root), pilot_state)
-            pdf_path = _make_state_yearly_pdf(
-                _yearly_df,
-                selected_state,
-                sel_scenario,
-                variable_label,
-                processed_root / "pdf_plots",
+            show_models = st.checkbox(
+                "Show model members",
+                key=f"state_trend_show_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
+                value=False,
             )
-            if pdf_path is not None and pdf_path.exists():
-                with open(pdf_path, "rb") as fh:
-                    st.download_button(
-                        "Download state-average time-series (PDF)",
-                        fh.read(),
-                        file_name=pdf_path.name,
-                        mime="application/pdf",
-                    )
+
+            fig = go.Figure()
+            if show_models:
+                mf = discover_state_yearly_model_file(ts_root=processed_root, state_dir=selected_state, level=level_norm)
+                if mf is None:
+                    st.caption("Model members not available for this state/index; showing ensemble only.")
+                else:
+                    mdf = pd.read_csv(mf)
+                    if not mdf.empty and {"scenario", "year", "model", "value"}.issubset(set(mdf.columns)):
+                        mdf = mdf[mdf["scenario"].astype(str).str.strip().str.lower().isin(["historical", sel_scenario.lower()])]
+                        mdf["year"] = pd.to_numeric(mdf["year"], errors="coerce")
+                        mdf["value"] = pd.to_numeric(mdf["value"], errors="coerce")
+                        mdf = mdf.dropna(subset=["year", "value"])
+                        for model, grp in mdf.groupby("model"):
+                            fig.add_trace(go.Scatter(x=grp["year"], y=grp["value"], mode="lines", line={"width": 1}, opacity=0.2, name=str(model), showlegend=False))
+                    else:
+                        st.caption("Model members not available for this state/index; showing ensemble only.")
+
+            ens = d[d["scenario"].str.lower().isin(["historical", sel_scenario.lower()])].sort_values(["scenario", "year"])
+            fig.add_trace(go.Scatter(x=ens["year"], y=ens["mean"], mode="lines", line={"width": 3}, name="Ensemble mean"))
+            fig.update_layout(xaxis_title="Year", yaxis_title=variable_label, margin={"l": 10, "r": 10, "t": 10, "b": 10})
+            st.plotly_chart(fig, use_container_width=True, config={"displaylogo": False, "responsive": True})
+
+    with st.expander("Scenario comparison (period-mean)", expanded=False):
+        f = discover_state_period_ensemble_file(ts_root=processed_root, state_dir=selected_state, level=level_norm)
+        if f is None:
+            st.info("Scenario comparison not available for this state/index.")
+        else:
+            sdf = pd.read_csv(f)
+            if sdf.empty or not {"scenario", "period", "ensemble_mean"}.issubset(set(sdf.columns)):
+                st.info("Scenario comparison not available for this state/index.")
             else:
-                st.info(
-                    "State-average yearly time-series is not available for this combination."
+                force_zero = st.checkbox(
+                    "Start y-axis at zero",
+                    key=f"state_scenario_y0_{variable_slug}_{selected_state}_{level_norm}_{sel_period}",
+                    value=False,
                 )
-
-
-def _load_state_yearly_cached(ts_root_str: str, state_dir: str) -> pd.DataFrame:
-    """Load state yearly data with Streamlit caching."""
-    import streamlit as st
-
-    @st.cache_data
-    def _inner(ts_root_str: str, state_dir: str) -> pd.DataFrame:
-        from india_resilience_tool.analysis.timeseries import load_state_yearly
-
-        return load_state_yearly(
-            ts_root=Path(ts_root_str),
-            state_dir=state_dir,
-            varcfg=None,
-        )
-
-    return _inner(ts_root_str, state_dir)
-
-
-def _make_state_yearly_pdf(
-    df_yearly: pd.DataFrame,
-    state_name: str,
-    scenario_name: str,
-    metric_label: str,
-    out_dir: Path,
-) -> Optional[Path]:
-    """Generate a state-average yearly time-series PDF."""
-    import matplotlib.pyplot as plt
-
-    if df_yearly is None or df_yearly.empty:
-        return None
-    d = df_yearly.copy()
-    
-    # Handle both 'state' and 'state_name' column naming conventions
-    state_col = "state" if "state" in d.columns else ("state_name" if "state_name" in d.columns else None)
-    scenario_col = "scenario" if "scenario" in d.columns else None
-    
-    if state_col is None or scenario_col is None:
-        return None
-    
-    d = d[
-        (d[state_col].astype(str).str.strip().str.lower() == state_name.strip().lower())
-        & (
-            d[scenario_col]
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            == scenario_name.strip().lower()
-        )
-    ]
-    if d.empty:
-        return None
-    for c in ("year", "mean", "p05", "p95"):
-        if c in d.columns:
-            d[c] = pd.to_numeric(d[c], errors="coerce")
-    d = d.dropna(subset=["year"]).sort_values("year")
-    if d.empty:
-        return None
-
-    fig, ax = plt.subplots(figsize=(7.5, 4.5), dpi=150)
-    x = d["year"]
-    y = d["mean"]
-    ax.plot(x, y, marker="o", linewidth=1.5, label="Mean")
-
-    if "p05" in d.columns and "p95" in d.columns:
-        ax.fill_between(
-            x,
-            d["p05"],
-            d["p95"],
-            alpha=0.2,
-            label="5–95% range",
-        )
-
-    ax.set_xlabel("Year")
-    ax.set_ylabel(metric_label)
-    ax.set_title(f"{state_name} — {metric_label} ({scenario_name})")
-    ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.7)
-    ax.legend(frameon=False, ncol=3, fontsize=9)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    def _safe(s: str) -> str:
-        return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in str(s))
-
-    pdf_path = (
-        out_dir
-        / f"{_safe(state_name)}__{_safe(metric_label)}__{_safe(scenario_name)}__yearly_timeseries.pdf"
-    )
-    fig.tight_layout()
-    fig.savefig(pdf_path, format="pdf")
-    plt.close(fig)
-    return pdf_path
+                sdf = sdf.copy()
+                sdf["ensemble_mean"] = pd.to_numeric(sdf["ensemble_mean"], errors="coerce")
+                sdf = sdf.dropna(subset=["ensemble_mean"])
+                fig2 = go.Figure()
+                for scen in sorted(sdf["scenario"].astype(str).unique()):
+                    g = sdf[sdf["scenario"].astype(str) == scen]
+                    fig2.add_trace(go.Bar(x=g["period"], y=g["ensemble_mean"], name=str(scen)))
+                if force_zero:
+                    fig2.update_yaxes(rangemode="tozero")
+                fig2.update_layout(barmode="group", xaxis_title="Period", yaxis_title=variable_label, margin={"l": 10, "r": 10, "t": 10, "b": 10})
+                st.plotly_chart(fig2, use_container_width=True, config={"displaylogo": False, "responsive": True})

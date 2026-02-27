@@ -54,12 +54,17 @@ If anything in this document is violated, it is considered a **breaking change**
 
 `build_master_metrics` must continue producing these exact filenames (same names, same schemas):
 - `master_metrics_by_district.csv`
-- `state_model_averages.csv`
-- `state_ensemble_stats.csv`
-- `state_yearly_model_averages.csv`
-- `state_yearly_ensemble_stats.csv`
+- `master_metrics_by_block.csv`
+- `state_model_averages_district.csv`
+- `state_ensemble_stats_district.csv`
+- `state_yearly_model_averages_district.csv`
+- `state_yearly_ensemble_stats_district.csv`
+- `state_model_averages_block.csv`
+- `state_ensemble_stats_block.csv`
+- `state_yearly_model_averages_block.csv`
+- `state_yearly_ensemble_stats_block.csv`
 
-Dashboard must continue reading these filenames exactly.
+Dashboard must continue reading level-specific state summary filenames exactly.
 
 ---
 

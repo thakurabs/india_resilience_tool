@@ -506,7 +506,7 @@ def _collect_block_data(
 # -----------------------------------------------------------------------------
 def _build_wide_master(
     df_all: pd.DataFrame,
-    metric_col_name: str,
+    _metric_col_name: str,
     level: AdminLevel,
     num_workers: int = 1,
     verbose: bool = True,
@@ -603,10 +603,21 @@ def _unique_unit_count(df: pd.DataFrame, level: AdminLevel) -> int:
 def _build_state_summaries(
     df_all: pd.DataFrame,
     df_yearly: pd.DataFrame,
-    metric_col_name: str,
+    _metric_col_name: str,
     level: AdminLevel,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Build all state-level summary DataFrames."""
+    def _coerce_year_int(df: pd.DataFrame) -> pd.DataFrame:
+        if df.empty or "year" not in df.columns:
+            return df
+        out = df.copy()
+        out["year"] = pd.to_numeric(out["year"], errors="coerce")
+        out = out.dropna(subset=["year"])
+        if out.empty:
+            return out
+        out["year"] = out["year"].astype(int)
+        return out
+
     # State model averages (period data)
     state_model_rows: List[Dict[str, Any]] = []
     for (scenario, period, model), grp in df_all.groupby(["scenario", "period", "model"]):
@@ -617,7 +628,7 @@ def _build_state_summaries(
                     "scenario": scenario,
                     "period": period,
                     "model": model,
-                    f"{metric_col_name}_mean": float(np.mean(values)),
+                    "value": float(np.mean(values)),
                     "n_units": _unique_unit_count(grp, level),
                 }
             )
@@ -633,7 +644,7 @@ def _build_state_summaries(
                 {
                     "scenario": scenario,
                     "period": period,
-                    **{f"{metric_col_name}__{k}": v for k, v in stats.items()},
+                    **{f"ensemble_{k}": v for k, v in stats.items()},
                     "n_models": len(model_means),
                     "n_units": _unique_unit_count(grp, level),
                 }
@@ -654,11 +665,11 @@ def _build_state_summaries(
                         "scenario": scenario,
                         "year": year,
                         "model": model,
-                        f"{metric_col_name}_mean": float(np.mean(values)),
+                        "value": float(np.mean(values)),
                         "n_units": _unique_unit_count(grp, level),
                     }
                 )
-        state_yearly_model_df = pd.DataFrame(yearly_model_rows)
+        state_yearly_model_df = _coerce_year_int(pd.DataFrame(yearly_model_rows))
 
         yearly_ensemble_rows: List[Dict[str, Any]] = []
         for (scenario, year), grp in df_yearly.groupby(["scenario", "year"]):
@@ -669,12 +680,12 @@ def _build_state_summaries(
                     {
                         "scenario": scenario,
                         "year": year,
-                        **{f"{metric_col_name}__{k}": v for k, v in stats.items()},
+                        **{f"ensemble_{k}": v for k, v in stats.items()},
                         "n_models": len(model_means),
                         "n_units": _unique_unit_count(grp, level),
                     }
                 )
-        state_yearly_ensemble_df = pd.DataFrame(yearly_ensemble_rows)
+        state_yearly_ensemble_df = _coerce_year_int(pd.DataFrame(yearly_ensemble_rows))
 
     return state_model_df, state_ensemble_df, state_yearly_model_df, state_yearly_ensemble_df
 
@@ -768,10 +779,10 @@ def build_master_metrics(
             print("Writing output files...")
 
         master.to_csv(outp, index=False)
-        state_model_df.to_csv(outp.parent / "state_model_averages.csv", index=False)
-        state_ensemble_df.to_csv(outp.parent / "state_ensemble_stats.csv", index=False)
-        state_yearly_model_df.to_csv(outp.parent / "state_yearly_model_averages.csv", index=False)
-        state_yearly_ensemble_df.to_csv(outp.parent / "state_yearly_ensemble_stats.csv", index=False)
+        state_model_df.to_csv(outp.parent / f"state_model_averages_{level}.csv", index=False)
+        state_ensemble_df.to_csv(outp.parent / f"state_ensemble_stats_{level}.csv", index=False)
+        state_yearly_model_df.to_csv(outp.parent / f"state_yearly_model_averages_{level}.csv", index=False)
+        state_yearly_ensemble_df.to_csv(outp.parent / f"state_yearly_ensemble_stats_{level}.csv", index=False)
 
         if verbose:
             print(f"  Master CSV -> {outp}")
