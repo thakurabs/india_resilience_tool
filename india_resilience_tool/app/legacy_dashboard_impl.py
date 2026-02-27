@@ -118,6 +118,8 @@ from india_resilience_tool.config.constants import (
     FONT_SIZE_TICKS,
     FONT_SIZE_LEGEND,
     LOGO_PATH,
+    SCENARIO_UI_LABEL,
+    SCENARIO_HELP_MD,
 )
 
 from india_resilience_tool.config.variables import (
@@ -665,8 +667,10 @@ def make_state_boxplot_for_districts(
     ax.set_xticklabels(ordered_districts, rotation=90, fontsize=7)
 
     ax.set_ylabel(metric_label)
+    scen_key = str(sel_scenario).strip().lower()
+    scen_label = SCENARIO_UI_LABEL.get(scen_key, str(sel_scenario))
     ax.set_title(
-        f"{sel_state}: {metric_label}\nScenario: {sel_scenario} · "
+        f"{sel_state}: {metric_label}\nScenario: {scen_label} · "
         f"Period: {sel_period} · Stat: {sel_stat}"
     )
     ax.grid(True, axis="y", linestyle="--", alpha=0.3)
@@ -686,6 +690,79 @@ st.set_page_config(page_title="India Resilience Tool", layout="wide")
 
 # Selection placeholders (force deliberate choices)
 SEL_PLACEHOLDER = "— Select —"
+
+def _help_md_to_plain_text(md: str) -> str:
+    """
+    Convert short Markdown help snippets into plain text for Streamlit widget tooltips.
+
+    Notes:
+      - Streamlit widget `help=` is plain text (not Markdown).
+      - Keep this intentionally lightweight; it's not a full Markdown renderer.
+    """
+    txt = str(md or "").replace("\r\n", "\n").replace("\r", "\n")
+    lines: list[str] = []
+    for raw in txt.split("\n"):
+        line = raw.strip()
+        if not line:
+            lines.append("")
+            continue
+        # Headings: "# Title" -> "Title"
+        if line.startswith("#"):
+            line = line.lstrip("#").strip()
+        # Basic emphasis/code markers
+        line = line.replace("**", "").replace("`", "")
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+# Ribbon help copy (base text; dynamic add-ons are appended at render time)
+RIBBON_HELP_MD: dict[str, str] = {
+    "risk_domain": (
+        "### Risk domain\n"
+        "A risk domain groups related metrics (indices) into a theme (e.g., heat risk, flood risk).\n\n"
+        "**How to use**\n"
+        "- Choose a domain to narrow the metric list to what you care about."
+    ),
+    "metric": (
+        "### Metric\n"
+        "A metric is the specific climate index you are mapping (e.g., TXx, hot days, wet spells).\n\n"
+        "**How to use**\n"
+        "- Pick the metric that matches your question (extremes vs averages, heat vs rainfall, etc.)."
+    ),
+    "scenario": (
+        "### Scenario\n"
+        "Scenarios describe different global development and emissions pathways used for future climate projections.\n\n"
+        "**Options in this tool**\n"
+        "- Middle-of-the-road (SSP2-4.5)\n"
+        "- Fossil-fuelled development (SSP5-8.5)\n\n"
+        "**Tip**\n"
+        "- Use SSP2-4.5 for baseline planning and SSP5-8.5 to stress-test."
+    ),
+    "period": (
+        "### Period\n"
+        "The multi-year time window over which values are summarized.\n\n"
+        "**Periods**\n"
+        "- Baseline: 1995–2014\n"
+        "- Early century: 2021–2040\n"
+        "- Mid century: 2041–2060\n"
+        "- Late century: 2061–2080\n"
+        "- End century: 2081–2100"
+    ),
+    "statistic": (
+        "### Statistic\n"
+        "- **Mean (average):** sensitive to extreme values.\n"
+        "- **Median (typical):** more robust when values are skewed or have outliers.\n\n"
+        "**Tip**\n"
+        "- If results look pulled by extremes, try Median."
+    ),
+    "map_mode": (
+        "### Map mode\n"
+        "- **Absolute value:** maps the metric as-is for the selected period.\n"
+        "- **Change from baseline:** maps (future period − baseline) to show how conditions shift.\n\n"
+        "**Example**\n"
+        "If TXx is 42°C in 2041–2060 and 40°C in baseline, change = +2°C."
+    ),
+}
 
 # Initialise analysis mode and portfolio storage in session state
 if "analysis_mode" not in st.session_state:
@@ -911,14 +988,19 @@ with col1:
         st.session_state["selected_bundle"] = SEL_PLACEHOLDER
 
     with row1[0]:
-        st.markdown("**Risk domain**")
+        bundle_help = _help_md_to_plain_text(RIBBON_HELP_MD["risk_domain"])
+        selected_bundle_preview = st.session_state.get("selected_bundle", SEL_PLACEHOLDER)
+        if selected_bundle_preview != SEL_PLACEHOLDER:
+            bundle_desc_preview = get_bundle_description(selected_bundle_preview)
+            if bundle_desc_preview:
+                bundle_help += f"\n\nThis domain covers:\n- {bundle_desc_preview}"
         selected_bundle = st.selectbox(
             "Risk domain",
             options=bundle_options,
             index=bundle_options.index(cur_bundle),
             key="selected_bundle",
-            label_visibility="collapsed",
-            help="Select a thematic bundle to filter available metrics.",
+            label_visibility="visible",
+            help=bundle_help,
         )
 
     # Bundle description (only when chosen)
@@ -951,16 +1033,30 @@ with col1:
     cur_var = st.session_state.get("selected_var", SEL_PLACEHOLDER)
 
     with row1[1]:
-        st.markdown("**Metric**")
+        metric_help = _help_md_to_plain_text(RIBBON_HELP_MD["metric"])
+        selected_metric_preview = st.session_state.get("selected_var", SEL_PLACEHOLDER)
+        if selected_metric_preview != SEL_PLACEHOLDER and selected_metric_preview in VARIABLES:
+            desc_preview = str(VARIABLES[selected_metric_preview].get("description", "")).strip()
+            units_preview = str(
+                VARIABLES[selected_metric_preview].get("unit")
+                or VARIABLES[selected_metric_preview].get("units")
+                or ""
+            ).strip()
+            if desc_preview or units_preview:
+                metric_help += "\n\nAbout this metric:"
+                if desc_preview:
+                    metric_help += f"\n- {desc_preview}"
+                if units_preview:
+                    metric_help += f"\n- Units: {units_preview}"
         selected_var = st.selectbox(
             "Metric",
             options=metric_options,
             index=metric_options.index(cur_var) if cur_var in metric_options else 0,
             key="selected_var",
-            label_visibility="collapsed",
+            label_visibility="visible",
             format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
             disabled=metric_disabled,
-            help="Select the metric to visualize on the map.",
+            help=metric_help,
         )
 
     # --- Resolve per-index config (once metric selected) ---
@@ -1119,14 +1215,28 @@ with col1:
     cur_scn = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
 
     with row1[2]:
-        st.markdown("**Scenario**")
+        scenario_help = _help_md_to_plain_text(RIBBON_HELP_MD["scenario"])
+        if cur_scn != SEL_PLACEHOLDER:
+            scen_key_preview = str(cur_scn).strip().lower()
+            extra = SCENARIO_HELP_MD.get(scen_key_preview)
+            if extra:
+                scenario_help += f"\n\n{_help_md_to_plain_text(extra)}"
         sel_scenario = st.selectbox(
             "Scenario",
             options=scenario_options,
             index=scenario_options.index(cur_scn),
             key="sel_scenario",
-            label_visibility="collapsed",
+            label_visibility="visible",
             disabled=scenario_disabled,
+            format_func=lambda s: (
+                s if s == SEL_PLACEHOLDER else SCENARIO_UI_LABEL.get(str(s).strip().lower(), str(s))
+            ),
+            help=scenario_help,
+        )
+        sel_scenario_display = (
+            sel_scenario
+            if sel_scenario == SEL_PLACEHOLDER
+            else SCENARIO_UI_LABEL.get(str(sel_scenario).strip().lower(), str(sel_scenario))
         )
 
     # --- Period selection (depends on scenario) ---
@@ -1156,15 +1266,16 @@ with col1:
     cur_per = st.session_state.get("sel_period", SEL_PLACEHOLDER)
 
     with row2[0]:
-        st.markdown("**Period**")
+        period_help = _help_md_to_plain_text(RIBBON_HELP_MD["period"])
         sel_period = st.selectbox(
             "Period",
             options=period_options,
             index=period_options.index(cur_per),
             key="sel_period",
-            label_visibility="collapsed",
+            label_visibility="visible",
             disabled=period_disabled,
             format_func=lambda p: period_display_label(p) if p != SEL_PLACEHOLDER else p,
+            help=period_help,
         )
 
     # --- Statistic selection (mean/median only, placeholder-first) ---
@@ -1176,14 +1287,15 @@ with col1:
     cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
 
     with row2[1]:
-        st.markdown("**Statistic**")
+        statistic_help = _help_md_to_plain_text(RIBBON_HELP_MD["statistic"])
         sel_stat = st.selectbox(
             "Statistic",
             options=stat_options,
             index=stat_options.index(cur_stat),
             key="sel_stat",
-            label_visibility="collapsed",
+            label_visibility="visible",
             disabled=stat_disabled,
+            help=statistic_help,
         )
 
     # --- Map mode selection (moved into ribbon) ---
@@ -1198,14 +1310,14 @@ with col1:
     cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
 
     with row2[2]:
-        st.markdown("**Map mode**")
+        map_mode_help = _help_md_to_plain_text(RIBBON_HELP_MD["map_mode"])
         map_mode = st.selectbox(
             "Map mode",
             options=map_mode_options,
             index=map_mode_options.index(cur_map_mode),
             key="map_mode",
-            label_visibility="collapsed",
-            help="Choose whether to map absolute values or change from the 1990–2010 baseline.",
+            label_visibility="visible",
+            help=map_mode_help,
         )
 
 # Column chosen to plot (only when all ribbon selections are complete)
@@ -1230,7 +1342,7 @@ if _ribbon_ready:
         st.stop()
 
     pretty_metric_label = (
-        f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
+        f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
     )
 # -------------------------
 # Master dataset controls (bound to chosen Index)
@@ -1973,12 +2085,12 @@ if map_mode == "Change from 1990-2010 baseline":
     cmap_name = "RdBu_r"  # blue-negative, red-positive
     pretty_metric_label = (
         f"Δ {VARIABLES[VARIABLE_SLUG]['label']} vs 1990–2010 · "
-        f"{sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
+        f"{sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
     )
 else:
     cmap_name = "Reds"
     pretty_metric_label = (
-        f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario} · {period_display_label(sel_period)} · {sel_stat}"
+        f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
     )
 
 with perf_section("colors: apply_fillcolor_binned"):

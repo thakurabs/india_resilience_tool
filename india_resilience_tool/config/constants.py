@@ -52,6 +52,28 @@ SCENARIO_DISPLAY: dict[str, str] = {
     "historical": "Historical",
 }
 
+# ---- Scenario UI labels (plain-English + scientific) ----
+SCENARIO_UI_LABEL: dict[str, str] = {
+    "ssp245": "Middle-of-the-road (SSP2-4.5)",
+    "ssp585": "Fossil-fuelled development (SSP5-8.5)",
+    "historical": "Historical",
+}
+
+# ---- Scenario help copy (shown in native Streamlit help tooltips) ----
+SCENARIO_HELP_MD: dict[str, str] = {
+    "ssp245": (
+        "Middle-of-the-road (SSP2-4.5)\n"
+        "A future where social, economic, and technological trends do not shift dramatically "
+        "from historical patterns. Often used as a baseline planning scenario."
+    ),
+    "ssp585": (
+        "Fossil-fuelled development (SSP5-8.5)\n"
+        "A future with rapid economic growth and high energy demand met largely by fossil fuels. "
+        "Often used to stress-test under higher emissions."
+    ),
+    "historical": "Historical\nObserved / historical reference period used for comparison (not a future projection).",
+}
+
 # ---- Risk classification thresholds ----
 RISK_THRESHOLDS: dict[str, Tuple[float, float]] = {
     "low": (0.0, 33.3),
