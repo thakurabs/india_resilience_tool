@@ -900,6 +900,35 @@ with st.sidebar:
 
 st.title("India Resilience Tool")
 
+st.markdown(
+    """
+    <style>
+    [data-testid="stPopover"] button {
+        background: transparent !important;
+        border: 0 !important;
+        box-shadow: none !important;
+        padding: 0.15rem 0.35rem !important;
+        min-height: auto !important;
+        color: rgba(85, 92, 102, 0.95) !important;
+        font-size: 0.85rem !important;
+        line-height: 1 !important;
+    }
+    [data-testid="stPopover"] button svg {
+        display: none !important;
+    }
+    [data-testid="stPopover"] button:hover {
+        background: rgba(0, 0, 0, 0.04) !important;
+    }
+    [data-testid="stPopover"] button:focus-visible {
+        outline: 2px solid #2563eb !important;
+        outline-offset: 2px;
+        border-radius: 6px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Pilot state default
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
@@ -960,7 +989,7 @@ with col1:
         st.session_state["selected_bundle"] = SEL_PLACEHOLDER
 
     with row1[0]:
-        bundle_label_col, bundle_info_col = st.columns([7, 1])
+        bundle_label_col, bundle_info_col = st.columns([0.92, 0.08])
         with bundle_label_col:
             st.markdown("**Risk domain**")
         with bundle_info_col:
@@ -973,7 +1002,7 @@ with col1:
                         "\n\n**This domain covers**\n"
                         f"- {bundle_desc_preview}"
                     )
-            with st.popover("ⓘ"):
+            with st.popover("?"):
                 st.markdown(bundle_help_md)
 
         selected_bundle = st.selectbox(
@@ -1015,7 +1044,7 @@ with col1:
     cur_var = st.session_state.get("selected_var", SEL_PLACEHOLDER)
 
     with row1[1]:
-        metric_label_col, metric_info_col = st.columns([7, 1])
+        metric_label_col, metric_info_col = st.columns([0.92, 0.08])
         with metric_label_col:
             st.markdown("**Metric**")
         with metric_info_col:
@@ -1029,7 +1058,7 @@ with col1:
                 metric_units_preview = str(metric_cfg_preview.get("units", "")).strip()
                 if metric_units_preview:
                     metric_help_md += f"\n\n**Units**: {metric_units_preview}"
-            with st.popover("ⓘ"):
+            with st.popover("?"):
                 st.markdown(metric_help_md)
 
         selected_var = st.selectbox(
@@ -1199,7 +1228,7 @@ with col1:
     cur_scn = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
 
     with row1[2]:
-        scenario_label_col, scenario_info_col = st.columns([7, 1])
+        scenario_label_col, scenario_info_col = st.columns([0.92, 0.08])
         with scenario_label_col:
             st.markdown("**Scenario**")
         with scenario_info_col:
@@ -1209,7 +1238,7 @@ with col1:
                 scenario_extra = SCENARIO_HELP_MD.get(selected_scenario_preview, "")
                 if scenario_extra:
                     scenario_help_md += f"\n\n{scenario_extra}"
-            with st.popover("ⓘ"):
+            with st.popover("?"):
                 st.markdown(scenario_help_md)
 
         sel_scenario = st.selectbox(
@@ -1249,11 +1278,11 @@ with col1:
     cur_per = st.session_state.get("sel_period", SEL_PLACEHOLDER)
 
     with row2[0]:
-        period_label_col, period_info_col = st.columns([7, 1])
+        period_label_col, period_info_col = st.columns([0.92, 0.08])
         with period_label_col:
             st.markdown("**Period**")
         with period_info_col:
-            with st.popover("ⓘ"):
+            with st.popover("?"):
                 st.markdown(RIBBON_HELP_MD["period"])
 
         sel_period = st.selectbox(
@@ -1275,11 +1304,11 @@ with col1:
     cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
 
     with row2[1]:
-        statistic_label_col, statistic_info_col = st.columns([7, 1])
+        statistic_label_col, statistic_info_col = st.columns([0.92, 0.08])
         with statistic_label_col:
             st.markdown("**Statistic**")
         with statistic_info_col:
-            with st.popover("ⓘ"):
+            with st.popover("?"):
                 st.markdown(RIBBON_HELP_MD["statistic"])
 
         sel_stat = st.selectbox(
@@ -1303,11 +1332,11 @@ with col1:
     cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
 
     with row2[2]:
-        map_mode_label_col, map_mode_info_col = st.columns([7, 1])
+        map_mode_label_col, map_mode_info_col = st.columns([0.92, 0.08])
         with map_mode_label_col:
             st.markdown("**Map mode**")
         with map_mode_info_col:
-            with st.popover("ⓘ"):
+            with st.popover("?"):
                 st.markdown(RIBBON_HELP_MD["map_mode"])
 
         map_mode = st.selectbox(
