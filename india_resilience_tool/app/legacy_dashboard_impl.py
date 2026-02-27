@@ -973,7 +973,7 @@ with col1:
                         "\n\n**This domain covers**\n"
                         f"- {bundle_desc_preview}"
                     )
-            with st.popover("ⓘ", key="ribbon_info_risk_domain"):
+            with st.popover("ⓘ"):
                 st.markdown(bundle_help_md)
 
         selected_bundle = st.selectbox(
@@ -1029,7 +1029,7 @@ with col1:
                 metric_units_preview = str(metric_cfg_preview.get("units", "")).strip()
                 if metric_units_preview:
                     metric_help_md += f"\n\n**Units**: {metric_units_preview}"
-            with st.popover("ⓘ", key="ribbon_info_metric"):
+            with st.popover("ⓘ"):
                 st.markdown(metric_help_md)
 
         selected_var = st.selectbox(
@@ -1209,7 +1209,7 @@ with col1:
                 scenario_extra = SCENARIO_HELP_MD.get(selected_scenario_preview, "")
                 if scenario_extra:
                     scenario_help_md += f"\n\n{scenario_extra}"
-            with st.popover("ⓘ", key="ribbon_info_scenario"):
+            with st.popover("ⓘ"):
                 st.markdown(scenario_help_md)
 
         sel_scenario = st.selectbox(
@@ -1253,7 +1253,7 @@ with col1:
         with period_label_col:
             st.markdown("**Period**")
         with period_info_col:
-            with st.popover("ⓘ", key="ribbon_info_period"):
+            with st.popover("ⓘ"):
                 st.markdown(RIBBON_HELP_MD["period"])
 
         sel_period = st.selectbox(
@@ -1279,7 +1279,7 @@ with col1:
         with statistic_label_col:
             st.markdown("**Statistic**")
         with statistic_info_col:
-            with st.popover("ⓘ", key="ribbon_info_statistic"):
+            with st.popover("ⓘ"):
                 st.markdown(RIBBON_HELP_MD["statistic"])
 
         sel_stat = st.selectbox(
@@ -1307,7 +1307,7 @@ with col1:
         with map_mode_label_col:
             st.markdown("**Map mode**")
         with map_mode_info_col:
-            with st.popover("ⓘ", key="ribbon_info_map_mode"):
+            with st.popover("ⓘ"):
                 st.markdown(RIBBON_HELP_MD["map_mode"])
 
         map_mode = st.selectbox(
