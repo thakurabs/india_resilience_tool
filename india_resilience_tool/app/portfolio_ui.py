@@ -1110,6 +1110,65 @@ def render_portfolio_visualizations(
             return (0, int(SCENARIO_ORDER.index(s_norm)), s_norm)
         return (1, 10_000, s_norm)
 
+    # -------------------------
+    # Scenario controls (shortcut for the table-level controls above)
+    # -------------------------
+    compare_key = f"portfolio_compare_scenarios_{scope}"
+    scen_key = f"portfolio_scenario_selection_{scope}"
+    viz_compare_key = f"viz_portfolio_compare_scenarios_{scope}"
+    viz_scen_key = f"viz_portfolio_scenario_selection_{scope}"
+    src_key = f"_portfolio_scenario_ctrl_src_{scope}"
+
+    def _set_src_viz() -> None:
+        st.session_state[src_key] = "viz"
+
+    # Pre-widget sync: if the last interaction was on the table, mirror table → viz.
+    src = st.session_state.get(src_key)
+    if src != "viz":
+        st.session_state[viz_compare_key] = bool(st.session_state.get(compare_key, False))
+        chosen_tbl = st.session_state.get(scen_key) or []
+        st.session_state[viz_scen_key] = [str(x).strip() for x in list(chosen_tbl) if str(x).strip()]
+
+    with st.expander("Scenario controls", expanded=False):
+        st.caption("These controls rebuild the comparison table above (and affect downloads/visualizations).")
+        st.checkbox(
+            "Compare scenarios (table)",
+            key=viz_compare_key,
+            on_change=_set_src_viz,
+            help="Shortcut for the Portfolio Comparison setting above.",
+        )
+
+        if bool(st.session_state.get(viz_compare_key, False)):
+            base_opts = ["ssp245", "ssp585"]
+            sel_scenario = st.session_state.get("sel_scenario")
+            if isinstance(sel_scenario, str) and sel_scenario.strip() and sel_scenario not in base_opts:
+                if not sel_scenario.strip().startswith("—"):
+                    base_opts = [sel_scenario.strip()] + base_opts
+
+            # Ensure options include any scenarios currently present in df (if already scenario-expanded),
+            # plus any persisted selections, so Streamlit doesn't drop values.
+            current = st.session_state.get(viz_scen_key) or []
+            extra = []
+            if "Scenario" in df.columns:
+                extra = [str(x).strip() for x in df["Scenario"].dropna().astype(str).tolist() if str(x).strip()]
+
+            all_opts = []
+            for x in list(base_opts) + list(extra) + list(current):
+                xs = str(x).strip()
+                if xs:
+                    all_opts.append(xs)
+            seen = set()
+            all_opts = [x for x in all_opts if not (x in seen or seen.add(x))]
+            all_opts = sorted(all_opts, key=_scenario_sort)
+
+            st.multiselect(
+                "Scenarios to compare",
+                options=all_opts,
+                format_func=_scenario_label,
+                key=viz_scen_key,
+                on_change=_set_src_viz,
+            )
+
     scenario_options: list[str] = []
     if has_scenario:
         scenario_options = [
@@ -1775,10 +1834,39 @@ def render_portfolio_panel(
 
     # --- Scenario comparison controls (optional) ---
     compare_key = f"portfolio_compare_scenarios_{level_norm}"
+    scen_key = f"portfolio_scenario_selection_{level_norm}"
+    viz_compare_key = f"viz_portfolio_compare_scenarios_{level_norm}"
+    viz_scen_key = f"viz_portfolio_scenario_selection_{level_norm}"
+    src_key = f"_portfolio_scenario_ctrl_src_{level_norm}"
+
+    def _set_src_table() -> None:
+        st.session_state[src_key] = "table"
+
+    # Pre-widget synchronization (must happen before any widget with these keys is created).
+    src = st.session_state.get(src_key)
+    if src == "viz":
+        if viz_compare_key in st.session_state:
+            st.session_state[compare_key] = bool(st.session_state.get(viz_compare_key, False))
+        if viz_scen_key in st.session_state:
+            chosen_viz = st.session_state.get(viz_scen_key) or []
+            st.session_state[scen_key] = [str(x).strip() for x in list(chosen_viz) if str(x).strip()]
+    elif src == "table":
+        st.session_state[viz_compare_key] = bool(st.session_state.get(compare_key, False))
+        chosen_tbl = st.session_state.get(scen_key) or []
+        st.session_state[viz_scen_key] = [str(x).strip() for x in list(chosen_tbl) if str(x).strip()]
+    else:
+        st.session_state.setdefault(viz_compare_key, bool(st.session_state.get(compare_key, False)))
+        chosen_tbl = st.session_state.get(scen_key) or []
+        st.session_state.setdefault(
+            viz_scen_key,
+            [str(x).strip() for x in list(chosen_tbl) if str(x).strip()],
+        )
+
     compare_scenarios = st.checkbox(
         "Compare scenarios",
         value=bool(st.session_state.get(compare_key, False)),
         key=compare_key,
+        on_change=_set_src_table,
         help="When enabled, the table will include one row per (unit × index × scenario).",
     )
 
@@ -1801,12 +1889,12 @@ def render_portfolio_panel(
         seen = set()
         default_sel = [x for x in default_sel if not (x in seen or seen.add(x))]
 
-        scen_key = f"portfolio_scenario_selection_{level_norm}"
         chosen = st.multiselect(
             "Scenarios to compare",
             options=base_opts,
             default=default_sel,
             key=scen_key,
+            on_change=_set_src_table,
         )
 
         if not chosen:
