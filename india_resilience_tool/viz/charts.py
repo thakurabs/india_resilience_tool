@@ -53,6 +53,49 @@ SCENARIO_COLORS_HEX: dict[str, str] = {
     "ssp585": "#d62728",      # red
 }
 
+# Risk-class palette (used for percentile-based heatmaps).
+#
+# These labels must remain aligned with analysis.metrics.risk_class_from_percentile:
+#   <20: Very Low, >=20: Low, >=40: Medium, >=60: High, >=80: Very High
+RISK_CLASS_LABELS: list[str] = ["Very Low", "Low", "Medium", "High", "Very High"]
+RISK_CLASS_COLORS: list[str] = ["#1a9850", "#91cf60", "#ffffbf", "#fc8d59", "#d73027"]
+
+
+def _risk_class_cmap_norm() -> tuple[Any, Any]:
+    """Return (cmap, norm) for 5 risk classes, with codes 0..4."""
+    import matplotlib.colors as mcolors
+
+    cmap = mcolors.ListedColormap(RISK_CLASS_COLORS, name="irt_risk_5")
+    norm = mcolors.BoundaryNorm(
+        boundaries=[-0.5, 0.5, 1.5, 2.5, 3.5, 4.5],
+        ncolors=len(RISK_CLASS_COLORS),
+    )
+    return cmap, norm
+
+
+def _percentile_to_risk_code(arr: np.ndarray) -> np.ndarray:
+    """
+    Map percentile values to risk class codes in {0..4}, preserving NaNs.
+
+    Codes:
+      0 Very Low, 1 Low, 2 Medium, 3 High, 4 Very High
+    """
+    out = np.full(arr.shape, np.nan, dtype=float)
+    mask = np.isfinite(arr)
+    if not np.any(mask):
+        return out
+
+    a = arr[mask]
+    code = np.zeros(a.shape, dtype=float)
+    code = np.where(a >= 80.0, 4.0, code)
+    code = np.where((a >= 60.0) & (a < 80.0), 3.0, code)
+    code = np.where((a >= 40.0) & (a < 60.0), 2.0, code)
+    code = np.where((a >= 20.0) & (a < 40.0), 1.0, code)
+    code = np.where(a < 20.0, 0.0, code)
+    out[mask] = code
+    return out
+
+
 def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     """Convert a hex color (#RRGGBB) to a Plotly-friendly rgba(r,g,b,a) string."""
     s = str(hex_color or "").strip()
@@ -1217,6 +1260,45 @@ def build_portfolio_scenario_diff_pivot(
     return pb2 - pa2
 
 
+def build_portfolio_scenario_min_pivot(
+    df: pd.DataFrame,
+    *,
+    value_col: str,
+    scenarios: Sequence[str],
+) -> pd.DataFrame:
+    """Compute elementwise min across scenarios on the unit × index pivot (NaN-aware)."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    scenarios_norm = [str(s).strip() for s in (scenarios or []) if str(s).strip()]
+    if len(scenarios_norm) < 1:
+        return pd.DataFrame()
+
+    pivots: list[pd.DataFrame] = []
+    for scen in scenarios_norm:
+        pv = build_portfolio_pivot(df, value_col=value_col, scenario=scen)
+        if pv is not None and not pv.empty:
+            pivots.append(pv)
+
+    if not pivots:
+        return pd.DataFrame()
+
+    idx = sorted({i for pv in pivots for i in pv.index})
+    cols = sorted({c for pv in pivots for c in pv.columns}, key=lambda x: str(x))
+    mats: list[np.ndarray] = []
+    for pv in pivots:
+        mats.append(pv.reindex(index=idx, columns=cols).to_numpy(dtype=float))
+
+    stack = np.stack(mats, axis=0)  # (S, R, C)
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="All-NaN slice encountered", category=RuntimeWarning)
+        out = np.nanmin(stack, axis=0)
+
+    return pd.DataFrame(out, index=idx, columns=cols)
+
+
 def make_portfolio_heatmap_scenario_panels(
     df: pd.DataFrame,
     *,
@@ -1277,32 +1359,8 @@ def make_portfolio_heatmap_scenario_panels(
         color_mats = {k: v.to_numpy(dtype=float) for k, v in pivots.items()}
         cbar_label = {"%Δ": "%Δ (vs baseline)", "Δ": "Δ (vs baseline)"}.get(value_col, value_col)
     elif value_col == "Percentile":
-        # Discrete risk-category colors (Very Low → Very High), aligned with
-        # analysis.metrics.risk_class_from_percentile thresholds.
-        risk_labels = ["Very Low", "Low", "Medium", "High", "Very High"]
-        risk_colors = ["#1a9850", "#91cf60", "#ffffbf", "#fc8d59", "#d73027"]
-        cmap_obj = mcolors.ListedColormap(risk_colors, name="irt_risk_5")
-        norm = mcolors.BoundaryNorm(
-            boundaries=[-0.5, 0.5, 1.5, 2.5, 3.5, 4.5],
-            ncolors=len(risk_colors),
-        )
-
-        def _pct_to_code(arr: np.ndarray) -> np.ndarray:
-            out = np.full(arr.shape, np.nan, dtype=float)
-            mask = np.isfinite(arr)
-            if not np.any(mask):
-                return out
-            a = arr[mask]
-            code = np.zeros(a.shape, dtype=float)
-            code = np.where(a >= 80.0, 4.0, code)
-            code = np.where((a >= 60.0) & (a < 80.0), 3.0, code)
-            code = np.where((a >= 40.0) & (a < 60.0), 2.0, code)
-            code = np.where((a >= 20.0) & (a < 40.0), 1.0, code)
-            code = np.where(a < 20.0, 0.0, code)
-            out[mask] = code
-            return out
-
-        color_mats = {k: _pct_to_code(v.to_numpy(dtype=float)) for k, v in pivots.items()}
+        cmap_obj, norm = _risk_class_cmap_norm()
+        color_mats = {k: _percentile_to_risk_code(v.to_numpy(dtype=float)) for k, v in pivots.items()}
         cbar_label = "Risk class (from percentile)"
     else:
         cmap_obj = plt.get_cmap(cmap)
@@ -1445,7 +1503,7 @@ def make_portfolio_heatmap_scenario_panels(
             cax.set_label("_portfolio_scenario_panels_colorbar")
             cbar = fig.colorbar(last_im, cax=cax, orientation="vertical")
             cbar.set_ticks([0, 1, 2, 3, 4])
-            cbar.set_ticklabels(risk_labels)
+            cbar.set_ticklabels(RISK_CLASS_LABELS)
             cbar.ax.tick_params(labelsize=label_fontsize)
         else:
             # Keep continuous values consistent: horizontal colorbar, centered below.
@@ -1459,6 +1517,96 @@ def make_portfolio_heatmap_scenario_panels(
             cax.set_label("_portfolio_scenario_panels_colorbar")
             cbar = fig.colorbar(last_im, cax=cax, orientation="horizontal")
             cbar.set_label(cbar_label, fontsize=label_fontsize)
+    return fig
+
+
+def make_portfolio_heatmap_robust_min_percentile(
+    df: pd.DataFrame,
+    *,
+    scenarios: Sequence[str],
+    figsize: Optional[Tuple[float, float]] = None,
+    fig_dpi: int = 100,
+    annot_fontsize: int = 9,
+    label_fontsize: int = 10,
+    title_fontsize: int = 12,
+    title: Optional[str] = None,
+) -> Optional[Any]:
+    """
+    Robust risk heatmap (No-regrets): min percentile across selected scenarios.
+
+    This highlights risk signals that remain high even under the less-severe scenario.
+    """
+    import matplotlib.pyplot as plt
+
+    if df is None or df.empty:
+        return None
+
+    scen_list = [str(s).strip() for s in (scenarios or []) if str(s).strip()]
+    if len(scen_list) < 2:
+        return None
+
+    min_pv = build_portfolio_scenario_min_pivot(df, value_col="Percentile", scenarios=scen_list)
+    if min_pv is None or min_pv.empty:
+        return None
+
+    cmap_obj, norm = _risk_class_cmap_norm()
+    try:
+        cmap_obj.set_bad("#cccccc")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    codes = _percentile_to_risk_code(min_pv.to_numpy(dtype=float))
+    masked = np.ma.masked_invalid(codes)
+
+    n_rows, n_cols = min_pv.shape
+    if figsize is None:
+        width = max(6, min(14, 2 + n_cols * 1.5))
+        height = max(4, min(12, 1.5 + n_rows * 0.6))
+        figsize = (width, height)
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=fig_dpi)
+    im = ax.imshow(masked, cmap=cmap_obj, aspect="auto", norm=norm)
+
+    ax.set_xticks(np.arange(n_cols))
+    ax.set_yticks(np.arange(n_rows))
+    ax.set_xticklabels(min_pv.columns, fontsize=label_fontsize, rotation=45, ha="right")
+    ax.set_yticklabels(min_pv.index, fontsize=label_fontsize)
+
+    # Annotations: min percentile values
+    for i in range(n_rows):
+        for j in range(n_cols):
+            val = min_pv.iloc[i, j]
+            if pd.isna(val):
+                continue
+            ax.text(j, i, f"{float(val):.0f}", ha="center", va="center", fontsize=annot_fontsize)
+
+    # Grid lines
+    ax.set_xticks(np.arange(-0.5, n_cols, 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, n_rows, 1), minor=True)
+    ax.grid(which="minor", color="white", linestyle="-", linewidth=2)
+    ax.tick_params(which="minor", size=0)
+
+    scen_disp = ", ".join([_scenario_display(s) for s in scen_list])
+    if title is None:
+        title = f"Robust risk (min percentile) • {scen_disp}"
+    ax.set_title(title, fontsize=title_fontsize, pad=12)
+
+    # Vertical right colorbar (5 bins)
+    cbar = fig.colorbar(im, ax=ax, shrink=0.85)
+    cbar.set_ticks([0, 1, 2, 3, 4])
+    cbar.set_ticklabels(RISK_CLASS_LABELS)
+    cbar.ax.tick_params(labelsize=label_fontsize)
+
+    # Mark the colorbar axes for tests (findable without pixel asserts).
+    try:
+        cbar.ax.set_label("_portfolio_robust_min_colorbar")
+    except Exception:
+        pass
+
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
     return fig
 
 

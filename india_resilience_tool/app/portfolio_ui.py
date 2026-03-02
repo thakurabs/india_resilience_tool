@@ -1197,6 +1197,7 @@ def render_portfolio_visualizations(
     from india_resilience_tool.viz.charts import (
         make_portfolio_grouped_bar,
         make_portfolio_heatmap,
+        make_portfolio_heatmap_robust_min_percentile,
         make_portfolio_heatmap_scenario_difference,
         make_portfolio_heatmap_scenario_panels,
         make_portfolio_scenario_grouped_bar,
@@ -1212,6 +1213,7 @@ def render_portfolio_visualizations(
         scenario_chart = st.selectbox(
             "Scenario chart",
             options=[
+                "Heatmap — Robust risk (min percentile)",
                 "Heatmap — Scenario difference",
                 "Heatmap — Scenario panels",
                 "Bars — Scenarios by unit (single index)",
@@ -1228,7 +1230,45 @@ def render_portfolio_visualizations(
             key=f"_viz_scenario_value_col_{scope}",
         )
 
-        if scenario_chart.startswith("Heatmap — Scenario difference"):
+        if scenario_chart.startswith("Heatmap — Robust risk"):
+            st.caption(
+                "Robust risk = **min percentile** across selected scenarios (risk that remains high even under the less severe scenario)."
+            )
+            if value_col != "Percentile":
+                st.info("Robust risk is currently defined for **Percentile** only. Switch **Show values** to Percentile.")
+                return
+
+            default_robust = []
+            for s in ("ssp245", "ssp585"):
+                for opt in scenario_options:
+                    if str(opt).strip().lower() == s:
+                        default_robust.append(opt)
+            if not default_robust:
+                default_robust = scenario_options[:2]
+
+            robust_scens = st.multiselect(
+                "Scenarios to combine",
+                options=scenario_options,
+                default=default_robust,
+                format_func=_scenario_label,
+                key=f"_viz_scenario_robust_sel_{scope}",
+                help="Robust min requires at least 2 scenarios.",
+            )
+            if len(robust_scens) < 2:
+                st.info("Select at least 2 scenarios.")
+                return
+
+            fig = make_portfolio_heatmap_robust_min_percentile(
+                df,
+                scenarios=robust_scens,
+            )
+            if fig is not None:
+                st.pyplot(fig)
+                _offer_figure_download(fig, "portfolio_heatmap_robust_min_percentile.png", "Download heatmap")
+            else:
+                st.warning("Could not generate robust risk heatmap. Check data availability.")
+
+        elif scenario_chart.startswith("Heatmap — Scenario difference"):
             st.caption("Cells show **Scenario B − Scenario A** (scenario shift).")
 
             def _default_idx_for(target: str, fallback: int) -> int:
