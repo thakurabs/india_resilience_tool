@@ -279,70 +279,6 @@ from india_resilience_tool.viz.colors import (
     get_cmap_hex_list as _get_cmap_hex_list,
 )
 
-# -------------------------
-# State metrics helper
-# -------------------------
-def compute_state_metrics_from_merged(
-    merged_gdf: gpd.GeoDataFrame, adm1_gdf: gpd.GeoDataFrame, metric_col: str, sel_state: str
-):
-    ensemble = {"mean": None, "median": None, "p05": None, "p95": None, "std": None, "n_districts": 0}
-    per_model = pd.DataFrame()
-
-    sel_state_norm = str(sel_state).strip().lower()
-    try:
-        row_state = adm1_gdf[adm1_gdf["shapeName"].astype(str).str.strip().str.lower() == sel_state_norm]
-        if row_state.empty:
-            row_state = adm1_gdf[
-                adm1_gdf["shapeName"].astype(str).str.strip().str.lower().str.contains(sel_state_norm, na=False)
-            ]
-        if not row_state.empty:
-            poly = row_state.iloc[0].geometry
-            try:
-                mask = merged_gdf.geometry.within(poly.buffer(0.001))
-            except Exception:
-                mask = merged_gdf.geometry.centroid.within(poly.buffer(0.001))
-        else:
-            mask = pd.Series([False] * len(merged_gdf), index=merged_gdf.index)
-    except Exception:
-        mask = merged_gdf["state_name"].astype(str).str.strip().str.lower() == sel_state_norm
-
-    if mask.sum() == 0:
-        mask = merged_gdf["state_name"].astype(str).str.strip().str.lower() == sel_state_norm
-
-    sel = merged_gdf[mask].copy()
-    vals = pd.to_numeric(sel.get(metric_col, pd.Series([], dtype=float)), errors="coerce").dropna().to_numpy()
-    if vals.size > 0:
-        ensemble.update(
-            mean=float(np.nanmean(vals)),
-            median=float(np.nanmedian(vals)),
-            p05=float(np.nanpercentile(vals, 5)),
-            p95=float(np.nanpercentile(vals, 95)),
-            std=float(np.nanstd(vals, ddof=0)),
-            n_districts=int(vals.size),
-        )
-
-    try:
-        metric_base = metric_col.rsplit("__", 1)[0]
-        vpm_col = f"{metric_base}__values_per_model"
-        if vpm_col in sel.columns:
-            acc = {}
-            for _, r in sel.iterrows():
-                raw = r.get(vpm_col)
-                d = json.loads(raw) if isinstance(raw, str) else raw
-                if isinstance(d, dict):
-                    for mname, v in d.items():
-                        acc.setdefault(mname, []).append(float(v))
-            if acc:
-                rows = [
-                    {"model": m, "value": float(pd.Series(vs).mean()), "n_districts": len(vs)}
-                    for m, vs in acc.items()
-                ]
-                per_model = pd.DataFrame(rows).sort_values("model")
-    except Exception:
-        per_model = pd.DataFrame()
-
-    return ensemble, per_model, sel
-
 def extract_name_from_feature(feat):
     if not isinstance(feat, dict):
         return None
@@ -422,6 +358,17 @@ def master_needs_rebuild(master_path: Path, processed_root: Path, state: str) ->
     except Exception:
         return True
     return latest_processed_periods_mtime(str(processed_root), state) > (master_mtime + 1.0)
+
+
+def state_profile_files_missing(processed_root: Path, state: str, level: str) -> bool:
+    """Return True when required level-specific state profile files are missing."""
+    level_norm = str(level or "district").strip().lower()
+    state_root = Path(processed_root) / str(state)
+    required = [
+        state_root / f"state_yearly_ensemble_stats_{level_norm}.csv",
+        state_root / f"state_ensemble_stats_{level_norm}.csv",
+    ]
+    return any(not p.exists() for p in required)
 
 # @st.cache_data
 from india_resilience_tool.data.master_loader import (
@@ -994,7 +941,7 @@ with col1:
         def rebuild_master_csv_if_needed(
             force: bool = False, attach_centroid_geojson: str | None = None
         ) -> tuple[bool, str]:
-            needs = force or master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE)
+            needs = force or master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE) or state_profile_files_missing(PROCESSED_ROOT, PILOT_STATE, str(st.session_state.get("admin_level", "district")).strip().lower())
             if not needs:
                 return False, "up-to-date"
             try:
@@ -1017,7 +964,7 @@ with col1:
 
         # Ensure master exists/fresh for this metric (only once a metric is chosen)
         try:
-            if master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE):
+            if (master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE) or state_profile_files_missing(PROCESSED_ROOT, PILOT_STATE, str(st.session_state.get("admin_level", "district")).strip().lower())):
                 with st.spinner("Master CSV missing or stale — rebuilding now..."):
                     ok, msg = rebuild_master_csv_if_needed(
                         force=False,
@@ -2425,7 +2372,7 @@ with col2:
             pilot_state=PILOT_STATE,
             data_dir=DATA_DIR,
             # Callable dependencies
-            compute_state_metrics_fn=compute_state_metrics_from_merged,
+            compute_state_metrics_fn=lambda *_args, **_kwargs: ({}, None, None),
             load_master_csv_fn=load_master_csv,
             normalize_master_columns_fn=normalize_master_columns,
             parse_master_schema_fn=parse_master_schema,
@@ -2606,25 +2553,11 @@ with col2:
     # ----------- STATE/DISTRICT SUMMARY MODE (no unit selected) -----------
     analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
 
-    # Determine if we should show state/district summary
-    # In block mode: show district summary when block is "All" but district is selected
-    # In district mode: show state summary when district is "All"
-    show_summary = False
-    summary_context = None
-    
+    # Determine if we should show State Climate Profile (no unit selected).
     if _admin_level == "block":
-        # Block mode: show district summary (block distribution) when district selected but block is All
-        if selected_district != "All" and selected_block == "All":
-            show_summary = True
-            summary_context = "district"  # Show district summary with block distribution
-        elif selected_district == "All" and selected_state != "All":
-            show_summary = True
-            summary_context = "state"  # Show state summary with district distribution
+        show_summary = selected_state != "All" and selected_block == "All"
     else:
-        # District mode: show state summary when district is All
-        if selected_district == "All" and selected_state != "All":
-            show_summary = True
-            summary_context = "state"
+        show_summary = selected_state != "All" and selected_district == "All"
 
     if (matched_row is None or matched_row.empty) and show_summary:
         if "Multi" in analysis_mode:
@@ -2632,21 +2565,15 @@ with col2:
             # Portfolio results should be driven by the Portfolio analysis panel.
             pass
         else:
-            _, _, sel_districts_gdf = compute_state_metrics_from_merged(
-                merged, adm1, metric_col, selected_state
-            )
-
             # ---- STATE CLIMATE PROFILE VIEW ----
             render_state_summary_view(
                 selected_state=selected_state,
-                selected_district=selected_district,
                 variables=VARIABLES,
                 variable_slug=VARIABLE_SLUG,
                 sel_scenario=sel_scenario,
                 sel_period=sel_period,
                 sel_stat=sel_stat,
                 metric_col=metric_col,
-                sel_districts_gdf=sel_districts_gdf,
                 merged_gdf=merged,
                 processed_root=PROCESSED_ROOT,
                 level=_admin_level,
