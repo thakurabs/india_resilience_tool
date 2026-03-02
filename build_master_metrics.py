@@ -554,7 +554,7 @@ def _build_wide_master(
 
             yield unit_ident, mapping
 
-    tasks = [(unit_ident, mapping, metric_col_name) for unit_ident, mapping in _unit_iter()]
+    tasks = [(unit_ident, mapping, _metric_col_name) for unit_ident, mapping in _unit_iter()]
 
     effective_workers = max(1, int(num_workers))
     if verbose:

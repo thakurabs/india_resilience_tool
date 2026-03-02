@@ -120,3 +120,39 @@ def test_build_master_metrics_writes_level_specific_state_files_block(tmp_path: 
     assert (state_root / "state_ensemble_stats_block.csv").exists()
     assert (state_root / "state_yearly_model_averages_block.csv").exists()
     assert (state_root / "state_yearly_ensemble_stats_block.csv").exists()
+
+
+def test_build_wide_master_uses_metric_col_name_and_does_not_error() -> None:
+    df_all = pd.DataFrame(
+        [
+            {
+                "state": "Telangana",
+                "district": "D1",
+                "scenario": "historical",
+                "period": "1990-2010",
+                "model": "m1",
+                "value": 1.0,
+            },
+            {
+                "state": "Telangana",
+                "district": "D1",
+                "scenario": "historical",
+                "period": "1990-2010",
+                "model": "m2",
+                "value": 3.0,
+            },
+        ]
+    )
+
+    out = bmm._build_wide_master(
+        df_all=df_all,
+        _metric_col_name="tm_mean",
+        level="district",
+        num_workers=1,
+        verbose=False,
+    )
+
+    assert not out.empty
+    assert "state" in out.columns
+    assert "district" in out.columns
+    assert "tm_mean__historical__1990-2010__mean" in out.columns
