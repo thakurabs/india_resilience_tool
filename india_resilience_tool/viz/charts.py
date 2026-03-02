@@ -1277,10 +1277,33 @@ def make_portfolio_heatmap_scenario_panels(
         color_mats = {k: v.to_numpy(dtype=float) for k, v in pivots.items()}
         cbar_label = {"%Δ": "%Δ (vs baseline)", "Δ": "Δ (vs baseline)"}.get(value_col, value_col)
     elif value_col == "Percentile":
-        cmap_obj = plt.get_cmap(cmap)
-        norm = mcolors.Normalize(vmin=0, vmax=100)
-        color_mats = {k: v.to_numpy(dtype=float) for k, v in pivots.items()}
-        cbar_label = "Percentile (within state)"
+        # Discrete risk-category colors (Very Low → Very High), aligned with
+        # analysis.metrics.risk_class_from_percentile thresholds.
+        risk_labels = ["Very Low", "Low", "Medium", "High", "Very High"]
+        risk_colors = ["#1a9850", "#91cf60", "#ffffbf", "#fc8d59", "#d73027"]
+        cmap_obj = mcolors.ListedColormap(risk_colors, name="irt_risk_5")
+        norm = mcolors.BoundaryNorm(
+            boundaries=[-0.5, 0.5, 1.5, 2.5, 3.5, 4.5],
+            ncolors=len(risk_colors),
+        )
+
+        def _pct_to_code(arr: np.ndarray) -> np.ndarray:
+            out = np.full(arr.shape, np.nan, dtype=float)
+            mask = np.isfinite(arr)
+            if not np.any(mask):
+                return out
+            a = arr[mask]
+            code = np.zeros(a.shape, dtype=float)
+            code = np.where(a >= 80.0, 4.0, code)
+            code = np.where((a >= 60.0) & (a < 80.0), 3.0, code)
+            code = np.where((a >= 40.0) & (a < 60.0), 2.0, code)
+            code = np.where((a >= 20.0) & (a < 40.0), 1.0, code)
+            code = np.where(a < 20.0, 0.0, code)
+            out[mask] = code
+            return out
+
+        color_mats = {k: _pct_to_code(v.to_numpy(dtype=float)) for k, v in pivots.items()}
+        cbar_label = "Risk class (from percentile)"
     else:
         cmap_obj = plt.get_cmap(cmap)
         cbar_label = "Value"
@@ -1347,6 +1370,9 @@ def make_portfolio_heatmap_scenario_panels(
         ax.set_yticks(np.arange(len(all_idx)))
         ax.set_xticklabels(all_cols, fontsize=label_fontsize, rotation=45, ha="right")
         ax.set_yticklabels(all_idx, fontsize=label_fontsize)
+        if n_cols > 1 and c != 0:
+            # Share y-axis labels across panels to improve readability.
+            ax.tick_params(axis="y", which="both", left=False, labelleft=False)
 
         # Annotate with actual values (not normalized)
         display_vals = pivots[scen]
@@ -1374,14 +1400,42 @@ def make_portfolio_heatmap_scenario_panels(
         title = f"Scenario panels: {value_col}"
     fig.suptitle(title, fontsize=title_fontsize + 1, y=0.98)
 
-    if last_im is not None:
-        cbar = fig.colorbar(last_im, ax=axes.ravel().tolist(), shrink=0.85)
-        cbar.set_label(cbar_label, fontsize=label_fontsize)
-
     try:
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        # Leave generous bottom space for rotated x-labels; the shared colorbar lives below them.
+        # Use a heuristic based on the number of x labels (long metric names).
+        base_bottom = 0.30
+        if len(all_cols) >= 8:
+            base_bottom = 0.34
+        if len(all_cols) >= 12:
+            base_bottom = 0.38
+        if not layout_norm.startswith("h"):
+            base_bottom = max(0.28, base_bottom - 0.06)
+        fig.tight_layout(rect=[0, base_bottom, 1, 0.95])
     except Exception:
         pass
+
+    if last_im is not None:
+        # Shared colorbar: horizontal, centered at bottom.
+        positions = [ax.get_position() for ax in axes.ravel().tolist()]
+        left = float(min(p.x0 for p in positions))
+        right = float(max(p.x1 for p in positions))
+
+        span = max(right - left, 1e-6)
+        cbar_width = max(0.25, min(0.70, span * 0.70))
+        cbar_left = left + (span - cbar_width) / 2.0
+        cbar_height = 0.030
+        cbar_bottom = 0.06
+
+        cax = fig.add_axes([cbar_left, cbar_bottom, cbar_width, cbar_height])
+        cax.set_label("_portfolio_scenario_panels_colorbar")
+        cbar = fig.colorbar(last_im, cax=cax, orientation="horizontal")
+
+        if value_col == "Percentile":
+            cbar.set_ticks([0, 1, 2, 3, 4])
+            cbar.set_ticklabels(risk_labels)
+            cbar.ax.tick_params(labelsize=label_fontsize)
+        else:
+            cbar.set_label(cbar_label, fontsize=label_fontsize)
     return fig
 
 

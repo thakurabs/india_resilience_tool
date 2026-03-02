@@ -1261,13 +1261,17 @@ def render_portfolio_visualizations(
                         key=f"_viz_scenario_panels_norm_{scope}",
                     )
                 with col3:
-                    cmap = st.selectbox(
-                        "Color scheme",
-                        options=["RdYlGn_r", "RdYlBu_r", "YlOrRd", "Blues", "Reds", "viridis"],
-                        index=0,
-                        key=f"_viz_scenario_panels_cmap_{scope}",
-                        disabled=value_col in ("%Δ", "Δ"),
-                    )
+                    cmap = "RdYlGn_r"
+                    if value_col == "Percentile":
+                        st.caption("Colors represent risk classes (Very Low → Very High); numbers show percentiles.")
+                    else:
+                        cmap = st.selectbox(
+                            "Color scheme",
+                            options=["RdYlGn_r", "RdYlBu_r", "YlOrRd", "Blues", "Reds", "viridis"],
+                            index=0,
+                            key=f"_viz_scenario_panels_cmap_{scope}",
+                            disabled=value_col in ("%Δ", "Δ"),
+                        )
 
             fig = make_portfolio_heatmap_scenario_panels(
                 df,
