@@ -1285,6 +1285,9 @@ def make_portfolio_heatmap_scenario_panels(
     normalize_per_index: bool = True,
     cmap: str = "RdYlGn_r",
     layout: str = "horizontal",
+    hide_xticklabels_except_last: bool = False,
+    hspace: float = 0.18,
+    wspace: float = 0.06,
     figsize: Optional[Tuple[float, float]] = None,
     fig_dpi: int = 100,
     annot_fontsize: int = 9,
@@ -1390,8 +1393,12 @@ def make_portfolio_heatmap_scenario_panels(
             figsize = (base_w, min(18, base_h * n_rows))
 
     gridspec_kw = None
-    if layout_norm.startswith("h") and n_cols > 1:
-        gridspec_kw = {"wspace": 0.06}
+    if n_cols > 1:
+        gridspec_kw = {"wspace": float(wspace)}
+    if n_rows > 1:
+        gs = dict(gridspec_kw or {})
+        gs["hspace"] = float(hspace)
+        gridspec_kw = gs
     fig, axes = plt.subplots(
         n_rows,
         n_cols,
@@ -1419,6 +1426,9 @@ def make_portfolio_heatmap_scenario_panels(
         if n_cols > 1 and c != 0:
             # Share y-axis labels across panels to improve readability.
             ax.tick_params(axis="y", which="both", left=False, labelleft=False)
+
+        if hide_xticklabels_except_last and (n_rows > 1) and (r != n_rows - 1):
+            ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
 
         # Annotate with actual values (not normalized)
         display_vals = pivots[scen]

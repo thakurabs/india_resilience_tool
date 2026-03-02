@@ -1211,6 +1211,7 @@ def render_portfolio_visualizations(
         scenario_chart = st.selectbox(
             "Scenario chart",
             options=[
+                "Heatmap — Scenario panels + robust (stacked)",
                 "Heatmap — Robust risk (min percentile)",
                 "Heatmap — Scenario panels",
             ],
@@ -1226,7 +1227,77 @@ def render_portfolio_visualizations(
             key=f"_viz_scenario_value_col_{scope}",
         )
 
-        if scenario_chart.startswith("Heatmap — Robust risk"):
+        if scenario_chart.startswith("Heatmap — Scenario panels + robust"):
+            st.caption(
+                "Scenario panels provide context; Robust risk summarizes the **min percentile** across scenarios (risk that remains high even under the less severe scenario)."
+            )
+            if value_col != "Percentile":
+                st.info("Stacked view is currently defined for **Percentile** only. Switch **Show values** to Percentile.")
+                return
+
+            default_sel = []
+            for s in ("ssp245", "ssp585"):
+                for opt in scenario_options:
+                    if str(opt).strip().lower() == s:
+                        default_sel.append(opt)
+            if not default_sel:
+                default_sel = scenario_options[:2]
+
+            sel_scens = st.multiselect(
+                "Scenarios to include",
+                options=scenario_options,
+                default=default_sel,
+                format_func=_scenario_label,
+                key=f"_viz_scenario_stacked_sel_{scope}",
+                help="Select at least 2 scenarios.",
+            )
+            if len(sel_scens) < 2:
+                st.info("Select at least 2 scenarios.")
+                return
+
+            # Context headers
+            ctx = st.session_state.get("portfolio_multiindex_context") or {}
+            period = str(ctx.get("period") or "").strip()
+            stat = str(ctx.get("stat") or "").strip()
+            ctx_bits = []
+            if period:
+                ctx_bits.append(period)
+            if stat:
+                ctx_bits.append(stat)
+            ctx_suffix = (" • " + " • ".join(ctx_bits)) if ctx_bits else ""
+
+            st.markdown("##### Scenario panels (Percentile)" + ctx_suffix)
+            st.caption("Each panel shows percentile (within state) for one scenario; colors indicate risk class.")
+
+            fig_panels = make_portfolio_heatmap_scenario_panels(
+                df,
+                value_col="Percentile",
+                scenarios=sel_scens,
+                normalize_per_index=False,
+                layout="vertical",
+                hide_xticklabels_except_last=True,
+                hspace=0.12,
+            )
+            if fig_panels is not None:
+                st.pyplot(fig_panels)
+                _offer_figure_download(fig_panels, "portfolio_heatmap_scenario_panels_stacked.png", "Download heatmap")
+            else:
+                st.warning("Could not generate scenario panels heatmap. Check data availability.")
+
+            st.markdown("##### Robust risk (min percentile)" + ctx_suffix)
+            st.caption("Robust risk = min percentile across selected scenarios.")
+
+            fig_robust = make_portfolio_heatmap_robust_min_percentile(
+                df,
+                scenarios=sel_scens,
+            )
+            if fig_robust is not None:
+                st.pyplot(fig_robust)
+                _offer_figure_download(fig_robust, "portfolio_heatmap_robust_min_percentile.png", "Download heatmap")
+            else:
+                st.warning("Could not generate robust risk heatmap. Check data availability.")
+
+        elif scenario_chart.startswith("Heatmap — Robust risk"):
             st.caption(
                 "Robust risk = **min percentile** across selected scenarios (risk that remains high even under the less severe scenario)."
             )
