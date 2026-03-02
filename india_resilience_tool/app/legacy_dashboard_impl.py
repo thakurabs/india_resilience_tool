@@ -928,8 +928,44 @@ with st.sidebar:
 
 st.title("India Resilience Tool")
 
-st.markdown(
+right_panel_height_override_raw = os.getenv("IRT_RIGHT_PANEL_HEIGHT_PX")
+right_panel_height_override_enabled = bool(str(right_panel_height_override_raw or "").strip())
+try:
+    right_panel_vh_offset_rem = float(os.getenv("IRT_RIGHT_PANEL_VH_OFFSET_REM", "9.5"))
+except (TypeError, ValueError):
+    right_panel_vh_offset_rem = 9.5
+
+right_panel_vh_css = ""
+if not right_panel_height_override_enabled:
+    right_panel_vh_css = f"""
+    div[data-testid=\"stElementContainer\"]:has(> #irt-main-layout-marker)
+      + div[data-testid=\"stHorizontalBlock\"] > div[data-testid=\"stColumn\"]:nth-child(2) > div {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - {right_panel_vh_offset_rem}rem);
+        min-height: 0;
+    }
+    div[data-testid=\"stElementContainer\"]:has(> #irt-right-panel-body-marker)
+      + div[data-testid=\"stVerticalBlock\"] {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto !important;
+    }
+    div[data-testid=\"stElementContainer\"]:has(> #irt-right-panel-body-marker)
+      + div[data-testid=\"stVerticalBlock\"] > div[data-testid=\"stVerticalBlockBorderWrapper\"] {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: 100%;
+    }
+    div[data-testid=\"stElementContainer\"]:has(> #irt-right-panel-body-marker)
+      + div[data-testid=\"stVerticalBlock\"] > div[data-testid=\"stVerticalBlockBorderWrapper\"] > div[data-testid=\"stVerticalBlock\"] {
+        min-height: 0;
+        height: 100%;
+    }
     """
+
+st.markdown(
+    f"""
     <style>
     div[data-testid="stElementContainer"]:has(> #irt-main-layout-marker)
       + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
@@ -941,6 +977,7 @@ st.markdown(
         top: 4.25rem;
         z-index: 10;
     }
+    {right_panel_vh_css}
     </style>
     """,
     unsafe_allow_html=True,
@@ -2545,6 +2582,7 @@ with col2:
                 st.rerun()
 
         panel_height_px = int(os.getenv("IRT_RIGHT_PANEL_HEIGHT_PX", str(MAP_HEIGHT)))
+        st.markdown('<div id="irt-right-panel-body-marker"></div>', unsafe_allow_html=True)
         with st.container(height=panel_height_px, border=True):
 
             # Reserved slot: "Selected district for portfolio" (map route) should appear ABOVE
