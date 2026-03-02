@@ -928,6 +928,24 @@ with st.sidebar:
 
 st.title("India Resilience Tool")
 
+st.markdown(
+    """
+    <style>
+    div[data-testid="stElementContainer"]:has(> #irt-main-layout-marker)
+      + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+        align-self: flex-start;
+    }
+    div[data-testid="stElementContainer"]:has(> #irt-main-layout-marker)
+      + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child {
+        position: sticky;
+        top: 4.25rem;
+        z-index: 10;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Pilot state default
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
@@ -937,7 +955,11 @@ PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 # -------------------------
 # Main layout: left (map/rankings) + right (details)
 # -------------------------
-col1, col2 = st.columns([5, 3])
+st.session_state.setdefault("irt_right_panel_collapsed", False)
+
+st.markdown('<div id="irt-main-layout-marker"></div>', unsafe_allow_html=True)
+main_col_weights = [50, 1] if st.session_state.get("irt_right_panel_collapsed", False) else [5, 3]
+col1, col2 = st.columns(main_col_weights)
 
 # -------------------------
 # Metric selection ribbon (bundle → metric → scenario/period/stat + map mode)
@@ -2505,1057 +2527,1071 @@ with col1:
 # -------------------------
 with col2:
 
-    # Reserved slot: "Selected district for portfolio" (map route) should appear ABOVE
-    # the Portfolio analysis expander even though it's determined later in the script.
-    portfolio_selected_slot = st.empty()
-
-    # -------------------------
-    # Multi-district/block portfolio mode: show a clean, guided right-panel flow
-    # -------------------------
     analysis_mode_rhs = st.session_state.get("analysis_mode", "Single district focus")
-    portfolio_route = st.session_state.get("portfolio_build_route", None)
+    is_portfolio_mode = "Multi" in str(analysis_mode_rhs)
+    panel_title = "Portfolio" if is_portfolio_mode else "Climate Profile"
 
-    if "Multi" in analysis_mode_rhs:
-        # ---- MULTI-UNIT PORTFOLIO PANEL (extracted to portfolio_ui.py) ----
-        render_portfolio_panel(
-            # State/selection context
-            selected_state=selected_state,
-            portfolio_route=portfolio_route,
-            level=_admin_level,
-            # Variable/metric context
-            variables=VARIABLES,
-            variable_slug=VARIABLE_SLUG,
-            index_group_labels=INDEX_GROUP_LABELS,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            metric_col=metric_col,
-            # Data
-            merged=merged,
-            adm1=adm1,
-            # Config
-            pilot_state=PILOT_STATE,
-            data_dir=DATA_DIR,
-            # Callable dependencies
-            compute_state_metrics_fn=compute_state_metrics_from_merged,
-            load_master_csv_fn=load_master_csv,
-            normalize_master_columns_fn=normalize_master_columns,
-            parse_master_schema_fn=parse_master_schema,
-            resolve_metric_column_fn=resolve_metric_column,
-            find_baseline_column_for_stat_fn=find_baseline_column_for_stat,
-            risk_class_from_percentile_fn=risk_class_from_percentile,
-            portfolio_normalize_fn=_portfolio_normalize,
-            portfolio_remove_fn=_portfolio_remove,
-            portfolio_remove_all_fn=_portfolio_remove_all,
-            build_portfolio_multiindex_df_fn=_build_portfolio_multiindex_df_impl,
-        )
-
-    else:
-        # In non-portfolio modes, the right panel content is rendered by the
-        # district/state details logic below.
-        pass
-
-    # -------------------------
-    # Climate profile / point query panel
-    # -------------------------
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-    portfolio_route = st.session_state.get("portfolio_build_route", None)
-    clear_clicked = False
-
-    is_portfolio_mode = "Multi" in str(analysis_mode)
-    if is_portfolio_mode:
-        # In any portfolio mode (multi-district or multi-block), keep the right panel
-        # clean and driven by the portfolio panel above.
-        render_perf_panel_safe()
-        st.stop()
-
-    st.header("Climate Profile")
-
-    # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
-    if "Multi" in analysis_mode and portfolio_route == "saved_points":
-        # ---- POINT SELECTION PANEL (extracted to point_selection_ui.py) ----
-        clear_clicked = render_point_selection_panel(
-            portfolio_add_fn=_portfolio_add,
-            portfolio_key_fn=_portfolio_key,
-            portfolio_set_flash_fn=_portfolio_set_flash,
-            level=_admin_level,
-        )
-
-    clicked_feature = None
-    click_coords = None
-    if returned:
-        for k in ("last_active_drawing", "last_object_clicked", "last_object"):
-            if returned.get(k) is not None:
-                clicked_feature = returned.get(k)
-                break
-        for k in ("last_clicked", "latlng", "last_latlng"):
-            val = returned.get(k)
-            if isinstance(val, dict) and ("lat" in val or "lng" in val):
-                lat = val.get("lat") or val.get("latitude") or val.get("y")
-                lng = val.get("lng") or val.get("longitude") or val.get("x")
-                if lat is not None and lng is not None:
-                    click_coords = (float(lat), float(lng))
-                    break
-            if isinstance(val, (list, tuple)) and len(val) >= 2:
-                try:
-                    click_coords = (float(val[0]), float(val[1]))
-                    break
-                except Exception:
-                    pass
-
-    if "Multi" in analysis_mode and portfolio_route == "saved_points":
-        # If map selection mode is active, use the next map click as the
-        # point-query location and then disable the mode (one-shot behaviour).
-        if click_coords is not None and st.session_state.get("point_query_select_on_map", False):
-            lat_click, lon_click = click_coords
-            st.session_state["point_query_lat"] = lat_click
-            st.session_state["point_query_lon"] = lon_click
-            st.session_state["point_query_latlon"] = {"lat": lat_click, "lon": lon_click}
-            st.session_state["point_query_select_on_map"] = False
-            # Rerun so the newly selected point is rendered immediately
+    if st.session_state.get("irt_right_panel_collapsed", False):
+        if st.button("⟨", key="irt_btn_right_panel_expand", help=f"Expand {panel_title}"):
+            st.session_state["irt_right_panel_collapsed"] = False
             st.rerun()
-
-        # If we cleared the point selection this run, ignore any stored
-        # point-query coordinates.
-        if clear_clicked:
-            click_coords = None
-        # If we have no current map click but do have a stored point query,
-        # reuse the stored point for district lookup.
-        elif click_coords is None:
-            point_query = st.session_state.get("point_query_latlon")
-            if isinstance(point_query, dict):
-                try:
-                    lat_q = float(point_query.get("lat"))
-                    lon_q = float(point_query.get("lon"))
-                    click_coords = (lat_q, lon_q)
-                except (TypeError, ValueError):
-                    click_coords = None
-
-    clicked_name2 = extract_name_from_feature(clicked_feature) if clicked_feature else None
-    matched_row = None
-    if clicked_name2:
-        mask = merged["district_name"].astype(str).str.lower() == str(clicked_name2).lower()
-        matched_row = merged[mask].iloc[0:1] if mask.any() else None
-        if matched_row is None or matched_row.empty:
-            mask2 = (
-                merged["district_name"]
-                .astype(str)
-                .str.lower()
-                .str.contains(str(clicked_name2).lower())
-            )
-            if mask2.any():
-                matched_row = merged[mask2].iloc[0:1]
-
-    if (matched_row is None or matched_row.empty) and (click_coords is not None):
-        lat, lng = click_coords
-        pt = Point(float(lng), float(lat))
-        try:
-            contains_mask = merged.geometry.contains(pt)
-            matched_row = merged[contains_mask].iloc[0:1] if contains_mask.any() else None
-            if matched_row is None or matched_row.empty:
-                centroids = merged.geometry.centroid
-                dists = centroids.distance(pt)
-                idx = dists.idxmin()
-                matched_row = merged.loc[[idx]]
-        except Exception:
-            matched_row = None
-
-    if (
-        matched_row is None
-        or matched_row.empty
-    ) and st.session_state.get("selected_district", "All") != "All":
-        sel_district_raw = st.session_state.get("selected_district", "All")
-        # Some UI controls store values like "District, State" — match on the district token.
-        sel_district_norm = str(sel_district_raw).split(",")[0].strip().lower()
-
-        district_series = merged["district_name"].astype(str).str.strip().str.lower()
-        mask = district_series == sel_district_norm
-        if (not mask.any()) and sel_district_norm:
-            mask = district_series.str.contains(re.escape(sel_district_norm), na=False)
-
-        # In block mode, also filter by selected_block
-        if _admin_level == "block" and st.session_state.get("selected_block", "All") != "All":
-            sel_block_raw = st.session_state.get("selected_block", "All")
-            sel_block_norm = str(sel_block_raw).split(",")[0].strip().lower()
-            
-            if "block_name" in merged.columns:
-                block_series = merged["block_name"].astype(str).str.strip().str.lower()
-                block_mask = block_series == sel_block_norm
-                if not block_mask.any() and sel_block_norm:
-                    block_mask = block_series.str.contains(re.escape(sel_block_norm), na=False)
-                mask = mask & block_mask
-
-        if mask.any():
-            matched_row = merged[mask].iloc[0:1]
-
-    # -------------- Helper for baseline detection --------------
-    def find_baseline_column(
-        df_cols, base_metric: str
-    ) -> Optional[str]:
-        """
-        Try to find a 'baseline' column for the same metric:
-        Prefer historical 1995-2014; else earliest historical period; else None.
-        Columns are in <metric>__<scenario>__<period>__<stat> form.
-        """
-        pat = re.compile(
-            rf"^{re.escape(base_metric)}__(?P<scenario>[^_]+)__(?P<period>[^_]+)__mean$"
-        )
-        candidates = []
-        for c in df_cols:
-            m = pat.match(str(c))
-            if m and m.group("scenario").lower() == "historical":
-                candidates.append((c, m.group("period")))
-        if not candidates:
-            return None
-        # Prefer 1995-2014 if present
-        for c, p in candidates:
-            if p.replace(" ", "") in ("1995-2014", "1995_2014", "1985-2014"):
-                return c
-        # else pick lexicographically earliest period
-        candidates.sort(key=lambda x: x[1])
-        return candidates[0][0]
-
-    # ----------- STATE/DISTRICT SUMMARY MODE (no unit selected) -----------
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-
-    # Determine if we should show state/district summary
-    # In block mode: show district summary when block is "All" but district is selected
-    # In district mode: show state summary when district is "All"
-    show_summary = False
-    summary_context = None
-    
-    if _admin_level == "block":
-        # Block mode: show district summary (block distribution) when district selected but block is All
-        if selected_district != "All" and selected_block == "All":
-            show_summary = True
-            summary_context = "district"  # Show district summary with block distribution
-        elif selected_district == "All" and selected_state != "All":
-            show_summary = True
-            summary_context = "state"  # Show state summary with district distribution
     else:
-        # District mode: show state summary when district is All
-        if selected_district == "All" and selected_state != "All":
-            show_summary = True
-            summary_context = "state"
+        panel_header_col, panel_toggle_col = st.columns([7, 1])
+        with panel_header_col:
+            st.markdown(f"### {panel_title}")
+        with panel_toggle_col:
+            if st.button("⟩", key="irt_btn_right_panel_collapse", help="Collapse right panel"):
+                st.session_state["irt_right_panel_collapsed"] = True
+                st.rerun()
 
-    if (matched_row is None or matched_row.empty) and show_summary:
-        if "Multi" in analysis_mode:
-            # In portfolio mode, we suppress the large summary panel here.
-            # Portfolio results should be driven by the Portfolio analysis panel.
-            pass
-        else:
-            ensemble, per_model_df, sel_districts_gdf = compute_state_metrics_from_merged(
-                merged, adm1, metric_col, selected_state
-            )
+        panel_height_px = int(os.getenv("IRT_RIGHT_PANEL_HEIGHT_PX", str(MAP_HEIGHT)))
+        with st.container(height=panel_height_px, border=True):
 
-            # ---- STATE/DISTRICT SUMMARY VIEW (extracted to state_summary_view.py) ----
-            render_state_summary_view(
-                # State/selection context
-                selected_state=selected_state,
-                selected_district=selected_district,
-                # Variable/metric context
-                variables=VARIABLES,
-                variable_slug=VARIABLE_SLUG,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                metric_col=metric_col,
-                # Pre-computed metrics
-                ensemble=ensemble,
-                per_model_df=per_model_df,
-                sel_districts_gdf=sel_districts_gdf,
-                # Config
-                processed_root=PROCESSED_ROOT,
-                pilot_state=PILOT_STATE,
-                # Callable dependencies
-                make_state_boxplot_fn=make_state_boxplot_for_districts,
-                # Block-level support
-                level=_admin_level,
-            )
+            # Reserved slot: "Selected district for portfolio" (map route) should appear ABOVE
+            # the Portfolio analysis expander even though it's determined later in the script.
+            portfolio_selected_slot = st.empty()
 
-    # ----------- UNIT DETAILS MODE (district or block) -----------
-    else:
-        analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-        unit_label = "block" if _admin_level == "block" else "district"
-
-        if matched_row is None or getattr(matched_row, "empty", True):
-            st.warning(f"No {unit_label}-level data found for the current selection.")
-            if "Multi" in analysis_mode:
-                st.info(
-                    f"In portfolio mode, add {unit_label}s via **From the map**, **From saved points**, "
-                    f"or **From the rankings table** (Portfolio analysis panel)."
-                )
-            else:
-                st.info(
-                    f"Please choose a different {unit_label} from the sidebar, or select **All** "
-                    f"to view the {'district' if _admin_level == 'block' else 'state'} summary."
-                )
-            st.stop()
-
-        row = matched_row.iloc[0]
-        district_name = row.get("district_name", "Unknown")
-        block_name = row.get("block_name", "Unknown") if _admin_level == "block" else None
-        state_to_show = (
-            st.session_state.get("selected_state")
-            if st.session_state.get("selected_state") != "All"
-            else (row.get("state_name") or "Unknown")
-        )
-
-        # --- Compact selection view in Multi-unit portfolio mode ---
-        if "Multi" in analysis_mode:
+            # -------------------------
+            # Multi-district/block portfolio mode: show a clean, guided right-panel flow
+            # -------------------------
+            analysis_mode_rhs = st.session_state.get("analysis_mode", "Single district focus")
             portfolio_route = st.session_state.get("portfolio_build_route", None)
 
-            # Only show the "selected district" panel when the user explicitly chose
-            # the "From the map" route.
-            if portfolio_route == "map":
-                with portfolio_selected_slot.container():
-                    st.subheader("Selected district for portfolio")
-                    st.markdown(f"**District:** {district_name}")
-                    st.markdown(f"**State:** {state_to_show}")
+            if "Multi" in analysis_mode_rhs:
+                # ---- MULTI-UNIT PORTFOLIO PANEL (extracted to portfolio_ui.py) ----
+                render_portfolio_panel(
+                    # State/selection context
+                    selected_state=selected_state,
+                    portfolio_route=portfolio_route,
+                    level=_admin_level,
+                    # Variable/metric context
+                    variables=VARIABLES,
+                    variable_slug=VARIABLE_SLUG,
+                    index_group_labels=INDEX_GROUP_LABELS,
+                    sel_scenario=sel_scenario,
+                    sel_period=sel_period,
+                    sel_stat=sel_stat,
+                    metric_col=metric_col,
+                    # Data
+                    merged=merged,
+                    adm1=adm1,
+                    # Config
+                    pilot_state=PILOT_STATE,
+                    data_dir=DATA_DIR,
+                    # Callable dependencies
+                    compute_state_metrics_fn=compute_state_metrics_from_merged,
+                    load_master_csv_fn=load_master_csv,
+                    normalize_master_columns_fn=normalize_master_columns,
+                    parse_master_schema_fn=parse_master_schema,
+                    resolve_metric_column_fn=resolve_metric_column,
+                    find_baseline_column_for_stat_fn=find_baseline_column_for_stat,
+                    risk_class_from_percentile_fn=risk_class_from_percentile,
+                    portfolio_normalize_fn=_portfolio_normalize,
+                    portfolio_remove_fn=_portfolio_remove,
+                    portfolio_remove_all_fn=_portfolio_remove_all,
+                    build_portfolio_multiindex_df_fn=_build_portfolio_multiindex_df_impl,
+                )
 
+            else:
+                # In non-portfolio modes, the right panel content is rendered by the
+                # district/state details logic below.
+                pass
+
+            # -------------------------
+            # Climate profile / point query panel
+            # -------------------------
+            analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+            portfolio_route = st.session_state.get("portfolio_build_route", None)
+            clear_clicked = False
+
+            is_portfolio_mode = "Multi" in str(analysis_mode)
+            show_climate_profile = not is_portfolio_mode
+
+            # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
+            if "Multi" in analysis_mode and portfolio_route == "saved_points":
+                # ---- POINT SELECTION PANEL (extracted to point_selection_ui.py) ----
+                clear_clicked = render_point_selection_panel(
+                    portfolio_add_fn=_portfolio_add,
+                    portfolio_key_fn=_portfolio_key,
+                    portfolio_set_flash_fn=_portfolio_set_flash,
+                    level=_admin_level,
+                )
+
+            clicked_feature = None
+            click_coords = None
+            if returned:
+                for k in ("last_active_drawing", "last_object_clicked", "last_object"):
+                    if returned.get(k) is not None:
+                        clicked_feature = returned.get(k)
+                        break
+                for k in ("last_clicked", "latlng", "last_latlng"):
+                    val = returned.get(k)
+                    if isinstance(val, dict) and ("lat" in val or "lng" in val):
+                        lat = val.get("lat") or val.get("latitude") or val.get("y")
+                        lng = val.get("lng") or val.get("longitude") or val.get("x")
+                        if lat is not None and lng is not None:
+                            click_coords = (float(lat), float(lng))
+                            break
+                    if isinstance(val, (list, tuple)) and len(val) >= 2:
+                        try:
+                            click_coords = (float(val[0]), float(val[1]))
+                            break
+                        except Exception:
+                            pass
+
+            if "Multi" in analysis_mode and portfolio_route == "saved_points":
+                # If map selection mode is active, use the next map click as the
+                # point-query location and then disable the mode (one-shot behaviour).
+                if click_coords is not None and st.session_state.get("point_query_select_on_map", False):
+                    lat_click, lon_click = click_coords
+                    st.session_state["point_query_lat"] = lat_click
+                    st.session_state["point_query_lon"] = lon_click
+                    st.session_state["point_query_latlon"] = {"lat": lat_click, "lon": lon_click}
+                    st.session_state["point_query_select_on_map"] = False
+                    # Rerun so the newly selected point is rendered immediately
+                    st.rerun()
+
+                # If we cleared the point selection this run, ignore any stored
+                # point-query coordinates.
+                if clear_clicked:
+                    click_coords = None
+                # If we have no current map click but do have a stored point query,
+                # reuse the stored point for district lookup.
+                elif click_coords is None:
+                    point_query = st.session_state.get("point_query_latlon")
+                    if isinstance(point_query, dict):
+                        try:
+                            lat_q = float(point_query.get("lat"))
+                            lon_q = float(point_query.get("lon"))
+                            click_coords = (lat_q, lon_q)
+                        except (TypeError, ValueError):
+                            click_coords = None
+
+            clicked_name2 = extract_name_from_feature(clicked_feature) if clicked_feature else None
+            matched_row = None
+            if clicked_name2:
+                mask = merged["district_name"].astype(str).str.lower() == str(clicked_name2).lower()
+                matched_row = merged[mask].iloc[0:1] if mask.any() else None
+                if matched_row is None or matched_row.empty:
+                    mask2 = (
+                        merged["district_name"]
+                        .astype(str)
+                        .str.lower()
+                        .str.contains(str(clicked_name2).lower())
+                    )
+                    if mask2.any():
+                        matched_row = merged[mask2].iloc[0:1]
+
+            if (matched_row is None or matched_row.empty) and (click_coords is not None):
+                lat, lng = click_coords
+                pt = Point(float(lng), float(lat))
+                try:
+                    contains_mask = merged.geometry.contains(pt)
+                    matched_row = merged[contains_mask].iloc[0:1] if contains_mask.any() else None
+                    if matched_row is None or matched_row.empty:
+                        centroids = merged.geometry.centroid
+                        dists = centroids.distance(pt)
+                        idx = dists.idxmin()
+                        matched_row = merged.loc[[idx]]
+                except Exception:
+                    matched_row = None
+
+            if (
+                matched_row is None
+                or matched_row.empty
+            ) and st.session_state.get("selected_district", "All") != "All":
+                sel_district_raw = st.session_state.get("selected_district", "All")
+                # Some UI controls store values like "District, State" — match on the district token.
+                sel_district_norm = str(sel_district_raw).split(",")[0].strip().lower()
+
+                district_series = merged["district_name"].astype(str).str.strip().str.lower()
+                mask = district_series == sel_district_norm
+                if (not mask.any()) and sel_district_norm:
+                    mask = district_series.str.contains(re.escape(sel_district_norm), na=False)
+
+                # In block mode, also filter by selected_block
+                if _admin_level == "block" and st.session_state.get("selected_block", "All") != "All":
+                    sel_block_raw = st.session_state.get("selected_block", "All")
+                    sel_block_norm = str(sel_block_raw).split(",")[0].strip().lower()
+            
+                    if "block_name" in merged.columns:
+                        block_series = merged["block_name"].astype(str).str.strip().str.lower()
+                        block_mask = block_series == sel_block_norm
+                        if not block_mask.any() and sel_block_norm:
+                            block_mask = block_series.str.contains(re.escape(sel_block_norm), na=False)
+                        mask = mask & block_mask
+
+                if mask.any():
+                    matched_row = merged[mask].iloc[0:1]
+
+            # -------------- Helper for baseline detection --------------
+            def find_baseline_column(
+                df_cols, base_metric: str
+            ) -> Optional[str]:
+                """
+                Try to find a 'baseline' column for the same metric:
+                Prefer historical 1995-2014; else earliest historical period; else None.
+                Columns are in <metric>__<scenario>__<period>__<stat> form.
+                """
+                pat = re.compile(
+                    rf"^{re.escape(base_metric)}__(?P<scenario>[^_]+)__(?P<period>[^_]+)__mean$"
+                )
+                candidates = []
+                for c in df_cols:
+                    m = pat.match(str(c))
+                    if m and m.group("scenario").lower() == "historical":
+                        candidates.append((c, m.group("period")))
+                if not candidates:
+                    return None
+                # Prefer 1995-2014 if present
+                for c, p in candidates:
+                    if p.replace(" ", "") in ("1995-2014", "1995_2014", "1985-2014"):
+                        return c
+                # else pick lexicographically earliest period
+                candidates.sort(key=lambda x: x[1])
+                return candidates[0][0]
+
+            # ----------- STATE/DISTRICT SUMMARY MODE (no unit selected) -----------
+            analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+
+            # Determine if we should show state/district summary
+            # In block mode: show district summary when block is "All" but district is selected
+            # In district mode: show state summary when district is "All"
+            show_summary = False
+            summary_context = None
+    
+            if _admin_level == "block":
+                # Block mode: show district summary (block distribution) when district selected but block is All
+                if selected_district != "All" and selected_block == "All":
+                    show_summary = True
+                    summary_context = "district"  # Show district summary with block distribution
+                elif selected_district == "All" and selected_state != "All":
+                    show_summary = True
+                    summary_context = "state"  # Show state summary with district distribution
+            else:
+                # District mode: show state summary when district is All
+                if selected_district == "All" and selected_state != "All":
+                    show_summary = True
+                    summary_context = "state"
+
+            if (matched_row is None or matched_row.empty) and show_summary:
+                if "Multi" in analysis_mode:
+                    # In portfolio mode, we suppress the large summary panel here.
+                    # Portfolio results should be driven by the Portfolio analysis panel.
+                    pass
+                else:
+                    ensemble, per_model_df, sel_districts_gdf = compute_state_metrics_from_merged(
+                        merged, adm1, metric_col, selected_state
+                    )
+
+                    # ---- STATE/DISTRICT SUMMARY VIEW (extracted to state_summary_view.py) ----
+                    render_state_summary_view(
+                        # State/selection context
+                        selected_state=selected_state,
+                        selected_district=selected_district,
+                        # Variable/metric context
+                        variables=VARIABLES,
+                        variable_slug=VARIABLE_SLUG,
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
+                        metric_col=metric_col,
+                        # Pre-computed metrics
+                        ensemble=ensemble,
+                        per_model_df=per_model_df,
+                        sel_districts_gdf=sel_districts_gdf,
+                        # Config
+                        processed_root=PROCESSED_ROOT,
+                        pilot_state=PILOT_STATE,
+                        # Callable dependencies
+                        make_state_boxplot_fn=make_state_boxplot_for_districts,
+                        # Block-level support
+                        level=_admin_level,
+                    )
+
+            # ----------- UNIT DETAILS MODE (district or block) -----------
+            else:
+                analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+                unit_label = "block" if _admin_level == "block" else "district"
+
+                if matched_row is None or getattr(matched_row, "empty", True):
+                    st.warning(f"No {unit_label}-level data found for the current selection.")
+                    if "Multi" in analysis_mode:
+                        st.info(
+                            f"In portfolio mode, add {unit_label}s via **From the map**, **From saved points**, "
+                            f"or **From the rankings table** (Portfolio analysis panel)."
+                        )
+                    else:
+                        st.info(
+                            f"Please choose a different {unit_label} from the sidebar, or select **All** "
+                            f"to view the {'district' if _admin_level == 'block' else 'state'} summary."
+                        )
+                    show_climate_profile = False
+
+                if show_climate_profile:
+                    row = matched_row.iloc[0]
+                    district_name = row.get("district_name", "Unknown")
+                    block_name = row.get("block_name", "Unknown") if _admin_level == "block" else None
+                    state_to_show = (
+                        st.session_state.get("selected_state")
+                        if st.session_state.get("selected_state") != "All"
+                        else (row.get("state_name") or "Unknown")
+                    )
+
+                    # --- Compact selection view in Multi-unit portfolio mode ---
+                    if "Multi" in analysis_mode:
+                        portfolio_route = st.session_state.get("portfolio_build_route", None)
+
+                        # Only show the "selected district" panel when the user explicitly chose
+                        # the "From the map" route.
+                        if portfolio_route == "map":
+                            with portfolio_selected_slot.container():
+                                st.subheader("Selected district for portfolio")
+                                st.markdown(f"**District:** {district_name}")
+                                st.markdown(f"**State:** {state_to_show}")
+
+                                if click_coords is not None:
+                                    st.caption(
+                                        f"Selected via map click at lat {click_coords[0]:.4f}, "
+                                        f"lon {click_coords[1]:.4f} (assigned to this district)."
+                                    )
+
+                                already_in = _portfolio_contains(state_to_show, district_name)
+
+                                c_add, c_remove = st.columns(2)
+                                with c_add:
+                                    if not already_in:
+                                        if st.button(
+                                            "Add to portfolio",
+                                            key=f"btn_add_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
+                                            use_container_width=True,
+                                        ):
+                                            _portfolio_add(state_to_show, district_name)
+                                            # Flash message is shown in your Step 2 portfolio panel
+                                            st.session_state["portfolio_flash"] = (
+                                                f"Added {district_name}, {state_to_show} to portfolio."
+                                            )
+                                            # Force a fresh rerun so the portfolio panel re-renders with new state
+                                            st.rerun()
+                                    else:
+                                        st.success("Already in portfolio")
+
+                                with c_remove:
+                                    if already_in:
+                                        if st.button(
+                                            "Remove",
+                                            key=f"btn_remove_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
+                                            use_container_width=True,
+                                        ):
+                                            _portfolio_remove(state_to_show, district_name)
+                                            st.session_state["portfolio_flash"] = (
+                                                f"Removed {district_name}, {state_to_show} from portfolio."
+                                            )
+                                            st.rerun()
+
+                                st.caption(f"Portfolio size: {len(st.session_state.get('portfolio_districts', []))} district(s)")
+
+                        # In portfolio mode, do NOT render the full climate profile below.
+                        show_climate_profile = False
+
+                    # --- Full unit climate profile (single-district/block focus mode) ---
+                    # Unit header is rendered inside render_details_panel (details_panel.py) to avoid duplication.
+
+                    # If this view was triggered by a point query, show the coordinates used.
                     if click_coords is not None:
+                        unit_label_display = "block" if _admin_level == "block" else "district"
                         st.caption(
-                            f"Selected via map click at lat {click_coords[0]:.4f}, "
-                            f"lon {click_coords[1]:.4f} (assigned to this district)."
+                            f"Point location used: lat {click_coords[0]:.4f}, "
+                            f"lon {click_coords[1]:.4f} (assigned to this {unit_label_display})."
                         )
 
-                    already_in = _portfolio_contains(state_to_show, district_name)
-
-                    c_add, c_remove = st.columns(2)
-                    with c_add:
-                        if not already_in:
-                            if st.button(
-                                "Add to portfolio",
-                                key=f"btn_add_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
-                                use_container_width=True,
-                            ):
-                                _portfolio_add(state_to_show, district_name)
-                                # Flash message is shown in your Step 2 portfolio panel
-                                st.session_state["portfolio_flash"] = (
-                                    f"Added {district_name}, {state_to_show} to portfolio."
-                                )
-                                # Force a fresh rerun so the portfolio panel re-renders with new state
-                                st.rerun()
-                        else:
-                            st.success("Already in portfolio")
-
-                    with c_remove:
-                        if already_in:
-                            if st.button(
-                                "Remove",
-                                key=f"btn_remove_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
-                                use_container_width=True,
-                            ):
-                                _portfolio_remove(state_to_show, district_name)
-                                st.session_state["portfolio_flash"] = (
-                                    f"Removed {district_name}, {state_to_show} from portfolio."
-                                )
-                                st.rerun()
-
-                    st.caption(f"Portfolio size: {len(st.session_state.get('portfolio_districts', []))} district(s)")
-
-            # In portfolio mode, do NOT render the full climate profile below.
-            render_perf_panel_safe()
-            st.stop()
-
-        # --- Full unit climate profile (single-district/block focus mode) ---
-        # Unit header is rendered inside render_details_panel (details_panel.py) to avoid duplication.
-
-        # If this view was triggered by a point query, show the coordinates used.
-        if click_coords is not None:
-            unit_label_display = "block" if _admin_level == "block" else "district"
-            st.caption(
-                f"Point location used: lat {click_coords[0]:.4f}, "
-                f"lon {click_coords[1]:.4f} (assigned to this {unit_label_display})."
-            )
-
-        # --- Portfolio add button (for multi-unit analysis) ---
-        if "Multi" in analysis_mode:
-            unit_label_btn = "block" if _admin_level == "block" else "district"
-            display_name = block_name if _admin_level == "block" else district_name
+                    # --- Portfolio add button (for multi-unit analysis) ---
+                    if "Multi" in analysis_mode:
+                        unit_label_btn = "block" if _admin_level == "block" else "district"
+                        display_name = block_name if _admin_level == "block" else district_name
             
-            if st.button(
-                f"Add this {unit_label_btn} to portfolio",
-                key=f"btn_add_portfolio_single_{state_to_show}_{district_name}_{block_name or 'na'}",
-            ):
-                _portfolio_add(state_to_show, district_name, block_name)
-                st.success(f"Added {display_name}, {state_to_show} to portfolio.")
+                        if st.button(
+                            f"Add this {unit_label_btn} to portfolio",
+                            key=f"btn_add_portfolio_single_{state_to_show}_{district_name}_{block_name or 'na'}",
+                        ):
+                            _portfolio_add(state_to_show, district_name, block_name)
+                            st.success(f"Added {display_name}, {state_to_show} to portfolio.")
 
-            # Always show current portfolio below the button
-            portfolio_key = "portfolio_blocks" if _admin_level == "block" else "portfolio_districts"
-            portfolio_current = st.session_state.get(portfolio_key, [])
-            if portfolio_current:
-                unit_label_plural = "blocks" if _admin_level == "block" else "districts"
-                st.markdown(f"**Current portfolio ({unit_label_plural})**")
-                try:
-                    if isinstance(portfolio_current[0], dict):
-                        if _admin_level == "block":
-                            port_df = (
-                                pd.DataFrame(portfolio_current)
-                                .rename(columns={"state": "State", "district": "District", "block": "Block"})
+                        # Always show current portfolio below the button
+                        portfolio_key = "portfolio_blocks" if _admin_level == "block" else "portfolio_districts"
+                        portfolio_current = st.session_state.get(portfolio_key, [])
+                        if portfolio_current:
+                            unit_label_plural = "blocks" if _admin_level == "block" else "districts"
+                            st.markdown(f"**Current portfolio ({unit_label_plural})**")
+                            try:
+                                if isinstance(portfolio_current[0], dict):
+                                    if _admin_level == "block":
+                                        port_df = (
+                                            pd.DataFrame(portfolio_current)
+                                            .rename(columns={"state": "State", "district": "District", "block": "Block"})
+                                        )
+                                    else:
+                                        port_df = (
+                                            pd.DataFrame(portfolio_current)
+                                            .rename(columns={"state": "State", "district": "District"})
+                                        )
+                                else:
+                                    port_df = pd.DataFrame(portfolio_current)
+                            except Exception:
+                                port_df = pd.DataFrame()
+
+                            st.dataframe(
+                                port_df,
+                                use_container_width=True,
                             )
                         else:
-                            port_df = (
-                                pd.DataFrame(portfolio_current)
-                                .rename(columns={"state": "State", "district": "District"})
+                            unit_label_plural = "blocks" if _admin_level == "block" else "districts"
+                            st.caption(
+                                f"No {unit_label_plural} in the portfolio yet. "
+                                f"Use the button above or the Rankings table to add {unit_label_plural}."
                             )
-                    else:
-                        port_df = pd.DataFrame(portfolio_current)
-                except Exception:
-                    port_df = pd.DataFrame()
 
-                st.dataframe(
-                    port_df,
-                    use_container_width=True,
-                )
-            else:
-                unit_label_plural = "blocks" if _admin_level == "block" else "districts"
-                st.caption(
-                    f"No {unit_label_plural} in the portfolio yet. "
-                    f"Use the button above or the Rankings table to add {unit_label_plural}."
-                )
+                    # ---- Risk cards (1.1) ----
+                    current_val = row.get(metric_col)
+                    current_val_f = float(current_val) if not pd.isna(current_val) else None
 
-        # ---- Risk cards (1.1) ----
-        current_val = row.get(metric_col)
-        current_val_f = float(current_val) if not pd.isna(current_val) else None
+                    # baseline: same metric, historical, baseline period
+                    baseline_col = find_baseline_column(df.columns, sel_metric)
+                    baseline_val = row.get(baseline_col) if baseline_col else np.nan
+                    baseline_val_f = float(baseline_val) if not pd.isna(baseline_val) else None
 
-        # baseline: same metric, historical, baseline period
-        baseline_col = find_baseline_column(df.columns, sel_metric)
-        baseline_val = row.get(baseline_col) if baseline_col else np.nan
-        baseline_val_f = float(baseline_val) if not pd.isna(baseline_val) else None
+                    # position within comparison groups: rank + percentile (direction-aware)
+                    # For districts: within state
+                    # For blocks: within district AND within state
+                    from india_resilience_tool.analysis.metrics import compute_position_stats
 
-        # position within comparison groups: rank + percentile (direction-aware)
-        # For districts: within state
-        # For blocks: within district AND within state
-        from india_resilience_tool.analysis.metrics import compute_position_stats
+                    rank_higher_is_worse = bool(VARCFG.get("rank_higher_is_worse", True))
 
-        rank_higher_is_worse = bool(VARCFG.get("rank_higher_is_worse", True))
+                    # Prefer median for ranking if available (more robust to outliers)
+                    rank_metric_col = metric_col
+                    try:
+                        parts = str(metric_col).split("__")
+                        if len(parts) == 4 and parts[-1] == "mean":
+                            cand = "__".join(parts[:-1] + ["median"])
+                            if cand in df.columns:
+                                rank_metric_col = cand
+                    except Exception:
+                        pass
 
-        # Prefer median for ranking if available (more robust to outliers)
-        rank_metric_col = metric_col
-        try:
-            parts = str(metric_col).split("__")
-            if len(parts) == 4 and parts[-1] == "mean":
-                cand = "__".join(parts[:-1] + ["median"])
-                if cand in df.columns:
-                    rank_metric_col = cand
-        except Exception:
-            pass
+                    # State distribution (districts or blocks)
+                    rank_in_state = None
+                    n_in_state = None
+                    percentile_state = None
 
-        # State distribution (districts or blocks)
-        rank_in_state = None
-        n_in_state = None
-        percentile_state = None
+                    try:
+                        in_state_mask = (
+                            merged["state_name"].astype(str).str.strip().str.lower()
+                            == str(state_to_show).strip().lower()
+                        )
+                        state_vals = pd.to_numeric(merged.loc[in_state_mask, rank_metric_col], errors="coerce").dropna()
+                        pos_state = compute_position_stats(state_vals, current_val_f, higher_is_worse=rank_higher_is_worse)
+                        rank_in_state, n_in_state, percentile_state = pos_state.rank, pos_state.n, pos_state.percentile
+                    except Exception:
+                        pass
 
-        try:
-            in_state_mask = (
-                merged["state_name"].astype(str).str.strip().str.lower()
-                == str(state_to_show).strip().lower()
-            )
-            state_vals = pd.to_numeric(merged.loc[in_state_mask, rank_metric_col], errors="coerce").dropna()
-            pos_state = compute_position_stats(state_vals, current_val_f, higher_is_worse=rank_higher_is_worse)
-            rank_in_state, n_in_state, percentile_state = pos_state.rank, pos_state.n, pos_state.percentile
-        except Exception:
-            pass
+                    # District distribution (blocks only)
+                    rank_in_district = None
+                    n_in_district = None
+                    percentile_district = None
+                    try:
+                        if _admin_level == "block":
+                            in_dist_mask = (
+                                (merged["state_name"].astype(str).str.strip().str.lower() == str(state_to_show).strip().lower())
+                                & (merged["district_name"].astype(str).str.strip().str.lower() == str(district_name).strip().lower())
+                            )
+                            dist_vals = pd.to_numeric(merged.loc[in_dist_mask, rank_metric_col], errors="coerce").dropna()
+                            pos_dist = compute_position_stats(dist_vals, current_val_f, higher_is_worse=rank_higher_is_worse)
+                            rank_in_district, n_in_district, percentile_district = (
+                                pos_dist.rank,
+                                pos_dist.n,
+                                pos_dist.percentile,
+                            )
+                    except Exception:
+                        pass
 
-        # District distribution (blocks only)
-        rank_in_district = None
-        n_in_district = None
-        percentile_district = None
-        try:
-            if _admin_level == "block":
-                in_dist_mask = (
-                    (merged["state_name"].astype(str).str.strip().str.lower() == str(state_to_show).strip().lower())
-                    & (merged["district_name"].astype(str).str.strip().str.lower() == str(district_name).strip().lower())
-                )
-                dist_vals = pd.to_numeric(merged.loc[in_dist_mask, rank_metric_col], errors="coerce").dropna()
-                pos_dist = compute_position_stats(dist_vals, current_val_f, higher_is_worse=rank_higher_is_worse)
-                rank_in_district, n_in_district, percentile_district = (
-                    pos_dist.rank,
-                    pos_dist.n,
-                    pos_dist.percentile,
-                )
-        except Exception:
-            pass
+                    # ---- Helper functions for time series and case study ----
 
-        # ---- Helper functions for time series and case study ----
+                    @st.cache_data
+                    def _read_yearly_csv(fpath: Path) -> pd.DataFrame:
+                        from india_resilience_tool.analysis.timeseries import read_yearly_csv_robust, prepare_yearly_series
 
-        @st.cache_data
-        def _read_yearly_csv(fpath: Path) -> pd.DataFrame:
-            from india_resilience_tool.analysis.timeseries import read_yearly_csv_robust, prepare_yearly_series
+                        df = read_yearly_csv_robust(fpath)
+                        return prepare_yearly_series(df)
 
-            df = read_yearly_csv_robust(fpath)
-            return prepare_yearly_series(df)
+                    def _slugify_fs(s: str) -> str:
+                        s = (
+                            unicodedata.normalize("NFKD", str(s))
+                            .encode("ascii", "ignore")
+                            .decode("ascii")
+                        )
+                        s = re.sub(r"[^A-Za-z0-9]+", "_", s.strip())
+                        return re.sub(r"_+", "_", s).strip("_").lower()
 
-        def _slugify_fs(s: str) -> str:
-            s = (
-                unicodedata.normalize("NFKD", str(s))
-                .encode("ascii", "ignore")
-                .decode("ascii")
-            )
-            s = re.sub(r"[^A-Za-z0-9]+", "_", s.strip())
-            return re.sub(r"_+", "_", s).strip("_").lower()
+                    @st.cache_data
+                    def _load_district_yearly(
+                        ts_root: Path,
+                        state_dir: str,
+                        district_display: str,
+                        scenario_name: str,
+                        varcfg: dict,
+                        aliases: dict | None = None,
+                    ) -> pd.DataFrame:
+                        """
+                        Load the *scenario-specific* yearly ensemble CSV for a district.
 
-        @st.cache_data
-        def _load_district_yearly(
-            ts_root: Path,
-            state_dir: str,
-            district_display: str,
-            scenario_name: str,
-            varcfg: dict,
-            aliases: dict | None = None,
-        ) -> pd.DataFrame:
-            """
-            Load the *scenario-specific* yearly ensemble CSV for a district.
+                        Delegates to india_resilience_tool.analysis.timeseries for robust discovery.
+                        """
+                        from india_resilience_tool.analysis.timeseries import load_district_yearly
 
-            Delegates to india_resilience_tool.analysis.timeseries for robust discovery.
-            """
-            from india_resilience_tool.analysis.timeseries import load_district_yearly
+                        return load_district_yearly(
+                            ts_root=ts_root,
+                            state_dir=state_dir,
+                            district_display=district_display,
+                            scenario_name=scenario_name,
+                            varcfg=varcfg,
+                            aliases=aliases,
+                            normalize_fn=alias,  # shared normalization + NAME_ALIASES (Step 9)
+                        )
 
-            return load_district_yearly(
-                ts_root=ts_root,
-                state_dir=state_dir,
-                district_display=district_display,
-                scenario_name=scenario_name,
-                varcfg=varcfg,
-                aliases=aliases,
-                normalize_fn=alias,  # shared normalization + NAME_ALIASES (Step 9)
-            )
+                    @st.cache_data
+                    def _load_block_yearly(
+                        ts_root: Path,
+                        state_dir: str,
+                        district_display: str,
+                        block_display: str,
+                        scenario_name: str,
+                        varcfg: dict,
+                        aliases: dict | None = None,
+                    ) -> pd.DataFrame:
+                        """
+                        Load the *scenario-specific* yearly ensemble CSV for a block.
 
-        @st.cache_data
-        def _load_block_yearly(
-            ts_root: Path,
-            state_dir: str,
-            district_display: str,
-            block_display: str,
-            scenario_name: str,
-            varcfg: dict,
-            aliases: dict | None = None,
-        ) -> pd.DataFrame:
-            """
-            Load the *scenario-specific* yearly ensemble CSV for a block.
+                        Delegates to india_resilience_tool.analysis.timeseries for robust discovery.
+                        """
+                        from india_resilience_tool.analysis.timeseries import load_block_yearly
 
-            Delegates to india_resilience_tool.analysis.timeseries for robust discovery.
-            """
-            from india_resilience_tool.analysis.timeseries import load_block_yearly
+                        return load_block_yearly(
+                            ts_root=ts_root,
+                            state_dir=state_dir,
+                            district_display=district_display,
+                            block_display=block_display,
+                            scenario_name=scenario_name,
+                            varcfg=varcfg,
+                            aliases=aliases,
+                            normalize_fn=alias,
+                        )
 
-            return load_block_yearly(
-                ts_root=ts_root,
-                state_dir=state_dir,
-                district_display=district_display,
-                block_display=block_display,
-                scenario_name=scenario_name,
-                varcfg=varcfg,
-                aliases=aliases,
-                normalize_fn=alias,
-            )
+                    def _filter_series_for_trend(
+                        df: pd.DataFrame,
+                        state_name: str,
+                        district_name: str,
+                        block_name: Optional[str] = None,
+                    ) -> pd.DataFrame:
+                        """
+                        Extract a clean time series for a single unit from a
+                        scenario-specific yearly dataframe.
 
-        def _filter_series_for_trend(
-            df: pd.DataFrame,
-            state_name: str,
-            district_name: str,
-            block_name: Optional[str] = None,
-        ) -> pd.DataFrame:
-            """
-            Extract a clean time series for a single unit from a
-            scenario-specific yearly dataframe.
+                        In district mode: filters to (state, district)
+                        In block mode:    filters to (state, district, block) when block_name is provided
+                        """
+                        if df is None or df.empty:
+                            return pd.DataFrame()
 
-            In district mode: filters to (state, district)
-            In block mode:    filters to (state, district, block) when block_name is provided
-            """
-            if df is None or df.empty:
-                return pd.DataFrame()
+                        d = df.copy()
 
-            d = df.copy()
+                        # Normalize id columns (tolerate 'block_name' vs 'block')
+                        if "block_name" in d.columns and "block" not in d.columns:
+                            d["block"] = d["block_name"]
 
-            # Normalize id columns (tolerate 'block_name' vs 'block')
-            if "block_name" in d.columns and "block" not in d.columns:
-                d["block"] = d["block_name"]
+                        def _n(s: str) -> str:
+                            return alias(s)
 
-            def _n(s: str) -> str:
-                return alias(s)
+                        if "state" in d.columns:
+                            d["_state_key"] = d["state"].astype(str).map(_n)
+                        else:
+                            d["_state_key"] = pd.Series([""] * len(d), index=d.index)
 
-            if "state" in d.columns:
-                d["_state_key"] = d["state"].astype(str).map(_n)
-            else:
-                d["_state_key"] = pd.Series([""] * len(d), index=d.index)
+                        if "district" in d.columns:
+                            d["_district_key"] = d["district"].astype(str).map(_n)
+                        else:
+                            d["_district_key"] = pd.Series([""] * len(d), index=d.index)
 
-            if "district" in d.columns:
-                d["_district_key"] = d["district"].astype(str).map(_n)
-            else:
-                d["_district_key"] = pd.Series([""] * len(d), index=d.index)
+                        mask = (d["_state_key"] == _n(state_name)) & (d["_district_key"] == _n(district_name))
 
-            mask = (d["_state_key"] == _n(state_name)) & (d["_district_key"] == _n(district_name))
+                        # Optional block filter when present + requested
+                        if block_name and ("block" in d.columns):
+                            d["_block_key"] = d["block"].astype(str).map(_n)
+                            mask = mask & (d["_block_key"] == _n(block_name))
 
-            # Optional block filter when present + requested
-            if block_name and ("block" in d.columns):
-                d["_block_key"] = d["block"].astype(str).map(_n)
-                mask = mask & (d["_block_key"] == _n(block_name))
+                        if not mask.any():
+                            # Soft fallback: allow partial matches on district (and block if provided)
+                            mask = (d["_state_key"] == _n(state_name)) & d["_district_key"].str.contains(_n(district_name), na=False)
+                            if block_name and ("block" in d.columns):
+                                d["_block_key"] = d["block"].astype(str).map(_n)
+                                mask = mask & d["_block_key"].str.contains(_n(block_name), na=False)
 
-            if not mask.any():
-                # Soft fallback: allow partial matches on district (and block if provided)
-                mask = (d["_state_key"] == _n(state_name)) & d["_district_key"].str.contains(_n(district_name), na=False)
-                if block_name and ("block" in d.columns):
-                    d["_block_key"] = d["block"].astype(str).map(_n)
-                    mask = mask & d["_block_key"].str.contains(_n(block_name), na=False)
+                        d = d[mask]
+                        if d.empty:
+                            return d
 
-            d = d[mask]
-            if d.empty:
-                return d
+                        for c in ("year", "mean", "p05", "p95"):
+                            if c in d.columns:
+                                d[c] = pd.to_numeric(d[c], errors="coerce")
+                        d = d.dropna(subset=["year", "mean"]).sort_values("year")
+                        return d
 
-            for c in ("year", "mean", "p05", "p95"):
-                if c in d.columns:
-                    d[c] = pd.to_numeric(d[c], errors="coerce")
-            d = d.dropna(subset=["year", "mean"]).sort_values("year")
-            return d
+                    def _build_district_case_study_data(
+                        state_name: str,
+                        district_name: str,
+                        index_slugs: list[str],
+                        sel_scenario: str,
+                        sel_period: str,
+                        sel_stat: str,
+                    ):
+                        """
+                        Assemble per-index summary metrics + yearly time series + scenario
+                        comparison panel for a single (state, district).
 
-        def _build_district_case_study_data(
-            state_name: str,
-            district_name: str,
-            index_slugs: list[str],
-            sel_scenario: str,
-            sel_period: str,
-            sel_stat: str,
-        ):
-            """
-            Assemble per-index summary metrics + yearly time series + scenario
-            comparison panel for a single (state, district).
+                        Returns
+                        -------
+                        summary_df : pd.DataFrame
+                            One row per index_slug with current value, baseline, delta,
+                            ranking & risk class.
+                        timeseries_by_index : dict[str, dict[str, pd.DataFrame]]
+                            {"slug": {"historical": df_hist, "scenario": df_scen}}
+                        scenario_panels : dict[str, pd.DataFrame]
+                            {"slug": panel_df} from build_scenario_comparison_panel_for_row.
+                        """
+                        records: list[dict] = []
+                        timeseries_by_index: dict[str, dict[str, pd.DataFrame]] = {}
+                        scenario_panels: dict[str, pd.DataFrame] = {}
 
-            Returns
-            -------
-            summary_df : pd.DataFrame
-                One row per index_slug with current value, baseline, delta,
-                ranking & risk class.
-            timeseries_by_index : dict[str, dict[str, pd.DataFrame]]
-                {"slug": {"historical": df_hist, "scenario": df_scen}}
-            scenario_panels : dict[str, pd.DataFrame]
-                {"slug": panel_df} from build_scenario_comparison_panel_for_row.
-            """
-            records: list[dict] = []
-            timeseries_by_index: dict[str, dict[str, pd.DataFrame]] = {}
-            scenario_panels: dict[str, pd.DataFrame] = {}
+                        for slug in index_slugs:
+                            varcfg = VARIABLES.get(slug)
+                            if not varcfg:
+                                continue
 
-            for slug in index_slugs:
-                varcfg = VARIABLES.get(slug)
-                if not varcfg:
-                    continue
+                            # Determine processed root for this index, similar to PROCESSED_ROOT logic
+                            env_root = os.getenv("IRT_PROCESSED_ROOT")
+                            if env_root:
+                                base_path = Path(env_root)
+                                if base_path.name.lower() == slug.lower():
+                                    proc_root = base_path
+                                else:
+                                    proc_root = base_path / slug
+                            else:
+                                proc_root = DATA_DIR / "processed" / slug
+                            proc_root = proc_root.resolve()
 
-                # Determine processed root for this index, similar to PROCESSED_ROOT logic
-                env_root = os.getenv("IRT_PROCESSED_ROOT")
-                if env_root:
-                    base_path = Path(env_root)
-                    if base_path.name.lower() == slug.lower():
-                        proc_root = base_path
-                    else:
-                        proc_root = base_path / slug
-                else:
-                    proc_root = DATA_DIR / "processed" / slug
-                proc_root = proc_root.resolve()
+                            master_path = proc_root / PILOT_STATE / "master_metrics_by_district.csv"
+                            if not master_path.exists():
+                                continue
 
-                master_path = proc_root / PILOT_STATE / "master_metrics_by_district.csv"
-                if not master_path.exists():
-                    continue
+                            try:
+                                df_master, schema_items_local, metrics_local, by_metric_local = _load_master_and_schema(
+                                    master_path, slug
+                                )
+                            except Exception:
+                                continue
 
-                try:
-                    df_master, schema_items_local, metrics_local, by_metric_local = _load_master_and_schema(
-                        master_path, slug
-                    )
-                except Exception:
-                    continue
+                            if df_master is None or df_master.empty:
+                                continue
 
-                if df_master is None or df_master.empty:
-                    continue
+                            # Decide metric name for this slug (align with normalized metrics)
+                            registry_metric = varcfg.get("periods_metric_col")
+                            available_metrics = list(metrics_local or [])
+                            if not available_metrics:
+                                continue
 
-                # Decide metric name for this slug (align with normalized metrics)
-                registry_metric = varcfg.get("periods_metric_col")
-                available_metrics = list(metrics_local or [])
-                if not available_metrics:
-                    continue
+                            def _metric_norm(m: str) -> str:
+                                # remove spaces AND underscores so:
+                                # "gt_25mm" and "gt25mm" can be matched
+                                return _portfolio_normalize(m).replace("_", "")
 
-                def _metric_norm(m: str) -> str:
-                    # remove spaces AND underscores so:
-                    # "gt_25mm" and "gt25mm" can be matched
-                    return _portfolio_normalize(m).replace("_", "")
+                            if registry_metric not in available_metrics:
+                                # Exact lower-case match first
+                                m_lower = {str(m).lower(): m for m in available_metrics}
+                                registry_metric = m_lower.get(str(registry_metric).lower())
 
-                if registry_metric not in available_metrics:
-                    # Exact lower-case match first
-                    m_lower = {str(m).lower(): m for m in available_metrics}
-                    registry_metric = m_lower.get(str(registry_metric).lower())
+                            if registry_metric not in available_metrics:
+                                # Normalized equality / contains fallback
+                                target_norm = _metric_norm(str(registry_metric))
+                                eq_matches = [
+                                    m for m in available_metrics
+                                    if _metric_norm(str(m)) == target_norm
+                                ]
+                                if eq_matches:
+                                    registry_metric = eq_matches[0]
+                                else:
+                                    contains_matches = [
+                                        m for m in available_metrics
+                                        if target_norm and target_norm in _metric_norm(str(m))
+                                    ]
+                                    registry_metric = contains_matches[0] if contains_matches else available_metrics[0]
 
-                if registry_metric not in available_metrics:
-                    # Normalized equality / contains fallback
-                    target_norm = _metric_norm(str(registry_metric))
-                    eq_matches = [
-                        m for m in available_metrics
-                        if _metric_norm(str(m)) == target_norm
-                    ]
-                    if eq_matches:
-                        registry_metric = eq_matches[0]
-                    else:
-                        contains_matches = [
-                            m for m in available_metrics
-                            if target_norm and target_norm in _metric_norm(str(m))
-                        ]
-                        registry_metric = contains_matches[0] if contains_matches else available_metrics[0]
+                            # Candidate column set for this metric + scenario + period (stat may vary)
+                            prefix = f"{registry_metric}__{sel_scenario}__{sel_period}__"
+                            metric_col_candidates = [
+                                c for c in df_master.columns
+                                if isinstance(c, str) and c.startswith(prefix)
+                            ]
 
-                # Candidate column set for this metric + scenario + period (stat may vary)
-                prefix = f"{registry_metric}__{sel_scenario}__{sel_period}__"
-                metric_col_candidates = [
-                    c for c in df_master.columns
-                    if isinstance(c, str) and c.startswith(prefix)
-                ]
+                            desired_col = f"{registry_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
+                            metric_col_local = desired_col if desired_col in df_master.columns else None
 
-                desired_col = f"{registry_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
-                metric_col_local = desired_col if desired_col in df_master.columns else None
+                            if metric_col_local is None:
+                                if not metric_col_candidates:
+                                    continue
 
-                if metric_col_local is None:
-                    if not metric_col_candidates:
-                        continue
+                                def _stat_norm(s: str) -> str:
+                                    return _portfolio_normalize(s).replace("_", "")
 
-                    def _stat_norm(s: str) -> str:
-                        return _portfolio_normalize(s).replace("_", "")
+                                sel_stat_norm = _stat_norm(str(sel_stat))
+                                stat_matches = [
+                                    c for c in metric_col_candidates
+                                    if _stat_norm(c.split("__")[-1]) == sel_stat_norm
+                                ]
+                                metric_col_local = stat_matches[0] if stat_matches else metric_col_candidates[0]
 
-                    sel_stat_norm = _stat_norm(str(sel_stat))
-                    stat_matches = [
-                        c for c in metric_col_candidates
-                        if _stat_norm(c.split("__")[-1]) == sel_stat_norm
-                    ]
-                    metric_col_local = stat_matches[0] if stat_matches else metric_col_candidates[0]
-
-                used_stat = str(metric_col_local).split("__")[-1]
-
-                # Robust match for a single state+district row
-                dm = df_master.copy()
-                if "state" not in dm.columns or "district" not in dm.columns:
-                    continue
-
-                def _n(s: str) -> str:
-                    return alias(s)
-
-                dm["_state_key"] = dm["state"].astype(str).map(_n)
-                dm["_district_key"] = dm["district"].astype(str).map(_n)
-
-                target_state = _n(state_name)
-                target_dist = _n(district_name)
-
-                mask = (dm["_state_key"] == target_state) & (dm["_district_key"] == target_dist)
-                if not mask.any():
-                    # fall back to contains on district name within same state
-                    mask = (dm["_state_key"] == target_state) & dm["_district_key"].str.contains(
-                        target_dist, na=False
-                    )
-                if not mask.any():
-                    continue
-
-                row_local = dm.loc[mask].iloc[0]
-
-                # Current value (try fallback columns if the chosen one is NaN)
-                current_val_f_local = None
-
-                current_val_local = row_local.get(metric_col_local)
-                current_val_try = pd.to_numeric([current_val_local], errors="coerce")[0]
-                if not pd.isna(current_val_try):
-                    current_val_f_local = float(current_val_try)
-                else:
-                    # Try alternate stat columns for the same metric/scenario/period
-                    for alt_col in metric_col_candidates:
-                        if alt_col == metric_col_local:
-                            continue
-                        alt_val = row_local.get(alt_col)
-                        alt_try = pd.to_numeric([alt_val], errors="coerce")[0]
-                        if not pd.isna(alt_try):
-                            metric_col_local = alt_col
                             used_stat = str(metric_col_local).split("__")[-1]
-                            current_val_f_local = float(alt_try)
-                            break
 
-                # Baseline for same metric/stat in historical baseline period
-                baseline_col_local = find_baseline_column_for_stat(
-                    dm.columns, registry_metric, used_stat
-                )
-                baseline_val_f_local = None
-                if baseline_col_local and baseline_col_local in dm.columns:
-                    baseline_val_local = row_local.get(baseline_col_local)
-                    baseline_val_f_local = pd.to_numeric([baseline_val_local], errors="coerce")[0]
-                    if pd.isna(baseline_val_f_local):
-                        baseline_val_f_local = None
+                            # Robust match for a single state+district row
+                            dm = df_master.copy()
+                            if "state" not in dm.columns or "district" not in dm.columns:
+                                continue
 
-                if current_val_f_local is not None and baseline_val_f_local is not None:
-                    delta_abs = current_val_f_local - baseline_val_f_local
-                    delta_pct = None
-                    if baseline_val_f_local not in (0.0,):
-                        delta_pct = (delta_abs / baseline_val_f_local) * 100.0
-                else:
-                    delta_abs = None
-                    delta_pct = None
+                            def _n(s: str) -> str:
+                                return alias(s)
 
-                # Ranking within state (direction-aware, inclusive percentile)
-                state_mask = dm["_state_key"] == target_state
-                state_vals_local = pd.to_numeric(
-                    dm.loc[state_mask, metric_col_local], errors="coerce"
-                ).dropna()
-                from india_resilience_tool.analysis.metrics import compute_position_stats
+                            dm["_state_key"] = dm["state"].astype(str).map(_n)
+                            dm["_district_key"] = dm["district"].astype(str).map(_n)
 
-                higher_is_worse_local = bool(varcfg.get("rank_higher_is_worse", True))
-                pos_local = compute_position_stats(
-                    state_vals_local,
-                    current_val_f_local,
-                    higher_is_worse=higher_is_worse_local,
-                )
-                n_in_state_local = pos_local.n
-                rank_in_state_local = pos_local.rank
-                percentile_in_state = pos_local.percentile
-                risk_class = (
-                    risk_class_from_percentile(percentile_in_state)
-                    if percentile_in_state is not None
-                    else "Unknown"
-                )
+                            target_state = _n(state_name)
+                            target_dist = _n(district_name)
 
-                records.append(
-                    {
-                        "index_slug": slug,
-                        "index_label": varcfg.get("label", slug),
-                        "group": varcfg.get("group"),
-                        "scenario": sel_scenario,
-                        "period": sel_period,
-                        "stat": sel_stat,
-                        "current": current_val_f_local,
-                        "baseline": baseline_val_f_local,
-                        "delta_abs": delta_abs,
-                        "delta_pct": delta_pct,
-                        "rank_in_state": rank_in_state_local,
-                        "percentile_in_state": percentile_in_state,
-                        "n_in_state": n_in_state_local,
-                        "risk_class": risk_class,
-                    }
-                )
+                            mask = (dm["_state_key"] == target_state) & (dm["_district_key"] == target_dist)
+                            if not mask.any():
+                                # fall back to contains on district name within same state
+                                mask = (dm["_state_key"] == target_state) & dm["_district_key"].str.contains(
+                                    target_dist, na=False
+                                )
+                            if not mask.any():
+                                continue
 
-                # Timeseries for this index
-                ts_root = proc_root
-                hist_df = _load_district_yearly(
-                    ts_root=ts_root,
-                    state_dir=str(state_name),
-                    district_display=str(district_name),
-                    scenario_name="historical",
-                    varcfg=varcfg,
-                    aliases=NAME_ALIASES,
-                )
-                scen_df = _load_district_yearly(
-                    ts_root=ts_root,
-                    state_dir=str(state_name),
-                    district_display=str(district_name),
-                    scenario_name=sel_scenario,
-                    varcfg=varcfg,
-                    aliases=NAME_ALIASES,
-                )
-                hist_ts_local = _filter_series_for_trend(hist_df, state_name, district_name)
-                scen_ts_local = _filter_series_for_trend(scen_df, state_name, district_name)
-                timeseries_by_index[slug] = {
-                    "historical": hist_ts_local,
-                    "scenario": scen_ts_local,
-                }
+                            row_local = dm.loc[mask].iloc[0]
 
-                # Scenario comparison panel (period-mean across scenarios)
-                try:
-                    metric_name_for_panel = str(metric_col_local).split("__")[0] if metric_col_local else str(registry_metric)
+                            # Current value (try fallback columns if the chosen one is NaN)
+                            current_val_f_local = None
 
-                    panel_df = build_scenario_comparison_panel_for_row(
-                        row=row_local,
-                        schema_items=schema_items_local,
-                        metric_name=metric_name_for_panel,
-                        sel_stat=sel_stat,
+                            current_val_local = row_local.get(metric_col_local)
+                            current_val_try = pd.to_numeric([current_val_local], errors="coerce")[0]
+                            if not pd.isna(current_val_try):
+                                current_val_f_local = float(current_val_try)
+                            else:
+                                # Try alternate stat columns for the same metric/scenario/period
+                                for alt_col in metric_col_candidates:
+                                    if alt_col == metric_col_local:
+                                        continue
+                                    alt_val = row_local.get(alt_col)
+                                    alt_try = pd.to_numeric([alt_val], errors="coerce")[0]
+                                    if not pd.isna(alt_try):
+                                        metric_col_local = alt_col
+                                        used_stat = str(metric_col_local).split("__")[-1]
+                                        current_val_f_local = float(alt_try)
+                                        break
+
+                            # Baseline for same metric/stat in historical baseline period
+                            baseline_col_local = find_baseline_column_for_stat(
+                                dm.columns, registry_metric, used_stat
+                            )
+                            baseline_val_f_local = None
+                            if baseline_col_local and baseline_col_local in dm.columns:
+                                baseline_val_local = row_local.get(baseline_col_local)
+                                baseline_val_f_local = pd.to_numeric([baseline_val_local], errors="coerce")[0]
+                                if pd.isna(baseline_val_f_local):
+                                    baseline_val_f_local = None
+
+                            if current_val_f_local is not None and baseline_val_f_local is not None:
+                                delta_abs = current_val_f_local - baseline_val_f_local
+                                delta_pct = None
+                                if baseline_val_f_local not in (0.0,):
+                                    delta_pct = (delta_abs / baseline_val_f_local) * 100.0
+                            else:
+                                delta_abs = None
+                                delta_pct = None
+
+                            # Ranking within state (direction-aware, inclusive percentile)
+                            state_mask = dm["_state_key"] == target_state
+                            state_vals_local = pd.to_numeric(
+                                dm.loc[state_mask, metric_col_local], errors="coerce"
+                            ).dropna()
+                            from india_resilience_tool.analysis.metrics import compute_position_stats
+
+                            higher_is_worse_local = bool(varcfg.get("rank_higher_is_worse", True))
+                            pos_local = compute_position_stats(
+                                state_vals_local,
+                                current_val_f_local,
+                                higher_is_worse=higher_is_worse_local,
+                            )
+                            n_in_state_local = pos_local.n
+                            rank_in_state_local = pos_local.rank
+                            percentile_in_state = pos_local.percentile
+                            risk_class = (
+                                risk_class_from_percentile(percentile_in_state)
+                                if percentile_in_state is not None
+                                else "Unknown"
+                            )
+
+                            records.append(
+                                {
+                                    "index_slug": slug,
+                                    "index_label": varcfg.get("label", slug),
+                                    "group": varcfg.get("group"),
+                                    "scenario": sel_scenario,
+                                    "period": sel_period,
+                                    "stat": sel_stat,
+                                    "current": current_val_f_local,
+                                    "baseline": baseline_val_f_local,
+                                    "delta_abs": delta_abs,
+                                    "delta_pct": delta_pct,
+                                    "rank_in_state": rank_in_state_local,
+                                    "percentile_in_state": percentile_in_state,
+                                    "n_in_state": n_in_state_local,
+                                    "risk_class": risk_class,
+                                }
+                            )
+
+                            # Timeseries for this index
+                            ts_root = proc_root
+                            hist_df = _load_district_yearly(
+                                ts_root=ts_root,
+                                state_dir=str(state_name),
+                                district_display=str(district_name),
+                                scenario_name="historical",
+                                varcfg=varcfg,
+                                aliases=NAME_ALIASES,
+                            )
+                            scen_df = _load_district_yearly(
+                                ts_root=ts_root,
+                                state_dir=str(state_name),
+                                district_display=str(district_name),
+                                scenario_name=sel_scenario,
+                                varcfg=varcfg,
+                                aliases=NAME_ALIASES,
+                            )
+                            hist_ts_local = _filter_series_for_trend(hist_df, state_name, district_name)
+                            scen_ts_local = _filter_series_for_trend(scen_df, state_name, district_name)
+                            timeseries_by_index[slug] = {
+                                "historical": hist_ts_local,
+                                "scenario": scen_ts_local,
+                            }
+
+                            # Scenario comparison panel (period-mean across scenarios)
+                            try:
+                                metric_name_for_panel = str(metric_col_local).split("__")[0] if metric_col_local else str(registry_metric)
+
+                                panel_df = build_scenario_comparison_panel_for_row(
+                                    row=row_local,
+                                    schema_items=schema_items_local,
+                                    metric_name=metric_name_for_panel,
+                                    sel_stat=sel_stat,
+                                )
+                            except Exception:
+                                panel_df = None
+                            if panel_df is not None and not panel_df.empty:
+                                scenario_panels[slug] = panel_df
+
+                        summary_df = pd.DataFrame.from_records(records) if records else pd.DataFrame()
+                        return summary_df, timeseries_by_index, scenario_panels
+
+                    def _make_case_study_zip(
+                        state_name: str,
+                        district_name: str,
+                        summary_df: pd.DataFrame,
+                        ts_dict: dict[str, dict[str, pd.DataFrame]],
+                        panel_dict: dict[str, pd.DataFrame],
+                        pdf_bytes: bytes,
+                    ) -> bytes:
+                        from india_resilience_tool.viz.exports import make_case_study_zip
+
+                        # Preserve exported CSV labels exactly like the legacy dashboard did
+                        label_lookup: dict[str, str] = {}
+                        for slug in set(list((ts_dict or {}).keys()) + list((panel_dict or {}).keys())):
+                            label_lookup[slug] = VARIABLES.get(slug, {}).get("label", slug)
+
+                        return make_case_study_zip(
+                            state_name=state_name,
+                            district_name=district_name,
+                            summary_df=summary_df,
+                            ts_dict=ts_dict,
+                            panel_dict=panel_dict,
+                            pdf_bytes=pdf_bytes,
+                            index_label_lookup=label_lookup,
+                        )
+
+                    def _make_district_case_study_pdf(
+                        state_name: str,
+                        district_name: str,
+                        summary_df: pd.DataFrame,
+                        ts_dict: dict[str, dict[str, pd.DataFrame]],
+                        panel_dict: dict[str, pd.DataFrame],
+                        sel_scenario: str,
+                        sel_period: str,
+                        sel_stat: str,
+                    ) -> bytes:
+                        from india_resilience_tool.viz.exports import make_district_case_study_pdf
+
+                        return make_district_case_study_pdf(
+                            state_name=state_name,
+                            district_name=district_name,
+                            summary_df=summary_df,
+                            ts_dict=ts_dict,
+                            panel_dict=panel_dict,
+                            sel_scenario=sel_scenario,
+                            sel_period=sel_period,
+                            sel_stat=sel_stat,
+                            logo_path=LOGO_PATH,
+                        )
+
+                    # --- Load historical + selected scenario series separately ---
+                    requested_state_dir = (
+                        selected_state
+                        if selected_state != "All"
+                        else (row.get("state_name") or PILOT_STATE)
                     )
-                except Exception:
-                    panel_df = None
-                if panel_df is not None and not panel_df.empty:
-                    scenario_panels[slug] = panel_df
+                    state_dir_for_fs = requested_state_dir
+                    district_for_fs = row.get("district_name") or selected_district
 
-            summary_df = pd.DataFrame.from_records(records) if records else pd.DataFrame()
-            return summary_df, timeseries_by_index, scenario_panels
+                    block_for_fs = row.get("block_name") or selected_block
 
-        def _make_case_study_zip(
-            state_name: str,
-            district_name: str,
-            summary_df: pd.DataFrame,
-            ts_dict: dict[str, dict[str, pd.DataFrame]],
-            panel_dict: dict[str, pd.DataFrame],
-            pdf_bytes: bytes,
-        ) -> bytes:
-            from india_resilience_tool.viz.exports import make_case_study_zip
+                    if _admin_level == "block" and selected_block != "All":
+                        # Historical (1990–2010) - block level
+                        _district_yearly_hist = _load_block_yearly(
+                            ts_root=PROCESSED_ROOT,
+                            state_dir=str(state_dir_for_fs),
+                            district_display=str(district_for_fs),
+                            block_display=str(block_for_fs),
+                            scenario_name="historical",
+                            varcfg=VARCFG,
+                            aliases=NAME_ALIASES,
+                        )
 
-            # Preserve exported CSV labels exactly like the legacy dashboard did
-            label_lookup: dict[str, str] = {}
-            for slug in set(list((ts_dict or {}).keys()) + list((panel_dict or {}).keys())):
-                label_lookup[slug] = VARIABLES.get(slug, {}).get("label", slug)
+                        # Selected SSP scenario (2020–2060) - block level
+                        _district_yearly_scen = _load_block_yearly(
+                            ts_root=PROCESSED_ROOT,
+                            state_dir=str(state_dir_for_fs),
+                            district_display=str(district_for_fs),
+                            block_display=str(block_for_fs),
+                            scenario_name=sel_scenario,
+                            varcfg=VARCFG,
+                            aliases=NAME_ALIASES,
+                        )
 
-            return make_case_study_zip(
-                state_name=state_name,
-                district_name=district_name,
-                summary_df=summary_df,
-                ts_dict=ts_dict,
-                panel_dict=panel_dict,
-                pdf_bytes=pdf_bytes,
-                index_label_lookup=label_lookup,
-            )
+                        # Prepare time series for the details panel (block filter)
+                        hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name, str(block_for_fs))
+                        scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name, str(block_for_fs))
+                    else:
+                        # Historical (1990–2010) - district level
+                        _district_yearly_hist = _load_district_yearly(
+                            ts_root=PROCESSED_ROOT,
+                            state_dir=str(state_dir_for_fs),
+                            district_display=str(district_for_fs),
+                            scenario_name="historical",
+                            varcfg=VARCFG,
+                            aliases=NAME_ALIASES,
+                        )
 
-        def _make_district_case_study_pdf(
-            state_name: str,
-            district_name: str,
-            summary_df: pd.DataFrame,
-            ts_dict: dict[str, dict[str, pd.DataFrame]],
-            panel_dict: dict[str, pd.DataFrame],
-            sel_scenario: str,
-            sel_period: str,
-            sel_stat: str,
-        ) -> bytes:
-            from india_resilience_tool.viz.exports import make_district_case_study_pdf
+                        # Selected SSP scenario (2020–2060) - district level
+                        _district_yearly_scen = _load_district_yearly(
+                            ts_root=PROCESSED_ROOT,
+                            state_dir=str(state_dir_for_fs),
+                            district_display=str(district_for_fs),
+                            scenario_name=sel_scenario,
+                            varcfg=VARCFG,
+                            aliases=NAME_ALIASES,
+                        )
 
-            return make_district_case_study_pdf(
-                state_name=state_name,
-                district_name=district_name,
-                summary_df=summary_df,
-                ts_dict=ts_dict,
-                panel_dict=panel_dict,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                logo_path=LOGO_PATH,
-            )
+                        # Prepare time series for the details panel
+                        hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name)
+                        scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name)
 
-        # --- Load historical + selected scenario series separately ---
-        requested_state_dir = (
-            selected_state
-            if selected_state != "All"
-            else (row.get("state_name") or PILOT_STATE)
-        )
-        state_dir_for_fs = requested_state_dir
-        district_for_fs = row.get("district_name") or selected_district
+                    # Import required functions for details panel
+                    from india_resilience_tool.viz.charts import (
+                        create_trend_figure_for_index_plotly as _create_trend_figure_for_index,
+                    )
+                    from india_resilience_tool.viz.exports import (
+                        make_district_case_study_pdf as _make_district_case_study_pdf_impl,
+                        make_case_study_zip as _make_case_study_zip_impl,
+                    )
+                    from india_resilience_tool.data.discovery import slugify_fs
 
-        block_for_fs = row.get("block_name") or selected_block
+                    from india_resilience_tool.viz.style import ensure_16x9_figsize
 
-        if _admin_level == "block" and selected_block != "All":
-            # Historical (1990–2010) - block level
-            _district_yearly_hist = _load_block_yearly(
-                ts_root=PROCESSED_ROOT,
-                state_dir=str(state_dir_for_fs),
-                district_display=str(district_for_fs),
-                block_display=str(block_for_fs),
-                scenario_name="historical",
-                varcfg=VARCFG,
-                aliases=NAME_ALIASES,
-            )
+                    _fig_size_panel = ensure_16x9_figsize(FIG_SIZE_PANEL, mode="fit_width")
 
-            # Selected SSP scenario (2020–2060) - block level
-            _district_yearly_scen = _load_block_yearly(
-                ts_root=PROCESSED_ROOT,
-                state_dir=str(state_dir_for_fs),
-                district_display=str(district_for_fs),
-                block_display=str(block_for_fs),
-                scenario_name=sel_scenario,
-                varcfg=VARCFG,
-                aliases=NAME_ALIASES,
-            )
-
-            # Prepare time series for the details panel (block filter)
-            hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name, str(block_for_fs))
-            scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name, str(block_for_fs))
-        else:
-            # Historical (1990–2010) - district level
-            _district_yearly_hist = _load_district_yearly(
-                ts_root=PROCESSED_ROOT,
-                state_dir=str(state_dir_for_fs),
-                district_display=str(district_for_fs),
-                scenario_name="historical",
-                varcfg=VARCFG,
-                aliases=NAME_ALIASES,
-            )
-
-            # Selected SSP scenario (2020–2060) - district level
-            _district_yearly_scen = _load_district_yearly(
-                ts_root=PROCESSED_ROOT,
-                state_dir=str(state_dir_for_fs),
-                district_display=str(district_for_fs),
-                scenario_name=sel_scenario,
-                varcfg=VARCFG,
-                aliases=NAME_ALIASES,
-            )
-
-            # Prepare time series for the details panel
-            hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name)
-            scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name)
-
-        # Import required functions for details panel
-        from india_resilience_tool.viz.charts import (
-            create_trend_figure_for_index_plotly as _create_trend_figure_for_index,
-        )
-        from india_resilience_tool.viz.exports import (
-            make_district_case_study_pdf as _make_district_case_study_pdf_impl,
-            make_case_study_zip as _make_case_study_zip_impl,
-        )
-        from india_resilience_tool.data.discovery import slugify_fs
-
-        from india_resilience_tool.viz.style import ensure_16x9_figsize
-
-        _fig_size_panel = ensure_16x9_figsize(FIG_SIZE_PANEL, mode="fit_width")
-
-        # ---- SINGLE-DISTRICT DETAILS PANEL (extracted to details_panel.py) ----
-        render_details_panel(
-            # Core district/state context
-            row=row,
-            district_name=district_name,
-            state_to_show=state_to_show,
-            selected_district=selected_district,
-            # Metric / variable context
-            variables=VARIABLES,
-            variable_slug=VARIABLE_SLUG,
-            sel_metric=sel_metric,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            # Risk summary data
-            current_val_f=current_val_f,
-            baseline_val_f=baseline_val_f,
-            baseline_col=baseline_col,
-            rank_in_state=rank_in_state,
-            n_in_state=n_in_state,
-            percentile_state=percentile_state,
-            rank_higher_is_worse=rank_higher_is_worse,
-            # Time series data
-            hist_ts=hist_ts,
-            scen_ts=scen_ts,
-            # Schema for scenario comparison
-            schema_items=schema_items,
-            # Figure styling
-            fig_size_panel=_fig_size_panel,
-            fig_dpi_panel=FIG_DPI_PANEL,
-            font_size_title=FONT_SIZE_TITLE,
-            font_size_label=FONT_SIZE_LABEL,
-            font_size_ticks=FONT_SIZE_TICKS,
-            font_size_legend=FONT_SIZE_LEGEND,
-            # Constants
-            period_order=PERIOD_ORDER,
-            scenario_display=SCENARIO_DISPLAY,
-            # Callable dependencies
-            create_trend_figure_fn=_create_trend_figure_for_index,
-            build_scenario_panel_fn=build_scenario_comparison_panel_for_row,
-            make_scenario_figure_fn=_make_scenario_comparison_figure_dashboard,
-            build_case_study_data_fn=_build_district_case_study_data,
-            make_case_study_pdf_fn=_make_district_case_study_pdf,
-            make_case_study_zip_fn=_make_case_study_zip,
-            slugify_fs_fn=slugify_fs,
-            # Optional filesystem paths
-            state_dir_for_fs=state_dir_for_fs,
-            district_for_fs=district_for_fs,
-            ts_root=PROCESSED_ROOT,
-            logo_path=LOGO_PATH,
-            # Block-level support
-            level=_admin_level,
-            block_name=str(block_for_fs) if (_admin_level == "block" and selected_block != "All") else None,
-            parent_district_name=str(district_name) if _admin_level == "block" else None,
-            rank_in_district=rank_in_district,
-            n_in_district=n_in_district,
-            percentile_district=percentile_district,
-        )
+                    # ---- SINGLE-DISTRICT DETAILS PANEL (extracted to details_panel.py) ----
+                    render_details_panel(
+                        # Core district/state context
+                        row=row,
+                        district_name=district_name,
+                        state_to_show=state_to_show,
+                        selected_district=selected_district,
+                        # Metric / variable context
+                        variables=VARIABLES,
+                        variable_slug=VARIABLE_SLUG,
+                        sel_metric=sel_metric,
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
+                        # Risk summary data
+                        current_val_f=current_val_f,
+                        baseline_val_f=baseline_val_f,
+                        baseline_col=baseline_col,
+                        rank_in_state=rank_in_state,
+                        n_in_state=n_in_state,
+                        percentile_state=percentile_state,
+                        rank_higher_is_worse=rank_higher_is_worse,
+                        # Time series data
+                        hist_ts=hist_ts,
+                        scen_ts=scen_ts,
+                        # Schema for scenario comparison
+                        schema_items=schema_items,
+                        # Figure styling
+                        fig_size_panel=_fig_size_panel,
+                        fig_dpi_panel=FIG_DPI_PANEL,
+                        font_size_title=FONT_SIZE_TITLE,
+                        font_size_label=FONT_SIZE_LABEL,
+                        font_size_ticks=FONT_SIZE_TICKS,
+                        font_size_legend=FONT_SIZE_LEGEND,
+                        # Constants
+                        period_order=PERIOD_ORDER,
+                        scenario_display=SCENARIO_DISPLAY,
+                        # Callable dependencies
+                        create_trend_figure_fn=_create_trend_figure_for_index,
+                        build_scenario_panel_fn=build_scenario_comparison_panel_for_row,
+                        make_scenario_figure_fn=_make_scenario_comparison_figure_dashboard,
+                        build_case_study_data_fn=_build_district_case_study_data,
+                        make_case_study_pdf_fn=_make_district_case_study_pdf,
+                        make_case_study_zip_fn=_make_case_study_zip,
+                        slugify_fs_fn=slugify_fs,
+                        # Optional filesystem paths
+                        state_dir_for_fs=state_dir_for_fs,
+                        district_for_fs=district_for_fs,
+                        ts_root=PROCESSED_ROOT,
+                        logo_path=LOGO_PATH,
+                        # Block-level support
+                        level=_admin_level,
+                        block_name=str(block_for_fs) if (_admin_level == "block" and selected_block != "All") else None,
+                        parent_district_name=str(district_name) if _admin_level == "block" else None,
+                        rank_in_district=rank_in_district,
+                        n_in_district=n_in_district,
+                        percentile_district=percentile_district,
+                    )
 
 render_perf_panel_safe()
 st.markdown("---")
