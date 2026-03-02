@@ -1,9 +1,4 @@
-"""
-Smoke tests for app.views.state_summary_view.
-
-Author: Abu Bakar Siddiqui Thakur
-Email: absthakur@resilience.org.in
-"""
+"""Tests for app.views.state_summary_view."""
 
 from __future__ import annotations
 
@@ -20,3 +15,28 @@ def test_state_summary_view_exports_renderer() -> None:
     from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
 
     assert callable(render_state_summary_view)
+
+
+def test_compute_position_in_india_single_state_returns_na_rank() -> None:
+    from india_resilience_tool.app.views.state_summary_view import _compute_position_in_india
+
+    rank, n = _compute_position_in_india(
+        {"telangana": 12.0},
+        "Telangana",
+        higher_is_worse=True,
+    )
+    assert rank is None
+    assert n == 1
+
+
+def test_compute_position_in_india_rank_is_never_greater_than_n() -> None:
+    from india_resilience_tool.app.views.state_summary_view import _compute_position_in_india
+
+    rank, n = _compute_position_in_india(
+        {"telangana": 12.0, "maharashtra": 8.0},
+        "Telangana",
+        higher_is_worse=True,
+    )
+    assert rank is not None
+    assert n == 2
+    assert rank <= n

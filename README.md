@@ -184,6 +184,14 @@ DATA_DIR/
         └── {state}/                  # e.g., Telangana
             ├── master_metrics_by_district.csv
             ├── master_metrics_by_block.csv
+            ├── state_model_averages_district.csv
+            ├── state_ensemble_stats_district.csv
+            ├── state_yearly_model_averages_district.csv
+            ├── state_yearly_ensemble_stats_district.csv
+            ├── state_model_averages_block.csv
+            ├── state_ensemble_stats_block.csv
+            ├── state_yearly_model_averages_block.csv
+            ├── state_yearly_ensemble_stats_block.csv
             ├── districts/
             │   ├── {district}/{model}/{scenario}/
             │   │   ├── {district}_yearly.csv
@@ -201,6 +209,7 @@ DATA_DIR/
 Notes:
 - Windows may show `.csv` as "Microsoft Excel CSV"; they're normal CSVs.
 - The dashboard uses **master metrics** for maps/rankings and **ensemble yearly** files for trends.
+- After updating to the level-specific state-summary contract, rebuild masters with `python build_master_metrics.py` so the new `*_district.csv` and `*_block.csv` state files exist.
 
 ### Building master CSVs (district + block)
 

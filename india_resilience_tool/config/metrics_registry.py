@@ -1634,7 +1634,7 @@ DEFAULT_DISTRICT_YEARLY_CANDIDATES = [
 ]
 
 DEFAULT_STATE_YEARLY_CANDIDATES = [
-    "{root}/{state}/state_yearly_ensemble_stats.csv",
+    "{root}/{state}/state_yearly_ensemble_stats_{level}.csv",
 ]
 
 
