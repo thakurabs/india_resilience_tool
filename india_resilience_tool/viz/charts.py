@@ -1238,28 +1238,6 @@ def build_portfolio_pivot(
     return pivot
 
 
-def build_portfolio_scenario_diff_pivot(
-    df: pd.DataFrame,
-    *,
-    value_col: str,
-    scenario_a: str,
-    scenario_b: str,
-) -> pd.DataFrame:
-    """Compute (scenario_b − scenario_a) on the unit × index pivot."""
-    if df is None or df.empty:
-        return pd.DataFrame()
-    pa = build_portfolio_pivot(df, value_col=value_col, scenario=scenario_a)
-    pb = build_portfolio_pivot(df, value_col=value_col, scenario=scenario_b)
-    if pa.empty or pb.empty:
-        return pd.DataFrame()
-
-    idx = sorted(set(pa.index).union(set(pb.index)))
-    cols = sorted(set(pa.columns).union(set(pb.columns)), key=lambda x: str(x))
-    pa2 = pa.reindex(index=idx, columns=cols)
-    pb2 = pb.reindex(index=idx, columns=cols)
-    return pb2 - pa2
-
-
 def build_portfolio_scenario_min_pivot(
     df: pd.DataFrame,
     *,
@@ -1602,108 +1580,6 @@ def make_portfolio_heatmap_robust_min_percentile(
         cbar.ax.set_label("_portfolio_robust_min_colorbar")
     except Exception:
         pass
-
-    try:
-        fig.tight_layout()
-    except Exception:
-        pass
-    return fig
-
-
-def make_portfolio_heatmap_scenario_difference(
-    df: pd.DataFrame,
-    *,
-    value_col: str,
-    scenario_a: str,
-    scenario_b: str,
-    normalize_per_index: bool = False,
-    cmap: str = "RdBu_r",
-    figsize: Optional[Tuple[float, float]] = None,
-    fig_dpi: int = 100,
-    annot_fontsize: int = 9,
-    label_fontsize: int = 10,
-    title_fontsize: int = 12,
-    title: Optional[str] = None,
-) -> Optional[Any]:
-    """Scenario difference heatmap: (scenario_b − scenario_a) for a chosen value column."""
-    import matplotlib.colors as mcolors
-    import matplotlib.pyplot as plt
-
-    diff = build_portfolio_scenario_diff_pivot(
-        df,
-        value_col=value_col,
-        scenario_a=scenario_a,
-        scenario_b=scenario_b,
-    )
-    if diff is None or diff.empty:
-        return None
-
-    display_values = diff.copy()
-    data_for_color = diff.to_numpy(dtype=float)
-
-    if value_col == "Current value" and normalize_per_index:
-        # Normalize per index by max abs so values lie in [-1, 1] per column.
-        for col in display_values.columns:
-            v = pd.to_numeric(display_values[col], errors="coerce")
-            mx = float(np.nanmax(np.abs(v.to_numpy(dtype=float)))) if v.notna().any() else 0.0
-            if mx > 0:
-                display_values[col] = v / mx
-            else:
-                display_values[col] = 0.0
-        data_for_color = display_values.to_numpy(dtype=float)
-
-    masked = np.ma.masked_invalid(data_for_color)
-    cmap_obj = plt.get_cmap(cmap or "RdBu_r")
-
-    vmax = float(np.nanmax(np.abs(data_for_color))) if np.isfinite(data_for_color).any() else 1.0
-    vmax = max(vmax, 1e-9)
-    norm = mcolors.TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
-
-    n_rows, n_cols = diff.shape
-    if figsize is None:
-        width = max(6, min(14, 2 + n_cols * 1.5))
-        height = max(4, min(12, 1.5 + n_rows * 0.6))
-        figsize = (width, height)
-
-    fig, ax = plt.subplots(figsize=figsize, dpi=fig_dpi)
-    im = ax.imshow(masked, cmap=cmap_obj, aspect="auto", norm=norm)
-
-    cbar = fig.colorbar(im, ax=ax, shrink=0.85)
-    if value_col == "Percentile":
-        cbar.set_label("Percentile shift (points)", fontsize=label_fontsize)
-    elif value_col == "%Δ":
-        cbar.set_label("%Δ shift (percentage points)", fontsize=label_fontsize)
-    elif value_col == "Δ":
-        cbar.set_label("Δ shift (units)", fontsize=label_fontsize)
-    else:
-        cbar.set_label("Difference (B − A)", fontsize=label_fontsize)
-
-    ax.set_xticks(np.arange(n_cols))
-    ax.set_yticks(np.arange(n_rows))
-    ax.set_xticklabels(diff.columns, fontsize=label_fontsize, rotation=45, ha="right")
-    ax.set_yticklabels(diff.index, fontsize=label_fontsize)
-
-    for i in range(n_rows):
-        for j in range(n_cols):
-            val = display_values.iloc[i, j]
-            if pd.isna(val):
-                continue
-            if value_col == "Percentile":
-                text = f"{float(val):+.0f}"
-            elif value_col == "%Δ":
-                text = f"{float(val):+.1f}"
-            else:
-                text = f"{float(val):+.1f}"
-            ax.text(j, i, text, ha="center", va="center", fontsize=annot_fontsize)
-
-    if title is None:
-        title = f"{_scenario_display(scenario_b)} − {_scenario_display(scenario_a)}: {value_col}"
-    ax.set_title(title, fontsize=title_fontsize, pad=12)
-
-    ax.set_xticks(np.arange(-0.5, n_cols, 1), minor=True)
-    ax.set_yticks(np.arange(-0.5, n_rows, 1), minor=True)
-    ax.grid(which="minor", color="white", linestyle="-", linewidth=2)
-    ax.tick_params(which="minor", size=0)
 
     try:
         fig.tight_layout()

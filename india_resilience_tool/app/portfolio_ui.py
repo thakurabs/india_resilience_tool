@@ -1198,9 +1198,7 @@ def render_portfolio_visualizations(
         make_portfolio_grouped_bar,
         make_portfolio_heatmap,
         make_portfolio_heatmap_robust_min_percentile,
-        make_portfolio_heatmap_scenario_difference,
         make_portfolio_heatmap_scenario_panels,
-        make_portfolio_scenario_grouped_bar,
     )
 
     value_col_options = list(available_value_cols.keys())
@@ -1214,9 +1212,7 @@ def render_portfolio_visualizations(
             "Scenario chart",
             options=[
                 "Heatmap — Robust risk (min percentile)",
-                "Heatmap — Scenario difference",
                 "Heatmap — Scenario panels",
-                "Bars — Scenarios by unit (single index)",
             ],
             index=0,
             key=chart_key,
@@ -1267,65 +1263,6 @@ def render_portfolio_visualizations(
                 _offer_figure_download(fig, "portfolio_heatmap_robust_min_percentile.png", "Download heatmap")
             else:
                 st.warning("Could not generate robust risk heatmap. Check data availability.")
-
-        elif scenario_chart.startswith("Heatmap — Scenario difference"):
-            st.caption("Cells show **Scenario B − Scenario A** (scenario shift).")
-
-            def _default_idx_for(target: str, fallback: int) -> int:
-                t = str(target or "").strip().lower()
-                for i, s in enumerate(scenario_options):
-                    if str(s).strip().lower() == t:
-                        return i
-                return fallback
-
-            a_idx = _default_idx_for("ssp245", 0)
-            b_idx = _default_idx_for("ssp585", min(1, max(0, len(scenario_options) - 1)))
-            scen_a = st.selectbox(
-                "Scenario A",
-                options=scenario_options,
-                index=a_idx,
-                format_func=_scenario_label,
-                key=f"_viz_scenario_a_{scope}",
-            )
-            scen_b = st.selectbox(
-                "Scenario B",
-                options=scenario_options,
-                index=b_idx,
-                format_func=_scenario_label,
-                key=f"_viz_scenario_b_{scope}",
-            )
-
-            with st.expander("Heatmap options", expanded=False):
-                col1, col2 = st.columns(2)
-                with col1:
-                    normalize_diff = st.checkbox(
-                        "Normalize per index",
-                        value=False,
-                        disabled=value_col != "Current value",
-                        help="For Current value only: scale (B − A) per index using max-abs within each index.",
-                        key=f"_viz_scenario_diff_norm_{scope}",
-                    )
-                with col2:
-                    cmap = st.selectbox(
-                        "Color scheme",
-                        options=["RdBu_r", "RdYlBu_r", "viridis", "Blues", "Reds"],
-                        index=0,
-                        key=f"_viz_scenario_diff_cmap_{scope}",
-                    )
-
-            fig = make_portfolio_heatmap_scenario_difference(
-                df,
-                value_col=value_col,
-                scenario_a=scen_a,
-                scenario_b=scen_b,
-                normalize_per_index=bool(normalize_diff) if value_col == "Current value" else False,
-                cmap=cmap,
-            )
-            if fig is not None:
-                st.pyplot(fig)
-                _offer_figure_download(fig, "portfolio_heatmap_scenario_difference.png", "Download heatmap")
-            else:
-                st.warning("Could not generate scenario difference heatmap. Check data availability.")
 
         elif scenario_chart.startswith("Heatmap — Scenario panels"):
             default_sel = scenario_options[:3]
@@ -1387,84 +1324,7 @@ def render_portfolio_visualizations(
                 st.warning("Could not generate scenario panels heatmap. Check data availability.")
 
         else:
-            # Bars — Scenarios by unit (single index)
-            index_options = [str(x) for x in pd.unique(df["Index"].astype(str)) if str(x).strip()]
-            if not index_options:
-                st.warning("No indices available for scenario bar chart.")
-                return
-
-            idx_name = st.selectbox(
-                "Index",
-                options=index_options,
-                index=0,
-                key=f"_viz_scenario_bar_index_{scope}",
-            )
-
-            default_scen = []
-            for s in ("ssp245", "ssp585"):
-                for opt in scenario_options:
-                    if str(opt).strip().lower() == s:
-                        default_scen.append(opt)
-            if not default_scen:
-                default_scen = scenario_options[:2]
-
-            bar_scens = st.multiselect(
-                "Scenarios",
-                options=scenario_options,
-                default=default_scen,
-                format_func=_scenario_label,
-                key=f"_viz_scenario_bar_scens_{scope}",
-            )
-            if not bar_scens:
-                st.info("Select at least one scenario.")
-                return
-
-            with st.expander("Bar chart options", expanded=False):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    sort_mode_ui = st.selectbox(
-                        "Sort units",
-                        options=["None", f"By {_scenario_label(bar_scens[-1])} (desc)"],
-                        index=1 if len(bar_scens) >= 2 else 0,
-                        key=f"_viz_scenario_bar_sort_{scope}",
-                    )
-                with col2:
-                    horizontal = st.checkbox(
-                        "Horizontal bars",
-                        value=True,
-                        key=f"_viz_scenario_bar_horizontal_{scope}",
-                    )
-                with col3:
-                    show_values = st.checkbox(
-                        "Show values on bars",
-                        value=True,
-                        key=f"_viz_scenario_bar_show_values_{scope}",
-                    )
-
-                max_units = st.slider(
-                    "Max units",
-                    min_value=1,
-                    max_value=min(30, max(int(n_units), 1)),
-                    value=min(15, max(int(n_units), 1)),
-                    key=f"_viz_scenario_bar_max_units_{scope}",
-                )
-
-            sort_mode = "none" if sort_mode_ui == "None" else "scenario_b_desc"
-            fig = make_portfolio_scenario_grouped_bar(
-                df,
-                index_name=idx_name,
-                value_col=value_col,
-                scenarios=bar_scens,
-                sort_mode=sort_mode,
-                horizontal=bool(horizontal),
-                show_values=bool(show_values),
-                max_units=int(max_units),
-            )
-            if fig is not None:
-                st.pyplot(fig)
-                _offer_figure_download(fig, "portfolio_scenario_bars.png", "Download bar chart")
-            else:
-                st.warning("Could not generate scenario bar chart. Check data availability.")
+            st.warning("Unknown scenario chart option.")
 
         return
 
