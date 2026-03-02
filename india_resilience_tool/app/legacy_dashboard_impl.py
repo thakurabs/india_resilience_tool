@@ -928,19 +928,62 @@ with st.sidebar:
 
 st.title("India Resilience Tool")
 
-st.markdown(
+_right_panel_height_px_env = os.getenv("IRT_RIGHT_PANEL_HEIGHT_PX")
+_right_panel_height_px_override: Optional[int] = None
+if isinstance(_right_panel_height_px_env, str):
+    _s = _right_panel_height_px_env.strip()
+    if _s:
+        try:
+            _v = int(_s)
+        except Exception:
+            _v = None
+        if isinstance(_v, int) and _v > 0:
+            _right_panel_height_px_override = _v
+
+_use_vh_right_panel = _right_panel_height_px_override is None
+_vh_offset_raw = os.getenv("IRT_RIGHT_PANEL_VH_OFFSET_REM", "9.5")
+try:
+    _right_panel_vh_offset_rem = float(str(_vh_offset_raw).strip() or "9.5")
+except Exception:
+    _right_panel_vh_offset_rem = 9.5
+_right_panel_vh_offset_rem = float(min(max(_right_panel_vh_offset_rem, 0.0), 30.0))
+
+_right_panel_vh_css = ""
+if _use_vh_right_panel:
+    _right_panel_vh_css = f"""
+    /* CHG-0004: Make the right panel a dedicated scroll container. */
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(#irt-right-panel-body-marker) {{
+        height: calc(100vh - {_right_panel_vh_offset_rem}rem) !important;
+        max-height: calc(100vh - {_right_panel_vh_offset_rem}rem) !important;
+        overflow-y: auto !important;
+        overflow-x: hidden;
+        min-height: 0;
+        scrollbar-gutter: stable;
+    }}
+    div[data-testid="stVerticalBlockBorderWrapper"]:has(#irt-right-panel-body-marker)
+      > div[data-testid="stVerticalBlock"] {{
+        min-height: 0;
+    }}
     """
+
+st.markdown(
+    f"""
     <style>
+    #irt-main-layout-marker,
+    #irt-right-panel-body-marker {{
+        display: none;
+    }}
     div[data-testid="stElementContainer"]:has(> #irt-main-layout-marker)
-      + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+      + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {{
         align-self: flex-start;
-    }
+    }}
     div[data-testid="stElementContainer"]:has(> #irt-main-layout-marker)
-      + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child {
+      + div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"]:first-child {{
         position: sticky;
         top: 4.25rem;
         z-index: 10;
-    }
+    }}
+    {_right_panel_vh_css}
     </style>
     """,
     unsafe_allow_html=True,
@@ -2526,7 +2569,6 @@ with col1:
 # Details panel (portfolio + risk cards, sparkline + comparison)
 # -------------------------
 with col2:
-
     analysis_mode_rhs = st.session_state.get("analysis_mode", "Single district focus")
     is_portfolio_mode = "Multi" in str(analysis_mode_rhs)
     panel_title = "Portfolio" if is_portfolio_mode else "Climate Profile"
@@ -2544,8 +2586,15 @@ with col2:
                 st.session_state["irt_right_panel_collapsed"] = True
                 st.rerun()
 
-        panel_height_px = int(os.getenv("IRT_RIGHT_PANEL_HEIGHT_PX", str(MAP_HEIGHT)))
-        with st.container(height=panel_height_px, border=True):
+        if _use_vh_right_panel:
+            _right_panel_container = st.container(border=True)
+        else:
+            panel_height_px = int(_right_panel_height_px_override or MAP_HEIGHT)
+            _right_panel_container = st.container(height=panel_height_px, border=True)
+
+        with _right_panel_container:
+            if _use_vh_right_panel:
+                st.markdown('<div id="irt-right-panel-body-marker"></div>', unsafe_allow_html=True)
 
             # Reserved slot: "Selected district for portfolio" (map route) should appear ABOVE
             # the Portfolio analysis expander even though it's determined later in the script.
