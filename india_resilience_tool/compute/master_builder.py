@@ -240,6 +240,92 @@ def get_level_folder(level: AdminLevel) -> str:
 
 
 # -----------------------------------------------------------------------------
+# Legacy CSV pruning (filesystem-based; optional maintenance)
+# -----------------------------------------------------------------------------
+def _prune_legacy_yearly_period_csvs(
+    *,
+    state_root: Path,
+    level: AdminLevel = "district",
+    verbose: bool = True,
+) -> List[Path]:
+    """
+    Delete legacy per-unit yearly/period CSVs only when Parquet "gates" exist.
+
+    This is a safety-first cleanup helper intended to avoid deleting legacy CSVs
+    before newer consolidated Parquet outputs are present.
+
+    Gates required (both):
+      1) `{state_root}/master_metrics_by_{level}.parquet`
+      2) Any consolidated yearly ensembles Parquet under:
+           `{state_root}/{level_folder}/ensembles/yearly/**/data.parquet`
+
+    Only deletes files matching:
+      - `*_yearly.csv`
+      - `*_periods.csv`
+    while excluding any paths containing known non-legacy folders such as
+    `ensembles/` or `raw/`.
+
+    Returns:
+        List of Paths that were deleted.
+    """
+    state_root = Path(state_root)
+    level_folder = get_level_folder(level)
+
+    master_gate = state_root / f"master_metrics_by_{level}.parquet"
+    ensembles_gate_root = state_root / level_folder / "ensembles" / "yearly"
+    ensembles_gate_ok = False
+    try:
+        ensembles_gate_ok = ensembles_gate_root.exists() and any(
+            p.name == "data.parquet" for p in ensembles_gate_root.rglob("data.parquet")
+        )
+    except Exception:
+        ensembles_gate_ok = False
+
+    if not (master_gate.exists() and ensembles_gate_ok):
+        if verbose:
+            print(
+                f"[prune] gates missing for state_root={state_root} level={level}: "
+                f"master_parquet={master_gate.exists()} ensembles_parquet={ensembles_gate_ok}"
+            )
+        return []
+
+    root = state_root / level_folder
+    if not root.exists():
+        return []
+
+    excluded_parts = {
+        "ensembles",
+        "raw",
+        "plots",
+        "pdf_plots",
+        "validation_reports",
+        "__pycache__",
+    }
+
+    deleted: List[Path] = []
+    for p in root.rglob("*.csv"):
+        name = p.name
+        if not (name.endswith("_yearly.csv") or name.endswith("_periods.csv")):
+            continue
+
+        parts = set(p.parts)
+        if parts & excluded_parts:
+            continue
+        # Avoid structured "scenario=..." paths used by partitioned stores
+        if any("scenario=" in part for part in p.parts):
+            continue
+
+        try:
+            p.unlink()
+            deleted.append(p)
+        except Exception as e:
+            if verbose:
+                print(f"[prune] failed to delete {p}: {e}")
+
+    return deleted
+
+
+# -----------------------------------------------------------------------------
 # Progress helper
 # -----------------------------------------------------------------------------
 class ProgressReporter:

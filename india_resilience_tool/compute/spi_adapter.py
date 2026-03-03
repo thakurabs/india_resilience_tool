@@ -319,6 +319,63 @@ def compute_spi_for_unit(
     )
 
 
+def compare_spi_implementations(
+    *,
+    monthly_precip: xr.DataArray,
+    baseline_years: Tuple[int, int],
+    scale_months: int = 3,
+    min_months_per_year: int = 9,
+) -> dict:
+    """
+    Compare SPI outputs across supported distribution implementations.
+
+    This is a diagnostic helper primarily intended for tests and debugging.
+
+    Returns:
+        Dict with keys:
+          - "gamma": SPIResult | None
+          - "pearson": SPIResult | None
+          - "comparison": {"correlation": float, "n": int}
+    """
+    _check_climate_indices_available()
+
+    gamma = compute_spi_for_unit(
+        monthly_precip=monthly_precip,
+        calibration_monthly_precip=None,
+        baseline_years=baseline_years,
+        scale_months=scale_months,
+        distribution=Distribution.GAMMA,
+        min_months_per_year=min_months_per_year,
+    )
+    pearson = compute_spi_for_unit(
+        monthly_precip=monthly_precip,
+        calibration_monthly_precip=None,
+        baseline_years=baseline_years,
+        scale_months=scale_months,
+        distribution=Distribution.PEARSON,
+        min_months_per_year=min_months_per_year,
+    )
+
+    corr = float("nan")
+    n = 0
+    if gamma is not None and pearson is not None:
+        a = np.asarray(gamma.monthly_spi.values, dtype=float)
+        b = np.asarray(pearson.monthly_spi.values, dtype=float)
+        mask = np.isfinite(a) & np.isfinite(b)
+        n = int(mask.sum())
+        if n >= 2:
+            try:
+                corr = float(np.corrcoef(a[mask], b[mask])[0, 1])
+            except Exception:
+                corr = float("nan")
+
+    return {
+        "gamma": gamma,
+        "pearson": pearson,
+        "comparison": {"correlation": corr, "n": n},
+    }
+
+
 def _annualize_spi_xarray(
     spi_monthly: xr.DataArray,
     min_months_per_year: int = 9,

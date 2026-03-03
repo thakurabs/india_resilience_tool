@@ -74,6 +74,7 @@ from india_resilience_tool.app.geo_cache import (
 )
 from india_resilience_tool.app.sidebar_branding import render_sidebar_branding
 from india_resilience_tool.app.ribbon import render_metric_ribbon
+from india_resilience_tool.app.geography_controls import render_geography_and_analysis_focus
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -507,6 +508,11 @@ def make_state_boxplot_for_districts(
 # Risk class helper (percentile → label)
 # -------------------------
 from india_resilience_tool.analysis.metrics import risk_class_from_percentile
+from india_resilience_tool.analysis.map_enrichment import (
+    add_current_baseline_delta,
+    add_rank_percentile_risk,
+    add_tooltip_strings,
+)
 
 # -------------------------
 # APP START
@@ -681,291 +687,25 @@ if "pending_selected_state" in st.session_state:
 if "pending_selected_district" in st.session_state:
     st.session_state["selected_district"] = st.session_state.pop("pending_selected_district")
 
-# State/district selectors + analysis focus (combined block in sidebar)
-with state_placeholder.container():
-    with st.expander("Geography & analysis focus", expanded=True):
-        # Option A UX: disable downstream geography widgets until Analysis focus is chosen.
-        # Render Analysis focus FIRST so the user understands why controls are disabled.
-
-        # ---- Step 0: Analysis focus (single vs portfolio; labels depend on admin_level) ----
-        analysis_options = (
-            ["Single block focus", "Multi-block portfolio"]
-            if admin_level == "block"
-            else ["Single district focus", "Multi-district portfolio"]
-        )
-
-        analysis_mode = render_analysis_mode_selector(
-            label="Analysis focus",
-            options=analysis_options,
-            placeholder=SEL_PLACEHOLDER,
-            index=0,
-            help_text=(
-                "Choose a single-unit focus to explore one unit at a time, "
-                "or portfolio mode to build and compare a set of units."
-            ),
-            label_visibility="collapsed",
-            use_markdown_header=True,
-            level=admin_level,
-        )
-
-        analysis_ready = (analysis_mode != SEL_PLACEHOLDER)
-        if not analysis_ready:
-            st.info("Select **Analysis focus** above to enable geography and map settings.")
-
-        # Reset jump flags when switching analysis focus modes (keep behavior stable).
-        prev_mode_for_jump_reset = st.session_state.get("_analysis_mode_prev_for_jump_reset", analysis_mode)
-        if prev_mode_for_jump_reset != analysis_mode:
-            st.session_state["_analysis_mode_prev_for_jump_reset"] = analysis_mode
-            st.session_state["portfolio_build_route"] = None
-            st.session_state["jump_to_rankings"] = False
-            st.session_state["jump_to_map"] = False
-
-        # Brief helper text so the mode explains itself (level-aware)
-        unit_singular = "block" if admin_level == "block" else "district"
-        unit_plural = "blocks" if admin_level == "block" else "districts"
-
-        if analysis_mode == SEL_PLACEHOLDER:
-            st.caption("Select an analysis focus to continue.")
-        elif "Single" in analysis_mode:
-            st.caption(
-                f"Inspect one {unit_singular} at a time. Use the dropdowns below "
-                f"to pick which {unit_singular} you want to explore in detail."
-            )
-        else:
-            st.markdown(
-                f"<div style='font-size:0.9rem; margin-top:0.25rem; margin-bottom:0.1rem;'>"
-                f"In <strong>Multi-{unit_singular} portfolio</strong> mode you build a set of {unit_plural} "
-                f"for comparison. {unit_plural.title()} are added from the <em>{VIEW_MAP}</em>, the "
-                f"<em>{VIEW_RANKINGS}</em>, or from saved point locations. "
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-
-        # ---- Step 1: State selection (data-driven from processed root) ----
-
-        metric_ready_for_geography = PROCESSED_ROOT is not None
-
-        if not metric_ready_for_geography:
-
-            st.info("Select a **Risk domain** and **Metric** in the ribbon above the map to load available states.")
-
-            processed_root = None
-
-            available_states = ["All"]
-
-        else:
-
-            processed_root = PROCESSED_ROOT.resolve()
-
-            available_states = list_available_states_from_processed_root_cached(str(processed_root))
-
-            if (not processed_root.exists()) or (not processed_root.is_dir()) or (not available_states):
-
-                st.warning(f"No processed data found under IRT_PROCESSED_ROOT={processed_root}")
-
-                available_states = ["All"]
-
-        prev_state = st.session_state.get("selected_state")
-
-        if prev_state and prev_state not in available_states:
-
-            st.warning(
-
-                f"Previously selected state '{prev_state}' is no longer available in processed data. "
-
-                f"Resetting to '{available_states[0]}'."
-
-            )
-
-        if (
-
-            "selected_state" not in st.session_state
-
-            or st.session_state["selected_state"] not in available_states
-
-        ):
-
-            st.session_state["selected_state"] = available_states[0]
-
-        selected_state = st.selectbox(
-
-            "State",
-
-            options=available_states,
-
-            index=available_states.index(st.session_state["selected_state"]),
-
-            key="selected_state",
-
-            disabled=(not analysis_ready) or (not metric_ready_for_geography),
-
-        )
-
-        # Build per-state district GeoDataFrame
-
-        if selected_state == "All":
-
-            gdf_state_districts = adm2.copy()
-
-        else:
-
-            sel_state_norm = selected_state.strip().lower()
-
-            state_row = adm1[
-
-                adm1["shapeName"].astype(str).str.strip().str.lower() == sel_state_norm
-
-            ]
-
-            if state_row.empty:
-
-                state_row = adm1[
-
-                    adm1["shapeName"]
-
-                    .astype(str)
-
-                    .str.strip()
-
-                    .str.lower()
-
-                    .str.contains(sel_state_norm, na=False)
-
-                ]
-
-            if not state_row.empty:
-
-                state_geom = state_row.iloc[0].geometry
-
-                try:
-
-                    gdf_state_districts = adm2[adm2.geometry.within(state_geom.buffer(0.001))].copy()
-
-                except Exception:
-
-                    gdf_state_districts = adm2[
-
-                        adm2.geometry.centroid.within(state_geom.buffer(0.001))
-
-                    ].copy()
-
-                if gdf_state_districts.empty:
-
-                    gdf_state_districts = adm2[
-
-                        adm2["state_name"]
-
-                        .astype(str)
-
-                        .str.strip()
-
-                        .str.lower()
-
-                        .str.contains(sel_state_norm, na=False)
-
-                    ].copy()
-
-            else:
-
-                gdf_state_districts = adm2[
-
-                    adm2["state_name"]
-
-                    .astype(str)
-
-                    .str.strip()
-
-                    .str.lower()
-
-                    .str.contains(sel_state_norm, na=False)
-
-                ].copy()
-
-        districts = [
-            "All"
-        ] + sorted(
-            gdf_state_districts["district_name"].astype(str).unique().tolist()
-        )
-
-        # Ensure we always have a valid district in session state
-        if (
-            "selected_district" not in st.session_state
-            or st.session_state["selected_district"] not in districts
-        ):
-            st.session_state["selected_district"] = "All"
-
-        from india_resilience_tool.app.sidebar import render_analysis_mode_selector
-
-        admin_level = st.session_state.get("admin_level", "district")
-
-        # ---- Step 2: District selection (always shown, required before block in block mode) ----
-        # Ensure we always have a valid district in session state
-        if (
-            "selected_district" not in st.session_state
-            or st.session_state["selected_district"] not in districts
-        ):
-            st.session_state["selected_district"] = "All"
-
-        # Portfolio mode behavior for district selection:
-        # - In district-level portfolio mode: freeze district to "All"
-        # - In block-level portfolio mode: allow district selection (needed to navigate blocks)
-        # Check this BEFORE creating the widget to avoid Streamlit session state errors
-        _current_analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-        if "Multi" in _current_analysis_mode and admin_level != "block":
-            st.session_state["selected_district"] = "All"
-
-        selected_district = st.selectbox(
-            "District",
-            options=districts,
-            index=districts.index(st.session_state["selected_district"]),
-            key="selected_district",
-            disabled=not analysis_ready,
-        )
-
-        # ---- Step 3: Block selection (only when admin_level == block AND district selected) ----
-        selected_block = "All"
-        if admin_level == "block":
-            if not ADM3_GEOJSON.exists():
-                st.error(f"ADM3 geojson not found at {ADM3_GEOJSON}. Please provide block_4326.geojson.")
-                st.stop()
-
-            # Load ADM3 boundaries for block selection
-            adm3_sidebar = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM3)
-
-            block_options = ["All"]
-            if selected_district != "All":
-                try:
-                    blocks = _get_blocks_for_district(adm3_sidebar, selected_state, selected_district, normalize_fn=alias)
-                    block_options = ["All"] + sorted([str(b).strip() for b in blocks if str(b).strip()])
-                except Exception:
-                    block_options = ["All"]
-
-                if "selected_block" not in st.session_state or st.session_state["selected_block"] not in block_options:
-                    st.session_state["selected_block"] = "All"
-
-                selected_block = st.selectbox(
-                    "Block",
-                    options=block_options,
-                    index=block_options.index(st.session_state.get("selected_block", "All")),
-                    key="selected_block",
-                    disabled=not analysis_ready,
-                )
-            else:
-                # Show disabled/info when district not selected
-                if selected_district == "All":
-                    st.caption("Select a district to see blocks")
-                st.session_state["selected_block"] = "All"
-        else:
-            st.session_state.pop("selected_block", None)
-
-        # Note: Portfolio mode behavior for district selection is now handled BEFORE
-        # the selectbox widget is created (around line 1186) to avoid Streamlit
-        # session state modification errors.
-        # In district-level portfolio mode: district is frozen to "All"
-        # In block-level portfolio mode: district selection is allowed (needed to navigate blocks)
-        if "Multi" in analysis_mode and admin_level != "block":
-            # Just update the local variable; session_state was already set before widget
-            selected_district = "All"
+geo_ctx = render_geography_and_analysis_focus(
+    state_placeholder=state_placeholder,
+    admin_level=admin_level,
+    processed_root=PROCESSED_ROOT,
+    sel_placeholder=SEL_PLACEHOLDER,
+    view_map=VIEW_MAP,
+    view_rankings=VIEW_RANKINGS,
+    adm1=adm1,
+    adm2=adm2,
+    adm3_geojson=ADM3_GEOJSON,
+    simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
+)
+
+analysis_mode = geo_ctx.analysis_mode
+analysis_ready = geo_ctx.analysis_ready
+selected_state = geo_ctx.selected_state
+selected_district = geo_ctx.selected_district
+selected_block = geo_ctx.selected_block
+gdf_state_districts = geo_ctx.gdf_state_districts
 
 # -------------------------
 # Portfolio selection helpers (multi-district)
@@ -1203,19 +943,11 @@ if DEBUG and _admin_level == "block":
 
 # --- Compute current/baseline/delta columns once (used by map + tooltip) ---
 with perf_section("map: compute current/baseline/delta"):
-    merged["_current_value"] = pd.to_numeric(merged.get(metric_col), errors="coerce")
-
-    if baseline_col and (baseline_col in merged.columns):
-        merged["_baseline_value"] = pd.to_numeric(merged.get(baseline_col), errors="coerce")
-        merged["_delta_abs"] = merged["_current_value"] - merged["_baseline_value"]
-
-        # % change only when baseline is non-zero
-        denom = merged["_baseline_value"].where(merged["_baseline_value"] != 0)
-        merged["_delta_pct"] = (merged["_delta_abs"] / denom) * 100.0
-    else:
-        merged["_baseline_value"] = pd.Series([pd.NA] * len(merged), index=merged.index, dtype="Float64")
-        merged["_delta_abs"] = pd.Series([pd.NA] * len(merged), index=merged.index, dtype="Float64")
-        merged["_delta_pct"] = pd.Series([pd.NA] * len(merged), index=merged.index, dtype="Float64")
+    merged = add_current_baseline_delta(
+        merged,
+        metric_col=metric_col,
+        baseline_col=baseline_col,
+    )
 
 # --- Decide which column the map will actually show ---
 map_mode = st.session_state.get("map_mode", "Absolute value")
@@ -1235,78 +967,17 @@ if map_mode == "Change from 1990-2010 baseline":
 
 # --- Compute rank/percentile/risk class per state for tooltip quick-glance ---
 with perf_section("map: compute rank + risk class"):
-    state_series = merged.get("state_name")
-    if state_series is None:
-        state_series = pd.Series(["Unknown"] * len(merged), index=merged.index)
-    state_series = state_series.astype(str).fillna("Unknown")
-
-    # In block mode, rank/percentile should be computed within the parent district
-    # (state|district) so the tooltip + risk quick-glance remain meaningful.
-    rank_scope_label = "state"
-    if _admin_level == "block" and "district_name" in merged.columns:
-        district_series = merged["district_name"].astype(str).fillna("Unknown")
-        group_key = state_series.map(alias) + "|" + district_series.map(alias)
-        rank_scope_label = "district"
-    else:
-        group_key = state_series
-
     rank_higher_is_worse = bool(VARCFG.get("rank_higher_is_worse", True))
-    rank_ascending = not rank_higher_is_worse
-    percentile_ascending = rank_higher_is_worse
-
-    # Rank is computed on the *current* value (absolute), regardless of map mode.
-    # Rank 1 = worst value within the grouping scope (direction-aware).
-    v = merged["_current_value"]
-    merged["_rank_in_state"] = v.groupby(group_key).rank(method="min", ascending=rank_ascending)
-
-    # Inclusive percentile (0..100), higher = worse (direction-aware).
-    merged["_percentile_state"] = (
-        v.groupby(group_key).rank(pct=True, method="max", ascending=percentile_ascending) * 100.0
+    merged, rank_scope_label = add_rank_percentile_risk(
+        merged,
+        admin_level=_admin_level,
+        rank_higher_is_worse=rank_higher_is_worse,
+        alias_fn=alias,
+        risk_class_from_percentile_fn=risk_class_from_percentile,
     )
 
-    def _risk_label(p: float) -> str:
-        try:
-            if pd.isna(p):
-                return "Unknown"
-            return str(risk_class_from_percentile(float(p)))
-        except Exception:
-            return "Unknown"
-
-    merged["_risk_class"] = merged["_percentile_state"].apply(_risk_label)
-
-# --- Human-friendly tooltip strings (avoid raw NaN/long floats) ---
-def _fmt_number(x) -> str:
-    if x is None or (isinstance(x, float) and pd.isna(x)) or pd.isna(x):
-        return "—"
-    try:
-        xf = float(x)
-    except Exception:
-        return "—"
-    if abs(xf - round(xf)) < 1e-9 and abs(xf) < 1e9:
-        return f"{int(round(xf)):,}"
-    return f"{xf:,.2f}"
-
 with perf_section("map: build tooltip strings"):
-    # Main value shown depends on map mode
-    if map_mode == "Change from 1990-2010 baseline":
-        merged["_tooltip_value"] = merged["_delta_abs"].apply(_fmt_number)
-        merged["_tooltip_value_label"] = "Δ vs 1990–2010"
-    else:
-        merged["_tooltip_value"] = merged["_current_value"].apply(_fmt_number)
-        merged["_tooltip_value_label"] = "Value"
-
-    merged["_tooltip_baseline"] = merged["_baseline_value"].apply(_fmt_number)
-    merged["_tooltip_delta"] = merged["_delta_abs"].apply(_fmt_number)
-
-    def _fmt_rank(r) -> str:
-        if r is None or pd.isna(r):
-            return "—"
-        try:
-            return str(int(round(float(r))))
-        except Exception:
-            return "—"
-
-    merged["_tooltip_rank"] = merged["_rank_in_state"].apply(_fmt_rank)
+    merged = add_tooltip_strings(merged, map_mode=map_mode)
 
 # Compute color scale defaults from *visible* units (matches the map filter),
 # then default to a robust p2–p98 range so outliers don't collapse the palette.

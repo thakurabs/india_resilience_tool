@@ -46,12 +46,14 @@ india_resilience_tool/
 ├── analysis/ # Data analysis & computation
 │ ├── __init__.py
 │ ├── case_study.py # Case-study exports and helpers
+│ ├── map_enrichment.py # Streamlit-free map enrichment helpers (tooltip/rank/baseline)
 │ ├── metrics.py # Risk classification
 │ ├── portfolio.py # Portfolio logic & state (district + block)
 │ └── timeseries.py # Time series loading (district + block)
 ├── app/ # Streamlit application
 │ ├── __init__.py
 │ ├── adm2_cache.py # District boundary caching/simplification
+│ ├── geography_controls.py # Sidebar: Geography & analysis focus (legacy-preserving)
 │ ├── geography.py # Filesystem-backed discovery for state/district/block selectors
 │ ├── dashboard.py # Dashboard entry wrapper
 │ ├── orchestrator_impl.py # Dashboard implementation (district + block + bundles)
