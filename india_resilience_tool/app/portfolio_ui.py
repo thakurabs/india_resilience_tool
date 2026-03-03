@@ -31,6 +31,8 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
+import re
+
 import html
 from pathlib import Path
 from typing import Any, Callable, List, Mapping, Optional, Sequence
@@ -473,14 +475,17 @@ def render_index_selector(
         # No bundles selected - fall back to current metric only
         expanded_slugs = [current_slug] if current_slug in available_slugs else []
     
-    # --- Optional manual refinement ---
-    manual_mode = st.checkbox(
-        "Manually refine metric selection",
-        value=st.session_state.get("portfolio_manual_refinement", False),
-        key="portfolio_manual_refinement",
-        help="Enable to manually add/remove individual metrics from the comparison",
-    )
-    
+    # --- Optional manual refinement (kept out of the main flow) ---
+    st.caption("Metrics are auto-included from selected domains. Use **Advanced metrics** to refine.")
+    with st.expander("Advanced metrics", expanded=False):
+        st.checkbox(
+            "Manually refine metric selection",
+            value=st.session_state.get("portfolio_manual_refinement", False),
+            key="portfolio_manual_refinement",
+            help="Enable to manually add/remove individual metrics from the comparison",
+        )
+
+    manual_mode = bool(st.session_state.get("portfolio_manual_refinement", False))
     if manual_mode:
         # Show multi-select with expanded slugs as default
         # But allow user to pick any metric
@@ -540,7 +545,7 @@ def render_index_selector(
 # Comparison Table (Auto-rebuild)
 # =============================================================================
 
-def render_comparison_table(
+def build_comparison_df(
     *,
     portfolio: Sequence[Any],
     selected_slugs: Sequence[str],
@@ -549,6 +554,7 @@ def render_comparison_table(
     sel_scenario: str,
     sel_period: str,
     sel_stat: str,
+    sel_scenarios: Optional[Sequence[str]] = None,
     pilot_state: str,
     data_dir: Path,
     load_master_csv_fn: Callable[[str], pd.DataFrame],
@@ -562,7 +568,7 @@ def render_comparison_table(
     level: str = "district",
 ) -> Optional[pd.DataFrame]:
     """
-    Render the comparison table with auto-rebuild on changes.
+    Build the portfolio comparison dataframe with auto-rebuild on changes.
 
     District mode:
       - loads master_metrics_by_district.csv
@@ -576,7 +582,6 @@ def render_comparison_table(
     import os
     from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
     from india_resilience_tool.app.portfolio_multistate import (
-        compute_portfolio_summary_stats,
         extract_states_in_portfolio,
     )
 
@@ -602,12 +607,15 @@ def render_comparison_table(
 
         return (st_name, dist_name, blk_name) if is_block else (st_name, dist_name)
 
+    scenarios_for_context = list(sel_scenarios) if sel_scenarios is not None else [sel_scenario]
+
     context = {
         "level": level_norm,
         "units": [_unit_tuple(d) for d in portfolio],
         "states": list(states_for_master),
         "slugs": list(selected_slugs),
         "scenario": sel_scenario,
+        "scenarios": list(scenarios_for_context),
         "period": sel_period,
         "stat": sel_stat,
     }
@@ -827,6 +835,9 @@ def render_comparison_table(
                 normalize_fn=normalize_fn,
             )
 
+            if sel_scenarios is not None:
+                kwargs["sel_scenarios"] = list(sel_scenarios)
+
             # Prefer passing level if the builder supports it; fallback if not
             try:
                 df = build_portfolio_multiindex_df_fn(**kwargs, level=level_norm)
@@ -851,22 +862,48 @@ def render_comparison_table(
                     "those rows may show blank values. " + " | ".join(examples)
                 )
 
-    # Display table
     if cached_df is not None and not cached_df.empty:
-        # Reorder columns for nicer UX (esp. block mode)
-        display_df = cached_df.copy()
+        return cached_df
+    return None
+
+
+def render_comparison_table_ui(
+    df: pd.DataFrame,
+    *,
+    level: str = "district",
+) -> None:
+    """Render the comparison table UI for a pre-built comparison dataframe."""
+    import streamlit as st
+
+    if df is None or df.empty:
+        st.info("No comparison results to display.")
+        return
+
+    level_norm = (level or "district").strip().lower()
+    is_block = level_norm == "block"
+
+    long_df = df.copy()
+    has_scenario = ("Scenario" in long_df.columns) and long_df["Scenario"].notna().any()
+
+    def _reorder_long_df(df_in: pd.DataFrame, *, include_scenario: bool) -> pd.DataFrame:
+        out = df_in.copy()
         preferred: list[str] = []
 
         for c in ("State", "District"):
-            if c in display_df.columns:
+            if c in out.columns:
                 preferred.append(c)
 
-        if is_block and "Block" in display_df.columns:
+        if is_block and "Block" in out.columns:
             preferred.append("Block")
 
+        for c in ("Index", "Group"):
+            if c in out.columns:
+                preferred.append(c)
+
+        if include_scenario and "Scenario" in out.columns:
+            preferred.append("Scenario")
+
         for c in (
-            "Index",
-            "Group",
             "Current value",
             "Baseline",
             "Δ",
@@ -875,26 +912,90 @@ def render_comparison_table(
             "Percentile",
             "Risk class",
         ):
-            if c in display_df.columns and c not in preferred:
+            if c in out.columns and c not in preferred:
                 preferred.append(c)
 
-        remaining = [c for c in display_df.columns if c not in preferred]
-        display_df = display_df[preferred + remaining]
+        remaining = [c for c in out.columns if c not in preferred]
+        return out[preferred + remaining]
 
-        # Summary strip (table-first orientation)
-        summary = compute_portfolio_summary_stats(display_df, level=level_norm)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Units", int(summary.get("units_count", 0)))
-        c2.metric("States", int(summary.get("states_count", 0)))
-        c3.metric("Metrics", int(summary.get("metrics_count", 0)))
+    def _safe_stub(s: str) -> str:
+        s = str(s).strip().lower()
+        s = s.replace("%", "pct")
+        s = s.replace("Δ", "delta")
+        s = re.sub(r"[^a-z0-9_\-]+", "_", s)
+        return s.strip("_")
 
-        risk_counts = summary.get("risk_counts") or {}
-        if isinstance(risk_counts, dict) and risk_counts:
-            rc_parts = [f"{k}: {int(v)}" for k, v in risk_counts.items()]
-            st.caption("Risk class • " + " • ".join(rc_parts))
+    if has_scenario:
+        value_key = f"_portfolio_scenario_value_{level_norm}"
 
+        value_options_all = ["Risk class", "Current value", "Δ", "%Δ"]
+        value_options = [c for c in value_options_all if c in long_df.columns]
+        if not value_options:
+            value_options = ["Risk class"] if "Risk class" in long_df.columns else ["Current value"]
+
+        default_value = st.session_state.get(value_key, "Risk class")
+        if default_value not in value_options:
+            default_value = value_options[0]
+
+        value_col = st.selectbox(
+            "Compare",
+            options=value_options,
+            index=value_options.index(default_value),
+            key=value_key,
+        )
+
+        if value_col in ("Δ", "%Δ"):
+            st.caption("Δ and %Δ are computed vs historical baseline.")
+
+        # Scenario side-by-side pivot only (no long view).
+        id_cols: list[str] = []
+        for c in ("State", "District"):
+            if c in long_df.columns:
+                id_cols.append(c)
+        if is_block and "Block" in long_df.columns:
+            id_cols.append("Block")
+        for c in ("Index", "Group"):
+            if c in long_df.columns:
+                id_cols.append(c)
+
+        pv = long_df.pivot_table(
+            index=id_cols,
+            columns="Scenario",
+            values=value_col,
+            aggfunc="first",
+        )
+
+        try:
+            from india_resilience_tool.viz.charts import SCENARIO_DISPLAY, SCENARIO_ORDER
+
+            def _scenario_label(s: str) -> str:
+                s_norm = str(s or "").strip().lower()
+                return str(SCENARIO_DISPLAY.get(s_norm, s)).strip()
+
+            def _scenario_sort(s: str) -> tuple[int, int, str]:
+                s_norm = str(s or "").strip().lower()
+                if s_norm in SCENARIO_ORDER:
+                    return (0, int(SCENARIO_ORDER.index(s_norm)), s_norm)
+                return (1, 10_000, s_norm)
+
+            cols_sorted = sorted([str(c) for c in pv.columns], key=_scenario_sort)
+            pv = pv.reindex(columns=cols_sorted)
+            pv.columns = [_scenario_label(c) for c in pv.columns]
+        except Exception:
+            pass
+
+        display_df = pv.reset_index()
         st.dataframe(display_df, hide_index=True, use_container_width=True)
 
+        st.download_button(
+            "Download CSV",
+            data=display_df.to_csv(index=False).encode("utf-8"),
+            file_name=f"portfolio_comparison_{level_norm}_{_safe_stub(value_col)}.csv",
+            mime="text/csv",
+        )
+    else:
+        display_df = _reorder_long_df(long_df, include_scenario=False)
+        st.dataframe(display_df, hide_index=True, use_container_width=True)
         st.download_button(
             "Download as CSV",
             data=display_df.to_csv(index=False).encode("utf-8"),
@@ -902,9 +1003,59 @@ def render_comparison_table(
             mime="text/csv",
         )
 
-        return cached_df
 
-    return None
+def render_comparison_table(
+    *,
+    portfolio: Sequence[Any],
+    selected_slugs: Sequence[str],
+    variables: Mapping[str, Mapping[str, Any]],
+    index_group_labels: Mapping[str, str],
+    sel_scenario: str,
+    sel_period: str,
+    sel_stat: str,
+    sel_scenarios: Optional[Sequence[str]] = None,
+    pilot_state: str,
+    data_dir: Path,
+    load_master_csv_fn: Callable[[str], pd.DataFrame],
+    normalize_master_columns_fn: Callable[[pd.DataFrame], pd.DataFrame],
+    parse_master_schema_fn: Callable[[Any], tuple[list, list, dict]],
+    resolve_metric_column_fn: Callable[..., Optional[str]],
+    find_baseline_column_for_stat_fn: Callable[..., Optional[str]],
+    risk_class_from_percentile_fn: Callable[[float], str],
+    normalize_fn: Callable[[str], str],
+    build_portfolio_multiindex_df_fn: Callable[..., pd.DataFrame],
+    level: str = "district",
+) -> Optional[pd.DataFrame]:
+    """
+    Backward-compatible wrapper: build + render the comparison table UI.
+
+    Prefer calling `build_comparison_df` and `render_comparison_table_ui` separately for layouts
+    that need the dataframe for multiple views (e.g., tabs).
+    """
+    df = build_comparison_df(
+        portfolio=portfolio,
+        selected_slugs=selected_slugs,
+        variables=variables,
+        index_group_labels=index_group_labels,
+        sel_scenario=sel_scenario,
+        sel_period=sel_period,
+        sel_stat=sel_stat,
+        sel_scenarios=sel_scenarios,
+        pilot_state=pilot_state,
+        data_dir=data_dir,
+        load_master_csv_fn=load_master_csv_fn,
+        normalize_master_columns_fn=normalize_master_columns_fn,
+        parse_master_schema_fn=parse_master_schema_fn,
+        resolve_metric_column_fn=resolve_metric_column_fn,
+        find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
+        risk_class_from_percentile_fn=risk_class_from_percentile_fn,
+        normalize_fn=normalize_fn,
+        build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
+        level=level,
+    )
+    if df is not None and not df.empty:
+        render_comparison_table_ui(df, level=level)
+    return df
 
 
 # =============================================================================
@@ -948,13 +1099,18 @@ def render_portfolio_visualizations(
     if df is None or df.empty:
         st.info("Add districts and select indices to see visualizations.")
         return
+
+    has_scenario = ("Scenario" in df.columns) and df["Scenario"].notna().any()
+    is_block = ("Block" in df.columns) and df["Block"].notna().any()
+    scope = "block" if is_block else "district"
     
     # Check minimum data requirements
     n_districts = df["District"].nunique() if "District" in df.columns else 0
     n_indices = df["Index"].nunique() if "Index" in df.columns else 0
+    n_units = df["Block"].nunique() if is_block and "Block" in df.columns else n_districts
     
-    if n_districts < 1 or n_indices < 1:
-        st.info("Need at least 1 district and 1 index for visualizations.")
+    if n_units < 1 or n_indices < 1:
+        st.info("Need at least 1 unit and 1 index for visualizations.")
         return
     
     # Filter value options to those with valid data
@@ -968,76 +1124,249 @@ def render_portfolio_visualizations(
     if not available_value_cols:
         st.warning("No valid data columns available for visualization.")
         return
-    
-    # Controls row
+
+    # Visualizations are percentile-only (risk-class coloring) by design for clarity.
+    if "Percentile" not in df.columns or not df["Percentile"].notna().any():
+        st.warning("Percentile is not available for these results; visualizations require percentiles.")
+        return
+    value_col_fixed = "Percentile"
+
+    from india_resilience_tool.viz.charts import SCENARIO_DISPLAY, SCENARIO_ORDER
+
+    def _scenario_label(s: str) -> str:
+        s_norm = str(s or "").strip().lower()
+        return str(SCENARIO_DISPLAY.get(s_norm, s)).strip()
+
+    def _scenario_sort(s: str) -> tuple[int, int, str]:
+        s_norm = str(s or "").strip().lower()
+        if s_norm in SCENARIO_ORDER:
+            return (0, int(SCENARIO_ORDER.index(s_norm)), s_norm)
+        return (1, 10_000, s_norm)
+
+    scenario_options: list[str] = []
+    if has_scenario:
+        scenario_options = [
+            s
+            for s in (df["Scenario"].dropna().astype(str).map(str.strip).tolist() if "Scenario" in df.columns else [])
+            if s
+        ]
+        # De-dupe while preserving order
+        seen = set()
+        scenario_options = [s for s in scenario_options if not (s in seen or seen.add(s))]
+        scenario_options = sorted(scenario_options, key=_scenario_sort)
+
+    viz_mode = "Across indices (single scenario)"
+    if has_scenario and len(scenario_options) >= 2:
+        viz_mode = st.radio(
+            "Visualization mode",
+            options=["Across indices (single scenario)", "Scenario compare"],
+            horizontal=True,
+            index=1,
+            key=f"_viz_mode_{scope}",
+        )
+    elif has_scenario:
+        st.caption("Only one scenario present in the table; scenario-compare visualizations are disabled.")
+
+    # Import chart functions
+    from india_resilience_tool.viz.charts import (
+        make_portfolio_grouped_bar,
+        make_portfolio_heatmap,
+        make_portfolio_heatmap_robust_min_percentile,
+        make_portfolio_heatmap_scenario_panels,
+    )
+
+    if viz_mode == "Scenario compare":
+        st.markdown("#### Scenario compare")
+
+        chart_key = f"_viz_scenario_chart_{scope}"
+        scenario_chart = st.selectbox(
+            "Scenario chart",
+            options=[
+                "Heatmap — Scenario panels + robust (stacked)",
+                "Heatmap — Robust risk (min percentile)",
+                "Heatmap — Scenario panels",
+            ],
+            index=0,
+            key=chart_key,
+        )
+        value_col = value_col_fixed
+
+        if scenario_chart.startswith("Heatmap — Scenario panels + robust"):
+            st.caption(
+                "Scenario panels provide context; Robust risk summarizes the **min percentile** across scenarios (risk that remains high even under the less severe scenario)."
+            )
+            sel_scens = list(scenario_options)
+            if len(sel_scens) < 2:
+                st.info("Scenario compare requires at least 2 scenarios.")
+                return
+            if len(sel_scens) > 2:
+                st.warning("Showing the first 2 scenarios for readability. Reduce scenarios in Scenario mode to change this.")
+                sel_scens = sel_scens[:2]
+            st.caption("Using scenarios: " + ", ".join([_scenario_label(s) for s in sel_scens]))
+
+            # Context headers
+            ctx = st.session_state.get("portfolio_multiindex_context") or {}
+            period = str(ctx.get("period") or "").strip()
+            stat = str(ctx.get("stat") or "").strip()
+            ctx_bits = []
+            if period:
+                ctx_bits.append(period)
+            if stat:
+                ctx_bits.append(stat)
+            ctx_suffix = (" • " + " • ".join(ctx_bits)) if ctx_bits else ""
+
+            st.markdown("##### Scenario panels (Percentile)" + ctx_suffix)
+            st.caption("Each panel shows percentile (within state) for one scenario; colors indicate risk class.")
+
+            fig_panels = make_portfolio_heatmap_scenario_panels(
+                df,
+                value_col="Percentile",
+                scenarios=sel_scens,
+                normalize_per_index=False,
+                layout="vertical",
+                hide_xticklabels_except_last=True,
+                hspace=0.12,
+            )
+            if fig_panels is not None:
+                st.pyplot(fig_panels)
+                _offer_figure_download(fig_panels, "portfolio_heatmap_scenario_panels_stacked.png", "Download heatmap")
+            else:
+                st.warning("Could not generate scenario panels heatmap. Check data availability.")
+
+            st.markdown("##### Robust risk (min percentile)" + ctx_suffix)
+            st.caption("Robust risk = min percentile across selected scenarios.")
+
+            fig_robust = make_portfolio_heatmap_robust_min_percentile(
+                df,
+                scenarios=sel_scens,
+            )
+            if fig_robust is not None:
+                st.pyplot(fig_robust)
+                _offer_figure_download(fig_robust, "portfolio_heatmap_robust_min_percentile.png", "Download heatmap")
+            else:
+                st.warning("Could not generate robust risk heatmap. Check data availability.")
+
+        elif scenario_chart.startswith("Heatmap — Robust risk"):
+            st.caption(
+                "Robust risk = **min percentile** across selected scenarios (risk that remains high even under the less severe scenario)."
+            )
+            robust_scens = list(scenario_options)
+            if len(robust_scens) < 2:
+                st.info("Scenario compare requires at least 2 scenarios.")
+                return
+            st.caption("Using scenarios: " + ", ".join([_scenario_label(s) for s in robust_scens]))
+
+            fig = make_portfolio_heatmap_robust_min_percentile(
+                df,
+                scenarios=robust_scens,
+            )
+            if fig is not None:
+                st.pyplot(fig)
+                _offer_figure_download(fig, "portfolio_heatmap_robust_min_percentile.png", "Download heatmap")
+            else:
+                st.warning("Could not generate robust risk heatmap. Check data availability.")
+
+        elif scenario_chart.startswith("Heatmap — Scenario panels"):
+            sel_scens = list(scenario_options)
+            if len(sel_scens) > 3:
+                st.warning("Showing the first 3 scenarios for readability. Reduce scenarios in Scenario mode to change this.")
+                sel_scens = sel_scens[:3]
+            st.caption("Using scenarios: " + ", ".join([_scenario_label(s) for s in sel_scens]))
+
+            with st.expander("Heatmap options", expanded=False):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    layout = st.radio(
+                        "Layout",
+                        options=["horizontal", "vertical"],
+                        horizontal=True,
+                        index=0,
+                        key=f"_viz_scenario_panels_layout_{scope}",
+                    )
+                with col2:
+                    st.caption("")  # reserved spacing
+                with col3:
+                    st.caption("Colors represent risk classes (Very Low → Very High); numbers show percentiles.")
+
+            fig = make_portfolio_heatmap_scenario_panels(
+                df,
+                value_col=value_col_fixed,
+                scenarios=sel_scens,
+                normalize_per_index=False,
+                cmap="RdYlGn_r",
+                layout=layout,
+            )
+            if fig is not None:
+                st.pyplot(fig)
+                _offer_figure_download(fig, "portfolio_heatmap_scenario_panels.png", "Download heatmap")
+            else:
+                st.warning("Could not generate scenario panels heatmap. Check data availability.")
+
+        else:
+            st.warning("Unknown scenario chart option.")
+
+        return
+
+    # -------------------------
+    # Across indices (single scenario) — legacy charts
+    # -------------------------
+    df_single = df
+    if has_scenario and scenario_options:
+        scen_filtered = st.selectbox(
+            "Scenario to visualize",
+            options=scenario_options,
+            index=0,
+            format_func=_scenario_label,
+            key=f"_viz_single_scenario_{scope}",
+            help="Legacy charts require a single scenario selection.",
+        )
+        df_single = df[df["Scenario"].astype(str).str.strip() == str(scen_filtered).strip()].copy()
+
     col1, col2 = st.columns(2)
-    
     with col1:
-        # Chart type selector
         chart_type = st.selectbox(
             "Chart type",
             options=list(CHART_TYPES.keys()),
             format_func=lambda x: CHART_TYPES[x],
             index=list(CHART_TYPES.keys()).index(default_chart_type) if default_chart_type in CHART_TYPES else 0,
-            key="_viz_chart_type",
+            key=f"_viz_chart_type_{scope}",
         )
-    
     with col2:
-        # Value column selector
-        value_col_options = list(available_value_cols.keys())
-        default_idx = value_col_options.index(default_value_col) if default_value_col in value_col_options else 0
-        
-        value_col = st.selectbox(
-            "Show values",
-            options=value_col_options,
-            format_func=lambda x: available_value_cols[x],
-            index=default_idx,
-            key="_viz_value_col",
-        )
-    
-    # Import chart functions
-    from india_resilience_tool.viz.charts import (
-        make_portfolio_heatmap,
-        make_portfolio_grouped_bar,
-    )
-    
-    # Render selected chart(s)
+        st.caption("Showing percentiles (risk-class coloring).")
+        value_col = value_col_fixed
+
     if chart_type in ("heatmap", "both"):
-        _render_heatmap_section(df, value_col, make_portfolio_heatmap)
-    
+        _render_heatmap_section(
+            df_single,
+            value_col,
+            make_portfolio_heatmap,
+            key_prefix=f"{scope}_single",
+        )
+
     if chart_type in ("grouped_bar", "both"):
-        _render_grouped_bar_section(df, value_col, make_portfolio_grouped_bar)
+        _render_grouped_bar_section(
+            df_single,
+            value_col,
+            make_portfolio_grouped_bar,
+            key_prefix=f"{scope}_single",
+        )
 
 
 def _render_heatmap_section(
     df: pd.DataFrame,
     value_col: str,
     make_heatmap_fn: Callable,
+    *,
+    key_prefix: str = "",
 ) -> None:
     """Render the heatmap visualization section."""
     import streamlit as st
     
     st.markdown("#### Heatmap")
-    
-    # Heatmap-specific options
-    with st.expander("Heatmap options", expanded=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            normalize = st.checkbox(
-                "Normalize per index",
-                value=True if value_col == "Current value" else False,
-                disabled=value_col != "Current value",
-                help="Scale values within each index column for better comparison",
-                key="_heatmap_normalize",
-            )
-        with col2:
-            cmap = st.selectbox(
-                "Color scheme",
-                options=["RdYlGn_r", "RdYlBu_r", "YlOrRd", "Blues", "Reds", "viridis"],
-                index=0,
-                key="_heatmap_cmap",
-                disabled=value_col in ("%Δ", "Δ"),  # Diverging maps forced for change
-            )
+
+    # Percentile-only mode: keep options minimal.
+    normalize = False
+    cmap = "RdYlGn_r"
     
     # Generate heatmap
     try:
@@ -1063,6 +1392,8 @@ def _render_grouped_bar_section(
     df: pd.DataFrame,
     value_col: str,
     make_bar_fn: Callable,
+    *,
+    key_prefix: str = "",
 ) -> None:
     """Render the grouped bar chart visualization section."""
     import streamlit as st
@@ -1087,7 +1418,7 @@ def _render_grouped_bar_section(
                     min_value=1,
                     max_value=max_districts_max,
                     value=min(10, max_districts_max),
-                    key="_bar_max_districts",
+                    key=f"{key_prefix}_bar_max_districts",
                 )
         with col2:
             max_indices_max = min(10, max(n_indices, 1))
@@ -1100,20 +1431,20 @@ def _render_grouped_bar_section(
                     min_value=1,
                     max_value=max_indices_max,
                     value=min(6, max_indices_max),
-                    key="_bar_max_indices",
+                    key=f"{key_prefix}_bar_max_indices",
                 )
         with col3:
             horizontal = st.checkbox(
                 "Horizontal bars",
                 value=n_districts > 5,
                 help="Better for many districts",
-                key="_bar_horizontal",
+                key=f"{key_prefix}_bar_horizontal",
             )
         
         show_values = st.checkbox(
             "Show values on bars",
             value=True,
-            key="_bar_show_values",
+            key=f"{key_prefix}_bar_show_values",
         )
     
     # Generate bar chart
@@ -1359,7 +1690,57 @@ def render_portfolio_panel(
         st.info("Select at least one index to compare.")
         return
 
-    cached_df = render_comparison_table(
+    # --- Scenario mode (single shared control for table + visualizations) ---
+    compare_key = f"portfolio_compare_scenarios_{level_norm}"  # kept for backward-compat session state
+    scen_key = f"portfolio_scenario_selection_{level_norm}"
+    mode_key = f"portfolio_scenario_mode_{level_norm}"
+
+    default_mode = "Compare scenarios" if bool(st.session_state.get(compare_key, False)) else "Single scenario"
+    if mode_key not in st.session_state:
+        st.session_state[mode_key] = default_mode
+
+    st.radio(
+        "Scenario mode",
+        options=["Single scenario", "Compare scenarios"],
+        horizontal=True,
+        key=mode_key,
+        help="Single scenario uses the global scenario selector. Compare scenarios expands the table and enables scenario-compare charts.",
+    )
+
+    compare_scenarios = str(st.session_state.get(mode_key, "Single scenario")).strip().lower().startswith("compare")
+    st.session_state[compare_key] = bool(compare_scenarios)
+
+    sel_scenarios: Optional[List[str]] = None
+    if compare_scenarios:
+        # Conservative defaults aligned with current data coverage
+        base_opts = ["ssp245", "ssp585"]
+        if isinstance(sel_scenario, str) and sel_scenario.strip() and sel_scenario not in base_opts:
+            base_opts = [sel_scenario.strip()] + base_opts
+
+        default_sel: list[str] = []
+        if isinstance(sel_scenario, str) and sel_scenario.strip():
+            default_sel.append(sel_scenario.strip())
+        if sel_scenario.strip().lower() == "ssp245":
+            default_sel.append("ssp585")
+        elif sel_scenario.strip().lower() == "ssp585":
+            default_sel.append("ssp245")
+
+        # De-dupe while preserving order
+        seen = set()
+        default_sel = [x for x in default_sel if not (x in seen or seen.add(x))]
+
+        chosen = st.multiselect(
+            "Scenarios to compare",
+            options=base_opts,
+            default=default_sel,
+            key=scen_key,
+        )
+
+        if not chosen:
+            chosen = [sel_scenario]
+        sel_scenarios = [str(x).strip() for x in chosen if str(x).strip()]
+
+    cached_df = build_comparison_df(
         portfolio=portfolio,
         selected_slugs=selected_slugs,
         variables=variables,
@@ -1367,6 +1748,7 @@ def render_portfolio_panel(
         sel_scenario=sel_scenario,
         sel_period=sel_period,
         sel_stat=sel_stat,
+        sel_scenarios=sel_scenarios,
         pilot_state=pilot_state,
         data_dir=data_dir,
         load_master_csv_fn=load_master_csv_fn,
@@ -1380,22 +1762,32 @@ def render_portfolio_panel(
         level=level_norm,
     )
 
+    scen_caption = ", ".join(sel_scenarios) if sel_scenarios else sel_scenario
     st.caption(
         f"Comparing {len(portfolio)} {unit_plural} across {len(selected_slugs)} indices • "
-        f"{sel_scenario} • {sel_period} • {sel_stat}"
+        f"{scen_caption} • {sel_period} • {sel_stat}"
     )
 
     if cached_df is not None and not cached_df.empty:
-        show_viz_key = f"portfolio_show_visualizations_{level_norm}"
-        show_viz = st.checkbox(
-            "Show visualizations",
-            value=bool(st.session_state.get(show_viz_key, False)),
-            key=show_viz_key,
-        )
+        from india_resilience_tool.app.portfolio_multistate import compute_portfolio_summary_stats
 
-        if show_viz:
-            st.markdown("---")
-            with st.expander("Visualizations", expanded=False):
+        summary = compute_portfolio_summary_stats(cached_df, level=level_norm)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Units", int(summary.get("units_count", 0)))
+        c2.metric("States", int(summary.get("states_count", 0)))
+        c3.metric("Metrics", int(summary.get("metrics_count", 0)))
+
+        risk_counts = summary.get("risk_counts") or {}
+        if isinstance(risk_counts, dict) and risk_counts:
+            rc_parts = [f"{k}: {int(v)}" for k, v in risk_counts.items()]
+            st.caption("Risk class • " + " • ".join(rc_parts))
+
+        tab_table, tab_viz = st.tabs(["Table", "Visualizations"])
+        with tab_table:
+            render_comparison_table_ui(cached_df, level=level_norm)
+
+        with tab_viz:
+            with st.spinner("Building visualizations…"):
                 render_portfolio_visualizations(
                     cached_df,
                     default_value_col="Percentile",

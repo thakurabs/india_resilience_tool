@@ -718,6 +718,7 @@ def build_portfolio_multiindex_df(
     compute_rank_and_percentile: Callable[..., tuple[Optional[int], Optional[float]]],
     risk_class_from_percentile: Callable[[float], str],
     normalize_fn: NormalizeFn,
+    sel_scenarios: Optional[Sequence[str]] = None,
     level: str = "district",
 ) -> pd.DataFrame:
     """
@@ -727,6 +728,19 @@ def build_portfolio_multiindex_df(
         - For level="district", items are (state, district).
         - For level="block", items are (state, district, block).
 
+    Scenario comparison:
+        - When ``sel_scenarios`` is provided (e.g., ["ssp245", "ssp585"]),
+          the output includes a ``Scenario`` column and contains one row per
+          (unit × index × scenario).
+        - Baseline is always computed from the *historical* baseline column
+          via ``find_baseline_column_for_stat``. This means Δ and %Δ are
+          *scenario values vs historical baseline*.
+
+    Missing/invalid data behavior:
+        - If a unit row cannot be matched, or a required metric column is absent,
+          numeric outputs (Current value/Baseline/Δ/%Δ/Percentile) are NaN and
+          Rank/Risk class are left as (None/"Unknown").
+
     The row match and ranking functions are injected (dependency injection).
     For block mode, we attempt to call the injected functions with block-aware
     arguments and fall back to the older district-only signatures if needed.
@@ -734,26 +748,46 @@ def build_portfolio_multiindex_df(
     level_norm = str(level).strip().lower()
     rows_out: list[dict[str, Any]] = []
 
-    for item in portfolio:
-        blk_name = ""
+    # Determine scenario list (single by default)
+    if sel_scenarios is None:
+        scenario_list = [str(sel_scenario).strip()]
+        include_scenario_col = False
+    else:
+        scenario_list = [str(s).strip() for s in sel_scenarios if str(s).strip()]
+        if not scenario_list:
+            scenario_list = [str(sel_scenario).strip()]
+        include_scenario_col = True
+
+    # Cache per-slug master loads (the loader may already cache; this avoids re-calls)
+    master_cache: dict[str, tuple[pd.DataFrame, list[str]]] = {}
+
+    def _parse_item(item: Any) -> tuple[str, str, str]:
+        blk = ""
         if isinstance(item, Mapping):
-            st_name = str(item.get("state", "")).strip()
-            dist_name = str(item.get("district", "")).strip()
+            st = str(item.get("state", "")).strip()
+            dist = str(item.get("district", "")).strip()
             if level_norm == "block":
-                blk_name = str(item.get("block", "")).strip()
-        else:
-            try:
-                if level_norm == "block":
-                    st_name, dist_name, blk_name = item  # type: ignore[misc]
-                    st_name = str(st_name).strip()
-                    dist_name = str(dist_name).strip()
-                    blk_name = str(blk_name).strip()
-                else:
-                    st_name, dist_name = item  # type: ignore[misc]
-                    st_name = str(st_name).strip()
-                    dist_name = str(dist_name).strip()
-            except Exception:
-                st_name, dist_name, blk_name = "", "", ""
+                blk = str(item.get("block", "")).strip()
+            return st, dist, blk
+
+        try:
+            tup = tuple(item)
+        except Exception:
+            return "", "", ""
+
+        if level_norm == "block":
+            if len(tup) < 3:
+                return "", "", ""
+            st, dist, blk = tup[0], tup[1], tup[2]
+            return str(st).strip(), str(dist).strip(), str(blk).strip()
+
+        if len(tup) < 2:
+            return "", "", ""
+        st, dist = tup[0], tup[1]
+        return str(st).strip(), str(dist).strip(), ""
+
+    for item in portfolio:
+        st_name, dist_name, blk_name = _parse_item(item)
 
         for slug in selected_slugs:
             cfg = variables.get(slug, {})
@@ -762,40 +796,36 @@ def build_portfolio_multiindex_df(
             idx_group_label = index_group_labels.get(idx_group, str(idx_group).title())
             registry_metric_i = str(cfg.get("periods_metric_col", "")).strip()
 
-            df_local, _, metrics_local, _ = load_master_and_schema_for_slug(str(slug))
+            # Load master only once per slug
+            slug_s = str(slug)
+            if slug_s not in master_cache:
+                df_local, _, metrics_local, _ = load_master_and_schema_for_slug(slug_s)
+                master_cache[slug_s] = (df_local, list(metrics_local or []))
+            df_local, metrics_local = master_cache[slug_s]
 
+            # Determine the base metric name (used to resolve scenario/period columns)
             used_metric = registry_metric_i
-            metric_col = None
-            if used_metric:
-                metric_col = resolve_metric_column(df_local, used_metric, sel_scenario, sel_period, sel_stat)
+            if not used_metric and metrics_local:
+                used_metric = str(metrics_local[0])
 
-            # Fuzzy fallback
-            if metric_col is None and registry_metric_i and metrics_local:
-                base_norm = normalize_fn(registry_metric_i)
+            # Fuzzy fallback for the base metric name (handles minor naming differences)
+            if used_metric and metrics_local and used_metric not in metrics_local:
+                base_norm = normalize_fn(used_metric)
                 candidates = [m for m in metrics_local if base_norm and base_norm in normalize_fn(m)]
                 if not candidates:
-                    candidates = difflib.get_close_matches(registry_metric_i, metrics_local, n=1, cutoff=0.6)
+                    candidates = difflib.get_close_matches(used_metric, metrics_local, n=1, cutoff=0.6)
                 if candidates:
-                    used_metric = candidates[0]
-                    metric_col = resolve_metric_column(df_local, used_metric, sel_scenario, sel_period, sel_stat)
+                    used_metric = str(candidates[0])
 
+            # Resolve baseline column once (independent of scenario)
             baseline_col = None
             if used_metric and df_local is not None and not df_local.empty:
                 baseline_col = find_baseline_column_for_stat(df_local.columns, used_metric, sel_stat)
 
-            # Defaults
-            value = np.nan
-            baseline = np.nan
-            delta_abs = np.nan
-            delta_pct = np.nan
-            rank_in_state: Optional[int] = None
-            percentile_in_state = np.nan
-            risk_class = "Unknown"
-
-            if df_local is not None and not df_local.empty and metric_col and metric_col in df_local.columns:
-                idx_row: Optional[int] = None
+            # Match the unit row once per (unit × slug)
+            idx_row = None
+            if df_local is not None and not df_local.empty:
                 if level_norm == "block":
-                    # Try a 3-name matcher first, fall back to (state, district)
                     try:
                         idx_row = match_row_idx(df_local, st_name, dist_name, blk_name)
                     except TypeError:
@@ -803,17 +833,38 @@ def build_portfolio_multiindex_df(
                 else:
                     idx_row = match_row_idx(df_local, st_name, dist_name)
 
-                if idx_row is not None:
+            # Baseline value once per (unit × slug)
+            baseline = float("nan")
+            if idx_row is not None and baseline_col and baseline_col in df_local.columns:
+                try:
+                    baseline = float(pd.to_numeric(df_local.loc[idx_row, baseline_col], errors="coerce"))
+                except Exception:
+                    baseline = float("nan")
+
+            for scen in scenario_list:
+                # Defaults
+                value = float("nan")
+                delta_abs = float("nan")
+                delta_pct = float("nan")
+                rank_in_state: Optional[int] = None
+                percentile_in_state = float("nan")
+                risk_class = "Unknown"
+
+                metric_col = None
+                if used_metric:
+                    metric_col = resolve_metric_column(df_local, used_metric, scen, sel_period, sel_stat)
+
+                if (
+                    df_local is not None
+                    and not df_local.empty
+                    and idx_row is not None
+                    and metric_col
+                    and metric_col in df_local.columns
+                ):
                     try:
                         value = float(pd.to_numeric(df_local.loc[idx_row, metric_col], errors="coerce"))
                     except Exception:
-                        value = np.nan
-
-                    if baseline_col and baseline_col in df_local.columns:
-                        try:
-                            baseline = float(pd.to_numeric(df_local.loc[idx_row, baseline_col], errors="coerce"))
-                        except Exception:
-                            baseline = np.nan
+                        value = float("nan")
 
                     if not pd.isna(value) and not pd.isna(baseline):
                         delta_abs = value - baseline
@@ -842,22 +893,24 @@ def build_portfolio_multiindex_df(
                         percentile_in_state = float(percentile)
                         risk_class = risk_class_from_percentile(percentile_in_state)
 
-            row: dict[str, Any] = {
-                "State": st_name,
-                "District": dist_name,
-                "Index": idx_label,
-                "Group": idx_group_label,
-                "Current value": value,
-                "Baseline": baseline,
-                "Δ": delta_abs,
-                "%Δ": delta_pct,
-                "Rank in state": rank_in_state,
-                "Percentile": percentile_in_state,
-                "Risk class": risk_class,
-            }
-            if level_norm == "block":
-                row["Block"] = blk_name
+                row: dict[str, Any] = {
+                    "State": st_name,
+                    "District": dist_name,
+                    "Index": idx_label,
+                    "Group": idx_group_label,
+                    "Current value": value,
+                    "Baseline": baseline,
+                    "Δ": delta_abs,
+                    "%Δ": delta_pct,
+                    "Rank in state": rank_in_state,
+                    "Percentile": percentile_in_state,
+                    "Risk class": risk_class,
+                }
+                if level_norm == "block":
+                    row["Block"] = blk_name
+                if include_scenario_col:
+                    row["Scenario"] = scen
 
-            rows_out.append(row)
+                rows_out.append(row)
 
     return pd.DataFrame(rows_out)

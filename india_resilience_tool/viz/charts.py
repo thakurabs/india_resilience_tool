@@ -53,6 +53,49 @@ SCENARIO_COLORS_HEX: dict[str, str] = {
     "ssp585": "#d62728",      # red
 }
 
+# Risk-class palette (used for percentile-based heatmaps).
+#
+# These labels must remain aligned with analysis.metrics.risk_class_from_percentile:
+#   <20: Very Low, >=20: Low, >=40: Medium, >=60: High, >=80: Very High
+RISK_CLASS_LABELS: list[str] = ["Very Low", "Low", "Medium", "High", "Very High"]
+RISK_CLASS_COLORS: list[str] = ["#1a9850", "#91cf60", "#ffffbf", "#fc8d59", "#d73027"]
+
+
+def _risk_class_cmap_norm() -> tuple[Any, Any]:
+    """Return (cmap, norm) for 5 risk classes, with codes 0..4."""
+    import matplotlib.colors as mcolors
+
+    cmap = mcolors.ListedColormap(RISK_CLASS_COLORS, name="irt_risk_5")
+    norm = mcolors.BoundaryNorm(
+        boundaries=[-0.5, 0.5, 1.5, 2.5, 3.5, 4.5],
+        ncolors=len(RISK_CLASS_COLORS),
+    )
+    return cmap, norm
+
+
+def _percentile_to_risk_code(arr: np.ndarray) -> np.ndarray:
+    """
+    Map percentile values to risk class codes in {0..4}, preserving NaNs.
+
+    Codes:
+      0 Very Low, 1 Low, 2 Medium, 3 High, 4 Very High
+    """
+    out = np.full(arr.shape, np.nan, dtype=float)
+    mask = np.isfinite(arr)
+    if not np.any(mask):
+        return out
+
+    a = arr[mask]
+    code = np.zeros(a.shape, dtype=float)
+    code = np.where(a >= 80.0, 4.0, code)
+    code = np.where((a >= 60.0) & (a < 80.0), 3.0, code)
+    code = np.where((a >= 40.0) & (a < 60.0), 2.0, code)
+    code = np.where((a >= 20.0) & (a < 40.0), 1.0, code)
+    code = np.where(a < 20.0, 0.0, code)
+    out[mask] = code
+    return out
+
+
 def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     """Convert a hex color (#RRGGBB) to a Plotly-friendly rgba(r,g,b,a) string."""
     s = str(hex_color or "").strip()
@@ -816,9 +859,10 @@ def make_portfolio_heatmap(
         vmin = -vmax
         norm = mcolors.TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
     elif value_col == "Percentile":
-        # Fixed 0-100 scale for percentile
-        cmap_obj = plt.get_cmap(cmap)
-        norm = mcolors.Normalize(vmin=0, vmax=100)
+        # Risk-class palette for percentile (colors show category; numbers show percentiles).
+        cmap_obj, norm = _risk_class_cmap_norm()
+        data_for_color = _percentile_to_risk_code(pivot.to_numpy(dtype=float))
+        masked_data = np.ma.masked_invalid(data_for_color)
     else:
         # Standard normalization
         cmap_obj = plt.get_cmap(cmap)
@@ -828,13 +872,20 @@ def make_portfolio_heatmap(
     
     # Add colorbar
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
-    cbar_label = {
-        "Current value": "Value (normalized)" if normalize_per_index else "Value",
-        "Percentile": "Percentile",
-        "%Δ": "% Change from Baseline",
-        "Δ": "Change from Baseline",
-    }.get(value_col, value_col)
-    cbar.set_label(cbar_label, fontsize=label_fontsize)
+    if value_col == "Percentile":
+        cbar.set_ticks([0, 1, 2, 3, 4])
+        cbar.set_ticklabels(RISK_CLASS_LABELS)
+        try:
+            cbar.ax.set_label("_portfolio_heatmap_percentile_colorbar")
+        except Exception:
+            pass
+    else:
+        cbar_label = {
+            "Current value": "Value (normalized)" if normalize_per_index else "Value",
+            "%Δ": "% Change from Baseline",
+            "Δ": "Change from Baseline",
+        }.get(value_col, value_col)
+        cbar.set_label(cbar_label, fontsize=label_fontsize)
     
     # Set ticks and labels
     ax.set_xticks(np.arange(n_cols))
@@ -1107,6 +1158,666 @@ def _get_value_label(value_col: str) -> str:
         "Δ": "Change from Baseline",
         "Baseline": "Baseline Value",
     }.get(value_col, value_col)
+
+
+# -----------------------------------------------------------------------------
+# Portfolio scenario compare helpers (used by Portfolio Compare visualizations)
+# -----------------------------------------------------------------------------
+
+def _scenario_sort_key(s: str) -> tuple[int, str]:
+    s_norm = str(s or "").strip().lower()
+    if s_norm in SCENARIO_ORDER:
+        return (0, str(SCENARIO_ORDER.index(s_norm)))
+    return (1, s_norm)
+
+
+def _scenario_display(s: str) -> str:
+    s_norm = str(s or "").strip().lower()
+    return str(SCENARIO_DISPLAY.get(s_norm, s)).strip()
+
+
+def _prep_portfolio_unit_label(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add a deterministic unit label column for portfolio matrices.
+
+    Contract:
+      - Block portfolio: "Block, District, State"
+      - District portfolio: "District, State"
+    """
+    out = df.copy()
+    has_block = ("Block" in out.columns) and out["Block"].notna().any()
+
+    if has_block:
+        if {"State", "District"}.issubset(out.columns):
+            out["_unit_label"] = (
+                out["Block"].astype(str)
+                + ", "
+                + out["District"].astype(str)
+                + ", "
+                + out["State"].astype(str)
+            )
+        elif "District" in out.columns:
+            out["_unit_label"] = out["Block"].astype(str) + ", " + out["District"].astype(str)
+        else:
+            out["_unit_label"] = out["Block"].astype(str)
+    else:
+        if {"State", "District"}.issubset(out.columns):
+            out["_unit_label"] = out["District"].astype(str) + ", " + out["State"].astype(str)
+        else:
+            out["_unit_label"] = out["District"].astype(str)
+    return out
+
+
+def build_portfolio_pivot(
+    df: pd.DataFrame,
+    *,
+    value_col: str,
+    scenario: Optional[str] = None,
+) -> pd.DataFrame:
+    """
+    Build a unit × index matrix for portfolio visualizations.
+
+    If `scenario` is provided, filters rows where `Scenario == scenario` (after strip()).
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if "Index" not in df.columns or value_col not in df.columns:
+        return pd.DataFrame()
+    if not (("District" in df.columns) or ("Block" in df.columns)):
+        return pd.DataFrame()
+
+    out = df.copy()
+    if scenario is not None and "Scenario" in out.columns:
+        scen = str(scenario).strip()
+        out = out[out["Scenario"].astype(str).str.strip() == scen]
+        if out.empty:
+            return pd.DataFrame()
+
+    out = _prep_portfolio_unit_label(out)
+    try:
+        pivot = out.pivot_table(
+            index="_unit_label",
+            columns="Index",
+            values=value_col,
+            aggfunc="first",
+        )
+    except Exception:
+        return pd.DataFrame()
+    return pivot
+
+
+def build_portfolio_scenario_min_pivot(
+    df: pd.DataFrame,
+    *,
+    value_col: str,
+    scenarios: Sequence[str],
+) -> pd.DataFrame:
+    """Compute elementwise min across scenarios on the unit × index pivot (NaN-aware)."""
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    scenarios_norm = [str(s).strip() for s in (scenarios or []) if str(s).strip()]
+    if len(scenarios_norm) < 1:
+        return pd.DataFrame()
+
+    pivots: list[pd.DataFrame] = []
+    for scen in scenarios_norm:
+        pv = build_portfolio_pivot(df, value_col=value_col, scenario=scen)
+        if pv is not None and not pv.empty:
+            pivots.append(pv)
+
+    if not pivots:
+        return pd.DataFrame()
+
+    idx = sorted({i for pv in pivots for i in pv.index})
+    cols = sorted({c for pv in pivots for c in pv.columns}, key=lambda x: str(x))
+    mats: list[np.ndarray] = []
+    for pv in pivots:
+        mats.append(pv.reindex(index=idx, columns=cols).to_numpy(dtype=float))
+
+    stack = np.stack(mats, axis=0)  # (S, R, C)
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="All-NaN slice encountered", category=RuntimeWarning)
+        out = np.nanmin(stack, axis=0)
+
+    return pd.DataFrame(out, index=idx, columns=cols)
+
+
+def make_portfolio_heatmap_scenario_panels(
+    df: pd.DataFrame,
+    *,
+    value_col: str,
+    scenarios: Sequence[str],
+    normalize_per_index: bool = True,
+    cmap: str = "RdYlGn_r",
+    layout: str = "horizontal",
+    hide_xticklabels_except_last: bool = False,
+    hspace: float = 0.18,
+    wspace: float = 0.06,
+    figsize: Optional[Tuple[float, float]] = None,
+    fig_dpi: int = 100,
+    annot_fontsize: int = 9,
+    label_fontsize: int = 10,
+    title_fontsize: int = 12,
+    title: Optional[str] = None,
+) -> Optional[Any]:
+    """
+    Scenario panels heatmap: one heatmap per scenario, with a shared color scale.
+
+    Notes:
+      - Percentile uses a fixed 0–100 scale.
+      - Δ/%Δ use a shared diverging scale centered at 0.
+      - Current value can be normalized per index across all selected scenarios.
+    """
+    import matplotlib.colors as mcolors
+    import matplotlib.pyplot as plt
+
+    if df is None or df.empty:
+        return None
+    if not scenarios:
+        return None
+
+    scenarios_norm = [str(s).strip() for s in scenarios if str(s).strip()]
+    if not scenarios_norm:
+        return None
+
+    pivots: dict[str, pd.DataFrame] = {}
+    for scen in scenarios_norm:
+        pv = build_portfolio_pivot(df, value_col=value_col, scenario=scen)
+        if not pv.empty:
+            pivots[scen] = pv
+
+    if not pivots:
+        return None
+
+    # Align pivots to a common index/columns union for consistent axes.
+    all_idx = sorted({i for pv in pivots.values() for i in pv.index})
+    all_cols = sorted({c for pv in pivots.values() for c in pv.columns}, key=lambda x: str(x))
+    for scen in list(pivots.keys()):
+        pivots[scen] = pivots[scen].reindex(index=all_idx, columns=all_cols)
+
+    # Prepare color data + shared norm
+    if value_col in ("%Δ", "Δ"):
+        cmap_obj = plt.get_cmap("RdBu_r")
+        all_vals = np.concatenate([pv.to_numpy(dtype=float).ravel() for pv in pivots.values()])
+        vmax = float(np.nanmax(np.abs(all_vals))) if np.isfinite(all_vals).any() else 1.0
+        vmax = max(vmax, 1e-9)
+        norm: Optional[Any] = mcolors.TwoSlopeNorm(vmin=-vmax, vcenter=0, vmax=vmax)
+        color_mats = {k: v.to_numpy(dtype=float) for k, v in pivots.items()}
+        cbar_label = {"%Δ": "%Δ (vs baseline)", "Δ": "Δ (vs baseline)"}.get(value_col, value_col)
+    elif value_col == "Percentile":
+        cmap_obj, norm = _risk_class_cmap_norm()
+        color_mats = {k: _percentile_to_risk_code(v.to_numpy(dtype=float)) for k, v in pivots.items()}
+        cbar_label = "Risk class (from percentile)"
+    else:
+        cmap_obj = plt.get_cmap(cmap)
+        cbar_label = "Value"
+        if value_col == "Current value" and normalize_per_index:
+            # Normalize per index across all selected scenarios (shared scale).
+            stacked = pd.concat(pivots.values(), axis=0)
+            mins = stacked.min(axis=0, skipna=True)
+            maxs = stacked.max(axis=0, skipna=True)
+
+            color_mats = {}
+            for scen, pv in pivots.items():
+                pv_n = pv.copy()
+                for col in pv_n.columns:
+                    mn = float(mins.get(col)) if col in mins.index else float("nan")
+                    mx = float(maxs.get(col)) if col in maxs.index else float("nan")
+                    if pd.isna(mn) or pd.isna(mx) or mx == mn:
+                        pv_n[col] = 0.5
+                    else:
+                        pv_n[col] = (pv_n[col] - mn) / (mx - mn)
+                color_mats[scen] = pv_n.to_numpy(dtype=float)
+            norm = mcolors.Normalize(vmin=0, vmax=1)
+            cbar_label = "Value (normalized per index)"
+        else:
+            all_vals = np.concatenate([pv.to_numpy(dtype=float).ravel() for pv in pivots.values()])
+            if all_vals.size and np.isfinite(all_vals).any():
+                vmin = float(np.nanmin(all_vals))
+                vmax = float(np.nanmax(all_vals))
+                if vmin == vmax:
+                    vmin -= 1.0
+                    vmax += 1.0
+                norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+            else:
+                norm = None
+            color_mats = {k: v.to_numpy(dtype=float) for k, v in pivots.items()}
+
+    layout_norm = str(layout or "horizontal").strip().lower()
+    n_panels = len(pivots)
+    n_rows = 1 if layout_norm.startswith("h") else n_panels
+    n_cols = n_panels if layout_norm.startswith("h") else 1
+
+    # Auto figure size
+    if figsize is None:
+        base_w = max(6, min(14, 2 + len(all_cols) * 1.2))
+        base_h = max(4, min(12, 1.5 + len(all_idx) * 0.55))
+        if n_cols > 1:
+            figsize = (min(18, base_w * n_cols), base_h)
+        else:
+            figsize = (base_w, min(18, base_h * n_rows))
+
+    gridspec_kw = None
+    if n_cols > 1:
+        gridspec_kw = {"wspace": float(wspace)}
+    if n_rows > 1:
+        gs = dict(gridspec_kw or {})
+        gs["hspace"] = float(hspace)
+        gridspec_kw = gs
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=figsize,
+        dpi=fig_dpi,
+        squeeze=False,
+        gridspec_kw=gridspec_kw,
+    )
+
+    scen_ordered = sorted(pivots.keys(), key=_scenario_sort_key)
+    last_im = None
+    for i, scen in enumerate(scen_ordered):
+        r = 0 if n_rows == 1 else i
+        c = i if n_cols > 1 else 0
+        ax = axes[r][c]
+
+        data_for_color = np.ma.masked_invalid(color_mats[scen])
+        last_im = ax.imshow(data_for_color, cmap=cmap_obj, aspect="auto", norm=norm)
+
+        ax.set_title(_scenario_display(scen), fontsize=title_fontsize, pad=10)
+        ax.set_xticks(np.arange(len(all_cols)))
+        ax.set_yticks(np.arange(len(all_idx)))
+        ax.set_xticklabels(all_cols, fontsize=label_fontsize, rotation=45, ha="right")
+        ax.set_yticklabels(all_idx, fontsize=label_fontsize)
+        if n_cols > 1 and c != 0:
+            # Share y-axis labels across panels to improve readability.
+            ax.tick_params(axis="y", which="both", left=False, labelleft=False)
+
+        if hide_xticklabels_except_last and (n_rows > 1) and (r != n_rows - 1):
+            ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+
+        # Annotate with actual values (not normalized)
+        display_vals = pivots[scen]
+        for rr in range(display_vals.shape[0]):
+            for cc in range(display_vals.shape[1]):
+                val = display_vals.iloc[rr, cc]
+                if pd.isna(val):
+                    continue
+                if value_col == "Percentile":
+                    text = f"{float(val):.0f}"
+                elif value_col == "%Δ":
+                    text = f"{float(val):+.1f}%"
+                elif value_col == "Δ":
+                    text = f"{float(val):+.1f}"
+                else:
+                    text = f"{float(val):.1f}"
+                ax.text(cc, rr, text, ha="center", va="center", fontsize=annot_fontsize)
+
+        ax.set_xticks(np.arange(-0.5, len(all_cols), 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, len(all_idx), 1), minor=True)
+        ax.grid(which="minor", color="white", linestyle="-", linewidth=2)
+        ax.tick_params(which="minor", size=0)
+
+    if title is None:
+        title = f"Scenario panels: {value_col}"
+    fig.suptitle(title, fontsize=title_fontsize + 1, y=0.98)
+
+    base_bottom = 0.30
+    try:
+        # Leave generous bottom space for rotated x-labels.
+        # Use a heuristic based on the number of x labels (long metric names).
+        if len(all_cols) >= 8:
+            base_bottom = 0.34
+        if len(all_cols) >= 12:
+            base_bottom = 0.38
+        if not layout_norm.startswith("h"):
+            base_bottom = max(0.28, base_bottom - 0.06)
+    except Exception:
+        base_bottom = 0.30
+
+    if last_im is not None:
+        if value_col == "Percentile":
+            # Use Matplotlib-managed sizing (like robust min risk heatmap) for a consistent look.
+            cbar = fig.colorbar(last_im, ax=axes.ravel().tolist(), shrink=0.85)
+            cbar.set_ticks([0, 1, 2, 3, 4])
+            cbar.set_ticklabels(RISK_CLASS_LABELS)
+            cbar.ax.tick_params(labelsize=label_fontsize)
+            try:
+                cbar.ax.set_label("_portfolio_scenario_panels_colorbar")
+            except Exception:
+                pass
+            try:
+                fig.tight_layout(rect=[0, base_bottom, 0.98, 0.95])
+            except Exception:
+                pass
+        else:
+            try:
+                fig.tight_layout(rect=[0, base_bottom, 1.0, 0.95])
+            except Exception:
+                pass
+            # Keep continuous values consistent: horizontal colorbar, centered below.
+            positions = [ax.get_position() for ax in axes.ravel().tolist()]
+            left = float(min(p.x0 for p in positions))
+            right = float(max(p.x1 for p in positions))
+            span = max(right - left, 1e-6)
+            cbar_width = max(0.25, min(0.70, span * 0.70))
+            cbar_left = left + (span - cbar_width) / 2.0
+            cbar_height = 0.030
+            cbar_bottom = 0.06
+
+            cax = fig.add_axes([cbar_left, cbar_bottom, cbar_width, cbar_height])
+            cax.set_label("_portfolio_scenario_panels_colorbar")
+            cbar = fig.colorbar(last_im, cax=cax, orientation="horizontal")
+            cbar.set_label(cbar_label, fontsize=label_fontsize)
+    return fig
+
+
+def make_portfolio_heatmap_robust_min_percentile(
+    df: pd.DataFrame,
+    *,
+    scenarios: Sequence[str],
+    figsize: Optional[Tuple[float, float]] = None,
+    fig_dpi: int = 100,
+    annot_fontsize: int = 9,
+    label_fontsize: int = 10,
+    title_fontsize: int = 12,
+    title: Optional[str] = None,
+) -> Optional[Any]:
+    """
+    Robust risk heatmap (No-regrets): min percentile across selected scenarios.
+
+    This highlights risk signals that remain high even under the less-severe scenario.
+    """
+    import matplotlib.pyplot as plt
+
+    if df is None or df.empty:
+        return None
+
+    scen_list = [str(s).strip() for s in (scenarios or []) if str(s).strip()]
+    if len(scen_list) < 2:
+        return None
+
+    min_pv = build_portfolio_scenario_min_pivot(df, value_col="Percentile", scenarios=scen_list)
+    if min_pv is None or min_pv.empty:
+        return None
+
+    cmap_obj, norm = _risk_class_cmap_norm()
+    try:
+        cmap_obj.set_bad("#cccccc")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    codes = _percentile_to_risk_code(min_pv.to_numpy(dtype=float))
+    masked = np.ma.masked_invalid(codes)
+
+    n_rows, n_cols = min_pv.shape
+    if figsize is None:
+        width = max(6, min(14, 2 + n_cols * 1.5))
+        height = max(4, min(12, 1.5 + n_rows * 0.6))
+        figsize = (width, height)
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=fig_dpi)
+    im = ax.imshow(masked, cmap=cmap_obj, aspect="auto", norm=norm)
+
+    ax.set_xticks(np.arange(n_cols))
+    ax.set_yticks(np.arange(n_rows))
+    ax.set_xticklabels(min_pv.columns, fontsize=label_fontsize, rotation=45, ha="right")
+    ax.set_yticklabels(min_pv.index, fontsize=label_fontsize)
+
+    # Annotations: min percentile values
+    for i in range(n_rows):
+        for j in range(n_cols):
+            val = min_pv.iloc[i, j]
+            if pd.isna(val):
+                continue
+            ax.text(j, i, f"{float(val):.0f}", ha="center", va="center", fontsize=annot_fontsize)
+
+    # Grid lines
+    ax.set_xticks(np.arange(-0.5, n_cols, 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, n_rows, 1), minor=True)
+    ax.grid(which="minor", color="white", linestyle="-", linewidth=2)
+    ax.tick_params(which="minor", size=0)
+
+    scen_disp = ", ".join([_scenario_display(s) for s in scen_list])
+    if title is None:
+        title = f"Robust risk (min percentile) • {scen_disp}"
+    ax.set_title(title, fontsize=title_fontsize, pad=12)
+
+    # Vertical right colorbar (5 bins)
+    cbar = fig.colorbar(im, ax=ax, shrink=0.85)
+    cbar.set_ticks([0, 1, 2, 3, 4])
+    cbar.set_ticklabels(RISK_CLASS_LABELS)
+    cbar.ax.tick_params(labelsize=label_fontsize)
+
+    # Mark the colorbar axes for tests (findable without pixel asserts).
+    try:
+        cbar.ax.set_label("_portfolio_robust_min_colorbar")
+    except Exception:
+        pass
+
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    return fig
+
+
+def make_portfolio_scenario_grouped_bar(
+    df: pd.DataFrame,
+    *,
+    index_name: str,
+    value_col: str,
+    scenarios: Sequence[str],
+    sort_mode: str = "scenario_b_desc",
+    horizontal: bool = True,
+    show_values: bool = True,
+    max_units: int = 15,
+    figsize: Optional[Tuple[float, float]] = None,
+    fig_dpi: int = 100,
+    label_fontsize: int = 10,
+    tick_fontsize: int = 9,
+    title_fontsize: int = 12,
+    legend_fontsize: int = 9,
+    title: Optional[str] = None,
+) -> Optional[Any]:
+    """Grouped bars per unit, colored by scenario, for a single portfolio index."""
+    import matplotlib.pyplot as plt
+
+    if df is None or df.empty:
+        return None
+    if "Scenario" not in df.columns or "Index" not in df.columns or value_col not in df.columns:
+        return None
+    if not (("District" in df.columns) or ("Block" in df.columns)):
+        return None
+
+    scenarios_norm = [str(s).strip() for s in scenarios if str(s).strip()]
+    if not scenarios_norm:
+        return None
+
+    dfi = df[df["Index"].astype(str) == str(index_name)]
+    if dfi.empty:
+        return None
+
+    dfi = dfi[dfi["Scenario"].astype(str).str.strip().isin(set(scenarios_norm))]
+    if dfi.empty:
+        return None
+
+    # Create compact unit labels (same style as existing grouped bar).
+    dfi = dfi.copy()
+    has_block = ("Block" in dfi.columns) and dfi["Block"].notna().any()
+    if has_block:
+        if "State" in dfi.columns and "District" in dfi.columns:
+            dfi["_unit_label"] = (
+                dfi["Block"].astype(str)
+                + "\n"
+                + dfi["District"].astype(str)
+                + " ("
+                + dfi["State"].astype(str).str[:3]
+                + ")"
+            )
+        elif "District" in dfi.columns:
+            dfi["_unit_label"] = dfi["Block"].astype(str) + "\n" + dfi["District"].astype(str)
+        else:
+            dfi["_unit_label"] = dfi["Block"].astype(str)
+    else:
+        if "State" in dfi.columns and "District" in dfi.columns:
+            dfi["_unit_label"] = dfi["District"].astype(str) + "\n(" + dfi["State"].astype(str).str[:3] + ")"
+        else:
+            dfi["_unit_label"] = dfi["District"].astype(str)
+
+    # Determine unit ordering
+    units = list(pd.unique(dfi["_unit_label"]))[:max_units]
+    if sort_mode == "scenario_b_desc" and len(scenarios_norm) >= 2:
+        scen_b = scenarios_norm[-1]
+        key_vals = []
+        for u in units:
+            sub = dfi[(dfi["_unit_label"] == u) & (dfi["Scenario"].astype(str).str.strip() == scen_b)]
+            if sub.empty:
+                key_vals.append(float("-inf"))
+            else:
+                v = pd.to_numeric(sub[value_col].iloc[0], errors="coerce")
+                key_vals.append(float(v) if pd.notna(v) else float("-inf"))
+        units = [u for _, u in sorted(zip(key_vals, units), reverse=True)]
+
+    n_units = len(units)
+    n_scens = len(scenarios_norm)
+    if n_units < 1 or n_scens < 1:
+        return None
+
+    if figsize is None:
+        if horizontal:
+            width = max(8, min(14, 5 + n_scens * 1.2))
+            height = max(4, min(12, 1 + n_units * 0.7))
+        else:
+            width = max(8, min(14, 2 + n_units * 1.1))
+            height = max(4, min(10, 4 + n_scens * 0.3))
+        figsize = (width, height)
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=fig_dpi)
+
+    # Scenario colors (fallback to stable mapping for unknowns)
+    from india_resilience_tool.viz.colors import stable_color_map
+
+    fallback_colors = stable_color_map([str(s) for s in scenarios_norm])
+    colors_by_scen = {}
+    for s in scenarios_norm:
+        s_norm = str(s).strip().lower()
+        colors_by_scen[s] = SCENARIO_COLORS_HEX.get(s_norm, fallback_colors.get(str(s), "#777777"))
+
+    x = np.arange(n_units)
+    group_width = 0.8
+    width_per = group_width / max(1, n_scens)
+
+    for i, scen in enumerate(scenarios_norm):
+        vals: list[float] = []
+        missing_mask: list[bool] = []
+        for u in units:
+            sub = dfi[(dfi["_unit_label"] == u) & (dfi["Scenario"].astype(str).str.strip() == scen)]
+            if sub.empty:
+                vals.append(float("nan"))
+                missing_mask.append(True)
+            else:
+                v = pd.to_numeric(sub[value_col].iloc[0], errors="coerce")
+                vals.append(float(v) if pd.notna(v) else float("nan"))
+                missing_mask.append(pd.isna(v))
+
+        offset = (i - n_scens / 2 + 0.5) * width_per
+        label = _scenario_display(scen)
+        color = colors_by_scen.get(scen, "#777777")
+
+        if horizontal:
+            bars = ax.barh(
+                x + offset,
+                [0.0 if pd.isna(v) else v for v in vals],
+                height=width_per * 0.9,
+                label=label,
+                color=color,
+                edgecolor="white",
+                linewidth=0.5,
+                alpha=0.25 if all(missing_mask) else 0.95,
+            )
+        else:
+            bars = ax.bar(
+                x + offset,
+                [0.0 if pd.isna(v) else v for v in vals],
+                width=width_per * 0.9,
+                label=label,
+                color=color,
+                edgecolor="white",
+                linewidth=0.5,
+                alpha=0.25 if all(missing_mask) else 0.95,
+            )
+
+        if show_values:
+            for bar, raw in zip(bars, vals):
+                if pd.isna(raw) or float(raw) == 0.0:
+                    continue
+                if value_col == "Percentile":
+                    text = f"{float(raw):.0f}"
+                elif value_col == "%Δ":
+                    text = f"{float(raw):+.0f}%"
+                else:
+                    text = f"{float(raw):.0f}" if abs(float(raw)) >= 10 else f"{float(raw):.1f}"
+
+                if horizontal:
+                    ax.text(
+                        bar.get_width(),
+                        bar.get_y() + bar.get_height() / 2,
+                        f" {text}",
+                        ha="left",
+                        va="center",
+                        fontsize=tick_fontsize - 1,
+                    )
+                else:
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height(),
+                        text,
+                        ha="center",
+                        va="bottom",
+                        fontsize=tick_fontsize - 1,
+                        rotation=90 if n_scens > 3 else 0,
+                    )
+
+    if horizontal:
+        ax.set_yticks(x)
+        ax.set_yticklabels(units, fontsize=tick_fontsize)
+        ax.set_xlabel(_get_value_label(value_col), fontsize=label_fontsize)
+        ax.invert_yaxis()
+        ax.xaxis.grid(True, linestyle="--", alpha=0.5)
+    else:
+        ax.set_xticks(x)
+        ax.set_xticklabels(units, fontsize=tick_fontsize, rotation=45, ha="right")
+        ax.set_ylabel(_get_value_label(value_col), fontsize=label_fontsize)
+        ax.yaxis.grid(True, linestyle="--", alpha=0.5)
+
+    if value_col in ("%Δ", "Δ"):
+        if horizontal:
+            ax.axvline(x=0, color="black", linestyle="-", linewidth=0.8, alpha=0.5)
+        else:
+            ax.axhline(y=0, color="black", linestyle="-", linewidth=0.8, alpha=0.5)
+
+    if title is None:
+        title = f"{index_name} • {_get_value_label(value_col)} by scenario"
+    ax.set_title(title, fontsize=title_fontsize, pad=12)
+
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1),
+        fontsize=legend_fontsize,
+        frameon=False,
+        title="Scenario",
+        title_fontsize=legend_fontsize,
+    )
+    ax.set_axisbelow(True)
+
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    return fig
 
 
 def make_scenario_comparison_figure_plotly(

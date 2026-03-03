@@ -98,11 +98,15 @@ In the right-side Portfolio panel, use:
 Once you have items in your portfolio:
 - Select one or more **risk domains** to compare
 - Metrics from selected domains are automatically included
-- Optional: manually refine which metrics to include
+- Optional: manually refine which metrics to include (under **Advanced metrics**)
 - Table auto-rebuilds when portfolio or selection changes
 - A summary strip shows unit/state/metric counts (and basic risk-class distribution)
-- Download comparison as CSV
-- Optional: enable visualizations (e.g., heatmap) for quick comparison (computed lazily)
+- Choose **Scenario mode**:
+  - **Single scenario**: uses the global scenario selector
+  - **Compare scenarios**: expands results across scenarios (table + charts)
+- Results are organized as tabs:
+  - **Table**: scenario results are shown **side-by-side** (no long view) for a selected comparator (default: **Risk class**); download the displayed table as CSV
+  - **Visualizations**: charts render when you open the tab; visualizations are **percentile-based with risk-class coloring** (Very Low → Very High), including scenario panels and robust risk (min percentile)
 
 ---
 
