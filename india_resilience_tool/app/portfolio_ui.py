@@ -475,14 +475,17 @@ def render_index_selector(
         # No bundles selected - fall back to current metric only
         expanded_slugs = [current_slug] if current_slug in available_slugs else []
     
-    # --- Optional manual refinement ---
-    manual_mode = st.checkbox(
-        "Manually refine metric selection",
-        value=st.session_state.get("portfolio_manual_refinement", False),
-        key="portfolio_manual_refinement",
-        help="Enable to manually add/remove individual metrics from the comparison",
-    )
-    
+    # --- Optional manual refinement (kept out of the main flow) ---
+    st.caption("Metrics are auto-included from selected domains. Use **Advanced metrics** to refine.")
+    with st.expander("Advanced metrics", expanded=False):
+        st.checkbox(
+            "Manually refine metric selection",
+            value=st.session_state.get("portfolio_manual_refinement", False),
+            key="portfolio_manual_refinement",
+            help="Enable to manually add/remove individual metrics from the comparison",
+        )
+
+    manual_mode = bool(st.session_state.get("portfolio_manual_refinement", False))
     if manual_mode:
         # Show multi-select with expanded slugs as default
         # But allow user to pick any metric
@@ -542,7 +545,7 @@ def render_index_selector(
 # Comparison Table (Auto-rebuild)
 # =============================================================================
 
-def render_comparison_table(
+def build_comparison_df(
     *,
     portfolio: Sequence[Any],
     selected_slugs: Sequence[str],
@@ -565,7 +568,7 @@ def render_comparison_table(
     level: str = "district",
 ) -> Optional[pd.DataFrame]:
     """
-    Render the comparison table with auto-rebuild on changes.
+    Build the portfolio comparison dataframe with auto-rebuild on changes.
 
     District mode:
       - loads master_metrics_by_district.csv
@@ -579,7 +582,6 @@ def render_comparison_table(
     import os
     from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
     from india_resilience_tool.app.portfolio_multistate import (
-        compute_portfolio_summary_stats,
         extract_states_in_portfolio,
     )
 
@@ -860,175 +862,232 @@ def render_comparison_table(
                     "those rows may show blank values. " + " | ".join(examples)
                 )
 
-
-    # Display table
     if cached_df is not None and not cached_df.empty:
-        long_df = cached_df.copy()
-        has_scenario = "Scenario" in long_df.columns
+        return cached_df
+    return None
 
-        def _reorder_long_df(df_in: pd.DataFrame, *, include_scenario: bool) -> pd.DataFrame:
-            out = df_in.copy()
-            preferred: list[str] = []
 
-            for c in ("State", "District"):
-                if c in out.columns:
-                    preferred.append(c)
+def render_comparison_table_ui(
+    df: pd.DataFrame,
+    *,
+    level: str = "district",
+) -> None:
+    """Render the comparison table UI (wide/long + downloads) for a pre-built comparison dataframe."""
+    import streamlit as st
 
-            if is_block and "Block" in out.columns:
-                preferred.append("Block")
+    if df is None or df.empty:
+        st.info("No comparison results to display.")
+        return
 
-            for c in ("Index", "Group"):
-                if c in out.columns:
-                    preferred.append(c)
+    level_norm = (level or "district").strip().lower()
+    is_block = level_norm == "block"
 
-            if include_scenario and "Scenario" in out.columns:
-                preferred.append("Scenario")
+    long_df = df.copy()
+    has_scenario = ("Scenario" in long_df.columns) and long_df["Scenario"].notna().any()
 
-            for c in (
-                "Current value",
-                "Baseline",
-                "Δ",
-                "%Δ",
-                "Rank in state",
-                "Percentile",
-                "Risk class",
-            ):
-                if c in out.columns and c not in preferred:
-                    preferred.append(c)
+    def _reorder_long_df(df_in: pd.DataFrame, *, include_scenario: bool) -> pd.DataFrame:
+        out = df_in.copy()
+        preferred: list[str] = []
 
-            remaining = [c for c in out.columns if c not in preferred]
-            return out[preferred + remaining]
+        for c in ("State", "District"):
+            if c in out.columns:
+                preferred.append(c)
 
-        def _pivot_scenario_wide(df_in: pd.DataFrame, *, value_col: str) -> pd.DataFrame:
-            if df_in is None or df_in.empty or "Scenario" not in df_in.columns:
-                return df_in
+        if is_block and "Block" in out.columns:
+            preferred.append("Block")
 
-            id_cols: list[str] = []
-            for c in ("State", "District"):
-                if c in df_in.columns:
-                    id_cols.append(c)
+        for c in ("Index", "Group"):
+            if c in out.columns:
+                preferred.append(c)
 
-            if is_block and "Block" in df_in.columns:
-                id_cols.append("Block")
+        if include_scenario and "Scenario" in out.columns:
+            preferred.append("Scenario")
 
-            for c in ("Index", "Group"):
-                if c in df_in.columns:
-                    id_cols.append(c)
+        for c in (
+            "Current value",
+            "Baseline",
+            "Δ",
+            "%Δ",
+            "Rank in state",
+            "Percentile",
+            "Risk class",
+        ):
+            if c in out.columns and c not in preferred:
+                preferred.append(c)
 
-            base_cols = list(id_cols)
-            if "Baseline" in df_in.columns and "Baseline" not in base_cols:
-                base_cols.append("Baseline")
+        remaining = [c for c in out.columns if c not in preferred]
+        return out[preferred + remaining]
 
-            base = df_in[base_cols].drop_duplicates(subset=id_cols).set_index(id_cols)
+    def _pivot_scenario_wide(df_in: pd.DataFrame, *, value_col: str) -> pd.DataFrame:
+        if df_in is None or df_in.empty or "Scenario" not in df_in.columns:
+            return df_in
 
-            if value_col not in df_in.columns:
-                value_col = "Percentile" if "Percentile" in df_in.columns else "Current value"
+        id_cols: list[str] = []
+        for c in ("State", "District"):
+            if c in df_in.columns:
+                id_cols.append(c)
 
-            pv = df_in.pivot_table(
-                index=id_cols,
-                columns="Scenario",
-                values=value_col,
-                aggfunc="first",
+        if is_block and "Block" in df_in.columns:
+            id_cols.append("Block")
+
+        for c in ("Index", "Group"):
+            if c in df_in.columns:
+                id_cols.append(c)
+
+        base_cols = list(id_cols)
+        if "Baseline" in df_in.columns and "Baseline" not in base_cols:
+            base_cols.append("Baseline")
+
+        base = df_in[base_cols].drop_duplicates(subset=id_cols).set_index(id_cols)
+
+        if value_col not in df_in.columns:
+            value_col = "Percentile" if "Percentile" in df_in.columns else "Current value"
+
+        pv = df_in.pivot_table(
+            index=id_cols,
+            columns="Scenario",
+            values=value_col,
+            aggfunc="first",
+        )
+
+        pv.columns = [f"{value_col} ({str(c)})" for c in pv.columns]
+        wide = base.join(pv, how="left").reset_index()
+        return wide
+
+    view = "Long"
+    value_col_for_wide = "Percentile"
+    if has_scenario:
+        st.caption(
+            "Baseline is historical; Δ and %Δ are computed vs baseline. "
+            "Use **Wide** view to compare scenarios side-by-side."
+        )
+        view_key = f"_portfolio_scenario_view_{level_norm}"
+        value_key = f"_portfolio_scenario_value_{level_norm}"
+
+        value_options_all = [
+            "Current value",
+            "Δ",
+            "%Δ",
+            "Percentile",
+            "Risk class",
+            "Rank in state",
+        ]
+        value_options = [c for c in value_options_all if c in long_df.columns]
+        if not value_options:
+            value_options = ["Percentile"] if "Percentile" in long_df.columns else ["Current value"]
+
+        v1, v2 = st.columns([1, 2])
+        with v1:
+            view = st.radio(
+                "Scenario view",
+                options=["Wide", "Long"],
+                horizontal=True,
+                key=view_key,
+            )
+        with v2:
+            default_value = st.session_state.get(value_key, "Percentile")
+            if default_value not in value_options:
+                default_value = value_options[0]
+            value_col_for_wide = st.selectbox(
+                "Value to compare",
+                options=value_options,
+                index=value_options.index(default_value),
+                key=value_key,
             )
 
-            pv.columns = [f"{value_col} ({str(c)})" for c in pv.columns]
+    # Choose display dataframe
+    if has_scenario and view == "Wide":
+        display_df = _pivot_scenario_wide(long_df, value_col=value_col_for_wide)
+    else:
+        display_df = _reorder_long_df(long_df, include_scenario=has_scenario)
 
-            wide = base.join(pv, how="left").reset_index()
-            return wide
+    st.dataframe(display_df, hide_index=True, use_container_width=True)
 
-        # Summary strip (table-first orientation)
-        summary = compute_portfolio_summary_stats(long_df, level=level_norm)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Units", int(summary.get("units_count", 0)))
-        c2.metric("States", int(summary.get("states_count", 0)))
-        c3.metric("Metrics", int(summary.get("metrics_count", 0)))
+    def _safe_stub(s: str) -> str:
+        s = str(s).strip().lower()
+        s = s.replace("%", "pct")
+        s = s.replace("Δ", "delta")
+        s = re.sub(r"[^a-z0-9_\-]+", "_", s)
+        return s.strip("_")
 
-        risk_counts = summary.get("risk_counts") or {}
-        if isinstance(risk_counts, dict) and risk_counts:
-            rc_parts = [f"{k}: {int(v)}" for k, v in risk_counts.items()]
-            st.caption("Risk class • " + " • ".join(rc_parts))
-
-        view = "Long"
-        value_col_for_wide = "Percentile"
-        if has_scenario:
-            st.caption(
-                "Baseline is historical; Δ and %Δ are computed vs baseline. "
-                "Use **Wide** view to compare scenarios side-by-side."
-            )
-            view_key = f"_portfolio_scenario_view_{level_norm}"
-            value_key = f"_portfolio_scenario_value_{level_norm}"
-
-            value_options = [
-                "Current value",
-                "Δ",
-                "%Δ",
-                "Percentile",
-                "Risk class",
-                "Rank in state",
-            ]
-
-            v1, v2 = st.columns([1, 2])
-            with v1:
-                view = st.radio(
-                    "Scenario view",
-                    options=["Wide", "Long"],
-                    horizontal=True,
-                    key=view_key,
-                )
-            with v2:
-                default_value = st.session_state.get(value_key, "Percentile")
-                if default_value not in value_options:
-                    default_value = "Percentile"
-                value_col_for_wide = st.selectbox(
-                    "Value to compare",
-                    options=value_options,
-                    index=value_options.index(default_value),
-                    key=value_key,
-                )
-
-        # Choose display dataframe
-        if has_scenario and view == "Wide":
-            display_df = _pivot_scenario_wide(long_df, value_col=value_col_for_wide)
-        else:
-            display_df = _reorder_long_df(long_df, include_scenario=has_scenario)
-
-        st.dataframe(display_df, hide_index=True, use_container_width=True)
-
-        def _safe_stub(s: str) -> str:
-            s = str(s).strip().lower()
-            s = s.replace("%", "pct")
-            s = s.replace("Δ", "delta")
-            s = re.sub(r"[^a-z0-9_\-]+", "_", s)
-            return s.strip("_")
-
-        if has_scenario:
-            dl1, dl2 = st.columns(2)
-            with dl1:
-                st.download_button(
-                    "Download long CSV",
-                    data=_reorder_long_df(long_df, include_scenario=True).to_csv(index=False).encode("utf-8"),
-                    file_name=f"portfolio_comparison_{level_norm}_long.csv",
-                    mime="text/csv",
-                )
-            with dl2:
-                wide_df = _pivot_scenario_wide(long_df, value_col=value_col_for_wide)
-                st.download_button(
-                    f"Download wide CSV ({value_col_for_wide})",
-                    data=wide_df.to_csv(index=False).encode("utf-8"),
-                    file_name=f"portfolio_comparison_{level_norm}_wide_{_safe_stub(value_col_for_wide)}.csv",
-                    mime="text/csv",
-                )
-        else:
+    if has_scenario:
+        dl1, dl2 = st.columns(2)
+        with dl1:
             st.download_button(
-                "Download as CSV",
-                data=display_df.to_csv(index=False).encode("utf-8"),
-                file_name=f"portfolio_comparison_{level_norm}.csv",
+                "Download long CSV",
+                data=_reorder_long_df(long_df, include_scenario=True).to_csv(index=False).encode("utf-8"),
+                file_name=f"portfolio_comparison_{level_norm}_long.csv",
                 mime="text/csv",
             )
+        with dl2:
+            wide_df = _pivot_scenario_wide(long_df, value_col=value_col_for_wide)
+            st.download_button(
+                f"Download wide CSV ({value_col_for_wide})",
+                data=wide_df.to_csv(index=False).encode("utf-8"),
+                file_name=f"portfolio_comparison_{level_norm}_wide_{_safe_stub(value_col_for_wide)}.csv",
+                mime="text/csv",
+            )
+    else:
+        st.download_button(
+            "Download as CSV",
+            data=display_df.to_csv(index=False).encode("utf-8"),
+            file_name=f"portfolio_comparison_{level_norm}.csv",
+            mime="text/csv",
+        )
 
-        return cached_df
 
-    return None
+def render_comparison_table(
+    *,
+    portfolio: Sequence[Any],
+    selected_slugs: Sequence[str],
+    variables: Mapping[str, Mapping[str, Any]],
+    index_group_labels: Mapping[str, str],
+    sel_scenario: str,
+    sel_period: str,
+    sel_stat: str,
+    sel_scenarios: Optional[Sequence[str]] = None,
+    pilot_state: str,
+    data_dir: Path,
+    load_master_csv_fn: Callable[[str], pd.DataFrame],
+    normalize_master_columns_fn: Callable[[pd.DataFrame], pd.DataFrame],
+    parse_master_schema_fn: Callable[[Any], tuple[list, list, dict]],
+    resolve_metric_column_fn: Callable[..., Optional[str]],
+    find_baseline_column_for_stat_fn: Callable[..., Optional[str]],
+    risk_class_from_percentile_fn: Callable[[float], str],
+    normalize_fn: Callable[[str], str],
+    build_portfolio_multiindex_df_fn: Callable[..., pd.DataFrame],
+    level: str = "district",
+) -> Optional[pd.DataFrame]:
+    """
+    Backward-compatible wrapper: build + render the comparison table UI.
+
+    Prefer calling `build_comparison_df` and `render_comparison_table_ui` separately for layouts
+    that need the dataframe for multiple views (e.g., tabs).
+    """
+    df = build_comparison_df(
+        portfolio=portfolio,
+        selected_slugs=selected_slugs,
+        variables=variables,
+        index_group_labels=index_group_labels,
+        sel_scenario=sel_scenario,
+        sel_period=sel_period,
+        sel_stat=sel_stat,
+        sel_scenarios=sel_scenarios,
+        pilot_state=pilot_state,
+        data_dir=data_dir,
+        load_master_csv_fn=load_master_csv_fn,
+        normalize_master_columns_fn=normalize_master_columns_fn,
+        parse_master_schema_fn=parse_master_schema_fn,
+        resolve_metric_column_fn=resolve_metric_column_fn,
+        find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
+        risk_class_from_percentile_fn=risk_class_from_percentile_fn,
+        normalize_fn=normalize_fn,
+        build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
+        level=level,
+    )
+    if df is not None and not df.empty:
+        render_comparison_table_ui(df, level=level)
+    return df
 
 
 # =============================================================================
@@ -1110,65 +1169,6 @@ def render_portfolio_visualizations(
             return (0, int(SCENARIO_ORDER.index(s_norm)), s_norm)
         return (1, 10_000, s_norm)
 
-    # -------------------------
-    # Scenario controls (shortcut for the table-level controls above)
-    # -------------------------
-    compare_key = f"portfolio_compare_scenarios_{scope}"
-    scen_key = f"portfolio_scenario_selection_{scope}"
-    viz_compare_key = f"viz_portfolio_compare_scenarios_{scope}"
-    viz_scen_key = f"viz_portfolio_scenario_selection_{scope}"
-    src_key = f"_portfolio_scenario_ctrl_src_{scope}"
-
-    def _set_src_viz() -> None:
-        st.session_state[src_key] = "viz"
-
-    # Pre-widget sync: if the last interaction was on the table, mirror table → viz.
-    src = st.session_state.get(src_key)
-    if src != "viz":
-        st.session_state[viz_compare_key] = bool(st.session_state.get(compare_key, False))
-        chosen_tbl = st.session_state.get(scen_key) or []
-        st.session_state[viz_scen_key] = [str(x).strip() for x in list(chosen_tbl) if str(x).strip()]
-
-    with st.expander("Scenario controls", expanded=False):
-        st.caption("These controls rebuild the comparison table above (and affect downloads/visualizations).")
-        st.checkbox(
-            "Compare scenarios (table)",
-            key=viz_compare_key,
-            on_change=_set_src_viz,
-            help="Shortcut for the Portfolio Comparison setting above.",
-        )
-
-        if bool(st.session_state.get(viz_compare_key, False)):
-            base_opts = ["ssp245", "ssp585"]
-            sel_scenario = st.session_state.get("sel_scenario")
-            if isinstance(sel_scenario, str) and sel_scenario.strip() and sel_scenario not in base_opts:
-                if not sel_scenario.strip().startswith("—"):
-                    base_opts = [sel_scenario.strip()] + base_opts
-
-            # Ensure options include any scenarios currently present in df (if already scenario-expanded),
-            # plus any persisted selections, so Streamlit doesn't drop values.
-            current = st.session_state.get(viz_scen_key) or []
-            extra = []
-            if "Scenario" in df.columns:
-                extra = [str(x).strip() for x in df["Scenario"].dropna().astype(str).tolist() if str(x).strip()]
-
-            all_opts = []
-            for x in list(base_opts) + list(extra) + list(current):
-                xs = str(x).strip()
-                if xs:
-                    all_opts.append(xs)
-            seen = set()
-            all_opts = [x for x in all_opts if not (x in seen or seen.add(x))]
-            all_opts = sorted(all_opts, key=_scenario_sort)
-
-            st.multiselect(
-                "Scenarios to compare",
-                options=all_opts,
-                format_func=_scenario_label,
-                key=viz_scen_key,
-                on_change=_set_src_viz,
-            )
-
     scenario_options: list[str] = []
     if has_scenario:
         scenario_options = [
@@ -1234,26 +1234,14 @@ def render_portfolio_visualizations(
             if value_col != "Percentile":
                 st.info("Stacked view is currently defined for **Percentile** only. Switch **Show values** to Percentile.")
                 return
-
-            default_sel = []
-            for s in ("ssp245", "ssp585"):
-                for opt in scenario_options:
-                    if str(opt).strip().lower() == s:
-                        default_sel.append(opt)
-            if not default_sel:
-                default_sel = scenario_options[:2]
-
-            sel_scens = st.multiselect(
-                "Scenarios to include",
-                options=scenario_options,
-                default=default_sel,
-                format_func=_scenario_label,
-                key=f"_viz_scenario_stacked_sel_{scope}",
-                help="Select at least 2 scenarios.",
-            )
+            sel_scens = list(scenario_options)
             if len(sel_scens) < 2:
-                st.info("Select at least 2 scenarios.")
+                st.info("Scenario compare requires at least 2 scenarios.")
                 return
+            if len(sel_scens) > 2:
+                st.warning("Showing the first 2 scenarios for readability. Reduce scenarios in Scenario mode to change this.")
+                sel_scens = sel_scens[:2]
+            st.caption("Using scenarios: " + ", ".join([_scenario_label(s) for s in sel_scens]))
 
             # Context headers
             ctx = st.session_state.get("portfolio_multiindex_context") or {}
@@ -1304,26 +1292,11 @@ def render_portfolio_visualizations(
             if value_col != "Percentile":
                 st.info("Robust risk is currently defined for **Percentile** only. Switch **Show values** to Percentile.")
                 return
-
-            default_robust = []
-            for s in ("ssp245", "ssp585"):
-                for opt in scenario_options:
-                    if str(opt).strip().lower() == s:
-                        default_robust.append(opt)
-            if not default_robust:
-                default_robust = scenario_options[:2]
-
-            robust_scens = st.multiselect(
-                "Scenarios to combine",
-                options=scenario_options,
-                default=default_robust,
-                format_func=_scenario_label,
-                key=f"_viz_scenario_robust_sel_{scope}",
-                help="Robust min requires at least 2 scenarios.",
-            )
+            robust_scens = list(scenario_options)
             if len(robust_scens) < 2:
-                st.info("Select at least 2 scenarios.")
+                st.info("Scenario compare requires at least 2 scenarios.")
                 return
+            st.caption("Using scenarios: " + ", ".join([_scenario_label(s) for s in robust_scens]))
 
             fig = make_portfolio_heatmap_robust_min_percentile(
                 df,
@@ -1336,18 +1309,11 @@ def render_portfolio_visualizations(
                 st.warning("Could not generate robust risk heatmap. Check data availability.")
 
         elif scenario_chart.startswith("Heatmap — Scenario panels"):
-            default_sel = scenario_options[:3]
-            sel_scens = st.multiselect(
-                "Scenarios to show",
-                options=scenario_options,
-                default=default_sel,
-                format_func=_scenario_label,
-                key=f"_viz_scenario_panels_sel_{scope}",
-                help="For readability, use 2–3 scenarios.",
-            )
+            sel_scens = list(scenario_options)
             if len(sel_scens) > 3:
-                st.warning("Showing the first 3 selected scenarios to keep the chart readable.")
+                st.warning("Showing the first 3 scenarios for readability. Reduce scenarios in Scenario mode to change this.")
                 sel_scens = sel_scens[:3]
+            st.caption("Using scenarios: " + ", ".join([_scenario_label(s) for s in sel_scens]))
 
             with st.expander("Heatmap options", expanded=False):
                 col1, col2, col3 = st.columns(3)
@@ -1803,43 +1769,25 @@ def render_portfolio_panel(
         st.info("Select at least one index to compare.")
         return
 
-    # --- Scenario comparison controls (optional) ---
-    compare_key = f"portfolio_compare_scenarios_{level_norm}"
+    # --- Scenario mode (single shared control for table + visualizations) ---
+    compare_key = f"portfolio_compare_scenarios_{level_norm}"  # kept for backward-compat session state
     scen_key = f"portfolio_scenario_selection_{level_norm}"
-    viz_compare_key = f"viz_portfolio_compare_scenarios_{level_norm}"
-    viz_scen_key = f"viz_portfolio_scenario_selection_{level_norm}"
-    src_key = f"_portfolio_scenario_ctrl_src_{level_norm}"
+    mode_key = f"portfolio_scenario_mode_{level_norm}"
 
-    def _set_src_table() -> None:
-        st.session_state[src_key] = "table"
+    default_mode = "Compare scenarios" if bool(st.session_state.get(compare_key, False)) else "Single scenario"
+    if mode_key not in st.session_state:
+        st.session_state[mode_key] = default_mode
 
-    # Pre-widget synchronization (must happen before any widget with these keys is created).
-    src = st.session_state.get(src_key)
-    if src == "viz":
-        if viz_compare_key in st.session_state:
-            st.session_state[compare_key] = bool(st.session_state.get(viz_compare_key, False))
-        if viz_scen_key in st.session_state:
-            chosen_viz = st.session_state.get(viz_scen_key) or []
-            st.session_state[scen_key] = [str(x).strip() for x in list(chosen_viz) if str(x).strip()]
-    elif src == "table":
-        st.session_state[viz_compare_key] = bool(st.session_state.get(compare_key, False))
-        chosen_tbl = st.session_state.get(scen_key) or []
-        st.session_state[viz_scen_key] = [str(x).strip() for x in list(chosen_tbl) if str(x).strip()]
-    else:
-        st.session_state.setdefault(viz_compare_key, bool(st.session_state.get(compare_key, False)))
-        chosen_tbl = st.session_state.get(scen_key) or []
-        st.session_state.setdefault(
-            viz_scen_key,
-            [str(x).strip() for x in list(chosen_tbl) if str(x).strip()],
-        )
-
-    compare_scenarios = st.checkbox(
-        "Compare scenarios",
-        value=bool(st.session_state.get(compare_key, False)),
-        key=compare_key,
-        on_change=_set_src_table,
-        help="When enabled, the table will include one row per (unit × index × scenario).",
+    st.radio(
+        "Scenario mode",
+        options=["Single scenario", "Compare scenarios"],
+        horizontal=True,
+        key=mode_key,
+        help="Single scenario uses the global scenario selector. Compare scenarios expands the table and enables scenario-compare charts.",
     )
+
+    compare_scenarios = str(st.session_state.get(mode_key, "Single scenario")).strip().lower().startswith("compare")
+    st.session_state[compare_key] = bool(compare_scenarios)
 
     sel_scenarios: Optional[List[str]] = None
     if compare_scenarios:
@@ -1865,14 +1813,13 @@ def render_portfolio_panel(
             options=base_opts,
             default=default_sel,
             key=scen_key,
-            on_change=_set_src_table,
         )
 
         if not chosen:
             chosen = [sel_scenario]
         sel_scenarios = [str(x).strip() for x in chosen if str(x).strip()]
 
-    cached_df = render_comparison_table(
+    cached_df = build_comparison_df(
         portfolio=portfolio,
         selected_slugs=selected_slugs,
         variables=variables,
@@ -1901,18 +1848,36 @@ def render_portfolio_panel(
     )
 
     if cached_df is not None and not cached_df.empty:
-        show_viz_key = f"portfolio_show_visualizations_{level_norm}"
-        show_viz = st.checkbox(
-            "Show visualizations",
-            value=bool(st.session_state.get(show_viz_key, False)),
-            key=show_viz_key,
-        )
+        from india_resilience_tool.app.portfolio_multistate import compute_portfolio_summary_stats
 
-        if show_viz:
-            st.markdown("---")
-            with st.expander("Visualizations", expanded=False):
+        summary = compute_portfolio_summary_stats(cached_df, level=level_norm)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Units", int(summary.get("units_count", 0)))
+        c2.metric("States", int(summary.get("states_count", 0)))
+        c3.metric("Metrics", int(summary.get("metrics_count", 0)))
+
+        risk_counts = summary.get("risk_counts") or {}
+        if isinstance(risk_counts, dict) and risk_counts:
+            rc_parts = [f"{k}: {int(v)}" for k, v in risk_counts.items()]
+            st.caption("Risk class • " + " • ".join(rc_parts))
+
+        tab_table, tab_viz = st.tabs(["Table", "Visualizations"])
+        with tab_table:
+            render_comparison_table_ui(cached_df, level=level_norm)
+
+        with tab_viz:
+            show_viz_key = f"portfolio_show_visualizations_{level_norm}"
+            show_viz = st.checkbox(
+                "Enable visualizations",
+                value=bool(st.session_state.get(show_viz_key, False)),
+                key=show_viz_key,
+                help="Charts are generated on demand and can be slower than the table.",
+            )
+            if show_viz:
                 render_portfolio_visualizations(
                     cached_df,
                     default_value_col="Percentile",
                     default_chart_type="heatmap",
                 )
+            else:
+                st.info("Enable visualizations to generate charts for this comparison.")
