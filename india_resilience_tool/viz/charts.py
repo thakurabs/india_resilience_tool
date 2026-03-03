@@ -1456,45 +1456,43 @@ def make_portfolio_heatmap_scenario_panels(
         title = f"Scenario panels: {value_col}"
     fig.suptitle(title, fontsize=title_fontsize + 1, y=0.98)
 
+    base_bottom = 0.30
     try:
         # Leave generous bottom space for rotated x-labels.
         # Use a heuristic based on the number of x labels (long metric names).
-        base_bottom = 0.30
         if len(all_cols) >= 8:
             base_bottom = 0.34
         if len(all_cols) >= 12:
             base_bottom = 0.38
         if not layout_norm.startswith("h"):
             base_bottom = max(0.28, base_bottom - 0.06)
-
-        # For Percentile scenario panels, reserve right margin for a vertical colorbar.
-        right_margin = 0.90 if value_col == "Percentile" else 1.0
-        fig.tight_layout(rect=[0, base_bottom, right_margin, 0.95])
     except Exception:
-        pass
+        base_bottom = 0.30
 
     if last_im is not None:
-        positions = [ax.get_position() for ax in axes.ravel().tolist()]
-        left = float(min(p.x0 for p in positions))
-        right = float(max(p.x1 for p in positions))
-        bottom = float(min(p.y0 for p in positions))
-        top = float(max(p.y1 for p in positions))
-
         if value_col == "Percentile":
-            # Shared colorbar: vertical, to the right of the panels.
-            cbar_left = min(0.975, right + 0.015)
-            cbar_width = 0.020
-            cbar_bottom = bottom
-            cbar_height = max(0.10, top - bottom)
-
-            cax = fig.add_axes([cbar_left, cbar_bottom, cbar_width, cbar_height])
-            cax.set_label("_portfolio_scenario_panels_colorbar")
-            cbar = fig.colorbar(last_im, cax=cax, orientation="vertical")
+            # Use Matplotlib-managed sizing (like robust min risk heatmap) for a consistent look.
+            cbar = fig.colorbar(last_im, ax=axes.ravel().tolist(), shrink=0.85)
             cbar.set_ticks([0, 1, 2, 3, 4])
             cbar.set_ticklabels(RISK_CLASS_LABELS)
             cbar.ax.tick_params(labelsize=label_fontsize)
+            try:
+                cbar.ax.set_label("_portfolio_scenario_panels_colorbar")
+            except Exception:
+                pass
+            try:
+                fig.tight_layout(rect=[0, base_bottom, 0.98, 0.95])
+            except Exception:
+                pass
         else:
+            try:
+                fig.tight_layout(rect=[0, base_bottom, 1.0, 0.95])
+            except Exception:
+                pass
             # Keep continuous values consistent: horizontal colorbar, centered below.
+            positions = [ax.get_position() for ax in axes.ravel().tolist()]
+            left = float(min(p.x0 for p in positions))
+            right = float(max(p.x1 for p in positions))
             span = max(right - left, 1e-6)
             cbar_width = max(0.25, min(0.70, span * 0.70))
             cbar_left = left + (span - cbar_width) / 2.0
