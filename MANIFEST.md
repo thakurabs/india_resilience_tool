@@ -20,13 +20,12 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 ### Entry Points
 | Command | Purpose |
 |---------|---------|
-| `streamlit run dashboard_unfactored.py` | Launch dashboard (recommended shim) |
-| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard (package entry) |
-| `python build_master_metrics.py` | Rebuild master CSVs (district + block) |
-| `python compute_indices.py` | Build processed index artifacts in single-process mode (debug) |
-| `python compute_indices_multiprocess.py` | Build processed index artifacts (default: both district + block) |
-| `python compute_indices_multiprocess.py --level district` | Build processed artifacts at district level |
-| `python compute_indices_multiprocess.py --level block` | Build processed artifacts at block level |
+| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard |
+| `python -m tools.pipeline.build_master_metrics` | Rebuild master CSVs (district + block) |
+| `python -m tools.pipeline.compute_indices` | Build processed index artifacts in single-process mode (debug) |
+| `python -m tools.pipeline.compute_indices_multiprocess` | Build processed index artifacts (default: both district + block) |
+| `python -m tools.pipeline.compute_indices_multiprocess --level district` | Build processed artifacts at district level |
+| `python -m tools.pipeline.compute_indices_multiprocess --level block` | Build processed artifacts at block level |
 
 ### Key Environment Variables
 | Variable | Default | Purpose |
@@ -54,7 +53,7 @@ india_resilience_tool/
 │ ├── adm2_cache.py # District boundary caching/simplification
 │ ├── geography.py # Filesystem-backed discovery for state/district/block selectors
 │ ├── dashboard.py # Dashboard entry wrapper
-│ ├── legacy_dashboard_impl.py # Main orchestrator (district + block + bundles)
+│ ├── orchestrator_impl.py # Dashboard implementation (district + block + bundles)
 │ ├── main.py # Streamlit entry module (run via Streamlit)
 │ ├── orchestrator.py # Module executor
 │ ├── perf.py # Performance helpers / timing
@@ -100,15 +99,12 @@ india_resilience_tool/
 └── tables.py # Table formatting
 
 Root files:
-├── dashboard_unfactored.py # Streamlit entry shim (recommended)
-├── dashboard_unfactored_impl.py # Legacy monolithic implementation (kept for reference)
 ├── paths.py # DATA_DIR + processed-root configuration (canonical)
-├── build_master_metrics.py # Master CSV builder script
-├── compute_indices.py # Single-process index compute
-├── compute_indices_multiprocess.py # Multi-process index compute
 ├── environment.yml # Conda environment (pinned)
 ├── requirements.txt # pip freeze (UTF-16)
 ├── docs/ # Additional docs/notes
+├── notebooks/ # Exploratory notebooks (non-runtime)
+├── tools/ # Ops/diagnostic scripts (non-runtime)
 └── tests/ # Test suite
 ```
 
@@ -116,7 +112,7 @@ Root files:
 
 - `AGENTS.md`: root agent workflow and guardrails for this repository.
 - `docs/HANDOFF.md`, `docs/refactor_acceptance.md`: handoff/history and refactor acceptance notes.
-- Helper scripts for maintenance/ops include `build_all_csv.ps1`, `debug_build_master.py`, and boundary/S3 helper scripts.
+- Helper scripts for maintenance/ops live under `tools/` (see `tools/README.md`).
 
 ---
 
@@ -283,7 +279,7 @@ Unchanged structurally, but used by both district and block details/portfolio pa
 
 ### 5) Application layer (`india_resilience_tool/app/`)
 
-#### `legacy_dashboard_impl.py`
+#### `orchestrator_impl.py`
 Main orchestrator. Responsibilities:
 - admin level toggle (district/block)
 - **Map View ribbon** (above the map) for selecting:
@@ -367,7 +363,7 @@ Typical responsibilities:
 - Return SPI arrays/series aligned to the original time index so downstream aggregation works cleanly
 
 See also:
-- `spi_diagnostic.py` (repo root): sanity checks / distribution diagnostics for SPI outputs
+- `tools/diagnostics/spi_diagnostic.py`: sanity checks / distribution diagnostics for SPI outputs
 
 ## Thematic Bundles
 
@@ -439,7 +435,7 @@ High-level flow is the same; the admin level controls which geometry and master 
 | Add metric to bundle | `config/metrics_registry.py` | Add slug to appropriate `BUNDLES[...]` list |
 | Create new bundle | `config/metrics_registry.py` | Add to `BUNDLES`, `BUNDLE_ORDER`, `BUNDLE_DESCRIPTIONS` |
 | Change default bundle | `config/metrics_registry.py` | Update `DEFAULT_BUNDLE` |
-| Build block master metrics | `build_master_metrics.py` | produces `master_metrics_by_block.csv` |
+| Build block master metrics | `tools/pipeline/build_master_metrics.py` | produces `master_metrics_by_block.csv` |
 | Update block tooltip/map click | `app/views/map_view.py` | ensure block identifiers flow to state |
 | Enable add-to-portfolio from block rankings | `app/views/rankings_view.py` | portfolio parity with district |
 | Fix time series loading | `analysis/timeseries.py`, `data/discovery.py` | ensemble yearly discovery + id injection |

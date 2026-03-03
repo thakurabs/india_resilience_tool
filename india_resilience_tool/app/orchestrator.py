@@ -2,7 +2,7 @@
 Dashboard orchestrator (Step 22).
 
 This module becomes the canonical runnable entrypoint for the dashboard logic.
-It executes the legacy implementation file located inside the package on every
+It executes the implementation file located inside the package on every
 Streamlit rerun, avoiding import caching.
 
 Author: Abu Bakar Siddiqui Thakur
@@ -19,12 +19,12 @@ from types import ModuleType
 
 def _legacy_impl_path() -> Path:
     """
-    Path to the legacy dashboard implementation file.
+    Path to the dashboard implementation file.
 
     After Step 22 it lives at:
-      india_resilience_tool/app/legacy_dashboard_impl.py
+      india_resilience_tool/app/orchestrator_impl.py
     """
-    return Path(__file__).resolve().parent / "legacy_dashboard_impl.py"
+    return Path(__file__).resolve().parent / "orchestrator_impl.py"
 
 
 def _exec_file_as_module(path: Path, *, module_key: str) -> ModuleType:
@@ -55,11 +55,10 @@ def run_app() -> None:
     """
     Run the dashboard application.
 
-    This is called by the root-level shim dashboard_unfactored_impl.py,
-    which is itself executed each rerun by app/dashboard.py (Step 21).
+    This is called by the Streamlit entrypoint `india_resilience_tool/app/main.py`.
     """
     impl = _legacy_impl_path()
     if not impl.exists():
         raise FileNotFoundError(f"Missing legacy dashboard implementation file: {impl}")
 
-    _exec_file_as_module(impl, module_key="_irt_legacy_dashboard_impl")
+    _exec_file_as_module(impl, module_key="_irt_orchestrator_impl")

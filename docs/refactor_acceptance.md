@@ -144,17 +144,16 @@ The refactor must unify registry between:
 
 ---
 
-## G. Root-level scripts must continue to work (backward compatibility)
+## G. Ops scripts must continue to work (tools/)
 
-These entrypoints must remain runnable from repo root:
-- `dashboard_unfactored.py` (may become shim)
-- `compute_indices.py` (may become shim)
-- `build_master_metrics.py` (may become shim)
-- `nex_india_subset_download_s3_v1.py` (may become shim)
+These entrypoints must remain runnable from repo root (but are relocated under `tools/`):
+- `python -m tools.pipeline.compute_indices_multiprocess`
+- `python -m tools.pipeline.compute_indices`
+- `python -m tools.pipeline.build_master_metrics`
+- `python -m tools.data_acquisition.nex_india_subset_download_s3_v1`
 
 README drift must be resolved either by:
-- updating README, OR
-- adding shims for referenced legacy filenames if they exist historically.
+- updating README (preferred).
 
 ---
 

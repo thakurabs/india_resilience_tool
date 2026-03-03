@@ -1041,7 +1041,7 @@ with col1:
             if not needs:
                 return False, "up-to-date"
             try:
-                from build_master_metrics import build_master_metrics
+                from india_resilience_tool.compute.master_builder import build_master_metrics
             except Exception as e:
                 return False, f"builder import failed: {e}"
             try:

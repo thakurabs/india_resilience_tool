@@ -53,14 +53,13 @@ def _repo_root() -> Path:
     """Find repository root (assumes tests/ is directly under repo root)."""
     return Path(__file__).resolve().parents[1]
 
-# Add repo root to sys.path so we can import compute_indices_multiprocess
+# Add repo root to sys.path so we can import tools.pipeline.compute_indices_multiprocess
 _root = _repo_root()
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
-# Now import the compute module directly
-# This assumes compute_indices_multiprocess.py is at repo root
-import compute_indices_multiprocess as CMP
+# Now import the compute module directly (relocated under tools/)
+from tools.pipeline import compute_indices_multiprocess as CMP
 
 
 def _pipeline_by_slug() -> dict[str, dict[str, Any]]:

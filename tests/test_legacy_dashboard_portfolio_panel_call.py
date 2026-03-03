@@ -1,5 +1,5 @@
 """
-Regression test: keep legacy_dashboard_impl's render_portfolio_panel call in sync
+Regression test: keep orchestrator_impl's render_portfolio_panel call in sync
 with portfolio_ui.render_portfolio_panel's required keyword-only arguments.
 """
 
@@ -24,7 +24,7 @@ def test_legacy_dashboard_render_portfolio_panel_call_includes_required_kwonly_a
         Path(__file__).resolve().parents[1]
         / "india_resilience_tool"
         / "app"
-        / "legacy_dashboard_impl.py"
+        / "orchestrator_impl.py"
     )
     tree = ast.parse(src_path.read_text(encoding="utf-8"), filename=str(src_path))
 
@@ -37,7 +37,7 @@ def test_legacy_dashboard_render_portfolio_panel_call_includes_required_kwonly_a
         ):
             calls.append(node)
 
-    assert calls, "Expected at least one render_portfolio_panel(...) call in legacy_dashboard_impl.py"
+    assert calls, "Expected at least one render_portfolio_panel(...) call in orchestrator_impl.py"
 
     for call in calls:
         call_kwargs = {kw.arg for kw in call.keywords if kw.arg is not None}
@@ -46,4 +46,3 @@ def test_legacy_dashboard_render_portfolio_panel_call_includes_required_kwonly_a
             "Missing required kw-only args in render_portfolio_panel call: "
             f"{sorted(missing)}"
         )
-

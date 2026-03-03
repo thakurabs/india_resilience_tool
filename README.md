@@ -148,14 +148,6 @@ pip install -r requirements.txt
 
 ### Running the dashboard
 
-Recommended:
-
-```bash
-streamlit run dashboard_unfactored.py
-```
-
-Alternative (package entry):
-
 ```bash
 streamlit run india_resilience_tool/app/main.py
 ```
@@ -213,12 +205,12 @@ DATA_DIR/
 Notes:
 - Windows may show `.csv` as "Microsoft Excel CSV"; they're normal CSVs.
 - The dashboard uses **master metrics** for maps/rankings and **ensemble yearly** files for trends.
-- After updating to the level-specific state-summary contract, rebuild masters with `python build_master_metrics.py` so the new `*_district.csv` and `*_block.csv` state files exist.
+- After updating to the level-specific state-summary contract, rebuild masters with `python -m tools.pipeline.build_master_metrics` so the new `*_district.csv` and `*_block.csv` state files exist.
 
 ### Building master CSVs (district + block)
 
 ```bash
-python build_master_metrics.py
+python -m tools.pipeline.build_master_metrics
 ```
 
 Or use the dashboard's "Rebuild now" control if exposed in your branch.
@@ -315,7 +307,7 @@ india_resilience_tool/
 │   ├── adm2_cache.py
 │   ├── dashboard.py
 │   ├── geography.py
-│   ├── legacy_dashboard_impl.py
+│   ├── orchestrator_impl.py
 │   ├── main.py
 │   ├── orchestrator.py
 │   ├── perf.py
@@ -356,12 +348,14 @@ india_resilience_tool/
     └── tables.py
 
 Root files and docs:
-├── dashboard_unfactored.py
-├── dashboard_unfactored_impl.py
-├── compute_indices.py
-├── compute_indices_multiprocess.py
+├── notebooks/
+├── tools/
 └── docs/
     ├── HANDOFF.md
+    ├── dead_code_candidate_report.md
+    ├── functionality_contract.md
+    ├── manual_smoke_test.md
+    ├── module_responsibility_map.md
     └── refactor_acceptance.md
 ```
 

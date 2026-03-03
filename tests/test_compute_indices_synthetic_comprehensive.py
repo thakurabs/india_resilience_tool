@@ -53,10 +53,10 @@ _ROOT = _repo_root()
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-import compute_indices_multiprocess as CMP  # noqa: E402
+from tools.pipeline import compute_indices_multiprocess as CMP  # noqa: E402
 
 # Hardening: ensure we imported the correct module file
-assert Path(CMP.__file__).resolve() == (_ROOT / "compute_indices_multiprocess.py").resolve()
+assert Path(CMP.__file__).resolve() == (_ROOT / "tools" / "pipeline" / "compute_indices_multiprocess.py").resolve()
 
 
 def _pipeline_by_slug() -> dict[str, dict[str, Any]]:
