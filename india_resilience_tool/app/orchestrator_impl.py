@@ -25,18 +25,7 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Point
 from shapely.ops import transform
 
-from india_resilience_tool.data.adm2_loader import (
-    build_adm1_from_adm2 as _build_adm1_from_adm2,
-    enrich_adm2_with_state_names as _enrich_adm2_with_state_names,
-    ensure_key_column as _ensure_key_column,
-    featurecollections_by_state as _featurecollections_by_state,
-    load_local_adm2 as _load_local_adm2,
-)
-
-from india_resilience_tool.data.adm3_loader import (
-    load_local_adm3 as _load_local_adm3,
-    get_blocks_for_district as _get_blocks_for_district,
-)
+from india_resilience_tool.data.adm3_loader import get_blocks_for_district as _get_blocks_for_district
 
 from india_resilience_tool.data.merge import (
     get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
@@ -53,8 +42,6 @@ from india_resilience_tool.analysis.portfolio import (
 from india_resilience_tool.viz.tables import build_rankings_table_df as _build_rankings_table_df
 
 from india_resilience_tool.utils.naming import alias
-
-from india_resilience_tool.app.geography import list_available_states_from_processed_root
 
 from india_resilience_tool.app.sidebar import (
     apply_jump_once_flags,
@@ -75,6 +62,18 @@ from india_resilience_tool.app.views.state_summary_view import render_state_summ
 from india_resilience_tool.app.portfolio_ui import render_portfolio_panel
 from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
 from india_resilience_tool.app.state import VIEW_MAP, VIEW_RANKINGS
+
+from india_resilience_tool.app.geo_cache import (
+    build_adm1_from_adm2,
+    build_adm2_geojson_by_state,
+    build_adm3_geojson_by_state,
+    enrich_adm2_with_state_names,
+    list_available_states_from_processed_root_cached,
+    load_local_adm2,
+    load_local_adm3,
+)
+from india_resilience_tool.app.sidebar_branding import render_sidebar_branding
+from india_resilience_tool.app.ribbon import render_metric_ribbon
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -119,17 +118,11 @@ from india_resilience_tool.config.constants import (
     FONT_SIZE_LEGEND,
     LOGO_PATH,
     SCENARIO_UI_LABEL,
-    SCENARIO_HELP_MD,
 )
 
 from india_resilience_tool.config.variables import (
     VARIABLES,
     INDEX_GROUP_LABELS,
-    # Bundle imports (NEW)
-    get_bundles,
-    get_metrics_for_bundle,
-    get_bundle_description,
-    get_default_bundle,
 )
 
 # Data paths derived from DATA_DIR
@@ -146,33 +139,7 @@ from india_resilience_tool.utils.naming import NAME_ALIASES, alias, normalize_na
 # -------------------------
 # Geo load / prep
 # -------------------------
-# @st.cache_data
-@st.cache_data
-def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
-    gdf = _load_local_adm2(
-        path=path,
-        tolerance=float(tolerance),
-        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
-        min_area=0.0003,
-    )
-    return gdf
-
-@st.cache_data(ttl=3600)
-def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM3) -> gpd.GeoDataFrame:
-    """
-    Load ADM3 (blocks) with the same bbox + simplification strategy as ADM2.
-
-    Notes:
-      - tolerant of large files via caching
-      - does NOT require a __key column (merge.py builds composite keys for blocks)
-    """
-    gdf = _load_local_adm3(
-        path=path,
-        tolerance=float(tolerance),
-        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
-        min_area=0.00005,
-    )
-    return gdf
+# Streamlit-cached geo helpers live in india_resilience_tool.app.geo_cache
 
 if not ADM2_GEOJSON.exists():
     st.set_page_config(page_title="India Resilience Tool", layout="wide")
@@ -181,95 +148,6 @@ if not ADM2_GEOJSON.exists():
 
 adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
 adm2["__key"] = adm2["district_name"].map(alias)
-
-@st.cache_data(ttl=3600)
-def build_adm2_geojson_by_state(
-    path: str,
-    tolerance: float,
-    mtime: float,
-) -> dict[str, dict]:
-    """
-    Build and cache an ADM2 FeatureCollection per state (geometry + identifiers only).
-
-    Cached by (path, tolerance, mtime) so it invalidates automatically when the
-    source GeoJSON changes or simplification tolerance is updated.
-    """
-    _ = mtime  # mtime is used only to invalidate Streamlit's cache
-
-    gdf = load_local_adm2(path, tolerance=tolerance)
-    if "__key" not in gdf.columns:
-        gdf = _ensure_key_column(gdf, district_col="district_name", alias_fn=alias, key_col="__key")
-
-    by_state = _featurecollections_by_state(
-        gdf,
-        state_col="state_name",
-        normalize_state_fn=normalize_name,
-        keep_cols=["district_name", "state_name", "__key", "geometry"],
-    )
-    return by_state
-
-@st.cache_data(ttl=3600)
-def build_adm3_geojson_by_state(
-    path: str,
-    tolerance: float,
-    mtime: float,
-) -> dict[str, dict]:
-    """
-    Build and cache an ADM3 FeatureCollection per state (geometry + identifiers only).
-
-    Cached by (path, tolerance, mtime) so it invalidates automatically when the
-    source GeoJSON changes or simplification tolerance is updated.
-    """
-    _ = mtime  # mtime is used only to invalidate Streamlit's cache
-
-    gdf = load_local_adm3(path, tolerance=tolerance)
-
-    # Tolerate alternate ADM3 naming conventions
-    if "block_name" not in gdf.columns:
-        for c in ("block", "adm3_name", "subdistrict_name", "name"):
-            if c in gdf.columns:
-                gdf["block_name"] = gdf[c]
-                break
-    if "district_name" not in gdf.columns:
-        for c in ("district", "adm2_name", "shapeName_2", "shapeName_1"):
-            if c in gdf.columns:
-                gdf["district_name"] = gdf[c]
-                break
-    if "state_name" not in gdf.columns:
-        for c in ("state", "adm1_name", "shapeName_0", "shapeGroup"):
-            if c in gdf.columns:
-                gdf["state_name"] = gdf[c]
-                break
-
-    # Build a composite key: state|district|block (normalized via alias)
-    if "__bkey" not in gdf.columns:
-        def _mk_bkey(r) -> str:
-            return f"{alias(r.get('state_name', ''))}|{alias(r.get('district_name', ''))}|{alias(r.get('block_name', ''))}"
-
-        gdf["__bkey"] = gdf.apply(_mk_bkey, axis=1)
-
-    by_state = _featurecollections_by_state(
-        gdf,
-        state_col="state_name",
-        normalize_state_fn=normalize_name,
-        keep_cols=["block_name", "district_name", "state_name", "__bkey", "geometry"],
-    )
-    return by_state
-
-@st.cache_data
-def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    return _build_adm1_from_adm2(_adm2_gdf, state_col="state_name")
-
-@st.cache_data
-def enrich_adm2_with_state_names(
-    _adm2_gdf: gpd.GeoDataFrame,
-    _adm1_gdf: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
-    return _enrich_adm2_with_state_names(_adm2_gdf, _adm1_gdf, state_col="state_name", adm1_name_col="shapeName")
-
-@st.cache_data(ttl=180)
-def list_available_states_from_processed_root_cached(processed_root_str: str) -> list[str]:
-    return list_available_states_from_processed_root(processed_root_str)
 
 # -------------------------
 # Color helpers (no GeoJSON round-trip)
@@ -638,79 +516,6 @@ st.set_page_config(page_title="India Resilience Tool", layout="wide")
 # Selection placeholders (force deliberate choices)
 SEL_PLACEHOLDER = "— Select —"
 
-def _help_md_to_plain_text(md: str) -> str:
-    """
-    Convert short Markdown help snippets into plain text for Streamlit widget tooltips.
-
-    Notes:
-      - Streamlit widget `help=` is plain text (not Markdown).
-      - Keep this intentionally lightweight; it's not a full Markdown renderer.
-    """
-    txt = str(md or "").replace("\r\n", "\n").replace("\r", "\n")
-    lines: list[str] = []
-    for raw in txt.split("\n"):
-        line = raw.strip()
-        if not line:
-            lines.append("")
-            continue
-        # Headings: "# Title" -> "Title"
-        if line.startswith("#"):
-            line = line.lstrip("#").strip()
-        # Basic emphasis/code markers
-        line = line.replace("**", "").replace("`", "")
-        lines.append(line)
-    return "\n".join(lines).strip()
-
-
-# Ribbon help copy (base text; dynamic add-ons are appended at render time)
-RIBBON_HELP_MD: dict[str, str] = {
-    "risk_domain": (
-        "### Risk domain\n"
-        "A risk domain groups related metrics (indices) into a theme (e.g., heat risk, flood risk).\n\n"
-        "**How to use**\n"
-        "- Choose a domain to narrow the metric list to what you care about."
-    ),
-    "metric": (
-        "### Metric\n"
-        "A metric is the specific climate index you are mapping (e.g., TXx, hot days, wet spells).\n\n"
-        "**How to use**\n"
-        "- Pick the metric that matches your question (extremes vs averages, heat vs rainfall, etc.)."
-    ),
-    "scenario": (
-        "### Scenario\n"
-        "Scenarios describe different global development and emissions pathways used for future climate projections.\n\n"
-        "**Options in this tool**\n"
-        "- Middle-of-the-road (SSP2-4.5)\n"
-        "- Fossil-fuelled development (SSP5-8.5)\n\n"
-        "**Tip**\n"
-        "- Use SSP2-4.5 for baseline planning and SSP5-8.5 to stress-test."
-    ),
-    "period": (
-        "### Period\n"
-        "The multi-year time window over which values are summarized.\n\n"
-        "**Periods**\n"
-        "- Baseline: 1995–2014\n"
-        "- Early century: 2021–2040\n"
-        "- Mid century: 2041–2060\n"
-        "- Late century: 2061–2080\n"
-        "- End century: 2081–2100"
-    ),
-    "statistic": (
-        "### Statistic\n"
-        "- **Mean (average):** sensitive to extreme values.\n"
-        "- **Median (typical):** more robust when values are skewed or have outliers.\n\n"
-        "**Tip**\n"
-        "- If results look pulled by extremes, try Median."
-    ),
-    "map_mode": (
-        "### Map mode\n"
-        "- **Absolute value:** maps the metric as-is for the selected period.\n"
-        "- **Change from baseline:** maps (future period − baseline) to show how conditions shift.\n\n"
-        "**Example**\n"
-        "If TXx is 42°C in 2041–2060 and 40°C in baseline, change = +2°C."
-    ),
-}
-
 # Initialise analysis mode and portfolio storage in session state
 if "analysis_mode" not in st.session_state:
     st.session_state["analysis_mode"] = SEL_PLACEHOLDER
@@ -740,100 +545,8 @@ perf_reset()
 apply_jump_once_flags()
 
 
-@st.cache_data
-def _logo_data_url(*, path: str, mtime: float) -> str | None:
-    """
-    Return a stable data: URL for the Resilience Actions logo.
-
-    Notes:
-      - Cached by (path, mtime) so updates to the logo file invalidate automatically.
-      - We embed the logo in HTML to avoid brittle CSS targeting of Streamlit image wrappers.
-    """
-    _ = mtime  # mtime is used only to invalidate Streamlit's cache
-    import base64
-    from pathlib import Path
-
-    try:
-        raw = Path(path).read_bytes()
-    except Exception:
-        return None
-
-    b64 = base64.b64encode(raw).decode("ascii")
-    return f"data:image/png;base64,{b64}"
-
-
 with st.sidebar:
-    st.markdown(
-        """
-        <style>
-        .irt-topcluster {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-bottom: 0.1rem;
-        }
-        .irt-logo {
-            width: 220px;
-            max-width: 100%;
-            height: auto;
-            display: block;
-            border-radius: 0 !important;
-        }
-        .irt-link {
-            margin-top: 0.25rem;
-            margin-bottom: 0.6rem;
-            font-size: 0.74rem;
-            font-weight: 500;
-            line-height: 1.2;
-            letter-spacing: 0;
-            color: rgba(85, 92, 102, 0.95);
-            text-align: center;
-            text-decoration: underline;
-            text-underline-offset: 0.08em;
-            text-decoration-thickness: 1px;
-        }
-        .irt-link:hover {
-            color: rgba(85, 92, 102, 0.95);
-            text-decoration-thickness: 2px;
-        }
-        /* District/Block toggle: keep horizontal labels readable (no letter-by-letter wrapping). */
-        [data-testid="stSidebar"] [data-baseweb="radio-group"] {
-            flex-wrap: wrap !important; /* allow wrap by option on very narrow sidebars */
-            justify-content: center !important;
-        }
-        [data-testid="stSidebar"] [data-baseweb="radio"] label {
-            white-space: nowrap !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    logo_url: str | None = None
-    try:
-        _logo_p = Path(LOGO_PATH)
-        if _logo_p.exists():
-            logo_url = _logo_data_url(path=str(_logo_p), mtime=float(_logo_p.stat().st_mtime))
-    except Exception:
-        logo_url = None
-
-    logo_html = (
-        f'<img class="irt-logo" src="{logo_url}" alt="Resilience Actions logo" />'
-        if logo_url
-        else ""
-    )
-    st.markdown(
-        f"""
-        <div class="irt-topcluster">
-          {logo_html}
-          <a class="irt-link" href="https://www.resilience.org.in/" target="_blank" rel="noopener noreferrer">
-            www.resilience.org.in/
-          </a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    render_sidebar_branding(logo_path=LOGO_PATH)
 
     # Admin level selector (District vs Block)
     admin_level = render_admin_level_selector(
@@ -889,408 +602,40 @@ col1, col2 = st.columns([5, 3])
 # -------------------------
 # Metric selection ribbon (bundle → metric → scenario/period/stat + map mode)
 # -------------------------
-# Force deliberate choices for ribbon controls
-for _k in ("selected_bundle", "selected_var", "sel_scenario", "sel_period", "sel_stat"):
-    st.session_state.setdefault(_k, SEL_PLACEHOLDER)
-
-# These are bound once a metric is selected (safe defaults otherwise)
-VARIABLE_SLUG: Optional[str] = None
-VARCFG: Optional[dict] = None
-PROCESSED_ROOT: Optional[Path] = None
-MASTER_CSV_PATH: Optional[Path] = None
-
-# Master CSV / schema outputs (safe defaults for placeholder-first UX)
-df: Optional[pd.DataFrame] = None
-schema_items: list[dict] = []
-metrics: list[str] = []
-by_metric: dict[str, list[dict]] = {}
-registry_metric: str = ""
-sel_scenario: str = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
-sel_period: str = st.session_state.get("sel_period", SEL_PLACEHOLDER)
-sel_stat: str = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
-
-# No-op default until a metric is selected (prevents NameError in sidebar master controls)
-def rebuild_master_csv_if_needed(
-    force: bool = False, attach_centroid_geojson: str | None = None
-) -> tuple[bool, str]:
-    _ = force, attach_centroid_geojson
-    return False, "disabled (select a metric first)"
-
-with col1:
-    # Ribbon: two compact rows; wraps naturally on smaller widths
-    row1 = st.columns([2.2, 3.0, 1.8])
-    row2 = st.columns([2.2, 1.4, 2.4])
-
-    # --- Bundle selection ---
-    all_bundles = get_bundles()
-    if not all_bundles:
-        st.error("No bundles defined in metrics_registry.py")
-        render_perf_panel_safe()
-        st.stop()
-
-    bundle_options = [SEL_PLACEHOLDER] + all_bundles
-    cur_bundle = st.session_state.get("selected_bundle", SEL_PLACEHOLDER)
-    if cur_bundle not in bundle_options:
-        cur_bundle = SEL_PLACEHOLDER
-        st.session_state["selected_bundle"] = SEL_PLACEHOLDER
-
-    with row1[0]:
-        bundle_help = _help_md_to_plain_text(RIBBON_HELP_MD["risk_domain"])
-        selected_bundle_preview = st.session_state.get("selected_bundle", SEL_PLACEHOLDER)
-        if selected_bundle_preview != SEL_PLACEHOLDER:
-            bundle_desc_preview = get_bundle_description(selected_bundle_preview)
-            if bundle_desc_preview:
-                bundle_help += f"\n\nThis domain covers:\n- {bundle_desc_preview}"
-        selected_bundle = st.selectbox(
-            "Risk domain",
-            options=bundle_options,
-            index=bundle_options.index(cur_bundle),
-            key="selected_bundle",
-            label_visibility="visible",
-            help=bundle_help,
-        )
-
-    # Bundle description (only when chosen)
-    if selected_bundle != SEL_PLACEHOLDER:
-        bundle_desc = get_bundle_description(selected_bundle)
-        if bundle_desc:
-            st.caption(bundle_desc)
-
-    # --- Metric selection (filtered by bundle) ---
-    metric_disabled = selected_bundle == SEL_PLACEHOLDER
-    if metric_disabled:
-        index_slugs = []
-        metric_options = [SEL_PLACEHOLDER]
-    else:
-        index_slugs = get_metrics_for_bundle(selected_bundle) or []
-        if not index_slugs:
-            index_slugs = list(VARIABLES.keys())
-            st.warning(f"Bundle '{selected_bundle}' has no metrics; showing all indices.")
-        metric_options = [SEL_PLACEHOLDER] + index_slugs
-
-    # Preserve current behavior on bundle changes:
-    # - If the previously selected metric is invalid (and not the placeholder), clamp to first valid metric.
-    # - If it's the placeholder, keep placeholder so the user deliberately picks a metric.
-    cur_var = st.session_state.get("selected_var", SEL_PLACEHOLDER)
-    if cur_var not in metric_options:
-        if cur_var == SEL_PLACEHOLDER or not index_slugs:
-            st.session_state["selected_var"] = SEL_PLACEHOLDER
-        else:
-            st.session_state["selected_var"] = index_slugs[0]
-    cur_var = st.session_state.get("selected_var", SEL_PLACEHOLDER)
-
-    with row1[1]:
-        metric_help = _help_md_to_plain_text(RIBBON_HELP_MD["metric"])
-        selected_metric_preview = st.session_state.get("selected_var", SEL_PLACEHOLDER)
-        if selected_metric_preview != SEL_PLACEHOLDER and selected_metric_preview in VARIABLES:
-            desc_preview = str(VARIABLES[selected_metric_preview].get("description", "")).strip()
-            units_preview = str(
-                VARIABLES[selected_metric_preview].get("unit")
-                or VARIABLES[selected_metric_preview].get("units")
-                or ""
-            ).strip()
-            if desc_preview or units_preview:
-                metric_help += "\n\nAbout this metric:"
-                if desc_preview:
-                    metric_help += f"\n- {desc_preview}"
-                if units_preview:
-                    metric_help += f"\n- Units: {units_preview}"
-        selected_var = st.selectbox(
-            "Metric",
-            options=metric_options,
-            index=metric_options.index(cur_var) if cur_var in metric_options else 0,
-            key="selected_var",
-            label_visibility="visible",
-            format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
-            disabled=metric_disabled,
-            help=metric_help,
-        )
-
-    # --- Resolve per-index config (once metric selected) ---
-    metric_ready = (selected_var != SEL_PLACEHOLDER) and (selected_var in VARIABLES)
-    if metric_ready:
-        VARIABLE_SLUG = selected_var
-        VARCFG = VARIABLES[VARIABLE_SLUG]
-
-        # Registry metric (prevents NameError if downstream master/schema logic short-circuits)
-        registry_metric = str(VARCFG.get("periods_metric_col", "")).strip()
-        st.session_state["registry_metric"] = registry_metric
-
-        # Metric description
-        desc = str(VARCFG.get("description", "")).strip()
-        if desc:
-            st.caption(f"Note: {desc}")
-
-        PROCESSED_ROOT = resolve_processed_root(
-            VARIABLE_SLUG, data_dir=DATA_DIR, mode="portfolio"
-        )
-        (PROCESSED_ROOT / PILOT_STATE).mkdir(parents=True, exist_ok=True)
-
-        _master_name = (
-            "master_metrics_by_block.csv"
-            if st.session_state.get("admin_level", "district") == "block"
-            else "master_metrics_by_district.csv"
-        )
-        MASTER_CSV_PATH = PROCESSED_ROOT / PILOT_STATE / _master_name
-
-        # Rebuilder bound to this metric
-        def rebuild_master_csv_if_needed(
-            force: bool = False, attach_centroid_geojson: str | None = None
-        ) -> tuple[bool, str]:
-            needs = force or master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE) or state_profile_files_missing(PROCESSED_ROOT, PILOT_STATE, str(st.session_state.get("admin_level", "district")).strip().lower())
-            if not needs:
-                return False, "up-to-date"
-            try:
-                from india_resilience_tool.compute.master_builder import build_master_metrics
-            except Exception as e:
-                return False, f"builder import failed: {e}"
-            try:
-                build_master_metrics(
-                    str(PROCESSED_ROOT),
-                    PILOT_STATE,
-                    metric_col_in_periods=VARCFG["periods_metric_col"],
-                    out_path=str(MASTER_CSV_PATH),
-                    attach_centroid_geojson=attach_centroid_geojson,
-                    verbose=True,
-                    level=str(st.session_state.get("admin_level", "district")).strip().lower(),
-                )
-                return True, "rebuilt"
-            except Exception as e:
-                return False, f"rebuild failed: {e}"
-
-        # Ensure master exists/fresh for this metric (only once a metric is chosen)
-        try:
-            if (master_needs_rebuild(MASTER_CSV_PATH, PROCESSED_ROOT, PILOT_STATE) or state_profile_files_missing(PROCESSED_ROOT, PILOT_STATE, str(st.session_state.get("admin_level", "district")).strip().lower())):
-                with st.spinner("Master CSV missing or stale — rebuilding now..."):
-                    ok, msg = rebuild_master_csv_if_needed(
-                        force=False,
-                        attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
-                    )
-                    st.success("Master CSV rebuilt.") if ok else st.error(
-                        f"Auto-rebuild failed: {msg}"
-                    )
-        except Exception as e:
-            st.warning(f"Could not check master CSV freshness: {e}")
-
-        if not MASTER_CSV_PATH.exists():
-            st.error(
-                f"Master CSV not found for {VARIABLES[VARIABLE_SLUG]['label']} at {MASTER_CSV_PATH}. "
-                f"Click 'Rebuild now' in the sidebar under 'Master dataset'."
-            )
-            render_perf_panel_safe()
-            st.stop()
-
-        # Load + parse schema (scenario/period/stat), cached by file mtime
-        def _load_master_and_schema(master_path: Path, slug: str):
-            cache = st.session_state.setdefault("_master_cache", {})
-            try:
-                mtime = master_path.stat().st_mtime
-            except Exception:
-                mtime = None
-
-            entry = cache.get(slug)
-            if entry is not None and entry.get("mtime") == mtime:
-                return (
-                    entry["df"],
-                    entry["schema_items"],
-                    entry["metrics"],
-                    entry["by_metric"],
-                )
-
-            with perf_section("master: read csv"):
-                with st.spinner("Loading master CSV..."):
-                    df_local = load_master_csv(str(master_path))
-
-            with perf_section("master: normalize columns"):
-                df_local = normalize_master_columns(df_local)
-
-            with perf_section("master: parse schema"):
-                schema_items_local, metrics_local, by_metric_local = parse_master_schema(
-                    df_local.columns
-                )
-
-            cache[slug] = {
-                "df": df_local,
-                "schema_items": schema_items_local,
-                "metrics": metrics_local,
-                "by_metric": by_metric_local,
-                "mtime": mtime,
-            }
-            return df_local, schema_items_local, metrics_local, by_metric_local
-
-        df, schema_items, metrics, by_metric = _load_master_and_schema(
-            MASTER_CSV_PATH, VARIABLE_SLUG
-        )
-
-        if not metrics:
-            st.error("No ensemble statistic columns found in the master CSV. Did the builder run?")
-            render_perf_panel_safe()
-            st.stop()
-
-        # Align registry metric if column normalization changed casing
-        available_metrics = set(metrics)
-        if registry_metric not in available_metrics and available_metrics:
-            m_lower = {str(m).lower(): m for m in available_metrics}
-            registry_metric = m_lower.get(
-                str(registry_metric).lower(), next(iter(available_metrics))
-            )
-        st.session_state["registry_metric"] = registry_metric
-
-        # Scenario list (restricted to SSP245/SSP585)
-        items_for_m = by_metric.get(registry_metric, [])
-        all_scenarios = (
-            sorted(set(i["scenario"] for i in items_for_m))
-            if items_for_m
-            else sorted(set(i["scenario"] for i in schema_items))
-        )
-        allowed = {"ssp245", "ssp585"}
-        scenarios = [s for s in all_scenarios if str(s).strip().lower() in allowed]
-        if not scenarios:
-            st.error("No SSP245/SSP585 data found for this metric in the master CSV.")
-            render_perf_panel_safe()
-            st.stop()
-        scenario_options = [SEL_PLACEHOLDER] + scenarios
-    else:
-        # Metric not selected yet → keep downstream pickers disabled
-        scenario_options = [SEL_PLACEHOLDER]
-
-    # --- Scenario selection ---
-    scenario_disabled = not metric_ready
-    cur_scn = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
-    if cur_scn not in scenario_options:
-        st.session_state["sel_scenario"] = SEL_PLACEHOLDER
-    cur_scn = st.session_state.get("sel_scenario", SEL_PLACEHOLDER)
-
-    with row1[2]:
-        scenario_help = _help_md_to_plain_text(RIBBON_HELP_MD["scenario"])
-        if cur_scn != SEL_PLACEHOLDER:
-            scen_key_preview = str(cur_scn).strip().lower()
-            extra = SCENARIO_HELP_MD.get(scen_key_preview)
-            if extra:
-                scenario_help += f"\n\n{_help_md_to_plain_text(extra)}"
-        sel_scenario = st.selectbox(
-            "Scenario",
-            options=scenario_options,
-            index=scenario_options.index(cur_scn),
-            key="sel_scenario",
-            label_visibility="visible",
-            disabled=scenario_disabled,
-            format_func=lambda s: (
-                s if s == SEL_PLACEHOLDER else SCENARIO_UI_LABEL.get(str(s).strip().lower(), str(s))
-            ),
-            help=scenario_help,
-        )
-        sel_scenario_display = (
-            sel_scenario
-            if sel_scenario == SEL_PLACEHOLDER
-            else SCENARIO_UI_LABEL.get(str(sel_scenario).strip().lower(), str(sel_scenario))
-        )
-
-    # --- Period selection (depends on scenario) ---
-    period_disabled = (not metric_ready) or (sel_scenario == SEL_PLACEHOLDER)
-    if metric_ready and (sel_scenario != SEL_PLACEHOLDER):
-        periods_found = {
-            canonical_period_label(i["period"])
-            for i in (
-                by_metric.get(st.session_state.get("registry_metric", registry_metric), [])
-                or schema_items
-            )
-            if i["scenario"] == sel_scenario
-        }
-        periods = [p for p in PERIOD_ORDER if p in periods_found] + sorted(
-            [p for p in periods_found if p not in PERIOD_ORDER]
-        )
-        if not periods:
-            period_options = [SEL_PLACEHOLDER]
-        else:
-            period_options = [SEL_PLACEHOLDER] + periods
-    else:
-        period_options = [SEL_PLACEHOLDER]
-
-    cur_per = st.session_state.get("sel_period", SEL_PLACEHOLDER)
-    if cur_per not in period_options:
-        st.session_state["sel_period"] = SEL_PLACEHOLDER
-    cur_per = st.session_state.get("sel_period", SEL_PLACEHOLDER)
-
-    with row2[0]:
-        period_help = _help_md_to_plain_text(RIBBON_HELP_MD["period"])
-        sel_period = st.selectbox(
-            "Period",
-            options=period_options,
-            index=period_options.index(cur_per),
-            key="sel_period",
-            label_visibility="visible",
-            disabled=period_disabled,
-            format_func=lambda p: period_display_label(p) if p != SEL_PLACEHOLDER else p,
-            help=period_help,
-        )
-
-    # --- Statistic selection (mean/median only, placeholder-first) ---
-    stat_disabled = not metric_ready
-    stat_options = [SEL_PLACEHOLDER, "mean", "median"]
-    cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
-    if cur_stat not in stat_options:
-        st.session_state["sel_stat"] = SEL_PLACEHOLDER
-    cur_stat = st.session_state.get("sel_stat", SEL_PLACEHOLDER)
-
-    with row2[1]:
-        statistic_help = _help_md_to_plain_text(RIBBON_HELP_MD["statistic"])
-        sel_stat = st.selectbox(
-            "Statistic",
-            options=stat_options,
-            index=stat_options.index(cur_stat),
-            key="sel_stat",
-            label_visibility="visible",
-            disabled=stat_disabled,
-            help=statistic_help,
-        )
-
-    # --- Map mode selection (moved into ribbon) ---
-    map_mode_options = [
-        SEL_PLACEHOLDER,
-        "Absolute value",
-        "Change from 1990-2010 baseline",
-    ]
-    cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
-    if cur_map_mode not in map_mode_options:
-        st.session_state["map_mode"] = SEL_PLACEHOLDER
-    cur_map_mode = st.session_state.get("map_mode", SEL_PLACEHOLDER)
-
-    with row2[2]:
-        map_mode_help = _help_md_to_plain_text(RIBBON_HELP_MD["map_mode"])
-        map_mode = st.selectbox(
-            "Map mode",
-            options=map_mode_options,
-            index=map_mode_options.index(cur_map_mode),
-            key="map_mode",
-            label_visibility="visible",
-            help=map_mode_help,
-        )
-
-# Column chosen to plot (only when all ribbon selections are complete)
-sel_metric = st.session_state.get("registry_metric", registry_metric).strip()
-metric_col: Optional[str] = None
-pretty_metric_label: str = "Select a metric to visualize"
-
-_ribbon_ready = (
-    (VARIABLE_SLUG is not None)
-    and (df is not None)
-    and (sel_scenario != SEL_PLACEHOLDER)
-    and (sel_period != SEL_PLACEHOLDER)
-    and (sel_stat != SEL_PLACEHOLDER)
-    and (map_mode != SEL_PLACEHOLDER)
+ribbon_ctx = render_metric_ribbon(
+    col=col1,
+    sel_placeholder=SEL_PLACEHOLDER,
+    data_dir=DATA_DIR,
+    pilot_state=PILOT_STATE,
+    resolve_processed_root_fn=resolve_processed_root,
+    attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
+    master_needs_rebuild_fn=master_needs_rebuild,
+    state_profile_files_missing_fn=state_profile_files_missing,
+    perf_section=perf_section,
+    render_perf_panel_safe=render_perf_panel_safe,
 )
 
-if _ribbon_ready:
-    metric_col = f"{sel_metric}__{sel_scenario}__{sel_period}__{sel_stat}"
-    if metric_col not in df.columns:
-        st.error(f"Selected column '{metric_col}' not found in master CSV.")
-        render_perf_panel_safe()
-        st.stop()
-
-    pretty_metric_label = (
-        f"{VARIABLES[VARIABLE_SLUG]['label']} · {sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
-    )
+# Unpack context into legacy variable names expected by downstream code.
+VARIABLE_SLUG = ribbon_ctx.variable_slug
+VARCFG = ribbon_ctx.varcfg
+PROCESSED_ROOT = ribbon_ctx.processed_root
+MASTER_CSV_PATH = ribbon_ctx.master_csv_path
+df = ribbon_ctx.df
+schema_items = ribbon_ctx.schema_items
+metrics = ribbon_ctx.metrics
+by_metric = ribbon_ctx.by_metric
+registry_metric = ribbon_ctx.registry_metric
+sel_metric = str(st.session_state.get("registry_metric", registry_metric) or "").strip()
+sel_scenario = ribbon_ctx.sel_scenario
+sel_scenario_display = ribbon_ctx.sel_scenario_display
+sel_period = ribbon_ctx.sel_period
+sel_stat = ribbon_ctx.sel_stat
+map_mode = ribbon_ctx.map_mode
+metric_col = ribbon_ctx.metric_col
+_ribbon_ready = ribbon_ctx.ribbon_ready
+pretty_metric_label = ribbon_ctx.pretty_metric_label
+rebuild_master_csv_if_needed = ribbon_ctx.rebuild_master_csv_if_needed
+_load_master_and_schema = ribbon_ctx.load_master_and_schema_fn
 # -------------------------
 # Master dataset controls (bound to chosen Index)
 # -------------------------
