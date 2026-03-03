@@ -872,7 +872,7 @@ def render_comparison_table_ui(
     *,
     level: str = "district",
 ) -> None:
-    """Render the comparison table UI (wide/long + downloads) for a pre-built comparison dataframe."""
+    """Render the comparison table UI for a pre-built comparison dataframe."""
     import streamlit as st
 
     if df is None or df.empty:
@@ -918,91 +918,6 @@ def render_comparison_table_ui(
         remaining = [c for c in out.columns if c not in preferred]
         return out[preferred + remaining]
 
-    def _pivot_scenario_wide(df_in: pd.DataFrame, *, value_col: str) -> pd.DataFrame:
-        if df_in is None or df_in.empty or "Scenario" not in df_in.columns:
-            return df_in
-
-        id_cols: list[str] = []
-        for c in ("State", "District"):
-            if c in df_in.columns:
-                id_cols.append(c)
-
-        if is_block and "Block" in df_in.columns:
-            id_cols.append("Block")
-
-        for c in ("Index", "Group"):
-            if c in df_in.columns:
-                id_cols.append(c)
-
-        base_cols = list(id_cols)
-        if "Baseline" in df_in.columns and "Baseline" not in base_cols:
-            base_cols.append("Baseline")
-
-        base = df_in[base_cols].drop_duplicates(subset=id_cols).set_index(id_cols)
-
-        if value_col not in df_in.columns:
-            value_col = "Percentile" if "Percentile" in df_in.columns else "Current value"
-
-        pv = df_in.pivot_table(
-            index=id_cols,
-            columns="Scenario",
-            values=value_col,
-            aggfunc="first",
-        )
-
-        pv.columns = [f"{value_col} ({str(c)})" for c in pv.columns]
-        wide = base.join(pv, how="left").reset_index()
-        return wide
-
-    view = "Long"
-    value_col_for_wide = "Percentile"
-    if has_scenario:
-        st.caption(
-            "Baseline is historical; Δ and %Δ are computed vs baseline. "
-            "Use **Wide** view to compare scenarios side-by-side."
-        )
-        view_key = f"_portfolio_scenario_view_{level_norm}"
-        value_key = f"_portfolio_scenario_value_{level_norm}"
-
-        value_options_all = [
-            "Current value",
-            "Δ",
-            "%Δ",
-            "Percentile",
-            "Risk class",
-            "Rank in state",
-        ]
-        value_options = [c for c in value_options_all if c in long_df.columns]
-        if not value_options:
-            value_options = ["Percentile"] if "Percentile" in long_df.columns else ["Current value"]
-
-        v1, v2 = st.columns([1, 2])
-        with v1:
-            view = st.radio(
-                "Scenario view",
-                options=["Wide", "Long"],
-                horizontal=True,
-                key=view_key,
-            )
-        with v2:
-            default_value = st.session_state.get(value_key, "Percentile")
-            if default_value not in value_options:
-                default_value = value_options[0]
-            value_col_for_wide = st.selectbox(
-                "Value to compare",
-                options=value_options,
-                index=value_options.index(default_value),
-                key=value_key,
-            )
-
-    # Choose display dataframe
-    if has_scenario and view == "Wide":
-        display_df = _pivot_scenario_wide(long_df, value_col=value_col_for_wide)
-    else:
-        display_df = _reorder_long_df(long_df, include_scenario=has_scenario)
-
-    st.dataframe(display_df, hide_index=True, use_container_width=True)
-
     def _safe_stub(s: str) -> str:
         s = str(s).strip().lower()
         s = s.replace("%", "pct")
@@ -1011,23 +926,76 @@ def render_comparison_table_ui(
         return s.strip("_")
 
     if has_scenario:
-        dl1, dl2 = st.columns(2)
-        with dl1:
-            st.download_button(
-                "Download long CSV",
-                data=_reorder_long_df(long_df, include_scenario=True).to_csv(index=False).encode("utf-8"),
-                file_name=f"portfolio_comparison_{level_norm}_long.csv",
-                mime="text/csv",
-            )
-        with dl2:
-            wide_df = _pivot_scenario_wide(long_df, value_col=value_col_for_wide)
-            st.download_button(
-                f"Download wide CSV ({value_col_for_wide})",
-                data=wide_df.to_csv(index=False).encode("utf-8"),
-                file_name=f"portfolio_comparison_{level_norm}_wide_{_safe_stub(value_col_for_wide)}.csv",
-                mime="text/csv",
-            )
+        value_key = f"_portfolio_scenario_value_{level_norm}"
+
+        value_options_all = ["Risk class", "Current value", "Δ", "%Δ"]
+        value_options = [c for c in value_options_all if c in long_df.columns]
+        if not value_options:
+            value_options = ["Risk class"] if "Risk class" in long_df.columns else ["Current value"]
+
+        default_value = st.session_state.get(value_key, "Risk class")
+        if default_value not in value_options:
+            default_value = value_options[0]
+
+        value_col = st.selectbox(
+            "Compare",
+            options=value_options,
+            index=value_options.index(default_value),
+            key=value_key,
+        )
+
+        if value_col in ("Δ", "%Δ"):
+            st.caption("Δ and %Δ are computed vs historical baseline.")
+
+        # Scenario side-by-side pivot only (no long view).
+        id_cols: list[str] = []
+        for c in ("State", "District"):
+            if c in long_df.columns:
+                id_cols.append(c)
+        if is_block and "Block" in long_df.columns:
+            id_cols.append("Block")
+        for c in ("Index", "Group"):
+            if c in long_df.columns:
+                id_cols.append(c)
+
+        pv = long_df.pivot_table(
+            index=id_cols,
+            columns="Scenario",
+            values=value_col,
+            aggfunc="first",
+        )
+
+        try:
+            from india_resilience_tool.viz.charts import SCENARIO_DISPLAY, SCENARIO_ORDER
+
+            def _scenario_label(s: str) -> str:
+                s_norm = str(s or "").strip().lower()
+                return str(SCENARIO_DISPLAY.get(s_norm, s)).strip()
+
+            def _scenario_sort(s: str) -> tuple[int, int, str]:
+                s_norm = str(s or "").strip().lower()
+                if s_norm in SCENARIO_ORDER:
+                    return (0, int(SCENARIO_ORDER.index(s_norm)), s_norm)
+                return (1, 10_000, s_norm)
+
+            cols_sorted = sorted([str(c) for c in pv.columns], key=_scenario_sort)
+            pv = pv.reindex(columns=cols_sorted)
+            pv.columns = [_scenario_label(c) for c in pv.columns]
+        except Exception:
+            pass
+
+        display_df = pv.reset_index()
+        st.dataframe(display_df, hide_index=True, use_container_width=True)
+
+        st.download_button(
+            "Download CSV",
+            data=display_df.to_csv(index=False).encode("utf-8"),
+            file_name=f"portfolio_comparison_{level_norm}_{_safe_stub(value_col)}.csv",
+            mime="text/csv",
+        )
     else:
+        display_df = _reorder_long_df(long_df, include_scenario=False)
+        st.dataframe(display_df, hide_index=True, use_container_width=True)
         st.download_button(
             "Download as CSV",
             data=display_df.to_csv(index=False).encode("utf-8"),
@@ -1866,18 +1834,9 @@ def render_portfolio_panel(
             render_comparison_table_ui(cached_df, level=level_norm)
 
         with tab_viz:
-            show_viz_key = f"portfolio_show_visualizations_{level_norm}"
-            show_viz = st.checkbox(
-                "Enable visualizations",
-                value=bool(st.session_state.get(show_viz_key, False)),
-                key=show_viz_key,
-                help="Charts are generated on demand and can be slower than the table.",
-            )
-            if show_viz:
+            with st.spinner("Building visualizations…"):
                 render_portfolio_visualizations(
                     cached_df,
                     default_value_col="Percentile",
                     default_chart_type="heatmap",
                 )
-            else:
-                st.info("Enable visualizations to generate charts for this comparison.")
