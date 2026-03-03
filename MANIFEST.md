@@ -314,10 +314,12 @@ Renders:
 Renders portfolio panel with:
 - portfolio badge and list management (search + group-by-state helpers)
 - **bundle-first metric selection** for comparison (multi-select bundles → auto-expand to metrics)
-- optional manual metric refinement
+- optional manual metric refinement (under **Advanced metrics**)
 - right-side panel tabs: **Compare | Add units**
-- comparison table (live-updating) with a summary strip above it
-- optional visualizations (e.g., heatmap) that are collapsed by default and computed lazily
+- **Scenario mode**: Single scenario vs Compare scenarios (expands results across scenarios)
+- comparison results organized as **Table | Visualizations** tabs:
+  - Table: scenario results shown **side-by-side** for a selected comparator (default: Risk class)
+  - Visualizations: render when the tab is opened; visualizations are **percentile-based with risk-class coloring**
 - coordinate-based unit lookup (single + batch) and saved points (Add units tab)
 - multi-state portfolio comparison loader (loads per-state master CSVs for all states present in the portfolio)
 
@@ -325,9 +327,11 @@ Key widget keys:
 - `portfolio_bundle_selection`: selected bundles for comparison
 - `portfolio_manual_refinement`: whether manual metric selection is enabled
 - `portfolio_multiindex_selection`: final list of metric slugs
+- `portfolio_scenario_mode_{level}`: Single scenario vs Compare scenarios
+- `portfolio_compare_scenarios_{level}`: scenario expansion toggle (derived from scenario mode)
+- `portfolio_scenario_selection_{level}`: scenarios to include when comparing
 - `portfolio_rhs_tab_{level}`: Compare vs Add units
 - `portfolio_manage_search_{level}`: portfolio list search filter
-- `portfolio_show_visualizations_{level}`: enable/disable heavy visualizations
 
 #### `portfolio_multistate.py`
 Streamlit-free helpers used by `portfolio_ui.py` to support true multi-state portfolio comparison:
@@ -459,6 +463,9 @@ Core keys (typical):
 - `portfolio_bundle_selection`: bundles selected for portfolio comparison
 - `portfolio_manual_refinement`: whether manual metric selection is enabled
 - `portfolio_multiindex_selection`: final metric slugs for comparison
+- `portfolio_scenario_mode_{level}`: Single scenario vs Compare scenarios
+- `portfolio_compare_scenarios_{level}`: scenario expansion toggle (derived from scenario mode)
+- `portfolio_scenario_selection_{level}`: scenarios to include when comparing
 
 Other UI keys vary by panel (map markers, etc.).
 
