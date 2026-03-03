@@ -7,7 +7,7 @@ Use this checklist after each deletion/move batch. It is intentionally quick and
 ## A) Launch
 
 ```bash
-streamlit run india_resilience_tool/app/main.py
+streamlit run main.py
 ```
 
 Pass:
@@ -58,4 +58,3 @@ For each batch, record:
 - PASS/FAIL
 - First exception stack trace (if FAIL)
 - Which step (A–D) failed
-

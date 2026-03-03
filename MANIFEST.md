@@ -20,7 +20,8 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 ### Entry Points
 | Command | Purpose |
 |---------|---------|
-| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard |
+| `streamlit run main.py` | Launch dashboard (simplest) |
+| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard (alternative) |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild master CSVs (district + block) |
 | `python -m tools.pipeline.compute_indices` | Build processed index artifacts in single-process mode (debug) |
 | `python -m tools.pipeline.compute_indices_multiprocess` | Build processed index artifacts (default: both district + block) |

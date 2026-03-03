@@ -149,12 +149,18 @@ pip install -r requirements.txt
 ### Running the dashboard
 
 ```bash
-streamlit run india_resilience_tool/app/main.py
+streamlit run main.py
 ```
 
 Open in a browser: `http://localhost:8501`
 
----
+Alternative (supported):
+
+```bash
+streamlit run india_resilience_tool/app/main.py
+```
+
+--- 
 
 ## Data Setup
 

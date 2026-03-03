@@ -4,17 +4,17 @@ This document defines the **must-not-break** contract for cleanup, dead-code rem
 
 If a change violates this contract, it is considered a regression even if tests pass.
 
-## 1) Primary dashboard entrypoint (single supported way)
+## 1) Primary dashboard entrypoint
 
 The dashboard must launch via:
 
 ```bash
-streamlit run india_resilience_tool/app/main.py
+streamlit run main.py
 ```
 
 Contract:
-- `india_resilience_tool/app/main.py` must *execute* the app when run by Streamlit (not just define functions).
-- This is the only supported launch path; legacy/root shims are explicitly out of scope to preserve.
+- `main.py` must *execute* the app when run by Streamlit (not just define functions).
+- `streamlit run india_resilience_tool/app/main.py` remains a supported alternative entrypoint.
 
 ## 2) Dashboard flows that must work
 
@@ -96,4 +96,3 @@ Cleanup work must not silently change:
 If a behavior change is required, it must be:
 - explicitly called out in the change notes
 - covered by a targeted pytest on a small synthetic dataset
-
