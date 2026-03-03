@@ -1125,6 +1125,12 @@ def render_portfolio_visualizations(
         st.warning("No valid data columns available for visualization.")
         return
 
+    # Visualizations are percentile-only (risk-class coloring) by design for clarity.
+    if "Percentile" not in df.columns or not df["Percentile"].notna().any():
+        st.warning("Percentile is not available for these results; visualizations require percentiles.")
+        return
+    value_col_fixed = "Percentile"
+
     from india_resilience_tool.viz.charts import SCENARIO_DISPLAY, SCENARIO_ORDER
 
     def _scenario_label(s: str) -> str:
@@ -1153,9 +1159,9 @@ def render_portfolio_visualizations(
     if has_scenario and len(scenario_options) >= 2:
         viz_mode = st.radio(
             "Visualization mode",
-            options=["Scenario compare", "Across indices (single scenario)"],
+            options=["Across indices (single scenario)", "Scenario compare"],
             horizontal=True,
-            index=0,
+            index=1,
             key=f"_viz_mode_{scope}",
         )
     elif has_scenario:
@@ -1168,9 +1174,6 @@ def render_portfolio_visualizations(
         make_portfolio_heatmap_robust_min_percentile,
         make_portfolio_heatmap_scenario_panels,
     )
-
-    value_col_options = list(available_value_cols.keys())
-    default_idx = value_col_options.index(default_value_col) if default_value_col in value_col_options else 0
 
     if viz_mode == "Scenario compare":
         st.markdown("#### Scenario compare")
@@ -1186,22 +1189,12 @@ def render_portfolio_visualizations(
             index=0,
             key=chart_key,
         )
-
-        value_col = st.selectbox(
-            "Show values",
-            options=value_col_options,
-            format_func=lambda x: available_value_cols[x],
-            index=default_idx,
-            key=f"_viz_scenario_value_col_{scope}",
-        )
+        value_col = value_col_fixed
 
         if scenario_chart.startswith("Heatmap — Scenario panels + robust"):
             st.caption(
                 "Scenario panels provide context; Robust risk summarizes the **min percentile** across scenarios (risk that remains high even under the less severe scenario)."
             )
-            if value_col != "Percentile":
-                st.info("Stacked view is currently defined for **Percentile** only. Switch **Show values** to Percentile.")
-                return
             sel_scens = list(scenario_options)
             if len(sel_scens) < 2:
                 st.info("Scenario compare requires at least 2 scenarios.")
@@ -1257,9 +1250,6 @@ def render_portfolio_visualizations(
             st.caption(
                 "Robust risk = **min percentile** across selected scenarios (risk that remains high even under the less severe scenario)."
             )
-            if value_col != "Percentile":
-                st.info("Robust risk is currently defined for **Percentile** only. Switch **Show values** to Percentile.")
-                return
             robust_scens = list(scenario_options)
             if len(robust_scens) < 2:
                 st.info("Scenario compare requires at least 2 scenarios.")
@@ -1294,32 +1284,16 @@ def render_portfolio_visualizations(
                         key=f"_viz_scenario_panels_layout_{scope}",
                     )
                 with col2:
-                    normalize = st.checkbox(
-                        "Normalize per index",
-                        value=True if value_col == "Current value" else False,
-                        disabled=value_col != "Current value",
-                        help="For Current value only: normalize per index across all selected scenarios (shared scale).",
-                        key=f"_viz_scenario_panels_norm_{scope}",
-                    )
+                    st.caption("")  # reserved spacing
                 with col3:
-                    cmap = "RdYlGn_r"
-                    if value_col == "Percentile":
-                        st.caption("Colors represent risk classes (Very Low → Very High); numbers show percentiles.")
-                    else:
-                        cmap = st.selectbox(
-                            "Color scheme",
-                            options=["RdYlGn_r", "RdYlBu_r", "YlOrRd", "Blues", "Reds", "viridis"],
-                            index=0,
-                            key=f"_viz_scenario_panels_cmap_{scope}",
-                            disabled=value_col in ("%Δ", "Δ"),
-                        )
+                    st.caption("Colors represent risk classes (Very Low → Very High); numbers show percentiles.")
 
             fig = make_portfolio_heatmap_scenario_panels(
                 df,
-                value_col=value_col,
+                value_col=value_col_fixed,
                 scenarios=sel_scens,
-                normalize_per_index=bool(normalize) if value_col == "Current value" else False,
-                cmap=cmap,
+                normalize_per_index=False,
+                cmap="RdYlGn_r",
                 layout=layout,
             )
             if fig is not None:
@@ -1358,13 +1332,8 @@ def render_portfolio_visualizations(
             key=f"_viz_chart_type_{scope}",
         )
     with col2:
-        value_col = st.selectbox(
-            "Show values",
-            options=value_col_options,
-            format_func=lambda x: available_value_cols[x],
-            index=default_idx,
-            key=f"_viz_value_col_{scope}",
-        )
+        st.caption("Showing percentiles (risk-class coloring).")
+        value_col = value_col_fixed
 
     if chart_type in ("heatmap", "both"):
         _render_heatmap_section(
@@ -1394,26 +1363,10 @@ def _render_heatmap_section(
     import streamlit as st
     
     st.markdown("#### Heatmap")
-    
-    # Heatmap-specific options
-    with st.expander("Heatmap options", expanded=False):
-        col1, col2 = st.columns(2)
-        with col1:
-            normalize = st.checkbox(
-                "Normalize per index",
-                value=True if value_col == "Current value" else False,
-                disabled=value_col != "Current value",
-                help="Scale values within each index column for better comparison",
-                key=f"{key_prefix}_heatmap_normalize",
-            )
-        with col2:
-            cmap = st.selectbox(
-                "Color scheme",
-                options=["RdYlGn_r", "RdYlBu_r", "YlOrRd", "Blues", "Reds", "viridis"],
-                index=0,
-                key=f"{key_prefix}_heatmap_cmap",
-                disabled=value_col in ("%Δ", "Δ"),  # Diverging maps forced for change
-            )
+
+    # Percentile-only mode: keep options minimal.
+    normalize = False
+    cmap = "RdYlGn_r"
     
     # Generate heatmap
     try:

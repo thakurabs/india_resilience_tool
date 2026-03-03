@@ -859,9 +859,10 @@ def make_portfolio_heatmap(
         vmin = -vmax
         norm = mcolors.TwoSlopeNorm(vmin=vmin, vcenter=0, vmax=vmax)
     elif value_col == "Percentile":
-        # Fixed 0-100 scale for percentile
-        cmap_obj = plt.get_cmap(cmap)
-        norm = mcolors.Normalize(vmin=0, vmax=100)
+        # Risk-class palette for percentile (colors show category; numbers show percentiles).
+        cmap_obj, norm = _risk_class_cmap_norm()
+        data_for_color = _percentile_to_risk_code(pivot.to_numpy(dtype=float))
+        masked_data = np.ma.masked_invalid(data_for_color)
     else:
         # Standard normalization
         cmap_obj = plt.get_cmap(cmap)
@@ -871,13 +872,20 @@ def make_portfolio_heatmap(
     
     # Add colorbar
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
-    cbar_label = {
-        "Current value": "Value (normalized)" if normalize_per_index else "Value",
-        "Percentile": "Percentile",
-        "%Δ": "% Change from Baseline",
-        "Δ": "Change from Baseline",
-    }.get(value_col, value_col)
-    cbar.set_label(cbar_label, fontsize=label_fontsize)
+    if value_col == "Percentile":
+        cbar.set_ticks([0, 1, 2, 3, 4])
+        cbar.set_ticklabels(RISK_CLASS_LABELS)
+        try:
+            cbar.ax.set_label("_portfolio_heatmap_percentile_colorbar")
+        except Exception:
+            pass
+    else:
+        cbar_label = {
+            "Current value": "Value (normalized)" if normalize_per_index else "Value",
+            "%Δ": "% Change from Baseline",
+            "Δ": "Change from Baseline",
+        }.get(value_col, value_col)
+        cbar.set_label(cbar_label, fontsize=label_fontsize)
     
     # Set ticks and labels
     ax.set_xticks(np.arange(n_cols))
