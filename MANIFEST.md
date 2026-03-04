@@ -45,7 +45,6 @@ india_resilience_tool/
 ├── __init__.py
 ├── analysis/ # Data analysis & computation
 │ ├── __init__.py
-│ ├── case_study.py # Case-study exports and helpers
 │ ├── map_enrichment.py # Streamlit-free map enrichment helpers (tooltip/rank/baseline)
 │ ├── metrics.py # Risk classification
 │ ├── portfolio.py # Portfolio logic & state (district + block)
@@ -56,7 +55,6 @@ india_resilience_tool/
 │ ├── color_range_controls.py # Map color-range defaults (robust p2–p98)
 │ ├── geography_controls.py # Sidebar: Geography & analysis focus (legacy-preserving)
 │ ├── geography.py # Filesystem-backed discovery for state/district/block selectors
-│ ├── dashboard.py # Dashboard entry wrapper
 │ ├── details_runtime.py # Right-panel runtime (Climate Profile routing)
 │ ├── left_panel_runtime.py # Left-panel runtime (Map vs Rankings routing)
 │ ├── map_layer_runtime.py # Streamlit-free Folium map-layer builder (patched FC + tooltip)
@@ -64,7 +62,6 @@ india_resilience_tool/
 │ ├── master_freshness.py # Master CSV freshness helpers (ribbon gating; Streamlit cached)
 │ ├── runtime.py # Canonical dashboard runtime entry (run_app orchestrator)
 │ ├── main.py # Streamlit entry module (run via Streamlit)
-│ ├── orchestrator.py # Module executor
 │ ├── perf.py # Performance helpers / timing
 │ ├── point_selection_ui.py # Coordinate input & batch support (district + block)
 │ ├── portfolio_state_runtime.py # Portfolio session_state wrappers (delegates to analysis.portfolio)
@@ -93,7 +90,6 @@ india_resilience_tool/
 │ ├── __init__.py
 │ ├── adm2_loader.py # GeoJSON district loading (ADM2)
 │ ├── adm3_loader.py # GeoJSON block loading (ADM3)
-│ ├── boundary_loader.py # Unified boundary loader API
 │ ├── discovery.py # Processed-artifact discovery helpers
 │ ├── master_columns.py # Streamlit-free master schema helpers (baseline discovery)
 │ ├── master_loader.py # Master CSV loading (district + block)
@@ -294,7 +290,7 @@ Unchanged structurally, but used by both district and block details/portfolio pa
 
 #### `runtime.py`
 Canonical runtime entrypoint for the dashboard. Responsibilities:
-- called by `india_resilience_tool/app/orchestrator.py` on every Streamlit rerun
+- called by `india_resilience_tool/app/main.py` on every Streamlit rerun
 - orchestrates sidebar + ribbon + map/rankings + details panels
 
 #### `map_pipeline.py`

@@ -11,18 +11,16 @@ Execution order (high-level):
 1. `india_resilience_tool/app/main.py`
    - initializes Streamlit session state via `ensure_session_state`
    - calls the app runner
-2. `india_resilience_tool/app/orchestrator.py`
-   - stable import path that calls the canonical runtime entrypoint
-3. `india_resilience_tool/app/runtime.py`
+2. `india_resilience_tool/app/runtime.py`
    - owns `st.set_page_config`
    - orchestrates sidebar + ribbon + map/rankings + details panels
-4. `india_resilience_tool/app/map_pipeline.py`
+3. `india_resilience_tool/app/map_pipeline.py`
    - builds merged GeoDataFrame + enriched columns + legend + Folium map + rankings table
-5. `india_resilience_tool/app/sidebar.py`
+4. `india_resilience_tool/app/sidebar.py`
    - renders selectors (admin level, analysis mode, view selection, hover toggle)
-6. `india_resilience_tool/app/views/*`
+5. `india_resilience_tool/app/views/*`
    - renders left-panel views and right-panel detail views
-7. Downstream layers (Streamlit-free):
+6. Downstream layers (Streamlit-free):
    - `india_resilience_tool/data/*` for I/O, discovery, merges
    - `india_resilience_tool/analysis/*` for computations (rank/percentile/portfolio/timeseries)
    - `india_resilience_tool/viz/*` for charts/tables/exports
@@ -32,7 +30,7 @@ Execution order (high-level):
 
 ### `india_resilience_tool/app/` (Streamlit UI + state + orchestration)
 - `main.py`: Streamlit script entry; calls `run()`
-- `orchestrator.py`: app routing + orchestration (no business logic beyond UI wiring)
+- `runtime.py`: app routing + orchestration (no business logic beyond UI wiring)
 - `state.py`: session_state key contract + defaults; level-aware helpers
 - `sidebar.py`: sidebar widgets and navigation/jump flags
 - `views/map_view.py`: Folium map rendering + click event extraction + inline add-to-portfolio control

@@ -19,6 +19,10 @@ Rule: only mark **delete** when there is evidence of non-reachability from roots
 | `dashboard_unfactored_impl.py` | Only referenced in docs/comments previously; not imported/executed by runtime chain. | low | delete (done) |
 | Root pipeline/ops scripts (historical) | These are *functionality to retain*, but they should not be in runtime root. They are now relocated under `tools/` (and the master builder implementation lives in `india_resilience_tool/compute/master_builder.py`). | med | move-to-tools (done) |
 | `india_resilience_tool/app/runtime_impl.py` | No longer part of the runtime chain (logic moved into `app/runtime.py` + `app/map_pipeline.py`). | low | delete (done) |
+| `india_resilience_tool/app/dashboard.py` | Legacy wrapper around `run_app`; removed to enforce a single runtime chain. Evidence: only referenced by `app/main.py` + a smoke test; both updated. | low | delete (done) |
+| `india_resilience_tool/app/orchestrator.py` | Legacy shim re-exporting `run_app`; removed to reduce runtime surface area. Evidence: only referenced by `app/dashboard.py` + a smoke test; both updated. | low | delete (done) |
+| `india_resilience_tool/data/boundary_loader.py` | Evidence: `rg` shows no imports from runtime (`india_resilience_tool/`), tools (`tools/`), or tests (`tests/`). | low | delete (done) |
+| `india_resilience_tool/analysis/case_study.py` | Evidence: `rg` shows no imports from runtime/tools/tests; functionality lives in `app/case_study_runtime.py` + `viz/exports.py`. | low | delete (done) |
 
 ## Candidates (symbol-level)
 

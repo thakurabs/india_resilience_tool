@@ -303,7 +303,6 @@ india_resilience_tool/
 ├── analysis/
 │   ├── AGENTS.md
 │   ├── __init__.py
-│   ├── case_study.py
 │   ├── metrics.py
 │   ├── portfolio.py
 │   └── timeseries.py
@@ -311,12 +310,10 @@ india_resilience_tool/
 │   ├── AGENTS.md
 │   ├── __init__.py
 │   ├── adm2_cache.py
-│   ├── dashboard.py
 │   ├── geography.py
 │   ├── runtime.py
 │   ├── map_pipeline.py
 │   ├── main.py
-│   ├── orchestrator.py
 │   ├── perf.py
 │   ├── point_selection_ui.py
 │   ├── portfolio_multistate.py
@@ -336,7 +333,6 @@ india_resilience_tool/
 │   ├── __init__.py
 │   ├── adm2_loader.py
 │   ├── adm3_loader.py
-│   ├── boundary_loader.py
 │   ├── discovery.py
 │   ├── master_loader.py
 │   └── merge.py

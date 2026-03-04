@@ -373,7 +373,7 @@ def render_right_panel(
         state_dir: str,
         district_display: str,
         scenario_name: str,
-        varcfg_in: Mapping[str, Any],
+        varcfg: Mapping[str, Any],
         aliases: Mapping[str, str] | None = None,
     ) -> pd.DataFrame:
         from india_resilience_tool.analysis.timeseries import load_district_yearly
@@ -383,7 +383,7 @@ def render_right_panel(
             state_dir=state_dir,
             district_display=district_display,
             scenario_name=scenario_name,
-            varcfg=dict(varcfg_in),
+            varcfg=dict(varcfg),
             aliases=dict(aliases) if aliases else None,
             normalize_fn=alias_fn,
         )
@@ -395,7 +395,7 @@ def render_right_panel(
         district_display: str,
         block_display: str,
         scenario_name: str,
-        varcfg_in: Mapping[str, Any],
+        varcfg: Mapping[str, Any],
         aliases: Mapping[str, str] | None = None,
     ) -> pd.DataFrame:
         from india_resilience_tool.analysis.timeseries import load_block_yearly
@@ -406,7 +406,7 @@ def render_right_panel(
             district_display=district_display,
             block_display=block_display,
             scenario_name=scenario_name,
-            varcfg=dict(varcfg_in),
+            varcfg=dict(varcfg),
             aliases=dict(aliases) if aliases else None,
             normalize_fn=alias_fn,
         )
@@ -497,7 +497,7 @@ def render_right_panel(
             district_display=str(district_for_fs),
             block_display=str(block_for_fs),
             scenario_name="historical",
-            varcfg_in=varcfg,
+            varcfg=varcfg,
             aliases=name_aliases,
         )
         yearly_scen = _load_block_yearly(
@@ -506,7 +506,7 @@ def render_right_panel(
             district_display=str(district_for_fs),
             block_display=str(block_for_fs),
             scenario_name=sel_scenario,
-            varcfg_in=varcfg,
+            varcfg=varcfg,
             aliases=name_aliases,
         )
         hist_ts = _filter_series_for_trend(yearly_hist, state_to_show, district_name, str(block_for_fs))
@@ -517,7 +517,7 @@ def render_right_panel(
             state_dir=str(state_dir_for_fs),
             district_display=str(district_for_fs),
             scenario_name="historical",
-            varcfg_in=varcfg,
+            varcfg=varcfg,
             aliases=name_aliases,
         )
         yearly_scen = _load_district_yearly(
@@ -525,7 +525,7 @@ def render_right_panel(
             state_dir=str(state_dir_for_fs),
             district_display=str(district_for_fs),
             scenario_name=sel_scenario,
-            varcfg_in=varcfg,
+            varcfg=varcfg,
             aliases=name_aliases,
         )
         hist_ts = _filter_series_for_trend(yearly_hist, state_to_show, district_name)
