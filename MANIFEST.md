@@ -56,6 +56,9 @@ india_resilience_tool/
 │ ├── geography_controls.py # Sidebar: Geography & analysis focus (legacy-preserving)
 │ ├── geography.py # Filesystem-backed discovery for state/district/block selectors
 │ ├── dashboard.py # Dashboard entry wrapper
+│ ├── details_runtime.py # Right-panel runtime (Climate Profile routing)
+│ ├── left_panel_runtime.py # Left-panel runtime (Map vs Rankings routing)
+│ ├── map_layer_runtime.py # Streamlit-free Folium map-layer builder (patched FC + tooltip)
 │ ├── orchestrator_impl.py # Dashboard implementation (district + block + bundles)
 │ ├── main.py # Streamlit entry module (run via Streamlit)
 │ ├── orchestrator.py # Module executor
@@ -88,7 +91,9 @@ india_resilience_tool/
 │ ├── adm3_loader.py # GeoJSON block loading (ADM3)
 │ ├── boundary_loader.py # Unified boundary loader API
 │ ├── discovery.py # Processed-artifact discovery helpers
+│ ├── master_columns.py # Streamlit-free master schema helpers (baseline discovery)
 │ ├── master_loader.py # Master CSV loading (district + block)
+│ ├── spatial_match.py # Streamlit-free click/point -> unit matching helpers
 │ └── merge.py # Merge utilities (ADM2/ADM3)
 ├── utils/ # Utilities
 │ ├── __init__.py
@@ -98,6 +103,7 @@ india_resilience_tool/
 ├── charts.py # Chart/figure generation
 ├── colors.py # Color scales & legends
 ├── exports.py # PDF/ZIP export generation
+├── folium_featurecollection.py # Streamlit-free GeoJSON FC patching + tooltip helpers
 ├── style.py # Shared plotting/table styling
 └── tables.py # Table formatting
 

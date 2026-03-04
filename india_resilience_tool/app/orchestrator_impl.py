@@ -22,7 +22,6 @@ import folium
 import matplotlib.colors as mcolors
 import matplotlib.cm as mpcm
 import matplotlib.pyplot as plt
-from shapely.geometry import Point
 from shapely.ops import transform
 
 from india_resilience_tool.data.adm3_loader import get_blocks_for_district as _get_blocks_for_district
@@ -49,24 +48,12 @@ from india_resilience_tool.app.sidebar import (
     render_analysis_mode_selector,
     render_block_selector,
     render_hover_toggle_if_portfolio,
-    render_view_selector,
 )
 
-from india_resilience_tool.app.views.map_view import (
-    render_map_view,
-    render_unit_add_to_portfolio,
-)
-from india_resilience_tool.app.views.rankings_view import render_rankings_view
-from india_resilience_tool.app.views.details_panel import render_details_panel
-from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
-from india_resilience_tool.app.portfolio_ui import render_portfolio_panel
-from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
 from india_resilience_tool.app.state import VIEW_MAP, VIEW_RANKINGS
 
 from india_resilience_tool.app.geo_cache import (
     build_adm1_from_adm2,
-    build_adm2_geojson_by_state,
-    build_adm3_geojson_by_state,
     enrich_adm2_with_state_names,
     list_available_states_from_processed_root_cached,
     load_local_adm2,
@@ -159,19 +146,6 @@ from india_resilience_tool.viz.colors import (
     compute_robust_range,
     get_cmap_hex_list as _get_cmap_hex_list,
 )
-
-def extract_name_from_feature(feat):
-    if not isinstance(feat, dict):
-        return None
-    props = feat.get("properties") or feat
-    for key in ("district_name", "shapeName", "NAME", "name", "SHAPE_NAME"):
-        if isinstance(props, dict) and props.get(key):
-            return props.get(key)
-    if isinstance(props, dict):
-        for k, v in props.items():
-            if isinstance(v, str) and len(v) > 2 and "shape" not in k.lower():
-                return v
-    return None
 
 # -------------------------
 # Helpers for export
@@ -593,9 +567,6 @@ with st.sidebar:
     perf_panel_placeholder = st.empty()
 
 st.title("India Resilience Tool")
-
-# Pilot state default
-PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
 # Pilot state default
 PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
@@ -1109,257 +1080,44 @@ if selected_district != "All":
 
 perf_end("map: filter display_gdf", _t_disp)
 
-m = folium.Map(
-    location=st.session_state["map_center"],
-    zoom_start=st.session_state["map_zoom"],
-    tiles="CartoDB positron",
-    control_scale=False,      # Disable scale control - minor speedup
-    min_zoom=4,
-    max_zoom=12,
-    prefer_canvas=True,       # Already good - uses Canvas instead of SVG
-    zoom_control=True,
-    dragging=True,
-    scrollWheelZoom=True,
-)
-
 try:
     if selected_state != "All" and selected_district == "All":
         row_state = adm1[adm1["shapeName"].astype(str).str.strip() == selected_state]
         if not row_state.empty:
             b = row_state.iloc[0].geometry.bounds
-            fit_bounds = [[b[1], b[0]], [b[3], b[2]]]
-            _name = m.get_name()
-            bounds_js = (
-                f"<script>var {_name} = {_name}; {_name}.fitBounds({fit_bounds});</script>"
-            )
-            m.get_root().html.add_child(folium.Element(bounds_js))
             st.session_state["map_center"] = [(b[1] + b[3]) / 2, (b[0] + b[2]) / 2]
             st.session_state["map_zoom"] = 7
 except Exception:
     pass
 
-_name = m.get_name()
-bounds_js = (
-    f"<script>var {_name} = {_name}; {_name}.setMaxBounds("
-    f"{[[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]]});</script>"
-)
-m.get_root().html.add_child(folium.Element(bounds_js))
-
-def style_fn(feature):
-    props = feature.get("properties", {})
-    return {
-        "fillColor": props.get("fillColor", "#cccccc"),
-        "color": "#666666",
-        "weight": 0.3,
-        "fillOpacity": 0.7,
-    }
-
 # Hover settings (tooltip is built AFTER fc properties are finalized)
 hover_enabled = st.session_state.get("hover_enabled", True)
-tooltip = None
-
-# -------------------------
-# Step 5: GeoJSON-by-state cache (geometry cached; properties patched per rerun)
-# -------------------------
-if _admin_level == "block":
-    adm3_mtime = float(ADM3_GEOJSON.stat().st_mtime)
-    geojson_by_state = build_adm3_geojson_by_state(
-        path=str(ADM3_GEOJSON),
-        tolerance=SIMPLIFY_TOL_ADM3,
-        mtime=adm3_mtime,
-    )
-else:
-    adm2_mtime = float(ADM2_GEOJSON.stat().st_mtime)
-    geojson_by_state = build_adm2_geojson_by_state(
-        path=str(ADM2_GEOJSON),
-        tolerance=SIMPLIFY_TOL_ADM2,
-        mtime=adm2_mtime,
-    )
-
-state_key = "all" if selected_state == "All" else (normalize_name(selected_state) or "unknown")
-
-# Legacy contract: callers expect geojson_by_state["all"] to exist as a fallback.
-# Some implementations return only per-state FeatureCollections, so we synthesize "all" once.
-if "all" not in geojson_by_state:
-    all_features: list[dict] = []
-    for k in sorted(geojson_by_state.keys()):
-        _fc = geojson_by_state.get(k) or {}
-        all_features.extend(_fc.get("features", []) or [])
-    geojson_by_state = dict(geojson_by_state)
-    geojson_by_state["all"] = {"type": "FeatureCollection", "features": all_features}
-
-fc = copy.deepcopy(geojson_by_state.get(state_key, geojson_by_state["all"]))
-
-# If a single district is selected, keep only that feature
-if selected_district != "All":
-    dist_key = alias(selected_district)
-    fc["features"] = [
-        f
-        for f in fc.get("features", [])
-        if alias(((f.get("properties") or {}).get("district_name", ""))) == dist_key
-    ]
-
-# Patch feature properties (fillColor + value columns) from the current display_gdf/merged
-prop_gdf = display_gdf if not display_gdf.empty else merged
-prop_work = prop_gdf.copy()
-
-is_block_level = _admin_level == "block"
-feature_key_col = "__bkey" if is_block_level else "__key"
-
-# Ensure identifier columns exist
-if is_block_level:
-    if "block_name" not in prop_work.columns and "block" in prop_work.columns:
-        prop_work["block_name"] = prop_work["block"]
-
-    if feature_key_col not in prop_work.columns:
-        def _mk_bkey_row(r) -> str:
-            return f"{alias(r.get('state_name', ''))}|{alias(r.get('district_name', ''))}|{alias(r.get('block_name', ''))}"
-
-        prop_work[feature_key_col] = prop_work.apply(_mk_bkey_row, axis=1)
-else:
-    if feature_key_col not in prop_work.columns:
-        prop_work[feature_key_col] = prop_work["district_name"].map(alias)
-
-# Numeric columns we want available on every feature (even if None)
-value_cols: list[str] = []
-for _c in (
-    metric_col,
-    map_value_col,
-    "_baseline_value",
-    "_delta_abs",
-    "_delta_pct",
-    "_rank_in_state",
-    "_percentile_state",
-):
-    if _c and (_c not in value_cols) and (_c in prop_work.columns):
-        value_cols.append(_c)
-
-# Text tooltip fields we want available on every feature
-text_cols: list[str] = []
-for _c in ("_risk_class", "_tooltip_value", "_tooltip_baseline", "_tooltip_delta", "_tooltip_rank"):
-    if _c in prop_work.columns:
-        text_cols.append(_c)
-
-keep_cols: list[str] = []
-if is_block_level:
-    if "block_name" in prop_work.columns:
-        keep_cols.append("block_name")
-keep_cols.append("district_name")
-if "state_name" in prop_work.columns:
-    keep_cols.append("state_name")
-keep_cols.append(feature_key_col)
-
-if "fillColor" in prop_work.columns:
-    keep_cols.append("fillColor")
-keep_cols.extend(value_cols)
-keep_cols.extend(text_cols)
-
-prop_work = prop_work[keep_cols].copy()
-
-props_map: dict[str, dict] = {}
-for _, r in prop_work.iterrows():
-    k = r.get(feature_key_col)
-    if not isinstance(k, str) or not k:
-        continue
-
-    upd: dict = {
-        "district_name": r.get("district_name"),
-        "state_name": r.get("state_name") if "state_name" in prop_work.columns else None,
-    }
-    if is_block_level and "block_name" in prop_work.columns:
-        upd["block_name"] = r.get("block_name")
-
-    fill = r.get("fillColor")
-    upd["fillColor"] = fill if isinstance(fill, str) and fill else "#cccccc"
-
-    for c in value_cols:
-        v = r.get(c)
-        upd[c] = None if pd.isna(v) else v
-
-    for c in text_cols:
-        v = r.get(c)
-        upd[c] = None if pd.isna(v) else v
-
-    props_map[k] = upd
-
-# Patch feature properties (fillColor + value columns) from the current display_gdf/merged
-for feat in fc.get("features", []):
-    props = feat.get("properties") or {}
-
-    k = props.get(feature_key_col)
-    if not isinstance(k, str) or not k:
-        if is_block_level:
-            props["block_name"] = props.get("block_name") or props.get("block") or props.get("adm3_name") or props.get("name")
-            props["district_name"] = props.get("district_name") or props.get("district") or props.get("adm2_name") or props.get("shapeName_2") or props.get("shapeName_1")
-            props["state_name"] = props.get("state_name") or props.get("state") or props.get("adm1_name") or props.get("shapeName_0") or props.get("shapeGroup")
-            k = f"{alias(props.get('state_name', ''))}|{alias(props.get('district_name', ''))}|{alias(props.get('block_name', ''))}"
-        else:
-            k = alias(props.get("district_name", ""))
-
-        props[feature_key_col] = k
-
-    upd = props_map.get(k)
-    if upd:
-        props.update(upd)
-    else:
-        props.setdefault("fillColor", "#cccccc")
-
-    # Tooltip text fields
-    for c in ("_risk_class", "_tooltip_value", "_tooltip_baseline", "_tooltip_delta", "_tooltip_rank"):
-        props.setdefault(c, None)
-
-    feat["properties"] = props
-
-# Build tooltip now that fc properties are finalized (unit/state + selection context)
-highlight_fn = None
-tooltip = None
-layer_name = "Blocks" if is_block_level else "Districts"
-
-if hover_enabled:
-    # Main label depends on map mode (absolute vs baseline change)
-    main_label = "Δ vs 1990–2010" if map_mode == "Change from 1990-2010 baseline" else "Value"
-
-    if is_block_level:
-        tooltip_fields = ["block_name", "district_name", "state_name", "_tooltip_value"]
-        tooltip_aliases = ["Block", "District", "State", main_label]
-    else:
-        tooltip_fields = ["district_name", "state_name", "_tooltip_value"]
-        tooltip_aliases = ["District", "State", main_label]
-
-    # Show baseline + delta if baseline exists in this dataset
-    if baseline_col and (baseline_col in merged.columns):
-        tooltip_fields += ["_tooltip_baseline", "_tooltip_delta"]
-        tooltip_aliases += ["Baseline (1990–2010)", "Δ vs baseline"]
-
-    # Risk/rank quick glance (rank scope is state for ADM2; district for ADM3)
-    tooltip_fields += ["_risk_class", "_tooltip_rank"]
-    tooltip_aliases += ["Risk class", f"Rank in {rank_scope_label}"]
-
-    tooltip = folium.features.GeoJsonTooltip(
-        fields=tooltip_fields,
-        aliases=tooltip_aliases,
-        localize=True,
-        sticky=True,
-    )
-
-    highlight_fn = lambda f: {
-        "fillColor": "#ffff00",
-        "color": "#000",
-        "weight": 2,
-        "fillOpacity": 0.9,
-    }
-
 _t_geojson = perf_start("map: GeoJSON serialize+add layer")
-folium.GeoJson(
-    data=fc,
-    name=layer_name,
-    style_function=style_fn,
-    tooltip=tooltip,
-    highlight_function=highlight_fn,
-    smooth_factor=1.5,        # Increased from 0.8 - reduces polygon vertices for faster render
-    zoom_on_click=False,
-    bubblingMouseEvents=False,  # Prevents event propagation overhead
-).add_to(m)
+from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
+
+m = build_folium_map_for_selection(
+    level=_admin_level,
+    merged=merged,
+    display_gdf=display_gdf,
+    selected_state=selected_state,
+    selected_district=selected_district,
+    map_mode=map_mode,
+    baseline_col=baseline_col,
+    rank_scope_label=rank_scope_label,
+    metric_col=metric_col,
+    map_value_col=map_value_col,
+    alias_fn=alias,
+    normalize_state_fn=normalize_name,
+    adm1=adm1,
+    map_center=st.session_state["map_center"],
+    map_zoom=st.session_state["map_zoom"],
+    bounds_latlon=[[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]],
+    hover_enabled=bool(hover_enabled),
+    adm2_geojson_path=ADM2_GEOJSON,
+    adm3_geojson_path=ADM3_GEOJSON,
+    simplify_tolerance_adm2=SIMPLIFY_TOL_ADM2,
+    simplify_tolerance_adm3=SIMPLIFY_TOL_ADM3,
+)
 perf_end("map: GeoJSON serialize+add layer", _t_geojson)
 
 MAP_WIDTH, MAP_HEIGHT = 780, 700
@@ -1377,825 +1135,93 @@ legend_block_html = build_vertical_binned_legend_block_html(
     bar_width_px=18,
 )
 
-# Ensure `returned` always exists, even if the map tab didn't run yet
-returned = None
+from india_resilience_tool.app.left_panel_runtime import render_left_panel
 
-# col1, col2 are defined earlier (metric ribbon layout)
-
-with col1:
-    # Ribbon is shown above; keep only the reset action here (right-aligned)
-    _, reset_col = st.columns([4, 1])
-    with reset_col:
-        if st.button("⟲ Reset View", key="reset_map_view"):
-            st.session_state["pending_selected_state"] = "All"
-            st.session_state["pending_selected_district"] = "All"
-            st.session_state["map_reset_requested"] = True
-
-    # Main view selector: Map vs Rankings (replaces tabs)
-    view_options = [VIEW_MAP, VIEW_RANKINGS]
-
-    from india_resilience_tool.app.sidebar import render_view_selector
-
-    # Preserve the exact widget key + option strings; keep horizontal=True like legacy
-    view = render_view_selector(label="View", horizontal=True)
-
-# ---------- VIEW 1: MAP ----------
-    if view == VIEW_MAP:
-
-        returned, clicked_district, clicked_state = render_map_view(
-            m=m,
-            variable_slug=VARIABLE_SLUG,
-            map_mode=map_mode,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            selected_state=selected_state,
-            selected_district=selected_district,
-            selected_block=selected_block,
-            map_width=MAP_WIDTH,
-            map_height=MAP_HEIGHT,
-            legend_block_html=legend_block_html,
-            perf_section=perf_section,
-            level=_admin_level,
-        )
-
-        # Show add-to-portfolio button when a unit is clicked in portfolio mode
-        if "Multi" in analysis_mode:
-            from india_resilience_tool.app.views.map_view import render_unit_add_to_portfolio
-            
-            # Get clicked block from session state (set by render_map_view in block mode)
-            clicked_block = st.session_state.get("clicked_block") if _admin_level == "block" else None
-            
-            render_unit_add_to_portfolio(
-                clicked_district=clicked_district,
-                clicked_state=clicked_state,
-                clicked_block=clicked_block,
-                selected_state=selected_state,
-                portfolio_add_fn=_portfolio_add,
-                portfolio_remove_fn=_portfolio_remove,
-                portfolio_contains_fn=_portfolio_contains,
-                normalize_fn=_portfolio_normalize,
-                returned=returned,
-                merged=merged,
-                level=_admin_level,
-            )
-
-        if clicked_district:
-            st.session_state["pending_selected_district"] = clicked_district
-            if clicked_state:
-                st.session_state["pending_selected_state"] = clicked_state
-
-    elif view == VIEW_RANKINGS:
-
-        render_rankings_view(
-            view=view,
-            table_df=table_df,
-            has_baseline=has_baseline,
-            variables=VARIABLES,
-            variable_slug=VARIABLE_SLUG,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            selected_state=selected_state,
-            portfolio_add=_portfolio_add,
-            portfolio_contains=_portfolio_contains,
-            portfolio_remove=_portfolio_remove,
-            level=_admin_level,
-        )
+# Ensure `returned` always exists, even if the Rankings view is selected.
+returned, _view = render_left_panel(
+    col=col1,
+    m=m,
+    legend_block_html=legend_block_html,
+    map_mode=map_mode,
+    map_width=MAP_WIDTH,
+    map_height=MAP_HEIGHT,
+    perf_section=perf_section,
+    variable_slug=VARIABLE_SLUG,
+    sel_scenario=sel_scenario,
+    sel_period=sel_period,
+    sel_stat=sel_stat,
+    selected_state=selected_state,
+    selected_district=selected_district,
+    selected_block=selected_block,
+    level=_admin_level,
+    table_df=table_df,
+    has_baseline=has_baseline,
+    variables=VARIABLES,
+    variable_slug_for_rankings=VARIABLE_SLUG,
+    portfolio_add_fn=_portfolio_add,
+    portfolio_contains_fn=_portfolio_contains,
+    portfolio_remove_fn=_portfolio_remove,
+    portfolio_normalize_fn=_portfolio_normalize,
+    merged=merged,
+)
 
 # -------------------------
 # Details panel (portfolio + risk cards, sparkline + comparison)
 # -------------------------
 with col2:
-
-    # Reserved slot: "Selected district for portfolio" (map route) should appear ABOVE
-    # the Portfolio analysis expander even though it's determined later in the script.
-    portfolio_selected_slot = st.empty()
-
-    # -------------------------
-    # Multi-district/block portfolio mode: show a clean, guided right-panel flow
-    # -------------------------
-    analysis_mode_rhs = st.session_state.get("analysis_mode", "Single district focus")
-    portfolio_route = st.session_state.get("portfolio_build_route", None)
-
-    if "Multi" in analysis_mode_rhs:
-        # ---- MULTI-UNIT PORTFOLIO PANEL (extracted to portfolio_ui.py) ----
-        render_portfolio_panel(
-            # State/selection context
-            selected_state=selected_state,
-            portfolio_route=portfolio_route,
-            level=_admin_level,
-            # Variable/metric context
-            variables=VARIABLES,
-            variable_slug=VARIABLE_SLUG,
-            index_group_labels=INDEX_GROUP_LABELS,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            metric_col=metric_col,
-            # Data
-            merged=merged,
-            adm1=adm1,
-            # Config
-            pilot_state=PILOT_STATE,
-            data_dir=DATA_DIR,
-            # Callable dependencies
-            compute_state_metrics_fn=lambda *_args, **_kwargs: ({}, None, None),
-            load_master_csv_fn=load_master_csv,
-            normalize_master_columns_fn=normalize_master_columns,
-            parse_master_schema_fn=parse_master_schema,
-            resolve_metric_column_fn=resolve_metric_column,
-            find_baseline_column_for_stat_fn=find_baseline_column_for_stat,
-            risk_class_from_percentile_fn=risk_class_from_percentile,
-            portfolio_normalize_fn=_portfolio_normalize,
-            portfolio_remove_fn=_portfolio_remove,
-            portfolio_remove_all_fn=_portfolio_remove_all,
-            build_portfolio_multiindex_df_fn=_build_portfolio_multiindex_df_impl,
-        )
-
-    else:
-        # In non-portfolio modes, the right panel content is rendered by the
-        # district/state details logic below.
-        pass
-
-    # -------------------------
-    # Climate profile / point query panel
-    # -------------------------
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-    portfolio_route = st.session_state.get("portfolio_build_route", None)
-    clear_clicked = False
-
-    is_portfolio_mode = "Multi" in str(analysis_mode)
-    if is_portfolio_mode:
-        # In any portfolio mode (multi-district or multi-block), keep the right panel
-        # clean and driven by the portfolio panel above.
-        render_perf_panel_safe()
-        st.stop()
-
-    st.header("Climate Profile")
-
-    # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
-    if "Multi" in analysis_mode and portfolio_route == "saved_points":
-        # ---- POINT SELECTION PANEL (extracted to point_selection_ui.py) ----
-        clear_clicked = render_point_selection_panel(
-            portfolio_add_fn=_portfolio_add,
-            portfolio_key_fn=_portfolio_key,
-            portfolio_set_flash_fn=_portfolio_set_flash,
-            level=_admin_level,
-        )
-
-    clicked_feature = None
-    click_coords = None
-    if returned:
-        for k in ("last_active_drawing", "last_object_clicked", "last_object"):
-            if returned.get(k) is not None:
-                clicked_feature = returned.get(k)
-                break
-        for k in ("last_clicked", "latlng", "last_latlng"):
-            val = returned.get(k)
-            if isinstance(val, dict) and ("lat" in val or "lng" in val):
-                lat = val.get("lat") or val.get("latitude") or val.get("y")
-                lng = val.get("lng") or val.get("longitude") or val.get("x")
-                if lat is not None and lng is not None:
-                    click_coords = (float(lat), float(lng))
-                    break
-            if isinstance(val, (list, tuple)) and len(val) >= 2:
-                try:
-                    click_coords = (float(val[0]), float(val[1]))
-                    break
-                except Exception:
-                    pass
-
-    if "Multi" in analysis_mode and portfolio_route == "saved_points":
-        # If map selection mode is active, use the next map click as the
-        # point-query location and then disable the mode (one-shot behaviour).
-        if click_coords is not None and st.session_state.get("point_query_select_on_map", False):
-            lat_click, lon_click = click_coords
-            st.session_state["point_query_lat"] = lat_click
-            st.session_state["point_query_lon"] = lon_click
-            st.session_state["point_query_latlon"] = {"lat": lat_click, "lon": lon_click}
-            st.session_state["point_query_select_on_map"] = False
-            # Rerun so the newly selected point is rendered immediately
-            st.rerun()
-
-        # If we cleared the point selection this run, ignore any stored
-        # point-query coordinates.
-        if clear_clicked:
-            click_coords = None
-        # If we have no current map click but do have a stored point query,
-        # reuse the stored point for district lookup.
-        elif click_coords is None:
-            point_query = st.session_state.get("point_query_latlon")
-            if isinstance(point_query, dict):
-                try:
-                    lat_q = float(point_query.get("lat"))
-                    lon_q = float(point_query.get("lon"))
-                    click_coords = (lat_q, lon_q)
-                except (TypeError, ValueError):
-                    click_coords = None
-
-    clicked_name2 = extract_name_from_feature(clicked_feature) if clicked_feature else None
-    matched_row = None
-    if clicked_name2:
-        mask = merged["district_name"].astype(str).str.lower() == str(clicked_name2).lower()
-        matched_row = merged[mask].iloc[0:1] if mask.any() else None
-        if matched_row is None or matched_row.empty:
-            mask2 = (
-                merged["district_name"]
-                .astype(str)
-                .str.lower()
-                .str.contains(str(clicked_name2).lower())
-            )
-            if mask2.any():
-                matched_row = merged[mask2].iloc[0:1]
-
-    if (matched_row is None or matched_row.empty) and (click_coords is not None):
-        lat, lng = click_coords
-        pt = Point(float(lng), float(lat))
-        try:
-            contains_mask = merged.geometry.contains(pt)
-            matched_row = merged[contains_mask].iloc[0:1] if contains_mask.any() else None
-            if matched_row is None or matched_row.empty:
-                centroids = merged.geometry.centroid
-                dists = centroids.distance(pt)
-                idx = dists.idxmin()
-                matched_row = merged.loc[[idx]]
-        except Exception:
-            matched_row = None
-
-    if (
-        matched_row is None
-        or matched_row.empty
-    ) and st.session_state.get("selected_district", "All") != "All":
-        sel_district_raw = st.session_state.get("selected_district", "All")
-        # Some UI controls store values like "District, State" — match on the district token.
-        sel_district_norm = str(sel_district_raw).split(",")[0].strip().lower()
-
-        district_series = merged["district_name"].astype(str).str.strip().str.lower()
-        mask = district_series == sel_district_norm
-        if (not mask.any()) and sel_district_norm:
-            mask = district_series.str.contains(re.escape(sel_district_norm), na=False)
-
-        # In block mode, also filter by selected_block
-        if _admin_level == "block" and st.session_state.get("selected_block", "All") != "All":
-            sel_block_raw = st.session_state.get("selected_block", "All")
-            sel_block_norm = str(sel_block_raw).split(",")[0].strip().lower()
-            
-            if "block_name" in merged.columns:
-                block_series = merged["block_name"].astype(str).str.strip().str.lower()
-                block_mask = block_series == sel_block_norm
-                if not block_mask.any() and sel_block_norm:
-                    block_mask = block_series.str.contains(re.escape(sel_block_norm), na=False)
-                mask = mask & block_mask
-
-        if mask.any():
-            matched_row = merged[mask].iloc[0:1]
-
-    # -------------- Helper for baseline detection --------------
-    def find_baseline_column(
-        df_cols, base_metric: str
-    ) -> Optional[str]:
-        """
-        Try to find a 'baseline' column for the same metric:
-        Prefer historical 1995-2014; else earliest historical period; else None.
-        Columns are in <metric>__<scenario>__<period>__<stat> form.
-        """
-        pat = re.compile(
-            rf"^{re.escape(base_metric)}__(?P<scenario>[^_]+)__(?P<period>[^_]+)__mean$"
-        )
-        candidates = []
-        for c in df_cols:
-            m = pat.match(str(c))
-            if m and m.group("scenario").lower() == "historical":
-                candidates.append((c, m.group("period")))
-        if not candidates:
-            return None
-        # Prefer 1995-2014 if present
-        for c, p in candidates:
-            if p.replace(" ", "") in ("1995-2014", "1995_2014", "1985-2014"):
-                return c
-        # else pick lexicographically earliest period
-        candidates.sort(key=lambda x: x[1])
-        return candidates[0][0]
-
-    # ----------- STATE/DISTRICT SUMMARY MODE (no unit selected) -----------
-    analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-
-    # Determine if we should show State Climate Profile (no unit selected).
-    if _admin_level == "block":
-        show_summary = selected_state != "All" and selected_block == "All"
-    else:
-        show_summary = selected_state != "All" and selected_district == "All"
-
-    if (matched_row is None or matched_row.empty) and show_summary:
-        if "Multi" in analysis_mode:
-            # In portfolio mode, we suppress the large summary panel here.
-            # Portfolio results should be driven by the Portfolio analysis panel.
-            pass
-        else:
-            # ---- STATE CLIMATE PROFILE VIEW ----
-            render_state_summary_view(
-                selected_state=selected_state,
-                variables=VARIABLES,
-                variable_slug=VARIABLE_SLUG,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                metric_col=metric_col,
-                merged_gdf=merged,
-                processed_root=PROCESSED_ROOT,
-                level=_admin_level,
-            )
-
-    # ----------- UNIT DETAILS MODE (district or block) -----------
-    else:
-        analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-        unit_label = "block" if _admin_level == "block" else "district"
-
-        if matched_row is None or getattr(matched_row, "empty", True):
-            st.warning(f"No {unit_label}-level data found for the current selection.")
-            if "Multi" in analysis_mode:
-                st.info(
-                    f"In portfolio mode, add {unit_label}s via **From the map**, **From saved points**, "
-                    f"or **From the rankings table** (Portfolio analysis panel)."
-                )
-            else:
-                st.info(
-                    f"Please choose a different {unit_label} from the sidebar, or select **All** "
-                    f"to view the {'district' if _admin_level == 'block' else 'state'} summary."
-                )
-            st.stop()
-
-        row = matched_row.iloc[0]
-        district_name = row.get("district_name", "Unknown")
-        block_name = row.get("block_name", "Unknown") if _admin_level == "block" else None
-        state_to_show = (
-            st.session_state.get("selected_state")
-            if st.session_state.get("selected_state") != "All"
-            else (row.get("state_name") or "Unknown")
-        )
-
-        # --- Compact selection view in Multi-unit portfolio mode ---
-        if "Multi" in analysis_mode:
-            portfolio_route = st.session_state.get("portfolio_build_route", None)
-
-            # Only show the "selected district" panel when the user explicitly chose
-            # the "From the map" route.
-            if portfolio_route == "map":
-                with portfolio_selected_slot.container():
-                    st.subheader("Selected district for portfolio")
-                    st.markdown(f"**District:** {district_name}")
-                    st.markdown(f"**State:** {state_to_show}")
-
-                    if click_coords is not None:
-                        st.caption(
-                            f"Selected via map click at lat {click_coords[0]:.4f}, "
-                            f"lon {click_coords[1]:.4f} (assigned to this district)."
-                        )
-
-                    already_in = _portfolio_contains(state_to_show, district_name)
-
-                    c_add, c_remove = st.columns(2)
-                    with c_add:
-                        if not already_in:
-                            if st.button(
-                                "Add to portfolio",
-                                key=f"btn_add_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
-                                use_container_width=True,
-                            ):
-                                _portfolio_add(state_to_show, district_name)
-                                # Flash message is shown in your Step 2 portfolio panel
-                                st.session_state["portfolio_flash"] = (
-                                    f"Added {district_name}, {state_to_show} to portfolio."
-                                )
-                                # Force a fresh rerun so the portfolio panel re-renders with new state
-                                st.rerun()
-                        else:
-                            st.success("Already in portfolio")
-
-                    with c_remove:
-                        if already_in:
-                            if st.button(
-                                "Remove",
-                                key=f"btn_remove_portfolio_maproute_{_portfolio_normalize(state_to_show)}_{_portfolio_normalize(district_name)}",
-                                use_container_width=True,
-                            ):
-                                _portfolio_remove(state_to_show, district_name)
-                                st.session_state["portfolio_flash"] = (
-                                    f"Removed {district_name}, {state_to_show} from portfolio."
-                                )
-                                st.rerun()
-
-                    st.caption(f"Portfolio size: {len(st.session_state.get('portfolio_districts', []))} district(s)")
-
-            # In portfolio mode, do NOT render the full climate profile below.
-            render_perf_panel_safe()
-            st.stop()
-
-        # --- Full unit climate profile (single-district/block focus mode) ---
-        # Unit header is rendered inside render_details_panel (details_panel.py) to avoid duplication.
-
-        # If this view was triggered by a point query, show the coordinates used.
-        if click_coords is not None:
-            unit_label_display = "block" if _admin_level == "block" else "district"
-            st.caption(
-                f"Point location used: lat {click_coords[0]:.4f}, "
-                f"lon {click_coords[1]:.4f} (assigned to this {unit_label_display})."
-            )
-
-        # --- Portfolio add button (for multi-unit analysis) ---
-        if "Multi" in analysis_mode:
-            unit_label_btn = "block" if _admin_level == "block" else "district"
-            display_name = block_name if _admin_level == "block" else district_name
-            
-            if st.button(
-                f"Add this {unit_label_btn} to portfolio",
-                key=f"btn_add_portfolio_single_{state_to_show}_{district_name}_{block_name or 'na'}",
-            ):
-                _portfolio_add(state_to_show, district_name, block_name)
-                st.success(f"Added {display_name}, {state_to_show} to portfolio.")
-
-            # Always show current portfolio below the button
-            portfolio_key = "portfolio_blocks" if _admin_level == "block" else "portfolio_districts"
-            portfolio_current = st.session_state.get(portfolio_key, [])
-            if portfolio_current:
-                unit_label_plural = "blocks" if _admin_level == "block" else "districts"
-                st.markdown(f"**Current portfolio ({unit_label_plural})**")
-                try:
-                    if isinstance(portfolio_current[0], dict):
-                        if _admin_level == "block":
-                            port_df = (
-                                pd.DataFrame(portfolio_current)
-                                .rename(columns={"state": "State", "district": "District", "block": "Block"})
-                            )
-                        else:
-                            port_df = (
-                                pd.DataFrame(portfolio_current)
-                                .rename(columns={"state": "State", "district": "District"})
-                            )
-                    else:
-                        port_df = pd.DataFrame(portfolio_current)
-                except Exception:
-                    port_df = pd.DataFrame()
-
-                st.dataframe(
-                    port_df,
-                    use_container_width=True,
-                )
-            else:
-                unit_label_plural = "blocks" if _admin_level == "block" else "districts"
-                st.caption(
-                    f"No {unit_label_plural} in the portfolio yet. "
-                    f"Use the button above or the Rankings table to add {unit_label_plural}."
-                )
-
-        # ---- Risk cards (1.1) ----
-        current_val = row.get(metric_col)
-        current_val_f = float(current_val) if not pd.isna(current_val) else None
-
-        # baseline: same metric, historical, baseline period
-        baseline_col = find_baseline_column(df.columns, sel_metric)
-        baseline_val = row.get(baseline_col) if baseline_col else np.nan
-        baseline_val_f = float(baseline_val) if not pd.isna(baseline_val) else None
-
-        # position within comparison groups: rank + percentile (direction-aware)
-        # For districts: within state
-        # For blocks: within district AND within state
-        from india_resilience_tool.analysis.metrics import compute_position_stats
-
-        rank_higher_is_worse = bool(VARCFG.get("rank_higher_is_worse", True))
-
-        # Prefer median for ranking if available (more robust to outliers)
-        rank_metric_col = metric_col
-        try:
-            parts = str(metric_col).split("__")
-            if len(parts) == 4 and parts[-1] == "mean":
-                cand = "__".join(parts[:-1] + ["median"])
-                if cand in df.columns:
-                    rank_metric_col = cand
-        except Exception:
-            pass
-
-        # State distribution (districts or blocks)
-        rank_in_state = None
-        n_in_state = None
-        percentile_state = None
-
-        try:
-            in_state_mask = (
-                merged["state_name"].astype(str).str.strip().str.lower()
-                == str(state_to_show).strip().lower()
-            )
-            state_vals = pd.to_numeric(merged.loc[in_state_mask, rank_metric_col], errors="coerce").dropna()
-            pos_state = compute_position_stats(state_vals, current_val_f, higher_is_worse=rank_higher_is_worse)
-            rank_in_state, n_in_state, percentile_state = pos_state.rank, pos_state.n, pos_state.percentile
-        except Exception:
-            pass
-
-        # District distribution (blocks only)
-        rank_in_district = None
-        n_in_district = None
-        percentile_district = None
-        try:
-            if _admin_level == "block":
-                in_dist_mask = (
-                    (merged["state_name"].astype(str).str.strip().str.lower() == str(state_to_show).strip().lower())
-                    & (merged["district_name"].astype(str).str.strip().str.lower() == str(district_name).strip().lower())
-                )
-                dist_vals = pd.to_numeric(merged.loc[in_dist_mask, rank_metric_col], errors="coerce").dropna()
-                pos_dist = compute_position_stats(dist_vals, current_val_f, higher_is_worse=rank_higher_is_worse)
-                rank_in_district, n_in_district, percentile_district = (
-                    pos_dist.rank,
-                    pos_dist.n,
-                    pos_dist.percentile,
-                )
-        except Exception:
-            pass
-
-        # ---- Helper functions for time series and case study ----
-
-        @st.cache_data
-        def _read_yearly_csv(fpath: Path) -> pd.DataFrame:
-            from india_resilience_tool.analysis.timeseries import read_yearly_csv_robust, prepare_yearly_series
-
-            df = read_yearly_csv_robust(fpath)
-            return prepare_yearly_series(df)
-
-        def _slugify_fs(s: str) -> str:
-            s = (
-                unicodedata.normalize("NFKD", str(s))
-                .encode("ascii", "ignore")
-                .decode("ascii")
-            )
-            s = re.sub(r"[^A-Za-z0-9]+", "_", s.strip())
-            return re.sub(r"_+", "_", s).strip("_").lower()
-
-        @st.cache_data
-        def _load_district_yearly(
-            ts_root: Path,
-            state_dir: str,
-            district_display: str,
-            scenario_name: str,
-            varcfg: dict,
-            aliases: dict | None = None,
-        ) -> pd.DataFrame:
-            """
-            Load the *scenario-specific* yearly ensemble CSV for a district.
-
-            Delegates to india_resilience_tool.analysis.timeseries for robust discovery.
-            """
-            from india_resilience_tool.analysis.timeseries import load_district_yearly
-
-            return load_district_yearly(
-                ts_root=ts_root,
-                state_dir=state_dir,
-                district_display=district_display,
-                scenario_name=scenario_name,
-                varcfg=varcfg,
-                aliases=aliases,
-                normalize_fn=alias,  # shared normalization + NAME_ALIASES (Step 9)
-            )
-
-        @st.cache_data
-        def _load_block_yearly(
-            ts_root: Path,
-            state_dir: str,
-            district_display: str,
-            block_display: str,
-            scenario_name: str,
-            varcfg: dict,
-            aliases: dict | None = None,
-        ) -> pd.DataFrame:
-            """
-            Load the *scenario-specific* yearly ensemble CSV for a block.
-
-            Delegates to india_resilience_tool.analysis.timeseries for robust discovery.
-            """
-            from india_resilience_tool.analysis.timeseries import load_block_yearly
-
-            return load_block_yearly(
-                ts_root=ts_root,
-                state_dir=state_dir,
-                district_display=district_display,
-                block_display=block_display,
-                scenario_name=scenario_name,
-                varcfg=varcfg,
-                aliases=aliases,
-                normalize_fn=alias,
-            )
-
-        def _filter_series_for_trend(
-            df: pd.DataFrame,
-            state_name: str,
-            district_name: str,
-            block_name: Optional[str] = None,
-        ) -> pd.DataFrame:
-            """
-            Extract a clean time series for a single unit from a
-            scenario-specific yearly dataframe.
-
-            In district mode: filters to (state, district)
-            In block mode:    filters to (state, district, block) when block_name is provided
-            """
-            if df is None or df.empty:
-                return pd.DataFrame()
-
-            d = df.copy()
-
-            # Normalize id columns (tolerate 'block_name' vs 'block')
-            if "block_name" in d.columns and "block" not in d.columns:
-                d["block"] = d["block_name"]
-
-            def _n(s: str) -> str:
-                return alias(s)
-
-            if "state" in d.columns:
-                d["_state_key"] = d["state"].astype(str).map(_n)
-            else:
-                d["_state_key"] = pd.Series([""] * len(d), index=d.index)
-
-            if "district" in d.columns:
-                d["_district_key"] = d["district"].astype(str).map(_n)
-            else:
-                d["_district_key"] = pd.Series([""] * len(d), index=d.index)
-
-            mask = (d["_state_key"] == _n(state_name)) & (d["_district_key"] == _n(district_name))
-
-            # Optional block filter when present + requested
-            if block_name and ("block" in d.columns):
-                d["_block_key"] = d["block"].astype(str).map(_n)
-                mask = mask & (d["_block_key"] == _n(block_name))
-
-            if not mask.any():
-                # Soft fallback: allow partial matches on district (and block if provided)
-                mask = (d["_state_key"] == _n(state_name)) & d["_district_key"].str.contains(_n(district_name), na=False)
-                if block_name and ("block" in d.columns):
-                    d["_block_key"] = d["block"].astype(str).map(_n)
-                    mask = mask & d["_block_key"].str.contains(_n(block_name), na=False)
-
-            d = d[mask]
-            if d.empty:
-                return d
-
-            for c in ("year", "mean", "p05", "p95"):
-                if c in d.columns:
-                    d[c] = pd.to_numeric(d[c], errors="coerce")
-            d = d.dropna(subset=["year", "mean"]).sort_values("year")
-            return d
-
-        from india_resilience_tool.app.case_study_runtime import (
-            make_case_study_zip_with_labels,
-            make_district_case_study_builder,
-        )
-        from india_resilience_tool.viz.exports import make_district_case_study_pdf as _make_district_case_study_pdf
-
-        _build_district_case_study_data = make_district_case_study_builder(
-            variables=VARIABLES,
-            data_dir=DATA_DIR,
-            pilot_state=PILOT_STATE,
-            load_master_and_schema_fn=_load_master_and_schema,
-            portfolio_normalize_fn=_portfolio_normalize,
-            alias_fn=alias,
-            name_aliases=NAME_ALIASES,
-            load_district_yearly_fn=_load_district_yearly,
-            filter_series_for_trend_fn=_filter_series_for_trend,
-            find_baseline_column_for_stat_fn=find_baseline_column_for_stat,
-            build_scenario_comparison_panel_for_row_fn=build_scenario_comparison_panel_for_row,
-            risk_class_from_percentile_fn=risk_class_from_percentile,
-        )
-
-        _make_case_study_zip = make_case_study_zip_with_labels(variables=VARIABLES)
-
-        # --- Load historical + selected scenario series separately ---
-        requested_state_dir = (
-            selected_state
-            if selected_state != "All"
-            else (row.get("state_name") or PILOT_STATE)
-        )
-        state_dir_for_fs = requested_state_dir
-        district_for_fs = row.get("district_name") or selected_district
-
-        block_for_fs = row.get("block_name") or selected_block
-
-        if _admin_level == "block" and selected_block != "All":
-            # Historical (1990–2010) - block level
-            _district_yearly_hist = _load_block_yearly(
-                ts_root=PROCESSED_ROOT,
-                state_dir=str(state_dir_for_fs),
-                district_display=str(district_for_fs),
-                block_display=str(block_for_fs),
-                scenario_name="historical",
-                varcfg=VARCFG,
-                aliases=NAME_ALIASES,
-            )
-
-            # Selected SSP scenario (2020–2060) - block level
-            _district_yearly_scen = _load_block_yearly(
-                ts_root=PROCESSED_ROOT,
-                state_dir=str(state_dir_for_fs),
-                district_display=str(district_for_fs),
-                block_display=str(block_for_fs),
-                scenario_name=sel_scenario,
-                varcfg=VARCFG,
-                aliases=NAME_ALIASES,
-            )
-
-            # Prepare time series for the details panel (block filter)
-            hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name, str(block_for_fs))
-            scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name, str(block_for_fs))
-        else:
-            # Historical (1990–2010) - district level
-            _district_yearly_hist = _load_district_yearly(
-                ts_root=PROCESSED_ROOT,
-                state_dir=str(state_dir_for_fs),
-                district_display=str(district_for_fs),
-                scenario_name="historical",
-                varcfg=VARCFG,
-                aliases=NAME_ALIASES,
-            )
-
-            # Selected SSP scenario (2020–2060) - district level
-            _district_yearly_scen = _load_district_yearly(
-                ts_root=PROCESSED_ROOT,
-                state_dir=str(state_dir_for_fs),
-                district_display=str(district_for_fs),
-                scenario_name=sel_scenario,
-                varcfg=VARCFG,
-                aliases=NAME_ALIASES,
-            )
-
-            # Prepare time series for the details panel
-            hist_ts = _filter_series_for_trend(_district_yearly_hist, state_to_show, district_name)
-            scen_ts = _filter_series_for_trend(_district_yearly_scen, state_to_show, district_name)
-
-        # Import required functions for details panel
-        from india_resilience_tool.viz.charts import (
-            create_trend_figure_for_index_plotly as _create_trend_figure_for_index,
-        )
-        from india_resilience_tool.data.discovery import slugify_fs
-
-        from india_resilience_tool.viz.style import ensure_16x9_figsize
-
-        _fig_size_panel = ensure_16x9_figsize(FIG_SIZE_PANEL, mode="fit_width")
-
-        # ---- SINGLE-DISTRICT DETAILS PANEL (extracted to details_panel.py) ----
-        render_details_panel(
-            # Core district/state context
-            row=row,
-            district_name=district_name,
-            state_to_show=state_to_show,
-            selected_district=selected_district,
-            # Metric / variable context
-            variables=VARIABLES,
-            variable_slug=VARIABLE_SLUG,
-            sel_metric=sel_metric,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            # Risk summary data
-            current_val_f=current_val_f,
-            baseline_val_f=baseline_val_f,
-            baseline_col=baseline_col,
-            rank_in_state=rank_in_state,
-            n_in_state=n_in_state,
-            percentile_state=percentile_state,
-            rank_higher_is_worse=rank_higher_is_worse,
-            # Time series data
-            hist_ts=hist_ts,
-            scen_ts=scen_ts,
-            # Schema for scenario comparison
-            schema_items=schema_items,
-            # Figure styling
-            fig_size_panel=_fig_size_panel,
-            fig_dpi_panel=FIG_DPI_PANEL,
-            font_size_title=FONT_SIZE_TITLE,
-            font_size_label=FONT_SIZE_LABEL,
-            font_size_ticks=FONT_SIZE_TICKS,
-            font_size_legend=FONT_SIZE_LEGEND,
-            # Constants
-            period_order=PERIOD_ORDER,
-            scenario_display=SCENARIO_DISPLAY,
-            # Callable dependencies
-            create_trend_figure_fn=_create_trend_figure_for_index,
-            build_scenario_panel_fn=build_scenario_comparison_panel_for_row,
-            make_scenario_figure_fn=_make_scenario_comparison_figure_dashboard,
-            build_case_study_data_fn=_build_district_case_study_data,
-            make_case_study_pdf_fn=_make_district_case_study_pdf,
-            make_case_study_zip_fn=_make_case_study_zip,
-            slugify_fs_fn=slugify_fs,
-            # Optional filesystem paths
-            state_dir_for_fs=state_dir_for_fs,
-            district_for_fs=district_for_fs,
-            ts_root=PROCESSED_ROOT,
-            logo_path=LOGO_PATH,
-            # Block-level support
-            level=_admin_level,
-            block_name=str(block_for_fs) if (_admin_level == "block" and selected_block != "All") else None,
-            parent_district_name=str(district_name) if _admin_level == "block" else None,
-            rank_in_district=rank_in_district,
-            n_in_district=n_in_district,
-            percentile_district=percentile_district,
-        )
+    from india_resilience_tool.app.details_runtime import render_right_panel
+
+    render_right_panel(
+        returned=returned,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        selected_block=selected_block,
+        admin_level=_admin_level,
+        variables=VARIABLES,
+        variable_slug=VARIABLE_SLUG,
+        index_group_labels=INDEX_GROUP_LABELS,
+        sel_metric=sel_metric,
+        sel_scenario=sel_scenario,
+        sel_period=sel_period,
+        sel_stat=sel_stat,
+        metric_col=metric_col,
+        merged=merged,
+        adm1=adm1,
+        df=df,
+        schema_items=schema_items,
+        processed_root=PROCESSED_ROOT,
+        pilot_state=PILOT_STATE,
+        data_dir=DATA_DIR,
+        logo_path=LOGO_PATH,
+        fig_size_panel=FIG_SIZE_PANEL,
+        fig_dpi_panel=FIG_DPI_PANEL,
+        font_size_title=FONT_SIZE_TITLE,
+        font_size_label=FONT_SIZE_LABEL,
+        font_size_ticks=FONT_SIZE_TICKS,
+        font_size_legend=FONT_SIZE_LEGEND,
+        period_order=PERIOD_ORDER,
+        scenario_display=SCENARIO_DISPLAY,
+        alias_fn=alias,
+        name_aliases=NAME_ALIASES,
+        varcfg=VARCFG,
+        portfolio_add_fn=_portfolio_add,
+        portfolio_remove_fn=_portfolio_remove,
+        portfolio_contains_fn=_portfolio_contains,
+        portfolio_key_fn=_portfolio_key,
+        portfolio_set_flash_fn=_portfolio_set_flash,
+        portfolio_normalize_fn=_portfolio_normalize,
+        portfolio_remove_all_fn=_portfolio_remove_all,
+        build_portfolio_multiindex_df_fn=_build_portfolio_multiindex_df_impl,
+        load_master_csv_fn=load_master_csv,
+        normalize_master_columns_fn=normalize_master_columns,
+        parse_master_schema_fn=parse_master_schema,
+        resolve_metric_column_fn=resolve_metric_column,
+        find_baseline_column_for_stat_fn=find_baseline_column_for_stat,
+        risk_class_from_percentile_fn=risk_class_from_percentile,
+        load_master_and_schema_fn=_load_master_and_schema,
+        build_scenario_comparison_panel_for_row_fn=build_scenario_comparison_panel_for_row,
+        make_scenario_comparison_figure_fn=_make_scenario_comparison_figure_dashboard,
+    )
 
 render_perf_panel_safe()
 st.markdown("---")
