@@ -18,7 +18,7 @@ Rule: only mark **delete** when there is evidence of non-reachability from roots
 | `dashboard_unfactored.py` | Only referenced in docs previously; no imports from `india_resilience_tool/` or tests. | low | delete (done) |
 | `dashboard_unfactored_impl.py` | Only referenced in docs/comments previously; not imported/executed by runtime chain. | low | delete (done) |
 | Root pipeline/ops scripts (historical) | These are *functionality to retain*, but they should not be in runtime root. They are now relocated under `tools/` (and the master builder implementation lives in `india_resilience_tool/compute/master_builder.py`). | med | move-to-tools (done) |
-| `india_resilience_tool/app/orchestrator_impl.py` | Directly executed by `india_resilience_tool/app/orchestrator.py` and referenced by multiple regression tests (`tests/test_legacy_dashboard_*.py`). | high | refactor (shrink over time) |
+| `india_resilience_tool/app/runtime_impl.py` | No longer part of the runtime chain (logic moved into `app/runtime.py` + `app/map_pipeline.py`). | low | delete (done) |
 
 ## Candidates (symbol-level)
 
@@ -26,4 +26,4 @@ Symbol-level dead code is only marked when:
 - it has **no references** (`rg`), and
 - deleting it would not remove a documented public contract or a test-protected behavior.
 
-Symbol-level candidates will be added incrementally as refactors progress and reachability roots stabilize (especially as `orchestrator_impl.py` shrinks).
+Symbol-level candidates will be added incrementally as refactors progress and reachability roots stabilize.

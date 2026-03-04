@@ -1,64 +1,14 @@
 """
-Dashboard orchestrator (Step 22).
+Dashboard orchestrator (thin wrapper) for the India Resilience Tool (IRT).
 
-This module becomes the canonical runnable entrypoint for the dashboard logic.
-It executes the implementation file located inside the package on every
-Streamlit rerun, avoiding import caching.
-
-Author: Abu Bakar Siddiqui Thakur
-Email: absthakur@resilience.org.in
+The canonical runtime entrypoint is `india_resilience_tool.app.runtime.run_app`.
+This module remains as a stable import path used by `app/dashboard.py` and
+legacy tests/docs.
 """
 
 from __future__ import annotations
 
-import importlib.util
-import sys
-from pathlib import Path
-from types import ModuleType
+from india_resilience_tool.app.runtime import run_app
 
+__all__ = ["run_app"]
 
-def _legacy_impl_path() -> Path:
-    """
-    Path to the dashboard implementation file.
-
-    After Step 22 it lives at:
-      india_resilience_tool/app/orchestrator_impl.py
-    """
-    return Path(__file__).resolve().parent / "orchestrator_impl.py"
-
-
-def _exec_file_as_module(path: Path, *, module_key: str) -> ModuleType:
-    """
-    Execute a Python file as a fresh module object.
-
-    We avoid normal import caching by deleting sys.modules[module_key] each time.
-    We do NOT force __name__="__main__" because importlib validates module names
-    against the spec name.
-
-    Returns:
-        The executed module object.
-    """
-    if module_key in sys.modules:
-        del sys.modules[module_key]
-
-    spec = importlib.util.spec_from_file_location(module_key, path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load spec for {path}")
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_key] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def run_app() -> None:
-    """
-    Run the dashboard application.
-
-    This is called by the Streamlit entrypoint `india_resilience_tool/app/main.py`.
-    """
-    impl = _legacy_impl_path()
-    if not impl.exists():
-        raise FileNotFoundError(f"Missing legacy dashboard implementation file: {impl}")
-
-    _exec_file_as_module(impl, module_key="_irt_orchestrator_impl")

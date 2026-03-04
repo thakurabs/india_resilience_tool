@@ -1,7 +1,7 @@
 """
 Runtime helpers for case-study exports (single district, multi-index).
 
-This module keeps `app/orchestrator_impl.py` smaller while preserving the legacy
+This module keeps the dashboard runtime smaller while preserving the legacy
 case-study export behavior (column matching, baseline selection, and time-series
 discovery) by accepting the orchestrator's existing loader/filter callables.
 """
@@ -318,4 +318,3 @@ def make_case_study_zip_with_labels(
         )
 
     return _make
-

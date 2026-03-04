@@ -53,17 +53,21 @@ india_resilience_tool/
 ├── app/ # Streamlit application
 │ ├── __init__.py
 │ ├── adm2_cache.py # District boundary caching/simplification
+│ ├── color_range_controls.py # Map color-range defaults (robust p2–p98)
 │ ├── geography_controls.py # Sidebar: Geography & analysis focus (legacy-preserving)
 │ ├── geography.py # Filesystem-backed discovery for state/district/block selectors
 │ ├── dashboard.py # Dashboard entry wrapper
 │ ├── details_runtime.py # Right-panel runtime (Climate Profile routing)
 │ ├── left_panel_runtime.py # Left-panel runtime (Map vs Rankings routing)
 │ ├── map_layer_runtime.py # Streamlit-free Folium map-layer builder (patched FC + tooltip)
-│ ├── orchestrator_impl.py # Dashboard implementation (district + block + bundles)
+│ ├── map_pipeline.py # Map+rankings pipeline (merge→enrich→colors→folium map)
+│ ├── master_freshness.py # Master CSV freshness helpers (ribbon gating; Streamlit cached)
+│ ├── runtime.py # Canonical dashboard runtime entry (run_app orchestrator)
 │ ├── main.py # Streamlit entry module (run via Streamlit)
 │ ├── orchestrator.py # Module executor
 │ ├── perf.py # Performance helpers / timing
 │ ├── point_selection_ui.py # Coordinate input & batch support (district + block)
+│ ├── portfolio_state_runtime.py # Portfolio session_state wrappers (delegates to analysis.portfolio)
 │ ├── portfolio_ui.py # Portfolio management panel (district + block + bundles)
 │ ├── portfolio_multistate.py # Multi-state portfolio helpers (master concat + summary stats)
 │ ├── sidebar.py # Sidebar controls & navigation (admin level + focus)
@@ -288,21 +292,17 @@ Unchanged structurally, but used by both district and block details/portfolio pa
 
 ### 5) Application layer (`india_resilience_tool/app/`)
 
-#### `orchestrator_impl.py`
-Main orchestrator. Responsibilities:
-- admin level toggle (district/block)
-- **Map View ribbon** (above the map) for selecting:
-  - risk domain (bundle) → metric
-  - scenario, period, statistic (mean/median)
-  - map mode (absolute vs change from 1990–2010 baseline)
-- placeholder-first ribbon UX (`— Select —`) with safe gating (avoid invalid/partial renders)
-- state/district/block selection widgets (sidebar)
-  - available states are discovered after metric selection (processed-root depends on metric slug)
-- data root resolution (`PROCESSED_ROOT` per index slug)
-- chooses correct master table by admin level:
-  - district: `master_metrics_by_district.csv`
-  - block: `master_metrics_by_block.csv`
-- routes to map/rankings/details/portfolio panels
+#### `runtime.py`
+Canonical runtime entrypoint for the dashboard. Responsibilities:
+- called by `india_resilience_tool/app/orchestrator.py` on every Streamlit rerun
+- orchestrates sidebar + ribbon + map/rankings + details panels
+
+#### `map_pipeline.py`
+Map + rankings pipeline. Responsibilities:
+- builds level-aware merged GeoDataFrame (ADM2/ADM3 ↔ master)
+- computes baseline/delta + rank/percentile/risk + tooltip strings (via Streamlit-free modules)
+- computes and applies color binning + legend HTML
+- builds Folium map layer (patched FeatureCollection) and rankings table
 
 #### `perf.py`
 Lightweight performance helpers used in the app (timing wrappers / counters) to support profiling and regressions.

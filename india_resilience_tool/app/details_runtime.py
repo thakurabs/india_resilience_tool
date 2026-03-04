@@ -1,8 +1,8 @@
 """
 Right-panel runtime (Streamlit UI) for IRT.
 
-This module centralizes the right-column "Climate Profile" routing logic from
-`orchestrator_impl.py` so the orchestrator can focus on map/rankings layout.
+This module centralizes the right-column "Climate Profile" routing logic so the
+app runtime (`app/runtime.py`) can focus on orchestration.
 
 Design notes
 ------------
@@ -580,4 +580,3 @@ def render_right_panel(
         n_in_district=n_in_district,
         percentile_district=percentile_district,
     )
-

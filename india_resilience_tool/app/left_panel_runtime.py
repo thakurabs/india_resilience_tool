@@ -2,7 +2,7 @@
 Left-panel runtime (Streamlit UI): Map vs Rankings for IRT.
 
 This module extracts the "view selector + map/rankings rendering" block from
-`orchestrator_impl.py` so the orchestrator can stay small and delegate UI work
+the app runtime so the orchestrator can stay small and delegate UI work
 to focused modules.
 """
 
@@ -131,4 +131,3 @@ def render_left_panel(
             )
 
     return returned, view
-

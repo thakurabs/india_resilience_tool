@@ -12,15 +12,17 @@ Execution order (high-level):
    - initializes Streamlit session state via `ensure_session_state`
    - calls the app runner
 2. `india_resilience_tool/app/orchestrator.py`
-   - executes the dashboard implementation each rerun (import-cache safe)
-3. `india_resilience_tool/app/orchestrator_impl.py`
+   - stable import path that calls the canonical runtime entrypoint
+3. `india_resilience_tool/app/runtime.py`
    - owns `st.set_page_config`
-   - coordinates routing/state and calls view/panel renderers
-4. `india_resilience_tool/app/sidebar.py`
+   - orchestrates sidebar + ribbon + map/rankings + details panels
+4. `india_resilience_tool/app/map_pipeline.py`
+   - builds merged GeoDataFrame + enriched columns + legend + Folium map + rankings table
+5. `india_resilience_tool/app/sidebar.py`
    - renders selectors (admin level, analysis mode, view selection, hover toggle)
-5. `india_resilience_tool/app/views/*`
+6. `india_resilience_tool/app/views/*`
    - renders left-panel views and right-panel detail views
-6. Downstream layers (Streamlit-free):
+7. Downstream layers (Streamlit-free):
    - `india_resilience_tool/data/*` for I/O, discovery, merges
    - `india_resilience_tool/analysis/*` for computations (rank/percentile/portfolio/timeseries)
    - `india_resilience_tool/viz/*` for charts/tables/exports

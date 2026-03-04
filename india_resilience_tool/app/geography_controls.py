@@ -1,7 +1,7 @@
 """
 Geography & analysis-focus controls for the Streamlit sidebar.
 
-This module exists to keep `orchestrator_impl.py` smaller while preserving the
+This module exists to keep the dashboard runtime smaller while preserving the
 legacy dashboard behavior and widget keys.
 
 Widget keys (must remain stable):
@@ -326,4 +326,3 @@ def render_geography_and_analysis_focus(
         selected_block=str(selected_block),
         gdf_state_districts=gdf_state_districts,
     )
-
