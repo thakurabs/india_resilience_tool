@@ -109,8 +109,10 @@ india_resilience_tool/
 
 Root files:
 ├── paths.py # DATA_DIR + processed-root configuration (canonical)
-├── environment.yml # Conda environment (pinned)
-├── requirements.txt # pip freeze (UTF-16)
+├── environment.yml # Conda environment (portable; canonical)
+├── environment.freeze.yml # Legacy full export (non-portable; reference only)
+├── requirements.txt # Conda-first pointer (not used for installs)
+├── requirements.freeze.txt # Legacy pip freeze/export (non-portable; reference only)
 ├── docs/ # Additional docs/notes
 ├── notebooks/ # Exploratory notebooks (non-runtime)
 ├── tools/ # Ops/diagnostic scripts (non-runtime)

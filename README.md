@@ -131,20 +131,10 @@ conda env create -f environment.yml
 conda activate irt
 ```
 
-**Option 2: pip**
+`pip` / `venv` installs are not supported for this repo (the geospatial stack is best installed via `conda-forge`).
 
-> Note: `requirements.txt` may be UTF-16 encoded in this repo. If `pip install -r requirements.txt` fails with an encoding error, convert it first:
->
-> ```bash
-> iconv -f UTF-16 -t UTF-8 requirements.txt > requirements.utf8.txt
-> pip install -r requirements.utf8.txt
-> ```
-
-```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+Legacy exports:
+- `environment.freeze.yml` and `requirements.freeze.txt` are kept for reference only (non-portable).
 
 ### Running the dashboard
 
