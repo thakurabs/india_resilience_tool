@@ -18,6 +18,7 @@ from india_resilience_tool.viz.charts import (
     build_scenario_comparison_panel_for_row,
     canonical_period_label,
     create_trend_figure_for_index,
+    make_portfolio_heatmap,
     make_portfolio_heatmap_robust_min_percentile,
     make_portfolio_heatmap_scenario_panels,
     make_portfolio_scenario_grouped_bar,

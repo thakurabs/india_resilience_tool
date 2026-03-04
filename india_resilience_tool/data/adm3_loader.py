@@ -270,28 +270,6 @@ def get_blocks_for_district(
     return sorted(filtered[block_col].dropna().unique().tolist())
 
 
-def get_districts_with_blocks(
-    gdf: gpd.GeoDataFrame,
-    state: str,
-    *,
-    state_col: str = "state_name",
-    district_col: str = "district_name",
-    normalize_fn: Optional[Callable[[str], str]] = None,
-) -> list[str]:
-    """
-    Get list of districts that have blocks in a specific state.
-    
-    Returns:
-        Sorted list of district names
-    """
-    filtered = filter_by_state(gdf, state, state_col=state_col, normalize_fn=normalize_fn)
-    
-    if filtered.empty or district_col not in filtered.columns:
-        return []
-    
-    return sorted(filtered[district_col].dropna().unique().tolist())
-
-
 def featurecollections_by_state(
     gdf,
     *,
@@ -358,75 +336,3 @@ def featurecollections_by_state(
         }
 
     return by_state
-
-
-def build_adm2_from_adm3(
-    adm3_gdf: gpd.GeoDataFrame,
-    *,
-    district_col: str = "district_name",
-    state_col: str = "state_name",
-) -> gpd.GeoDataFrame:
-    """
-    Derive an ADM2 (district) GeoDataFrame by dissolving ADM3 (block) boundaries.
-    
-    Useful when you only have block-level data but need district outlines.
-    """
-    adm3 = adm3_gdf.copy()
-    
-    # Dissolve by state + district to get district boundaries
-    adm2 = adm3.dissolve(by=[state_col, district_col], as_index=False)
-    
-    if "shapeName" not in adm2.columns:
-        adm2["shapeName"] = adm2[district_col]
-    
-    return adm2.reset_index(drop=True)
-
-
-def build_adm1_from_adm3(
-    adm3_gdf: gpd.GeoDataFrame,
-    *,
-    state_col: str = "state_name",
-) -> gpd.GeoDataFrame:
-    """
-    Derive an ADM1 (state) GeoDataFrame by dissolving ADM3 (block) boundaries.
-    """
-    adm3 = adm3_gdf.copy()
-    adm1 = adm3.dissolve(by=state_col, as_index=False)
-    
-    if state_col not in adm1.columns and "index" in adm1.columns:
-        adm1 = adm1.rename(columns={"index": state_col})
-    if "shapeName" not in adm1.columns:
-        adm1["shapeName"] = adm1[state_col]
-    
-    return adm1.reset_index(drop=True)
-
-
-def get_block_count_by_district(
-    gdf: gpd.GeoDataFrame,
-    *,
-    state_col: str = "state_name",
-    district_col: str = "district_name",
-) -> pd.DataFrame:
-    """
-    Get count of blocks per district per state.
-    
-    Returns:
-        DataFrame with columns: state_name, district_name, block_count
-    """
-    counts = gdf.groupby([state_col, district_col]).size().reset_index(name="block_count")
-    return counts.sort_values([state_col, district_col]).reset_index(drop=True)
-
-
-def get_block_count_by_state(
-    gdf: gpd.GeoDataFrame,
-    *,
-    state_col: str = "state_name",
-) -> pd.DataFrame:
-    """
-    Get count of blocks per state.
-    
-    Returns:
-        DataFrame with columns: state_name, block_count
-    """
-    counts = gdf.groupby(state_col).size().reset_index(name="block_count")
-    return counts.sort_values(state_col).reset_index(drop=True)

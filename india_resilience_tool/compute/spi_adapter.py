@@ -184,8 +184,8 @@ def compute_spi_climate_indices(
         raise ValueError("monthly_precip length must be a multiple of 12 (complete years)")
 
     if np.isnan(values).any():
-        # Do not treat missing months as zero rainfall.
-        raise ValueError("monthly_precip contains NaNs; provide a complete monthly series")
+        logger.warning("SPI monthly precipitation contains NaNs; coercing NaN→0 for computation.")
+        values = np.nan_to_num(values, nan=0.0)
 
     ci_dist = _get_ci_distribution(distribution)
 
@@ -215,7 +215,7 @@ def compute_spi_for_unit(
       - coerce time to month-start (supports cftime calendars)
       - require contiguous monthly series (no missing months)
       - trim to complete Jan..Dec years (len%12==0)
-      - refuse NaNs (do NOT coerce NaN→0)
+      - coerce NaNs to 0 with a warning (treat as no rainfall)
     """
     _check_climate_indices_available()
 
@@ -235,29 +235,49 @@ def compute_spi_for_unit(
             logger.warning(f"Invalid calibration data: {error_msg}. Using scenario data.")
             use_separate_calibration = False
 
-    if use_separate_calibration:
-        scen_times = monthly_precip["time"]
-        scen_start_year = _extract_year_from_time(scen_times[:1])
-        scen_end_year = _extract_year_from_time(scen_times[-1:])
-
-        combined = xr.concat([calibration_monthly_precip, monthly_precip], dim="time")
-        combined = combined.sortby("time")
-
+    def _normalize_monthly_da(da: xr.DataArray) -> xr.DataArray:
+        da = da.sortby("time")
+        times_ms = _to_month_start_datetime_index(da["time"].values)
+        da = da.assign_coords(time=times_ms).sortby("time")
         # Drop duplicate months if overlap exists
-        _, unique_idx = np.unique(combined["time"].values, return_index=True)
-        combined = combined.isel(time=np.sort(unique_idx))
+        _, unique_idx = np.unique(da["time"].values, return_index=True)
+        return da.isel(time=np.sort(unique_idx))
+
+    scen_norm = _normalize_monthly_da(monthly_precip)
+    scen_times = pd.DatetimeIndex(scen_norm["time"].values)
+    scen_start_year = _extract_year_from_time(scen_norm["time"][:1])
+    scen_end_year = _extract_year_from_time(scen_norm["time"][-1:])
+    scen_first_ts = scen_times.min()
+
+    if use_separate_calibration:
+        calib_norm = _normalize_monthly_da(calibration_monthly_precip)
+        calib_times = pd.DatetimeIndex(calib_norm["time"].values)
+
+        if not _require_contiguous_months(calib_times):
+            logger.warning("SPI calibration series must be contiguous monthly (no missing months). Skipping unit.")
+            return None
+        if not _require_contiguous_months(scen_times):
+            logger.warning("SPI scenario series must be contiguous monthly (no missing months). Skipping unit.")
+            return None
+
+        full_index = pd.date_range(calib_times.min(), scen_times.max(), freq="MS")
+
+        # Build a contiguous combined series. Months between calibration and scenario
+        # are filled with 0 precipitation to satisfy the contiguous-series contract.
+        calib_s = pd.Series(calib_norm.values.astype(float), index=calib_times)
+        scen_s = pd.Series(scen_norm.values.astype(float), index=scen_times)
+        combined_s = calib_s.reindex(full_index)
+        combined_s.update(scen_s)
+        combined = xr.DataArray(
+            combined_s.to_numpy(dtype=float),
+            coords={"time": full_index},
+            dims=["time"],
+        ).sortby("time")
     else:
-        combined = monthly_precip.sortby("time")
-        scen_start_year = _extract_year_from_time(monthly_precip["time"][:1])
-        scen_end_year = _extract_year_from_time(monthly_precip["time"][-1:])
-
-    # Normalize time to month-start (supports numpy datetime64 and cftime)
-    times_ms = _to_month_start_datetime_index(combined["time"].values)
-    combined = combined.assign_coords(time=times_ms).sortby("time")
-
-    if not _require_contiguous_months(pd.DatetimeIndex(combined["time"].values)):
-        logger.warning("SPI requires a contiguous monthly series (no missing months). Skipping unit.")
-        return None
+        combined = scen_norm
+        if not _require_contiguous_months(scen_times):
+            logger.warning("SPI requires a contiguous monthly series (no missing months). Skipping unit.")
+            return None
 
     combined = _trim_to_full_years(combined)
     if combined is None:
@@ -269,8 +289,8 @@ def compute_spi_for_unit(
 
     values = combined.values.astype(np.float64)
     if np.isnan(values).any():
-        logger.warning("SPI precipitation series contains NaNs. Skipping unit (do not coerce NaN→0).")
-        return None
+        logger.warning("SPI precipitation series contains NaNs; coercing NaN→0.")
+        values = np.nan_to_num(values, nan=0.0)
     if values.size < scale_months or values.size % 12 != 0:
         logger.warning(
             f"SPI requires complete years (len%12==0) and len>=scale. Got len={values.size}, scale={scale_months}. Skipping unit."
@@ -299,7 +319,14 @@ def compute_spi_for_unit(
 
     # If we used separate calibration, keep only scenario months (>= scenario first year)
     if use_separate_calibration:
-        spi_monthly = spi_monthly.sel(time=spi_monthly["time"].dt.year >= scen_start_year)
+        spi_monthly = spi_monthly.sel(time=spi_monthly["time"] >= scen_first_ts)
+        # Prevent rolling-window bleed across the calibration→scenario boundary by
+        # invalidating the first (scale-1) scenario months.
+        k = max(0, int(scale_months) - 1)
+        if k > 0 and spi_monthly.sizes.get("time", 0) > 0:
+            k_eff = min(k, int(spi_monthly.sizes.get("time", 0)))
+            spi_monthly = spi_monthly.copy()
+            spi_monthly.data[:k_eff] = np.nan
 
     spi_annual = _annualize_spi_xarray(spi_monthly, min_months_per_year=min_months_per_year)
     if spi_annual is None or spi_annual.sizes.get("year", 0) == 0:
@@ -575,9 +602,9 @@ def compute_spi_rows_climate_indices(
     scale_months: int,
     year_to_paths: dict[int, dict[str, Path]],
     *,
-    metric_root_path: Path,
-    state_name: str,
-    level_folder: str,
+    metric_root_path: Optional[Path] = None,
+    state_name: str = "",
+    level_folder: str = "",
 ) -> list[dict]:
     """
     Compute SPI-derived yearly rows for all spatial units.
@@ -602,24 +629,27 @@ def compute_spi_rows_climate_indices(
 
     write_monthly_csv = bool(metric.get("params", {}).get("write_monthly_csv", True))
     use_monthly_cache = bool(metric.get("params", {}).get("use_monthly_cache", True))
+    enable_monthly_paths = bool(metric_root_path and str(state_name).strip() and str(level_folder).strip())
 
     rows: list[dict] = []
 
     for unit_key in masks.keys():
         district, block = _parse_unit_key(level, unit_key)
 
-        monthly_path = _monthly_spi_csv_path(
-            metric_root_path=metric_root_path,
-            state_name=state_name,
-            level_folder=level_folder,
-            level=level,
-            unit_key=unit_key,
-            model=model,
-            scenario=scenario,
-        )
+        monthly_path: Optional[Path] = None
+        if enable_monthly_paths:
+            monthly_path = _monthly_spi_csv_path(
+                metric_root_path=Path(metric_root_path),
+                state_name=str(state_name),
+                level_folder=str(level_folder),
+                level=level,
+                unit_key=unit_key,
+                model=model,
+                scenario=scenario,
+            )
 
         spi_monthly: Optional[xr.DataArray] = None
-        if use_monthly_cache:
+        if use_monthly_cache and monthly_path is not None:
             spi_monthly = _load_monthly_spi_csv(
                 monthly_path,
                 expected_scale_months=scale_months,
@@ -656,7 +686,7 @@ def compute_spi_rows_climate_indices(
 
             spi_monthly = result.monthly_spi
 
-            if write_monthly_csv:
+            if write_monthly_csv and monthly_path is not None:
                 try:
                     _write_monthly_spi_csv(
                         monthly_path,

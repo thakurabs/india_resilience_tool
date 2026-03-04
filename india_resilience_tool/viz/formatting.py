@@ -12,21 +12,11 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import math
 
 import numpy as np
-
-
-@dataclass(frozen=True)
-class FormatSpec:
-    """Default formatting configuration."""
-
-    decimals: int = 2
-    thousand_sep: bool = True
-    na: str = "—"
 
 
 def _is_na(x: object) -> bool:

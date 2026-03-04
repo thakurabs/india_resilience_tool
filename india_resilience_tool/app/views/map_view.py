@@ -314,66 +314,6 @@ def find_block_at_coordinates(
     return None, None, None
 
 
-def create_portfolio_style_function(
-    portfolio_keys: set,
-    normalize_fn: Callable[[str], str],
-    *,
-    level: str = "district",
-    portfolio_border_color: str = "#2563eb",
-    portfolio_border_weight: int = 3,
-    default_border_color: str = "#666666",
-    default_border_weight: float = 0.3,
-) -> Callable[[dict], dict]:
-    """
-    Create a style function that highlights portfolio units.
-
-    District mode:
-        portfolio_keys contains (state, district)
-
-    Block mode:
-        portfolio_keys contains (state, district, block)
-    """
-    level_norm = str(level).strip().lower()
-
-    def style_fn(feature: dict) -> dict:
-        props = feature.get("properties", {})
-        fill_color = props.get("fillColor", "#cccccc")
-
-        state_name = props.get("state_name", "")
-        district_name = props.get("district_name", "")
-
-        if level_norm == "block":
-            block_name = props.get("block_name", "") or props.get("subdistrict_name", "") or props.get("adm3_name", "")
-            key = (
-                normalize_fn(state_name),
-                normalize_fn(district_name),
-                normalize_fn(str(block_name)),
-            )
-        else:
-            key = (normalize_fn(state_name), normalize_fn(district_name))
-
-        is_in_portfolio = key in portfolio_keys
-
-        if is_in_portfolio:
-            return {
-                "fillColor": fill_color,
-                "color": portfolio_border_color,
-                "weight": portfolio_border_weight,
-                "fillOpacity": 0.8,
-                "dashArray": None,
-            }
-
-        return {
-            "fillColor": fill_color,
-            "color": default_border_color,
-            "weight": default_border_weight,
-            "fillOpacity": 0.8,
-            "dashArray": None,
-        }
-
-    return style_fn
-
-
 def add_portfolio_legend_to_map(
     m: Any,
     portfolio_count: int,
@@ -756,32 +696,3 @@ def render_unit_add_to_portfolio(
 
     return False
 
-
-def render_district_add_to_portfolio(
-    *,
-    clicked_district: Optional[str],
-    clicked_state: Optional[str],
-    selected_state: str,
-    portfolio_add_fn: Callable[[str, str], None],
-    portfolio_remove_fn: Callable[[str, str], None],
-    portfolio_contains_fn: Callable[[str, str], bool],
-    normalize_fn: Callable[[str], str],
-    returned: Optional[Mapping[str, Any]] = None,
-    merged: Optional[Any] = None,  # GeoDataFrame
-) -> bool:
-    """
-    Backward-compatible wrapper for district-mode inline portfolio controls.
-    """
-    return render_unit_add_to_portfolio(
-        clicked_district=clicked_district,
-        clicked_state=clicked_state,
-        clicked_block=None,
-        selected_state=selected_state,
-        portfolio_add_fn=portfolio_add_fn,
-        portfolio_remove_fn=portfolio_remove_fn,
-        portfolio_contains_fn=portfolio_contains_fn,
-        normalize_fn=normalize_fn,
-        returned=returned,
-        merged=merged,
-        level="district",
-    )

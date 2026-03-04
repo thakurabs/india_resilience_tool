@@ -65,6 +65,7 @@ temp/
 *.tif
 *.tiff
 *.zip
+*.pdf
 
 # --------------------------------
 # Project-specific directories (if they ever end up under repo)

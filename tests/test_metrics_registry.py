@@ -11,6 +11,7 @@ from india_resilience_tool.config.metrics_registry import (
     METRICS_BY_SLUG,
     PIPELINE_METRICS,
     PIPELINE_METRICS_RAW,
+    build_registry_from_pipeline,
     find_duplicate_slugs,
     validate_registry_against_pipeline,
 )
@@ -29,16 +30,28 @@ def test_default_periods_metric_col_matches_value_col() -> None:
 
 
 def test_duplicate_detection_is_stable() -> None:
-    dupes = find_duplicate_slugs(PIPELINE_METRICS_RAW)
-    # Current pipeline list includes at least one duplicate slug; we preserve behavior.
-    assert "tasmin_tropical_nights_gt20" in dupes
+    # Do not rely on real registry contents having duplicates; validate the helper
+    # against a small synthetic list.
+    pipeline = [
+        {"slug": "a", "value_col": "a_val"},
+        {"slug": "b", "value_col": "b_val"},
+        {"slug": "a", "value_col": "a_val"},
+        {"slug": ""},  # ignored
+        {},  # ignored
+    ]
+    dupes = find_duplicate_slugs(pipeline)
+    assert dupes == ["a"]
 
 
 def test_validate_registry_against_pipeline_reports_duplicates_but_no_mismatch() -> None:
-    issues = validate_registry_against_pipeline(METRICS_BY_SLUG, PIPELINE_METRICS_RAW)
-    # Expect a duplicate warning line
+    pipeline = [
+        {"slug": "x", "name": "X", "var": "tas", "value_col": "x_val"},
+        {"slug": "y", "name": "Y", "var": "tas", "value_col": "y_val"},
+        {"slug": "x", "name": "X duplicate", "var": "tas", "value_col": "x_val"},
+    ]
+    reg = build_registry_from_pipeline(pipeline)
+    issues = validate_registry_against_pipeline(reg, pipeline)
     assert any("Duplicate pipeline metric slugs detected" in s for s in issues)
-    # Should not report the fragile mismatch we care about
     assert not any("periods_metric_col" in s and "value_col" in s for s in issues)
 
 

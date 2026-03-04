@@ -30,4 +30,46 @@ Symbol-level dead code is only marked when:
 - it has **no references** (`rg`), and
 - deleting it would not remove a documented public contract or a test-protected behavior.
 
-Symbol-level candidates will be added incrementally as refactors progress and reachability roots stabilize.
+### B3–B4 (symbol-level deletions applied)
+
+Evidence standard:
+- `rg` shows **no references** across `india_resilience_tool/`, `tools/`, `tests/`, and root entrypoints.
+- Not part of the documented functionality contract (dashboard flows + tools).
+
+| Candidate (file:symbol) | Evidence | Risk | Action |
+|---|---|---:|---|
+| `india_resilience_tool/app/portfolio_ui.py:render_comparison_table` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/sidebar.py:render_block_selector` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/sidebar.py:render_portfolio_quick_stats` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/sidebar.py:render_portfolio_mode_hint` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/sidebar.py:get_portfolio_summary` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/state.py:get_selected_unit` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/state.py:set_selected_unit` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/state.py:get_master_csv_key` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/state.py:get_portfolio_unit_key` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/views/map_view.py:create_portfolio_style_function` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/app/views/map_view.py:render_district_add_to_portfolio` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/analysis/metrics.py:rank_series_within_group` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/analysis/metrics.py:percentile_series_within_group` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/analysis/metrics.py:safe_apply_numeric` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/analysis/portfolio.py:PortfolioState` | `rg` shows only the definition/docstring; no instantiations. | low | delete (done) |
+| `india_resilience_tool/analysis/portfolio.py:get_portfolio_district_keys` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/analysis/portfolio.py:get_portfolio_block_keys` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/analysis/timeseries.py:load_district_yearly_models` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/analysis/timeseries.py:load_block_yearly_models` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/analysis/timeseries.py:load_unit_yearly` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/adm3_loader.py:get_districts_with_blocks` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/adm3_loader.py:build_adm2_from_adm3` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/adm3_loader.py:build_adm1_from_adm3` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/adm3_loader.py:get_block_count_by_district` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/adm3_loader.py:get_block_count_by_state` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/merge.py:get_master_unit_column` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/merge.py:filter_merged_by_state` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/merge.py:filter_merged_by_district` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/merge.py:get_units_from_merged` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/data/merge.py:get_districts_from_merged` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/utils/processed_io.py:resolve_existing_table_path` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/utils/processed_io.py:write_parquet_dataset` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/utils/processed_io.py:write_parquet_file` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/viz/colors.py:build_vertical_gradient_legend_block_html` | `rg` shows only the definition; no imports/call sites. | low | delete (done) |
+| `india_resilience_tool/viz/formatting.py:FormatSpec` | `rg` shows only the class definition; no imports/call sites. | low | delete (done) |
