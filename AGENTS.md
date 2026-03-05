@@ -161,6 +161,9 @@ This repo uses nested `AGENTS.md` files to improve agent performance. Apply the 
 Current nested scopes include:
 - `india_resilience_tool/analysis/AGENTS.md`
 - `india_resilience_tool/app/AGENTS.md`
+- `india_resilience_tool/config/AGENTS.md`
+- `india_resilience_tool/compute/AGENTS.md`
+- `india_resilience_tool/data/AGENTS.md`
 - `india_resilience_tool/viz/AGENTS.md`
 - `tests/AGENTS.md`
 - `tools/AGENTS.md`
