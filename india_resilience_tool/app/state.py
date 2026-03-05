@@ -37,6 +37,9 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "active_view": VIEW_MAP,
     "main_view_selector": VIEW_MAP,
 
+    # Main layout (right panel)
+    "right_panel_collapsed": False,
+
     # Administrative level (NEW)
     "admin_level": ADMIN_LEVEL_DISTRICT,
     "selected_block": "All",  # For block-level selection
