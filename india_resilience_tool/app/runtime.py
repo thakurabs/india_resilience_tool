@@ -140,8 +140,112 @@ def run_app() -> None:
     # Pilot state default
     PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
-    # Main layout: left (map/rankings) + right (details)
-    col1, col2 = st.columns([5, 3])
+    # --- Split-pane layout CSS (left stays visible; right scrolls internally) ---
+    def _inject_split_pane_css() -> None:
+        st.markdown(
+            """
+            <style>
+            :root {
+              /* Tune if the right panel feels too tall/short on your screen. */
+              --irt-pane-top-offset: 8.5rem;
+              --irt-rhs-collapsed-width: 3.25rem;
+              --irt-rhs-transition-ms: 200ms;
+            }
+
+            .irt-left-workspace-marker,
+            .irt-rhs-scroll-marker,
+            .irt-rhs-rail-marker {
+              display: none;
+            }
+
+            /* Smoothly animate the main two-column layout (left workspace + right panel). */
+            [data-testid="stMainBlockContainer"]
+              div[data-testid="stHorizontalBlock"]:has(.irt-left-workspace-marker):has(.irt-rhs-rail-marker)
+              div[data-testid="column"] {
+              transition:
+                flex-basis var(--irt-rhs-transition-ms) ease,
+                flex-grow var(--irt-rhs-transition-ms) ease,
+                width var(--irt-rhs-transition-ms) ease,
+                max-width var(--irt-rhs-transition-ms) ease;
+              will-change: flex-basis, flex-grow, width, max-width;
+            }
+
+            /* Visual separator between workspace and right panel. */
+            [data-testid="stMainBlockContainer"] div[data-testid="column"]:has(.irt-rhs-rail-marker) {
+              border-left: 1px solid rgba(148, 163, 184, 0.22);
+              padding-left: 0.2rem;
+            }
+
+            /* Compact, icon-style toggle buttons for collapsing/expanding the right panel. */
+            button[title="Collapse right panel"],
+            button[title="Expand right panel"] {
+              width: 2.2rem !important;
+              min-width: 2.2rem !important;
+              max-width: 2.2rem !important;
+              height: 2.2rem !important;
+              padding: 0 !important;
+              border-radius: 0.7rem !important;
+              border: 1px solid rgba(148, 163, 184, 0.45) !important;
+              background: rgba(255, 255, 255, 0.92) !important;
+              color: rgba(51, 65, 85, 0.92) !important;
+              box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+              display: inline-flex !important;
+              align-items: center !important;
+              justify-content: center !important;
+              line-height: 1 !important;
+              font-weight: 900 !important;
+              font-size: 1.05rem !important;
+            }
+            button[title="Collapse right panel"]:hover,
+            button[title="Expand right panel"]:hover {
+              border-color: rgba(148, 163, 184, 0.7) !important;
+              background: rgba(248, 250, 252, 0.98) !important;
+              color: rgba(30, 41, 59, 0.98) !important;
+              box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+            }
+            button[title="Collapse right panel"]:active,
+            button[title="Expand right panel"]:active {
+              transform: translateY(1px);
+            }
+
+            /* Make the right panel scroll inside its own container (not the page). */
+            [data-testid="stMainBlockContainer"] div[data-testid="stVerticalBlock"]:has(.irt-rhs-scroll-marker) {
+              height: calc(100vh - var(--irt-pane-top-offset));
+              max-height: calc(100vh - var(--irt-pane-top-offset));
+              overflow-y: auto;
+              overflow-x: hidden;
+              padding-right: 0.25rem;
+              scrollbar-gutter: stable;
+            }
+
+            /* Keep the left workspace visible when the page scrolls for any reason. */
+            [data-testid="stMainBlockContainer"] div[data-testid="stVerticalBlock"]:has(.irt-left-workspace-marker) {
+              position: sticky;
+              top: var(--irt-pane-top-offset);
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    _inject_split_pane_css()
+
+    # Main layout: left (workspace) + right (panel: scrollable, collapsible)
+    rhs_collapsed = bool(st.session_state.get("right_panel_collapsed", False))
+
+    col_weights = [5, 3] if not rhs_collapsed else [9.4, 0.6]
+    col1, col2 = st.columns(col_weights)
+
+    with col1:
+        left_root = st.container()
+    with col2:
+        right_header = st.container()
+        right_body = st.container()
+
+    with left_root:
+        st.markdown('<div class="irt-left-workspace-marker"></div>', unsafe_allow_html=True)
+    with right_header:
+        st.markdown('<div class="irt-rhs-rail-marker"></div>', unsafe_allow_html=True)
 
     # -------------------------
     # Load base admin boundaries (ADM2 is always required)
@@ -161,7 +265,7 @@ def run_app() -> None:
     # Metric selection ribbon (bundle → metric → scenario/period/stat + map mode)
     # -------------------------
     ribbon_ctx = render_metric_ribbon(
-        col=col1,
+        col=left_root,
         sel_placeholder=SEL_PLACEHOLDER,
         data_dir=DATA_DIR,
         pilot_state=PILOT_STATE,
@@ -369,7 +473,7 @@ def run_app() -> None:
     from india_resilience_tool.app.left_panel_runtime import render_left_panel
 
     returned, _view = render_left_panel(
-        col=col1,
+        col=left_root,
         m=artifacts.folium_map,
         legend_block_html=artifacts.legend_block_html,
         map_mode=artifacts.map_mode,
@@ -395,66 +499,95 @@ def run_app() -> None:
         merged=artifacts.merged,
     )
 
-    with col2:
-        from india_resilience_tool.app.details_runtime import render_right_panel
-        from india_resilience_tool.analysis.metrics import risk_class_from_percentile
+    if rhs_collapsed:
+        with right_header:
+            _, btn_col = st.columns([1, 0.25])
+            with btn_col:
+                if st.button(
+                    "⟨",
+                    key="btn_rhs_expand",
+                    help="Expand right panel",
+                    use_container_width=False,
+                    type="secondary",
+                ):
+                    st.session_state["right_panel_collapsed"] = False
+                    st.rerun()
+    else:
+        with right_header:
+            _, btn_col = st.columns([1, 0.25])
+            with btn_col:
+                if st.button(
+                    "⟩",
+                    key="btn_rhs_collapse",
+                    help="Collapse right panel",
+                    use_container_width=False,
+                    type="secondary",
+                ):
+                    st.session_state["right_panel_collapsed"] = True
+                    st.rerun()
 
-        # Adapt the Streamlit-free helper (keyword-only) to the older positional
-        # signature expected by the case-study builder.
-        def _find_baseline_column_for_stat_compat(cols: object, metric: str, stat: str) -> str | None:
-            return find_baseline_column_for_stat(cols, base_metric=metric, stat=stat)
+        with right_body:
+            st.markdown('<div class="irt-rhs-scroll-marker"></div>', unsafe_allow_html=True)
 
-        render_right_panel(
-            returned=returned,
-            selected_state=selected_state,
-            selected_district=selected_district,
-            selected_block=selected_block,
-            admin_level=_admin_level,
-            variables=VARIABLES,
-            variable_slug=str(VARIABLE_SLUG or ""),
-            index_group_labels=INDEX_GROUP_LABELS,
-            sel_metric=sel_metric,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            metric_col=str(metric_col or ""),
-            merged=artifacts.merged,
-            adm1=adm1,
-            df=df if isinstance(df, pd.DataFrame) else pd.DataFrame(),
-            schema_items=schema_items,
-            processed_root=PROCESSED_ROOT if PROCESSED_ROOT is not None else Path("."),
-            pilot_state=PILOT_STATE,
-            data_dir=DATA_DIR,
-            logo_path=LOGO_PATH,
-            fig_size_panel=FIG_SIZE_PANEL,
-            fig_dpi_panel=FIG_DPI_PANEL,
-            font_size_title=FONT_SIZE_TITLE,
-            font_size_label=FONT_SIZE_LABEL,
-            font_size_ticks=FONT_SIZE_TICKS,
-            font_size_legend=FONT_SIZE_LEGEND,
-            period_order=PERIOD_ORDER,
-            scenario_display=SCENARIO_DISPLAY,
-            alias_fn=alias,
-            name_aliases=NAME_ALIASES,
-            varcfg=VARCFG or {},
-            portfolio_add_fn=_portfolio_add,
-            portfolio_remove_fn=_portfolio_remove,
-            portfolio_contains_fn=_portfolio_contains,
-            portfolio_key_fn=_portfolio_key,
-            portfolio_set_flash_fn=_portfolio_set_flash,
-            portfolio_normalize_fn=_portfolio_normalize,
-            portfolio_remove_all_fn=_portfolio_remove_all,
-            build_portfolio_multiindex_df_fn=_build_portfolio_multiindex_df_impl,
-            load_master_csv_fn=load_master_csv,
-            normalize_master_columns_fn=normalize_master_columns,
-            parse_master_schema_fn=parse_master_schema,
-            resolve_metric_column_fn=resolve_metric_column,
-            find_baseline_column_for_stat_fn=_find_baseline_column_for_stat_compat,
-            risk_class_from_percentile_fn=risk_class_from_percentile,
-            load_master_and_schema_fn=_load_master_and_schema,
-            build_scenario_comparison_panel_for_row_fn=build_scenario_comparison_panel_for_row,
-            make_scenario_comparison_figure_fn=make_scenario_comparison_figure_dashboard,
-        )
+            from india_resilience_tool.app.details_runtime import render_right_panel
+            from india_resilience_tool.analysis.metrics import risk_class_from_percentile
+
+            # Adapt the Streamlit-free helper (keyword-only) to the older positional
+            # signature expected by the case-study builder.
+            def _find_baseline_column_for_stat_compat(cols: object, metric: str, stat: str) -> str | None:
+                return find_baseline_column_for_stat(cols, base_metric=metric, stat=stat)
+
+            render_right_panel(
+                returned=returned,
+                selected_state=selected_state,
+                selected_district=selected_district,
+                selected_block=selected_block,
+                admin_level=_admin_level,
+                variables=VARIABLES,
+                variable_slug=str(VARIABLE_SLUG or ""),
+                index_group_labels=INDEX_GROUP_LABELS,
+                sel_metric=sel_metric,
+                sel_scenario=sel_scenario,
+                sel_period=sel_period,
+                sel_stat=sel_stat,
+                metric_col=str(metric_col or ""),
+                merged=artifacts.merged,
+                adm1=adm1,
+                df=df if isinstance(df, pd.DataFrame) else pd.DataFrame(),
+                schema_items=schema_items,
+                processed_root=PROCESSED_ROOT if PROCESSED_ROOT is not None else Path("."),
+                pilot_state=PILOT_STATE,
+                data_dir=DATA_DIR,
+                logo_path=LOGO_PATH,
+                fig_size_panel=FIG_SIZE_PANEL,
+                fig_dpi_panel=FIG_DPI_PANEL,
+                font_size_title=FONT_SIZE_TITLE,
+                font_size_label=FONT_SIZE_LABEL,
+                font_size_ticks=FONT_SIZE_TICKS,
+                font_size_legend=FONT_SIZE_LEGEND,
+                period_order=PERIOD_ORDER,
+                scenario_display=SCENARIO_DISPLAY,
+                alias_fn=alias,
+                name_aliases=NAME_ALIASES,
+                varcfg=VARCFG or {},
+                portfolio_add_fn=_portfolio_add,
+                portfolio_remove_fn=_portfolio_remove,
+                portfolio_contains_fn=_portfolio_contains,
+                portfolio_key_fn=_portfolio_key,
+                portfolio_set_flash_fn=_portfolio_set_flash,
+                portfolio_normalize_fn=_portfolio_normalize,
+                portfolio_remove_all_fn=_portfolio_remove_all,
+                build_portfolio_multiindex_df_fn=_build_portfolio_multiindex_df_impl,
+                load_master_csv_fn=load_master_csv,
+                normalize_master_columns_fn=normalize_master_columns,
+                parse_master_schema_fn=parse_master_schema,
+                resolve_metric_column_fn=resolve_metric_column,
+                find_baseline_column_for_stat_fn=_find_baseline_column_for_stat_compat,
+                risk_class_from_percentile_fn=risk_class_from_percentile,
+                load_master_and_schema_fn=_load_master_and_schema,
+                build_scenario_comparison_panel_for_row_fn=build_scenario_comparison_panel_for_row,
+                make_scenario_comparison_figure_fn=make_scenario_comparison_figure_dashboard,
+            )
 
     render_perf_panel_safe()
     st.markdown("---")

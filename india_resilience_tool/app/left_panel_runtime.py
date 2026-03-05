@@ -72,6 +72,11 @@ def render_left_panel(
 
         # ---------- VIEW 1: MAP ----------
         if view == VIEW_MAP:
+            # In portfolio mode, reserve a slot ABOVE the map so the add/remove control
+            # is visible even when the user is scrolling inside the right panel.
+            analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
+            portfolio_action_slot = st.empty() if "Multi" in str(analysis_mode) else None
+
             returned, clicked_district, clicked_state = render_map_view(
                 m=m,
                 variable_slug=variable_slug,
@@ -90,22 +95,26 @@ def render_left_panel(
             )
 
             # Show add-to-portfolio button when a unit is clicked in portfolio mode
-            analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-            if "Multi" in str(analysis_mode):
-                clicked_block = st.session_state.get("clicked_block") if str(level).strip().lower() == "block" else None
-                render_unit_add_to_portfolio(
-                    clicked_district=clicked_district,
-                    clicked_state=clicked_state,
-                    clicked_block=clicked_block,
-                    selected_state=selected_state,
-                    portfolio_add_fn=portfolio_add_fn,
-                    portfolio_remove_fn=portfolio_remove_fn,
-                    portfolio_contains_fn=portfolio_contains_fn,
-                    normalize_fn=portfolio_normalize_fn,
-                    returned=returned,
-                    merged=merged,
-                    level=level,
-                )
+            if portfolio_action_slot is not None:
+                with portfolio_action_slot.container():
+                    clicked_block = (
+                        st.session_state.get("clicked_block")
+                        if str(level).strip().lower() == "block"
+                        else None
+                    )
+                    render_unit_add_to_portfolio(
+                        clicked_district=clicked_district,
+                        clicked_state=clicked_state,
+                        clicked_block=clicked_block,
+                        selected_state=selected_state,
+                        portfolio_add_fn=portfolio_add_fn,
+                        portfolio_remove_fn=portfolio_remove_fn,
+                        portfolio_contains_fn=portfolio_contains_fn,
+                        normalize_fn=portfolio_normalize_fn,
+                        returned=returned,
+                        merged=merged,
+                        level=level,
+                    )
 
             if clicked_district:
                 st.session_state["pending_selected_district"] = clicked_district
