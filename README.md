@@ -28,6 +28,7 @@ The tool visualizes **ensemble climate model outputs** and derived indices (temp
   - Scenario comparison (period-mean)
   - Trend over time (ensemble yearly series)
   - Case study export (single district, multi-index PDF/ZIP)
+  - Right panel scrolls independently (map/ribbon stay visible) and can be collapsed to a narrow rail.
 
 ### Metric selection ribbon (above the map)
 

@@ -26,8 +26,11 @@ Pass:
    - Select **Map mode** (Absolute and Change-from-baseline)
 3. Confirm the choropleth renders and hover tooltips work.
 4. Click a district; confirm the right-side details panel populates.
-5. Click the “Open rankings table” control (if present); confirm it switches views.
-6. Switch to **Rankings table** view; confirm table renders and sorting modes work.
+5. Scroll the right-side panel; confirm the map/ribbon stay visible (right panel scrolls internally).
+6. Collapse the right panel to the rail; confirm the left workspace expands and the expand control is visible.
+7. Expand the right panel again; confirm the details panel returns.
+8. Click the “Open rankings table” control (if present); confirm it switches views.
+9. Switch to **Rankings table** view; confirm table renders and sorting modes work.
 
 ## C) District portfolio — add + compare + export
 
@@ -37,11 +40,12 @@ Pass:
    - Rankings add/remove buttons
    - Add by Location (single coordinate)
 3. Confirm portfolio summary badge updates and unit list shows items.
-4. In portfolio compare:
+4. Optional UX check: collapse/expand the right panel; confirm portfolio mode still works after expanding.
+5. In portfolio compare:
    - Select 1–2 bundles
    - Confirm comparison table builds
    - Download CSV for the displayed table
-5. Trigger a case-study export (PDF and ZIP) and confirm downloaded files open.
+6. Trigger a case-study export (PDF and ZIP) and confirm downloaded files open.
 
 ## D) Block (ADM3) — Map + Rankings + Details + portfolio
 
