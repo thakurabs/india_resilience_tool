@@ -13,17 +13,54 @@ Expected SPI characteristics:
 Author: Abu Bakar Siddiqui Thakur
 """
 
+from __future__ import annotations
+
+import argparse
+import os
 import sys
 from pathlib import Path
-import pandas as pd
-import numpy as np
 
-# Configuration - UPDATE THESE PATHS
-BASE_OUTPUT_ROOT = Path(r"D:\projects\irt_data\processed")  # Adjust this path
-STATE = "Telangana"
-METRIC_SLUG = "spi6_drought_index"
-MODEL = "CanESM5"
-SCENARIOS = ["historical", "ssp245"]
+import numpy as np
+import pandas as pd
+
+def _resolve_processed_root(arg: str | None) -> Path:
+    """
+    Resolve the processed root directory.
+
+    Priority:
+      1) --processed-root
+      2) IRT_PROCESSED_ROOT
+      3) paths.BASE_OUTPUT_ROOT (DATA_DIR/processed)
+    """
+    if arg:
+        return Path(arg).expanduser().resolve()
+
+    env = os.getenv("IRT_PROCESSED_ROOT")
+    if env:
+        return Path(env).expanduser().resolve()
+
+    try:
+        from paths import BASE_OUTPUT_ROOT  # repo-root canonical
+        return Path(BASE_OUTPUT_ROOT).expanduser().resolve()
+    except Exception:
+        return Path(".").resolve()
+
+
+def _resolve_metric_root(processed_root: Path, metric_slug: str) -> Path:
+    """
+    Allow either:
+      - processed_root = <...>/processed
+      - processed_root = <...>/processed/<metric_slug>
+    """
+    metric_slug = str(metric_slug).strip()
+    if not metric_slug:
+        return processed_root
+
+    if processed_root.name == metric_slug:
+        return processed_root
+
+    candidate = processed_root / metric_slug
+    return candidate if candidate.exists() else candidate
 
 
 def load_district_yearly(base_path: Path, state: str, metric: str, district: str, model: str, scenario: str) -> pd.DataFrame:
@@ -40,13 +77,13 @@ def load_district_yearly(base_path: Path, state: str, metric: str, district: str
     return df
 
 
-def analyze_spi_values(df: pd.DataFrame, scenario: str, baseline_years: tuple = (1981, 2010)) -> dict:
+def analyze_spi_values(df: pd.DataFrame, scenario: str, baseline_years: tuple[int, int] = (1981, 2010)) -> dict:
     """Compute diagnostic statistics for SPI values."""
     if df.empty or "value" not in df.columns:
         return {"error": "No data"}
     
-    values = df["value"].dropna()
-    years = df["year"]
+    values = pd.to_numeric(df["value"], errors="coerce").dropna()
+    years = pd.to_numeric(df["year"], errors="coerce")
     
     # Overall stats
     stats = {
@@ -146,7 +183,14 @@ def check_scientific_validity(stats_by_scenario: dict) -> list:
     return issues
 
 
-def plot_timeseries(dfs: dict, district: str, output_path: Path = None):
+def plot_timeseries(
+    dfs: dict,
+    district: str,
+    *,
+    model: str,
+    baseline_years: tuple[int, int],
+    output_path: Path | None = None,
+) -> None:
     """Plot SPI timeseries for visual inspection."""
     try:
         import matplotlib.pyplot as plt
@@ -173,11 +217,11 @@ def plot_timeseries(dfs: dict, district: str, output_path: Path = None):
     ax.axhline(y=2, color="blue", linestyle="--", linewidth=0.5)
     
     # Add baseline period shading
-    ax.axvspan(1981, 2010, alpha=0.1, color="green", label="Baseline period")
+    ax.axvspan(baseline_years[0], baseline_years[1], alpha=0.1, color="green", label="Baseline period")
     
     ax.set_xlabel("Year")
     ax.set_ylabel("SPI-3")
-    ax.set_title(f"SPI-3 Time Series: {district} ({MODEL})")
+    ax.set_title(f"SPI Time Series: {district} ({model})")
     ax.legend(loc="upper left", fontsize=8)
     ax.set_ylim(-4, 4)
     ax.grid(True, alpha=0.3)
@@ -191,18 +235,40 @@ def plot_timeseries(dfs: dict, district: str, output_path: Path = None):
         plt.show()
 
 
-def main():
+def _parse_args(argv: list[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="SPI diagnostic checks for IRT processed outputs.")
+    p.add_argument("--processed-root", default=None, help="Path to DATA_DIR/processed (or to processed/<metric_slug>).")
+    p.add_argument("--state", default=os.getenv("IRT_PILOT_STATE", "Telangana"), help="State folder name.")
+    p.add_argument("--metric-slug", default="spi6_drought_index", help="SPI metric slug under processed root.")
+    p.add_argument("--model", default="CanESM5", help="Climate model folder name.")
+    p.add_argument("--scenarios", nargs="+", default=["historical", "ssp245"], help="Scenarios to analyze.")
+    p.add_argument("--district", default=None, help="District folder name to analyze (default: first available).")
+    p.add_argument("--baseline-start", type=int, default=1981, help="Baseline start year (historical).")
+    p.add_argument("--baseline-end", type=int, default=2010, help="Baseline end year (historical).")
+    p.add_argument("--plot", action="store_true", help="Plot the SPI time series (requires matplotlib).")
+    p.add_argument("--plot-out", default=None, help="If set, save plot to this path instead of showing it.")
+    return p.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(list(sys.argv[1:] if argv is None else argv))
+
+    processed_root = _resolve_processed_root(args.processed_root)
+    metric_root = _resolve_metric_root(processed_root, args.metric_slug)
+    baseline_years = (int(args.baseline_start), int(args.baseline_end))
+
     print("SPI Diagnostic Analysis")
-    print(f"Metric: {METRIC_SLUG}")
-    print(f"Model: {MODEL}")
-    print(f"State: {STATE}")
-    print(f"Base path: {BASE_OUTPUT_ROOT}")
+    print(f"Metric: {args.metric_slug}")
+    print(f"Model: {args.model}")
+    print(f"State: {args.state}")
+    print(f"Processed root: {processed_root}")
+    print(f"Metric root: {metric_root}")
     
     # Find available districts
-    districts_path = BASE_OUTPUT_ROOT / METRIC_SLUG / STATE / "districts"
+    districts_path = metric_root / str(args.state) / "districts"
     if not districts_path.exists():
         print(f"\nERROR: Districts path not found: {districts_path}")
-        print("Please update BASE_OUTPUT_ROOT in this script.")
+        print("Pass --processed-root (or set IRT_PROCESSED_ROOT / IRT_DATA_DIR).")
         sys.exit(1)
     
     available_districts = [d.name for d in districts_path.iterdir() if d.is_dir()]
@@ -212,18 +278,21 @@ def main():
         print("No districts found!")
         sys.exit(1)
     
-    # Analyze first district (or specify one)
-    district = available_districts[0].replace("_", " ")
+    # Analyze selected district (or first available)
+    if args.district:
+        district = str(args.district)
+    else:
+        district = available_districts[0].replace("_", " ")
     print(f"\nAnalyzing district: {district}")
     
     # Load data for each scenario
     dfs = {}
     stats_by_scenario = {}
     
-    for scenario in SCENARIOS:
-        df = load_district_yearly(BASE_OUTPUT_ROOT, STATE, METRIC_SLUG, district, MODEL, scenario)
+    for scenario in args.scenarios:
+        df = load_district_yearly(metric_root.parent, str(args.state), str(args.metric_slug), district, str(args.model), str(scenario))
         dfs[scenario] = df
-        stats_by_scenario[scenario] = analyze_spi_values(df, scenario)
+        stats_by_scenario[scenario] = analyze_spi_values(df, str(scenario), baseline_years=baseline_years)
     
     # Print diagnostic report
     print_diagnostic_report(district, stats_by_scenario)
@@ -249,7 +318,9 @@ def main():
             print(df[["year", "value"]].head(10).to_string(index=False))
     
     # Try to plot
-    plot_timeseries(dfs, district)
+    if args.plot:
+        outp = Path(args.plot_out).expanduser().resolve() if args.plot_out else None
+        plot_timeseries(dfs, district, model=str(args.model), baseline_years=baseline_years, output_path=outp)
 
 
 if __name__ == "__main__":

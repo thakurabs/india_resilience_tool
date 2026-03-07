@@ -45,7 +45,7 @@ def test_legacy_dashboard_suppresses_climate_profile_in_any_portfolio_mode() -> 
         Path(__file__).resolve().parents[1]
         / "india_resilience_tool"
         / "app"
-        / "legacy_dashboard_impl.py"
+        / "details_runtime.py"
     )
     lines = _read(src)
 
@@ -53,7 +53,7 @@ def test_legacy_dashboard_suppresses_climate_profile_in_any_portfolio_mode() -> 
         (i for i, ln in enumerate(lines) if 'st.header("Climate Profile")' in ln or "st.header('Climate Profile')" in ln),
         None,
     )
-    assert header_line is not None, 'Expected st.header("Climate Profile") in legacy_dashboard_impl.py'
+    assert header_line is not None, 'Expected st.header("Climate Profile") in details_runtime.py'
 
     window_start = max(0, header_line - 60)
     window = "\n".join(lines[window_start : header_line + 1])
@@ -73,4 +73,3 @@ def test_portfolio_rhs_has_compare_add_units_tabs() -> None:
     assert "portfolio_rhs_tab_" in text
     assert "Add units" in text
     assert "Compare" in text
-

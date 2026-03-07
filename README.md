@@ -28,6 +28,7 @@ The tool visualizes **ensemble climate model outputs** and derived indices (temp
   - Scenario comparison (period-mean)
   - Trend over time (ensemble yearly series)
   - Case study export (single district, multi-index PDF/ZIP)
+  - Right panel scrolls independently (map/ribbon stay visible) and can be collapsed to a narrow rail.
 
 ### Metric selection ribbon (above the map)
 
@@ -131,38 +132,26 @@ conda env create -f environment.yml
 conda activate irt
 ```
 
-**Option 2: pip**
+`pip` / `venv` installs are not supported for this repo (the geospatial stack is best installed via `conda-forge`).
 
-> Note: `requirements.txt` may be UTF-16 encoded in this repo. If `pip install -r requirements.txt` fails with an encoding error, convert it first:
->
-> ```bash
-> iconv -f UTF-16 -t UTF-8 requirements.txt > requirements.utf8.txt
-> pip install -r requirements.utf8.txt
-> ```
-
-```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
+Legacy exports:
+- `environment.freeze.yml` and `requirements.freeze.txt` are kept for reference only (non-portable).
 
 ### Running the dashboard
 
-Recommended:
-
 ```bash
-streamlit run dashboard_unfactored.py
+streamlit run main.py
 ```
 
-Alternative (package entry):
+Open in a browser: `http://localhost:8501`
+
+Alternative (supported):
 
 ```bash
 streamlit run india_resilience_tool/app/main.py
 ```
 
-Open in a browser: `http://localhost:8501`
-
----
+--- 
 
 ## Data Setup
 
@@ -213,12 +202,12 @@ DATA_DIR/
 Notes:
 - Windows may show `.csv` as "Microsoft Excel CSV"; they're normal CSVs.
 - The dashboard uses **master metrics** for maps/rankings and **ensemble yearly** files for trends.
-- After updating to the level-specific state-summary contract, rebuild masters with `python build_master_metrics.py` so the new `*_district.csv` and `*_block.csv` state files exist.
+- After updating to the level-specific state-summary contract, rebuild masters with `python -m tools.pipeline.build_master_metrics` so the new `*_district.csv` and `*_block.csv` state files exist.
 
 ### Building master CSVs (district + block)
 
 ```bash
-python build_master_metrics.py
+python -m tools.pipeline.build_master_metrics
 ```
 
 Or use the dashboard's "Rebuild now" control if exposed in your branch.
@@ -305,7 +294,6 @@ india_resilience_tool/
 ├── analysis/
 │   ├── AGENTS.md
 │   ├── __init__.py
-│   ├── case_study.py
 │   ├── metrics.py
 │   ├── portfolio.py
 │   └── timeseries.py
@@ -313,11 +301,10 @@ india_resilience_tool/
 │   ├── AGENTS.md
 │   ├── __init__.py
 │   ├── adm2_cache.py
-│   ├── dashboard.py
 │   ├── geography.py
-│   ├── legacy_dashboard_impl.py
+│   ├── runtime.py
+│   ├── map_pipeline.py
 │   ├── main.py
-│   ├── orchestrator.py
 │   ├── perf.py
 │   ├── point_selection_ui.py
 │   ├── portfolio_multistate.py
@@ -337,7 +324,6 @@ india_resilience_tool/
 │   ├── __init__.py
 │   ├── adm2_loader.py
 │   ├── adm3_loader.py
-│   ├── boundary_loader.py
 │   ├── discovery.py
 │   ├── master_loader.py
 │   └── merge.py
@@ -356,12 +342,14 @@ india_resilience_tool/
     └── tables.py
 
 Root files and docs:
-├── dashboard_unfactored.py
-├── dashboard_unfactored_impl.py
-├── compute_indices.py
-├── compute_indices_multiprocess.py
+├── notebooks/
+├── tools/
 └── docs/
     ├── HANDOFF.md
+    ├── dead_code_candidate_report.md
+    ├── functionality_contract.md
+    ├── manual_smoke_test.md
+    ├── module_responsibility_map.md
     └── refactor_acceptance.md
 ```
 

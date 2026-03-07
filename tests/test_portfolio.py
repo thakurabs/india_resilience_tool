@@ -105,3 +105,77 @@ def test_build_portfolio_multiindex_df_smoke() -> None:
     assert out.loc[0, "Baseline"] == 10.0
     assert out.loc[0, "Δ"] == 10.0
     assert out.loc[0, "Risk class"] == "Very High"
+
+
+def test_build_portfolio_multiindex_df_multi_scenario() -> None:
+    # Dummy 1-row master with 2 scenarios + 1 historical baseline
+    df_local = pd.DataFrame(
+        {
+            "state": ["Telangana"],
+            "district": ["Alpha"],
+            "m__ssp245__2020-2040__mean": [12.0],
+            "m__ssp585__2020-2040__mean": [20.0],
+            "m__historical__1985-2014__mean": [10.0],
+        }
+    )
+
+    def _load(slug: str):
+        return df_local, None, ["m"], None
+
+    def _resolve(df: pd.DataFrame, metric: str, scenario: str, period: str, stat: str) -> Optional[str]:
+        if metric != "m":
+            return None
+        if scenario == "ssp245":
+            return "m__ssp245__2020-2040__mean"
+        if scenario == "ssp585":
+            return "m__ssp585__2020-2040__mean"
+        return None
+
+    def _baseline(cols, metric: str, stat: str) -> Optional[str]:
+        return "m__historical__1985-2014__mean"
+
+    def _match(df: pd.DataFrame, st: str, dist: str) -> Optional[int]:
+        return 0
+
+    def _rankpct(**kwargs):
+        return 1, 90.0
+
+    def _risk(p: float) -> str:
+        return "Very High" if p >= 80 else "Other"
+
+    variables = {"slug1": {"label": "Metric One", "group": "temperature", "periods_metric_col": "m"}}
+    group_labels = {"temperature": "Temperature"}
+
+    out = build_portfolio_multiindex_df(
+        portfolio=[{"state": "Telangana", "district": "Alpha"}],
+        selected_slugs=["slug1"],
+        variables=variables,
+        index_group_labels=group_labels,
+        sel_scenario="ssp245",
+        sel_period="2020-2040",
+        sel_stat="mean",
+        sel_scenarios=["ssp245", "ssp585"],
+        load_master_and_schema_for_slug=_load,
+        resolve_metric_column=_resolve,
+        find_baseline_column_for_stat=_baseline,
+        match_row_idx=_match,
+        compute_rank_and_percentile=_rankpct,
+        risk_class_from_percentile=_risk,
+        normalize_fn=_norm,
+    )
+
+    assert out.shape[0] == 2
+    assert set(out["Scenario"].tolist()) == {"ssp245", "ssp585"}
+
+    # ssp245
+    row_245 = out[out["Scenario"] == "ssp245"].iloc[0]
+    assert row_245["Current value"] == 12.0
+    assert row_245["Baseline"] == 10.0
+    assert row_245["Δ"] == 2.0
+
+    # ssp585
+    row_585 = out[out["Scenario"] == "ssp585"].iloc[0]
+    assert row_585["Current value"] == 20.0
+    assert row_585["Baseline"] == 10.0
+    assert row_585["Δ"] == 10.0
+

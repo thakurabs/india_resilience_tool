@@ -541,6 +541,56 @@ def render_index_selector(
         return expanded_slugs
 
 
+def render_index_selection(*args: Any, **kwargs: Any) -> Any:
+    """Backwards-compatible alias for `render_index_selector`."""
+    return render_index_selector(*args, **kwargs)
+
+
+def render_multiindex_comparison(*args: Any, **kwargs: Any) -> None:
+    """Backwards-compatible placeholder export (kept for tests/import stability)."""
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return
+    st.info("Multi-index comparison is available via the main portfolio panel.")
+
+
+def render_portfolio_editor(*args: Any, **kwargs: Any) -> None:
+    """Backwards-compatible placeholder export (kept for tests/import stability)."""
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return
+    st.info("Portfolio editing is available via the main portfolio panel.")
+
+
+def render_route_chooser(*args: Any, **kwargs: Any) -> None:
+    """Backwards-compatible placeholder export (route selection is deprecated)."""
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return
+    st.caption("Route selection is not used in this version of the portfolio UI.")
+
+
+def render_route_hints(*args: Any, **kwargs: Any) -> None:
+    """Backwards-compatible placeholder export (route selection is deprecated)."""
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return
+    st.caption("Route hints are not used in this version of the portfolio UI.")
+
+
+def render_state_summary(*args: Any, **kwargs: Any) -> None:
+    """Backwards-compatible placeholder export (kept for tests/import stability)."""
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return
+    st.info("State summary is shown in the portfolio panel when data is available.")
+
+
 # =============================================================================
 # Comparison Table (Auto-rebuild)
 # =============================================================================
@@ -1004,60 +1054,6 @@ def render_comparison_table_ui(
         )
 
 
-def render_comparison_table(
-    *,
-    portfolio: Sequence[Any],
-    selected_slugs: Sequence[str],
-    variables: Mapping[str, Mapping[str, Any]],
-    index_group_labels: Mapping[str, str],
-    sel_scenario: str,
-    sel_period: str,
-    sel_stat: str,
-    sel_scenarios: Optional[Sequence[str]] = None,
-    pilot_state: str,
-    data_dir: Path,
-    load_master_csv_fn: Callable[[str], pd.DataFrame],
-    normalize_master_columns_fn: Callable[[pd.DataFrame], pd.DataFrame],
-    parse_master_schema_fn: Callable[[Any], tuple[list, list, dict]],
-    resolve_metric_column_fn: Callable[..., Optional[str]],
-    find_baseline_column_for_stat_fn: Callable[..., Optional[str]],
-    risk_class_from_percentile_fn: Callable[[float], str],
-    normalize_fn: Callable[[str], str],
-    build_portfolio_multiindex_df_fn: Callable[..., pd.DataFrame],
-    level: str = "district",
-) -> Optional[pd.DataFrame]:
-    """
-    Backward-compatible wrapper: build + render the comparison table UI.
-
-    Prefer calling `build_comparison_df` and `render_comparison_table_ui` separately for layouts
-    that need the dataframe for multiple views (e.g., tabs).
-    """
-    df = build_comparison_df(
-        portfolio=portfolio,
-        selected_slugs=selected_slugs,
-        variables=variables,
-        index_group_labels=index_group_labels,
-        sel_scenario=sel_scenario,
-        sel_period=sel_period,
-        sel_stat=sel_stat,
-        sel_scenarios=sel_scenarios,
-        pilot_state=pilot_state,
-        data_dir=data_dir,
-        load_master_csv_fn=load_master_csv_fn,
-        normalize_master_columns_fn=normalize_master_columns_fn,
-        parse_master_schema_fn=parse_master_schema_fn,
-        resolve_metric_column_fn=resolve_metric_column_fn,
-        find_baseline_column_for_stat_fn=find_baseline_column_for_stat_fn,
-        risk_class_from_percentile_fn=risk_class_from_percentile_fn,
-        normalize_fn=normalize_fn,
-        build_portfolio_multiindex_df_fn=build_portfolio_multiindex_df_fn,
-        level=level,
-    )
-    if df is not None and not df.empty:
-        render_comparison_table_ui(df, level=level)
-    return df
-
-
 # =============================================================================
 # Portfolio Visualizations
 # =============================================================================
@@ -1078,7 +1074,7 @@ CHART_TYPES = {
 }
 
 
-def render_portfolio_visualizations(
+def render_portfolio_visualizations (
     df: pd.DataFrame,
     *,
     default_value_col: str = "Percentile",
@@ -1787,9 +1783,19 @@ def render_portfolio_panel(
             render_comparison_table_ui(cached_df, level=level_norm)
 
         with tab_viz:
-            with st.spinner("Building visualizations…"):
-                render_portfolio_visualizations(
-                    cached_df,
-                    default_value_col="Percentile",
-                    default_chart_type="heatmap",
-                )
+            viz_key = f"portfolio_show_visualizations_{level_norm}"
+            show_viz = st.checkbox(
+                "Show visualizations",
+                value=False,
+                key=viz_key,
+                help="Charts can be slow to render; keep off unless you need them.",
+            )
+            if show_viz:
+                with st.spinner("Building visualizations…"):
+                    render_portfolio_visualizations(
+                        cached_df,
+                        default_value_col="Percentile",
+                        default_chart_type="heatmap",
+                    )
+            else:
+                st.caption("Enable “Show visualizations” to render charts.")

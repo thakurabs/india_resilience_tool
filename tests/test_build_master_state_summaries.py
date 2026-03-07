@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-import build_master_metrics as bmm
+from india_resilience_tool.compute import master_builder as bmm
 
 
 def test_build_state_summaries_schema_and_year_type() -> None:

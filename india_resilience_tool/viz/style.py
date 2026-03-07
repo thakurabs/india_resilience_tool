@@ -52,6 +52,15 @@ class IRTFigureStyle:
     grid_linestyle: str = "--"
     grid_linewidth: float = 0.6
 
+    @property
+    def title_fontsize(self) -> int:
+        """
+        Backwards-compatible alias for older call sites.
+
+        Prefer `title_size` in new code.
+        """
+        return int(self.title_size)
+
 
 def ensure_16x9_figsize(
     figsize: Tuple[float, float],
@@ -251,4 +260,3 @@ def apply_irt_plotly_layout(
         return fig
 
     return fig
-

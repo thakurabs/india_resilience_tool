@@ -20,13 +20,13 @@ IRT visualizes ensemble climate model outputs and derived indices, enabling comp
 ### Entry Points
 | Command | Purpose |
 |---------|---------|
-| `streamlit run dashboard_unfactored.py` | Launch dashboard (recommended shim) |
-| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard (package entry) |
-| `python build_master_metrics.py` | Rebuild master CSVs (district + block) |
-| `python compute_indices.py` | Build processed index artifacts in single-process mode (debug) |
-| `python compute_indices_multiprocess.py` | Build processed index artifacts (default: both district + block) |
-| `python compute_indices_multiprocess.py --level district` | Build processed artifacts at district level |
-| `python compute_indices_multiprocess.py --level block` | Build processed artifacts at block level |
+| `streamlit run main.py` | Launch dashboard (simplest) |
+| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard (alternative) |
+| `python -m tools.pipeline.build_master_metrics` | Rebuild master CSVs (district + block) |
+| `python -m tools.pipeline.compute_indices` | Build processed index artifacts in single-process mode (debug) |
+| `python -m tools.pipeline.compute_indices_multiprocess` | Build processed index artifacts (default: both district + block) |
+| `python -m tools.pipeline.compute_indices_multiprocess --level district` | Build processed artifacts at district level |
+| `python -m tools.pipeline.compute_indices_multiprocess --level block` | Build processed artifacts at block level |
 
 ### Key Environment Variables
 | Variable | Default | Purpose |
@@ -45,20 +45,26 @@ india_resilience_tool/
 ├── __init__.py
 ├── analysis/ # Data analysis & computation
 │ ├── __init__.py
-│ ├── case_study.py # Case-study exports and helpers
+│ ├── map_enrichment.py # Streamlit-free map enrichment helpers (tooltip/rank/baseline)
 │ ├── metrics.py # Risk classification
 │ ├── portfolio.py # Portfolio logic & state (district + block)
 │ └── timeseries.py # Time series loading (district + block)
 ├── app/ # Streamlit application
 │ ├── __init__.py
 │ ├── adm2_cache.py # District boundary caching/simplification
+│ ├── color_range_controls.py # Map color-range defaults (robust p2–p98)
+│ ├── geography_controls.py # Sidebar: Geography & analysis focus (legacy-preserving)
 │ ├── geography.py # Filesystem-backed discovery for state/district/block selectors
-│ ├── dashboard.py # Dashboard entry wrapper
-│ ├── legacy_dashboard_impl.py # Main orchestrator (district + block + bundles)
+│ ├── details_runtime.py # Right-panel runtime (Climate Profile routing)
+│ ├── left_panel_runtime.py # Left-panel runtime (Map vs Rankings routing)
+│ ├── map_layer_runtime.py # Streamlit-free Folium map-layer builder (patched FC + tooltip)
+│ ├── map_pipeline.py # Map+rankings pipeline (merge→enrich→colors→folium map)
+│ ├── master_freshness.py # Master CSV freshness helpers (ribbon gating; Streamlit cached)
+│ ├── runtime.py # Canonical dashboard runtime entry (run_app orchestrator)
 │ ├── main.py # Streamlit entry module (run via Streamlit)
-│ ├── orchestrator.py # Module executor
 │ ├── perf.py # Performance helpers / timing
 │ ├── point_selection_ui.py # Coordinate input & batch support (district + block)
+│ ├── portfolio_state_runtime.py # Portfolio session_state wrappers (delegates to analysis.portfolio)
 │ ├── portfolio_ui.py # Portfolio management panel (district + block + bundles)
 │ ├── portfolio_multistate.py # Multi-state portfolio helpers (master concat + summary stats)
 │ ├── sidebar.py # Sidebar controls & navigation (admin level + focus)
@@ -84,9 +90,10 @@ india_resilience_tool/
 │ ├── __init__.py
 │ ├── adm2_loader.py # GeoJSON district loading (ADM2)
 │ ├── adm3_loader.py # GeoJSON block loading (ADM3)
-│ ├── boundary_loader.py # Unified boundary loader API
 │ ├── discovery.py # Processed-artifact discovery helpers
+│ ├── master_columns.py # Streamlit-free master schema helpers (baseline discovery)
 │ ├── master_loader.py # Master CSV loading (district + block)
+│ ├── spatial_match.py # Streamlit-free click/point -> unit matching helpers
 │ └── merge.py # Merge utilities (ADM2/ADM3)
 ├── utils/ # Utilities
 │ ├── __init__.py
@@ -96,19 +103,19 @@ india_resilience_tool/
 ├── charts.py # Chart/figure generation
 ├── colors.py # Color scales & legends
 ├── exports.py # PDF/ZIP export generation
+├── folium_featurecollection.py # Streamlit-free GeoJSON FC patching + tooltip helpers
 ├── style.py # Shared plotting/table styling
 └── tables.py # Table formatting
 
 Root files:
-├── dashboard_unfactored.py # Streamlit entry shim (recommended)
-├── dashboard_unfactored_impl.py # Legacy monolithic implementation (kept for reference)
 ├── paths.py # DATA_DIR + processed-root configuration (canonical)
-├── build_master_metrics.py # Master CSV builder script
-├── compute_indices.py # Single-process index compute
-├── compute_indices_multiprocess.py # Multi-process index compute
-├── environment.yml # Conda environment (pinned)
-├── requirements.txt # pip freeze (UTF-16)
+├── environment.yml # Conda environment (portable; canonical)
+├── environment.freeze.yml # Legacy full export (non-portable; reference only)
+├── requirements.txt # Conda-first pointer (not used for installs)
+├── requirements.freeze.txt # Legacy pip freeze/export (non-portable; reference only)
 ├── docs/ # Additional docs/notes
+├── notebooks/ # Exploratory notebooks (non-runtime)
+├── tools/ # Ops/diagnostic scripts (non-runtime)
 └── tests/ # Test suite
 ```
 
@@ -116,7 +123,7 @@ Root files:
 
 - `AGENTS.md`: root agent workflow and guardrails for this repository.
 - `docs/HANDOFF.md`, `docs/refactor_acceptance.md`: handoff/history and refactor acceptance notes.
-- Helper scripts for maintenance/ops include `build_all_csv.ps1`, `debug_build_master.py`, and boundary/S3 helper scripts.
+- Helper scripts for maintenance/ops live under `tools/` (see `tools/README.md`).
 
 ---
 
@@ -283,21 +290,17 @@ Unchanged structurally, but used by both district and block details/portfolio pa
 
 ### 5) Application layer (`india_resilience_tool/app/`)
 
-#### `legacy_dashboard_impl.py`
-Main orchestrator. Responsibilities:
-- admin level toggle (district/block)
-- **Map View ribbon** (above the map) for selecting:
-  - risk domain (bundle) → metric
-  - scenario, period, statistic (mean/median)
-  - map mode (absolute vs change from 1990–2010 baseline)
-- placeholder-first ribbon UX (`— Select —`) with safe gating (avoid invalid/partial renders)
-- state/district/block selection widgets (sidebar)
-  - available states are discovered after metric selection (processed-root depends on metric slug)
-- data root resolution (`PROCESSED_ROOT` per index slug)
-- chooses correct master table by admin level:
-  - district: `master_metrics_by_district.csv`
-  - block: `master_metrics_by_block.csv`
-- routes to map/rankings/details/portfolio panels
+#### `runtime.py`
+Canonical runtime entrypoint for the dashboard. Responsibilities:
+- called by `india_resilience_tool/app/main.py` on every Streamlit rerun
+- orchestrates sidebar + ribbon + map/rankings + details panels
+
+#### `map_pipeline.py`
+Map + rankings pipeline. Responsibilities:
+- builds level-aware merged GeoDataFrame (ADM2/ADM3 ↔ master)
+- computes baseline/delta + rank/percentile/risk + tooltip strings (via Streamlit-free modules)
+- computes and applies color binning + legend HTML
+- builds Folium map layer (patched FeatureCollection) and rankings table
 
 #### `perf.py`
 Lightweight performance helpers used in the app (timing wrappers / counters) to support profiling and regressions.
@@ -367,7 +370,7 @@ Typical responsibilities:
 - Return SPI arrays/series aligned to the original time index so downstream aggregation works cleanly
 
 See also:
-- `spi_diagnostic.py` (repo root): sanity checks / distribution diagnostics for SPI outputs
+- `tools/diagnostics/spi_diagnostic.py`: sanity checks / distribution diagnostics for SPI outputs
 
 ## Thematic Bundles
 
@@ -439,7 +442,7 @@ High-level flow is the same; the admin level controls which geometry and master 
 | Add metric to bundle | `config/metrics_registry.py` | Add slug to appropriate `BUNDLES[...]` list |
 | Create new bundle | `config/metrics_registry.py` | Add to `BUNDLES`, `BUNDLE_ORDER`, `BUNDLE_DESCRIPTIONS` |
 | Change default bundle | `config/metrics_registry.py` | Update `DEFAULT_BUNDLE` |
-| Build block master metrics | `build_master_metrics.py` | produces `master_metrics_by_block.csv` |
+| Build block master metrics | `tools/pipeline/build_master_metrics.py` | produces `master_metrics_by_block.csv` |
 | Update block tooltip/map click | `app/views/map_view.py` | ensure block identifiers flow to state |
 | Enable add-to-portfolio from block rankings | `app/views/rankings_view.py` | portfolio parity with district |
 | Fix time series loading | `analysis/timeseries.py`, `data/discovery.py` | ensemble yearly discovery + id injection |

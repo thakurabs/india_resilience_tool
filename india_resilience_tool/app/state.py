@@ -37,6 +37,9 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "active_view": VIEW_MAP,
     "main_view_selector": VIEW_MAP,
 
+    # Main layout (right panel)
+    "right_panel_collapsed": False,
+
     # Administrative level (NEW)
     "admin_level": ADMIN_LEVEL_DISTRICT,
     "selected_block": "All",  # For block-level selection
@@ -152,39 +155,6 @@ def get_unit_selection_key(level: AdminLevel) -> str:
     return "selected_block" if level == "block" else "selected_district"
 
 
-def get_selected_unit(
-    session_state: Optional[MutableMapping[str, Any]] = None,
-    level: Optional[AdminLevel] = None,
-) -> str:
-    """Get the currently selected unit name based on level."""
-    if session_state is None:
-        import streamlit as st
-        session_state = st.session_state
-    
-    if level is None:
-        level = get_current_level(session_state)
-    
-    key = get_unit_selection_key(level)
-    return session_state.get(key, "All")
-
-
-def set_selected_unit(
-    session_state: Optional[MutableMapping[str, Any]] = None,
-    level: Optional[AdminLevel] = None,
-    unit_name: str = "All",
-) -> None:
-    """Set the selected unit based on level."""
-    if session_state is None:
-        import streamlit as st
-        session_state = st.session_state
-    
-    if level is None:
-        level = get_current_level(session_state)
-    
-    key = get_unit_selection_key(level)
-    session_state[key] = unit_name
-
-
 def get_level_display_name(level: AdminLevel) -> str:
     """Get display name for a level."""
     return "Block" if level == "block" else "District"
@@ -193,19 +163,3 @@ def get_level_display_name(level: AdminLevel) -> str:
 def get_level_display_name_plural(level: AdminLevel) -> str:
     """Get plural display name for a level."""
     return "Blocks" if level == "block" else "Districts"
-
-
-def get_master_csv_key(level: AdminLevel) -> str:
-    """Get the master CSV filename suffix based on level."""
-    return "block" if level == "block" else "district"
-
-
-def get_portfolio_unit_key(level: AdminLevel) -> str:
-    """
-    Get the key used in portfolio items for the unit name.
-    
-    Portfolio items are dicts like:
-    - District level: {"state": "...", "district": "..."}
-    - Block level: {"state": "...", "district": "...", "block": "..."}
-    """
-    return "block" if level == "block" else "district"

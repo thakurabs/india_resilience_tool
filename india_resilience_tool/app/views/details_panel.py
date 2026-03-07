@@ -1322,3 +1322,37 @@ def render_details_panel(
         make_case_study_zip_fn=make_case_study_zip_fn,
         slugify_fs_fn=slugify_fs_fn,
     )
+
+
+def render_detailed_statistics(*args: Any, **kwargs: Any) -> None:
+    """
+    Backwards-compatible export for older dashboard wiring/tests.
+
+    The legacy dashboard exposed a "Detailed statistics" sub-renderer. The
+    refactored details panel no longer includes that section, but we keep this
+    callable wrapper so downstream imports remain stable.
+    """
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return
+
+    with st.expander("Detailed statistics", expanded=False):
+        st.info("Detailed statistics panel is not available in the refactored dashboard yet.")
+
+
+def render_district_comparison(*args: Any, **kwargs: Any) -> None:
+    """
+    Backwards-compatible export for older dashboard wiring/tests.
+
+    The legacy dashboard exposed a "District comparison" sub-renderer. The new
+    dashboard focuses on single-unit details + portfolio mode; keep this as a
+    safe placeholder.
+    """
+    try:
+        import streamlit as st  # type: ignore
+    except Exception:
+        return
+
+    with st.expander("District comparison", expanded=False):
+        st.info("District comparison panel is not available in the refactored dashboard yet.")

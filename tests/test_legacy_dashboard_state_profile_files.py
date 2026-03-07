@@ -1,4 +1,4 @@
-"""AST-driven tests for state profile missing-file helper in legacy dashboard."""
+"""AST-driven tests for state profile missing-file helper (app/master_freshness)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ def _load_state_profile_files_missing_fn():
         Path(__file__).resolve().parents[1]
         / "india_resilience_tool"
         / "app"
-        / "legacy_dashboard_impl.py"
+        / "master_freshness.py"
     )
     source = src_path.read_text(encoding="utf-8")
     module_ast = ast.parse(source, filename=str(src_path))
@@ -23,7 +23,7 @@ def _load_state_profile_files_missing_fn():
             target = node
             break
 
-    assert target is not None, "state_profile_files_missing must exist in legacy_dashboard_impl.py"
+    assert target is not None, "state_profile_files_missing must exist in master_freshness.py"
 
     isolated_mod = ast.Module(body=[target], type_ignores=[])
     code = compile(isolated_mod, filename=str(src_path), mode="exec")

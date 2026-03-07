@@ -15,27 +15,6 @@ from typing import Any, Iterable, Optional, Sequence, Union
 import pandas as pd
 
 
-def resolve_existing_table_path(base: Path) -> Optional[Path]:
-    """
-    Resolve an on-disk table path by trying common extensions.
-
-    If `base` already exists (file or directory), it is returned as-is.
-    Otherwise, tries:
-      - .parquet
-      - .csv
-      - .csv.gz
-    """
-    p = Path(base)
-    if p.exists():
-        return p
-
-    for ext in (".parquet", ".csv", ".csv.gz"):
-        cand = Path(str(p) + ext)
-        if cand.exists():
-            return cand
-    return None
-
-
 def _filters_to_pyarrow_expression(
     filters: Optional[Union[Iterable[tuple[str, str, Any]], Any]]
 ):
@@ -110,43 +89,3 @@ def read_table(
 
     # CSV / CSV.GZ
     return pd.read_csv(p, **read_csv_kwargs)
-
-
-def write_parquet_dataset(
-    df: pd.DataFrame,
-    root_dir: Path,
-    *,
-    partition_cols: Sequence[str],
-    compression: str = "zstd",
-) -> None:
-    """
-    Append a DataFrame into a hive-partitioned Parquet dataset.
-
-    Partition columns are removed from the written files and encoded into the
-    directory structure like: col=value/...
-    """
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-
-    root_dir = Path(root_dir)
-    root_dir.mkdir(parents=True, exist_ok=True)
-
-    table = pa.Table.from_pandas(df, preserve_index=False)
-    pq.write_to_dataset(
-        table,
-        root_path=str(root_dir),
-        partition_cols=list(partition_cols),
-        compression=compression,
-        existing_data_behavior="overwrite_or_ignore",
-    )
-
-
-def write_parquet_file(
-    df: pd.DataFrame,
-    path: Path,
-    *,
-    compression: str = "zstd",
-) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, index=False, compression=compression)

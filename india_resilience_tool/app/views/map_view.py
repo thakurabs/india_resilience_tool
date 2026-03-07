@@ -18,6 +18,96 @@ from contextlib import nullcontext
 from typing import Any, Callable, Mapping, Optional, Tuple
 
 
+def build_choropleth_map_with_geojson_layer(
+    *,
+    fc: Mapping[str, Any],
+    map_center: list[float],
+    map_zoom: float,
+    bounds_latlon: list[list[float]],
+    adm1: Any,
+    selected_state: str,
+    selected_district: str,
+    layer_name: str,
+    tooltip: Any = None,
+    highlight_function: Optional[Callable[[dict], dict]] = None,
+) -> Any:
+    """
+    Build a Folium map and attach the patched GeoJSON FeatureCollection as a layer.
+
+    This function is Streamlit-free; it only builds a Folium map object. The
+    Streamlit rendering is done by `render_map_view`.
+
+    Args:
+        fc: GeoJSON FeatureCollection (already patched with fillColor/value fields).
+        map_center/map_zoom: initial view.
+        bounds_latlon: [[min_lat, min_lon], [max_lat, max_lon]] max-bounds clamp.
+        adm1: ADM1 GeoDataFrame used to fit bounds when a state is selected.
+        selected_state/selected_district: selection context (fit state bounds only).
+        layer_name: layer label ("Districts"/"Blocks").
+        tooltip: optional folium GeoJsonTooltip.
+        highlight_function: optional folium highlight function.
+    """
+    import folium
+
+    m = folium.Map(
+        location=map_center,
+        zoom_start=map_zoom,
+        tiles="CartoDB positron",
+        control_scale=False,
+        min_zoom=4,
+        max_zoom=12,
+        prefer_canvas=True,
+        zoom_control=True,
+        dragging=True,
+        scrollWheelZoom=True,
+    )
+
+    # Fit state bounds when a state is selected but district is "All"
+    try:
+        if selected_state != "All" and selected_district == "All":
+            row_state = adm1[adm1["shapeName"].astype(str).str.strip() == selected_state]
+            if not row_state.empty:
+                b = row_state.iloc[0].geometry.bounds
+                fit_bounds = [[b[1], b[0]], [b[3], b[2]]]
+                _name = m.get_name()
+                bounds_js = f"<script>var {_name} = {_name}; {_name}.fitBounds({fit_bounds});</script>"
+                m.get_root().html.add_child(folium.Element(bounds_js))
+    except Exception:
+        pass
+
+    # Clamp panning to India-ish bounds (legacy)
+    try:
+        _name = m.get_name()
+        bounds_js = (
+            f"<script>var {_name} = {_name}; {_name}.setMaxBounds({bounds_latlon});</script>"
+        )
+        m.get_root().html.add_child(folium.Element(bounds_js))
+    except Exception:
+        pass
+
+    def _style_fn(feature: dict) -> dict:
+        props = (feature or {}).get("properties", {}) if isinstance(feature, dict) else {}
+        return {
+            "fillColor": props.get("fillColor", "#cccccc"),
+            "color": "#666666",
+            "weight": 0.3,
+            "fillOpacity": 0.7,
+        }
+
+    folium.GeoJson(
+        data=dict(fc),
+        name=layer_name,
+        style_function=_style_fn,
+        tooltip=tooltip,
+        highlight_function=highlight_function,
+        smooth_factor=1.5,
+        zoom_on_click=False,
+        bubblingMouseEvents=False,
+    ).add_to(m)
+
+    return m
+
+
 def extract_clicked_district_state(ret: Optional[Mapping[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
     """
     Extract (district_name, state_name) from st_folium return payload.
@@ -222,66 +312,6 @@ def find_block_at_coordinates(
         pass
 
     return None, None, None
-
-
-def create_portfolio_style_function(
-    portfolio_keys: set,
-    normalize_fn: Callable[[str], str],
-    *,
-    level: str = "district",
-    portfolio_border_color: str = "#2563eb",
-    portfolio_border_weight: int = 3,
-    default_border_color: str = "#666666",
-    default_border_weight: float = 0.3,
-) -> Callable[[dict], dict]:
-    """
-    Create a style function that highlights portfolio units.
-
-    District mode:
-        portfolio_keys contains (state, district)
-
-    Block mode:
-        portfolio_keys contains (state, district, block)
-    """
-    level_norm = str(level).strip().lower()
-
-    def style_fn(feature: dict) -> dict:
-        props = feature.get("properties", {})
-        fill_color = props.get("fillColor", "#cccccc")
-
-        state_name = props.get("state_name", "")
-        district_name = props.get("district_name", "")
-
-        if level_norm == "block":
-            block_name = props.get("block_name", "") or props.get("subdistrict_name", "") or props.get("adm3_name", "")
-            key = (
-                normalize_fn(state_name),
-                normalize_fn(district_name),
-                normalize_fn(str(block_name)),
-            )
-        else:
-            key = (normalize_fn(state_name), normalize_fn(district_name))
-
-        is_in_portfolio = key in portfolio_keys
-
-        if is_in_portfolio:
-            return {
-                "fillColor": fill_color,
-                "color": portfolio_border_color,
-                "weight": portfolio_border_weight,
-                "fillOpacity": 0.8,
-                "dashArray": None,
-            }
-
-        return {
-            "fillColor": fill_color,
-            "color": default_border_color,
-            "weight": default_border_weight,
-            "fillOpacity": 0.8,
-            "dashArray": None,
-        }
-
-    return style_fn
 
 
 def add_portfolio_legend_to_map(
@@ -666,32 +696,3 @@ def render_unit_add_to_portfolio(
 
     return False
 
-
-def render_district_add_to_portfolio(
-    *,
-    clicked_district: Optional[str],
-    clicked_state: Optional[str],
-    selected_state: str,
-    portfolio_add_fn: Callable[[str, str], None],
-    portfolio_remove_fn: Callable[[str, str], None],
-    portfolio_contains_fn: Callable[[str, str], bool],
-    normalize_fn: Callable[[str], str],
-    returned: Optional[Mapping[str, Any]] = None,
-    merged: Optional[Any] = None,  # GeoDataFrame
-) -> bool:
-    """
-    Backward-compatible wrapper for district-mode inline portfolio controls.
-    """
-    return render_unit_add_to_portfolio(
-        clicked_district=clicked_district,
-        clicked_state=clicked_state,
-        clicked_block=None,
-        selected_state=selected_state,
-        portfolio_add_fn=portfolio_add_fn,
-        portfolio_remove_fn=portfolio_remove_fn,
-        portfolio_contains_fn=portfolio_contains_fn,
-        normalize_fn=normalize_fn,
-        returned=returned,
-        merged=merged,
-        level="district",
-    )

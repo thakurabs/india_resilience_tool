@@ -947,6 +947,24 @@ def make_portfolio_heatmap(
     return fig
 
 
+def make_scenario_comparison_figure_dashboard(**kwargs):
+    """
+    Return a Plotly scenario comparison when available; fall back to Matplotlib.
+
+    The dashboard prefers Plotly for visual consistency. If Plotly is unavailable
+    (or the Plotly builder fails), fall back to the Matplotlib version to avoid
+    breaking the UI.
+    """
+    try:
+        fig = make_scenario_comparison_figure_plotly(render_context="dashboard", **kwargs)
+        if fig is not None:
+            return fig
+    except Exception:
+        pass
+
+    return make_scenario_comparison_figure(render_context="dashboard", **kwargs)
+
+
 def make_portfolio_grouped_bar(
     df: pd.DataFrame,
     value_col: str = "Current value",
