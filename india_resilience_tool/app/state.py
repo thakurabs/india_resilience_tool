@@ -21,11 +21,18 @@ VIEW_RANKINGS = "Rankings table"
 ANALYSIS_MODE_SINGLE = "Single district focus"
 ANALYSIS_MODE_PORTFOLIO = "Multi-district portfolio"
 
-# Administrative level constants (NEW)
+# Spatial family constants
+SPATIAL_FAMILY_ADMIN = "admin"
+SPATIAL_FAMILY_HYDRO = "hydro"
+
+# Administrative / spatial level constants
 ADMIN_LEVEL_DISTRICT = "district"
 ADMIN_LEVEL_BLOCK = "block"
+ADMIN_LEVEL_BASIN = "basin"
+ADMIN_LEVEL_SUB_BASIN = "sub_basin"
 
-AdminLevel = Literal["district", "block"]
+SpatialFamily = Literal["admin", "hydro"]
+AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 SESSION_DEFAULTS: dict[str, Any] = {
     # Core mode/router keys
@@ -41,8 +48,11 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "right_panel_collapsed": False,
 
     # Administrative level (NEW)
+    "spatial_family": SPATIAL_FAMILY_ADMIN,
     "admin_level": ADMIN_LEVEL_DISTRICT,
     "selected_block": "All",  # For block-level selection
+    "selected_basin": "All",
+    "selected_subbasin": "All",
 
     # Other stable keys (widget keys / caches)
     # NOTE: Do NOT pre-seed unified metric selection keys here. The legacy dashboard
@@ -139,6 +149,8 @@ def set_level(
         session_state["admin_level"] = level
         session_state["selected_district"] = "All"
         session_state["selected_block"] = "All"
+        session_state["selected_basin"] = "All"
+        session_state["selected_subbasin"] = "All"
         
         # Clear portfolio when switching levels (level-specific lists)
         session_state["portfolio_districts"] = []
@@ -152,14 +164,26 @@ def set_level(
 
 def get_unit_selection_key(level: AdminLevel) -> str:
     """Get the session state key for unit selection based on level."""
+    if level == "sub_basin":
+        return "selected_subbasin"
+    if level == "basin":
+        return "selected_basin"
     return "selected_block" if level == "block" else "selected_district"
 
 
 def get_level_display_name(level: AdminLevel) -> str:
     """Get display name for a level."""
+    if level == "sub_basin":
+        return "Sub-basin"
+    if level == "basin":
+        return "Basin"
     return "Block" if level == "block" else "District"
 
 
 def get_level_display_name_plural(level: AdminLevel) -> str:
     """Get plural display name for a level."""
+    if level == "sub_basin":
+        return "Sub-basins"
+    if level == "basin":
+        return "Basins"
     return "Blocks" if level == "block" else "Districts"

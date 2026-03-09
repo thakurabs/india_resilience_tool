@@ -18,7 +18,7 @@ import pandas as pd
 
 
 PathLike = Union[str, Path]
-AdminLevel = Literal["district", "block"]
+AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 
 def get_master_mtime(master_path: PathLike) -> Optional[float]:
@@ -132,6 +132,50 @@ def merge_adm3_with_master(
     return merged
 
 
+def merge_basin_with_master(
+    basin_df: pd.DataFrame,
+    master_df: pd.DataFrame,
+    *,
+    alias_fn: Callable[[str], str],
+    basin_id_col: str = "basin_id",
+    master_basin_id_col: str = "basin_id",
+    key_col: str = "__key",
+    suffixes: tuple[str, str] = ("", "_csv"),
+) -> pd.DataFrame:
+    """Deterministic left merge for basins using normalized basin IDs."""
+    basinc = basin_df.copy()
+    dfc = master_df.copy()
+
+    if key_col not in basinc.columns:
+        basinc[key_col] = basinc[basin_id_col].astype(str).map(alias_fn)
+    dfc[key_col] = dfc[master_basin_id_col].astype(str).map(alias_fn)
+
+    merged = basinc.merge(dfc, on=key_col, how="left", suffixes=suffixes).drop(columns=[key_col])
+    return merged
+
+
+def merge_subbasin_with_master(
+    subbasin_df: pd.DataFrame,
+    master_df: pd.DataFrame,
+    *,
+    alias_fn: Callable[[str], str],
+    subbasin_id_col: str = "subbasin_id",
+    master_subbasin_id_col: str = "subbasin_id",
+    key_col: str = "__key",
+    suffixes: tuple[str, str] = ("", "_csv"),
+) -> pd.DataFrame:
+    """Deterministic left merge for sub-basins using normalized sub-basin IDs."""
+    subc = subbasin_df.copy()
+    dfc = master_df.copy()
+
+    if key_col not in subc.columns:
+        subc[key_col] = subc[subbasin_id_col].astype(str).map(alias_fn)
+    dfc[key_col] = dfc[master_subbasin_id_col].astype(str).map(alias_fn)
+
+    merged = subc.merge(dfc, on=key_col, how="left", suffixes=suffixes).drop(columns=[key_col])
+    return merged
+
+
 def get_or_build_merged_for_index_cached(
     adm2_df: pd.DataFrame,
     master_df: pd.DataFrame,
@@ -153,6 +197,7 @@ def get_or_build_merged_for_index_cached(
       - Restricts boundaries to states present in master (if columns exist)
       - Deterministic join using alias-normalized keys
       - For blocks, uses composite district|block key
+      - For hydro levels, uses canonical basin/sub-basin IDs
       
     Args:
         adm2_df: GeoDataFrame with boundary geometries (ADM2 or ADM3)
@@ -187,7 +232,11 @@ def get_or_build_merged_for_index_cached(
     )
 
     # Merge based on level
-    if level == "block":
+    if level == "sub_basin":
+        merged = merge_subbasin_with_master(boundary_c, master_df, alias_fn=alias_fn)
+    elif level == "basin":
+        merged = merge_basin_with_master(boundary_c, master_df, alias_fn=alias_fn)
+    elif level == "block":
         merged = merge_adm3_with_master(boundary_c, master_df, alias_fn=alias_fn)
     else:
         merged = merge_adm2_with_master(boundary_c, master_df, alias_fn=alias_fn)
@@ -198,4 +247,8 @@ def get_or_build_merged_for_index_cached(
 
 def get_unit_name_column(level: AdminLevel) -> str:
     """Get the primary unit name column for a given level."""
+    if level == "sub_basin":
+        return "subbasin_name"
+    if level == "basin":
+        return "basin_name"
     return "block_name" if level == "block" else "district_name"

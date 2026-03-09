@@ -19,7 +19,7 @@ import pandas as pd
 
 from india_resilience_tool.app.state import VIEW_RANKINGS
 
-AdminLevel = Literal["district", "block"]
+AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 
 def render_rankings_view(
@@ -54,14 +54,24 @@ def render_rankings_view(
         return
 
     level_norm = str(level).strip().lower()
-    unit_label = "Block" if level_norm == "block" else "District"
+    if level_norm == "sub_basin":
+        unit_label = "Sub-basin"
+    elif level_norm == "basin":
+        unit_label = "Basin"
+    else:
+        unit_label = "Block" if level_norm == "block" else "District"
     st.subheader(f"{unit_label} Rankings")
 
     if table_df is None or table_df.empty:
         st.caption("No ranking data available for this selection.")
         return
 
-    default_mode = "Single block focus" if level_norm == "block" else "Single district focus"
+    if level_norm == "sub_basin":
+        default_mode = "Single sub-basin focus"
+    elif level_norm == "basin":
+        default_mode = "Single basin focus"
+    else:
+        default_mode = "Single block focus" if level_norm == "block" else "Single district focus"
     analysis_mode = st.session_state.get("analysis_mode", default_mode)
     is_portfolio_mode = "Multi" in str(analysis_mode)
 
@@ -144,7 +154,11 @@ def _render_simple_rankings(
             df = df.sort_values("value", ascending=False)
 
     # Build display columns based on level
-    if level_norm == "block" and "block_name" in df.columns:
+    if level_norm == "sub_basin" and "subbasin_name" in df.columns:
+        display_cols = ["rank_value", "subbasin_name", "basin_name", "value"]
+    elif level_norm == "basin" and "basin_name" in df.columns:
+        display_cols = ["rank_value", "basin_name", "value"]
+    elif level_norm == "block" and "block_name" in df.columns:
         display_cols = ["rank_value", "block_name", "district_name", "state_name", "value"]
     else:
         display_cols = ["rank_value", "district_name", "state_name", "value"]
@@ -162,6 +176,8 @@ def _render_simple_rankings(
 
     df_display = df[display_cols].rename(columns={
         "rank_value": "Rank (value)",
+        "subbasin_name": "Sub-basin",
+        "basin_name": "Basin",
         "block_name": "Block",
         "district_name": "District",
         "state_name": "State",

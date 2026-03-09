@@ -26,6 +26,10 @@ from india_resilience_tool.data.adm2_loader import (
     load_local_adm2 as _load_local_adm2,
 )
 from india_resilience_tool.data.adm3_loader import load_local_adm3 as _load_local_adm3
+from india_resilience_tool.data.hydro_loader import (
+    ensure_hydro_key_column as _ensure_hydro_key_column,
+    load_local_hydro as _load_local_hydro,
+)
 from india_resilience_tool.utils.naming import alias, normalize_name
 
 
@@ -56,6 +60,26 @@ def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM3) -> gpd.GeoD
         min_area=0.00005,
     )
     return gdf
+
+
+@st.cache_data(ttl=3600)
+def load_local_basin(path: str) -> gpd.GeoDataFrame:
+    """Load basin GeoJSON with canonical hydro columns."""
+    return _load_local_hydro(
+        path=path,
+        level="basin",
+        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
+    )
+
+
+@st.cache_data(ttl=3600)
+def load_local_subbasin(path: str) -> gpd.GeoDataFrame:
+    """Load sub-basin GeoJSON with canonical hydro columns."""
+    return _load_local_hydro(
+        path=path,
+        level="sub_basin",
+        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
+    )
 
 
 @st.cache_data(ttl=3600)
@@ -137,6 +161,49 @@ def build_adm3_geojson_by_state(
         keep_cols=["block_name", "district_name", "state_name", "__bkey", "geometry"],
     )
     return by_state
+
+
+@st.cache_data(ttl=3600)
+def build_basin_geojson_all(
+    path: str,
+    mtime: float,
+) -> dict[str, dict]:
+    """Build a single nationwide basin FeatureCollection cache."""
+    _ = mtime
+    gdf = load_local_basin(path)
+    gdf = _ensure_hydro_key_column(gdf, level="basin", alias_fn=alias, key_col="__key")
+    return _featurecollections_by_state(
+        gdf.assign(state_name="All"),
+        state_col="state_name",
+        normalize_state_fn=normalize_name,
+        keep_cols=["basin_id", "basin_name", "hydro_level", "__key", "geometry"],
+    )
+
+
+@st.cache_data(ttl=3600)
+def build_subbasin_geojson_all(
+    path: str,
+    mtime: float,
+) -> dict[str, dict]:
+    """Build a single nationwide sub-basin FeatureCollection cache."""
+    _ = mtime
+    gdf = load_local_subbasin(path)
+    gdf = _ensure_hydro_key_column(gdf, level="sub_basin", alias_fn=alias, key_col="__key")
+    return _featurecollections_by_state(
+        gdf.assign(state_name="All"),
+        state_col="state_name",
+        normalize_state_fn=normalize_name,
+        keep_cols=[
+            "basin_id",
+            "basin_name",
+            "subbasin_id",
+            "subbasin_code",
+            "subbasin_name",
+            "hydro_level",
+            "__key",
+            "geometry",
+        ],
+    )
 
 
 @st.cache_data

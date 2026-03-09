@@ -67,7 +67,7 @@ def _level_aware_merge(
     level: str,
 ) -> Any:
     level_norm = str(level or "district").strip().lower()
-    boundary_gdf = adm3 if level_norm == "block" else adm2
+    boundary_gdf = adm3 if level_norm in {"block", "basin", "sub_basin"} else adm2
     if boundary_gdf is None:
         raise ValueError(f"Boundary GeoDataFrame is required for level={level_norm!r}")
 
@@ -103,6 +103,9 @@ def build_map_and_rankings(
     selected_state: str,
     selected_district: str,
     selected_block: str,
+    selected_basin: str,
+    selected_subbasin: str,
+    spatial_family: str,
     hover_enabled: bool,
     map_center: list[float],
     map_zoom: float,
@@ -111,6 +114,8 @@ def build_map_and_rankings(
     normalize_state_fn: Any,
     adm2_geojson_path: Path,
     adm3_geojson_path: Path,
+    basin_geojson_path: Path,
+    subbasin_geojson_path: Path,
     simplify_tol_adm2: float,
     simplify_tol_adm3: float,
     map_height: int,
@@ -126,7 +131,7 @@ def build_map_and_rankings(
     """
     level_norm = str(adm_level or "district").strip().lower()
 
-    if "district" not in df.columns:
+    if level_norm in {"district", "block"} and "district" not in df.columns:
         st.error("Master CSV must contain a 'district' column.")
         render_perf_panel_safe()
         st.stop()
@@ -138,6 +143,16 @@ def build_map_and_rankings(
             st.error("Block mode requires master CSV to contain a 'block' (or 'block_name') column.")
             render_perf_panel_safe()
             st.stop()
+
+    if level_norm == "basin" and "basin_id" not in df.columns:
+        st.error("Basin mode requires master CSV to contain a 'basin_id' column.")
+        render_perf_panel_safe()
+        st.stop()
+
+    if level_norm == "sub_basin" and "subbasin_id" not in df.columns:
+        st.error("Sub-basin mode requires master CSV to contain a 'subbasin_id' column.")
+        render_perf_panel_safe()
+        st.stop()
 
         if adm3 is None:
             st.error("Block mode requires ADM3 boundaries to be loaded.")
@@ -241,6 +256,18 @@ def build_map_and_rankings(
 
     if level_norm == "block" and selected_block != "All" and "block_name" in scale_gdf.columns:
         scale_gdf = scale_gdf[scale_gdf["block_name"].astype(str) == selected_block]
+    if level_norm == "basin" and selected_basin != "All" and "basin_name" in scale_gdf.columns:
+        scale_gdf = scale_gdf[scale_gdf["basin_name"].astype(str) == selected_basin]
+    if level_norm == "sub_basin":
+        if selected_basin != "All" and "basin_name" in scale_gdf.columns:
+            scale_gdf = scale_gdf[scale_gdf["basin_name"].astype(str) == selected_basin]
+        if (
+            selected_subbasin != "All"
+            and "subbasin_name" in scale_gdf.columns
+        ):
+            scale_gdf = scale_gdf[
+                scale_gdf["subbasin_name"].astype(str) == selected_subbasin
+            ]
 
     scale_vals = pd.to_numeric(
         scale_gdf.get(map_value_col, pd.Series([], dtype=float)), errors="coerce"
@@ -294,7 +321,14 @@ def build_map_and_rankings(
     # Build ranking table
     # -------------------------
     with perf_section("rank_table: build"):
-        unit_col = "block_name" if level_norm == "block" else "district_name"
+        if level_norm == "sub_basin":
+            unit_col = "subbasin_name"
+        elif level_norm == "basin":
+            unit_col = "basin_name"
+        elif level_norm == "block":
+            unit_col = "block_name"
+        else:
+            unit_col = "district_name"
         table_df, has_baseline = _build_rankings_table_df(
             merged,
             metric_col=metric_col,
@@ -321,6 +355,17 @@ def build_map_and_rankings(
 
     if selected_district != "All":
         display_gdf = display_gdf[display_gdf["district_name"].astype(str) == selected_district]
+    if level_norm == "basin" and selected_basin != "All":
+        display_gdf = display_gdf[display_gdf["basin_name"].astype(str) == selected_basin]
+    if level_norm == "sub_basin":
+        if selected_basin != "All":
+            display_gdf = display_gdf[
+                display_gdf["basin_name"].astype(str) == selected_basin
+            ]
+        if selected_subbasin != "All":
+            display_gdf = display_gdf[
+                display_gdf["subbasin_name"].astype(str) == selected_subbasin
+            ]
 
     with perf_section("map: GeoJSON serialize+add layer"):
         folium_map = build_folium_map_for_selection(
@@ -329,6 +374,7 @@ def build_map_and_rankings(
             display_gdf=display_gdf,
             selected_state=selected_state,
             selected_district=selected_district,
+            selected_basin=selected_basin,
             map_mode=map_mode,
             baseline_col=baseline_col,
             rank_scope_label=rank_scope_label,
@@ -343,6 +389,8 @@ def build_map_and_rankings(
             hover_enabled=bool(hover_enabled),
             adm2_geojson_path=adm2_geojson_path,
             adm3_geojson_path=adm3_geojson_path,
+            basin_geojson_path=basin_geojson_path,
+            subbasin_geojson_path=subbasin_geojson_path,
             simplify_tolerance_adm2=simplify_tol_adm2,
             simplify_tolerance_adm3=simplify_tol_adm3,
         )

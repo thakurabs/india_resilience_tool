@@ -74,7 +74,15 @@ import geopandas as gpd
 from rasterio import features
 from affine import Affine
 
-from paths import DATA_ROOT, DISTRICTS_PATH, BLOCKS_PATH, BASE_OUTPUT_ROOT
+from paths import (
+    BASE_OUTPUT_ROOT,
+    BASINS_PATH,
+    BLOCKS_PATH,
+    DATA_ROOT,
+    DISTRICTS_PATH,
+    SUBBASINS_PATH,
+)
+from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
 
 # -----------------------------------------------------------------------------
@@ -100,11 +108,15 @@ USE_CLIMATE_INDICES_PACKAGE = CLIMATE_INDICES_AVAILABLE
 SPI_DISTRIBUTION: str = "gamma"
 
 # Type alias for administrative level
-AdminLevel = Literal["district", "block"]
+AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 # Folder names for clean separation
 DISTRICT_FOLDER = "districts"
 BLOCK_FOLDER = "blocks"
+BASIN_FOLDER = "basins"
+SUB_BASIN_FOLDER = "sub_basins"
+HYDRO_ROOT_NAME = "hydro"
+COVERAGE_THRESHOLD = 0.80
 
 # -----------------------------------------------------------------------------
 # CONFIGURATION
@@ -140,6 +152,10 @@ def metric_root(slug: str) -> Path:
 
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
+    if level == "sub_basin":
+        return SUB_BASIN_FOLDER
+    if level == "basin":
+        return BASIN_FOLDER
     return BLOCK_FOLDER if level == "block" else DISTRICT_FOLDER
 
 def normalize_lat_lon(ds: xr.Dataset) -> xr.Dataset:
@@ -159,6 +175,10 @@ def pr_to_mm_per_day(da: xr.DataArray) -> xr.DataArray:
 # -----------------------------------------------------------------------------
 def get_boundary_path(level: AdminLevel) -> Path:
     """Get the boundary file path based on level."""
+    if level == "sub_basin":
+        return SUBBASINS_PATH
+    if level == "basin":
+        return BASINS_PATH
     return BLOCKS_PATH if level == "block" else DISTRICTS_PATH
 
 def load_boundaries(
@@ -171,6 +191,12 @@ def load_boundaries(
     """
     gdf = gpd.read_file(path)
     
+    if level in {"basin", "sub_basin"}:
+        if gdf.crs is None:
+            gdf = gdf.set_crs("EPSG:4326")
+        gdf = ensure_hydro_columns(gdf, level="sub_basin" if level == "sub_basin" else "basin")
+        return gdf
+
     # Find state column
     state_cols = ["STATE_UT", "state_ut", "STATE", "STATE_LGD", "ST_NM", "state_name"]
     state_col = next((c for c in state_cols if c in gdf.columns), None)
@@ -244,6 +270,10 @@ def _standardize_block_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 def get_unit_name_column(level: AdminLevel) -> str:
     """Get the column name for the spatial unit based on level."""
+    if level == "sub_basin":
+        return "subbasin_name"
+    if level == "basin":
+        return "basin_name"
     return "block_name" if level == "block" else "district_name"
 
 # Legacy compatibility
@@ -258,13 +288,13 @@ def build_unit_masks(
     gdf: gpd.GeoDataFrame,
     sample_ds: xr.Dataset,
     level: AdminLevel = "district",
-) -> dict:
+) -> tuple[dict[str, xr.DataArray], pd.DataFrame]:
     """
     Build raster masks for each spatial unit (district or block).
     
-    Returns dict with keys:
-    - For districts: "district_name"
-    - For blocks: "district_name||block_name" (double pipe separator)
+    Returns:
+    - dict of unit_key -> raster mask
+    - DataFrame with coverage QC per unit
     """
     unit_col = get_unit_name_column(level)
     
@@ -284,18 +314,32 @@ def build_unit_masks(
     xres, yres = lons[1] - lons[0], lats[1] - lats[0]
     transform = Affine.translation(lons[0] - xres/2, lats[0] - yres/2) * Affine.scale(xres, yres)
     
-    masks = {}
+    try:
+        sample_var = next(iter(sample_ds.data_vars))
+        valid_grid = sample_ds[sample_var]
+        if "time" in valid_grid.dims:
+            valid_grid = valid_grid.isel(time=0)
+        valid_footprint = valid_grid.notnull()
+    except Exception:
+        valid_footprint = xr.DataArray(
+            np.ones((height, width), dtype=bool),
+            coords={"lat": sample_ds["lat"], "lon": sample_ds["lon"]},
+            dims=("lat", "lon"),
+        )
+
+    masks: dict[str, xr.DataArray] = {}
+    coverage_rows: list[dict[str, object]] = []
     for _, row in gdf.iterrows():
         if row.geometry is None:
             continue
-        
+
         unit_name = str(row[unit_col]).strip()
         
-        # For blocks, include district name to ensure uniqueness
-        # Use || as separator (safe for filenames when we split later)
         if level == "block" and "district_name" in gdf.columns:
             district = str(row["district_name"]).strip()
             key = f"{district}||{unit_name}"
+        elif level == "sub_basin":
+            key = f"{str(row.get('basin_name', '')).strip()}||{unit_name}"
         else:
             key = unit_name
         
@@ -307,13 +351,50 @@ def build_unit_masks(
             all_touched=True,
             dtype="uint8"
         )
-        masks[key] = xr.DataArray(
+        mask_da = xr.DataArray(
             mask.astype(bool),
             coords={"lat": sample_ds["lat"], "lon": sample_ds["lon"]},
             dims=("lat", "lon")
         )
-    
-    return masks
+        masks[key] = mask_da
+
+        total_cells = int(mask_da.sum().item())
+        covered_cells = int((mask_da & valid_footprint).sum().item()) if total_cells > 0 else 0
+        coverage_fraction = (
+            float(covered_cells / total_cells)
+            if total_cells > 0
+            else 0.0
+        )
+
+        qc_row = {
+            "unit_key": key,
+            "coverage_fraction": coverage_fraction,
+            "coverage_ok": coverage_fraction >= COVERAGE_THRESHOLD,
+            "coverage_threshold": COVERAGE_THRESHOLD,
+            "covered_cells": covered_cells,
+            "total_cells": total_cells,
+            "reason": (
+                "ok"
+                if coverage_fraction >= COVERAGE_THRESHOLD
+                else "below_spatial_coverage_threshold"
+            ),
+        }
+        if level == "block":
+            qc_row["district"] = str(row.get("district_name", "")).strip()
+            qc_row["block"] = unit_name
+        elif level == "district":
+            qc_row["district"] = unit_name
+        elif level == "basin":
+            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
+            qc_row["basin_name"] = unit_name
+        elif level == "sub_basin":
+            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
+            qc_row["basin_name"] = str(row.get("basin_name", "")).strip()
+            qc_row["subbasin_id"] = str(row.get("subbasin_id", "")).strip()
+            qc_row["subbasin_name"] = unit_name
+        coverage_rows.append(qc_row)
+
+    return masks, pd.DataFrame(coverage_rows)
 
 # Legacy compatibility
 def build_district_masks(gdf: gpd.GeoDataFrame, sample_ds: xr.Dataset, district_name_col: str = "DISTRICT") -> dict:
@@ -321,7 +402,85 @@ def build_district_masks(gdf: gpd.GeoDataFrame, sample_ds: xr.Dataset, district_
     if district_name_col not in gdf.columns and "district_name" in gdf.columns:
         gdf = gdf.copy()
         gdf[district_name_col] = gdf["district_name"]
-    return build_unit_masks(gdf, sample_ds, level="district")
+    masks, _coverage_df = build_unit_masks(gdf, sample_ds, level="district")
+    return masks
+
+
+def _add_unit_fields_from_key(row: dict, unit_key: str, level: AdminLevel) -> None:
+    """Populate row identifier columns from a level-specific unit key."""
+    if level == "block":
+        if "||" in unit_key:
+            district, block = unit_key.split("||", 1)
+            row["district"] = district
+            row["block"] = block
+        else:
+            row["district"] = "Unknown"
+            row["block"] = unit_key
+        return
+
+    if level == "sub_basin":
+        if "||" in unit_key:
+            basin, sub_basin = unit_key.split("||", 1)
+            row["basin"] = basin
+            row["sub_basin"] = sub_basin
+        else:
+            row["basin"] = "Unknown"
+            row["sub_basin"] = unit_key
+        return
+
+    if level == "basin":
+        row["basin"] = unit_key
+        return
+
+    row["district"] = unit_key
+
+
+def _append_coverage_failure_rows(
+    rows: list[dict],
+    coverage_df: pd.DataFrame,
+    years: list[int],
+    *,
+    level: AdminLevel,
+    value_col: str,
+) -> None:
+    """Append NaN rows for units below the spatial coverage threshold."""
+    if coverage_df is None or coverage_df.empty:
+        return
+
+    failing = coverage_df[~coverage_df["coverage_ok"].astype(bool)].copy()
+    if failing.empty:
+        return
+
+    for _, qc_row in failing.iterrows():
+        unit_key = str(qc_row.get("unit_key", "")).strip()
+        for year in years:
+            row = {
+                "year": int(year),
+                "value": np.nan,
+                value_col: np.nan,
+                "source_file": "",
+            }
+            _add_unit_fields_from_key(row, unit_key, level)
+            rows.append(row)
+
+
+def _write_coverage_qc(
+    metric_root_path: Path,
+    *,
+    state_name: str,
+    level: AdminLevel,
+    model: str,
+    scenario: str,
+    coverage_df: pd.DataFrame,
+) -> None:
+    """Write spatial coverage QC for a metric/model/scenario/level combination."""
+    if coverage_df is None or coverage_df.empty:
+        return
+
+    qc_root = metric_root_path / state_name / get_level_folder(level)
+    qc_root.mkdir(parents=True, exist_ok=True)
+    out_path = qc_root / f"coverage_qc_{model}_{scenario}.csv"
+    coverage_df.to_csv(out_path, index=False)
 
 # -----------------------------------------------------------------------------
 # RUN-LENGTH HELPERS
@@ -1462,17 +1621,7 @@ def _compute_spi_spei_rows(
                 "source_file": source_path,
             }
 
-            # Parse unit_key based on level
-            if level == "block":
-                if "||" in unit_key:
-                    district, block = unit_key.split("||", 1)
-                    row["district"] = district
-                    row["block"] = block
-                else:
-                    row["district"] = "Unknown"
-                    row["block"] = unit_key
-            else:
-                row["district"] = unit_key
+            _add_unit_fields_from_key(row, unit_key, level)
 
             rows.append(row)
 
@@ -2724,15 +2873,35 @@ def process_metric_for_model_scenario(
         ds_sample.close()
         return
 
-    masks = build_unit_masks(gdf, ds_sample, level=level)
+    masks, coverage_df = build_unit_masks(gdf, ds_sample, level=level)
     ds_sample.close()
 
     if not masks:
         logging.warning(f"[{slug}] No valid masks built for {level} level")
         return
 
+    valid_units = set(
+        coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+        .astype(str)
+        .tolist()
+    )
+    masks = {k: v for k, v in masks.items() if k in valid_units}
+    if not masks:
+        logging.warning(
+            f"[{slug}] No units met the spatial coverage threshold for level={level}"
+        )
+        _write_coverage_qc(
+            metric_root_path,
+            state_name=state_name,
+            level=level,
+            model=model,
+            scenario=scenario,
+            coverage_df=coverage_df,
+        )
+        return
+
     # Get the level subfolder
-    level_folder = BLOCK_FOLDER if level == "block" else DISTRICT_FOLDER
+    level_folder = get_level_folder(level)
 
     rows = []
 
@@ -2978,18 +3147,7 @@ def process_metric_for_model_scenario(
                         "source_file": str(paths_by_var.get(primary_var) or next(iter(paths_by_var.values()))),
                     }
 
-                    # Parse unit_key based on level
-                    if level == "block":
-                        # Key format: "district||block"
-                        if "||" in unit_key:
-                            district, block = unit_key.split("||", 1)
-                            row["district"] = district
-                            row["block"] = block
-                        else:
-                            row["district"] = "Unknown"
-                            row["block"] = unit_key
-                    else:
-                        row["district"] = unit_key
+                    _add_unit_fields_from_key(row, unit_key, level)
 
                     rows.append(row)
 
@@ -3004,12 +3162,27 @@ def process_metric_for_model_scenario(
     if not rows:
         return
 
+    _append_coverage_failure_rows(
+        rows,
+        coverage_df,
+        sorted(year_to_paths.keys()),
+        level=level,
+        value_col=value_col,
+    )
+
     df_yearly = pd.DataFrame(rows)
 
     # Period aggregation (mean over years used, consistent with other day-count metrics)
     # Note: For SPI, years may come from climate-indices output which may differ from year_to_paths
     available_years = set(df_yearly["year"].unique())
-    group_cols = ["district", "block"] if level == "block" else ["district"]
+    if level == "sub_basin":
+        group_cols = ["basin", "sub_basin"]
+    elif level == "basin":
+        group_cols = ["basin"]
+    elif level == "block":
+        group_cols = ["district", "block"]
+    else:
+        group_cols = ["district"]
     period_frames = []
 
     for period_name, (y0, y1) in scenario_conf["periods"].items():
@@ -3033,7 +3206,47 @@ def process_metric_for_model_scenario(
 
     # Write outputs with clean folder structure
     try:
-        if level == "block":
+        if level == "sub_basin":
+            for (basin, sub_basin), grp_df in df_yearly.groupby(["basin", "sub_basin"]):
+                basin_safe = basin.replace(" ", "_").replace("/", "_")
+                sub_basin_safe = sub_basin.replace(" ", "_").replace("/", "_")
+
+                out_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
+                out_dir.mkdir(parents=True, exist_ok=True)
+                grp_df = grp_df.copy()
+                grp_df["model"] = model
+                grp_df["scenario"] = scenario
+                grp_df.to_csv(out_dir / f"{sub_basin_safe}_yearly.csv", index=False)
+
+                if not df_periods.empty:
+                    period_mask = (
+                        (df_periods["basin"] == basin) &
+                        (df_periods["sub_basin"] == sub_basin)
+                    )
+                    period_grp = df_periods.loc[period_mask].copy()
+                    if not period_grp.empty:
+                        period_grp["model"] = model
+                        period_grp["scenario"] = scenario
+                        period_grp.to_csv(out_dir / f"{sub_basin_safe}_periods.csv", index=False)
+        elif level == "basin":
+            for basin_name in df_yearly["basin"].unique():
+                basin_safe = basin_name.replace(" ", "_").replace("/", "_")
+
+                out_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
+                out_dir.mkdir(parents=True, exist_ok=True)
+
+                basin_df = df_yearly[df_yearly["basin"] == basin_name].copy()
+                basin_df["model"] = model
+                basin_df["scenario"] = scenario
+                basin_df.to_csv(out_dir / f"{basin_safe}_yearly.csv", index=False)
+
+                if not df_periods.empty:
+                    period_df = df_periods[df_periods["basin"] == basin_name].copy()
+                    if not period_df.empty:
+                        period_df["model"] = model
+                        period_df["scenario"] = scenario
+                        period_df.to_csv(out_dir / f"{basin_safe}_periods.csv", index=False)
+        elif level == "block":
             # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
             for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
                 district_safe = district.replace(" ", "_").replace("/", "_")
@@ -3079,6 +3292,14 @@ def process_metric_for_model_scenario(
                         period_df.to_csv(out_dir / f"{dist_safe}_periods.csv", index=False)
         
         logging.debug(f"[{slug}] Wrote {len(df_yearly)} yearly rows, {len(df_periods)} period rows for {model}/{scenario}")
+        _write_coverage_qc(
+            metric_root_path,
+            state_name=state_name,
+            level=level,
+            model=model,
+            scenario=scenario,
+            coverage_df=coverage_df,
+        )
     except Exception as e:
         logging.error(f"[{slug}] Failed to write output files for {model}/{scenario}: {e}")
         logging.debug(traceback.format_exc())
@@ -3108,7 +3329,11 @@ def compute_ensembles_generic(
     ensembles_root = level_root / "ensembles"
     ensembles_root.mkdir(parents=True, exist_ok=True)
     
-    if level == "block":
+    if level == "sub_basin":
+        _compute_sub_basin_ensembles(level_root, ensembles_root)
+    elif level == "basin":
+        _compute_basin_ensembles(level_root, ensembles_root)
+    elif level == "block":
         _compute_block_ensembles(level_root, ensembles_root)
     else:
         _compute_district_ensembles(level_root, ensembles_root)
@@ -3187,7 +3412,7 @@ def _compute_block_ensembles(level_root: Path, ensembles_root: Path):
                             district,
                             scenario,
                             e,
-                        )
+                                    )
                         continue
 
                     # After successfully writing ensemble outputs, delete per-model yearly CSVs
@@ -3204,6 +3429,81 @@ def _compute_block_ensembles(level_root: Path, ensembles_root: Path):
                                         ycsv,
                                         e,
                                     )
+
+
+def _compute_basin_ensembles(level_root: Path, ensembles_root: Path):
+    """Compute ensembles for basin-level data."""
+    skip_dirs = {"ensembles"}
+    basin_dirs = [
+        p for p in level_root.iterdir()
+        if p.is_dir() and p.name not in skip_dirs
+    ]
+
+    for bdir in basin_dirs:
+        basin = bdir.name
+        model_dirs = [p for p in bdir.iterdir() if p.is_dir()]
+        scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+
+        for scenario in scenarios:
+            model_yearly = []
+            for m in model_dirs:
+                ycsv = m / scenario / f"{basin}_yearly.csv"
+                if not ycsv.exists():
+                    continue
+                try:
+                    dfy = pd.read_csv(ycsv)
+                    if "value" not in dfy.columns:
+                        cols = [c for c in dfy.columns if c not in {"basin", "model", "scenario", "year", "source_file"}]
+                        if cols:
+                            dfy["value"] = dfy[cols[0]]
+                    dfy["model"] = m.name
+                    model_yearly.append(dfy)
+                except Exception:
+                    pass
+
+            if model_yearly:
+                _write_ensemble_stats(model_yearly, ensembles_root / basin / scenario, basin)
+
+
+def _compute_sub_basin_ensembles(level_root: Path, ensembles_root: Path):
+    """Compute ensembles for sub-basin-level data."""
+    skip_dirs = {"ensembles"}
+    basin_dirs = [
+        p for p in level_root.iterdir()
+        if p.is_dir() and p.name not in skip_dirs
+    ]
+
+    for basin_dir in basin_dirs:
+        basin = basin_dir.name
+        sub_basin_dirs = [p for p in basin_dir.iterdir() if p.is_dir()]
+        for sbdir in sub_basin_dirs:
+            sub_basin = sbdir.name
+            model_dirs = [p for p in sbdir.iterdir() if p.is_dir()]
+            scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+
+            for scenario in scenarios:
+                model_yearly = []
+                for m in model_dirs:
+                    ycsv = m / scenario / f"{sub_basin}_yearly.csv"
+                    if not ycsv.exists():
+                        continue
+                    try:
+                        dfy = pd.read_csv(ycsv)
+                        if "value" not in dfy.columns:
+                            cols = [c for c in dfy.columns if c not in {"basin", "sub_basin", "model", "scenario", "year", "source_file"}]
+                            if cols:
+                                dfy["value"] = dfy[cols[0]]
+                        dfy["model"] = m.name
+                        model_yearly.append(dfy)
+                    except Exception:
+                        pass
+
+                if model_yearly:
+                    _write_ensemble_stats(
+                        model_yearly,
+                        ensembles_root / basin / sub_basin / scenario,
+                        sub_basin,
+                    )
 
 def _write_ensemble_stats(model_yearly: list, out_dir: Path, unit_name: str):
     """Write ensemble statistics CSV."""
@@ -3246,9 +3546,10 @@ _worker_state = "Telangana"
 def _worker_init(level: str = "district", state: str = "Telangana"):
     global _worker_gdf, _worker_level, _worker_state
     _worker_level = level
-    _worker_state = state
+    _worker_state = HYDRO_ROOT_NAME if level in {"basin", "sub_basin"} else state
     boundary_path = get_boundary_path(level)
-    _worker_gdf = load_boundaries(boundary_path, state_filter=state, level=level)
+    state_filter = None if level in {"basin", "sub_basin"} else state
+    _worker_gdf = load_boundaries(boundary_path, state_filter=state_filter, level=level)
 
 def _worker_process_task(task: ProcessingTask) -> dict:
     global _worker_gdf, _worker_level, _worker_state
@@ -3356,7 +3657,13 @@ def run_pipeline_parallel(
             f"Task builder skipped {skipped} (metric, model, scenario) combinations due to missing required variables/years"
         )
 
-    level_display = "Block" if level == "block" else "District"
+    effective_state = HYDRO_ROOT_NAME if level in {"basin", "sub_basin"} else state
+    if level == "sub_basin":
+        level_display = "Sub-basin"
+    elif level == "basin":
+        level_display = "Basin"
+    else:
+        level_display = "Block" if level == "block" else "District"
     level_folder = get_level_folder(level)
     
     # Determine SPI implementation info
@@ -3365,7 +3672,7 @@ def run_pipeline_parallel(
     logging.info("=" * 60)
     logging.info("India Resilience Tool - Climate Index Pipeline")
     logging.info(f"Level: {level_display} (folder: {level_folder}/)")
-    logging.info(f"State: {state}")
+    logging.info(f"Output scope: {effective_state}")
     logging.info(f"Metrics: {len(metrics_to_process)}, Models: {len(models_to_process)}, Scenarios: {len(scenarios_to_process)}")
     logging.info(f"Total tasks: {len(tasks)}, Workers: {num_workers}")
     logging.info(f"SPI/SPEI implementation: {spi_impl}")
@@ -3383,15 +3690,19 @@ def run_pipeline_parallel(
     if num_workers == 1:
         # Sequential mode
         boundary_path = get_boundary_path(level)
-        gdf = load_boundaries(boundary_path, state_filter=state, level=level)
-        logging.info(f"Loaded {len(gdf)} {level} boundaries for {state}")
+        gdf = load_boundaries(
+            boundary_path,
+            state_filter=None if level in {"basin", "sub_basin"} else state,
+            level=level,
+        )
+        logging.info(f"Loaded {len(gdf)} {level} boundaries for {effective_state}")
         
         for task in tasks:
             metric = METRICS[task.metric_idx]
             try:
                 process_metric_for_model_scenario(
                     metric, task.model, task.scenario, task.scenario_conf, gdf,
-                    level=level, state_name=state
+                    level=level, state_name=effective_state
                 )
                 results.append({"status": "success"})
             except Exception as e:
@@ -3419,7 +3730,7 @@ def run_pipeline_parallel(
     
     # Build ensembles
     slugs = [m["slug"] for _, m in metrics_to_process]
-    ensemble_args = [(s, level, state) for s in slugs]
+    ensemble_args = [(s, level, effective_state) for s in slugs]
     
     if num_workers == 1:
         for args in ensemble_args:
@@ -3442,9 +3753,9 @@ def main():
     parser.add_argument(
         "-l",
         "--level",
-        choices=["district", "block", "both"],
+        choices=["district", "block", "basin", "sub_basin", "both"],
         default="both",
-        help="Administrative level for spatial aggregation (default: both)",
+        help="Spatial level for aggregation (default: both = district + block)",
     )
     parser.add_argument("-s", "--state", default="Telangana",
                         help="State to process (default: Telangana)")

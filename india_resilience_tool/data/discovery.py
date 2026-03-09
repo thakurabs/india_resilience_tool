@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence, Union
 
 PathLike = Union[str, Path]
-AdminLevel = Literal["district", "block"]
+AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 
 def slugify_fs(text: str) -> str:
@@ -314,6 +314,65 @@ def discover_state_yearly_file(
 
     f_level = ts_root_p / state_dir / f"state_yearly_ensemble_stats_{level}.csv"
     return f_level if f_level.exists() else None
+
+
+def discover_hydro_yearly_file(
+    *,
+    ts_root: PathLike,
+    level: Literal["basin", "sub_basin"],
+    basin_display: str,
+    subbasin_display: Optional[str],
+    scenario_name: str,
+) -> Optional[Path]:
+    """Discover a hydro yearly ensemble CSV under processed/{metric}/hydro/."""
+    root = Path(ts_root) / "hydro"
+    if not root.exists():
+        return None
+
+    scenario = str(scenario_name).strip()
+    basin_variants = _generate_name_variants(basin_display)
+    subbasin_variants = _generate_name_variants(subbasin_display or "")
+
+    if level == "basin":
+        base = root / "basins" / "ensembles"
+        for basin_name in basin_variants:
+            scen_dir = base / basin_name / scenario
+            if not scen_dir.exists():
+                continue
+            for filename in (
+                f"{basin_name}_yearly_ensemble.csv",
+                f"{basin_name.upper()}_yearly_ensemble.csv",
+                f"{basin_name.lower()}_yearly_ensemble.csv",
+            ):
+                f = scen_dir / filename
+                if f.exists():
+                    return f
+            csvs = sorted(scen_dir.glob("*_yearly_ensemble.csv"))
+            if csvs:
+                return csvs[0]
+        return None
+
+    base = root / "sub_basins" / "ensembles"
+    for basin_name in basin_variants:
+        basin_dir = base / basin_name
+        if not basin_dir.exists():
+            continue
+        for subbasin_name in subbasin_variants:
+            scen_dir = basin_dir / subbasin_name / scenario
+            if not scen_dir.exists():
+                continue
+            for filename in (
+                f"{subbasin_name}_yearly_ensemble.csv",
+                f"{subbasin_name.upper()}_yearly_ensemble.csv",
+                f"{subbasin_name.lower()}_yearly_ensemble.csv",
+            ):
+                f = scen_dir / filename
+                if f.exists():
+                    return f
+            csvs = sorted(scen_dir.glob("*_yearly_ensemble.csv"))
+            if csvs:
+                return csvs[0]
+    return None
 
 
 def discover_state_yearly_model_file(

@@ -15,13 +15,22 @@ def run_app() -> None:
     import pandas as pd
     import streamlit as st
 
-    from paths import BLOCKS_PATH, DATA_DIR, DISTRICTS_PATH, resolve_processed_root
+    from paths import (
+        BASINS_PATH,
+        BLOCKS_PATH,
+        DATA_DIR,
+        DISTRICTS_PATH,
+        SUBBASINS_PATH,
+        resolve_processed_root,
+    )
 
     from india_resilience_tool.app.geo_cache import (
         build_adm1_from_adm2,
         enrich_adm2_with_state_names,
         load_local_adm2,
         load_local_adm3,
+        load_local_basin,
+        load_local_subbasin,
     )
     from india_resilience_tool.app.geography_controls import render_geography_and_analysis_focus
     from india_resilience_tool.app.master_freshness import (
@@ -38,6 +47,7 @@ def run_app() -> None:
         apply_jump_once_flags,
         render_admin_level_selector,
         render_hover_toggle_if_portfolio,
+        render_spatial_family_selector,
     )
     from india_resilience_tool.app.sidebar_branding import render_sidebar_branding
     from india_resilience_tool.app.state import VIEW_MAP, VIEW_RANKINGS
@@ -97,13 +107,17 @@ def run_app() -> None:
     # Data paths
     ADM2_GEOJSON = DISTRICTS_PATH
     ADM3_GEOJSON = BLOCKS_PATH
+    BASIN_GEOJSON = BASINS_PATH
+    SUBBASIN_GEOJSON = SUBBASINS_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 
     with st.sidebar:
         render_sidebar_branding(logo_path=LOGO_PATH)
 
-        # Admin level selector (District vs Block)
+        spatial_family = render_spatial_family_selector(label_visibility="collapsed")
+
+        # Family-aware level selector
         admin_level = render_admin_level_selector(
             label_visibility="collapsed",
             centered=True,
@@ -111,7 +125,14 @@ def run_app() -> None:
         )
 
         # Read current analysis mode (default depends on admin level)
-        default_mode = "Single block focus" if admin_level == "block" else "Single district focus"
+        if admin_level == "sub_basin":
+            default_mode = "Single sub-basin focus"
+        elif admin_level == "basin":
+            default_mode = "Single basin focus"
+        elif admin_level == "block":
+            default_mode = "Single block focus"
+        else:
+            default_mode = "Single district focus"
         analysis_mode_current = st.session_state.get("analysis_mode", default_mode)
 
         # Show hover toggle (always visible)
@@ -336,6 +357,7 @@ def run_app() -> None:
 
     geo_ctx = render_geography_and_analysis_focus(
         state_placeholder=state_placeholder,
+        spatial_family=spatial_family,
         admin_level=admin_level,
         processed_root=PROCESSED_ROOT,
         sel_placeholder=SEL_PLACEHOLDER,
@@ -344,6 +366,8 @@ def run_app() -> None:
         adm1=adm1,
         adm2=adm2,
         adm3_geojson=ADM3_GEOJSON,
+        basins_geojson=BASIN_GEOJSON,
+        subbasins_geojson=SUBBASIN_GEOJSON,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
     )
 
@@ -351,6 +375,8 @@ def run_app() -> None:
     selected_state = geo_ctx.selected_state
     selected_district = geo_ctx.selected_district
     selected_block = geo_ctx.selected_block
+    selected_basin = geo_ctx.selected_basin
+    selected_subbasin = geo_ctx.selected_subbasin
     gdf_state_districts = geo_ctx.gdf_state_districts
 
     from india_resilience_tool.app.portfolio_state_runtime import (
@@ -379,6 +405,10 @@ def run_app() -> None:
             "district": selected_district,
             "block": selected_block,
         }
+    elif _admin_level_for_zoom == "sub_basin" and selected_subbasin != "All":
+        st.session_state.pop("_pending_block_zoom", None)
+    elif _admin_level_for_zoom == "basin" and selected_basin != "All":
+        st.session_state.pop("_pending_block_zoom", None)
     elif selected_district != "All":
         district_row = gdf_state_districts[gdf_state_districts["district_name"] == selected_district]
         if not district_row.empty:
@@ -419,6 +449,18 @@ def run_app() -> None:
             render_perf_panel_safe()
             st.stop()
         adm3 = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM3)
+    elif _admin_level == "basin":
+        if not BASIN_GEOJSON.exists():
+            st.error(f"Basin geojson not found at {BASIN_GEOJSON}. Please provide basins.geojson.")
+            render_perf_panel_safe()
+            st.stop()
+        adm3 = load_local_basin(str(BASIN_GEOJSON))
+    elif _admin_level == "sub_basin":
+        if not SUBBASIN_GEOJSON.exists():
+            st.error(f"Sub-basin geojson not found at {SUBBASIN_GEOJSON}. Please provide subbasins.geojson.")
+            render_perf_panel_safe()
+            st.stop()
+        adm3 = load_local_subbasin(str(SUBBASIN_GEOJSON))
     else:
         adm3 = None
 
@@ -454,6 +496,9 @@ def run_app() -> None:
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
+        selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
+        spatial_family=spatial_family,
         hover_enabled=bool(st.session_state.get("hover_enabled", True)),
         map_center=list(st.session_state["map_center"]),
         map_zoom=float(st.session_state["map_zoom"]),
@@ -462,6 +507,8 @@ def run_app() -> None:
         normalize_state_fn=normalize_name,
         adm2_geojson_path=ADM2_GEOJSON,
         adm3_geojson_path=ADM3_GEOJSON,
+        basin_geojson_path=BASIN_GEOJSON,
+        subbasin_geojson_path=SUBBASIN_GEOJSON,
         simplify_tol_adm2=SIMPLIFY_TOL_ADM2,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
         map_height=MAP_HEIGHT,
@@ -487,6 +534,8 @@ def run_app() -> None:
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
+        selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
         level=_admin_level,
         table_df=artifacts.table_df,
         has_baseline=artifacts.has_baseline,
@@ -543,6 +592,9 @@ def run_app() -> None:
                 selected_district=selected_district,
                 selected_block=selected_block,
                 admin_level=_admin_level,
+                spatial_family=spatial_family,
+                selected_basin=selected_basin,
+                selected_subbasin=selected_subbasin,
                 variables=VARIABLES,
                 variable_slug=str(VARIABLE_SLUG or ""),
                 index_group_labels=INDEX_GROUP_LABELS,

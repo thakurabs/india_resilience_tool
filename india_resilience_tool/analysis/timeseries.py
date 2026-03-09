@@ -26,11 +26,12 @@ from india_resilience_tool.data.discovery import (
     discover_district_model_yearly_files,
     discover_block_yearly_file,
     discover_block_model_yearly_files,
+    discover_hydro_yearly_file,
     discover_state_yearly_file,
 )
 
 PathLike = Union[str, Path]
-AdminLevel = Literal["district", "block"]
+AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 
 def read_yearly_csv_robust(path: PathLike) -> pd.DataFrame:
@@ -417,3 +418,43 @@ def load_block_yearly(
 
     return df
 
+
+def load_hydro_yearly(
+    *,
+    ts_root: PathLike,
+    level: Literal["basin", "sub_basin"],
+    basin_display: str,
+    subbasin_display: Optional[str],
+    scenario_name: str,
+) -> pd.DataFrame:
+    """Load a hydro yearly ensemble CSV using processed/{metric}/hydro/ discovery."""
+    f = discover_hydro_yearly_file(
+        ts_root=ts_root,
+        level=level,
+        basin_display=basin_display,
+        subbasin_display=subbasin_display,
+        scenario_name=scenario_name,
+    )
+    if not f:
+        return pd.DataFrame()
+
+    df = read_yearly_csv_robust(f)
+    if df.empty:
+        return pd.DataFrame()
+
+    df = _normalize_ensemble_columns(df)
+    if "scenario" not in df.columns:
+        df["scenario"] = str(scenario_name).strip()
+    if "basin" not in df.columns:
+        df["basin"] = str(basin_display).strip()
+    if level == "sub_basin" and "sub_basin" not in df.columns:
+        df["sub_basin"] = str(subbasin_display or "").strip()
+
+    scenario = str(scenario_name).strip().lower()
+    try:
+        df["scenario"] = df["scenario"].astype(str).str.strip()
+        df = df[df["scenario"].str.lower() == scenario]
+    except Exception:
+        pass
+
+    return prepare_yearly_series(df)

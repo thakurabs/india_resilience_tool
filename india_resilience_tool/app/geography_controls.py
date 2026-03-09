@@ -1,14 +1,10 @@
 """
 Geography & analysis-focus controls for the Streamlit sidebar.
 
-This module exists to keep the dashboard runtime smaller while preserving the
-legacy dashboard behavior and widget keys.
-
-Widget keys (must remain stable):
-- analysis_mode
-- selected_state
-- selected_district
-- selected_block
+This module keeps the dashboard runtime smaller while preserving stable widget
+keys and introducing a family-aware geography flow:
+  - Admin -> state -> district -> block
+  - Hydro -> basin -> sub-basin
 """
 
 from __future__ import annotations
@@ -20,14 +16,17 @@ from typing import Any, Optional
 import pandas as pd
 import streamlit as st
 
-from india_resilience_tool.data.adm3_loader import get_blocks_for_district as _get_blocks_for_district
-from india_resilience_tool.utils.naming import alias
-
 from india_resilience_tool.app.geo_cache import (
     list_available_states_from_processed_root_cached,
     load_local_adm3,
+    load_local_basin,
+    load_local_subbasin,
 )
 from india_resilience_tool.app.sidebar import render_analysis_mode_selector
+from india_resilience_tool.data.adm3_loader import (
+    get_blocks_for_district as _get_blocks_for_district,
+)
+from india_resilience_tool.utils.naming import alias
 
 
 @dataclass(frozen=True)
@@ -37,12 +36,235 @@ class GeographyContext:
     selected_state: str
     selected_district: str
     selected_block: str
+    selected_basin: str
+    selected_subbasin: str
     gdf_state_districts: Any
+
+
+def _build_admin_geography(
+    *,
+    analysis_ready: bool,
+    analysis_mode: str,
+    processed_root: Optional[Path],
+    adm1: Any,
+    adm2: Any,
+    adm3_geojson: Path,
+    simplify_tol_adm3: float,
+    admin_level: str,
+) -> tuple[str, str, str, Any]:
+    metric_ready_for_geography = processed_root is not None
+
+    if not metric_ready_for_geography:
+        st.info(
+            "Select a **Risk domain** and **Metric** in the ribbon above the map to load available states."
+        )
+        available_states = ["All"]
+    else:
+        processed_root_resolved = processed_root.resolve()
+        available_states = list_available_states_from_processed_root_cached(
+            str(processed_root_resolved)
+        )
+        if (
+            (not processed_root_resolved.exists())
+            or (not processed_root_resolved.is_dir())
+            or (not available_states)
+        ):
+            st.warning(
+                f"No processed data found under IRT_PROCESSED_ROOT={processed_root_resolved}"
+            )
+            available_states = ["All"]
+
+    if st.session_state.get("selected_state") not in available_states:
+        st.session_state["selected_state"] = available_states[0]
+
+    selected_state = st.selectbox(
+        "State",
+        options=available_states,
+        index=available_states.index(st.session_state["selected_state"]),
+        key="selected_state",
+        disabled=(not analysis_ready) or (not metric_ready_for_geography),
+    )
+
+    if selected_state == "All":
+        gdf_state_districts = adm2.copy()
+    else:
+        sel_state_norm = selected_state.strip().lower()
+        state_row = adm1[
+            adm1["shapeName"].astype(str).str.strip().str.lower() == sel_state_norm
+        ]
+        if state_row.empty:
+            state_row = adm1[
+                adm1["shapeName"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .str.contains(sel_state_norm, na=False)
+            ]
+
+        if not state_row.empty:
+            state_geom = state_row.iloc[0].geometry
+            try:
+                gdf_state_districts = adm2[
+                    adm2.geometry.within(state_geom.buffer(0.001))
+                ].copy()
+            except Exception:
+                gdf_state_districts = adm2[
+                    adm2.geometry.centroid.within(state_geom.buffer(0.001))
+                ].copy()
+        else:
+            gdf_state_districts = pd.DataFrame()
+
+        if getattr(gdf_state_districts, "empty", True):
+            gdf_state_districts = adm2[
+                adm2["state_name"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .str.contains(sel_state_norm, na=False)
+            ].copy()
+
+    districts = ["All"] + sorted(
+        gdf_state_districts["district_name"].astype(str).unique().tolist()
+    )
+    if st.session_state.get("selected_district") not in districts:
+        st.session_state["selected_district"] = "All"
+
+    admin_level_from_state = st.session_state.get("admin_level", admin_level)
+    if "Multi" in analysis_mode and str(admin_level_from_state) != "block":
+        st.session_state["selected_district"] = "All"
+
+    selected_district = st.selectbox(
+        "District",
+        options=districts,
+        index=districts.index(st.session_state["selected_district"]),
+        key="selected_district",
+        disabled=not analysis_ready,
+    )
+
+    selected_block = "All"
+    if str(admin_level_from_state) == "block":
+        if not adm3_geojson.exists():
+            st.error(
+                f"ADM3 geojson not found at {adm3_geojson}. Please provide block_4326.geojson."
+            )
+            st.stop()
+
+        adm3_sidebar = load_local_adm3(str(adm3_geojson), tolerance=simplify_tol_adm3)
+        block_options = ["All"]
+        if selected_district != "All":
+            try:
+                blocks = _get_blocks_for_district(
+                    adm3_sidebar,
+                    selected_state,
+                    selected_district,
+                    normalize_fn=alias,
+                )
+                block_options = ["All"] + sorted(
+                    [str(b).strip() for b in blocks if str(b).strip()]
+                )
+            except Exception:
+                block_options = ["All"]
+        else:
+            st.caption("Select a district to see blocks")
+
+        if st.session_state.get("selected_block") not in block_options:
+            st.session_state["selected_block"] = "All"
+
+        selected_block = st.selectbox(
+            "Block",
+            options=block_options,
+            index=block_options.index(st.session_state["selected_block"]),
+            key="selected_block",
+            disabled=not analysis_ready,
+        )
+    else:
+        st.session_state["selected_block"] = "All"
+
+    st.session_state["selected_basin"] = "All"
+    st.session_state["selected_subbasin"] = "All"
+
+    return selected_state, selected_district, selected_block, gdf_state_districts
+
+
+def _build_hydro_geography(
+    *,
+    analysis_ready: bool,
+    admin_level: str,
+    basins_geojson: Path,
+    subbasins_geojson: Path,
+) -> tuple[str, str]:
+    if not basins_geojson.exists():
+        st.error(
+            f"Hydro basin geojson not found at {basins_geojson}. Please provide basins.geojson."
+        )
+        st.stop()
+    if not subbasins_geojson.exists():
+        st.error(
+            f"Hydro sub-basin geojson not found at {subbasins_geojson}. Please provide subbasins.geojson."
+        )
+        st.stop()
+
+    basins_gdf = load_local_basin(str(basins_geojson))
+    subbasins_gdf = load_local_subbasin(str(subbasins_geojson))
+
+    basin_options = ["All"] + sorted(
+        basins_gdf["basin_name"].astype(str).str.strip().unique().tolist()
+    )
+    if st.session_state.get("selected_basin") not in basin_options:
+        st.session_state["selected_basin"] = "All"
+
+    selected_basin = st.selectbox(
+        "Basin",
+        options=basin_options,
+        index=basin_options.index(st.session_state["selected_basin"]),
+        key="selected_basin",
+        disabled=not analysis_ready,
+    )
+
+    subbasin_options = ["All"]
+    if selected_basin != "All":
+        basin_mask = (
+            subbasins_gdf["basin_name"].astype(str).str.strip()
+            == str(selected_basin).strip()
+        )
+        subbasin_options = ["All"] + sorted(
+            subbasins_gdf.loc[basin_mask, "subbasin_name"]
+            .astype(str)
+            .str.strip()
+            .unique()
+            .tolist()
+        )
+    elif str(admin_level).strip().lower() == "sub_basin":
+        subbasin_options = ["All"] + sorted(
+            subbasins_gdf["subbasin_name"].astype(str).str.strip().unique().tolist()
+        )
+
+    if st.session_state.get("selected_subbasin") not in subbasin_options:
+        st.session_state["selected_subbasin"] = "All"
+
+    if str(admin_level).strip().lower() == "sub_basin":
+        selected_subbasin = st.selectbox(
+            "Sub-basin",
+            options=subbasin_options,
+            index=subbasin_options.index(st.session_state["selected_subbasin"]),
+            key="selected_subbasin",
+            disabled=not analysis_ready,
+        )
+    else:
+        selected_subbasin = "All"
+        st.session_state["selected_subbasin"] = "All"
+
+    st.session_state["selected_state"] = "All"
+    st.session_state["selected_district"] = "All"
+    st.session_state["selected_block"] = "All"
+
+    return selected_basin, selected_subbasin
 
 
 def render_geography_and_analysis_focus(
     *,
     state_placeholder: Any,
+    spatial_family: str,
     admin_level: str,
     processed_root: Optional[Path],
     sel_placeholder: str,
@@ -51,30 +273,27 @@ def render_geography_and_analysis_focus(
     adm1: Any,
     adm2: Any,
     adm3_geojson: Path,
+    basins_geojson: Path,
+    subbasins_geojson: Path,
     simplify_tol_adm3: float,
 ) -> GeographyContext:
-    """
-    Render the legacy "Geography & analysis focus" expander and return selections.
-
-    Notes:
-        - This function intentionally preserves the legacy behavior and session_state
-          interactions, including portfolio-mode district freezing and selection
-          validation.
-        - `adm1`/`adm2` are GeoDataFrames in practice, but are typed as Any here to
-          avoid importing geopandas types at import-time for lightweight tooling.
-    """
+    """Render the geography controls and return the active selection context."""
     with state_placeholder.container():
         with st.expander("Geography & analysis focus", expanded=True):
-            # Option A UX: disable downstream geography widgets until Analysis focus is chosen.
-            # Render Analysis focus FIRST so the user understands why controls are disabled.
-
-            # ---- Step 0: Analysis focus (single vs portfolio; labels depend on admin_level) ----
-            analysis_options = (
-                ["Single block focus", "Multi-block portfolio"]
-                if admin_level == "block"
-                else ["Single district focus", "Multi-district portfolio"]
-            )
-
+            family_norm = str(spatial_family).strip().lower()
+            level_norm = str(admin_level).strip().lower()
+            if family_norm == "hydro":
+                analysis_options = (
+                    ["Single sub-basin focus"]
+                    if level_norm == "sub_basin"
+                    else ["Single basin focus"]
+                )
+            else:
+                analysis_options = (
+                    ["Single block focus", "Multi-block portfolio"]
+                    if admin_level == "block"
+                    else ["Single district focus", "Multi-district portfolio"]
+                )
             analysis_mode = render_analysis_mode_selector(
                 label="Analysis focus",
                 options=analysis_options,
@@ -93,7 +312,6 @@ def render_geography_and_analysis_focus(
             if not analysis_ready:
                 st.info("Select **Analysis focus** above to enable geography and map settings.")
 
-            # Reset jump flags when switching analysis focus modes (keep behavior stable).
             prev_mode_for_jump_reset = st.session_state.get(
                 "_analysis_mode_prev_for_jump_reset", analysis_mode
             )
@@ -103,9 +321,11 @@ def render_geography_and_analysis_focus(
                 st.session_state["jump_to_rankings"] = False
                 st.session_state["jump_to_map"] = False
 
-            # Brief helper text so the mode explains itself (level-aware)
             unit_singular = "block" if admin_level == "block" else "district"
             unit_plural = "blocks" if admin_level == "block" else "districts"
+            if str(spatial_family).strip().lower() == "hydro":
+                unit_singular = "sub-basin" if admin_level == "sub_basin" else "basin"
+                unit_plural = "sub-basins" if admin_level == "sub_basin" else "basins"
 
             if analysis_mode == sel_placeholder:
                 st.caption("Select an analysis focus to continue.")
@@ -124,205 +344,44 @@ def render_geography_and_analysis_focus(
                     unsafe_allow_html=True,
                 )
 
-            # ---- Step 1: State selection (data-driven from processed root) ----
-
-            metric_ready_for_geography = processed_root is not None
-
-            if not metric_ready_for_geography:
-                st.info(
-                    "Select a **Risk domain** and **Metric** in the ribbon above the map to load available states."
-                )
-                processed_root_resolved = None
-                available_states = ["All"]
-            else:
-                processed_root_resolved = processed_root.resolve()
-                available_states = list_available_states_from_processed_root_cached(
-                    str(processed_root_resolved)
-                )
-
-                if (
-                    (not processed_root_resolved.exists())
-                    or (not processed_root_resolved.is_dir())
-                    or (not available_states)
-                ):
-                    st.warning(
-                        f"No processed data found under IRT_PROCESSED_ROOT={processed_root_resolved}"
-                    )
-                    available_states = ["All"]
-
-            prev_state = st.session_state.get("selected_state")
-
-            if prev_state and prev_state not in available_states:
-                st.warning(
-                    f"Previously selected state '{prev_state}' is no longer available in processed data. "
-                    f"Resetting to '{available_states[0]}'."
-                )
-
-            if (
-                "selected_state" not in st.session_state
-                or st.session_state["selected_state"] not in available_states
-            ):
-                st.session_state["selected_state"] = available_states[0]
-
-            selected_state = st.selectbox(
-                "State",
-                options=available_states,
-                index=available_states.index(st.session_state["selected_state"]),
-                key="selected_state",
-                disabled=(not analysis_ready) or (not metric_ready_for_geography),
-            )
-
-            # Build per-state district GeoDataFrame
-            if selected_state == "All":
-                gdf_state_districts = adm2.copy()
-            else:
-                sel_state_norm = selected_state.strip().lower()
-                state_row = adm1[
-                    adm1["shapeName"].astype(str).str.strip().str.lower() == sel_state_norm
-                ]
-
-                if state_row.empty:
-                    state_row = adm1[
-                        adm1["shapeName"]
-                        .astype(str)
-                        .str.strip()
-                        .str.lower()
-                        .str.contains(sel_state_norm, na=False)
-                    ]
-
-                if not state_row.empty:
-                    state_geom = state_row.iloc[0].geometry
-                    try:
-                        gdf_state_districts = adm2[
-                            adm2.geometry.within(state_geom.buffer(0.001))
-                        ].copy()
-                    except Exception:
-                        gdf_state_districts = adm2[
-                            adm2.geometry.centroid.within(state_geom.buffer(0.001))
-                        ].copy()
-
-                    if gdf_state_districts.empty:
-                        gdf_state_districts = adm2[
-                            adm2["state_name"]
-                            .astype(str)
-                            .str.strip()
-                            .str.lower()
-                            .str.contains(sel_state_norm, na=False)
-                        ].copy()
-                else:
-                    gdf_state_districts = adm2[
-                        adm2["state_name"]
-                        .astype(str)
-                        .str.strip()
-                        .str.lower()
-                        .str.contains(sel_state_norm, na=False)
-                    ].copy()
-
-            districts = ["All"] + sorted(
-                gdf_state_districts["district_name"].astype(str).unique().tolist()
-            )
-
-            # Ensure we always have a valid district in session state
-            if (
-                "selected_district" not in st.session_state
-                or st.session_state["selected_district"] not in districts
-            ):
-                st.session_state["selected_district"] = "All"
-
-            # ---- Step 2: District selection (always shown, required before block in block mode) ----
-            # Ensure we always have a valid district in session state
-            if (
-                "selected_district" not in st.session_state
-                or st.session_state["selected_district"] not in districts
-            ):
-                st.session_state["selected_district"] = "All"
-
-            # Portfolio mode behavior for district selection:
-            # - In district-level portfolio mode: freeze district to "All"
-            # - In block-level portfolio mode: allow district selection (needed to navigate blocks)
-            # Check this BEFORE creating the widget to avoid Streamlit session state errors
-            _current_analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
-            admin_level_from_state = st.session_state.get("admin_level", admin_level)
-            if "Multi" in _current_analysis_mode and str(admin_level_from_state) != "block":
-                st.session_state["selected_district"] = "All"
-
-            selected_district = st.selectbox(
-                "District",
-                options=districts,
-                index=districts.index(st.session_state["selected_district"]),
-                key="selected_district",
-                disabled=not analysis_ready,
-            )
-
-            # ---- Step 3: Block selection (only when admin_level == block AND district selected) ----
+            selected_state = "All"
+            selected_district = "All"
             selected_block = "All"
-            if str(admin_level_from_state) == "block":
-                if not adm3_geojson.exists():
-                    st.error(
-                        f"ADM3 geojson not found at {adm3_geojson}. Please provide block_4326.geojson."
-                    )
-                    st.stop()
+            selected_basin = "All"
+            selected_subbasin = "All"
+            gdf_state_districts = adm2.copy()
 
-                # Load ADM3 boundaries for block selection
-                adm3_sidebar = load_local_adm3(str(adm3_geojson), tolerance=simplify_tol_adm3)
-
-                block_options = ["All"]
-                if selected_district != "All":
-                    try:
-                        blocks = _get_blocks_for_district(
-                            adm3_sidebar,
-                            selected_state,
-                            selected_district,
-                            normalize_fn=alias,
-                        )
-                        block_options = ["All"] + sorted(
-                            [str(b).strip() for b in blocks if str(b).strip()]
-                        )
-                    except Exception:
-                        block_options = ["All"]
-
-                    if (
-                        "selected_block" not in st.session_state
-                        or st.session_state["selected_block"] not in block_options
-                    ):
-                        st.session_state["selected_block"] = "All"
-
-                    selected_block = st.selectbox(
-                        "Block",
-                        options=block_options,
-                        index=block_options.index(st.session_state.get("selected_block", "All")),
-                        key="selected_block",
-                        disabled=not analysis_ready,
-                    )
-                else:
-                    # Show disabled/info when district not selected
-                    if selected_district == "All":
-                        st.caption("Select a district to see blocks")
-                    st.session_state["selected_block"] = "All"
+            if str(spatial_family).strip().lower() == "hydro":
+                selected_basin, selected_subbasin = _build_hydro_geography(
+                    analysis_ready=analysis_ready,
+                    admin_level=admin_level,
+                    basins_geojson=basins_geojson,
+                    subbasins_geojson=subbasins_geojson,
+                )
             else:
-                st.session_state.pop("selected_block", None)
-
-            # Note: Portfolio mode behavior for district selection is now handled BEFORE
-            # the selectbox widget is created to avoid Streamlit session state modification errors.
-            # In district-level portfolio mode: district is frozen to "All"
-            # In block-level portfolio mode: district selection is allowed (needed to navigate blocks)
-            if "Multi" in analysis_mode and str(admin_level_from_state) != "block":
-                # Just update the local variable; session_state was already set before widget
-                selected_district = "All"
-
-    # Normalize any potential None values to strings (defensive)
-    if selected_state is None or (isinstance(selected_state, float) and pd.isna(selected_state)):
-        selected_state = "All"
-    if selected_district is None or (isinstance(selected_district, float) and pd.isna(selected_district)):
-        selected_district = "All"
-    if selected_block is None or (isinstance(selected_block, float) and pd.isna(selected_block)):
-        selected_block = "All"
+                (
+                    selected_state,
+                    selected_district,
+                    selected_block,
+                    gdf_state_districts,
+                ) = _build_admin_geography(
+                    analysis_ready=analysis_ready,
+                    analysis_mode=analysis_mode,
+                    processed_root=processed_root,
+                    adm1=adm1,
+                    adm2=adm2,
+                    adm3_geojson=adm3_geojson,
+                    simplify_tol_adm3=simplify_tol_adm3,
+                    admin_level=admin_level,
+                )
 
     return GeographyContext(
         analysis_mode=analysis_mode,
         analysis_ready=analysis_ready,
-        selected_state=str(selected_state),
-        selected_district=str(selected_district),
-        selected_block=str(selected_block),
+        selected_state=str(selected_state or "All"),
+        selected_district=str(selected_district or "All"),
+        selected_block=str(selected_block or "All"),
+        selected_basin=str(selected_basin or "All"),
+        selected_subbasin=str(selected_subbasin or "All"),
         gdf_state_districts=gdf_state_districts,
     )

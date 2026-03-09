@@ -42,6 +42,9 @@ from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
+from paths import get_boundary_path
+
+from india_resilience_tool.data.hydro_loader import load_local_hydro
 
 
 def _get_mp_module():
@@ -71,12 +74,14 @@ def default_workers_75pct() -> int:
     return max(1, int(cpu * 0.75))
 
 
-AdminLevel = Literal["district", "block"]
-CLILevel = Literal["district", "block", "both"]
+AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+CLILevel = Literal["district", "block", "basin", "sub_basin", "both"]
 
 # Folder names for clean separation
 DISTRICT_FOLDER = "districts"
 BLOCK_FOLDER = "blocks"
+BASIN_FOLDER = "basins"
+SUB_BASIN_FOLDER = "sub_basins"
 
 
 # -----------------------------------------------------------------------------
@@ -159,6 +164,45 @@ def sanitize_colname(s: str) -> str:
     return s
 
 
+def hydro_folder_name(text: str) -> str:
+    """Return the folder-safe hydro token used by the compute pipeline."""
+    return str(text).replace(" ", "_").replace("/", "_").strip()
+
+
+def _build_basin_lookup() -> Dict[str, Dict[str, str]]:
+    """Build a lookup from basin folder token to canonical basin identifiers."""
+    gdf = load_local_hydro(get_boundary_path("basin"), level="basin")
+    lookup: Dict[str, Dict[str, str]] = {}
+    for _, row in gdf.iterrows():
+        folder_key = hydro_folder_name(row.get("basin_name", ""))
+        if not folder_key:
+            continue
+        lookup[folder_key] = {
+            "basin_id": str(row.get("basin_id", "")).strip(),
+            "basin_name": str(row.get("basin_name", "")).strip(),
+        }
+    return lookup
+
+
+def _build_subbasin_lookup() -> Dict[Tuple[str, str], Dict[str, str]]:
+    """Build a lookup from basin/sub-basin folder tokens to canonical identifiers."""
+    gdf = load_local_hydro(get_boundary_path("sub_basin"), level="sub_basin")
+    lookup: Dict[Tuple[str, str], Dict[str, str]] = {}
+    for _, row in gdf.iterrows():
+        basin_key = hydro_folder_name(row.get("basin_name", ""))
+        subbasin_key = hydro_folder_name(row.get("subbasin_name", ""))
+        if not basin_key or not subbasin_key:
+            continue
+        lookup[(basin_key, subbasin_key)] = {
+            "basin_id": str(row.get("basin_id", "")).strip(),
+            "basin_name": str(row.get("basin_name", "")).strip(),
+            "subbasin_id": str(row.get("subbasin_id", "")).strip(),
+            "subbasin_code": str(row.get("subbasin_code", "")).strip(),
+            "subbasin_name": str(row.get("subbasin_name", "")).strip(),
+        }
+    return lookup
+
+
 def compute_ensemble_stats(values_list: Sequence[float]) -> Optional[Dict[str, float]]:
     """Given a list of numeric values (per-model), return dict of stats."""
     arr = np.array(list(values_list), dtype=float)
@@ -226,16 +270,28 @@ def _first_existing_metric_col(df: pd.DataFrame, candidates: Sequence[str]) -> O
 
 def get_master_csv_filename(level: AdminLevel) -> str:
     """Get the master CSV filename for a given administrative level."""
+    if level == "sub_basin":
+        return "master_metrics_by_sub_basin.csv"
+    if level == "basin":
+        return "master_metrics_by_basin.csv"
     return "master_metrics_by_block.csv" if level == "block" else "master_metrics_by_district.csv"
 
 
 def get_unit_column_name(level: AdminLevel) -> str:
     """Get the unit column name based on level."""
+    if level == "sub_basin":
+        return "subbasin_name"
+    if level == "basin":
+        return "basin_name"
     return "block" if level == "block" else "district"
 
 
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
+    if level == "sub_basin":
+        return SUB_BASIN_FOLDER
+    if level == "basin":
+        return BASIN_FOLDER
     return BLOCK_FOLDER if level == "block" else DISTRICT_FOLDER
 
 
@@ -587,6 +643,168 @@ def _collect_block_data(
     return all_rows, yearly_rows
 
 
+def _collect_basin_data(
+    state_root: Path,
+    state: str,
+    metric_col_candidates: Sequence[str],
+    verbose: bool = True,
+) -> Tuple[List[Dict], List[Dict]]:
+    """Collect data from basin-level directory structure."""
+    all_rows: List[Dict] = []
+    yearly_rows: List[Dict] = []
+    basin_lookup = _build_basin_lookup()
+
+    level_root = state_root / BASIN_FOLDER
+    if not level_root.exists():
+        if verbose:
+            print(f"  ERROR: Basin folder not found: {level_root}")
+        return [], []
+
+    basin_dirs = [p for p in level_root.iterdir() if p.is_dir() and p.name != "ensembles"]
+    for bdir in basin_dirs:
+        basin = bdir.name
+        basin_meta = basin_lookup.get(basin)
+        if basin_meta is None:
+            if verbose:
+                print(f"  WARNING: Basin folder '{basin}' not found in canonical basin lookup")
+            basin_meta = {"basin_id": "", "basin_name": basin.replace("_", " ")}
+        model_dirs = [p for p in bdir.iterdir() if p.is_dir() and _is_model_directory(p)]
+        for mdir in model_dirs:
+            model = mdir.name
+            for sdir in [p for p in mdir.iterdir() if p.is_dir()]:
+                scenario = sdir.name
+                periods_csv = sdir / f"{basin}_periods.csv"
+                if periods_csv.exists():
+                    df_p = safe_read_csv(periods_csv)
+                    metric_col = _first_existing_metric_col(df_p, metric_col_candidates)
+                    if metric_col and metric_col in df_p.columns:
+                        for _, row in df_p.iterrows():
+                            all_rows.append(
+                                {
+                                    "basin": basin_meta["basin_name"],
+                                    "basin_id": basin_meta["basin_id"],
+                                    "basin_name": basin_meta["basin_name"],
+                                    "state": state,
+                                    "model": model,
+                                    "scenario": scenario,
+                                    "period": row.get("period", ""),
+                                    "value": row[metric_col],
+                                }
+                            )
+
+                yearly_csv = sdir / f"{basin}_yearly.csv"
+                if yearly_csv.exists():
+                    df_y = safe_read_csv(yearly_csv)
+                    metric_col = _first_existing_metric_col(df_y, metric_col_candidates)
+                    if metric_col and metric_col in df_y.columns:
+                        for _, row in df_y.iterrows():
+                            yearly_rows.append(
+                                {
+                                    "basin": basin_meta["basin_name"],
+                                    "basin_id": basin_meta["basin_id"],
+                                    "basin_name": basin_meta["basin_name"],
+                                    "state": state,
+                                    "model": model,
+                                    "scenario": scenario,
+                                    "year": row.get("year", ""),
+                                    "value": row[metric_col],
+                                }
+                            )
+
+    return all_rows, yearly_rows
+
+
+def _collect_sub_basin_data(
+    state_root: Path,
+    state: str,
+    metric_col_candidates: Sequence[str],
+    verbose: bool = True,
+) -> Tuple[List[Dict], List[Dict]]:
+    """Collect data from sub-basin-level directory structure."""
+    all_rows: List[Dict] = []
+    yearly_rows: List[Dict] = []
+    subbasin_lookup = _build_subbasin_lookup()
+
+    level_root = state_root / SUB_BASIN_FOLDER
+    if not level_root.exists():
+        if verbose:
+            print(f"  ERROR: Sub-basin folder not found: {level_root}")
+        return [], []
+
+    basin_dirs = [p for p in level_root.iterdir() if p.is_dir() and p.name != "ensembles"]
+    for basin_dir in basin_dirs:
+        basin = basin_dir.name
+        sub_basin_dirs = [p for p in basin_dir.iterdir() if p.is_dir()]
+        for sbdir in sub_basin_dirs:
+            sub_basin = sbdir.name
+            subbasin_meta = subbasin_lookup.get((basin, sub_basin))
+            if subbasin_meta is None:
+                if verbose:
+                    print(
+                        "  WARNING: Sub-basin folder "
+                        f"'{basin}/{sub_basin}' not found in canonical sub-basin lookup"
+                    )
+                subbasin_meta = {
+                    "basin_id": "",
+                    "basin_name": basin.replace("_", " "),
+                    "subbasin_id": "",
+                    "subbasin_code": "",
+                    "subbasin_name": sub_basin.replace("_", " "),
+                }
+            model_dirs = [p for p in sbdir.iterdir() if p.is_dir() and _is_model_directory(p)]
+            for mdir in model_dirs:
+                model = mdir.name
+                for sdir in [p for p in mdir.iterdir() if p.is_dir()]:
+                    scenario = sdir.name
+                    periods_csv = sdir / f"{sub_basin}_periods.csv"
+                    if periods_csv.exists():
+                        df_p = safe_read_csv(periods_csv)
+                        metric_col = _first_existing_metric_col(df_p, metric_col_candidates)
+                        if metric_col and metric_col in df_p.columns:
+                            for _, row in df_p.iterrows():
+                                all_rows.append(
+                                {
+                                    "sub_basin": subbasin_meta["subbasin_name"],
+                                    "basin": subbasin_meta["basin_name"],
+                                    "basin_id": subbasin_meta["basin_id"],
+                                    "basin_name": subbasin_meta["basin_name"],
+                                    "subbasin_id": subbasin_meta["subbasin_id"],
+                                    "subbasin_code": subbasin_meta["subbasin_code"],
+                                    "subbasin_name": subbasin_meta["subbasin_name"],
+                                    "state": state,
+                                    "model": model,
+                                    "scenario": scenario,
+                                        "period": row.get("period", ""),
+                                        "value": row[metric_col],
+                                    }
+                                )
+
+                    yearly_csv = sdir / f"{sub_basin}_yearly.csv"
+                    if yearly_csv.exists():
+                        df_y = safe_read_csv(yearly_csv)
+                        metric_col = _first_existing_metric_col(df_y, metric_col_candidates)
+                        if metric_col and metric_col in df_y.columns:
+                            for _, row in df_y.iterrows():
+                                yearly_rows.append(
+                                {
+                                    "sub_basin": subbasin_meta["subbasin_name"],
+                                    "basin": subbasin_meta["basin_name"],
+                                    "basin_id": subbasin_meta["basin_id"],
+                                    "basin_name": subbasin_meta["basin_name"],
+                                    "subbasin_id": subbasin_meta["subbasin_id"],
+                                    "subbasin_code": subbasin_meta["subbasin_code"],
+                                    "subbasin_name": subbasin_meta["subbasin_name"],
+                                    "state": state,
+                                    "model": model,
+                                    "scenario": scenario,
+                                        "year": row.get("year", ""),
+                                        "value": row[metric_col],
+                                    }
+                                )
+
+    return all_rows, yearly_rows
+
+
 # -----------------------------------------------------------------------------
 # Master building
 # -----------------------------------------------------------------------------
@@ -604,7 +822,13 @@ def _build_wide_master(
     """
     unit_col = get_unit_column_name(level)
 
-    if level == "block":
+    if level == "sub_basin":
+        id_cols = ["subbasin_id", "subbasin_code", "subbasin_name", "basin_id", "basin_name", "state"]
+        units = df_all[id_cols].drop_duplicates()
+    elif level == "basin":
+        id_cols = ["basin_id", "basin_name", "state"]
+        units = df_all[id_cols].drop_duplicates()
+    elif level == "block":
         id_cols = ["block", "district", "state"]
         units = df_all[id_cols].drop_duplicates()
     else:
@@ -681,6 +905,10 @@ def _unique_unit_count(df: pd.DataFrame, level: AdminLevel) -> int:
     """Count unique admin units in a dataframe chunk."""
     if df.empty:
         return 0
+    if level == "sub_basin":
+        return int(df[["subbasin_id", "basin_id", "state"]].drop_duplicates().shape[0])
+    if level == "basin":
+        return int(df[["basin_id", "state"]].drop_duplicates().shape[0])
     if level == "block":
         return int(df[["block", "district", "state"]].drop_duplicates().shape[0])
     return int(df[["district", "state"]].drop_duplicates().shape[0])
@@ -818,7 +1046,11 @@ def build_master_metrics(
     if verbose:
         print("[Step 1/3] Collecting data from CSV files...")
 
-    if level == "block":
+    if level == "sub_basin":
+        all_rows, yearly_rows = _collect_sub_basin_data(state_root, state, metric_col_candidates, verbose)
+    elif level == "basin":
+        all_rows, yearly_rows = _collect_basin_data(state_root, state, metric_col_candidates, verbose)
+    elif level == "block":
         all_rows, yearly_rows = _collect_block_data(state_root, state, metric_col_candidates, verbose)
     else:
         all_rows, yearly_rows = _collect_district_data(state_root, state, metric_col_candidates, verbose)
@@ -1052,9 +1284,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--level",
         "-l",
-        choices=["district", "block", "both"],
+        choices=["district", "block", "basin", "sub_basin", "both"],
         default="both",
-        help="Administrative level (default: both)",
+        help="Spatial level (default: both = district + block)",
     )
     p.add_argument("--processed-root", "-p", default=None, help="Processed root directory")
     p.add_argument("--state", "-s", default=None, help="State filter (comma-separated)")

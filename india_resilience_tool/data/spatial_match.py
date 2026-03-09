@@ -63,7 +63,15 @@ def extract_name_from_feature(feat: Any) -> Optional[str]:
     if not isinstance(feat, dict):
         return None
     props = feat.get("properties") or feat
-    for key in ("district_name", "shapeName", "NAME", "name", "SHAPE_NAME"):
+    for key in (
+        "subbasin_name",
+        "basin_name",
+        "district_name",
+        "shapeName",
+        "NAME",
+        "name",
+        "SHAPE_NAME",
+    ):
         if isinstance(props, dict) and props.get(key):
             return str(props.get(key))
     if isinstance(props, dict):
@@ -80,6 +88,36 @@ def _match_row_by_district_name(merged, name: str):
         return None
     try:
         series = merged["district_name"].astype(str)
+    except Exception:
+        return None
+
+    name_l = str(name).lower()
+    mask = series.str.lower() == name_l
+    if mask.any():
+        return merged[mask].iloc[0:1]
+
+    mask2 = series.str.lower().str.contains(name_l)
+    if mask2.any():
+        return merged[mask2].iloc[0:1]
+    return None
+
+
+def _match_row_by_name(merged, level: str, name: str):
+    if merged is None or getattr(merged, "empty", True):
+        return None
+    if not name:
+        return None
+
+    level_norm = str(level).strip().lower()
+    if level_norm == "sub_basin":
+        col = "subbasin_name"
+    elif level_norm == "basin":
+        col = "basin_name"
+    else:
+        return _match_row_by_district_name(merged, name)
+
+    try:
+        series = merged[col].astype(str)
     except Exception:
         return None
 
@@ -119,6 +157,8 @@ def resolve_matched_row(
     click_coords: Optional[Tuple[float, float]],
     selected_district: str,
     selected_block: str,
+    selected_basin: str = "All",
+    selected_subbasin: str = "All",
 ) -> Any:
     """
     Resolve the 'matched row' (single-row GeoDataFrame slice) for the details panel.
@@ -132,11 +172,29 @@ def resolve_matched_row(
 
     matched_row = None
     if clicked_name:
-        matched_row = _match_row_by_district_name(merged, str(clicked_name))
+        matched_row = _match_row_by_name(merged, level, str(clicked_name))
 
     if (matched_row is None or getattr(matched_row, "empty", True)) and click_coords is not None:
         lat, lon = click_coords
         matched_row = _match_row_by_point(merged, float(lat), float(lon))
+
+    level_norm = str(level).strip().lower()
+
+    if (matched_row is None or getattr(matched_row, "empty", True)) and level_norm == "sub_basin" and selected_subbasin != "All":
+        try:
+            mask = merged["subbasin_name"].astype(str).str.strip().str.lower() == str(selected_subbasin).strip().lower()
+            if mask.any():
+                matched_row = merged[mask].iloc[0:1]
+        except Exception:
+            pass
+
+    if (matched_row is None or getattr(matched_row, "empty", True)) and level_norm == "basin" and selected_basin != "All":
+        try:
+            mask = merged["basin_name"].astype(str).str.strip().str.lower() == str(selected_basin).strip().lower()
+            if mask.any():
+                matched_row = merged[mask].iloc[0:1]
+        except Exception:
+            pass
 
     if (matched_row is None or getattr(matched_row, "empty", True)) and selected_district != "All":
         sel_district_norm = str(selected_district).split(",")[0].strip().lower()
@@ -146,7 +204,7 @@ def resolve_matched_row(
             if (not mask.any()) and sel_district_norm:
                 mask = district_series.str.contains(re.escape(sel_district_norm), na=False)
 
-            if str(level).strip().lower() == "block" and selected_block != "All":
+            if level_norm == "block" and selected_block != "All":
                 sel_block_norm = str(selected_block).split(",")[0].strip().lower()
                 if "block_name" in merged.columns:
                     block_series = merged["block_name"].astype(str).str.strip().str.lower()
@@ -161,4 +219,3 @@ def resolve_matched_row(
             pass
 
     return matched_row
-

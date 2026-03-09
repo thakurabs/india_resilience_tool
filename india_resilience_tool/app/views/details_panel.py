@@ -1307,21 +1307,22 @@ def render_details_panel(
         make_scenario_figure_fn=make_scenario_figure_fn,
     )
 
-    # 4. Case study export (multi-index)
-    render_case_study_export(
-        variables=variables,
-        variable_slug=variable_slug,
-        state_to_show=state_to_show,
-        district_name=district_name,
-        sel_scenario=sel_scenario,
-        sel_period=sel_period,
-        sel_stat=sel_stat,
-        logo_path=logo_path,
-        build_case_study_data_fn=build_case_study_data_fn,
-        make_case_study_pdf_fn=make_case_study_pdf_fn,
-        make_case_study_zip_fn=make_case_study_zip_fn,
-        slugify_fs_fn=slugify_fs_fn,
-    )
+    # 4. Case study export (district/block only in v1)
+    if level_norm in {"district", "block"}:
+        render_case_study_export(
+            variables=variables,
+            variable_slug=variable_slug,
+            state_to_show=state_to_show,
+            district_name=district_name,
+            sel_scenario=sel_scenario,
+            sel_period=sel_period,
+            sel_stat=sel_stat,
+            logo_path=logo_path,
+            build_case_study_data_fn=build_case_study_data_fn,
+            make_case_study_pdf_fn=make_case_study_pdf_fn,
+            make_case_study_zip_fn=make_case_study_zip_fn,
+            slugify_fs_fn=slugify_fs_fn,
+        )
 
 
 def render_detailed_statistics(*args: Any, **kwargs: Any) -> None:

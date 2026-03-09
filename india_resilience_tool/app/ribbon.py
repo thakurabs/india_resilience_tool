@@ -24,6 +24,7 @@ from india_resilience_tool.config.variables import (
     get_metrics_for_bundle,
 )
 from india_resilience_tool.viz.charts import PERIOD_ORDER, canonical_period_label, period_display_label
+from paths import get_master_csv_filename
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,34 @@ class RibbonContext:
     pretty_metric_label: str
     rebuild_master_csv_if_needed: Callable[..., tuple[bool, str]]
     load_master_and_schema_fn: Callable[[Path, str], tuple[pd.DataFrame, list[dict], list[str], dict]]
+
+
+def _hydro_output_glob(level: str) -> str:
+    """Return the relative glob used to detect hydro period outputs for a level."""
+    if str(level).strip().lower() == "sub_basin":
+        return "hydro/sub_basins/**/*_periods.csv"
+    return "hydro/basins/**/*_periods.csv"
+
+
+def _hydro_outputs_available(processed_root: Path, level: str) -> bool:
+    """Return True when hydro processed period CSVs exist for the requested level."""
+    try:
+        return any(processed_root.glob(_hydro_output_glob(level)))
+    except Exception:
+        return False
+
+
+def _hydro_master_contract_ready(master_csv_path: Path, level: str) -> bool:
+    """Return True when a hydro master CSV contains the canonical hydro ID columns."""
+    if not master_csv_path.exists():
+        return False
+    try:
+        cols = set(pd.read_csv(master_csv_path, nrows=0).columns)
+    except Exception:
+        return False
+    if str(level).strip().lower() == "sub_basin":
+        return {"basin_id", "subbasin_id"}.issubset(cols)
+    return {"basin_id"}.issubset(cols)
 
 
 def render_metric_ribbon(
@@ -197,50 +226,77 @@ def render_metric_ribbon(
                 st.caption(f"Note: {desc}")
 
             processed_root = resolve_processed_root_fn(variable_slug, data_dir=data_dir, mode="portfolio")
-            (processed_root / str(pilot_state)).mkdir(parents=True, exist_ok=True)
+            level = str(st.session_state.get("admin_level", "district")).strip().lower()
+            if level in {"basin", "sub_basin"}:
+                master_root = processed_root / "hydro"
+            else:
+                master_root = processed_root / str(pilot_state)
+            master_root.mkdir(parents=True, exist_ok=True)
 
-            master_name = (
-                "master_metrics_by_block.csv"
-                if str(st.session_state.get("admin_level", "district")).strip().lower() == "block"
-                else "master_metrics_by_district.csv"
-            )
-            master_csv_path = processed_root / str(pilot_state) / master_name
+            master_name = get_master_csv_filename(level)
+            master_csv_path = master_root / master_name
 
             def rebuild_master_csv_if_needed(
                 force: bool = False, attach_centroid_geojson: str | None = None
             ) -> tuple[bool, str]:
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
+                is_hydro = level in {"basin", "sub_basin"}
                 needs = (
                     force
-                    or master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state))
-                    or state_profile_files_missing_fn(processed_root, str(pilot_state), level)
+                    or (is_hydro and not _hydro_master_contract_ready(master_csv_path, level))
+                    or (
+                        level in {"district", "block"}
+                        and master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state))
+                    )
+                    or (
+                        level in {"district", "block"}
+                        and state_profile_files_missing_fn(processed_root, str(pilot_state), level)
+                    )
                 )
                 if not needs:
                     return False, "up-to-date"
+                if is_hydro and not _hydro_outputs_available(processed_root, level):
+                    return (
+                        False,
+                        (
+                            f"no hydro processed outputs found under {processed_root / 'hydro'}; "
+                            f"run compute_indices_multiprocess for --level {level} first"
+                        ),
+                    )
                 try:
                     from india_resilience_tool.compute.master_builder import build_master_metrics
                 except Exception as e:
                     return False, f"builder import failed: {e}"
                 try:
-                    build_master_metrics(
+                    master_df = build_master_metrics(
                         str(processed_root),
-                        str(pilot_state),
+                        ("hydro" if level in {"basin", "sub_basin"} else str(pilot_state)),
                         metric_col_in_periods=varcfg["periods_metric_col"],
                         out_path=str(master_csv_path),
                         attach_centroid_geojson=attach_centroid_geojson,
                         verbose=True,
                         level=level,
                     )
-                    return True, "rebuilt"
+                    if master_csv_path.exists():
+                        return True, "rebuilt"
+                    if getattr(master_df, "empty", True):
+                        return False, f"builder found no source rows for {level} under {master_root}"
+                    return False, f"builder finished but did not create {master_csv_path}"
                 except Exception as e:
                     return False, f"rebuild failed: {e}"
 
             # Ensure master exists/fresh for this metric (only once a metric is chosen)
             try:
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
-                if master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state)) or state_profile_files_missing_fn(
-                    processed_root, str(pilot_state), level
-                ):
+                needs_rebuild = False
+                if level in {"district", "block"}:
+                    needs_rebuild = master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state)) or state_profile_files_missing_fn(
+                        processed_root, str(pilot_state), level
+                    )
+                if level in {"basin", "sub_basin"} and not _hydro_master_contract_ready(master_csv_path, level):
+                    needs_rebuild = True
+
+                if needs_rebuild:
                     with st.spinner("Master CSV missing or stale — rebuilding now..."):
                         ok, msg = rebuild_master_csv_if_needed(
                             force=False,
@@ -251,10 +307,17 @@ def render_metric_ribbon(
                 st.warning(f"Could not check master CSV freshness: {e}")
 
             if not master_csv_path.exists():
-                st.error(
-                    f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
-                    f"Click 'Rebuild now' in the sidebar under 'Master dataset'."
-                )
+                if level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
+                    st.error(
+                        f"Hydro boundary files are loaded, but no hydro processed outputs were found for "
+                        f"{VARIABLES[variable_slug]['label']} under {processed_root / 'hydro'}. "
+                        f"Run the hydro compute pipeline for `--level {level}` first, then rebuild the master CSV."
+                    )
+                else:
+                    st.error(
+                        f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
+                        f"Click 'Rebuild now' in the sidebar under 'Master dataset'."
+                    )
                 render_perf_panel_safe()
                 st.stop()
 
@@ -434,4 +497,3 @@ def render_metric_ribbon(
         rebuild_master_csv_if_needed=rebuild_master_csv_if_needed,
         load_master_and_schema_fn=load_master_and_schema_fn,
     )
-

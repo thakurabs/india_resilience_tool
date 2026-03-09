@@ -60,6 +60,8 @@ class PathsConfig:
     data_root: Path
     districts_path: Path
     blocks_path: Path  # NEW: ADM3 block/subdistrict boundaries
+    basins_path: Path
+    subbasins_path: Path
     base_output_root: Path
 
 
@@ -96,6 +98,8 @@ def get_paths_config() -> PathsConfig:
         data_root=data_dir / "r1i1p1f1",
         districts_path=data_dir / "districts_4326.geojson",
         blocks_path=data_dir / "blocks_4326.geojson",  # NEW
+        basins_path=data_dir / "basins.geojson",
+        subbasins_path=data_dir / "subbasins.geojson",
         base_output_root=data_dir / "processed",
     )
 
@@ -125,7 +129,8 @@ def debug_enabled_default() -> bool:
 ProcessedRootMode = Literal["single", "portfolio"]
 
 # NEW: Administrative level type
-AdminLevel = Literal["district", "block"]
+SpatialFamily = Literal["admin", "hydro"]
+AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 
 def resolve_processed_root(
@@ -177,12 +182,16 @@ def get_boundary_path(level: AdminLevel) -> Path:
     Get the boundary file path for a given administrative level.
     
     Args:
-        level: "district" for ADM2, "block" for ADM3/subdistrict
+        level: "district", "block", "basin", or "sub_basin"
         
     Returns:
         Path to the GeoJSON boundary file
     """
     cfg = get_paths_config()
+    if level == "sub_basin":
+        return cfg.subbasins_path
+    if level == "basin":
+        return cfg.basins_path
     if level == "block":
         return cfg.blocks_path
     return cfg.districts_path
@@ -193,14 +202,29 @@ def get_master_csv_filename(level: AdminLevel) -> str:
     Get the master CSV filename for a given administrative level.
     
     Args:
-        level: "district" or "block"
+        level: "district", "block", "basin", or "sub_basin"
         
     Returns:
         Filename string (e.g., "master_metrics_by_district.csv")
     """
+    if level == "sub_basin":
+        return "master_metrics_by_sub_basin.csv"
+    if level == "basin":
+        return "master_metrics_by_basin.csv"
     if level == "block":
         return "master_metrics_by_block.csv"
     return "master_metrics_by_district.csv"
+
+
+def get_unit_name_column(level: AdminLevel) -> str:
+    """Get the canonical primary display column for a spatial level."""
+    if level == "sub_basin":
+        return "subbasin_name"
+    if level == "basin":
+        return "basin_name"
+    if level == "block":
+        return "block_name"
+    return "district_name"
 
 
 # Convenience constants matching legacy root-level paths.py exports
@@ -211,4 +235,6 @@ DATA_DIR: Path = _CFG.data_dir
 DATA_ROOT: Path = _CFG.data_root
 DISTRICTS_PATH: Path = _CFG.districts_path
 BLOCKS_PATH: Path = _CFG.blocks_path  # NEW
+BASINS_PATH: Path = _CFG.basins_path
+SUBBASINS_PATH: Path = _CFG.subbasins_path
 BASE_OUTPUT_ROOT: Path = _CFG.base_output_root

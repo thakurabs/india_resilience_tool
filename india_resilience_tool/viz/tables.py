@@ -42,18 +42,22 @@ def build_rankings_table_df(
     if merged_df is None or merged_df.empty:
         return pd.DataFrame(), False
 
-    if state_col not in merged_df.columns or district_col not in merged_df.columns:
+    if district_col not in merged_df.columns:
         return pd.DataFrame(), False
+
+    ranking_source = merged_df.copy()
+    if state_col not in ranking_source.columns:
+        ranking_source[state_col] = "Hydro"
 
     # Filter for ranking: respect selected_state
     if selected_state != "All":
         rank_mask = (
-            merged_df[state_col].astype(str).str.strip().str.lower()
+            ranking_source[state_col].astype(str).str.strip().str.lower()
             == str(selected_state).strip().lower()
         )
-        ranking_df = merged_df.loc[rank_mask].copy()
+        ranking_df = ranking_source.loc[rank_mask].copy()
     else:
-        ranking_df = merged_df.copy()
+        ranking_df = ranking_source.copy()
 
     if ranking_df.empty:
         return pd.DataFrame(), False

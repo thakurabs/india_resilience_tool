@@ -26,7 +26,10 @@ def render_right_panel(
     selected_state: str,
     selected_district: str,
     selected_block: str,
+    selected_basin: str,
+    selected_subbasin: str,
     admin_level: str,
+    spatial_family: str,
     # Variable/metric context
     variables: Mapping[str, Mapping[str, Any]],
     variable_slug: str,
@@ -191,10 +194,16 @@ def render_right_panel(
         click_coords=click_coords,
         selected_district=str(st.session_state.get("selected_district", "All")),
         selected_block=str(st.session_state.get("selected_block", "All")),
+        selected_basin=str(st.session_state.get("selected_basin", "All")),
+        selected_subbasin=str(st.session_state.get("selected_subbasin", "All")),
     )
 
     # ----------- STATE/DISTRICT SUMMARY MODE (no unit selected) -----------
-    if str(admin_level).strip().lower() == "block":
+    if str(admin_level).strip().lower() == "sub_basin":
+        show_summary = selected_basin != "All" and selected_subbasin == "All"
+    elif str(admin_level).strip().lower() == "basin":
+        show_summary = False
+    elif str(admin_level).strip().lower() == "block":
         show_summary = selected_state != "All" and selected_block == "All"
     else:
         show_summary = selected_state != "All" and selected_district == "All"
@@ -217,7 +226,13 @@ def render_right_panel(
         return
 
     # ----------- UNIT DETAILS MODE (district or block) -----------
-    unit_label = "block" if str(admin_level).strip().lower() == "block" else "district"
+    level_norm = str(admin_level).strip().lower()
+    if level_norm == "sub_basin":
+        unit_label = "sub-basin"
+    elif level_norm == "basin":
+        unit_label = "basin"
+    else:
+        unit_label = "block" if level_norm == "block" else "district"
 
     if matched_row is None or getattr(matched_row, "empty", True):
         st.warning(f"No {unit_label}-level data found for the current selection.")
@@ -235,11 +250,13 @@ def render_right_panel(
 
     row = matched_row.iloc[0]
     district_name = row.get("district_name", "Unknown")
-    block_name = row.get("block_name", "Unknown") if str(admin_level).strip().lower() == "block" else None
+    block_name = row.get("block_name", "Unknown") if level_norm == "block" else None
+    basin_name = row.get("basin_name", "Unknown")
+    subbasin_name = row.get("subbasin_name", "Unknown") if level_norm == "sub_basin" else None
     state_to_show = (
         st.session_state.get("selected_state")
         if st.session_state.get("selected_state") != "All"
-        else (row.get("state_name") or "Unknown")
+        else (row.get("state_name") or ("Hydro" if spatial_family == "hydro" else "Unknown"))
     )
 
     # --- Compact selection view in Multi-unit portfolio mode ---
@@ -295,7 +312,12 @@ def render_right_panel(
 
     # --- Full unit climate profile (single-district/block focus mode) ---
     if click_coords is not None:
-        unit_label_display = "block" if str(admin_level).strip().lower() == "block" else "district"
+        if level_norm == "sub_basin":
+            unit_label_display = "sub-basin"
+        elif level_norm == "basin":
+            unit_label_display = "basin"
+        else:
+            unit_label_display = "block" if level_norm == "block" else "district"
         st.caption(
             f"Point location used: lat {click_coords[0]:.4f}, "
             f"lon {click_coords[1]:.4f} (assigned to this {unit_label_display})."
@@ -327,10 +349,13 @@ def render_right_panel(
     n_in_state = None
     percentile_state = None
     try:
-        in_state_mask = (
-            merged["state_name"].astype(str).str.strip().str.lower()
-            == str(state_to_show).strip().lower()
-        )
+        if "state_name" in merged.columns:
+            in_state_mask = (
+                merged["state_name"].astype(str).str.strip().str.lower()
+                == str(state_to_show).strip().lower()
+            )
+        else:
+            in_state_mask = pd.Series(True, index=merged.index)
         state_vals = pd.to_numeric(merged.loc[in_state_mask, rank_metric_col], errors="coerce").dropna()
         pos_state = compute_position_stats(
             state_vals, current_val_f, higher_is_worse=rank_higher_is_worse
@@ -411,6 +436,24 @@ def render_right_panel(
             normalize_fn=alias_fn,
         )
 
+    @st.cache_data
+    def _load_hydro_yearly(
+        ts_root: Path,
+        hydro_level: str,
+        basin_display: str,
+        subbasin_display: str | None,
+        scenario_name: str,
+    ) -> pd.DataFrame:
+        from india_resilience_tool.analysis.timeseries import load_hydro_yearly
+
+        return load_hydro_yearly(
+            ts_root=ts_root,
+            level="sub_basin" if hydro_level == "sub_basin" else "basin",
+            basin_display=basin_display,
+            subbasin_display=subbasin_display,
+            scenario_name=scenario_name,
+        )
+
     def _filter_series_for_trend(
         series_df: pd.DataFrame,
         state_name: str,
@@ -486,11 +529,45 @@ def render_right_panel(
     requested_state_dir = (
         selected_state if selected_state != "All" else (row.get("state_name") or pilot_state)
     )
-    state_dir_for_fs = requested_state_dir
+    state_dir_for_fs = "hydro" if spatial_family == "hydro" else requested_state_dir
     district_for_fs = row.get("district_name") or selected_district
     block_for_fs = row.get("block_name") or selected_block
 
-    if str(admin_level).strip().lower() == "block" and selected_block != "All":
+    if level_norm == "sub_basin":
+        yearly_hist = _load_hydro_yearly(
+            ts_root=processed_root,
+            hydro_level="sub_basin",
+            basin_display=str(basin_name),
+            subbasin_display=str(subbasin_name),
+            scenario_name="historical",
+        )
+        yearly_scen = _load_hydro_yearly(
+            ts_root=processed_root,
+            hydro_level="sub_basin",
+            basin_display=str(basin_name),
+            subbasin_display=str(subbasin_name),
+            scenario_name=sel_scenario,
+        )
+        hist_ts = yearly_hist
+        scen_ts = yearly_scen
+    elif level_norm == "basin":
+        yearly_hist = _load_hydro_yearly(
+            ts_root=processed_root,
+            hydro_level="basin",
+            basin_display=str(basin_name),
+            subbasin_display=None,
+            scenario_name="historical",
+        )
+        yearly_scen = _load_hydro_yearly(
+            ts_root=processed_root,
+            hydro_level="basin",
+            basin_display=str(basin_name),
+            subbasin_display=None,
+            scenario_name=sel_scenario,
+        )
+        hist_ts = yearly_hist
+        scen_ts = yearly_scen
+    elif level_norm == "block" and selected_block != "All":
         yearly_hist = _load_block_yearly(
             ts_root=processed_root,
             state_dir=str(state_dir_for_fs),
@@ -535,7 +612,11 @@ def render_right_panel(
 
     render_details_panel(
         row=row,
-        district_name=district_name,
+        district_name=(
+            str(subbasin_name)
+            if level_norm == "sub_basin"
+            else str(basin_name) if level_norm == "basin" else district_name
+        ),
         state_to_show=state_to_show,
         selected_district=selected_district,
         variables=variables,
@@ -574,8 +655,8 @@ def render_right_panel(
         ts_root=processed_root,
         logo_path=logo_path,
         level=admin_level,
-        block_name=str(block_for_fs) if (str(admin_level).strip().lower() == "block" and selected_block != "All") else None,
-        parent_district_name=str(district_name) if str(admin_level).strip().lower() == "block" else None,
+        block_name=str(block_for_fs) if (level_norm == "block" and selected_block != "All") else None,
+        parent_district_name=str(district_name) if level_norm == "block" else None,
         rank_in_district=rank_in_district,
         n_in_district=n_in_district,
         percentile_district=percentile_district,

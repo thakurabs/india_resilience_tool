@@ -43,9 +43,34 @@ def filter_fc_by_district(
     fc: dict,
     *,
     selected_district: str,
+    selected_basin: str = "All",
+    level: str = "district",
     alias_fn: Callable[[str], str],
 ) -> dict:
-    """If a single district is selected, keep only that feature (legacy behavior)."""
+    """Filter a feature collection to the active district or basin selection."""
+    level_norm = str(level).strip().lower()
+    if level_norm == "basin" and selected_basin and selected_basin != "All":
+        basin_key = alias_fn(selected_basin)
+        features = [
+            f
+            for f in fc.get("features", [])
+            if alias_fn(((f.get("properties") or {}).get("basin_name", ""))) == basin_key
+        ]
+        fc = dict(fc)
+        fc["features"] = features
+        return fc
+
+    if level_norm == "sub_basin" and selected_basin and selected_basin != "All":
+        basin_key = alias_fn(selected_basin)
+        features = [
+            f
+            for f in fc.get("features", [])
+            if alias_fn(((f.get("properties") or {}).get("basin_name", ""))) == basin_key
+        ]
+        fc = dict(fc)
+        fc["features"] = features
+        return fc
+
     if not selected_district or selected_district == "All":
         return fc
 
@@ -73,6 +98,10 @@ def _feature_key_for_row(
             f"{alias_fn(row.get('district_name', ''))}|"
             f"{alias_fn(row.get('block_name', ''))}"
         )
+    if level == "sub_basin":
+        return alias_fn(row.get("subbasin_id", ""))
+    if level == "basin":
+        return alias_fn(row.get("basin_id", ""))
     return alias_fn(row.get("district_name", ""))
 
 
@@ -97,12 +126,14 @@ def build_props_map_from_gdf(
 
     if is_block_level and "block_name" not in prop_work.columns and "block" in prop_work.columns:
         prop_work["block_name"] = prop_work["block"]
+    if str(level).strip().lower() == "sub_basin" and "subbasin_name" not in prop_work.columns and "subbasin" in prop_work.columns:
+        prop_work["subbasin_name"] = prop_work["subbasin"]
 
     if feature_key_col not in prop_work.columns:
         prop_work[feature_key_col] = prop_work.apply(
             lambda r: _feature_key_for_row(
                 r,
-                level="block" if is_block_level else "district",
+                level=str(level).strip().lower(),
                 alias_fn=alias_fn,
                 feature_key_col=feature_key_col,
             ),
@@ -128,6 +159,14 @@ def build_props_map_from_gdf(
             text_cols.append(c)
 
     keep_cols: list[str] = []
+    if str(level).strip().lower() == "sub_basin":
+        for c in ("subbasin_name", "subbasin_id", "subbasin_code", "basin_name", "basin_id"):
+            if c in prop_work.columns:
+                keep_cols.append(c)
+    elif str(level).strip().lower() == "basin":
+        for c in ("basin_name", "basin_id"):
+            if c in prop_work.columns:
+                keep_cols.append(c)
     if is_block_level and "block_name" in prop_work.columns:
         keep_cols.append("block_name")
     if "district_name" in prop_work.columns:
@@ -152,6 +191,15 @@ def build_props_map_from_gdf(
             "district_name": r.get("district_name"),
             "state_name": r.get("state_name") if "state_name" in prop_work.columns else None,
         }
+        if str(level).strip().lower() == "sub_basin":
+            upd["subbasin_name"] = r.get("subbasin_name")
+            upd["subbasin_id"] = r.get("subbasin_id")
+            upd["subbasin_code"] = r.get("subbasin_code")
+            upd["basin_name"] = r.get("basin_name")
+            upd["basin_id"] = r.get("basin_id")
+        elif str(level).strip().lower() == "basin":
+            upd["basin_name"] = r.get("basin_name")
+            upd["basin_id"] = r.get("basin_id")
         if is_block_level and "block_name" in prop_work.columns:
             upd["block_name"] = r.get("block_name")
 
@@ -224,6 +272,16 @@ def patch_fc_properties(
                     f"{alias_fn(props.get('district_name', ''))}|"
                     f"{alias_fn(props.get('block_name', ''))}"
                 )
+            elif str(level).strip().lower() == "sub_basin":
+                props["subbasin_name"] = props.get("subbasin_name") or props.get("name")
+                props["subbasin_id"] = props.get("subbasin_id")
+                props["basin_name"] = props.get("basin_name")
+                props["basin_id"] = props.get("basin_id")
+                k = alias_fn(props.get("subbasin_id", ""))
+            elif str(level).strip().lower() == "basin":
+                props["basin_name"] = props.get("basin_name") or props.get("name")
+                props["basin_id"] = props.get("basin_id")
+                k = alias_fn(props.get("basin_id", ""))
             else:
                 k = alias_fn(props.get("district_name", ""))
 
@@ -259,6 +317,12 @@ def build_geojson_tooltip(
     if is_block_level:
         tooltip_fields = ["block_name", "district_name", "state_name", "_tooltip_value"]
         tooltip_aliases = ["Block", "District", "State", main_label]
+    elif str(level).strip().lower() == "sub_basin":
+        tooltip_fields = ["subbasin_name", "basin_name", "_tooltip_value"]
+        tooltip_aliases = ["Sub-basin", "Basin", main_label]
+    elif str(level).strip().lower() == "basin":
+        tooltip_fields = ["basin_name", "_tooltip_value"]
+        tooltip_aliases = ["Basin", main_label]
     else:
         tooltip_fields = ["district_name", "state_name", "_tooltip_value"]
         tooltip_aliases = ["District", "State", main_label]
@@ -276,4 +340,3 @@ def build_geojson_tooltip(
         localize=True,
         sticky=True,
     )
-

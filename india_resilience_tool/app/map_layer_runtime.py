@@ -22,6 +22,7 @@ def build_folium_map_for_selection(
     display_gdf: Any,
     selected_state: str,
     selected_district: str,
+    selected_basin: str,
     map_mode: str,
     baseline_col: Optional[str],
     rank_scope_label: str,
@@ -37,12 +38,16 @@ def build_folium_map_for_selection(
     # GeoJSON cache inputs
     adm2_geojson_path: Path,
     adm3_geojson_path: Path,
+    basin_geojson_path: Path,
+    subbasin_geojson_path: Path,
     simplify_tolerance_adm2: float,
     simplify_tolerance_adm3: float,
 ) -> Any:
     from india_resilience_tool.app.geo_cache import (
         build_adm2_geojson_by_state,
         build_adm3_geojson_by_state,
+        build_basin_geojson_all,
+        build_subbasin_geojson_all,
     )
     from india_resilience_tool.app.views.map_view import build_choropleth_map_with_geojson_layer
     from india_resilience_tool.viz.folium_featurecollection import (
@@ -54,13 +59,25 @@ def build_folium_map_for_selection(
     )
 
     level_norm = str(level).strip().lower()
-    if level_norm not in {"district", "block"}:
+    if level_norm not in {"district", "block", "basin", "sub_basin"}:
         level_norm = "district"
 
     # -------------------------
     # GeoJSON-by-state cache (geometry cached; properties patched per rerun)
     # -------------------------
-    if level_norm == "block":
+    if level_norm == "sub_basin":
+        subbasin_mtime = float(subbasin_geojson_path.stat().st_mtime)
+        geojson_by_state = build_subbasin_geojson_all(
+            path=str(subbasin_geojson_path),
+            mtime=subbasin_mtime,
+        )
+    elif level_norm == "basin":
+        basin_mtime = float(basin_geojson_path.stat().st_mtime)
+        geojson_by_state = build_basin_geojson_all(
+            path=str(basin_geojson_path),
+            mtime=basin_mtime,
+        )
+    elif level_norm == "block":
         adm3_mtime = float(adm3_geojson_path.stat().st_mtime)
         geojson_by_state = build_adm3_geojson_by_state(
             path=str(adm3_geojson_path),
@@ -79,7 +96,13 @@ def build_folium_map_for_selection(
     geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
 
     fc = copy.deepcopy(geojson_by_state.get(state_key, geojson_by_state["all"]))
-    fc = filter_fc_by_district(fc, selected_district=selected_district, alias_fn=alias_fn)
+    fc = filter_fc_by_district(
+        fc,
+        selected_district=selected_district,
+        selected_basin=selected_basin,
+        level=level_norm,
+        alias_fn=alias_fn,
+    )
 
     prop_gdf = display_gdf if getattr(display_gdf, "empty", False) is False else merged
     feature_key_col = "__bkey" if level_norm == "block" else "__key"
@@ -102,7 +125,12 @@ def build_folium_map_for_selection(
 
     highlight_fn = None
     tooltip = None
-    layer_name = "Blocks" if level_norm == "block" else "Districts"
+    if level_norm == "sub_basin":
+        layer_name = "Sub-basins"
+    elif level_norm == "basin":
+        layer_name = "Basins"
+    else:
+        layer_name = "Blocks" if level_norm == "block" else "Districts"
 
     if hover_enabled:
         tooltip = build_geojson_tooltip(
@@ -132,4 +160,3 @@ def build_folium_map_for_selection(
         highlight_function=highlight_fn,
     )
     return m
-
