@@ -44,6 +44,7 @@ def filter_fc_by_district(
     *,
     selected_district: str,
     selected_basin: str = "All",
+    selected_subbasin: str = "All",
     level: str = "district",
     alias_fn: Callable[[str], str],
 ) -> dict:
@@ -69,6 +70,17 @@ def filter_fc_by_district(
         ]
         fc = dict(fc)
         fc["features"] = features
+    if level_norm == "sub_basin" and selected_subbasin and selected_subbasin != "All":
+        subbasin_key = alias_fn(selected_subbasin)
+        features = [
+            f
+            for f in fc.get("features", [])
+            if alias_fn(((f.get("properties") or {}).get("subbasin_name", ""))) == subbasin_key
+        ]
+        fc = dict(fc)
+        fc["features"] = features
+        return fc
+    if level_norm in {"basin", "sub_basin"}:
         return fc
 
     if not selected_district or selected_district == "All":

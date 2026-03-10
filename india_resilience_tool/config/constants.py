@@ -17,6 +17,8 @@ from typing import Tuple
 SIMPLIFY_TOL_ADM2: float = 0.001
 SIMPLIFY_TOL_ADM3: float = 0.001
 SIMPLIFY_TOL_ADM1: float = 0.015
+SIMPLIFY_TOL_BASIN_RENDER: float = 0.0035
+SIMPLIFY_TOL_SUBBASIN_RENDER: float = 0.005
 
 # ---- Bounding box for India ----
 MIN_LON: float = 68.0

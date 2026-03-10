@@ -11,12 +11,14 @@ from india_resilience_tool.data.hydro_loader import (
     ensure_hydro_columns,
     ensure_hydro_key_column,
     filter_subbasins_for_basin,
+    simplify_hydro_for_render,
 )
 from india_resilience_tool.data.merge import (
     get_unit_name_column,
     merge_basin_with_master,
     merge_subbasin_with_master,
 )
+from india_resilience_tool.viz.folium_featurecollection import filter_fc_by_district
 from paths import get_boundary_path, get_master_csv_filename
 
 
@@ -77,6 +79,14 @@ def test_filter_subbasins_for_basin_filters_by_basin_id() -> None:
     assert filtered["subbasin_name"].tolist() == ["Upper Godavari", "Lower Godavari"]
 
 
+def test_simplify_hydro_for_render_preserves_canonical_ids() -> None:
+    basin_gdf = _basin_gdf()
+    simplified = simplify_hydro_for_render(basin_gdf, level="basin", tolerance=0.01)
+    assert simplified["basin_id"].tolist() == ["B01"]
+    assert simplified["basin_name"].tolist() == ["Godavari"]
+    assert simplified.geom_type.tolist() == ["Polygon"]
+
+
 def test_merge_basin_with_master_joins_on_basin_id() -> None:
     basin_gdf = _basin_gdf()
     master_df = pd.DataFrame(
@@ -108,3 +118,43 @@ def test_merge_subbasin_with_master_joins_on_subbasin_id() -> None:
     )
     val = merged.loc[merged["subbasin_id"] == "SB02", "tas__ssp245__2020-2040__mean"].iloc[0]
     assert float(val) == 7.5
+
+
+def test_filter_fc_by_district_filters_subbasins_by_basin_then_subbasin() -> None:
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "basin_name": "Godavari",
+                    "subbasin_name": "Upper Godavari",
+                },
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "basin_name": "Godavari",
+                    "subbasin_name": "Lower Godavari",
+                },
+            },
+            {
+                "type": "Feature",
+                "properties": {
+                    "basin_name": "Krishna",
+                    "subbasin_name": "Upper Krishna",
+                },
+            },
+        ],
+    }
+
+    filtered = filter_fc_by_district(
+        fc,
+        selected_district="All",
+        selected_basin="Godavari",
+        selected_subbasin="Lower Godavari",
+        level="sub_basin",
+        alias_fn=lambda s: str(s).strip().lower(),
+    )
+
+    assert [f["properties"]["subbasin_name"] for f in filtered["features"]] == ["Lower Godavari"]

@@ -103,6 +103,26 @@ def ensure_hydro_columns(
     return out
 
 
+def simplify_hydro_for_render(
+    gdf: gpd.GeoDataFrame,
+    *,
+    level: HydroLevel,
+    tolerance: float,
+) -> gpd.GeoDataFrame:
+    """Return a render-only simplified hydro GeoDataFrame in EPSG:4326."""
+    out = gdf.copy()
+    out["geometry"] = out["geometry"].apply(drop_z)
+    out = ensure_epsg4326(out)
+    out = ensure_hydro_columns(out, level=level)
+
+    tol = float(tolerance)
+    if tol > 0.0:
+        out["geometry"] = out["geometry"].simplify(tol, preserve_topology=True)
+
+    _validate_geometries(out, level=level)
+    return out.reset_index(drop=True)
+
+
 def ensure_hydro_key_column(
     gdf: gpd.GeoDataFrame,
     *,

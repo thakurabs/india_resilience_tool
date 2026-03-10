@@ -174,10 +174,6 @@ def resolve_matched_row(
     if clicked_name:
         matched_row = _match_row_by_name(merged, level, str(clicked_name))
 
-    if (matched_row is None or getattr(matched_row, "empty", True)) and click_coords is not None:
-        lat, lon = click_coords
-        matched_row = _match_row_by_point(merged, float(lat), float(lon))
-
     level_norm = str(level).strip().lower()
 
     if (matched_row is None or getattr(matched_row, "empty", True)) and level_norm == "sub_basin" and selected_subbasin != "All":
@@ -195,6 +191,10 @@ def resolve_matched_row(
                 matched_row = merged[mask].iloc[0:1]
         except Exception:
             pass
+
+    if (matched_row is None or getattr(matched_row, "empty", True)) and click_coords is not None:
+        lat, lon = click_coords
+        matched_row = _match_row_by_point(merged, float(lat), float(lon))
 
     if (matched_row is None or getattr(matched_row, "empty", True)) and selected_district != "All":
         sel_district_norm = str(selected_district).split(",")[0].strip().lower()

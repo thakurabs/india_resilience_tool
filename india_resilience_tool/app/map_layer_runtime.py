@@ -14,6 +14,11 @@ import copy
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Tuple
 
+from india_resilience_tool.config.constants import (
+    SIMPLIFY_TOL_BASIN_RENDER,
+    SIMPLIFY_TOL_SUBBASIN_RENDER,
+)
+
 
 def build_folium_map_for_selection(
     *,
@@ -23,6 +28,7 @@ def build_folium_map_for_selection(
     selected_state: str,
     selected_district: str,
     selected_basin: str,
+    selected_subbasin: str,
     map_mode: str,
     baseline_col: Optional[str],
     rank_scope_label: str,
@@ -47,7 +53,9 @@ def build_folium_map_for_selection(
         build_adm2_geojson_by_state,
         build_adm3_geojson_by_state,
         build_basin_geojson_all,
+        build_basin_geojson_by_basin,
         build_subbasin_geojson_all,
+        build_subbasin_geojson_by_basin,
     )
     from india_resilience_tool.app.views.map_view import build_choropleth_map_with_geojson_layer
     from india_resilience_tool.viz.folium_featurecollection import (
@@ -67,16 +75,32 @@ def build_folium_map_for_selection(
     # -------------------------
     if level_norm == "sub_basin":
         subbasin_mtime = float(subbasin_geojson_path.stat().st_mtime)
-        geojson_by_state = build_subbasin_geojson_all(
-            path=str(subbasin_geojson_path),
-            mtime=subbasin_mtime,
-        )
+        if selected_basin != "All":
+            geojson_by_state = build_subbasin_geojson_by_basin(
+                path=str(subbasin_geojson_path),
+                mtime=subbasin_mtime,
+                tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
+            )
+        else:
+            geojson_by_state = build_subbasin_geojson_all(
+                path=str(subbasin_geojson_path),
+                mtime=subbasin_mtime,
+                tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
+            )
     elif level_norm == "basin":
         basin_mtime = float(basin_geojson_path.stat().st_mtime)
-        geojson_by_state = build_basin_geojson_all(
-            path=str(basin_geojson_path),
-            mtime=basin_mtime,
-        )
+        if selected_basin != "All":
+            geojson_by_state = build_basin_geojson_by_basin(
+                path=str(basin_geojson_path),
+                mtime=basin_mtime,
+                tolerance=SIMPLIFY_TOL_BASIN_RENDER,
+            )
+        else:
+            geojson_by_state = build_basin_geojson_all(
+                path=str(basin_geojson_path),
+                mtime=basin_mtime,
+                tolerance=SIMPLIFY_TOL_BASIN_RENDER,
+            )
     elif level_norm == "block":
         adm3_mtime = float(adm3_geojson_path.stat().st_mtime)
         geojson_by_state = build_adm3_geojson_by_state(
@@ -92,14 +116,20 @@ def build_folium_map_for_selection(
             mtime=adm2_mtime,
         )
 
-    state_key = "all" if selected_state == "All" else (normalize_state_fn(selected_state) or "unknown")
-    geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
-
-    fc = copy.deepcopy(geojson_by_state.get(state_key, geojson_by_state["all"]))
+    if level_norm in {"basin", "sub_basin"}:
+        selection_key = alias_fn(selected_basin) if selected_basin != "All" else "all"
+        fc_source = geojson_by_state.get(selection_key, geojson_by_state.get("all"))
+        geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
+        fc = copy.deepcopy(fc_source or geojson_by_state["all"])
+    else:
+        state_key = "all" if selected_state == "All" else (normalize_state_fn(selected_state) or "unknown")
+        geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
+        fc = copy.deepcopy(geojson_by_state.get(state_key, geojson_by_state["all"]))
     fc = filter_fc_by_district(
         fc,
         selected_district=selected_district,
         selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
         level=level_norm,
         alias_fn=alias_fn,
     )

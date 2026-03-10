@@ -18,9 +18,9 @@ import streamlit as st
 
 from india_resilience_tool.app.geo_cache import (
     list_available_states_from_processed_root_cached,
+    load_basin_selector_index,
     load_local_adm3,
-    load_local_basin,
-    load_local_subbasin,
+    load_subbasin_selector_index,
 )
 from india_resilience_tool.app.sidebar import render_analysis_mode_selector
 from india_resilience_tool.data.adm3_loader import (
@@ -204,12 +204,19 @@ def _build_hydro_geography(
         )
         st.stop()
 
-    basins_gdf = load_local_basin(str(basins_geojson))
-    subbasins_gdf = load_local_subbasin(str(subbasins_geojson))
+    level_norm = str(admin_level).strip().lower()
+    if level_norm == "sub_basin":
+        selector_index = load_subbasin_selector_index(str(subbasins_geojson))
+        basin_names = selector_index.get("basin_names", [])
+        subbasins_by_basin = selector_index.get("subbasins_by_basin", {})
+        subbasins_all = selector_index.get("subbasins_all", [])
+    else:
+        selector_index = load_basin_selector_index(str(basins_geojson))
+        basin_names = selector_index.get("basin_names", [])
+        subbasins_by_basin = {}
+        subbasins_all = []
 
-    basin_options = ["All"] + sorted(
-        basins_gdf["basin_name"].astype(str).str.strip().unique().tolist()
-    )
+    basin_options = ["All"] + [str(v) for v in basin_names]
     if st.session_state.get("selected_basin") not in basin_options:
         st.session_state["selected_basin"] = "All"
 
@@ -223,26 +230,14 @@ def _build_hydro_geography(
 
     subbasin_options = ["All"]
     if selected_basin != "All":
-        basin_mask = (
-            subbasins_gdf["basin_name"].astype(str).str.strip()
-            == str(selected_basin).strip()
-        )
-        subbasin_options = ["All"] + sorted(
-            subbasins_gdf.loc[basin_mask, "subbasin_name"]
-            .astype(str)
-            .str.strip()
-            .unique()
-            .tolist()
-        )
-    elif str(admin_level).strip().lower() == "sub_basin":
-        subbasin_options = ["All"] + sorted(
-            subbasins_gdf["subbasin_name"].astype(str).str.strip().unique().tolist()
-        )
+        subbasin_options = ["All"] + [str(v) for v in subbasins_by_basin.get(str(selected_basin).strip(), [])]
+    elif level_norm == "sub_basin":
+        subbasin_options = ["All"] + [str(v) for v in subbasins_all]
 
     if st.session_state.get("selected_subbasin") not in subbasin_options:
         st.session_state["selected_subbasin"] = "All"
 
-    if str(admin_level).strip().lower() == "sub_basin":
+    if level_norm == "sub_basin":
         selected_subbasin = st.selectbox(
             "Sub-basin",
             options=subbasin_options,

@@ -371,6 +371,8 @@ def render_map_view(
     map_height: int,
     legend_block_html: Optional[str] = None,
     selected_block: str = "All",
+    selected_basin: str = "All",
+    selected_subbasin: str = "All",
     level: str = "district",
     perf_section: Optional[Callable[[str], Any]] = None,
 ) -> Tuple[Mapping[str, Any], Optional[str], Optional[str]]:
@@ -496,7 +498,11 @@ def render_map_view(
     ctx = perf_section("map: render st_folium") if perf_section is not None else nullcontext()
 
     with ctx:
-        map_key = f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_{selected_state}_{selected_district}_{selected_block}_{str(level).strip().lower()}"
+        map_key = (
+            f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_"
+            f"{selected_state}_{selected_district}_{selected_block}_"
+            f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}"
+        )
 
         if legend_block_html:
             # Give the legend enough width so the colorbar and labels don't get clipped
@@ -695,4 +701,3 @@ def render_unit_add_to_portfolio(
         st.caption("Portfolio mode")
 
     return False
-

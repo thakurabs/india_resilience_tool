@@ -375,6 +375,7 @@ def build_map_and_rankings(
             selected_state=selected_state,
             selected_district=selected_district,
             selected_basin=selected_basin,
+            selected_subbasin=selected_subbasin,
             map_mode=map_mode,
             baseline_col=baseline_col,
             rank_scope_label=rank_scope_label,

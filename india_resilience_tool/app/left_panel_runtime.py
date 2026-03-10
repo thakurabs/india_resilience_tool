@@ -91,6 +91,8 @@ def render_left_panel(
                 selected_state=selected_state,
                 selected_district=selected_district,
                 selected_block=selected_block,
+                selected_basin=selected_basin,
+                selected_subbasin=selected_subbasin,
                 map_width=map_width,
                 map_height=map_height,
                 legend_block_html=legend_block_html,
