@@ -58,6 +58,7 @@ class PathsConfig:
     data_dir: Path
     data_root: Path
     districts_path: Path
+    district_subbasin_crosswalk_path: Path
     base_output_root: Path
 
 
@@ -93,6 +94,7 @@ def get_paths_config() -> PathsConfig:
         data_dir=data_dir,
         data_root=data_dir / "r1i1p1f1",
         districts_path=data_dir / "districts_4326.geojson",
+        district_subbasin_crosswalk_path=data_dir / "district_subbasin_crosswalk.csv",
         base_output_root=data_dir / "processed",
     )
 
@@ -173,4 +175,5 @@ PROJECTS_ROOT: Path = _CFG.projects_root
 DATA_DIR: Path = _CFG.data_dir
 DATA_ROOT: Path = _CFG.data_root
 DISTRICTS_PATH: Path = _CFG.districts_path
+DISTRICT_SUBBASIN_CROSSWALK_PATH: Path = _CFG.district_subbasin_crosswalk_path
 BASE_OUTPUT_ROOT: Path = _CFG.base_output_root

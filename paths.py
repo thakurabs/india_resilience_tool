@@ -62,6 +62,7 @@ class PathsConfig:
     blocks_path: Path  # NEW: ADM3 block/subdistrict boundaries
     basins_path: Path
     subbasins_path: Path
+    district_subbasin_crosswalk_path: Path
     base_output_root: Path
 
 
@@ -100,6 +101,7 @@ def get_paths_config() -> PathsConfig:
         blocks_path=data_dir / "blocks_4326.geojson",  # NEW
         basins_path=data_dir / "basins.geojson",
         subbasins_path=data_dir / "subbasins.geojson",
+        district_subbasin_crosswalk_path=data_dir / "district_subbasin_crosswalk.csv",
         base_output_root=data_dir / "processed",
     )
 
@@ -237,4 +239,5 @@ DISTRICTS_PATH: Path = _CFG.districts_path
 BLOCKS_PATH: Path = _CFG.blocks_path  # NEW
 BASINS_PATH: Path = _CFG.basins_path
 SUBBASINS_PATH: Path = _CFG.subbasins_path
+DISTRICT_SUBBASIN_CROSSWALK_PATH: Path = _CFG.district_subbasin_crosswalk_path
 BASE_OUTPUT_ROOT: Path = _CFG.base_output_root

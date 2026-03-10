@@ -92,6 +92,11 @@ def render_right_panel(
     from india_resilience_tool.app.views.details_panel import render_details_panel
     from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
     from india_resilience_tool.data.master_columns import find_baseline_column_for_metric
+    from india_resilience_tool.data.crosswalks import (
+        build_district_hydro_context,
+        build_subbasin_admin_context,
+        load_district_subbasin_crosswalk,
+    )
     from india_resilience_tool.data.spatial_match import (
         extract_click_coords,
         extract_clicked_feature,
@@ -268,6 +273,8 @@ def render_right_panel(
     district_name = row.get("district_name", "Unknown")
     block_name = row.get("block_name", "Unknown") if level_norm == "block" else None
     basin_name = row.get("basin_name", "Unknown")
+    basin_id = row.get("basin_id", "")
+    subbasin_id = row.get("subbasin_id", "")
     subbasin_name = row.get("subbasin_name", "Unknown") if level_norm == "sub_basin" else None
     state_to_show = (
         st.session_state.get("selected_state")
@@ -549,6 +556,35 @@ def render_right_panel(
     district_for_fs = row.get("district_name") or selected_district
     block_for_fs = row.get("block_name") or selected_block
 
+    @st.cache_data(show_spinner=False)
+    def _load_crosswalk_cached(path_str: str, mtime: float) -> pd.DataFrame:
+        return load_district_subbasin_crosswalk(path_str)
+
+    crosswalk_context = None
+    crosswalk_path = data_dir / "district_subbasin_crosswalk.csv"
+    if crosswalk_path.exists() and level_norm in {"district", "sub_basin"}:
+        try:
+            crosswalk_df = _load_crosswalk_cached(
+                str(crosswalk_path),
+                float(crosswalk_path.stat().st_mtime),
+            )
+            if level_norm == "district":
+                crosswalk_context = build_district_hydro_context(
+                    crosswalk_df,
+                    district_name=str(district_name),
+                    state_name=str(row.get("state_name") or state_to_show),
+                    alias_fn=alias_fn,
+                )
+            elif level_norm == "sub_basin":
+                crosswalk_context = build_subbasin_admin_context(
+                    crosswalk_df,
+                    subbasin_id=str(subbasin_id or ""),
+                    subbasin_name=str(subbasin_name or ""),
+                    alias_fn=alias_fn,
+                )
+        except Exception:
+            crosswalk_context = None
+
     if level_norm == "sub_basin":
         yearly_hist = _load_hydro_yearly(
             ts_root=processed_root,
@@ -676,4 +712,5 @@ def render_right_panel(
         rank_in_district=rank_in_district,
         n_in_district=n_in_district,
         percentile_district=percentile_district,
+        crosswalk_context=crosswalk_context,
     )

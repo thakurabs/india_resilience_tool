@@ -22,6 +22,7 @@ import html
 import pandas as pd
 
 from india_resilience_tool.app.state import VIEW_RANKINGS
+from india_resilience_tool.data.crosswalks import CrosswalkContext
 from india_resilience_tool.viz.formatting import format_delta, format_percent, format_value
 
 PathLike = Union[str, Path]
@@ -345,6 +346,54 @@ def render_risk_summary(
                 )
             else:
                 st.write("Insufficient data")
+
+
+def render_crosswalk_context(*, context: CrosswalkContext) -> None:
+    """Render deterministic admin↔hydro context from the crosswalk layer."""
+    import streamlit as st
+
+    with st.expander(context.section_title, expanded=True):
+        if context.direction == "district_to_subbasin":
+            st.markdown(f"**Dominant basin:** {context.primary_basin_name}")
+            st.markdown(
+                f"**Dominant sub-basin:** {context.dominant_counterpart_name} "
+                f"({context.dominant_counterpart_fraction * 100:.0f}% of district area)"
+            )
+        else:
+            st.markdown(f"**Parent basin:** {context.primary_basin_name}")
+            st.markdown(
+                f"**Largest district overlap:** {context.dominant_counterpart_name} "
+                f"({context.dominant_counterpart_fraction * 100:.0f}% of sub-basin area)"
+            )
+
+        st.markdown(f"**Overlap count:** {context.overlap_count}")
+        st.caption(context.explanation)
+
+        if context.overlaps:
+            if context.direction == "district_to_subbasin":
+                rows = [
+                    {
+                        "Sub-basin": ov.counterpart_name,
+                        "Basin": ov.basin_name,
+                        "District share": f"{ov.selected_fraction * 100:.1f}%",
+                        "Sub-basin share": f"{ov.counterpart_fraction * 100:.1f}%",
+                    }
+                    for ov in context.overlaps
+                ]
+            else:
+                rows = [
+                    {
+                        "District": ov.counterpart_name,
+                        "Basin": ov.basin_name,
+                        "Sub-basin share": f"{ov.selected_fraction * 100:.1f}%",
+                        "District share": f"{ov.counterpart_fraction * 100:.1f}%",
+                    }
+                    for ov in context.overlaps
+                ]
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+        if context.coordination_note:
+            st.caption(context.coordination_note)
 
 
 def render_trend_over_time(
@@ -1165,6 +1214,7 @@ def render_details_panel(
     rank_in_district: Optional[int] = None,
     n_in_district: Optional[int] = None,
     percentile_district: Optional[float] = None,
+    crosswalk_context: Optional[CrosswalkContext] = None,
 ) -> None:
 
     """
@@ -1225,6 +1275,9 @@ def render_details_panel(
         if state_title:
             parts.append(state_title)
         st.caption(" • ".join(parts))
+
+    if crosswalk_context is not None:
+        render_crosswalk_context(context=crosswalk_context)
 
     # Normalize panel figure size to 16:9 (dashboard style contract)
     fig_size_panel_169 = fig_size_panel
