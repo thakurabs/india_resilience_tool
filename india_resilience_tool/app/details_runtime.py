@@ -98,6 +98,22 @@ def render_right_panel(
         resolve_matched_row,
     )
 
+    def _render_climate_profile_header() -> None:
+        """Render the right-panel header with an inline collapse control."""
+        title_col, btn_col = st.columns([1, 0.2], vertical_alignment="center")
+        with title_col:
+            st.header("Climate Profile")
+        with btn_col:
+            if st.button(
+                "⟩",
+                key="btn_rhs_collapse",
+                help="Collapse right panel",
+                use_container_width=False,
+                type="secondary",
+            ):
+                st.session_state["right_panel_collapsed"] = True
+                st.rerun()
+
     # Reserved slot: "Selected district for portfolio" (map route) should appear ABOVE
     # the Portfolio analysis expander even though it's determined later in the script.
     portfolio_selected_slot = st.empty()
@@ -151,7 +167,7 @@ def render_right_panel(
         render_perf_panel_safe()
         st.stop()
 
-    st.header("Climate Profile")
+    _render_climate_profile_header()
 
     # --- Point-level query controls: only in portfolio mode AND only for the "saved points" route ---
     # NOTE: This block is legacy; portfolio mode is stopped above in current behavior.

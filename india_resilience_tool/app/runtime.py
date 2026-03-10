@@ -161,6 +161,60 @@ def run_app() -> None:
     # Pilot state default
     PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")
 
+    def _inject_rhs_scroll_target_hook() -> None:
+        """Mark only the intended right-body wrapper as the scrollable pane."""
+        import streamlit.components.v1 as components
+
+        components.html(
+            """
+            <script>
+            (function() {
+              const selfFrame = window.frameElement;
+              const parentWindow = window.parent;
+              const parentDoc = parentWindow && parentWindow.document ? parentWindow.document : null;
+              if (!selfFrame || !parentDoc) {
+                return;
+              }
+
+              function applyScrollTarget() {
+                const marker = parentDoc.querySelector(".irt-rhs-scroll-marker");
+                if (!marker) {
+                  return;
+                }
+
+                const target = marker.closest('div[data-testid="stVerticalBlock"]');
+                if (!target) {
+                  return;
+                }
+
+                parentDoc
+                  .querySelectorAll(".irt-rhs-scroll-target")
+                  .forEach((node) => node.classList.remove("irt-rhs-scroll-target"));
+
+                target.classList.add("irt-rhs-scroll-target");
+              }
+
+              applyScrollTarget();
+              window.setTimeout(applyScrollTarget, 0);
+              window.setTimeout(applyScrollTarget, 100);
+              window.setTimeout(applyScrollTarget, 400);
+
+              if (typeof parentWindow.addEventListener === "function") {
+                const listenerKey = "__irtRhsScrollTargetListener__";
+                const previousListener = parentWindow[listenerKey];
+                if (typeof previousListener === "function") {
+                  parentWindow.removeEventListener("resize", previousListener);
+                }
+                parentWindow[listenerKey] = applyScrollTarget;
+                parentWindow.addEventListener("resize", applyScrollTarget);
+              }
+            })();
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
+
     # --- Split-pane layout CSS (left stays visible; right scrolls internally) ---
     def _inject_split_pane_css() -> None:
         st.markdown(
@@ -229,8 +283,8 @@ def run_app() -> None:
               transform: translateY(1px);
             }
 
-            /* Make the right panel scroll inside its own container (not the page). */
-            [data-testid="stMainBlockContainer"] div[data-testid="stVerticalBlock"]:has(.irt-rhs-scroll-marker) {
+            /* Make only the intended right panel body scroll inside its own container. */
+            [data-testid="stMainBlockContainer"] div[data-testid="stVerticalBlock"].irt-rhs-scroll-target {
               height: calc(100vh - var(--irt-pane-top-offset));
               max-height: calc(100vh - var(--irt-pane-top-offset));
               overflow-y: auto;
@@ -475,7 +529,7 @@ def run_app() -> None:
         st.stop()
 
     # Build map + rankings artifacts
-    MAP_WIDTH, MAP_HEIGHT = 780, 700
+    MAP_WIDTH, MAP_HEIGHT = 780, 560
     pending_zoom = st.session_state.pop("_pending_block_zoom", None)
 
     artifacts = build_map_and_rankings(
@@ -562,21 +616,9 @@ def run_app() -> None:
                     st.session_state["right_panel_collapsed"] = False
                     st.rerun()
     else:
-        with right_header:
-            _, btn_col = st.columns([1, 0.25])
-            with btn_col:
-                if st.button(
-                    "⟩",
-                    key="btn_rhs_collapse",
-                    help="Collapse right panel",
-                    use_container_width=False,
-                    type="secondary",
-                ):
-                    st.session_state["right_panel_collapsed"] = True
-                    st.rerun()
-
         with right_body:
             st.markdown('<div class="irt-rhs-scroll-marker"></div>', unsafe_allow_html=True)
+            _inject_rhs_scroll_target_hook()
 
             from india_resilience_tool.app.details_runtime import render_right_panel
             from india_resilience_tool.analysis.metrics import risk_class_from_percentile

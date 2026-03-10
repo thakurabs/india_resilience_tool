@@ -17,6 +17,166 @@ from __future__ import annotations
 from contextlib import nullcontext
 from typing import Any, Callable, Mapping, Optional, Tuple
 
+RESPONSIVE_MAP_MIN_HEIGHT = 420
+RESPONSIVE_MAP_MAX_HEIGHT = 700
+
+
+def clamp_map_height(
+    available_height: float,
+    *,
+    min_height: int = RESPONSIVE_MAP_MIN_HEIGHT,
+    max_height: int = RESPONSIVE_MAP_MAX_HEIGHT,
+) -> int:
+    """
+    Clamp a computed viewport height into the supported map display range.
+
+    Args:
+        available_height: Candidate height derived from viewport space.
+        min_height: Lower bound for readable map rendering.
+        max_height: Upper bound to avoid oversizing the map area.
+
+    Returns:
+        Integer map height constrained to the configured bounds.
+    """
+    try:
+        height = int(round(float(available_height)))
+    except (TypeError, ValueError):
+        height = min_height
+    return max(min_height, min(max_height, height))
+
+
+def _build_responsive_map_resizer_html(
+    *,
+    map_key: str,
+    default_height: int,
+    min_height: int = RESPONSIVE_MAP_MIN_HEIGHT,
+    max_height: int = RESPONSIVE_MAP_MAX_HEIGHT,
+    bottom_margin: int = 16,
+) -> str:
+    """Return a tiny component payload that resizes the map/legend iframes."""
+    fallback_height = clamp_map_height(default_height, min_height=min_height, max_height=max_height)
+    return f"""
+    <script>
+    (function() {{
+      const selfFrame = window.frameElement;
+      if (!selfFrame || !window.parent) {{
+        return;
+      }}
+
+      const mapKey = {map_key!r};
+      const minHeight = {int(min_height)};
+      const maxHeight = {int(max_height)};
+      const bottomMargin = {int(bottom_margin)};
+      const fallbackHeight = {int(fallback_height)};
+
+      function clampHeight(value) {{
+        const rounded = Math.round(Number(value));
+        if (!Number.isFinite(rounded)) {{
+          return fallbackHeight;
+        }}
+        return Math.max(minHeight, Math.min(maxHeight, rounded));
+      }}
+
+      function updateInnerFrame(iframe, height) {{
+        iframe.style.height = `${{height}}px`;
+        iframe.height = String(height);
+        try {{
+          const childWindow = iframe.contentWindow;
+          const childDocument = childWindow && childWindow.document ? childWindow.document : null;
+          if (!childDocument) {{
+            return;
+          }}
+          if (childDocument.documentElement) {{
+            childDocument.documentElement.style.height = `${{height}}px`;
+          }}
+          if (childDocument.body) {{
+            childDocument.body.style.height = `${{height}}px`;
+            childDocument.body.style.overflow = "hidden";
+          }}
+          const mapNode = childDocument.querySelector(".folium-map, #map, .st_folium");
+          if (mapNode) {{
+            mapNode.style.height = `${{height}}px`;
+          }}
+          if (childWindow && typeof childWindow.dispatchEvent === "function") {{
+            childWindow.dispatchEvent(new Event("resize"));
+          }}
+        }} catch (error) {{
+          /* Ignore cross-frame access failures; the outer iframe height is still applied. */
+        }}
+      }}
+
+      function findTargetIframes(block, markerTop) {{
+        return Array.from(block.querySelectorAll("iframe")).filter((iframe) => {{
+          if (iframe === selfFrame) {{
+            return false;
+          }}
+          const rect = iframe.getBoundingClientRect();
+          return Math.abs(rect.top - markerTop) < 220 && rect.height >= 0;
+        }});
+      }}
+
+      function resizeTargets() {{
+        const hostBlock = selfFrame.closest('[data-testid="stVerticalBlock"]');
+        if (!hostBlock) {{
+          return;
+        }}
+        const marker = hostBlock.querySelector(`.irt-responsive-map-marker[data-map-key="${{mapKey}}"]`);
+        if (!marker) {{
+          return;
+        }}
+
+        const markerTop = marker.getBoundingClientRect().top;
+        const availableHeight = window.parent.innerHeight - markerTop - bottomMargin;
+        const targetHeight = clampHeight(availableHeight);
+        const iframes = findTargetIframes(hostBlock, markerTop);
+        if (!iframes.length) {{
+          return;
+        }}
+        iframes.forEach((iframe) => updateInnerFrame(iframe, targetHeight));
+      }}
+
+      function scheduleResize() {{
+        if (window.parent && typeof window.parent.requestAnimationFrame === "function") {{
+          window.parent.requestAnimationFrame(resizeTargets);
+          return;
+        }}
+        window.setTimeout(resizeTargets, 0);
+      }}
+
+      scheduleResize();
+      window.setTimeout(scheduleResize, 50);
+      window.setTimeout(scheduleResize, 250);
+      window.setTimeout(scheduleResize, 1000);
+
+      if (window.parent && typeof window.parent.addEventListener === "function") {{
+        window.parent.addEventListener("resize", scheduleResize);
+      }}
+    }})();
+    </script>
+    """
+
+
+def _render_responsive_map_resizer(
+    *,
+    map_key: str,
+    default_height: int,
+    min_height: int = RESPONSIVE_MAP_MIN_HEIGHT,
+    max_height: int = RESPONSIVE_MAP_MAX_HEIGHT,
+) -> None:
+    """Inject a zero-height component that resizes the map and legend after render."""
+    import streamlit.components.v1 as components
+
+    components.html(
+        _build_responsive_map_resizer_html(
+            map_key=map_key,
+            default_height=default_height,
+            min_height=min_height,
+            max_height=max_height,
+        ),
+        height=0,
+        width=0,
+    )
+
 
 def build_choropleth_map_with_geojson_layer(
     *,
@@ -503,6 +663,13 @@ def render_map_view(
             f"{selected_state}_{selected_district}_{selected_block}_"
             f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}"
         )
+        st.markdown(
+            (
+                f'<div class="irt-responsive-map-marker" data-map-key="{map_key}" '
+                'style="display:none;"></div>'
+            ),
+            unsafe_allow_html=True,
+        )
 
         if legend_block_html:
             # Give the legend enough width so the colorbar and labels don't get clipped
@@ -536,6 +703,10 @@ def render_map_view(
                 use_container_width=False,
                 key=map_key,
             )
+        _render_responsive_map_resizer(
+            map_key=map_key,
+            default_height=map_height,
+        )
 
     if not isinstance(returned, dict):
         returned = {}

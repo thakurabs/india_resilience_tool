@@ -160,11 +160,6 @@ def render_metric_ribbon(
                 help=bundle_help,
             )
 
-        if selected_bundle != sel_placeholder:
-            bundle_desc = get_bundle_description(selected_bundle)
-            if bundle_desc:
-                st.caption(bundle_desc)
-
         # --- Metric selection (filtered by bundle) ---
         metric_disabled = selected_bundle == sel_placeholder
         if metric_disabled:
@@ -220,10 +215,6 @@ def render_metric_ribbon(
 
             registry_metric = str(varcfg.get("periods_metric_col", "")).strip()
             st.session_state["registry_metric"] = registry_metric
-
-            desc = str(varcfg.get("description", "")).strip()
-            if desc:
-                st.caption(f"Note: {desc}")
 
             processed_root = resolve_processed_root_fn(variable_slug, data_dir=data_dir, mode="portfolio")
             level = str(st.session_state.get("admin_level", "district")).strip().lower()

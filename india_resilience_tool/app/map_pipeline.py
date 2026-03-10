@@ -57,6 +57,11 @@ class MapArtifacts:
     rank_scope_label: str
 
 
+def _build_legend_title(varcfg: Mapping[str, Any]) -> str:
+    """Return the minimal legend title text derived from metric units."""
+    return str(varcfg.get("unit") or varcfg.get("units") or "").strip()
+
+
 def _level_aware_merge(
     *,
     adm2: Any,
@@ -305,6 +310,7 @@ def build_map_and_rankings(
         pretty_metric_label = (
             f"{str(varcfg.get('label') or variable_slug)} · {sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
         )
+    legend_title = _build_legend_title(varcfg)
 
     with perf_section("colors: apply_fillcolor_binned"):
         with st.spinner("Computing colors..."):
@@ -397,7 +403,7 @@ def build_map_and_rankings(
         )
 
     legend_block_html = build_vertical_binned_legend_block_html(
-        pretty_metric_label=pretty_metric_label,
+        legend_title=legend_title,
         vmin=vmin,
         vmax=vmax,
         cmap_name=cmap_name,

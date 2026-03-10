@@ -309,7 +309,7 @@ z-index: 9999; pointer-events: none; display: flex; align-items: center; gap: 10
 
 def build_vertical_binned_legend_block_html(
     *,
-    pretty_metric_label: str,
+    legend_title: str,
     vmin: float,
     vmax: float,
     cmap_name: str,
@@ -319,7 +319,7 @@ def build_vertical_binned_legend_block_html(
     map_height: int = 700,
     bar_width_px: int = 18,
     label_font: str = "12px",
-    bar_height_fraction: float = 0.92,
+    bar_height_fraction: float = 0.82,
 ) -> str:
     """
     Build a container-relative *binned* legend block HTML (stepped colorbar).
@@ -334,7 +334,18 @@ def build_vertical_binned_legend_block_html(
     if nlevels < 2:
         nlevels = 2
 
-    bar_height_px = int(map_height * bar_height_fraction)
+    title_text = str(legend_title or "").strip()
+    outer_pad_top_px = 30
+    outer_pad_bottom_px = 18
+    available_height_px = max(int(map_height) - outer_pad_top_px - outer_pad_bottom_px, 160)
+    bar_height_px = max(int(available_height_px * bar_height_fraction), 120)
+    title_html = ""
+    if title_text:
+        title_html = (
+            '<div style="writing-mode: vertical-rl; transform: rotate(180deg);'
+            f" font-size: {label_font}; white-space: nowrap; align-self: center; color: #000;\">"
+            f"{title_text}</div>"
+        )
 
     legend_colors = get_cmap_hex_list(cmap_name, nsteps=int(nlevels))
 
@@ -412,24 +423,24 @@ def build_vertical_binned_legend_block_html(
         tick_labels_html = ""
 
     return f"""
-<div style="display: flex; align-items: center; justify-content: flex-start; gap: 8px;
-            font-family: Arial, Helvetica, sans-serif; padding-top: 8px;
-            min-width: 90px; max-width: 100%; box-sizing: border-box;">
-  <div style="position: relative; display: flex; align-items: center; height: {bar_height_px}px;">
-    <div style="position: relative; width: 34px; height: {bar_height_px}px; margin-right: 6px;
-                font-size: {label_font}; color: #000;">
-      {tick_labels_html}
+<div style="height: 100%; width: 100%; display: flex; align-items: center; justify-content: center;
+            box-sizing: border-box; font-family: Arial, Helvetica, sans-serif;">
+  <div style="display: flex; align-items: center; justify-content: center; gap: 8px;
+              padding: {outer_pad_top_px}px 0 {outer_pad_bottom_px}px 0;
+              min-width: 90px; max-width: 100%; box-sizing: border-box;">
+    <div style="position: relative; display: flex; align-items: center; height: {bar_height_px}px;">
+      <div style="position: relative; width: 34px; height: {bar_height_px}px; margin-right: 6px;
+                  font-size: {label_font}; color: #000;">
+        {tick_labels_html}
+      </div>
+      <div style="height: {bar_height_px}px; width: {bar_width_px}px; border-radius: 6px;
+                  border: 1px solid rgba(0,0,0,0.18);
+                  box-shadow: 0 2px 6px rgba(0,0,0,0.20);
+                  overflow: hidden; display: flex; flex-direction: column-reverse;">
+        {segments_html}
+      </div>
     </div>
-    <div style="height: {bar_height_px}px; width: {bar_width_px}px; border-radius: 6px;
-                border: 1px solid rgba(0,0,0,0.18);
-                box-shadow: 0 2px 6px rgba(0,0,0,0.20);
-                overflow: hidden; display: flex; flex-direction: column-reverse;">
-      {segments_html}
-    </div>
-  </div>
-  <div style="writing-mode: vertical-rl; transform: rotate(180deg);
-              font-size: {label_font}; white-space: nowrap; align-self: center; color: #000;">
-    {pretty_metric_label}
+    {title_html}
   </div>
 </div>
 """
