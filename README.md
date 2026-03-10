@@ -1,371 +1,218 @@
 # India Resilience Tool (IRT)
 
-A Streamlit-based dashboard for exploring climate resilience metrics across **Indian administrative units at two levels**:
+The India Resilience Tool is a Streamlit dashboard for exploring climate-risk metrics across two spatial families:
 
-- **Districts (ADM2)**
-- **Blocks / Sub-districts (ADM3)**
+- **Admin**: district and block
+- **Hydro**: basin and sub-basin
 
-The tool visualizes **ensemble climate model outputs** and derived indices (temperature and rainfall), enabling comparison across **scenarios** and **time periods**, plus portfolio-style comparison of multiple districts **or blocks**.
+IRT combines processed climate-model outputs, boundary layers, rankings, trends, and details views into a single exploration workflow. The current codebase supports admin and hydro map/rankings/details flows, hydro-specific boundaries and processed outputs, and a first actionable crosswalk between **districts** and **sub-basins**.
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.51.0-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
----
+## Current capabilities
 
-## Features
+### Core dashboard
+- Spatial-family selector: `Admin` or `Hydro`
+- Level selector:
+  - Admin: `District` / `Block`
+  - Hydro: `Basin` / `Sub-basin`
+- Ribbon-driven metric selection:
+  - risk domain
+  - metric
+  - scenario
+  - period
+  - statistic
+  - map mode
+- Map view and rankings table for all four levels
+- Right-side details panel with:
+  - risk summary
+  - trend over time
+  - scenario comparison
+  - case-study export for admin single-unit flows
 
-### Core exploration
-- **Admin level toggle**: District ↔ Block
-- **Risk domain selection (Map View ribbon)**: Choose from 8 thematic bundles (plus an optional advanced drought bundle)
-- **Interactive Map View**: Choropleth visualization with hover highlight + tooltip
-- **Rankings Table**:
-  - District-wise rankings (ADM2)
-  - Block-wise rankings (ADM3)
-  - Risk classification + percentiles
-- **Details panel (Climate Profile)**:
-  - Risk summary
-  - Scenario comparison (period-mean)
-  - Trend over time (ensemble yearly series)
-  - Case study export (single district, multi-index PDF/ZIP)
-  - Right panel scrolls independently (map/ribbon stay visible) and can be collapsed to a narrow rail.
+### Portfolio support
+- Implemented for **district** and **block**
+- Not implemented yet for **basin** and **sub-basin**
 
-### Metric selection ribbon (above the map)
+### Hydro support
+- Canonical hydro boundaries:
+  - `basins.geojson`
+  - `subbasins.geojson`
+- Hydro processed outputs under `processed/{metric}/hydro/`
+- Hydro master CSVs:
+  - `master_metrics_by_basin.csv`
+  - `master_metrics_by_sub_basin.csv`
 
-In **Map View**, the controls that determine what you see on the choropleth live in a compact **ribbon directly above the map** (replacing the old “selected metric / scenario / period / stat” summary text).
+### Crosswalk support
+- Canonical crosswalk artifact:
+  - `district_subbasin_crosswalk.csv`
+- Current dashboard use:
+  - district details show **Hydrology context**
+  - sub-basin details show **Administrative context**
+  - related-unit highlight overlay on the map
+  - district -> sub-basin navigation
+  - sub-basin -> district navigation
 
-The ribbon includes:
+### Explicitly not implemented yet
+- Block ↔ sub-basin crosswalks
+- District/block ↔ basin crosswalks
+- Weighted admin ↔ hydro metric transfer
+- River-network crosswalks or topology-aware routing
+- Hydro portfolio workflows
 
-- **Risk domain (bundle)**
-- **Metric (index)**
-- **Scenario**
-- **Period**
-- **Statistic** (mean/median only)
-- **Map mode** (absolute vs change from 1990–2010 baseline)
-
-All ribbon fields start with a placeholder (`— Select —`) to encourage deliberate selection. The map renders once the required ribbon fields are chosen. **Geography options** (available states/districts/blocks) are populated after you choose a metric, because the processed-root depends on the metric slug.
-
-Metrics are organized into **thematic bundles** for easier navigation:
-
-| Bundle | Metrics | Focus |
-|--------|---------:|-------|
-| Heat Risk | 14 | Extreme heat, heatwaves, hot days/nights, persistence. |
-| Heat Stress | 5 | Wet-bulb temperature and wet-bulb day thresholds (heat stress). |
-| Cold Risk | 8 | Cold extremes: frost days, cold nights, cold spells. |
-| Agriculture & Growing Conditions | 4 | Growing season and temperature context for crops. |
-| Flood & Extreme Rainfall Risk | 6 | Heavy rainfall intensity, very wet days, wet spells. |
-| Rainfall Totals & Typical Wetness | 3 | Annual totals, rainy days, typical wetness. |
-| Drought Risk | 3 | Dry spell length and SPI-6 drought indicators. |
-| Temperature Variability | 2 | Daily/annual temperature range and variability. |
-| Drought Risk (Advanced) | 9 | SPI-3/6/12 indices and severity counts (optional). |
-
-> Note: **Drought Risk (Advanced)** is an optional bundle (not shown by default in the UI).
-
-> **Wet-bulb (Heat Stress):** Wet-bulb indices (`twb_*`, `wbd_*`) are grouped under the **Heat Stress** bundle.
-
-**Single-focus mode**: use the **ribbon** to select a risk domain, then choose a metric within that domain.
-
-**Portfolio mode**: metric selection for portfolio comparison remains in the **Portfolio panel** (bundle multi-select → auto-expand to metrics, with optional manual refinement).
-
-### Portfolio mode (districts and blocks)
-Portfolio mode exists at **both** admin levels:
-
-- **Multi-district portfolio**: build and compare sets of districts (portfolios can span multiple states)
-- **Multi-block portfolio**: build and compare sets of blocks (portfolios can span multiple states; switch state to add units)
-
-You can add units to your portfolio in three ways (same UX in district and block modes):
-
-**From the Map**
-- Click a district/block on the choropleth map
-- Use the "+ Add to portfolio" control that appears below the map
-- Portfolio units are highlighted (e.g., blue borders)
-
-**From the Rankings Table**
-- Switch to Rankings view
-- Select rows to add (checkboxes / editor column)
-- Click "Add checked … to portfolio"
-- Units already in portfolio show Yes in "In portfolio"
-
-**By Coordinates (Point Selection)**
-- Use the "Add by Location" panel (single + batch)
-- Preview which district/block contains the point
-- Add to portfolio or show markers on the map
-
-In the right-side Portfolio panel, use:
-- **Compare**: summary strip + comparison table (updates live)
-- **Add units**: coordinate-based unit lookup and saved points
-
-### Portfolio comparison
-Once you have items in your portfolio:
-- Select one or more **risk domains** to compare
-- Metrics from selected domains are automatically included
-- Optional: manually refine which metrics to include (under **Advanced metrics**)
-- Table auto-rebuilds when portfolio or selection changes
-- A summary strip shows unit/state/metric counts (and basic risk-class distribution)
-- Choose **Scenario mode**:
-  - **Single scenario**: uses the global scenario selector
-  - **Compare scenarios**: expands results across scenarios (table + charts)
-- Results are organized as tabs:
-  - **Table**: scenario results are shown **side-by-side** (no long view) for a selected comparator (default: **Risk class**); download the displayed table as CSV
-  - **Visualizations**: charts render when you open the tab; visualizations are **percentile-based with risk-class coloring** (Very Low → Very High), including scenario panels and robust risk (min percentile)
-
----
-
-## Quick Start
+## Quick start
 
 ### Prerequisites
 - Python 3.10+
-- Processed climate data (see [Data Setup](#data-setup))
+- Conda
+- Boundary files and processed climate outputs in `IRT_DATA_DIR`
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/thakurabs/india_resilience_tool.git
 cd india_resilience_tool
-```
-
-**Option 1: Conda (recommended)**
-
-```bash
 conda env create -f environment.yml
 conda activate irt
 ```
 
-`pip` / `venv` installs are not supported for this repo (the geospatial stack is best installed via `conda-forge`).
+`pip` / `venv` installs are not supported for this repo; the geospatial stack is expected to come from `conda-forge`.
 
-Legacy exports:
-- `environment.freeze.yml` and `requirements.freeze.txt` are kept for reference only (non-portable).
-
-### Running the dashboard
+### Run the dashboard
 
 ```bash
 streamlit run main.py
 ```
 
-Open in a browser: `http://localhost:8501`
-
-Alternative (supported):
+Alternative entrypoint:
 
 ```bash
 streamlit run india_resilience_tool/app/main.py
 ```
 
---- 
+Open: `http://localhost:8501`
 
-## Data Setup
+## Data setup
 
-### Required boundary files (EPSG:4326)
+IRT reads from `DATA_DIR` in `paths.py`, or from `IRT_DATA_DIR` if the environment variable is set.
 
-Place these in `DATA_DIR` (configured in `paths.py`, or overridden via `IRT_DATA_DIR`):
+### Boundary and crosswalk inputs
 
-1. **District boundaries**: `districts_4326.geojson` (ADM2)
-2. **Block boundaries**: `blocks_4326.geojson` (ADM3)
+Place these in `IRT_DATA_DIR`:
 
-> Block mode requires `blocks_4326.geojson`.
+- `districts_4326.geojson`
+- `blocks_4326.geojson`
+- `basins.geojson`
+- `subbasins.geojson`
+- `district_subbasin_crosswalk.csv` (optional but required for crosswalk context/actions)
 
-### Processed outputs directory structure
+All boundary GeoJSONs are expected in `EPSG:4326`.
 
-Processed artifacts are organized **by index slug** (e.g., `tas_gt32`) and state.
+### Processed outputs layout
 
-```
-DATA_DIR/
-├── districts_4326.geojson
-├── blocks_4326.geojson
+Processed outputs live under:
+
+```text
+IRT_DATA_DIR/
 └── processed/
-    └── {index_slug}/                 # e.g., tas_gt32
-        └── {state}/                  # e.g., Telangana
-            ├── master_metrics_by_district.csv
-            ├── master_metrics_by_block.csv
-            ├── state_model_averages_district.csv
-            ├── state_ensemble_stats_district.csv
-            ├── state_yearly_model_averages_district.csv
-            ├── state_yearly_ensemble_stats_district.csv
-            ├── state_model_averages_block.csv
-            ├── state_ensemble_stats_block.csv
-            ├── state_yearly_model_averages_block.csv
-            ├── state_yearly_ensemble_stats_block.csv
-            ├── districts/
-            │   ├── {district}/{model}/{scenario}/
-            │   │   ├── {district}_yearly.csv
-            │   │   └── {district}_periods.csv
-            │   └── ensembles/{district}/{scenario}/
-            │       └── {district}_yearly_ensemble.csv
-            └── blocks/
-                ├── {district}/{block}/{model}/{scenario}/
-                │   ├── {block}_yearly.csv
-                │   └── {block}_periods.csv
-                └── ensembles/{district}/{block}/{scenario}/
-                    └── {block}_yearly_ensemble.csv
+    └── {metric_slug}/
 ```
 
-Notes:
-- Windows may show `.csv` as "Microsoft Excel CSV"; they're normal CSVs.
-- The dashboard uses **master metrics** for maps/rankings and **ensemble yearly** files for trends.
-- After updating to the level-specific state-summary contract, rebuild masters with `python -m tools.pipeline.build_master_metrics` so the new `*_district.csv` and `*_block.csv` state files exist.
+#### Admin layout
 
-### Building master CSVs (district + block)
+```text
+processed/{metric_slug}/{state}/
+├── master_metrics_by_district.csv
+├── master_metrics_by_block.csv
+├── state_model_averages_district.csv
+├── state_ensemble_stats_district.csv
+├── state_yearly_model_averages_district.csv
+├── state_yearly_ensemble_stats_district.csv
+├── state_model_averages_block.csv
+├── state_ensemble_stats_block.csv
+├── state_yearly_model_averages_block.csv
+├── state_yearly_ensemble_stats_block.csv
+├── districts/
+└── blocks/
+```
+
+#### Hydro layout
+
+```text
+processed/{metric_slug}/hydro/
+├── master_metrics_by_basin.csv
+├── master_metrics_by_sub_basin.csv
+├── basins/
+│   ├── {basin}/{model}/{scenario}/{basin}_yearly.csv
+│   └── ensembles/{basin}/{scenario}/{basin}_yearly_ensemble.csv
+└── sub_basins/
+    ├── {basin}/{sub_basin}/{model}/{scenario}/{sub_basin}_yearly.csv
+    └── ensembles/{basin}/{sub_basin}/{scenario}/{sub_basin}_yearly_ensemble.csv
+```
+
+## Common commands
+
+### Build or refresh processed outputs
+
+```bash
+python -m tools.pipeline.compute_indices_multiprocess --help
+python -m tools.pipeline.compute_indices_multiprocess --level district --metrics tas_annual_mean
+python -m tools.pipeline.compute_indices_multiprocess --level block --metrics tas_annual_mean
+python -m tools.pipeline.compute_indices_multiprocess --level basin --metrics tas_annual_mean
+python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics tas_annual_mean
+```
+
+### Rebuild master CSVs
 
 ```bash
 python -m tools.pipeline.build_master_metrics
 ```
 
-Or use the dashboard's "Rebuild now" control if exposed in your branch.
+### Hydro boundary preparation
 
----
-
-## Usage Guide
-
-### Admin level selection
-Use the left sidebar toggle:
-- **District**: explore districts and build district portfolios
-- **Block**: explore blocks and build block portfolios
-
-### Metric selection (Map View ribbon)
-
-The **Map View ribbon** (above the map) controls what is visualized. The dashboard uses placeholder-first selection (`— Select —`) and will prompt you until the required fields are chosen.
-
-Recommended order:
-
-1. **Choose Analysis focus** in the left sidebar (required to render the map).
-2. In the **ribbon above the map**, select:
-   - **Risk domain** → **Metric**
-3. Once a metric is selected, complete the remaining ribbon fields:
-   - **Scenario**, **Period**, **Statistic** (mean/median), **Map mode**
-4. In the left sidebar **Geography & analysis focus** panel, select:
-   - **State** (and District/Block when applicable)
-
-Changing any ribbon field triggers a rerun and the map updates accordingly. If you see an info message asking you to complete ribbon selections, it means one or more fields are still set to the placeholder.
-
-### Analysis modes
-Each admin level supports:
-1. **Single focus**: explore one district/block at a time
-2. **Portfolio focus**:
-   - Multi-district portfolio
-   - Multi-block portfolio
-
-### Portfolio comparison (bundle-first selection)
-
-In portfolio mode, you can select metrics by risk domain:
-
-1. **Select risk domains**: Choose one or more bundles (e.g., "Heat Risk" + "Drought Risk")
-2. **Auto-expansion**: All metrics from selected bundles are included automatically
-3. **Optional refinement**: Check "Manually refine metric selection" to add/remove individual metrics
-4. **View included metrics**: Expand the "View X included metrics" section to see what's selected
-
-### Trend over time (yearly series)
-The Trend panel looks for **ensemble yearly** time-series:
-
-- District trend: `districts/ensembles/{district}/{scenario}/{district}_yearly_ensemble.csv`
-- Block trend: `blocks/ensembles/{district}/{block}/{scenario}/{block}_yearly_ensemble.csv`
-
-Some ensemble-yearly CSVs may not include identifier columns (e.g., `state`, `district`, `block`). The loader injects missing identifiers from the path context so filtering stays consistent in-memory.
-
-If Trend shows "No yearly time-series available…":
-- confirm the `*_yearly_ensemble.csv` exists under the `ensembles/` path
-- confirm it contains `year` and at least one usable value column (commonly `ensemble_mean`, `mean`, or `value`)
-
----
-
-## Configuration
-
-### Environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `IRT_PILOT_STATE` | `Telangana` | Default state to load |
-| `IRT_DATA_DIR` | (from `paths.py`) | Base data directory for boundary + processed |
-| `IRT_PROCESSED_ROOT` | `DATA_DIR/processed/{index}` | Processed data location override |
-| `IRT_DEBUG` | `0` | Enable debug output (1=on) |
-
-### Data directory
-Edit `paths.py` to set `DATA_DIR`, or set `IRT_DATA_DIR`.
-
-```python
-DATA_DIR = Path("/path/to/your/data")
+```bash
+python -m tools.subbasin_shp_explore --help
 ```
 
----
+This utility inspects the canonical `waterbasin_goi.shp`, can repair invalid hydro geometries, and exports:
+- `basins.geojson`
+- `subbasins.geojson`
 
-## Project Structure (high level)
+### Build the district ↔ sub-basin crosswalk
 
-```text
-india_resilience_tool/
-├── analysis/
-│   ├── AGENTS.md
-│   ├── __init__.py
-│   ├── metrics.py
-│   ├── portfolio.py
-│   └── timeseries.py
-├── app/
-│   ├── AGENTS.md
-│   ├── __init__.py
-│   ├── adm2_cache.py
-│   ├── geography.py
-│   ├── runtime.py
-│   ├── map_pipeline.py
-│   ├── main.py
-│   ├── perf.py
-│   ├── point_selection_ui.py
-│   ├── portfolio_multistate.py
-│   ├── portfolio_ui.py
-│   ├── sidebar.py
-│   ├── state.py
-│   └── views/
-│       ├── __init__.py
-│       ├── details_panel.py
-│       ├── map_view.py
-│       ├── rankings_view.py
-│       └── state_summary_view.py
-├── compute/
-│   └── tests/
-│       └── test_spi_adapter.py
-├── data/
-│   ├── __init__.py
-│   ├── adm2_loader.py
-│   ├── adm3_loader.py
-│   ├── discovery.py
-│   ├── master_loader.py
-│   └── merge.py
-├── utils/
-│   ├── __init__.py
-│   ├── naming.py
-│   └── processed_io.py
-└── viz/
-    ├── AGENTS.md
-    ├── __init__.py
-    ├── charts.py
-    ├── colors.py
-    ├── exports.py
-    ├── formatting.py
-    ├── style.py
-    └── tables.py
-
-Root files and docs:
-├── notebooks/
-├── tools/
-└── docs/
-    ├── HANDOFF.md
-    ├── dead_code_candidate_report.md
-    ├── functionality_contract.md
-    ├── manual_smoke_test.md
-    ├── module_responsibility_map.md
-    └── refactor_acceptance.md
+```bash
+python -m tools.geodata.build_district_subbasin_crosswalk --overwrite
 ```
 
-For detailed module documentation, see [MANIFEST.md](MANIFEST.md).
+## Usage notes
 
+### Admin vs Hydro
+- Use **Admin** when you want governance/action units: district or block
+- Use **Hydro** when you want watershed/process units: basin or sub-basin
+
+### Current crosswalk behavior
+When `district_subbasin_crosswalk.csv` is present:
+- district details expose intersecting sub-basins
+- sub-basin details expose intersecting districts
+- you can highlight related units on the map
+- you can jump across the admin/hydro bridge for the current district ↔ sub-basin pair
+
+### Current limitations
+- Crosswalks are currently **read-optimized and explanatory**, not analytical transfer engines
+- Basin metrics and sub-basin metrics should be computed directly on their own polygons
+- Hydro UI is single-unit oriented today; portfolio/cross-family aggregation is future work
 
 ## Development
 
-### Running tests
+### Tests
 
 ```bash
 python -m pytest -q
-python -m pytest --cov=india_resilience_tool
 ```
 
-### Code style
+### Formatting and checks
 
 ```bash
 black india_resilience_tool/
@@ -373,56 +220,17 @@ ruff check india_resilience_tool/
 mypy india_resilience_tool/
 ```
 
-### Adding a new metric
+### Adding a metric
+1. Add the metric to `india_resilience_tool/config/metrics_registry.py`
+2. Place the slug in the appropriate bundle(s)
+3. Ensure processed artifacts exist for the metric
+4. Rebuild or refresh masters as needed
 
-1. Add metric definition to `india_resilience_tool/config/metrics_registry.py` in `PIPELINE_METRICS_RAW`
-2. Add the slug to appropriate bundle(s) in `BUNDLES`
-3. Run validation: `python -m india_resilience_tool.config.metrics_registry`
-4. Ensure processed data exists for the new metric
-
-### Adding a new bundle
-
-1. Add bundle to `BUNDLES` dict in `india_resilience_tool/config/metrics_registry.py`
-2. Add bundle name to `BUNDLE_ORDER` list
-3. Add description to `BUNDLE_DESCRIPTIONS` dict
-4. Run validation: `python -m india_resilience_tool.config.metrics_registry` to ensure all slugs exist
-
----
-
-## Changelog (high level)
-
-### v2.4 — Map-top metric selection ribbon (2026-02)
-- Moved Map View controls into a **ribbon above the map**: risk domain, metric, scenario, period, statistic, and map mode
-- Added **placeholder-first** selection (`— Select —`) with safe gating (map renders only after required choices)
-- Sidebar expanders are **user-controlled** (auto-collapse removed)
-
-### v2.3 — Thematic bundles + bundle-first selection (2026-01)
-- Added thematic bundles organizing metrics by risk domain (Heat Risk, Heat Stress, etc.)
-- Sidebar now uses **bundle → metric** two-step selection
-- Portfolio comparison supports **bundle multi-select** with auto-expansion
-- Optional manual refinement for fine-grained metric selection
-- New session state keys: `selected_bundle`, `portfolio_bundle_selection`, `portfolio_manual_refinement`
-
-### v2.2 — Block-level visualization + portfolio parity (2026-01)
-- Added **ADM3 Block** support across map, rankings, and portfolio comparison.
-- Block rankings table now supports **add-to-portfolio** with the same UX as district mode.
-- Trend over time supports **block ensemble yearly** series when present.
-- Time-series loader injects missing identifiers (e.g., state) for consistent filtering.
-
-### v2.1 — Portfolio UX improvements (2024-12)
-- Add districts from map clicks, rankings table, and coordinates
-- Batch coordinates + saved points
-- Auto-rebuilding comparison table
-
-### v2.0 — Modular refactor (2024-12)
-- Refactored from monolithic dashboard to modular structure
-
----
+For a detailed repo map and module responsibilities, see [MANIFEST.md](MANIFEST.md).
 
 ## License
-MIT License — see [LICENSE](LICENSE) for details.
 
----
+MIT License — see [LICENSE](LICENSE) for details.
 
 ## Contact
 
