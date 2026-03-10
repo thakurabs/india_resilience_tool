@@ -93,6 +93,11 @@ def run_app() -> None:
 
     st.set_page_config(page_title="India Resilience Tool", layout="wide")
 
+    pending_crosswalk_navigation = st.session_state.pop("_pending_crosswalk_navigation", None)
+    if isinstance(pending_crosswalk_navigation, dict):
+        for key, value in pending_crosswalk_navigation.items():
+            st.session_state[key] = value
+
     # Selection placeholders (force deliberate choices)
     SEL_PLACEHOLDER = "— Select —"
 
@@ -553,6 +558,7 @@ def run_app() -> None:
         selected_basin=selected_basin,
         selected_subbasin=selected_subbasin,
         spatial_family=spatial_family,
+        crosswalk_overlay=st.session_state.get("crosswalk_overlay"),
         hover_enabled=bool(st.session_state.get("hover_enabled", True)),
         map_center=list(st.session_state["map_center"]),
         map_zoom=float(st.session_state["map_zoom"]),

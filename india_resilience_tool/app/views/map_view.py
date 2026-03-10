@@ -190,6 +190,9 @@ def build_choropleth_map_with_geojson_layer(
     layer_name: str,
     tooltip: Any = None,
     highlight_function: Optional[Callable[[dict], dict]] = None,
+    reference_fc: Optional[Mapping[str, Any]] = None,
+    reference_level: Optional[str] = None,
+    reference_layer_name: Optional[str] = None,
 ) -> Any:
     """
     Build a Folium map and attach the patched GeoJSON FeatureCollection as a layer.
@@ -206,6 +209,9 @@ def build_choropleth_map_with_geojson_layer(
         layer_name: layer label ("Districts"/"Blocks").
         tooltip: optional folium GeoJsonTooltip.
         highlight_function: optional folium highlight function.
+        reference_fc: optional filtered FeatureCollection for a related-units overlay.
+        reference_level: level of the related overlay (`district` or `sub_basin`).
+        reference_layer_name: human-facing name for the overlay layer.
     """
     import folium
 
@@ -264,6 +270,43 @@ def build_choropleth_map_with_geojson_layer(
         zoom_on_click=False,
         bubblingMouseEvents=False,
     ).add_to(m)
+
+    if reference_fc and list((reference_fc or {}).get("features", []) or []):
+        reference_level_norm = str(reference_level or "").strip().lower()
+
+        def _reference_style(_feature: dict) -> dict:
+            return {
+                "fillColor": "transparent",
+                "color": "#1d4ed8" if reference_level_norm == "district" else "#0f766e",
+                "weight": 2.0,
+                "fillOpacity": 0.0,
+            }
+
+        reference_tooltip = None
+        if reference_level_norm == "district":
+            reference_tooltip = folium.features.GeoJsonTooltip(
+                fields=["district_name", "state_name"],
+                aliases=["District", "State"],
+                localize=True,
+                sticky=True,
+            )
+        elif reference_level_norm == "sub_basin":
+            reference_tooltip = folium.features.GeoJsonTooltip(
+                fields=["subbasin_name", "basin_name"],
+                aliases=["Sub-basin", "Basin"],
+                localize=True,
+                sticky=True,
+            )
+
+        folium.GeoJson(
+            data=dict(reference_fc),
+            name=str(reference_layer_name or "Related units"),
+            style_function=_reference_style,
+            tooltip=reference_tooltip,
+            smooth_factor=1.5,
+            zoom_on_click=False,
+            bubblingMouseEvents=False,
+        ).add_to(m)
 
     return m
 
@@ -658,10 +701,16 @@ def render_map_view(
     ctx = perf_section("map: render st_folium") if perf_section is not None else nullcontext()
 
     with ctx:
+        overlay_spec = st.session_state.get("crosswalk_overlay") or {}
+        overlay_signature = (
+            f"{overlay_spec.get('level', 'none')}_"
+            f"{overlay_spec.get('selected_name', 'none')}_"
+            f"{len(list(overlay_spec.get('feature_keys', []) or []))}"
+        )
         map_key = (
             f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_"
             f"{selected_state}_{selected_district}_{selected_block}_"
-            f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}"
+            f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}_{overlay_signature}"
         )
         st.markdown(
             (

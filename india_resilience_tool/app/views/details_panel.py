@@ -351,6 +351,12 @@ def render_risk_summary(
 def render_crosswalk_context(*, context: CrosswalkContext) -> None:
     """Render deterministic admin↔hydro context from the crosswalk layer."""
     import streamlit as st
+    from india_resilience_tool.app.crosswalk_runtime import (
+        clear_crosswalk_overlay,
+        navigate_from_crosswalk_overlap,
+        overlay_matches_context,
+        set_crosswalk_overlay_from_context,
+    )
 
     with st.expander(context.section_title, expanded=True):
         if context.direction == "district_to_subbasin":
@@ -369,28 +375,81 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
         st.markdown(f"**Overlap count:** {context.overlap_count}")
         st.caption(context.explanation)
 
+        overlay_active = overlay_matches_context(
+            st.session_state.get("crosswalk_overlay"),
+            context=context,
+        )
+
+        action_cols = st.columns([1, 1], gap="small")
+        highlight_label = (
+            "Highlight related sub-basins"
+            if context.direction == "district_to_subbasin"
+            else "Highlight related districts"
+        )
+        if action_cols[0].button(
+            highlight_label,
+            key=f"btn_crosswalk_overlay_{context.direction}_{context.selected_name}",
+            use_container_width=True,
+        ):
+            set_crosswalk_overlay_from_context(
+                st.session_state,
+                context=context,
+                feature_keys=context.all_counterpart_ids,
+            )
+            st.rerun()
+
+        if action_cols[1].button(
+            "Clear related overlay",
+            key=f"btn_crosswalk_clear_{context.direction}_{context.selected_name}",
+            use_container_width=True,
+            disabled=not overlay_active,
+        ):
+            clear_crosswalk_overlay(st.session_state)
+            st.rerun()
+
+        if overlay_active:
+            st.caption("Related-unit overlay is active on the map.")
+
         if context.overlaps:
-            if context.direction == "district_to_subbasin":
-                rows = [
-                    {
-                        "Sub-basin": ov.counterpart_name,
-                        "Basin": ov.basin_name,
-                        "District share": f"{ov.selected_fraction * 100:.1f}%",
-                        "Sub-basin share": f"{ov.counterpart_fraction * 100:.1f}%",
-                    }
-                    for ov in context.overlaps
-                ]
-            else:
-                rows = [
-                    {
-                        "District": ov.counterpart_name,
-                        "Basin": ov.basin_name,
-                        "Sub-basin share": f"{ov.selected_fraction * 100:.1f}%",
-                        "District share": f"{ov.counterpart_fraction * 100:.1f}%",
-                    }
-                    for ov in context.overlaps
-                ]
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            for idx, ov in enumerate(context.overlaps):
+                if context.direction == "district_to_subbasin":
+                    title = ov.counterpart_name
+                    subtitle = (
+                        f"{ov.basin_name} • District share {ov.selected_fraction * 100:.1f}% • "
+                        f"Sub-basin share {ov.counterpart_fraction * 100:.1f}%"
+                    )
+                    open_label = "Open sub-basin"
+                else:
+                    district_label = ov.counterpart_name
+                    if ov.counterpart_state_name:
+                        district_label = f"{district_label}, {ov.counterpart_state_name}"
+                    title = district_label
+                    subtitle = (
+                        f"{ov.basin_name} • Sub-basin share {ov.selected_fraction * 100:.1f}% • "
+                        f"District share {ov.counterpart_fraction * 100:.1f}%"
+                    )
+                    open_label = "Open district"
+
+                cols = st.columns([4, 1], gap="small")
+                with cols[0]:
+                    st.markdown(f"**{title}**")
+                    st.caption(subtitle)
+                with cols[1]:
+                    if st.button(
+                        open_label,
+                        key=f"btn_crosswalk_open_{context.direction}_{idx}_{ov.counterpart_id}",
+                        use_container_width=True,
+                    ):
+                        navigate_from_crosswalk_overlap(
+                            st.session_state,
+                            context=context,
+                            overlap={
+                                "counterpart_name": ov.counterpart_name,
+                                "counterpart_state_name": ov.counterpart_state_name,
+                                "basin_name": ov.basin_name,
+                            },
+                        )
+                        st.rerun()
 
         if context.coordination_note:
             st.caption(context.coordination_note)

@@ -97,6 +97,71 @@ def filter_fc_by_district(
     return fc
 
 
+def filter_fc_by_feature_keys(
+    fc: dict,
+    *,
+    feature_keys: Sequence[str],
+    level: str,
+    alias_fn: Callable[[str], str],
+    key_col: str = "__key",
+) -> dict:
+    """
+    Filter a feature collection to a small explicit set of feature identifiers.
+
+    For district overlays, keys may be either:
+    - `state::district`
+    - `district`
+
+    For hydro overlays, the cached `__key` field is used directly.
+    """
+    allowed = [str(v).strip() for v in feature_keys if str(v).strip()]
+    out = dict(fc)
+    if not allowed:
+        out["features"] = []
+        return out
+
+    level_norm = str(level).strip().lower()
+    features = list(fc.get("features", []) or [])
+
+    if level_norm == "district":
+        allowed_pairs: set[tuple[str, str]] = set()
+        allowed_districts: set[str] = set()
+        for item in allowed:
+            if "::" in item:
+                state_part, district_part = item.split("::", 1)
+                allowed_pairs.add((alias_fn(state_part), alias_fn(district_part)))
+            else:
+                allowed_districts.add(alias_fn(item))
+
+        kept = []
+        for feat in features:
+            props = feat.get("properties") or {}
+            state_key = alias_fn(props.get("state_name", ""))
+            district_key = alias_fn(props.get("district_name", ""))
+            if (state_key, district_key) in allowed_pairs or district_key in allowed_districts:
+                kept.append(feat)
+        out["features"] = kept
+        return out
+
+    allowed_keys = {alias_fn(v) for v in allowed}
+    kept = []
+    for feat in features:
+        props = feat.get("properties") or {}
+        feature_key = props.get(key_col)
+        if not isinstance(feature_key, str) or not feature_key:
+            if level_norm == "sub_basin":
+                feature_key = alias_fn(props.get("subbasin_id", ""))
+            elif level_norm == "basin":
+                feature_key = alias_fn(props.get("basin_id", ""))
+            else:
+                feature_key = alias_fn(props.get("district_name", ""))
+        if alias_fn(feature_key) in allowed_keys:
+            kept.append(feat)
+
+    out["features"] = kept
+    return out
+
+
 def _feature_key_for_row(
     row: Mapping[str, Any],
     *,

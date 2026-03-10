@@ -38,6 +38,7 @@ class CrosswalkOverlap:
 
     counterpart_id: str
     counterpart_name: str
+    counterpart_state_name: Optional[str]
     basin_id: str
     basin_name: str
     intersection_area_km2: float
@@ -59,6 +60,7 @@ class CrosswalkContext:
     dominant_counterpart_fraction: float
     primary_basin_id: str
     primary_basin_name: str
+    all_counterpart_ids: tuple[str, ...]
     overlaps: tuple[CrosswalkOverlap, ...]
     explanation: str
     coordination_note: Optional[str] = None
@@ -174,6 +176,7 @@ def build_district_hydro_context(
         CrosswalkOverlap(
             counterpart_id=str(r["subbasin_id"]),
             counterpart_name=str(r["subbasin_name"]),
+            counterpart_state_name=None,
             basin_id=str(r["basin_id"]),
             basin_name=str(r["basin_name"]),
             intersection_area_km2=float(r["intersection_area_km2"]),
@@ -207,6 +210,7 @@ def build_district_hydro_context(
         dominant_counterpart_fraction=dominant_fraction,
         primary_basin_id=str(primary_basin["basin_id"]),
         primary_basin_name=str(primary_basin["basin_name"]),
+        all_counterpart_ids=tuple(str(v) for v in district_rows["subbasin_id"].tolist()),
         overlaps=overlaps,
         explanation=explanation,
         coordination_note=coordination_note,
@@ -253,6 +257,7 @@ def build_subbasin_admin_context(
         CrosswalkOverlap(
             counterpart_id=_district_counterpart_id(r),
             counterpart_name=str(r["district_name"]),
+            counterpart_state_name=str(r.get("state_name", "")).strip() or None,
             basin_id=str(r["basin_id"]),
             basin_name=str(r["basin_name"]),
             intersection_area_km2=float(r["intersection_area_km2"]),
@@ -286,6 +291,7 @@ def build_subbasin_admin_context(
         dominant_counterpart_fraction=dominant_fraction,
         primary_basin_id=str(top["basin_id"]),
         primary_basin_name=str(top["basin_name"]),
+        all_counterpart_ids=tuple(_district_counterpart_id(r) for _, r in subbasin_rows.iterrows()),
         overlaps=overlaps,
         explanation=explanation,
         coordination_note=coordination_note,

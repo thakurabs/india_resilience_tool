@@ -72,6 +72,8 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "_merged_cache": {},
     "_portfolio_master_cache": {},
     "_adm3_cache": None,  # NEW: block boundary cache
+    "crosswalk_overlay": None,
+    "_pending_crosswalk_navigation": None,
 }
 
 

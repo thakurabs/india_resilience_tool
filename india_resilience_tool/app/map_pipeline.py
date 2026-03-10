@@ -111,6 +111,7 @@ def build_map_and_rankings(
     selected_basin: str,
     selected_subbasin: str,
     spatial_family: str,
+    crosswalk_overlay: Optional[Mapping[str, Any]],
     hover_enabled: bool,
     map_center: list[float],
     map_zoom: float,
@@ -400,6 +401,7 @@ def build_map_and_rankings(
             subbasin_geojson_path=subbasin_geojson_path,
             simplify_tolerance_adm2=simplify_tol_adm2,
             simplify_tolerance_adm3=simplify_tol_adm3,
+            crosswalk_overlay=crosswalk_overlay,
         )
 
     legend_block_html = build_vertical_binned_legend_block_html(

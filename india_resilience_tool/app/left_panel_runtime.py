@@ -69,6 +69,7 @@ def render_left_panel(
                 st.session_state["pending_selected_district"] = "All"
                 st.session_state["selected_basin"] = "All"
                 st.session_state["selected_subbasin"] = "All"
+                st.session_state["crosswalk_overlay"] = None
                 st.session_state["map_reset_requested"] = True
 
         # Main view selector: Map vs Rankings (replaces tabs)
@@ -122,7 +123,7 @@ def render_left_panel(
                         level=level,
                     )
 
-            if clicked_district:
+            if clicked_district and str(level).strip().lower() in {"district", "block"}:
                 st.session_state["pending_selected_district"] = clicked_district
                 if clicked_state:
                     st.session_state["pending_selected_state"] = clicked_state

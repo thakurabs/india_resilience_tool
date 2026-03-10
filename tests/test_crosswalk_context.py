@@ -65,6 +65,7 @@ def test_build_district_hydro_context_returns_dominant_subbasin() -> None:
     assert ctx.overlap_count == 2
     assert ctx.classification == "dominant_subbasin"
     assert len(ctx.overlaps) == 2
+    assert ctx.all_counterpart_ids == ("SB01", "SB02")
 
 
 def test_build_subbasin_admin_context_returns_ordered_districts() -> None:
@@ -81,3 +82,5 @@ def test_build_subbasin_admin_context_returns_ordered_districts() -> None:
     assert ctx.overlap_count == 2
     assert ctx.classification == "concentrated_in_one_district"
     assert [ov.counterpart_name for ov in ctx.overlaps] == ["Karimnagar", "Nizamabad"]
+    assert [ov.counterpart_state_name for ov in ctx.overlaps] == ["Telangana", "Telangana"]
+    assert ctx.all_counterpart_ids == ("Telangana::Karimnagar", "Telangana::Nizamabad")

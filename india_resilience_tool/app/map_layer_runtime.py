@@ -48,6 +48,7 @@ def build_folium_map_for_selection(
     subbasin_geojson_path: Path,
     simplify_tolerance_adm2: float,
     simplify_tolerance_adm3: float,
+    crosswalk_overlay: Optional[Mapping[str, Any]] = None,
 ) -> Any:
     from india_resilience_tool.app.geo_cache import (
         build_adm2_geojson_by_state,
@@ -63,6 +64,7 @@ def build_folium_map_for_selection(
         build_props_map_from_gdf,
         ensure_geojson_by_state_has_all,
         filter_fc_by_district,
+        filter_fc_by_feature_keys,
         patch_fc_properties,
     )
 
@@ -153,6 +155,45 @@ def build_folium_map_for_selection(
         props_map=props_map,
     )
 
+    reference_fc = None
+    reference_level = None
+    reference_layer_name = None
+    overlay_level = str((crosswalk_overlay or {}).get("level", "")).strip().lower()
+    overlay_feature_keys = list((crosswalk_overlay or {}).get("feature_keys", []) or [])
+    if overlay_level in {"district", "sub_basin"} and overlay_feature_keys:
+        if overlay_level == "district":
+            adm2_mtime = float(adm2_geojson_path.stat().st_mtime)
+            overlay_geojson_by_state = build_adm2_geojson_by_state(
+                path=str(adm2_geojson_path),
+                tolerance=simplify_tolerance_adm2,
+                mtime=adm2_mtime,
+            )
+            overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+            reference_fc = filter_fc_by_feature_keys(
+                overlay_geojson_by_state["all"],
+                feature_keys=overlay_feature_keys,
+                level="district",
+                alias_fn=alias_fn,
+            )
+            reference_level = "district"
+        else:
+            subbasin_mtime = float(subbasin_geojson_path.stat().st_mtime)
+            overlay_geojson_by_state = build_subbasin_geojson_all(
+                path=str(subbasin_geojson_path),
+                mtime=subbasin_mtime,
+                tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
+            )
+            overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+            reference_fc = filter_fc_by_feature_keys(
+                overlay_geojson_by_state["all"],
+                feature_keys=overlay_feature_keys,
+                level="sub_basin",
+                alias_fn=alias_fn,
+            )
+            reference_level = "sub_basin"
+
+        reference_layer_name = str((crosswalk_overlay or {}).get("label", "")).strip() or "Related units"
+
     highlight_fn = None
     tooltip = None
     if level_norm == "sub_basin":
@@ -188,5 +229,8 @@ def build_folium_map_for_selection(
         layer_name=layer_name,
         tooltip=tooltip,
         highlight_function=highlight_fn,
+        reference_fc=reference_fc,
+        reference_level=reference_level,
+        reference_layer_name=reference_layer_name,
     )
     return m

@@ -19,6 +19,8 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert isinstance(ss["portfolio_districts"], list)
     assert ss["jump_to_rankings"] is False
     assert ss["jump_to_map"] is False
+    assert ss["crosswalk_overlay"] is None
+    assert ss["_pending_crosswalk_navigation"] is None
 
 
 def test_ensure_session_state_does_not_override_existing() -> None:
