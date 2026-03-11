@@ -10,6 +10,8 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
+import inspect
+
 
 def test_details_panel_module_imports() -> None:
     """Test that the details_panel module imports without Streamlit dependency."""
@@ -31,14 +33,24 @@ def test_details_panel_exports_subrenderers() -> None:
         render_case_study_export,
         render_detailed_statistics,
         render_district_comparison,
+        render_river_context,
         render_risk_summary,
         render_scenario_comparison,
         render_trend_over_time,
     )
 
     assert callable(render_risk_summary)
+    assert callable(render_river_context)
     assert callable(render_trend_over_time)
     assert callable(render_scenario_comparison)
     assert callable(render_detailed_statistics)
     assert callable(render_case_study_export)
     assert callable(render_district_comparison)
+
+
+def test_render_river_context_uses_plain_language_label() -> None:
+    """River context should expose user-facing wording instead of backend jargon."""
+    from india_resilience_tool.app.views.details_panel import render_river_context
+
+    source = inspect.getsource(render_river_context)
+    assert "Mapped river segments" in source

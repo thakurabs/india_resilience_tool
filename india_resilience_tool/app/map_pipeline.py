@@ -28,13 +28,19 @@ from india_resilience_tool.analysis.map_enrichment import (
 )
 from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 from india_resilience_tool.app.color_range_controls import compute_color_range_defaults
-from india_resilience_tool.app.geo_cache import load_river_basin_reconciliation_cached
+from india_resilience_tool.app.geo_cache import (
+    load_river_basin_reconciliation_cached,
+    load_river_subbasin_diagnostics_cached,
+)
 from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
 from india_resilience_tool.data.master_columns import find_baseline_column_for_stat
 from india_resilience_tool.data.merge import (
     get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
 )
-from india_resilience_tool.data.river_loader import resolve_river_basin_reconciliation
+from india_resilience_tool.data.river_loader import (
+    resolve_river_basin_reconciliation,
+    resolve_river_subbasin_diagnostics,
+)
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.colors import (
     apply_fillcolor_binned,
@@ -128,6 +134,7 @@ def build_map_and_rankings(
     subbasin_geojson_path: Path,
     river_display_geojson_path: Path,
     river_basin_reconciliation_path: Path,
+    river_subbasin_diagnostics_path: Path,
     simplify_tol_adm2: float,
     simplify_tol_adm3: float,
     map_height: int,
@@ -387,24 +394,39 @@ def build_map_and_rankings(
         and str(spatial_family).strip().lower() == "hydro"
         and level_norm in {"basin", "sub_basin"}
         and selected_basin != "All"
-        and (level_norm == "basin" or selected_subbasin == "All")
     ):
-        if river_basin_reconciliation_path.exists():
-            reconciliation_df = load_river_basin_reconciliation_cached(
-                str(river_basin_reconciliation_path)
+        if level_norm == "basin" or selected_subbasin == "All":
+            if river_basin_reconciliation_path.exists():
+                reconciliation_df = load_river_basin_reconciliation_cached(
+                    str(river_basin_reconciliation_path)
+                )
+            else:
+                reconciliation_df = None
+            resolution = resolve_river_basin_reconciliation(
+                hydro_basin_name=selected_basin,
+                reconciliation_df=reconciliation_df,
+                alias_fn=alias,
+            )
+            if resolution.get("status") == "matched":
+                resolved_river_basin_name = str(resolution.get("river_basin_name") or "").strip() or None
+            river_overlay_message = (
+                str(resolution.get("message")).strip() if resolution.get("message") else None
             )
         else:
-            reconciliation_df = None
-        resolution = resolve_river_basin_reconciliation(
-            hydro_basin_name=selected_basin,
-            reconciliation_df=reconciliation_df,
-            alias_fn=alias,
-        )
-        if resolution.get("status") == "matched":
-            resolved_river_basin_name = str(resolution.get("river_basin_name") or "").strip() or None
-        river_overlay_message = (
-            str(resolution.get("message")).strip() if resolution.get("message") else None
-        )
+            if river_subbasin_diagnostics_path.exists():
+                diagnostics_df = load_river_subbasin_diagnostics_cached(
+                    str(river_subbasin_diagnostics_path)
+                )
+            else:
+                diagnostics_df = None
+            resolution = resolve_river_subbasin_diagnostics(
+                hydro_subbasin_name=selected_subbasin,
+                diagnostics_df=diagnostics_df,
+                alias_fn=alias,
+            )
+            river_overlay_message = (
+                str(resolution.get("message")).strip() if resolution.get("message") else None
+            )
 
     with perf_section("map: GeoJSON serialize+add layer"):
         folium_map = build_folium_map_for_selection(

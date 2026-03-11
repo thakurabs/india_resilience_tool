@@ -33,6 +33,8 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 | `tools/geodata/build_block_basin_crosswalk.py` | Build the canonical block ↔ basin crosswalk CSV from block and basin GeoJSONs | `python -m tools.geodata.build_block_basin_crosswalk --help` |
 | `tools/geodata/clean_river_network.py` | Clean the Survey of India river shapefile into canonical river artifacts (`river_network.parquet`, display GeoJSON, QA CSV) | `python -m tools.geodata.clean_river_network --help` |
 | `tools/geodata/build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV used by hydro river overlays | `python -m tools.geodata.build_river_basin_reconciliation --help` |
+| `tools/geodata/build_river_subbasin_diagnostics.py` | Build the hydro sub-basin vs river-name diagnostics CSV used by hydro sub-basin overlays | `python -m tools.geodata.build_river_subbasin_diagnostics --help` |
+| `tools/geodata/build_river_topology.py` | Build topology-ready river reaches, nodes, adjacency, and QA artifacts from the canonical river parquet | `python -m tools.geodata.build_river_topology --help` |
 | `tools/subbasin_shp_explore.py` | Inspect, optionally repair, and export canonical basin/sub-basin GeoJSONs from `waterbasin_goi.shp` | `python -m tools.subbasin_shp_explore --help` |
 | `tools/data_acquisition/download_era5_daily_stats_structured.py` | Download/structure ERA5 daily stats | `python -m tools.data_acquisition.download_era5_daily_stats_structured --help` |
 | `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | Download NEX India subset from S3 | `python -m tools.data_acquisition.nex_india_subset_download_s3_v1 --help` |
@@ -65,6 +67,27 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
   - `review_required`
   - `no_source_rivers`
 - hydro river overlays consume this CSV at runtime
+
+`tools/geodata/build_river_subbasin_diagnostics.py` notes:
+- inputs:
+  - `IRT_DATA_DIR/subbasins.geojson`
+  - `IRT_DATA_DIR/river_network_display.geojson`
+- output:
+  - `IRT_DATA_DIR/river_subbasin_diagnostics.csv`
+
+`tools/geodata/build_river_topology.py` notes:
+- input:
+  - `IRT_DATA_DIR/river_network.parquet`
+- hydro context inputs:
+  - `IRT_DATA_DIR/basins.geojson`
+  - `IRT_DATA_DIR/subbasins.geojson`
+- outputs:
+  - `IRT_DATA_DIR/river_reaches.parquet`
+  - `IRT_DATA_DIR/river_nodes.parquet`
+  - `IRT_DATA_DIR/river_adjacency.parquet`
+  - `IRT_DATA_DIR/river_topology_qa.csv`
+  - `IRT_DATA_DIR/river_missing_assignments.csv`
+  - `IRT_DATA_DIR/river_missing_assignments.geojson`
 
 ## Legacy / one-offs
 

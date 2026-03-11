@@ -9,7 +9,9 @@ from shapely.geometry import LineString, Polygon
 
 from india_resilience_tool.data.river_loader import (
     ensure_river_basin_reconciliation,
+    ensure_river_subbasin_diagnostics,
     resolve_river_basin_reconciliation,
+    resolve_river_subbasin_diagnostics,
 )
 from tools.geodata.build_river_basin_reconciliation import (
     build_river_basin_reconciliation_df,
@@ -114,3 +116,34 @@ def test_resolve_river_basin_reconciliation_returns_messages_by_status() -> None
     assert "No river features" in str(no_source["message"])
     assert review["status"] == "review_required"
     assert "pending basin-name reconciliation" in str(review["message"])
+
+
+def test_resolve_river_subbasin_diagnostics_returns_expected_message() -> None:
+    df = ensure_river_subbasin_diagnostics(
+        pd.DataFrame(
+            {
+                "basin_id": ["B01", "B01"],
+                "basin_name": ["Godavari Basin", "Godavari Basin"],
+                "subbasin_id": ["SB01", "SB02"],
+                "subbasin_name": ["Pranhita and others", "Wardha"],
+                "matched_river_feature_count": [2, 0],
+                "placeholder_river_feature_count": [0, 1],
+                "match_status": ["matched", "review_required"],
+                "notes": ["", ""],
+            }
+        )
+    )
+    matched = resolve_river_subbasin_diagnostics(
+        hydro_subbasin_name="Pranhita and others",
+        diagnostics_df=df,
+        alias_fn=lambda s: str(s).lower(),
+    )
+    unresolved = resolve_river_subbasin_diagnostics(
+        hydro_subbasin_name="Wardha",
+        diagnostics_df=df,
+        alias_fn=lambda s: str(s).lower(),
+    )
+    assert matched["status"] == "matched"
+    assert matched["message"] is None
+    assert unresolved["status"] == "review_required"
+    assert "No river features" in str(unresolved["message"])

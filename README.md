@@ -49,6 +49,14 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - basin matching is mediated by `river_basin_name_reconciliation.csv`
   - available only in hydro basin/sub-basin views
   - toggle is off by default
+- Offline river topology artifacts:
+  - `river_reaches.parquet`
+  - `river_nodes.parquet`
+  - `river_adjacency.parquet`
+  - `river_topology_qa.csv`
+  - `river_missing_assignments.csv`
+  - `river_missing_assignments.geojson`
+  - hydro details can use `river_reaches.parquet` for a compact river summary when present
 
 ### Crosswalk support
 - Canonical crosswalk artifacts:
@@ -121,6 +129,13 @@ Place these in `IRT_DATA_DIR`:
 - `river_network_display.geojson` (optional derived display artifact for inspection)
 - `river_network_qa.csv` (optional QA artifact from river cleaning)
 - `river_basin_name_reconciliation.csv` (optional but required for reliable hydro basin river overlays)
+- `river_subbasin_diagnostics.csv` (optional diagnostics artifact for hydro sub-basin river overlays)
+- `river_reaches.parquet` (optional topology-ready reach artifact)
+- `river_nodes.parquet` (optional topology-ready node artifact)
+- `river_adjacency.parquet` (optional topology-ready reach adjacency artifact)
+- `river_topology_qa.csv` (optional topology QA artifact)
+- `river_missing_assignments.csv` (optional focused diagnostics for unresolved river hydro assignments)
+- `river_missing_assignments.geojson` (optional visual-debug layer for unresolved river hydro assignments)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -228,7 +243,23 @@ python -m tools.geodata.build_river_basin_reconciliation --overwrite
 This writes:
 - `river_basin_name_reconciliation.csv`
 
-The optional hydro-only river overlay in basin/sub-basin views depends on this reconciliation file. River topology, routing, and admin-side river overlays are still deferred.
+### Build river topology and missing-assignment diagnostics
+
+```bash
+python -m tools.geodata.build_river_subbasin_diagnostics --overwrite
+python -m tools.geodata.build_river_topology --overwrite
+```
+
+This writes:
+- `river_reaches.parquet`
+- `river_nodes.parquet`
+- `river_adjacency.parquet`
+- `river_subbasin_diagnostics.csv`
+- `river_topology_qa.csv`
+- `river_missing_assignments.csv`
+- `river_missing_assignments.geojson`
+
+The optional hydro-only river overlay in basin/sub-basin views depends on the reconciliation and diagnostics files. Topology-ready river artifacts are supported offline, but upstream/downstream routing, admin-side river overlays, and river-based metric computation are still deferred.
 
 ## Usage notes
 

@@ -478,6 +478,42 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
             st.caption(context.coordination_note)
 
 
+def render_river_context(*, context: Mapping[str, Any]) -> None:
+    """Render a compact hydro-side river summary from topology-ready reaches."""
+    import streamlit as st
+
+    reach_count = int(context.get("reach_count", 0) or 0)
+    river_feature_count = int(context.get("river_feature_count", 0) or 0)
+    named_river_count = int(context.get("named_river_count", 0) or 0)
+    total_length_km = float(context.get("total_length_km", 0.0) or 0.0)
+    fallback_segment_count = int(context.get("fallback_segment_count", 0) or 0)
+    status_note = str(context.get("status_note", "") or "").strip()
+    top_named_rivers = list(context.get("top_named_rivers", []) or [])
+
+    with st.expander("River context", expanded=False):
+        if status_note:
+            st.caption(status_note)
+
+        metric_cols = st.columns(3)
+        metric_cols[0].markdown(f"**Mapped river segments:** {reach_count}")
+        metric_cols[1].markdown(f"**River features:** {river_feature_count}")
+        metric_cols[2].markdown(f"**Named rivers:** {named_river_count}")
+        st.caption(f"Total mapped reach length: {total_length_km:,.1f} km")
+        if fallback_segment_count > 0:
+            st.caption(
+                f"{fallback_segment_count:,} mapped river segment(s) were assigned to the current hydro unit using a nearest-boundary fallback."
+            )
+
+        if top_named_rivers:
+            st.markdown("**Top named rivers by mapped reach length**")
+            for item in top_named_rivers:
+                river_name = str(item.get("river_name", "")).strip() or "Unnamed river"
+                total_length = float(item.get("total_length_km", 0.0) or 0.0)
+                st.caption(f"{river_name} • {total_length:,.1f} km")
+        else:
+            st.caption("No named river segments were found in the current topology artifact.")
+
+
 def render_trend_over_time(
     *,
     hist_ts: pd.DataFrame,
@@ -1297,6 +1333,7 @@ def render_details_panel(
     n_in_district: Optional[int] = None,
     percentile_district: Optional[float] = None,
     crosswalk_contexts: Optional[Mapping[str, CrosswalkContext]] = None,
+    river_context: Optional[Mapping[str, Any]] = None,
 ) -> None:
 
     """
@@ -1400,6 +1437,9 @@ def render_details_panel(
                 context = crosswalk_contexts.get(selected_admin_context)
                 if context is not None:
                     render_crosswalk_context(context=context)
+
+    if level_norm in {"basin", "sub_basin"} and river_context is not None:
+        render_river_context(context=river_context)
 
     # Normalize panel figure size to 16:9 (dashboard style contract)
     fig_size_panel_169 = fig_size_panel

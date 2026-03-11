@@ -22,6 +22,8 @@ def run_app() -> None:
         DISTRICTS_PATH,
         RIVER_BASIN_RECONCILIATION_PATH,
         RIVER_NETWORK_DISPLAY_PATH,
+        RIVER_REACHES_PATH,
+        RIVER_SUBBASIN_DIAGNOSTICS_PATH,
         SUBBASINS_PATH,
         resolve_processed_root,
     )
@@ -118,6 +120,8 @@ def run_app() -> None:
     SUBBASIN_GEOJSON = SUBBASINS_PATH
     RIVER_DISPLAY_GEOJSON = RIVER_NETWORK_DISPLAY_PATH
     RIVER_BASIN_RECONCILIATION_CSV = RIVER_BASIN_RECONCILIATION_PATH
+    RIVER_SUBBASIN_DIAGNOSTICS_CSV = RIVER_SUBBASIN_DIAGNOSTICS_PATH
+    RIVER_REACHES_PARQUET = RIVER_REACHES_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 
@@ -578,6 +582,7 @@ def run_app() -> None:
         subbasin_geojson_path=SUBBASIN_GEOJSON,
         river_display_geojson_path=RIVER_DISPLAY_GEOJSON,
         river_basin_reconciliation_path=RIVER_BASIN_RECONCILIATION_CSV,
+        river_subbasin_diagnostics_path=RIVER_SUBBASIN_DIAGNOSTICS_CSV,
         simplify_tol_adm2=SIMPLIFY_TOL_ADM2,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
         map_height=MAP_HEIGHT,
@@ -668,6 +673,8 @@ def run_app() -> None:
                 processed_root=PROCESSED_ROOT if PROCESSED_ROOT is not None else Path("."),
                 pilot_state=PILOT_STATE,
                 data_dir=DATA_DIR,
+                river_reaches_path=RIVER_REACHES_PARQUET,
+                river_overlay_message=artifacts.river_overlay_message,
                 logo_path=LOGO_PATH,
                 fig_size_panel=FIG_SIZE_PANEL,
                 fig_dpi_panel=FIG_DPI_PANEL,

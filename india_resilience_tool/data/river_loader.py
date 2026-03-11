@@ -30,6 +30,16 @@ _DISPLAY_REQUIRED = [
     "length_km_source",
     "geometry",
 ]
+_SUBBASIN_DIAGNOSTICS_REQUIRED = [
+    "basin_id",
+    "basin_name",
+    "subbasin_id",
+    "subbasin_name",
+    "matched_river_feature_count",
+    "placeholder_river_feature_count",
+    "match_status",
+    "notes",
+]
 _RECON_REQUIRED = [
     "hydro_basin_name",
     "hydro_basin_id",
@@ -38,6 +48,7 @@ _RECON_REQUIRED = [
     "notes",
 ]
 _RECON_STATUSES = {"matched", "no_source_rivers", "review_required"}
+_SUBBASIN_DIAGNOSTIC_STATUSES = {"matched", "review_required"}
 
 
 def drop_z(geom: BaseGeometry) -> BaseGeometry:
@@ -199,6 +210,41 @@ def ensure_river_basin_reconciliation(df: pd.DataFrame) -> pd.DataFrame:
     return out.reset_index(drop=True)
 
 
+def ensure_river_subbasin_diagnostics(df: pd.DataFrame) -> pd.DataFrame:
+    """Validate and normalize river sub-basin diagnostics rows."""
+    missing = [col for col in _SUBBASIN_DIAGNOSTICS_REQUIRED if col not in df.columns]
+    if missing:
+        raise ValueError(
+            f"River sub-basin diagnostics is missing required columns: {missing}."
+        )
+
+    out = df.copy()
+    for col in (
+        "basin_id",
+        "basin_name",
+        "subbasin_id",
+        "subbasin_name",
+        "match_status",
+        "notes",
+    ):
+        out[col] = out[col].fillna("").astype(str).str.strip()
+    for col in ("matched_river_feature_count", "placeholder_river_feature_count"):
+        out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0).astype(int)
+
+    if out["subbasin_id"].eq("").any():
+        raise ValueError("River sub-basin diagnostics contains blank subbasin_id values.")
+    if out["subbasin_id"].duplicated().any():
+        raise ValueError("River sub-basin diagnostics contains duplicate subbasin_id values.")
+
+    bad_status = sorted(set(out["match_status"]) - _SUBBASIN_DIAGNOSTIC_STATUSES)
+    if bad_status:
+        raise ValueError(
+            f"River sub-basin diagnostics contains invalid match_status values: {bad_status}."
+        )
+
+    return out.reset_index(drop=True)
+
+
 def load_river_basin_reconciliation(path: PathLike) -> pd.DataFrame:
     """Load the canonical hydro-basin to river-basin reconciliation CSV."""
     df = pd.read_csv(str(path))
@@ -243,6 +289,36 @@ def resolve_river_basin_reconciliation(
             "message": "No river features are currently mapped to this basin in the cleaned river source.",
         }
     return dict(default_review)
+
+
+def resolve_river_subbasin_diagnostics(
+    *,
+    hydro_subbasin_name: str,
+    diagnostics_df: Optional[pd.DataFrame],
+    alias_fn: Callable[[str], str],
+) -> dict[str, Optional[str]]:
+    """Resolve one hydro sub-basin against diagnostics rows."""
+    unresolved = {
+        "status": "review_required",
+        "message": "River overlay for this sub-basin is pending sub-basin diagnostics review.",
+    }
+    if diagnostics_df is None or diagnostics_df.empty:
+        return dict(unresolved)
+
+    work = ensure_river_subbasin_diagnostics(diagnostics_df)
+    subbasin_key = alias_fn(str(hydro_subbasin_name or "").strip())
+    row = work.loc[work["subbasin_name"].astype(str).map(alias_fn) == subbasin_key]
+    if row.empty:
+        return dict(unresolved)
+
+    rec = row.iloc[0]
+    if str(rec.get("match_status", "")).strip() == "matched":
+        if int(rec.get("matched_river_feature_count", 0)) > 0:
+            return {"status": "matched", "message": None}
+    return {
+        "status": "review_required",
+        "message": "No river features are currently mapped to this sub-basin in the cleaned river source.",
+    }
 
 
 def load_local_river_display(

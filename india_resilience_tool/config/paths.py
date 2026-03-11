@@ -61,8 +61,16 @@ class PathsConfig:
     blocks_path: Path
     basins_path: Path
     subbasins_path: Path
+    river_network_path: Path
     river_network_display_path: Path
     river_basin_reconciliation_path: Path
+    river_subbasin_diagnostics_path: Path
+    river_reaches_path: Path
+    river_nodes_path: Path
+    river_adjacency_path: Path
+    river_topology_qa_path: Path
+    river_missing_assignments_path: Path
+    river_missing_assignments_geojson_path: Path
     district_subbasin_crosswalk_path: Path
     block_subbasin_crosswalk_path: Path
     district_basin_crosswalk_path: Path
@@ -105,8 +113,16 @@ def get_paths_config() -> PathsConfig:
         blocks_path=data_dir / "blocks_4326.geojson",
         basins_path=data_dir / "basins.geojson",
         subbasins_path=data_dir / "subbasins.geojson",
+        river_network_path=data_dir / "river_network.parquet",
         river_network_display_path=data_dir / "river_network_display.geojson",
         river_basin_reconciliation_path=data_dir / "river_basin_name_reconciliation.csv",
+        river_subbasin_diagnostics_path=data_dir / "river_subbasin_diagnostics.csv",
+        river_reaches_path=data_dir / "river_reaches.parquet",
+        river_nodes_path=data_dir / "river_nodes.parquet",
+        river_adjacency_path=data_dir / "river_adjacency.parquet",
+        river_topology_qa_path=data_dir / "river_topology_qa.csv",
+        river_missing_assignments_path=data_dir / "river_missing_assignments.csv",
+        river_missing_assignments_geojson_path=data_dir / "river_missing_assignments.geojson",
         district_subbasin_crosswalk_path=data_dir / "district_subbasin_crosswalk.csv",
         block_subbasin_crosswalk_path=data_dir / "block_subbasin_crosswalk.csv",
         district_basin_crosswalk_path=data_dir / "district_basin_crosswalk.csv",
@@ -196,6 +212,14 @@ BASINS_PATH: Path = _CFG.basins_path
 SUBBASINS_PATH: Path = _CFG.subbasins_path
 RIVER_NETWORK_DISPLAY_PATH: Path = _CFG.river_network_display_path
 RIVER_BASIN_RECONCILIATION_PATH: Path = _CFG.river_basin_reconciliation_path
+RIVER_NETWORK_PATH: Path = _CFG.river_network_path
+RIVER_SUBBASIN_DIAGNOSTICS_PATH: Path = _CFG.river_subbasin_diagnostics_path
+RIVER_REACHES_PATH: Path = _CFG.river_reaches_path
+RIVER_NODES_PATH: Path = _CFG.river_nodes_path
+RIVER_ADJACENCY_PATH: Path = _CFG.river_adjacency_path
+RIVER_TOPOLOGY_QA_PATH: Path = _CFG.river_topology_qa_path
+RIVER_MISSING_ASSIGNMENTS_PATH: Path = _CFG.river_missing_assignments_path
+RIVER_MISSING_ASSIGNMENTS_GEOJSON_PATH: Path = _CFG.river_missing_assignments_geojson_path
 DISTRICT_SUBBASIN_CROSSWALK_PATH: Path = _CFG.district_subbasin_crosswalk_path
 BLOCK_SUBBASIN_CROSSWALK_PATH: Path = _CFG.block_subbasin_crosswalk_path
 DISTRICT_BASIN_CROSSWALK_PATH: Path = _CFG.district_basin_crosswalk_path

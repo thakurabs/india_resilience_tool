@@ -38,8 +38,10 @@ from india_resilience_tool.data.river_loader import (
     canonicalize_river_hydro_name as _canonicalize_river_hydro_name,
     ensure_river_key_column as _ensure_river_key_column,
     load_river_basin_reconciliation as _load_river_basin_reconciliation,
+    ensure_river_subbasin_diagnostics as _ensure_river_subbasin_diagnostics,
     load_local_river_display as _load_local_river_display,
 )
+from india_resilience_tool.data.river_topology import load_river_reaches as _load_river_reaches
 from india_resilience_tool.utils.naming import alias, normalize_name
 
 
@@ -147,6 +149,19 @@ def load_local_river_display(path: str) -> gpd.GeoDataFrame:
 def load_river_basin_reconciliation_cached(path: str) -> pd.DataFrame:
     """Load the canonical hydro-basin to river-basin reconciliation CSV."""
     return _load_river_basin_reconciliation(path)
+
+
+@st.cache_data(ttl=3600)
+def load_river_subbasin_diagnostics_cached(path: str) -> pd.DataFrame:
+    """Load the canonical hydro sub-basin river diagnostics CSV."""
+    df = pd.read_csv(path)
+    return _ensure_river_subbasin_diagnostics(df)
+
+
+@st.cache_data(ttl=3600)
+def load_river_reaches_cached(path: str) -> gpd.GeoDataFrame:
+    """Load the canonical topology-ready river reaches artifact."""
+    return _load_river_reaches(path)
 
 
 @st.cache_data(ttl=3600)

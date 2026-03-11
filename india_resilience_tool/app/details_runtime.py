@@ -48,6 +48,8 @@ def render_right_panel(
     # Config
     pilot_state: str,
     data_dir: Path,
+    river_reaches_path: Path,
+    river_overlay_message: Optional[str],
     logo_path: Optional[Path],
     # Figure styling
     fig_size_panel: tuple[float, float],
@@ -86,6 +88,7 @@ def render_right_panel(
     import streamlit as st
 
     from india_resilience_tool.analysis.metrics import compute_position_stats
+    from india_resilience_tool.app.geo_cache import load_river_reaches_cached
     from india_resilience_tool.app.perf import render_perf_panel_safe
     from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
     from india_resilience_tool.app.portfolio_ui import render_portfolio_panel
@@ -102,6 +105,7 @@ def render_right_panel(
         load_district_basin_crosswalk,
         load_district_subbasin_crosswalk,
     )
+    from india_resilience_tool.data.river_topology import build_hydro_river_summary
     from india_resilience_tool.data.spatial_match import (
         extract_click_coords,
         extract_clicked_feature,
@@ -575,6 +579,7 @@ def render_right_panel(
         raise ValueError(f"Unsupported crosswalk kind: {kind}")
 
     crosswalk_contexts: dict[str, Any] = {}
+    river_context: Optional[dict[str, Any]] = None
     crosswalk_specs = {
         "district_subbasin": data_dir / "district_subbasin_crosswalk.csv",
         "block_subbasin": data_dir / "block_subbasin_crosswalk.csv",
@@ -692,6 +697,18 @@ def render_right_panel(
             )
             if context is not None:
                 crosswalk_contexts["block"] = context
+
+    if level_norm in {"basin", "sub_basin"} and river_reaches_path.exists():
+        reaches_gdf = load_river_reaches_cached(str(river_reaches_path))
+        river_context = build_hydro_river_summary(
+            reaches_gdf,
+            level="sub_basin" if level_norm == "sub_basin" else "basin",
+            basin_id=str(basin_id or ""),
+            subbasin_id=str(subbasin_id or "") if level_norm == "sub_basin" else None,
+        )
+        if river_context is not None and river_overlay_message:
+            river_context = dict(river_context)
+            river_context["status_note"] = str(river_overlay_message).strip()
 
     if level_norm == "sub_basin":
         yearly_hist = _load_hydro_yearly(
@@ -820,5 +837,6 @@ def render_right_panel(
         rank_in_district=rank_in_district,
         n_in_district=n_in_district,
         percentile_district=percentile_district,
-        crosswalk_contexts=crosswalk_contexts or None,
+            crosswalk_contexts=crosswalk_contexts or None,
+            river_context=river_context,
     )

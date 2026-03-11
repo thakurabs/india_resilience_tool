@@ -41,6 +41,8 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
 | `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
 | `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
+| `python -m tools.geodata.build_river_subbasin_diagnostics --overwrite` | Build hydro sub-basin vs river-name diagnostics CSV |
+| `python -m tools.geodata.build_river_topology --overwrite` | Build topology-ready river reaches, nodes, adjacency, and QA artifacts |
 | `python -m pytest -q` | Run tests |
 
 ### Key environment variables
@@ -171,7 +173,8 @@ Notes:
 | `crosswalks.py` | Polygon crosswalk validation and context builders for district/block ↔ basin/sub-basin |
 | `discovery.py` | Processed-artifact discovery helpers for yearly files and outputs |
 | `hydro_loader.py` | Basin/sub-basin loading, validation, keys, and render simplification |
-| `river_loader.py` | Cleaned river-display loading, validation, keys, and hydro filtering helpers |
+| `river_loader.py` | Cleaned river-display loading, validation, reconciliation, diagnostics, and hydro filtering helpers |
+| `river_topology.py` | Streamlit-free river reach validation and hydro-side river summary builders |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
 | `master_loader.py` | Robust master CSV loading, normalization, and schema parsing |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
@@ -245,6 +248,8 @@ Notes:
 | `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
+| `build_river_subbasin_diagnostics.py` | Build hydro sub-basin vs river-name diagnostics CSV |
+| `build_river_topology.py` | Build topology-ready river reaches, nodes, adjacency, and QA artifacts |
 | `convert_blocks_shp_to_geojson.py` | Convert block shapefile to standardized GeoJSON |
 | `inspect_block_shapefile.py` | Inspect and optionally convert block shapefiles |
 
@@ -315,6 +320,7 @@ python -m pytest -q
 - `test_river_loader.py`
 - `test_river_overlay_contract.py`
 - `test_river_reconciliation.py`
+- `test_river_topology.py`
 - `test_timeseries.py`
 - `test_timeseries_models.py`
 
@@ -388,6 +394,13 @@ python -m pytest -q
 | `river_network_display.geojson` | Simplified river-network display artifact |
 | `river_network_qa.csv` | Row-level QA flags for the cleaned river network |
 | `river_basin_name_reconciliation.csv` | Hydro-basin ↔ river-basin reconciliation registry used by hydro river overlays |
+| `river_subbasin_diagnostics.csv` | Hydro sub-basin vs river-name diagnostics registry for sub-basin overlays |
+| `river_reaches.parquet` | Topology-ready river reach artifact |
+| `river_nodes.parquet` | Topology-ready river node artifact |
+| `river_adjacency.parquet` | Reach-to-reach adjacency artifact |
+| `river_topology_qa.csv` | QA rows for topology-ready reach artifacts |
+| `river_missing_assignments.csv` | Focused diagnostics for reaches still missing basin/sub-basin assignment |
+| `river_missing_assignments.geojson` | Visual-debug layer for unresolved river reach assignments |
 
 ### Canonical identifier expectations
 
@@ -484,7 +497,9 @@ Current behavior:
 - preserves raw Survey of India fields and adds canonical cleaned columns
 - hydro-only display overlay available via `river_network_display.geojson`
 - basin-level overlay matching is driven by `river_basin_name_reconciliation.csv`
-- no reach topology, upstream/downstream routing, or river crosswalks yet
+- sub-basin overlay diagnostics are supported via `river_subbasin_diagnostics.csv`
+- topology-ready reach/node/adjacency artifacts are supported offline
+- no upstream/downstream routing UI, river crosswalks, or river-based metric computation yet
 
 ## Current status vs deferred work
 
