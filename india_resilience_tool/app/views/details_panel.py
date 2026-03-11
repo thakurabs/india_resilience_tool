@@ -22,7 +22,7 @@ import html
 import pandas as pd
 
 from india_resilience_tool.app.state import VIEW_RANKINGS
-from india_resilience_tool.data.crosswalks import CrosswalkContext
+from india_resilience_tool.data.crosswalks import CrosswalkContext, CrosswalkOverlap
 from india_resilience_tool.viz.formatting import format_delta, format_percent, format_value
 
 PathLike = Union[str, Path]
@@ -348,6 +348,42 @@ def render_risk_summary(
                 st.write("Insufficient data")
 
 
+def _display_level_name(level: str) -> str:
+    return "Sub-basin" if str(level).strip().lower() == "sub_basin" else str(level).strip().title()
+
+
+def _display_level_name_plural(level: str) -> str:
+    level_norm = str(level).strip().lower()
+    if level_norm == "sub_basin":
+        return "sub-basins"
+    if level_norm == "basin":
+        return "basins"
+    if level_norm == "district":
+        return "districts"
+    return "blocks"
+
+
+def _crosswalk_overlap_title(context: CrosswalkContext, overlap: CrosswalkOverlap) -> str:
+    if overlap.counterpart_level == "district":
+        if overlap.counterpart_state_name:
+            return f"{overlap.counterpart_name}, {overlap.counterpart_state_name}"
+        return overlap.counterpart_name
+    return overlap.counterpart_name
+
+
+def _crosswalk_overlap_subtitle(context: CrosswalkContext, overlap: CrosswalkOverlap) -> str:
+    parts: list[str] = []
+    if overlap.counterpart_level == "sub_basin" and overlap.counterpart_parent_name:
+        parts.append(overlap.counterpart_parent_name)
+    elif overlap.counterpart_level == "block":
+        location_bits = [bit for bit in [overlap.counterpart_parent_name, overlap.counterpart_state_name] if bit]
+        if location_bits:
+            parts.append(", ".join(location_bits))
+    parts.append(f"{context.selected_fraction_label} {overlap.selected_fraction * 100:.1f}%")
+    parts.append(f"{context.counterpart_fraction_label} {overlap.counterpart_fraction * 100:.1f}%")
+    return " • ".join(parts)
+
+
 def render_crosswalk_context(*, context: CrosswalkContext) -> None:
     """Render deterministic admin↔hydro context from the crosswalk layer."""
     import streamlit as st
@@ -359,17 +395,24 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
     )
 
     with st.expander(context.section_title, expanded=True):
-        if context.direction == "district_to_subbasin":
+        dominant_overlap = context.overlaps[0] if context.overlaps else None
+        if context.counterpart_level == "sub_basin" and context.primary_basin_name:
             st.markdown(f"**Dominant basin:** {context.primary_basin_name}")
-            st.markdown(
-                f"**Dominant sub-basin:** {context.dominant_counterpart_name} "
-                f"({context.dominant_counterpart_fraction * 100:.0f}% of district area)"
-            )
-        else:
+        elif context.selected_level == "sub_basin" and context.primary_basin_name:
             st.markdown(f"**Parent basin:** {context.primary_basin_name}")
-            st.markdown(
-                f"**Largest district overlap:** {context.dominant_counterpart_name} "
-                f"({context.dominant_counterpart_fraction * 100:.0f}% of sub-basin area)"
+
+        st.markdown(
+            f"**{context.dominant_label}:** {context.dominant_counterpart_name} "
+            f"({context.dominant_counterpart_fraction * 100:.0f}% of {_display_level_name(context.selected_level).lower()} area)"
+        )
+        if dominant_overlap is not None and context.selected_level in {"basin", "sub_basin"}:
+            st.caption(
+                f"{context.selected_fraction_label}: {dominant_overlap.selected_fraction * 100:.1f}%"
+                f" • {context.counterpart_fraction_label}: {dominant_overlap.counterpart_fraction * 100:.1f}%"
+            )
+            st.caption(
+                f"Hydro views rank related {_display_level_name_plural(context.counterpart_level)} "
+                f"by the share of the selected {_display_level_name(context.selected_level).lower()} they cover."
             )
 
         st.markdown(f"**Overlap count:** {context.overlap_count}")
@@ -381,14 +424,9 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
         )
 
         action_cols = st.columns([1, 1], gap="small")
-        highlight_label = (
-            "Highlight related sub-basins"
-            if context.direction == "district_to_subbasin"
-            else "Highlight related districts"
-        )
         if action_cols[0].button(
-            highlight_label,
-            key=f"btn_crosswalk_overlay_{context.direction}_{context.selected_name}",
+            context.highlight_action_label,
+            key=f"btn_crosswalk_overlay_{context.direction}_{context.selected_name}_{context.counterpart_level}",
             use_container_width=True,
         ):
             set_crosswalk_overlay_from_context(
@@ -400,7 +438,7 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
 
         if action_cols[1].button(
             "Clear related overlay",
-            key=f"btn_crosswalk_clear_{context.direction}_{context.selected_name}",
+            key=f"btn_crosswalk_clear_{context.direction}_{context.selected_name}_{context.counterpart_level}",
             use_container_width=True,
             disabled=not overlay_active,
         ):
@@ -412,32 +450,16 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
 
         if context.overlaps:
             for idx, ov in enumerate(context.overlaps):
-                if context.direction == "district_to_subbasin":
-                    title = ov.counterpart_name
-                    subtitle = (
-                        f"{ov.basin_name} • District share {ov.selected_fraction * 100:.1f}% • "
-                        f"Sub-basin share {ov.counterpart_fraction * 100:.1f}%"
-                    )
-                    open_label = "Open sub-basin"
-                else:
-                    district_label = ov.counterpart_name
-                    if ov.counterpart_state_name:
-                        district_label = f"{district_label}, {ov.counterpart_state_name}"
-                    title = district_label
-                    subtitle = (
-                        f"{ov.basin_name} • Sub-basin share {ov.selected_fraction * 100:.1f}% • "
-                        f"District share {ov.counterpart_fraction * 100:.1f}%"
-                    )
-                    open_label = "Open district"
-
+                title = _crosswalk_overlap_title(context, ov)
+                subtitle = _crosswalk_overlap_subtitle(context, ov)
                 cols = st.columns([4, 1], gap="small")
                 with cols[0]:
                     st.markdown(f"**{title}**")
                     st.caption(subtitle)
                 with cols[1]:
                     if st.button(
-                        open_label,
-                        key=f"btn_crosswalk_open_{context.direction}_{idx}_{ov.counterpart_id}",
+                        context.open_action_label,
+                        key=f"btn_crosswalk_open_{context.direction}_{idx}_{ov.counterpart_id}_{context.counterpart_level}",
                         use_container_width=True,
                     ):
                         navigate_from_crosswalk_overlap(
@@ -446,6 +468,7 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
                             overlap={
                                 "counterpart_name": ov.counterpart_name,
                                 "counterpart_state_name": ov.counterpart_state_name,
+                                "counterpart_parent_name": ov.counterpart_parent_name,
                                 "basin_name": ov.basin_name,
                             },
                         )
@@ -1273,7 +1296,7 @@ def render_details_panel(
     rank_in_district: Optional[int] = None,
     n_in_district: Optional[int] = None,
     percentile_district: Optional[float] = None,
-    crosswalk_context: Optional[CrosswalkContext] = None,
+    crosswalk_contexts: Optional[Mapping[str, CrosswalkContext]] = None,
 ) -> None:
 
     """
@@ -1328,6 +1351,18 @@ def render_details_panel(
             if state_title:
                 parts.append(state_title)
             st.caption(" • ".join(parts))
+    elif level_norm == "sub_basin":
+        subbasin_title = str(row.get("subbasin_name", "")).strip() or district_title
+        basin_title = str(row.get("basin_name", "")).strip()
+        st.subheader(subbasin_title)
+        parts: list[str] = ["Sub-basin"]
+        if basin_title:
+            parts.append(basin_title)
+        st.caption(" • ".join(parts))
+    elif level_norm == "basin":
+        basin_title = str(row.get("basin_name", "")).strip() or district_title
+        st.subheader(basin_title)
+        st.caption(" • ".join(["Basin", state_title] if state_title else ["Basin"]))
     else:
         st.subheader(district_title)
         parts: list[str] = ["District"]
@@ -1335,8 +1370,36 @@ def render_details_panel(
             parts.append(state_title)
         st.caption(" • ".join(parts))
 
-    if crosswalk_context is not None:
-        render_crosswalk_context(context=crosswalk_context)
+    if crosswalk_contexts:
+        if level_norm in {"district", "block"}:
+            for hydro_level in ("basin", "sub_basin"):
+                context = crosswalk_contexts.get(hydro_level)
+                if context is not None:
+                    render_crosswalk_context(context=context)
+        elif level_norm in {"basin", "sub_basin"}:
+            available_admin_levels = [
+                admin_level
+                for admin_level in ("district", "block")
+                if crosswalk_contexts.get(admin_level) is not None
+            ]
+            if available_admin_levels:
+                if st.session_state.get("hydro_admin_context_level") not in available_admin_levels:
+                    preferred = "district" if "district" in available_admin_levels else available_admin_levels[0]
+                    st.session_state["hydro_admin_context_level"] = preferred
+                if len(available_admin_levels) > 1:
+                    selected_admin_context = st.radio(
+                        "Administrative context granularity",
+                        options=available_admin_levels,
+                        format_func=_display_level_name,
+                        horizontal=True,
+                        key="hydro_admin_context_level",
+                    )
+                else:
+                    selected_admin_context = available_admin_levels[0]
+                    st.session_state["hydro_admin_context_level"] = selected_admin_context
+                context = crosswalk_contexts.get(selected_admin_context)
+                if context is not None:
+                    render_crosswalk_context(context=context)
 
     # Normalize panel figure size to 16:9 (dashboard style contract)
     fig_size_panel_169 = fig_size_panel

@@ -63,6 +63,9 @@ class PathsConfig:
     basins_path: Path
     subbasins_path: Path
     district_subbasin_crosswalk_path: Path
+    block_subbasin_crosswalk_path: Path
+    district_basin_crosswalk_path: Path
+    block_basin_crosswalk_path: Path
     base_output_root: Path
 
 
@@ -102,6 +105,9 @@ def get_paths_config() -> PathsConfig:
         basins_path=data_dir / "basins.geojson",
         subbasins_path=data_dir / "subbasins.geojson",
         district_subbasin_crosswalk_path=data_dir / "district_subbasin_crosswalk.csv",
+        block_subbasin_crosswalk_path=data_dir / "block_subbasin_crosswalk.csv",
+        district_basin_crosswalk_path=data_dir / "district_basin_crosswalk.csv",
+        block_basin_crosswalk_path=data_dir / "block_basin_crosswalk.csv",
         base_output_root=data_dir / "processed",
     )
 
@@ -240,4 +246,7 @@ BLOCKS_PATH: Path = _CFG.blocks_path  # NEW
 BASINS_PATH: Path = _CFG.basins_path
 SUBBASINS_PATH: Path = _CFG.subbasins_path
 DISTRICT_SUBBASIN_CROSSWALK_PATH: Path = _CFG.district_subbasin_crosswalk_path
+BLOCK_SUBBASIN_CROSSWALK_PATH: Path = _CFG.block_subbasin_crosswalk_path
+DISTRICT_BASIN_CROSSWALK_PATH: Path = _CFG.district_basin_crosswalk_path
+BLOCK_BASIN_CROSSWALK_PATH: Path = _CFG.block_basin_crosswalk_path
 BASE_OUTPUT_ROOT: Path = _CFG.base_output_root

@@ -5,7 +5,7 @@ The India Resilience Tool is a Streamlit dashboard for exploring climate-risk me
 - **Admin**: district and block
 - **Hydro**: basin and sub-basin
 
-IRT combines processed climate-model outputs, boundary layers, rankings, trends, and details views into a single exploration workflow. The current codebase supports admin and hydro map/rankings/details flows, hydro-specific boundaries and processed outputs, and a first actionable crosswalk between **districts** and **sub-basins**.
+IRT combines processed climate-model outputs, boundary layers, rankings, trends, and details views into a single exploration workflow. The current codebase supports admin and hydro map/rankings/details flows, hydro-specific boundaries and processed outputs, and an actionable polygon crosswalk bridge across **district/block** and **basin/sub-basin** views.
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.51.0-red.svg)
@@ -46,18 +46,20 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - `master_metrics_by_sub_basin.csv`
 
 ### Crosswalk support
-- Canonical crosswalk artifact:
+- Canonical crosswalk artifacts:
   - `district_subbasin_crosswalk.csv`
+  - `block_subbasin_crosswalk.csv`
+  - `district_basin_crosswalk.csv`
+  - `block_basin_crosswalk.csv`
 - Current dashboard use:
-  - district details show **Hydrology context**
-  - sub-basin details show **Administrative context**
+  - district and block details show **Basin context** and **Hydrology context**
+  - basin and sub-basin details show **Administrative context**
   - related-unit highlight overlay on the map
-  - district -> sub-basin navigation
-  - sub-basin -> district navigation
+  - admin -> hydro navigation
+  - hydro -> admin navigation
+  - hydro admin-context drill-down defaults to districts, with blocks available as an optional drill-down
 
 ### Explicitly not implemented yet
-- Block ↔ sub-basin crosswalks
-- District/block ↔ basin crosswalks
 - Weighted admin ↔ hydro metric transfer
 - River-network crosswalks or topology-aware routing
 - Hydro portfolio workflows
@@ -106,7 +108,10 @@ Place these in `IRT_DATA_DIR`:
 - `blocks_4326.geojson`
 - `basins.geojson`
 - `subbasins.geojson`
-- `district_subbasin_crosswalk.csv` (optional but required for crosswalk context/actions)
+- `district_subbasin_crosswalk.csv` (optional but required for district/sub-basin context/actions)
+- `block_subbasin_crosswalk.csv` (optional but required for block/sub-basin context/actions)
+- `district_basin_crosswalk.csv` (optional but required for district/basin context/actions)
+- `block_basin_crosswalk.csv` (optional but required for block/basin context/actions)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -186,6 +191,14 @@ This utility inspects the canonical `waterbasin_goi.shp`, can repair invalid hyd
 python -m tools.geodata.build_district_subbasin_crosswalk --overwrite
 ```
 
+### Build the remaining polygon crosswalks
+
+```bash
+python -m tools.geodata.build_block_subbasin_crosswalk --overwrite
+python -m tools.geodata.build_district_basin_crosswalk --overwrite
+python -m tools.geodata.build_block_basin_crosswalk --overwrite
+```
+
 ## Usage notes
 
 ### Admin vs Hydro
@@ -193,11 +206,11 @@ python -m tools.geodata.build_district_subbasin_crosswalk --overwrite
 - Use **Hydro** when you want watershed/process units: basin or sub-basin
 
 ### Current crosswalk behavior
-When `district_subbasin_crosswalk.csv` is present:
-- district details expose intersecting sub-basins
-- sub-basin details expose intersecting districts
+When the polygon crosswalk CSVs are present:
+- district and block details expose related basins and sub-basins
+- basin and sub-basin details expose related districts, with blocks as an optional drill-down
 - you can highlight related units on the map
-- you can jump across the admin/hydro bridge for the current district ↔ sub-basin pair
+- you can jump across the admin/hydro bridge for the current polygon pair
 
 ### Current limitations
 - Crosswalks are currently **read-optimized and explanatory**, not analytical transfer engines

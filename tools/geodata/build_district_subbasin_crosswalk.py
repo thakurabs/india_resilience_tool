@@ -1,26 +1,47 @@
 #!/usr/bin/env python3
 """
-Build a canonical district ↔ sub-basin crosswalk CSV for IRT.
+Shared polygon crosswalk builders for IRT.
 
-The output is a read-optimized intersection table used by the dashboard to
-connect administrative and hydro storylines. Geometry is not written to the
-artifact; the script computes overlap areas in a projected CRS and exports a
-flat CSV.
+This module keeps the district ↔ sub-basin CLI entrypoint, but also exposes the
+shared loaders and builders used by the broader polygon crosswalk phase:
+- district ↔ sub-basin
+- block ↔ sub-basin
+- district ↔ basin
+- block ↔ basin
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import geopandas as gpd
 import pandas as pd
 
 from india_resilience_tool.data.adm2_loader import ensure_adm2_columns, ensure_epsg4326
-from india_resilience_tool.data.crosswalks import ensure_district_subbasin_crosswalk
+from india_resilience_tool.data.adm3_loader import ensure_adm3_columns
+from india_resilience_tool.data.crosswalks import (
+    ensure_block_basin_crosswalk,
+    ensure_block_subbasin_crosswalk,
+    ensure_district_basin_crosswalk,
+    ensure_district_subbasin_crosswalk,
+)
 from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
-from paths import DISTRICT_SUBBASIN_CROSSWALK_PATH, DISTRICTS_PATH, SUBBASINS_PATH
+from paths import (
+    BASINS_PATH,
+    BLOCKS_PATH,
+    BLOCK_BASIN_CROSSWALK_PATH,
+    BLOCK_SUBBASIN_CROSSWALK_PATH,
+    DISTRICTS_PATH,
+    DISTRICT_BASIN_CROSSWALK_PATH,
+    DISTRICT_SUBBASIN_CROSSWALK_PATH,
+    SUBBASINS_PATH,
+)
+
+
+AdminLevel = Literal["district", "block"]
+HydroLevel = Literal["basin", "sub_basin"]
 
 
 def _assert_areal_geometries(gdf: gpd.GeoDataFrame, *, label: str) -> None:
@@ -36,12 +57,19 @@ def _assert_areal_geometries(gdf: gpd.GeoDataFrame, *, label: str) -> None:
 
 
 def _district_key(state_name: object, district_name: object) -> str:
-    """Build a stable district key from canonical district fields."""
     return f"{str(state_name).strip()}::{str(district_name).strip()}"
 
 
+def _block_key(state_name: object, district_name: object, block_name: object) -> str:
+    return (
+        f"{str(state_name).strip()}::"
+        f"{str(district_name).strip()}::"
+        f"{str(block_name).strip()}"
+    )
+
+
 def load_district_boundaries(path: Path) -> gpd.GeoDataFrame:
-    """Load canonical district boundaries for crosswalk generation."""
+    """Load canonical district boundaries and dissolve district fragments."""
     gdf = gpd.read_file(path)
     gdf = ensure_epsg4326(gdf)
     gdf = ensure_adm2_columns(gdf)
@@ -54,39 +82,127 @@ def load_district_boundaries(path: Path) -> gpd.GeoDataFrame:
         _district_key(state_name, district_name)
         for state_name, district_name in zip(out["state_name"], out["district_name"])
     ]
-    # Some district sources contain multiple polygon features for the same
-    # district (islands/fragments). Dissolve them so the crosswalk has one
-    # canonical district geometry per district key.
     out = out.dissolve(
         by="district_key",
         as_index=False,
-        aggfunc={
-            "state_name": "first",
-            "district_name": "first",
-        },
+        aggfunc={"state_name": "first", "district_name": "first"},
     )
-    out["district_key"] = out["district_key"].astype(str).str.strip()
-    out["state_name"] = out["state_name"].astype(str).str.strip()
-    out["district_name"] = out["district_name"].astype(str).str.strip()
     return out[["state_name", "district_name", "district_key", "geometry"]].reset_index(drop=True)
 
 
-def load_subbasin_boundaries(path: Path) -> gpd.GeoDataFrame:
-    """Load canonical sub-basin boundaries for crosswalk generation."""
+def load_block_boundaries(path: Path) -> gpd.GeoDataFrame:
+    """Load canonical block boundaries and dissolve block fragments."""
     gdf = gpd.read_file(path)
     gdf = ensure_epsg4326(gdf)
-    gdf = ensure_hydro_columns(gdf, level="sub_basin")
-    _assert_areal_geometries(gdf, label="Sub-basin boundaries")
+    gdf = ensure_adm3_columns(gdf)
+    _assert_areal_geometries(gdf, label="Block boundaries")
 
-    keep_cols = [
-        "basin_id",
-        "basin_name",
-        "subbasin_id",
-        "subbasin_code",
-        "subbasin_name",
-        "geometry",
+    out = gdf[["state_name", "district_name", "block_name", "geometry"]].copy()
+    for col in ("state_name", "district_name", "block_name"):
+        out[col] = out[col].astype(str).str.strip()
+    out["block_key"] = [
+        _block_key(state_name, district_name, block_name)
+        for state_name, district_name, block_name in zip(
+            out["state_name"], out["district_name"], out["block_name"]
+        )
     ]
+    out = out.dissolve(
+        by="block_key",
+        as_index=False,
+        aggfunc={"state_name": "first", "district_name": "first", "block_name": "first"},
+    )
+    return out[["state_name", "district_name", "block_name", "block_key", "geometry"]].reset_index(drop=True)
+
+
+def load_hydro_boundaries(path: Path, *, level: HydroLevel) -> gpd.GeoDataFrame:
+    """Load canonical basin or sub-basin boundaries."""
+    gdf = gpd.read_file(path)
+    gdf = ensure_epsg4326(gdf)
+    gdf = ensure_hydro_columns(gdf, level=level)
+    _assert_areal_geometries(gdf, label=f"{'Sub-basin' if level == 'sub_basin' else 'Basin'} boundaries")
+    if level == "sub_basin":
+        keep_cols = ["basin_id", "basin_name", "subbasin_id", "subbasin_code", "subbasin_name", "geometry"]
+    else:
+        keep_cols = ["basin_id", "basin_name", "geometry"]
     return gdf[keep_cols].copy().reset_index(drop=True)
+
+
+def build_admin_hydro_crosswalk(
+    admin_gdf: gpd.GeoDataFrame,
+    hydro_gdf: gpd.GeoDataFrame,
+    *,
+    admin_level: AdminLevel,
+    hydro_level: HydroLevel,
+    area_epsg: int = 6933,
+) -> pd.DataFrame:
+    """
+    Build a canonical overlap table between one admin level and one hydro level.
+
+    Fractions follow the naming contract used by the dashboard:
+    - `<admin>_area_fraction_in_<hydro>` = intersection / admin area
+    - `<hydro>_area_fraction_in_<admin>` = intersection / hydro area
+    """
+    admin_proj = admin_gdf.to_crs(epsg=area_epsg).copy()
+    hydro_proj = hydro_gdf.to_crs(epsg=area_epsg).copy()
+
+    admin_area_col = f"{admin_level}_area_km2"
+    hydro_area_col = "subbasin_area_km2" if hydro_level == "sub_basin" else "basin_area_km2"
+    admin_fraction_col = f"{admin_level}_area_fraction_in_{'subbasin' if hydro_level == 'sub_basin' else 'basin'}"
+    hydro_fraction_col = f"{'subbasin' if hydro_level == 'sub_basin' else 'basin'}_area_fraction_in_{admin_level}"
+
+    admin_proj[admin_area_col] = admin_proj.geometry.area / 1_000_000.0
+    hydro_proj[hydro_area_col] = hydro_proj.geometry.area / 1_000_000.0
+
+    if admin_level == "district":
+        admin_cols = ["state_name", "district_name", "district_key", admin_area_col, "geometry"]
+        group_cols = ["state_name", "district_name", "district_key", admin_area_col]
+    else:
+        admin_cols = ["state_name", "district_name", "block_name", "block_key", admin_area_col, "geometry"]
+        group_cols = ["state_name", "district_name", "block_name", "block_key", admin_area_col]
+
+    if hydro_level == "sub_basin":
+        hydro_cols = [
+            "basin_id",
+            "basin_name",
+            "subbasin_id",
+            "subbasin_code",
+            "subbasin_name",
+            hydro_area_col,
+            "geometry",
+        ]
+        hydro_group_cols = ["basin_id", "basin_name", "subbasin_id", "subbasin_code", "subbasin_name", hydro_area_col]
+    else:
+        hydro_cols = ["basin_id", "basin_name", hydro_area_col, "geometry"]
+        hydro_group_cols = ["basin_id", "basin_name", hydro_area_col]
+
+    intersections = gpd.overlay(
+        admin_proj[admin_cols].copy(),
+        hydro_proj[hydro_cols].copy(),
+        how="intersection",
+    )
+    if intersections.empty:
+        return pd.DataFrame(columns=group_cols + hydro_group_cols + ["intersection_area_km2", admin_fraction_col, hydro_fraction_col])
+
+    intersections["intersection_area_km2"] = intersections.geometry.area / 1_000_000.0
+    intersections = intersections[intersections["intersection_area_km2"] > 0].copy()
+    if intersections.empty:
+        raise ValueError(f"{admin_level.title()} and {hydro_level.replace('_', '-') } layers intersect only on zero-area boundaries.")
+
+    grouped = (
+        intersections.groupby(group_cols + hydro_group_cols, dropna=False, as_index=False)["intersection_area_km2"]
+        .sum()
+    )
+    grouped[admin_fraction_col] = grouped["intersection_area_km2"] / grouped[admin_area_col]
+    grouped[hydro_fraction_col] = grouped["intersection_area_km2"] / grouped[hydro_area_col]
+
+    sort_cols = ["state_name", "district_name"]
+    if admin_level == "block":
+        sort_cols.append("block_name")
+    sort_cols.extend(["basin_name"])
+    if hydro_level == "sub_basin":
+        sort_cols.append("subbasin_name")
+    grouped = grouped.sort_values(by=sort_cols, ascending=[True] * len(sort_cols)).reset_index(drop=True)
+    return grouped
 
 
 def build_district_subbasin_crosswalk(
@@ -95,189 +211,109 @@ def build_district_subbasin_crosswalk(
     *,
     area_epsg: int = 6933,
 ) -> pd.DataFrame:
-    """
-    Build the canonical district ↔ sub-basin overlap table.
-
-    Fractions use the current dashboard contract:
-    - district_area_fraction_in_subbasin = intersection_area / district_area
-    - subbasin_area_fraction_in_district = intersection_area / subbasin_area
-    """
-    districts_proj = districts.to_crs(epsg=area_epsg).copy()
-    subbasins_proj = subbasins.to_crs(epsg=area_epsg).copy()
-
-    districts_proj["district_area_km2"] = districts_proj.geometry.area / 1_000_000.0
-    subbasins_proj["subbasin_area_km2"] = subbasins_proj.geometry.area / 1_000_000.0
-
-    districts_keep = districts_proj[
-        ["state_name", "district_name", "district_key", "district_area_km2", "geometry"]
-    ].copy()
-    subbasins_keep = subbasins_proj[
-        [
-            "basin_id",
-            "basin_name",
-            "subbasin_id",
-            "subbasin_code",
-            "subbasin_name",
-            "subbasin_area_km2",
-            "geometry",
-        ]
-    ].copy()
-
-    intersections = gpd.overlay(districts_keep, subbasins_keep, how="intersection")
-    if intersections.empty:
-        return pd.DataFrame(
-            columns=[
-                "district_key",
-                "district_name",
-                "state_name",
-                "basin_id",
-                "basin_name",
-                "subbasin_id",
-                "subbasin_code",
-                "subbasin_name",
-                "district_area_km2",
-                "subbasin_area_km2",
-                "intersection_area_km2",
-                "district_area_fraction_in_subbasin",
-                "subbasin_area_fraction_in_district",
-            ]
-        )
-
-    intersections["intersection_area_km2"] = intersections.geometry.area / 1_000_000.0
-    intersections = intersections[intersections["intersection_area_km2"] > 0].copy()
-
-    if intersections.empty:
-        raise ValueError("District and sub-basin layers intersect only on zero-area boundaries.")
-
-    grouped = (
-        intersections.groupby(
-            [
-                "district_key",
-                "district_name",
-                "state_name",
-                "basin_id",
-                "basin_name",
-                "subbasin_id",
-                "subbasin_code",
-                "subbasin_name",
-                "district_area_km2",
-                "subbasin_area_km2",
-            ],
-            dropna=False,
-            as_index=False,
-        )["intersection_area_km2"]
-        .sum()
+    """Build the canonical district ↔ sub-basin overlap table."""
+    return build_admin_hydro_crosswalk(
+        districts,
+        subbasins,
+        admin_level="district",
+        hydro_level="sub_basin",
+        area_epsg=area_epsg,
     )
 
-    grouped["district_area_fraction_in_subbasin"] = (
-        grouped["intersection_area_km2"] / grouped["district_area_km2"]
+
+def build_block_subbasin_crosswalk(
+    blocks: gpd.GeoDataFrame,
+    subbasins: gpd.GeoDataFrame,
+    *,
+    area_epsg: int = 6933,
+) -> pd.DataFrame:
+    """Build the canonical block ↔ sub-basin overlap table."""
+    return build_admin_hydro_crosswalk(
+        blocks,
+        subbasins,
+        admin_level="block",
+        hydro_level="sub_basin",
+        area_epsg=area_epsg,
     )
-    grouped["subbasin_area_fraction_in_district"] = (
-        grouped["intersection_area_km2"] / grouped["subbasin_area_km2"]
+
+
+def build_district_basin_crosswalk(
+    districts: gpd.GeoDataFrame,
+    basins: gpd.GeoDataFrame,
+    *,
+    area_epsg: int = 6933,
+) -> pd.DataFrame:
+    """Build the canonical district ↔ basin overlap table."""
+    return build_admin_hydro_crosswalk(
+        districts,
+        basins,
+        admin_level="district",
+        hydro_level="basin",
+        area_epsg=area_epsg,
     )
 
-    grouped = grouped.sort_values(
-        by=["state_name", "district_name", "basin_name", "subbasin_name"],
-        ascending=[True, True, True, True],
-    ).reset_index(drop=True)
 
-    return grouped[
-        [
-            "district_key",
-            "district_name",
-            "state_name",
-            "basin_id",
-            "basin_name",
-            "subbasin_id",
-            "subbasin_code",
-            "subbasin_name",
-            "district_area_km2",
-            "subbasin_area_km2",
-            "intersection_area_km2",
-            "district_area_fraction_in_subbasin",
-            "subbasin_area_fraction_in_district",
-        ]
-    ].copy()
+def build_block_basin_crosswalk(
+    blocks: gpd.GeoDataFrame,
+    basins: gpd.GeoDataFrame,
+    *,
+    area_epsg: int = 6933,
+) -> pd.DataFrame:
+    """Build the canonical block ↔ basin overlap table."""
+    return build_admin_hydro_crosswalk(
+        blocks,
+        basins,
+        admin_level="block",
+        hydro_level="basin",
+        area_epsg=area_epsg,
+    )
 
 
-def _print_summary(df: pd.DataFrame) -> None:
+def _print_summary(df: pd.DataFrame, *, admin_level: AdminLevel, hydro_level: HydroLevel) -> None:
     """Print a compact artifact summary."""
     print(f"Rows: {len(df)}")
-    print(f"Districts covered: {df['district_key'].nunique(dropna=True)}")
-    print(f"Sub-basins covered: {df['subbasin_id'].nunique(dropna=True)}")
+    admin_key_col = "district_key" if admin_level == "district" else "block_key"
+    print(f"{admin_level.title()}s covered: {df[admin_key_col].nunique(dropna=True)}")
+    if hydro_level == "sub_basin":
+        print(f"Sub-basins covered: {df['subbasin_id'].nunique(dropna=True)}")
     print(f"Basins covered: {df['basin_id'].nunique(dropna=True)}")
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    """CLI entry point."""
-    parser = argparse.ArgumentParser(
-        description="Build the canonical district-subbasin crosswalk CSV for IRT."
-    )
-    parser.add_argument(
-        "--districts",
-        type=str,
-        default=str(DISTRICTS_PATH),
-        help="Path to district boundaries GeoJSON. Defaults to the canonical DATA_DIR path.",
-    )
-    parser.add_argument(
-        "--subbasins",
-        type=str,
-        default=str(SUBBASINS_PATH),
-        help="Path to sub-basin GeoJSON. Defaults to the canonical DATA_DIR path.",
-    )
-    parser.add_argument(
-        "--out",
-        type=str,
-        default=str(DISTRICT_SUBBASIN_CROSSWALK_PATH),
-        help="Output CSV path. Defaults to DATA_DIR/district_subbasin_crosswalk.csv.",
-    )
-    parser.add_argument(
-        "--area-epsg",
-        type=int,
-        default=6933,
-        help="Projected EPSG used for area calculations. Default: 6933.",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Overwrite the output CSV if it already exists.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Build and validate the crosswalk, but do not write the CSV.",
-    )
-    args = parser.parse_args(argv)
+def _run_build(
+    *,
+    title: str,
+    admin_path: Path,
+    hydro_path: Path,
+    out_path: Path,
+    area_epsg: int,
+    overwrite: bool,
+    dry_run: bool,
+    load_admin_fn,
+    load_hydro_fn,
+    build_fn,
+    ensure_fn,
+    admin_level: AdminLevel,
+    hydro_level: HydroLevel,
+) -> int:
+    if not admin_path.exists():
+        raise FileNotFoundError(f"{admin_level.title()} boundaries not found: {admin_path}")
+    if not hydro_path.exists():
+        raise FileNotFoundError(f"{'Sub-basin' if hydro_level == 'sub_basin' else 'Basin'} boundaries not found: {hydro_path}")
+    if out_path.exists() and not overwrite and not dry_run:
+        raise FileExistsError(f"Output already exists: {out_path}. Re-run with --overwrite to replace it.")
 
-    districts_path = Path(args.districts).expanduser().resolve()
-    subbasins_path = Path(args.subbasins).expanduser().resolve()
-    out_path = Path(args.out).expanduser().resolve()
+    admin = load_admin_fn(admin_path)
+    hydro = load_hydro_fn(hydro_path)
+    crosswalk = build_fn(admin, hydro, area_epsg=area_epsg)
+    crosswalk = ensure_fn(crosswalk)
 
-    if not districts_path.exists():
-        raise FileNotFoundError(f"District boundaries not found: {districts_path}")
-    if not subbasins_path.exists():
-        raise FileNotFoundError(f"Sub-basin boundaries not found: {subbasins_path}")
-    if out_path.exists() and not args.overwrite and not args.dry_run:
-        raise FileExistsError(
-            f"Output already exists: {out_path}. Re-run with --overwrite to replace it."
-        )
+    print(title)
+    print(f"{admin_level.title()}s: {admin_path}")
+    print(f"{'Sub-basins' if hydro_level == 'sub_basin' else 'Basins'}: {hydro_path}")
+    print(f"Area EPSG: {area_epsg}")
+    _print_summary(crosswalk, admin_level=admin_level, hydro_level=hydro_level)
 
-    districts = load_district_boundaries(districts_path)
-    subbasins = load_subbasin_boundaries(subbasins_path)
-    crosswalk = build_district_subbasin_crosswalk(
-        districts,
-        subbasins,
-        area_epsg=int(args.area_epsg),
-    )
-    crosswalk = ensure_district_subbasin_crosswalk(crosswalk)
-
-    print("DISTRICT ↔ SUB-BASIN CROSSWALK")
-    print(f"Districts: {districts_path}")
-    print(f"Sub-basins: {subbasins_path}")
-    print(f"Area EPSG: {args.area_epsg}")
-    _print_summary(crosswalk)
-
-    if args.dry_run:
+    if dry_run:
         print("Dry run complete. No file written.")
         return 0
 
@@ -285,6 +321,36 @@ def main(argv: Optional[list[str]] = None) -> int:
     crosswalk.to_csv(out_path, index=False)
     print(f"Wrote crosswalk CSV: {out_path}")
     return 0
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    """CLI entry point for the district ↔ sub-basin artifact."""
+    parser = argparse.ArgumentParser(
+        description="Build the canonical district-subbasin crosswalk CSV for IRT."
+    )
+    parser.add_argument("--districts", type=str, default=str(DISTRICTS_PATH))
+    parser.add_argument("--subbasins", type=str, default=str(SUBBASINS_PATH))
+    parser.add_argument("--out", type=str, default=str(DISTRICT_SUBBASIN_CROSSWALK_PATH))
+    parser.add_argument("--area-epsg", type=int, default=6933)
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+
+    return _run_build(
+        title="DISTRICT ↔ SUB-BASIN CROSSWALK",
+        admin_path=Path(args.districts).expanduser().resolve(),
+        hydro_path=Path(args.subbasins).expanduser().resolve(),
+        out_path=Path(args.out).expanduser().resolve(),
+        area_epsg=int(args.area_epsg),
+        overwrite=bool(args.overwrite),
+        dry_run=bool(args.dry_run),
+        load_admin_fn=load_district_boundaries,
+        load_hydro_fn=lambda path: load_hydro_boundaries(path, level="sub_basin"),
+        build_fn=build_district_subbasin_crosswalk,
+        ensure_fn=ensure_district_subbasin_crosswalk,
+        admin_level="district",
+        hydro_level="sub_basin",
+    )
 
 
 if __name__ == "__main__":

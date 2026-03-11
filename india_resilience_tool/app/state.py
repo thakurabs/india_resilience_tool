@@ -53,6 +53,7 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "selected_block": "All",  # For block-level selection
     "selected_basin": "All",
     "selected_subbasin": "All",
+    "hydro_admin_context_level": "district",
 
     # Other stable keys (widget keys / caches)
     # NOTE: Do NOT pre-seed unified metric selection keys here. The legacy dashboard
@@ -153,6 +154,7 @@ def set_level(
         session_state["selected_block"] = "All"
         session_state["selected_basin"] = "All"
         session_state["selected_subbasin"] = "All"
+        session_state["hydro_admin_context_level"] = "district"
         
         # Clear portfolio when switching levels (level-specific lists)
         session_state["portfolio_districts"] = []

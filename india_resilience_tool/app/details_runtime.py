@@ -93,8 +93,13 @@ def render_right_panel(
     from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
     from india_resilience_tool.data.master_columns import find_baseline_column_for_metric
     from india_resilience_tool.data.crosswalks import (
+        build_basin_admin_context,
+        build_block_hydro_context,
         build_district_hydro_context,
         build_subbasin_admin_context,
+        load_block_basin_crosswalk,
+        load_block_subbasin_crosswalk,
+        load_district_basin_crosswalk,
         load_district_subbasin_crosswalk,
     )
     from india_resilience_tool.data.spatial_match import (
@@ -557,33 +562,136 @@ def render_right_panel(
     block_for_fs = row.get("block_name") or selected_block
 
     @st.cache_data(show_spinner=False)
-    def _load_crosswalk_cached(path_str: str, mtime: float) -> pd.DataFrame:
-        return load_district_subbasin_crosswalk(path_str)
+    def _load_crosswalk_cached(kind: str, path_str: str, mtime: float) -> pd.DataFrame:
+        _ = mtime
+        if kind == "district_subbasin":
+            return load_district_subbasin_crosswalk(path_str)
+        if kind == "block_subbasin":
+            return load_block_subbasin_crosswalk(path_str)
+        if kind == "district_basin":
+            return load_district_basin_crosswalk(path_str)
+        if kind == "block_basin":
+            return load_block_basin_crosswalk(path_str)
+        raise ValueError(f"Unsupported crosswalk kind: {kind}")
 
-    crosswalk_context = None
-    crosswalk_path = data_dir / "district_subbasin_crosswalk.csv"
-    if crosswalk_path.exists() and level_norm in {"district", "sub_basin"}:
+    crosswalk_contexts: dict[str, Any] = {}
+    crosswalk_specs = {
+        "district_subbasin": data_dir / "district_subbasin_crosswalk.csv",
+        "block_subbasin": data_dir / "block_subbasin_crosswalk.csv",
+        "district_basin": data_dir / "district_basin_crosswalk.csv",
+        "block_basin": data_dir / "block_basin_crosswalk.csv",
+    }
+    loaded_crosswalks: dict[str, pd.DataFrame] = {}
+    for kind, path in crosswalk_specs.items():
+        if not path.exists():
+            continue
         try:
-            crosswalk_df = _load_crosswalk_cached(
-                str(crosswalk_path),
-                float(crosswalk_path.stat().st_mtime),
+            loaded_crosswalks[kind] = _load_crosswalk_cached(
+                kind,
+                str(path),
+                float(path.stat().st_mtime),
             )
-            if level_norm == "district":
-                crosswalk_context = build_district_hydro_context(
-                    crosswalk_df,
-                    district_name=str(district_name),
-                    state_name=str(row.get("state_name") or state_to_show),
-                    alias_fn=alias_fn,
-                )
-            elif level_norm == "sub_basin":
-                crosswalk_context = build_subbasin_admin_context(
-                    crosswalk_df,
-                    subbasin_id=str(subbasin_id or ""),
-                    subbasin_name=str(subbasin_name or ""),
-                    alias_fn=alias_fn,
-                )
         except Exception:
-            crosswalk_context = None
+            continue
+
+    if level_norm == "district":
+        district_basin_df = loaded_crosswalks.get("district_basin")
+        if district_basin_df is not None:
+            context = build_district_hydro_context(
+                district_basin_df,
+                district_name=str(district_name),
+                state_name=str(row.get("state_name") or state_to_show),
+                alias_fn=alias_fn,
+                hydro_level="basin",
+            )
+            if context is not None:
+                crosswalk_contexts["basin"] = context
+
+        district_subbasin_df = loaded_crosswalks.get("district_subbasin")
+        if district_subbasin_df is not None:
+            context = build_district_hydro_context(
+                district_subbasin_df,
+                district_name=str(district_name),
+                state_name=str(row.get("state_name") or state_to_show),
+                alias_fn=alias_fn,
+                hydro_level="sub_basin",
+            )
+            if context is not None:
+                crosswalk_contexts["sub_basin"] = context
+    elif level_norm == "block":
+        block_basin_df = loaded_crosswalks.get("block_basin")
+        if block_basin_df is not None:
+            context = build_block_hydro_context(
+                block_basin_df,
+                block_name=str(block_for_fs or ""),
+                district_name=str(district_name or ""),
+                state_name=str(row.get("state_name") or state_to_show),
+                alias_fn=alias_fn,
+                hydro_level="basin",
+            )
+            if context is not None:
+                crosswalk_contexts["basin"] = context
+
+        block_subbasin_df = loaded_crosswalks.get("block_subbasin")
+        if block_subbasin_df is not None:
+            context = build_block_hydro_context(
+                block_subbasin_df,
+                block_name=str(block_for_fs or ""),
+                district_name=str(district_name or ""),
+                state_name=str(row.get("state_name") or state_to_show),
+                alias_fn=alias_fn,
+                hydro_level="sub_basin",
+            )
+            if context is not None:
+                crosswalk_contexts["sub_basin"] = context
+    elif level_norm == "basin":
+        district_basin_df = loaded_crosswalks.get("district_basin")
+        if district_basin_df is not None:
+            context = build_basin_admin_context(
+                district_basin_df,
+                basin_id=str(basin_id or ""),
+                basin_name=str(basin_name or ""),
+                alias_fn=alias_fn,
+                admin_level="district",
+            )
+            if context is not None:
+                crosswalk_contexts["district"] = context
+
+        block_basin_df = loaded_crosswalks.get("block_basin")
+        if block_basin_df is not None:
+            context = build_basin_admin_context(
+                block_basin_df,
+                basin_id=str(basin_id or ""),
+                basin_name=str(basin_name or ""),
+                alias_fn=alias_fn,
+                admin_level="block",
+            )
+            if context is not None:
+                crosswalk_contexts["block"] = context
+    elif level_norm == "sub_basin":
+        district_subbasin_df = loaded_crosswalks.get("district_subbasin")
+        if district_subbasin_df is not None:
+            context = build_subbasin_admin_context(
+                district_subbasin_df,
+                subbasin_id=str(subbasin_id or ""),
+                subbasin_name=str(subbasin_name or ""),
+                alias_fn=alias_fn,
+                admin_level="district",
+            )
+            if context is not None:
+                crosswalk_contexts["district"] = context
+
+        block_subbasin_df = loaded_crosswalks.get("block_subbasin")
+        if block_subbasin_df is not None:
+            context = build_subbasin_admin_context(
+                block_subbasin_df,
+                subbasin_id=str(subbasin_id or ""),
+                subbasin_name=str(subbasin_name or ""),
+                alias_fn=alias_fn,
+                admin_level="block",
+            )
+            if context is not None:
+                crosswalk_contexts["block"] = context
 
     if level_norm == "sub_basin":
         yearly_hist = _load_hydro_yearly(
@@ -712,5 +820,5 @@ def render_right_panel(
         rank_in_district=rank_in_district,
         n_in_district=n_in_district,
         percentile_district=percentile_district,
-        crosswalk_context=crosswalk_context,
+        crosswalk_contexts=crosswalk_contexts or None,
     )

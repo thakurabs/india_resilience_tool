@@ -11,7 +11,7 @@ The current working tree supports:
 - map, rankings, and details flows for district, block, basin, and sub-basin
 - admin portfolio workflows for district and block
 - hydro boundary loading and hydro processed-output discovery
-- district ↔ sub-basin crosswalk context and actionable related-unit navigation/highlighting
+- actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
 
 The crosswalk layer is currently **read-optimized and explanatory**. It is not yet a full weighted transfer engine across spatial families.
 
@@ -35,6 +35,9 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics <slug>` | Build sub-basin outputs |
 | `python -m tools.subbasin_shp_explore --help` | Inspect/repair/export hydro boundaries |
 | `python -m tools.geodata.build_district_subbasin_crosswalk --overwrite` | Build district ↔ sub-basin crosswalk CSV |
+| `python -m tools.geodata.build_block_subbasin_crosswalk --overwrite` | Build block ↔ sub-basin crosswalk CSV |
+| `python -m tools.geodata.build_district_basin_crosswalk --overwrite` | Build district ↔ basin crosswalk CSV |
+| `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
 | `python -m pytest -q` | Run tests |
 
 ### Key environment variables
@@ -162,7 +165,7 @@ Notes:
 | `__init__.py` | Package marker |
 | `adm2_loader.py` | District boundary loading, normalization, and FeatureCollection builders |
 | `adm3_loader.py` | Block boundary loading and normalization |
-| `crosswalks.py` | District ↔ sub-basin crosswalk validation and context builders |
+| `crosswalks.py` | Polygon crosswalk validation and context builders for district/block ↔ basin/sub-basin |
 | `discovery.py` | Processed-artifact discovery helpers for yearly files and outputs |
 | `hydro_loader.py` | Basin/sub-basin loading, validation, keys, and render simplification |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
@@ -232,7 +235,10 @@ Notes:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `build_district_subbasin_crosswalk.py` | Build canonical district ↔ sub-basin crosswalk CSV |
+| `build_district_subbasin_crosswalk.py` | Shared polygon crosswalk builders plus the district ↔ sub-basin CLI |
+| `build_block_subbasin_crosswalk.py` | Build canonical block ↔ sub-basin crosswalk CSV |
+| `build_district_basin_crosswalk.py` | Build canonical district ↔ basin crosswalk CSV |
+| `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |
 | `convert_blocks_shp_to_geojson.py` | Convert block shapefile to standardized GeoJSON |
 | `inspect_block_shapefile.py` | Inspect and optionally convert block shapefiles |
 
@@ -365,6 +371,9 @@ python -m pytest -q
 | `basins.geojson` | Canonical basin boundaries |
 | `subbasins.geojson` | Canonical sub-basin boundaries |
 | `district_subbasin_crosswalk.csv` | District ↔ sub-basin overlap registry |
+| `block_subbasin_crosswalk.csv` | Block ↔ sub-basin overlap registry |
+| `district_basin_crosswalk.csv` | District ↔ basin overlap registry |
+| `block_basin_crosswalk.csv` | Block ↔ basin overlap registry |
 
 ### Canonical identifier expectations
 
@@ -419,8 +428,11 @@ Identifier columns:
 
 ### Crosswalk artifact
 
-Current canonical crosswalk:
+Current canonical crosswalks:
 - `district_subbasin_crosswalk.csv`
+- `block_subbasin_crosswalk.csv`
+- `district_basin_crosswalk.csv`
+- `block_basin_crosswalk.csv`
 
 Required columns:
 - `district_name`
@@ -434,15 +446,14 @@ Required columns:
 - `subbasin_area_fraction_in_district`
 
 Current behavior:
-- district details -> hydrology context
-- sub-basin details -> administrative context
+- district and block details -> basin + sub-basin context
+- basin and sub-basin details -> administrative context
+- hydro admin-context defaults to districts, with blocks as an optional drill-down
 - related-unit map overlays
-- district -> sub-basin jump
-- sub-basin -> district jump
+- admin -> hydro jump
+- hydro -> admin jump
 
 Not yet supported:
-- block crosswalk artifacts
-- basin crosswalk artifacts
 - weighted transfer across spatial families
 - river-network crosswalk/topology layer
 
@@ -453,11 +464,9 @@ Not yet supported:
 - Hydro family: basin and sub-basin
 - Hydro compute outputs and hydro master contracts
 - Hydro map/rankings/details flows
-- District ↔ sub-basin crosswalk context and actionability
+- Polygon crosswalk context and actionability for district/block ↔ basin/sub-basin
 
 ### Deferred
-- Block ↔ sub-basin crosswalks
-- Basin ↔ admin crosswalk registry
 - Weighted admin ↔ hydro translation engine
 - Hydro portfolio workflows
 - River-network/reach translation layer

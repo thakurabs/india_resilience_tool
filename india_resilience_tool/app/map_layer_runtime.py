@@ -160,7 +160,7 @@ def build_folium_map_for_selection(
     reference_layer_name = None
     overlay_level = str((crosswalk_overlay or {}).get("level", "")).strip().lower()
     overlay_feature_keys = list((crosswalk_overlay or {}).get("feature_keys", []) or [])
-    if overlay_level in {"district", "sub_basin"} and overlay_feature_keys:
+    if overlay_level in {"district", "block", "basin", "sub_basin"} and overlay_feature_keys:
         if overlay_level == "district":
             adm2_mtime = float(adm2_geojson_path.stat().st_mtime)
             overlay_geojson_by_state = build_adm2_geojson_by_state(
@@ -176,6 +176,37 @@ def build_folium_map_for_selection(
                 alias_fn=alias_fn,
             )
             reference_level = "district"
+        elif overlay_level == "block":
+            adm3_mtime = float(adm3_geojson_path.stat().st_mtime)
+            overlay_geojson_by_state = build_adm3_geojson_by_state(
+                path=str(adm3_geojson_path),
+                tolerance=simplify_tolerance_adm3,
+                mtime=adm3_mtime,
+            )
+            overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+            reference_fc = filter_fc_by_feature_keys(
+                overlay_geojson_by_state["all"],
+                feature_keys=overlay_feature_keys,
+                level="block",
+                alias_fn=alias_fn,
+                key_col="__bkey",
+            )
+            reference_level = "block"
+        elif overlay_level == "basin":
+            basin_mtime = float(basin_geojson_path.stat().st_mtime)
+            overlay_geojson_by_state = build_basin_geojson_all(
+                path=str(basin_geojson_path),
+                mtime=basin_mtime,
+                tolerance=SIMPLIFY_TOL_BASIN_RENDER,
+            )
+            overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+            reference_fc = filter_fc_by_feature_keys(
+                overlay_geojson_by_state["all"],
+                feature_keys=overlay_feature_keys,
+                level="basin",
+                alias_fn=alias_fn,
+            )
+            reference_level = "basin"
         else:
             subbasin_mtime = float(subbasin_geojson_path.stat().st_mtime)
             overlay_geojson_by_state = build_subbasin_geojson_all(

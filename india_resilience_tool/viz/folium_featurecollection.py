@@ -112,6 +112,10 @@ def filter_fc_by_feature_keys(
     - `state::district`
     - `district`
 
+    For block overlays, keys may be:
+    - `state::district::block`
+    - `block`
+
     For hydro overlays, the cached `__key` field is used directly.
     """
     allowed = [str(v).strip() for v in feature_keys if str(v).strip()]
@@ -139,6 +143,30 @@ def filter_fc_by_feature_keys(
             state_key = alias_fn(props.get("state_name", ""))
             district_key = alias_fn(props.get("district_name", ""))
             if (state_key, district_key) in allowed_pairs or district_key in allowed_districts:
+                kept.append(feat)
+        out["features"] = kept
+        return out
+
+    if level_norm == "block":
+        allowed_triplets: set[tuple[str, str, str]] = set()
+        allowed_blocks: set[str] = set()
+        for item in allowed:
+            if item.count("::") >= 2:
+                state_part, district_part, block_part = item.split("::", 2)
+                allowed_triplets.add(
+                    (alias_fn(state_part), alias_fn(district_part), alias_fn(block_part))
+                )
+            else:
+                allowed_blocks.add(alias_fn(item))
+
+        kept = []
+        for feat in features:
+            props = feat.get("properties") or {}
+            state_key = alias_fn(props.get("state_name", ""))
+            district_key = alias_fn(props.get("district_name", ""))
+            block_key = alias_fn(props.get("block_name", ""))
+            composite = (state_key, district_key, block_key)
+            if composite in allowed_triplets or block_key in allowed_blocks:
                 kept.append(feat)
         out["features"] = kept
         return out

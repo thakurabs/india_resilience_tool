@@ -275,9 +275,13 @@ def build_choropleth_map_with_geojson_layer(
         reference_level_norm = str(reference_level or "").strip().lower()
 
         def _reference_style(_feature: dict) -> dict:
+            if reference_level_norm in {"district", "block"}:
+                outline_color = "#1d4ed8"
+            else:
+                outline_color = "#0f766e"
             return {
                 "fillColor": "transparent",
-                "color": "#1d4ed8" if reference_level_norm == "district" else "#0f766e",
+                "color": outline_color,
                 "weight": 2.0,
                 "fillOpacity": 0.0,
             }
@@ -287,6 +291,20 @@ def build_choropleth_map_with_geojson_layer(
             reference_tooltip = folium.features.GeoJsonTooltip(
                 fields=["district_name", "state_name"],
                 aliases=["District", "State"],
+                localize=True,
+                sticky=True,
+            )
+        elif reference_level_norm == "block":
+            reference_tooltip = folium.features.GeoJsonTooltip(
+                fields=["block_name", "district_name", "state_name"],
+                aliases=["Block", "District", "State"],
+                localize=True,
+                sticky=True,
+            )
+        elif reference_level_norm == "basin":
+            reference_tooltip = folium.features.GeoJsonTooltip(
+                fields=["basin_name"],
+                aliases=["Basin"],
                 localize=True,
                 sticky=True,
             )
