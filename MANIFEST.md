@@ -2,128 +2,361 @@
 
 ## Overview
 
-IRT is a Streamlit-based climate-risk dashboard organized around two spatial families:
+IRT is a Streamlit-based climate-risk and resilience dashboard organized around two spatial families:
 
 - **Admin**: district, block
 - **Hydro**: basin, sub-basin
 
-The current codebase supports:
-- map, rankings, and details flows for all four levels
+The current working tree supports:
+- map, rankings, and details flows for district, block, basin, and sub-basin
 - admin portfolio workflows for district and block
-- hydro-specific boundary loading and processed-output discovery
-- a first actionable crosswalk layer for **district ↔ sub-basin**
+- hydro boundary loading and hydro processed-output discovery
+- district ↔ sub-basin crosswalk context and actionable related-unit navigation/highlighting
 
-The crosswalk layer is currently **relationship- and explanation-oriented**. It does not yet perform weighted analytical transfer of metrics between admin and hydro units.
+The crosswalk layer is currently **read-optimized and explanatory**. It is not yet a full weighted transfer engine across spatial families.
 
 **Author:** Abu Bakar Siddiqui Thakur  
 **Email:** absthakur@resilience.org.in  
-**Tech Stack:** Python 3.10+, Streamlit, Pandas, GeoPandas, Folium, Matplotlib, Plotly
+**Primary stack:** Python 3.10+, Streamlit, Pandas, GeoPandas, Folium, Matplotlib, Plotly, Xarray
 
 ## Quick reference
 
-### Entry points
+### Main entry points
 
 | Command | Purpose |
 |---------|---------|
-| `streamlit run main.py` | Launch dashboard |
-| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard (alternative) |
+| `streamlit run main.py` | Launch dashboard from root entrypoint |
+| `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild master CSVs |
-| `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute pipeline options |
+| `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics <slug>` | Build district outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level block --metrics <slug>` | Build block outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level basin --metrics <slug>` | Build basin outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics <slug>` | Build sub-basin outputs |
-| `python -m tools.subbasin_shp_explore --help` | Inspect/repair/export canonical hydro boundaries |
+| `python -m tools.subbasin_shp_explore --help` | Inspect/repair/export hydro boundaries |
 | `python -m tools.geodata.build_district_subbasin_crosswalk --overwrite` | Build district ↔ sub-basin crosswalk CSV |
+| `python -m pytest -q` | Run tests |
 
-### Environment variables
+### Key environment variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `IRT_PILOT_STATE` | `Telangana` | Default admin state in the app |
-| `IRT_DATA_DIR` | from `paths.py` | Base directory for boundaries, crosswalks, and processed outputs |
-| `IRT_PROCESSED_ROOT` | `IRT_DATA_DIR/processed/{metric}` | Override processed root |
+| `IRT_PILOT_STATE` | `Telangana` | Default admin state in the UI |
+| `IRT_DATA_DIR` | resolved in `paths.py` | Base directory for boundaries, crosswalks, and processed outputs |
+| `IRT_PROCESSED_ROOT` | `IRT_DATA_DIR/processed/{metric}` | Optional processed-root override |
 | `IRT_DEBUG` | `0` | Enable debug/perf output |
 
-## Current project structure
+## Top-level repo map
 
-```text
-india_resilience_tool/
-├── analysis/
-│   ├── map_enrichment.py
-│   ├── metrics.py
-│   ├── portfolio.py
-│   └── timeseries.py
-├── app/
-│   ├── color_range_controls.py
-│   ├── crosswalk_runtime.py
-│   ├── details_runtime.py
-│   ├── geo_cache.py
-│   ├── geography.py
-│   ├── geography_controls.py
-│   ├── left_panel_runtime.py
-│   ├── map_layer_runtime.py
-│   ├── map_pipeline.py
-│   ├── master_freshness.py
-│   ├── perf.py
-│   ├── point_selection_ui.py
-│   ├── portfolio_multistate.py
-│   ├── portfolio_state_runtime.py
-│   ├── portfolio_ui.py
-│   ├── ribbon.py
-│   ├── runtime.py
-│   ├── sidebar.py
-│   ├── sidebar_branding.py
-│   ├── state.py
-│   └── views/
-│       ├── details_panel.py
-│       ├── map_view.py
-│       ├── rankings_view.py
-│       └── state_summary_view.py
-├── compute/
-│   ├── master_builder.py
-│   └── spi_adapter.py
-├── config/
-│   ├── constants.py
-│   ├── metrics_registry.py
-│   ├── paths.py
-│   └── variables.py
-├── data/
-│   ├── adm2_loader.py
-│   ├── adm3_loader.py
-│   ├── crosswalks.py
-│   ├── discovery.py
-│   ├── hydro_loader.py
-│   ├── master_columns.py
-│   ├── master_loader.py
-│   ├── merge.py
-│   └── spatial_match.py
-├── utils/
-│   ├── naming.py
-│   └── processed_io.py
-└── viz/
-    ├── charts.py
-    ├── colors.py
-    ├── exports.py
-    ├── folium_featurecollection.py
-    ├── formatting.py
-    ├── style.py
-    └── tables.py
+### Root files
 
-Root:
-├── paths.py
-├── README.md
-├── MANIFEST.md
-├── environment.yml
-├── tools/
-└── tests/
+| Path | Purpose |
+|------|---------|
+| `AGENTS.md` | Repo-wide agent instructions and workflow guardrails |
+| `README.md` | Human-facing setup and usage guide |
+| `MANIFEST.md` | AI/engineer-facing repo map and contracts |
+| `main.py` | Root Streamlit entrypoint |
+| `paths.py` | Canonical path and data-contract configuration |
+| `environment.yml` | Canonical Conda environment |
+| `environment.freeze.yml` | Reference environment snapshot |
+| `requirements.txt` | Pointer/reference requirements file |
+| `requirements.freeze.txt` | Freeze/export reference |
+| `LICENSE` | License text |
+| `resilience_actions_logo_transparent.png` | Branding asset used in the sidebar |
+
+### Primary directories
+
+| Path | Purpose |
+|------|---------|
+| `india_resilience_tool/` | Main application package |
+| `tools/` | Operational, data-prep, pipeline, diagnostics, and geodata utilities |
+| `tests/` | Main pytest suite |
+| `docs/` | Handoffs, smoke tests, and repo/process notes |
+| `notebooks/` | Exploratory notebooks and notebook-specific instructions |
+
+Notes:
+- `__pycache__/` directories are intentionally omitted below.
+- Local logs, zips, and untracked working files are not treated as canonical repo modules.
+
+## Package inventory
+
+### `india_resilience_tool/analysis/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `map_enrichment.py` | Streamlit-free map enrichment helpers: baseline/delta, ranking, tooltip prep |
+| `metrics.py` | Risk-class and percentile/ranking helpers |
+| `portfolio.py` | Portfolio comparison logic and portfolio-level data prep |
+| `timeseries.py` | Yearly series loading for admin and hydro flows |
+
+### `india_resilience_tool/app/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `adm2_cache.py` | Streamlit-cached ADM2 loading and FeatureCollection helpers |
+| `case_study_runtime.py` | Runtime helpers for district-focused case-study export |
+| `color_range_controls.py` | Robust color-range default calculation for maps |
+| `crosswalk_runtime.py` | App-layer crosswalk navigation and overlay-state helpers |
+| `details_runtime.py` | Right-panel orchestration and data prep for details views |
+| `geo_cache.py` | Streamlit-cached admin and hydro geometry loading/builders |
+| `geography.py` | Filesystem-backed admin geography discovery helpers |
+| `geography_controls.py` | Sidebar geography + analysis-focus controls for admin and hydro |
+| `help_text.py` | Tooltip/help-text helpers for ribbon widgets |
+| `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
+| `main.py` | Package Streamlit entrypoint |
+| `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
+| `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline |
+| `master_cache.py` | Streamlit session-state cache for master CSV + schema loading |
+| `master_freshness.py` | Master CSV freshness/rebuild gating helpers |
+| `perf.py` | Lightweight timing/performance instrumentation |
+| `point_selection_ui.py` | Coordinate input, preview, and saved-point support |
+| `portfolio_multistate.py` | Multi-state portfolio helper functions |
+| `portfolio_state_runtime.py` | Session-state wrappers around portfolio operations |
+| `portfolio_ui.py` | Portfolio right-panel UI and comparison workflows |
+| `ribbon.py` | Metric selection ribbon, master loading, and hydro-master readiness checks |
+| `runtime.py` | Canonical app orchestrator (`run_app`) |
+| `sidebar.py` | Family/level/view selector widgets and jump-once helpers |
+| `sidebar_branding.py` | Sidebar logo/branding render block |
+| `state.py` | Session-state defaults, level constants, and level-aware helpers |
+
+#### `india_resilience_tool/app/views/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `details_panel.py` | Render the single-unit details panel and crosswalk context/actions |
+| `map_view.py` | Render Folium map and extract click payloads |
+| `rankings_view.py` | Rankings table rendering and portfolio add flows |
+| `state_summary_view.py` | State summary view for admin-focused overview flows |
+
+### `india_resilience_tool/compute/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `master_builder.py` | Build master CSVs, including hydro master enrichment |
+| `spi_adapter.py` | SPI adapter around `climate-indices` |
+
+#### `india_resilience_tool/compute/tests/`
+
+| File | Purpose |
+|------|---------|
+| `test_spi_adapter.py` | SPI adapter tests |
+
+### `india_resilience_tool/config/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `constants.py` | UI, styling, scenario, and geometry-render constants |
+| `metrics_registry.py` | Canonical metric and bundle registry |
+| `paths.py` | Library-side path config mirroring root `paths.py` |
+| `variables.py` | Dashboard-facing variable registry derived from metrics registry |
+
+### `india_resilience_tool/data/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `adm2_loader.py` | District boundary loading, normalization, and FeatureCollection builders |
+| `adm3_loader.py` | Block boundary loading and normalization |
+| `crosswalks.py` | District ↔ sub-basin crosswalk validation and context builders |
+| `discovery.py` | Processed-artifact discovery helpers for yearly files and outputs |
+| `hydro_loader.py` | Basin/sub-basin loading, validation, keys, and render simplification |
+| `master_columns.py` | Streamlit-free master column resolution helpers |
+| `master_loader.py` | Robust master CSV loading, normalization, and schema parsing |
+| `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
+| `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |
+
+### `india_resilience_tool/utils/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `naming.py` | Name normalization, aliasing, and join-key helpers |
+| `processed_io.py` | Lightweight Parquet/CSV I/O helpers for processed outputs |
+
+### `india_resilience_tool/viz/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `charts.py` | Chart and figure generation for details and portfolio flows |
+| `colors.py` | Color scales, legends, and map-color helpers |
+| `exports.py` | PDF/ZIP export helpers |
+| `folium_featurecollection.py` | Streamlit-free FeatureCollection patching/filtering helpers |
+| `formatting.py` | Numeric/text formatting helpers |
+| `style.py` | Shared plotting/style helpers |
+| `tables.py` | Rankings and comparison table formatting/builders |
+
+## Tools inventory
+
+### `tools/`
+
+| File | Purpose |
+|------|---------|
+| `AGENTS.md` | Tooling-specific agent instructions |
+| `README.md` | Tooling overview and command reference |
+| `__init__.py` | Package marker |
+| `subbasin_shp_explore.py` | Inspect, repair, and export canonical hydro boundaries |
+
+### `tools/data_acquisition/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `download_era5_daily_stats_structured.py` | Download structured ERA5 daily stats from CDS |
+| `nex_india_subset_download_s3_v1.py` | Download NEX India subsets from S3 |
+
+### `tools/data_prep/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `derive_hurs_from_era5_tas_tdps.py` | Derive relative humidity from ERA5 tas + dew point |
+| `organize_era5_legacy_nc_files.py` | Reorganize legacy ERA5 NetCDF files |
+| `prepare_reanalysis_for_pipeline.py` | Prepare ERA5/IMD reanalysis data for compute pipeline ingestion |
+
+### `tools/diagnostics/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `debug_build_master.py` | Diagnose master-building issues |
+| `spi_diagnostic.py` | SPI output sanity checks and diagnostics |
+
+### `tools/geodata/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `build_district_subbasin_crosswalk.py` | Build canonical district ↔ sub-basin crosswalk CSV |
+| `convert_blocks_shp_to_geojson.py` | Convert block shapefile to standardized GeoJSON |
+| `inspect_block_shapefile.py` | Inspect and optionally convert block shapefiles |
+
+### `tools/legacy/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `DONOTUSE_ArtparkGenerateReport.py` | Legacy script kept for reference only |
+
+### `tools/pipeline/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `build_all_csv.ps1` | PowerShell helper for CSV build workflows |
+| `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
+| `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
+| `compute_indices_multiprocess.py` | Main multi-process compute pipeline for admin and hydro |
+
+## Test inventory
+
+### Test entrypoint
+
+```bash
+python -m pytest -q
 ```
+
+### Test modules under `tests/`
+
+#### App/UI/runtime
+- `test_app_adm2_cache.py`
+- `test_app_dashboard_entry.py`
+- `test_app_details_panel.py`
+- `test_app_map_view_extract.py`
+- `test_app_orchestrator_entry.py`
+- `test_app_perf.py`
+- `test_app_point_selection_ui.py`
+- `test_app_portfolio_ui.py`
+- `test_app_rankings_view.py`
+- `test_app_sidebar_import.py`
+- `test_app_state.py`
+- `test_app_state_summary_view.py`
+- `test_legend_html.py`
+- `test_main_app_import.py`
+- `test_map_view_layout.py`
+- `test_root_main_entrypoint.py`
+- `test_scenario_ui_labels.py`
+- `test_state_defaults.py`
+
+#### Data, paths, merge, contracts
+- `test_available_states.py`
+- `test_config.py`
+- `test_crosswalk_context.py`
+- `test_crosswalk_generator.py`
+- `test_crosswalk_runtime.py`
+- `test_hydro_contracts.py`
+- `test_import_boundaries.py`
+- `test_imports_smoke.py`
+- `test_master_loader.py`
+- `test_merge.py`
+- `test_metrics_registry.py`
+- `test_naming.py`
+- `test_paths_resolution.py`
+- `test_processed_io_parquet_filters.py`
+- `test_prune_legacy_csv.py`
+- `test_timeseries.py`
+- `test_timeseries_models.py`
+
+#### Analysis, enrichment, portfolio
+- `test_analysis_metrics.py`
+- `test_map_enrichment.py`
+- `test_portfolio.py`
+- `test_portfolio_grouping_helpers.py`
+- `test_portfolio_tier1_guards.py`
+- `test_portfolio_tier2_manage_helpers.py`
+- `test_portfolio_tier3_multistate.py`
+- `test_state_profile_trend_band_fallback.py`
+
+#### Compute and legacy parity
+- `test_build_master_state_summaries.py`
+- `test_compute_indices_synthetic.py`
+- `test_compute_indices_synthetic_comprehensive.py`
+- `test_legacy_dashboard_map_portfolio_wiring.py`
+- `test_legacy_dashboard_portfolio_panel_call.py`
+- `test_legacy_dashboard_state_profile_files.py`
+
+#### Visualization
+- `test_viz_charts.py`
+- `test_viz_colors.py`
+- `test_viz_exports.py`
+- `test_viz_scenario_yaxis_scaling.py`
+- `test_viz_tables.py`
+- `test_viz_trend_spaghetti.py`
+
+#### Repo/process guards
+- `test_no_emojis.py`
+
+## Docs and supporting repo files
+
+### `docs/`
+
+| File | Purpose |
+|------|---------|
+| `HANDOFF.md` | Persistent handoff ledger |
+| `dead_code_candidate_report.md` | Dead-code analysis notes |
+| `functionality_contract.md` | Product/functionality contract notes |
+| `manual_smoke_test.md` | Manual smoke-test checklist |
+| `module_responsibility_map.md` | Historical module responsibility notes |
+| `pytest_baseline_failures.md` | Known/recorded pytest baseline failures |
+| `refactor_acceptance.md` | Refactor acceptance criteria/history |
+
+### Other notable root assets
+
+| File | Purpose |
+|------|---------|
+| `irt_agents_bundle.zip` | Agent-bundle artifact kept at repo root |
+| `irt_agents_data_catalog_patch.zip` | Patch/archive artifact |
+| `irt_data_catalog_patch.zip` | Patch/archive artifact |
+| `spi3_err.log` / `spi3_out.log` / `spi3_tel.log` | Local diagnostic logs |
 
 ## Data contracts
 
-### Boundary inputs
-
-Expected under `IRT_DATA_DIR`:
+### Boundary inputs expected under `IRT_DATA_DIR`
 
 | Artifact | Purpose |
 |----------|---------|
@@ -133,18 +366,18 @@ Expected under `IRT_DATA_DIR`:
 | `subbasins.geojson` | Canonical sub-basin boundaries |
 | `district_subbasin_crosswalk.csv` | District ↔ sub-basin overlap registry |
 
-### Boundary identifier expectations
+### Canonical identifier expectations
 
-| Level | Key columns |
-|------|-------------|
-| District | `state_name`, `district_name`, `geometry` |
-| Block | `state_name`, `district_name`, `block_name`, `geometry` |
-| Basin | `basin_id`, `basin_name`, `hydro_level`, `geometry` |
-| Sub-basin | `basin_id`, `basin_name`, `subbasin_id`, `subbasin_code`, `subbasin_name`, `hydro_level`, `geometry` |
+| Level | Required identifiers |
+|------|-----------------------|
+| District | `state_name`, `district_name` |
+| Block | `state_name`, `district_name`, `block_name` |
+| Basin | `basin_id`, `basin_name` |
+| Sub-basin | `basin_id`, `basin_name`, `subbasin_id`, `subbasin_code`, `subbasin_name` |
 
-### Processed outputs
+### Processed output layout
 
-#### Admin layout
+#### Admin
 
 ```text
 processed/{metric_slug}/{state}/
@@ -166,7 +399,7 @@ Identifier columns:
 - district master: `state`, `district`
 - block master: `state`, `district`, `block`
 
-#### Hydro layout
+#### Hydro
 
 ```text
 processed/{metric_slug}/hydro/
@@ -200,178 +433,37 @@ Required columns:
 - `district_area_fraction_in_subbasin`
 - `subbasin_area_fraction_in_district`
 
-Current use:
+Current behavior:
 - district details -> hydrology context
 - sub-basin details -> administrative context
-- related-unit overlay on the map
+- related-unit map overlays
 - district -> sub-basin jump
 - sub-basin -> district jump
 
 Not yet supported:
 - block crosswalk artifacts
 - basin crosswalk artifacts
-- weighted translation across spatial families
-
-## Module responsibilities
-
-### App layer
-
-#### `app/runtime.py`
-Canonical Streamlit orchestrator. It wires:
-- sidebar selectors
-- geography controls
-- metric ribbon
-- map/rankings pipeline
-- right-side details panel
-
-#### `app/sidebar.py`
-Family-aware sidebar routing:
-- `Admin` vs `Hydro`
-- `District` / `Block` / `Basin` / `Sub-basin`
-- view switching and jump-once flags
-
-#### `app/geography_controls.py`
-Selection controls for the active level:
-- admin selectors for state/district/block
-- hydro selectors for basin/sub-basin
-- analysis-focus gating
-
-#### `app/map_pipeline.py`
-Shared map/rankings build path:
-- merge boundaries with the current master table
-- compute baseline/delta/rank/risk/tooltip fields
-- filter visible units for the active selection
-- hand off to the Folium layer builder
-
-#### `app/map_layer_runtime.py`
-Streamlit-free Folium map builder:
-- uses cached geometry FeatureCollections
-- patches runtime properties into features
-- supports optional related-unit overlay for crosswalk actions
-
-#### `app/details_runtime.py`
-Builds the right-side panel context:
-- climate summary
-- trend/scenario data
-- current crosswalk context for district and sub-basin
-
-#### `app/crosswalk_runtime.py`
-App-layer helper for actionable crosswalk behavior:
-- set/clear related-unit overlays
-- queue district -> sub-basin navigation
-- queue sub-basin -> district navigation
-
-#### `app/views/details_panel.py`
-Renders the details UI and current crosswalk actions:
-- show context summary
-- highlight related units
-- open a related unit across admin/hydro families
-
-#### `app/views/map_view.py`
-Renders the Folium map and extracts click payloads. The map key is selection-aware so crosswalk overlays and hydro filters rerender correctly.
-
-### Data layer
-
-#### `data/hydro_loader.py`
-Canonical hydro boundary loading and normalization:
-- validates required hydro columns
-- ensures stable hydro keys
-- provides render-only simplification helpers
-
-#### `data/crosswalks.py`
-Read-optimized district ↔ sub-basin crosswalk service:
-- validates the CSV contract
-- builds district hydrology context
-- builds sub-basin administrative context
-- returns deterministic summary objects for the UI
-
-#### `data/merge.py`
-Boundary ↔ master merge helpers for:
-- district
-- block
-- basin
-- sub-basin
-
-#### `data/discovery.py`
-Processed-artifact discovery for yearly files and supporting file-system lookups across admin and hydro layouts.
-
-#### `data/spatial_match.py`
-Click and explicit-selection matching helpers used to resolve details-panel rows for admin and hydro selections.
-
-### Compute layer
-
-#### `compute/master_builder.py`
-Builds master CSVs and enriches hydro masters with canonical hydro identifiers from the basin/sub-basin GeoJSONs.
-
-#### `tools/pipeline/compute_indices_multiprocess.py`
-Primary compute pipeline for district, block, basin, and sub-basin outputs. Current hydro support includes:
-- direct basin computation
-- direct sub-basin computation
-- hydro output layout under `processed/{metric}/hydro/`
-- shared spatial coverage QC policy
-
-### Tools
-
-#### `tools/subbasin_shp_explore.py`
-Hydro boundary prep utility for the canonical `waterbasin_goi.shp` source:
-- inspect schema and hierarchy
-- report invalid geometries
-- optionally repair invalid features
-- export `basins.geojson` and `subbasins.geojson`
-
-#### `tools/geodata/build_district_subbasin_crosswalk.py`
-Offline generator for the canonical district ↔ sub-basin crosswalk CSV.
-
-## Session state and UI contracts
-
-Important current state keys include:
-- `spatial_family`
-- `admin_level`
-- `analysis_mode`
-- `selected_state`
-- `selected_district`
-- `selected_block`
-- `selected_basin`
-- `selected_subbasin`
-- `crosswalk_overlay`
-- `_pending_crosswalk_navigation`
-
-Current UI contract:
-- family first, then level
-- hydro uses `Single basin focus` / `Single sub-basin focus`
-- admin portfolios exist only for district and block
+- weighted transfer across spatial families
+- river-network crosswalk/topology layer
 
 ## Current status vs deferred work
 
 ### Implemented now
-- Admin + hydro level support in the app
-- Hydro boundary loading and hydro compute outputs
-- Basin/sub-basin map, rankings, and details flows
+- Admin family: district and block
+- Hydro family: basin and sub-basin
+- Hydro compute outputs and hydro master contracts
+- Hydro map/rankings/details flows
 - District ↔ sub-basin crosswalk context and actionability
 
 ### Deferred
 - Block ↔ sub-basin crosswalks
 - Basin ↔ admin crosswalk registry
-- Weighted admin ↔ hydro metric transfer
+- Weighted admin ↔ hydro translation engine
 - Hydro portfolio workflows
 - River-network/reach translation layer
 
-## Tests and validation
-
-Primary test entrypoint:
-
-```bash
-python -m pytest -q
-```
-
-Current crosswalk/hydro-specific tests include:
-- `tests/test_hydro_contracts.py`
-- `tests/test_crosswalk_context.py`
-- `tests/test_crosswalk_generator.py`
-- `tests/test_crosswalk_runtime.py`
-
 ## Contact
 
-For questions about this codebase:
+For questions about the codebase:
 - **Author:** Abu Bakar Siddiqui Thakur
 - **Email:** absthakur@resilience.org.in
