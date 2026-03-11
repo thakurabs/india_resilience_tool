@@ -20,6 +20,8 @@ def run_app() -> None:
         BLOCKS_PATH,
         DATA_DIR,
         DISTRICTS_PATH,
+        RIVER_BASIN_RECONCILIATION_PATH,
+        RIVER_NETWORK_DISPLAY_PATH,
         SUBBASINS_PATH,
         resolve_processed_root,
     )
@@ -114,6 +116,8 @@ def run_app() -> None:
     ADM3_GEOJSON = BLOCKS_PATH
     BASIN_GEOJSON = BASINS_PATH
     SUBBASIN_GEOJSON = SUBBASINS_PATH
+    RIVER_DISPLAY_GEOJSON = RIVER_NETWORK_DISPLAY_PATH
+    RIVER_BASIN_RECONCILIATION_CSV = RIVER_BASIN_RECONCILIATION_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 
@@ -427,6 +431,7 @@ def run_app() -> None:
         adm3_geojson=ADM3_GEOJSON,
         basins_geojson=BASIN_GEOJSON,
         subbasins_geojson=SUBBASIN_GEOJSON,
+        river_display_geojson=RIVER_DISPLAY_GEOJSON,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
     )
 
@@ -436,6 +441,7 @@ def run_app() -> None:
     selected_block = geo_ctx.selected_block
     selected_basin = geo_ctx.selected_basin
     selected_subbasin = geo_ctx.selected_subbasin
+    show_river_network = geo_ctx.show_river_network
     gdf_state_districts = geo_ctx.gdf_state_districts
 
     from india_resilience_tool.app.portfolio_state_runtime import (
@@ -559,6 +565,7 @@ def run_app() -> None:
         selected_subbasin=selected_subbasin,
         spatial_family=spatial_family,
         crosswalk_overlay=st.session_state.get("crosswalk_overlay"),
+        show_river_network=show_river_network,
         hover_enabled=bool(st.session_state.get("hover_enabled", True)),
         map_center=list(st.session_state["map_center"]),
         map_zoom=float(st.session_state["map_zoom"]),
@@ -569,6 +576,8 @@ def run_app() -> None:
         adm3_geojson_path=ADM3_GEOJSON,
         basin_geojson_path=BASIN_GEOJSON,
         subbasin_geojson_path=SUBBASIN_GEOJSON,
+        river_display_geojson_path=RIVER_DISPLAY_GEOJSON,
+        river_basin_reconciliation_path=RIVER_BASIN_RECONCILIATION_CSV,
         simplify_tol_adm2=SIMPLIFY_TOL_ADM2,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
         map_height=MAP_HEIGHT,
@@ -606,6 +615,7 @@ def run_app() -> None:
         portfolio_remove_fn=_portfolio_remove,
         portfolio_normalize_fn=_portfolio_normalize,
         merged=artifacts.merged,
+        river_overlay_message=artifacts.river_overlay_message,
     )
 
     if rhs_collapsed:

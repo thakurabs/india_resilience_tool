@@ -8,6 +8,7 @@ runtime behavior (same caching, tolerances, and keying strategy).
 from __future__ import annotations
 
 import geopandas as gpd
+import pandas as pd
 import streamlit as st
 
 from india_resilience_tool.config.constants import (
@@ -32,6 +33,12 @@ from india_resilience_tool.data.hydro_loader import (
     ensure_hydro_key_column as _ensure_hydro_key_column,
     load_local_hydro as _load_local_hydro,
     simplify_hydro_for_render as _simplify_hydro_for_render,
+)
+from india_resilience_tool.data.river_loader import (
+    canonicalize_river_hydro_name as _canonicalize_river_hydro_name,
+    ensure_river_key_column as _ensure_river_key_column,
+    load_river_basin_reconciliation as _load_river_basin_reconciliation,
+    load_local_river_display as _load_local_river_display,
 )
 from india_resilience_tool.utils.naming import alias, normalize_name
 
@@ -125,6 +132,21 @@ def load_local_subbasin_render(
     """Load sub-basin GeoJSON and apply render-only simplification."""
     gdf = load_local_subbasin(path)
     return _simplify_hydro_for_render(gdf, level="sub_basin", tolerance=float(tolerance))
+
+
+@st.cache_data(ttl=3600)
+def load_local_river_display(path: str) -> gpd.GeoDataFrame:
+    """Load the cleaned river display artifact."""
+    return _load_local_river_display(
+        path=path,
+        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
+    )
+
+
+@st.cache_data(ttl=3600)
+def load_river_basin_reconciliation_cached(path: str) -> pd.DataFrame:
+    """Load the canonical hydro-basin to river-basin reconciliation CSV."""
+    return _load_river_basin_reconciliation(path)
 
 
 @st.cache_data(ttl=3600)
@@ -325,6 +347,89 @@ def build_subbasin_geojson_by_basin(
             "subbasin_code",
             "subbasin_name",
             "hydro_level",
+            "__key",
+            "geometry",
+        ],
+    )
+
+
+@st.cache_data(ttl=3600)
+def build_river_geojson_all(
+    path: str,
+    mtime: float,
+) -> dict[str, dict]:
+    """Build a single nationwide river display FeatureCollection cache."""
+    _ = mtime
+    gdf = load_local_river_display(path)
+    gdf = _ensure_river_key_column(gdf, alias_fn=alias, key_col="__key")
+    return _featurecollections_by_state(
+        gdf.assign(state_name="All"),
+        state_col="state_name",
+        normalize_state_fn=normalize_name,
+        keep_cols=[
+            "river_feature_id",
+            "source_uid_river",
+            "river_name_clean",
+            "basin_name_clean",
+            "subbasin_name_clean",
+            "state_names_clean",
+            "length_km_source",
+            "__key",
+            "geometry",
+        ],
+    )
+
+
+@st.cache_data(ttl=3600)
+def build_river_geojson_by_basin(
+    path: str,
+    mtime: float,
+) -> dict[str, dict]:
+    """Build river FeatureCollections keyed by normalized basin name."""
+    _ = mtime
+    gdf = load_local_river_display(path)
+    gdf = _ensure_river_key_column(gdf, alias_fn=alias, key_col="__key")
+    gdf = gdf.copy()
+    gdf["__selector"] = gdf["basin_name_clean"].astype(str).map(_canonicalize_river_hydro_name).map(alias)
+    return _featurecollections_by_selector(
+        gdf,
+        selector_col="__selector",
+        keep_cols=[
+            "river_feature_id",
+            "source_uid_river",
+            "river_name_clean",
+            "basin_name_clean",
+            "subbasin_name_clean",
+            "state_names_clean",
+            "length_km_source",
+            "__key",
+            "geometry",
+        ],
+    )
+
+
+@st.cache_data(ttl=3600)
+def build_river_geojson_by_subbasin(
+    path: str,
+    mtime: float,
+) -> dict[str, dict]:
+    """Build river FeatureCollections keyed by normalized sub-basin name."""
+    _ = mtime
+    gdf = load_local_river_display(path)
+    gdf = _ensure_river_key_column(gdf, alias_fn=alias, key_col="__key")
+    gdf = gdf.copy()
+    gdf["__selector"] = gdf["subbasin_name_clean"].astype(str).map(alias)
+    return _featurecollections_by_selector(
+        gdf,
+        selector_col="__selector",
+        keep_cols=[
+            "river_feature_id",
+            "source_uid_river",
+            "river_name_clean",
+            "basin_name_clean",
+            "subbasin_name_clean",
+            "state_names_clean",
+            "length_km_source",
             "__key",
             "geometry",
         ],

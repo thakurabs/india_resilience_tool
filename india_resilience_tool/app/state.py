@@ -54,6 +54,7 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "selected_basin": "All",
     "selected_subbasin": "All",
     "hydro_admin_context_level": "district",
+    "show_river_network": False,
 
     # Other stable keys (widget keys / caches)
     # NOTE: Do NOT pre-seed unified metric selection keys here. The legacy dashboard

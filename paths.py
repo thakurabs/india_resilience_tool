@@ -62,6 +62,8 @@ class PathsConfig:
     blocks_path: Path  # NEW: ADM3 block/subdistrict boundaries
     basins_path: Path
     subbasins_path: Path
+    river_network_display_path: Path
+    river_basin_reconciliation_path: Path
     district_subbasin_crosswalk_path: Path
     block_subbasin_crosswalk_path: Path
     district_basin_crosswalk_path: Path
@@ -104,6 +106,8 @@ def get_paths_config() -> PathsConfig:
         blocks_path=data_dir / "blocks_4326.geojson",  # NEW
         basins_path=data_dir / "basins.geojson",
         subbasins_path=data_dir / "subbasins.geojson",
+        river_network_display_path=data_dir / "river_network_display.geojson",
+        river_basin_reconciliation_path=data_dir / "river_basin_name_reconciliation.csv",
         district_subbasin_crosswalk_path=data_dir / "district_subbasin_crosswalk.csv",
         block_subbasin_crosswalk_path=data_dir / "block_subbasin_crosswalk.csv",
         district_basin_crosswalk_path=data_dir / "district_basin_crosswalk.csv",
@@ -245,6 +249,8 @@ DISTRICTS_PATH: Path = _CFG.districts_path
 BLOCKS_PATH: Path = _CFG.blocks_path  # NEW
 BASINS_PATH: Path = _CFG.basins_path
 SUBBASINS_PATH: Path = _CFG.subbasins_path
+RIVER_NETWORK_DISPLAY_PATH: Path = _CFG.river_network_display_path
+RIVER_BASIN_RECONCILIATION_PATH: Path = _CFG.river_basin_reconciliation_path
 DISTRICT_SUBBASIN_CROSSWALK_PATH: Path = _CFG.district_subbasin_crosswalk_path
 BLOCK_SUBBASIN_CROSSWALK_PATH: Path = _CFG.block_subbasin_crosswalk_path
 DISTRICT_BASIN_CROSSWALK_PATH: Path = _CFG.district_basin_crosswalk_path

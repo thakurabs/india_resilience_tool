@@ -19,7 +19,6 @@ from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_SUBBASIN_RENDER,
 )
 
-
 def build_folium_map_for_selection(
     *,
     level: str,
@@ -46,15 +45,20 @@ def build_folium_map_for_selection(
     adm3_geojson_path: Path,
     basin_geojson_path: Path,
     subbasin_geojson_path: Path,
+    river_display_geojson_path: Path,
     simplify_tolerance_adm2: float,
     simplify_tolerance_adm3: float,
     crosswalk_overlay: Optional[Mapping[str, Any]] = None,
+    show_river_network: bool = False,
+    resolved_river_basin_name: Optional[str] = None,
 ) -> Any:
     from india_resilience_tool.app.geo_cache import (
         build_adm2_geojson_by_state,
         build_adm3_geojson_by_state,
         build_basin_geojson_all,
         build_basin_geojson_by_basin,
+        build_river_geojson_by_basin,
+        build_river_geojson_by_subbasin,
         build_subbasin_geojson_all,
         build_subbasin_geojson_by_basin,
     )
@@ -158,6 +162,8 @@ def build_folium_map_for_selection(
     reference_fc = None
     reference_level = None
     reference_layer_name = None
+    river_fc = None
+    river_layer_name = None
     overlay_level = str((crosswalk_overlay or {}).get("level", "")).strip().lower()
     overlay_feature_keys = list((crosswalk_overlay or {}).get("feature_keys", []) or [])
     if overlay_level in {"district", "block", "basin", "sub_basin"} and overlay_feature_keys:
@@ -225,6 +231,34 @@ def build_folium_map_for_selection(
 
         reference_layer_name = str((crosswalk_overlay or {}).get("label", "")).strip() or "Related units"
 
+    if (
+        show_river_network
+        and level_norm in {"basin", "sub_basin"}
+        and river_display_geojson_path.exists()
+        and selected_basin != "All"
+    ):
+        river_mtime = float(river_display_geojson_path.stat().st_mtime)
+        if level_norm == "sub_basin" and selected_subbasin != "All":
+            river_geojson_by_selector = build_river_geojson_by_subbasin(
+                path=str(river_display_geojson_path),
+                mtime=river_mtime,
+            )
+            selector_key = alias_fn(selected_subbasin)
+            river_fc = copy.deepcopy(
+                river_geojson_by_selector.get(selector_key, {"type": "FeatureCollection", "features": []})
+            )
+            river_layer_name = "River network"
+        else:
+            river_geojson_by_selector = build_river_geojson_by_basin(
+                path=str(river_display_geojson_path),
+                mtime=river_mtime,
+            )
+            selector_key = alias_fn(str(resolved_river_basin_name or "").strip())
+            river_fc = copy.deepcopy(
+                river_geojson_by_selector.get(selector_key, {"type": "FeatureCollection", "features": []})
+            )
+            river_layer_name = "River network"
+
     highlight_fn = None
     tooltip = None
     if level_norm == "sub_basin":
@@ -263,5 +297,7 @@ def build_folium_map_for_selection(
         reference_fc=reference_fc,
         reference_level=reference_level,
         reference_layer_name=reference_layer_name,
+        river_fc=river_fc,
+        river_layer_name=river_layer_name,
     )
     return m

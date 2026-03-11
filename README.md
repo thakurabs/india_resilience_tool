@@ -44,6 +44,11 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Hydro master CSVs:
   - `master_metrics_by_basin.csv`
   - `master_metrics_by_sub_basin.csv`
+- Optional hydro river overlay:
+  - uses `river_network_display.geojson`
+  - basin matching is mediated by `river_basin_name_reconciliation.csv`
+  - available only in hydro basin/sub-basin views
+  - toggle is off by default
 
 ### Crosswalk support
 - Canonical crosswalk artifacts:
@@ -112,6 +117,10 @@ Place these in `IRT_DATA_DIR`:
 - `block_subbasin_crosswalk.csv` (optional but required for block/sub-basin context/actions)
 - `district_basin_crosswalk.csv` (optional but required for district/basin context/actions)
 - `block_basin_crosswalk.csv` (optional but required for block/basin context/actions)
+- `river_network.parquet` (optional canonical cleaned river artifact; not yet used by the dashboard runtime)
+- `river_network_display.geojson` (optional derived display artifact for inspection)
+- `river_network_qa.csv` (optional QA artifact from river cleaning)
+- `river_basin_name_reconciliation.csv` (optional but required for reliable hydro basin river overlays)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -198,6 +207,28 @@ python -m tools.geodata.build_block_subbasin_crosswalk --overwrite
 python -m tools.geodata.build_district_basin_crosswalk --overwrite
 python -m tools.geodata.build_block_basin_crosswalk --overwrite
 ```
+
+### Clean the Survey of India river network
+
+```bash
+python -m tools.geodata.clean_river_network --src /path/to/river_network_goi.shp --overwrite
+```
+
+This creates the first canonical river artifacts under `IRT_DATA_DIR`:
+- `river_network.parquet`
+- `river_network_display.geojson`
+- `river_network_qa.csv`
+
+Then build the hydro-basin reconciliation table used by the hydro river overlay:
+
+```bash
+python -m tools.geodata.build_river_basin_reconciliation --overwrite
+```
+
+This writes:
+- `river_basin_name_reconciliation.csv`
+
+The optional hydro-only river overlay in basin/sub-basin views depends on this reconciliation file. River topology, routing, and admin-side river overlays are still deferred.
 
 ## Usage notes
 

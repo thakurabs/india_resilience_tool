@@ -12,6 +12,7 @@ The current working tree supports:
 - admin portfolio workflows for district and block
 - hydro boundary loading and hydro processed-output discovery
 - actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
+- optional hydro-only river overlay in basin/sub-basin maps
 
 The crosswalk layer is currently **read-optimized and explanatory**. It is not yet a full weighted transfer engine across spatial families.
 
@@ -38,6 +39,8 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_block_subbasin_crosswalk --overwrite` | Build block ↔ sub-basin crosswalk CSV |
 | `python -m tools.geodata.build_district_basin_crosswalk --overwrite` | Build district ↔ basin crosswalk CSV |
 | `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
+| `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
+| `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
 | `python -m pytest -q` | Run tests |
 
 ### Key environment variables
@@ -168,6 +171,7 @@ Notes:
 | `crosswalks.py` | Polygon crosswalk validation and context builders for district/block ↔ basin/sub-basin |
 | `discovery.py` | Processed-artifact discovery helpers for yearly files and outputs |
 | `hydro_loader.py` | Basin/sub-basin loading, validation, keys, and render simplification |
+| `river_loader.py` | Cleaned river-display loading, validation, keys, and hydro filtering helpers |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
 | `master_loader.py` | Robust master CSV loading, normalization, and schema parsing |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
@@ -239,6 +243,8 @@ Notes:
 | `build_block_subbasin_crosswalk.py` | Build canonical block ↔ sub-basin crosswalk CSV |
 | `build_district_basin_crosswalk.py` | Build canonical district ↔ basin crosswalk CSV |
 | `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |
+| `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
+| `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
 | `convert_blocks_shp_to_geojson.py` | Convert block shapefile to standardized GeoJSON |
 | `inspect_block_shapefile.py` | Inspect and optionally convert block shapefiles |
 
@@ -292,6 +298,7 @@ python -m pytest -q
 #### Data, paths, merge, contracts
 - `test_available_states.py`
 - `test_config.py`
+- `test_clean_river_network.py`
 - `test_crosswalk_context.py`
 - `test_crosswalk_generator.py`
 - `test_crosswalk_runtime.py`
@@ -305,6 +312,9 @@ python -m pytest -q
 - `test_paths_resolution.py`
 - `test_processed_io_parquet_filters.py`
 - `test_prune_legacy_csv.py`
+- `test_river_loader.py`
+- `test_river_overlay_contract.py`
+- `test_river_reconciliation.py`
 - `test_timeseries.py`
 - `test_timeseries_models.py`
 
@@ -374,6 +384,10 @@ python -m pytest -q
 | `block_subbasin_crosswalk.csv` | Block ↔ sub-basin overlap registry |
 | `district_basin_crosswalk.csv` | District ↔ basin overlap registry |
 | `block_basin_crosswalk.csv` | Block ↔ basin overlap registry |
+| `river_network.parquet` | Canonical cleaned river-network line artifact |
+| `river_network_display.geojson` | Simplified river-network display artifact |
+| `river_network_qa.csv` | Row-level QA flags for the cleaned river network |
+| `river_basin_name_reconciliation.csv` | Hydro-basin ↔ river-basin reconciliation registry used by hydro river overlays |
 
 ### Canonical identifier expectations
 
@@ -457,6 +471,21 @@ Not yet supported:
 - weighted transfer across spatial families
 - river-network crosswalk/topology layer
 
+### River-network artifact
+
+Current canonical river-network cleaning outputs:
+- `river_network.parquet`
+- `river_network_display.geojson`
+- `river_network_qa.csv`
+- `river_basin_name_reconciliation.csv`
+
+Current behavior:
+- offline cleaning + QA only
+- preserves raw Survey of India fields and adds canonical cleaned columns
+- hydro-only display overlay available via `river_network_display.geojson`
+- basin-level overlay matching is driven by `river_basin_name_reconciliation.csv`
+- no reach topology, upstream/downstream routing, or river crosswalks yet
+
 ## Current status vs deferred work
 
 ### Implemented now
@@ -465,6 +494,7 @@ Not yet supported:
 - Hydro compute outputs and hydro master contracts
 - Hydro map/rankings/details flows
 - Polygon crosswalk context and actionability for district/block ↔ basin/sub-basin
+- Hydro-only river display overlay for basin/sub-basin maps
 
 ### Deferred
 - Weighted admin ↔ hydro translation engine

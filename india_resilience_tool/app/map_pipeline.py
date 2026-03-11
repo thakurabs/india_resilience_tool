@@ -28,11 +28,13 @@ from india_resilience_tool.analysis.map_enrichment import (
 )
 from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 from india_resilience_tool.app.color_range_controls import compute_color_range_defaults
+from india_resilience_tool.app.geo_cache import load_river_basin_reconciliation_cached
 from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
 from india_resilience_tool.data.master_columns import find_baseline_column_for_stat
 from india_resilience_tool.data.merge import (
     get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
 )
+from india_resilience_tool.data.river_loader import resolve_river_basin_reconciliation
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.colors import (
     apply_fillcolor_binned,
@@ -55,6 +57,7 @@ class MapArtifacts:
     pretty_metric_label: str
     cmap_name: str
     rank_scope_label: str
+    river_overlay_message: Optional[str]
 
 
 def _build_legend_title(varcfg: Mapping[str, Any]) -> str:
@@ -112,6 +115,7 @@ def build_map_and_rankings(
     selected_subbasin: str,
     spatial_family: str,
     crosswalk_overlay: Optional[Mapping[str, Any]],
+    show_river_network: bool,
     hover_enabled: bool,
     map_center: list[float],
     map_zoom: float,
@@ -122,6 +126,8 @@ def build_map_and_rankings(
     adm3_geojson_path: Path,
     basin_geojson_path: Path,
     subbasin_geojson_path: Path,
+    river_display_geojson_path: Path,
+    river_basin_reconciliation_path: Path,
     simplify_tol_adm2: float,
     simplify_tol_adm3: float,
     map_height: int,
@@ -374,6 +380,32 @@ def build_map_and_rankings(
                 display_gdf["subbasin_name"].astype(str) == selected_subbasin
             ]
 
+    resolved_river_basin_name: Optional[str] = None
+    river_overlay_message: Optional[str] = None
+    if (
+        bool(show_river_network)
+        and str(spatial_family).strip().lower() == "hydro"
+        and level_norm in {"basin", "sub_basin"}
+        and selected_basin != "All"
+        and (level_norm == "basin" or selected_subbasin == "All")
+    ):
+        if river_basin_reconciliation_path.exists():
+            reconciliation_df = load_river_basin_reconciliation_cached(
+                str(river_basin_reconciliation_path)
+            )
+        else:
+            reconciliation_df = None
+        resolution = resolve_river_basin_reconciliation(
+            hydro_basin_name=selected_basin,
+            reconciliation_df=reconciliation_df,
+            alias_fn=alias,
+        )
+        if resolution.get("status") == "matched":
+            resolved_river_basin_name = str(resolution.get("river_basin_name") or "").strip() or None
+        river_overlay_message = (
+            str(resolution.get("message")).strip() if resolution.get("message") else None
+        )
+
     with perf_section("map: GeoJSON serialize+add layer"):
         folium_map = build_folium_map_for_selection(
             level=level_norm,
@@ -399,9 +431,12 @@ def build_map_and_rankings(
             adm3_geojson_path=adm3_geojson_path,
             basin_geojson_path=basin_geojson_path,
             subbasin_geojson_path=subbasin_geojson_path,
+            river_display_geojson_path=river_display_geojson_path,
             simplify_tolerance_adm2=simplify_tol_adm2,
             simplify_tolerance_adm3=simplify_tol_adm3,
             crosswalk_overlay=crosswalk_overlay,
+            show_river_network=bool(show_river_network),
+            resolved_river_basin_name=resolved_river_basin_name,
         )
 
     legend_block_html = build_vertical_binned_legend_block_html(
@@ -428,4 +463,5 @@ def build_map_and_rankings(
         pretty_metric_label=pretty_metric_label,
         cmap_name=cmap_name,
         rank_scope_label=rank_scope_label,
+        river_overlay_message=river_overlay_message,
     )

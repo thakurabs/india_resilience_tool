@@ -31,6 +31,8 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 | `tools/geodata/build_block_subbasin_crosswalk.py` | Build the canonical block ↔ sub-basin crosswalk CSV from block and sub-basin GeoJSONs | `python -m tools.geodata.build_block_subbasin_crosswalk --help` |
 | `tools/geodata/build_district_basin_crosswalk.py` | Build the canonical district ↔ basin crosswalk CSV from district and basin GeoJSONs | `python -m tools.geodata.build_district_basin_crosswalk --help` |
 | `tools/geodata/build_block_basin_crosswalk.py` | Build the canonical block ↔ basin crosswalk CSV from block and basin GeoJSONs | `python -m tools.geodata.build_block_basin_crosswalk --help` |
+| `tools/geodata/clean_river_network.py` | Clean the Survey of India river shapefile into canonical river artifacts (`river_network.parquet`, display GeoJSON, QA CSV) | `python -m tools.geodata.clean_river_network --help` |
+| `tools/geodata/build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV used by hydro river overlays | `python -m tools.geodata.build_river_basin_reconciliation --help` |
 | `tools/subbasin_shp_explore.py` | Inspect, optionally repair, and export canonical basin/sub-basin GeoJSONs from `waterbasin_goi.shp` | `python -m tools.subbasin_shp_explore --help` |
 | `tools/data_acquisition/download_era5_daily_stats_structured.py` | Download/structure ERA5 daily stats | `python -m tools.data_acquisition.download_era5_daily_stats_structured --help` |
 | `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | Download NEX India subset from S3 | `python -m tools.data_acquisition.nex_india_subset_download_s3_v1 --help` |
@@ -42,6 +44,27 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 - source: `waterbasin_goi.shp`
 - optional repair: `--repair-invalid`
 - canonical outputs: `basins.geojson` and `subbasins.geojson`
+
+`tools/geodata/clean_river_network.py` notes:
+- source: `river_network_goi.shp`
+- canonical output: `IRT_DATA_DIR/river_network.parquet`
+- derived outputs:
+  - `IRT_DATA_DIR/river_network_display.geojson`
+  - `IRT_DATA_DIR/river_network_qa.csv`
+- preserves raw source fields and adds canonical cleaned columns plus QA flags
+- first tranche only: cleaning + QA, no topology/routing inference
+
+`tools/geodata/build_river_basin_reconciliation.py` notes:
+- inputs:
+  - `IRT_DATA_DIR/basins.geojson`
+  - `IRT_DATA_DIR/river_network_display.geojson`
+- canonical output:
+  - `IRT_DATA_DIR/river_basin_name_reconciliation.csv`
+- emits one row per hydro basin with:
+  - `matched`
+  - `review_required`
+  - `no_source_rivers`
+- hydro river overlays consume this CSV at runtime
 
 ## Legacy / one-offs
 

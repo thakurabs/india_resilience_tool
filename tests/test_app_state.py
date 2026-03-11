@@ -21,6 +21,7 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["jump_to_map"] is False
     assert ss["crosswalk_overlay"] is None
     assert ss["hydro_admin_context_level"] == "district"
+    assert ss["show_river_network"] is False
     assert ss["_pending_crosswalk_navigation"] is None
 
 

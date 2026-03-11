@@ -193,6 +193,8 @@ def build_choropleth_map_with_geojson_layer(
     reference_fc: Optional[Mapping[str, Any]] = None,
     reference_level: Optional[str] = None,
     reference_layer_name: Optional[str] = None,
+    river_fc: Optional[Mapping[str, Any]] = None,
+    river_layer_name: Optional[str] = None,
 ) -> Any:
     """
     Build a Folium map and attach the patched GeoJSON FeatureCollection as a layer.
@@ -212,6 +214,8 @@ def build_choropleth_map_with_geojson_layer(
         reference_fc: optional filtered FeatureCollection for a related-units overlay.
         reference_level: level of the related overlay (`district` or `sub_basin`).
         reference_layer_name: human-facing name for the overlay layer.
+        river_fc: optional filtered FeatureCollection for a river-line overlay.
+        river_layer_name: human-facing name for the river overlay layer.
     """
     import folium
 
@@ -322,6 +326,33 @@ def build_choropleth_map_with_geojson_layer(
             style_function=_reference_style,
             tooltip=reference_tooltip,
             smooth_factor=1.5,
+            zoom_on_click=False,
+            bubblingMouseEvents=False,
+        ).add_to(m)
+
+    if river_fc and list((river_fc or {}).get("features", []) or []):
+        river_tooltip = folium.features.GeoJsonTooltip(
+            fields=[
+                "river_name_clean",
+                "basin_name_clean",
+                "subbasin_name_clean",
+                "length_km_source",
+            ],
+            aliases=["River", "Basin", "Sub-basin", "Length (km)"],
+            localize=True,
+            sticky=True,
+        )
+
+        folium.GeoJson(
+            data=dict(river_fc),
+            name=str(river_layer_name or "River network"),
+            style_function=lambda _feature: {
+                "color": "#2563eb",
+                "weight": 1.8,
+                "opacity": 0.75,
+            },
+            tooltip=river_tooltip,
+            smooth_factor=1.0,
             zoom_on_click=False,
             bubblingMouseEvents=False,
         ).add_to(m)
@@ -725,10 +756,14 @@ def render_map_view(
             f"{overlay_spec.get('selected_name', 'none')}_"
             f"{len(list(overlay_spec.get('feature_keys', []) or []))}"
         )
+        river_signature = (
+            f"{bool(st.session_state.get('show_river_network', False))}_"
+            f"{selected_basin}_{selected_subbasin}"
+        )
         map_key = (
             f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_"
             f"{selected_state}_{selected_district}_{selected_block}_"
-            f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}_{overlay_signature}"
+            f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}_{overlay_signature}_{river_signature}"
         )
         st.markdown(
             (

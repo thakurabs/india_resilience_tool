@@ -44,6 +44,7 @@ def render_left_panel(
     portfolio_normalize_fn: Callable[[str], str],
     # Data (for coordinate fallback in add-to-portfolio)
     merged: Any,
+    river_overlay_message: Optional[str] = None,
 ) -> Tuple[Mapping[str, Any], str]:
     """
     Render the left panel and return the st_folium payload (if Map view ran).
@@ -77,6 +78,9 @@ def render_left_panel(
 
         # ---------- VIEW 1: MAP ----------
         if view == VIEW_MAP:
+            if river_overlay_message:
+                st.caption(river_overlay_message)
+
             # In portfolio mode, reserve a slot ABOVE the map so the add/remove control
             # is visible even when the user is scrolling inside the right panel.
             analysis_mode = st.session_state.get("analysis_mode", "Single district focus")

@@ -38,6 +38,7 @@ class GeographyContext:
     selected_block: str
     selected_basin: str
     selected_subbasin: str
+    show_river_network: bool
     gdf_state_districts: Any
 
 
@@ -270,6 +271,7 @@ def render_geography_and_analysis_focus(
     adm3_geojson: Path,
     basins_geojson: Path,
     subbasins_geojson: Path,
+    river_display_geojson: Path,
     simplify_tol_adm3: float,
 ) -> GeographyContext:
     """Render the geography controls and return the active selection context."""
@@ -344,6 +346,7 @@ def render_geography_and_analysis_focus(
             selected_block = "All"
             selected_basin = "All"
             selected_subbasin = "All"
+            show_river_network = bool(st.session_state.get("show_river_network", False))
             gdf_state_districts = adm2.copy()
 
             if str(spatial_family).strip().lower() == "hydro":
@@ -353,6 +356,22 @@ def render_geography_and_analysis_focus(
                     basins_geojson=basins_geojson,
                     subbasins_geojson=subbasins_geojson,
                 )
+                if selected_basin == "All":
+                    st.session_state["show_river_network"] = False
+                show_river_network = st.checkbox(
+                    "Show river network",
+                    key="show_river_network",
+                    value=bool(st.session_state.get("show_river_network", False)),
+                    disabled=(not analysis_ready) or (selected_basin == "All"),
+                    help=(
+                        "Show cleaned river lines for the selected basin or sub-basin. "
+                        "Available only when a specific basin is selected."
+                    ),
+                )
+                if not river_display_geojson.exists():
+                    st.session_state["show_river_network"] = False
+                    show_river_network = False
+                    st.caption("River overlay unavailable: river_network_display.geojson not found.")
             else:
                 (
                     selected_state,
@@ -369,6 +388,8 @@ def render_geography_and_analysis_focus(
                     simplify_tol_adm3=simplify_tol_adm3,
                     admin_level=admin_level,
                 )
+                st.session_state["show_river_network"] = False
+                show_river_network = False
 
     return GeographyContext(
         analysis_mode=analysis_mode,
@@ -378,5 +399,6 @@ def render_geography_and_analysis_focus(
         selected_block=str(selected_block or "All"),
         selected_basin=str(selected_basin or "All"),
         selected_subbasin=str(selected_subbasin or "All"),
+        show_river_network=bool(show_river_network),
         gdf_state_districts=gdf_state_districts,
     )
