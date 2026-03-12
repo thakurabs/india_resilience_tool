@@ -516,6 +516,8 @@ Current behavior:
 - Hydro portfolio workflows
 - River-network/reach translation layer
 
+Long-lived deferred work and shelved initiatives are tracked in `docs/BACKLOG.md`.
+
 ## Contact
 
 For questions about the codebase:

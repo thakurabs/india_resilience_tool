@@ -91,6 +91,14 @@ For non-trivial logic changes, always include:
 
 If you cannot run tests (env/data missing), say exactly what blocked you and provide a manual validation checklist.
 
+After any **accepted/applied** code, contract, or workflow change, explicitly check whether:
+- `README.md` needs updating
+- `MANIFEST.md` needs updating
+
+In your response, either:
+- update them, or
+- state clearly why no update is needed
+
 ---
 
 ## 4) Climate / geospatial / risk guardrails
@@ -130,9 +138,43 @@ The persistent ledger lives in `docs/HANDOFF.md`.
 
 Before that, keep updates in-chat only.
 
+## 7) Persistent BACKLOG ledger: docs/BACKLOG.md
+
+The durable deferred-work list lives in `docs/BACKLOG.md`.
+
+Use it for:
+- long-lived deferred work
+- shelved follow-ups that should be picked up later
+- larger initiatives that are not the current execution priority
+
+Do not use it for:
+- session handoff details
+- applied-change history
+- transient debugging observations with no durable follow-up value
+
+Update `docs/BACKLOG.md` when the user explicitly asks to capture or revise deferred work.
+
+## 8) Git handoff after applied work
+
+After **accepted/applied** repo changes, Codex should proactively help the user finish the git handoff by:
+- checking or reviewing `git status`
+- providing a one-line `git add ...`
+- providing a short, crisp one-line `git commit -m "..."`
+
+Important:
+- this is guidance to provide commands, not permission to run commits automatically
+- skip this only if the user explicitly says they do not want git help yet
+
+Formatting requirement for git handoff commands:
+- the `git add` command must be on **one physical line**
+- it must be directly copy-pasteable into the VS Code terminal with no edits
+- do not use shell continuations or wrapped multi-line formatting
+- be mindful that visual line wrapping in chat can introduce confusion; the command itself must remain a single literal line
+- the `git commit -m "..."` command should also be provided on one physical line
+
 ---
 
-## 7) PERFECT HANDOFF POINT (mandatory on session end)
+## 9) PERFECT HANDOFF POINT (mandatory on session end)
 
 Whenever the user indicates they are ending / pausing the session (examples: “wrap up”, “pause”, “handoff”, “end”, “stop”, `/quit`, `/new`),
 append a copy-paste-ready section titled:
@@ -154,7 +196,7 @@ Important:
 
 ---
 
-## 8) Nested AGENTS.md
+## 10) Nested AGENTS.md
 
 This repo uses nested `AGENTS.md` files to improve agent performance. Apply the closest applicable instructions when working in subdirectories.
 

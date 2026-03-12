@@ -77,6 +77,8 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - River-network crosswalks or topology-aware routing
 - Hydro portfolio workflows
 
+Long-lived deferred work and shelved follow-ups are tracked in `docs/BACKLOG.md`.
+
 ## Quick start
 
 ### Prerequisites
