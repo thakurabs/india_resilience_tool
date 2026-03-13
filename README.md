@@ -25,10 +25,13 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - period
   - statistic
   - map mode
+- Water-risk hydro onboarding:
+  - Aqueduct water stress on SOI basin and sub-basin units
+  - native Aqueduct scenarios: `historical`, `bau`, `opt`, `pes`
 - Map view and rankings table for all four levels
 - Right-side details panel with:
   - risk summary
-  - trend over time
+  - trend over time (when yearly source files exist)
   - scenario comparison
   - case-study export for admin single-unit flows
 
@@ -141,6 +144,10 @@ Place these in `IRT_DATA_DIR`:
 - `aqueduct/baseline_clean_india.geojson` (optional canonical Aqueduct baseline artifact for onboarding, derived from clean `future_annual` geometry + aggregated baseline CSV metrics)
 - `aqueduct/baseline_clean_india_qa.csv` (optional QA diagnostics for the clean Aqueduct baseline artifact)
 - `aqueduct/future_annual_india.geojson` (optional India-only Aqueduct `future_annual` geometry subset keyed by `pfaf_id`)
+- `aqueduct/aqueduct_basin_crosswalk.csv` (optional Aqueduct HydroSHEDS ↔ SOI basin overlap table)
+- `aqueduct/aqueduct_subbasin_crosswalk.csv` (optional Aqueduct HydroSHEDS ↔ SOI sub-basin overlap table)
+- `aqueduct/aq_water_stress_basin_master_qa.csv` (optional QA for the Aqueduct basin master build)
+- `aqueduct/aq_water_stress_subbasin_master_qa.csv` (optional QA for the Aqueduct sub-basin master build)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -186,6 +193,14 @@ processed/{metric_slug}/hydro/
     └── ensembles/{basin}/{sub_basin}/{scenario}/{sub_basin}_yearly_ensemble.csv
 ```
 
+For Aqueduct hydro onboarding, the first supported slug is:
+
+```text
+processed/aq_water_stress/hydro/
+├── master_metrics_by_basin.csv
+└── master_metrics_by_sub_basin.csv
+```
+
 ## Common commands
 
 ### Build or refresh processed outputs
@@ -218,6 +233,8 @@ This utility inspects the canonical `waterbasin_goi.shp`, can repair invalid hyd
 
 ```bash
 python -m tools.geodata.build_district_subbasin_crosswalk --overwrite
+python -m tools.geodata.build_aqueduct_hydro_crosswalk --overwrite
+python -m tools.geodata.build_aqueduct_hydro_masters --overwrite
 ```
 
 ### Build the remaining polygon crosswalks

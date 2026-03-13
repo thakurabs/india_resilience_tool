@@ -32,6 +32,8 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 | `tools/geodata/build_district_basin_crosswalk.py` | Build the canonical district ↔ basin crosswalk CSV from district and basin GeoJSONs | `python -m tools.geodata.build_district_basin_crosswalk --help` |
 | `tools/geodata/build_block_basin_crosswalk.py` | Build the canonical block ↔ basin crosswalk CSV from block and basin GeoJSONs | `python -m tools.geodata.build_block_basin_crosswalk --help` |
 | `tools/geodata/prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON by joining baseline CSV attributes onto `future_annual` HydroBASINS geometry keyed by `pfaf_id` | `python -m tools.geodata.prepare_aqueduct_baseline --help` |
+| `tools/geodata/build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs for area-weighted transfer | `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` |
+| `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for Aqueduct water stress under `processed/aq_water_stress/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
 | `tools/geodata/clean_river_network.py` | Clean the Survey of India river shapefile into canonical river artifacts (`river_network.parquet`, display GeoJSON, QA CSV) | `python -m tools.geodata.clean_river_network --help` |
 | `tools/geodata/build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV used by hydro river overlays | `python -m tools.geodata.build_river_basin_reconciliation --help` |
 | `tools/geodata/build_river_subbasin_diagnostics.py` | Build the hydro sub-basin vs river-name diagnostics CSV used by hydro sub-basin overlays | `python -m tools.geodata.build_river_subbasin_diagnostics --help` |
@@ -58,6 +60,29 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
   - `IRT_DATA_DIR/aqueduct/future_annual_india.geojson`
 - baseline geometry is intentionally not used; the tool aggregates segmented baseline rows to one row per `pfaf_id`
   and also emits the India-only `future_annual` subset with the source future attributes preserved
+
+`tools/geodata/build_aqueduct_hydro_crosswalk.py` notes:
+- inputs:
+  - `IRT_DATA_DIR/aqueduct/baseline_clean_india.geojson`
+  - `IRT_DATA_DIR/basins.geojson`
+  - `IRT_DATA_DIR/subbasins.geojson`
+- analysis CRS: `EPSG:6933`
+- outputs:
+  - `IRT_DATA_DIR/aqueduct/aqueduct_basin_crosswalk.csv`
+  - `IRT_DATA_DIR/aqueduct/aqueduct_subbasin_crosswalk.csv`
+
+`tools/geodata/build_aqueduct_hydro_masters.py` notes:
+- inputs:
+  - `IRT_DATA_DIR/aqueduct/baseline_clean_india.geojson`
+  - `IRT_DATA_DIR/aqueduct/future_annual_india.geojson`
+  - Aqueduct hydro crosswalk CSVs
+- outputs:
+  - `IRT_DATA_DIR/processed/aq_water_stress/hydro/master_metrics_by_basin.csv`
+  - `IRT_DATA_DIR/processed/aq_water_stress/hydro/master_metrics_by_sub_basin.csv`
+  - QA CSVs under `IRT_DATA_DIR/aqueduct/`
+- current metric mapping:
+  - baseline: `bws_raw`
+  - future: `*_ws_x_r`
 
 `tools/geodata/clean_river_network.py` notes:
 - source: `river_network_goi.shp`

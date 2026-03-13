@@ -230,13 +230,18 @@ def build_map_and_rankings(
 
     # --- Decide which column the map will actually show ---
     map_value_col = metric_col  # default: absolute values
+    baseline_map_mode_label = (
+        "Change from baseline"
+        if str(varcfg.get("source_type") or "").strip().lower() == "external"
+        else "Change from 1990-2010 baseline"
+    )
 
-    if map_mode == "Change from 1990-2010 baseline":
+    if map_mode == baseline_map_mode_label:
         if baseline_col and (baseline_col in merged.columns):
             map_value_col = "_delta_abs"
         else:
             st.warning(
-                "Baseline (historical 1990-2010) column not found for this metric/stat; "
+                "Historical baseline column not found for this metric/stat; "
                 "showing absolute values instead."
             )
             map_mode = "Absolute value"

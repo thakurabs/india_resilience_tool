@@ -58,6 +58,12 @@ class MetricSpec:
     name: Optional[str] = None
     description: Optional[str] = None
     aliases: Sequence[str] = field(default_factory=tuple)
+    source_type: str = "pipeline"
+    supports_yearly_trend: bool = True
+    supported_scenarios: Sequence[str] = field(default_factory=tuple)
+    preferred_period_order: Sequence[str] = field(default_factory=tuple)
+    supported_spatial_families: Sequence[str] = field(default_factory=tuple)
+    supported_levels: Sequence[str] = field(default_factory=tuple)
 
     # Discovery templates
     district_yearly_candidates: Optional[Sequence[str]] = None
@@ -90,6 +96,12 @@ class MetricSpec:
             name=str(d.get("name") or "") or None,
             description=str(d.get("description") or "") or None,
             aliases=tuple(d.get("aliases") or ()),
+            source_type=str(d.get("source_type") or "pipeline").strip() or "pipeline",
+            supports_yearly_trend=bool(d.get("supports_yearly_trend", True)),
+            supported_scenarios=tuple(str(v) for v in (d.get("supported_scenarios") or ())),
+            preferred_period_order=tuple(str(v) for v in (d.get("preferred_period_order") or ())),
+            supported_spatial_families=tuple(str(v) for v in (d.get("supported_spatial_families") or ())),
+            supported_levels=tuple(str(v) for v in (d.get("supported_levels") or ())),
             district_yearly_candidates=d.get("district_yearly_candidates"),
             state_yearly_candidates=d.get("state_yearly_candidates"),
         )
@@ -1427,9 +1439,38 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     # },
 ]
 
-# Typed views derived from pipeline metrics
+# Dashboard-only source-backed metrics that do not participate in the climate
+# compute pipeline. These still use the same wide-master contract so the app can
+# treat them like first-class metrics.
+DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
+    {
+        "name": "Aqueduct Water Stress",
+        "slug": "aq_water_stress",
+        "label": "Aqueduct Water Stress",
+        "group": "water",
+        "value_col": "aq_water_stress",
+        "periods_metric_col": "aq_water_stress",
+        "units": "index",
+        "description": (
+            "Aqueduct 4.0 annual water stress transferred from HydroSHEDS Level 6 "
+            "onto Survey of India basin and sub-basin units using area-weighted overlap."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "supported_scenarios": ("historical", "bau", "opt", "pes"),
+        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
+        "supported_spatial_families": ("hydro",),
+        "supported_levels": ("basin", "sub_basin"),
+        "rank_higher_is_worse": True,
+    },
+]
+
+ALL_METRICS_RAW: list[dict[str, Any]] = PIPELINE_METRICS_RAW + DASHBOARD_ONLY_METRICS_RAW
+PIPELINE_SLUGS: set[str] = {str(m.get("slug", "")).strip() for m in PIPELINE_METRICS_RAW if str(m.get("slug", "")).strip()}
+
+# Typed views derived from metric registries
 PIPELINE_METRICS: list[MetricSpec] = [MetricSpec.from_pipeline_dict(m) for m in PIPELINE_METRICS_RAW]
-METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(PIPELINE_METRICS_RAW)
+METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(ALL_METRICS_RAW)
 
 
 # -----------------------------------------------------------------------------
@@ -1440,6 +1481,9 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(PIPELINE_M
 # Sub-groupings within bundles are documented via inline comments.
 
 BUNDLES: dict[str, list[str]] = {
+    "Water Risk": [
+        "aq_water_stress",
+    ],
     "Heat Risk": [
         "tas_annual_mean",
         "txx_annual_max",        
@@ -1569,6 +1613,7 @@ BUNDLES: dict[str, list[str]] = {
 
 # Bundle display order for UI
 BUNDLE_ORDER: list[str] = [
+    "Water Risk",
     "Heat Risk",
     "Heat Stress",
     "Cold Risk",
@@ -1584,6 +1629,10 @@ DEFAULT_BUNDLE: str = "Heat Risk"
 
 # Bundle descriptions for UI tooltips/help text
 BUNDLE_DESCRIPTIONS: dict[str, str] = {
+    "Water Risk": (
+        "Hydrology-focused water-risk metrics derived from Aqueduct and displayed "
+        "on Survey of India basin and sub-basin units."
+    ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "
         "Includes threshold-based indices, percentile extremes, and heatwave persistence."
@@ -1654,6 +1703,16 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
     variables: dict[str, dict[str, Any]] = {}
     for slug, spec in METRICS_BY_SLUG.items():
         units = str(spec.units or "").strip()
+        district_yearly_candidates = (
+            list(spec.district_yearly_candidates)
+            if spec.district_yearly_candidates is not None
+            else ([] if not spec.supports_yearly_trend else list(DEFAULT_DISTRICT_YEARLY_CANDIDATES))
+        )
+        state_yearly_candidates = (
+            list(spec.state_yearly_candidates)
+            if spec.state_yearly_candidates is not None
+            else ([] if not spec.supports_yearly_trend else list(DEFAULT_STATE_YEARLY_CANDIDATES))
+        )
         variables[slug] = {
             "label": spec.label,
             "group": spec.group,
@@ -1663,12 +1722,14 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             "units": units,
             "unit": units,
             "description": spec.description or "",
-            "district_yearly_candidates": list(
-                spec.district_yearly_candidates or DEFAULT_DISTRICT_YEARLY_CANDIDATES
-            ),
-            "state_yearly_candidates": list(
-                spec.state_yearly_candidates or DEFAULT_STATE_YEARLY_CANDIDATES
-            ),
+            "source_type": spec.source_type,
+            "supports_yearly_trend": bool(spec.supports_yearly_trend),
+            "supported_scenarios": list(spec.supported_scenarios),
+            "preferred_period_order": list(spec.preferred_period_order),
+            "supported_spatial_families": list(spec.supported_spatial_families),
+            "supported_levels": list(spec.supported_levels),
+            "district_yearly_candidates": district_yearly_candidates,
+            "state_yearly_candidates": state_yearly_candidates,
         }
     return variables
 
@@ -1683,6 +1744,39 @@ def get_metrics_by_group() -> dict[str, list[str]]:
     return groups
 
 
+def _metric_supported_in_context(
+    spec: MetricSpec,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> bool:
+    """Return True when a metric is valid for the requested app context."""
+    family = str(spatial_family or "").strip().lower()
+    level_norm = str(level or "").strip().lower()
+
+    if spec.supported_spatial_families:
+        allowed_families = {str(v).strip().lower() for v in spec.supported_spatial_families if str(v).strip()}
+        if family and family not in allowed_families:
+            return False
+
+    if spec.supported_levels:
+        allowed_levels = {str(v).strip().lower() for v in spec.supported_levels if str(v).strip()}
+        if level_norm and level_norm not in allowed_levels:
+            return False
+
+    return True
+
+
+def get_pipeline_bundles() -> dict[str, list[str]]:
+    """Return bundle contents restricted to pipeline-backed metrics."""
+    out: dict[str, list[str]] = {}
+    for bundle, slugs in BUNDLES.items():
+        filtered = [slug for slug in slugs if slug in PIPELINE_SLUGS]
+        if filtered:
+            out[bundle] = filtered
+    return out
+
+
 def get_metric_count() -> dict[str, int]:
     """Return count of metrics per group."""
     groups = get_metrics_by_group()
@@ -1693,17 +1787,30 @@ def get_metric_count() -> dict[str, int]:
 # BUNDLE HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
 
-def get_bundles() -> list[str]:
+def get_bundles(
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str]:
     """
     Return ordered list of bundle names for UI display.
     
     Returns:
         List of bundle names in display order.
     """
-    return list(BUNDLE_ORDER)
+    bundles: list[str] = []
+    for bundle in BUNDLE_ORDER:
+        if get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=level):
+            bundles.append(bundle)
+    return bundles
 
 
-def get_metrics_for_bundle(bundle: str) -> list[str]:
+def get_metrics_for_bundle(
+    bundle: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str]:
     """
     Return list of metric slugs for a given bundle.
     
@@ -1713,10 +1820,23 @@ def get_metrics_for_bundle(bundle: str) -> list[str]:
     Returns:
         List of metric slugs in the bundle. Empty list if bundle not found.
     """
-    return list(BUNDLES.get(bundle, []))
+    slugs = list(BUNDLES.get(bundle, []))
+    filtered: list[str] = []
+    for slug in slugs:
+        spec = METRICS_BY_SLUG.get(slug)
+        if spec is None:
+            continue
+        if _metric_supported_in_context(spec, spatial_family=spatial_family, level=level):
+            filtered.append(slug)
+    return filtered
 
 
-def get_bundle_for_metric(slug: str) -> list[str]:
+def get_bundle_for_metric(
+    slug: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str]:
     """
     Return list of bundles that contain a given metric slug.
     
@@ -1726,7 +1846,14 @@ def get_bundle_for_metric(slug: str) -> list[str]:
     Returns:
         List of bundle names containing this metric. Empty if not in any bundle.
     """
-    return [bundle for bundle, slugs in BUNDLES.items() if slug in slugs]
+    spec = METRICS_BY_SLUG.get(slug)
+    if spec is None or not _metric_supported_in_context(spec, spatial_family=spatial_family, level=level):
+        return []
+    return [
+        bundle
+        for bundle, slugs in BUNDLES.items()
+        if slug in slugs and get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=level)
+    ]
 
 
 def get_bundle_description(bundle: str) -> str:
@@ -1742,17 +1869,29 @@ def get_bundle_description(bundle: str) -> str:
     return BUNDLE_DESCRIPTIONS.get(bundle, "")
 
 
-def get_default_bundle() -> str:
+def get_default_bundle(
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> str:
     """
     Return the default bundle for single-focus mode.
     
     Returns:
         Default bundle name.
     """
-    return DEFAULT_BUNDLE
+    bundles = get_bundles(spatial_family=spatial_family, level=level)
+    if DEFAULT_BUNDLE in bundles:
+        return DEFAULT_BUNDLE
+    return bundles[0] if bundles else DEFAULT_BUNDLE
 
 
-def get_metric_options_for_bundle(bundle: str) -> list[tuple[str, str]]:
+def get_metric_options_for_bundle(
+    bundle: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[tuple[str, str]]:
     """
     Return (slug, label) tuples for metrics in a bundle, suitable for dropdown options.
     
@@ -1762,7 +1901,7 @@ def get_metric_options_for_bundle(bundle: str) -> list[tuple[str, str]]:
     Returns:
         List of (slug, label) tuples for the bundle's metrics.
     """
-    slugs = get_metrics_for_bundle(bundle)
+    slugs = get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=level)
     options = []
     for slug in slugs:
         spec = METRICS_BY_SLUG.get(slug)

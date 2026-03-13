@@ -20,6 +20,30 @@ import numpy as np
 import pandas as pd
 
 
+def _resolve_summary_target(
+    *,
+    admin_level: str,
+    spatial_family: str,
+    selected_state: str,
+    selected_district: str,
+    selected_block: str,
+    selected_basin: str,
+    selected_subbasin: str,
+) -> Optional[str]:
+    """Return the summary renderer target for the current selection, if any."""
+    level_norm = str(admin_level).strip().lower()
+    family_norm = str(spatial_family).strip().lower()
+    if family_norm == "hydro" and level_norm == "sub_basin":
+        if selected_basin != "All" and selected_subbasin == "All":
+            return "hydro_basin"
+        return None
+    if level_norm == "basin":
+        return None
+    if level_norm == "block":
+        return "state" if selected_state != "All" and selected_block == "All" else None
+    return "state" if selected_state != "All" and selected_district == "All" else None
+
+
 def render_right_panel(
     *,
     returned: Optional[Mapping[str, Any]],
@@ -93,6 +117,7 @@ def render_right_panel(
     from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
     from india_resilience_tool.app.portfolio_ui import render_portfolio_panel
     from india_resilience_tool.app.views.details_panel import render_details_panel
+    from india_resilience_tool.app.views.hydro_summary_view import render_hydro_summary_view
     from india_resilience_tool.app.views.state_summary_view import render_state_summary_view
     from india_resilience_tool.data.master_columns import find_baseline_column_for_metric
     from india_resilience_tool.data.crosswalks import (
@@ -228,31 +253,44 @@ def render_right_panel(
         selected_subbasin=str(st.session_state.get("selected_subbasin", "All")),
     )
 
-    # ----------- STATE/DISTRICT SUMMARY MODE (no unit selected) -----------
-    if str(admin_level).strip().lower() == "sub_basin":
-        show_summary = selected_basin != "All" and selected_subbasin == "All"
-    elif str(admin_level).strip().lower() == "basin":
-        show_summary = False
-    elif str(admin_level).strip().lower() == "block":
-        show_summary = selected_state != "All" and selected_block == "All"
-    else:
-        show_summary = selected_state != "All" and selected_district == "All"
+    summary_target = _resolve_summary_target(
+        admin_level=admin_level,
+        spatial_family=spatial_family,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        selected_block=selected_block,
+        selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
+    )
 
-    if (matched_row is None or getattr(matched_row, "empty", True)) and show_summary:
+    if (matched_row is None or getattr(matched_row, "empty", True)) and summary_target:
         if "Multi" in str(analysis_mode):
             return
-        render_state_summary_view(
-            selected_state=selected_state,
-            variables=variables,
-            variable_slug=variable_slug,
-            sel_scenario=sel_scenario,
-            sel_period=sel_period,
-            sel_stat=sel_stat,
-            metric_col=metric_col,
-            merged_gdf=merged,
-            processed_root=processed_root,
-            level=admin_level,
-        )
+        if summary_target == "hydro_basin":
+            render_hydro_summary_view(
+                selected_basin=selected_basin,
+                variables=variables,
+                variable_slug=variable_slug,
+                sel_scenario=sel_scenario,
+                sel_period=sel_period,
+                sel_stat=sel_stat,
+                metric_col=metric_col,
+                merged_gdf=merged,
+                processed_root=processed_root,
+            )
+        else:
+            render_state_summary_view(
+                selected_state=selected_state,
+                variables=variables,
+                variable_slug=variable_slug,
+                sel_scenario=sel_scenario,
+                sel_period=sel_period,
+                sel_stat=sel_stat,
+                metric_col=metric_col,
+                merged_gdf=merged,
+                processed_root=processed_root,
+                level=admin_level,
+            )
         return
 
     # ----------- UNIT DETAILS MODE (district or block) -----------

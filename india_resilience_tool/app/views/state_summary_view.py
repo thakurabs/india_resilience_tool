@@ -203,6 +203,15 @@ def _compute_position_in_india(
     return rank_i, n_i
 
 
+def _resolve_state_column(df: pd.DataFrame) -> Optional[str]:
+    """Return the canonical state column name when present."""
+    if "state_name" in df.columns:
+        return "state_name"
+    if "state" in df.columns:
+        return "state"
+    return None
+
+
 def render_state_summary_view(
     *,
     selected_state: str,
@@ -233,8 +242,15 @@ def render_state_summary_view(
     st.subheader(f"{selected_state} — State Climate Profile")
     st.markdown(f"**Index:** {variable_label}  \n**Scenario:** {sel_scenario}  \n**Period:** {sel_period}")
 
+    state_col = _resolve_state_column(pd.DataFrame(merged_gdf))
+    if not state_col:
+        st.info(
+            "State summary is unavailable for the current selection because the loaded data "
+            "does not include a state column."
+        )
+        return
+
     df_all = _with_area_weights(merged_gdf)
-    state_col = "state_name" if "state_name" in df_all.columns else "state"
     sel_state_norm = _normalize_name(selected_state)
     df_state = df_all[df_all[state_col].astype(str).str.strip().str.lower() == sel_state_norm].copy()
 

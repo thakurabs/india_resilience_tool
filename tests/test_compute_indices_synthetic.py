@@ -32,7 +32,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from india_resilience_tool.config.metrics_registry import BUNDLES, PIPELINE_METRICS_RAW
+from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW, get_pipeline_bundles
 
 
 # =============================================================================
@@ -282,9 +282,10 @@ class TestTierARegistryConsistency:
     def test_all_bundle_slugs_exist_in_pipeline_registry(self) -> None:
         """Every slug in BUNDLES must exist in PIPELINE_METRICS_RAW."""
         pipeline = _pipeline_by_slug()
+        pipeline_bundles = get_pipeline_bundles()
 
         missing: list[str] = []
-        for bundle_name, slugs in BUNDLES.items():
+        for bundle_name, slugs in pipeline_bundles.items():
             for slug in slugs:
                 if slug not in pipeline:
                     missing.append(f"{bundle_name}: {slug}")
@@ -309,9 +310,10 @@ class TestTierARegistryConsistency:
     def test_all_bundle_metrics_have_valid_compute_functions(self) -> None:
         """Every metric in any bundle must have a valid compute function."""
         pipeline = _pipeline_by_slug()
+        pipeline_bundles = get_pipeline_bundles()
 
         missing_compute: list[str] = []
-        for bundle_name, slugs in BUNDLES.items():
+        for bundle_name, slugs in pipeline_bundles.items():
             for slug in slugs:
                 if slug not in pipeline:
                     continue  # Covered by test_all_bundle_slugs_exist_in_pipeline_registry

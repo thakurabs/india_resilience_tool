@@ -11,6 +11,7 @@ The current working tree supports:
 - map, rankings, and details flows for district, block, basin, and sub-basin
 - admin portfolio workflows for district and block
 - hydro boundary loading and hydro processed-output discovery
+- Aqueduct water-stress hydro masters on SOI basin and sub-basin units
 - actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
 - optional hydro-only river overlay in basin/sub-basin maps
 
@@ -40,6 +41,8 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_district_basin_crosswalk --overwrite` | Build district ↔ basin crosswalk CSV |
 | `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
 | `python -m tools.geodata.prepare_aqueduct_baseline --help` | Build the canonical clean Aqueduct baseline artifact and India-only future geometry subset from future geometry + baseline CSV |
+| `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ SOI basin/sub-basin overlap CSVs |
+| `python -m tools.geodata.build_aqueduct_hydro_masters --help` | Build Aqueduct hydro master CSVs on SOI basin/sub-basin units |
 | `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
 | `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
 | `python -m tools.geodata.build_river_subbasin_diagnostics --overwrite` | Build hydro sub-basin vs river-name diagnostics CSV |
@@ -248,6 +251,8 @@ Notes:
 | `build_district_basin_crosswalk.py` | Build canonical district ↔ basin crosswalk CSV |
 | `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |
 | `prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON, QA CSV, and India-only `future_annual` GeoJSON with source future attributes preserved |
+| `build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs in `EPSG:6933` |
+| `build_aqueduct_hydro_masters.py` | Build `processed/aq_water_stress/hydro/` master CSVs from Aqueduct overlaps |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
 | `build_river_subbasin_diagnostics.py` | Build hydro sub-basin vs river-name diagnostics CSV |
@@ -306,6 +311,7 @@ python -m pytest -q
 - `test_available_states.py`
 - `test_config.py`
 - `test_clean_river_network.py`
+- `test_aqueduct_hydro_transfer.py`
 - `test_crosswalk_context.py`
 - `test_crosswalk_generator.py`
 - `test_crosswalk_runtime.py`

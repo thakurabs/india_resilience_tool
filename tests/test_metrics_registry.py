@@ -13,6 +13,9 @@ from india_resilience_tool.config.metrics_registry import (
     PIPELINE_METRICS_RAW,
     build_registry_from_pipeline,
     find_duplicate_slugs,
+    get_bundles,
+    get_metrics_for_bundle,
+    get_pipeline_bundles,
     validate_registry_against_pipeline,
 )
 
@@ -66,3 +69,16 @@ def test_wbd_metrics_registered() -> None:
     assert humid.compute == "wet_bulb_depression_days_le_threshold_stull"
     assert severe.value_col == "wbd_le_3_days"
     assert humid.value_col == "wbd_le_6_days"
+
+
+def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
+    pipeline_bundles = get_pipeline_bundles()
+    assert "aq_water_stress" not in {slug for slugs in pipeline_bundles.values() for slug in slugs}
+    assert "aq_water_stress" in METRICS_BY_SLUG
+
+
+def test_aqueduct_metric_is_context_limited_to_hydro() -> None:
+    assert "Water Risk" in get_bundles(spatial_family="hydro", level="basin")
+    assert "aq_water_stress" in get_metrics_for_bundle("Water Risk", spatial_family="hydro", level="sub_basin")
+    assert "Water Risk" not in get_bundles(spatial_family="admin", level="district")
+    assert get_metrics_for_bundle("Water Risk", spatial_family="admin", level="district") == []

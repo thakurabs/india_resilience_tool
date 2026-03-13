@@ -23,7 +23,12 @@ from india_resilience_tool.config.variables import (
     get_bundles,
     get_metrics_for_bundle,
 )
-from india_resilience_tool.viz.charts import PERIOD_ORDER, canonical_period_label, period_display_label
+from india_resilience_tool.viz.charts import (
+    PERIOD_ORDER,
+    canonical_period_label,
+    ordered_scenario_keys,
+    period_display_label,
+)
 from paths import get_master_csv_filename
 
 
@@ -129,9 +134,11 @@ def render_metric_ribbon(
     with col:
         row1 = st.columns([2.2, 3.0, 1.8])
         row2 = st.columns([2.2, 1.4, 2.4])
+        spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
+        current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
 
         # --- Bundle selection ---
-        all_bundles = get_bundles()
+        all_bundles = get_bundles(spatial_family=spatial_family, level=current_level)
         if not all_bundles:
             st.error("No bundles defined in metrics_registry.py")
             render_perf_panel_safe()
@@ -166,10 +173,13 @@ def render_metric_ribbon(
             index_slugs: list[str] = []
             metric_options = [sel_placeholder]
         else:
-            index_slugs = get_metrics_for_bundle(selected_bundle) or []
+            index_slugs = get_metrics_for_bundle(
+                selected_bundle,
+                spatial_family=spatial_family,
+                level=current_level,
+            ) or []
             if not index_slugs:
-                index_slugs = list(VARIABLES.keys())
-                st.warning(f"Bundle '{selected_bundle}' has no metrics; showing all indices.")
+                st.warning(f"Bundle '{selected_bundle}' has no metrics for the current spatial view.")
             metric_options = [sel_placeholder] + index_slugs
 
         cur_var = st.session_state.get("selected_var", sel_placeholder)
@@ -326,15 +336,20 @@ def render_metric_ribbon(
                 registry_metric = m_lower.get(str(registry_metric).lower(), next(iter(available_metrics)))
             st.session_state["registry_metric"] = registry_metric
 
-            # Scenario list (restricted to SSP245/SSP585)
+            # Scenario list (metric-aware; climate metrics default to SSP245/SSP585)
             items_for_m = by_metric.get(registry_metric, [])
             all_scenarios = (
                 sorted(set(i["scenario"] for i in items_for_m)) if items_for_m else sorted(set(i["scenario"] for i in schema_items))
             )
-            allowed = {"ssp245", "ssp585"}
-            scenarios = [s for s in all_scenarios if str(s).strip().lower() in allowed]
+            allowed_list = [
+                str(s).strip().lower()
+                for s in (varcfg.get("supported_scenarios") or ("ssp245", "ssp585"))
+                if str(s).strip()
+            ]
+            allowed = set(allowed_list)
+            scenarios = [s for s in ordered_scenario_keys(all_scenarios) if str(s).strip().lower() in allowed]
             if not scenarios:
-                st.error("No SSP245/SSP585 data found for this metric in the master CSV.")
+                st.error("No supported scenarios found for this metric in the master CSV.")
                 render_perf_panel_safe()
                 st.stop()
             scenario_options = [sel_placeholder] + scenarios
@@ -382,7 +397,14 @@ def render_metric_ribbon(
                 for i in (by_metric.get(st.session_state.get("registry_metric", registry_metric), []) or schema_items)
                 if i["scenario"] == sel_scenario
             }
-            periods = [p for p in PERIOD_ORDER if p in periods_found] + sorted([p for p in periods_found if p not in PERIOD_ORDER])
+            preferred_periods = [
+                canonical_period_label(p)
+                for p in (varcfg.get("preferred_period_order") or ())
+                if str(p).strip()
+            ]
+            base_period_order = preferred_periods + [p for p in PERIOD_ORDER if p not in preferred_periods]
+            periods = [p for p in base_period_order if p in periods_found]
+            periods.extend(sorted([p for p in periods_found if p not in set(base_period_order)]))
             period_options = [sel_placeholder] + periods if periods else [sel_placeholder]
         else:
             period_options = [sel_placeholder]
@@ -426,7 +448,12 @@ def render_metric_ribbon(
             )
 
         # --- Map mode selection ---
-        map_mode_options = [sel_placeholder, "Absolute value", "Change from 1990-2010 baseline"]
+        baseline_map_mode_label = (
+            "Change from baseline"
+            if str((varcfg or {}).get("source_type") or "").strip().lower() == "external"
+            else "Change from 1990-2010 baseline"
+        )
+        map_mode_options = [sel_placeholder, "Absolute value", baseline_map_mode_label]
         cur_map_mode = st.session_state.get("map_mode", sel_placeholder)
         if cur_map_mode not in map_mode_options:
             st.session_state["map_mode"] = sel_placeholder

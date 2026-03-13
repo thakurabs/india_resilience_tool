@@ -44,6 +44,7 @@ VARIABLES: Dict[str, Dict[str, Any]] = get_dashboard_variables()
 INDEX_GROUP_LABELS: Dict[str, str] = {
     "temperature": "Temperature",
     "rain": "Rainfall",
+    "water": "Water",
 }
 
 

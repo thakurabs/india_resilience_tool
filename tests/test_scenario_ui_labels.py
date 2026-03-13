@@ -7,6 +7,9 @@ def test_scenario_ui_labels_include_expected_keys() -> None:
     assert "ssp245" in SCENARIO_UI_LABEL
     assert "ssp585" in SCENARIO_UI_LABEL
     assert "historical" in SCENARIO_UI_LABEL
+    assert "bau" in SCENARIO_UI_LABEL
+    assert "opt" in SCENARIO_UI_LABEL
+    assert "pes" in SCENARIO_UI_LABEL
 
 
 def test_scenario_ui_labels_are_friendly_and_scientific() -> None:
@@ -20,3 +23,7 @@ def test_scenario_ui_labels_are_friendly_and_scientific() -> None:
     assert "Fossil-fuelled development" in s585
     assert "SSP5-8.5" in s585
 
+    assert SCENARIO_UI_LABEL["historical"] == "Historical"
+    assert SCENARIO_UI_LABEL["bau"] == "Business-as-usual"
+    assert SCENARIO_UI_LABEL["opt"] == "Optimistic"
+    assert SCENARIO_UI_LABEL["pes"] == "Pessimistic"

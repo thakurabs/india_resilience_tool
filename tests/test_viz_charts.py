@@ -100,6 +100,7 @@ def _sample_portfolio_df() -> pd.DataFrame:
 def test_canonical_period_label() -> None:
     assert canonical_period_label("1990_2010") == "1990-2010"
     assert canonical_period_label("2020-2040") == "2020-2040"
+    assert canonical_period_label("2030") == "2030"
 
 
 def test_build_scenario_comparison_panel_for_row() -> None:
@@ -138,6 +139,52 @@ def test_build_scenario_comparison_panel_for_row() -> None:
     assert not panel.empty
     assert set(panel.columns).issuperset({"scenario", "period", "value", "column"})
     assert panel.shape[0] == 3
+
+
+def test_build_scenario_comparison_panel_for_aqueduct_tokens() -> None:
+    row = pd.Series(
+        {
+            "aq_water_stress__historical__1979-2019__mean": 0.6,
+            "aq_water_stress__bau__2030__mean": 0.8,
+            "aq_water_stress__opt__2050__mean": 0.7,
+            "aq_water_stress__pes__2080__mean": 1.1,
+        }
+    )
+    schema_items = [
+        {
+            "metric": "aq_water_stress",
+            "scenario": "historical",
+            "period": "1979-2019",
+            "stat": "mean",
+            "column": "aq_water_stress__historical__1979-2019__mean",
+        },
+        {
+            "metric": "aq_water_stress",
+            "scenario": "bau",
+            "period": "2030",
+            "stat": "mean",
+            "column": "aq_water_stress__bau__2030__mean",
+        },
+        {
+            "metric": "aq_water_stress",
+            "scenario": "opt",
+            "period": "2050",
+            "stat": "mean",
+            "column": "aq_water_stress__opt__2050__mean",
+        },
+        {
+            "metric": "aq_water_stress",
+            "scenario": "pes",
+            "period": "2080",
+            "stat": "mean",
+            "column": "aq_water_stress__pes__2080__mean",
+        },
+    ]
+
+    panel = build_scenario_comparison_panel_for_row(row, schema_items, "aq_water_stress", "mean")
+    assert not panel.empty
+    assert panel["scenario"].astype(str).tolist() == ["historical", "bau", "opt", "pes"]
+    assert panel["period"].astype(str).tolist() == ["1979-2019", "2030", "2050", "2080"]
 
 
 def test_make_scenario_comparison_figure_smoke() -> None:

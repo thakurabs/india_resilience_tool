@@ -540,6 +540,8 @@ def render_trend_over_time(
     import re
     import streamlit as st
 
+    supports_yearly_trend = bool((varcfg or {}).get("supports_yearly_trend", True))
+
     def _parse_period(s: str) -> tuple[Optional[int], Optional[int]]:
         txt = str(s or "").strip()
         m = re.match(r"^(\d{4})\D+(\d{4})$", txt)
@@ -562,6 +564,10 @@ def render_trend_over_time(
         return float(tmp["mean"].mean())
 
     with st.expander("Trend over time", expanded=False):
+        if not supports_yearly_trend:
+            st.caption("Yearly trend charts are not available for this source yet.")
+            return
+
         st.caption(
             f"Looking for yearly CSVs under: {state_dir_for_fs} / {district_for_fs} "
             f"(historical + {sel_scenario})"
@@ -804,6 +810,8 @@ def render_trend_over_time(
                     st.pyplot(fig_ts, use_container_width=True)
             except Exception:
                 st.pyplot(fig_ts, use_container_width=True)
+        else:
+            st.caption("Yearly trend charts are not available for this unit/source combination.")
 
 
 def render_scenario_comparison(
@@ -943,13 +951,33 @@ def render_scenario_comparison(
                     pass
 
             # Numeric summary in text
+            available_scenarios = []
+            if "scenario" in panel_df.columns:
+                available_scenarios = [
+                    str(s)
+                    for s in pd.unique(panel_df["scenario"])
+                    if str(s).strip()
+                ]
+            scenario_order = [
+                scen
+                for scen in scenario_display.keys()
+                if scen in set(str(s).strip().lower() for s in available_scenarios)
+            ]
+            scenario_order.extend(
+                sorted(
+                    scen
+                    for scen in set(str(s).strip().lower() for s in available_scenarios)
+                    if scen not in scenario_order
+                )
+            )
+
             lines = []
             for period in period_order:
                 sub = panel_df[panel_df["period"] == period]
                 if sub.empty:
                     continue
                 parts = []
-                for scen in ["historical", "ssp245", "ssp585"]:
+                for scen in scenario_order:
                     sub_s = sub[sub["scenario"] == scen]
                     if sub_s.empty:
                         continue
@@ -1007,10 +1035,20 @@ def render_case_study_export(
         )
 
         index_options = list(variables.keys())
-        all_bundles = get_bundles()
+        spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
+        current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
+        all_bundles = get_bundles(spatial_family=spatial_family, level=current_level)
 
-        bundles_for_current = get_bundle_for_metric(variable_slug)
-        default_bundle = bundles_for_current[0] if bundles_for_current else get_default_bundle()
+        bundles_for_current = get_bundle_for_metric(
+            variable_slug,
+            spatial_family=spatial_family,
+            level=current_level,
+        )
+        default_bundle = (
+            bundles_for_current[0]
+            if bundles_for_current
+            else get_default_bundle(spatial_family=spatial_family, level=current_level)
+        )
 
         selected_bundles = st.multiselect(
             "Risk domains to include in the report",
@@ -1025,7 +1063,7 @@ def render_case_study_export(
 
         expanded_slugs: list[str] = []
         for bundle in selected_bundles:
-            for slug in get_metrics_for_bundle(bundle):
+            for slug in get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=current_level):
                 if slug in index_options and slug not in expanded_slugs:
                     expanded_slugs.append(slug)
 

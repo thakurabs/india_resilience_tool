@@ -29,7 +29,7 @@ import numpy as np
 import pytest
 import xarray as xr
 
-from india_resilience_tool.config.metrics_registry import BUNDLES, PIPELINE_METRICS_RAW
+from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW, get_pipeline_bundles
 
 
 # =============================================================================
@@ -65,7 +65,7 @@ def _pipeline_by_slug() -> dict[str, dict[str, Any]]:
 
 def _bundle_slugs() -> set[str]:
     slugs: set[str] = set()
-    for _bname, items in BUNDLES.items():
+    for _bname, items in get_pipeline_bundles().items():
         for s in items:
             slugs.add(s)
     return slugs
@@ -254,7 +254,7 @@ class TestTierARegistryConsistency:
     def test_all_bundle_slugs_exist_in_pipeline_registry(self) -> None:
         pipeline = _pipeline_by_slug()
         missing: list[str] = []
-        for bundle_name, slugs in BUNDLES.items():
+        for bundle_name, slugs in get_pipeline_bundles().items():
             for slug in slugs:
                 if slug not in pipeline:
                     missing.append(f"{bundle_name}: {slug}")

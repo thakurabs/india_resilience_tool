@@ -38,12 +38,15 @@ PathLike = Union[str, Path]
 # Scenario / period helpers (index-agnostic)
 # -------------------------
 
-SCENARIO_ORDER = ["historical", "ssp245", "ssp585"]
+SCENARIO_ORDER = ["historical", "ssp245", "ssp585", "bau", "opt", "pes"]
 
 SCENARIO_DISPLAY = {
     "historical": "Historical",
     "ssp245": "SSP2-4.5",
     "ssp585": "SSP5-8.5",
+    "bau": "Business-as-usual",
+    "opt": "Optimistic",
+    "pes": "Pessimistic",
 }
 
 # Consistent scenario colors for Plotly + Matplotlib (module-level so it's always defined)
@@ -51,6 +54,9 @@ SCENARIO_COLORS_HEX: dict[str, str] = {
     "historical": "#1f77b4",  # blue
     "ssp245": "#ff7f0e",      # orange
     "ssp585": "#d62728",      # red
+    "bau": "#e66101",         # dark orange
+    "opt": "#1a9850",         # green
+    "pes": "#b2182b",         # dark red
 }
 
 # Risk-class palette (used for percentile-based heatmaps).
@@ -114,14 +120,27 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     a = max(0.0, min(1.0, float(alpha)))
     return f"rgba({r},{g},{b},{a:.3f})"
 
-PERIOD_ORDER = ["1990-2010", "2020-2040", "2040-2060", "2060-2080"]
+PERIOD_ORDER = [
+    "1979-2019",
+    "1990-2010",
+    "2020-2040",
+    "2040-2060",
+    "2060-2080",
+    "2030",
+    "2050",
+    "2080",
+]
 
 # Human-friendly labels used in UI and chart axes (keys must match PERIOD_ORDER)
 PERIOD_DISPLAY: dict[str, str] = {
+    "1979-2019": "Baseline (1979-2019)",
     "1990-2010": "1990–2010",
     "2020-2040": "Early century (2020–2040)",
     "2040-2060": "Mid-century (2040–2060)",
     "2060-2080": "End century (2060–2080)",
+    "2030": "2030",
+    "2050": "2050",
+    "2080": "2080",
 }
 
 def period_display_label(period_key: str) -> str:
@@ -137,6 +156,22 @@ def canonical_period_label(raw: str) -> str:
     if m:
         return f"{m.group(1)}-{m.group(2)}"
     return s
+
+
+def ordered_period_keys(periods: Sequence[str]) -> list[str]:
+    """Return deduplicated period keys in canonical display order."""
+    found = {canonical_period_label(p) for p in periods if str(p).strip()}
+    ordered = [p for p in PERIOD_ORDER if p in found]
+    ordered.extend(sorted(p for p in found if p not in PERIOD_ORDER))
+    return ordered
+
+
+def ordered_scenario_keys(scenarios: Sequence[str]) -> list[str]:
+    """Return deduplicated scenario keys in canonical display order."""
+    found = {str(s).strip().lower() for s in scenarios if str(s).strip()}
+    ordered = [s for s in SCENARIO_ORDER if s in found]
+    ordered.extend(sorted(s for s in found if s not in SCENARIO_ORDER))
+    return ordered
 
 
 def compute_scenario_y_range(
@@ -284,8 +319,8 @@ def build_scenario_comparison_panel_for_row(
 
     dfp = pd.DataFrame(records)
     dfp["scenario_display"] = dfp["scenario"].map(SCENARIO_DISPLAY).fillna(dfp["scenario"])
-    dfp["period"] = pd.Categorical(dfp["period"], PERIOD_ORDER, ordered=True)
-    dfp["scenario"] = pd.Categorical(dfp["scenario"], SCENARIO_ORDER, ordered=True)
+    dfp["period"] = pd.Categorical(dfp["period"], ordered_period_keys(dfp["period"].tolist()), ordered=True)
+    dfp["scenario"] = pd.Categorical(dfp["scenario"], ordered_scenario_keys(dfp["scenario"].tolist()), ordered=True)
     dfp = dfp.sort_values(["period", "scenario"]).reset_index(drop=True)
     return dfp
 
@@ -355,10 +390,13 @@ def make_scenario_comparison_figure(
     dfp["period"] = dfp["period"].map(canonical_period_label)
     dfp["scenario_norm"] = dfp["scenario"].astype(str).str.strip().str.lower()
 
+    scenario_order = ordered_scenario_keys(dfp["scenario_norm"].tolist())
+    period_order = ordered_period_keys(dfp["period"].tolist())
+
     combos: list[tuple[str, str]] = []
-    for scen in SCENARIO_ORDER:
+    for scen in scenario_order:
         scen_norm = str(scen).strip().lower()
-        for period in PERIOD_ORDER:
+        for period in period_order:
             mask = (dfp["scenario_norm"] == scen_norm) & (dfp["period"] == period)
             if mask.any():
                 combos.append((scen_norm, period))
@@ -367,7 +405,7 @@ def make_scenario_comparison_figure(
         return None, None
 
     periods_present: list[str] = []
-    for period in PERIOD_ORDER:
+    for period in period_order:
         if any(p == period for (_, p) in combos):
             periods_present.append(period)
 

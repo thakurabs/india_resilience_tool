@@ -40,11 +40,15 @@ FONT_SIZE_LEGEND: int = 8
 
 # ---- Period ordering for display ----
 PERIOD_ORDER: list[str] = [
+    "1979-2019",
     "1995-2014",
     "2021-2040",
     "2041-2060",
     "2061-2080",
     "2081-2100",
+    "2030",
+    "2050",
+    "2080",
 ]
 
 # ---- Scenario display names ----
@@ -52,6 +56,9 @@ SCENARIO_DISPLAY: dict[str, str] = {
     "ssp245": "SSP2-4.5",
     "ssp585": "SSP5-8.5",
     "historical": "Historical",
+    "bau": "Business-as-usual",
+    "opt": "Optimistic",
+    "pes": "Pessimistic",
 }
 
 # ---- Scenario UI labels (plain-English + scientific) ----
@@ -59,6 +66,9 @@ SCENARIO_UI_LABEL: dict[str, str] = {
     "ssp245": "Middle-of-the-road (SSP2-4.5)",
     "ssp585": "Fossil-fuelled development (SSP5-8.5)",
     "historical": "Historical",
+    "bau": "Business-as-usual",
+    "opt": "Optimistic",
+    "pes": "Pessimistic",
 }
 
 # ---- Scenario help copy (shown in native Streamlit help tooltips) ----
@@ -73,7 +83,19 @@ SCENARIO_HELP_MD: dict[str, str] = {
         "A future with rapid economic growth and high energy demand met largely by fossil fuels. "
         "Often used to stress-test under higher emissions."
     ),
-    "historical": "Historical\nObserved / historical reference period used for comparison (not a future projection).",
+    "historical": "Historical\nReference historical period used for comparison (period depends on the dataset).",
+    "bau": (
+        "Business-as-usual\n"
+        "Aqueduct future pathway representing continued current trajectories without major additional intervention."
+    ),
+    "opt": (
+        "Optimistic\n"
+        "Aqueduct future pathway representing stronger mitigation and adaptation outcomes."
+    ),
+    "pes": (
+        "Pessimistic\n"
+        "Aqueduct future pathway representing weaker mitigation and higher water-risk pressure."
+    ),
 }
 
 # ---- Risk classification thresholds ----

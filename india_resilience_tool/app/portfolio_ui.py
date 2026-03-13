@@ -431,7 +431,9 @@ def render_index_selector(
         get_default_bundle,
     )
     
-    all_bundles = get_bundles()
+    spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
+    current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
+    all_bundles = get_bundles(spatial_family=spatial_family, level=current_level)
     available_slugs = list(variables.keys())
     
     # --- Determine default bundle(s) based on current metric ---
@@ -441,16 +443,20 @@ def render_index_selector(
     
     if current_bundle_selection is None:
         # First load: select bundle(s) containing the current metric
-        bundles_for_current = get_bundle_for_metric(current_slug)
+        bundles_for_current = get_bundle_for_metric(
+            current_slug,
+            spatial_family=spatial_family,
+            level=current_level,
+        )
         if bundles_for_current:
             default_bundles = [bundles_for_current[0]]  # Use first matching bundle
         else:
-            default_bundles = [get_default_bundle()]
+            default_bundles = [get_default_bundle(spatial_family=spatial_family, level=current_level)]
     else:
         # Use existing selection, filtering out invalid bundles
         default_bundles = [b for b in current_bundle_selection if b in all_bundles]
         if not default_bundles:
-            default_bundles = [get_default_bundle()]
+            default_bundles = [get_default_bundle(spatial_family=spatial_family, level=current_level)]
     
     # --- Bundle multi-select ---
     selected_bundles = st.multiselect(
@@ -465,7 +471,7 @@ def render_index_selector(
     if selected_bundles:
         expanded_slugs: list[str] = []
         for bundle in selected_bundles:
-            for slug in get_metrics_for_bundle(bundle):
+            for slug in get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=current_level):
                 if slug in available_slugs and slug not in expanded_slugs:
                     expanded_slugs.append(slug)
         
