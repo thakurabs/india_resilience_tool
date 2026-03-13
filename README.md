@@ -151,6 +151,10 @@ Place these in `IRT_DATA_DIR`:
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
+Aqueduct methodology note:
+
+- See [`docs/aqueduct_onboarding_methodology.md`](docs/aqueduct_onboarding_methodology.md) for the full post-processing workflow, including `pfaf_id`-based baseline cleanup and HydroSHEDS → SOI hydro transfer.
+
 ### Processed outputs layout
 
 Processed outputs live under:

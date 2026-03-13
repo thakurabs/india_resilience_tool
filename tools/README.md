@@ -84,6 +84,9 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
   - baseline: `bws_raw`
   - future: `*_ws_x_r`
 
+Aqueduct methodology note:
+- see [`docs/aqueduct_onboarding_methodology.md`](../docs/aqueduct_onboarding_methodology.md) for the end-to-end explanation of baseline cleanup, crosswalk construction, and SOI hydro transfer.
+
 `tools/geodata/clean_river_network.py` notes:
 - source: `river_network_goi.shp`
 - canonical output: `IRT_DATA_DIR/river_network.parquet`

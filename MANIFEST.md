@@ -90,6 +90,9 @@ Notes:
 - `__pycache__/` directories are intentionally omitted below.
 - Local logs, zips, and untracked working files are not treated as canonical repo modules.
 
+Aqueduct methodology note:
+- `docs/aqueduct_onboarding_methodology.md` is the canonical narrative for Aqueduct cleanup, HydroSHEDS `pfaf_id` normalization, and HydroSHEDS → SOI hydro transfer.
+
 ## Package inventory
 
 ### `india_resilience_tool/analysis/`
