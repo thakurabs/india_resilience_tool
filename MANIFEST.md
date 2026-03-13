@@ -92,6 +92,7 @@ Notes:
 
 Aqueduct methodology note:
 - `docs/aqueduct_onboarding_methodology.md` is the canonical narrative for Aqueduct cleanup, HydroSHEDS `pfaf_id` normalization, and HydroSHEDS → SOI hydro transfer.
+- `docs/aqueduct_field_contract.md` records the currently used Aqueduct source-field mapping and interpretation notes for `aq_water_stress`.
 
 ## Package inventory
 
