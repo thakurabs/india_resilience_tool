@@ -31,6 +31,7 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 | `tools/geodata/build_block_subbasin_crosswalk.py` | Build the canonical block ↔ sub-basin crosswalk CSV from block and sub-basin GeoJSONs | `python -m tools.geodata.build_block_subbasin_crosswalk --help` |
 | `tools/geodata/build_district_basin_crosswalk.py` | Build the canonical district ↔ basin crosswalk CSV from district and basin GeoJSONs | `python -m tools.geodata.build_district_basin_crosswalk --help` |
 | `tools/geodata/build_block_basin_crosswalk.py` | Build the canonical block ↔ basin crosswalk CSV from block and basin GeoJSONs | `python -m tools.geodata.build_block_basin_crosswalk --help` |
+| `tools/geodata/prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON by joining baseline CSV attributes onto `future_annual` HydroBASINS geometry keyed by `pfaf_id` | `python -m tools.geodata.prepare_aqueduct_baseline --help` |
 | `tools/geodata/clean_river_network.py` | Clean the Survey of India river shapefile into canonical river artifacts (`river_network.parquet`, display GeoJSON, QA CSV) | `python -m tools.geodata.clean_river_network --help` |
 | `tools/geodata/build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV used by hydro river overlays | `python -m tools.geodata.build_river_basin_reconciliation --help` |
 | `tools/geodata/build_river_subbasin_diagnostics.py` | Build the hydro sub-basin vs river-name diagnostics CSV used by hydro sub-basin overlays | `python -m tools.geodata.build_river_subbasin_diagnostics --help` |
@@ -46,6 +47,17 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 - source: `waterbasin_goi.shp`
 - optional repair: `--repair-invalid`
 - canonical outputs: `basins.geojson` and `subbasins.geojson`
+
+`tools/geodata/prepare_aqueduct_baseline.py` notes:
+- geometry source: Aqueduct GDB `future_annual` layer
+- attribute source: `Aqueduct40_baseline_annual_*.csv`
+- default scope: India-only (`gid_0 == IND`, excludes `pfaf_id = -9999`)
+- canonical outputs:
+  - `IRT_DATA_DIR/aqueduct/baseline_clean_india.geojson`
+  - `IRT_DATA_DIR/aqueduct/baseline_clean_india_qa.csv`
+  - `IRT_DATA_DIR/aqueduct/future_annual_india.geojson`
+- baseline geometry is intentionally not used; the tool aggregates segmented baseline rows to one row per `pfaf_id`
+  and also emits the India-only `future_annual` subset with the source future attributes preserved
 
 `tools/geodata/clean_river_network.py` notes:
 - source: `river_network_goi.shp`

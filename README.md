@@ -138,6 +138,9 @@ Place these in `IRT_DATA_DIR`:
 - `river_topology_qa.csv` (optional topology QA artifact)
 - `river_missing_assignments.csv` (optional focused diagnostics for unresolved river hydro assignments)
 - `river_missing_assignments.geojson` (optional visual-debug layer for unresolved river hydro assignments)
+- `aqueduct/baseline_clean_india.geojson` (optional canonical Aqueduct baseline artifact for onboarding, derived from clean `future_annual` geometry + aggregated baseline CSV metrics)
+- `aqueduct/baseline_clean_india_qa.csv` (optional QA diagnostics for the clean Aqueduct baseline artifact)
+- `aqueduct/future_annual_india.geojson` (optional India-only Aqueduct `future_annual` geometry subset keyed by `pfaf_id`)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -224,6 +227,15 @@ python -m tools.geodata.build_block_subbasin_crosswalk --overwrite
 python -m tools.geodata.build_district_basin_crosswalk --overwrite
 python -m tools.geodata.build_block_basin_crosswalk --overwrite
 ```
+
+### Build the clean Aqueduct baseline artifact
+
+```bash
+python -m tools.geodata.prepare_aqueduct_baseline --help
+python -m tools.geodata.prepare_aqueduct_baseline --source-gdb /path/to/Aq40_Y2023D07M05.gdb --baseline-csv /path/to/Aqueduct40_baseline_annual_y2023m07d05.csv --overwrite
+```
+
+This tool uses the Aqueduct `future_annual` geometry as the canonical HydroBASINS Level 6 base, aggregates segmented `baseline_annual` CSV rows to one record per `pfaf_id`, and also writes an India-only `future_annual` GeoJSON with the source future attributes preserved.
 
 ### Clean the Survey of India river network
 

@@ -39,6 +39,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_block_subbasin_crosswalk --overwrite` | Build block ↔ sub-basin crosswalk CSV |
 | `python -m tools.geodata.build_district_basin_crosswalk --overwrite` | Build district ↔ basin crosswalk CSV |
 | `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
+| `python -m tools.geodata.prepare_aqueduct_baseline --help` | Build the canonical clean Aqueduct baseline artifact and India-only future geometry subset from future geometry + baseline CSV |
 | `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
 | `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
 | `python -m tools.geodata.build_river_subbasin_diagnostics --overwrite` | Build hydro sub-basin vs river-name diagnostics CSV |
@@ -246,6 +247,7 @@ Notes:
 | `build_block_subbasin_crosswalk.py` | Build canonical block ↔ sub-basin crosswalk CSV |
 | `build_district_basin_crosswalk.py` | Build canonical district ↔ basin crosswalk CSV |
 | `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |
+| `prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON, QA CSV, and India-only `future_annual` GeoJSON with source future attributes preserved |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
 | `build_river_subbasin_diagnostics.py` | Build hydro sub-basin vs river-name diagnostics CSV |
