@@ -6,7 +6,10 @@ import pytest
 from shapely.geometry import Polygon
 
 from tools.geodata.build_aqueduct_admin_crosswalk import build_aqueduct_district_crosswalk
-from tools.geodata.build_aqueduct_admin_masters import aggregate_crosswalk_to_districts
+from tools.geodata.build_aqueduct_admin_masters import (
+    aggregate_crosswalk_to_districts,
+    load_district_crosswalk,
+)
 
 
 def _aqueduct_gdf() -> gpd.GeoDataFrame:
@@ -65,3 +68,22 @@ def test_aggregate_crosswalk_to_districts_builds_expected_district_master() -> N
     assert pytest.approx(float(master_df["aq_water_stress__historical__1979-2019__mean"].iloc[0]), rel=1e-6) == 2.0
     assert pytest.approx(float(master_df["aq_water_stress__bau__2030__mean"].iloc[0]), rel=1e-6) == 3.0
     assert pytest.approx(float(qa_df["district_coverage_fraction"].iloc[0]), rel=1e-6) == 1.0
+
+
+def test_load_district_crosswalk_rejects_invalid_state_name(tmp_path) -> None:
+    csv_path = tmp_path / "district_crosswalk.csv"
+    pd.DataFrame(
+        {
+            "pfaf_id": ["P1"],
+            "state_name": [pd.NA],
+            "district_name": ["Demo District"],
+            "district_key": ["Telangana::Demo District"],
+            "district_area_km2": [10.0],
+            "intersection_area_km2": [5.0],
+            "pfaf_area_fraction_in_district": [0.5],
+            "district_area_fraction_in_pfaf": [0.5],
+        }
+    ).to_csv(csv_path, index=False)
+
+    with pytest.raises(ValueError, match="invalid state_name"):
+        load_district_crosswalk(csv_path)

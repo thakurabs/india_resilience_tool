@@ -5,6 +5,35 @@ from __future__ import annotations
 from collections import deque
 from pathlib import Path
 
+_RESERVED_PROCESSED_DIR_NAMES = {"hydro"}
+_INVALID_STATE_DIR_NAMES = {"", "nan", "none", "null", "nat"}
+
+
+def _has_master_csv(root: Path) -> bool:
+    """Return True when ``root`` contains a canonical admin master CSV."""
+    if not root.is_dir():
+        return False
+    try:
+        return any(
+            child.is_file()
+            and child.name in {"master_metrics_by_district.csv", "master_metrics_by_block.csv"}
+            for child in root.iterdir()
+        )
+    except Exception:
+        return False
+
+
+def _is_valid_state_dir_name(name: str) -> bool:
+    """Return True when a processed-root child name is safe to treat as an admin state."""
+    norm = str(name or "").strip()
+    if not norm:
+        return False
+    lowered = norm.lower()
+    if lowered in _RESERVED_PROCESSED_DIR_NAMES:
+        return False
+    if lowered in _INVALID_STATE_DIR_NAMES:
+        return False
+    return True
 
 
 def _has_nested_directory(root: Path, *, min_levels: int = 1, max_depth: int = 3) -> bool:
@@ -37,6 +66,8 @@ def _state_has_available_data(state_dir: Path) -> bool:
     if not state_dir.is_dir():
         return False
 
+    if _has_master_csv(state_dir):
+        return True
     if _has_nested_directory(state_dir / "districts", min_levels=2, max_depth=4):
         return True
     if _has_nested_directory(state_dir / "blocks", min_levels=3, max_depth=5):
@@ -62,7 +93,7 @@ def list_available_states_from_processed_root(processed_root_str: str) -> list[s
 
     states: list[str] = []
     for entry in processed_root.iterdir():
-        if not entry.is_dir() or entry.name.startswith("."):
+        if not entry.is_dir() or entry.name.startswith(".") or not _is_valid_state_dir_name(entry.name):
             continue
         if _state_has_available_data(entry):
             states.append(entry.name)

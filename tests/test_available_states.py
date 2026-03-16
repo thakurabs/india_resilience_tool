@@ -22,6 +22,26 @@ def test_available_states_old_structure(tmp_path: Path) -> None:
     assert states == ["Telangana"]
 
 
+def test_available_states_flat_admin_master_structure(tmp_path: Path) -> None:
+    (tmp_path / "Telangana").mkdir(parents=True)
+    (tmp_path / "Telangana" / "master_metrics_by_district.csv").write_text("state,district\n", encoding="utf-8")
+    (tmp_path / "Odisha").mkdir(parents=True)
+
+    states = list_available_states_from_processed_root(str(tmp_path))
+    assert states == ["Telangana"]
+
+
+def test_available_states_ignores_reserved_and_nan_like_dirs(tmp_path: Path) -> None:
+    (tmp_path / "Telangana").mkdir(parents=True)
+    (tmp_path / "Telangana" / "master_metrics_by_district.csv").write_text("state,district\n", encoding="utf-8")
+    (tmp_path / "hydro" / "DemoBasin" / "ssp245").mkdir(parents=True)
+    (tmp_path / "nan").mkdir(parents=True)
+    (tmp_path / "nan" / "master_metrics_by_district.csv").write_text("state,district\n", encoding="utf-8")
+
+    states = list_available_states_from_processed_root(str(tmp_path))
+    assert states == ["Telangana"]
+
+
 def test_available_states_missing_or_empty_root(tmp_path: Path) -> None:
     missing = tmp_path / "does_not_exist"
     assert list_available_states_from_processed_root(str(missing)) == []

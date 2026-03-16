@@ -30,6 +30,27 @@ def _normalize_pfaf_id_series(series: pd.Series) -> pd.Series:
     return series.astype("string").str.strip().fillna("")
 
 
+def _normalize_text_series(series: pd.Series) -> pd.Series:
+    return series.astype("string").str.strip().fillna("")
+
+
+def _invalid_identity_mask(series: pd.Series) -> pd.Series:
+    normalized = _normalize_text_series(series)
+    lowered = normalized.str.lower()
+    return lowered.isin({"", "nan", "none", "null", "nat"})
+
+
+def _validate_district_identity_columns(df: pd.DataFrame, *, label: str) -> None:
+    required = ("state_name", "district_name", "district_key")
+    for column in required:
+        invalid = _invalid_identity_mask(df[column])
+        if invalid.any():
+            bad_values = sorted({str(v) for v in df.loc[invalid, column].astype("string").fillna("<NA>").tolist()})
+            raise ValueError(
+                f"{label} contains invalid {column} values: {bad_values[:5]}"
+            )
+
+
 def load_district_crosswalk(path: Path) -> pd.DataFrame:
     """Load an Aqueduct-to-district overlap crosswalk CSV."""
     df = pd.read_csv(path)
@@ -48,7 +69,10 @@ def load_district_crosswalk(path: Path) -> pd.DataFrame:
         raise ValueError(f"District crosswalk missing required columns {missing}: {path}")
     df = df.copy()
     df["pfaf_id"] = _normalize_pfaf_id_series(df["pfaf_id"])
-    df["district_key"] = df["district_key"].astype("string").str.strip().fillna("")
+    df["state_name"] = _normalize_text_series(df["state_name"])
+    df["district_name"] = _normalize_text_series(df["district_name"])
+    df["district_key"] = _normalize_text_series(df["district_key"])
+    _validate_district_identity_columns(df, label=f"District crosswalk {path}")
     return df
 
 
@@ -115,6 +139,8 @@ def aggregate_crosswalk_to_districts(
 
     aggregated = aggregated.sort_values(["state_name", "district_name"]).reset_index(drop=True)
     qa_df = qa_df.sort_values(["state_name", "district_name"]).reset_index(drop=True)
+    _validate_district_identity_columns(aggregated, label="Aggregated Aqueduct district masters")
+    _validate_district_identity_columns(qa_df, label="Aqueduct district QA")
     aggregated = aggregated.rename(columns={"state_name": "state", "district_name": "district"})
     return aggregated, qa_df
 

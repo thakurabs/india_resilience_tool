@@ -42,6 +42,22 @@ class GeographyContext:
     gdf_state_districts: Any
 
 
+def _resolve_available_admin_states(processed_root: Optional[Path]) -> tuple[list[str], bool]:
+    """Return state options and whether the processed root has usable admin data."""
+    if processed_root is None:
+        return ["All"], False
+
+    processed_root_resolved = processed_root.resolve()
+    discovered_states = list_available_states_from_processed_root_cached(str(processed_root_resolved))
+    if (
+        (not processed_root_resolved.exists())
+        or (not processed_root_resolved.is_dir())
+        or (not discovered_states)
+    ):
+        return ["All"], False
+    return ["All"] + discovered_states, True
+
+
 def _build_admin_geography(
     *,
     analysis_ready: bool,
@@ -61,19 +77,12 @@ def _build_admin_geography(
         )
         available_states = ["All"]
     else:
-        processed_root_resolved = processed_root.resolve()
-        available_states = list_available_states_from_processed_root_cached(
-            str(processed_root_resolved)
-        )
-        if (
-            (not processed_root_resolved.exists())
-            or (not processed_root_resolved.is_dir())
-            or (not available_states)
-        ):
+        available_states, has_available_data = _resolve_available_admin_states(processed_root)
+        if not has_available_data:
+            processed_root_resolved = processed_root.resolve()
             st.warning(
                 f"No processed data found under IRT_PROCESSED_ROOT={processed_root_resolved}"
             )
-            available_states = ["All"]
 
     if st.session_state.get("selected_state") not in available_states:
         st.session_state["selected_state"] = available_states[0]
