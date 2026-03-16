@@ -71,13 +71,13 @@ Entry fields:
 - `Dependency / trigger`: start after river topology QA closure and once the desired river/admin translation semantics are defined.
 - `Done when`: the platform can relate reaches to admin and hydro polygons in a reusable, audited way.
 
-## Later
+### BL-0007 — Complete `processed_parquet` rollout and validation
+- `Area`: storage, runtime, rollout
+- `Why deferred`: the Parquet-only pipeline contract is implemented, but production publication, runtime validation, and storage verification still need to be completed on real data before the migration can be treated as fully closed.
+- `Dependency / trigger`: continue after the current Parquet pipeline changes are committed and the runtime environment includes required visualization dependencies such as `plotly`.
+- `Done when`: representative district, block, basin, and sub-basin metrics have been computed, master-built, and published under `processed_parquet`; the migrated dashboard has been smoke-tested successfully against the published tree; legacy `processed/` has been confirmed untouched and usable for fallback; and file-count / size improvements have been measured on representative metrics.
 
-### BL-0007 — Migrate processed-data storage to build/published/archive Parquet serving
-- `Area`: storage, architecture
-- `Why deferred`: this is a large repo-wide migration and the immediate focus remains river QA/topology closure and hydro-facing runtime hardening.
-- `Dependency / trigger`: begin after current river v1 closure, when runtime loader changes and publish/prune workflow changes can be tackled systematically.
-- `Done when`: processed serving data uses the planned `build / published / archive` structure, runtime prefers Parquet with CSV fallback during transition, GeoParquet reference geometry is in place, and legacy hot-path CSV forests are pruned only after parity validation.
+## Later
 
 ### BL-0008 — Add upstream/downstream routing behavior to the river experience
 - `Area`: river, topology, UI
@@ -96,6 +96,12 @@ Entry fields:
 - `Why deferred`: the current river work is limited to cleaning, topology-ready artifacts, overlays, and hydro-side summary context.
 - `Dependency / trigger`: requires a settled reach-level analytical contract and clear methodology for river-native metrics.
 - `Done when`: river reaches can participate in metric computation and serving contracts in a scientifically explicit way.
+
+### BL-0011 — Remove transitional CSV-era compatibility from the migrated pipeline
+- `Area`: storage, cleanup
+- `Why deferred`: some compatibility code remains so the migration can be validated incrementally, but it should be removed once `processed_parquet` is fully populated and accepted as the sole migrated runtime contract.
+- `Dependency / trigger`: start after `BL-0007` is complete and the rollback window for the older dashboard is explicitly closed.
+- `Done when`: migrated compute, master-build, discovery, and freshness code no longer depends on legacy CSV-shaped processed outputs or CSV fallback paths.
 
 ## Icebox
 
