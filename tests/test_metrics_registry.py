@@ -85,13 +85,20 @@ def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
 
 
 def test_aqueduct_metric_is_context_limited_to_hydro() -> None:
+    admin_district_metrics = set(get_metrics_for_bundle("Water Risk", spatial_family="admin", level="district"))
     assert "Water Risk" in get_bundles(spatial_family="hydro", level="basin")
     hydro_metrics = set(get_metrics_for_bundle("Water Risk", spatial_family="hydro", level="sub_basin"))
+    assert "Water Risk" in get_bundles(spatial_family="admin", level="district")
     assert {
         "aq_water_stress",
         "aq_interannual_variability",
         "aq_seasonal_variability",
         "aq_water_depletion",
     }.issubset(hydro_metrics)
-    assert "Water Risk" not in get_bundles(spatial_family="admin", level="district")
-    assert get_metrics_for_bundle("Water Risk", spatial_family="admin", level="district") == []
+    assert {
+        "aq_water_stress",
+        "aq_interannual_variability",
+        "aq_seasonal_variability",
+        "aq_water_depletion",
+    }.issubset(admin_district_metrics)
+    assert get_metrics_for_bundle("Water Risk", spatial_family="admin", level="block") == []

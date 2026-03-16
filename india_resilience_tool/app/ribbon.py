@@ -83,6 +83,11 @@ def _hydro_master_contract_ready(master_csv_path: Path, level: str) -> bool:
     return {"basin_id"}.issubset(cols)
 
 
+def _is_external_metric(varcfg: Optional[dict]) -> bool:
+    """Return True when the selected metric is backed by an external prebuilt source."""
+    return str((varcfg or {}).get("source_type") or "").strip().lower() == "external"
+
+
 def render_metric_ribbon(
     *,
     col: object,
@@ -242,6 +247,27 @@ def render_metric_ribbon(
             ) -> tuple[bool, str]:
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
                 is_hydro = level in {"basin", "sub_basin"}
+                is_external = _is_external_metric(varcfg)
+                if is_external:
+                    if master_csv_path.exists():
+                        return False, "up-to-date"
+                    if level == "district":
+                        return (
+                            False,
+                            (
+                                "external district masters are built by dedicated geodata tooling; "
+                                "run python -m tools.geodata.build_aqueduct_admin_masters --overwrite"
+                            ),
+                        )
+                    if level in {"basin", "sub_basin"}:
+                        return (
+                            False,
+                            (
+                                "external hydro masters are built by dedicated geodata tooling; "
+                                "run python -m tools.geodata.build_aqueduct_hydro_masters --overwrite"
+                            ),
+                        )
+                    return False, "external metric master CSV missing"
                 needs = (
                     force
                     or (is_hydro and not _hydro_master_contract_ready(master_csv_path, level))
@@ -290,7 +316,9 @@ def render_metric_ribbon(
             try:
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
                 needs_rebuild = False
-                if level in {"district", "block"}:
+                if _is_external_metric(varcfg):
+                    needs_rebuild = not master_csv_path.exists()
+                elif level in {"district", "block"}:
                     needs_rebuild = master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state)) or state_profile_files_missing_fn(
                         processed_root, str(pilot_state), level
                     )
@@ -308,7 +336,22 @@ def render_metric_ribbon(
                 st.warning(f"Could not check master CSV freshness: {e}")
 
             if not master_csv_path.exists():
-                if level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
+                if _is_external_metric(varcfg):
+                    if level == "district":
+                        st.error(
+                            f"District master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
+                            "Run `python -m tools.geodata.build_aqueduct_admin_masters --overwrite` first."
+                        )
+                    elif level in {"basin", "sub_basin"}:
+                        st.error(
+                            f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
+                            "Run `python -m tools.geodata.build_aqueduct_hydro_masters --overwrite` first."
+                        )
+                    else:
+                        st.error(
+                            f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}."
+                        )
+                elif level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
                     st.error(
                         f"Hydro boundary files are loaded, but no hydro processed outputs were found for "
                         f"{VARIABLES[variable_slug]['label']} under {processed_root / 'hydro'}. "
@@ -448,11 +491,7 @@ def render_metric_ribbon(
             )
 
         # --- Map mode selection ---
-        baseline_map_mode_label = (
-            "Change from baseline"
-            if str((varcfg or {}).get("source_type") or "").strip().lower() == "external"
-            else "Change from 1990-2010 baseline"
-        )
+        baseline_map_mode_label = "Change from baseline" if _is_external_metric(varcfg) else "Change from 1990-2010 baseline"
         map_mode_options = [sel_placeholder, "Absolute value", baseline_map_mode_label]
         cur_map_mode = st.session_state.get("map_mode", sel_placeholder)
         if cur_map_mode not in map_mode_options:

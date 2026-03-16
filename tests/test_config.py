@@ -69,3 +69,4 @@ def test_aqueduct_metrics_are_exposed_to_dashboard_variables() -> None:
         assert cfg["source_type"] == "external"
         assert cfg["supports_yearly_trend"] is False
         assert cfg["supported_scenarios"] == ["historical", "bau", "opt", "pes"]
+        assert cfg["supported_levels"] == ["district", "basin", "sub_basin"]

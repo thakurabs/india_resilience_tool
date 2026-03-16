@@ -1560,8 +1560,8 @@ def render_details_panel(
         make_scenario_figure_fn=make_scenario_figure_fn,
     )
 
-    # 4. Case study export (district/block only in v1)
-    if level_norm in {"district", "block"}:
+    # 4. Case study export (district/block only in v1, pipeline-backed metrics only)
+    if level_norm in {"district", "block"} and str(varcfg.get("source_type") or "").strip().lower() != "external":
         render_case_study_export(
             variables=variables,
             variable_slug=variable_slug,
@@ -1576,6 +1576,13 @@ def render_details_panel(
             make_case_study_zip_fn=make_case_study_zip_fn,
             slugify_fs_fn=slugify_fs_fn,
         )
+    elif level_norm in {"district", "block"} and str(varcfg.get("source_type") or "").strip().lower() == "external":
+        try:
+            import streamlit as st
+
+            st.info("Case-study export is not available for external metrics yet.")
+        except Exception:
+            pass
 
 
 def render_detailed_statistics(*args: Any, **kwargs: Any) -> None:

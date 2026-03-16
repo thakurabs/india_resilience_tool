@@ -32,6 +32,8 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 | `tools/geodata/build_district_basin_crosswalk.py` | Build the canonical district ↔ basin crosswalk CSV from district and basin GeoJSONs | `python -m tools.geodata.build_district_basin_crosswalk --help` |
 | `tools/geodata/build_block_basin_crosswalk.py` | Build the canonical block ↔ basin crosswalk CSV from block and basin GeoJSONs | `python -m tools.geodata.build_block_basin_crosswalk --help` |
 | `tools/geodata/prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON by joining baseline CSV attributes onto `future_annual` HydroBASINS geometry keyed by `pfaf_id` | `python -m tools.geodata.prepare_aqueduct_baseline --help` |
+| `tools/geodata/build_aqueduct_admin_crosswalk.py` | Build direct Aqueduct HydroSHEDS Level 6 ↔ district overlap CSVs for admin-boundary transfer | `python -m tools.geodata.build_aqueduct_admin_crosswalk --help` |
+| `tools/geodata/build_aqueduct_admin_masters.py` | Build district master CSVs for the onboarded Aqueduct metrics under `processed/{metric_slug}/{state}/master_metrics_by_district.csv` | `python -m tools.geodata.build_aqueduct_admin_masters --help` |
 | `tools/geodata/build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs for area-weighted transfer | `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` |
 | `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for the onboarded Aqueduct hydro metrics under `processed/{metric_slug}/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
 | `tools/geodata/validate_aqueduct_workflow.py` | Validate the Aqueduct cleanup, crosswalk, coverage, sensitivity, and master-value workflow and write per-metric validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/` | `python -m tools.geodata.validate_aqueduct_workflow --help` |
@@ -72,6 +74,14 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
   - `IRT_DATA_DIR/aqueduct/aqueduct_basin_crosswalk.csv`
   - `IRT_DATA_DIR/aqueduct/aqueduct_subbasin_crosswalk.csv`
 
+`tools/geodata/build_aqueduct_admin_crosswalk.py` notes:
+- inputs:
+  - `IRT_DATA_DIR/aqueduct/baseline_clean_india.geojson`
+  - `IRT_DATA_DIR/districts_4326.geojson`
+- analysis CRS: `EPSG:6933`
+- output:
+  - `IRT_DATA_DIR/aqueduct/aqueduct_district_crosswalk.csv`
+
 `tools/geodata/build_aqueduct_hydro_masters.py` notes:
 - inputs:
   - `IRT_DATA_DIR/aqueduct/baseline_clean_india.geojson`
@@ -94,17 +104,31 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
   - water depletion: baseline `bwd_raw`, future `*_wd_x_r`
 - if `--metric-slug` is omitted or set to `all`, the tool builds all onboarded Aqueduct hydro metrics
 
+`tools/geodata/build_aqueduct_admin_masters.py` notes:
+- inputs:
+  - `IRT_DATA_DIR/aqueduct/baseline_clean_india.geojson`
+  - `IRT_DATA_DIR/aqueduct/future_annual_india.geojson`
+  - `IRT_DATA_DIR/aqueduct/aqueduct_district_crosswalk.csv`
+- outputs:
+  - `IRT_DATA_DIR/processed/aq_water_stress/{state}/master_metrics_by_district.csv`
+  - `IRT_DATA_DIR/processed/aq_interannual_variability/{state}/master_metrics_by_district.csv`
+  - `IRT_DATA_DIR/processed/aq_seasonal_variability/{state}/master_metrics_by_district.csv`
+  - `IRT_DATA_DIR/processed/aq_water_depletion/{state}/master_metrics_by_district.csv`
+  - district QA CSVs under `IRT_DATA_DIR/aqueduct/`
+- if `--metric-slug` is omitted or set to `all`, the tool builds all onboarded Aqueduct district metrics
+
 `tools/geodata/validate_aqueduct_workflow.py` notes:
 - writes per-metric validation bundles under:
   - `IRT_DATA_DIR/aqueduct/validation/aq_water_stress/`
   - `IRT_DATA_DIR/aqueduct/validation/aq_interannual_variability/`
   - `IRT_DATA_DIR/aqueduct/validation/aq_seasonal_variability/`
   - `IRT_DATA_DIR/aqueduct/validation/aq_water_depletion/`
-- if `--metric-slug` is omitted or set to `all`, the validator runs for all onboarded Aqueduct hydro metrics
+- each bundle now includes district, basin, and sub-basin validation outputs
+- if `--metric-slug` is omitted or set to `all`, the validator runs for all onboarded Aqueduct district and hydro metrics
 
 Aqueduct methodology note:
-- see [`docs/aqueduct_onboarding_methodology.md`](../docs/aqueduct_onboarding_methodology.md) for the end-to-end explanation of baseline cleanup, crosswalk construction, and SOI hydro transfer.
-- see [`docs/aqueduct_field_contract.md`](../docs/aqueduct_field_contract.md) for the current Aqueduct source-field mappings used by the onboarded Aqueduct hydro metrics.
+- see [`docs/aqueduct_onboarding_methodology.md`](../docs/aqueduct_onboarding_methodology.md) for the end-to-end explanation of baseline cleanup, district transfer, crosswalk construction, and SOI hydro transfer.
+- see [`docs/aqueduct_field_contract.md`](../docs/aqueduct_field_contract.md) for the current Aqueduct source-field mappings used by the onboarded Aqueduct district and hydro metrics.
 
 `tools/geodata/clean_river_network.py` notes:
 - source: `river_network_goi.shp`

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Validate the Aqueduct-to-SOI hydro workflow.
+Validate the Aqueduct district + SOI hydro workflow.
 
 This tool audits:
 - source-field semantics for the currently onboarded Aqueduct metrics
@@ -21,10 +21,15 @@ import geopandas as gpd
 import pandas as pd
 
 from paths import BASINS_PATH, SUBBASINS_PATH, get_paths_config
+from tools.geodata.build_aqueduct_admin_masters import (
+    aggregate_crosswalk_to_districts,
+    load_district_crosswalk,
+)
 from tools.geodata.build_aqueduct_hydro_crosswalk import (
     load_aqueduct_boundaries,
     load_soi_hydro_boundaries,
 )
+from tools.geodata.build_district_subbasin_crosswalk import load_district_boundaries
 from tools.geodata.build_aqueduct_hydro_masters import (
     aggregate_crosswalk_to_targets,
     get_aqueduct_metric_spec,
@@ -34,7 +39,7 @@ from tools.geodata.build_aqueduct_hydro_masters import (
     load_metric_source_table,
 )
 
-HydroLevel = Literal["basin", "sub_basin"]
+TargetLevel = Literal["district", "basin", "sub_basin"]
 
 DEFAULT_AREA_EPSG = 6933
 INDIA_ALBERS_CRS = (
@@ -89,7 +94,14 @@ def _write_text(text: str, path: Path, *, overwrite: bool) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def _target_columns(level: HydroLevel) -> tuple[list[str], str, str, str]:
+def _target_columns(level: TargetLevel) -> tuple[list[str], str, str, str]:
+    if level == "district":
+        return (
+            ["state_name", "district_name", "district_key"],
+            "district_key",
+            "district_name",
+            "district_coverage_fraction",
+        )
     if level == "sub_basin":
         return (
             ["basin_id", "basin_name", "subbasin_id", "subbasin_code", "subbasin_name"],
@@ -112,7 +124,7 @@ def build_field_semantics_markdown(metric_slug: str) -> str:
     lines = [
         "# Aqueduct Field Semantics Audit",
         "",
-        f"This audit documents the source fields currently used to build the `{spec.slug}` hydro masters.",
+        f"This audit documents the source fields currently used to build the `{spec.slug}` district and hydro masters.",
         "",
         "## Current field contract",
         "",
@@ -213,10 +225,13 @@ def build_pfaf_cleaning_checks(
 def build_crosswalk_conservation_summary(
     crosswalk_df: pd.DataFrame,
     *,
-    hydro_level: HydroLevel,
+    hydro_level: TargetLevel,
 ) -> pd.DataFrame:
     """Summarize per-`pfaf_id` conservation behavior for one crosswalk."""
-    pfaf_fraction_col = "pfaf_area_fraction_in_subbasin" if hydro_level == "sub_basin" else "pfaf_area_fraction_in_basin"
+    if hydro_level == "district":
+        pfaf_fraction_col = "pfaf_area_fraction_in_district"
+    else:
+        pfaf_fraction_col = "pfaf_area_fraction_in_subbasin" if hydro_level == "sub_basin" else "pfaf_area_fraction_in_basin"
     grouped = (
         crosswalk_df.groupby("pfaf_id", dropna=False, as_index=False)
         .agg(
@@ -237,7 +252,7 @@ def build_crosswalk_conservation_summary(
 def classify_reliability_tiers(
     qa_df: pd.DataFrame,
     *,
-    hydro_level: HydroLevel,
+    hydro_level: TargetLevel,
 ) -> pd.DataFrame:
     """Assign reliability tiers from the master QA coverage fractions."""
     _, target_id_col, target_name_col, coverage_col = _target_columns(hydro_level)
@@ -255,10 +270,12 @@ def _build_crosswalk_with_area_crs(
     aqueduct_gdf: gpd.GeoDataFrame,
     hydro_gdf: gpd.GeoDataFrame,
     *,
-    hydro_level: HydroLevel,
+    hydro_level: TargetLevel,
     area_crs: Any,
 ) -> pd.DataFrame:
     """Compute an overlap table with a configurable equal-area CRS."""
+    if hydro_level == "district":
+        return _build_district_crosswalk_with_area_crs(aqueduct_gdf, hydro_gdf, area_crs=area_crs)
     aqueduct_proj = aqueduct_gdf.to_crs(area_crs).copy()
     hydro_proj = hydro_gdf.to_crs(area_crs).copy()
     target_area_col = "subbasin_area_km2" if hydro_level == "sub_basin" else "basin_area_km2"
@@ -290,13 +307,49 @@ def _build_crosswalk_with_area_crs(
     )
 
 
+def _build_district_crosswalk_with_area_crs(
+    aqueduct_gdf: gpd.GeoDataFrame,
+    district_gdf: gpd.GeoDataFrame,
+    *,
+    area_crs: Any,
+) -> pd.DataFrame:
+    """Compute an Aqueduct-to-district overlap table with a configurable area CRS."""
+    aqueduct_proj = aqueduct_gdf.to_crs(area_crs).copy()
+    district_proj = district_gdf.to_crs(area_crs).copy()
+    aqueduct_proj["pfaf_area_km2"] = aqueduct_proj.geometry.area / 1_000_000.0
+    district_proj["district_area_km2"] = district_proj.geometry.area / 1_000_000.0
+    intersections = gpd.overlay(
+        aqueduct_proj[["pfaf_id", "pfaf_area_km2", "geometry"]],
+        district_proj[["state_name", "district_name", "district_key", "district_area_km2", "geometry"]],
+        how="intersection",
+    )
+    if intersections.empty:
+        return pd.DataFrame()
+    intersections["intersection_area_km2"] = intersections.geometry.area / 1_000_000.0
+    intersections = intersections.loc[intersections["intersection_area_km2"] > 0].copy()
+    if intersections.empty:
+        return pd.DataFrame()
+    grouped = (
+        intersections.groupby(
+            ["pfaf_id", "pfaf_area_km2", "state_name", "district_name", "district_key", "district_area_km2"],
+            as_index=False,
+            dropna=False,
+        )["intersection_area_km2"]
+        .sum()
+        .reset_index(drop=True)
+    )
+    grouped["pfaf_area_fraction_in_district"] = grouped["intersection_area_km2"] / grouped["pfaf_area_km2"]
+    grouped["district_area_fraction_in_pfaf"] = grouped["intersection_area_km2"] / grouped["district_area_km2"]
+    return grouped
+
+
 def build_projection_sensitivity_summary(
     *,
     source_df: pd.DataFrame,
     aqueduct_gdf: gpd.GeoDataFrame,
     hydro_gdf: gpd.GeoDataFrame,
     base_master_df: pd.DataFrame,
-    hydro_level: HydroLevel,
+    hydro_level: TargetLevel,
     source_column_map: dict[str, str],
 ) -> pd.DataFrame:
     """Compare the reference transfer against alternate projections and a dominant-overlap rule."""
@@ -307,14 +360,22 @@ def build_projection_sensitivity_summary(
         hydro_level=hydro_level,
         area_crs=INDIA_ALBERS_CRS,
     )
-    alt_master_df, _ = aggregate_crosswalk_to_targets(
-        source_df=source_df,
-        crosswalk_df=alt_crosswalk,
-        target_gdf=hydro_gdf,
-        hydro_level=hydro_level,
-        source_column_map=source_column_map,
-        area_epsg=DEFAULT_AREA_EPSG,
-    )
+    if hydro_level == "district":
+        alt_master_df, _ = aggregate_crosswalk_to_districts(
+            source_df=source_df,
+            crosswalk_df=alt_crosswalk,
+            source_column_map=source_column_map,
+        )
+        alt_master_df = alt_master_df.rename(columns={"state": "state_name", "district": "district_name"})
+    else:
+        alt_master_df, _ = aggregate_crosswalk_to_targets(
+            source_df=source_df,
+            crosswalk_df=alt_crosswalk,
+            target_gdf=hydro_gdf,
+            hydro_level=hydro_level,
+            source_column_map=source_column_map,
+            area_epsg=DEFAULT_AREA_EPSG,
+        )
 
     records: list[dict[str, object]] = []
     value_columns = list(source_column_map)
@@ -397,7 +458,7 @@ def build_projection_sensitivity_summary(
 def select_sample_audit_units(
     reliability_df: pd.DataFrame,
     *,
-    hydro_level: HydroLevel,
+    hydro_level: TargetLevel,
     per_tier: int = 3,
 ) -> pd.DataFrame:
     """Select deterministic sample units across reliability tiers."""
@@ -422,7 +483,7 @@ def build_master_value_spotcheck(
     crosswalk_df: pd.DataFrame,
     source_df: pd.DataFrame,
     master_df: pd.DataFrame,
-    hydro_level: HydroLevel,
+    hydro_level: TargetLevel,
     metric_columns: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """Recompute master values for sampled units and compare against the written masters."""
@@ -480,18 +541,26 @@ def build_validation_summary_markdown(
     *,
     metric_slug: str,
     pfaf_checks_df: pd.DataFrame,
+    district_conservation_df: pd.DataFrame,
     basin_conservation_df: pd.DataFrame,
     subbasin_conservation_df: pd.DataFrame,
+    district_reliability_df: pd.DataFrame,
     basin_reliability_df: pd.DataFrame,
     subbasin_reliability_df: pd.DataFrame,
     sensitivity_df: pd.DataFrame,
     spotcheck_df: pd.DataFrame,
 ) -> str:
     """Summarize the validation outputs in markdown."""
+    district_tiers = district_reliability_df["reliability_tier"].value_counts().to_dict() if not district_reliability_df.empty else {}
     basin_tiers = basin_reliability_df["reliability_tier"].value_counts().to_dict() if not basin_reliability_df.empty else {}
     subbasin_tiers = subbasin_reliability_df["reliability_tier"].value_counts().to_dict() if not subbasin_reliability_df.empty else {}
+    district_cons = district_conservation_df.copy()
     basin_cons = basin_conservation_df.copy()
     subbasin_cons = subbasin_conservation_df.copy()
+    district_cons["pfaf_fraction_abs_diff_from_1"] = pd.to_numeric(
+        district_cons.get("pfaf_fraction_abs_diff_from_1"),
+        errors="coerce",
+    )
     basin_cons["pfaf_fraction_abs_diff_from_1"] = pd.to_numeric(
         basin_cons.get("pfaf_fraction_abs_diff_from_1"),
         errors="coerce",
@@ -501,6 +570,10 @@ def build_validation_summary_markdown(
         errors="coerce",
     )
     worst_basin_conservation = basin_cons.dropna(subset=["pfaf_fraction_abs_diff_from_1"]).nlargest(
+        5,
+        "pfaf_fraction_abs_diff_from_1",
+    )[["pfaf_id", "pfaf_fraction_abs_diff_from_1"]]
+    worst_district_conservation = district_cons.dropna(subset=["pfaf_fraction_abs_diff_from_1"]).nlargest(
         5,
         "pfaf_fraction_abs_diff_from_1",
     )[["pfaf_id", "pfaf_fraction_abs_diff_from_1"]]
@@ -529,15 +602,28 @@ def build_validation_summary_markdown(
         f"- Metric slug: `{metric_slug}`",
         f"- `pfaf_id` rows checked: {len(pfaf_checks_df)}",
         f"- `pfaf_id` rows with non-OK status: {geometry_mismatches}",
+        f"- District reliability tiers: {district_tiers}",
         f"- Basin reliability tiers: {basin_tiers}",
         f"- Sub-basin reliability tiers: {subbasin_tiers}",
         f"- Maximum sampled-unit master recomputation difference: {max_spotcheck:.12f}",
         "",
         "## Largest conservation deviations",
         "",
-        "### Basin crosswalk",
+        "### District crosswalk",
         "",
     ]
+    if worst_district_conservation.empty:
+        lines.append("- No district conservation deviations found.")
+    else:
+        for _, row in worst_district_conservation.iterrows():
+            lines.append(f"- `{row['pfaf_id']}`: fraction diff from 1 = {row['pfaf_fraction_abs_diff_from_1']:.6f}")
+    lines.extend(
+        [
+            "",
+        "### Basin crosswalk",
+        "",
+        ]
+    )
     if worst_basin_conservation.empty:
         lines.append("- No basin conservation deviations found.")
     else:
@@ -555,9 +641,10 @@ def build_validation_summary_markdown(
         lines.append("- No sensitivity deltas were computed.")
     else:
         for _, row in worst_sensitivity.iterrows():
+            location_name = row.get("district_name", row.get("basin_name", row.get("subbasin_name", "unknown")))
             lines.append(
                 f"- `{row['hydro_level']}` `{row.get('metric_column', '')}` `{row.get('comparison', '')}` "
-                f"at `{row.get('basin_name', row.get('subbasin_name', 'unknown'))}`: abs diff {float(row['abs_diff']):.6f}"
+                f"at `{location_name}`: abs diff {float(row['abs_diff']):.6f}"
             )
 
     lines.extend(
@@ -573,13 +660,15 @@ def build_validation_summary_markdown(
 
 
 def build_cli() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Validate the Aqueduct-to-SOI hydro workflow.")
+    parser = argparse.ArgumentParser(description="Validate the Aqueduct district + SOI hydro workflow.")
     aqueduct_dir = _default_aqueduct_dir()
     parser.add_argument("--baseline", type=str, default=str(aqueduct_dir / "baseline_clean_india.geojson"))
     parser.add_argument("--future", type=str, default=str(aqueduct_dir / "future_annual_india.geojson"))
     parser.add_argument("--baseline-qa", type=str, default=str(aqueduct_dir / "baseline_clean_india_qa.csv"))
+    parser.add_argument("--district-crosswalk", type=str, default=str(aqueduct_dir / "aqueduct_district_crosswalk.csv"))
     parser.add_argument("--basin-crosswalk", type=str, default=str(aqueduct_dir / "aqueduct_basin_crosswalk.csv"))
     parser.add_argument("--subbasin-crosswalk", type=str, default=str(aqueduct_dir / "aqueduct_subbasin_crosswalk.csv"))
+    parser.add_argument("--districts", type=str, default=str(get_paths_config().districts_path))
     parser.add_argument("--basins", type=str, default=str(BASINS_PATH))
     parser.add_argument("--subbasins", type=str, default=str(SUBBASINS_PATH))
     parser.add_argument(
@@ -608,8 +697,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline_path = Path(args.baseline).expanduser().resolve()
     future_path = Path(args.future).expanduser().resolve()
     baseline_qa_path = Path(args.baseline_qa).expanduser().resolve()
+    district_crosswalk_path = Path(args.district_crosswalk).expanduser().resolve()
     basin_crosswalk_path = Path(args.basin_crosswalk).expanduser().resolve()
     subbasin_crosswalk_path = Path(args.subbasin_crosswalk).expanduser().resolve()
+    districts_path = Path(args.districts).expanduser().resolve()
     basins_path = Path(args.basins).expanduser().resolve()
     subbasins_path = Path(args.subbasins).expanduser().resolve()
     output_root = Path(args.output_dir).expanduser().resolve()
@@ -629,8 +720,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         baseline_path,
         future_path,
         baseline_qa_path,
+        district_crosswalk_path,
         basin_crosswalk_path,
         subbasin_crosswalk_path,
+        districts_path,
         basins_path,
         subbasins_path,
     ]
@@ -644,12 +737,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         qa_path=baseline_qa_path,
     )
 
+    district_crosswalk_df = load_district_crosswalk(district_crosswalk_path)
     basin_crosswalk_df = load_crosswalk(basin_crosswalk_path, hydro_level="basin")
     subbasin_crosswalk_df = load_crosswalk(subbasin_crosswalk_path, hydro_level="sub_basin")
+    district_conservation_df = build_crosswalk_conservation_summary(district_crosswalk_df, hydro_level="district")
     basin_conservation_df = build_crosswalk_conservation_summary(basin_crosswalk_df, hydro_level="basin")
     subbasin_conservation_df = build_crosswalk_conservation_summary(subbasin_crosswalk_df, hydro_level="sub_basin")
 
     aqueduct_gdf = load_aqueduct_boundaries(baseline_path)
+    district_gdf = load_district_boundaries(districts_path)
     basin_gdf = load_soi_hydro_boundaries(basins_path, level="basin")
     subbasin_gdf = load_soi_hydro_boundaries(subbasins_path, level="sub_basin")
     print("AQUEDUCT VALIDATION")
@@ -657,8 +753,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"metric_slugs: {', '.join(metric_slugs)}")
     for metric_slug in metric_slugs:
         source_column_map = get_aqueduct_source_column_map(metric_slug)
+        district_master_qa_path = _default_aqueduct_dir() / f"{metric_slug}_district_master_qa.csv"
         basin_master_qa_path = _default_aqueduct_dir() / f"{metric_slug}_basin_master_qa.csv"
         subbasin_master_qa_path = _default_aqueduct_dir() / f"{metric_slug}_subbasin_master_qa.csv"
+        if not district_master_qa_path.exists():
+            raise FileNotFoundError(f"Required district QA for validation not found: {district_master_qa_path}")
         if not basin_master_qa_path.exists():
             raise FileNotFoundError(f"Required basin QA for validation not found: {basin_master_qa_path}")
         if not subbasin_master_qa_path.exists():
@@ -669,13 +768,29 @@ def main(argv: Sequence[str] | None = None) -> int:
             future_path=future_path,
             source_column_map=source_column_map,
         )
+        district_master_qa_df = pd.read_csv(district_master_qa_path)
         basin_master_qa_df = pd.read_csv(basin_master_qa_path)
         subbasin_master_qa_df = pd.read_csv(subbasin_master_qa_path)
+        district_reliability_df = classify_reliability_tiers(district_master_qa_df, hydro_level="district")
         basin_reliability_df = classify_reliability_tiers(basin_master_qa_df, hydro_level="basin")
         subbasin_reliability_df = classify_reliability_tiers(subbasin_master_qa_df, hydro_level="sub_basin")
+        district_samples = select_sample_audit_units(district_reliability_df, hydro_level="district")
         basin_samples = select_sample_audit_units(basin_reliability_df, hydro_level="basin")
         subbasin_samples = select_sample_audit_units(subbasin_reliability_df, hydro_level="sub_basin")
-        sample_df = pd.concat([basin_samples, subbasin_samples], ignore_index=True)
+        sample_df = pd.concat([district_samples, basin_samples, subbasin_samples], ignore_index=True)
+        district_master_root = get_paths_config().data_dir / "processed" / metric_slug
+        district_master_paths = sorted(district_master_root.glob("*/master_metrics_by_district.csv"))
+        if not district_master_paths:
+            raise FileNotFoundError(f"Required district masters for validation not found under: {district_master_root}")
+        district_master_frames = [pd.read_csv(path) for path in district_master_paths]
+        district_master_df = pd.concat(district_master_frames, ignore_index=True)
+        district_master_df = district_master_df.rename(columns={"state": "state_name", "district": "district_name"})
+        if "district_key" not in district_master_df.columns:
+            district_master_df["district_key"] = (
+                district_master_df["state_name"].astype(str).str.strip()
+                + "::"
+                + district_master_df["district_name"].astype(str).str.strip()
+            )
         basin_master_path = get_paths_config().data_dir / "processed" / metric_slug / "hydro" / "master_metrics_by_basin.csv"
         subbasin_master_path = get_paths_config().data_dir / "processed" / metric_slug / "hydro" / "master_metrics_by_sub_basin.csv"
         if not basin_master_path.exists():
@@ -686,6 +801,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         basin_master_df = pd.read_csv(basin_master_path)
         subbasin_master_df = pd.read_csv(subbasin_master_path)
 
+        district_sensitivity_df = build_projection_sensitivity_summary(
+            source_df=source_df,
+            aqueduct_gdf=aqueduct_gdf,
+            hydro_gdf=district_gdf,
+            base_master_df=district_master_df,
+            hydro_level="district",
+            source_column_map=source_column_map,
+        )
         basin_sensitivity_df = build_projection_sensitivity_summary(
             source_df=source_df,
             aqueduct_gdf=aqueduct_gdf,
@@ -702,8 +825,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             hydro_level="sub_basin",
             source_column_map=source_column_map,
         )
-        sensitivity_df = pd.concat([basin_sensitivity_df, subbasin_sensitivity_df], ignore_index=True)
+        sensitivity_df = pd.concat([district_sensitivity_df, basin_sensitivity_df, subbasin_sensitivity_df], ignore_index=True)
 
+        district_spotcheck = build_master_value_spotcheck(
+            sample_df=district_samples,
+            crosswalk_df=district_crosswalk_df,
+            source_df=source_df,
+            master_df=district_master_df,
+            hydro_level="district",
+            metric_columns=list(source_column_map),
+        )
         basin_spotcheck = build_master_value_spotcheck(
             sample_df=basin_samples,
             crosswalk_df=basin_crosswalk_df,
@@ -720,13 +851,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             hydro_level="sub_basin",
             metric_columns=list(source_column_map),
         )
-        spotcheck_df = pd.concat([basin_spotcheck, subbasin_spotcheck], ignore_index=True)
+        spotcheck_df = pd.concat([district_spotcheck, basin_spotcheck, subbasin_spotcheck], ignore_index=True)
 
         summary_md = build_validation_summary_markdown(
             metric_slug=metric_slug,
             pfaf_checks_df=pfaf_checks_df,
+            district_conservation_df=district_conservation_df,
             basin_conservation_df=basin_conservation_df,
             subbasin_conservation_df=subbasin_conservation_df,
+            district_reliability_df=district_reliability_df,
             basin_reliability_df=basin_reliability_df,
             subbasin_reliability_df=subbasin_reliability_df,
             sensitivity_df=sensitivity_df,
@@ -736,18 +869,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         metric_output_dir = output_root / metric_slug
         _write_text(build_field_semantics_markdown(metric_slug), metric_output_dir / "field_semantics_audit.md", overwrite=bool(args.overwrite))
         _write_csv(pfaf_checks_df, metric_output_dir / "pfaf_cleaning_checks.csv", overwrite=bool(args.overwrite))
+        _write_csv(district_conservation_df, metric_output_dir / "crosswalk_conservation_district.csv", overwrite=bool(args.overwrite))
         _write_csv(basin_conservation_df, metric_output_dir / "crosswalk_conservation_basin.csv", overwrite=bool(args.overwrite))
         _write_csv(subbasin_conservation_df, metric_output_dir / "crosswalk_conservation_subbasin.csv", overwrite=bool(args.overwrite))
+        _write_csv(district_reliability_df, metric_output_dir / "coverage_reliability_district.csv", overwrite=bool(args.overwrite))
         _write_csv(basin_reliability_df, metric_output_dir / "coverage_reliability_basin.csv", overwrite=bool(args.overwrite))
         _write_csv(subbasin_reliability_df, metric_output_dir / "coverage_reliability_subbasin.csv", overwrite=bool(args.overwrite))
         _write_csv(sensitivity_df, metric_output_dir / "projection_sensitivity_summary.csv", overwrite=bool(args.overwrite))
         _write_csv(sample_df, metric_output_dir / "sample_audit_units.csv", overwrite=bool(args.overwrite))
+        _write_csv(district_samples, metric_output_dir / "district_sample_audit_units.csv", overwrite=bool(args.overwrite))
         _write_csv(spotcheck_df, metric_output_dir / "master_value_spotcheck.csv", overwrite=bool(args.overwrite))
+        _write_csv(district_spotcheck, metric_output_dir / "district_master_value_spotcheck.csv", overwrite=bool(args.overwrite))
         _write_text(summary_md, metric_output_dir / "validation_summary.md", overwrite=bool(args.overwrite))
 
         print(f"metric_slug: {metric_slug}")
         print(f"output_dir: {metric_output_dir}")
         print(f"pfaf_rows: {len(pfaf_checks_df)}")
+        print(f"district_samples: {len(district_samples)}")
         print(f"basin_samples: {len(basin_samples)}")
         print(f"subbasin_samples: {len(subbasin_samples)}")
         print(f"sensitivity_rows: {len(sensitivity_df)}")

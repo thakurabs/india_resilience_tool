@@ -1,7 +1,7 @@
 # Aqueduct Field Contract
 
 This note records the Aqueduct source fields currently used for the onboarded
-Aqueduct hydro metrics in the India Resilience Tool.
+Aqueduct district and hydro metrics in the India Resilience Tool.
 
 It is meant to answer a narrow but important question:
 
@@ -22,7 +22,10 @@ All four metrics currently follow the same dashboard contract:
 - future scenario values from `future_annual_india.geojson`
 - scenarios: `historical`, `bau`, `opt`, `pes`
 - periods: `1979-2019`, `2030`, `2050`, `2080`
-- hydro-only rendering on SOI `basin` and `sub-basin` units
+- rendering on:
+  - SOI `basin`
+  - SOI `sub-basin`
+  - district admin units via direct `pfaf_id -> district` transfer
 
 ## Metric mappings
 

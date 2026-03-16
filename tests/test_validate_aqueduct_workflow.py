@@ -73,6 +73,25 @@ def test_classify_reliability_tiers_assigns_expected_bands() -> None:
     assert tiers == {"S1": "high", "S2": "moderate", "S3": "low"}
 
 
+def test_classify_reliability_tiers_supports_district_outputs() -> None:
+    qa_df = pd.DataFrame(
+        {
+            "state_name": ["Telangana", "Telangana"],
+            "district_name": ["High District", "Low District"],
+            "district_key": ["Telangana::High District", "Telangana::Low District"],
+            "source_pfaf_count": [3, 1],
+            "district_coverage_fraction": [0.95, 0.2],
+        }
+    )
+
+    out = classify_reliability_tiers(qa_df, hydro_level="district")
+    tiers = dict(zip(out["district_key"], out["reliability_tier"]))
+    assert tiers == {
+        "Telangana::High District": "high",
+        "Telangana::Low District": "low",
+    }
+
+
 def test_select_sample_audit_units_returns_deterministic_per_tier_rows() -> None:
     reliability_df = pd.DataFrame(
         {
@@ -140,4 +159,53 @@ def test_build_master_value_spotcheck_recomputes_sampled_weighted_values() -> No
     bau = out.loc[out["metric_column"] == "aq_water_stress__bau__2030__mean"].iloc[0]
     assert hist["recomputed_weighted_value"] == pytest.approx(4.0)
     assert bau["recomputed_weighted_value"] == pytest.approx(8.0)
+    assert hist["dominant_pfaf_id"] == "P2"
+
+
+def test_build_master_value_spotcheck_supports_district_outputs() -> None:
+    sample_df = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Demo District"],
+            "district_key": ["Telangana::Demo District"],
+            "district_coverage_fraction": [1.0],
+            "source_pfaf_count": [2],
+            "hydro_level": ["district"],
+            "audit_reason": ["high_coverage_sample"],
+        }
+    )
+    crosswalk_df = pd.DataFrame(
+        {
+            "pfaf_id": ["P1", "P2"],
+            "state_name": ["Telangana", "Telangana"],
+            "district_name": ["Demo District", "Demo District"],
+            "district_key": ["Telangana::Demo District", "Telangana::Demo District"],
+            "intersection_area_km2": [1.0, 3.0],
+        }
+    )
+    source_df = pd.DataFrame(
+        {
+            "pfaf_id": ["P1", "P2"],
+            "aq_water_stress__historical__1979-2019__mean": [1.0, 5.0],
+        }
+    )
+    master_df = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Demo District"],
+            "district_key": ["Telangana::Demo District"],
+            "aq_water_stress__historical__1979-2019__mean": [4.0],
+        }
+    )
+
+    out = build_master_value_spotcheck(
+        sample_df=sample_df,
+        crosswalk_df=crosswalk_df,
+        source_df=source_df,
+        master_df=master_df,
+        hydro_level="district",
+    )
+
+    hist = out.loc[out["metric_column"] == "aq_water_stress__historical__1979-2019__mean"].iloc[0]
+    assert hist["recomputed_weighted_value"] == pytest.approx(4.0)
     assert hist["dominant_pfaf_id"] == "P2"
