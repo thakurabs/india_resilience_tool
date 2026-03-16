@@ -445,6 +445,142 @@ It does not yet include:
 - Aqueduct yearly trend files in the dashboard format
 - a broader Aqueduct metric family beyond the current water-stress onboarding tranche
 
+## How to Read the Validation Package
+
+The validation outputs under `IRT_DATA_DIR/aqueduct/validation/` are meant to be read in a specific order.
+
+### Recommended reading order
+
+1. `validation_summary.md`
+2. `field_semantics_audit.md`
+3. `pfaf_cleaning_checks.csv`
+4. `coverage_reliability_basin.csv` and `coverage_reliability_subbasin.csv`
+5. `crosswalk_conservation_basin.csv` and `crosswalk_conservation_subbasin.csv`
+6. `projection_sensitivity_summary.csv`
+7. `master_value_spotcheck.csv`
+8. `sample_audit_units.csv`
+
+This order moves from high-level interpretation to increasingly detailed technical audit.
+
+### What each file answers
+
+`validation_summary.md`
+
+- start here
+- gives the headline counts:
+  - cleaned `pfaf_id` status
+  - reliability tiers
+  - spotcheck reproducibility
+  - largest conservation deviations
+  - largest sensitivity differences
+
+`field_semantics_audit.md`
+
+- answers: are we comparing the intended Aqueduct fields?
+- confirms that:
+  - baseline comes from `bws_raw`
+  - future comes from `*_ws_x_r`
+- use this file whenever someone questions what the dashboard delta actually means
+
+`pfaf_cleaning_checks.csv`
+
+- answers: did the cleaned Aqueduct layer build correctly?
+- use it to inspect:
+  - one-row-per-`pfaf_id` integrity
+  - geometry presence and validity
+  - geometry equality between cleaned baseline and clean future geometry
+
+`coverage_reliability_*.csv`
+
+- answers: how trustworthy is each SOI basin or sub-basin result?
+- these are target-side QA files
+- they tell you how much of the SOI unit is covered by Aqueduct overlap
+- use the `reliability_tier` column first:
+  - `high`
+  - `moderate`
+  - `low`
+
+`crosswalk_conservation_*.csv`
+
+- answers: how much of each Aqueduct `pfaf_id` is actually represented inside the SOI hydro system?
+- these are source-side QA files
+- they are different from coverage:
+  - coverage asks whether the target SOI unit is well supported
+  - conservation asks whether the source Aqueduct polygon is mostly retained in the transfer
+
+`projection_sensitivity_summary.csv`
+
+- answers: how stable are the results if we vary the transfer method?
+- use this file to distinguish:
+  - very small differences for `alt_equal_area_vs_epsg6933`, which support the chosen equal-area projection
+  - potentially larger differences for `dominant_overlap_vs_weighted`, which show why area-weighted transfer is preferable to winner-takes-all assignment
+
+`master_value_spotcheck.csv`
+
+- answers: can the final basin/sub-basin master values be reproduced exactly from the crosswalk and source values?
+- this is the most concrete reproducibility file
+- for a technical review, this is the file to use when tracing a final dashboard value back to its contributing `pfaf_id`s
+
+`sample_audit_units.csv`
+
+- answers: which units should be used for manual GIS audit?
+- the sample is chosen to include high-, moderate-, and low-reliability cases
+
+### How to interpret the main result types
+
+Use these distinctions consistently:
+
+- semantic audit:
+  - are we using and interpreting the right Aqueduct fields?
+- cleaning integrity:
+  - did the `pfaf_id` cleanup produce a stable HydroSHEDS source layer?
+- target reliability:
+  - is a basin or sub-basin well covered by Aqueduct overlap?
+- source conservation:
+  - is a `pfaf_id` mostly retained inside the SOI hydro system?
+- sensitivity:
+  - do results change materially under alternate reasonable transfer choices?
+- spotcheck reproducibility:
+  - do the final written master values numerically match direct recomputation?
+
+These are complementary checks. A low-conservation `pfaf_id` near a boundary does not automatically invalidate a high-coverage SOI target unit, and vice versa.
+
+### Practical green / yellow / red reading rule
+
+Green:
+
+- `pfaf_id` cleaning checks are all or nearly all `ok`
+- sampled spotcheck differences are effectively zero
+- most target units are `high` reliability
+- alternate equal-area projection differences are negligible
+
+Yellow:
+
+- some basins or sub-basins fall into `moderate` or `low` reliability
+- a few source `pfaf_id`s show partial conservation
+- some units are sensitive to dominant-overlap versus weighted transfer
+
+Red:
+
+- many non-OK cleaned `pfaf_id` rows
+- large spotcheck mismatches
+- many low-reliability target units
+- large differences even across reasonable equal-area projection choices
+
+### Practical rule for downstream interpretation
+
+For the current Aqueduct tranche:
+
+- `high` reliability units are the strongest candidates for technical discussion and dashboard use
+- `moderate` reliability units should be used with explicit caveats
+- `low` reliability units should not be overclaimed and should be checked manually before being used in important interpretation
+
+When in doubt:
+
+- read `field_semantics_audit.md` first for interpretation
+- use `master_value_spotcheck.csv` to reproduce a reported value
+- use `sample_audit_units.csv` and GIS overlays for manual review
+
 ## End-to-end processing sequence
 
 The full Aqueduct onboarding sequence is:
