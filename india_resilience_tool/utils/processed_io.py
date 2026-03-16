@@ -10,7 +10,7 @@ Goals:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence, Union
+from typing import Any, Iterable, Mapping, Optional, Sequence, Union
 
 import pandas as pd
 
@@ -155,7 +155,12 @@ def write_table(df: pd.DataFrame, path: Path, *, index: bool = False) -> None:
 
     if target.suffix.lower() == ".parquet":
         try:
-            df.to_parquet(target, index=index)
+            df.to_parquet(
+                target,
+                index=index,
+                engine="pyarrow",
+                compression="zstd",
+            )
         except ImportError as err:
             raise RuntimeError(
                 "Writing Parquet requires pyarrow or fastparquet in the active environment."
@@ -175,8 +180,38 @@ def write_partitioned_dataset(
     out_root = Path(root)
     out_root.parent.mkdir(parents=True, exist_ok=True)
     try:
-        df.to_parquet(out_root, partition_cols=list(partition_cols), index=False)
+        df.to_parquet(
+            out_root,
+            partition_cols=list(partition_cols),
+            index=False,
+            engine="pyarrow",
+            compression="zstd",
+        )
     except ImportError as err:
         raise RuntimeError(
             "Writing Parquet datasets requires pyarrow or fastparquet in the active environment."
         ) from err
+
+
+def write_partition_file(
+    df: pd.DataFrame,
+    dataset_root: Path,
+    *,
+    partitions: Optional[Mapping[str, object]] = None,
+    filename: str = "part.parquet",
+    index: bool = False,
+) -> Path:
+    """
+    Write one Parquet file into a hive-style partitioned dataset layout.
+
+    This is used by the compute pipeline to avoid whole-dataset rewrites while
+    still producing Parquet datasets that can be read via ``pyarrow.dataset``.
+    """
+    root = Path(dataset_root)
+    out_dir = root
+    for key, value in (partitions or {}).items():
+        out_dir = out_dir / f"{str(key).strip()}={str(value).strip()}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    target = out_dir / filename
+    write_table(df, target, index=index)
+    return target

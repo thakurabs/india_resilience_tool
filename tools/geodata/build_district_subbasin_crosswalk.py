@@ -142,13 +142,44 @@ def build_admin_hydro_crosswalk(
     - `<admin>_area_fraction_in_<hydro>` = intersection / admin area
     - `<hydro>_area_fraction_in_<admin>` = intersection / hydro area
     """
-    admin_proj = admin_gdf.to_crs(epsg=area_epsg).copy()
-    hydro_proj = hydro_gdf.to_crs(epsg=area_epsg).copy()
-
     admin_area_col = f"{admin_level}_area_km2"
     hydro_area_col = "subbasin_area_km2" if hydro_level == "sub_basin" else "basin_area_km2"
     admin_fraction_col = f"{admin_level}_area_fraction_in_{'subbasin' if hydro_level == 'sub_basin' else 'basin'}"
     hydro_fraction_col = f"{'subbasin' if hydro_level == 'sub_basin' else 'basin'}_area_fraction_in_{admin_level}"
+
+    if admin_level == "district" and "district_key" in admin_gdf.columns:
+        admin_gdf = admin_gdf.dissolve(
+            by="district_key",
+            as_index=False,
+            aggfunc={"state_name": "first", "district_name": "first"},
+        )
+    elif admin_level == "block" and "block_key" in admin_gdf.columns:
+        admin_gdf = admin_gdf.dissolve(
+            by="block_key",
+            as_index=False,
+            aggfunc={"state_name": "first", "district_name": "first", "block_name": "first"},
+        )
+
+    if hydro_level == "sub_basin" and "subbasin_id" in hydro_gdf.columns:
+        hydro_gdf = hydro_gdf.dissolve(
+            by="subbasin_id",
+            as_index=False,
+            aggfunc={
+                "basin_id": "first",
+                "basin_name": "first",
+                "subbasin_code": "first",
+                "subbasin_name": "first",
+            },
+        )
+    elif hydro_level == "basin" and "basin_id" in hydro_gdf.columns:
+        hydro_gdf = hydro_gdf.dissolve(
+            by="basin_id",
+            as_index=False,
+            aggfunc={"basin_name": "first"},
+        )
+
+    admin_proj = admin_gdf.to_crs(epsg=area_epsg).copy()
+    hydro_proj = hydro_gdf.to_crs(epsg=area_epsg).copy()
 
     admin_proj[admin_area_col] = admin_proj.geometry.area / 1_000_000.0
     hydro_proj[hydro_area_col] = hydro_proj.geometry.area / 1_000_000.0

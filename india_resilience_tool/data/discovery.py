@@ -34,7 +34,7 @@ AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 def _parquet_dataset_exists(path: Path) -> bool:
     """Return True when ``path`` looks like a Parquet dataset directory."""
     try:
-        return path.is_dir() and any(p.name == "data.parquet" for p in path.rglob("data.parquet"))
+        return path.is_dir() and any(p.suffix.lower() == ".parquet" for p in path.rglob("*.parquet"))
     except Exception:
         return False
 
@@ -436,8 +436,9 @@ def discover_district_model_yearly_files(
     """
     Discover per-model district yearly CSVs for a given district+scenario.
 
-    Expected structure (compute pipeline):
-      {root}/{state}/districts/{district}/{model}/{scenario}/{district}_yearly.csv
+    Expected structures:
+      - Parquet dataset: {root}/{state}/districts/models/yearly/
+      - Legacy files:    {root}/{state}/districts/{district}/{model}/{scenario}/{district}_yearly.csv
 
     Returns:
         Mapping of model_name -> Path to the per-model yearly CSV.
@@ -450,6 +451,19 @@ def discover_district_model_yearly_files(
 
     disp = str(district_display).strip()
     scenario = str(scenario_name).strip()
+
+    dataset_root = base / "models" / "yearly"
+    if _parquet_dataset_exists(dataset_root):
+        scenario_root = dataset_root / f"scenario={scenario}"
+        if scenario_root.exists():
+            models = sorted(
+                [
+                    p.name.split("=", 1)[1]
+                    for p in scenario_root.iterdir()
+                    if p.is_dir() and p.name.startswith("model=")
+                ]
+            )
+            return {model_name: dataset_root for model_name in models}
 
     # Generate name variants for matching (and aliases when present)
     name_variants = _generate_name_variants(disp)
@@ -544,8 +558,9 @@ def discover_block_model_yearly_files(
     """
     Discover per-model block yearly CSVs for a given district+block+scenario.
 
-    Expected structure (compute pipeline):
-      {root}/{state}/blocks/{district}/{block}/{model}/{scenario}/{block}_yearly.csv
+    Expected structures:
+      - Parquet dataset: {root}/{state}/blocks/models/yearly/
+      - Legacy files:    {root}/{state}/blocks/{district}/{block}/{model}/{scenario}/{block}_yearly.csv
 
     Returns:
         Mapping of model_name -> Path to the per-model yearly CSV.
@@ -558,6 +573,19 @@ def discover_block_model_yearly_files(
 
     scenario = str(scenario_name).strip()
     aliases = aliases or {}
+
+    dataset_root = base / "models" / "yearly"
+    if _parquet_dataset_exists(dataset_root):
+        scenario_root = dataset_root / f"scenario={scenario}"
+        if scenario_root.exists():
+            models = sorted(
+                [
+                    p.name.split("=", 1)[1]
+                    for p in scenario_root.iterdir()
+                    if p.is_dir() and p.name.startswith("model=")
+                ]
+            )
+            return {model_name: dataset_root for model_name in models}
 
     # Resolve district directory (skip "ensembles")
     district_variants = _generate_name_variants(district_display)

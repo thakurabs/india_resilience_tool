@@ -563,7 +563,7 @@ def render_trend_over_time(
 
     with st.expander("Trend over time", expanded=False):
         st.caption(
-            f"Looking for yearly CSVs under: {state_dir_for_fs} / {district_for_fs} "
+            f"Looking for yearly processed datasets under: {state_dir_for_fs} / {district_for_fs} "
             f"(historical + {sel_scenario})"
         )
 
@@ -573,7 +573,7 @@ def render_trend_over_time(
             key="trend_show_models",
             help=(
                 "Overlay per-model yearly series as faint lines (spaghetti) behind the ensemble median. "
-                "Requires per-model yearly CSVs to be present on disk."
+                "Requires per-model yearly Parquet data to be present on disk."
             ),
         )
 
@@ -645,6 +645,9 @@ def render_trend_over_time(
                 st.caption("Model members not available (missing processed-root path).")
             elif max_available <= 0:
                 st.caption("Model-member series not available for this unit (only ensemble summary found).")
+            elif max_available == 1:
+                max_models = 1
+                st.caption("Only 1 model available for this unit/scenario.")
             else:
                 default_val = int(st.session_state.get("trend_max_models", 15) or 15)
                 default_val = min(max(1, default_val), int(max_available))

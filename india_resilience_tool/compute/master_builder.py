@@ -45,7 +45,12 @@ import pandas as pd
 from paths import get_boundary_path
 
 from india_resilience_tool.data.hydro_loader import load_local_hydro
-from india_resilience_tool.utils.processed_io import write_table
+from india_resilience_tool.utils.processed_io import read_table, write_table
+from india_resilience_tool.utils.processed_layout import (
+    metric_build_root,
+    model_period_dataset_root,
+    model_yearly_dataset_root,
+)
 
 
 def _get_mp_module():
@@ -150,6 +155,49 @@ def _should_write_parquet_mirrors(target_path: Path) -> bool:
         return migrated_root == target_resolved or migrated_root in target_resolved.parents
     except Exception:
         return False
+
+
+def _resolve_metric_build_root(output_root: Path) -> Path:
+    """Return the canonical build root for a metric output root."""
+    root = Path(output_root)
+    if root.name == "build":
+        return root
+    build_root = root / "build"
+    return build_root if build_root.exists() else metric_build_root(root)
+
+
+def _collect_dataset_data(
+    build_root: Path,
+    state: str,
+    level: AdminLevel,
+    verbose: bool = True,
+) -> Tuple[List[Dict], List[Dict]]:
+    """Collect long-form period/yearly rows from the Parquet build datasets."""
+    period_root = model_period_dataset_root(build_root, state=state, level=level)
+    yearly_root = model_yearly_dataset_root(build_root, state=state, level=level)
+
+    all_rows: List[Dict] = []
+    yearly_rows: List[Dict] = []
+
+    if period_root.exists():
+        try:
+            df_periods = read_table(period_root)
+            if not df_periods.empty:
+                all_rows = df_periods.to_dict(orient="records")
+        except Exception as exc:
+            if verbose:
+                print(f"  WARNING: Failed to read period dataset {period_root}: {exc}")
+
+    if yearly_root.exists():
+        try:
+            df_yearly = read_table(yearly_root)
+            if not df_yearly.empty:
+                yearly_rows = df_yearly.to_dict(orient="records")
+        except Exception as exc:
+            if verbose:
+                print(f"  WARNING: Failed to read yearly dataset {yearly_root}: {exc}")
+
+    return all_rows, yearly_rows
 
 
 # -----------------------------------------------------------------------------
@@ -1033,7 +1081,8 @@ def build_master_metrics(
 ) -> pd.DataFrame:
     """Build master CSV for a single metric/state combination."""
     root = Path(output_root)
-    state_root = root / state
+    build_root = _resolve_metric_build_root(root)
+    state_root = build_root / state
 
     if not state_root.exists():
         if verbose:
@@ -1047,26 +1096,28 @@ def build_master_metrics(
 
     if verbose:
         print(f"\n{'='*60}")
-        print("Building master CSV")
+        print("Building master Parquet")
         print(f"{'='*60}")
         print(f"Level: {level}")
         print(f"State: {state}")
         print(f"Metric column: {metric_col_in_periods}")
-        print(f"State root: {state_root}")
+        print(f"Build state root: {state_root}")
         print()
 
     # Collect data
     if verbose:
-        print("[Step 1/3] Collecting data from CSV files...")
+        print("[Step 1/3] Collecting data from Parquet build datasets...")
 
-    if level == "sub_basin":
-        all_rows, yearly_rows = _collect_sub_basin_data(state_root, state, metric_col_candidates, verbose)
-    elif level == "basin":
-        all_rows, yearly_rows = _collect_basin_data(state_root, state, metric_col_candidates, verbose)
-    elif level == "block":
-        all_rows, yearly_rows = _collect_block_data(state_root, state, metric_col_candidates, verbose)
-    else:
-        all_rows, yearly_rows = _collect_district_data(state_root, state, metric_col_candidates, verbose)
+    all_rows, yearly_rows = _collect_dataset_data(build_root, state, level, verbose)
+    if not all_rows:
+        if level == "sub_basin":
+            all_rows, yearly_rows = _collect_sub_basin_data(state_root, state, metric_col_candidates, verbose)
+        elif level == "basin":
+            all_rows, yearly_rows = _collect_basin_data(state_root, state, metric_col_candidates, verbose)
+        elif level == "block":
+            all_rows, yearly_rows = _collect_block_data(state_root, state, metric_col_candidates, verbose)
+        else:
+            all_rows, yearly_rows = _collect_district_data(state_root, state, metric_col_candidates, verbose)
 
     if not all_rows:
         if verbose:
@@ -1100,7 +1151,7 @@ def build_master_metrics(
         df_all, df_yearly, metric_col_in_periods, level
     )
 
-    # Write outputs (master CSV goes in state root)
+    # Write outputs (Parquet-only under the canonical build root)
     if out_path:
         outp = Path(out_path)
         outp.parent.mkdir(parents=True, exist_ok=True)
@@ -1109,30 +1160,20 @@ def build_master_metrics(
             print()
             print("Writing output files...")
 
-        master_csv = outp.with_suffix(".csv")
-        state_model_csv = outp.parent / f"state_model_averages_{level}.csv"
-        state_ensemble_csv = outp.parent / f"state_ensemble_stats_{level}.csv"
-        state_yearly_model_csv = outp.parent / f"state_yearly_model_averages_{level}.csv"
-        state_yearly_ensemble_csv = outp.parent / f"state_yearly_ensemble_stats_{level}.csv"
+        master_parquet = outp.with_suffix(".parquet")
+        state_model_parquet = outp.parent / f"state_model_averages_{level}.parquet"
+        state_ensemble_parquet = outp.parent / f"state_ensemble_stats_{level}.parquet"
+        state_yearly_model_parquet = outp.parent / f"state_yearly_model_averages_{level}.parquet"
+        state_yearly_ensemble_parquet = outp.parent / f"state_yearly_ensemble_stats_{level}.parquet"
 
-        write_table(master, master_csv)
-        write_table(state_model_df, state_model_csv)
-        write_table(state_ensemble_df, state_ensemble_csv)
-        write_table(state_yearly_model_df, state_yearly_model_csv)
-        write_table(state_yearly_ensemble_df, state_yearly_ensemble_csv)
-
-        wrote_parquet = False
-        if _should_write_parquet_mirrors(outp.parent):
-            write_table(master, master_csv.with_suffix(".parquet"))
-            write_table(state_model_df, state_model_csv.with_suffix(".parquet"))
-            write_table(state_ensemble_df, state_ensemble_csv.with_suffix(".parquet"))
-            write_table(state_yearly_model_df, state_yearly_model_csv.with_suffix(".parquet"))
-            write_table(state_yearly_ensemble_df, state_yearly_ensemble_csv.with_suffix(".parquet"))
-            wrote_parquet = True
+        write_table(master, master_parquet)
+        write_table(state_model_df, state_model_parquet)
+        write_table(state_ensemble_df, state_ensemble_parquet)
+        write_table(state_yearly_model_df, state_yearly_model_parquet)
+        write_table(state_yearly_ensemble_df, state_yearly_ensemble_parquet)
 
         if verbose:
-            suffix_note = " (+ parquet mirror)" if wrote_parquet else ""
-            print(f"  Master table -> {master_csv}{suffix_note}")
+            print(f"  Master table -> {master_parquet}")
             print(f"  Rows: {len(master)}, Columns: {len(master.columns)}")
 
     elapsed = time.time() - start_time
@@ -1159,52 +1200,20 @@ def _looks_like_state_dir(state_dir: Path, level: AdminLevel) -> bool:
     """Check if directory looks like a state directory for given level."""
     if not state_dir.is_dir():
         return False
-
-    if level == "block":
-        # Only new structure for blocks
-        level_path = state_dir / BLOCK_FOLDER
-        if not level_path.exists():
-            return False
-        patterns = (
-            "*/*/*/*/*_periods.csv",
-            "*/*/*/*/*_yearly.csv",
-            "ensembles/*/*/*/*_yearly_ensemble.csv",
-        )
-        for pat in patterns:
-            try:
-                for _ in level_path.glob(pat):
-                    return True
-            except Exception:
-                continue
-        return False
-
-    # Districts: check for new structure first
-    level_path = state_dir / DISTRICT_FOLDER
-    if level_path.exists():
-        patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
-        for pat in patterns:
-            try:
-                for _ in level_path.glob(pat):
-                    return True
-            except Exception:
-                continue
-
-    # Districts: old structure
-    patterns = ("*/*/*/*_periods.csv", "*/*/*/*_yearly.csv")
-    for pat in patterns:
-        try:
-            for _ in state_dir.glob(pat):
-                return True
-        except Exception:
-            continue
-
-    return False
+    if model_period_dataset_root(state_dir.parent, state=state_dir.name, level=level).exists():
+        return True
+    if model_yearly_dataset_root(state_dir.parent, state=state_dir.name, level=level).exists():
+        return True
+    return any(state_dir.glob("master_metrics_by_*.parquet"))
 
 
 def _discover_states(metric_root: Path, level: AdminLevel = "district") -> List[str]:
     """Return state directories under a metric root."""
+    build_root = _resolve_metric_build_root(metric_root)
     states: List[str] = []
-    for p in metric_root.iterdir():
+    if not build_root.exists():
+        return states
+    for p in build_root.iterdir():
         if p.is_dir() and _looks_like_state_dir(p, level):
             states.append(p.name)
     return sorted(states)
@@ -1224,7 +1233,7 @@ def build_all_master_metrics(
     skip_existing: bool = False,
     num_workers: int = 1,
 ) -> None:
-    """Build master CSVs for all metrics under processed_root."""
+    """Build master Parquet tables for all metrics under processed_root."""
     variables, metrics_by_slug = _try_import_registries()
 
     metric_dirs = _discover_metric_dirs(processed_root)
@@ -1281,9 +1290,9 @@ def build_all_master_metrics(
         read_candidates = [c for c in [periods_metric_col, reg_value_col, "value"] if c]
 
         for state in states:
-            out_path = metric_root / state / master_filename
+            out_path = metric_build_root(metric_root) / state / master_filename
 
-            if skip_existing and out_path.exists():
+            if skip_existing and out_path.with_suffix(".parquet").exists():
                 if verbose:
                     print(f"[BATCH] {slug}/{state}: exists; skipping")
                 continue
@@ -1308,7 +1317,7 @@ def build_all_master_metrics(
 # CLI
 # -----------------------------------------------------------------------------
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Build master_metrics CSV(s) from processed outputs.")
+    p = argparse.ArgumentParser(description="Build master_metrics Parquet tables from processed outputs.")
 
     p.add_argument(
         "--level",
@@ -1330,8 +1339,8 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Batch mode: list eligible metric slugs under processed root and exit",
     )
-    p.add_argument("--skip-existing", action="store_true", help="Skip if master CSV already exists")
-    p.add_argument("--output-root", "-r", default=None, help="Single-metric mode: processed variable root")
+    p.add_argument("--skip-existing", action="store_true", help="Skip if master Parquet already exists")
+    p.add_argument("--output-root", "-r", default=None, help="Single-metric mode: metric root or build root")
     p.add_argument("--metric", "-m", default=None, help="Single-metric mode: metric column name")
     p.add_argument("--district-geojson", "-g", default=None, help="Optional path to district GeoJSON for centroids")
     p.add_argument("--quiet", action="store_true", help="Reduce output")
@@ -1376,7 +1385,7 @@ def main() -> None:
         for run_idx, level in enumerate(levels_to_run, start=1):
             _print_run_banner(run_idx, total_runs, level)
             master_filename = get_master_csv_filename(level)
-            default_out = Path(args.output_root) / str(args.state) / master_filename
+            default_out = _resolve_metric_build_root(Path(args.output_root)) / str(args.state) / master_filename
 
             build_master_metrics(
                 args.output_root,

@@ -113,7 +113,7 @@ def render_right_panel(
     )
 
     def _render_climate_profile_header() -> None:
-        """Render the right-panel header with an inline collapse control."""
+        """Render the right-panel header after the `is_portfolio_mode` + `st.stop()` guard."""
         title_col, btn_col = st.columns([1, 0.2], vertical_alignment="center")
         with title_col:
             st.header("Climate Profile")

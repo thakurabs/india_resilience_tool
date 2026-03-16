@@ -52,14 +52,14 @@ class RibbonContext:
 
 
 def _hydro_output_glob(level: str) -> str:
-    """Return the relative glob used to detect hydro period outputs for a level."""
+    """Return the relative glob used to detect hydro Parquet period datasets for a level."""
     if str(level).strip().lower() == "sub_basin":
-        return "hydro/sub_basins/**/*_periods.csv"
-    return "hydro/basins/**/*_periods.csv"
+        return "hydro/sub_basins/models/periods/**/*.parquet"
+    return "hydro/basins/models/periods/**/*.parquet"
 
 
 def _hydro_outputs_available(processed_root: Path, level: str) -> bool:
-    """Return True when hydro processed period CSVs exist for the requested level."""
+    """Return True when hydro processed period Parquet datasets exist for the requested level."""
     try:
         return any(processed_root.glob(_hydro_output_glob(level)))
     except Exception:

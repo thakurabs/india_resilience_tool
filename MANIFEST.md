@@ -28,8 +28,8 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 |---------|---------|
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
-| `python -m tools.pipeline.build_master_metrics` | Rebuild master tables and state summaries; Parquet mirrors are written only under the migrated root |
-| `python -m tools.pipeline.publish_processed_outputs --help` | Publish legacy CSV/build outputs from `processed/` into migrated `processed_parquet/.../published` |
+| `python -m tools.pipeline.build_master_metrics` | Rebuild Parquet master tables and state summaries from `processed_parquet/.../build` |
+| `python -m tools.pipeline.publish_processed_outputs --help` | Promote Parquet build outputs from `processed_parquet/.../build` into `processed_parquet/.../published` |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics <slug>` | Build district outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level block --metrics <slug>` | Build block outputs |
@@ -271,7 +271,7 @@ Notes:
 | `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
 | `compute_indices_multiprocess.py` | Main multi-process compute pipeline for admin and hydro |
-| `publish_processed_outputs.py` | Publish legacy/build outputs into `published/` and archive replaced artifacts |
+| `publish_processed_outputs.py` | Promote Parquet build outputs into `published/` and archive replaced artifacts |
 
 ## Test inventory
 
@@ -463,16 +463,21 @@ processed_parquet/{metric_slug}/
 ├── published/
 │   ├── {state}/
 │   │   ├── master_metrics_by_*.parquet
-│   │   ├── master_metrics_by_*.csv
 │   │   ├── state_*.parquet
-│   │   ├── state_*.csv
-│   │   ├── districts/ensembles/yearly/scenario=.../data.parquet
-│   │   └── blocks/ensembles/yearly/scenario=.../data.parquet
+│   │   ├── districts/models/yearly/scenario=.../model=.../part.parquet
+│   │   ├── districts/models/periods/scenario=.../model=.../part.parquet
+│   │   ├── districts/ensembles/yearly/scenario=.../part.parquet
+│   │   ├── blocks/models/yearly/scenario=.../model=.../part.parquet
+│   │   ├── blocks/models/periods/scenario=.../model=.../part.parquet
+│   │   └── blocks/ensembles/yearly/scenario=.../part.parquet
 │   └── hydro/
 │       ├── master_metrics_by_*.parquet
-│       ├── master_metrics_by_*.csv
-│       ├── basins/ensembles/yearly/scenario=.../data.parquet
-│       └── sub_basins/ensembles/yearly/scenario=.../data.parquet
+│       ├── basins/models/yearly/scenario=.../model=.../part.parquet
+│       ├── basins/models/periods/scenario=.../model=.../part.parquet
+│       ├── basins/ensembles/yearly/scenario=.../part.parquet
+│       ├── sub_basins/models/yearly/scenario=.../model=.../part.parquet
+│       ├── sub_basins/models/periods/scenario=.../model=.../part.parquet
+│       └── sub_basins/ensembles/yearly/scenario=.../part.parquet
 └── archive/<timestamp>/
 ```
 - sub-basin master: `basin_id`, `basin_name`, `subbasin_id`, `subbasin_code`, `subbasin_name`

@@ -215,7 +215,21 @@ def load_unit_yearly_models_from_files(
     scen = str(scenario_name).strip()
 
     for model_name, path in file_specs:
-        df_raw = read_yearly_csv_robust(path)
+        path_obj = Path(path)
+        if path_obj.is_dir():
+            filters: list[tuple[str, str, str]] = [
+                ("scenario", "==", scen),
+                ("model", "==", str(model_name)),
+            ]
+            if state_dir:
+                filters.append(("state", "==", str(state_dir).strip()))
+            if district_display:
+                filters.append(("district", "==", str(district_display).strip()))
+            if level == "block" and block_display:
+                filters.append(("block", "==", str(block_display).strip()))
+            df_raw = read_table(path_obj, filters=filters)
+        else:
+            df_raw = read_yearly_csv_robust(path_obj)
         df = prepare_model_yearly_series(df_raw)
         if df.empty:
             continue

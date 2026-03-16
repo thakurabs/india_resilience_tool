@@ -75,15 +75,23 @@ from rasterio import features
 from affine import Affine
 
 from paths import (
-    BASE_OUTPUT_ROOT,
     BASINS_PATH,
     BLOCKS_PATH,
     DATA_ROOT,
     DISTRICTS_PATH,
+    MIGRATED_BASE_OUTPUT_ROOT,
     SUBBASINS_PATH,
 )
 from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
+from india_resilience_tool.utils.processed_io import read_table, write_partition_file
+from india_resilience_tool.utils.processed_layout import (
+    coverage_qc_dataset_root,
+    ensemble_yearly_dataset_root,
+    metric_build_root,
+    model_period_dataset_root,
+    model_yearly_dataset_root,
+)
 
 # -----------------------------------------------------------------------------
 # CLIMATE-INDICES PACKAGE INTEGRATION (SPI/SPEI)
@@ -146,7 +154,7 @@ def setup_logging(verbose: bool = False):
 # BASIC HELPERS
 # -----------------------------------------------------------------------------
 def metric_root(slug: str) -> Path:
-    root = BASE_OUTPUT_ROOT / slug
+    root = MIGRATED_BASE_OUTPUT_ROOT / slug
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -473,14 +481,19 @@ def _write_coverage_qc(
     scenario: str,
     coverage_df: pd.DataFrame,
 ) -> None:
-    """Write spatial coverage QC for a metric/model/scenario/level combination."""
+    """Write spatial coverage QC rows into the Parquet build contract."""
     if coverage_df is None or coverage_df.empty:
         return
 
-    qc_root = metric_root_path / state_name / get_level_folder(level)
-    qc_root.mkdir(parents=True, exist_ok=True)
-    out_path = qc_root / f"coverage_qc_{model}_{scenario}.csv"
-    coverage_df.to_csv(out_path, index=False)
+    build_root = metric_build_root(metric_root_path)
+    dataset_root = coverage_qc_dataset_root(build_root, state=state_name, level=level)
+    write_partition_file(
+        coverage_df,
+        dataset_root,
+        partitions={"scenario": scenario, "model": model},
+        filename="coverage.parquet",
+        index=False,
+    )
 
 # -----------------------------------------------------------------------------
 # RUN-LENGTH HELPERS
@@ -2902,6 +2915,7 @@ def process_metric_for_model_scenario(
 
     # Get the level subfolder
     level_folder = get_level_folder(level)
+    build_root = metric_build_root(metric_root_path)
 
     rows = []
 
@@ -2965,7 +2979,7 @@ def process_metric_for_model_scenario(
                     baseline_years=baseline_years,
                     scale_months=scale_months,
                     year_to_paths=year_to_paths,
-                    metric_root_path=metric_root_path,
+                    metric_root_path=build_root,
                     state_name=state_name,
                     level_folder=level_folder,
                 )
@@ -3204,93 +3218,33 @@ def process_metric_for_model_scenario(
 
     df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
 
-    # Write outputs with clean folder structure
+    # Write outputs into the Parquet-native build contract.
     try:
-        if level == "sub_basin":
-            for (basin, sub_basin), grp_df in df_yearly.groupby(["basin", "sub_basin"]):
-                basin_safe = basin.replace(" ", "_").replace("/", "_")
-                sub_basin_safe = sub_basin.replace(" ", "_").replace("/", "_")
+        df_yearly = df_yearly.copy()
+        df_yearly["state"] = state_name
+        df_yearly["model"] = model
+        df_yearly["scenario"] = scenario
+        write_partition_file(
+            df_yearly,
+            model_yearly_dataset_root(build_root, state=state_name, level=level),
+            partitions={"scenario": scenario, "model": model},
+            filename="part.parquet",
+            index=False,
+        )
 
-                out_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
-                grp_df = grp_df.copy()
-                grp_df["model"] = model
-                grp_df["scenario"] = scenario
-                grp_df.to_csv(out_dir / f"{sub_basin_safe}_yearly.csv", index=False)
+        if not df_periods.empty:
+            df_periods = df_periods.copy()
+            df_periods["state"] = state_name
+            df_periods["model"] = model
+            df_periods["scenario"] = scenario
+            write_partition_file(
+                df_periods,
+                model_period_dataset_root(build_root, state=state_name, level=level),
+                partitions={"scenario": scenario, "model": model},
+                filename="part.parquet",
+                index=False,
+            )
 
-                if not df_periods.empty:
-                    period_mask = (
-                        (df_periods["basin"] == basin) &
-                        (df_periods["sub_basin"] == sub_basin)
-                    )
-                    period_grp = df_periods.loc[period_mask].copy()
-                    if not period_grp.empty:
-                        period_grp["model"] = model
-                        period_grp["scenario"] = scenario
-                        period_grp.to_csv(out_dir / f"{sub_basin_safe}_periods.csv", index=False)
-        elif level == "basin":
-            for basin_name in df_yearly["basin"].unique():
-                basin_safe = basin_name.replace(" ", "_").replace("/", "_")
-
-                out_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
-
-                basin_df = df_yearly[df_yearly["basin"] == basin_name].copy()
-                basin_df["model"] = model
-                basin_df["scenario"] = scenario
-                basin_df.to_csv(out_dir / f"{basin_safe}_yearly.csv", index=False)
-
-                if not df_periods.empty:
-                    period_df = df_periods[df_periods["basin"] == basin_name].copy()
-                    if not period_df.empty:
-                        period_df["model"] = model
-                        period_df["scenario"] = scenario
-                        period_df.to_csv(out_dir / f"{basin_safe}_periods.csv", index=False)
-        elif level == "block":
-            # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
-            for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
-                district_safe = district.replace(" ", "_").replace("/", "_")
-                block_safe = block.replace(" ", "_").replace("/", "_")
-
-                out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
-                grp_df = grp_df.copy()  # Avoid SettingWithCopyWarning
-                grp_df["model"] = model
-                grp_df["scenario"] = scenario
-
-                grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
-
-                if not df_periods.empty:
-                    period_mask = (
-                        (df_periods["district"] == district) &
-                        (df_periods["block"] == block)
-                    )
-                    period_grp = df_periods.loc[period_mask].copy()
-
-                    if not period_grp.empty:
-                        period_grp["model"] = model
-                        period_grp["scenario"] = scenario
-                        period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
-        else:
-            # Structure: {metric}/{state}/districts/{district}/{model}/{scenario}/
-            for dist_name in df_yearly["district"].unique():
-                dist_safe = dist_name.replace(" ", "_").replace("/", "_")
-
-                out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
-
-                dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
-                dist_df["model"] = model
-                dist_df["scenario"] = scenario
-                dist_df.to_csv(out_dir / f"{dist_safe}_yearly.csv", index=False)
-
-                if not df_periods.empty:
-                    period_df = df_periods[df_periods["district"] == dist_name].copy()
-                    if not period_df.empty:
-                        period_df["model"] = model
-                        period_df["scenario"] = scenario
-                        period_df.to_csv(out_dir / f"{dist_safe}_periods.csv", index=False)
-        
         logging.debug(f"[{slug}] Wrote {len(df_yearly)} yearly rows, {len(df_periods)} period rows for {model}/{scenario}")
         _write_coverage_qc(
             metric_root_path,
@@ -3314,215 +3268,65 @@ def compute_ensembles_generic(
     state: str = "Telangana",
     level: AdminLevel = "district",
 ):
-    """Compute ensemble statistics across models."""
-    root = Path(output_root)
-    level_folder = get_level_folder(level)
-    
-    # Data lives in: {state}/{level_folder}/...
-    # Ensembles go to: {state}/{level_folder}/ensembles/...
-    level_root = root / state / level_folder
-    
-    if not level_root.exists():
-        logging.warning(f"Level root does not exist: {level_root}")
+    """Compute yearly ensemble statistics from the Parquet build datasets."""
+    metric_root_path = Path(output_root)
+    build_root = metric_build_root(metric_root_path)
+    yearly_root = model_yearly_dataset_root(build_root, state=state, level=level)
+    if not yearly_root.exists():
+        logging.warning(f"Yearly model dataset does not exist: {yearly_root}")
         return
-    
-    ensembles_root = level_root / "ensembles"
-    ensembles_root.mkdir(parents=True, exist_ok=True)
-    
-    if level == "sub_basin":
-        _compute_sub_basin_ensembles(level_root, ensembles_root)
-    elif level == "basin":
-        _compute_basin_ensembles(level_root, ensembles_root)
-    elif level == "block":
-        _compute_block_ensembles(level_root, ensembles_root)
-    else:
-        _compute_district_ensembles(level_root, ensembles_root)
 
-def _compute_district_ensembles(level_root: Path, ensembles_root: Path):
-    """Compute ensembles for district-level data."""
-    skip_dirs = {"ensembles"}
-    district_dirs = [
-        p for p in level_root.iterdir()
-        if p.is_dir() and p.name not in skip_dirs
-    ]
-    
-    for ddir in district_dirs:
-        district = ddir.name
-        model_dirs = [p for p in ddir.iterdir() if p.is_dir()]
-        scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
-        
-        for scenario in scenarios:
-            model_yearly = []
-            for m in model_dirs:
-                ycsv = m / scenario / f"{district}_yearly.csv"
-                if ycsv.exists():
-                    try:
-                        dfy = pd.read_csv(ycsv)
-                        if "value" not in dfy.columns:
-                            cols = [c for c in dfy.columns if c not in {"district", "model", "scenario", "year", "source_file"}]
-                            if cols: dfy["value"] = dfy[cols[0]]
-                        dfy["model"] = m.name
-                        model_yearly.append(dfy)
-                    except:
-                        pass
-            
-            if model_yearly:
-                _write_ensemble_stats(model_yearly, ensembles_root / district / scenario, district)
+    df_yc = read_table(yearly_root)
+    if df_yc.empty or "year" not in df_yc.columns:
+        logging.warning(f"No yearly rows available for ensemble build: {yearly_root}")
+        return
 
-def _compute_block_ensembles(level_root: Path, ensembles_root: Path):
-    """Compute ensembles for block-level data."""
-    skip_dirs = {"ensembles"}
-    district_dirs = [
-        p for p in level_root.iterdir()
-        if p.is_dir() and p.name not in skip_dirs
-    ]
-    
-    for ddir in district_dirs:
-        district = ddir.name
-        block_dirs = [p for p in ddir.iterdir() if p.is_dir()]
-        
-        for bdir in block_dirs:
-            block = bdir.name
-            model_dirs = [p for p in bdir.iterdir() if p.is_dir()]
-            scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
-            
-            for scenario in scenarios:
-                model_yearly = []
-                for m in model_dirs:
-                    ycsv = m / scenario / f"{block}_yearly.csv"
-                    if ycsv.exists():
-                        try:
-                            dfy = pd.read_csv(ycsv)
-                            if "value" not in dfy.columns:
-                                cols = [c for c in dfy.columns if c not in {"district", "block", "model", "scenario", "year", "source_file"}]
-                                if cols: dfy["value"] = dfy[cols[0]]
-                            dfy["model"] = m.name
-                            model_yearly.append(dfy)
-                        except:
-                            pass
-                
-                if model_yearly:
-                    out_dir = ensembles_root / district / block / scenario
-                    try:
-                        _write_ensemble_stats(model_yearly, out_dir, block)
-                    except Exception as e:
-                        logging.warning(
-                            "Failed to write ensemble yearly for block=%s district=%s scenario=%s: %s",
-                            block,
-                            district,
-                            scenario,
-                            e,
-                                    )
-                        continue
+    df_yc = df_yc.copy()
+    df_yc["year"] = pd.to_numeric(df_yc["year"], errors="coerce")
+    df_yc["value"] = pd.to_numeric(df_yc["value"], errors="coerce")
+    df_yc = df_yc.dropna(subset=["year", "value", "scenario", "model"])
+    if df_yc.empty:
+        return
 
-                    # After successfully writing ensemble outputs, delete per-model yearly CSVs
-                    out_csv = out_dir / f"{block}_yearly_ensemble.csv"
-                    if out_csv.exists():
-                        for m in model_dirs:
-                            ycsv = m / scenario / f"{block}_yearly.csv"
-                            if ycsv.exists():
-                                try:
-                                    ycsv.unlink()
-                                except Exception as e:
-                                    logging.debug(
-                                        "Could not delete per-model block yearly CSV: %s (%s)",
-                                        ycsv,
-                                        e,
-                                    )
+    unit_cols = {
+        "district": ["state", "district"],
+        "block": ["state", "district", "block"],
+        "basin": ["basin", "basin_id", "basin_name"],
+        "sub_basin": [
+            "basin",
+            "basin_id",
+            "basin_name",
+            "sub_basin",
+            "subbasin_id",
+            "subbasin_code",
+            "subbasin_name",
+        ],
+    }[level]
+    group_cols = [c for c in unit_cols if c in df_yc.columns] + ["scenario", "year"]
 
+    summary = (
+        df_yc.groupby(group_cols, dropna=False)["value"]
+        .agg(
+            n_models="count",
+            ensemble_mean="mean",
+            ensemble_std=lambda s: float(np.nanstd(s.astype(float), ddof=0)),
+            ensemble_median="median",
+            ensemble_p05=lambda s: float(np.nanpercentile(s.astype(float), 5)),
+            ensemble_p95=lambda s: float(np.nanpercentile(s.astype(float), 95)),
+        )
+        .reset_index()
+    )
+    summary["year"] = summary["year"].astype(int)
 
-def _compute_basin_ensembles(level_root: Path, ensembles_root: Path):
-    """Compute ensembles for basin-level data."""
-    skip_dirs = {"ensembles"}
-    basin_dirs = [
-        p for p in level_root.iterdir()
-        if p.is_dir() and p.name not in skip_dirs
-    ]
-
-    for bdir in basin_dirs:
-        basin = bdir.name
-        model_dirs = [p for p in bdir.iterdir() if p.is_dir()]
-        scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
-
-        for scenario in scenarios:
-            model_yearly = []
-            for m in model_dirs:
-                ycsv = m / scenario / f"{basin}_yearly.csv"
-                if not ycsv.exists():
-                    continue
-                try:
-                    dfy = pd.read_csv(ycsv)
-                    if "value" not in dfy.columns:
-                        cols = [c for c in dfy.columns if c not in {"basin", "model", "scenario", "year", "source_file"}]
-                        if cols:
-                            dfy["value"] = dfy[cols[0]]
-                    dfy["model"] = m.name
-                    model_yearly.append(dfy)
-                except Exception:
-                    pass
-
-            if model_yearly:
-                _write_ensemble_stats(model_yearly, ensembles_root / basin / scenario, basin)
-
-
-def _compute_sub_basin_ensembles(level_root: Path, ensembles_root: Path):
-    """Compute ensembles for sub-basin-level data."""
-    skip_dirs = {"ensembles"}
-    basin_dirs = [
-        p for p in level_root.iterdir()
-        if p.is_dir() and p.name not in skip_dirs
-    ]
-
-    for basin_dir in basin_dirs:
-        basin = basin_dir.name
-        sub_basin_dirs = [p for p in basin_dir.iterdir() if p.is_dir()]
-        for sbdir in sub_basin_dirs:
-            sub_basin = sbdir.name
-            model_dirs = [p for p in sbdir.iterdir() if p.is_dir()]
-            scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
-
-            for scenario in scenarios:
-                model_yearly = []
-                for m in model_dirs:
-                    ycsv = m / scenario / f"{sub_basin}_yearly.csv"
-                    if not ycsv.exists():
-                        continue
-                    try:
-                        dfy = pd.read_csv(ycsv)
-                        if "value" not in dfy.columns:
-                            cols = [c for c in dfy.columns if c not in {"basin", "sub_basin", "model", "scenario", "year", "source_file"}]
-                            if cols:
-                                dfy["value"] = dfy[cols[0]]
-                        dfy["model"] = m.name
-                        model_yearly.append(dfy)
-                    except Exception:
-                        pass
-
-                if model_yearly:
-                    _write_ensemble_stats(
-                        model_yearly,
-                        ensembles_root / basin / sub_basin / scenario,
-                        sub_basin,
-                    )
-
-def _write_ensemble_stats(model_yearly: list, out_dir: Path, unit_name: str):
-    """Write ensemble statistics CSV."""
-    df_yc = pd.concat(model_yearly, ignore_index=True)
-    if "year" in df_yc.columns:
-        df_yc["year"] = df_yc["year"].astype(int)
-        pivot = df_yc.pivot_table(index="year", columns="model", values="value", aggfunc="first")
-        summary = pd.DataFrame({
-            "year": pivot.index,
-            "n_models": pivot.count(axis=1),
-            "ensemble_mean": pivot.mean(axis=1),
-            "ensemble_std": pivot.std(axis=1, ddof=0),
-            "ensemble_median": pivot.median(axis=1),
-            "ensemble_p05": pivot.quantile(0.05, axis=1),
-            "ensemble_p95": pivot.quantile(0.95, axis=1),
-        }).reset_index(drop=True)
-        
-        out_dir.mkdir(parents=True, exist_ok=True)
-        summary.to_csv(out_dir / f"{unit_name}_yearly_ensemble.csv", index=False)
+    dataset_root = ensemble_yearly_dataset_root(build_root, state=state, level=level)
+    for scenario_name, scenario_df in summary.groupby("scenario", dropna=False):
+        write_partition_file(
+            scenario_df.reset_index(drop=True),
+            dataset_root,
+            partitions={"scenario": str(scenario_name).strip()},
+            filename="part.parquet",
+            index=False,
+        )
 
 # -----------------------------------------------------------------------------
 # MULTIPROCESSING (Updated for level support)

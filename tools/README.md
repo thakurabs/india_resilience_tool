@@ -9,10 +9,10 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 
 | Script | Purpose | Run |
 |---|---|---|
-| `tools/pipeline/compute_indices_multiprocess.py` | Build processed index artifacts (multi-process; district + block) | `python -m tools.pipeline.compute_indices_multiprocess --help` |
+| `tools/pipeline/compute_indices_multiprocess.py` | Build Parquet-only processed index artifacts under `processed_parquet/<metric>/build` (multi-process; district + block) | `python -m tools.pipeline.compute_indices_multiprocess --help` |
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
-| `tools/pipeline/build_master_metrics.py` | Build master tables (district + block) + state summary files; Parquet mirrors are written only under the migrated root | `python -m tools.pipeline.build_master_metrics --help` |
-| `tools/pipeline/publish_processed_outputs.py` | Read legacy `processed/` CSV/build inputs and publish migrated artifacts into `processed_parquet/.../published` with archive-on-replace | `python -m tools.pipeline.publish_processed_outputs --help` |
+| `tools/pipeline/build_master_metrics.py` | Build Parquet master tables (district + block) + state summary files from `processed_parquet/.../build` | `python -m tools.pipeline.build_master_metrics --help` |
+| `tools/pipeline/publish_processed_outputs.py` | Promote Parquet build artifacts from `processed_parquet/.../build` into `processed_parquet/.../published` with archive-on-replace | `python -m tools.pipeline.publish_processed_outputs --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
 
 ## Diagnostics

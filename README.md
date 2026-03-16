@@ -167,32 +167,31 @@ and should remain untouched by migrated Parquet outputs.
 
 ```text
 processed_parquet/{metric_slug}/
-├── build/                      # optional staging root for publish flows
+├── build/                      # canonical compute + master-build destination
 ├── published/                  # runtime-served root when present
 │   ├── {state}/
 │   │   ├── master_metrics_by_district.parquet
-│   │   ├── master_metrics_by_district.csv
 │   │   ├── master_metrics_by_block.parquet
-│   │   ├── master_metrics_by_block.csv
 │   │   ├── state_*.parquet
-│   │   ├── state_*.csv
 │   │   ├── districts/
-│   │   │   └── ensembles/yearly/scenario=.../data.parquet
+│   │   │   ├── models/yearly/scenario=.../model=.../part.parquet
+│   │   │   ├── models/periods/scenario=.../model=.../part.parquet
+│   │   │   └── ensembles/yearly/scenario=.../part.parquet
 │   │   └── blocks/
-│   │       └── ensembles/yearly/scenario=.../data.parquet
+│   │       ├── models/yearly/scenario=.../model=.../part.parquet
+│   │       ├── models/periods/scenario=.../model=.../part.parquet
+│   │       └── ensembles/yearly/scenario=.../part.parquet
 │   └── hydro/
 │       ├── master_metrics_by_basin.parquet
-│       ├── master_metrics_by_basin.csv
 │       ├── master_metrics_by_sub_basin.parquet
-│       ├── master_metrics_by_sub_basin.csv
-│       ├── basins/ensembles/yearly/scenario=.../data.parquet
-│       └── sub_basins/ensembles/yearly/scenario=.../data.parquet
+│       ├── basins/models/yearly/scenario=.../model=.../part.parquet
+│       ├── basins/models/periods/scenario=.../model=.../part.parquet
+│       ├── basins/ensembles/yearly/scenario=.../part.parquet
+│       ├── sub_basins/models/yearly/scenario=.../model=.../part.parquet
+│       ├── sub_basins/models/periods/scenario=.../model=.../part.parquet
+│       └── sub_basins/ensembles/yearly/scenario=.../part.parquet
 └── archive/<timestamp>/        # previous published artifacts replaced by republish
 ```
-
-CSV mirrors remain in `published/` during transition so migrated readers can still fall back
-format-wise without touching the legacy tree. The publish command also preserves the copied
-per-unit/per-model CSV tree under `published/`.
 
 #### Legacy layout preserved for the older dashboard
 
@@ -219,8 +218,7 @@ python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metric
 python -m tools.pipeline.build_master_metrics
 ```
 
-This now writes CSV outputs plus Parquet mirrors for masters and state summaries.
-Parquet mirrors are only written when the output path is under `processed_parquet/`.
+This writes Parquet-only master tables and state summaries into `processed_parquet/<metric>/build/`.
 
 ### Publish processed outputs
 
@@ -229,8 +227,8 @@ python -m tools.pipeline.publish_processed_outputs --help
 python -m tools.pipeline.publish_processed_outputs --metrics tas_annual_mean
 ```
 
-By default this command reads legacy CSV inputs from `IRT_DATA_DIR/processed` and writes
-migrated outputs to `IRT_DATA_DIR/processed_parquet`.
+By default this command promotes Parquet build artifacts from `IRT_DATA_DIR/processed_parquet/<metric>/build`
+into `IRT_DATA_DIR/processed_parquet/<metric>/published` and archives replaced published artifacts.
 
 ### Hydro boundary preparation
 

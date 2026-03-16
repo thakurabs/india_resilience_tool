@@ -88,3 +88,37 @@ def test_load_unit_yearly_models_from_files_tidy_output(tmp_path: Path) -> None:
     assert set(out["model"].unique()) == {"ModelA", "ModelB"}
     assert (out["scenario"].astype(str).str.lower() == "historical").all()
 
+
+def test_discover_and_load_district_model_yearly_dataset(tmp_path: Path) -> None:
+    ts_root = tmp_path / "processed_parquet"
+    dataset_root = ts_root / "Telangana" / "districts" / "models" / "yearly"
+    pd.DataFrame(
+        {
+            "state": ["Telangana", "Telangana"],
+            "district": ["Alpha", "Alpha"],
+            "scenario": ["ssp245", "ssp245"],
+            "model": ["ModelA", "ModelB"],
+            "year": [2020, 2020],
+            "value": [1.0, 2.0],
+        }
+    ).to_parquet(dataset_root, partition_cols=["scenario", "model"], index=False)
+
+    found = discover_district_model_yearly_files(
+        ts_root=ts_root,
+        state_dir="Telangana",
+        district_display="Alpha",
+        scenario_name="ssp245",
+        varcfg={},
+    )
+    assert set(found.keys()) == {"ModelA", "ModelB"}
+    assert all(path.resolve() == dataset_root.resolve() for path in found.values())
+
+    out = load_unit_yearly_models_from_files(
+        sorted(found.items()),
+        scenario_name="ssp245",
+        level="district",
+        state_dir="Telangana",
+        district_display="Alpha",
+    )
+    assert set(out["model"].unique()) == {"ModelA", "ModelB"}
+    assert list(sorted(out["value"].tolist())) == [1.0, 2.0]

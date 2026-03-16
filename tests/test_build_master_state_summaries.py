@@ -61,8 +61,8 @@ def test_build_state_summaries_schema_and_year_type() -> None:
 
 
 def test_build_master_metrics_writes_level_specific_state_files(tmp_path: Path, monkeypatch) -> None:
-    root = tmp_path / "processed"
-    state_root = root / "Telangana"
+    root = tmp_path / "processed_parquet" / "tas_metric"
+    state_root = root / "build" / "Telangana"
     state_root.mkdir(parents=True)
 
     all_rows = [
@@ -84,18 +84,19 @@ def test_build_master_metrics_writes_level_specific_state_files(tmp_path: Path, 
         verbose=False,
     )
 
-    assert (state_root / "state_model_averages_district.csv").exists()
-    assert (state_root / "state_ensemble_stats_district.csv").exists()
-    assert (state_root / "state_yearly_model_averages_district.csv").exists()
-    assert (state_root / "state_yearly_ensemble_stats_district.csv").exists()
+    assert (state_root / "state_model_averages_district.parquet").exists()
+    assert (state_root / "state_ensemble_stats_district.parquet").exists()
+    assert (state_root / "state_yearly_model_averages_district.parquet").exists()
+    assert (state_root / "state_yearly_ensemble_stats_district.parquet").exists()
     assert not (state_root / "state_model_averages.csv").exists()
     assert not (state_root / "state_ensemble_stats.csv").exists()
-    assert not (state_root / "master_metrics_by_district.parquet").exists()
+    assert (state_root / "master_metrics_by_district.parquet").exists()
+    assert not (state_root / "master_metrics_by_district.csv").exists()
 
 
 def test_build_master_metrics_writes_level_specific_state_files_block(tmp_path: Path, monkeypatch) -> None:
-    root = tmp_path / "processed"
-    state_root = root / "Telangana"
+    root = tmp_path / "processed_parquet" / "tas_metric"
+    state_root = root / "build" / "Telangana"
     state_root.mkdir(parents=True)
 
     all_rows = [
@@ -117,15 +118,15 @@ def test_build_master_metrics_writes_level_specific_state_files_block(tmp_path: 
         verbose=False,
     )
 
-    assert (state_root / "state_model_averages_block.csv").exists()
-    assert (state_root / "state_ensemble_stats_block.csv").exists()
-    assert (state_root / "state_yearly_model_averages_block.csv").exists()
-    assert (state_root / "state_yearly_ensemble_stats_block.csv").exists()
+    assert (state_root / "state_model_averages_block.parquet").exists()
+    assert (state_root / "state_ensemble_stats_block.parquet").exists()
+    assert (state_root / "state_yearly_model_averages_block.parquet").exists()
+    assert (state_root / "state_yearly_ensemble_stats_block.parquet").exists()
 
 
 def test_build_master_metrics_writes_parquet_only_under_migrated_root(tmp_path: Path, monkeypatch) -> None:
     root = tmp_path / "processed_parquet"
-    state_root = root / "tas_metric" / "Telangana"
+    state_root = root / "tas_metric" / "build" / "Telangana"
     state_root.mkdir(parents=True)
 
     all_rows = [
@@ -137,8 +138,6 @@ def test_build_master_metrics_writes_parquet_only_under_migrated_root(tmp_path: 
 
     monkeypatch.setattr(bmm, "_collect_district_data", lambda *args, **kwargs: (all_rows, yearly_rows))
     monkeypatch.setattr(bmm, "_build_wide_master", lambda *args, **kwargs: pd.DataFrame([{"state": "Telangana", "district": "D1"}]))
-    monkeypatch.setattr("paths.MIGRATED_BASE_OUTPUT_ROOT", root)
-
     outp = state_root / "master_metrics_by_district.csv"
     bmm.build_master_metrics(
         output_root=str(root / "tas_metric"),

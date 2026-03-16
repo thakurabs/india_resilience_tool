@@ -11,11 +11,11 @@ The adapter:
 - Returns results compatible with the existing IRT output structure
 
 Additional IRT behavior:
-- Writes per-unit monthly SPI CSVs (e.g., *_monthly.csv) alongside yearly outputs
+- Writes per-unit monthly SPI Parquet caches (e.g., *_monthly.parquet) alongside yearly outputs
 - Supports annual aggregations derived from monthly SPI:
     - mean (legacy behavior)
     - count_months_lt / count_months_gt using thresholds (e.g., -1, -2, +1, +2)
-- Can reuse an existing monthly CSV on disk as a cache if metadata matches.
+- Can reuse an existing monthly Parquet cache on disk if metadata matches.
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -32,6 +32,7 @@ from typing import Optional, Tuple
 import numpy as np
 import pandas as pd
 import xarray as xr
+from india_resilience_tool.utils.processed_io import read_table, write_table
 
 # Import from climate-indices package
 try:
@@ -470,7 +471,7 @@ def _parse_unit_key(level: str, unit_key: str) -> tuple[str, Optional[str]]:
     return unit_key, None
 
 
-def _monthly_spi_csv_path(
+def _monthly_spi_parquet_path(
     *,
     metric_root_path: Path,
     state_name: str,
@@ -486,13 +487,13 @@ def _monthly_spi_csv_path(
     if level == "block":
         block_safe = _safe_component(block or unit_key)
         out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
-        return out_dir / f"{block_safe}_monthly.csv"
+        return out_dir / f"{block_safe}_monthly.parquet"
 
     out_dir = metric_root_path / state_name / level_folder / district_safe / model / scenario
-    return out_dir / f"{district_safe}_monthly.csv"
+    return out_dir / f"{district_safe}_monthly.parquet"
 
 
-def _load_monthly_spi_csv(
+def _load_monthly_spi_parquet(
     path: Path,
     *,
     expected_scale_months: int,
@@ -505,9 +506,9 @@ def _load_monthly_spi_csv(
         return None
 
     try:
-        df = pd.read_csv(path)
+        df = read_table(path)
     except Exception as e:
-        logger.warning(f"Failed to read monthly SPI CSV '{path}': {e}")
+        logger.warning(f"Failed to read monthly SPI parquet '{path}': {e}")
         return None
 
     required = {
@@ -554,7 +555,7 @@ def _load_monthly_spi_csv(
         return None
 
 
-def _write_monthly_spi_csv(
+def _write_monthly_spi_parquet(
     path: Path,
     *,
     spi_monthly: xr.DataArray,
@@ -586,7 +587,7 @@ def _write_monthly_spi_csv(
             "block": block or "",
         }
     )
-    df.to_csv(path, index=False)
+    write_table(df, path, index=False)
 
 
 def compute_spi_rows_climate_indices(
@@ -609,9 +610,9 @@ def compute_spi_rows_climate_indices(
     """
     Compute SPI-derived yearly rows for all spatial units.
 
-    Writes per-unit monthly SPI CSVs alongside yearly outputs:
-      - districts: {district_safe}_monthly.csv
-      - blocks:    {block_safe}_monthly.csv
+    Writes per-unit monthly SPI Parquet caches alongside yearly outputs:
+      - districts: {district_safe}_monthly.parquet
+      - blocks:    {block_safe}_monthly.parquet
 
     If a compatible monthly file exists, it is reused as a cache.
     """
@@ -638,7 +639,7 @@ def compute_spi_rows_climate_indices(
 
         monthly_path: Optional[Path] = None
         if enable_monthly_paths:
-            monthly_path = _monthly_spi_csv_path(
+            monthly_path = _monthly_spi_parquet_path(
                 metric_root_path=Path(metric_root_path),
                 state_name=str(state_name),
                 level_folder=str(level_folder),
@@ -650,7 +651,7 @@ def compute_spi_rows_climate_indices(
 
         spi_monthly: Optional[xr.DataArray] = None
         if use_monthly_cache and monthly_path is not None:
-            spi_monthly = _load_monthly_spi_csv(
+            spi_monthly = _load_monthly_spi_parquet(
                 monthly_path,
                 expected_scale_months=scale_months,
                 expected_distribution=distribution,
@@ -688,7 +689,7 @@ def compute_spi_rows_climate_indices(
 
             if write_monthly_csv and monthly_path is not None:
                 try:
-                    _write_monthly_spi_csv(
+                    _write_monthly_spi_parquet(
                         monthly_path,
                         spi_monthly=spi_monthly,
                         scale_months=scale_months,
@@ -700,7 +701,7 @@ def compute_spi_rows_climate_indices(
                         block=block,
                     )
                 except Exception as e:
-                    logger.warning(f"[{slug}] Failed to write monthly SPI CSV for unit={unit_key}: {e}")
+                    logger.warning(f"[{slug}] Failed to write monthly SPI parquet for unit={unit_key}: {e}")
 
         # Annual aggregation selection
         spi_yearly: Optional[xr.DataArray]
