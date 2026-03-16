@@ -73,12 +73,25 @@ def test_wbd_metrics_registered() -> None:
 
 def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
     pipeline_bundles = get_pipeline_bundles()
-    assert "aq_water_stress" not in {slug for slugs in pipeline_bundles.values() for slug in slugs}
-    assert "aq_water_stress" in METRICS_BY_SLUG
+    dashboard_only = {
+        "aq_water_stress",
+        "aq_interannual_variability",
+        "aq_seasonal_variability",
+        "aq_water_depletion",
+    }
+    assert dashboard_only.isdisjoint({slug for slugs in pipeline_bundles.values() for slug in slugs})
+    for slug in dashboard_only:
+        assert slug in METRICS_BY_SLUG
 
 
 def test_aqueduct_metric_is_context_limited_to_hydro() -> None:
     assert "Water Risk" in get_bundles(spatial_family="hydro", level="basin")
-    assert "aq_water_stress" in get_metrics_for_bundle("Water Risk", spatial_family="hydro", level="sub_basin")
+    hydro_metrics = set(get_metrics_for_bundle("Water Risk", spatial_family="hydro", level="sub_basin"))
+    assert {
+        "aq_water_stress",
+        "aq_interannual_variability",
+        "aq_seasonal_variability",
+        "aq_water_depletion",
+    }.issubset(hydro_metrics)
     assert "Water Risk" not in get_bundles(spatial_family="admin", level="district")
     assert get_metrics_for_bundle("Water Risk", spatial_family="admin", level="district") == []

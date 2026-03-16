@@ -27,6 +27,9 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - map mode
 - Water-risk hydro onboarding:
   - Aqueduct water stress on SOI basin and sub-basin units
+  - Aqueduct interannual variability on SOI basin and sub-basin units
+  - Aqueduct seasonal variability on SOI basin and sub-basin units
+  - Aqueduct water depletion on SOI basin and sub-basin units
   - native Aqueduct scenarios: `historical`, `bau`, `opt`, `pes`
 - Map view and rankings table for all four levels
 - Right-side details panel with:
@@ -148,6 +151,12 @@ Place these in `IRT_DATA_DIR`:
 - `aqueduct/aqueduct_subbasin_crosswalk.csv` (optional Aqueduct HydroSHEDS ↔ SOI sub-basin overlap table)
 - `aqueduct/aq_water_stress_basin_master_qa.csv` (optional QA for the Aqueduct basin master build)
 - `aqueduct/aq_water_stress_subbasin_master_qa.csv` (optional QA for the Aqueduct sub-basin master build)
+- `aqueduct/aq_interannual_variability_basin_master_qa.csv` (optional QA for Aqueduct interannual-variability basin masters)
+- `aqueduct/aq_interannual_variability_subbasin_master_qa.csv` (optional QA for Aqueduct interannual-variability sub-basin masters)
+- `aqueduct/aq_seasonal_variability_basin_master_qa.csv` (optional QA for Aqueduct seasonal-variability basin masters)
+- `aqueduct/aq_seasonal_variability_subbasin_master_qa.csv` (optional QA for Aqueduct seasonal-variability sub-basin masters)
+- `aqueduct/aq_water_depletion_basin_master_qa.csv` (optional QA for Aqueduct water-depletion basin masters)
+- `aqueduct/aq_water_depletion_subbasin_master_qa.csv` (optional QA for Aqueduct water-depletion sub-basin masters)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -155,7 +164,7 @@ Aqueduct methodology note:
 
 - See [`docs/aqueduct_onboarding_methodology.md`](docs/aqueduct_onboarding_methodology.md) for the full post-processing workflow, including `pfaf_id`-based baseline cleanup and HydroSHEDS → SOI hydro transfer.
 - That methodology doc also includes a short "How to read the validation package" section for interpreting the generated Aqueduct validation outputs.
-- See [`docs/aqueduct_field_contract.md`](docs/aqueduct_field_contract.md) for the current Aqueduct source-field mapping used by `aq_water_stress`.
+- See [`docs/aqueduct_field_contract.md`](docs/aqueduct_field_contract.md) for the current Aqueduct source-field mappings used by the onboarded Aqueduct hydro metrics.
 
 ### Processed outputs layout
 
@@ -199,10 +208,22 @@ processed/{metric_slug}/hydro/
     └── ensembles/{basin}/{sub_basin}/{scenario}/{sub_basin}_yearly_ensemble.csv
 ```
 
-For Aqueduct hydro onboarding, the first supported slug is:
+For Aqueduct hydro onboarding, the currently supported slugs are:
 
 ```text
 processed/aq_water_stress/hydro/
+├── master_metrics_by_basin.csv
+└── master_metrics_by_sub_basin.csv
+
+processed/aq_interannual_variability/hydro/
+├── master_metrics_by_basin.csv
+└── master_metrics_by_sub_basin.csv
+
+processed/aq_seasonal_variability/hydro/
+├── master_metrics_by_basin.csv
+└── master_metrics_by_sub_basin.csv
+
+processed/aq_water_depletion/hydro/
 ├── master_metrics_by_basin.csv
 └── master_metrics_by_sub_basin.csv
 ```

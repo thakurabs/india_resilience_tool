@@ -6,7 +6,11 @@ import pytest
 from shapely.geometry import Polygon
 
 from tools.geodata.build_aqueduct_hydro_crosswalk import build_aqueduct_hydro_crosswalk
-from tools.geodata.build_aqueduct_hydro_masters import aggregate_crosswalk_to_targets
+from tools.geodata.build_aqueduct_hydro_masters import (
+    aggregate_crosswalk_to_targets,
+    get_aqueduct_source_column_map,
+    get_supported_aqueduct_metric_slugs,
+)
 
 
 def _aqueduct_gdf() -> gpd.GeoDataFrame:
@@ -111,3 +115,19 @@ def test_aggregate_crosswalk_to_targets_builds_expected_hydro_masters() -> None:
         rel=1e-6,
     ) == 3.0
     assert pytest.approx(float(qa_df["basin_coverage_fraction"].iloc[0]), rel=1e-6) == 1.0
+
+
+def test_supported_aqueduct_metrics_include_tranche_two_metrics() -> None:
+    assert get_supported_aqueduct_metric_slugs() == (
+        "aq_water_stress",
+        "aq_interannual_variability",
+        "aq_seasonal_variability",
+        "aq_water_depletion",
+    )
+
+
+def test_tranche_two_metric_source_map_uses_expected_columns() -> None:
+    column_map = get_aqueduct_source_column_map("aq_interannual_variability")
+    assert column_map["aq_interannual_variability__historical__1979-2019__mean"] == "iav_raw"
+    assert column_map["aq_interannual_variability__bau__2050__mean"] == "bau50_iv_x_r"
+    assert column_map["aq_interannual_variability__pes__2080__mean"] == "pes80_iv_x_r"

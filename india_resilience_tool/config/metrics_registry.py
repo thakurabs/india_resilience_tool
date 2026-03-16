@@ -1463,6 +1463,66 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_levels": ("basin", "sub_basin"),
         "rank_higher_is_worse": True,
     },
+    {
+        "name": "Aqueduct Interannual Variability",
+        "slug": "aq_interannual_variability",
+        "label": "Aqueduct Interannual Variability",
+        "group": "water",
+        "value_col": "aq_interannual_variability",
+        "periods_metric_col": "aq_interannual_variability",
+        "units": "index",
+        "description": (
+            "Aqueduct 4.0 interannual variability transferred from HydroSHEDS Level 6 "
+            "onto Survey of India basin and sub-basin units using area-weighted overlap."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "supported_scenarios": ("historical", "bau", "opt", "pes"),
+        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
+        "supported_spatial_families": ("hydro",),
+        "supported_levels": ("basin", "sub_basin"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Aqueduct Seasonal Variability",
+        "slug": "aq_seasonal_variability",
+        "label": "Aqueduct Seasonal Variability",
+        "group": "water",
+        "value_col": "aq_seasonal_variability",
+        "periods_metric_col": "aq_seasonal_variability",
+        "units": "index",
+        "description": (
+            "Aqueduct 4.0 seasonal variability transferred from HydroSHEDS Level 6 "
+            "onto Survey of India basin and sub-basin units using area-weighted overlap."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "supported_scenarios": ("historical", "bau", "opt", "pes"),
+        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
+        "supported_spatial_families": ("hydro",),
+        "supported_levels": ("basin", "sub_basin"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Aqueduct Water Depletion",
+        "slug": "aq_water_depletion",
+        "label": "Aqueduct Water Depletion",
+        "group": "water",
+        "value_col": "aq_water_depletion",
+        "periods_metric_col": "aq_water_depletion",
+        "units": "index",
+        "description": (
+            "Aqueduct 4.0 water depletion transferred from HydroSHEDS Level 6 "
+            "onto Survey of India basin and sub-basin units using area-weighted overlap."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "supported_scenarios": ("historical", "bau", "opt", "pes"),
+        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
+        "supported_spatial_families": ("hydro",),
+        "supported_levels": ("basin", "sub_basin"),
+        "rank_higher_is_worse": True,
+    },
 ]
 
 ALL_METRICS_RAW: list[dict[str, Any]] = PIPELINE_METRICS_RAW + DASHBOARD_ONLY_METRICS_RAW
@@ -1483,6 +1543,9 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(ALL_METRIC
 BUNDLES: dict[str, list[str]] = {
     "Water Risk": [
         "aq_water_stress",
+        "aq_interannual_variability",
+        "aq_seasonal_variability",
+        "aq_water_depletion",
     ],
     "Heat Risk": [
         "tas_annual_mean",

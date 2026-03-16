@@ -54,12 +54,18 @@ def test_config_helper_functions() -> None:
     assert len(temp_indices) > 0
 
 
-def test_aqueduct_metric_is_exposed_to_dashboard_variables() -> None:
+def test_aqueduct_metrics_are_exposed_to_dashboard_variables() -> None:
     """Aqueduct metrics should be available through the dashboard variable registry."""
     from india_resilience_tool.config.variables import VARIABLES
 
-    cfg = VARIABLES["aq_water_stress"]
-    assert cfg["label"] == "Aqueduct Water Stress"
-    assert cfg["source_type"] == "external"
-    assert cfg["supports_yearly_trend"] is False
-    assert cfg["supported_scenarios"] == ["historical", "bau", "opt", "pes"]
+    for slug, label in [
+        ("aq_water_stress", "Aqueduct Water Stress"),
+        ("aq_interannual_variability", "Aqueduct Interannual Variability"),
+        ("aq_seasonal_variability", "Aqueduct Seasonal Variability"),
+        ("aq_water_depletion", "Aqueduct Water Depletion"),
+    ]:
+        cfg = VARIABLES[slug]
+        assert cfg["label"] == label
+        assert cfg["source_type"] == "external"
+        assert cfg["supports_yearly_trend"] is False
+        assert cfg["supported_scenarios"] == ["historical", "bau", "opt", "pes"]

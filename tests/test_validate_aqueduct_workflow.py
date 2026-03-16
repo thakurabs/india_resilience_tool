@@ -3,19 +3,33 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from tools.geodata.build_aqueduct_hydro_masters import AQ_WATER_STRESS_COLUMN_MAP
+from tools.geodata.build_aqueduct_hydro_masters import (
+    get_aqueduct_source_column_map,
+    get_supported_aqueduct_metric_slugs,
+)
 from tools.geodata.validate_aqueduct_workflow import (
     FIELD_CONTRACT,
     build_crosswalk_conservation_summary,
+    build_field_semantics_markdown,
     build_master_value_spotcheck,
     classify_reliability_tiers,
     select_sample_audit_units,
 )
 
 
-def test_field_contract_covers_all_current_aq_water_stress_columns() -> None:
-    mapped_source_columns = {row["source_column"] for row in FIELD_CONTRACT}
-    assert mapped_source_columns == set(AQ_WATER_STRESS_COLUMN_MAP.values())
+@pytest.mark.parametrize("metric_slug", get_supported_aqueduct_metric_slugs())
+def test_field_contract_covers_all_current_aqueduct_metric_columns(metric_slug: str) -> None:
+    metric_rows = [row for row in FIELD_CONTRACT if row["metric_slug"] == metric_slug]
+    mapped_source_columns = {row["source_column"] for row in metric_rows}
+    assert mapped_source_columns == set(get_aqueduct_source_column_map(metric_slug).values())
+
+
+def test_field_semantics_markdown_is_metric_scoped() -> None:
+    md = build_field_semantics_markdown("aq_water_depletion")
+    assert "aq_water_depletion" in md
+    assert "aq_water_stress__historical__1979-2019__mean" not in md
+    assert "bwd_raw" in md
+    assert "*_wd_x_r" in md
 
 
 def test_build_crosswalk_conservation_summary_flags_partial_coverage() -> None:

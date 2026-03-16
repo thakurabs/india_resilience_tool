@@ -11,7 +11,7 @@ The current working tree supports:
 - map, rankings, and details flows for district, block, basin, and sub-basin
 - admin portfolio workflows for district and block
 - hydro boundary loading and hydro processed-output discovery
-- Aqueduct water-stress hydro masters on SOI basin and sub-basin units
+- Aqueduct hydro masters on SOI basin and sub-basin units for water stress, interannual variability, seasonal variability, and water depletion
 - actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
 - optional hydro-only river overlay in basin/sub-basin maps
 
@@ -92,8 +92,8 @@ Notes:
 
 Aqueduct methodology note:
 - `docs/aqueduct_onboarding_methodology.md` is the canonical narrative for Aqueduct cleanup, HydroSHEDS `pfaf_id` normalization, and HydroSHEDS → SOI hydro transfer.
-- that same doc now includes a short reader guide for interpreting the Aqueduct validation bundle under `IRT_DATA_DIR/aqueduct/validation/`
-- `docs/aqueduct_field_contract.md` records the currently used Aqueduct source-field mapping and interpretation notes for `aq_water_stress`.
+- that same doc now includes a short reader guide for interpreting the Aqueduct validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/`
+- `docs/aqueduct_field_contract.md` records the currently used Aqueduct source-field mappings and interpretation notes for the onboarded Aqueduct hydro metrics.
 
 ## Package inventory
 
@@ -257,7 +257,7 @@ Aqueduct methodology note:
 | `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |
 | `prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON, QA CSV, and India-only `future_annual` GeoJSON with source future attributes preserved |
 | `build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs in `EPSG:6933` |
-| `build_aqueduct_hydro_masters.py` | Build `processed/aq_water_stress/hydro/` master CSVs from Aqueduct overlaps |
+| `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master CSVs from Aqueduct overlaps for the onboarded Aqueduct hydro metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
 | `build_river_subbasin_diagnostics.py` | Build hydro sub-basin vs river-name diagnostics CSV |

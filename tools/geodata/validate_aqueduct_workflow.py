@@ -3,7 +3,7 @@
 Validate the Aqueduct-to-SOI hydro workflow.
 
 This tool audits:
-- source-field semantics for the currently onboarded Aqueduct metric
+- source-field semantics for the currently onboarded Aqueduct metrics
 - cleaned ``pfaf_id`` integrity
 - crosswalk area conservation
 - master coverage reliability
@@ -26,8 +26,10 @@ from tools.geodata.build_aqueduct_hydro_crosswalk import (
     load_soi_hydro_boundaries,
 )
 from tools.geodata.build_aqueduct_hydro_masters import (
-    AQ_WATER_STRESS_COLUMN_MAP,
     aggregate_crosswalk_to_targets,
+    get_aqueduct_metric_spec,
+    get_aqueduct_source_column_map,
+    get_supported_aqueduct_metric_slugs,
     load_crosswalk,
     load_metric_source_table,
 )
@@ -40,107 +42,10 @@ INDIA_ALBERS_CRS = (
     "+datum=WGS84 +units=m +no_defs"
 )
 
-FIELD_CONTRACT: tuple[dict[str, str], ...] = (
-    {
-        "output_column": "aq_water_stress__historical__1979-2019__mean",
-        "source_column": "bws_raw",
-        "source_dataset": "baseline_clean_india.geojson",
-        "indicator_name": "Baseline Water Stress",
-        "scenario": "historical",
-        "period": "1979-2019",
-        "interpretation": "Baseline annual water stress screening indicator",
-        "comparability_note": "Used as the historical reference for the current Aqueduct water-stress onboarding.",
-    },
-    {
-        "output_column": "aq_water_stress__bau__2030__mean",
-        "source_column": "bau30_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "bau",
-        "period": "2030",
-        "interpretation": "Business-as-usual future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 business-as-usual scenario.",
-    },
-    {
-        "output_column": "aq_water_stress__bau__2050__mean",
-        "source_column": "bau50_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "bau",
-        "period": "2050",
-        "interpretation": "Business-as-usual future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 business-as-usual scenario.",
-    },
-    {
-        "output_column": "aq_water_stress__bau__2080__mean",
-        "source_column": "bau80_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "bau",
-        "period": "2080",
-        "interpretation": "Business-as-usual future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 business-as-usual scenario.",
-    },
-    {
-        "output_column": "aq_water_stress__opt__2030__mean",
-        "source_column": "opt30_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "opt",
-        "period": "2030",
-        "interpretation": "Optimistic future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 optimistic scenario.",
-    },
-    {
-        "output_column": "aq_water_stress__opt__2050__mean",
-        "source_column": "opt50_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "opt",
-        "period": "2050",
-        "interpretation": "Optimistic future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 optimistic scenario.",
-    },
-    {
-        "output_column": "aq_water_stress__opt__2080__mean",
-        "source_column": "opt80_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "opt",
-        "period": "2080",
-        "interpretation": "Optimistic future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 optimistic scenario.",
-    },
-    {
-        "output_column": "aq_water_stress__pes__2030__mean",
-        "source_column": "pes30_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "pes",
-        "period": "2030",
-        "interpretation": "Pessimistic future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 pessimistic scenario.",
-    },
-    {
-        "output_column": "aq_water_stress__pes__2050__mean",
-        "source_column": "pes50_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "pes",
-        "period": "2050",
-        "interpretation": "Pessimistic future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 pessimistic scenario.",
-    },
-    {
-        "output_column": "aq_water_stress__pes__2080__mean",
-        "source_column": "pes80_ws_x_r",
-        "source_dataset": "future_annual_india.geojson",
-        "indicator_name": "Future Water Stress",
-        "scenario": "pes",
-        "period": "2080",
-        "interpretation": "Pessimistic future water stress projection",
-        "comparability_note": "Projected future water stress under Aqueduct 4.0 pessimistic scenario.",
-    },
+FIELD_CONTRACT: tuple[dict[str, str], ...] = tuple(
+    row
+    for slug in get_supported_aqueduct_metric_slugs()
+    for row in get_aqueduct_metric_spec(slug).field_contract_rows()
 )
 
 FIELD_SEMANTICS_SOURCES: tuple[dict[str, str], ...] = (
@@ -200,19 +105,21 @@ def _target_columns(level: HydroLevel) -> tuple[list[str], str, str, str]:
     )
 
 
-def build_field_semantics_markdown() -> str:
-    """Return a markdown summary of the current Aqueduct field contract."""
+def build_field_semantics_markdown(metric_slug: str) -> str:
+    """Return a markdown summary of one Aqueduct metric field contract."""
+    spec = get_aqueduct_metric_spec(metric_slug)
+    contract_rows = [row for row in FIELD_CONTRACT if row["metric_slug"] == spec.slug]
     lines = [
         "# Aqueduct Field Semantics Audit",
         "",
-        "This audit documents the source fields currently used to build the `aq_water_stress` hydro masters.",
+        f"This audit documents the source fields currently used to build the `{spec.slug}` hydro masters.",
         "",
         "## Current field contract",
         "",
         "| Dashboard column | Aqueduct source column | Dataset | Scenario | Period | Meaning |",
         "|---|---|---|---|---|---|",
     ]
-    for row in FIELD_CONTRACT:
+    for row in contract_rows:
         lines.append(
             f"| `{row['output_column']}` | `{row['source_column']}` | `{row['source_dataset']}` | "
             f"`{row['scenario']}` | `{row['period']}` | {row['interpretation']} |"
@@ -223,9 +130,9 @@ def build_field_semantics_markdown() -> str:
             "",
             "## Interpretation notes",
             "",
-            "- The baseline reference currently used for dashboard comparison is `bws_raw`.",
-            "- Future values currently come from the Aqueduct annual future water-stress fields `*_ws_x_r`.",
-            "- Dashboard deltas therefore represent **Aqueduct scenario value minus Aqueduct historical baseline**, not a pure climate-only delta.",
+            f"- The baseline reference currently used for dashboard comparison is `{spec.baseline_source_column}`.",
+            f"- Future values currently come from the Aqueduct annual future fields `*_{spec.future_source_suffix}_x_r`.",
+            f"- Dashboard deltas therefore represent **Aqueduct scenario value minus Aqueduct historical baseline** for `{spec.label}`, not a pure climate-only delta.",
             "- Aqueduct remains a screening/prioritization product and should be complemented by local or regional analysis.",
             "",
             "## Official sources",
@@ -390,6 +297,7 @@ def build_projection_sensitivity_summary(
     hydro_gdf: gpd.GeoDataFrame,
     base_master_df: pd.DataFrame,
     hydro_level: HydroLevel,
+    source_column_map: dict[str, str],
 ) -> pd.DataFrame:
     """Compare the reference transfer against alternate projections and a dominant-overlap rule."""
     target_keep_cols, target_id_col, target_name_col, _ = _target_columns(hydro_level)
@@ -404,12 +312,12 @@ def build_projection_sensitivity_summary(
         crosswalk_df=alt_crosswalk,
         target_gdf=hydro_gdf,
         hydro_level=hydro_level,
-        source_column_map=AQ_WATER_STRESS_COLUMN_MAP,
+        source_column_map=source_column_map,
         area_epsg=DEFAULT_AREA_EPSG,
     )
 
     records: list[dict[str, object]] = []
-    value_columns = list(AQ_WATER_STRESS_COLUMN_MAP)
+    value_columns = list(source_column_map)
     base_lookup = base_master_df.set_index(target_keep_cols)
     alt_lookup = alt_master_df.set_index(target_keep_cols)
 
@@ -515,6 +423,7 @@ def build_master_value_spotcheck(
     source_df: pd.DataFrame,
     master_df: pd.DataFrame,
     hydro_level: HydroLevel,
+    metric_columns: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     """Recompute master values for sampled units and compare against the written masters."""
     target_keep_cols, target_id_col, target_name_col, _ = _target_columns(hydro_level)
@@ -522,11 +431,10 @@ def build_master_value_spotcheck(
     master_lookup = master_df.set_index(target_keep_cols)
     sample_ids = set(sample_df[target_id_col].astype(str).tolist())
     overlaps = overlaps[overlaps[target_id_col].astype(str).isin(sample_ids)].copy()
-    value_columns = [
-        column
-        for column in AQ_WATER_STRESS_COLUMN_MAP
-        if column in overlaps.columns and column in master_df.columns
+    requested_columns = list(metric_columns) if metric_columns is not None else [
+        column for column in master_df.columns if column in overlaps.columns
     ]
+    value_columns = [column for column in requested_columns if column in overlaps.columns and column in master_df.columns]
 
     records: list[dict[str, object]] = []
     for key, grp in overlaps.groupby(target_keep_cols, dropna=False):
@@ -570,6 +478,7 @@ def build_master_value_spotcheck(
 
 def build_validation_summary_markdown(
     *,
+    metric_slug: str,
     pfaf_checks_df: pd.DataFrame,
     basin_conservation_df: pd.DataFrame,
     subbasin_conservation_df: pd.DataFrame,
@@ -617,6 +526,7 @@ def build_validation_summary_markdown(
         "",
         "## Headline checks",
         "",
+        f"- Metric slug: `{metric_slug}`",
         f"- `pfaf_id` rows checked: {len(pfaf_checks_df)}",
         f"- `pfaf_id` rows with non-OK status: {geometry_mismatches}",
         f"- Basin reliability tiers: {basin_tiers}",
@@ -670,10 +580,17 @@ def build_cli() -> argparse.ArgumentParser:
     parser.add_argument("--baseline-qa", type=str, default=str(aqueduct_dir / "baseline_clean_india_qa.csv"))
     parser.add_argument("--basin-crosswalk", type=str, default=str(aqueduct_dir / "aqueduct_basin_crosswalk.csv"))
     parser.add_argument("--subbasin-crosswalk", type=str, default=str(aqueduct_dir / "aqueduct_subbasin_crosswalk.csv"))
-    parser.add_argument("--basin-master-qa", type=str, default=str(aqueduct_dir / "aq_water_stress_basin_master_qa.csv"))
-    parser.add_argument("--subbasin-master-qa", type=str, default=str(aqueduct_dir / "aq_water_stress_subbasin_master_qa.csv"))
     parser.add_argument("--basins", type=str, default=str(BASINS_PATH))
     parser.add_argument("--subbasins", type=str, default=str(SUBBASINS_PATH))
+    parser.add_argument(
+        "--metric-slug",
+        action="append",
+        default=None,
+        help=(
+            "Aqueduct metric slug to validate. Repeat for multiple metrics, or pass `all` "
+            f"to validate all supported Aqueduct metrics ({', '.join(get_supported_aqueduct_metric_slugs())})."
+        ),
+    )
     parser.add_argument(
         "--output-dir",
         type=str,
@@ -693,11 +610,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline_qa_path = Path(args.baseline_qa).expanduser().resolve()
     basin_crosswalk_path = Path(args.basin_crosswalk).expanduser().resolve()
     subbasin_crosswalk_path = Path(args.subbasin_crosswalk).expanduser().resolve()
-    basin_master_qa_path = Path(args.basin_master_qa).expanduser().resolve()
-    subbasin_master_qa_path = Path(args.subbasin_master_qa).expanduser().resolve()
     basins_path = Path(args.basins).expanduser().resolve()
     subbasins_path = Path(args.subbasins).expanduser().resolve()
-    output_dir = Path(args.output_dir).expanduser().resolve()
+    output_root = Path(args.output_dir).expanduser().resolve()
+    raw_metric_slugs = [str(v).strip() for v in (args.metric_slug or []) if str(v).strip()]
+    if not raw_metric_slugs or any(v.lower() == "all" for v in raw_metric_slugs):
+        metric_slugs = list(get_supported_aqueduct_metric_slugs())
+    else:
+        seen: set[str] = set()
+        metric_slugs = []
+        for slug in raw_metric_slugs:
+            canonical = get_aqueduct_metric_spec(slug).slug
+            if canonical not in seen:
+                metric_slugs.append(canonical)
+                seen.add(canonical)
 
     required = [
         baseline_path,
@@ -705,8 +631,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         baseline_qa_path,
         basin_crosswalk_path,
         subbasin_crosswalk_path,
-        basin_master_qa_path,
-        subbasin_master_qa_path,
         basins_path,
         subbasins_path,
     ]
@@ -714,7 +638,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not path.exists():
             raise FileNotFoundError(f"Required validation input not found: {path}")
 
-    field_audit_md = build_field_semantics_markdown()
     pfaf_checks_df = build_pfaf_cleaning_checks(
         baseline_path=baseline_path,
         future_path=future_path,
@@ -726,88 +649,108 @@ def main(argv: Sequence[str] | None = None) -> int:
     basin_conservation_df = build_crosswalk_conservation_summary(basin_crosswalk_df, hydro_level="basin")
     subbasin_conservation_df = build_crosswalk_conservation_summary(subbasin_crosswalk_df, hydro_level="sub_basin")
 
-    basin_master_qa_df = pd.read_csv(basin_master_qa_path)
-    subbasin_master_qa_df = pd.read_csv(subbasin_master_qa_path)
-    basin_reliability_df = classify_reliability_tiers(basin_master_qa_df, hydro_level="basin")
-    subbasin_reliability_df = classify_reliability_tiers(subbasin_master_qa_df, hydro_level="sub_basin")
-
-    source_df = load_metric_source_table(
-        baseline_path=baseline_path,
-        future_path=future_path,
-        source_column_map=AQ_WATER_STRESS_COLUMN_MAP,
-    )
     aqueduct_gdf = load_aqueduct_boundaries(baseline_path)
     basin_gdf = load_soi_hydro_boundaries(basins_path, level="basin")
     subbasin_gdf = load_soi_hydro_boundaries(subbasins_path, level="sub_basin")
-
-    basin_master_path = get_paths_config().data_dir / "processed" / "aq_water_stress" / "hydro" / "master_metrics_by_basin.csv"
-    subbasin_master_path = get_paths_config().data_dir / "processed" / "aq_water_stress" / "hydro" / "master_metrics_by_sub_basin.csv"
-    basin_master_df = pd.read_csv(basin_master_path)
-    subbasin_master_df = pd.read_csv(subbasin_master_path)
-
-    basin_sensitivity_df = build_projection_sensitivity_summary(
-        source_df=source_df,
-        aqueduct_gdf=aqueduct_gdf,
-        hydro_gdf=basin_gdf,
-        base_master_df=basin_master_df,
-        hydro_level="basin",
-    )
-    subbasin_sensitivity_df = build_projection_sensitivity_summary(
-        source_df=source_df,
-        aqueduct_gdf=aqueduct_gdf,
-        hydro_gdf=subbasin_gdf,
-        base_master_df=subbasin_master_df,
-        hydro_level="sub_basin",
-    )
-    sensitivity_df = pd.concat([basin_sensitivity_df, subbasin_sensitivity_df], ignore_index=True)
-
-    basin_samples = select_sample_audit_units(basin_reliability_df, hydro_level="basin")
-    subbasin_samples = select_sample_audit_units(subbasin_reliability_df, hydro_level="sub_basin")
-    sample_df = pd.concat([basin_samples, subbasin_samples], ignore_index=True)
-
-    basin_spotcheck = build_master_value_spotcheck(
-        sample_df=basin_samples,
-        crosswalk_df=basin_crosswalk_df,
-        source_df=source_df,
-        master_df=basin_master_df,
-        hydro_level="basin",
-    )
-    subbasin_spotcheck = build_master_value_spotcheck(
-        sample_df=subbasin_samples,
-        crosswalk_df=subbasin_crosswalk_df,
-        source_df=source_df,
-        master_df=subbasin_master_df,
-        hydro_level="sub_basin",
-    )
-    spotcheck_df = pd.concat([basin_spotcheck, subbasin_spotcheck], ignore_index=True)
-
-    summary_md = build_validation_summary_markdown(
-        pfaf_checks_df=pfaf_checks_df,
-        basin_conservation_df=basin_conservation_df,
-        subbasin_conservation_df=subbasin_conservation_df,
-        basin_reliability_df=basin_reliability_df,
-        subbasin_reliability_df=subbasin_reliability_df,
-        sensitivity_df=sensitivity_df,
-        spotcheck_df=spotcheck_df,
-    )
-
-    _write_text(field_audit_md, output_dir / "field_semantics_audit.md", overwrite=bool(args.overwrite))
-    _write_csv(pfaf_checks_df, output_dir / "pfaf_cleaning_checks.csv", overwrite=bool(args.overwrite))
-    _write_csv(basin_conservation_df, output_dir / "crosswalk_conservation_basin.csv", overwrite=bool(args.overwrite))
-    _write_csv(subbasin_conservation_df, output_dir / "crosswalk_conservation_subbasin.csv", overwrite=bool(args.overwrite))
-    _write_csv(basin_reliability_df, output_dir / "coverage_reliability_basin.csv", overwrite=bool(args.overwrite))
-    _write_csv(subbasin_reliability_df, output_dir / "coverage_reliability_subbasin.csv", overwrite=bool(args.overwrite))
-    _write_csv(sensitivity_df, output_dir / "projection_sensitivity_summary.csv", overwrite=bool(args.overwrite))
-    _write_csv(sample_df, output_dir / "sample_audit_units.csv", overwrite=bool(args.overwrite))
-    _write_csv(spotcheck_df, output_dir / "master_value_spotcheck.csv", overwrite=bool(args.overwrite))
-    _write_text(summary_md, output_dir / "validation_summary.md", overwrite=bool(args.overwrite))
-
     print("AQUEDUCT VALIDATION")
-    print(f"output_dir: {output_dir}")
-    print(f"pfaf_rows: {len(pfaf_checks_df)}")
-    print(f"basin_samples: {len(basin_samples)}")
-    print(f"subbasin_samples: {len(subbasin_samples)}")
-    print(f"sensitivity_rows: {len(sensitivity_df)}")
+    print(f"output_root: {output_root}")
+    print(f"metric_slugs: {', '.join(metric_slugs)}")
+    for metric_slug in metric_slugs:
+        source_column_map = get_aqueduct_source_column_map(metric_slug)
+        basin_master_qa_path = _default_aqueduct_dir() / f"{metric_slug}_basin_master_qa.csv"
+        subbasin_master_qa_path = _default_aqueduct_dir() / f"{metric_slug}_subbasin_master_qa.csv"
+        if not basin_master_qa_path.exists():
+            raise FileNotFoundError(f"Required basin QA for validation not found: {basin_master_qa_path}")
+        if not subbasin_master_qa_path.exists():
+            raise FileNotFoundError(f"Required sub-basin QA for validation not found: {subbasin_master_qa_path}")
+
+        source_df = load_metric_source_table(
+            baseline_path=baseline_path,
+            future_path=future_path,
+            source_column_map=source_column_map,
+        )
+        basin_master_qa_df = pd.read_csv(basin_master_qa_path)
+        subbasin_master_qa_df = pd.read_csv(subbasin_master_qa_path)
+        basin_reliability_df = classify_reliability_tiers(basin_master_qa_df, hydro_level="basin")
+        subbasin_reliability_df = classify_reliability_tiers(subbasin_master_qa_df, hydro_level="sub_basin")
+        basin_samples = select_sample_audit_units(basin_reliability_df, hydro_level="basin")
+        subbasin_samples = select_sample_audit_units(subbasin_reliability_df, hydro_level="sub_basin")
+        sample_df = pd.concat([basin_samples, subbasin_samples], ignore_index=True)
+        basin_master_path = get_paths_config().data_dir / "processed" / metric_slug / "hydro" / "master_metrics_by_basin.csv"
+        subbasin_master_path = get_paths_config().data_dir / "processed" / metric_slug / "hydro" / "master_metrics_by_sub_basin.csv"
+        if not basin_master_path.exists():
+            raise FileNotFoundError(f"Required basin master for validation not found: {basin_master_path}")
+        if not subbasin_master_path.exists():
+            raise FileNotFoundError(f"Required sub-basin master for validation not found: {subbasin_master_path}")
+
+        basin_master_df = pd.read_csv(basin_master_path)
+        subbasin_master_df = pd.read_csv(subbasin_master_path)
+
+        basin_sensitivity_df = build_projection_sensitivity_summary(
+            source_df=source_df,
+            aqueduct_gdf=aqueduct_gdf,
+            hydro_gdf=basin_gdf,
+            base_master_df=basin_master_df,
+            hydro_level="basin",
+            source_column_map=source_column_map,
+        )
+        subbasin_sensitivity_df = build_projection_sensitivity_summary(
+            source_df=source_df,
+            aqueduct_gdf=aqueduct_gdf,
+            hydro_gdf=subbasin_gdf,
+            base_master_df=subbasin_master_df,
+            hydro_level="sub_basin",
+            source_column_map=source_column_map,
+        )
+        sensitivity_df = pd.concat([basin_sensitivity_df, subbasin_sensitivity_df], ignore_index=True)
+
+        basin_spotcheck = build_master_value_spotcheck(
+            sample_df=basin_samples,
+            crosswalk_df=basin_crosswalk_df,
+            source_df=source_df,
+            master_df=basin_master_df,
+            hydro_level="basin",
+            metric_columns=list(source_column_map),
+        )
+        subbasin_spotcheck = build_master_value_spotcheck(
+            sample_df=subbasin_samples,
+            crosswalk_df=subbasin_crosswalk_df,
+            source_df=source_df,
+            master_df=subbasin_master_df,
+            hydro_level="sub_basin",
+            metric_columns=list(source_column_map),
+        )
+        spotcheck_df = pd.concat([basin_spotcheck, subbasin_spotcheck], ignore_index=True)
+
+        summary_md = build_validation_summary_markdown(
+            metric_slug=metric_slug,
+            pfaf_checks_df=pfaf_checks_df,
+            basin_conservation_df=basin_conservation_df,
+            subbasin_conservation_df=subbasin_conservation_df,
+            basin_reliability_df=basin_reliability_df,
+            subbasin_reliability_df=subbasin_reliability_df,
+            sensitivity_df=sensitivity_df,
+            spotcheck_df=spotcheck_df,
+        )
+
+        metric_output_dir = output_root / metric_slug
+        _write_text(build_field_semantics_markdown(metric_slug), metric_output_dir / "field_semantics_audit.md", overwrite=bool(args.overwrite))
+        _write_csv(pfaf_checks_df, metric_output_dir / "pfaf_cleaning_checks.csv", overwrite=bool(args.overwrite))
+        _write_csv(basin_conservation_df, metric_output_dir / "crosswalk_conservation_basin.csv", overwrite=bool(args.overwrite))
+        _write_csv(subbasin_conservation_df, metric_output_dir / "crosswalk_conservation_subbasin.csv", overwrite=bool(args.overwrite))
+        _write_csv(basin_reliability_df, metric_output_dir / "coverage_reliability_basin.csv", overwrite=bool(args.overwrite))
+        _write_csv(subbasin_reliability_df, metric_output_dir / "coverage_reliability_subbasin.csv", overwrite=bool(args.overwrite))
+        _write_csv(sensitivity_df, metric_output_dir / "projection_sensitivity_summary.csv", overwrite=bool(args.overwrite))
+        _write_csv(sample_df, metric_output_dir / "sample_audit_units.csv", overwrite=bool(args.overwrite))
+        _write_csv(spotcheck_df, metric_output_dir / "master_value_spotcheck.csv", overwrite=bool(args.overwrite))
+        _write_text(summary_md, metric_output_dir / "validation_summary.md", overwrite=bool(args.overwrite))
+
+        print(f"metric_slug: {metric_slug}")
+        print(f"output_dir: {metric_output_dir}")
+        print(f"pfaf_rows: {len(pfaf_checks_df)}")
+        print(f"basin_samples: {len(basin_samples)}")
+        print(f"subbasin_samples: {len(subbasin_samples)}")
+        print(f"sensitivity_rows: {len(sensitivity_df)}")
     return 0
 
 
