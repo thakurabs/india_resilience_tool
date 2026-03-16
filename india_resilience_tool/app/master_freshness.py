@@ -12,6 +12,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from india_resilience_tool.utils.processed_io import resolve_preferred_table_path
+
 
 @st.cache_data(ttl=300)
 def latest_processed_periods_mtime(processed_root_str: str, state: str) -> float:
@@ -54,9 +56,8 @@ def state_profile_files_missing(processed_root: Path, state: str, level: str) ->
     """Return True when required level-specific state profile files are missing."""
     level_norm = str(level or "district").strip().lower()
     state_root = Path(processed_root) / str(state)
-    required = [
+    required = (
         state_root / f"state_yearly_ensemble_stats_{level_norm}.csv",
         state_root / f"state_ensemble_stats_{level_norm}.csv",
-    ]
-    return any(not p.exists() for p in required)
-
+    )
+    return any(not resolve_preferred_table_path(p).exists() for p in required)

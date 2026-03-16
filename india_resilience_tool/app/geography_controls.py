@@ -71,7 +71,7 @@ def _build_admin_geography(
             or (not available_states)
         ):
             st.warning(
-                f"No processed data found under IRT_PROCESSED_ROOT={processed_root_resolved}"
+                f"No migrated processed data found under {processed_root_resolved}"
             )
             available_states = ["All"]
 

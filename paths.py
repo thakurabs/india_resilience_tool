@@ -77,6 +77,7 @@ class PathsConfig:
     district_basin_crosswalk_path: Path
     block_basin_crosswalk_path: Path
     base_output_root: Path
+    migrated_base_output_root: Path
 
 
 def _get_data_dir(repo_root: Path) -> Path:
@@ -129,6 +130,7 @@ def get_paths_config() -> PathsConfig:
         district_basin_crosswalk_path=data_dir / "district_basin_crosswalk.csv",
         block_basin_crosswalk_path=data_dir / "block_basin_crosswalk.csv",
         base_output_root=data_dir / "processed",
+        migrated_base_output_root=data_dir / "processed_parquet",
     )
 
 
@@ -188,7 +190,7 @@ def resolve_processed_root(
          - derived via get_paths_config().data_dir
 
     Returns:
-      Absolute resolved Path to processed root for the requested slug.
+      Absolute resolved Path to the legacy processed root for the requested slug.
     """
     env_root = os.getenv("IRT_PROCESSED_ROOT")
     if env_root:
@@ -203,6 +205,45 @@ def resolve_processed_root(
         data_dir = get_paths_config().data_dir
 
     return (data_dir / "processed" / slug).resolve()
+
+
+def resolve_migrated_processed_root(
+    slug: str,
+    *,
+    data_dir: Optional[Path] = None,
+    mode: ProcessedRootMode = "single",
+) -> Path:
+    """
+    Resolve the migrated processed root for a given index slug.
+
+    Contract:
+    1) If IRT_MIGRATED_PROCESSED_ROOT is set:
+       - mode == "single": use it as-is
+       - mode == "portfolio": append `/<slug>` unless it already points at that slug
+    2) Otherwise default to DATA_DIR/processed_parquet/<slug>
+    3) If `<resolved>/published` exists, return it for runtime serving
+
+    This resolver is isolated from the legacy `processed/` tree so rollback remains safe.
+    """
+    env_root = os.getenv("IRT_MIGRATED_PROCESSED_ROOT")
+    if env_root:
+        base_path = Path(env_root).expanduser()
+        if mode == "portfolio":
+            proc_root = base_path if base_path.name == slug else (base_path / slug)
+        else:
+            proc_root = base_path
+        resolved = proc_root.resolve()
+    else:
+        if data_dir is None:
+            data_dir = get_paths_config().data_dir
+        resolved = (data_dir / "processed_parquet" / slug).resolve()
+
+    if resolved.name == "published":
+        return resolved
+    published = resolved / "published"
+    if published.exists() and published.is_dir():
+        return published
+    return resolved
 
 
 def get_boundary_path(level: AdminLevel) -> Path:
@@ -280,3 +321,4 @@ BLOCK_SUBBASIN_CROSSWALK_PATH: Path = _CFG.block_subbasin_crosswalk_path
 DISTRICT_BASIN_CROSSWALK_PATH: Path = _CFG.district_basin_crosswalk_path
 BLOCK_BASIN_CROSSWALK_PATH: Path = _CFG.block_basin_crosswalk_path
 BASE_OUTPUT_ROOT: Path = _CFG.base_output_root
+MIGRATED_BASE_OUTPUT_ROOT: Path = _CFG.migrated_base_output_root

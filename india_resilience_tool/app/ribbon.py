@@ -23,6 +23,7 @@ from india_resilience_tool.config.variables import (
     get_bundles,
     get_metrics_for_bundle,
 )
+from india_resilience_tool.utils.processed_io import resolve_preferred_table_path
 from india_resilience_tool.viz.charts import PERIOD_ORDER, canonical_period_label, period_display_label
 from paths import get_master_csv_filename
 
@@ -67,10 +68,14 @@ def _hydro_outputs_available(processed_root: Path, level: str) -> bool:
 
 def _hydro_master_contract_ready(master_csv_path: Path, level: str) -> bool:
     """Return True when a hydro master CSV contains the canonical hydro ID columns."""
-    if not master_csv_path.exists():
+    master_path = resolve_preferred_table_path(master_csv_path)
+    if not master_path.exists():
         return False
     try:
-        cols = set(pd.read_csv(master_csv_path, nrows=0).columns)
+        if master_path.suffix.lower() == ".parquet":
+            cols = set(pd.read_parquet(master_path).columns)
+        else:
+            cols = set(pd.read_csv(master_path, nrows=0).columns)
     except Exception:
         return False
     if str(level).strip().lower() == "sub_basin":
@@ -225,7 +230,7 @@ def render_metric_ribbon(
             master_root.mkdir(parents=True, exist_ok=True)
 
             master_name = get_master_csv_filename(level)
-            master_csv_path = master_root / master_name
+            master_csv_path = resolve_preferred_table_path(master_root / master_name)
 
             def rebuild_master_csv_if_needed(
                 force: bool = False, attach_centroid_geojson: str | None = None
@@ -268,7 +273,7 @@ def render_metric_ribbon(
                         verbose=True,
                         level=level,
                     )
-                    if master_csv_path.exists():
+                    if resolve_preferred_table_path(master_csv_path).exists():
                         return True, "rebuilt"
                     if getattr(master_df, "empty", True):
                         return False, f"builder found no source rows for {level} under {master_root}"
@@ -297,7 +302,7 @@ def render_metric_ribbon(
             except Exception as e:
                 st.warning(f"Could not check master CSV freshness: {e}")
 
-            if not master_csv_path.exists():
+            if not resolve_preferred_table_path(master_csv_path).exists():
                 if level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
                     st.error(
                         f"Hydro boundary files are loaded, but no hydro processed outputs were found for "

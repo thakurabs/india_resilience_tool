@@ -45,6 +45,7 @@ import pandas as pd
 from paths import get_boundary_path
 
 from india_resilience_tool.data.hydro_loader import load_local_hydro
+from india_resilience_tool.utils.processed_io import write_table
 
 
 def _get_mp_module():
@@ -131,12 +132,24 @@ def _try_import_registries() -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 
 def _try_import_processed_root() -> Optional[Path]:
-    """Try to import BASE_OUTPUT_ROOT from paths.py."""
+    """Try to import the migrated processed root from paths.py."""
     try:
-        from paths import BASE_OUTPUT_ROOT
-        return Path(BASE_OUTPUT_ROOT)
+        from paths import MIGRATED_BASE_OUTPUT_ROOT
+        return Path(MIGRATED_BASE_OUTPUT_ROOT)
     except Exception:
         return None
+
+
+def _should_write_parquet_mirrors(target_path: Path) -> bool:
+    """Return True when parquet mirrors should be written for this target path."""
+    try:
+        from paths import MIGRATED_BASE_OUTPUT_ROOT
+
+        migrated_root = Path(MIGRATED_BASE_OUTPUT_ROOT).resolve()
+        target_resolved = Path(target_path).resolve()
+        return migrated_root == target_resolved or migrated_root in target_resolved.parents
+    except Exception:
+        return False
 
 
 # -----------------------------------------------------------------------------
@@ -1096,14 +1109,30 @@ def build_master_metrics(
             print()
             print("Writing output files...")
 
-        master.to_csv(outp, index=False)
-        state_model_df.to_csv(outp.parent / f"state_model_averages_{level}.csv", index=False)
-        state_ensemble_df.to_csv(outp.parent / f"state_ensemble_stats_{level}.csv", index=False)
-        state_yearly_model_df.to_csv(outp.parent / f"state_yearly_model_averages_{level}.csv", index=False)
-        state_yearly_ensemble_df.to_csv(outp.parent / f"state_yearly_ensemble_stats_{level}.csv", index=False)
+        master_csv = outp.with_suffix(".csv")
+        state_model_csv = outp.parent / f"state_model_averages_{level}.csv"
+        state_ensemble_csv = outp.parent / f"state_ensemble_stats_{level}.csv"
+        state_yearly_model_csv = outp.parent / f"state_yearly_model_averages_{level}.csv"
+        state_yearly_ensemble_csv = outp.parent / f"state_yearly_ensemble_stats_{level}.csv"
+
+        write_table(master, master_csv)
+        write_table(state_model_df, state_model_csv)
+        write_table(state_ensemble_df, state_ensemble_csv)
+        write_table(state_yearly_model_df, state_yearly_model_csv)
+        write_table(state_yearly_ensemble_df, state_yearly_ensemble_csv)
+
+        wrote_parquet = False
+        if _should_write_parquet_mirrors(outp.parent):
+            write_table(master, master_csv.with_suffix(".parquet"))
+            write_table(state_model_df, state_model_csv.with_suffix(".parquet"))
+            write_table(state_ensemble_df, state_ensemble_csv.with_suffix(".parquet"))
+            write_table(state_yearly_model_df, state_yearly_model_csv.with_suffix(".parquet"))
+            write_table(state_yearly_ensemble_df, state_yearly_ensemble_csv.with_suffix(".parquet"))
+            wrote_parquet = True
 
         if verbose:
-            print(f"  Master CSV -> {outp}")
+            suffix_note = " (+ parquet mirror)" if wrote_parquet else ""
+            print(f"  Master table -> {master_csv}{suffix_note}")
             print(f"  Rows: {len(master)}, Columns: {len(master.columns)}")
 
     elapsed = time.time() - start_time

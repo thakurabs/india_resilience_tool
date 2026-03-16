@@ -78,3 +78,15 @@ def test_load_master_csv_encoding_fallback(tmp_path: Path) -> None:
     df = load_master_csv(p)
     assert df.loc[0, "name"] == "café"
     assert int(df.loc[0, "value"]) == 1
+
+
+def test_load_master_csv_prefers_parquet_sibling(tmp_path: Path) -> None:
+    csv_path = tmp_path / "master_metrics_by_district.csv"
+    parquet_path = tmp_path / "master_metrics_by_district.parquet"
+
+    pd.DataFrame({"district": ["A"], "value": [1.0]}).to_csv(csv_path, index=False)
+    pd.DataFrame({"district": ["B"], "value": [2.0]}).to_parquet(parquet_path, index=False)
+
+    df = load_master_csv(csv_path)
+    assert df.loc[0, "district"] == "B"
+    assert float(df.loc[0, "value"]) == 2.0

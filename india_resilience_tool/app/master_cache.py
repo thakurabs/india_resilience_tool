@@ -46,8 +46,8 @@ def make_load_master_and_schema_fn(
                 entry["by_metric"],
             )
 
-        with perf_section("master: read csv"):
-            with st.spinner("Loading master CSV..."):
+        with perf_section("master: read table"):
+            with st.spinner("Loading master table..."):
                 df_local = load_master_csv(str(master_path))
 
         with perf_section("master: normalize columns"):
@@ -66,4 +66,3 @@ def make_load_master_and_schema_fn(
         return df_local, schema_items_local, metrics_local, by_metric_local
 
     return _load_master_and_schema
-

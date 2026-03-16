@@ -23,6 +23,8 @@ from typing import Any, Iterable, Optional, Union
 
 import pandas as pd
 
+from india_resilience_tool.utils.processed_io import read_table, resolve_preferred_table_path
+
 PathLike = Union[str, Path]
 
 
@@ -73,11 +75,14 @@ def read_csv_robust(
 
 def load_master_csv(path: PathLike) -> pd.DataFrame:
     """
-    Load the master metrics CSV.
+    Load the master metrics table from Parquet or CSV.
 
-    Intentionally thin wrapper around read_csv_robust().
+    The function name is preserved for runtime compatibility.
     """
-    return read_csv_robust(path)
+    resolved = resolve_preferred_table_path(Path(path))
+    if resolved.suffix.lower() == ".csv":
+        return read_csv_robust(resolved)
+    return read_table(resolved)
 
 
 def normalize_master_columns(df: pd.DataFrame) -> pd.DataFrame:

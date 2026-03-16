@@ -25,7 +25,7 @@ def run_app() -> None:
         RIVER_REACHES_PATH,
         RIVER_SUBBASIN_DIAGNOSTICS_PATH,
         SUBBASINS_PATH,
-        resolve_processed_root,
+        resolve_migrated_processed_root,
     )
 
     from india_resilience_tool.app.geo_cache import (
@@ -357,7 +357,7 @@ def run_app() -> None:
         sel_placeholder=SEL_PLACEHOLDER,
         data_dir=DATA_DIR,
         pilot_state=PILOT_STATE,
-        resolve_processed_root_fn=resolve_processed_root,
+        resolve_processed_root_fn=resolve_migrated_processed_root,
         attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
         master_needs_rebuild_fn=master_needs_rebuild,
         state_profile_files_missing_fn=state_profile_files_missing,

@@ -143,7 +143,7 @@ All boundary GeoJSONs are expected in `EPSG:4326`.
 
 ### Processed outputs layout
 
-Processed outputs live under:
+Legacy processed outputs used by the older dashboard live under:
 
 ```text
 IRT_DATA_DIR/
@@ -151,36 +151,54 @@ IRT_DATA_DIR/
     └── {metric_slug}/
 ```
 
-#### Admin layout
+Migrated Parquet-serving outputs live under a separate sibling root by default:
 
 ```text
-processed/{metric_slug}/{state}/
-├── master_metrics_by_district.csv
-├── master_metrics_by_block.csv
-├── state_model_averages_district.csv
-├── state_ensemble_stats_district.csv
-├── state_yearly_model_averages_district.csv
-├── state_yearly_ensemble_stats_district.csv
-├── state_model_averages_block.csv
-├── state_ensemble_stats_block.csv
-├── state_yearly_model_averages_block.csv
-├── state_yearly_ensemble_stats_block.csv
-├── districts/
-└── blocks/
+IRT_DATA_DIR/
+└── processed_parquet/
+    └── {metric_slug}/
 ```
 
-#### Hydro layout
+The migrated dashboard reads from `processed_parquet/{metric_slug}/published/` when present.
+The legacy `processed/` tree is preserved as a bootstrap/fallback source for the older dashboard
+and should remain untouched by migrated Parquet outputs.
+
+#### Migrated layout
 
 ```text
-processed/{metric_slug}/hydro/
-├── master_metrics_by_basin.csv
-├── master_metrics_by_sub_basin.csv
-├── basins/
-│   ├── {basin}/{model}/{scenario}/{basin}_yearly.csv
-│   └── ensembles/{basin}/{scenario}/{basin}_yearly_ensemble.csv
-└── sub_basins/
-    ├── {basin}/{sub_basin}/{model}/{scenario}/{sub_basin}_yearly.csv
-    └── ensembles/{basin}/{sub_basin}/{scenario}/{sub_basin}_yearly_ensemble.csv
+processed_parquet/{metric_slug}/
+├── build/                      # optional staging root for publish flows
+├── published/                  # runtime-served root when present
+│   ├── {state}/
+│   │   ├── master_metrics_by_district.parquet
+│   │   ├── master_metrics_by_district.csv
+│   │   ├── master_metrics_by_block.parquet
+│   │   ├── master_metrics_by_block.csv
+│   │   ├── state_*.parquet
+│   │   ├── state_*.csv
+│   │   ├── districts/
+│   │   │   └── ensembles/yearly/scenario=.../data.parquet
+│   │   └── blocks/
+│   │       └── ensembles/yearly/scenario=.../data.parquet
+│   └── hydro/
+│       ├── master_metrics_by_basin.parquet
+│       ├── master_metrics_by_basin.csv
+│       ├── master_metrics_by_sub_basin.parquet
+│       ├── master_metrics_by_sub_basin.csv
+│       ├── basins/ensembles/yearly/scenario=.../data.parquet
+│       └── sub_basins/ensembles/yearly/scenario=.../data.parquet
+└── archive/<timestamp>/        # previous published artifacts replaced by republish
+```
+
+CSV mirrors remain in `published/` during transition so migrated readers can still fall back
+format-wise without touching the legacy tree. The publish command also preserves the copied
+per-unit/per-model CSV tree under `published/`.
+
+#### Legacy layout preserved for the older dashboard
+
+```text
+processed/{metric_slug}/{state}/...
+processed/{metric_slug}/hydro/...
 ```
 
 ## Common commands
@@ -195,11 +213,24 @@ python -m tools.pipeline.compute_indices_multiprocess --level basin --metrics ta
 python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics tas_annual_mean
 ```
 
-### Rebuild master CSVs
+### Rebuild master tables
 
 ```bash
 python -m tools.pipeline.build_master_metrics
 ```
+
+This now writes CSV outputs plus Parquet mirrors for masters and state summaries.
+Parquet mirrors are only written when the output path is under `processed_parquet/`.
+
+### Publish processed outputs
+
+```bash
+python -m tools.pipeline.publish_processed_outputs --help
+python -m tools.pipeline.publish_processed_outputs --metrics tas_annual_mean
+```
+
+By default this command reads legacy CSV inputs from `IRT_DATA_DIR/processed` and writes
+migrated outputs to `IRT_DATA_DIR/processed_parquet`.
 
 ### Hydro boundary preparation
 

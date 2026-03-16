@@ -29,6 +29,7 @@ from india_resilience_tool.data.discovery import (
     discover_hydro_yearly_file,
     discover_state_yearly_file,
 )
+from india_resilience_tool.utils.processed_io import read_table
 
 PathLike = Union[str, Path]
 AdminLevel = Literal["district", "block", "basin", "sub_basin"]
@@ -36,20 +37,13 @@ AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 def read_yearly_csv_robust(path: PathLike) -> pd.DataFrame:
     """
-    Read a yearly CSV with encoding fallbacks.
+    Read a yearly table from Parquet or CSV.
     """
     fpath = Path(path)
     if not fpath.exists():
         return pd.DataFrame()
-
-    for enc in (None, "ISO-8859-1"):
-        try:
-            return pd.read_csv(fpath, encoding=enc) if enc else pd.read_csv(fpath)
-        except Exception:
-            pass
-
     try:
-        return pd.read_csv(fpath, encoding="utf-8", errors="replace")
+        return read_table(fpath)
     except Exception:
         return pd.DataFrame()
 
@@ -314,7 +308,16 @@ def load_district_yearly(
     if not f:
         return pd.DataFrame()
 
-    df = read_yearly_csv_robust(f)
+    if Path(f).is_dir():
+        df = read_table(
+            Path(f),
+            filters=[
+                ("scenario", "==", str(scenario_name).strip()),
+                ("district", "==", str(district_display).strip()),
+            ],
+        )
+    else:
+        df = read_yearly_csv_robust(f)
     if df.empty:
         return pd.DataFrame()
 
@@ -386,7 +389,17 @@ def load_block_yearly(
     if not f:
         return pd.DataFrame()
 
-    df = read_yearly_csv_robust(f)
+    if Path(f).is_dir():
+        df = read_table(
+            Path(f),
+            filters=[
+                ("scenario", "==", str(scenario_name).strip()),
+                ("district", "==", str(district_display).strip()),
+                ("block", "==", str(block_display).strip()),
+            ],
+        )
+    else:
+        df = read_yearly_csv_robust(f)
     if df.empty:
         return pd.DataFrame()
 
@@ -438,7 +451,16 @@ def load_hydro_yearly(
     if not f:
         return pd.DataFrame()
 
-    df = read_yearly_csv_robust(f)
+    if Path(f).is_dir():
+        filters: list[tuple[str, str, str]] = [
+            ("scenario", "==", str(scenario_name).strip()),
+            ("basin", "==", str(basin_display).strip()),
+        ]
+        if level == "sub_basin":
+            filters.append(("sub_basin", "==", str(subbasin_display or "").strip()))
+        df = read_table(Path(f), filters=filters)
+    else:
+        df = read_yearly_csv_robust(f)
     if df.empty:
         return pd.DataFrame()
 

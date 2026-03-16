@@ -63,6 +63,63 @@ def _read_parquet_dataset(
     return table.to_pandas()
 
 
+def _read_csv_robust(
+    path: Path,
+    *,
+    encoding_priority: Optional[Sequence[str]] = None,
+    **read_csv_kwargs: Any,
+) -> pd.DataFrame:
+    """Read a CSV with small encoding fallbacks."""
+    if encoding_priority is None:
+        encoding_priority = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
+
+    try:
+        return pd.read_csv(path, **read_csv_kwargs)
+    except UnicodeDecodeError:
+        last_err: Optional[UnicodeDecodeError] = None
+        for enc in encoding_priority:
+            try:
+                return pd.read_csv(path, encoding=enc, **read_csv_kwargs)
+            except UnicodeDecodeError as err:
+                last_err = err
+                continue
+        if last_err is not None:
+            raise last_err
+        raise
+
+
+def resolve_preferred_table_path(path: Path) -> Path:
+    """
+    Prefer a Parquet sibling when callers pass a legacy CSV path.
+
+    Examples:
+      - `/x/master.csv` -> `/x/master.parquet` when present, otherwise `/x/master.csv`
+      - `/x/master.parquet` -> `/x/master.parquet` when present, otherwise `/x/master.csv`
+      - `/x/yearly` -> `/x/yearly` when it is a dataset directory
+    """
+    p = Path(path)
+    if p.is_dir():
+        return p
+
+    suffixes = tuple(s.lower() for s in p.suffixes)
+    candidates: list[Path] = []
+
+    if suffixes[-2:] == (".csv", ".gz"):
+        stem_path = p.with_suffix("").with_suffix("")
+        candidates.extend([stem_path.with_suffix(".parquet"), p])
+    elif suffixes[-1:] == (".csv",):
+        candidates.extend([p.with_suffix(".parquet"), p])
+    elif suffixes[-1:] == (".parquet",):
+        candidates.extend([p, p.with_suffix(".csv")])
+    else:
+        candidates.extend([p, p.with_suffix(".parquet"), p.with_suffix(".csv")])
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return p
+
+
 def read_table(
     path: Path,
     *,
@@ -76,7 +133,7 @@ def read_table(
     - Parquet dataset dirs can be filtered via `filters` (pyarrow.dataset filter triples).
     - CSV ignores `filters` and is read with pandas.read_csv.
     """
-    p = Path(path)
+    p = resolve_preferred_table_path(Path(path))
     if not p.exists():
         return pd.DataFrame()
 
@@ -88,4 +145,38 @@ def read_table(
         return pd.read_parquet(p, columns=list(columns) if columns else None)
 
     # CSV / CSV.GZ
-    return pd.read_csv(p, **read_csv_kwargs)
+    return _read_csv_robust(p, **read_csv_kwargs)
+
+
+def write_table(df: pd.DataFrame, path: Path, *, index: bool = False) -> None:
+    """Write a DataFrame to either Parquet or CSV based on the target suffix."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if target.suffix.lower() == ".parquet":
+        try:
+            df.to_parquet(target, index=index)
+        except ImportError as err:
+            raise RuntimeError(
+                "Writing Parquet requires pyarrow or fastparquet in the active environment."
+            ) from err
+        return
+
+    df.to_csv(target, index=index)
+
+
+def write_partitioned_dataset(
+    df: pd.DataFrame,
+    root: Path,
+    *,
+    partition_cols: Sequence[str],
+) -> None:
+    """Write a partitioned Parquet dataset rooted at ``root``."""
+    out_root = Path(root)
+    out_root.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        df.to_parquet(out_root, partition_cols=list(partition_cols), index=False)
+    except ImportError as err:
+        raise RuntimeError(
+            "Writing Parquet datasets requires pyarrow or fastparquet in the active environment."
+        ) from err

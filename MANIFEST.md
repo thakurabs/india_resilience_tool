@@ -28,7 +28,8 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 |---------|---------|
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
-| `python -m tools.pipeline.build_master_metrics` | Rebuild master CSVs |
+| `python -m tools.pipeline.build_master_metrics` | Rebuild master tables and state summaries; Parquet mirrors are written only under the migrated root |
+| `python -m tools.pipeline.publish_processed_outputs --help` | Publish legacy CSV/build outputs from `processed/` into migrated `processed_parquet/.../published` |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics <slug>` | Build district outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level block --metrics <slug>` | Build block outputs |
@@ -51,7 +52,8 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 |----------|---------|---------|
 | `IRT_PILOT_STATE` | `Telangana` | Default admin state in the UI |
 | `IRT_DATA_DIR` | resolved in `paths.py` | Base directory for boundaries, crosswalks, and processed outputs |
-| `IRT_PROCESSED_ROOT` | `IRT_DATA_DIR/processed/{metric}` | Optional processed-root override |
+| `IRT_PROCESSED_ROOT` | `IRT_DATA_DIR/processed/{metric}` | Optional legacy processed-root override used by older workflows |
+| `IRT_MIGRATED_PROCESSED_ROOT` | `IRT_DATA_DIR/processed_parquet/{metric}` | Optional migrated processed-root override used by the migrated dashboard/runtime |
 | `IRT_DEBUG` | `0` | Enable debug/perf output |
 
 ## Top-level repo map
@@ -144,7 +146,7 @@ Notes:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `master_builder.py` | Build master CSVs, including hydro master enrichment |
+| `master_builder.py` | Build master tables and state summaries, including Parquet mirrors |
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 
 #### `india_resilience_tool/compute/tests/`
@@ -171,12 +173,12 @@ Notes:
 | `adm2_loader.py` | District boundary loading, normalization, and FeatureCollection builders |
 | `adm3_loader.py` | Block boundary loading and normalization |
 | `crosswalks.py` | Polygon crosswalk validation and context builders for district/block ↔ basin/sub-basin |
-| `discovery.py` | Processed-artifact discovery helpers for yearly files and outputs |
+| `discovery.py` | Processed-artifact discovery helpers for yearly files, datasets, and state summaries |
 | `hydro_loader.py` | Basin/sub-basin loading, validation, keys, and render simplification |
 | `river_loader.py` | Cleaned river-display loading, validation, reconciliation, diagnostics, and hydro filtering helpers |
 | `river_topology.py` | Streamlit-free river reach validation and hydro-side river summary builders |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
-| `master_loader.py` | Robust master CSV loading, normalization, and schema parsing |
+| `master_loader.py` | Robust master table loading, normalization, and schema parsing across Parquet/CSV |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
 | `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |
 
@@ -186,7 +188,7 @@ Notes:
 |------|---------|
 | `__init__.py` | Package marker |
 | `naming.py` | Name normalization, aliasing, and join-key helpers |
-| `processed_io.py` | Lightweight Parquet/CSV I/O helpers for processed outputs |
+| `processed_io.py` | Lightweight Parquet/CSV read-write helpers for processed outputs |
 
 ### `india_resilience_tool/viz/`
 
@@ -269,6 +271,7 @@ Notes:
 | `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
 | `compute_indices_multiprocess.py` | Main multi-process compute pipeline for admin and hydro |
+| `publish_processed_outputs.py` | Publish legacy/build outputs into `published/` and archive replaced artifacts |
 
 ## Test inventory
 
@@ -413,7 +416,7 @@ python -m pytest -q
 
 ### Processed output layout
 
-#### Admin
+#### Legacy admin source tree
 
 ```text
 processed/{metric_slug}/{state}/
@@ -435,7 +438,7 @@ Identifier columns:
 - district master: `state`, `district`
 - block master: `state`, `district`, `block`
 
-#### Hydro
+#### Legacy hydro source tree
 
 ```text
 processed/{metric_slug}/hydro/
@@ -451,6 +454,27 @@ processed/{metric_slug}/hydro/
 
 Identifier columns:
 - basin master: `basin_id`, `basin_name`
+
+#### Migrated serving tree
+
+```text
+processed_parquet/{metric_slug}/
+├── build/
+├── published/
+│   ├── {state}/
+│   │   ├── master_metrics_by_*.parquet
+│   │   ├── master_metrics_by_*.csv
+│   │   ├── state_*.parquet
+│   │   ├── state_*.csv
+│   │   ├── districts/ensembles/yearly/scenario=.../data.parquet
+│   │   └── blocks/ensembles/yearly/scenario=.../data.parquet
+│   └── hydro/
+│       ├── master_metrics_by_*.parquet
+│       ├── master_metrics_by_*.csv
+│       ├── basins/ensembles/yearly/scenario=.../data.parquet
+│       └── sub_basins/ensembles/yearly/scenario=.../data.parquet
+└── archive/<timestamp>/
+```
 - sub-basin master: `basin_id`, `basin_name`, `subbasin_id`, `subbasin_code`, `subbasin_name`
 
 ### Crosswalk artifact

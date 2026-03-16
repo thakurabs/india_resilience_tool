@@ -40,6 +40,8 @@ from typing import Any, Callable, List, Mapping, Optional, Sequence
 import numpy as np
 import pandas as pd
 
+from paths import resolve_migrated_processed_root
+
 
 # =============================================================================
 # Portfolio Badge & Summary
@@ -678,13 +680,7 @@ def build_comparison_df(
 
     # Helper functions
     def _resolve_proc_root_for_slug(slug: str) -> Path:
-        env_root = os.getenv("IRT_PROCESSED_ROOT")
-        if env_root:
-            base_path = Path(env_root)
-            if base_path.name == slug:
-                return base_path.resolve()
-            return (base_path / slug).resolve()
-        return (data_dir / "processed" / slug).resolve()
+        return resolve_migrated_processed_root(str(slug), data_dir=data_dir, mode="portfolio")
 
     def _resolve_state_dir(proc_root: Path, state_name: str) -> str:
         """

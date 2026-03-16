@@ -58,3 +58,62 @@ def test_resolve_processed_root_env_portfolio_mode_uses_slug_dir_when_already_po
 
     out = resolve_processed_root(slug, data_dir=tmp_path, mode="portfolio")
     assert out == env_root.resolve()
+
+
+def test_resolve_processed_root_keeps_legacy_tree_even_when_published_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
+    monkeypatch.delenv("IRT_DATA_DIR", raising=False)
+
+    from india_resilience_tool.config.paths import resolve_processed_root
+
+    slug = "days_gt_32C"
+    published = tmp_path / "processed" / slug / "published"
+    published.mkdir(parents=True, exist_ok=True)
+
+    out = resolve_processed_root(slug, data_dir=tmp_path, mode="single")
+    assert out == (tmp_path / "processed" / slug).resolve()
+
+
+def test_root_paths_resolve_processed_root_keeps_legacy_tree_even_when_published_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
+    monkeypatch.delenv("IRT_DATA_DIR", raising=False)
+
+    from paths import resolve_processed_root
+
+    slug = "days_gt_32C"
+    published = tmp_path / "processed" / slug / "published"
+    published.mkdir(parents=True, exist_ok=True)
+
+    out = resolve_processed_root(slug, data_dir=tmp_path, mode="single")
+    assert out == (tmp_path / "processed" / slug).resolve()
+
+
+def test_resolve_migrated_processed_root_prefers_published(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("IRT_MIGRATED_PROCESSED_ROOT", raising=False)
+    monkeypatch.delenv("IRT_DATA_DIR", raising=False)
+
+    from india_resilience_tool.config.paths import resolve_migrated_processed_root
+
+    slug = "days_gt_32C"
+    published = tmp_path / "processed_parquet" / slug / "published"
+    published.mkdir(parents=True, exist_ok=True)
+
+    out = resolve_migrated_processed_root(slug, data_dir=tmp_path, mode="single")
+    assert out == published.resolve()
+
+
+def test_root_paths_resolve_migrated_processed_root_env_portfolio_appends_slug(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from paths import resolve_migrated_processed_root
+
+    slug = "days_gt_32C"
+    env_root = tmp_path / "processed_parquet_base"
+    monkeypatch.setenv("IRT_MIGRATED_PROCESSED_ROOT", str(env_root))
+
+    out = resolve_migrated_processed_root(slug, data_dir=tmp_path, mode="portfolio")
+    assert out == (env_root / slug).resolve()

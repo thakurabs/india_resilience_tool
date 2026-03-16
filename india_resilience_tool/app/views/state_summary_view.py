@@ -7,6 +7,8 @@ from typing import Any, Mapping, Optional
 
 import pandas as pd
 
+from india_resilience_tool.utils.processed_io import read_table
+
 
 def _normalize_name(value: str) -> str:
     return str(value or "").strip().lower()
@@ -222,6 +224,7 @@ def render_state_summary_view(
     from india_resilience_tool.analysis.timeseries import load_state_yearly
     from india_resilience_tool.data.discovery import (
         discover_state_period_ensemble_file,
+        discover_state_yearly_file,
         discover_state_yearly_model_file,
     )
 
@@ -277,11 +280,16 @@ def render_state_summary_view(
                 st.caption("Insufficient states to rank")
 
     with st.expander("Trend over time (state average)", expanded=False):
-        expected_yearly = processed_root / selected_state / f"state_yearly_ensemble_stats_{level_norm}.csv"
-        if not expected_yearly.exists():
+        expected_yearly = discover_state_yearly_file(
+            ts_root=processed_root,
+            state_dir=selected_state,
+            varcfg=None,
+            level=level_norm,
+        )
+        if expected_yearly is None or not Path(expected_yearly).exists():
             st.info(
                 "State yearly ensemble data not available (missing file). "
-                f"Expected: {expected_yearly}. Rebuild master dataset in this mode."
+                f"Expected state yearly summary under {processed_root / selected_state}. Rebuild or republish this metric."
             )
         else:
             from india_resilience_tool.viz.charts import create_trend_figure_for_index_plotly
@@ -338,7 +346,7 @@ def render_state_summary_view(
                 mdf = pd.DataFrame()
                 if model_file is not None and (show_models or needs_band_fallback):
                     try:
-                        mdf = pd.read_csv(model_file)
+                        mdf = read_table(Path(model_file))
                     except Exception:
                         mdf = pd.DataFrame()
 
@@ -483,14 +491,13 @@ def render_state_summary_view(
 
     with st.expander("Scenario comparison (period-mean)", expanded=False):
         f = discover_state_period_ensemble_file(ts_root=processed_root, state_dir=selected_state, level=level_norm)
-        expected_period = processed_root / selected_state / f"state_ensemble_stats_{level_norm}.csv"
-        if f is None or not expected_period.exists():
+        if f is None or not Path(f).exists():
             st.info(
                 "Scenario comparison not available (missing file). "
-                f"Expected: {expected_period}. Rebuild master dataset in this mode."
+                f"Expected state comparison summary under {processed_root / selected_state}. Rebuild or republish this metric."
             )
         else:
-            sdf = pd.read_csv(f)
+            sdf = read_table(Path(f))
             y_col = "ensemble_median" if str(sel_stat).strip().lower() == "median" and "ensemble_median" in sdf.columns else "ensemble_mean"
             if sdf.empty or not {"scenario", "period", y_col}.issubset(set(sdf.columns)):
                 st.info(

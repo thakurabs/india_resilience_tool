@@ -8,11 +8,12 @@ discovery) by accepting the orchestrator's existing loader/filter callables.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional
 
 import pandas as pd
+
+from paths import resolve_migrated_processed_root
 
 
 def make_district_case_study_builder(
@@ -69,17 +70,7 @@ def make_district_case_study_builder(
             if not varcfg:
                 continue
 
-            # Determine processed root for this index, similar to PROCESSED_ROOT logic
-            env_root = os.getenv("IRT_PROCESSED_ROOT")
-            if env_root:
-                base_path = Path(env_root)
-                if base_path.name.lower() == str(slug).lower():
-                    proc_root = base_path
-                else:
-                    proc_root = base_path / str(slug)
-            else:
-                proc_root = data_dir / "processed" / str(slug)
-            proc_root = proc_root.resolve()
+            proc_root = resolve_migrated_processed_root(str(slug), data_dir=data_dir, mode="portfolio")
 
             master_path = proc_root / pilot_state / "master_metrics_by_district.csv"
             if not master_path.exists():

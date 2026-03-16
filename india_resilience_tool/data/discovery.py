@@ -25,8 +25,18 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence, Union
 
+from india_resilience_tool.utils.processed_io import resolve_preferred_table_path
+
 PathLike = Union[str, Path]
 AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+
+
+def _parquet_dataset_exists(path: Path) -> bool:
+    """Return True when ``path`` looks like a Parquet dataset directory."""
+    try:
+        return path.is_dir() and any(p.name == "data.parquet" for p in path.rglob("data.parquet"))
+    except Exception:
+        return False
 
 
 def slugify_fs(text: str) -> str:
@@ -115,6 +125,10 @@ def discover_district_yearly_file(
         aliased = aliases[disp_norm]
         name_variants.extend(_generate_name_variants(aliased))
         name_variants = _dedupe(name_variants)
+
+    parquet_dataset = base / "districts" / "ensembles" / "yearly"
+    if _parquet_dataset_exists(parquet_dataset):
+        return parquet_dataset
 
     # 1) Try NEW structure: {state}/districts/ensembles/{district}/{scenario}/
     ensembles_path = base / "districts" / "ensembles"
@@ -220,7 +234,12 @@ def discover_block_yearly_file(
     ts_root_p = Path(ts_root)
     base = ts_root_p / state_dir / "blocks" / "ensembles"
     if not base.exists():
-        return None
+        parquet_dataset = ts_root_p / state_dir / "blocks" / "ensembles" / "yearly"
+        return parquet_dataset if _parquet_dataset_exists(parquet_dataset) else None
+
+    parquet_dataset = ts_root_p / state_dir / "blocks" / "ensembles" / "yearly"
+    if _parquet_dataset_exists(parquet_dataset):
+        return parquet_dataset
 
     scenario = str(scenario_name).strip()
     
@@ -313,7 +332,8 @@ def discover_state_yearly_file(
                 return f
 
     f_level = ts_root_p / state_dir / f"state_yearly_ensemble_stats_{level}.csv"
-    return f_level if f_level.exists() else None
+    resolved = resolve_preferred_table_path(f_level)
+    return resolved if resolved.exists() else None
 
 
 def discover_hydro_yearly_file(
@@ -328,6 +348,10 @@ def discover_hydro_yearly_file(
     root = Path(ts_root) / "hydro"
     if not root.exists():
         return None
+
+    dataset_root = root / ("sub_basins" if level == "sub_basin" else "basins") / "ensembles" / "yearly"
+    if _parquet_dataset_exists(dataset_root):
+        return dataset_root
 
     scenario = str(scenario_name).strip()
     basin_variants = _generate_name_variants(basin_display)
@@ -383,7 +407,8 @@ def discover_state_yearly_model_file(
 ) -> Optional[Path]:
     """Discover state yearly model averages CSV for the given level."""
     f = Path(ts_root) / state_dir / f"state_yearly_model_averages_{level}.csv"
-    return f if f.exists() else None
+    resolved = resolve_preferred_table_path(f)
+    return resolved if resolved.exists() else None
 
 
 def discover_state_period_ensemble_file(
@@ -394,7 +419,8 @@ def discover_state_period_ensemble_file(
 ) -> Optional[Path]:
     """Discover state period ensemble stats CSV for the given level."""
     f = Path(ts_root) / state_dir / f"state_ensemble_stats_{level}.csv"
-    return f if f.exists() else None
+    resolved = resolve_preferred_table_path(f)
+    return resolved if resolved.exists() else None
 
 
 def discover_district_model_yearly_files(

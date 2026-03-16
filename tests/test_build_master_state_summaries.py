@@ -90,6 +90,7 @@ def test_build_master_metrics_writes_level_specific_state_files(tmp_path: Path, 
     assert (state_root / "state_yearly_ensemble_stats_district.csv").exists()
     assert not (state_root / "state_model_averages.csv").exists()
     assert not (state_root / "state_ensemble_stats.csv").exists()
+    assert not (state_root / "master_metrics_by_district.parquet").exists()
 
 
 def test_build_master_metrics_writes_level_specific_state_files_block(tmp_path: Path, monkeypatch) -> None:
@@ -120,6 +121,35 @@ def test_build_master_metrics_writes_level_specific_state_files_block(tmp_path: 
     assert (state_root / "state_ensemble_stats_block.csv").exists()
     assert (state_root / "state_yearly_model_averages_block.csv").exists()
     assert (state_root / "state_yearly_ensemble_stats_block.csv").exists()
+
+
+def test_build_master_metrics_writes_parquet_only_under_migrated_root(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "processed_parquet"
+    state_root = root / "tas_metric" / "Telangana"
+    state_root.mkdir(parents=True)
+
+    all_rows = [
+        {"state": "Telangana", "district": "D1", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0},
+    ]
+    yearly_rows = [
+        {"state": "Telangana", "district": "D1", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0},
+    ]
+
+    monkeypatch.setattr(bmm, "_collect_district_data", lambda *args, **kwargs: (all_rows, yearly_rows))
+    monkeypatch.setattr(bmm, "_build_wide_master", lambda *args, **kwargs: pd.DataFrame([{"state": "Telangana", "district": "D1"}]))
+    monkeypatch.setattr("paths.MIGRATED_BASE_OUTPUT_ROOT", root)
+
+    outp = state_root / "master_metrics_by_district.csv"
+    bmm.build_master_metrics(
+        output_root=str(root / "tas_metric"),
+        state="Telangana",
+        out_path=str(outp),
+        level="district",
+        verbose=False,
+    )
+
+    assert (state_root / "master_metrics_by_district.parquet").exists()
+    assert (state_root / "state_ensemble_stats_district.parquet").exists()
 
 
 def test_build_wide_master_uses_metric_col_name_and_does_not_error() -> None:
