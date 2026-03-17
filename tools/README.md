@@ -5,6 +5,30 @@ but are intentionally kept out of the runtime package.
 
 Run these from the **repo root** so imports like `paths.py` resolve correctly.
 
+## Canonical runner
+
+The recommended entrypoint for common workflows is:
+
+```bash
+python -m tools.runs.prepare_dashboard --help
+```
+
+Examples:
+
+```bash
+python -m tools.runs.prepare_dashboard aqueduct --overwrite
+```
+
+```bash
+python -m tools.runs.prepare_dashboard climate-hazards --level all --state Telangana --overwrite
+```
+
+```bash
+python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite --dry-run
+```
+
+For the full command catalog, see [`../docs/command_catalog.md`](../docs/command_catalog.md).
+
 ## Pipeline
 
 | Script | Purpose | Run |

@@ -253,6 +253,14 @@ processed/aq_water_depletion/{state}/master_metrics_by_block.csv
 
 ## Common commands
 
+The canonical operational runner is now:
+
+```bash
+python -m tools.runs.prepare_dashboard --help
+```
+
+For a single command reference, see [`docs/command_catalog.md`](docs/command_catalog.md).
+
 ### Build or refresh processed outputs
 
 ```bash
@@ -267,6 +275,18 @@ python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metric
 
 ```bash
 python -m tools.pipeline.build_master_metrics
+```
+
+### Prepare the dashboard package with the canonical runner
+
+```bash
+python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite
+```
+
+Preview first:
+
+```bash
+python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite --dry-run
 ```
 
 ### Hydro boundary preparation

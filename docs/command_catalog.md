@@ -1,0 +1,162 @@
+# Command Catalog
+
+This file is the single source of truth for common operational commands in IRT.
+
+The recommended path is the new runner:
+
+```bash
+python -m tools.runs.prepare_dashboard --help
+```
+
+Run it from the repo root with the correct Conda environment active.
+
+## Canonical runner
+
+### List available bundles and steps
+
+```bash
+python -m tools.runs.prepare_dashboard list
+```
+
+### Preview an Aqueduct run without executing anything
+
+```bash
+python -m tools.runs.prepare_dashboard aqueduct --dry-run --overwrite
+```
+
+### Run the full Aqueduct workflow
+
+```bash
+python -m tools.runs.prepare_dashboard aqueduct --overwrite
+```
+
+Default bundle contents:
+- district crosswalk
+- block crosswalk
+- hydro crosswalk
+- admin masters
+- hydro masters
+- Aqueduct validation
+
+Optional raw baseline prep:
+
+```bash
+python -m tools.runs.prepare_dashboard aqueduct --prepare-baseline --source-gdb /path/to/Aq40_Y2023D07M05.gdb --baseline-csv /path/to/Aqueduct40_baseline_annual_y2023m07d05.csv --overwrite
+```
+
+### Run climate hazard processing
+
+```bash
+python -m tools.runs.prepare_dashboard climate-hazards --level all --state Telangana --overwrite
+```
+
+Notes:
+- `--level all` expands to `district`, `block`, `basin`, and `sub_basin`
+- if no `--state` is passed for admin levels, the runner defaults to `Telangana`
+- the runner orchestrates:
+  - `tools.pipeline.compute_indices_multiprocess`
+  - `tools.pipeline.build_master_metrics`
+
+### Prepare the dashboard package end to end
+
+```bash
+python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite
+```
+
+Optional validation tests at the end:
+
+```bash
+python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite --include-pytest
+```
+
+### Run validation only
+
+```bash
+python -m tools.runs.prepare_dashboard validate --overwrite --include-pytest
+```
+
+### Run a single step
+
+Examples:
+
+```bash
+python -m tools.runs.prepare_dashboard aqueduct-block-crosswalk --overwrite
+```
+
+```bash
+python -m tools.runs.prepare_dashboard climate-compute --level hydro --metrics tas_annual_mean prcptot
+```
+
+## Underlying commands
+
+Use these when you need direct control or debugging.
+
+### Dashboard
+
+```bash
+streamlit run main.py
+```
+
+```bash
+streamlit run india_resilience_tool/app/main.py
+```
+
+### Climate hazards
+
+```bash
+python -m tools.pipeline.compute_indices_multiprocess --help
+python -m tools.pipeline.build_master_metrics --help
+```
+
+Examples:
+
+```bash
+python -m tools.pipeline.compute_indices_multiprocess --level district --state Telangana --metrics tas_annual_mean
+```
+
+```bash
+python -m tools.pipeline.build_master_metrics --level district --state Telangana --metrics tas_annual_mean
+```
+
+### Aqueduct
+
+```bash
+python -m tools.geodata.prepare_aqueduct_baseline --help
+python -m tools.geodata.build_aqueduct_admin_crosswalk --help
+python -m tools.geodata.build_aqueduct_block_crosswalk --help
+python -m tools.geodata.build_aqueduct_hydro_crosswalk --help
+python -m tools.geodata.build_aqueduct_admin_masters --help
+python -m tools.geodata.build_aqueduct_hydro_masters --help
+python -m tools.geodata.validate_aqueduct_workflow --help
+```
+
+### Tests
+
+```bash
+python -m pytest -q
+```
+
+Targeted validation set used by the runner:
+
+```bash
+python -m pytest -q tests/test_prepare_aqueduct_baseline.py tests/test_aqueduct_admin_transfer.py tests/test_aqueduct_hydro_transfer.py tests/test_validate_aqueduct_workflow.py tests/test_metrics_registry.py tests/test_config.py tests/test_available_states.py tests/test_crosswalk_generator.py
+```
+
+## Expected outputs
+
+### Climate hazards
+- processed climate artifacts under `IRT_DATA_DIR/processed/{metric}/...`
+- master CSVs from `tools.pipeline.build_master_metrics`
+
+### Aqueduct
+- crosswalks under `IRT_DATA_DIR/aqueduct/`
+- district/block masters under `IRT_DATA_DIR/processed/{metric_slug}/{state}/`
+- hydro masters under `IRT_DATA_DIR/processed/{metric_slug}/hydro/`
+- validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/`
+
+## Notes
+
+- The runner assumes the environment is already activated; it does not manage Conda itself.
+- `--dry-run` is the safest way to inspect what will execute.
+- `--overwrite` is passed through only to commands that support it.
+

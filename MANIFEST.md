@@ -29,6 +29,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 |---------|---------|
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
+| `python -m tools.runs.prepare_dashboard --help` | Show canonical dashboard-prep workflow bundles and step commands |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild master CSVs |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics <slug>` | Build district outputs |
@@ -97,6 +98,7 @@ Aqueduct methodology note:
 - `docs/aqueduct_onboarding_methodology.md` is the canonical narrative for Aqueduct cleanup, HydroSHEDS `pfaf_id` normalization, direct `pfaf_id -> district/block` transfer, and HydroSHEDS → SOI hydro transfer.
 - that same doc now includes a short reader guide for interpreting the Aqueduct validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/`
 - `docs/aqueduct_field_contract.md` records the currently used Aqueduct source-field mappings and interpretation notes for the onboarded Aqueduct district, block, and hydro metrics.
+- `docs/command_catalog.md` is the canonical operator-facing command catalog for dashboard prep, Aqueduct, climate hazards, and validation workflows.
 
 ## Package inventory
 
@@ -264,7 +266,8 @@ Aqueduct methodology note:
 | `build_aqueduct_admin_masters.py` | Build `processed/{aqueduct_metric_slug}/{state}/master_metrics_by_{district,block}.csv` from direct Aqueduct admin overlaps |
 | `build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs in `EPSG:6933` |
 | `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master CSVs from Aqueduct overlaps for the onboarded Aqueduct hydro metrics |
-| `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
+| `runs/prepare_dashboard.py` | Canonical workflow runner for climate hazard, Aqueduct, validation, and dashboard-package prep bundles |
+| `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
 | `build_river_subbasin_diagnostics.py` | Build hydro sub-basin vs river-name diagnostics CSV |
