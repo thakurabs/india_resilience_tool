@@ -143,7 +143,15 @@ def render_right_panel(
         with title_col:
             # The portfolio path returns early under `is_portfolio_mode` via
             # `st.stop()`, so this header only renders for single-unit details flows.
-            st.header("Climate Profile")
+            pillars = {
+                str(v).strip().lower()
+                for v in ((varcfg or {}).get("pillars") or [])
+                if str(v).strip()
+            }
+            if pillars and pillars.isdisjoint({"climate hazards", "bio-physical hazards"}):
+                st.header("Profile")
+            else:
+                st.header("Climate Profile")
         with btn_col:
             if st.button(
                 "⟩",

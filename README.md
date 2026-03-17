@@ -29,6 +29,11 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Top-level taxonomy:
   - `Climate Hazards` for climate-model-derived heat, cold, rainfall, flood, drought, and variability layers
   - `Bio-physical Hazards` for externally sourced physical hazard layers such as Aqueduct
+  - `Exposure` for static exposure layers such as population
+- Population exposure onboarding:
+  - Total Population on district and block units
+  - Population Density on district and block units
+  - fixed snapshot semantics: `snapshot`, `2025`
 - Water-risk Aqueduct onboarding:
   - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
   - Aqueduct interannual variability on SOI basin, SOI sub-basin, district, and block units
@@ -37,9 +42,9 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - native Aqueduct scenarios: `historical`, `bau`, `opt`, `pes`
 - Map view and rankings table for all four levels
 - Right-side details panel with:
-  - risk summary
+  - risk or metric summary
   - trend over time (when yearly source files exist)
-  - scenario comparison
+  - scenario comparison (when the metric supports it)
   - case-study export for admin single-unit flows
 
 ### Portfolio support
@@ -169,6 +174,11 @@ Place these in `IRT_DATA_DIR`:
 - `aqueduct/aq_water_depletion_subbasin_master_qa.csv` (optional QA for Aqueduct water-depletion sub-basin masters)
 - `aqueduct/aq_water_depletion_district_master_qa.csv` (optional QA for Aqueduct water-depletion district masters)
 - `aqueduct/aq_water_depletion_block_master_qa.csv` (optional QA for Aqueduct water-depletion block masters)
+- `population-*/population/ind_pop_2025_CN_1km_R2025A_UA_v1.tif` (optional source raster for population exposure onboarding)
+- `population/population_district_master_qa.csv` (optional QA for district population masters)
+- `population/population_block_master_qa.csv` (optional QA for block population masters)
+- `population/population_district_vs_blocks_qa.csv` (optional district vs sum(blocks) consistency QA)
+- `population/population_national_summary.csv` (optional national raster-vs-admin population summary)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -253,6 +263,15 @@ processed/aq_water_depletion/{state}/master_metrics_by_district.csv
 processed/aq_water_depletion/{state}/master_metrics_by_block.csv
 ```
 
+Population exposure metrics currently support direct admin masters under:
+
+```text
+processed/population_total/{state}/master_metrics_by_district.csv
+processed/population_total/{state}/master_metrics_by_block.csv
+processed/population_density/{state}/master_metrics_by_district.csv
+processed/population_density/{state}/master_metrics_by_block.csv
+```
+
 ## Common commands
 
 The canonical operational runner is now:
@@ -285,11 +304,26 @@ python -m tools.pipeline.build_master_metrics
 python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite
 ```
 
+This bundle now includes climate hazards, Aqueduct, and population exposure prep.
+
 Preview first:
 
 ```bash
 python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite --dry-run
 ```
+
+### Build population exposure masters
+
+```bash
+python -m tools.runs.prepare_dashboard population-exposure --overwrite
+python -m tools.geodata.build_population_admin_masters --overwrite
+```
+
+This aggregates the 2025 1 km population raster onto canonical district and block polygons and writes:
+- `processed/population_total/{state}/master_metrics_by_district.csv`
+- `processed/population_total/{state}/master_metrics_by_block.csv`
+- `processed/population_density/{state}/master_metrics_by_district.csv`
+- `processed/population_density/{state}/master_metrics_by_block.csv`
 
 ### Hydro boundary preparation
 

@@ -230,13 +230,14 @@ def build_map_and_rankings(
 
     # --- Decide which column the map will actually show ---
     map_value_col = metric_col  # default: absolute values
+    supports_baseline_comparison = bool(varcfg.get("supports_baseline_comparison", True))
     baseline_map_mode_label = (
         "Change from baseline"
         if str(varcfg.get("source_type") or "").strip().lower() == "external"
         else "Change from 1990-2010 baseline"
     )
 
-    if map_mode == baseline_map_mode_label:
+    if supports_baseline_comparison and map_mode == baseline_map_mode_label:
         if baseline_col and (baseline_col in merged.columns):
             map_value_col = "_delta_abs"
         else:
@@ -318,7 +319,7 @@ def build_map_and_rankings(
     vmin, vmax = float(vmin_vmax[0]), float(vmin_vmax[1])
 
     # Choose colormap: sequential for absolute, diverging for change
-    if map_mode == "Change from 1990-2010 baseline":
+    if supports_baseline_comparison and map_mode == "Change from 1990-2010 baseline":
         cmap_name = "RdBu_r"  # blue-negative, red-positive
         pretty_metric_label = (
             f"Δ {str(varcfg.get('label') or variable_slug)} vs 1990–2010 · "

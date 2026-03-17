@@ -212,6 +212,23 @@ def _resolve_state_column(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
+def _supports_baseline_comparison(varcfg: Mapping[str, Any]) -> bool:
+    return bool(varcfg.get("supports_baseline_comparison", True))
+
+
+def _supports_scenario_comparison(varcfg: Mapping[str, Any]) -> bool:
+    return bool(varcfg.get("supports_scenario_comparison", True))
+
+
+def _is_non_hazard_metric(varcfg: Mapping[str, Any]) -> bool:
+    pillars = {
+        str(v).strip().lower()
+        for v in (varcfg.get("pillars") or [])
+        if str(v).strip()
+    }
+    return bool(pillars) and pillars.isdisjoint({"climate hazards", "bio-physical hazards"})
+
+
 def render_state_summary_view(
     *,
     selected_state: str,
@@ -237,10 +254,19 @@ def render_state_summary_view(
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
     units = variables.get(variable_slug, {}).get("units") or variables.get(variable_slug, {}).get("unit")
     level_norm = str(level).strip().lower()
-    rank_higher_is_worse = bool(variables.get(variable_slug, {}).get("rank_higher_is_worse", True))
+    varcfg = variables.get(variable_slug, {}) or {}
+    rank_higher_is_worse = bool(varcfg.get("rank_higher_is_worse", True))
+    supports_baseline_comparison = _supports_baseline_comparison(varcfg)
+    supports_yearly_trend = bool(varcfg.get("supports_yearly_trend", True))
+    supports_scenario_comparison = _supports_scenario_comparison(varcfg)
+    summary_title = "Metric summary" if _is_non_hazard_metric(varcfg) else "Risk summary"
 
-    st.subheader(f"{selected_state} — State Climate Profile")
-    st.markdown(f"**Index:** {variable_label}  \n**Scenario:** {sel_scenario}  \n**Period:** {sel_period}")
+    profile_title = "State Profile" if _is_non_hazard_metric(varcfg) else "State Climate Profile"
+    st.subheader(f"{selected_state} — {profile_title}")
+    if supports_baseline_comparison:
+        st.markdown(f"**Index:** {variable_label}  \n**Scenario:** {sel_scenario}  \n**Period:** {sel_period}")
+    else:
+        st.markdown(f"**Index:** {variable_label}  \n**Data snapshot:** {sel_period}")
 
     state_col = _resolve_state_column(pd.DataFrame(merged_gdf))
     if not state_col:
@@ -271,297 +297,310 @@ def render_state_summary_view(
         higher_is_worse=rank_higher_is_worse,
     )
 
-    with st.expander("Risk summary", expanded=True):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown("**Historical baseline**")
-            st.metric("", f"{baseline_val:.2f} {units or ''}" if baseline_val is not None else "N/A")
-        with c2:
-            st.markdown("**Current value**")
-            delta = (current_val - baseline_val) if (current_val is not None and baseline_val is not None) else None
-            st.metric(
-                "",
-                f"{current_val:.2f} {units or ''}" if current_val is not None else "N/A",
-                f"{delta:+.2f}" if delta is not None else None,
-            )
-        with c3:
-            st.markdown("**Position in India**")
-            if rank_india is not None and n_india >= 2:
-                st.metric("", f"#{rank_india} / {n_india}")
-            else:
-                st.metric("", "N/A")
-                st.caption("Insufficient states to rank")
-
-    with st.expander("Trend over time (state average)", expanded=False):
-        expected_yearly = processed_root / selected_state / f"state_yearly_ensemble_stats_{level_norm}.csv"
-        if not expected_yearly.exists():
-            st.info(
-                "State yearly ensemble data not available (missing file). "
-                f"Expected: {expected_yearly}. Rebuild master dataset in this mode."
-            )
-        else:
-            from india_resilience_tool.viz.charts import create_trend_figure_for_index_plotly
-
-            yearly_df = load_state_yearly(
-                ts_root=processed_root,
-                state_dir=selected_state,
-                varcfg=None,
-                level=level_norm,
-            )
-
-            if yearly_df is None or yearly_df.empty or not {"scenario", "year"}.issubset(set(yearly_df.columns)):
-                st.info("State yearly ensemble data not available; file is empty or schema mismatch.")
-            else:
-                d = yearly_df.copy()
-                d["scenario"] = d["scenario"].astype(str).str.strip()
-                d["year"] = pd.to_numeric(d["year"], errors="coerce")
-                if "mean" in d.columns:
-                    d["mean"] = pd.to_numeric(d["mean"], errors="coerce")
-                if "median" in d.columns:
-                    d["median"] = pd.to_numeric(d["median"], errors="coerce")
-                if "p05" in d.columns:
-                    d["p05"] = pd.to_numeric(d["p05"], errors="coerce")
-                if "p95" in d.columns:
-                    d["p95"] = pd.to_numeric(d["p95"], errors="coerce")
-                d = d.dropna(subset=["year"])
-
-                # Keep parity with district/block: allow model members + optional band.
-                show_models = st.checkbox(
-                    "Show model members",
-                    key=f"state_trend_show_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
-                    value=bool(
-                        st.session_state.get(
-                            f"state_trend_show_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
-                            False,
-                        )
-                    ),
+    with st.expander(summary_title, expanded=True):
+        if supports_baseline_comparison:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown("**Historical baseline**")
+                st.metric("", f"{baseline_val:.2f} {units or ''}" if baseline_val is not None else "N/A")
+            with c2:
+                st.markdown("**Current value**")
+                delta = (current_val - baseline_val) if (current_val is not None and baseline_val is not None) else None
+                st.metric(
+                    "",
+                    f"{current_val:.2f} {units or ''}" if current_val is not None else "N/A",
+                    f"{delta:+.2f}" if delta is not None else None,
                 )
-
-                needs_band_fallback = False
-                if ("p05" not in d.columns) or ("p95" not in d.columns):
-                    needs_band_fallback = True
+            with c3:
+                st.markdown("**Position in India**")
+                if rank_india is not None and n_india >= 2:
+                    st.metric("", f"#{rank_india} / {n_india}")
                 else:
-                    p05 = pd.to_numeric(d["p05"], errors="coerce")
-                    p95 = pd.to_numeric(d["p95"], errors="coerce")
-                    needs_band_fallback = bool(p05.isna().any() or p95.isna().any())
+                    st.metric("", "N/A")
+                    st.caption("Insufficient states to rank")
+        else:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**Selected value**")
+                st.metric("", f"{current_val:.2f} {units or ''}" if current_val is not None else "N/A")
+            with c2:
+                st.markdown("**Position in India**")
+                if rank_india is not None and n_india >= 2:
+                    st.metric("", f"#{rank_india} / {n_india}")
+                else:
+                    st.metric("", "N/A")
+                    st.caption("Insufficient states to rank")
 
-                model_file = discover_state_yearly_model_file(
+    if supports_yearly_trend:
+        with st.expander("Trend over time (state average)", expanded=False):
+            expected_yearly = processed_root / selected_state / f"state_yearly_ensemble_stats_{level_norm}.csv"
+            if not expected_yearly.exists():
+                st.info(
+                    "State yearly ensemble data not available (missing file). "
+                    f"Expected: {expected_yearly}. Rebuild master dataset in this mode."
+                )
+            else:
+                from india_resilience_tool.viz.charts import create_trend_figure_for_index_plotly
+
+                yearly_df = load_state_yearly(
                     ts_root=processed_root,
                     state_dir=selected_state,
+                    varcfg=None,
                     level=level_norm,
                 )
 
-                mdf = pd.DataFrame()
-                if model_file is not None and (show_models or needs_band_fallback):
-                    try:
-                        mdf = pd.read_csv(model_file)
-                    except Exception:
-                        mdf = pd.DataFrame()
+                if yearly_df is None or yearly_df.empty or not {"scenario", "year"}.issubset(set(yearly_df.columns)):
+                    st.info("State yearly ensemble data not available; file is empty or schema mismatch.")
+                else:
+                    d = yearly_df.copy()
+                    d["scenario"] = d["scenario"].astype(str).str.strip()
+                    d["year"] = pd.to_numeric(d["year"], errors="coerce")
+                    if "mean" in d.columns:
+                        d["mean"] = pd.to_numeric(d["mean"], errors="coerce")
+                    if "median" in d.columns:
+                        d["median"] = pd.to_numeric(d["median"], errors="coerce")
+                    if "p05" in d.columns:
+                        d["p05"] = pd.to_numeric(d["p05"], errors="coerce")
+                    if "p95" in d.columns:
+                        d["p95"] = pd.to_numeric(d["p95"], errors="coerce")
+                    d = d.dropna(subset=["year"])
 
-                max_models = 0
-                model_ts_hist = pd.DataFrame()
-                model_ts_scen = pd.DataFrame()
+                    show_models = st.checkbox(
+                        "Show model members",
+                        key=f"state_trend_show_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
+                        value=bool(
+                            st.session_state.get(
+                                f"state_trend_show_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
+                                False,
+                            )
+                        ),
+                    )
 
-                if show_models:
-                    required = {"scenario", "year", "model", "value"}
-                    if model_file is None:
-                        st.caption("Model members not available for this state/index; showing ensemble only.")
-                    elif mdf.empty or not required.issubset(set(mdf.columns)):
-                        st.caption("Model members not available for this state/index; showing ensemble only.")
+                    needs_band_fallback = False
+                    if ("p05" not in d.columns) or ("p95" not in d.columns):
+                        needs_band_fallback = True
                     else:
-                        mdf2 = mdf.copy()
-                        mdf2["scenario"] = mdf2["scenario"].astype(str).str.strip().str.lower()
-                        mdf2["year"] = pd.to_numeric(mdf2["year"], errors="coerce")
-                        mdf2["value"] = pd.to_numeric(mdf2["value"], errors="coerce")
-                        mdf2["model"] = mdf2["model"].astype(str)
-                        mdf2 = mdf2.dropna(subset=["year", "value"])
+                        p05 = pd.to_numeric(d["p05"], errors="coerce")
+                        p95 = pd.to_numeric(d["p95"], errors="coerce")
+                        needs_band_fallback = bool(p05.isna().any() or p95.isna().any())
 
-                        available_models = sorted(mdf2["model"].dropna().unique().tolist())
-                        if not available_models:
+                    model_file = discover_state_yearly_model_file(
+                        ts_root=processed_root,
+                        state_dir=selected_state,
+                        level=level_norm,
+                    )
+
+                    mdf = pd.DataFrame()
+                    if model_file is not None and (show_models or needs_band_fallback):
+                        try:
+                            mdf = pd.read_csv(model_file)
+                        except Exception:
+                            mdf = pd.DataFrame()
+
+                    max_models = 0
+                    model_ts_hist = pd.DataFrame()
+                    model_ts_scen = pd.DataFrame()
+
+                    if show_models:
+                        required = {"scenario", "year", "model", "value"}
+                        if model_file is None:
+                            st.caption("Model members not available for this state/index; showing ensemble only.")
+                        elif mdf.empty or not required.issubset(set(mdf.columns)):
                             st.caption("Model members not available for this state/index; showing ensemble only.")
                         else:
-                            default_val = int(
-                                st.session_state.get(
-                                    f"state_trend_max_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
-                                    15,
+                            mdf2 = mdf.copy()
+                            mdf2["scenario"] = mdf2["scenario"].astype(str).str.strip().str.lower()
+                            mdf2["year"] = pd.to_numeric(mdf2["year"], errors="coerce")
+                            mdf2["value"] = pd.to_numeric(mdf2["value"], errors="coerce")
+                            mdf2["model"] = mdf2["model"].astype(str)
+                            mdf2 = mdf2.dropna(subset=["year", "value"])
+
+                            available_models = sorted(mdf2["model"].dropna().unique().tolist())
+                            if not available_models:
+                                st.caption("Model members not available for this state/index; showing ensemble only.")
+                            else:
+                                default_val = int(
+                                    st.session_state.get(
+                                        f"state_trend_max_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
+                                        15,
+                                    )
+                                    or 15
                                 )
-                                or 15
-                            )
-                            default_val = min(max(1, default_val), int(len(available_models)))
-                            max_models = int(
-                                st.slider(
-                                    "Max models to draw",
-                                    min_value=1,
-                                    max_value=int(len(available_models)),
-                                    value=default_val,
-                                    step=1,
-                                    key=f"state_trend_max_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
-                                    help="Caps the number of model traces for readability and performance.",
+                                default_val = min(max(1, default_val), int(len(available_models)))
+                                max_models = int(
+                                    st.slider(
+                                        "Max models to draw",
+                                        min_value=1,
+                                        max_value=int(len(available_models)),
+                                        value=default_val,
+                                        step=1,
+                                        key=f"state_trend_max_models_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
+                                        help="Caps the number of model traces for readability and performance.",
+                                    )
                                 )
-                            )
 
-                            keep = set(available_models[:max_models])
-                            mdf2 = mdf2[mdf2["model"].isin(keep)]
-                            model_ts_hist = mdf2[mdf2["scenario"] == "historical"][["year", "model", "value"]].copy()
-                            model_ts_scen = mdf2[mdf2["scenario"] == sel_scenario.strip().lower()][["year", "model", "value"]].copy()
+                                keep = set(available_models[:max_models])
+                                mdf2 = mdf2[mdf2["model"].isin(keep)]
+                                model_ts_hist = mdf2[mdf2["scenario"] == "historical"][["year", "model", "value"]].copy()
+                                model_ts_scen = mdf2[mdf2["scenario"] == sel_scenario.strip().lower()][["year", "model", "value"]].copy()
 
-                effective_show_models = bool(
-                    show_models and max_models > 0 and (not model_ts_hist.empty or not model_ts_scen.empty)
-                )
-                show_band_default = not effective_show_models
-                show_band = st.checkbox(
-                    "Show percentile band (p05–p95)",
-                    value=bool(
-                        st.session_state.get(
-                            f"state_trend_show_band_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
-                            show_band_default,
-                        )
-                    ),
-                    key=f"state_trend_show_band_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
-                    help="Show the ensemble P05–P95 shading (may be visually heavy when spaghetti is enabled).",
-                )
-
-                if show_band and needs_band_fallback:
-                    d = _merge_missing_trend_band(ensemble_df=d, model_df=mdf)
-
-                d = _coerce_trend_central_tendency(d, sel_stat)
-                if "mean" not in d.columns:
-                    st.info("State trend not available; no central tendency series found (expected mean/median).")
-                else:
-                    d["mean"] = pd.to_numeric(d["mean"], errors="coerce")
-                    d = d.dropna(subset=["year", "mean"])
-
-                    # Split series (shared builder expects separate hist/scen DataFrames).
-                    scen_norm = sel_scenario.strip().lower()
-                    hist_ts = d[d["scenario"].str.lower() == "historical"].copy()
-                    scen_ts = d[d["scenario"].str.lower() == scen_norm].copy()
-
-                    def _parse_period(s: str) -> tuple[Optional[int], Optional[int]]:
-                        import re
-
-                        txt = str(s or "").strip()
-                        m = re.match(r"^(\d{4})\D+(\d{4})$", txt)
-                        if not m:
-                            return None, None
-                        return int(m.group(1)), int(m.group(2))
-
-                    def _period_mean_from_ts(df: pd.DataFrame, start: int, end: int) -> Optional[float]:
-                        if df is None or df.empty:
-                            return None
-                        if "year" not in df.columns or "mean" not in df.columns:
-                            return None
-                        tmp = df.copy()
-                        tmp["year"] = pd.to_numeric(tmp["year"], errors="coerce")
-                        tmp["mean"] = pd.to_numeric(tmp["mean"], errors="coerce")
-                        tmp = tmp.dropna(subset=["year", "mean"])
-                        tmp = tmp[(tmp["year"] >= start) & (tmp["year"] <= end)]
-                        if tmp.empty:
-                            return None
-                        return float(tmp["mean"].mean())
-
-                    p0, p1 = _parse_period(sel_period)
-                    compare_period_label = str(sel_period or "").strip()
-                    compare_period_mean: Optional[float] = None
-                    if p0 is not None and p1 is not None:
-                        hist_max = (
-                            int(pd.to_numeric(hist_ts["year"], errors="coerce").max())
-                            if not hist_ts.empty and "year" in hist_ts.columns
-                            else None
-                        )
-                        if sel_scenario.strip().lower() == "historical":
-                            base_ts = hist_ts
-                        elif hist_max is not None and p1 <= hist_max:
-                            base_ts = hist_ts
-                        else:
-                            base_ts = scen_ts
-                        compare_period_mean = _period_mean_from_ts(base_ts, p0, p1)
-
-                    fig_ts = create_trend_figure_for_index_plotly(
-                        hist_ts=hist_ts,
-                        scen_ts=scen_ts,
-                        idx_label=variable_label,
-                        scenario_name=sel_scenario,
-                        compare_period_label=compare_period_label,
-                        compare_period_mean=compare_period_mean,
-                        units=units,
-                        model_ts_hist=model_ts_hist,
-                        model_ts_scen=model_ts_scen,
-                        show_model_members=effective_show_models,
-                        max_models=max_models or 15,
-                        show_band=bool(show_band),
-                        render_context="dashboard",
+                    effective_show_models = bool(
+                        show_models and max_models > 0 and (not model_ts_hist.empty or not model_ts_scen.empty)
                     )
-                    st.plotly_chart(
-                        fig_ts,
-                        use_container_width=True,
-                        config={"displaylogo": False, "responsive": True},
+                    show_band_default = not effective_show_models
+                    show_band = st.checkbox(
+                        "Show percentile band (p05–p95)",
+                        value=bool(
+                            st.session_state.get(
+                                f"state_trend_show_band_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
+                                show_band_default,
+                            )
+                        ),
+                        key=f"state_trend_show_band_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
+                        help="Show the ensemble P05–P95 shading (may be visually heavy when spaghetti is enabled).",
                     )
 
-    with st.expander("Scenario comparison (period-mean)", expanded=False):
-        f = discover_state_period_ensemble_file(ts_root=processed_root, state_dir=selected_state, level=level_norm)
-        expected_period = processed_root / selected_state / f"state_ensemble_stats_{level_norm}.csv"
-        if f is None or not expected_period.exists():
-            st.info(
-                "Scenario comparison not available (missing file). "
-                f"Expected: {expected_period}. Rebuild master dataset in this mode."
-            )
-        else:
-            sdf = pd.read_csv(f)
-            y_col = "ensemble_median" if str(sel_stat).strip().lower() == "median" and "ensemble_median" in sdf.columns else "ensemble_mean"
-            if sdf.empty or not {"scenario", "period", y_col}.issubset(set(sdf.columns)):
+                    if show_band and needs_band_fallback:
+                        d = _merge_missing_trend_band(ensemble_df=d, model_df=mdf)
+
+                    d = _coerce_trend_central_tendency(d, sel_stat)
+                    if "mean" not in d.columns:
+                        st.info("State trend not available; no central tendency series found (expected mean/median).")
+                    else:
+                        d["mean"] = pd.to_numeric(d["mean"], errors="coerce")
+                        d = d.dropna(subset=["year", "mean"])
+
+                        scen_norm = sel_scenario.strip().lower()
+                        hist_ts = d[d["scenario"].str.lower() == "historical"].copy()
+                        scen_ts = d[d["scenario"].str.lower() == scen_norm].copy()
+
+                        def _parse_period(s: str) -> tuple[Optional[int], Optional[int]]:
+                            import re
+
+                            txt = str(s or "").strip()
+                            m = re.match(r"^(\d{4})\D+(\d{4})$", txt)
+                            if not m:
+                                return None, None
+                            return int(m.group(1)), int(m.group(2))
+
+                        def _period_mean_from_ts(df: pd.DataFrame, start: int, end: int) -> Optional[float]:
+                            if df is None or df.empty:
+                                return None
+                            if "year" not in df.columns or "mean" not in df.columns:
+                                return None
+                            tmp = df.copy()
+                            tmp["year"] = pd.to_numeric(tmp["year"], errors="coerce")
+                            tmp["mean"] = pd.to_numeric(tmp["mean"], errors="coerce")
+                            tmp = tmp.dropna(subset=["year", "mean"])
+                            tmp = tmp[(tmp["year"] >= start) & (tmp["year"] <= end)]
+                            if tmp.empty:
+                                return None
+                            return float(tmp["mean"].mean())
+
+                        p0, p1 = _parse_period(sel_period)
+                        compare_period_label = str(sel_period or "").strip()
+                        compare_period_mean: Optional[float] = None
+                        if p0 is not None and p1 is not None:
+                            hist_max = (
+                                int(pd.to_numeric(hist_ts["year"], errors="coerce").max())
+                                if not hist_ts.empty and "year" in hist_ts.columns
+                                else None
+                            )
+                            if sel_scenario.strip().lower() == "historical":
+                                base_ts = hist_ts
+                            elif hist_max is not None and p1 <= hist_max:
+                                base_ts = hist_ts
+                            else:
+                                base_ts = scen_ts
+                            compare_period_mean = _period_mean_from_ts(base_ts, p0, p1)
+
+                        fig_ts = create_trend_figure_for_index_plotly(
+                            hist_ts=hist_ts,
+                            scen_ts=scen_ts,
+                            idx_label=variable_label,
+                            scenario_name=sel_scenario,
+                            compare_period_label=compare_period_label,
+                            compare_period_mean=compare_period_mean,
+                            units=units,
+                            model_ts_hist=model_ts_hist,
+                            model_ts_scen=model_ts_scen,
+                            show_model_members=effective_show_models,
+                            max_models=max_models or 15,
+                            show_band=bool(show_band),
+                            render_context="dashboard",
+                        )
+                        st.plotly_chart(
+                            fig_ts,
+                            use_container_width=True,
+                            config={"displaylogo": False, "responsive": True},
+                        )
+
+    if supports_scenario_comparison:
+        with st.expander("Scenario comparison (period-mean)", expanded=False):
+            f = discover_state_period_ensemble_file(ts_root=processed_root, state_dir=selected_state, level=level_norm)
+            expected_period = processed_root / selected_state / f"state_ensemble_stats_{level_norm}.csv"
+            if f is None or not expected_period.exists():
                 st.info(
-                    "Scenario comparison not available; file is empty or schema mismatch "
-                    f"(expected columns include scenario, period, {y_col})."
+                    "Scenario comparison not available (missing file). "
+                    f"Expected: {expected_period}. Rebuild master dataset in this mode."
                 )
             else:
-                from india_resilience_tool.viz.charts import (
-                    compute_scenario_y_range,
-                    make_scenario_comparison_figure_plotly,
-                )
-
-                force_zero = st.checkbox(
-                    "Start y-axis at zero",
-                    key=f"state_scenario_y0_{variable_slug}_{selected_state}_{level_norm}_{sel_period}",
-                    value=bool(
-                        st.session_state.get(
-                            f"state_scenario_y0_{variable_slug}_{selected_state}_{level_norm}_{sel_period}",
-                            False,
-                        )
-                    ),
-                )
-                y_axis_policy = "zero" if force_zero else "auto"
-
-                panel_df = sdf[["scenario", "period", y_col]].copy()
-                panel_df = panel_df.rename(columns={y_col: "value"})
-                panel_df["value"] = pd.to_numeric(panel_df["value"], errors="coerce")
-                panel_df = panel_df.dropna(subset=["value"])
-
-                fig_sc = make_scenario_comparison_figure_plotly(
-                    panel_df=panel_df,
-                    metric_label=variable_label,
-                    sel_scenario=sel_scenario,
-                    sel_period=sel_period,
-                    sel_stat=sel_stat,
-                    district_name=selected_state,  # label placeholder for API
-                    y_axis_policy=y_axis_policy,
-                    units=units,
-                    render_context="dashboard",
-                )
-                if fig_sc is not None:
-                    st.plotly_chart(
-                        fig_sc,
-                        use_container_width=True,
-                        config={"displaylogo": False, "responsive": True},
+                sdf = pd.read_csv(f)
+                y_col = "ensemble_median" if str(sel_stat).strip().lower() == "median" and "ensemble_median" in sdf.columns else "ensemble_mean"
+                if sdf.empty or not {"scenario", "period", y_col}.issubset(set(sdf.columns)):
+                    st.info(
+                        "Scenario comparison not available; file is empty or schema mismatch "
+                        f"(expected columns include scenario, period, {y_col})."
+                    )
+                else:
+                    from india_resilience_tool.viz.charts import (
+                        compute_scenario_y_range,
+                        make_scenario_comparison_figure_plotly,
                     )
 
-                if not force_zero:
-                    try:
-                        y_vals = panel_df["value"].astype(float).tolist()
-                        zoomed, _ = compute_scenario_y_range(y_vals, y_axis_policy="auto")
-                        if zoomed:
-                            st.caption(
-                                "Note: y-axis is auto-zoomed (does not start at 0). "
-                                "Enable “Start y-axis at zero” to compare on a zero baseline."
+                    force_zero = st.checkbox(
+                        "Start y-axis at zero",
+                        key=f"state_scenario_y0_{variable_slug}_{selected_state}_{level_norm}_{sel_period}",
+                        value=bool(
+                            st.session_state.get(
+                                f"state_scenario_y0_{variable_slug}_{selected_state}_{level_norm}_{sel_period}",
+                                False,
                             )
-                    except Exception:
-                        pass
+                        ),
+                    )
+                    y_axis_policy = "zero" if force_zero else "auto"
+
+                    panel_df = sdf[["scenario", "period", y_col]].copy()
+                    panel_df = panel_df.rename(columns={y_col: "value"})
+                    panel_df["value"] = pd.to_numeric(panel_df["value"], errors="coerce")
+                    panel_df = panel_df.dropna(subset=["value"])
+
+                    fig_sc = make_scenario_comparison_figure_plotly(
+                        panel_df=panel_df,
+                        metric_label=variable_label,
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
+                        district_name=selected_state,  # label placeholder for API
+                        y_axis_policy=y_axis_policy,
+                        units=units,
+                        render_context="dashboard",
+                    )
+                    if fig_sc is not None:
+                        st.plotly_chart(
+                            fig_sc,
+                            use_container_width=True,
+                            config={"displaylogo": False, "responsive": True},
+                        )
+
+                    if not force_zero:
+                        try:
+                            y_vals = panel_df["value"].astype(float).tolist()
+                            zoomed, _ = compute_scenario_y_range(y_vals, y_axis_policy="auto")
+                            if zoomed:
+                                st.caption(
+                                    "Note: y-axis is auto-zoomed (does not start at 0). "
+                                    "Enable “Start y-axis at zero” to compare on a zero baseline."
+                                )
+                        except Exception:
+                            pass

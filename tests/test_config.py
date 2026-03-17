@@ -74,3 +74,28 @@ def test_aqueduct_metrics_are_exposed_to_dashboard_variables() -> None:
         assert cfg["supported_levels"] == ["district", "block", "basin", "sub_basin"]
         assert "Aqueduct Water Risk" in cfg["domains"]
         assert "Bio-physical Hazards" in cfg["pillars"]
+
+
+def test_population_metrics_are_exposed_as_static_admin_layers() -> None:
+    """Population metrics should appear as fixed-snapshot exposure layers."""
+    from india_resilience_tool.config.variables import VARIABLES
+
+    for slug, label, units in [
+        ("population_total", "Total Population", "people"),
+        ("population_density", "Population Density", "people/km2"),
+    ]:
+        cfg = VARIABLES[slug]
+        assert cfg["label"] == label
+        assert cfg["source_type"] == "external"
+        assert cfg["selection_mode"] == "static_snapshot"
+        assert cfg["fixed_scenario"] == "snapshot"
+        assert cfg["fixed_period"] == "2025"
+        assert cfg["supported_scenarios"] == ["snapshot"]
+        assert cfg["supported_levels"] == ["district", "block"]
+        assert cfg["supported_spatial_families"] == ["admin"]
+        assert cfg["supported_statistics"] == ["mean"]
+        assert cfg["supports_baseline_comparison"] is False
+        assert cfg["supports_scenario_comparison"] is False
+        assert cfg["units"] == units
+        assert "Population Exposure" in cfg["domains"]
+        assert "Exposure" in cfg["pillars"]

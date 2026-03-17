@@ -120,7 +120,7 @@ def test_taxonomy_exposes_climate_and_biophysical_pillars() -> None:
     pillars = get_pillars(spatial_family="admin", level="district")
     assert "Climate Hazards" in pillars
     assert "Bio-physical Hazards" in pillars
-    assert "Exposure" not in pillars
+    assert "Exposure" in pillars
     assert get_default_pillar(spatial_family="admin", level="district") == "Climate Hazards"
 
 
@@ -138,3 +138,13 @@ def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
         spatial_family="admin",
         level="district",
     ) == "Heat Risk"
+
+
+def test_population_exposure_domain_is_admin_only() -> None:
+    admin_domains = get_domains_for_pillar("Exposure", spatial_family="admin", level="district")
+    assert admin_domains == ["Population Exposure"]
+    admin_metrics = set(get_metrics_for_bundle("Population Exposure", spatial_family="admin", level="block"))
+    assert admin_metrics == {"population_total", "population_density"}
+
+    hydro_pillars = get_pillars(spatial_family="hydro", level="basin")
+    assert "Exposure" not in hydro_pillars

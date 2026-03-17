@@ -59,6 +59,7 @@ SCENARIO_DISPLAY: dict[str, str] = {
     "bau": "Business-as-usual",
     "opt": "Optimistic",
     "pes": "Pessimistic",
+    "snapshot": "Snapshot",
 }
 
 # ---- Scenario UI labels (plain-English + scientific) ----
@@ -69,6 +70,7 @@ SCENARIO_UI_LABEL: dict[str, str] = {
     "bau": "Business-as-usual",
     "opt": "Optimistic",
     "pes": "Pessimistic",
+    "snapshot": "Snapshot",
 }
 
 # ---- Scenario help copy (shown in native Streamlit help tooltips) ----
@@ -95,6 +97,10 @@ SCENARIO_HELP_MD: dict[str, str] = {
     "pes": (
         "Pessimistic\n"
         "Aqueduct future pathway representing weaker mitigation and higher water-risk pressure."
+    ),
+    "snapshot": (
+        "Snapshot\n"
+        "A fixed, non-climate scenario data snapshot. Use this for static layers such as population exposure."
     ),
 }
 

@@ -21,6 +21,7 @@ DEFAULT_VALIDATION_TESTS = [
     "tests/test_prepare_aqueduct_baseline.py",
     "tests/test_aqueduct_admin_transfer.py",
     "tests/test_aqueduct_hydro_transfer.py",
+    "tests/test_population_admin_masters.py",
     "tests/test_validate_aqueduct_workflow.py",
     "tests/test_metrics_registry.py",
     "tests/test_config.py",
@@ -147,6 +148,15 @@ def build_aqueduct_plan(args: argparse.Namespace) -> list[PlannedCommand]:
     return plan
 
 
+def build_population_plan(args: argparse.Namespace) -> list[PlannedCommand]:
+    """Build the population exposure prep plan."""
+    argv = _py_module_cmd("tools.geodata.build_population_admin_masters")
+    _append_flag(argv, "--overwrite", bool(args.overwrite))
+    if getattr(args, "population_raster", None):
+        argv.extend(["--raster", str(args.population_raster)])
+    return [PlannedCommand(label="population-admin-masters", argv=argv)]
+
+
 def build_climate_hazards_plan(args: argparse.Namespace) -> list[PlannedCommand]:
     plan: list[PlannedCommand] = []
     levels = _resolve_levels(str(args.level))
@@ -215,11 +225,15 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         "aqueduct-hydro-crosswalk": "tools.geodata.build_aqueduct_hydro_crosswalk",
         "aqueduct-hydro-masters": "tools.geodata.build_aqueduct_hydro_masters",
         "aqueduct-validate": "tools.geodata.validate_aqueduct_workflow",
+        "population-admin-masters": "tools.geodata.build_population_admin_masters",
     }
     if step in module_map:
         argv = _py_module_cmd(module_map[step])
         _append_flag(argv, "--overwrite", bool(args.overwrite))
-        argv.extend(_build_aqueduct_metric_args(args))
+        if step.startswith("aqueduct-"):
+            argv.extend(_build_aqueduct_metric_args(args))
+        if step == "population-admin-masters" and getattr(args, "population_raster", None):
+            argv.extend(["--raster", str(args.population_raster)])
         return [PlannedCommand(label=step, argv=argv)]
 
     if step == "climate-compute":
@@ -274,9 +288,12 @@ def build_command_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         return build_aqueduct_plan(args)
     if command == "climate-hazards":
         return build_climate_hazards_plan(args)
+    if command == "population-exposure":
+        return build_population_plan(args)
     if command == "dashboard-package":
         plan = build_climate_hazards_plan(args)
         plan.extend(build_aqueduct_plan(args))
+        plan.extend(build_population_plan(args))
         if bool(getattr(args, "include_pytest", False)):
             plan.append(
                 PlannedCommand(
@@ -294,6 +311,7 @@ def _print_available_commands() -> None:
     print("Available workflow bundles:")
     print("  aqueduct")
     print("  climate-hazards")
+    print("  population-exposure")
     print("  dashboard-package")
     print("  validate")
     print("")
@@ -306,6 +324,7 @@ def _print_available_commands() -> None:
         "aqueduct-hydro-crosswalk",
         "aqueduct-hydro-masters",
         "aqueduct-validate",
+        "population-admin-masters",
         "climate-compute",
         "climate-masters",
         "pytest-validation",
@@ -350,6 +369,14 @@ def _add_aqueduct_flags(parser: argparse.ArgumentParser, *, bundle: bool) -> Non
         parser.add_argument("--source-gdb", default=None, help="Aqueduct file geodatabase path for baseline cleanup.")
         parser.add_argument("--baseline-csv", default=None, help="Aqueduct baseline CSV path for baseline cleanup.")
         parser.add_argument("--skip-validation", action="store_true", help="Skip Aqueduct validation at the end.")
+
+
+def _add_population_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--population-raster",
+        default=None,
+        help="Optional override path to the 2025 population raster used by population exposure prep.",
+    )
 
 
 def _add_climate_flags(parser: argparse.ArgumentParser) -> None:
@@ -400,10 +427,15 @@ def build_cli() -> argparse.ArgumentParser:
     _add_common_runner_flags(p_climate)
     _add_climate_flags(p_climate)
 
-    p_pkg = subparsers.add_parser("dashboard-package", help="Run climate hazards plus Aqueduct prep for the dashboard.")
+    p_population = subparsers.add_parser("population-exposure", help="Build district/block population exposure masters.")
+    _add_common_runner_flags(p_population)
+    _add_population_flags(p_population)
+
+    p_pkg = subparsers.add_parser("dashboard-package", help="Run climate hazards, Aqueduct, and population exposure prep for the dashboard.")
     _add_common_runner_flags(p_pkg)
     _add_climate_flags(p_pkg)
     _add_aqueduct_flags(p_pkg, bundle=True)
+    _add_population_flags(p_pkg)
     p_pkg.add_argument("--include-pytest", action="store_true", help="Run the default validation pytest set at the end.")
 
     p_validate = subparsers.add_parser("validate", help="Run Aqueduct validation and optional targeted pytest checks.")
@@ -419,10 +451,14 @@ def build_cli() -> argparse.ArgumentParser:
         "aqueduct-hydro-crosswalk",
         "aqueduct-hydro-masters",
         "aqueduct-validate",
+        "population-admin-masters",
     ]:
         sub = subparsers.add_parser(name, help=f"Run the `{name}` step only.")
         _add_common_runner_flags(sub)
-        _add_aqueduct_flags(sub, bundle=(name == "aqueduct-baseline"))
+        if name == "population-admin-masters":
+            _add_population_flags(sub)
+        else:
+            _add_aqueduct_flags(sub, bundle=(name == "aqueduct-baseline"))
 
     p_compute = subparsers.add_parser("climate-compute", help="Run climate compute only.")
     _add_common_runner_flags(p_compute)
@@ -452,4 +488,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

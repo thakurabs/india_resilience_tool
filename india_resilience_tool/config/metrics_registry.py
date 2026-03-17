@@ -60,6 +60,14 @@ class MetricSpec:
     aliases: Sequence[str] = field(default_factory=tuple)
     source_type: str = "pipeline"
     supports_yearly_trend: bool = True
+    selection_mode: str = "scenario_period"
+    fixed_scenario: Optional[str] = None
+    fixed_period: Optional[str] = None
+    supported_statistics: Sequence[str] = field(default_factory=lambda: ("mean", "median"))
+    supports_baseline_comparison: bool = True
+    supports_scenario_comparison: bool = True
+    admin_rebuild_command: Optional[str] = None
+    hydro_rebuild_command: Optional[str] = None
     supported_scenarios: Sequence[str] = field(default_factory=tuple)
     preferred_period_order: Sequence[str] = field(default_factory=tuple)
     supported_spatial_families: Sequence[str] = field(default_factory=tuple)
@@ -98,6 +106,16 @@ class MetricSpec:
             aliases=tuple(d.get("aliases") or ()),
             source_type=str(d.get("source_type") or "pipeline").strip() or "pipeline",
             supports_yearly_trend=bool(d.get("supports_yearly_trend", True)),
+            selection_mode=str(d.get("selection_mode") or "scenario_period").strip() or "scenario_period",
+            fixed_scenario=str(d.get("fixed_scenario") or "").strip() or None,
+            fixed_period=str(d.get("fixed_period") or "").strip() or None,
+            supported_statistics=tuple(
+                str(v) for v in (d.get("supported_statistics") or ("mean", "median"))
+            ),
+            supports_baseline_comparison=bool(d.get("supports_baseline_comparison", True)),
+            supports_scenario_comparison=bool(d.get("supports_scenario_comparison", True)),
+            admin_rebuild_command=str(d.get("admin_rebuild_command") or "").strip() or None,
+            hydro_rebuild_command=str(d.get("hydro_rebuild_command") or "").strip() or None,
             supported_scenarios=tuple(str(v) for v in (d.get("supported_scenarios") or ())),
             preferred_period_order=tuple(str(v) for v in (d.get("preferred_period_order") or ())),
             supported_spatial_families=tuple(str(v) for v in (d.get("supported_spatial_families") or ())),
@@ -1457,6 +1475,12 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
+        "selection_mode": "scenario_period",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": True,
+        "supports_scenario_comparison": True,
+        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
+        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
         "supported_scenarios": ("historical", "bau", "opt", "pes"),
         "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
         "supported_spatial_families": ("admin", "hydro"),
@@ -1477,6 +1501,12 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
+        "selection_mode": "scenario_period",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": True,
+        "supports_scenario_comparison": True,
+        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
+        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
         "supported_scenarios": ("historical", "bau", "opt", "pes"),
         "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
         "supported_spatial_families": ("admin", "hydro"),
@@ -1497,6 +1527,12 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
+        "selection_mode": "scenario_period",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": True,
+        "supports_scenario_comparison": True,
+        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
+        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
         "supported_scenarios": ("historical", "bau", "opt", "pes"),
         "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
         "supported_spatial_families": ("admin", "hydro"),
@@ -1517,10 +1553,70 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
+        "selection_mode": "scenario_period",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": True,
+        "supports_scenario_comparison": True,
+        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
+        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
         "supported_scenarios": ("historical", "bau", "opt", "pes"),
         "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
         "supported_spatial_families": ("admin", "hydro"),
         "supported_levels": ("district", "block", "basin", "sub_basin"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Total Population",
+        "slug": "population_total",
+        "label": "Total Population",
+        "group": "other",
+        "value_col": "population_total",
+        "periods_metric_col": "population_total",
+        "units": "people",
+        "description": (
+            "2025 population totals aggregated from the 1 km population raster onto "
+            "canonical district and block units."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "2025",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_population_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("2025",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Population Density",
+        "slug": "population_density",
+        "label": "Population Density",
+        "group": "other",
+        "value_col": "population_density",
+        "periods_metric_col": "population_density",
+        "units": "people/km2",
+        "description": (
+            "2025 population density derived from raster-aggregated population totals "
+            "and canonical district/block polygon area."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "2025",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_population_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("2025",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
         "rank_higher_is_worse": True,
     },
 ]
@@ -1668,6 +1764,10 @@ DOMAINS: dict[str, list[str]] = {
         "dtr_daily_temp_range",
         "etr_extreme_temp_range",
     ],
+    "Population Exposure": [
+        "population_total",
+        "population_density",
+    ],
     "Aqueduct Water Risk": [
         "aq_water_stress",
         "aq_interannual_variability",
@@ -1687,6 +1787,7 @@ DOMAIN_ORDER: list[str] = [
     "Drought Risk",
     "Drought Risk (Advanced)",
     "Temperature Variability",
+    "Population Exposure",
     "Aqueduct Water Risk",
 ]
 
@@ -1705,7 +1806,9 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
     "Bio-physical Hazards": [
         "Aqueduct Water Risk",
     ],
-    "Exposure": [],
+    "Exposure": [
+        "Population Exposure",
+    ],
     "Vulnerability": [],
     "Adaptive Capacity": [],
 }
@@ -1737,6 +1840,10 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
     "Aqueduct Water Risk": (
         "Hydrologic water-risk metrics derived from Aqueduct and displayed on "
         "admin and hydro units through audited overlap transfer workflows."
+    ),
+    "Population Exposure": (
+        "Static population exposure layers derived from the 2025 population raster "
+        "and aggregated onto canonical district and block units."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "
@@ -1778,7 +1885,8 @@ PILLAR_DESCRIPTIONS: dict[str, str] = {
         "separate from climate hazard indices to make provenance clear."
     ),
     "Exposure": (
-        "Future placeholder for people, assets, land use, and other exposure layers."
+        "People, assets, land use, and other layers that describe what is present "
+        "in places potentially affected by hazards."
     ),
     "Vulnerability": (
         "Future placeholder for sensitivity and vulnerability layers."
@@ -1863,6 +1971,14 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             "description": spec.description or "",
             "source_type": spec.source_type,
             "supports_yearly_trend": bool(spec.supports_yearly_trend),
+            "selection_mode": spec.selection_mode,
+            "fixed_scenario": spec.fixed_scenario,
+            "fixed_period": spec.fixed_period,
+            "supported_statistics": list(spec.supported_statistics),
+            "supports_baseline_comparison": bool(spec.supports_baseline_comparison),
+            "supports_scenario_comparison": bool(spec.supports_scenario_comparison),
+            "admin_rebuild_command": spec.admin_rebuild_command,
+            "hydro_rebuild_command": spec.hydro_rebuild_command,
             "supported_scenarios": list(spec.supported_scenarios),
             "preferred_period_order": list(spec.preferred_period_order),
             "supported_spatial_families": list(spec.supported_spatial_families),

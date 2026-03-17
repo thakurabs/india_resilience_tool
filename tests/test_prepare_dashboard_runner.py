@@ -10,6 +10,7 @@ from tools.runs.prepare_dashboard import (
     build_aqueduct_plan,
     build_climate_hazards_plan,
     build_command_plan,
+    build_population_plan,
     build_cli,
     execute_plan,
 )
@@ -100,7 +101,15 @@ def test_dashboard_package_combines_climate_aqueduct_and_pytest() -> None:
         "climate-masters:basin",
         "climate-masters:sub_basin",
     ]
+    assert "population-admin-masters" in labels
     assert labels[-1] == "pytest-validation"
+
+
+def test_population_bundle_builds_expected_step() -> None:
+    args = argparse.Namespace(overwrite=True, population_raster=None)
+    plan = build_population_plan(args)
+    assert [step.label for step in plan] == ["population-admin-masters"]
+    assert plan[0].argv[1:] == ["-m", "tools.geodata.build_population_admin_masters", "--overwrite"]
 
 
 def test_execute_plan_dry_run_prints_commands_without_running() -> None:

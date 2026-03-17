@@ -92,6 +92,56 @@ def _is_external_metric(varcfg: Optional[dict]) -> bool:
     return str((varcfg or {}).get("source_type") or "").strip().lower() == "external"
 
 
+def _selection_mode(varcfg: Optional[dict]) -> str:
+    """Return the metric selection mode declared in the registry."""
+    return str((varcfg or {}).get("selection_mode") or "scenario_period").strip().lower()
+
+
+def _is_static_snapshot_metric(varcfg: Optional[dict]) -> bool:
+    """Return True for fixed-snapshot metrics such as population exposure layers."""
+    return _selection_mode(varcfg) == "static_snapshot"
+
+
+def _fixed_scenario(varcfg: Optional[dict]) -> str:
+    return str((varcfg or {}).get("fixed_scenario") or "").strip()
+
+
+def _fixed_period(varcfg: Optional[dict]) -> str:
+    return str((varcfg or {}).get("fixed_period") or "").strip()
+
+
+def _supported_statistics(varcfg: Optional[dict]) -> list[str]:
+    raw = list((varcfg or {}).get("supported_statistics") or ("mean", "median"))
+    out = [str(v).strip().lower() for v in raw if str(v).strip()]
+    return out or ["mean", "median"]
+
+
+def _supports_baseline_comparison(varcfg: Optional[dict]) -> bool:
+    return bool((varcfg or {}).get("supports_baseline_comparison", True))
+
+
+def _metric_rebuild_command(varcfg: Optional[dict], *, level: str) -> Optional[str]:
+    level_norm = str(level).strip().lower()
+    key = "hydro_rebuild_command" if level_norm in {"basin", "sub_basin"} else "admin_rebuild_command"
+    cmd = str((varcfg or {}).get(key) or "").strip()
+    return cmd or None
+
+
+def _coerce_selection(
+    *,
+    key: str,
+    options: list[str],
+    placeholder: str,
+    default: Optional[str] = None,
+) -> str:
+    preferred = default if (default is not None and default in options) else None
+    fallback = preferred or (options[0] if options else placeholder)
+    current = st.session_state.get(key, placeholder)
+    if current not in options:
+        st.session_state[key] = fallback
+    return str(st.session_state.get(key, fallback))
+
+
 def render_metric_ribbon(
     *,
     col: object,
@@ -301,12 +351,13 @@ def render_metric_ribbon(
                 if is_external:
                     if master_csv_path.exists():
                         return False, "up-to-date"
+                    rebuild_cmd = _metric_rebuild_command(varcfg, level=level)
                     if level in {"district", "block"}:
                         return (
                             False,
                             (
                                 "external admin masters are built by dedicated geodata tooling; "
-                                "run python -m tools.geodata.build_aqueduct_admin_masters --overwrite"
+                                f"run {rebuild_cmd or 'the metric-specific admin master builder'}"
                             ),
                         )
                     if level in {"basin", "sub_basin"}:
@@ -314,7 +365,7 @@ def render_metric_ribbon(
                             False,
                             (
                                 "external hydro masters are built by dedicated geodata tooling; "
-                                "run python -m tools.geodata.build_aqueduct_hydro_masters --overwrite"
+                                f"run {rebuild_cmd or 'the metric-specific hydro master builder'}"
                             ),
                         )
                     return False, "external metric master CSV missing"
@@ -387,15 +438,16 @@ def render_metric_ribbon(
 
             if not master_csv_path.exists():
                 if _is_external_metric(varcfg):
+                    rebuild_cmd = _metric_rebuild_command(varcfg, level=level)
                     if level in {"district", "block"}:
                         st.error(
                             f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
-                            "Run `python -m tools.geodata.build_aqueduct_admin_masters --overwrite` first."
+                            f"Run `{rebuild_cmd or 'the metric-specific admin master builder'}` first."
                         )
                     elif level in {"basin", "sub_basin"}:
                         st.error(
                             f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
-                            "Run `python -m tools.geodata.build_aqueduct_hydro_masters --overwrite` first."
+                            f"Run `{rebuild_cmd or 'the metric-specific hydro master builder'}` first."
                         )
                     else:
                         st.error(
@@ -441,22 +493,32 @@ def render_metric_ribbon(
             ]
             allowed = set(allowed_list)
             scenarios = [s for s in ordered_scenario_keys(all_scenarios) if str(s).strip().lower() in allowed]
+            if _is_static_snapshot_metric(varcfg):
+                fixed = _fixed_scenario(varcfg) or (scenarios[0] if scenarios else "")
+                if fixed and fixed not in scenarios:
+                    scenarios = [fixed]
+                elif fixed:
+                    scenarios = [fixed]
             if not scenarios:
                 st.error("No supported scenarios found for this metric in the master CSV.")
                 render_perf_panel_safe()
                 st.stop()
-            scenario_options = [sel_placeholder] + scenarios
+            scenario_options = scenarios if _is_static_snapshot_metric(varcfg) else [sel_placeholder] + scenarios
         else:
             scenario_options = [sel_placeholder]
 
-        scenario_disabled = not metric_ready
-        cur_scn = st.session_state.get("sel_scenario", sel_placeholder)
-        if cur_scn not in scenario_options:
-            st.session_state["sel_scenario"] = sel_placeholder
-        cur_scn = st.session_state.get("sel_scenario", sel_placeholder)
+        scenario_disabled = (not metric_ready) or (_is_static_snapshot_metric(varcfg) and len(scenario_options) == 1)
+        cur_scn = _coerce_selection(
+            key="sel_scenario",
+            options=scenario_options,
+            placeholder=sel_placeholder,
+            default=_fixed_scenario(varcfg) if _is_static_snapshot_metric(varcfg) else sel_placeholder,
+        )
 
         with row2[0]:
             scenario_help = help_md_to_plain_text(RIBBON_HELP_MD["scenario"])
+            if _is_static_snapshot_metric(varcfg):
+                scenario_help = "This metric uses a fixed snapshot selection and does not expose multiple scenarios."
             if cur_scn != sel_placeholder:
                 scen_key_preview = str(cur_scn).strip().lower()
                 extra = SCENARIO_HELP_MD.get(scen_key_preview)
@@ -498,17 +560,26 @@ def render_metric_ribbon(
             base_period_order = preferred_periods + [p for p in PERIOD_ORDER if p not in preferred_periods]
             periods = [p for p in base_period_order if p in periods_found]
             periods.extend(sorted([p for p in periods_found if p not in set(base_period_order)]))
-            period_options = [sel_placeholder] + periods if periods else [sel_placeholder]
+            if _is_static_snapshot_metric(varcfg):
+                fixed_period = canonical_period_label(_fixed_period(varcfg) or (periods[0] if periods else ""))
+                period_options = [fixed_period] if fixed_period else [sel_placeholder]
+                period_disabled = period_disabled or (fixed_period != sel_placeholder)
+            else:
+                period_options = [sel_placeholder] + periods if periods else [sel_placeholder]
         else:
             period_options = [sel_placeholder]
 
-        cur_per = st.session_state.get("sel_period", sel_placeholder)
-        if cur_per not in period_options:
-            st.session_state["sel_period"] = sel_placeholder
-        cur_per = st.session_state.get("sel_period", sel_placeholder)
+        cur_per = _coerce_selection(
+            key="sel_period",
+            options=period_options,
+            placeholder=sel_placeholder,
+            default=canonical_period_label(_fixed_period(varcfg)) if _is_static_snapshot_metric(varcfg) else sel_placeholder,
+        )
 
         with row2[1]:
             period_help = help_md_to_plain_text(RIBBON_HELP_MD["period"])
+            if _is_static_snapshot_metric(varcfg):
+                period_help = "This metric uses a fixed data snapshot year and does not expose multi-period climate windows."
             sel_period = st.selectbox(
                 "Period",
                 options=period_options,
@@ -522,11 +593,16 @@ def render_metric_ribbon(
 
         # --- Statistic selection (mean/median only, placeholder-first) ---
         stat_disabled = not metric_ready
-        stat_options = [sel_placeholder, "mean", "median"]
-        cur_stat = st.session_state.get("sel_stat", sel_placeholder)
-        if cur_stat not in stat_options:
-            st.session_state["sel_stat"] = sel_placeholder
-        cur_stat = st.session_state.get("sel_stat", sel_placeholder)
+        stat_values = _supported_statistics(varcfg) if metric_ready else ["mean", "median"]
+        stat_options = stat_values if (_is_static_snapshot_metric(varcfg) and len(stat_values) == 1) else [sel_placeholder] + stat_values
+        if _is_static_snapshot_metric(varcfg) and len(stat_values) == 1:
+            stat_disabled = True
+        cur_stat = _coerce_selection(
+            key="sel_stat",
+            options=stat_options,
+            placeholder=sel_placeholder,
+            default=(stat_values[0] if (_is_static_snapshot_metric(varcfg) and stat_values) else sel_placeholder),
+        )
 
         with row2[2]:
             statistic_help = help_md_to_plain_text(RIBBON_HELP_MD["statistic"])
@@ -542,20 +618,28 @@ def render_metric_ribbon(
 
         # --- Map mode selection ---
         baseline_map_mode_label = "Change from baseline" if _is_external_metric(varcfg) else "Change from 1990-2010 baseline"
-        map_mode_options = [sel_placeholder, "Absolute value", baseline_map_mode_label]
-        cur_map_mode = st.session_state.get("map_mode", sel_placeholder)
-        if cur_map_mode not in map_mode_options:
-            st.session_state["map_mode"] = sel_placeholder
-        cur_map_mode = st.session_state.get("map_mode", sel_placeholder)
+        if metric_ready and not _supports_baseline_comparison(varcfg):
+            map_mode_options = ["Absolute value"]
+        else:
+            map_mode_options = [sel_placeholder, "Absolute value", baseline_map_mode_label]
+        cur_map_mode = _coerce_selection(
+            key="map_mode",
+            options=map_mode_options,
+            placeholder=sel_placeholder,
+            default=("Absolute value" if map_mode_options == ["Absolute value"] else sel_placeholder),
+        )
 
         with row3[0]:
             map_mode_help = help_md_to_plain_text(RIBBON_HELP_MD["map_mode"])
+            if metric_ready and not _supports_baseline_comparison(varcfg):
+                map_mode_help = "This metric only supports absolute-value mapping; baseline change mode is not available."
             map_mode = st.selectbox(
                 "Map mode",
                 options=map_mode_options,
                 index=map_mode_options.index(cur_map_mode),
                 key="map_mode",
                 label_visibility="visible",
+                disabled=(metric_ready and map_mode_options == ["Absolute value"]),
                 help=map_mode_help,
             )
 

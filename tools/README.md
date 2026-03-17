@@ -24,6 +24,10 @@ python -m tools.runs.prepare_dashboard climate-hazards --level all --state Telan
 ```
 
 ```bash
+python -m tools.runs.prepare_dashboard population-exposure --overwrite
+```
+
+```bash
 python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite --dry-run
 ```
 
@@ -61,6 +65,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_aqueduct_admin_masters.py` | Build district and block master CSVs for the onboarded Aqueduct metrics under `processed/{metric_slug}/{state}/master_metrics_by_{district,block}.csv` | `python -m tools.geodata.build_aqueduct_admin_masters --help` |
 | `tools/geodata/build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs for area-weighted transfer | `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` |
 | `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for the onboarded Aqueduct hydro metrics under `processed/{metric_slug}/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
+| `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
 | `tools/geodata/validate_aqueduct_workflow.py` | Validate the Aqueduct cleanup, crosswalk, coverage, sensitivity, and master-value workflow and write per-metric validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/` | `python -m tools.geodata.validate_aqueduct_workflow --help` |
 | `tools/geodata/clean_river_network.py` | Clean the Survey of India river shapefile into canonical river artifacts (`river_network.parquet`, display GeoJSON, QA CSV) | `python -m tools.geodata.clean_river_network --help` |
 | `tools/geodata/build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV used by hydro river overlays | `python -m tools.geodata.build_river_basin_reconciliation --help` |
@@ -154,6 +159,20 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - `IRT_DATA_DIR/processed/aq_water_depletion/{state}/master_metrics_by_block.csv`
   - district and block QA CSVs under `IRT_DATA_DIR/aqueduct/`
 - if `--metric-slug` is omitted or set to `all`, the tool builds all onboarded Aqueduct admin metrics
+
+`tools/geodata/build_population_admin_masters.py` notes:
+- source raster:
+  - `IRT_DATA_DIR/population-*/population/ind_pop_2025_CN_1km_R2025A_UA_v1.tif`
+- canonical boundary inputs:
+  - `IRT_DATA_DIR/districts_4326.geojson`
+  - `IRT_DATA_DIR/blocks_4326.geojson`
+- outputs:
+  - `IRT_DATA_DIR/processed/population_total/{state}/master_metrics_by_district.csv`
+  - `IRT_DATA_DIR/processed/population_total/{state}/master_metrics_by_block.csv`
+  - `IRT_DATA_DIR/processed/population_density/{state}/master_metrics_by_district.csv`
+  - `IRT_DATA_DIR/processed/population_density/{state}/master_metrics_by_block.csv`
+  - QA CSVs under `IRT_DATA_DIR/population/`
+- uses raster cell-center inclusion (`all_touched=False`) and canonical polygon area in `EPSG:6933`
 
 `tools/geodata/validate_aqueduct_workflow.py` notes:
 - writes per-metric validation bundles under:

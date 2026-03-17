@@ -27,6 +27,23 @@ from india_resilience_tool.viz.formatting import format_delta, format_percent, f
 
 PathLike = Union[str, Path]
 
+
+def _supports_baseline_comparison(varcfg: Optional[Mapping[str, Any]]) -> bool:
+    return bool((varcfg or {}).get("supports_baseline_comparison", True))
+
+
+def _supports_scenario_comparison(varcfg: Optional[Mapping[str, Any]]) -> bool:
+    return bool((varcfg or {}).get("supports_scenario_comparison", True))
+
+
+def _is_non_hazard_metric(varcfg: Optional[Mapping[str, Any]]) -> bool:
+    pillars = {
+        str(v).strip().lower()
+        for v in ((varcfg or {}).get("pillars") or [])
+        if str(v).strip()
+    }
+    return bool(pillars) and pillars.isdisjoint({"climate hazards", "bio-physical hazards"})
+
 _RISK_SUMMARY_CSS = """
 <style>
 /* ---------------------------
@@ -181,6 +198,8 @@ def render_risk_summary(
     n_in_district: Optional[int] = None,
     percentile_district: Optional[float] = None,
     units: Optional[str] = None,
+    supports_baseline_comparison: bool = True,
+    summary_title: str = "Risk summary",
 ) -> None:
     """
     Render the Risk summary expander.
@@ -229,49 +248,71 @@ def render_risk_summary(
             delta_str += f" ({format_percent(diff_pct, decimals=1, show_sign=True)})"
         delta_kind = "pos" if diff_abs > 0 else ("neg" if diff_abs < 0 else "neutral")
 
-    with st.expander("Risk summary", expanded=True):
-        cols = st.columns(4) if is_block else st.columns(3)
+    with st.expander(summary_title, expanded=True):
+        if supports_baseline_comparison:
+            cols = st.columns(4) if is_block else st.columns(3)
 
-        # Column mapping (keeps "Position in state" at the far right)
-        col_baseline = cols[0]
-        col_current = cols[1]
-        col_pos_district = cols[2] if is_block else None
-        col_pos_state = cols[3] if is_block else cols[2]
+            # Column mapping (keeps "Position in state" at the far right)
+            col_baseline = cols[0]
+            col_current = cols[1]
+            col_pos_district = cols[2] if is_block else None
+            col_pos_state = cols[3] if is_block else cols[2]
 
-        # --- Historical baseline (LEFT) ---
-        with col_baseline:
-            st.markdown("**Historical baseline**")
-            if baseline_val_f is not None:
-                number_str = format_value(baseline_val_f, units=None)
-                st.markdown(
-                    _risk_metric_html(
-                        number_str=number_str,
-                        units=units,
-                        help_text=f"Historical baseline: {baseline_desc}",
-                    ),
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.write("Baseline not available")
+            # --- Historical baseline (LEFT) ---
+            with col_baseline:
+                st.markdown("**Historical baseline**")
+                if baseline_val_f is not None:
+                    number_str = format_value(baseline_val_f, units=None)
+                    st.markdown(
+                        _risk_metric_html(
+                            number_str=number_str,
+                            units=units,
+                            help_text=f"Historical baseline: {baseline_desc}",
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.write("Baseline not available")
 
-        # --- Current value (MIDDLE) + delta pill (below) ---
-        with col_current:
-            st.markdown("**Current value**")
-            if current_val_f is not None:
-                number_str = format_value(current_val_f, units=None)
-                help_text = f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})"
-                st.markdown(
-                    _risk_metric_html(
-                        number_str=number_str,
-                        units=units,
-                        delta_text=delta_str,
-                        delta_kind=delta_kind,
-                        help_text=help_text,
-                    ),
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.write("No data")
+            # --- Current value (MIDDLE) + delta pill (below) ---
+            with col_current:
+                st.markdown("**Current value**")
+                if current_val_f is not None:
+                    number_str = format_value(current_val_f, units=None)
+                    help_text = f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})"
+                    st.markdown(
+                        _risk_metric_html(
+                            number_str=number_str,
+                            units=units,
+                            delta_text=delta_str,
+                            delta_kind=delta_kind,
+                            help_text=help_text,
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.write("No data")
+        else:
+            cols = st.columns(3) if is_block else st.columns(2)
+            col_current = cols[0]
+            col_pos_district = cols[1] if is_block else None
+            col_pos_state = cols[2] if is_block else cols[1]
+
+            with col_current:
+                st.markdown("**Selected value**")
+                if current_val_f is not None:
+                    number_str = format_value(current_val_f, units=None)
+                    help_text = f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})"
+                    st.markdown(
+                        _risk_metric_html(
+                            number_str=number_str,
+                            units=units,
+                            help_text=help_text,
+                        ),
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.write("No data")
 
         # --- Position in district (block mode only; unchanged position) ---
         if is_block and col_pos_district is not None:
@@ -1393,6 +1434,7 @@ def render_details_panel(
         or variables.get(variable_slug, {}).get("units")
         or ""
     )
+    summary_title = "Metric summary" if _is_non_hazard_metric(varcfg) else "Risk summary"
 
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
@@ -1513,52 +1555,56 @@ def render_details_panel(
         n_in_district=n_in_district,
         percentile_district=percentile_district,
         units=units,
+        supports_baseline_comparison=_supports_baseline_comparison(varcfg),
+        summary_title=summary_title,
     )
 
     # 2. Trend over time
-    render_trend_over_time(
-        hist_ts=hist_ts,
-        scen_ts=scen_ts,
-        variable_label=variable_label,
-        sel_scenario=sel_scenario,
-        sel_period=sel_period,
-        district_name=district_name,
-        state_dir_for_fs=state_dir_for_fs or state_to_show,
-        district_for_fs=district_for_fs or district_name,
-        fig_size_panel=fig_size_panel_169,
-        fig_dpi_panel=fig_dpi_panel,
-        font_size_legend=font_size_legend,
-        units=units,
-        logo_path=logo_path,
-        create_trend_figure_fn=create_trend_figure_fn,
-        ts_root=ts_root,
-        varcfg=varcfg,
-        level=level,
-        block_name=block_name,
-    )
+    if bool(varcfg.get("supports_yearly_trend", True)):
+        render_trend_over_time(
+            hist_ts=hist_ts,
+            scen_ts=scen_ts,
+            variable_label=variable_label,
+            sel_scenario=sel_scenario,
+            sel_period=sel_period,
+            district_name=district_name,
+            state_dir_for_fs=state_dir_for_fs or state_to_show,
+            district_for_fs=district_for_fs or district_name,
+            fig_size_panel=fig_size_panel_169,
+            fig_dpi_panel=fig_dpi_panel,
+            font_size_legend=font_size_legend,
+            units=units,
+            logo_path=logo_path,
+            create_trend_figure_fn=create_trend_figure_fn,
+            ts_root=ts_root,
+            varcfg=varcfg,
+            level=level,
+            block_name=block_name,
+        )
 
     # 3. Scenario comparison
-    render_scenario_comparison(
-        row=row,
-        schema_items=schema_items,
-        sel_metric=sel_metric,
-        sel_scenario=sel_scenario,
-        sel_period=sel_period,
-        sel_stat=sel_stat,
-        variable_label=variable_label,
-        district_name=district_name,
-        fig_size_panel=fig_size_panel_169,
-        fig_dpi_panel=fig_dpi_panel,
-        font_size_title=font_size_title,
-        font_size_label=font_size_label,
-        font_size_ticks=font_size_ticks,
-        font_size_legend=font_size_legend,
-        logo_path=logo_path,
-        period_order=period_order,
-        scenario_display=scenario_display,
-        build_scenario_panel_fn=build_scenario_panel_fn,
-        make_scenario_figure_fn=make_scenario_figure_fn,
-    )
+    if _supports_scenario_comparison(varcfg):
+        render_scenario_comparison(
+            row=row,
+            schema_items=schema_items,
+            sel_metric=sel_metric,
+            sel_scenario=sel_scenario,
+            sel_period=sel_period,
+            sel_stat=sel_stat,
+            variable_label=variable_label,
+            district_name=district_name,
+            fig_size_panel=fig_size_panel_169,
+            fig_dpi_panel=fig_dpi_panel,
+            font_size_title=font_size_title,
+            font_size_label=font_size_label,
+            font_size_ticks=font_size_ticks,
+            font_size_legend=font_size_legend,
+            logo_path=logo_path,
+            period_order=period_order,
+            scenario_display=scenario_display,
+            build_scenario_panel_fn=build_scenario_panel_fn,
+            make_scenario_figure_fn=make_scenario_figure_fn,
+        )
 
     # 4. Case study export (district/block only in v1, pipeline-backed metrics only)
     if level_norm in {"district", "block"} and str(varcfg.get("source_type") or "").strip().lower() != "external":
