@@ -19,6 +19,11 @@ import math
 import numpy as np
 
 
+_METRIC_DISPLAY_DECIMALS: dict[str, int] = {
+    "population_total": 0,
+}
+
+
 def _is_na(x: object) -> bool:
     try:
         if x is None:
@@ -57,6 +62,20 @@ def infer_decimals(
             return default
 
     return default
+
+
+def infer_metric_decimals(
+    *,
+    metric_slug: Optional[str] = None,
+    units: Optional[str] = None,
+    value_range: Optional[Tuple[float, float]] = None,
+    default: int = 2,
+) -> int:
+    """Infer decimals with optional metric-specific overrides."""
+    slug = str(metric_slug or "").strip().lower()
+    if slug in _METRIC_DISPLAY_DECIMALS:
+        return int(_METRIC_DISPLAY_DECIMALS[slug])
+    return infer_decimals(units=units, value_range=value_range, default=default)
 
 
 def format_number(
@@ -102,6 +121,51 @@ def format_value(
             return f"{s}%"
         return f"{s} {u}".rstrip()
     return s
+
+
+def format_metric_number(
+    x: object,
+    *,
+    metric_slug: Optional[str] = None,
+    units: Optional[str] = None,
+    decimals: Optional[int] = None,
+    thousand_sep: bool = True,
+    na: str = "—",
+) -> str:
+    """Format a metric value as a number without appending units."""
+    if decimals is not None:
+        d = int(decimals)
+    else:
+        d = infer_metric_decimals(
+            metric_slug=metric_slug,
+            units=units,
+        )
+        slug = str(metric_slug or "").strip().lower()
+        if slug not in _METRIC_DISPLAY_DECIMALS:
+            try:
+                xf = float(x)  # type: ignore[arg-type]
+            except Exception:
+                xf = None
+            if xf is not None and abs(xf - round(xf)) < 1e-10:
+                d = 0
+    return format_number(x, decimals=d, thousand_sep=thousand_sep, na=na)
+
+
+def format_metric_value(
+    x: object,
+    *,
+    metric_slug: Optional[str] = None,
+    units: Optional[str] = None,
+    decimals: Optional[int] = None,
+    thousand_sep: bool = True,
+    na: str = "—",
+) -> str:
+    """Format a metric value with metric-aware decimals and optional units."""
+    d = int(decimals) if decimals is not None else infer_metric_decimals(
+        metric_slug=metric_slug,
+        units=units,
+    )
+    return format_value(x, units=units, decimals=d, thousand_sep=thousand_sep, na=na)
 
 
 def format_delta(

@@ -23,7 +23,7 @@ import pandas as pd
 
 from india_resilience_tool.app.state import VIEW_RANKINGS
 from india_resilience_tool.data.crosswalks import CrosswalkContext, CrosswalkOverlap
-from india_resilience_tool.viz.formatting import format_delta, format_percent, format_value
+from india_resilience_tool.viz.formatting import format_delta, format_metric_number, format_percent
 
 PathLike = Union[str, Path]
 
@@ -188,6 +188,7 @@ def render_risk_summary(
     percentile_state: Optional[float],
     rank_higher_is_worse: bool = True,
     variable_label: str,
+    variable_slug: str,
     sel_scenario: str,
     sel_period: str,
     sel_stat: str,
@@ -262,7 +263,7 @@ def render_risk_summary(
             with col_baseline:
                 st.markdown("**Historical baseline**")
                 if baseline_val_f is not None:
-                    number_str = format_value(baseline_val_f, units=None)
+                    number_str = format_metric_number(baseline_val_f, metric_slug=variable_slug)
                     st.markdown(
                         _risk_metric_html(
                             number_str=number_str,
@@ -278,7 +279,7 @@ def render_risk_summary(
             with col_current:
                 st.markdown("**Current value**")
                 if current_val_f is not None:
-                    number_str = format_value(current_val_f, units=None)
+                    number_str = format_metric_number(current_val_f, metric_slug=variable_slug)
                     help_text = f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})"
                     st.markdown(
                         _risk_metric_html(
@@ -301,7 +302,7 @@ def render_risk_summary(
             with col_current:
                 st.markdown("**Selected value**")
                 if current_val_f is not None:
-                    number_str = format_value(current_val_f, units=None)
+                    number_str = format_metric_number(current_val_f, metric_slug=variable_slug)
                     help_text = f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})"
                     st.markdown(
                         _risk_metric_html(
@@ -1537,15 +1538,16 @@ def render_details_panel(
 
     # 1. Risk summary
     render_risk_summary(
-        current_val_f=current_val_f,
-        baseline_val_f=baseline_val_f,
-        baseline_col=baseline_col,
+            current_val_f=current_val_f,
+            baseline_val_f=baseline_val_f,
+            baseline_col=baseline_col,
         rank_in_state=rank_in_state,
         n_in_state=n_in_state,
         percentile_state=percentile_state,
-        rank_higher_is_worse=rank_higher_is_worse,
-        variable_label=variable_label,
-        sel_scenario=sel_scenario,
+            rank_higher_is_worse=rank_higher_is_worse,
+            variable_label=variable_label,
+            variable_slug=variable_slug,
+            sel_scenario=sel_scenario,
         sel_period=sel_period,
         sel_stat=sel_stat,
         state_to_show=state_to_show,

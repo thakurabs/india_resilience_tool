@@ -261,7 +261,7 @@ def build_map_and_rankings(
         )
 
     with perf_section("map: build tooltip strings"):
-        merged = add_tooltip_strings(merged, map_mode=map_mode)
+        merged = add_tooltip_strings(merged, map_mode=map_mode, variable_slug=variable_slug)
 
     # Compute color scale defaults from *visible* units (matches the map filter),
     # then default to a robust p2–p98 range so outliers don't collapse the palette.

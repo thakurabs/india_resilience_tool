@@ -18,8 +18,18 @@ from typing import Any, Callable, Literal, Mapping, Optional
 import pandas as pd
 
 from india_resilience_tool.app.state import VIEW_RANKINGS
+from india_resilience_tool.viz.formatting import format_metric_number
 
 AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+
+
+def _format_rankings_numeric_columns(df: pd.DataFrame, *, variable_slug: str) -> pd.DataFrame:
+    """Format visible rankings value columns without changing underlying ranking math."""
+    out = df.copy()
+    for col in ("value", "baseline", "delta_abs"):
+        if col in out.columns:
+            out[col] = out[col].map(lambda x: format_metric_number(x, metric_slug=variable_slug))
+    return out
 
 
 def render_rankings_view(
@@ -174,7 +184,7 @@ def _render_simple_rankings(
 
     display_cols = [c for c in display_cols if c in df.columns]
 
-    df_display = df[display_cols].rename(columns={
+    df_display = _format_rankings_numeric_columns(df[display_cols], variable_slug=variable_slug).rename(columns={
         "rank_value": "Rank (value)",
         "subbasin_name": "Sub-basin",
         "basin_name": "Basin",
@@ -405,6 +415,7 @@ def _render_portfolio_rankings(
 
     df_port.insert(0, "In portfolio", in_portfolio_status)
     df_port["Add to portfolio"] = False  # Checkbox column for adding
+    df_port = _format_rankings_numeric_columns(df_port, variable_slug=variable_slug)
 
     # Portfolio stats
     portfolio_state_key = get_portfolio_storage_key(level_norm)

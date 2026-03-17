@@ -85,3 +85,21 @@ def test_add_tooltip_strings_formats_missing_and_integers() -> None:
     assert out["_tooltip_delta"].tolist() == ["500", "—"]
     assert out["_tooltip_rank"].tolist() == ["1", "—"]
 
+
+def test_add_tooltip_strings_rounds_population_total_to_whole_persons() -> None:
+    merged = pd.DataFrame(
+        {
+            "_current_value": [1931513.75],
+            "_baseline_value": [pd.NA],
+            "_delta_abs": [pd.NA],
+            "_rank_in_state": [5.0],
+        }
+    )
+
+    out = add_tooltip_strings(
+        merged.copy(),
+        map_mode="Absolute value",
+        variable_slug="population_total",
+    )
+
+    assert out["_tooltip_value"].tolist() == ["1,931,514"]

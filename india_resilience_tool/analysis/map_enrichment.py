@@ -17,6 +17,8 @@ from typing import Callable, Optional, Tuple
 
 import pandas as pd
 
+from india_resilience_tool.viz.formatting import format_metric_number
+
 
 def add_current_baseline_delta(
     merged: pd.DataFrame,
@@ -124,6 +126,7 @@ def add_tooltip_strings(
     merged: pd.DataFrame,
     *,
     map_mode: str,
+    variable_slug: Optional[str] = None,
 ) -> pd.DataFrame:
     """
     Add human-friendly tooltip string columns (Streamlit-free).
@@ -138,15 +141,7 @@ def add_tooltip_strings(
     """
 
     def _fmt_number(x) -> str:
-        if x is None or (isinstance(x, float) and pd.isna(x)) or pd.isna(x):
-            return "—"
-        try:
-            xf = float(x)
-        except Exception:
-            return "—"
-        if abs(xf - round(xf)) < 1e-9 and abs(xf) < 1e9:
-            return f"{int(round(xf)):,}"
-        return f"{xf:,.2f}"
+        return format_metric_number(x, metric_slug=variable_slug)
 
     if map_mode == "Change from 1990-2010 baseline":
         merged["_tooltip_value"] = merged.get("_delta_abs", pd.Series([pd.NA] * len(merged), index=merged.index)).apply(
@@ -178,4 +173,3 @@ def add_tooltip_strings(
         _fmt_rank
     )
     return merged
-

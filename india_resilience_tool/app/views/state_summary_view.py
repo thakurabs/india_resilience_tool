@@ -7,6 +7,8 @@ from typing import Any, Mapping, Optional
 
 import pandas as pd
 
+from india_resilience_tool.viz.formatting import format_metric_value
+
 
 def _normalize_name(value: str) -> str:
     return str(value or "").strip().lower()
@@ -302,13 +304,20 @@ def render_state_summary_view(
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.markdown("**Historical baseline**")
-                st.metric("", f"{baseline_val:.2f} {units or ''}" if baseline_val is not None else "N/A")
+                st.metric(
+                    "",
+                    format_metric_value(baseline_val, metric_slug=variable_slug, units=units)
+                    if baseline_val is not None
+                    else "N/A",
+                )
             with c2:
                 st.markdown("**Current value**")
                 delta = (current_val - baseline_val) if (current_val is not None and baseline_val is not None) else None
                 st.metric(
                     "",
-                    f"{current_val:.2f} {units or ''}" if current_val is not None else "N/A",
+                    format_metric_value(current_val, metric_slug=variable_slug, units=units)
+                    if current_val is not None
+                    else "N/A",
                     f"{delta:+.2f}" if delta is not None else None,
                 )
             with c3:
@@ -322,7 +331,12 @@ def render_state_summary_view(
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown("**Selected value**")
-                st.metric("", f"{current_val:.2f} {units or ''}" if current_val is not None else "N/A")
+                st.metric(
+                    "",
+                    format_metric_value(current_val, metric_slug=variable_slug, units=units)
+                    if current_val is not None
+                    else "N/A",
+                )
             with c2:
                 st.markdown("**Position in India**")
                 if rank_india is not None and n_india >= 2:
