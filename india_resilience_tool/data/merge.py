@@ -11,24 +11,21 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Callable, Literal, MutableMapping, Optional, Union
+from typing import Callable, Literal, MutableMapping, Optional
 
 import pandas as pd
 
+from india_resilience_tool.data.master_loader import MasterSourceLike, master_source_signature
 
-PathLike = Union[str, Path]
 AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
 
-def get_master_mtime(master_path: PathLike) -> Optional[float]:
+def get_master_mtime(master_path: MasterSourceLike) -> Optional[float]:
     """
-    Return master CSV mtime, or None if unavailable.
+    Return the latest master CSV mtime, or None if unavailable.
     """
-    try:
-        return Path(master_path).stat().st_mtime
-    except Exception:
-        return None
+    mtimes = [mtime for _path, mtime in master_source_signature(master_path) if mtime is not None]
+    return max(mtimes) if mtimes else None
 
 
 def restrict_boundaries_to_master_states(
@@ -181,7 +178,7 @@ def get_or_build_merged_for_index_cached(
     master_df: pd.DataFrame,
     *,
     slug: str,
-    master_path: PathLike,
+    master_path: MasterSourceLike,
     session_state: MutableMapping,
     alias_fn: Callable[[str], str],
     level: AdminLevel = "district",
@@ -215,11 +212,11 @@ def get_or_build_merged_for_index_cached(
     """
     merged_cache = session_state.setdefault("_merged_cache", {})
 
-    mtime = get_master_mtime(master_path)
-    cache_key = f"{slug}_{level}"
+    source_signature = master_source_signature(master_path)
+    cache_key = (slug, level, tuple(path for path, _ in source_signature))
     cache_entry = merged_cache.get(cache_key)
 
-    if cache_entry is not None and cache_entry.get("mtime") == mtime:
+    if cache_entry is not None and cache_entry.get("source_signature") == source_signature:
         return cache_entry["gdf"]
 
     # Restrict to states present in master
@@ -241,7 +238,7 @@ def get_or_build_merged_for_index_cached(
     else:
         merged = merge_adm2_with_master(boundary_c, master_df, alias_fn=alias_fn)
 
-    merged_cache[cache_key] = {"mtime": mtime, "gdf": merged}
+    merged_cache[cache_key] = {"source_signature": source_signature, "gdf": merged}
     return merged
 
 

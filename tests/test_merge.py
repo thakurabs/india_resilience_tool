@@ -102,3 +102,48 @@ def test_cache_by_mtime(tmp_path: Path) -> None:
         alias_fn=_alias,
     )
     assert int(out2["m"].iloc[0]) == 999
+
+
+def test_cache_invalidates_when_multisource_signature_changes(tmp_path: Path) -> None:
+    adm2 = pd.DataFrame({"district_name": ["Alpha"], "state_name": ["Telangana"]})
+    master_v1 = pd.DataFrame({"district": ["alpha"], "state": ["telangana"], "m": [1]})
+    master_v2 = pd.DataFrame({"district": ["alpha"], "state": ["telangana"], "m": [5]})
+
+    master_a = tmp_path / "a.csv"
+    master_b = tmp_path / "b.csv"
+    master_a.write_text("x\n1\n")
+    master_b.write_text("x\n1\n")
+    session_state: dict = {}
+
+    out1 = get_or_build_merged_for_index_cached(
+        adm2,
+        master_v1,
+        slug="demo",
+        master_path=(master_a, master_b),
+        session_state=session_state,
+        alias_fn=_alias,
+    )
+    assert int(out1["m"].iloc[0]) == 1
+
+    out_cached = get_or_build_merged_for_index_cached(
+        adm2,
+        master_v2,
+        slug="demo",
+        master_path=(master_a, master_b),
+        session_state=session_state,
+        alias_fn=_alias,
+    )
+    assert int(out_cached["m"].iloc[0]) == 1
+
+    time.sleep(0.01)
+    master_b.write_text("x\n2\n")
+
+    out2 = get_or_build_merged_for_index_cached(
+        adm2,
+        master_v2,
+        slug="demo",
+        master_path=(master_a, master_b),
+        session_state=session_state,
+        alias_fn=_alias,
+    )
+    assert int(out2["m"].iloc[0]) == 5

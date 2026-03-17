@@ -13,6 +13,8 @@ import pandas as pd
 
 from india_resilience_tool.data.master_loader import (
     load_master_csv,
+    load_master_csvs,
+    master_source_signature,
     normalize_master_columns,
     parse_master_schema,
     parse_master_schema_obj,
@@ -78,3 +80,18 @@ def test_load_master_csv_encoding_fallback(tmp_path: Path) -> None:
     df = load_master_csv(p)
     assert df.loc[0, "name"] == "café"
     assert int(df.loc[0, "value"]) == 1
+
+
+def test_load_master_csvs_concatenates_multiple_files_and_reports_signature(tmp_path: Path) -> None:
+    p1 = tmp_path / "state_a.csv"
+    p2 = tmp_path / "state_b.csv"
+    p1.write_text("state,district,value\nTelangana,A,1\n", encoding="utf-8")
+    p2.write_text("state,district,value\nOdisha,B,2\n", encoding="utf-8")
+
+    df = load_master_csvs((p1, p2))
+    signature = master_source_signature((p1, p2))
+
+    assert df["state"].tolist() == ["Telangana", "Odisha"]
+    assert len(signature) == 2
+    assert signature[0][0].endswith("state_a.csv")
+    assert signature[1][0].endswith("state_b.csv")

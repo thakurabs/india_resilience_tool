@@ -14,6 +14,7 @@ from typing import Callable, Optional
 import pandas as pd
 import streamlit as st
 
+from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.help_text import RIBBON_HELP_MD, help_md_to_plain_text
 from india_resilience_tool.app.master_cache import make_load_master_and_schema_fn
 from india_resilience_tool.config.constants import SCENARIO_HELP_MD, SCENARIO_UI_LABEL
@@ -41,7 +42,7 @@ class RibbonContext:
     variable_slug: Optional[str]
     varcfg: Optional[dict]
     processed_root: Optional[Path]
-    master_csv_path: Optional[Path]
+    master_csv_path: Optional[Path | tuple[Path, ...]]
     df: Optional[pd.DataFrame]
     schema_items: list[dict]
     metrics: list[str]
@@ -56,7 +57,7 @@ class RibbonContext:
     ribbon_ready: bool
     pretty_metric_label: str
     rebuild_master_csv_if_needed: Callable[..., tuple[bool, str]]
-    load_master_and_schema_fn: Callable[[Path, str], tuple[pd.DataFrame, list[dict], list[str], dict]]
+    load_master_and_schema_fn: Callable[[Path | tuple[Path, ...], str], tuple[pd.DataFrame, list[dict], list[str], dict]]
 
 
 def _hydro_output_glob(level: str) -> str:
@@ -125,6 +126,55 @@ def _metric_rebuild_command(varcfg: Optional[dict], *, level: str) -> Optional[s
     key = "hydro_rebuild_command" if level_norm in {"basin", "sub_basin"} else "admin_rebuild_command"
     cmd = str((varcfg or {}).get(key) or "").strip()
     return cmd or None
+
+
+def _selected_state_for_admin_master_loading() -> str:
+    """Return the best available admin-state selection for master loading."""
+    pending = st.session_state.get("pending_selected_state")
+    if pending not in (None, ""):
+        return str(pending).strip() or "All"
+    selected = st.session_state.get("selected_state", "All")
+    return str(selected).strip() or "All"
+
+
+def _resolve_external_admin_master_sources(
+    processed_root: Path,
+    *,
+    level: str,
+    selected_state: str,
+) -> tuple[Path, ...]:
+    """Resolve one or many external admin master CSVs for the current state selection."""
+    master_name = get_master_csv_filename(level)
+    state_norm = str(selected_state or "All").strip() or "All"
+    if state_norm != "All":
+        return (processed_root / state_norm / master_name,)
+
+    states = list_available_states_from_processed_root(str(processed_root))
+    sources: list[Path] = []
+    for state_name in states:
+        candidate = processed_root / state_name / master_name
+        if candidate.exists():
+            sources.append(candidate)
+    return tuple(sources)
+
+
+def _master_source_exists(master_source: Path | tuple[Path, ...]) -> bool:
+    """Return True when the resolved master source has at least one readable file."""
+    if isinstance(master_source, tuple):
+        return bool(master_source) and all(path.exists() for path in master_source)
+    return master_source.exists()
+
+
+def _master_source_label(master_source: Path | tuple[Path, ...]) -> str:
+    """Return a compact user-facing label for one or many master CSVs."""
+    if isinstance(master_source, tuple):
+        if not master_source:
+            return "(no state-sliced master CSVs found)"
+        if len(master_source) == 1:
+            return str(master_source[0])
+        root = master_source[0].parents[1] if len(master_source[0].parents) >= 2 else master_source[0].parent
+        return f"{root}/*/{master_source[0].name}"
+    return str(master_source)
 
 
 def _coerce_selection(
@@ -333,14 +383,23 @@ def render_metric_ribbon(
 
             processed_root = resolve_processed_root_fn(variable_slug, data_dir=data_dir, mode="portfolio")
             level = str(st.session_state.get("admin_level", "district")).strip().lower()
+            selected_admin_state = _selected_state_for_admin_master_loading()
+            master_name = get_master_csv_filename(level)
             if level in {"basin", "sub_basin"}:
                 master_root = processed_root / "hydro"
+                master_root.mkdir(parents=True, exist_ok=True)
+                master_csv_path = master_root / master_name
+            elif _is_external_metric(varcfg):
+                master_csv_path = _resolve_external_admin_master_sources(
+                    processed_root,
+                    level=level,
+                    selected_state=selected_admin_state,
+                )
             else:
                 master_root = processed_root / str(pilot_state)
-            master_root.mkdir(parents=True, exist_ok=True)
-
-            master_name = get_master_csv_filename(level)
-            master_csv_path = master_root / master_name
+                master_root.mkdir(parents=True, exist_ok=True)
+                master_csv_path = master_root / master_name
+            master_source_label = _master_source_label(master_csv_path)
 
             def rebuild_master_csv_if_needed(
                 force: bool = False, attach_centroid_geojson: str | None = None
@@ -349,7 +408,7 @@ def render_metric_ribbon(
                 is_hydro = level in {"basin", "sub_basin"}
                 is_external = _is_external_metric(varcfg)
                 if is_external:
-                    if master_csv_path.exists():
+                    if _master_source_exists(master_csv_path):
                         return False, "up-to-date"
                     rebuild_cmd = _metric_rebuild_command(varcfg, level=level)
                     if level in {"district", "block"}:
@@ -418,7 +477,7 @@ def render_metric_ribbon(
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
                 needs_rebuild = False
                 if _is_external_metric(varcfg):
-                    needs_rebuild = not master_csv_path.exists()
+                    needs_rebuild = not _master_source_exists(master_csv_path)
                 elif level in {"district", "block"}:
                     needs_rebuild = master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state)) or state_profile_files_missing_fn(
                         processed_root, str(pilot_state), level
@@ -436,22 +495,22 @@ def render_metric_ribbon(
             except Exception as e:
                 st.warning(f"Could not check master CSV freshness: {e}")
 
-            if not master_csv_path.exists():
+            if not _master_source_exists(master_csv_path):
                 if _is_external_metric(varcfg):
                     rebuild_cmd = _metric_rebuild_command(varcfg, level=level)
                     if level in {"district", "block"}:
                         st.error(
-                            f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
+                            f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
                             f"Run `{rebuild_cmd or 'the metric-specific admin master builder'}` first."
                         )
                     elif level in {"basin", "sub_basin"}:
                         st.error(
-                            f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
+                            f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
                             f"Run `{rebuild_cmd or 'the metric-specific hydro master builder'}` first."
                         )
                     else:
                         st.error(
-                            f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}."
+                            f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}."
                         )
                 elif level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
                     st.error(
@@ -461,7 +520,7 @@ def render_metric_ribbon(
                     )
                 else:
                     st.error(
-                        f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
+                        f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
                         f"Click 'Rebuild now' in the sidebar under 'Master dataset'."
                     )
                 render_perf_panel_safe()

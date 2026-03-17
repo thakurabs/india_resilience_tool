@@ -19,11 +19,45 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Optional, Union
+from typing import Any, Iterable, Optional, Sequence, Union
 
 import pandas as pd
 
 PathLike = Union[str, Path]
+MasterSourceLike = Union[PathLike, Sequence[PathLike]]
+
+
+def normalize_master_source_paths(master_source: MasterSourceLike) -> tuple[Path, ...]:
+    """
+    Normalize one or many master CSV paths into an ordered tuple of Paths.
+
+    Raises:
+        ValueError: If no paths are supplied.
+    """
+    if isinstance(master_source, (str, Path)):
+        paths = (Path(master_source),)
+    else:
+        paths = tuple(Path(p) for p in master_source)
+
+    if not paths:
+        raise ValueError("No master CSV paths were provided.")
+    return paths
+
+
+def master_source_signature(master_source: MasterSourceLike) -> tuple[tuple[str, Optional[float]], ...]:
+    """Return a stable `(resolved_path, mtime)` signature for one or many master CSVs."""
+    signature: list[tuple[str, Optional[float]]] = []
+    for path in normalize_master_source_paths(master_source):
+        try:
+            resolved = str(path.resolve())
+        except Exception:
+            resolved = str(path)
+        try:
+            mtime = path.stat().st_mtime
+        except Exception:
+            mtime = None
+        signature.append((resolved, mtime))
+    return tuple(signature)
 
 
 def read_csv_robust(
@@ -78,6 +112,17 @@ def load_master_csv(path: PathLike) -> pd.DataFrame:
     Intentionally thin wrapper around read_csv_robust().
     """
     return read_csv_robust(path)
+
+
+def load_master_csvs(master_source: MasterSourceLike) -> pd.DataFrame:
+    """
+    Load one or many master CSVs and return a single concatenated DataFrame.
+    """
+    paths = normalize_master_source_paths(master_source)
+    frames = [load_master_csv(path) for path in paths]
+    if len(frames) == 1:
+        return frames[0]
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 def normalize_master_columns(df: pd.DataFrame) -> pd.DataFrame:
