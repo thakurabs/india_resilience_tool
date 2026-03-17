@@ -350,7 +350,7 @@ def run_app() -> None:
         adm2["__key"] = adm2["district_name"].map(alias)
 
     # -------------------------
-    # Metric selection ribbon (bundle → metric → scenario/period/stat + map mode)
+    # Metric selection ribbon (pillar → domain → metric → scenario/period/stat + map mode)
     # -------------------------
     ribbon_ctx = render_metric_ribbon(
         col=left_root,
@@ -502,7 +502,7 @@ def run_app() -> None:
     if not _ready_for_map:
         with col1:
             st.info(
-                "Complete the selections in the **ribbon above the map** (Risk domain, Metric, Scenario, Period, Statistic, Map mode) "
+                "Complete the selections in the **ribbon above the map** (Assessment pillar, Domain, Metric, Scenario, Period, Statistic, Map mode) "
                 "and choose an **Analysis focus** in the sidebar to render the map."
             )
         render_perf_panel_safe()
@@ -709,6 +709,7 @@ def run_app() -> None:
     render_perf_panel_safe()
     st.markdown("---")
     st.caption(
-        "Notes: first choose a Risk domain (e.g. Heat Risk, Drought Risk), then a Metric within that bundle. "
+        "Notes: first choose an Assessment pillar (e.g. Climate Hazards, Bio-physical Hazards), "
+        "then a Domain, then a Metric within that domain. "
         "Details panel shows risk cards, trends, narrative, and case-study export."
     )

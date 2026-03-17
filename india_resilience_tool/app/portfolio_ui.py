@@ -518,78 +518,76 @@ def render_index_selector(
     selected_slugs: List[str],
 ) -> List[str]:
     """
-    Render bundle-first index selection for portfolio comparison.
+    Render domain-first index selection for portfolio comparison.
     
     Pattern 2 implementation:
-    1. User selects one or more bundles (multi-select)
-    2. Metrics from selected bundles are auto-expanded
+    1. User selects one or more domains (multi-select)
+    2. Metrics from selected domains are auto-expanded
     3. Optional: user can manually refine the metric list
     
     Ensures the current index is always included by default.
     
     Widget keys used:
-    - portfolio_bundle_selection: selected bundles
+    - portfolio_bundle_selection: selected domains (legacy key name kept stable)
     - portfolio_manual_refinement: whether manual mode is enabled
     - portfolio_multiindex_selection: final metric selection
     """
     import streamlit as st
     
-    # Import bundle functions
+    # Import domain helpers
     from india_resilience_tool.config.variables import (
-        get_bundles,
-        get_metrics_for_bundle,
-        get_bundle_for_metric,
-        get_default_bundle,
+        get_domains,
+        get_metrics_for_domain,
+        get_domains_for_metric,
+        get_default_domain,
     )
     
     spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
     current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
-    all_bundles = get_bundles(spatial_family=spatial_family, level=current_level)
+    all_domains = get_domains(spatial_family=spatial_family, level=current_level)
     available_slugs = list(variables.keys())
     
-    # --- Determine default bundle(s) based on current metric ---
-    # If user has an existing bundle selection, use that
-    # Otherwise, select the bundle(s) containing the current metric
+    # --- Determine default domain(s) based on current metric ---
+    # If user has an existing selection, use that. Otherwise select the
+    # domain(s) containing the current metric.
     current_bundle_selection = st.session_state.get("portfolio_bundle_selection")
     
     if current_bundle_selection is None:
-        # First load: select bundle(s) containing the current metric
-        bundles_for_current = get_bundle_for_metric(
+        domains_for_current = get_domains_for_metric(
             current_slug,
             spatial_family=spatial_family,
             level=current_level,
         )
-        if bundles_for_current:
-            default_bundles = [bundles_for_current[0]]  # Use first matching bundle
+        if domains_for_current:
+            default_bundles = [domains_for_current[0]]
         else:
-            default_bundles = [get_default_bundle(spatial_family=spatial_family, level=current_level)]
+            default_bundles = [get_default_domain(spatial_family=spatial_family, level=current_level)]
     else:
-        # Use existing selection, filtering out invalid bundles
-        default_bundles = [b for b in current_bundle_selection if b in all_bundles]
+        default_bundles = [b for b in current_bundle_selection if b in all_domains]
         if not default_bundles:
-            default_bundles = [get_default_bundle(spatial_family=spatial_family, level=current_level)]
+            default_bundles = [get_default_domain(spatial_family=spatial_family, level=current_level)]
     
-    # --- Bundle multi-select ---
+    # --- Domain multi-select ---
     selected_bundles = st.multiselect(
-        "Select risk domains to compare",
-        options=all_bundles,
+        "Select domains to compare",
+        options=all_domains,
         default=default_bundles,
         key="portfolio_bundle_selection",
-        help="Select one or more risk domains. Metrics from all selected domains will be included.",
+        help="Select one or more domains. Metrics from all selected domains will be included.",
     )
     
-    # --- Expand bundles to metrics ---
+    # --- Expand domains to metrics ---
     if selected_bundles:
         expanded_slugs: list[str] = []
         for bundle in selected_bundles:
-            for slug in get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=current_level):
+            for slug in get_metrics_for_domain(bundle, spatial_family=spatial_family, level=current_level):
                 if slug in available_slugs and slug not in expanded_slugs:
                     expanded_slugs.append(slug)
         
         # Show count of expanded metrics
         st.caption(f"{len(expanded_slugs)} metrics from {len(selected_bundles)} domain(s)")
     else:
-        # No bundles selected - fall back to current metric only
+        # No domains selected - fall back to current metric only
         expanded_slugs = [current_slug] if current_slug in available_slugs else []
     
     # --- Optional manual refinement (kept out of the main flow) ---
@@ -646,9 +644,9 @@ def render_index_selector(
         # Show which metrics are included (collapsed by default)
         if expanded_slugs:
             with st.expander(f"View {len(expanded_slugs)} included metrics", expanded=False):
-                # Group by bundle for display
+                # Group by domain for display
                 for bundle in selected_bundles:
-                    bundle_metrics = [s for s in get_metrics_for_bundle(bundle) if s in expanded_slugs]
+                    bundle_metrics = [s for s in get_metrics_for_domain(bundle) if s in expanded_slugs]
                     if bundle_metrics:
                         st.markdown(f"**{bundle}** ({len(bundle_metrics)})")
                         for slug in bundle_metrics:

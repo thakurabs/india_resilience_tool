@@ -15,6 +15,8 @@ def test_config_variables_imports() -> None:
     assert variables is not None
     assert hasattr(variables, "VARIABLES")
     assert hasattr(variables, "INDEX_GROUP_LABELS")
+    assert hasattr(variables, "get_pillars")
+    assert hasattr(variables, "get_domains_for_pillar")
 
 
 def test_config_variables_exports() -> None:
@@ -70,3 +72,5 @@ def test_aqueduct_metrics_are_exposed_to_dashboard_variables() -> None:
         assert cfg["supports_yearly_trend"] is False
         assert cfg["supported_scenarios"] == ["historical", "bau", "opt", "pes"]
         assert cfg["supported_levels"] == ["district", "block", "basin", "sub_basin"]
+        assert "Aqueduct Water Risk" in cfg["domains"]
+        assert "Bio-physical Hazards" in cfg["pillars"]

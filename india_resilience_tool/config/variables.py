@@ -22,6 +22,20 @@ from india_resilience_tool.config.metrics_registry import (
     get_dashboard_variables,
     get_metrics_by_group,
     get_metric_count,
+    PILLAR_ORDER,
+    PILLAR_DESCRIPTIONS,
+    get_pillars,
+    get_domains,
+    get_domains_for_pillar,
+    get_domains_for_metric,
+    get_pillar_for_domain,
+    get_pillar_description,
+    get_domain_description,
+    get_default_pillar,
+    get_default_domain,
+    get_metrics_for_domain,
+    get_metric_options_for_domain,
+    normalize_domain_name,
     # Bundle exports (NEW)
     BUNDLES,
     BUNDLE_ORDER,
@@ -121,9 +135,9 @@ def print_index_summary():
                 cfg = VARIABLES[slug]
                 print(f"  - {cfg['label']} ({slug})")
     
-    # Also print bundle summary
+    # Also print domain summary (via compatibility helpers)
     print(f"\n{'='*60}")
-    print("Bundles:")
+    print("Domains:")
     print(f"{'='*60}")
     for bundle in get_bundles():
         slugs = get_metrics_for_bundle(bundle)

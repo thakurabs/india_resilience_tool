@@ -1,5 +1,5 @@
 """
-Metric selection ribbon (bundle → metric → scenario/period/stat + map mode).
+Metric selection ribbon (pillar → domain → metric → scenario/period/stat + map mode).
 
 Extracted from the legacy orchestrator to keep orchestration thin while
 preserving widget keys and session_state contracts.
@@ -19,9 +19,13 @@ from india_resilience_tool.app.master_cache import make_load_master_and_schema_f
 from india_resilience_tool.config.constants import SCENARIO_HELP_MD, SCENARIO_UI_LABEL
 from india_resilience_tool.config.variables import (
     VARIABLES,
-    get_bundle_description,
-    get_bundles,
-    get_metrics_for_bundle,
+    get_domain_description,
+    get_domains_for_pillar,
+    get_metrics_for_domain,
+    normalize_domain_name,
+    get_pillar_description,
+    get_pillar_for_domain,
+    get_pillars,
 )
 from india_resilience_tool.viz.charts import (
     PERIOD_ORDER,
@@ -106,11 +110,11 @@ def render_metric_ribbon(
 
     Contract:
     - Preserves all widget keys from the legacy dashboard:
-      `selected_bundle`, `selected_var`, `sel_scenario`, `sel_period`, `sel_stat`, `map_mode`
+      `selected_pillar`, `selected_bundle`, `selected_var`, `sel_scenario`, `sel_period`, `sel_stat`, `map_mode`
     - Preserves placeholder-first selection behavior.
     """
     # Force deliberate choices for ribbon controls
-    for k in ("selected_bundle", "selected_var", "sel_scenario", "sel_period", "sel_stat"):
+    for k in ("selected_pillar", "selected_bundle", "selected_var", "sel_scenario", "sel_period", "sel_stat"):
         st.session_state.setdefault(k, sel_placeholder)
 
     # Bound once a metric is selected (safe defaults otherwise)
@@ -138,53 +142,99 @@ def render_metric_ribbon(
 
     with col:
         row1 = st.columns([2.2, 3.0, 1.8])
-        row2 = st.columns([2.2, 1.4, 2.4])
+        row2 = st.columns([1.8, 2.2, 1.4])
+        row3 = st.columns([2.4, 1.2, 1.8])
         spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
         current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
 
-        # --- Bundle selection ---
-        all_bundles = get_bundles(spatial_family=spatial_family, level=current_level)
-        if not all_bundles:
-            st.error("No bundles defined in metrics_registry.py")
+        # --- Pillar selection ---
+        all_pillars = get_pillars(spatial_family=spatial_family, level=current_level)
+        if not all_pillars:
+            st.error("No assessment pillars defined in metrics_registry.py")
             render_perf_panel_safe()
             st.stop()
 
-        bundle_options = [sel_placeholder] + all_bundles
-        cur_bundle = st.session_state.get("selected_bundle", sel_placeholder)
-        if cur_bundle not in bundle_options:
-            cur_bundle = sel_placeholder
-            st.session_state["selected_bundle"] = sel_placeholder
+        pillar_options = [sel_placeholder] + all_pillars
+        cur_pillar = st.session_state.get("selected_pillar", sel_placeholder)
+        if cur_pillar not in pillar_options:
+            inferred_pillar = get_pillar_for_domain(st.session_state.get("selected_bundle", ""))
+            if inferred_pillar in all_pillars:
+                cur_pillar = inferred_pillar
+                st.session_state["selected_pillar"] = inferred_pillar
+            else:
+                cur_pillar = sel_placeholder
+                st.session_state["selected_pillar"] = sel_placeholder
 
         with row1[0]:
+            pillar_help = help_md_to_plain_text(RIBBON_HELP_MD["assessment_pillar"])
+            selected_pillar_preview = st.session_state.get("selected_pillar", sel_placeholder)
+            if selected_pillar_preview != sel_placeholder:
+                pillar_desc_preview = get_pillar_description(selected_pillar_preview)
+                if pillar_desc_preview:
+                    pillar_help += f"\n\nThis pillar covers:\n- {pillar_desc_preview}"
+
+            selected_pillar = st.selectbox(
+                "Assessment pillar",
+                options=pillar_options,
+                index=pillar_options.index(cur_pillar),
+                key="selected_pillar",
+                label_visibility="visible",
+                help=pillar_help,
+            )
+
+        # --- Domain selection ---
+        domain_disabled = selected_pillar == sel_placeholder
+        if domain_disabled:
+            all_domains: list[str] = []
+            domain_options = [sel_placeholder]
+        else:
+            all_domains = get_domains_for_pillar(
+                selected_pillar,
+                spatial_family=spatial_family,
+                level=current_level,
+            )
+            domain_options = [sel_placeholder] + all_domains
+
+        cur_bundle = st.session_state.get("selected_bundle", sel_placeholder)
+        if cur_bundle != sel_placeholder:
+            cur_bundle = normalize_domain_name(cur_bundle)
+        if cur_bundle not in domain_options:
+            cur_bundle = sel_placeholder
+            st.session_state["selected_bundle"] = sel_placeholder
+        elif cur_bundle != st.session_state.get("selected_bundle", sel_placeholder):
+            st.session_state["selected_bundle"] = cur_bundle
+
+        with row1[1]:
             bundle_help = help_md_to_plain_text(RIBBON_HELP_MD["risk_domain"])
             selected_bundle_preview = st.session_state.get("selected_bundle", sel_placeholder)
             if selected_bundle_preview != sel_placeholder:
-                bundle_desc_preview = get_bundle_description(selected_bundle_preview)
+                bundle_desc_preview = get_domain_description(selected_bundle_preview)
                 if bundle_desc_preview:
                     bundle_help += f"\n\nThis domain covers:\n- {bundle_desc_preview}"
 
             selected_bundle = st.selectbox(
-                "Risk domain",
-                options=bundle_options,
-                index=bundle_options.index(cur_bundle),
+                "Domain",
+                options=domain_options,
+                index=domain_options.index(cur_bundle),
                 key="selected_bundle",
                 label_visibility="visible",
+                disabled=domain_disabled,
                 help=bundle_help,
             )
 
-        # --- Metric selection (filtered by bundle) ---
+        # --- Metric selection (filtered by domain) ---
         metric_disabled = selected_bundle == sel_placeholder
         if metric_disabled:
             index_slugs: list[str] = []
             metric_options = [sel_placeholder]
         else:
-            index_slugs = get_metrics_for_bundle(
+            index_slugs = get_metrics_for_domain(
                 selected_bundle,
                 spatial_family=spatial_family,
                 level=current_level,
             ) or []
             if not index_slugs:
-                st.warning(f"Bundle '{selected_bundle}' has no metrics for the current spatial view.")
+                st.warning(f"Domain '{selected_bundle}' has no metrics for the current spatial view.")
             metric_options = [sel_placeholder] + index_slugs
 
         cur_var = st.session_state.get("selected_var", sel_placeholder)
@@ -195,7 +245,7 @@ def render_metric_ribbon(
                 st.session_state["selected_var"] = index_slugs[0]
         cur_var = st.session_state.get("selected_var", sel_placeholder)
 
-        with row1[1]:
+        with row1[2]:
             metric_help = help_md_to_plain_text(RIBBON_HELP_MD["metric"])
             selected_metric_preview = st.session_state.get("selected_var", sel_placeholder)
             if selected_metric_preview != sel_placeholder and selected_metric_preview in VARIABLES:
@@ -405,7 +455,7 @@ def render_metric_ribbon(
             st.session_state["sel_scenario"] = sel_placeholder
         cur_scn = st.session_state.get("sel_scenario", sel_placeholder)
 
-        with row1[2]:
+        with row2[0]:
             scenario_help = help_md_to_plain_text(RIBBON_HELP_MD["scenario"])
             if cur_scn != sel_placeholder:
                 scen_key_preview = str(cur_scn).strip().lower()
@@ -457,7 +507,7 @@ def render_metric_ribbon(
             st.session_state["sel_period"] = sel_placeholder
         cur_per = st.session_state.get("sel_period", sel_placeholder)
 
-        with row2[0]:
+        with row2[1]:
             period_help = help_md_to_plain_text(RIBBON_HELP_MD["period"])
             sel_period = st.selectbox(
                 "Period",
@@ -478,7 +528,7 @@ def render_metric_ribbon(
             st.session_state["sel_stat"] = sel_placeholder
         cur_stat = st.session_state.get("sel_stat", sel_placeholder)
 
-        with row2[1]:
+        with row2[2]:
             statistic_help = help_md_to_plain_text(RIBBON_HELP_MD["statistic"])
             sel_stat = st.selectbox(
                 "Statistic",
@@ -498,7 +548,7 @@ def render_metric_ribbon(
             st.session_state["map_mode"] = sel_placeholder
         cur_map_mode = st.session_state.get("map_mode", sel_placeholder)
 
-        with row2[2]:
+        with row3[0]:
             map_mode_help = help_md_to_plain_text(RIBBON_HELP_MD["map_mode"])
             map_mode = st.selectbox(
                 "Map mode",

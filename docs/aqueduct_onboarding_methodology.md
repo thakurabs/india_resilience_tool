@@ -10,7 +10,7 @@ The current onboarding tranche covers:
 - Aqueduct baseline and future annual water-depletion data
 - India-only processing
 - SOI hydro units (`basin` and `sub-basin`) plus district and block admin units
-- Dashboard integration under the `Water Risk` bundle for Hydro, District, and Block views
+- Dashboard integration under the `Bio-physical Hazards -> Aqueduct Water Risk` domain for Hydro, District, and Block views
 
 ## Why a special onboarding workflow was needed
 
@@ -472,7 +472,8 @@ Relevant configuration and UI files include:
 
 Aqueduct is exposed as:
 
-- risk domain: `Water Risk`
+- assessment pillar: `Bio-physical Hazards`
+- domain: `Aqueduct Water Risk`
 - metrics:
   - `Aqueduct Water Stress`
   - `Aqueduct Interannual Variability`

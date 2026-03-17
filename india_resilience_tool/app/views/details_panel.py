@@ -1027,19 +1027,19 @@ def render_case_study_export(
         # Bundle-first selection (parity with Portfolio mode)
         # ---------------------------------------------------------------------
         from india_resilience_tool.config.variables import (
-            get_bundles,
-            get_bundle_for_metric,
-            get_bundle_description,
-            get_default_bundle,
-            get_metrics_for_bundle,
+            get_domains,
+            get_domains_for_metric,
+            get_domain_description,
+            get_default_domain,
+            get_metrics_for_domain,
         )
 
         index_options = list(variables.keys())
         spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
         current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
-        all_bundles = get_bundles(spatial_family=spatial_family, level=current_level)
+        all_bundles = get_domains(spatial_family=spatial_family, level=current_level)
 
-        bundles_for_current = get_bundle_for_metric(
+        bundles_for_current = get_domains_for_metric(
             variable_slug,
             spatial_family=spatial_family,
             level=current_level,
@@ -1047,23 +1047,23 @@ def render_case_study_export(
         default_bundle = (
             bundles_for_current[0]
             if bundles_for_current
-            else get_default_bundle(spatial_family=spatial_family, level=current_level)
+            else get_default_domain(spatial_family=spatial_family, level=current_level)
         )
 
         selected_bundles = st.multiselect(
-            "Risk domains to include in the report",
+            "Domains to include in the report",
             options=all_bundles,
             default=[default_bundle] if default_bundle in all_bundles else (all_bundles[:1] if all_bundles else []),
             key="case_study_bundle_selection",
             help=(
-                "Select one or more risk domains (bundles). Metrics from all selected domains "
+                "Select one or more domains. Metrics from all selected domains "
                 "will be included in the case-study export."
             ),
         )
 
         expanded_slugs: list[str] = []
         for bundle in selected_bundles:
-            for slug in get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=current_level):
+            for slug in get_metrics_for_domain(bundle, spatial_family=spatial_family, level=current_level):
                 if slug in index_options and slug not in expanded_slugs:
                     expanded_slugs.append(slug)
 
@@ -1100,10 +1100,10 @@ def render_case_study_export(
             if selected_bundles:
                 with st.expander(f"View {len(selected_index_slugs)} included metrics", expanded=False):
                     for bundle in selected_bundles:
-                        slugs_in_bundle = [s for s in get_metrics_for_bundle(bundle) if s in selected_index_slugs]
+                        slugs_in_bundle = [s for s in get_metrics_for_domain(bundle) if s in selected_index_slugs]
                         if not slugs_in_bundle:
                             continue
-                        desc = get_bundle_description(bundle)
+                        desc = get_domain_description(bundle)
                         st.markdown(f"**{bundle}** — {desc}" if desc else f"**{bundle}**")
                         for slug in slugs_in_bundle:
                             st.caption(f"  • {variables.get(slug, {}).get('label', slug)}")

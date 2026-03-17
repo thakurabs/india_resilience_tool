@@ -19,12 +19,16 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - Admin: `District` / `Block`
   - Hydro: `Basin` / `Sub-basin`
 - Ribbon-driven metric selection:
-  - risk domain
+  - assessment pillar
+  - domain
   - metric
   - scenario
   - period
   - statistic
   - map mode
+- Top-level taxonomy:
+  - `Climate Hazards` for climate-model-derived heat, cold, rainfall, flood, drought, and variability layers
+  - `Bio-physical Hazards` for externally sourced physical hazard layers such as Aqueduct
 - Water-risk Aqueduct onboarding:
   - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
   - Aqueduct interannual variability on SOI basin, SOI sub-basin, district, and block units
@@ -434,7 +438,7 @@ mypy india_resilience_tool/
 
 ### Adding a metric
 1. Add the metric to `india_resilience_tool/config/metrics_registry.py`
-2. Place the slug in the appropriate bundle(s)
+2. Place the slug in the appropriate domain(s) and pillar
 3. Ensure processed artifacts exist for the metric
 4. Rebuild or refresh masters as needed
 

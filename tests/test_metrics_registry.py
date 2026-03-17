@@ -13,8 +13,14 @@ from india_resilience_tool.config.metrics_registry import (
     PIPELINE_METRICS_RAW,
     build_registry_from_pipeline,
     find_duplicate_slugs,
+    get_default_domain,
+    get_default_pillar,
     get_bundles,
+    get_domain_description,
+    get_domains_for_pillar,
     get_metrics_for_bundle,
+    get_pillar_for_domain,
+    get_pillars,
     get_pipeline_bundles,
     validate_registry_against_pipeline,
 )
@@ -85,11 +91,11 @@ def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
 
 
 def test_aqueduct_metric_is_context_limited_to_supported_views() -> None:
-    admin_district_metrics = set(get_metrics_for_bundle("Water Risk", spatial_family="admin", level="district"))
-    admin_block_metrics = set(get_metrics_for_bundle("Water Risk", spatial_family="admin", level="block"))
-    assert "Water Risk" in get_bundles(spatial_family="hydro", level="basin")
-    hydro_metrics = set(get_metrics_for_bundle("Water Risk", spatial_family="hydro", level="sub_basin"))
-    assert "Water Risk" in get_bundles(spatial_family="admin", level="district")
+    admin_district_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="admin", level="district"))
+    admin_block_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="admin", level="block"))
+    assert "Aqueduct Water Risk" in get_bundles(spatial_family="hydro", level="basin")
+    hydro_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="hydro", level="sub_basin"))
+    assert "Aqueduct Water Risk" in get_bundles(spatial_family="admin", level="district")
     assert {
         "aq_water_stress",
         "aq_interannual_variability",
@@ -108,3 +114,27 @@ def test_aqueduct_metric_is_context_limited_to_supported_views() -> None:
         "aq_seasonal_variability",
         "aq_water_depletion",
     }.issubset(admin_block_metrics)
+
+
+def test_taxonomy_exposes_climate_and_biophysical_pillars() -> None:
+    pillars = get_pillars(spatial_family="admin", level="district")
+    assert "Climate Hazards" in pillars
+    assert "Bio-physical Hazards" in pillars
+    assert "Exposure" not in pillars
+    assert get_default_pillar(spatial_family="admin", level="district") == "Climate Hazards"
+
+
+def test_aqueduct_domain_lives_under_biophysical_hazards() -> None:
+    domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="hydro", level="basin")
+    assert domains == ["Aqueduct Water Risk"]
+    assert get_pillar_for_domain("Aqueduct Water Risk") == "Bio-physical Hazards"
+    assert get_pillar_for_domain("Water Risk") == "Bio-physical Hazards"
+    assert "Aqueduct" in get_domain_description("Aqueduct Water Risk")
+
+
+def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
+    assert get_default_domain(
+        pillar="Climate Hazards",
+        spatial_family="admin",
+        level="district",
+    ) == "Heat Risk"

@@ -22,7 +22,7 @@ Contract:
 
 Must work end-to-end:
 1. **Map view**
-   - Choose a risk domain (bundle) → metric → scenario → period → statistic
+   - Choose an assessment pillar → domain → metric → scenario → period → statistic
    - Choose map mode (absolute vs change-from-baseline)
    - Choropleth renders for the selected state/district scope
 2. **Rankings**

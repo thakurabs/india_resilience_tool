@@ -4,7 +4,7 @@ Shared metrics registry for the India Resilience Tool (IRT).
 This module unifies:
 - Dashboard metric registry needs (slug/label/group/periods_metric_col + discovery templates)
 - Pipeline metric specs (var/value_col/compute/params/units)
-- Thematic bundles for dashboard UI organization
+- Dashboard taxonomy metadata (assessment pillars + domains)
 
 Includes all standard Climdex indices plus custom IRT indices.
 
@@ -1534,19 +1534,15 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(ALL_METRIC
 
 
 # -----------------------------------------------------------------------------
-# THEMATIC BUNDLES FOR DASHBOARD UI
+# DASHBOARD TAXONOMY
 # -----------------------------------------------------------------------------
-# Bundles organize metrics into risk-domain groupings for user-friendly selection.
-# Each bundle maps to a list of metric slugs. Metrics may appear in multiple bundles.
-# Sub-groupings within bundles are documented via inline comments.
+# The dashboard now uses:
+#   Assessment pillar -> Domain -> Metric
+#
+# The older bundle terminology is kept as a compatibility alias because portfolio,
+# exports, and some helper functions still reference "bundles".
 
-BUNDLES: dict[str, list[str]] = {
-    "Water Risk": [
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
-    ],
+DOMAINS: dict[str, list[str]] = {
     "Heat Risk": [
         "tas_annual_mean",
         "txx_annual_max",        
@@ -1672,11 +1668,16 @@ BUNDLES: dict[str, list[str]] = {
         "dtr_daily_temp_range",
         "etr_extreme_temp_range",
     ],
+    "Aqueduct Water Risk": [
+        "aq_water_stress",
+        "aq_interannual_variability",
+        "aq_seasonal_variability",
+        "aq_water_depletion",
+    ],
 }
 
-# Bundle display order for UI
-BUNDLE_ORDER: list[str] = [
-    "Water Risk",
+# Domain display order for UI
+DOMAIN_ORDER: list[str] = [
     "Heat Risk",
     "Heat Stress",
     "Cold Risk",
@@ -1684,17 +1685,58 @@ BUNDLE_ORDER: list[str] = [
     "Flood & Extreme Rainfall Risk",
     "Rainfall Totals & Typical Wetness",
     "Drought Risk",
+    "Drought Risk (Advanced)",
     "Temperature Variability",
+    "Aqueduct Water Risk",
 ]
 
-# Default bundle for single-focus mode
-DEFAULT_BUNDLE: str = "Heat Risk"
+PILLAR_DOMAINS: dict[str, list[str]] = {
+    "Climate Hazards": [
+        "Heat Risk",
+        "Heat Stress",
+        "Cold Risk",
+        "Agriculture & Growing Conditions",
+        "Flood & Extreme Rainfall Risk",
+        "Rainfall Totals & Typical Wetness",
+        "Drought Risk",
+        "Drought Risk (Advanced)",
+        "Temperature Variability",
+    ],
+    "Bio-physical Hazards": [
+        "Aqueduct Water Risk",
+    ],
+    "Exposure": [],
+    "Vulnerability": [],
+    "Adaptive Capacity": [],
+}
 
-# Bundle descriptions for UI tooltips/help text
-BUNDLE_DESCRIPTIONS: dict[str, str] = {
-    "Water Risk": (
-        "Hydrology-focused water-risk metrics derived from Aqueduct and displayed "
-        "on Survey of India basin and sub-basin units."
+PILLAR_ORDER: list[str] = [
+    "Climate Hazards",
+    "Bio-physical Hazards",
+    "Exposure",
+    "Vulnerability",
+    "Adaptive Capacity",
+]
+
+DOMAIN_TO_PILLAR: dict[str, str] = {
+    domain: pillar
+    for pillar, domains in PILLAR_DOMAINS.items()
+    for domain in domains
+}
+
+LEGACY_DOMAIN_ALIASES: dict[str, str] = {
+    "Water Risk": "Aqueduct Water Risk",
+}
+
+# Defaults for single-focus mode
+DEFAULT_PILLAR: str = "Climate Hazards"
+DEFAULT_DOMAIN: str = "Heat Risk"
+
+# Domain descriptions for UI tooltips/help text
+DOMAIN_DESCRIPTIONS: dict[str, str] = {
+    "Aqueduct Water Risk": (
+        "Hydrologic water-risk metrics derived from Aqueduct and displayed on "
+        "admin and hydro units through audited overlap transfer workflows."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "
@@ -1725,6 +1767,32 @@ BUNDLE_DESCRIPTIONS: dict[str, str] = {
         "Useful for understanding climate stability and interpreting heat stress."
     ),
 }
+
+PILLAR_DESCRIPTIONS: dict[str, str] = {
+    "Climate Hazards": (
+        "Climate-model-derived hazard and climate-condition layers, including heat, "
+        "cold, rainfall, flood, drought, and variability metrics."
+    ),
+    "Bio-physical Hazards": (
+        "Physical hazard layers from externally sourced geospatial products, kept "
+        "separate from climate hazard indices to make provenance clear."
+    ),
+    "Exposure": (
+        "Future placeholder for people, assets, land use, and other exposure layers."
+    ),
+    "Vulnerability": (
+        "Future placeholder for sensitivity and vulnerability layers."
+    ),
+    "Adaptive Capacity": (
+        "Future placeholder for coping, readiness, and adaptive capacity layers."
+    ),
+}
+
+# Compatibility aliases (older code still imports bundle names/constants)
+BUNDLES: dict[str, list[str]] = DOMAINS
+BUNDLE_ORDER: list[str] = DOMAIN_ORDER
+DEFAULT_BUNDLE: str = DEFAULT_DOMAIN
+BUNDLE_DESCRIPTIONS: dict[str, str] = DOMAIN_DESCRIPTIONS
 
 
 # -----------------------------------------------------------------------------
@@ -1766,6 +1834,14 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
     variables: dict[str, dict[str, Any]] = {}
     for slug, spec in METRICS_BY_SLUG.items():
         units = str(spec.units or "").strip()
+        domains_for_slug = get_domains_for_metric(slug)
+        pillars_for_slug = list(
+            dict.fromkeys(
+                get_pillar_for_domain(domain)
+                for domain in domains_for_slug
+                if get_pillar_for_domain(domain)
+            )
+        )
         district_yearly_candidates = (
             list(spec.district_yearly_candidates)
             if spec.district_yearly_candidates is not None
@@ -1791,6 +1867,8 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             "preferred_period_order": list(spec.preferred_period_order),
             "supported_spatial_families": list(spec.supported_spatial_families),
             "supported_levels": list(spec.supported_levels),
+            "domains": domains_for_slug,
+            "pillars": pillars_for_slug,
             "district_yearly_candidates": district_yearly_candidates,
             "state_yearly_candidates": state_yearly_candidates,
         }
@@ -1833,10 +1911,10 @@ def _metric_supported_in_context(
 def get_pipeline_bundles() -> dict[str, list[str]]:
     """Return bundle contents restricted to pipeline-backed metrics."""
     out: dict[str, list[str]] = {}
-    for bundle, slugs in BUNDLES.items():
+    for domain, slugs in DOMAINS.items():
         filtered = [slug for slug in slugs if slug in PIPELINE_SLUGS]
         if filtered:
-            out[bundle] = filtered
+            out[domain] = filtered
     return out
 
 
@@ -1847,43 +1925,65 @@ def get_metric_count() -> dict[str, int]:
 
 
 # -----------------------------------------------------------------------------
-# BUNDLE HELPER FUNCTIONS
+# TAXONOMY HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
 
-def get_bundles(
+def normalize_domain_name(domain: str) -> str:
+    """Return the canonical domain name for legacy/alias input."""
+    raw = str(domain or "").strip()
+    return LEGACY_DOMAIN_ALIASES.get(raw, raw)
+
+
+def get_pillars(
     *,
     spatial_family: Optional[str] = None,
     level: Optional[str] = None,
 ) -> list[str]:
-    """
-    Return ordered list of bundle names for UI display.
-    
-    Returns:
-        List of bundle names in display order.
-    """
-    bundles: list[str] = []
-    for bundle in BUNDLE_ORDER:
-        if get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=level):
-            bundles.append(bundle)
-    return bundles
+    """Return populated assessment pillars for the current context."""
+    pillars: list[str] = []
+    for pillar in PILLAR_ORDER:
+        if get_domains_for_pillar(pillar, spatial_family=spatial_family, level=level):
+            pillars.append(pillar)
+    return pillars
 
 
-def get_metrics_for_bundle(
-    bundle: str,
+def get_domains_for_pillar(
+    pillar: str,
     *,
     spatial_family: Optional[str] = None,
     level: Optional[str] = None,
 ) -> list[str]:
-    """
-    Return list of metric slugs for a given bundle.
-    
-    Args:
-        bundle: Bundle name (e.g., "Heat Risk").
-        
-    Returns:
-        List of metric slugs in the bundle. Empty list if bundle not found.
-    """
-    slugs = list(BUNDLES.get(bundle, []))
+    """Return populated domains for a pillar in display order."""
+    canonical_pillar = str(pillar or "").strip()
+    domains: list[str] = []
+    for domain in PILLAR_DOMAINS.get(canonical_pillar, []):
+        if get_metrics_for_domain(domain, spatial_family=spatial_family, level=level):
+            domains.append(domain)
+    return domains
+
+
+def get_domains(
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str]:
+    """Return populated domain names in display order."""
+    domains: list[str] = []
+    for domain in DOMAIN_ORDER:
+        if get_metrics_for_domain(domain, spatial_family=spatial_family, level=level):
+            domains.append(domain)
+    return domains
+
+
+def get_metrics_for_domain(
+    domain: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str]:
+    """Return metric slugs for a domain in the current context."""
+    canonical_domain = normalize_domain_name(domain)
+    slugs = list(DOMAINS.get(canonical_domain, []))
     filtered: list[str] = []
     for slug in slugs:
         spec = METRICS_BY_SLUG.get(slug)
@@ -1894,77 +1994,76 @@ def get_metrics_for_bundle(
     return filtered
 
 
-def get_bundle_for_metric(
+def get_domains_for_metric(
     slug: str,
     *,
     spatial_family: Optional[str] = None,
     level: Optional[str] = None,
 ) -> list[str]:
-    """
-    Return list of bundles that contain a given metric slug.
-    
-    Args:
-        slug: Metric slug (e.g., "txx_annual_max").
-        
-    Returns:
-        List of bundle names containing this metric. Empty if not in any bundle.
-    """
+    """Return populated domains containing a given metric slug."""
     spec = METRICS_BY_SLUG.get(slug)
     if spec is None or not _metric_supported_in_context(spec, spatial_family=spatial_family, level=level):
         return []
     return [
-        bundle
-        for bundle, slugs in BUNDLES.items()
-        if slug in slugs and get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=level)
+        domain
+        for domain, slugs in DOMAINS.items()
+        if slug in slugs and get_metrics_for_domain(domain, spatial_family=spatial_family, level=level)
     ]
 
 
-def get_bundle_description(bundle: str) -> str:
-    """
-    Return description for a bundle.
-    
-    Args:
-        bundle: Bundle name.
-        
-    Returns:
-        Description string, or empty string if not found.
-    """
-    return BUNDLE_DESCRIPTIONS.get(bundle, "")
+def get_domain_description(domain: str) -> str:
+    """Return description for a domain."""
+    return DOMAIN_DESCRIPTIONS.get(normalize_domain_name(domain), "")
 
 
-def get_default_bundle(
+def get_pillar_for_domain(domain: str) -> str:
+    """Return the assessment pillar containing a domain."""
+    return DOMAIN_TO_PILLAR.get(normalize_domain_name(domain), "")
+
+
+def get_pillar_description(pillar: str) -> str:
+    """Return description for an assessment pillar."""
+    return PILLAR_DESCRIPTIONS.get(str(pillar or "").strip(), "")
+
+
+def get_default_pillar(
     *,
     spatial_family: Optional[str] = None,
     level: Optional[str] = None,
 ) -> str:
-    """
-    Return the default bundle for single-focus mode.
-    
-    Returns:
-        Default bundle name.
-    """
-    bundles = get_bundles(spatial_family=spatial_family, level=level)
-    if DEFAULT_BUNDLE in bundles:
-        return DEFAULT_BUNDLE
-    return bundles[0] if bundles else DEFAULT_BUNDLE
+    """Return the default populated pillar for the current context."""
+    pillars = get_pillars(spatial_family=spatial_family, level=level)
+    if DEFAULT_PILLAR in pillars:
+        return DEFAULT_PILLAR
+    return pillars[0] if pillars else DEFAULT_PILLAR
 
 
-def get_metric_options_for_bundle(
-    bundle: str,
+def get_default_domain(
+    *,
+    pillar: Optional[str] = None,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> str:
+    """Return the default populated domain for the current context."""
+    if pillar:
+        domains = get_domains_for_pillar(pillar, spatial_family=spatial_family, level=level)
+        if DEFAULT_DOMAIN in domains:
+            return DEFAULT_DOMAIN
+        return domains[0] if domains else DEFAULT_DOMAIN
+    domains = get_domains(spatial_family=spatial_family, level=level)
+    if DEFAULT_DOMAIN in domains:
+        return DEFAULT_DOMAIN
+    return domains[0] if domains else DEFAULT_DOMAIN
+
+
+def get_metric_options_for_domain(
+    domain: str,
     *,
     spatial_family: Optional[str] = None,
     level: Optional[str] = None,
 ) -> list[tuple[str, str]]:
-    """
-    Return (slug, label) tuples for metrics in a bundle, suitable for dropdown options.
-    
-    Args:
-        bundle: Bundle name.
-        
-    Returns:
-        List of (slug, label) tuples for the bundle's metrics.
-    """
-    slugs = get_metrics_for_bundle(bundle, spatial_family=spatial_family, level=level)
+    """Return (slug, label) tuples for metrics in a domain."""
+    slugs = get_metrics_for_domain(domain, spatial_family=spatial_family, level=level)
     options = []
     for slug in slugs:
         spec = METRICS_BY_SLUG.get(slug)
@@ -1973,61 +2072,129 @@ def get_metric_options_for_bundle(
     return options
 
 
-def validate_bundles() -> list[str]:
-    """
-    Validate that all bundle definitions are consistent with the registry.
-    
-    Checks:
-    - All slugs in bundles exist in METRICS_BY_SLUG
-    - All bundles in BUNDLE_ORDER exist in BUNDLES
-    - All bundles in BUNDLES appear in BUNDLE_ORDER
-    
-    Returns:
-        List of validation issues. Empty if all valid.
-    """
+def get_bundles(
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str]:
+    """Compatibility alias: return populated domains in display order."""
+    return get_domains(spatial_family=spatial_family, level=level)
+
+
+def get_metrics_for_bundle(
+    bundle: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str]:
+    """Compatibility alias for get_metrics_for_domain."""
+    return get_metrics_for_domain(bundle, spatial_family=spatial_family, level=level)
+
+
+def get_bundle_for_metric(
+    slug: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str]:
+    """Compatibility alias for get_domains_for_metric."""
+    return get_domains_for_metric(slug, spatial_family=spatial_family, level=level)
+
+
+def get_bundle_description(bundle: str) -> str:
+    """Compatibility alias for get_domain_description."""
+    return get_domain_description(bundle)
+
+
+def get_default_bundle(
+    *,
+    pillar: Optional[str] = None,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> str:
+    """Compatibility alias for get_default_domain."""
+    return get_default_domain(pillar=pillar, spatial_family=spatial_family, level=level)
+
+
+def get_metric_options_for_bundle(
+    bundle: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[tuple[str, str]]:
+    """Compatibility alias for get_metric_options_for_domain."""
+    return get_metric_options_for_domain(bundle, spatial_family=spatial_family, level=level)
+
+
+def validate_domains() -> list[str]:
+    """Validate that domain and pillar definitions are consistent with the registry."""
     issues: list[str] = []
-    
-    # Check all slugs in bundles exist
-    for bundle, slugs in BUNDLES.items():
+
+    for domain, slugs in DOMAINS.items():
         for slug in slugs:
             if slug not in METRICS_BY_SLUG:
-                issues.append(f"Bundle '{bundle}' references unknown slug: '{slug}'")
-    
-    # Check BUNDLE_ORDER matches BUNDLES
-    for bundle in BUNDLE_ORDER:
-        if bundle not in BUNDLES:
-            issues.append(f"BUNDLE_ORDER contains unknown bundle: '{bundle}'")
-    
-    for bundle in BUNDLES:
-        if bundle not in BUNDLE_ORDER:
-            issues.append(f"Bundle '{bundle}' missing from BUNDLE_ORDER")
-    
-    # Check DEFAULT_BUNDLE is valid
-    if DEFAULT_BUNDLE not in BUNDLES:
-        issues.append(f"DEFAULT_BUNDLE '{DEFAULT_BUNDLE}' not in BUNDLES")
-    
+                issues.append(f"Domain '{domain}' references unknown slug: '{slug}'")
+
+    for domain in DOMAIN_ORDER:
+        if domain not in DOMAINS:
+            issues.append(f"DOMAIN_ORDER contains unknown domain: '{domain}'")
+
+    for domain in DOMAINS:
+        if domain not in DOMAIN_ORDER:
+            issues.append(f"Domain '{domain}' missing from DOMAIN_ORDER")
+
+    for pillar in PILLAR_ORDER:
+        if pillar not in PILLAR_DOMAINS:
+            issues.append(f"PILLAR_ORDER contains unknown pillar: '{pillar}'")
+
+    for pillar, domains in PILLAR_DOMAINS.items():
+        if pillar not in PILLAR_ORDER:
+            issues.append(f"Pillar '{pillar}' missing from PILLAR_ORDER")
+        for domain in domains:
+            if domain not in DOMAINS:
+                issues.append(f"Pillar '{pillar}' references unknown domain: '{domain}'")
+            elif DOMAIN_TO_PILLAR.get(domain) != pillar:
+                issues.append(f"Domain '{domain}' is not mapped back to pillar '{pillar}'.")
+
+    if DEFAULT_PILLAR not in PILLAR_DOMAINS:
+        issues.append(f"DEFAULT_PILLAR '{DEFAULT_PILLAR}' not in PILLAR_DOMAINS")
+
+    if DEFAULT_DOMAIN not in DOMAINS:
+        issues.append(f"DEFAULT_DOMAIN '{DEFAULT_DOMAIN}' not in DOMAINS")
+
     return issues
 
 
+def validate_bundles() -> list[str]:
+    """Compatibility alias for validate_domains."""
+    return validate_domains()
+
+
 def print_bundle_summary() -> None:
-    """Print a summary of bundle definitions."""
+    """Print a summary of the dashboard taxonomy."""
     print(f"\n{'='*60}")
-    print("India Resilience Tool - Bundle Summary")
+    print("India Resilience Tool - Taxonomy Summary")
     print(f"{'='*60}")
-    print(f"Total bundles: {len(BUNDLES)}")
-    print(f"Default bundle: {DEFAULT_BUNDLE}")
-    
+    print(f"Total pillars: {len(PILLAR_ORDER)}")
+    print(f"Default pillar: {DEFAULT_PILLAR}")
+    print(f"Default domain: {DEFAULT_DOMAIN}")
+
     print(f"\n{'='*60}")
-    print("Bundle contents:")
+    print("Pillar -> domain contents:")
     print(f"{'='*60}")
-    
-    for bundle in BUNDLE_ORDER:
-        slugs = BUNDLES.get(bundle, [])
-        print(f"\n{bundle} ({len(slugs)} metrics):")
-        for slug in slugs:
-            spec = METRICS_BY_SLUG.get(slug)
-            label = spec.label if spec else "(unknown)"
-            print(f"  - {label} ({slug})")
+
+    for pillar in PILLAR_ORDER:
+        domains = PILLAR_DOMAINS.get(pillar, [])
+        if not domains:
+            continue
+        print(f"\n{pillar}:")
+        for domain in domains:
+            slugs = DOMAINS.get(domain, [])
+            print(f"  {domain} ({len(slugs)} metrics):")
+            for slug in slugs:
+                spec = METRICS_BY_SLUG.get(slug)
+                label = spec.label if spec else "(unknown)"
+                print(f"    - {label} ({slug})")
 
 
 if __name__ == "__main__":
@@ -2035,10 +2202,10 @@ if __name__ == "__main__":
     print("Validating metrics registry...")
     issues = validate_bundles()
     if issues:
-        print("Bundle validation issues found:")
+        print("Taxonomy validation issues found:")
         for issue in issues:
             print(f"  - {issue}")
     else:
-        print("All bundles validated successfully!")
+        print("All taxonomy definitions validated successfully!")
     
     print_bundle_summary()

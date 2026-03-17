@@ -63,7 +63,7 @@ SESSION_DEFAULTS: dict[str, Any] = {
     # NOTE: Do NOT pre-seed unified metric selection keys here. The legacy dashboard
     # sets them dynamically based on VARIABLES; pre-seeding can block that defaulting.
     # Keys managed dynamically: 
-    #   - selected_bundle, selected_var, selected_index_group (legacy) - sidebar
+    #   - selected_pillar, selected_bundle, selected_var, selected_index_group (legacy) - sidebar
     #   - portfolio_bundle_selection, portfolio_manual_refinement - portfolio panel
     "hover_enabled": True,
     "portfolio_multiindex_selection": [],
