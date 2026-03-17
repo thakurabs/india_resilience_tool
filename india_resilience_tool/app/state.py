@@ -38,6 +38,9 @@ SESSION_DEFAULTS: dict[str, Any] = {
     # Core mode/router keys
     "analysis_mode": ANALYSIS_MODE_SINGLE,
     "portfolio_districts": [],
+    "portfolio_blocks": [],
+    "portfolio_basins": [],
+    "portfolio_subbasins": [],
     "portfolio_build_route": None,
     "jump_to_rankings": False,
     "jump_to_map": False,
@@ -160,6 +163,8 @@ def set_level(
         # Clear portfolio when switching levels (level-specific lists)
         session_state["portfolio_districts"] = []
         session_state["portfolio_blocks"] = []
+        session_state["portfolio_basins"] = []
+        session_state["portfolio_subbasins"] = []
         session_state["portfolio_multiindex_df"] = None
         session_state["portfolio_multiindex_context"] = None
         

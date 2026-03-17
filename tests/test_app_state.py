@@ -17,6 +17,9 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["active_view"] == "Map view"
     assert ss["main_view_selector"] == "Map view"
     assert isinstance(ss["portfolio_districts"], list)
+    assert isinstance(ss["portfolio_blocks"], list)
+    assert isinstance(ss["portfolio_basins"], list)
+    assert isinstance(ss["portfolio_subbasins"], list)
     assert ss["jump_to_rankings"] is False
     assert ss["jump_to_map"] is False
     assert ss["crosswalk_overlay"] is None

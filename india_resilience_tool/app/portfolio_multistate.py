@@ -73,6 +73,8 @@ def compute_portfolio_summary_stats(
     """
     level_norm = (level or "district").strip().lower()
     is_block = level_norm == "block"
+    is_basin = level_norm == "basin"
+    is_subbasin = level_norm == "sub_basin"
 
     if display_df is None or display_df.empty:
         return {"units_count": 0, "states_count": 0, "metrics_count": 0, "risk_counts": {}}
@@ -80,12 +82,22 @@ def compute_portfolio_summary_stats(
     state_col = "State" if "State" in display_df.columns else None
     dist_col = "District" if "District" in display_df.columns else None
     blk_col = "Block" if is_block and "Block" in display_df.columns else None
+    basin_col = "Basin" if ("Basin" in display_df.columns) else None
+    subbasin_col = "Sub-basin" if is_subbasin and ("Sub-basin" in display_df.columns) else None
     idx_col = "Index" if "Index" in display_df.columns else None
     risk_col = "Risk class" if "Risk class" in display_df.columns else None
 
-    unit_cols = [c for c in (state_col, dist_col, blk_col) if c]
+    if is_subbasin:
+        unit_cols = [c for c in (basin_col, subbasin_col) if c]
+    elif is_basin:
+        unit_cols = [c for c in (basin_col,) if c]
+    else:
+        unit_cols = [c for c in (state_col, dist_col, blk_col) if c]
     units_count = int(display_df[unit_cols].drop_duplicates().shape[0]) if unit_cols else 0
-    states_count = int(display_df[state_col].dropna().nunique()) if state_col else 0
+    if basin_col and not state_col:
+        states_count = int(display_df[basin_col].dropna().nunique())
+    else:
+        states_count = int(display_df[state_col].dropna().nunique()) if state_col else 0
     metrics_count = int(display_df[idx_col].dropna().nunique()) if idx_col else 0
 
     risk_counts: dict[str, int] = {}
@@ -100,4 +112,3 @@ def compute_portfolio_summary_stats(
         "metrics_count": metrics_count,
         "risk_counts": risk_counts,
     }
-

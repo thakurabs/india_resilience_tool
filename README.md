@@ -39,8 +39,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - case-study export for admin single-unit flows
 
 ### Portfolio support
-- Implemented for **district** and **block**
-- Not implemented yet for **basin** and **sub-basin**
+- Implemented for **district**, **block**, **basin**, and **sub-basin**
 
 ### Hydro support
 - Canonical hydro boundaries:
@@ -81,7 +80,6 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 ### Explicitly not implemented yet
 - Weighted admin ↔ hydro metric transfer
 - River-network crosswalks or topology-aware routing
-- Hydro portfolio workflows
 
 Long-lived deferred work and shelved follow-ups are tracked in `docs/BACKLOG.md`.
 

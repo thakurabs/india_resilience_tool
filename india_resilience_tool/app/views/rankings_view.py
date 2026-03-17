@@ -217,9 +217,15 @@ def _render_portfolio_rankings(
     """Render rankings view with per-row add/remove buttons using st.data_editor."""
     import streamlit as st
     from india_resilience_tool.utils.naming import alias
+    from india_resilience_tool.analysis.portfolio import get_portfolio_storage_key
 
     level_norm = str(level).strip().lower()
-    unit_label = "block" if level_norm == "block" else "district"
+    if level_norm == "sub_basin":
+        unit_label = "sub-basin"
+    elif level_norm == "basin":
+        unit_label = "basin"
+    else:
+        unit_label = "block" if level_norm == "block" else "district"
     plural_label = f"{unit_label}s"
 
     def _normalize(s: str) -> str:
@@ -230,7 +236,25 @@ def _render_portfolio_rankings(
         from india_resilience_tool.analysis.portfolio import portfolio_contains, portfolio_remove
 
         if portfolio_contains_fn is None:
-            def portfolio_contains_fn(state: str, district: str, block: Optional[str] = None) -> bool:  # type: ignore[misc]
+            def portfolio_contains_fn(state: str = "", district: str = "", block: Optional[str] = None, **kwargs: Any) -> bool:  # type: ignore[misc]
+                if level_norm == "sub_basin":
+                    return portfolio_contains(
+                        st.session_state,
+                        normalize_fn=_normalize,
+                        level="sub_basin",
+                        basin_name=str(kwargs.get("basin_name", "")),
+                        basin_id=kwargs.get("basin_id"),
+                        subbasin_name=str(kwargs.get("subbasin_name", "")),
+                        subbasin_id=kwargs.get("subbasin_id"),
+                    )
+                if level_norm == "basin":
+                    return portfolio_contains(
+                        st.session_state,
+                        normalize_fn=_normalize,
+                        level="basin",
+                        basin_name=str(kwargs.get("basin_name", "")),
+                        basin_id=kwargs.get("basin_id"),
+                    )
                 if level_norm == "block" and block:
                     return portfolio_contains(
                         st.session_state, state, district, 
@@ -239,7 +263,27 @@ def _render_portfolio_rankings(
                 return portfolio_contains(st.session_state, state, district, normalize_fn=_normalize)
 
         if portfolio_remove_fn is None:
-            def portfolio_remove_fn(state: str, district: str, block: Optional[str] = None) -> None:  # type: ignore[misc]
+            def portfolio_remove_fn(state: str = "", district: str = "", block: Optional[str] = None, **kwargs: Any) -> None:  # type: ignore[misc]
+                if level_norm == "sub_basin":
+                    portfolio_remove(
+                        st.session_state,
+                        normalize_fn=_normalize,
+                        level="sub_basin",
+                        basin_name=str(kwargs.get("basin_name", "")),
+                        basin_id=kwargs.get("basin_id"),
+                        subbasin_name=str(kwargs.get("subbasin_name", "")),
+                        subbasin_id=kwargs.get("subbasin_id"),
+                    )
+                    return
+                if level_norm == "basin":
+                    portfolio_remove(
+                        st.session_state,
+                        normalize_fn=_normalize,
+                        level="basin",
+                        basin_name=str(kwargs.get("basin_name", "")),
+                        basin_id=kwargs.get("basin_id"),
+                    )
+                    return
                 if level_norm == "block" and block:
                     portfolio_remove(
                         st.session_state, state, district,
@@ -261,11 +305,16 @@ def _render_portfolio_rankings(
     )
     qn = _normalize(q)
     if qn:
-        desired = ["state_name", "district_name"]
-        if level_norm == "block" and "block_name" in df_to_show.columns:
-            desired.append("block_name")
+        if level_norm == "sub_basin":
+            desired = ["basin_name", "subbasin_name"]
+        elif level_norm == "basin":
+            desired = ["basin_name"]
+        else:
+            desired = ["state_name", "district_name"]
+            if level_norm == "block" and "block_name" in df_to_show.columns:
+                desired.append("block_name")
         cols = [c for c in desired if c in df_to_show.columns]
-        if len(cols) >= 2:
+        if cols:
             work = df_to_show[cols].astype(str).apply(lambda s: s.map(_normalize))
             mask = False
             for c in cols:
@@ -306,20 +355,49 @@ def _render_portfolio_rankings(
 
     # Determine name columns
     is_block_table = level_norm == "block" and "block_name" in df_to_show.columns
+    is_basin_table = level_norm == "basin" and "basin_name" in df_to_show.columns
+    is_subbasin_table = level_norm == "sub_basin" and "subbasin_name" in df_to_show.columns
 
     # Add portfolio status columns
     df_port = df_to_show.copy()
     in_portfolio_status: list[bool] = []
 
     for _, row in df_port.iterrows():
+        if is_subbasin_table:
+            basin = str(row.get("basin_name", "")).strip()
+            basin_id = str(row.get("basin_id", "")).strip() or None
+            subbasin = str(row.get("subbasin_name", "")).strip()
+            subbasin_id = str(row.get("subbasin_id", "")).strip() or None
+            if not basin or not subbasin:
+                in_portfolio_status.append(False)
+                continue
+            in_portfolio_status.append(
+                bool(
+                    portfolio_contains_fn(
+                        basin_name=basin,
+                        basin_id=basin_id,
+                        subbasin_name=subbasin,
+                        subbasin_id=subbasin_id,
+                    )
+                )
+            )
+            continue
+
+        if is_basin_table:
+            basin = str(row.get("basin_name", "")).strip()
+            basin_id = str(row.get("basin_id", "")).strip() or None
+            if not basin:
+                in_portfolio_status.append(False)
+                continue
+            in_portfolio_status.append(bool(portfolio_contains_fn(basin_name=basin, basin_id=basin_id)))
+            continue
+
         state = str(row.get("state_name", "")).strip()
         district = str(row.get("district_name", "")).strip()
         block = str(row.get("block_name", "")).strip() if is_block_table else None
-
         if not state or not district:
             in_portfolio_status.append(False)
             continue
-
         if is_block_table and block:
             in_portfolio_status.append(bool(portfolio_contains_fn(state, district, block)))
         else:
@@ -329,7 +407,7 @@ def _render_portfolio_rankings(
     df_port["Add to portfolio"] = False  # Checkbox column for adding
 
     # Portfolio stats
-    portfolio_state_key = "portfolio_blocks" if level_norm == "block" else "portfolio_districts"
+    portfolio_state_key = get_portfolio_storage_key(level_norm)
     portfolio_items = st.session_state.get(portfolio_state_key, [])
     if not isinstance(portfolio_items, list):
         portfolio_items = []
@@ -408,6 +486,40 @@ def _render_portfolio_rankings(
 
         for _, row in edited_df.iterrows():
             if not bool(row.get("Add to portfolio")):
+                continue
+
+            if is_subbasin_table:
+                basin_label = str(row.get("basin_name", "")).strip()
+                basin_id = str(row.get("basin_id", "")).strip() or None
+                subbasin_label = str(row.get("subbasin_name", "")).strip()
+                subbasin_id = str(row.get("subbasin_id", "")).strip() or None
+                if not basin_label or not subbasin_label:
+                    continue
+                if not bool(
+                    portfolio_contains_fn(
+                        basin_name=basin_label,
+                        basin_id=basin_id,
+                        subbasin_name=subbasin_label,
+                        subbasin_id=subbasin_id,
+                    )
+                ):
+                    portfolio_add_fn(
+                        basin_name=basin_label,
+                        basin_id=basin_id,
+                        subbasin_name=subbasin_label,
+                        subbasin_id=subbasin_id,
+                    )
+                    added += 1
+                continue
+
+            if is_basin_table:
+                basin_label = str(row.get("basin_name", "")).strip()
+                basin_id = str(row.get("basin_id", "")).strip() or None
+                if not basin_label:
+                    continue
+                if not bool(portfolio_contains_fn(basin_name=basin_label, basin_id=basin_id)):
+                    portfolio_add_fn(basin_name=basin_label, basin_id=basin_id)
+                    added += 1
                 continue
 
             state_label = str(row.get("state_name", "")).strip()

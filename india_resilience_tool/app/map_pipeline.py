@@ -346,10 +346,13 @@ def build_map_and_rankings(
     # Build ranking table
     # -------------------------
     with perf_section("rank_table: build"):
+        extra_rank_cols: list[str] = []
         if level_norm == "sub_basin":
             unit_col = "subbasin_name"
+            extra_rank_cols = ["basin_name", "basin_id", "subbasin_id"]
         elif level_norm == "basin":
             unit_col = "basin_name"
+            extra_rank_cols = ["basin_id"]
         elif level_norm == "block":
             unit_col = "block_name"
         else:
@@ -363,6 +366,7 @@ def build_map_and_rankings(
             district_col=unit_col,
             state_col="state_name",
             aspirational_col="aspirational",
+            extra_cols=extra_rank_cols,
         )
 
     # Filter for map display (preserves legacy behavior: block selection does not

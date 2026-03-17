@@ -62,3 +62,31 @@ def test_compute_portfolio_summary_stats_block() -> None:
     assert s["states_count"] == 1
     assert s["metrics_count"] == 2
 
+
+def test_compute_portfolio_summary_stats_basin() -> None:
+    df = pd.DataFrame(
+        {
+            "Basin": ["Godavari", "Krishna"],
+            "Index": ["I1", "I2"],
+            "Risk class": ["High", "Low"],
+        }
+    )
+    s = compute_portfolio_summary_stats(df, level="basin")
+    assert s["units_count"] == 2
+    assert s["states_count"] == 2
+    assert s["metrics_count"] == 2
+
+
+def test_compute_portfolio_summary_stats_subbasin() -> None:
+    df = pd.DataFrame(
+        {
+            "Basin": ["Godavari", "Godavari", "Krishna"],
+            "Sub-basin": ["Pranhita", "Wardha", "Bhima"],
+            "Index": ["I1", "I1", "I2"],
+            "Risk class": ["High", "Medium", "Low"],
+        }
+    )
+    s = compute_portfolio_summary_stats(df, level="sub_basin")
+    assert s["units_count"] == 3
+    assert s["states_count"] == 2
+    assert s["metrics_count"] == 2

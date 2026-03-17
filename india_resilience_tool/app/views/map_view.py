@@ -360,6 +360,21 @@ def build_choropleth_map_with_geojson_layer(
     return m
 
 
+def _iter_clicked_payloads(ret: Optional[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return candidate payload dictionaries from an st_folium return payload."""
+    if not ret:
+        return []
+    out: list[dict[str, Any]] = []
+    for key in ("last_object_clicked", "clicked_feature", "last_active_drawing", "last_object"):
+        feat = ret.get(key)
+        if not isinstance(feat, dict):
+            continue
+        props = feat.get("properties") if isinstance(feat.get("properties"), dict) else feat
+        if isinstance(props, dict):
+            out.append(props)
+    return out
+
+
 def extract_clicked_district_state(ret: Optional[Mapping[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
     """
     Extract (district_name, state_name) from st_folium return payload.
@@ -373,22 +388,7 @@ def extract_clicked_district_state(ret: Optional[Mapping[str, Any]]) -> Tuple[Op
     if not ret:
         return None, None
 
-    candidates = (
-        "last_object_clicked",
-        "clicked_feature",
-        "last_active_drawing",
-        "last_object",
-    )
-
-    for key in candidates:
-        feat = ret.get(key)
-        if not isinstance(feat, dict):
-            continue
-
-        props = feat.get("properties") if isinstance(feat.get("properties"), dict) else feat
-        if not isinstance(props, dict):
-            continue
-
+    for props in _iter_clicked_payloads(ret):
         for pk in ("district_name", "shapeName", "NAME", "name", "SHAPE_NAME"):
             val = props.get(pk)
             if val:
@@ -402,6 +402,35 @@ def extract_clicked_district_state(ret: Optional[Mapping[str, Any]]) -> Tuple[Op
                 return str(val), (str(state_val) if state_val else None)
 
     return None, None
+
+
+def extract_clicked_basin(ret: Optional[Mapping[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+    """Extract `(basin_name, basin_id)` from an st_folium return payload."""
+    for props in _iter_clicked_payloads(ret):
+        basin_name = props.get("basin_name") or props.get("BASIN_NAME") or props.get("name")
+        basin_id = props.get("basin_id") or props.get("BASIN_ID") or props.get("id")
+        if basin_name:
+            return str(basin_name).strip(), (str(basin_id).strip() if basin_id else None)
+    return None, None
+
+
+def extract_clicked_subbasin(
+    ret: Optional[Mapping[str, Any]],
+) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """Extract `(subbasin_name, subbasin_id, basin_name, basin_id)` from an st_folium return payload."""
+    for props in _iter_clicked_payloads(ret):
+        subbasin_name = props.get("subbasin_name") or props.get("sub_basin") or props.get("SUBBASIN_NAME") or props.get("name")
+        subbasin_id = props.get("subbasin_id") or props.get("SUBBASIN_ID") or props.get("id")
+        basin_name = props.get("basin_name") or props.get("BASIN_NAME")
+        basin_id = props.get("basin_id") or props.get("BASIN_ID")
+        if subbasin_name:
+            return (
+                str(subbasin_name).strip(),
+                (str(subbasin_id).strip() if subbasin_id else None),
+                (str(basin_name).strip() if basin_name else None),
+                (str(basin_id).strip() if basin_id else None),
+            )
+    return None, None, None, None
 
 
 def extract_clicked_block_district_state(
@@ -566,6 +595,60 @@ def find_block_at_coordinates(
     return None, None, None
 
 
+def find_basin_at_coordinates(
+    merged: Any,
+    lat: float,
+    lon: float,
+) -> Tuple[Optional[str], Optional[str]]:
+    """Find basin containing or nearest to the given coordinates."""
+    from shapely.geometry import Point
+
+    try:
+        pt = Point(float(lon), float(lat))
+        mask = merged.geometry.contains(pt)
+        if mask.any():
+            row = merged[mask].iloc[0]
+        else:
+            dists = merged.geometry.centroid.distance(pt)
+            row = merged.loc[dists.idxmin()]
+
+        basin_name = str(row.get("basin_name", "")).strip()
+        basin_id = str(row.get("basin_id", "")).strip()
+        if basin_name:
+            return basin_name, (basin_id or None)
+    except Exception:
+        pass
+    return None, None
+
+
+def find_subbasin_at_coordinates(
+    merged: Any,
+    lat: float,
+    lon: float,
+) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """Find sub-basin containing or nearest to the given coordinates."""
+    from shapely.geometry import Point
+
+    try:
+        pt = Point(float(lon), float(lat))
+        mask = merged.geometry.contains(pt)
+        if mask.any():
+            row = merged[mask].iloc[0]
+        else:
+            dists = merged.geometry.centroid.distance(pt)
+            row = merged.loc[dists.idxmin()]
+
+        basin_name = str(row.get("basin_name", "")).strip()
+        basin_id = str(row.get("basin_id", "")).strip()
+        subbasin_name = str(row.get("subbasin_name", "")).strip()
+        subbasin_id = str(row.get("subbasin_id", "")).strip()
+        if basin_name and subbasin_name:
+            return basin_name, (basin_id or None), subbasin_name, (subbasin_id or None)
+    except Exception:
+        pass
+    return None, None, None, None
+
+
 def add_portfolio_legend_to_map(
     m: Any,
     portfolio_count: int,
@@ -581,7 +664,13 @@ def add_portfolio_legend_to_map(
     if portfolio_count == 0:
         return
 
-    unit_label = "block" if str(level).strip().lower() == "block" else "district"
+    level_norm = str(level).strip().lower()
+    if level_norm == "sub_basin":
+        unit_label = "sub-basin"
+    elif level_norm == "basin":
+        unit_label = "basin"
+    else:
+        unit_label = "block" if level_norm == "block" else "district"
 
     legend_html = f"""
     <div style="
@@ -677,7 +766,10 @@ def render_map_view(
                 
                 label = pt.get("label") or f"Point {idx}"
                 district = pt.get("district", "")
-                tooltip_text = f"{label}: {district}" if district else f"{label}: {lat_p:.4f}, {lon_p:.4f}"
+                basin = pt.get("basin", "")
+                subbasin = pt.get("subbasin", "")
+                unit_name = subbasin or basin or district
+                tooltip_text = f"{label}: {unit_name}" if unit_name else f"{label}: {lat_p:.4f}, {lon_p:.4f}"
 
                 folium.Marker(
                     location=[lat_p, lon_p],
@@ -707,12 +799,16 @@ def render_map_view(
                 lon_m = float(preview_marker.get("lon"))
                 district = preview_marker.get("district", "")
                 state = preview_marker.get("state", "")
-                tooltip_text = f"Location: {district}, {state}" if district else f"Location: {lat_m:.4f}, {lon_m:.4f}"
+                basin = preview_marker.get("basin", "")
+                subbasin = preview_marker.get("subbasin", "")
+                label = subbasin or basin or district
+                context = basin if subbasin else (state or "")
+                tooltip_text = f"Location: {label}, {context}".strip(", ") if label else f"Location: {lat_m:.4f}, {lon_m:.4f}"
                 
                 folium.Marker(
                     location=[lat_m, lon_m],
                     tooltip=tooltip_text,
-                    popup=f"<b>{district}</b><br>{state}<br>({lat_m:.4f}, {lon_m:.4f})",
+                    popup=f"<b>{label or district}</b><br>{context or state}<br>({lat_m:.4f}, {lon_m:.4f})",
                     icon=folium.Icon(color="red", icon="star"),
                 ).add_to(m)
             except (TypeError, ValueError):
@@ -733,17 +829,28 @@ def render_map_view(
                 label = marker.get("label") or f"#{idx}"
                 district = marker.get("district", "")
                 state = marker.get("state", "")
-                tooltip_text = f"Location: {label}: {district}" if district else f"Location: {label}: {lat_m:.4f}, {lon_m:.4f}"
+                basin = marker.get("basin", "")
+                subbasin = marker.get("subbasin", "")
+                unit_name = subbasin or basin or district
+                tooltip_text = f"Location: {label}: {unit_name}" if unit_name else f"Location: {label}: {lat_m:.4f}, {lon_m:.4f}"
                 
                 folium.Marker(
                     location=[lat_m, lon_m],
                     tooltip=tooltip_text,
-                    popup=f"<b>{label}</b><br>{district}, {state}<br>({lat_m:.4f}, {lon_m:.4f})",
+                    popup=f"<b>{label}</b><br>{(unit_name or district)}, {(basin or state)}<br>({lat_m:.4f}, {lon_m:.4f})",
                     icon=folium.Icon(color="green", icon="map-marker"),
                 ).add_to(m)
         
         # Portfolio legend
-        portfolio_state_key = "portfolio_blocks" if str(level).strip().lower() == "block" else "portfolio_districts"
+        level_norm = str(level).strip().lower()
+        if level_norm == "sub_basin":
+            portfolio_state_key = "portfolio_subbasins"
+        elif level_norm == "basin":
+            portfolio_state_key = "portfolio_basins"
+        elif level_norm == "block":
+            portfolio_state_key = "portfolio_blocks"
+        else:
+            portfolio_state_key = "portfolio_districts"
         portfolio = st.session_state.get(portfolio_state_key, [])
         add_portfolio_legend_to_map(m, len(portfolio) if isinstance(portfolio, list) else 0, level=level)
 
@@ -818,16 +925,34 @@ def render_map_view(
 
     # Block-aware click extraction (stores clicked_block in session_state)
     clicked_block: Optional[str] = None
-    if str(level).strip().lower() == "block":
+    level_norm = str(level).strip().lower()
+    if level_norm == "block":
         b, d, s = extract_clicked_block_district_state(returned)
         clicked_block = b
         clicked_district = d or clicked_district
         clicked_state = s or clicked_state
         st.session_state["clicked_block"] = clicked_block
+    elif level_norm == "basin":
+        st.session_state.pop("clicked_block", None)
+        basin_name, basin_id = extract_clicked_basin(returned)
+        st.session_state["clicked_basin_name"] = basin_name
+        st.session_state["clicked_basin_id"] = basin_id
+        st.session_state.pop("clicked_subbasin_name", None)
+        st.session_state.pop("clicked_subbasin_id", None)
     else:
-        # Ensure stale value isn't carried across toggles
         if "clicked_block" in st.session_state:
             st.session_state.pop("clicked_block")
+        if level_norm == "sub_basin":
+            subbasin_name, subbasin_id, basin_name, basin_id = extract_clicked_subbasin(returned)
+            st.session_state["clicked_basin_name"] = basin_name
+            st.session_state["clicked_basin_id"] = basin_id
+            st.session_state["clicked_subbasin_name"] = subbasin_name
+            st.session_state["clicked_subbasin_id"] = subbasin_id
+        else:
+            st.session_state.pop("clicked_basin_name", None)
+            st.session_state.pop("clicked_basin_id", None)
+            st.session_state.pop("clicked_subbasin_name", None)
+            st.session_state.pop("clicked_subbasin_id", None)
 
     return returned, clicked_district, clicked_state
 
@@ -864,8 +989,32 @@ def render_unit_add_to_portfolio(
     resolved_district = clicked_district
     resolved_state = clicked_state
     resolved_block = clicked_block
+    resolved_basin = str(st.session_state.get("clicked_basin_name") or "").strip() or None
+    resolved_basin_id = str(st.session_state.get("clicked_basin_id") or "").strip() or None
+    resolved_subbasin = str(st.session_state.get("clicked_subbasin_name") or "").strip() or None
+    resolved_subbasin_id = str(st.session_state.get("clicked_subbasin_id") or "").strip() or None
 
-    if level_norm == "block":
+    if level_norm == "sub_basin":
+        if (
+            (merged is not None)
+            and (returned is not None)
+            and ((not resolved_basin) or (not resolved_subbasin))
+        ):
+            lat, lon = extract_click_coordinates(returned)
+            if lat is not None and lon is not None:
+                basin2, basin_id2, sub2, sub_id2 = find_subbasin_at_coordinates(merged, lat, lon)
+                resolved_basin = resolved_basin or basin2
+                resolved_basin_id = resolved_basin_id or basin_id2
+                resolved_subbasin = resolved_subbasin or sub2
+                resolved_subbasin_id = resolved_subbasin_id or sub_id2
+    elif level_norm == "basin":
+        if (merged is not None) and (returned is not None) and (not resolved_basin):
+            lat, lon = extract_click_coordinates(returned)
+            if lat is not None and lon is not None:
+                basin2, basin_id2 = find_basin_at_coordinates(merged, lat, lon)
+                resolved_basin = resolved_basin or basin2
+                resolved_basin_id = resolved_basin_id or basin_id2
+    elif level_norm == "block":
         if not resolved_block and returned is not None:
             b, d, s = extract_clicked_block_district_state(returned)
             resolved_block = b or resolved_block
@@ -911,7 +1060,13 @@ def render_unit_add_to_portfolio(
                     if (not resolved_district) or (d2 and normalize_fn(d2) == normalize_fn(resolved_district)):
                         resolved_state = s2
 
-    if level_norm == "block":
+    if level_norm == "sub_basin":
+        if not resolved_basin or not resolved_subbasin:
+            return False
+    elif level_norm == "basin":
+        if not resolved_basin:
+            return False
+    elif level_norm == "block":
         if not resolved_block or not resolved_district:
             return False
     else:
@@ -923,21 +1078,51 @@ def render_unit_add_to_portfolio(
         return False
 
     state_for_add = (resolved_state or selected_state or "").strip()
-    if not state_for_add or state_for_add == "All":
+    if level_norm in {"district", "block"} and (not state_for_add or state_for_add == "All"):
         return False
 
-    unit_label = "block" if level_norm == "block" else "district"
-    name_for_display = resolved_block if level_norm == "block" else resolved_district
+    if level_norm == "sub_basin":
+        unit_label = "sub-basin"
+        name_for_display = resolved_subbasin
+    elif level_norm == "basin":
+        unit_label = "basin"
+        name_for_display = resolved_basin
+    else:
+        unit_label = "block" if level_norm == "block" else "district"
+        name_for_display = resolved_block if level_norm == "block" else resolved_district
 
     # Portfolio membership check
-    if level_norm == "block":
+    if level_norm == "sub_basin":
+        is_in_portfolio = bool(
+            portfolio_contains_fn(
+                basin_name=resolved_basin,
+                basin_id=resolved_basin_id,
+                subbasin_name=resolved_subbasin,
+                subbasin_id=resolved_subbasin_id,
+            )
+        )
+        key_suffix = f"{normalize_fn(resolved_basin or '')}_{normalize_fn(resolved_subbasin or '')}"
+    elif level_norm == "basin":
+        is_in_portfolio = bool(
+            portfolio_contains_fn(
+                basin_name=resolved_basin,
+                basin_id=resolved_basin_id,
+            )
+        )
+        key_suffix = normalize_fn(resolved_basin or "")
+    elif level_norm == "block":
         is_in_portfolio = bool(portfolio_contains_fn(state_for_add, resolved_district, resolved_block))
         key_suffix = f"{normalize_fn(state_for_add)}_{normalize_fn(resolved_district)}_{normalize_fn(resolved_block)}"
     else:
         is_in_portfolio = bool(portfolio_contains_fn(state_for_add, resolved_district))
         key_suffix = f"{normalize_fn(state_for_add)}_{normalize_fn(resolved_district)}"
 
-    st.markdown(f"**{name_for_display}** ({state_for_add})")
+    if level_norm == "sub_basin":
+        st.markdown(f"**{name_for_display}** ({resolved_basin})")
+    elif level_norm == "basin":
+        st.markdown(f"**{name_for_display}**")
+    else:
+        st.markdown(f"**{name_for_display}** ({state_for_add})")
 
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -948,7 +1133,16 @@ def render_unit_add_to_portfolio(
                 type="secondary",
                 use_container_width=True,
             ):
-                if level_norm == "block":
+                if level_norm == "sub_basin":
+                    portfolio_remove_fn(
+                        basin_name=resolved_basin,
+                        basin_id=resolved_basin_id,
+                        subbasin_name=resolved_subbasin,
+                        subbasin_id=resolved_subbasin_id,
+                    )
+                elif level_norm == "basin":
+                    portfolio_remove_fn(basin_name=resolved_basin, basin_id=resolved_basin_id)
+                elif level_norm == "block":
                     portfolio_remove_fn(state_for_add, resolved_district, resolved_block)
                 else:
                     portfolio_remove_fn(state_for_add, resolved_district)
@@ -962,7 +1156,16 @@ def render_unit_add_to_portfolio(
                 type="primary",
                 use_container_width=True,
             ):
-                if level_norm == "block":
+                if level_norm == "sub_basin":
+                    portfolio_add_fn(
+                        basin_name=resolved_basin,
+                        basin_id=resolved_basin_id,
+                        subbasin_name=resolved_subbasin,
+                        subbasin_id=resolved_subbasin_id,
+                    )
+                elif level_norm == "basin":
+                    portfolio_add_fn(basin_name=resolved_basin, basin_id=resolved_basin_id)
+                elif level_norm == "block":
                     portfolio_add_fn(state_for_add, resolved_district, resolved_block)
                 else:
                     portfolio_add_fn(state_for_add, resolved_district)

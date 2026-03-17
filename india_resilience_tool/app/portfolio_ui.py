@@ -51,13 +51,19 @@ def render_portfolio_badge(portfolio_count: int, level: str = "district") -> Non
 
     Args:
         portfolio_count: Number of units in the portfolio.
-        level: "district" or "block".
+        level: active portfolio level.
     """
     import streamlit as st
 
     level_norm = (level or "district").strip().lower()
-    unit_singular = "block" if level_norm == "block" else "district"
-    unit_plural = "blocks" if level_norm == "block" else "districts"
+    if level_norm == "sub_basin":
+        unit_singular, unit_plural = "sub-basin", "sub-basins"
+    elif level_norm == "basin":
+        unit_singular, unit_plural = "basin", "basins"
+    elif level_norm == "block":
+        unit_singular, unit_plural = "block", "blocks"
+    else:
+        unit_singular, unit_plural = "district", "districts"
 
     if portfolio_count == 0:
         st.markdown(
@@ -166,6 +172,45 @@ def _group_portfolio_items_by_state_and_district(
     return dict(sorted(out.items(), key=lambda kv: normalize_fn(kv[0])))
 
 
+def _portfolio_hydro_items_to_dicts(portfolio: Sequence[Any], *, level: str) -> list[dict[str, str]]:
+    """Normalize basin/sub-basin portfolio items into simple display dicts."""
+    level_norm = (level or "district").strip().lower()
+    items: list[dict[str, str]] = []
+    for raw in portfolio:
+        if isinstance(raw, dict):
+            item = {
+                "basin_id": str(raw.get("basin_id", "")).strip(),
+                "basin_name": str(raw.get("basin_name", "")).strip(),
+                "subbasin_id": str(raw.get("subbasin_id", "")).strip(),
+                "subbasin_name": str(raw.get("subbasin_name", "")).strip(),
+            }
+        elif isinstance(raw, (list, tuple)):
+            if level_norm == "sub_basin" and len(raw) >= 4:
+                item = {
+                    "basin_id": str(raw[0]).strip(),
+                    "basin_name": str(raw[1]).strip(),
+                    "subbasin_id": str(raw[2]).strip(),
+                    "subbasin_name": str(raw[3]).strip(),
+                }
+            elif level_norm == "basin" and len(raw) >= 2:
+                item = {
+                    "basin_id": str(raw[0]).strip(),
+                    "basin_name": str(raw[1]).strip(),
+                    "subbasin_id": "",
+                    "subbasin_name": "",
+                }
+            else:
+                continue
+        else:
+            continue
+        if not item["basin_name"]:
+            continue
+        if level_norm == "sub_basin" and not item["subbasin_name"]:
+            continue
+        items.append(item)
+    return items
+
+
 def render_portfolio_list(
     *,
     portfolio: Sequence[Any],
@@ -175,19 +220,85 @@ def render_portfolio_list(
     level: str = "district",
 ) -> None:
     """
-    Render the portfolio unit list (districts or blocks) with remove buttons.
+    Render the portfolio unit list with remove buttons.
     """
     import streamlit as st
 
     level_norm = (level or "district").strip().lower()
     is_block = level_norm == "block"
+    is_basin = level_norm == "basin"
+    is_subbasin = level_norm == "sub_basin"
+    is_hydro = level_norm in {"basin", "sub_basin"}
 
     if not portfolio:
-        st.caption(
-            "No blocks selected yet. Add blocks from the map, rankings table, or by coordinates."
-            if is_block
-            else "No districts selected yet. Add districts from the map, rankings table, or by coordinates."
+        if level_norm == "sub_basin":
+            st.caption("No sub-basins selected yet. Add sub-basins from the map, rankings table, or by coordinates.")
+        elif level_norm == "basin":
+            st.caption("No basins selected yet. Add basins from the map, rankings table, or by coordinates.")
+        else:
+            st.caption(
+                "No blocks selected yet. Add blocks from the map, rankings table, or by coordinates."
+                if is_block
+                else "No districts selected yet. Add districts from the map, rankings table, or by coordinates."
+            )
+        return
+
+    if is_hydro:
+        items_all = _portfolio_hydro_items_to_dicts(portfolio, level=level_norm)
+        search_key = f"portfolio_manage_search_{level_norm}"
+        q = st.text_input(
+            "Search",
+            value=str(st.session_state.get(search_key, "")),
+            key=search_key,
+            placeholder="Type to filter…",
         )
+        qn = normalize_fn(str(q))
+        items = items_all
+        if qn:
+            items = [
+                it
+                for it in items_all
+                if qn in normalize_fn(" ".join([it.get("basin_name", ""), it.get("subbasin_name", "")]))
+            ]
+        if not items:
+            st.caption("No matching items. Clear search to see all.")
+            return
+
+        if level_norm == "basin":
+            for it in sorted(items, key=lambda r: normalize_fn(r.get("basin_name", ""))):
+                basin_name = it.get("basin_name", "")
+                basin_id = it.get("basin_id", "")
+                col1, col2 = st.columns([5, 1])
+                with col1:
+                    st.markdown(f"**{html.escape(str(basin_name))}**")
+                with col2:
+                    key = f"btn_portfolio_remove_{normalize_fn(basin_name)}"
+                    if st.button("×", key=key, help=f"Remove {basin_name}"):
+                        portfolio_remove_fn(basin_name=basin_name, basin_id=basin_id or None)
+                        st.rerun()
+            return
+
+        grouped: dict[str, list[dict[str, str]]] = {}
+        for it in items:
+            grouped.setdefault(it["basin_name"], []).append(it)
+        for basin_name, basin_items in sorted(grouped.items(), key=lambda kv: normalize_fn(kv[0])):
+            with st.expander(f"{basin_name} ({len(basin_items)})", expanded=True):
+                for it in sorted(basin_items, key=lambda r: normalize_fn(r.get("subbasin_name", ""))):
+                    sub_name = it.get("subbasin_name", "")
+                    col1, col2 = st.columns([5, 1])
+                    with col1:
+                        st.markdown(f"<div style=\"padding-left: 16px;\"><strong>{html.escape(str(sub_name))}</strong></div>", unsafe_allow_html=True)
+                    with col2:
+                        key = f"btn_portfolio_remove_{normalize_fn(basin_name)}_{normalize_fn(sub_name)}"
+                        if st.button("×", key=key, help=f"Remove {sub_name}"):
+                            portfolio_remove_fn(
+                                basin_name=basin_name,
+                                basin_id=it.get("basin_id") or None,
+                                subbasin_name=sub_name,
+                                subbasin_id=it.get("subbasin_id") or None,
+                            )
+                            st.rerun()
+            st.markdown("")
         return
 
     items_all = _portfolio_items_to_dicts(portfolio, is_block=is_block)
@@ -636,27 +747,50 @@ def build_comparison_df(
     """
     import streamlit as st
     import os
-    from india_resilience_tool.analysis.metrics import compute_rank_and_percentile
+    from india_resilience_tool.analysis.metrics import (
+        compute_percentile_in_state,
+        compute_rank_and_percentile,
+        compute_rank_descending,
+    )
     from india_resilience_tool.app.portfolio_multistate import (
         extract_states_in_portfolio,
     )
 
     level_norm = (level or "district").strip().lower()
     is_block = level_norm == "block"
+    is_basin = level_norm == "basin"
+    is_subbasin = level_norm == "sub_basin"
 
     if not portfolio or not selected_slugs:
         return None
 
-    states_for_master = extract_states_in_portfolio(portfolio, fallback_state=pilot_state)
+    states_for_master = (
+        []
+        if level_norm in {"basin", "sub_basin"}
+        else extract_states_in_portfolio(portfolio, fallback_state=pilot_state)
+    )
 
     # Build context for cache invalidation (level-aware)
     def _unit_tuple(item: Any) -> tuple:
         if isinstance(item, dict):
+            if is_subbasin:
+                return (
+                    item.get("basin_id"),
+                    item.get("basin_name"),
+                    item.get("subbasin_id"),
+                    item.get("subbasin_name"),
+                )
+            if is_basin:
+                return (item.get("basin_id"), item.get("basin_name"))
             st_name = item.get("state")
             dist_name = item.get("district")
             blk_name = item.get("block")
         else:
             tup = tuple(item)
+            if is_subbasin:
+                return tuple(tup[:4])
+            if is_basin:
+                return tuple(tup[:2])
             st_name = tup[0] if len(tup) > 0 else None
             dist_name = tup[1] if len(tup) > 1 else None
             blk_name = tup[2] if len(tup) > 2 else None
@@ -716,10 +850,43 @@ def build_comparison_df(
 
     def _load_master_and_schema_for_slug(slug: str):
         proc_root = _resolve_proc_root_for_slug(slug)
-        master_fname = "master_metrics_by_block.csv" if is_block else "master_metrics_by_district.csv"
+        if is_subbasin:
+            master_fname = "master_metrics_by_sub_basin.csv"
+        elif is_basin:
+            master_fname = "master_metrics_by_basin.csv"
+        elif is_block:
+            master_fname = "master_metrics_by_block.csv"
+        else:
+            master_fname = "master_metrics_by_district.csv"
 
         file_cache = st.session_state.setdefault("_portfolio_master_cache", {})
         concat_cache = st.session_state.setdefault("_portfolio_master_concat_cache", {})
+
+        if level_norm in {"basin", "sub_basin"}:
+            master_path = proc_root / "hydro" / master_fname
+            file_key = f"{slug}::{master_path}"
+            try:
+                mtime = master_path.stat().st_mtime
+            except Exception:
+                mtime = None
+            entry = file_cache.get(file_key)
+            if entry and entry.get("mtime") == mtime:
+                return entry["df"], entry["schema_items"], entry["metrics"], entry["by_metric"]
+            if not master_path.exists():
+                empty = pd.DataFrame()
+                file_cache[file_key] = {"df": empty, "schema_items": [], "metrics": [], "by_metric": {}, "mtime": mtime}
+                return empty, [], [], {}
+            df_all = load_master_csv_fn(str(master_path))
+            df_all = normalize_master_columns_fn(df_all)
+            schema_items, metrics, by_metric = parse_master_schema_fn(df_all.columns)
+            file_cache[file_key] = {
+                "df": df_all,
+                "schema_items": schema_items,
+                "metrics": metrics,
+                "by_metric": by_metric,
+                "mtime": mtime,
+            }
+            return df_all, schema_items, metrics, by_metric
 
         # Resolve state directory names once per slug build.
         state_dirs = [_resolve_state_dir(proc_root, s) for s in states_for_master] or ([pilot_state] if pilot_state else [])
@@ -804,8 +971,50 @@ def build_comparison_df(
             missing_master_by_slug[str(slug)] = list(missing_states)
         return df_all, schema_items, metrics, by_metric
 
-    def _match_row_idx(df_local, st_name, dist_name, blk_name: Optional[str] = None):
+    def _match_row_idx(df_local, st_name, dist_name=None, blk_name: Optional[str] = None, unit_id: Optional[str] = None):
         if df_local is None or df_local.empty:
+            return None
+
+        if is_subbasin:
+            basin_col_name = "basin_id" if "basin_id" in df_local.columns else ("basin_name" if "basin_name" in df_local.columns else None)
+            subbasin_col_name = "subbasin_id" if "subbasin_id" in df_local.columns else ("subbasin_name" if "subbasin_name" in df_local.columns else None)
+            basin_name_col = "basin_name" if "basin_name" in df_local.columns else basin_col_name
+            subbasin_name_col = "subbasin_name" if "subbasin_name" in df_local.columns else subbasin_col_name
+            if basin_col_name is None or subbasin_col_name is None:
+                return None
+            basin_norm = normalize_fn(st_name)
+            subbasin_norm = normalize_fn(dist_name or "")
+            basin_id_norm = normalize_fn(blk_name or "")
+            subbasin_id_norm = normalize_fn(unit_id or "")
+            basin_id_col = df_local[basin_col_name].astype(str).map(normalize_fn)
+            basin_name_series = df_local[basin_name_col].astype(str).map(normalize_fn)
+            subbasin_id_col = df_local[subbasin_col_name].astype(str).map(normalize_fn)
+            subbasin_name_series = df_local[subbasin_name_col].astype(str).map(normalize_fn)
+            if basin_id_norm and subbasin_id_norm:
+                exact = (basin_id_col == basin_id_norm) & (subbasin_id_col == subbasin_id_norm)
+                if exact.any():
+                    return int(df_local.index[exact][0])
+            exact_name = (basin_name_series == basin_norm) & (subbasin_name_series == subbasin_norm)
+            if exact_name.any():
+                return int(df_local.index[exact_name][0])
+            return None
+
+        if is_basin:
+            basin_col_name = "basin_id" if "basin_id" in df_local.columns else ("basin_name" if "basin_name" in df_local.columns else None)
+            basin_name_col = "basin_name" if "basin_name" in df_local.columns else basin_col_name
+            if basin_col_name is None:
+                return None
+            basin_norm = normalize_fn(st_name)
+            basin_id_norm = normalize_fn(dist_name or "")
+            basin_id_col = df_local[basin_col_name].astype(str).map(normalize_fn)
+            basin_name_series = df_local[basin_name_col].astype(str).map(normalize_fn)
+            if basin_id_norm:
+                exact = basin_id_col == basin_id_norm
+                if exact.any():
+                    return int(df_local.index[exact][0])
+            exact_name = basin_name_series == basin_norm
+            if exact_name.any():
+                return int(df_local.index[exact_name][0])
             return None
 
         # Support both naming styles (some loaders may use *_name)
@@ -859,7 +1068,15 @@ def build_comparison_df(
 
         return None
 
-    def _compute_rank_and_percentile(df_local, st_name, metric_col, value):
+    def _compute_rank_and_percentile(df_local, st_name, metric_col, value, **_: Any):
+        if level_norm in {"basin", "sub_basin"}:
+            values = pd.to_numeric(df_local.get(metric_col), errors="coerce").dropna()
+            if values.empty:
+                return None, None
+            return (
+                compute_rank_descending(values, value),
+                compute_percentile_in_state(values, value, method="le"),
+            )
         state_col_name = "state" if "state" in df_local.columns else ("state_name" if "state_name" in df_local.columns else "state")
         return compute_rank_and_percentile(
             df_local,
@@ -937,6 +1154,8 @@ def render_comparison_table_ui(
 
     level_norm = (level or "district").strip().lower()
     is_block = level_norm == "block"
+    is_basin = level_norm == "basin"
+    is_subbasin = level_norm == "sub_basin"
 
     long_df = df.copy()
     has_scenario = ("Scenario" in long_df.columns) and long_df["Scenario"].notna().any()
@@ -945,9 +1164,17 @@ def render_comparison_table_ui(
         out = df_in.copy()
         preferred: list[str] = []
 
-        for c in ("State", "District"):
-            if c in out.columns:
-                preferred.append(c)
+        if is_subbasin:
+            for c in ("Basin", "Sub-basin"):
+                if c in out.columns:
+                    preferred.append(c)
+        elif is_basin:
+            if "Basin" in out.columns:
+                preferred.append("Basin")
+        else:
+            for c in ("State", "District"):
+                if c in out.columns:
+                    preferred.append(c)
 
         if is_block and "Block" in out.columns:
             preferred.append("Block")
@@ -1005,9 +1232,17 @@ def render_comparison_table_ui(
 
         # Scenario side-by-side pivot only (no long view).
         id_cols: list[str] = []
-        for c in ("State", "District"):
-            if c in long_df.columns:
-                id_cols.append(c)
+        if is_subbasin:
+            for c in ("Basin", "Sub-basin"):
+                if c in long_df.columns:
+                    id_cols.append(c)
+        elif is_basin:
+            if "Basin" in long_df.columns:
+                id_cols.append("Basin")
+        else:
+            for c in ("State", "District"):
+                if c in long_df.columns:
+                    id_cols.append(c)
         if is_block and "Block" in long_df.columns:
             id_cols.append("Block")
         for c in ("Index", "Group"):
@@ -1085,6 +1320,7 @@ def render_portfolio_visualizations (
     *,
     default_value_col: str = "Percentile",
     default_chart_type: str = "heatmap",
+    level: str = "district",
 ) -> None:
     """
     Render interactive portfolio comparison visualizations.
@@ -1095,21 +1331,29 @@ def render_portfolio_visualizations (
             Rank in state, Percentile, Risk class
         default_value_col: Default value column to visualize
         default_chart_type: Default chart type to show
+        level: Active portfolio level for display adaptation.
     """
     import streamlit as st
     
     if df is None or df.empty:
-        st.info("Add districts and select indices to see visualizations.")
+        st.info("Add units and select indices to see visualizations.")
         return
 
+    level_norm = (level or "district").strip().lower()
     has_scenario = ("Scenario" in df.columns) and df["Scenario"].notna().any()
-    is_block = ("Block" in df.columns) and df["Block"].notna().any()
+    viz_df = df.copy()
+    if level_norm == "basin" and "Basin" in viz_df.columns:
+        viz_df["District"] = viz_df["Basin"].astype(str)
+    elif level_norm == "sub_basin" and {"Basin", "Sub-basin"}.issubset(viz_df.columns):
+        viz_df["District"] = viz_df["Basin"].astype(str)
+        viz_df["Block"] = viz_df["Sub-basin"].astype(str)
+    is_block = ("Block" in viz_df.columns) and viz_df["Block"].notna().any()
     scope = "block" if is_block else "district"
     
     # Check minimum data requirements
-    n_districts = df["District"].nunique() if "District" in df.columns else 0
-    n_indices = df["Index"].nunique() if "Index" in df.columns else 0
-    n_units = df["Block"].nunique() if is_block and "Block" in df.columns else n_districts
+    n_districts = viz_df["District"].nunique() if "District" in viz_df.columns else 0
+    n_indices = viz_df["Index"].nunique() if "Index" in viz_df.columns else 0
+    n_units = viz_df["Block"].nunique() if is_block and "Block" in viz_df.columns else n_districts
     
     if n_units < 1 or n_indices < 1:
         st.info("Need at least 1 unit and 1 index for visualizations.")
@@ -1221,7 +1465,7 @@ def render_portfolio_visualizations (
             st.caption("Each panel shows percentile (within state) for one scenario; colors indicate risk class.")
 
             fig_panels = make_portfolio_heatmap_scenario_panels(
-                df,
+                viz_df,
                 value_col="Percentile",
                 scenarios=sel_scens,
                 normalize_per_index=False,
@@ -1239,7 +1483,7 @@ def render_portfolio_visualizations (
             st.caption("Robust risk = min percentile across selected scenarios.")
 
             fig_robust = make_portfolio_heatmap_robust_min_percentile(
-                df,
+                viz_df,
                 scenarios=sel_scens,
             )
             if fig_robust is not None:
@@ -1259,7 +1503,7 @@ def render_portfolio_visualizations (
             st.caption("Using scenarios: " + ", ".join([_scenario_label(s) for s in robust_scens]))
 
             fig = make_portfolio_heatmap_robust_min_percentile(
-                df,
+                viz_df,
                 scenarios=robust_scens,
             )
             if fig is not None:
@@ -1312,7 +1556,7 @@ def render_portfolio_visualizations (
     # -------------------------
     # Across indices (single scenario) — legacy charts
     # -------------------------
-    df_single = df
+    df_single = viz_df
     if has_scenario and scenario_options:
         scen_filtered = st.selectbox(
             "Scenario to visualize",
@@ -1322,7 +1566,7 @@ def render_portfolio_visualizations (
             key=f"_viz_single_scenario_{scope}",
             help="Legacy charts require a single scenario selection.",
         )
-        df_single = df[df["Scenario"].astype(str).str.strip() == str(scen_filtered).strip()].copy()
+        df_single = viz_df[viz_df["Scenario"].astype(str).str.strip() == str(scen_filtered).strip()].copy()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -1403,23 +1647,31 @@ def _render_grouped_bar_section(
     st.markdown("#### Grouped Bar Chart")
     
     # Count data dimensions
-    n_districts = df["District"].nunique() if "District" in df.columns else 0
+    n_units_primary = 0
+    if "Block" in df.columns:
+        n_units_primary = df["Block"].nunique()
+    elif "District" in df.columns:
+        n_units_primary = df["District"].nunique()
+    elif "Sub-basin" in df.columns:
+        n_units_primary = df["Sub-basin"].nunique()
+    elif "Basin" in df.columns:
+        n_units_primary = df["Basin"].nunique()
     n_indices = df["Index"].nunique() if "Index" in df.columns else 0
     
     # Bar chart-specific options
     with st.expander("Bar chart options", expanded=False):
         col1, col2, col3 = st.columns(3)
         with col1:
-            max_districts_max = min(15, max(n_districts, 1))
-            if max_districts_max <= 1:
+            max_units_max = min(15, max(n_units_primary, 1))
+            if max_units_max <= 1:
                 max_districts = 1
-                st.caption("Max districts: 1")
+                st.caption("Max units: 1")
             else:
                 max_districts = st.slider(
-                    "Max districts",
+                    "Max units",
                     min_value=1,
-                    max_value=max_districts_max,
-                    value=min(10, max_districts_max),
+                    max_value=max_units_max,
+                    value=min(10, max_units_max),
                     key=f"{key_prefix}_bar_max_districts",
                 )
         with col2:
@@ -1438,8 +1690,8 @@ def _render_grouped_bar_section(
         with col3:
             horizontal = st.checkbox(
                 "Horizontal bars",
-                value=n_districts > 5,
-                help="Better for many districts",
+                value=n_units_primary > 5,
+                help="Better for many units",
                 key=f"{key_prefix}_bar_horizontal",
             )
         
@@ -1510,14 +1762,26 @@ def render_coordinate_lookup(
     Render coordinate-based unit lookup.
 
     This wraps render_point_selection_panel from point_selection_ui.py
-    and forwards admin level so the panel can resolve district vs block.
+    and forwards the active level so the panel can resolve admin vs hydro units.
     """
     from india_resilience_tool.app.point_selection_ui import render_point_selection_panel
 
     level_norm = (level or "district").strip().lower()
     is_block = level_norm == "block"
 
-    def _portfolio_key_fn(state: str, district: str, block: Optional[str] = None) -> tuple:
+    def _portfolio_key_fn(state: str = "", district: str = "", block: Optional[str] = None, **kwargs: Any) -> tuple:
+        if level_norm == "sub_basin":
+            return (
+                str(kwargs.get("basin_id") or "").lower().replace(" ", ""),
+                str(kwargs.get("basin_name") or "").lower().replace(" ", ""),
+                str(kwargs.get("subbasin_id") or "").lower().replace(" ", ""),
+                str(kwargs.get("subbasin_name") or "").lower().replace(" ", ""),
+            )
+        if level_norm == "basin":
+            return (
+                str(kwargs.get("basin_id") or "").lower().replace(" ", ""),
+                str(kwargs.get("basin_name") or "").lower().replace(" ", ""),
+            )
         s = state.lower().replace(" ", "")
         d = district.lower().replace(" ", "")
         if is_block:
@@ -1577,28 +1841,65 @@ def render_portfolio_panel(
     Note: portfolio_route parameter is kept for backward compatibility but ignored.
     """
     import streamlit as st
-    from india_resilience_tool.analysis.portfolio import portfolio_add, portfolio_contains
+    from india_resilience_tool.analysis.portfolio import (
+        get_portfolio_storage_key,
+        portfolio_add,
+        portfolio_contains,
+    )
 
     level_norm = (level or "district").strip().lower()
     is_block = level_norm == "block"
-    unit_plural = "blocks" if is_block else "districts"
+    if level_norm == "sub_basin":
+        unit_plural = "sub-basins"
+    elif level_norm == "basin":
+        unit_plural = "basins"
+    else:
+        unit_plural = "blocks" if is_block else "districts"
 
-    def _add(state: str, district: str, block: Optional[str] = None) -> None:
-        try:
-            portfolio_add(st.session_state, state, district, block_name=block, level=level_norm, normalize_fn=portfolio_normalize_fn)
-        except TypeError:
-            portfolio_add(st.session_state, state, district, normalize_fn=portfolio_normalize_fn)
+    def _add(
+        state: str = "",
+        district: str = "",
+        block: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        portfolio_add(
+            st.session_state,
+            state,
+            district,
+            block_name=block,
+            basin_name=kwargs.get("basin_name"),
+            basin_id=kwargs.get("basin_id"),
+            subbasin_name=kwargs.get("subbasin_name"),
+            subbasin_id=kwargs.get("subbasin_id"),
+            level=level_norm,
+            normalize_fn=portfolio_normalize_fn,
+        )
 
-    def _contains(state: str, district: str, block: Optional[str] = None) -> bool:
-        try:
-            return bool(portfolio_contains(st.session_state, state, district, block_name=block, level=level_norm, normalize_fn=portfolio_normalize_fn))
-        except TypeError:
-            return bool(portfolio_contains(st.session_state, state, district, normalize_fn=portfolio_normalize_fn))
+    def _contains(
+        state: str = "",
+        district: str = "",
+        block: Optional[str] = None,
+        **kwargs: Any,
+    ) -> bool:
+        return bool(
+            portfolio_contains(
+                st.session_state,
+                state,
+                district,
+                block_name=block,
+                basin_name=kwargs.get("basin_name"),
+                basin_id=kwargs.get("basin_id"),
+                subbasin_name=kwargs.get("subbasin_name"),
+                subbasin_id=kwargs.get("subbasin_id"),
+                level=level_norm,
+                normalize_fn=portfolio_normalize_fn,
+            )
+        )
 
     def _set_flash(msg: str, level_: str) -> None:
         st.session_state["_portfolio_flash"] = {"message": msg, "level": level_}
 
-    storage_key = "portfolio_blocks" if is_block else "portfolio_districts"
+    storage_key = get_portfolio_storage_key(level_norm)
     portfolio = st.session_state.get(storage_key, [])
 
     flash = st.session_state.pop("_portfolio_flash", None)
@@ -1654,9 +1955,18 @@ def render_portfolio_panel(
 
     if tab == "Add units":
         st.markdown(f"#### How to add {unit_plural}")
+        map_unit = (
+            "sub-basin"
+            if level_norm == "sub_basin"
+            else "basin"
+            if level_norm == "basin"
+            else "block"
+            if is_block
+            else "district"
+        )
         st.markdown(
             f"""
-        **From the map:** Click any {('block' if is_block else 'district')}, then click **+ Add to portfolio**
+        **From the map:** Click any {map_unit}, then click **+ Add to portfolio**
 
         **From rankings:** Use the **+ Add** buttons in the rankings table
 
@@ -1676,7 +1986,7 @@ def render_portfolio_panel(
     # Compare tab
     # -------------------------
     if not portfolio:
-        st.info("Your portfolio is empty. Use the **Add units** tab to add districts/blocks.")
+        st.info(f"Your portfolio is empty. Use the **Add units** tab to add {unit_plural}.")
         return
 
     st.markdown("### Portfolio Comparison")
@@ -1776,7 +2086,7 @@ def render_portfolio_panel(
         summary = compute_portfolio_summary_stats(cached_df, level=level_norm)
         c1, c2, c3 = st.columns(3)
         c1.metric("Units", int(summary.get("units_count", 0)))
-        c2.metric("States", int(summary.get("states_count", 0)))
+        c2.metric("Basins" if level_norm in {"basin", "sub_basin"} else "States", int(summary.get("states_count", 0)))
         c3.metric("Metrics", int(summary.get("metrics_count", 0)))
 
         risk_counts = summary.get("risk_counts") or {}
@@ -1802,6 +2112,7 @@ def render_portfolio_panel(
                         cached_df,
                         default_value_col="Percentile",
                         default_chart_type="heatmap",
+                        level=level_norm,
                     )
             else:
                 st.caption("Enable “Show visualizations” to render charts.")

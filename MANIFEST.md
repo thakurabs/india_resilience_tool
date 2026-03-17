@@ -9,7 +9,7 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 
 The current working tree supports:
 - map, rankings, and details flows for district, block, basin, and sub-basin
-- admin portfolio workflows for district and block
+- portfolio workflows for district, block, basin, and sub-basin
 - hydro boundary loading and hydro processed-output discovery
 - Aqueduct direct district/block masters plus SOI hydro masters for water stress, interannual variability, seasonal variability, and water depletion
 - actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views

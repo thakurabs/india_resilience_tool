@@ -13,6 +13,7 @@ from typing import Optional
 import streamlit as st
 
 from india_resilience_tool.analysis.portfolio import (
+    get_portfolio_storage_key,
     portfolio_add as _portfolio_add_impl,
     portfolio_clear as _portfolio_clear_impl,
     portfolio_contains as _portfolio_contains_impl,
@@ -33,12 +34,34 @@ def _portfolio_normalize(text: str) -> str:
 
 def _portfolio_state_key() -> str:
     """Return the active portfolio storage key based on the current admin level."""
-    return "portfolio_blocks" if st.session_state.get("admin_level", "district") == "block" else "portfolio_districts"
+    return get_portfolio_storage_key(st.session_state.get("admin_level", "district"))
 
 
-def _portfolio_key(state_name: str, district_name: str, block_name: Optional[str] = None) -> tuple:
-    """Return a normalized key tuple for district/block portfolio items."""
-    if st.session_state.get("admin_level", "district") == "block":
+def _portfolio_key(
+    state_name: str = "",
+    district_name: str = "",
+    block_name: Optional[str] = None,
+    *,
+    basin_name: Optional[str] = None,
+    basin_id: Optional[str] = None,
+    subbasin_name: Optional[str] = None,
+    subbasin_id: Optional[str] = None,
+) -> tuple:
+    """Return a normalized key tuple for the active portfolio level."""
+    level = str(st.session_state.get("admin_level", "district")).strip().lower()
+    if level == "sub_basin":
+        return (
+            _portfolio_normalize(basin_id or ""),
+            _portfolio_normalize(basin_name or ""),
+            _portfolio_normalize(subbasin_id or ""),
+            _portfolio_normalize(subbasin_name or ""),
+        )
+    if level == "basin":
+        return (
+            _portfolio_normalize(basin_id or ""),
+            _portfolio_normalize(basin_name or ""),
+        )
+    if level == "block":
         return (
             _portfolio_normalize(state_name),
             _portfolio_normalize(district_name),
@@ -47,8 +70,17 @@ def _portfolio_key(state_name: str, district_name: str, block_name: Optional[str
     return (_portfolio_normalize(state_name), _portfolio_normalize(district_name))
 
 
-def _portfolio_add(state_name: str, district_name: str, block_name: Optional[str] = None) -> None:
-    """Add a unit (district or block) to the active portfolio."""
+def _portfolio_add(
+    state_name: str = "",
+    district_name: str = "",
+    block_name: Optional[str] = None,
+    *,
+    basin_name: Optional[str] = None,
+    basin_id: Optional[str] = None,
+    subbasin_name: Optional[str] = None,
+    subbasin_id: Optional[str] = None,
+) -> None:
+    """Add a unit to the active portfolio."""
     level = st.session_state.get("admin_level", "district")
     state_key = _portfolio_state_key()
     _portfolio_add_impl(
@@ -57,13 +89,26 @@ def _portfolio_add(state_name: str, district_name: str, block_name: Optional[str
         district_name,
         normalize_fn=_portfolio_normalize,
         block_name=block_name,
+        basin_name=basin_name,
+        basin_id=basin_id,
+        subbasin_name=subbasin_name,
+        subbasin_id=subbasin_id,
         level=level,
         state_key=state_key,
     )
 
 
-def _portfolio_remove(state_name: str, district_name: str, block_name: Optional[str] = None) -> None:
-    """Remove a unit (district or block) from the active portfolio."""
+def _portfolio_remove(
+    state_name: str = "",
+    district_name: str = "",
+    block_name: Optional[str] = None,
+    *,
+    basin_name: Optional[str] = None,
+    basin_id: Optional[str] = None,
+    subbasin_name: Optional[str] = None,
+    subbasin_id: Optional[str] = None,
+) -> None:
+    """Remove a unit from the active portfolio."""
     level = st.session_state.get("admin_level", "district")
     state_key = _portfolio_state_key()
     _portfolio_remove_impl(
@@ -72,12 +117,25 @@ def _portfolio_remove(state_name: str, district_name: str, block_name: Optional[
         district_name,
         normalize_fn=_portfolio_normalize,
         block_name=block_name,
+        basin_name=basin_name,
+        basin_id=basin_id,
+        subbasin_name=subbasin_name,
+        subbasin_id=subbasin_id,
         level=level,
         state_key=state_key,
     )
 
 
-def _portfolio_contains(state_name: str, district_name: str, block_name: Optional[str] = None) -> bool:
+def _portfolio_contains(
+    state_name: str = "",
+    district_name: str = "",
+    block_name: Optional[str] = None,
+    *,
+    basin_name: Optional[str] = None,
+    basin_id: Optional[str] = None,
+    subbasin_name: Optional[str] = None,
+    subbasin_id: Optional[str] = None,
+) -> bool:
     """Return True if the unit is already present in the active portfolio."""
     level = st.session_state.get("admin_level", "district")
     state_key = _portfolio_state_key()
@@ -88,6 +146,10 @@ def _portfolio_contains(state_name: str, district_name: str, block_name: Optiona
             district_name,
             normalize_fn=_portfolio_normalize,
             block_name=block_name,
+            basin_name=basin_name,
+            basin_id=basin_id,
+            subbasin_name=subbasin_name,
+            subbasin_id=subbasin_id,
             level=level,
             state_key=state_key,
         )

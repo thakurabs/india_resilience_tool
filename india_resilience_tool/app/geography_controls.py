@@ -42,6 +42,19 @@ class GeographyContext:
     gdf_state_districts: Any
 
 
+def _analysis_mode_options(spatial_family: str, admin_level: str) -> list[str]:
+    """Return level-aware analysis-mode options for the sidebar selector."""
+    family_norm = str(spatial_family).strip().lower()
+    level_norm = str(admin_level).strip().lower()
+    if family_norm == "hydro":
+        if level_norm == "sub_basin":
+            return ["Single sub-basin focus", "Multi-sub-basin portfolio"]
+        return ["Single basin focus", "Multi-basin portfolio"]
+    if level_norm == "block":
+        return ["Single block focus", "Multi-block portfolio"]
+    return ["Single district focus", "Multi-district portfolio"]
+
+
 def _resolve_available_admin_states(processed_root: Optional[Path]) -> tuple[list[str], bool]:
     """Return state options and whether the processed root has usable admin data."""
     if processed_root is None:
@@ -288,18 +301,7 @@ def render_geography_and_analysis_focus(
         with st.expander("Geography & analysis focus", expanded=True):
             family_norm = str(spatial_family).strip().lower()
             level_norm = str(admin_level).strip().lower()
-            if family_norm == "hydro":
-                analysis_options = (
-                    ["Single sub-basin focus"]
-                    if level_norm == "sub_basin"
-                    else ["Single basin focus"]
-                )
-            else:
-                analysis_options = (
-                    ["Single block focus", "Multi-block portfolio"]
-                    if admin_level == "block"
-                    else ["Single district focus", "Multi-district portfolio"]
-                )
+            analysis_options = _analysis_mode_options(family_norm, level_norm)
             analysis_mode = render_analysis_mode_selector(
                 label="Analysis focus",
                 options=analysis_options,

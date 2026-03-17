@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from india_resilience_tool.app.geography_controls import _resolve_available_admin_states
+from india_resilience_tool.app.geography_controls import (
+    _analysis_mode_options,
+    _resolve_available_admin_states,
+)
 
 
 def test_resolve_available_admin_states_preserves_all_for_flat_admin_masters(tmp_path: Path) -> None:
@@ -22,3 +25,14 @@ def test_resolve_available_admin_states_returns_all_when_missing(tmp_path: Path)
 
     assert has_available_data is False
     assert available_states == ["All"]
+
+
+def test_analysis_mode_options_include_hydro_portfolio_modes() -> None:
+    assert _analysis_mode_options("hydro", "basin") == [
+        "Single basin focus",
+        "Multi-basin portfolio",
+    ]
+    assert _analysis_mode_options("hydro", "sub_basin") == [
+        "Single sub-basin focus",
+        "Multi-sub-basin portfolio",
+    ]

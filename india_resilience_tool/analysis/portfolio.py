@@ -27,10 +27,12 @@ import pandas as pd
 # -----------------------------------------------------------------------------
 KEY_DISTRICTS = "portfolio_districts"
 KEY_BLOCKS = "portfolio_blocks"
+KEY_BASINS = "portfolio_basins"
+KEY_SUBBASINS = "portfolio_subbasins"
 KEY_SAVED_POINTS = "point_query_points"  # legacy key used elsewhere
 
 
-PortfolioItem = Mapping[str, Any]  # expects keys: "state", "district", optional "block"
+PortfolioItem = Mapping[str, Any]
 NormalizeFn = Callable[[str], str]
 
 
@@ -39,12 +41,19 @@ def get_portfolio_storage_key(level: str) -> str:
     Resolve the session_state list key used to store portfolio items.
 
     Args:
-        level: "district" or "block" (any other value falls back to "district").
+        level: `district`, `block`, `basin`, or `sub_basin`.
 
     Returns:
-        Session-state key string, e.g. "portfolio_districts" or "portfolio_blocks".
+        Session-state key string, e.g. `portfolio_districts` or `portfolio_subbasins`.
     """
-    return KEY_BLOCKS if str(level).strip().lower() == "block" else KEY_DISTRICTS
+    level_norm = str(level).strip().lower()
+    if level_norm == "block":
+        return KEY_BLOCKS
+    if level_norm == "basin":
+        return KEY_BASINS
+    if level_norm == "sub_basin":
+        return KEY_SUBBASINS
+    return KEY_DISTRICTS
 
 
 # =============================================================================
@@ -80,13 +89,98 @@ def portfolio_key_block(
     return (normalize_fn(state_name), normalize_fn(district_name), normalize_fn(block_name))
 
 
+def portfolio_key_basin(
+    basin_name: str,
+    *,
+    basin_id: Optional[str],
+    normalize_fn: NormalizeFn,
+) -> tuple[str, str]:
+    """Normalized key used to compare/uniquify basin portfolio items."""
+    return (normalize_fn(basin_id or ""), normalize_fn(basin_name))
+
+
+def portfolio_key_subbasin(
+    basin_name: str,
+    subbasin_name: str,
+    *,
+    basin_id: Optional[str],
+    subbasin_id: Optional[str],
+    normalize_fn: NormalizeFn,
+) -> tuple[str, str, str, str]:
+    """Normalized key used to compare/uniquify sub-basin portfolio items."""
+    return (
+        normalize_fn(basin_id or ""),
+        normalize_fn(basin_name),
+        normalize_fn(subbasin_id or ""),
+        normalize_fn(subbasin_name),
+    )
+
+
+def _basin_matches(
+    *,
+    item_basin_name: str,
+    item_basin_id: str,
+    basin_name: str,
+    basin_id: Optional[str],
+    normalize_fn: NormalizeFn,
+) -> bool:
+    item_key = portfolio_key_basin(item_basin_name, basin_id=item_basin_id, normalize_fn=normalize_fn)
+    query_key = portfolio_key_basin(basin_name, basin_id=basin_id, normalize_fn=normalize_fn)
+    if item_key[0] and query_key[0]:
+        return item_key[0] == query_key[0]
+    return bool(item_key[1] and query_key[1] and item_key[1] == query_key[1])
+
+
+def _subbasin_matches(
+    *,
+    item_basin_name: str,
+    item_basin_id: str,
+    item_subbasin_name: str,
+    item_subbasin_id: str,
+    basin_name: str,
+    basin_id: Optional[str],
+    subbasin_name: str,
+    subbasin_id: Optional[str],
+    normalize_fn: NormalizeFn,
+) -> bool:
+    item_key = portfolio_key_subbasin(
+        item_basin_name,
+        item_subbasin_name,
+        basin_id=item_basin_id,
+        subbasin_id=item_subbasin_id,
+        normalize_fn=normalize_fn,
+    )
+    query_key = portfolio_key_subbasin(
+        basin_name,
+        subbasin_name,
+        basin_id=basin_id,
+        subbasin_id=subbasin_id,
+        normalize_fn=normalize_fn,
+    )
+    basin_match = (
+        item_key[0] == query_key[0]
+        if item_key[0] and query_key[0]
+        else bool(item_key[1] and query_key[1] and item_key[1] == query_key[1])
+    )
+    subbasin_match = (
+        item_key[2] == query_key[2]
+        if item_key[2] and query_key[2]
+        else bool(item_key[3] and query_key[3] and item_key[3] == query_key[3])
+    )
+    return basin_match and subbasin_match
+
+
 def portfolio_add(
     session_state: MutableMapping[str, Any],
-    state_name: str,
-    district_name: str,
+    state_name: str = "",
+    district_name: str = "",
     *,
     normalize_fn: NormalizeFn,
     block_name: Optional[str] = None,
+    basin_name: Optional[str] = None,
+    basin_id: Optional[str] = None,
+    subbasin_name: Optional[str] = None,
+    subbasin_id: Optional[str] = None,
     level: str = "district",
     state_key: Optional[str] = None,
 ) -> None:
@@ -102,16 +196,73 @@ def portfolio_add(
     level_norm = str(level).strip().lower()
     storage_key = state_key or get_portfolio_storage_key(level_norm)
 
-    if not state_name or not district_name or district_name == "All":
-        return
-
-    if level_norm == "block":
-        if not block_name or str(block_name).strip() == "" or str(block_name).strip() == "All":
+    if level_norm == "basin":
+        basin_name_clean = str(basin_name or "").strip()
+        if not basin_name_clean or basin_name_clean == "All":
             return
+    elif level_norm == "sub_basin":
+        basin_name_clean = str(basin_name or "").strip()
+        subbasin_name_clean = str(subbasin_name or "").strip()
+        if (
+            not basin_name_clean
+            or basin_name_clean == "All"
+            or not subbasin_name_clean
+            or subbasin_name_clean == "All"
+        ):
+            return
+    else:
+        if not state_name or not district_name or district_name == "All":
+            return
+        if level_norm == "block":
+            if not block_name or str(block_name).strip() == "" or str(block_name).strip() == "All":
+                return
 
     items = session_state.get(storage_key, [])
     if not isinstance(items, list):
         items = []
+
+    if level_norm == "basin":
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if _basin_matches(
+                item_basin_name=str(item.get("basin_name", "")),
+                item_basin_id=str(item.get("basin_id", "")),
+                basin_name=basin_name_clean,
+                basin_id=basin_id,
+                normalize_fn=normalize_fn,
+            ):
+                return
+        items.append({"basin_id": str(basin_id or ""), "basin_name": basin_name_clean})
+        session_state[storage_key] = items
+        return
+
+    if level_norm == "sub_basin":
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if _subbasin_matches(
+                item_basin_name=str(item.get("basin_name", "")),
+                item_basin_id=str(item.get("basin_id", "")),
+                item_subbasin_name=str(item.get("subbasin_name", "")),
+                item_subbasin_id=str(item.get("subbasin_id", "")),
+                basin_name=basin_name_clean,
+                basin_id=basin_id,
+                subbasin_name=subbasin_name_clean,
+                subbasin_id=subbasin_id,
+                normalize_fn=normalize_fn,
+            ):
+                return
+        items.append(
+            {
+                "basin_id": str(basin_id or ""),
+                "basin_name": basin_name_clean,
+                "subbasin_id": str(subbasin_id or ""),
+                "subbasin_name": subbasin_name_clean,
+            }
+        )
+        session_state[storage_key] = items
+        return
 
     if level_norm == "block":
         new_norm = portfolio_key_block(state_name, district_name, str(block_name), normalize_fn=normalize_fn)
@@ -147,11 +298,15 @@ def portfolio_add(
 
 def portfolio_remove(
     session_state: MutableMapping[str, Any],
-    state_name: str,
-    district_name: str,
+    state_name: str = "",
+    district_name: str = "",
     *,
     normalize_fn: NormalizeFn,
     block_name: Optional[str] = None,
+    basin_name: Optional[str] = None,
+    basin_id: Optional[str] = None,
+    subbasin_name: Optional[str] = None,
+    subbasin_id: Optional[str] = None,
     level: str = "district",
     state_key: Optional[str] = None,
 ) -> None:
@@ -170,6 +325,61 @@ def portfolio_remove(
     items = session_state.get(storage_key, [])
     if not isinstance(items, list):
         session_state[storage_key] = []
+        return
+
+    if level_norm == "basin":
+        basin_name_clean = str(basin_name or "").strip()
+        if not basin_name_clean:
+            return
+        new_items_basin: list[dict[str, str]] = []
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if not _basin_matches(
+                item_basin_name=str(item.get("basin_name", "")),
+                item_basin_id=str(item.get("basin_id", "")),
+                basin_name=basin_name_clean,
+                basin_id=basin_id,
+                normalize_fn=normalize_fn,
+            ):
+                new_items_basin.append(
+                    {
+                        "basin_id": str(item.get("basin_id", "")),
+                        "basin_name": str(item.get("basin_name", "")),
+                    }
+                )
+        session_state[storage_key] = new_items_basin
+        return
+
+    if level_norm == "sub_basin":
+        basin_name_clean = str(basin_name or "").strip()
+        subbasin_name_clean = str(subbasin_name or "").strip()
+        if not basin_name_clean or not subbasin_name_clean:
+            return
+        new_items_subbasin: list[dict[str, str]] = []
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if not _subbasin_matches(
+                item_basin_name=str(item.get("basin_name", "")),
+                item_basin_id=str(item.get("basin_id", "")),
+                item_subbasin_name=str(item.get("subbasin_name", "")),
+                item_subbasin_id=str(item.get("subbasin_id", "")),
+                basin_name=basin_name_clean,
+                basin_id=basin_id,
+                subbasin_name=subbasin_name_clean,
+                subbasin_id=subbasin_id,
+                normalize_fn=normalize_fn,
+            ):
+                new_items_subbasin.append(
+                    {
+                        "basin_id": str(item.get("basin_id", "")),
+                        "basin_name": str(item.get("basin_name", "")),
+                        "subbasin_id": str(item.get("subbasin_id", "")),
+                        "subbasin_name": str(item.get("subbasin_name", "")),
+                    }
+                )
+        session_state[storage_key] = new_items_subbasin
         return
 
     if level_norm == "block":
@@ -218,11 +428,15 @@ def portfolio_remove(
 
 def portfolio_contains(
     session_state: Mapping[str, Any],
-    state_name: str,
-    district_name: str,
+    state_name: str = "",
+    district_name: str = "",
     *,
     normalize_fn: NormalizeFn,
     block_name: Optional[str] = None,
+    basin_name: Optional[str] = None,
+    basin_id: Optional[str] = None,
+    subbasin_name: Optional[str] = None,
+    subbasin_id: Optional[str] = None,
     level: str = "district",
     state_key: Optional[str] = None,
 ) -> bool:
@@ -238,15 +452,58 @@ def portfolio_contains(
     level_norm = str(level).strip().lower()
     storage_key = state_key or get_portfolio_storage_key(level_norm)
 
-    if not state_name or not district_name or district_name == "All":
-        return False
-
-    if level_norm == "block":
-        if not block_name or str(block_name).strip() == "" or str(block_name).strip() == "All":
+    if level_norm == "basin":
+        if not basin_name or str(basin_name).strip() in {"", "All"}:
             return False
+    elif level_norm == "sub_basin":
+        if (
+            not basin_name
+            or str(basin_name).strip() in {"", "All"}
+            or not subbasin_name
+            or str(subbasin_name).strip() in {"", "All"}
+        ):
+            return False
+    else:
+        if not state_name or not district_name or district_name == "All":
+            return False
+        if level_norm == "block":
+            if not block_name or str(block_name).strip() == "" or str(block_name).strip() == "All":
+                return False
 
     items = session_state.get(storage_key, [])
     if not isinstance(items, list):
+        return False
+
+    if level_norm == "basin":
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if _basin_matches(
+                item_basin_name=str(item.get("basin_name", "")),
+                item_basin_id=str(item.get("basin_id", "")),
+                basin_name=str(basin_name or ""),
+                basin_id=basin_id,
+                normalize_fn=normalize_fn,
+            ):
+                return True
+        return False
+
+    if level_norm == "sub_basin":
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if _subbasin_matches(
+                item_basin_name=str(item.get("basin_name", "")),
+                item_basin_id=str(item.get("basin_id", "")),
+                item_subbasin_name=str(item.get("subbasin_name", "")),
+                item_subbasin_id=str(item.get("subbasin_id", "")),
+                basin_name=str(basin_name or ""),
+                basin_id=basin_id,
+                subbasin_name=str(subbasin_name or ""),
+                subbasin_id=subbasin_id,
+                normalize_fn=normalize_fn,
+            ):
+                return True
         return False
 
     if level_norm == "block":
@@ -300,6 +557,8 @@ def get_portfolio_unit_keys(
     Returns:
         - level="district": set of (normalized_state, normalized_district)
         - level="block": set of (normalized_state, normalized_district, normalized_block)
+        - level="basin": set of (normalized_basin_id, normalized_basin_name)
+        - level="sub_basin": set of (normalized_basin_id, normalized_basin_name, normalized_subbasin_id, normalized_subbasin_name)
     """
     level_norm = str(level).strip().lower()
     storage_key = state_key or get_portfolio_storage_key(level_norm)
@@ -312,15 +571,53 @@ def get_portfolio_unit_keys(
             state = str(item.get("state", "")).strip()
             district = str(item.get("district", "")).strip()
             block = str(item.get("block", "")).strip() if level_norm == "block" else ""
+            basin = str(item.get("basin_name", "")).strip()
+            basin_id = str(item.get("basin_id", "")).strip()
+            subbasin = str(item.get("subbasin_name", "")).strip() if level_norm == "sub_basin" else ""
+            subbasin_id = str(item.get("subbasin_id", "")).strip() if level_norm == "sub_basin" else ""
         elif isinstance(item, (list, tuple)):
-            if level_norm == "block" and len(item) >= 3:
+            if level_norm == "sub_basin" and len(item) >= 4:
+                basin_id, basin, subbasin_id, subbasin = (
+                    str(item[0]).strip(),
+                    str(item[1]).strip(),
+                    str(item[2]).strip(),
+                    str(item[3]).strip(),
+                )
+                state = district = block = ""
+            elif level_norm == "basin" and len(item) >= 2:
+                basin_id, basin = str(item[0]).strip(), str(item[1]).strip()
+                state = district = block = subbasin = subbasin_id = ""
+            elif level_norm == "block" and len(item) >= 3:
                 state, district, block = str(item[0]).strip(), str(item[1]).strip(), str(item[2]).strip()
+                basin = basin_id = subbasin = subbasin_id = ""
             elif level_norm != "block" and len(item) >= 2:
                 state, district = str(item[0]).strip(), str(item[1]).strip()
-                block = ""
+                block = basin = basin_id = subbasin = subbasin_id = ""
             else:
                 continue
         else:
+            continue
+
+        if level_norm == "basin":
+            if not basin and not basin_id:
+                continue
+            keys.add(portfolio_key_basin(basin, basin_id=basin_id, normalize_fn=normalize_fn))
+            continue
+
+        if level_norm == "sub_basin":
+            if not basin and not basin_id:
+                continue
+            if not subbasin and not subbasin_id:
+                continue
+            keys.add(
+                portfolio_key_subbasin(
+                    basin,
+                    subbasin,
+                    basin_id=basin_id,
+                    subbasin_id=subbasin_id,
+                    normalize_fn=normalize_fn,
+                )
+            )
             continue
 
         if not state or not district:
@@ -365,6 +662,8 @@ def build_portfolio_multiindex_df(
     Notes:
         - For level="district", items are (state, district).
         - For level="block", items are (state, district, block).
+        - For level="basin", items are keyed by basin.
+        - For level="sub_basin", items are keyed by basin + sub-basin.
 
     Scenario comparison:
         - When ``sel_scenarios`` is provided (e.g., ["ssp245", "ssp585"]),
@@ -399,33 +698,63 @@ def build_portfolio_multiindex_df(
     # Cache per-slug master loads (the loader may already cache; this avoids re-calls)
     master_cache: dict[str, tuple[pd.DataFrame, list[str]]] = {}
 
-    def _parse_item(item: Any) -> tuple[str, str, str]:
+    def _parse_item(item: Any) -> tuple[str, str, str, str, str, str, str]:
         blk = ""
+        basin = ""
+        basin_id = ""
+        subbasin = ""
+        subbasin_id = ""
         if isinstance(item, Mapping):
             st = str(item.get("state", "")).strip()
             dist = str(item.get("district", "")).strip()
             if level_norm == "block":
                 blk = str(item.get("block", "")).strip()
-            return st, dist, blk
+            elif level_norm == "basin":
+                basin = str(item.get("basin_name", "")).strip()
+                basin_id = str(item.get("basin_id", "")).strip()
+            elif level_norm == "sub_basin":
+                basin = str(item.get("basin_name", "")).strip()
+                basin_id = str(item.get("basin_id", "")).strip()
+                subbasin = str(item.get("subbasin_name", "")).strip()
+                subbasin_id = str(item.get("subbasin_id", "")).strip()
+            return st, dist, blk, basin, basin_id, subbasin, subbasin_id
 
         try:
             tup = tuple(item)
         except Exception:
-            return "", "", ""
+            return "", "", "", "", "", "", ""
+
+        if level_norm == "sub_basin":
+            if len(tup) < 4:
+                return "", "", "", "", "", "", ""
+            return (
+                "",
+                "",
+                "",
+                str(tup[1]).strip(),
+                str(tup[0]).strip(),
+                str(tup[3]).strip(),
+                str(tup[2]).strip(),
+            )
+
+        if level_norm == "basin":
+            if len(tup) < 2:
+                return "", "", "", "", "", "", ""
+            return "", "", "", str(tup[1]).strip(), str(tup[0]).strip(), "", ""
 
         if level_norm == "block":
             if len(tup) < 3:
-                return "", "", ""
+                return "", "", "", "", "", "", ""
             st, dist, blk = tup[0], tup[1], tup[2]
-            return str(st).strip(), str(dist).strip(), str(blk).strip()
+            return str(st).strip(), str(dist).strip(), str(blk).strip(), "", "", "", ""
 
         if len(tup) < 2:
-            return "", "", ""
+            return "", "", "", "", "", "", ""
         st, dist = tup[0], tup[1]
-        return str(st).strip(), str(dist).strip(), ""
+        return str(st).strip(), str(dist).strip(), "", "", "", "", ""
 
     for item in portfolio:
-        st_name, dist_name, blk_name = _parse_item(item)
+        st_name, dist_name, blk_name, basin_name, basin_id, subbasin_name, subbasin_id = _parse_item(item)
 
         for slug in selected_slugs:
             cfg = variables.get(slug, {})
@@ -463,7 +792,17 @@ def build_portfolio_multiindex_df(
             # Match the unit row once per (unit × slug)
             idx_row = None
             if df_local is not None and not df_local.empty:
-                if level_norm == "block":
+                if level_norm == "sub_basin":
+                    try:
+                        idx_row = match_row_idx(df_local, basin_name, subbasin_name, basin_id, subbasin_id)
+                    except TypeError:
+                        idx_row = match_row_idx(df_local, basin_name, subbasin_name)
+                elif level_norm == "basin":
+                    try:
+                        idx_row = match_row_idx(df_local, basin_name, basin_id)
+                    except TypeError:
+                        idx_row = match_row_idx(df_local, basin_name)
+                elif level_norm == "block":
                     try:
                         idx_row = match_row_idx(df_local, st_name, dist_name, blk_name)
                     except TypeError:
@@ -511,18 +850,28 @@ def build_portfolio_multiindex_df(
 
                     # Rank/percentile: try block-aware kwargs, then fall back
                     try:
-                        rank_in_state, percentile = compute_rank_and_percentile(
-                            df_local=df_local,
-                            st_name=st_name,
-                            metric_col=metric_col,
-                            value=value,
-                            district_name=dist_name,
-                            block_name=blk_name,
-                        )
+                        kwargs: dict[str, Any] = {
+                            "df_local": df_local,
+                            "st_name": st_name if level_norm in {"district", "block"} else basin_name,
+                            "metric_col": metric_col,
+                            "value": value,
+                        }
+                        if level_norm == "block":
+                            kwargs["district_name"] = dist_name
+                            kwargs["block_name"] = blk_name
+                        elif level_norm == "basin":
+                            kwargs["basin_name"] = basin_name
+                            kwargs["basin_id"] = basin_id
+                        elif level_norm == "sub_basin":
+                            kwargs["basin_name"] = basin_name
+                            kwargs["basin_id"] = basin_id
+                            kwargs["subbasin_name"] = subbasin_name
+                            kwargs["subbasin_id"] = subbasin_id
+                        rank_in_state, percentile = compute_rank_and_percentile(**kwargs)
                     except TypeError:
                         rank_in_state, percentile = compute_rank_and_percentile(
                             df_local=df_local,
-                            st_name=st_name,
+                            st_name=st_name if level_norm in {"district", "block"} else basin_name,
                             metric_col=metric_col,
                             value=value,
                         )
@@ -532,8 +881,6 @@ def build_portfolio_multiindex_df(
                         risk_class = risk_class_from_percentile(percentile_in_state)
 
                 row: dict[str, Any] = {
-                    "State": st_name,
-                    "District": dist_name,
                     "Index": idx_label,
                     "Group": idx_group_label,
                     "Current value": value,
@@ -544,6 +891,14 @@ def build_portfolio_multiindex_df(
                     "Percentile": percentile_in_state,
                     "Risk class": risk_class,
                 }
+                if level_norm == "sub_basin":
+                    row["Basin"] = basin_name
+                    row["Sub-basin"] = subbasin_name
+                elif level_norm == "basin":
+                    row["Basin"] = basin_name
+                else:
+                    row["State"] = st_name
+                    row["District"] = dist_name
                 if level_norm == "block":
                     row["Block"] = blk_name
                 if include_scenario_col:

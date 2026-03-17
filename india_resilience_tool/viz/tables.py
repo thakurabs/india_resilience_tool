@@ -32,6 +32,7 @@ def build_rankings_table_df(
     district_col: str = "district_name",
     state_col: str = "state_name",
     aspirational_col: str = "aspirational",
+    extra_cols: Optional[list[str]] = None,
 ) -> Tuple[pd.DataFrame, bool]:
     """
     Build the district-level rankings table used by the dashboard.
@@ -65,7 +66,12 @@ def build_rankings_table_df(
     if metric_col not in ranking_df.columns:
         return pd.DataFrame(), False
 
-    table_df = ranking_df[[district_col, state_col]].copy()
+    columns_to_keep: list[str] = [district_col, state_col]
+    for col in list(extra_cols or []):
+        if col in ranking_df.columns and col not in columns_to_keep:
+            columns_to_keep.append(col)
+
+    table_df = ranking_df[columns_to_keep].copy()
 
     # Absolute value
     value_series = pd.to_numeric(ranking_df[metric_col], errors="coerce")
