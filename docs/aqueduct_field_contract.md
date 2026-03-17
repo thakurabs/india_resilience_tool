@@ -1,7 +1,7 @@
 # Aqueduct Field Contract
 
 This note records the Aqueduct source fields currently used for the onboarded
-Aqueduct district and hydro metrics in the India Resilience Tool.
+Aqueduct district, block, and hydro metrics in the India Resilience Tool.
 
 It is meant to answer a narrow but important question:
 
@@ -26,6 +26,7 @@ All four metrics currently follow the same dashboard contract:
   - SOI `basin`
   - SOI `sub-basin`
   - district admin units via direct `pfaf_id -> district` transfer
+  - block admin units via direct `pfaf_id -> block` transfer
 
 ## Metric mappings
 

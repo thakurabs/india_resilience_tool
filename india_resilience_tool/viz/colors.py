@@ -309,7 +309,8 @@ z-index: 9999; pointer-events: none; display: flex; align-items: center; gap: 10
 
 def build_vertical_binned_legend_block_html(
     *,
-    legend_title: str,
+    legend_title: str = "",
+    pretty_metric_label: str | None = None,
     vmin: float,
     vmax: float,
     cmap_name: str,
@@ -334,7 +335,7 @@ def build_vertical_binned_legend_block_html(
     if nlevels < 2:
         nlevels = 2
 
-    title_text = str(legend_title or "").strip()
+    title_text = str(legend_title or pretty_metric_label or "").strip()
     outer_pad_top_px = 30
     outer_pad_bottom_px = 18
     available_height_px = max(int(map_height) - outer_pad_top_px - outer_pad_bottom_px, 160)

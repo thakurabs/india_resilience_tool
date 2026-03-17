@@ -138,9 +138,11 @@ def render_right_panel(
     )
 
     def _render_climate_profile_header() -> None:
-        """Render the right-panel header with an inline collapse control."""
+        """Render the right-panel header after the caller's `is_portfolio_mode` / `st.stop()` guard."""
         title_col, btn_col = st.columns([1, 0.2], vertical_alignment="center")
         with title_col:
+            # The portfolio path returns early under `is_portfolio_mode` via
+            # `st.stop()`, so this header only renders for single-unit details flows.
             st.header("Climate Profile")
         with btn_col:
             if st.button(
@@ -163,7 +165,9 @@ def render_right_panel(
     analysis_mode_rhs = st.session_state.get("analysis_mode", "Single district focus")
     portfolio_route = st.session_state.get("portfolio_build_route", None)
 
-    if "Multi" in str(analysis_mode_rhs):
+    is_portfolio_mode = "Multi" in str(analysis_mode_rhs)
+
+    if is_portfolio_mode:
         render_portfolio_panel(
             selected_state=selected_state,
             portfolio_route=portfolio_route,

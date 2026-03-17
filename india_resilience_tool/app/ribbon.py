@@ -251,11 +251,11 @@ def render_metric_ribbon(
                 if is_external:
                     if master_csv_path.exists():
                         return False, "up-to-date"
-                    if level == "district":
+                    if level in {"district", "block"}:
                         return (
                             False,
                             (
-                                "external district masters are built by dedicated geodata tooling; "
+                                "external admin masters are built by dedicated geodata tooling; "
                                 "run python -m tools.geodata.build_aqueduct_admin_masters --overwrite"
                             ),
                         )
@@ -337,9 +337,9 @@ def render_metric_ribbon(
 
             if not master_csv_path.exists():
                 if _is_external_metric(varcfg):
-                    if level == "district":
+                    if level in {"district", "block"}:
                         st.error(
-                            f"District master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
+                            f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_csv_path}. "
                             "Run `python -m tools.geodata.build_aqueduct_admin_masters --overwrite` first."
                         )
                     elif level in {"basin", "sub_basin"}:

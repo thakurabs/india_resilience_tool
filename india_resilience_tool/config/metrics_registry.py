@@ -1460,7 +1460,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_scenarios": ("historical", "bau", "opt", "pes"),
         "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
         "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "basin", "sub_basin"),
+        "supported_levels": ("district", "block", "basin", "sub_basin"),
         "rank_higher_is_worse": True,
     },
     {
@@ -1480,7 +1480,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_scenarios": ("historical", "bau", "opt", "pes"),
         "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
         "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "basin", "sub_basin"),
+        "supported_levels": ("district", "block", "basin", "sub_basin"),
         "rank_higher_is_worse": True,
     },
     {
@@ -1500,7 +1500,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_scenarios": ("historical", "bau", "opt", "pes"),
         "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
         "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "basin", "sub_basin"),
+        "supported_levels": ("district", "block", "basin", "sub_basin"),
         "rank_higher_is_worse": True,
     },
     {
@@ -1520,7 +1520,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_scenarios": ("historical", "bau", "opt", "pes"),
         "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
         "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "basin", "sub_basin"),
+        "supported_levels": ("district", "block", "basin", "sub_basin"),
         "rank_higher_is_worse": True,
     },
 ]

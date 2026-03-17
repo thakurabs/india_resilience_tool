@@ -123,9 +123,73 @@ def test_load_district_boundaries_dissolves_same_district_fragments(tmp_path) ->
     assert dissolved["district_key"].tolist() == ["Telangana::Nizamabad"]
 
 
+def test_load_district_boundaries_drops_invalid_identity_rows(tmp_path) -> None:
+    in_path = tmp_path / "districts_invalid.geojson"
+    gdf = _districts_gdf()
+    gdf.loc[len(gdf)] = {
+        "state_name": None,
+        "district_name": None,
+        "district_key": None,
+        "geometry": Polygon([(5, 0), (6, 0), (6, 1)]),
+    }
+    gdf.to_file(in_path, driver="GeoJSON")
+    dissolved = load_district_boundaries(in_path)
+    assert len(dissolved) == 1
+    assert dissolved["district_key"].tolist() == ["Telangana::Nizamabad"]
+
+
+def test_load_district_boundaries_repairs_known_state_label_corruption(tmp_path) -> None:
+    in_path = tmp_path / "districts_karnataka.geojson"
+    gdf = gpd.GeoDataFrame(
+        {
+            "state_name": ["Karn<taka"],
+            "district_name": ["Bengaluru Urban"],
+        },
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1)])],
+        crs="EPSG:4326",
+    )
+    gdf.to_file(in_path, driver="GeoJSON")
+    dissolved = load_district_boundaries(in_path)
+    assert dissolved["state_name"].tolist() == ["Karnataka"]
+    assert dissolved["district_key"].tolist() == ["Karnataka::Bengaluru Urban"]
+
+
 def test_load_block_boundaries_dissolves_same_block_fragments(tmp_path) -> None:
     in_path = tmp_path / "blocks.geojson"
     _blocks_gdf().to_file(in_path, driver="GeoJSON")
     dissolved = load_block_boundaries(in_path)
     assert len(dissolved) == 1
     assert dissolved["block_key"].tolist() == ["Telangana::Nizamabad::Armur"]
+
+
+def test_load_block_boundaries_drops_invalid_identity_rows(tmp_path) -> None:
+    in_path = tmp_path / "blocks_invalid.geojson"
+    gdf = _blocks_gdf()
+    gdf.loc[len(gdf)] = {
+        "state_name": None,
+        "district_name": None,
+        "block_name": None,
+        "block_key": None,
+        "geometry": Polygon([(5, 0), (6, 0), (6, 1)]),
+    }
+    gdf.to_file(in_path, driver="GeoJSON")
+    dissolved = load_block_boundaries(in_path)
+    assert len(dissolved) == 1
+    assert dissolved["block_key"].tolist() == ["Telangana::Nizamabad::Armur"]
+
+
+def test_load_block_boundaries_repairs_known_state_label_corruption(tmp_path) -> None:
+    in_path = tmp_path / "blocks_karnataka.geojson"
+    gdf = gpd.GeoDataFrame(
+        {
+            "state_name": ["Karn<taka"],
+            "district_name": ["Bengaluru Urban"],
+            "block_name": ["East"],
+        },
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1)])],
+        crs="EPSG:4326",
+    )
+    gdf.to_file(in_path, driver="GeoJSON")
+    dissolved = load_block_boundaries(in_path)
+    assert dissolved["state_name"].tolist() == ["Karnataka"]
+    assert dissolved["block_key"].tolist() == ["Karnataka::Bengaluru Urban::East"]

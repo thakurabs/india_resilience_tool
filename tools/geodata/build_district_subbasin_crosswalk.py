@@ -13,6 +13,7 @@ shared loaders and builders used by the broader polygon crosswalk phase:
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -42,6 +43,9 @@ from paths import (
 
 AdminLevel = Literal["district", "block"]
 HydroLevel = Literal["basin", "sub_basin"]
+_STATE_NAME_REPAIRS = {
+    "karntaka": "Karnataka",
+}
 
 
 def _assert_areal_geometries(gdf: gpd.GeoDataFrame, *, label: str) -> None:
@@ -68,6 +72,52 @@ def _block_key(state_name: object, district_name: object, block_name: object) ->
     )
 
 
+def _invalid_admin_identity_mask(series: pd.Series) -> pd.Series:
+    normalized = series.astype("string").str.strip().fillna("")
+    return normalized.str.lower().isin({"", "nan", "none", "null", "nat"})
+
+
+def _normalize_repair_key(text: object) -> str:
+    if pd.isna(text):
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", str(text).strip().lower())
+
+
+def _repair_state_name_series(series: pd.Series) -> pd.Series:
+    repaired = series.astype("string").str.strip()
+    keys = repaired.map(_normalize_repair_key)
+    return repaired.where(~keys.isin(_STATE_NAME_REPAIRS), keys.map(_STATE_NAME_REPAIRS))
+
+
+def _collapse_admin_units(admin_gdf: gpd.GeoDataFrame, *, admin_level: AdminLevel) -> gpd.GeoDataFrame:
+    """Dissolve fragmented admin geometries to one row per canonical admin key."""
+    if admin_level == "district":
+        required_cols = ["state_name", "district_name", "district_key", "geometry"]
+        dissolve_col = "district_key"
+        aggfunc = {"state_name": "first", "district_name": "first"}
+        keep_cols = ["state_name", "district_name", "district_key", "geometry"]
+    else:
+        required_cols = ["state_name", "district_name", "block_name", "block_key", "geometry"]
+        dissolve_col = "block_key"
+        aggfunc = {"state_name": "first", "district_name": "first", "block_name": "first"}
+        keep_cols = ["state_name", "district_name", "block_name", "block_key", "geometry"]
+
+    missing = [col for col in required_cols if col not in admin_gdf.columns]
+    if missing:
+        raise ValueError(f"{admin_level.title()} geometries are missing required columns: {missing}.")
+
+    out = admin_gdf[required_cols].copy()
+    text_cols = [col for col in required_cols if col != "geometry"]
+    for col in text_cols:
+        out[col] = out[col].astype(str).str.strip()
+
+    if not out[dissolve_col].duplicated().any():
+        return out[keep_cols].reset_index(drop=True)
+
+    dissolved = out.dissolve(by=dissolve_col, as_index=False, aggfunc=aggfunc)
+    return dissolved[keep_cols].reset_index(drop=True)
+
+
 def load_district_boundaries(path: Path) -> gpd.GeoDataFrame:
     """Load canonical district boundaries and dissolve district fragments."""
     gdf = gpd.read_file(path)
@@ -76,8 +126,12 @@ def load_district_boundaries(path: Path) -> gpd.GeoDataFrame:
     _assert_areal_geometries(gdf, label="District boundaries")
 
     out = gdf[["state_name", "district_name", "geometry"]].copy()
-    out["state_name"] = out["state_name"].astype(str).str.strip()
-    out["district_name"] = out["district_name"].astype(str).str.strip()
+    out["state_name"] = _repair_state_name_series(out["state_name"])
+    out["district_name"] = out["district_name"].astype("string").str.strip()
+    invalid = _invalid_admin_identity_mask(out["state_name"]) | _invalid_admin_identity_mask(out["district_name"])
+    out = out.loc[~invalid].copy().reset_index(drop=True)
+    if out.empty:
+        raise ValueError(f"District boundaries contain no valid state/district identity rows: {path}")
     out["district_key"] = [
         _district_key(state_name, district_name)
         for state_name, district_name in zip(out["state_name"], out["district_name"])
@@ -98,8 +152,17 @@ def load_block_boundaries(path: Path) -> gpd.GeoDataFrame:
     _assert_areal_geometries(gdf, label="Block boundaries")
 
     out = gdf[["state_name", "district_name", "block_name", "geometry"]].copy()
-    for col in ("state_name", "district_name", "block_name"):
-        out[col] = out[col].astype(str).str.strip()
+    out["state_name"] = _repair_state_name_series(out["state_name"])
+    for col in ("district_name", "block_name"):
+        out[col] = out[col].astype("string").str.strip()
+    invalid = (
+        _invalid_admin_identity_mask(out["state_name"])
+        | _invalid_admin_identity_mask(out["district_name"])
+        | _invalid_admin_identity_mask(out["block_name"])
+    )
+    out = out.loc[~invalid].copy().reset_index(drop=True)
+    if out.empty:
+        raise ValueError(f"Block boundaries contain no valid state/district/block identity rows: {path}")
     out["block_key"] = [
         _block_key(state_name, district_name, block_name)
         for state_name, district_name, block_name in zip(
@@ -142,6 +205,7 @@ def build_admin_hydro_crosswalk(
     - `<admin>_area_fraction_in_<hydro>` = intersection / admin area
     - `<hydro>_area_fraction_in_<admin>` = intersection / hydro area
     """
+    admin_gdf = _collapse_admin_units(admin_gdf, admin_level=admin_level)
     admin_proj = admin_gdf.to_crs(epsg=area_epsg).copy()
     hydro_proj = hydro_gdf.to_crs(epsg=area_epsg).copy()
 

@@ -11,7 +11,7 @@ The current working tree supports:
 - map, rankings, and details flows for district, block, basin, and sub-basin
 - admin portfolio workflows for district and block
 - hydro boundary loading and hydro processed-output discovery
-- Aqueduct direct district masters plus SOI hydro masters for water stress, interannual variability, seasonal variability, and water depletion
+- Aqueduct direct district/block masters plus SOI hydro masters for water stress, interannual variability, seasonal variability, and water depletion
 - actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
 - optional hydro-only river overlay in basin/sub-basin maps
 
@@ -42,7 +42,8 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
 | `python -m tools.geodata.prepare_aqueduct_baseline --help` | Build the canonical clean Aqueduct baseline artifact and India-only future geometry subset from future geometry + baseline CSV |
 | `python -m tools.geodata.build_aqueduct_admin_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ district overlap CSVs |
-| `python -m tools.geodata.build_aqueduct_admin_masters --help` | Build Aqueduct district master CSVs on canonical admin district units |
+| `python -m tools.geodata.build_aqueduct_block_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ block overlap CSVs |
+| `python -m tools.geodata.build_aqueduct_admin_masters --help` | Build Aqueduct district/block master CSVs on canonical admin units |
 | `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ SOI basin/sub-basin overlap CSVs |
 | `python -m tools.geodata.build_aqueduct_hydro_masters --help` | Build Aqueduct hydro master CSVs on SOI basin/sub-basin units |
 | `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
@@ -93,9 +94,9 @@ Notes:
 - Local logs, zips, and untracked working files are not treated as canonical repo modules.
 
 Aqueduct methodology note:
-- `docs/aqueduct_onboarding_methodology.md` is the canonical narrative for Aqueduct cleanup, HydroSHEDS `pfaf_id` normalization, direct `pfaf_id -> district` transfer, and HydroSHEDS → SOI hydro transfer.
+- `docs/aqueduct_onboarding_methodology.md` is the canonical narrative for Aqueduct cleanup, HydroSHEDS `pfaf_id` normalization, direct `pfaf_id -> district/block` transfer, and HydroSHEDS → SOI hydro transfer.
 - that same doc now includes a short reader guide for interpreting the Aqueduct validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/`
-- `docs/aqueduct_field_contract.md` records the currently used Aqueduct source-field mappings and interpretation notes for the onboarded Aqueduct district and hydro metrics.
+- `docs/aqueduct_field_contract.md` records the currently used Aqueduct source-field mappings and interpretation notes for the onboarded Aqueduct district, block, and hydro metrics.
 
 ## Package inventory
 
@@ -259,7 +260,8 @@ Aqueduct methodology note:
 | `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |
 | `prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON, QA CSV, and India-only `future_annual` GeoJSON with source future attributes preserved |
 | `build_aqueduct_admin_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ district overlap CSVs in `EPSG:6933` |
-| `build_aqueduct_admin_masters.py` | Build `processed/{aqueduct_metric_slug}/{state}/master_metrics_by_district.csv` from direct Aqueduct district overlaps |
+| `build_aqueduct_block_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ block overlap CSVs in `EPSG:6933` |
+| `build_aqueduct_admin_masters.py` | Build `processed/{aqueduct_metric_slug}/{state}/master_metrics_by_{district,block}.csv` from direct Aqueduct admin overlaps |
 | `build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs in `EPSG:6933` |
 | `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master CSVs from Aqueduct overlaps for the onboarded Aqueduct hydro metrics |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district and SOI hydro transfer outputs for the onboarded Aqueduct metrics |

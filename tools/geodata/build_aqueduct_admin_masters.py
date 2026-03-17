@@ -3,13 +3,14 @@
 Build admin master CSVs for Aqueduct metrics.
 
 This tool transfers clean Aqueduct ``pfaf_id`` metrics directly onto canonical
-district polygons using a precomputed Aqueduct-to-district overlap crosswalk.
+district and block polygons using precomputed Aqueduct overlap crosswalks.
 """
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import re
 
 import pandas as pd
 
@@ -34,6 +35,21 @@ def _normalize_text_series(series: pd.Series) -> pd.Series:
     return series.astype("string").str.strip().fillna("")
 
 
+_STATE_NAME_REPAIRS = {
+    "karntaka": "Karnataka",
+}
+
+
+def _normalize_repair_key(text: object) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(text or "").strip().lower())
+
+
+def _repair_state_name_series(series: pd.Series) -> pd.Series:
+    repaired = series.astype("string").str.strip().fillna("")
+    keys = repaired.map(_normalize_repair_key)
+    return repaired.where(~keys.isin(_STATE_NAME_REPAIRS), keys.map(_STATE_NAME_REPAIRS))
+
+
 def _invalid_identity_mask(series: pd.Series) -> pd.Series:
     normalized = _normalize_text_series(series)
     lowered = normalized.str.lower()
@@ -42,6 +58,17 @@ def _invalid_identity_mask(series: pd.Series) -> pd.Series:
 
 def _validate_district_identity_columns(df: pd.DataFrame, *, label: str) -> None:
     required = ("state_name", "district_name", "district_key")
+    for column in required:
+        invalid = _invalid_identity_mask(df[column])
+        if invalid.any():
+            bad_values = sorted({str(v) for v in df.loc[invalid, column].astype("string").fillna("<NA>").tolist()})
+            raise ValueError(
+                f"{label} contains invalid {column} values: {bad_values[:5]}"
+            )
+
+
+def _validate_block_identity_columns(df: pd.DataFrame, *, label: str) -> None:
+    required = ("state_name", "district_name", "block_name", "block_key")
     for column in required:
         invalid = _invalid_identity_mask(df[column])
         if invalid.any():
@@ -69,10 +96,36 @@ def load_district_crosswalk(path: Path) -> pd.DataFrame:
         raise ValueError(f"District crosswalk missing required columns {missing}: {path}")
     df = df.copy()
     df["pfaf_id"] = _normalize_pfaf_id_series(df["pfaf_id"])
-    df["state_name"] = _normalize_text_series(df["state_name"])
+    df["state_name"] = _repair_state_name_series(df["state_name"])
     df["district_name"] = _normalize_text_series(df["district_name"])
     df["district_key"] = _normalize_text_series(df["district_key"])
     _validate_district_identity_columns(df, label=f"District crosswalk {path}")
+    return df
+
+
+def load_block_crosswalk(path: Path) -> pd.DataFrame:
+    """Load an Aqueduct-to-block overlap crosswalk CSV."""
+    df = pd.read_csv(path)
+    required = {
+        "pfaf_id",
+        "state_name",
+        "district_name",
+        "block_name",
+        "block_key",
+        "block_area_km2",
+        "intersection_area_km2",
+        "pfaf_area_fraction_in_block",
+        "block_area_fraction_in_pfaf",
+    }
+    missing = sorted(required - set(df.columns))
+    if missing:
+        raise ValueError(f"Block crosswalk missing required columns {missing}: {path}")
+    df = df.copy()
+    df["pfaf_id"] = _normalize_pfaf_id_series(df["pfaf_id"])
+    df["state_name"] = _repair_state_name_series(df["state_name"])
+    for column in ("district_name", "block_name", "block_key"):
+        df[column] = _normalize_text_series(df[column])
+    _validate_block_identity_columns(df, label=f"Block crosswalk {path}")
     return df
 
 
@@ -145,6 +198,77 @@ def aggregate_crosswalk_to_districts(
     return aggregated, qa_df
 
 
+def aggregate_crosswalk_to_blocks(
+    *,
+    source_df: pd.DataFrame,
+    crosswalk_df: pd.DataFrame,
+    source_column_map: dict[str, str],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Aggregate Aqueduct source metrics onto block target units."""
+    target_keep_cols = ["state_name", "district_name", "block_name", "block_key"]
+    target_df = (
+        crosswalk_df[target_keep_cols + ["block_area_km2"]]
+        .drop_duplicates()
+        .copy()
+        .reset_index(drop=True)
+    )
+    overlaps = crosswalk_df.merge(source_df, on="pfaf_id", how="left", validate="many_to_one")
+
+    qa_df = (
+        crosswalk_df.groupby(target_keep_cols, dropna=False, as_index=False)
+        .agg(
+            source_pfaf_count=("pfaf_id", "nunique"),
+            intersection_area_km2=("intersection_area_km2", "sum"),
+            block_area_km2=("block_area_km2", "first"),
+        )
+        .reset_index(drop=True)
+    )
+    qa_df["source_pfaf_count"] = pd.to_numeric(qa_df["source_pfaf_count"], errors="coerce").fillna(0).astype(int)
+    qa_df["intersection_area_km2"] = pd.to_numeric(qa_df["intersection_area_km2"], errors="coerce").fillna(0.0)
+    qa_df["block_area_km2"] = pd.to_numeric(qa_df["block_area_km2"], errors="coerce")
+    qa_df["block_coverage_fraction"] = qa_df["intersection_area_km2"] / qa_df["block_area_km2"]
+
+    aggregated = target_df.copy()
+    for output_column in source_column_map:
+        valid = overlaps.loc[
+            overlaps[output_column].notna() & overlaps["intersection_area_km2"].gt(0),
+            target_keep_cols + ["intersection_area_km2", output_column],
+        ].copy()
+        if valid.empty:
+            aggregated[output_column] = pd.NA
+            qa_df[f"{output_column}__valid_weight_km2"] = 0.0
+            continue
+
+        valid["weighted_value"] = pd.to_numeric(valid[output_column], errors="coerce") * valid["intersection_area_km2"]
+        numerators = valid.groupby(target_keep_cols, dropna=False)["weighted_value"].sum()
+        denominators = valid.groupby(target_keep_cols, dropna=False)["intersection_area_km2"].sum()
+        rolled = (
+            pd.DataFrame(
+                {
+                    output_column: numerators / denominators,
+                    f"{output_column}__valid_weight_km2": denominators,
+                }
+            )
+            .reset_index()
+        )
+        aggregated = aggregated.merge(rolled[target_keep_cols + [output_column]], on=target_keep_cols, how="left")
+        qa_df = qa_df.merge(rolled[target_keep_cols + [f"{output_column}__valid_weight_km2"]], on=target_keep_cols, how="left")
+
+    for output_column in source_column_map:
+        valid_col = f"{output_column}__valid_weight_km2"
+        if valid_col in qa_df.columns:
+            qa_df[valid_col] = pd.to_numeric(qa_df[valid_col], errors="coerce").fillna(0.0)
+
+    aggregated = aggregated.sort_values(["state_name", "district_name", "block_name"]).reset_index(drop=True)
+    qa_df = qa_df.sort_values(["state_name", "district_name", "block_name"]).reset_index(drop=True)
+    _validate_block_identity_columns(aggregated, label="Aggregated Aqueduct block masters")
+    _validate_block_identity_columns(qa_df, label="Aqueduct block QA")
+    aggregated = aggregated.rename(
+        columns={"state_name": "state", "district_name": "district", "block_name": "block"}
+    )
+    return aggregated, qa_df
+
+
 def _write_csv(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
     if path.exists() and not overwrite:
         raise FileExistsError(f"Output already exists (pass --overwrite): {path}")
@@ -153,7 +277,7 @@ def _write_csv(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
 
 
 def build_cli() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Build Aqueduct district master CSVs on canonical admin units.")
+    parser = argparse.ArgumentParser(description="Build Aqueduct district and block master CSVs on canonical admin units.")
     parser.add_argument(
         "--baseline",
         type=str,
@@ -171,6 +295,12 @@ def build_cli() -> argparse.ArgumentParser:
         type=str,
         default=str(_default_aqueduct_dir() / "aqueduct_district_crosswalk.csv"),
         help="Path to the Aqueduct-to-district crosswalk CSV.",
+    )
+    parser.add_argument(
+        "--block-crosswalk",
+        type=str,
+        default=str(_default_aqueduct_dir() / "aqueduct_block_crosswalk.csv"),
+        help="Path to the Aqueduct-to-block crosswalk CSV.",
     )
     parser.add_argument(
         "--metric-slug",
@@ -204,11 +334,13 @@ def main(argv: list[str] | None = None) -> int:
     baseline_path = Path(args.baseline).expanduser().resolve()
     future_path = Path(args.future).expanduser().resolve()
     district_crosswalk_path = Path(args.district_crosswalk).expanduser().resolve()
-    for path in (baseline_path, future_path, district_crosswalk_path):
+    block_crosswalk_path = Path(args.block_crosswalk).expanduser().resolve()
+    for path in (baseline_path, future_path, district_crosswalk_path, block_crosswalk_path):
         if not path.exists():
             raise FileNotFoundError(f"Required Aqueduct admin input not found: {path}")
 
     district_crosswalk_df = load_district_crosswalk(district_crosswalk_path)
+    block_crosswalk_df = load_block_crosswalk(block_crosswalk_path)
     aqueduct_dir = _default_aqueduct_dir()
 
     print("AQUEDUCT ADMIN MASTERS")
@@ -225,23 +357,40 @@ def main(argv: list[str] | None = None) -> int:
             crosswalk_df=district_crosswalk_df,
             source_column_map=source_column_map,
         )
+        block_master_df, block_qa_df = aggregate_crosswalk_to_blocks(
+            source_df=source_df,
+            crosswalk_df=block_crosswalk_df,
+            source_column_map=source_column_map,
+        )
 
         processed_root = resolve_processed_root(metric_slug, mode="portfolio")
-        master_name = get_master_csv_filename("district")
+        district_master_name = get_master_csv_filename("district")
+        block_master_name = get_master_csv_filename("block")
         state_counts: list[str] = []
         for state_name, state_df in district_master_df.groupby("state", dropna=False):
             state_dir = processed_root / str(state_name)
-            out_path = state_dir / master_name
+            out_path = state_dir / district_master_name
             _write_csv(state_df.reset_index(drop=True), out_path, overwrite=bool(args.overwrite))
             state_counts.append(f"{state_name}:{len(state_df)}")
+        block_state_counts: list[str] = []
+        for state_name, state_df in block_master_df.groupby("state", dropna=False):
+            state_dir = processed_root / str(state_name)
+            out_path = state_dir / block_master_name
+            _write_csv(state_df.reset_index(drop=True), out_path, overwrite=bool(args.overwrite))
+            block_state_counts.append(f"{state_name}:{len(state_df)}")
 
         district_qa_path = aqueduct_dir / f"{metric_slug}_district_master_qa.csv"
+        block_qa_path = aqueduct_dir / f"{metric_slug}_block_master_qa.csv"
         _write_csv(district_qa_df, district_qa_path, overwrite=bool(args.overwrite))
+        _write_csv(block_qa_df, block_qa_path, overwrite=bool(args.overwrite))
 
         print(f"metric_slug: {metric_slug}")
         print(f"district_master_rows: {len(district_master_df)}")
         print(f"state_slices: {', '.join(state_counts[:8])}{' ...' if len(state_counts) > 8 else ''}")
+        print(f"block_master_rows: {len(block_master_df)}")
+        print(f"block_state_slices: {', '.join(block_state_counts[:8])}{' ...' if len(block_state_counts) > 8 else ''}")
         print(f"district_qa: {district_qa_path}")
+        print(f"block_qa: {block_qa_path}")
     return 0
 
 

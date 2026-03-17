@@ -26,10 +26,10 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - statistic
   - map mode
 - Water-risk Aqueduct onboarding:
-  - Aqueduct water stress on SOI basin, SOI sub-basin, and district units
-  - Aqueduct interannual variability on SOI basin, SOI sub-basin, and district units
-  - Aqueduct seasonal variability on SOI basin, SOI sub-basin, and district units
-  - Aqueduct water depletion on SOI basin, SOI sub-basin, and district units
+  - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
+  - Aqueduct interannual variability on SOI basin, SOI sub-basin, district, and block units
+  - Aqueduct seasonal variability on SOI basin, SOI sub-basin, district, and block units
+  - Aqueduct water depletion on SOI basin, SOI sub-basin, district, and block units
   - native Aqueduct scenarios: `historical`, `bau`, `opt`, `pes`
 - Map view and rankings table for all four levels
 - Right-side details panel with:
@@ -150,18 +150,23 @@ Place these in `IRT_DATA_DIR`:
 - `aqueduct/aqueduct_basin_crosswalk.csv` (optional Aqueduct HydroSHEDS ↔ SOI basin overlap table)
 - `aqueduct/aqueduct_subbasin_crosswalk.csv` (optional Aqueduct HydroSHEDS ↔ SOI sub-basin overlap table)
 - `aqueduct/aqueduct_district_crosswalk.csv` (optional Aqueduct HydroSHEDS ↔ district overlap table for direct admin transfer)
+- `aqueduct/aqueduct_block_crosswalk.csv` (optional Aqueduct HydroSHEDS ↔ block overlap table for direct admin transfer)
 - `aqueduct/aq_water_stress_basin_master_qa.csv` (optional QA for the Aqueduct basin master build)
 - `aqueduct/aq_water_stress_subbasin_master_qa.csv` (optional QA for the Aqueduct sub-basin master build)
 - `aqueduct/aq_water_stress_district_master_qa.csv` (optional QA for the Aqueduct district master build)
+- `aqueduct/aq_water_stress_block_master_qa.csv` (optional QA for the Aqueduct block master build)
 - `aqueduct/aq_interannual_variability_basin_master_qa.csv` (optional QA for Aqueduct interannual-variability basin masters)
 - `aqueduct/aq_interannual_variability_subbasin_master_qa.csv` (optional QA for Aqueduct interannual-variability sub-basin masters)
 - `aqueduct/aq_interannual_variability_district_master_qa.csv` (optional QA for Aqueduct interannual-variability district masters)
+- `aqueduct/aq_interannual_variability_block_master_qa.csv` (optional QA for Aqueduct interannual-variability block masters)
 - `aqueduct/aq_seasonal_variability_basin_master_qa.csv` (optional QA for Aqueduct seasonal-variability basin masters)
 - `aqueduct/aq_seasonal_variability_subbasin_master_qa.csv` (optional QA for Aqueduct seasonal-variability sub-basin masters)
 - `aqueduct/aq_seasonal_variability_district_master_qa.csv` (optional QA for Aqueduct seasonal-variability district masters)
+- `aqueduct/aq_seasonal_variability_block_master_qa.csv` (optional QA for Aqueduct seasonal-variability block masters)
 - `aqueduct/aq_water_depletion_basin_master_qa.csv` (optional QA for Aqueduct water-depletion basin masters)
 - `aqueduct/aq_water_depletion_subbasin_master_qa.csv` (optional QA for Aqueduct water-depletion sub-basin masters)
 - `aqueduct/aq_water_depletion_district_master_qa.csv` (optional QA for Aqueduct water-depletion district masters)
+- `aqueduct/aq_water_depletion_block_master_qa.csv` (optional QA for Aqueduct water-depletion block masters)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -169,7 +174,7 @@ Aqueduct methodology note:
 
 - See [`docs/aqueduct_onboarding_methodology.md`](docs/aqueduct_onboarding_methodology.md) for the full post-processing workflow, including `pfaf_id`-based baseline cleanup and HydroSHEDS → SOI hydro transfer.
 - That methodology doc also includes a short "How to read the validation package" section for interpreting the generated Aqueduct validation outputs.
-- See [`docs/aqueduct_field_contract.md`](docs/aqueduct_field_contract.md) for the current Aqueduct source-field mappings used by the onboarded Aqueduct district and hydro metrics.
+- See [`docs/aqueduct_field_contract.md`](docs/aqueduct_field_contract.md) for the current Aqueduct source-field mappings used by the onboarded Aqueduct district, block, and hydro metrics.
 
 ### Processed outputs layout
 
@@ -233,13 +238,17 @@ processed/aq_water_depletion/hydro/
 └── master_metrics_by_sub_basin.csv
 ```
 
-The same onboarded Aqueduct slugs also support direct district masters under:
+The same onboarded Aqueduct slugs also support direct district and block masters under:
 
 ```text
 processed/aq_water_stress/{state}/master_metrics_by_district.csv
+processed/aq_water_stress/{state}/master_metrics_by_block.csv
 processed/aq_interannual_variability/{state}/master_metrics_by_district.csv
+processed/aq_interannual_variability/{state}/master_metrics_by_block.csv
 processed/aq_seasonal_variability/{state}/master_metrics_by_district.csv
+processed/aq_seasonal_variability/{state}/master_metrics_by_block.csv
 processed/aq_water_depletion/{state}/master_metrics_by_district.csv
+processed/aq_water_depletion/{state}/master_metrics_by_block.csv
 ```
 
 ## Common commands
@@ -303,13 +312,21 @@ python -m tools.geodata.build_aqueduct_admin_crosswalk --overwrite
 
 This builds the direct Aqueduct `pfaf_id` ↔ district overlap table used for admin-boundary Aqueduct transfer in `EPSG:6933`.
 
-### Build the Aqueduct district masters
+### Build the Aqueduct block crosswalk
+
+```bash
+python -m tools.geodata.build_aqueduct_block_crosswalk --overwrite
+```
+
+This builds the direct Aqueduct `pfaf_id` ↔ block overlap table used for admin-boundary Aqueduct transfer in `EPSG:6933`.
+
+### Build the Aqueduct admin masters
 
 ```bash
 python -m tools.geodata.build_aqueduct_admin_masters --overwrite
 ```
 
-This writes state-sliced district master CSVs for all onboarded Aqueduct metrics under `processed/{metric_slug}/{state}/master_metrics_by_district.csv`.
+This writes state-sliced district and block master CSVs for all onboarded Aqueduct metrics under `processed/{metric_slug}/{state}/master_metrics_by_district.csv` and `processed/{metric_slug}/{state}/master_metrics_by_block.csv`.
 
 ### Build or refresh Aqueduct hydro masters
 
@@ -323,7 +340,7 @@ python -m tools.geodata.build_aqueduct_hydro_masters --overwrite
 python -m tools.geodata.validate_aqueduct_workflow --overwrite
 ```
 
-The validator now emits per-metric bundles covering district, basin, and sub-basin transfer outputs under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/`.
+The validator now emits per-metric bundles covering district, block, basin, and sub-basin transfer outputs under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/`.
 
 ### Clean the Survey of India river network
 

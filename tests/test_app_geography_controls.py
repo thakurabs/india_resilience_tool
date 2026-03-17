@@ -9,7 +9,7 @@ def test_resolve_available_admin_states_preserves_all_for_flat_admin_masters(tmp
     (tmp_path / "Telangana").mkdir(parents=True)
     (tmp_path / "Telangana" / "master_metrics_by_district.csv").write_text("state,district\n", encoding="utf-8")
     (tmp_path / "Odisha").mkdir(parents=True)
-    (tmp_path / "Odisha" / "master_metrics_by_district.csv").write_text("state,district\n", encoding="utf-8")
+    (tmp_path / "Odisha" / "master_metrics_by_block.csv").write_text("state,district,block\n", encoding="utf-8")
 
     available_states, has_available_data = _resolve_available_admin_states(tmp_path)
 
