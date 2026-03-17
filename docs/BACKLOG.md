@@ -79,6 +79,12 @@ Entry fields:
 - `Dependency / trigger`: begin after current river v1 closure, when runtime loader changes and publish/prune workflow changes can be tackled systematically.
 - `Done when`: processed serving data uses the planned `build / published / archive` structure, runtime prefers Parquet with CSV fallback during transition, GeoParquet reference geometry is in place, and legacy hot-path CSV forests are pruned only after parity validation.
 
+### BL-0011 — Reframe exposure rankings so they do not present hazard-style risk classes
+- `Area`: exposure, UI, semantics
+- `Why deferred`: exposure layers currently inherit the generic ranking and `risk_class` presentation used for hazard metrics, which is mechanically correct but semantically awkward for non-hazard layers such as population.
+- `Dependency / trigger`: revisit after the first exposure-layer tranche is stable and the desired exposure-side summary language is agreed across details, map tooltips, and rankings.
+- `Done when`: exposure pillars no longer present hazard-style `risk_class` labels by default, and the UI uses clearly named relative-exposure language or suppresses those labels entirely where appropriate.
+
 ### BL-0008 — Add upstream/downstream routing behavior to the river experience
 - `Area`: river, topology, UI
 - `Why deferred`: topology artifacts exist offline, but no routed or direction-aware product behavior has been added yet.
