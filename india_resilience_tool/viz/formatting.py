@@ -146,7 +146,7 @@ def format_metric_number(
                 xf = float(x)  # type: ignore[arg-type]
             except Exception:
                 xf = None
-            if xf is not None and abs(xf - round(xf)) < 1e-10:
+            if xf is not None and math.isfinite(xf) and abs(xf - round(xf)) < 1e-10:
                 d = 0
     return format_number(x, decimals=d, thousand_sep=thousand_sep, na=na)
 
