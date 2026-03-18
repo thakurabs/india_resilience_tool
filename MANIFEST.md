@@ -44,6 +44,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_block_subbasin_crosswalk --overwrite` | Build block ↔ sub-basin crosswalk CSV |
 | `python -m tools.geodata.build_district_basin_crosswalk --overwrite` | Build district ↔ basin crosswalk CSV |
 | `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
+| `python -m tools.geodata.build_blocks_geojson --overwrite` | Rebuild the canonical block GeoJSON and block-label QA outputs |
 | `python -m tools.geodata.prepare_aqueduct_baseline --help` | Build the canonical clean Aqueduct baseline artifact and India-only future geometry subset from future geometry + baseline CSV |
 | `python -m tools.geodata.build_aqueduct_admin_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ district overlap CSVs |
 | `python -m tools.geodata.build_aqueduct_block_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ block overlap CSVs |
@@ -261,6 +262,7 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `build_district_subbasin_crosswalk.py` | Shared polygon crosswalk builders plus the district ↔ sub-basin CLI |
+| `build_blocks_geojson.py` | Rebuild the canonical `blocks_4326.geojson` with canonical block identity columns and label QA |
 | `build_block_subbasin_crosswalk.py` | Build canonical block ↔ sub-basin crosswalk CSV |
 | `build_district_basin_crosswalk.py` | Build canonical district ↔ basin crosswalk CSV |
 | `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |
@@ -271,7 +273,7 @@ Aqueduct methodology note:
 | `build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs in `EPSG:6933` |
 | `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master CSVs from Aqueduct overlaps for the onboarded Aqueduct hydro metrics |
 | `build_population_admin_masters.py` | Build district/block population total and density masters from the 2025 population raster |
-| `runs/prepare_dashboard.py` | Canonical workflow runner for climate hazard, Aqueduct, population exposure, validation, and dashboard-package prep bundles |
+| `runs/prepare_dashboard.py` | Canonical workflow runner for climate hazard, canonical block-boundary refresh, Aqueduct, population exposure, validation, and dashboard-package prep bundles |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |

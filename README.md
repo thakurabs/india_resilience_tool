@@ -305,6 +305,8 @@ python -m tools.runs.prepare_dashboard dashboard-package --level all --state Tel
 ```
 
 This bundle now includes climate hazards, Aqueduct, and population exposure prep.
+When block-level products are part of the run, the runner now refreshes the canonical
+`IRT_DATA_DIR/blocks_4326.geojson` first.
 
 Preview first:
 
@@ -324,6 +326,15 @@ This aggregates the 2025 1 km population raster onto canonical district and bloc
 - `processed/population_total/{state}/master_metrics_by_block.csv`
 - `processed/population_density/{state}/master_metrics_by_district.csv`
 - `processed/population_density/{state}/master_metrics_by_block.csv`
+
+### Rebuild the canonical block boundaries
+
+```bash
+python -m tools.geodata.build_blocks_geojson --overwrite
+```
+
+This refreshes `IRT_DATA_DIR/blocks_4326.geojson` from the source block shapefile,
+repairs canonical block identity columns, and emits QA CSVs for suspicious labels.
 
 ### Hydro boundary preparation
 

@@ -18,6 +18,7 @@ from typing import Sequence
 
 DEFAULT_ADMIN_STATE = "Telangana"
 DEFAULT_VALIDATION_TESTS = [
+    "tests/test_build_blocks_geojson.py",
     "tests/test_prepare_aqueduct_baseline.py",
     "tests/test_aqueduct_admin_transfer.py",
     "tests/test_aqueduct_hydro_transfer.py",
@@ -115,8 +116,17 @@ def _build_aqueduct_metric_args(args: argparse.Namespace) -> list[str]:
     return argv
 
 
-def build_aqueduct_plan(args: argparse.Namespace) -> list[PlannedCommand]:
+def build_blocks_geojson_plan(args: argparse.Namespace) -> list[PlannedCommand]:
+    """Build the canonical block-boundary refresh step."""
+    argv = _py_module_cmd("tools.geodata.build_blocks_geojson")
+    _append_flag(argv, "--overwrite", bool(args.overwrite))
+    return [PlannedCommand(label="blocks-geojson", argv=argv)]
+
+
+def build_aqueduct_plan(args: argparse.Namespace, *, include_blocks_geojson: bool = True) -> list[PlannedCommand]:
     plan: list[PlannedCommand] = []
+    if include_blocks_geojson:
+        plan.extend(build_blocks_geojson_plan(args))
     if bool(getattr(args, "prepare_baseline", False)):
         plan.append(_build_prepare_aqueduct_baseline_step(args))
 
@@ -148,13 +158,17 @@ def build_aqueduct_plan(args: argparse.Namespace) -> list[PlannedCommand]:
     return plan
 
 
-def build_population_plan(args: argparse.Namespace) -> list[PlannedCommand]:
+def build_population_plan(args: argparse.Namespace, *, include_blocks_geojson: bool = True) -> list[PlannedCommand]:
     """Build the population exposure prep plan."""
+    plan: list[PlannedCommand] = []
+    if include_blocks_geojson:
+        plan.extend(build_blocks_geojson_plan(args))
     argv = _py_module_cmd("tools.geodata.build_population_admin_masters")
     _append_flag(argv, "--overwrite", bool(args.overwrite))
     if getattr(args, "population_raster", None):
         argv.extend(["--raster", str(args.population_raster)])
-    return [PlannedCommand(label="population-admin-masters", argv=argv)]
+    plan.append(PlannedCommand(label="population-admin-masters", argv=argv))
+    return plan
 
 
 def build_climate_hazards_plan(args: argparse.Namespace) -> list[PlannedCommand]:
@@ -219,6 +233,7 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         return [_build_prepare_aqueduct_baseline_step(args)]
 
     module_map = {
+        "blocks-geojson": "tools.geodata.build_blocks_geojson",
         "aqueduct-admin-crosswalk": "tools.geodata.build_aqueduct_admin_crosswalk",
         "aqueduct-block-crosswalk": "tools.geodata.build_aqueduct_block_crosswalk",
         "aqueduct-admin-masters": "tools.geodata.build_aqueduct_admin_masters",
@@ -285,15 +300,16 @@ def build_command_plan(args: argparse.Namespace) -> list[PlannedCommand]:
     if command == "list":
         return []
     if command == "aqueduct":
-        return build_aqueduct_plan(args)
+        return build_aqueduct_plan(args, include_blocks_geojson=True)
     if command == "climate-hazards":
         return build_climate_hazards_plan(args)
     if command == "population-exposure":
-        return build_population_plan(args)
+        return build_population_plan(args, include_blocks_geojson=True)
     if command == "dashboard-package":
-        plan = build_climate_hazards_plan(args)
-        plan.extend(build_aqueduct_plan(args))
-        plan.extend(build_population_plan(args))
+        plan = build_blocks_geojson_plan(args)
+        plan.extend(build_climate_hazards_plan(args))
+        plan.extend(build_aqueduct_plan(args, include_blocks_geojson=False))
+        plan.extend(build_population_plan(args, include_blocks_geojson=False))
         if bool(getattr(args, "include_pytest", False)):
             plan.append(
                 PlannedCommand(
@@ -317,6 +333,7 @@ def _print_available_commands() -> None:
     print("")
     print("Available step commands:")
     for step in [
+        "blocks-geojson",
         "aqueduct-baseline",
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
@@ -444,6 +461,7 @@ def build_cli() -> argparse.ArgumentParser:
     p_validate.add_argument("--include-pytest", action="store_true", help="Run the default validation pytest set after the validator.")
 
     for name in [
+        "blocks-geojson",
         "aqueduct-baseline",
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
@@ -457,7 +475,7 @@ def build_cli() -> argparse.ArgumentParser:
         _add_common_runner_flags(sub)
         if name == "population-admin-masters":
             _add_population_flags(sub)
-        else:
+        elif name != "blocks-geojson":
             _add_aqueduct_flags(sub, bundle=(name == "aqueduct-baseline"))
 
     p_compute = subparsers.add_parser("climate-compute", help="Run climate compute only.")

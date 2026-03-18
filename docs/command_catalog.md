@@ -31,6 +31,7 @@ python -m tools.runs.prepare_dashboard aqueduct --overwrite
 ```
 
 Default bundle contents:
+- canonical block-boundary refresh
 - district crosswalk
 - block crosswalk
 - hydro crosswalk
@@ -69,6 +70,12 @@ Optional raster override:
 python -m tools.runs.prepare_dashboard population-exposure --population-raster /path/to/ind_pop_2025_CN_1km_R2025A_UA_v1.tif --overwrite
 ```
 
+The runner refreshes the canonical block boundaries first:
+
+```bash
+python -m tools.runs.prepare_dashboard blocks-geojson --overwrite
+```
+
 ### Prepare the dashboard package end to end
 
 ```bash
@@ -76,6 +83,7 @@ python -m tools.runs.prepare_dashboard dashboard-package --level all --state Tel
 ```
 
 This bundle now includes:
+- canonical block-boundary refresh
 - climate hazard compute + master builds
 - Aqueduct prep + validation
 - population exposure master builds
@@ -150,6 +158,7 @@ python -m tools.geodata.validate_aqueduct_workflow --help
 ### Population exposure
 
 ```bash
+python -m tools.geodata.build_blocks_geojson --help
 python -m tools.geodata.build_population_admin_masters --help
 ```
 
@@ -162,7 +171,7 @@ python -m pytest -q
 Targeted validation set used by the runner:
 
 ```bash
-python -m pytest -q tests/test_prepare_aqueduct_baseline.py tests/test_aqueduct_admin_transfer.py tests/test_aqueduct_hydro_transfer.py tests/test_population_admin_masters.py tests/test_validate_aqueduct_workflow.py tests/test_metrics_registry.py tests/test_config.py tests/test_available_states.py tests/test_crosswalk_generator.py
+python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aqueduct_baseline.py tests/test_aqueduct_admin_transfer.py tests/test_aqueduct_hydro_transfer.py tests/test_population_admin_masters.py tests/test_validate_aqueduct_workflow.py tests/test_metrics_registry.py tests/test_config.py tests/test_available_states.py tests/test_crosswalk_generator.py
 ```
 
 ## Expected outputs
@@ -178,6 +187,8 @@ python -m pytest -q tests/test_prepare_aqueduct_baseline.py tests/test_aqueduct_
 - validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/`
 
 ### Population exposure
+- canonical block GeoJSON under `IRT_DATA_DIR/blocks_4326.geojson`
+- block-boundary QA outputs under `IRT_DATA_DIR/block_boundary_*.csv`
 - district/block masters under `IRT_DATA_DIR/processed/population_{total,density}/{state}/`
 - QA bundles under `IRT_DATA_DIR/population/`
 

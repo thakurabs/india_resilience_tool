@@ -19,6 +19,7 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Tuple, Union
@@ -31,6 +32,20 @@ from shapely.ops import transform
 
 PathLike = Union[str, Path]
 BBox = Tuple[float, float, float, float]  # (min_lon, min_lat, max_lon, max_lat)
+SUSPICIOUS_ADM3_LABEL_CHARS = ("<", ">", "#", "@", "|", "\\")
+_STATE_NAME_REPAIRS = {
+    "karntaka": "Karnataka",
+}
+_ADM3_CHAR_REPAIRS = str.maketrans(
+    {
+        "<": "a",
+        ">": "a",
+        "#": "u",
+        "@": "u",
+        "|": "i",
+        "\\": "i",
+    }
+)
 
 
 def drop_z(geom: BaseGeometry) -> BaseGeometry:
@@ -100,7 +115,89 @@ def ensure_adm3_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     if "Subdis_LGD" in out.columns and "block_lgd_code" not in out.columns:
         out["block_lgd_code"] = out["Subdis_LGD"].astype(str).str.strip()
 
+    return repair_adm3_identity_columns(out)
+
+
+def contains_suspicious_adm3_label(text: object) -> bool:
+    """Return True when a block admin label contains known corruption markers."""
+    if text is None or pd.isna(text):
+        return False
+    label = str(text)
+    return any(ch in label for ch in SUSPICIOUS_ADM3_LABEL_CHARS)
+
+
+def suspicious_adm3_label_mask(series: pd.Series) -> pd.Series:
+    """Vectorized wrapper around :func:`contains_suspicious_adm3_label`."""
+    return series.astype("string").map(contains_suspicious_adm3_label).fillna(False)
+
+
+def _normalize_repair_key(text: object) -> str:
+    if text is None or pd.isna(text):
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", str(text).strip().lower())
+
+
+def _repair_adm3_text_value(text: object, *, title_case: bool) -> str:
+    if text is None or pd.isna(text):
+        return ""
+    repaired = str(text).translate(_ADM3_CHAR_REPAIRS).strip()
+    repaired = re.sub(r"\s+", " ", repaired)
+    if title_case:
+        repaired = repaired.title()
+        repaired = repaired.replace(" And ", " and ")
+    return repaired
+
+
+def repair_adm3_state_name_series(series: pd.Series) -> pd.Series:
+    """Repair known block-level state label corruption while preserving user-facing case."""
+    repaired = series.astype("string").map(lambda v: _repair_adm3_text_value(v, title_case=False))
+    keys = repaired.map(_normalize_repair_key)
+    replacements = keys.map(_STATE_NAME_REPAIRS)
+    return repaired.where(replacements.isna(), replacements)
+
+
+def repair_adm3_identity_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Normalize canonical block identity columns in place-safe fashion.
+
+    This function is intentionally conservative:
+    - it repairs known state-name corruption needed for state coverage parity
+    - it strips district/block labels but does not guess unknown corrupted names
+    """
+    out = gdf.copy()
+    if "state_name" in out.columns:
+        out["state_name"] = repair_adm3_state_name_series(out["state_name"])
+    if "district_name" in out.columns:
+        out["district_name"] = out["district_name"].astype("string").map(
+            lambda v: _repair_adm3_text_value(v, title_case=True)
+        )
+    if "block_name" in out.columns:
+        out["block_name"] = out["block_name"].astype("string").map(
+            lambda v: _repair_adm3_text_value(v, title_case=True)
+        )
     return out
+
+
+def collect_adm3_label_anomalies(gdf: gpd.GeoDataFrame) -> pd.DataFrame:
+    """
+    Return rows whose canonical block identity columns still contain suspicious characters.
+    """
+    canonical_cols = [col for col in ("state_name", "district_name", "block_name") if col in gdf.columns]
+    if not canonical_cols:
+        return pd.DataFrame(columns=["field"])
+
+    frames: list[pd.DataFrame] = []
+    for field in canonical_cols:
+        mask = suspicious_adm3_label_mask(gdf[field])
+        if not mask.any():
+            continue
+        flagged = gdf.loc[mask, canonical_cols].copy()
+        flagged["field"] = field
+        frames.append(flagged.reset_index(drop=True))
+
+    if not frames:
+        return pd.DataFrame(columns=[*canonical_cols, "field"])
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 def crop_to_bbox(gdf: gpd.GeoDataFrame, bbox: Optional[BBox]) -> gpd.GeoDataFrame:
@@ -132,6 +229,13 @@ def simplify_and_filter(
     out["geometry"] = out["geometry"].apply(lambda geom: drop_z(geom))
     out = ensure_epsg4326(out)
     out = ensure_adm3_columns(out)
+    anomalies = collect_adm3_label_anomalies(out)
+    if not anomalies.empty:
+        sample = anomalies[["field", "state_name", "district_name", "block_name"]].head(10).to_dict(orient="records")
+        raise ValueError(
+            "ADM3 boundaries contain suspicious admin labels after canonicalization. "
+            f"Sample: {sample}"
+        )
 
     out["geometry"] = out["geometry"].simplify(tolerance, preserve_topology=True)
     out = out[out.geometry.area > float(min_area)].reset_index(drop=True)

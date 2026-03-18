@@ -21,7 +21,10 @@ import geopandas as gpd
 import pandas as pd
 
 from india_resilience_tool.data.adm2_loader import ensure_adm2_columns, ensure_epsg4326
-from india_resilience_tool.data.adm3_loader import ensure_adm3_columns
+from india_resilience_tool.data.adm3_loader import (
+    collect_adm3_label_anomalies,
+    ensure_adm3_columns,
+)
 from india_resilience_tool.data.crosswalks import (
     ensure_block_basin_crosswalk,
     ensure_block_subbasin_crosswalk,
@@ -150,6 +153,13 @@ def load_block_boundaries(path: Path) -> gpd.GeoDataFrame:
     gdf = ensure_epsg4326(gdf)
     gdf = ensure_adm3_columns(gdf)
     _assert_areal_geometries(gdf, label="Block boundaries")
+    anomalies = collect_adm3_label_anomalies(gdf)
+    if not anomalies.empty:
+        sample = anomalies[["field", "state_name", "district_name", "block_name"]].head(10).to_dict(orient="records")
+        raise ValueError(
+            "Block boundaries contain suspicious admin labels after canonicalization. "
+            f"Sample: {sample}"
+        )
 
     out = gdf[["state_name", "district_name", "block_name", "geometry"]].copy()
     out["state_name"] = _repair_state_name_series(out["state_name"])

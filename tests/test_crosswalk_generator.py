@@ -193,3 +193,21 @@ def test_load_block_boundaries_repairs_known_state_label_corruption(tmp_path) ->
     dissolved = load_block_boundaries(in_path)
     assert dissolved["state_name"].tolist() == ["Karnataka"]
     assert dissolved["block_key"].tolist() == ["Karnataka::Bengaluru Urban::East"]
+
+
+def test_load_block_boundaries_repairs_known_label_corruption(tmp_path) -> None:
+    in_path = tmp_path / "blocks_bad_labels.geojson"
+    gdf = gpd.GeoDataFrame(
+        {
+            "state_name": ["Karn<taka"],
+            "district_name": ["Belag<vi"],
+            "block_name": ["B<d<mi"],
+        },
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1)])],
+        crs="EPSG:4326",
+    )
+    gdf.to_file(in_path, driver="GeoJSON")
+    dissolved = load_block_boundaries(in_path)
+    assert dissolved["state_name"].tolist() == ["Karnataka"]
+    assert dissolved["district_name"].tolist() == ["Belagavi"]
+    assert dissolved["block_name"].tolist() == ["Badami"]

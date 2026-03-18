@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from india_resilience_tool.data.merge import get_or_build_merged_for_index_cached
 
@@ -147,3 +148,37 @@ def test_cache_invalidates_when_multisource_signature_changes(tmp_path: Path) ->
         alias_fn=_alias,
     )
     assert int(out2["m"].iloc[0]) == 5
+
+
+def test_block_merge_raises_when_master_states_are_missing_from_boundaries(tmp_path: Path) -> None:
+    adm3 = pd.DataFrame(
+        {
+            "state_name": ["Karn<taka"],
+            "district_name": ["Belag<vi"],
+            "block_name": ["Athani"],
+        }
+    )
+    master = pd.DataFrame(
+        {
+            "state": ["Karnataka"],
+            "district": ["Belagavi"],
+            "block": ["Athani"],
+            "m": [1.0],
+        }
+    )
+
+    master_path = tmp_path / "master.csv"
+    master_path.write_text("x\n1\n")
+
+    with pytest.raises(ValueError, match="missing master states"):
+        get_or_build_merged_for_index_cached(
+            adm3,
+            master,
+            slug="demo",
+            master_path=master_path,
+            session_state={},
+            alias_fn=_alias,
+            level="block",
+            adm2_state_col="state_name",
+            master_state_col="state",
+        )

@@ -58,6 +58,46 @@ def restrict_boundaries_to_master_states(
 restrict_adm2_to_master_states = restrict_boundaries_to_master_states
 
 
+def find_missing_boundary_states(
+    boundary_df: pd.DataFrame,
+    master_df: pd.DataFrame,
+    *,
+    boundary_state_col: str,
+    master_state_col: str,
+    alias_fn: Callable[[str], str],
+) -> list[str]:
+    """Return master states that have no corresponding boundary rows after normalization."""
+    if boundary_state_col not in boundary_df.columns or master_state_col not in master_df.columns:
+        return []
+
+    master_states = (
+        master_df[master_state_col]
+        .astype(str)
+        .map(alias_fn)
+        .dropna()
+        .tolist()
+    )
+    boundary_states = set(
+        boundary_df[boundary_state_col]
+        .astype(str)
+        .map(alias_fn)
+        .dropna()
+        .tolist()
+    )
+    missing_norm = [state for state in master_states if state and state not in boundary_states]
+    if not missing_norm:
+        return []
+
+    missing_ordered: list[str] = []
+    seen: set[str] = set()
+    for raw_state, norm_state in zip(master_df[master_state_col].astype(str), master_df[master_state_col].astype(str).map(alias_fn)):
+        if not norm_state or norm_state in boundary_states or norm_state in seen:
+            continue
+        seen.add(norm_state)
+        missing_ordered.append(str(raw_state).strip())
+    return missing_ordered
+
+
 def merge_adm2_with_master(
     adm2_df: pd.DataFrame,
     master_df: pd.DataFrame,
@@ -227,6 +267,17 @@ def get_or_build_merged_for_index_cached(
         master_state_col=master_state_col,
         alias_fn=alias_fn,
     )
+    missing_states = find_missing_boundary_states(
+        boundary_c,
+        master_df,
+        boundary_state_col=adm2_state_col,
+        master_state_col=master_state_col,
+        alias_fn=alias_fn,
+    )
+    if missing_states and level in {"district", "block"}:
+        raise ValueError(
+            f"{level.title()} boundaries are missing master states after normalization: {missing_states}"
+        )
 
     # Merge based on level
     if level == "sub_basin":

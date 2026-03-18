@@ -55,6 +55,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 |---|---|---|
 | `tools/geodata/convert_blocks_shp_to_geojson.py` | Convert block boundaries shapefile → GeoJSON | `python -m tools.geodata.convert_blocks_shp_to_geojson --help` |
 | `tools/geodata/inspect_block_shapefile.py` | Inspect boundary shapefile/GeoJSON structure | `python -m tools.geodata.inspect_block_shapefile --help` |
+| `tools/geodata/build_blocks_geojson.py` | Rebuild the canonical `blocks_4326.geojson` from the source block shapefile with label QA | `python -m tools.geodata.build_blocks_geojson --help` |
 | `tools/geodata/build_district_subbasin_crosswalk.py` | Build the canonical district ↔ sub-basin crosswalk CSV from district and sub-basin GeoJSONs | `python -m tools.geodata.build_district_subbasin_crosswalk --help` |
 | `tools/geodata/build_block_subbasin_crosswalk.py` | Build the canonical block ↔ sub-basin crosswalk CSV from block and sub-basin GeoJSONs | `python -m tools.geodata.build_block_subbasin_crosswalk --help` |
 | `tools/geodata/build_district_basin_crosswalk.py` | Build the canonical district ↔ basin crosswalk CSV from district and basin GeoJSONs | `python -m tools.geodata.build_district_basin_crosswalk --help` |
@@ -173,6 +174,16 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - `IRT_DATA_DIR/processed/population_density/{state}/master_metrics_by_block.csv`
   - QA CSVs under `IRT_DATA_DIR/population/`
 - uses raster cell-center inclusion (`all_touched=False`) and canonical polygon area in `EPSG:6933`
+
+`tools/geodata/build_blocks_geojson.py` notes:
+- source shapefile:
+  - `IRT_DATA_DIR/Block_GH_WUP_POP R2025A _GHS_WUP/Block_GH_WUP_POP R2025A _GHS_WUP.shp`
+- canonical output:
+  - `IRT_DATA_DIR/blocks_4326.geojson`
+- QA outputs:
+  - `IRT_DATA_DIR/block_boundary_repair_summary.csv`
+  - `IRT_DATA_DIR/block_boundary_label_anomalies.csv`
+- refuses to publish a canonical block GeoJSON if suspicious admin-label corruption remains after canonicalization
 
 `tools/geodata/validate_aqueduct_workflow.py` notes:
 - writes per-metric validation bundles under:

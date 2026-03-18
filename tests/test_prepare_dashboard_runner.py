@@ -8,6 +8,7 @@ from tools.runs.prepare_dashboard import (
     DEFAULT_VALIDATION_TESTS,
     PlannedCommand,
     build_aqueduct_plan,
+    build_blocks_geojson_plan,
     build_climate_hazards_plan,
     build_command_plan,
     build_population_plan,
@@ -28,6 +29,7 @@ def test_aqueduct_bundle_builds_expected_default_steps() -> None:
     plan = build_aqueduct_plan(args)
     labels = [step.label for step in plan]
     assert labels == [
+        "blocks-geojson",
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
         "aqueduct-hydro-crosswalk",
@@ -95,7 +97,8 @@ def test_dashboard_package_combines_climate_aqueduct_and_pytest() -> None:
     )
     plan = build_command_plan(args)
     labels = [step.label for step in plan]
-    assert labels[0:4] == [
+    assert labels[0:5] == [
+        "blocks-geojson",
         "climate-compute:basin",
         "climate-compute:sub_basin",
         "climate-masters:basin",
@@ -108,8 +111,15 @@ def test_dashboard_package_combines_climate_aqueduct_and_pytest() -> None:
 def test_population_bundle_builds_expected_step() -> None:
     args = argparse.Namespace(overwrite=True, population_raster=None)
     plan = build_population_plan(args)
-    assert [step.label for step in plan] == ["population-admin-masters"]
-    assert plan[0].argv[1:] == ["-m", "tools.geodata.build_population_admin_masters", "--overwrite"]
+    assert [step.label for step in plan] == ["blocks-geojson", "population-admin-masters"]
+    assert plan[1].argv[1:] == ["-m", "tools.geodata.build_population_admin_masters", "--overwrite"]
+
+
+def test_blocks_geojson_step_builds_expected_command() -> None:
+    args = argparse.Namespace(overwrite=True)
+    plan = build_blocks_geojson_plan(args)
+    assert [step.label for step in plan] == ["blocks-geojson"]
+    assert plan[0].argv[1:] == ["-m", "tools.geodata.build_blocks_geojson", "--overwrite"]
 
 
 def test_execute_plan_dry_run_prints_commands_without_running() -> None:
