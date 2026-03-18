@@ -76,6 +76,24 @@ The runner refreshes the canonical block boundaries first:
 python -m tools.runs.prepare_dashboard blocks-geojson --overwrite
 ```
 
+### Build groundwater district masters
+
+```bash
+python -m tools.runs.prepare_dashboard groundwater --overwrite
+```
+
+Optional source and alias overrides:
+
+```bash
+python -m tools.runs.prepare_dashboard groundwater --groundwater-workbook /path/to/CentralReport1773820094787.xlsx --groundwater-alias-csv /path/to/groundwater_district_aliases.csv --overwrite
+```
+
+This bundle writes district-only masters for:
+- `gw_stage_extraction_pct`
+- `gw_future_availability_ham`
+- `gw_extractable_resource_ham`
+- `gw_total_extraction_ham`
+
 ### Prepare the dashboard package end to end
 
 ```bash
@@ -87,6 +105,7 @@ This bundle now includes:
 - climate hazard compute + master builds
 - Aqueduct prep + validation
 - population exposure master builds
+- groundwater district master builds
 
 Optional validation tests at the end:
 
@@ -162,6 +181,12 @@ python -m tools.geodata.build_blocks_geojson --help
 python -m tools.geodata.build_population_admin_masters --help
 ```
 
+### Groundwater
+
+```bash
+python -m tools.geodata.build_groundwater_district_masters --help
+```
+
 ### Tests
 
 ```bash
@@ -171,7 +196,7 @@ python -m pytest -q
 Targeted validation set used by the runner:
 
 ```bash
-python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aqueduct_baseline.py tests/test_aqueduct_admin_transfer.py tests/test_aqueduct_hydro_transfer.py tests/test_population_admin_masters.py tests/test_validate_aqueduct_workflow.py tests/test_metrics_registry.py tests/test_config.py tests/test_available_states.py tests/test_crosswalk_generator.py
+python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aqueduct_baseline.py tests/test_aqueduct_admin_transfer.py tests/test_aqueduct_hydro_transfer.py tests/test_groundwater_district_masters.py tests/test_population_admin_masters.py tests/test_validate_aqueduct_workflow.py tests/test_metrics_registry.py tests/test_config.py tests/test_available_states.py tests/test_crosswalk_generator.py
 ```
 
 ## Expected outputs
@@ -191,6 +216,10 @@ python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aquedu
 - block-boundary QA outputs under `IRT_DATA_DIR/block_boundary_*.csv`
 - district/block masters under `IRT_DATA_DIR/processed/population_{total,density}/{state}/`
 - QA bundles under `IRT_DATA_DIR/population/`
+
+### Groundwater
+- district masters under `IRT_DATA_DIR/processed/gw_*/{state}/`
+- alias/crosswalk QA outputs under `IRT_DATA_DIR/groundwater/`
 
 ## Notes
 

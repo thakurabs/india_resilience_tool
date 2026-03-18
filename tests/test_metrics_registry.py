@@ -148,3 +148,20 @@ def test_population_exposure_domain_is_admin_only() -> None:
 
     hydro_pillars = get_pillars(spatial_family="hydro", level="basin")
     assert "Exposure" not in hydro_pillars
+
+
+def test_groundwater_domain_is_admin_district_only() -> None:
+    admin_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="district")
+    assert admin_domains == ["Aqueduct Water Risk", "Groundwater Status & Availability"]
+    admin_metrics = set(
+        get_metrics_for_bundle("Groundwater Status & Availability", spatial_family="admin", level="district")
+    )
+    assert admin_metrics == {
+        "gw_stage_extraction_pct",
+        "gw_future_availability_ham",
+        "gw_extractable_resource_ham",
+        "gw_total_extraction_ham",
+    }
+
+    block_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="block")
+    assert block_domains == ["Aqueduct Water Risk"]

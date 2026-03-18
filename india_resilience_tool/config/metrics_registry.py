@@ -1619,6 +1619,110 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_levels": ("district", "block"),
         "rank_higher_is_worse": True,
     },
+    {
+        "name": "Stage of Ground Water Extraction",
+        "slug": "gw_stage_extraction_pct",
+        "label": "Stage of Ground Water Extraction",
+        "group": "water",
+        "value_col": "gw_stage_extraction_pct",
+        "periods_metric_col": "gw_stage_extraction_pct",
+        "units": "%",
+        "description": (
+            "2024-2025 GEC district snapshot of total stage of groundwater extraction."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "2024-2025",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_groundwater_district_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("2024-2025",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Net Annual Ground Water Availability for Future Use",
+        "slug": "gw_future_availability_ham",
+        "label": "Net Annual Ground Water Availability for Future Use",
+        "group": "water",
+        "value_col": "gw_future_availability_ham",
+        "periods_metric_col": "gw_future_availability_ham",
+        "units": "ham",
+        "description": (
+            "2024-2025 GEC district snapshot of net annual groundwater availability for future use."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "2024-2025",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_groundwater_district_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("2024-2025",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": False,
+    },
+    {
+        "name": "Annual Extractable Ground Water Resource",
+        "slug": "gw_extractable_resource_ham",
+        "label": "Annual Extractable Ground Water Resource",
+        "group": "water",
+        "value_col": "gw_extractable_resource_ham",
+        "periods_metric_col": "gw_extractable_resource_ham",
+        "units": "ham",
+        "description": (
+            "2024-2025 GEC district snapshot of annual extractable groundwater resource."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "2024-2025",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_groundwater_district_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("2024-2025",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": False,
+    },
+    {
+        "name": "Ground Water Extraction for All Uses",
+        "slug": "gw_total_extraction_ham",
+        "label": "Ground Water Extraction for All Uses",
+        "group": "water",
+        "value_col": "gw_total_extraction_ham",
+        "periods_metric_col": "gw_total_extraction_ham",
+        "units": "ha.m",
+        "description": (
+            "2024-2025 GEC district snapshot of total groundwater extraction for all uses."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "2024-2025",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_groundwater_district_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("2024-2025",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": True,
+    },
 ]
 
 ALL_METRICS_RAW: list[dict[str, Any]] = PIPELINE_METRICS_RAW + DASHBOARD_ONLY_METRICS_RAW
@@ -1774,6 +1878,12 @@ DOMAINS: dict[str, list[str]] = {
         "aq_seasonal_variability",
         "aq_water_depletion",
     ],
+    "Groundwater Status & Availability": [
+        "gw_stage_extraction_pct",
+        "gw_future_availability_ham",
+        "gw_extractable_resource_ham",
+        "gw_total_extraction_ham",
+    ],
 }
 
 # Domain display order for UI
@@ -1789,6 +1899,7 @@ DOMAIN_ORDER: list[str] = [
     "Temperature Variability",
     "Population Exposure",
     "Aqueduct Water Risk",
+    "Groundwater Status & Availability",
 ]
 
 PILLAR_DOMAINS: dict[str, list[str]] = {
@@ -1805,6 +1916,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
     ],
     "Bio-physical Hazards": [
         "Aqueduct Water Risk",
+        "Groundwater Status & Availability",
     ],
     "Exposure": [
         "Population Exposure",
@@ -1844,6 +1956,11 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
     "Population Exposure": (
         "Static population exposure layers derived from the 2025 population raster "
         "and aggregated onto canonical district and block units."
+    ),
+    "Groundwater Status & Availability": (
+        "District groundwater assessment layers from the 2024-2025 GEC workbook, "
+        "covering extraction stage, extractable resource, total extraction, and "
+        "future groundwater availability."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "

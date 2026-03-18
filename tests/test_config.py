@@ -99,3 +99,36 @@ def test_population_metrics_are_exposed_as_static_admin_layers() -> None:
         assert cfg["units"] == units
         assert "Population Exposure" in cfg["domains"]
         assert "Exposure" in cfg["pillars"]
+
+
+def test_groundwater_metrics_are_exposed_as_static_district_layers() -> None:
+    """Groundwater metrics should appear as fixed-snapshot district layers."""
+    from india_resilience_tool.config.variables import VARIABLES
+
+    for slug, label, units, worse_high in [
+        ("gw_stage_extraction_pct", "Stage of Ground Water Extraction", "%", True),
+        (
+            "gw_future_availability_ham",
+            "Net Annual Ground Water Availability for Future Use",
+            "ham",
+            False,
+        ),
+        ("gw_extractable_resource_ham", "Annual Extractable Ground Water Resource", "ham", False),
+        ("gw_total_extraction_ham", "Ground Water Extraction for All Uses", "ha.m", True),
+    ]:
+        cfg = VARIABLES[slug]
+        assert cfg["label"] == label
+        assert cfg["source_type"] == "external"
+        assert cfg["selection_mode"] == "static_snapshot"
+        assert cfg["fixed_scenario"] == "snapshot"
+        assert cfg["fixed_period"] == "2024-2025"
+        assert cfg["supported_scenarios"] == ["snapshot"]
+        assert cfg["supported_levels"] == ["district"]
+        assert cfg["supported_spatial_families"] == ["admin"]
+        assert cfg["supported_statistics"] == ["mean"]
+        assert cfg["supports_baseline_comparison"] is False
+        assert cfg["supports_scenario_comparison"] is False
+        assert cfg["units"] == units
+        assert cfg["rank_higher_is_worse"] is worse_high
+        assert "Groundwater Status & Availability" in cfg["domains"]
+        assert "Bio-physical Hazards" in cfg["pillars"]

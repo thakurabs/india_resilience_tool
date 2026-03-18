@@ -28,8 +28,15 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - map mode
 - Top-level taxonomy:
   - `Climate Hazards` for climate-model-derived heat, cold, rainfall, flood, drought, and variability layers
-  - `Bio-physical Hazards` for externally sourced physical hazard layers such as Aqueduct
+  - `Bio-physical Hazards` for externally sourced physical hazard layers such as Aqueduct and groundwater assessment
   - `Exposure` for static exposure layers such as population
+- Groundwater status onboarding:
+  - district-only metrics from the 2024-2025 GEC workbook
+  - Stage of Ground Water Extraction
+  - Net Annual Ground Water Availability for Future Use
+  - Annual Extractable Ground Water Resource
+  - Ground Water Extraction for All Uses
+  - fixed snapshot semantics: `snapshot`, `2024-2025`
 - Population exposure onboarding:
   - Total Population on district and block units
   - Population Density on district and block units
@@ -179,6 +186,12 @@ Place these in `IRT_DATA_DIR`:
 - `population/population_block_master_qa.csv` (optional QA for block population masters)
 - `population/population_district_vs_blocks_qa.csv` (optional district vs sum(blocks) consistency QA)
 - `population/population_national_summary.csv` (optional national raster-vs-admin population summary)
+- `CentralReport1773820094787.xlsx` (optional source workbook for groundwater district onboarding)
+- `groundwater/groundwater_summary.csv` (optional QA summary for groundwater onboarding)
+- `groundwater/groundwater_source_extract.csv` (optional normalized groundwater source extract)
+- `groundwater/groundwater_district_crosswalk.csv` (optional groundwater source-to-canonical district mapping)
+- `groundwater/groundwater_unmatched_districts.csv` (optional QA for unmatched groundwater districts)
+- `groundwater/groundwater_district_alias_template.csv` (optional template for manual groundwater district alias curation)
 
 All boundary GeoJSONs are expected in `EPSG:4326`.
 
@@ -272,6 +285,15 @@ processed/population_density/{state}/master_metrics_by_district.csv
 processed/population_density/{state}/master_metrics_by_block.csv
 ```
 
+Groundwater status metrics currently support direct district masters under:
+
+```text
+processed/gw_stage_extraction_pct/{state}/master_metrics_by_district.csv
+processed/gw_future_availability_ham/{state}/master_metrics_by_district.csv
+processed/gw_extractable_resource_ham/{state}/master_metrics_by_district.csv
+processed/gw_total_extraction_ham/{state}/master_metrics_by_district.csv
+```
+
 ## Common commands
 
 The canonical operational runner is now:
@@ -304,7 +326,7 @@ python -m tools.pipeline.build_master_metrics
 python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite
 ```
 
-This bundle now includes climate hazards, Aqueduct, and population exposure prep.
+This bundle now includes climate hazards, Aqueduct, population exposure, and groundwater prep.
 When block-level products are part of the run, the runner now refreshes the canonical
 `IRT_DATA_DIR/blocks_4326.geojson` first.
 
@@ -326,6 +348,20 @@ This aggregates the 2025 1 km population raster onto canonical district and bloc
 - `processed/population_total/{state}/master_metrics_by_block.csv`
 - `processed/population_density/{state}/master_metrics_by_district.csv`
 - `processed/population_density/{state}/master_metrics_by_block.csv`
+
+### Build groundwater district masters
+
+```bash
+python -m tools.runs.prepare_dashboard groundwater --overwrite
+python -m tools.geodata.build_groundwater_district_masters --overwrite
+```
+
+This parses the 2024-2025 GEC workbook, resolves source districts onto the canonical
+district GeoJSON through an explicit alias workflow, and writes:
+- `processed/gw_stage_extraction_pct/{state}/master_metrics_by_district.csv`
+- `processed/gw_future_availability_ham/{state}/master_metrics_by_district.csv`
+- `processed/gw_extractable_resource_ham/{state}/master_metrics_by_district.csv`
+- `processed/gw_total_extraction_ham/{state}/master_metrics_by_district.csv`
 
 ### Rebuild the canonical block boundaries
 
