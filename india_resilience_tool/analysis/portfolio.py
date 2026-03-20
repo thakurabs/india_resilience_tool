@@ -1,0 +1,554 @@
+# india_resilience_tool/analysis/portfolio.py
+"""
+Portfolio helpers for IRT.
+
+This module centralizes:
+- Normalization and keying functions
+- Add/remove/contains/clear operations
+- Building the multi-index portfolio comparison table
+
+This module is intentionally Streamlit-free: pass `session_state=st.session_state`
+from the app layer.
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
+"""
+
+from __future__ import annotations
+
+import difflib
+from typing import Any, Callable, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple
+
+import numpy as np
+import pandas as pd
+
+# -----------------------------------------------------------------------------
+# Session-state storage keys (kept as module-level constants for reuse)
+# -----------------------------------------------------------------------------
+KEY_DISTRICTS = "portfolio_districts"
+KEY_BLOCKS = "portfolio_blocks"
+KEY_SAVED_POINTS = "point_query_points"  # legacy key used elsewhere
+
+
+PortfolioItem = Mapping[str, Any]  # expects keys: "state", "district", optional "block"
+NormalizeFn = Callable[[str], str]
+
+
+def get_portfolio_storage_key(level: str) -> str:
+    """
+    Resolve the session_state list key used to store portfolio items.
+
+    Args:
+        level: "district" or "block" (any other value falls back to "district").
+
+    Returns:
+        Session-state key string, e.g. "portfolio_districts" or "portfolio_blocks".
+    """
+    return KEY_BLOCKS if str(level).strip().lower() == "block" else KEY_DISTRICTS
+
+
+# =============================================================================
+# Standalone Functions (for backward compatibility)
+# =============================================================================
+
+def portfolio_normalize(text: str, *, alias_fn: Callable[[str], str]) -> str:
+    """
+    Normalize a state/district/block name for robust comparison across sources.
+    """
+    norm = alias_fn(text)
+    return str(norm).replace(" ", "")
+
+
+def portfolio_key(
+    state_name: str,
+    district_name: str,
+    *,
+    normalize_fn: NormalizeFn,
+) -> tuple[str, str]:
+    """Normalized key used to compare/uniquify district portfolio items."""
+    return (normalize_fn(state_name), normalize_fn(district_name))
+
+
+def portfolio_key_block(
+    state_name: str,
+    district_name: str,
+    block_name: str,
+    *,
+    normalize_fn: NormalizeFn,
+) -> tuple[str, str, str]:
+    """Normalized key used to compare/uniquify block portfolio items."""
+    return (normalize_fn(state_name), normalize_fn(district_name), normalize_fn(block_name))
+
+
+def portfolio_add(
+    session_state: MutableMapping[str, Any],
+    state_name: str,
+    district_name: str,
+    *,
+    normalize_fn: NormalizeFn,
+    block_name: Optional[str] = None,
+    level: str = "district",
+    state_key: Optional[str] = None,
+) -> None:
+    """
+    Add a portfolio item if not already present.
+
+    Backward compatible:
+        portfolio_add(ss, state, district, normalize_fn=...)
+
+    For blocks:
+        portfolio_add(ss, state, district, block_name=block, level="block", normalize_fn=...)
+    """
+    level_norm = str(level).strip().lower()
+    storage_key = state_key or get_portfolio_storage_key(level_norm)
+
+    if not state_name or not district_name or district_name == "All":
+        return
+
+    if level_norm == "block":
+        if not block_name or str(block_name).strip() == "" or str(block_name).strip() == "All":
+            return
+
+    items = session_state.get(storage_key, [])
+    if not isinstance(items, list):
+        items = []
+
+    if level_norm == "block":
+        new_norm = portfolio_key_block(state_name, district_name, str(block_name), normalize_fn=normalize_fn)
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if portfolio_key_block(
+                str(item.get("state", "")),
+                str(item.get("district", "")),
+                str(item.get("block", "")),
+                normalize_fn=normalize_fn,
+            ) == new_norm:
+                return
+        items.append({"state": state_name, "district": district_name, "block": str(block_name)})
+        session_state[storage_key] = items
+        return
+
+    # district
+    new_norm = portfolio_key(state_name, district_name, normalize_fn=normalize_fn)
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        if portfolio_key(
+            str(item.get("state", "")),
+            str(item.get("district", "")),
+            normalize_fn=normalize_fn,
+        ) == new_norm:
+            return
+
+    items.append({"state": state_name, "district": district_name})
+    session_state[storage_key] = items
+
+
+def portfolio_remove(
+    session_state: MutableMapping[str, Any],
+    state_name: str,
+    district_name: str,
+    *,
+    normalize_fn: NormalizeFn,
+    block_name: Optional[str] = None,
+    level: str = "district",
+    state_key: Optional[str] = None,
+) -> None:
+    """
+    Remove a portfolio item.
+
+    Backward compatible:
+        portfolio_remove(ss, state, district, normalize_fn=...)
+
+    For blocks:
+        portfolio_remove(ss, state, district, block_name=block, level="block", normalize_fn=...)
+    """
+    level_norm = str(level).strip().lower()
+    storage_key = state_key or get_portfolio_storage_key(level_norm)
+
+    items = session_state.get(storage_key, [])
+    if not isinstance(items, list):
+        session_state[storage_key] = []
+        return
+
+    if level_norm == "block":
+        if not block_name:
+            return
+        norm = portfolio_key_block(state_name, district_name, str(block_name), normalize_fn=normalize_fn)
+        new_items: list[dict[str, str]] = []
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if portfolio_key_block(
+                str(item.get("state", "")),
+                str(item.get("district", "")),
+                str(item.get("block", "")),
+                normalize_fn=normalize_fn,
+            ) != norm:
+                new_items.append(
+                    {
+                        "state": str(item.get("state", "")),
+                        "district": str(item.get("district", "")),
+                        "block": str(item.get("block", "")),
+                    }
+                )
+        session_state[storage_key] = new_items
+        return
+
+    # district
+    norm = portfolio_key(state_name, district_name, normalize_fn=normalize_fn)
+    new_items2: list[dict[str, str]] = []
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        if portfolio_key(
+            str(item.get("state", "")),
+            str(item.get("district", "")),
+            normalize_fn=normalize_fn,
+        ) != norm:
+            new_items2.append(
+                {
+                    "state": str(item.get("state", "")),
+                    "district": str(item.get("district", "")),
+                }
+            )
+    session_state[storage_key] = new_items2
+
+
+def portfolio_contains(
+    session_state: Mapping[str, Any],
+    state_name: str,
+    district_name: str,
+    *,
+    normalize_fn: NormalizeFn,
+    block_name: Optional[str] = None,
+    level: str = "district",
+    state_key: Optional[str] = None,
+) -> bool:
+    """
+    Return True if item exists in portfolio.
+
+    Backward compatible:
+        portfolio_contains(ss, state, district, normalize_fn=...)
+
+    For blocks:
+        portfolio_contains(ss, state, district, block_name=block, level="block", normalize_fn=...)
+    """
+    level_norm = str(level).strip().lower()
+    storage_key = state_key or get_portfolio_storage_key(level_norm)
+
+    if not state_name or not district_name or district_name == "All":
+        return False
+
+    if level_norm == "block":
+        if not block_name or str(block_name).strip() == "" or str(block_name).strip() == "All":
+            return False
+
+    items = session_state.get(storage_key, [])
+    if not isinstance(items, list):
+        return False
+
+    if level_norm == "block":
+        norm = portfolio_key_block(state_name, district_name, str(block_name), normalize_fn=normalize_fn)
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if portfolio_key_block(
+                str(item.get("state", "")),
+                str(item.get("district", "")),
+                str(item.get("block", "")),
+                normalize_fn=normalize_fn,
+            ) == norm:
+                return True
+        return False
+
+    norm2 = portfolio_key(state_name, district_name, normalize_fn=normalize_fn)
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        if portfolio_key(
+            str(item.get("state", "")),
+            str(item.get("district", "")),
+            normalize_fn=normalize_fn,
+        ) == norm2:
+            return True
+    return False
+
+
+def portfolio_clear(
+    session_state: MutableMapping[str, Any],
+    *,
+    level: str = "district",
+    state_key: Optional[str] = None,
+) -> None:
+    """Clear all portfolio items for the given level."""
+    storage_key = state_key or get_portfolio_storage_key(level)
+    session_state[storage_key] = []
+
+
+def get_portfolio_unit_keys(
+    session_state: Mapping[str, Any],
+    normalize_fn: NormalizeFn,
+    *,
+    level: str = "district",
+    state_key: Optional[str] = None,
+) -> set:
+    """
+    Get normalized keys for all items in the portfolio.
+
+    Returns:
+        - level="district": set of (normalized_state, normalized_district)
+        - level="block": set of (normalized_state, normalized_district, normalized_block)
+    """
+    level_norm = str(level).strip().lower()
+    storage_key = state_key or get_portfolio_storage_key(level_norm)
+
+    portfolio = session_state.get(storage_key, [])
+    keys: set = set()
+
+    for item in portfolio:
+        if isinstance(item, Mapping):
+            state = str(item.get("state", "")).strip()
+            district = str(item.get("district", "")).strip()
+            block = str(item.get("block", "")).strip() if level_norm == "block" else ""
+        elif isinstance(item, (list, tuple)):
+            if level_norm == "block" and len(item) >= 3:
+                state, district, block = str(item[0]).strip(), str(item[1]).strip(), str(item[2]).strip()
+            elif level_norm != "block" and len(item) >= 2:
+                state, district = str(item[0]).strip(), str(item[1]).strip()
+                block = ""
+            else:
+                continue
+        else:
+            continue
+
+        if not state or not district:
+            continue
+
+        if level_norm == "block":
+            if not block:
+                continue
+            keys.add((normalize_fn(state), normalize_fn(district), normalize_fn(block)))
+        else:
+            keys.add((normalize_fn(state), normalize_fn(district)))
+
+    return keys
+
+
+# =============================================================================
+# Multi-Index Comparison Table Builder
+# =============================================================================
+
+def build_portfolio_multiindex_df(
+    *,
+    portfolio: Sequence[Any],
+    selected_slugs: Sequence[str],
+    variables: Mapping[str, Mapping[str, Any]],
+    index_group_labels: Mapping[str, str],
+    sel_scenario: str,
+    sel_period: str,
+    sel_stat: str,
+    load_master_and_schema_for_slug: Callable[[str], tuple[pd.DataFrame, Any, list[str], Any]],
+    resolve_metric_column: Callable[[pd.DataFrame, str, str, str, str], Optional[str]],
+    find_baseline_column_for_stat: Callable[[Sequence[Any], str, str], Optional[str]],
+    match_row_idx: Callable[..., Optional[int]],
+    compute_rank_and_percentile: Callable[..., tuple[Optional[int], Optional[float]]],
+    risk_class_from_percentile: Callable[[float], str],
+    normalize_fn: NormalizeFn,
+    sel_scenarios: Optional[Sequence[str]] = None,
+    level: str = "district",
+) -> pd.DataFrame:
+    """
+    Build the portfolio multi-index comparison table.
+
+    Notes:
+        - For level="district", items are (state, district).
+        - For level="block", items are (state, district, block).
+
+    Scenario comparison:
+        - When ``sel_scenarios`` is provided (e.g., ["ssp245", "ssp585"]),
+          the output includes a ``Scenario`` column and contains one row per
+          (unit × index × scenario).
+        - Baseline is always computed from the *historical* baseline column
+          via ``find_baseline_column_for_stat``. This means Δ and %Δ are
+          *scenario values vs historical baseline*.
+
+    Missing/invalid data behavior:
+        - If a unit row cannot be matched, or a required metric column is absent,
+          numeric outputs (Current value/Baseline/Δ/%Δ/Percentile) are NaN and
+          Rank/Risk class are left as (None/"Unknown").
+
+    The row match and ranking functions are injected (dependency injection).
+    For block mode, we attempt to call the injected functions with block-aware
+    arguments and fall back to the older district-only signatures if needed.
+    """
+    level_norm = str(level).strip().lower()
+    rows_out: list[dict[str, Any]] = []
+
+    # Determine scenario list (single by default)
+    if sel_scenarios is None:
+        scenario_list = [str(sel_scenario).strip()]
+        include_scenario_col = False
+    else:
+        scenario_list = [str(s).strip() for s in sel_scenarios if str(s).strip()]
+        if not scenario_list:
+            scenario_list = [str(sel_scenario).strip()]
+        include_scenario_col = True
+
+    # Cache per-slug master loads (the loader may already cache; this avoids re-calls)
+    master_cache: dict[str, tuple[pd.DataFrame, list[str]]] = {}
+
+    def _parse_item(item: Any) -> tuple[str, str, str]:
+        blk = ""
+        if isinstance(item, Mapping):
+            st = str(item.get("state", "")).strip()
+            dist = str(item.get("district", "")).strip()
+            if level_norm == "block":
+                blk = str(item.get("block", "")).strip()
+            return st, dist, blk
+
+        try:
+            tup = tuple(item)
+        except Exception:
+            return "", "", ""
+
+        if level_norm == "block":
+            if len(tup) < 3:
+                return "", "", ""
+            st, dist, blk = tup[0], tup[1], tup[2]
+            return str(st).strip(), str(dist).strip(), str(blk).strip()
+
+        if len(tup) < 2:
+            return "", "", ""
+        st, dist = tup[0], tup[1]
+        return str(st).strip(), str(dist).strip(), ""
+
+    for item in portfolio:
+        st_name, dist_name, blk_name = _parse_item(item)
+
+        for slug in selected_slugs:
+            cfg = variables.get(slug, {})
+            idx_label = cfg.get("label", str(slug))
+            idx_group = cfg.get("group", "other")
+            idx_group_label = index_group_labels.get(idx_group, str(idx_group).title())
+            registry_metric_i = str(cfg.get("periods_metric_col", "")).strip()
+
+            # Load master only once per slug
+            slug_s = str(slug)
+            if slug_s not in master_cache:
+                df_local, _, metrics_local, _ = load_master_and_schema_for_slug(slug_s)
+                master_cache[slug_s] = (df_local, list(metrics_local or []))
+            df_local, metrics_local = master_cache[slug_s]
+
+            # Determine the base metric name (used to resolve scenario/period columns)
+            used_metric = registry_metric_i
+            if not used_metric and metrics_local:
+                used_metric = str(metrics_local[0])
+
+            # Fuzzy fallback for the base metric name (handles minor naming differences)
+            if used_metric and metrics_local and used_metric not in metrics_local:
+                base_norm = normalize_fn(used_metric)
+                candidates = [m for m in metrics_local if base_norm and base_norm in normalize_fn(m)]
+                if not candidates:
+                    candidates = difflib.get_close_matches(used_metric, metrics_local, n=1, cutoff=0.6)
+                if candidates:
+                    used_metric = str(candidates[0])
+
+            # Resolve baseline column once (independent of scenario)
+            baseline_col = None
+            if used_metric and df_local is not None and not df_local.empty:
+                baseline_col = find_baseline_column_for_stat(df_local.columns, used_metric, sel_stat)
+
+            # Match the unit row once per (unit × slug)
+            idx_row = None
+            if df_local is not None and not df_local.empty:
+                if level_norm == "block":
+                    try:
+                        idx_row = match_row_idx(df_local, st_name, dist_name, blk_name)
+                    except TypeError:
+                        idx_row = match_row_idx(df_local, st_name, dist_name)
+                else:
+                    idx_row = match_row_idx(df_local, st_name, dist_name)
+
+            # Baseline value once per (unit × slug)
+            baseline = float("nan")
+            if idx_row is not None and baseline_col and baseline_col in df_local.columns:
+                try:
+                    baseline = float(pd.to_numeric(df_local.loc[idx_row, baseline_col], errors="coerce"))
+                except Exception:
+                    baseline = float("nan")
+
+            for scen in scenario_list:
+                # Defaults
+                value = float("nan")
+                delta_abs = float("nan")
+                delta_pct = float("nan")
+                rank_in_state: Optional[int] = None
+                percentile_in_state = float("nan")
+                risk_class = "Unknown"
+
+                metric_col = None
+                if used_metric:
+                    metric_col = resolve_metric_column(df_local, used_metric, scen, sel_period, sel_stat)
+
+                if (
+                    df_local is not None
+                    and not df_local.empty
+                    and idx_row is not None
+                    and metric_col
+                    and metric_col in df_local.columns
+                ):
+                    try:
+                        value = float(pd.to_numeric(df_local.loc[idx_row, metric_col], errors="coerce"))
+                    except Exception:
+                        value = float("nan")
+
+                    if not pd.isna(value) and not pd.isna(baseline):
+                        delta_abs = value - baseline
+                        if baseline != 0:
+                            delta_pct = (delta_abs / baseline) * 100.0
+
+                    # Rank/percentile: try block-aware kwargs, then fall back
+                    try:
+                        rank_in_state, percentile = compute_rank_and_percentile(
+                            df_local=df_local,
+                            st_name=st_name,
+                            metric_col=metric_col,
+                            value=value,
+                            district_name=dist_name,
+                            block_name=blk_name,
+                        )
+                    except TypeError:
+                        rank_in_state, percentile = compute_rank_and_percentile(
+                            df_local=df_local,
+                            st_name=st_name,
+                            metric_col=metric_col,
+                            value=value,
+                        )
+
+                    if percentile is not None:
+                        percentile_in_state = float(percentile)
+                        risk_class = risk_class_from_percentile(percentile_in_state)
+
+                row: dict[str, Any] = {
+                    "State": st_name,
+                    "District": dist_name,
+                    "Index": idx_label,
+                    "Group": idx_group_label,
+                    "Current value": value,
+                    "Baseline": baseline,
+                    "Δ": delta_abs,
+                    "%Δ": delta_pct,
+                    "Rank in state": rank_in_state,
+                    "Percentile": percentile_in_state,
+                    "Risk class": risk_class,
+                }
+                if level_norm == "block":
+                    row["Block"] = blk_name
+                if include_scenario_col:
+                    row["Scenario"] = scen
+
+                rows_out.append(row)
+
+    return pd.DataFrame(rows_out)

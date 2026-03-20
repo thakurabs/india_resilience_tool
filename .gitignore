@@ -48,7 +48,7 @@ Thumbs.db
 # --------------------------------
 # Data / outputs (generic)
 # --------------------------------
-data/
+# data/
 raw_data/
 processed/
 outputs/
@@ -65,9 +65,15 @@ temp/
 *.tif
 *.tiff
 *.zip
+*.pdf
 
 # --------------------------------
 # Project-specific directories (if they ever end up under repo)
 # --------------------------------
 r1i1p1f1/
 processed/
+
+# --------------------------------
+# Python files
+# --------------------------------
+mouse_nudge.py 

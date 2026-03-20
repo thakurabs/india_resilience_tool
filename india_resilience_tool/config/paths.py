@@ -6,7 +6,6 @@ This module is the single source of truth for:
 - DATA_DIR default behavior (and optional IRT_DATA_DIR override)
 - processed-root resolution semantics (including portfolio multi-index behavior)
 - pilot state/debug environment defaults
-- ADM2 (district) and ADM3 (block/subdistrict) boundary paths
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -59,7 +58,6 @@ class PathsConfig:
     data_dir: Path
     data_root: Path
     districts_path: Path
-    blocks_path: Path  # NEW: ADM3 block/subdistrict boundaries
     base_output_root: Path
 
 
@@ -95,7 +93,6 @@ def get_paths_config() -> PathsConfig:
         data_dir=data_dir,
         data_root=data_dir / "r1i1p1f1",
         districts_path=data_dir / "districts_4326.geojson",
-        blocks_path=data_dir / "blocks_4326.geojson",  # NEW
         base_output_root=data_dir / "processed",
     )
 
@@ -123,9 +120,6 @@ def debug_enabled_default() -> bool:
 
 
 ProcessedRootMode = Literal["single", "portfolio"]
-
-# NEW: Administrative level type
-AdminLevel = Literal["district", "block"]
 
 
 def resolve_processed_root(
@@ -172,37 +166,6 @@ def resolve_processed_root(
     return (data_dir / "processed" / slug).resolve()
 
 
-def get_boundary_path(level: AdminLevel) -> Path:
-    """
-    Get the boundary file path for a given administrative level.
-    
-    Args:
-        level: "district" for ADM2, "block" for ADM3/subdistrict
-        
-    Returns:
-        Path to the GeoJSON boundary file
-    """
-    cfg = get_paths_config()
-    if level == "block":
-        return cfg.blocks_path
-    return cfg.districts_path
-
-
-def get_master_csv_filename(level: AdminLevel) -> str:
-    """
-    Get the master CSV filename for a given administrative level.
-    
-    Args:
-        level: "district" or "block"
-        
-    Returns:
-        Filename string (e.g., "master_metrics_by_district.csv")
-    """
-    if level == "block":
-        return "master_metrics_by_block.csv"
-    return "master_metrics_by_district.csv"
-
-
 # Convenience constants matching legacy root-level paths.py exports
 _CFG = get_paths_config()
 REPO_ROOT: Path = _CFG.repo_root
@@ -210,5 +173,4 @@ PROJECTS_ROOT: Path = _CFG.projects_root
 DATA_DIR: Path = _CFG.data_dir
 DATA_ROOT: Path = _CFG.data_root
 DISTRICTS_PATH: Path = _CFG.districts_path
-BLOCKS_PATH: Path = _CFG.blocks_path  # NEW
 BASE_OUTPUT_ROOT: Path = _CFG.base_output_root

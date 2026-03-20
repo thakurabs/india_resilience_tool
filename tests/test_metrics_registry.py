@@ -1,0 +1,68 @@
+"""
+Unit tests for the shared metrics registry.
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
+"""
+
+from __future__ import annotations
+
+from india_resilience_tool.config.metrics_registry import (
+    METRICS_BY_SLUG,
+    PIPELINE_METRICS,
+    PIPELINE_METRICS_RAW,
+    build_registry_from_pipeline,
+    find_duplicate_slugs,
+    validate_registry_against_pipeline,
+)
+
+
+def test_pipeline_metrics_present() -> None:
+    assert isinstance(PIPELINE_METRICS_RAW, list)
+    assert len(PIPELINE_METRICS_RAW) > 0
+    assert len(PIPELINE_METRICS) == len(PIPELINE_METRICS_RAW)
+
+
+def test_default_periods_metric_col_matches_value_col() -> None:
+    for spec in PIPELINE_METRICS:
+        if spec.value_col:
+            assert spec.periods_metric_col == spec.value_col
+
+
+def test_duplicate_detection_is_stable() -> None:
+    # Do not rely on real registry contents having duplicates; validate the helper
+    # against a small synthetic list.
+    pipeline = [
+        {"slug": "a", "value_col": "a_val"},
+        {"slug": "b", "value_col": "b_val"},
+        {"slug": "a", "value_col": "a_val"},
+        {"slug": ""},  # ignored
+        {},  # ignored
+    ]
+    dupes = find_duplicate_slugs(pipeline)
+    assert dupes == ["a"]
+
+
+def test_validate_registry_against_pipeline_reports_duplicates_but_no_mismatch() -> None:
+    pipeline = [
+        {"slug": "x", "name": "X", "var": "tas", "value_col": "x_val"},
+        {"slug": "y", "name": "Y", "var": "tas", "value_col": "y_val"},
+        {"slug": "x", "name": "X duplicate", "var": "tas", "value_col": "x_val"},
+    ]
+    reg = build_registry_from_pipeline(pipeline)
+    issues = validate_registry_against_pipeline(reg, pipeline)
+    assert any("Duplicate pipeline metric slugs detected" in s for s in issues)
+    assert not any("periods_metric_col" in s and "value_col" in s for s in issues)
+
+
+def test_wbd_metrics_registered() -> None:
+    assert "wbd_le_3" in METRICS_BY_SLUG
+    assert "wbd_le_6" in METRICS_BY_SLUG
+
+    severe = METRICS_BY_SLUG["wbd_le_3"]
+    humid = METRICS_BY_SLUG["wbd_le_6"]
+
+    assert severe.compute == "wet_bulb_depression_days_le_threshold_stull"
+    assert humid.compute == "wet_bulb_depression_days_le_threshold_stull"
+    assert severe.value_col == "wbd_le_3_days"
+    assert humid.value_col == "wbd_le_6_days"

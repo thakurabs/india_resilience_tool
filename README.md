@@ -1,173 +1,430 @@
-````markdown
-# IRT Climate Pipeline (Prototype)
+# India Resilience Tool (IRT)
 
-This repository contains the code used to:
+A Streamlit-based dashboard for exploring climate resilience metrics across **Indian administrative units at two levels**:
 
-1. **Download** downscaled daily climate model data from NASA NEX-GDDP.
-2. **Pre-process** the downloaded NetCDF data for a region of interest (e.g. India / Telangana).
-3. **Compute climate indices** and post-process them into district-level CSV files.
-4. **Visualize** the results using a Streamlit dashboard.
+- **Districts (ADM2)**
+- **Blocks / Sub-districts (ADM3)**
 
-> **Note:** This repo is intentionally **code-only**. Raw and processed data
-> (e.g. NetCDF files, large CSVs) live outside the repo and are not tracked by Git.
+The tool visualizes **ensemble climate model outputs** and derived indices (temperature and rainfall), enabling comparison across **scenarios** and **time periods**, plus portfolio-style comparison of multiple districts **or blocks**.
+
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
+![Streamlit](https://img.shields.io/badge/streamlit-1.51.0-red.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 ---
 
-## 1. Environment
+## Features
 
-- Python: **3.10**
-- Conda environment name: **`irt`**
+### Core exploration
+- **Admin level toggle**: District ↔ Block
+- **Risk domain selection (Map View ribbon)**: Choose from 8 thematic bundles (plus an optional advanced drought bundle)
+- **Interactive Map View**: Choropleth visualization with hover highlight + tooltip
+- **Rankings Table**:
+  - District-wise rankings (ADM2)
+  - Block-wise rankings (ADM3)
+  - Risk classification + percentiles
+- **Details panel (Climate Profile)**:
+  - Risk summary
+  - Scenario comparison (period-mean)
+  - Trend over time (ensemble yearly series)
+  - Case study export (single district, multi-index PDF/ZIP)
+  - Right panel scrolls independently (map/ribbon stay visible) and can be collapsed to a narrow rail.
 
-Create the environment using the provided `irt_env.yml`:
+### Metric selection ribbon (above the map)
+
+In **Map View**, the controls that determine what you see on the choropleth live in a compact **ribbon directly above the map** (replacing the old “selected metric / scenario / period / stat” summary text).
+
+The ribbon includes:
+
+- **Risk domain (bundle)**
+- **Metric (index)**
+- **Scenario**
+- **Period**
+- **Statistic** (mean/median only)
+- **Map mode** (absolute vs change from 1990–2010 baseline)
+
+All ribbon fields start with a placeholder (`— Select —`) to encourage deliberate selection. The map renders once the required ribbon fields are chosen. **Geography options** (available states/districts/blocks) are populated after you choose a metric, because the processed-root depends on the metric slug.
+
+Metrics are organized into **thematic bundles** for easier navigation:
+
+| Bundle | Metrics | Focus |
+|--------|---------:|-------|
+| Heat Risk | 14 | Extreme heat, heatwaves, hot days/nights, persistence. |
+| Heat Stress | 5 | Wet-bulb temperature and wet-bulb day thresholds (heat stress). |
+| Cold Risk | 8 | Cold extremes: frost days, cold nights, cold spells. |
+| Agriculture & Growing Conditions | 4 | Growing season and temperature context for crops. |
+| Flood & Extreme Rainfall Risk | 6 | Heavy rainfall intensity, very wet days, wet spells. |
+| Rainfall Totals & Typical Wetness | 3 | Annual totals, rainy days, typical wetness. |
+| Drought Risk | 3 | Dry spell length and SPI-6 drought indicators. |
+| Temperature Variability | 2 | Daily/annual temperature range and variability. |
+| Drought Risk (Advanced) | 9 | SPI-3/6/12 indices and severity counts (optional). |
+
+> Note: **Drought Risk (Advanced)** is an optional bundle (not shown by default in the UI).
+
+> **Wet-bulb (Heat Stress):** Wet-bulb indices (`twb_*`, `wbd_*`) are grouped under the **Heat Stress** bundle.
+
+**Single-focus mode**: use the **ribbon** to select a risk domain, then choose a metric within that domain.
+
+**Portfolio mode**: metric selection for portfolio comparison remains in the **Portfolio panel** (bundle multi-select → auto-expand to metrics, with optional manual refinement).
+
+### Portfolio mode (districts and blocks)
+Portfolio mode exists at **both** admin levels:
+
+- **Multi-district portfolio**: build and compare sets of districts (portfolios can span multiple states)
+- **Multi-block portfolio**: build and compare sets of blocks (portfolios can span multiple states; switch state to add units)
+
+You can add units to your portfolio in three ways (same UX in district and block modes):
+
+**From the Map**
+- Click a district/block on the choropleth map
+- Use the "+ Add to portfolio" control that appears below the map
+- Portfolio units are highlighted (e.g., blue borders)
+
+**From the Rankings Table**
+- Switch to Rankings view
+- Select rows to add (checkboxes / editor column)
+- Click "Add checked … to portfolio"
+- Units already in portfolio show Yes in "In portfolio"
+
+**By Coordinates (Point Selection)**
+- Use the "Add by Location" panel (single + batch)
+- Preview which district/block contains the point
+- Add to portfolio or show markers on the map
+
+In the right-side Portfolio panel, use:
+- **Compare**: summary strip + comparison table (updates live)
+- **Add units**: coordinate-based unit lookup and saved points
+
+### Portfolio comparison
+Once you have items in your portfolio:
+- Select one or more **risk domains** to compare
+- Metrics from selected domains are automatically included
+- Optional: manually refine which metrics to include (under **Advanced metrics**)
+- Table auto-rebuilds when portfolio or selection changes
+- A summary strip shows unit/state/metric counts (and basic risk-class distribution)
+- Choose **Scenario mode**:
+  - **Single scenario**: uses the global scenario selector
+  - **Compare scenarios**: expands results across scenarios (table + charts)
+- Results are organized as tabs:
+  - **Table**: scenario results are shown **side-by-side** (no long view) for a selected comparator (default: **Risk class**); download the displayed table as CSV
+  - **Visualizations**: charts render when you open the tab; visualizations are **percentile-based with risk-class coloring** (Very Low → Very High), including scenario panels and robust risk (min percentile)
+
+---
+
+## Quick Start
+
+### Prerequisites
+- Python 3.10+
+- Processed climate data (see [Data Setup](#data-setup))
+
+### Installation
 
 ```bash
-conda env create -f irt_env.yml -n irt
+# Clone the repository
+git clone https://github.com/thakurabs/india_resilience_tool.git
+cd india_resilience_tool
+```
+
+**Option 1: Conda (recommended)**
+
+```bash
+conda env create -f environment.yml
 conda activate irt
-````
+```
 
-If the environment already exists:
+`pip` / `venv` installs are not supported for this repo (the geospatial stack is best installed via `conda-forge`).
+
+Legacy exports:
+- `environment.freeze.yml` and `requirements.freeze.txt` are kept for reference only (non-portable).
+
+### Running the dashboard
 
 ```bash
-conda activate irt
+streamlit run main.py
+```
+
+Open in a browser: `http://localhost:8501`
+
+Alternative (supported):
+
+```bash
+streamlit run india_resilience_tool/app/main.py
+```
+
+--- 
+
+## Data Setup
+
+### Required boundary files (EPSG:4326)
+
+Place these in `DATA_DIR` (configured in `paths.py`, or overridden via `IRT_DATA_DIR`):
+
+1. **District boundaries**: `districts_4326.geojson` (ADM2)
+2. **Block boundaries**: `blocks_4326.geojson` (ADM3)
+
+> Block mode requires `blocks_4326.geojson`.
+
+### Processed outputs directory structure
+
+Processed artifacts are organized **by index slug** (e.g., `tas_gt32`) and state.
+
+```
+DATA_DIR/
+├── districts_4326.geojson
+├── blocks_4326.geojson
+└── processed/
+    └── {index_slug}/                 # e.g., tas_gt32
+        └── {state}/                  # e.g., Telangana
+            ├── master_metrics_by_district.csv
+            ├── master_metrics_by_block.csv
+            ├── state_model_averages_district.csv
+            ├── state_ensemble_stats_district.csv
+            ├── state_yearly_model_averages_district.csv
+            ├── state_yearly_ensemble_stats_district.csv
+            ├── state_model_averages_block.csv
+            ├── state_ensemble_stats_block.csv
+            ├── state_yearly_model_averages_block.csv
+            ├── state_yearly_ensemble_stats_block.csv
+            ├── districts/
+            │   ├── {district}/{model}/{scenario}/
+            │   │   ├── {district}_yearly.csv
+            │   │   └── {district}_periods.csv
+            │   └── ensembles/{district}/{scenario}/
+            │       └── {district}_yearly_ensemble.csv
+            └── blocks/
+                ├── {district}/{block}/{model}/{scenario}/
+                │   ├── {block}_yearly.csv
+                │   └── {block}_periods.csv
+                └── ensembles/{district}/{block}/{scenario}/
+                    └── {block}_yearly_ensemble.csv
+```
+
+Notes:
+- Windows may show `.csv` as "Microsoft Excel CSV"; they're normal CSVs.
+- The dashboard uses **master metrics** for maps/rankings and **ensemble yearly** files for trends.
+- After updating to the level-specific state-summary contract, rebuild masters with `python -m tools.pipeline.build_master_metrics` so the new `*_district.csv` and `*_block.csv` state files exist.
+
+### Building master CSVs (district + block)
+
+```bash
+python -m tools.pipeline.build_master_metrics
+```
+
+Or use the dashboard's "Rebuild now" control if exposed in your branch.
+
+---
+
+## Usage Guide
+
+### Admin level selection
+Use the left sidebar toggle:
+- **District**: explore districts and build district portfolios
+- **Block**: explore blocks and build block portfolios
+
+### Metric selection (Map View ribbon)
+
+The **Map View ribbon** (above the map) controls what is visualized. The dashboard uses placeholder-first selection (`— Select —`) and will prompt you until the required fields are chosen.
+
+Recommended order:
+
+1. **Choose Analysis focus** in the left sidebar (required to render the map).
+2. In the **ribbon above the map**, select:
+   - **Risk domain** → **Metric**
+3. Once a metric is selected, complete the remaining ribbon fields:
+   - **Scenario**, **Period**, **Statistic** (mean/median), **Map mode**
+4. In the left sidebar **Geography & analysis focus** panel, select:
+   - **State** (and District/Block when applicable)
+
+Changing any ribbon field triggers a rerun and the map updates accordingly. If you see an info message asking you to complete ribbon selections, it means one or more fields are still set to the placeholder.
+
+### Analysis modes
+Each admin level supports:
+1. **Single focus**: explore one district/block at a time
+2. **Portfolio focus**:
+   - Multi-district portfolio
+   - Multi-block portfolio
+
+### Portfolio comparison (bundle-first selection)
+
+In portfolio mode, you can select metrics by risk domain:
+
+1. **Select risk domains**: Choose one or more bundles (e.g., "Heat Risk" + "Drought Risk")
+2. **Auto-expansion**: All metrics from selected bundles are included automatically
+3. **Optional refinement**: Check "Manually refine metric selection" to add/remove individual metrics
+4. **View included metrics**: Expand the "View X included metrics" section to see what's selected
+
+### Trend over time (yearly series)
+The Trend panel looks for **ensemble yearly** time-series:
+
+- District trend: `districts/ensembles/{district}/{scenario}/{district}_yearly_ensemble.csv`
+- Block trend: `blocks/ensembles/{district}/{block}/{scenario}/{block}_yearly_ensemble.csv`
+
+Some ensemble-yearly CSVs may not include identifier columns (e.g., `state`, `district`, `block`). The loader injects missing identifiers from the path context so filtering stays consistent in-memory.
+
+If Trend shows "No yearly time-series available…":
+- confirm the `*_yearly_ensemble.csv` exists under the `ensembles/` path
+- confirm it contains `year` and at least one usable value column (commonly `ensemble_mean`, `mean`, or `value`)
+
+---
+
+## Configuration
+
+### Environment variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `IRT_PILOT_STATE` | `Telangana` | Default state to load |
+| `IRT_DATA_DIR` | (from `paths.py`) | Base data directory for boundary + processed |
+| `IRT_PROCESSED_ROOT` | `DATA_DIR/processed/{index}` | Processed data location override |
+| `IRT_DEBUG` | `0` | Enable debug output (1=on) |
+
+### Data directory
+Edit `paths.py` to set `DATA_DIR`, or set `IRT_DATA_DIR`.
+
+```python
+DATA_DIR = Path("/path/to/your/data")
 ```
 
 ---
 
-## 2. Data locations (on disk)
-
-These paths are **local** to the primary development machine and should be
-adapted as needed on other systems. A typical layout is:
-
-* Raw NEX-GDDP data (subset for India / region):
-
-  * `D:\projects\irt\r1i1p1f1\`
-* Processed outputs (intermediate and final CSVs):
-
-  * `D:\projects\irt\processed\...`
-* District polygons / GeoJSON:
-
-  * `D:\projects\irt\districts_4326.geojson` (or equivalent path)
-
-These directories are **not** part of the Git repo and should not be added to Git.
-
----
-
-## 3. Main scripts
-
-* `nex_india_subset_download_s3_v1.py`
-  Downloads and subsets NASA NEX-GDDP data for the region of interest.
-  Writes NetCDF files into the raw data directory (e.g. `D:\projects\irt\r1i1p1f1\`).
-
-* `compute_indices_v1.py`
-  Reads the downloaded NetCDF files, computes climate indices, and writes
-  district-level CSVs to the processed directory (e.g. `D:\projects\irt\processed\...`).
-
-* `avg_days_above_32degC.py`
-  Utility script for computing “days above 32°C” metrics, typically at district level.
-
-* `build_master_metrics.py`
-  Post-processes index CSVs into master tables that are consumed by the dashboard.
-
-* `build_all_csv.ps1`
-  PowerShell helper to run a sequence of CSV-building steps (optional convenience).
-
-* `climdex_dashboard_v2.py`
-  Streamlit app to explore the computed indices via an interactive dashboard.
-
----
-
-## 4. Typical workflow
-
-From the repository root (e.g. `D:\projects\irt_v1\`):
-
-### 4.1 Download NEX-GDDP data
-
-```bash
-conda activate irt
-python nex_india_subset_download_s3_v1.py
-```
-
-This populates the raw data directory (e.g. `D:\projects\irt\r1i1p1f1\`).
-
-### 4.2 Compute climate indices
-
-```bash
-python compute_indices_v1.py
-```
-
-This reads the NetCDF data and writes district-level CSVs into
-`D:\projects\irt\processed\...` (or equivalent).
-
-### 4.3 Build master metrics CSVs
-
-Either run the PowerShell helper:
-
-```powershell
-.\build_all_csv.ps1
-```
-
-or directly call:
-
-```bash
-python build_master_metrics.py
-```
-
-This step produces aggregated “master” CSV files that the dashboard will read.
-
-### 4.4 Run the Streamlit dashboard
-
-```bash
-streamlit run climdex_dashboard_v2.py --server.address 0.0.0.0 --server.port 8501
-```
-
-On the same machine you can open:
+## Project Structure (high level)
 
 ```text
-http://localhost:8501
+india_resilience_tool/
+├── analysis/
+│   ├── AGENTS.md
+│   ├── __init__.py
+│   ├── metrics.py
+│   ├── portfolio.py
+│   └── timeseries.py
+├── app/
+│   ├── AGENTS.md
+│   ├── __init__.py
+│   ├── adm2_cache.py
+│   ├── geography.py
+│   ├── runtime.py
+│   ├── map_pipeline.py
+│   ├── main.py
+│   ├── perf.py
+│   ├── point_selection_ui.py
+│   ├── portfolio_multistate.py
+│   ├── portfolio_ui.py
+│   ├── sidebar.py
+│   ├── state.py
+│   └── views/
+│       ├── __init__.py
+│       ├── details_panel.py
+│       ├── map_view.py
+│       ├── rankings_view.py
+│       └── state_summary_view.py
+├── compute/
+│   └── tests/
+│       └── test_spi_adapter.py
+├── data/
+│   ├── __init__.py
+│   ├── adm2_loader.py
+│   ├── adm3_loader.py
+│   ├── discovery.py
+│   ├── master_loader.py
+│   └── merge.py
+├── utils/
+│   ├── __init__.py
+│   ├── naming.py
+│   └── processed_io.py
+└── viz/
+    ├── AGENTS.md
+    ├── __init__.py
+    ├── charts.py
+    ├── colors.py
+    ├── exports.py
+    ├── formatting.py
+    ├── style.py
+    └── tables.py
+
+Root files and docs:
+├── notebooks/
+├── tools/
+└── docs/
+    ├── HANDOFF.md
+    ├── dead_code_candidate_report.md
+    ├── functionality_contract.md
+    ├── manual_smoke_test.md
+    ├── module_responsibility_map.md
+    └── refactor_acceptance.md
 ```
 
-From another machine on the same network, use:
+For detailed module documentation, see [MANIFEST.md](MANIFEST.md).
 
-```text
-http://<your-ipv4-address>:8501
+
+## Development
+
+### Running tests
+
+```bash
+python -m pytest -q
+python -m pytest --cov=india_resilience_tool
 ```
+
+### Code style
+
+```bash
+black india_resilience_tool/
+ruff check india_resilience_tool/
+mypy india_resilience_tool/
+```
+
+### Adding a new metric
+
+1. Add metric definition to `india_resilience_tool/config/metrics_registry.py` in `PIPELINE_METRICS_RAW`
+2. Add the slug to appropriate bundle(s) in `BUNDLES`
+3. Run validation: `python -m india_resilience_tool.config.metrics_registry`
+4. Ensure processed data exists for the new metric
+
+### Adding a new bundle
+
+1. Add bundle to `BUNDLES` dict in `india_resilience_tool/config/metrics_registry.py`
+2. Add bundle name to `BUNDLE_ORDER` list
+3. Add description to `BUNDLE_DESCRIPTIONS` dict
+4. Run validation: `python -m india_resilience_tool.config.metrics_registry` to ensure all slugs exist
 
 ---
 
-## 5. Repository layout
+## Changelog (high level)
 
-A minimal layout for this repo is:
+### v2.4 — Map-top metric selection ribbon (2026-02)
+- Moved Map View controls into a **ribbon above the map**: risk domain, metric, scenario, period, statistic, and map mode
+- Added **placeholder-first** selection (`— Select —`) with safe gating (map renders only after required choices)
+- Sidebar expanders are **user-controlled** (auto-collapse removed)
 
-```text
-.
-├─ climdex_dashboard_v2.py
-├─ compute_indices_v1.py
-├─ avg_days_above_32degC.py
-├─ nex_india_subset_download_s3_v1.py
-├─ build_master_metrics.py
-├─ build_all_csv.ps1
-├─ irt_env.yml
-├─ districts_4326.geojson        # if version-controlled; optional
-├─ README.md
-└─ .gitignore
-```
+### v2.3 — Thematic bundles + bundle-first selection (2026-01)
+- Added thematic bundles organizing metrics by risk domain (Heat Risk, Heat Stress, etc.)
+- Sidebar now uses **bundle → metric** two-step selection
+- Portfolio comparison supports **bundle multi-select** with auto-expansion
+- Optional manual refinement for fine-grained metric selection
+- New session state keys: `selected_bundle`, `portfolio_bundle_selection`, `portfolio_manual_refinement`
 
-Large data directories such as `r1i1p1f1\` and `processed\` are intentionally
-kept **outside** this repository.
+### v2.2 — Block-level visualization + portfolio parity (2026-01)
+- Added **ADM3 Block** support across map, rankings, and portfolio comparison.
+- Block rankings table now supports **add-to-portfolio** with the same UX as district mode.
+- Trend over time supports **block ensemble yearly** series when present.
+- Time-series loader injects missing identifiers (e.g., state) for consistent filtering.
+
+### v2.1 — Portfolio UX improvements (2024-12)
+- Add districts from map clicks, rankings table, and coordinates
+- Batch coordinates + saved points
+- Auto-rebuilding comparison table
+
+### v2.0 — Modular refactor (2024-12)
+- Refactored from monolithic dashboard to modular structure
 
 ---
 
-## 6. Notes & future work
+## License
+MIT License — see [LICENSE](LICENSE) for details.
 
-* Replace hard-coded paths (e.g. `D:\projects\irt\...`) with a small config file
-  so different users/machines can point to their own data directories.
-* Add simple consistency checks for the generated CSVs (e.g. row counts, basic
-  validity checks) and turn them into lightweight tests.
-* Add a basic GitHub Actions workflow to:
+---
 
-  * set up Python 3.10
-  * create a minimal environment
-  * run import checks and very fast tests that do not require large data downloads.
+## Contact
 
-```
-```
+**Author:** Abu Bakar Siddiqui Thakur  
+**Email:** absthakur@resilience.org.in

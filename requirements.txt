@@ -1,0 +1,9 @@
+# IRT is conda-first (portable + supports the geospatial stack cleanly).
+#
+# Install (recommended):
+#   conda env create -f environment.yml
+#   conda activate irt
+#
+# Notes:
+# - The legacy exported freeze has been kept as `requirements.freeze.txt` for reference only.
+# - `pip install -r requirements.txt` is intentionally not a supported install path.
