@@ -346,6 +346,17 @@ def _write_csv(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
     df.to_csv(path, index=False)
 
 
+def _write_master_table(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
+    """Write a runtime master table as CSV plus a Parquet companion."""
+    parquet_path = path.with_suffix(".parquet")
+    if not overwrite:
+        existing = [str(p) for p in (path, parquet_path) if p.exists()]
+        if existing:
+            raise FileExistsError(f"Output already exists (pass --overwrite): {', '.join(existing)}")
+    _write_csv(df, path, overwrite=True)
+    df.to_parquet(parquet_path, index=False)
+
+
 def build_cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build Aqueduct hydro master CSVs on SOI basin/sub-basin units.")
     parser.add_argument(
@@ -456,8 +467,8 @@ def main(argv: list[str] | None = None) -> int:
         basin_qa_path = aqueduct_dir / f"{metric_slug}_basin_master_qa.csv"
         subbasin_qa_path = aqueduct_dir / f"{metric_slug}_subbasin_master_qa.csv"
 
-        _write_csv(basin_master_df, basin_master_path, overwrite=bool(args.overwrite))
-        _write_csv(subbasin_master_df, subbasin_master_path, overwrite=bool(args.overwrite))
+        _write_master_table(basin_master_df, basin_master_path, overwrite=bool(args.overwrite))
+        _write_master_table(subbasin_master_df, subbasin_master_path, overwrite=bool(args.overwrite))
         _write_csv(basin_qa_df, basin_qa_path, overwrite=bool(args.overwrite))
         _write_csv(subbasin_qa_df, subbasin_qa_path, overwrite=bool(args.overwrite))
 

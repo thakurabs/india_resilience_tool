@@ -48,6 +48,10 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - Aqueduct water depletion on SOI basin, SOI sub-basin, district, and block units
   - native Aqueduct scenarios: `historical`, `bau`, `opt`, `pes`
 - Map view and rankings table for all four levels
+- Fine-grain performance guards:
+  - `Admin -> Block` requires a selected state before rendering map or rankings
+  - `Hydro -> Sub-basin` requires a selected basin before rendering map or rankings
+  - nationwide overview remains available at `District` and `Basin`
 - Right-side details panel with:
   - risk or metric summary
   - trend over time (when yearly source files exist)
@@ -130,6 +134,10 @@ streamlit run india_resilience_tool/app/main.py
 ```
 
 Open: `http://localhost:8501`
+
+Performance note:
+- runtime prefers `.parquet` master companions when they exist next to the legacy `.csv` masters
+- the canonical master builders now emit both formats for faster warm dashboard reads
 
 ## Data setup
 

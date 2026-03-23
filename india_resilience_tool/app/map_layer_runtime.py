@@ -10,7 +10,6 @@ map object for the current selection by:
 
 from __future__ import annotations
 
-import copy
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Tuple
 
@@ -19,11 +18,14 @@ from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_SUBBASIN_RENDER,
 )
 
+
 def build_folium_map_for_selection(
     *,
     level: str,
     merged: Any,
     display_gdf: Any,
+    session_state: Any,
+    render_signature: Tuple[Any, ...],
     selected_state: str,
     selected_district: str,
     selected_basin: str,
@@ -54,6 +56,7 @@ def build_folium_map_for_selection(
 ) -> Any:
     from india_resilience_tool.app.geo_cache import (
         build_adm2_geojson_by_state,
+        build_adm3_geojson_by_district,
         build_adm3_geojson_by_state,
         build_basin_geojson_all,
         build_basin_geojson_by_basin,
@@ -66,11 +69,23 @@ def build_folium_map_for_selection(
     from india_resilience_tool.viz.folium_featurecollection import (
         build_geojson_tooltip,
         build_props_map_from_gdf,
+        clone_featurecollection_for_patch,
         ensure_geojson_by_state_has_all,
         filter_fc_by_district,
         filter_fc_by_feature_keys,
         patch_fc_properties,
+        props_map_signature,
     )
+
+    def _empty_fc() -> dict[str, Any]:
+        return {"type": "FeatureCollection", "features": []}
+
+    def _patched_fc_cache() -> dict[tuple[Any, ...], dict[str, Any]]:
+        cache = session_state.get("_patched_fc_cache")
+        if not isinstance(cache, dict):
+            cache = {}
+            session_state["_patched_fc_cache"] = cache
+        return cache
 
     level_norm = str(level).strip().lower()
     if level_norm not in {"district", "block", "basin", "sub_basin"}:
@@ -79,6 +94,7 @@ def build_folium_map_for_selection(
     # -------------------------
     # GeoJSON-by-state cache (geometry cached; properties patched per rerun)
     # -------------------------
+    geojson_signature: tuple[Any, ...]
     if level_norm == "sub_basin":
         subbasin_mtime = float(subbasin_geojson_path.stat().st_mtime)
         if selected_basin != "All":
@@ -93,6 +109,7 @@ def build_folium_map_for_selection(
                 mtime=subbasin_mtime,
                 tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
             )
+        geojson_signature = ("sub_basin", subbasin_mtime, alias_fn(selected_basin), alias_fn(selected_subbasin))
     elif level_norm == "basin":
         basin_mtime = float(basin_geojson_path.stat().st_mtime)
         if selected_basin != "All":
@@ -107,13 +124,29 @@ def build_folium_map_for_selection(
                 mtime=basin_mtime,
                 tolerance=SIMPLIFY_TOL_BASIN_RENDER,
             )
+        geojson_signature = ("basin", basin_mtime, alias_fn(selected_basin))
     elif level_norm == "block":
         adm3_mtime = float(adm3_geojson_path.stat().st_mtime)
-        geojson_by_state = build_adm3_geojson_by_state(
-            path=str(adm3_geojson_path),
-            tolerance=simplify_tolerance_adm3,
-            mtime=adm3_mtime,
-        )
+        if selected_state != "All" and selected_district != "All":
+            geojson_by_state = build_adm3_geojson_by_district(
+                path=str(adm3_geojson_path),
+                tolerance=simplify_tolerance_adm3,
+                mtime=adm3_mtime,
+            )
+            geojson_signature = (
+                "block",
+                "district",
+                adm3_mtime,
+                alias_fn(selected_state),
+                alias_fn(selected_district),
+            )
+        else:
+            geojson_by_state = build_adm3_geojson_by_state(
+                path=str(adm3_geojson_path),
+                tolerance=simplify_tolerance_adm3,
+                mtime=adm3_mtime,
+            )
+            geojson_signature = ("block", "state", adm3_mtime, alias_fn(selected_state))
     else:
         adm2_mtime = float(adm2_geojson_path.stat().st_mtime)
         geojson_by_state = build_adm2_geojson_by_state(
@@ -121,18 +154,23 @@ def build_folium_map_for_selection(
             tolerance=simplify_tolerance_adm2,
             mtime=adm2_mtime,
         )
+        geojson_signature = ("district", adm2_mtime, alias_fn(selected_state))
 
     if level_norm in {"basin", "sub_basin"}:
         selection_key = alias_fn(selected_basin) if selected_basin != "All" else "all"
         fc_source = geojson_by_state.get(selection_key, geojson_by_state.get("all"))
         geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
-        fc = copy.deepcopy(fc_source or geojson_by_state["all"])
     else:
-        state_key = "all" if selected_state == "All" else (normalize_state_fn(selected_state) or "unknown")
         geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
-        fc = copy.deepcopy(geojson_by_state.get(state_key, geojson_by_state["all"]))
-    fc = filter_fc_by_district(
-        fc,
+        if level_norm == "block" and selected_state != "All" and selected_district != "All":
+            selector_key = f"{alias_fn(selected_state)}|{alias_fn(selected_district)}"
+            fc_source = geojson_by_state.get(selector_key, geojson_by_state.get("all"))
+        else:
+            state_key = "all" if selected_state == "All" else (normalize_state_fn(selected_state) or "unknown")
+            fc_source = geojson_by_state.get(state_key, geojson_by_state["all"])
+
+    base_fc = filter_fc_by_district(
+        fc_source or geojson_by_state["all"],
         selected_district=selected_district,
         selected_basin=selected_basin,
         selected_subbasin=selected_subbasin,
@@ -151,13 +189,30 @@ def build_folium_map_for_selection(
         metric_col=metric_col,
         map_value_col=map_value_col,
     )
-    fc = patch_fc_properties(
-        fc,
-        level=level_norm,
-        alias_fn=alias_fn,
-        feature_key_col=feature_key_col,
-        props_map=props_map,
+    prop_signature = props_map_signature(props_map)
+    patched_cache_key = (
+        "patched_fc",
+        *render_signature,
+        *geojson_signature,
+        feature_key_col,
+        prop_signature,
     )
+    patched_fc_cache = _patched_fc_cache()
+    cached_fc = patched_fc_cache.get(patched_cache_key)
+    if cached_fc is None:
+        fc = clone_featurecollection_for_patch(base_fc)
+        fc = patch_fc_properties(
+            fc,
+            level=level_norm,
+            alias_fn=alias_fn,
+            feature_key_col=feature_key_col,
+            props_map=props_map,
+        )
+        patched_fc_cache[patched_cache_key] = clone_featurecollection_for_patch(fc)
+        while len(patched_fc_cache) > 24:
+            patched_fc_cache.pop(next(iter(patched_fc_cache)))
+    else:
+        fc = clone_featurecollection_for_patch(cached_fc)
 
     reference_fc = None
     reference_level = None
@@ -244,8 +299,8 @@ def build_folium_map_for_selection(
                 mtime=river_mtime,
             )
             selector_key = alias_fn(selected_subbasin)
-            river_fc = copy.deepcopy(
-                river_geojson_by_selector.get(selector_key, {"type": "FeatureCollection", "features": []})
+            river_fc = clone_featurecollection_for_patch(
+                river_geojson_by_selector.get(selector_key, _empty_fc())
             )
             river_layer_name = "River network"
         else:
@@ -254,8 +309,8 @@ def build_folium_map_for_selection(
                 mtime=river_mtime,
             )
             selector_key = alias_fn(str(resolved_river_basin_name or "").strip())
-            river_fc = copy.deepcopy(
-                river_geojson_by_selector.get(selector_key, {"type": "FeatureCollection", "features": []})
+            river_fc = clone_featurecollection_for_patch(
+                river_geojson_by_selector.get(selector_key, _empty_fc())
             )
             river_layer_name = "River network"
 

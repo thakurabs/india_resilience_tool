@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any, Mapping, Optional
 
 import numpy as np
@@ -64,11 +65,134 @@ class MapArtifacts:
     cmap_name: str
     rank_scope_label: str
     river_overlay_message: Optional[str]
+    blocked_message: Optional[str]
 
 
 def _build_legend_title(varcfg: Mapping[str, Any]) -> str:
     """Return the minimal legend title text derived from metric units."""
     return str(varcfg.get("unit") or varcfg.get("units") or "").strip()
+
+
+def details_require_geometry(
+    *,
+    adm_level: str,
+    spatial_family: str,
+    selected_state: str,
+    selected_district: str,
+    selected_block: str,
+    selected_basin: str,
+    selected_subbasin: str,
+) -> bool:
+    """Return whether the right-panel flow still needs merged geometries."""
+    level_norm = str(adm_level or "district").strip().lower()
+    family_norm = str(spatial_family or "admin").strip().lower()
+    if family_norm == "hydro" and level_norm == "sub_basin":
+        return selected_basin != "All" and selected_subbasin == "All"
+    if level_norm == "block":
+        return selected_state != "All" and selected_block == "All"
+    return level_norm == "district" and selected_state != "All" and selected_district == "All"
+
+
+def blocked_drilldown_message(
+    *,
+    adm_level: str,
+    spatial_family: str,
+    selected_state: str,
+    selected_basin: str,
+) -> Optional[str]:
+    """Return the drill-down prompt for fine-grain nationwide views, if any."""
+    level_norm = str(adm_level or "district").strip().lower()
+    family_norm = str(spatial_family or "admin").strip().lower()
+    if family_norm != "hydro" and level_norm == "block" and selected_state == "All":
+        return "Select a state to render block maps and rankings."
+    if family_norm == "hydro" and level_norm == "sub_basin" and selected_basin == "All":
+        return "Select a basin to render sub-basin maps and rankings."
+    return None
+
+
+def _build_nonspatial_details_source_df(
+    df: pd.DataFrame,
+    *,
+    level: str,
+    spatial_family: str,
+) -> pd.DataFrame:
+    """Return a details/rankings dataframe that does not require geometry."""
+    level_norm = str(level or "district").strip().lower()
+    family_norm = str(spatial_family or "admin").strip().lower()
+    out = df.copy()
+    rename_map: dict[str, str] = {}
+    if "state" in out.columns and "state_name" not in out.columns:
+        rename_map["state"] = "state_name"
+    if "district" in out.columns and "district_name" not in out.columns:
+        rename_map["district"] = "district_name"
+    if level_norm == "block" and "block" in out.columns and "block_name" not in out.columns:
+        rename_map["block"] = "block_name"
+    out = out.rename(columns=rename_map)
+    if family_norm == "hydro" and "state_name" not in out.columns:
+        out["state_name"] = "Hydro"
+    return out
+
+
+def _filter_frame_by_selection_value(
+    frame: pd.DataFrame,
+    *,
+    column: str,
+    selected_value: str,
+) -> pd.DataFrame:
+    """Filter a dataframe by a user selection with case/alias fallback."""
+    if selected_value == "All" or column not in frame.columns:
+        return frame
+
+    series = frame[column].astype(str).str.strip()
+    mask = series == str(selected_value).strip()
+    if not mask.any():
+        selected_key = alias(selected_value)
+        mask = series.map(alias) == selected_key
+    if not mask.any():
+        mask = series.str.contains(re.escape(str(selected_value).strip()), case=False, na=False)
+    return frame[mask]
+
+
+def _build_map_render_signature(
+    *,
+    level: str,
+    selected_state: str,
+    selected_district: str,
+    selected_block: str,
+    selected_basin: str,
+    selected_subbasin: str,
+    metric_col: str,
+    map_value_col: str,
+    baseline_col: Optional[str],
+    map_mode: str,
+    hover_enabled: bool,
+    crosswalk_overlay: Optional[Mapping[str, Any]],
+    show_river_network: bool,
+    resolved_river_basin_name: Optional[str],
+) -> tuple[Any, ...]:
+    """Return a stable render signature for patched FeatureCollection caching."""
+    overlay = crosswalk_overlay or {}
+    overlay_signature = (
+        str(overlay.get("level") or ""),
+        tuple(str(v) for v in (overlay.get("feature_keys") or [])),
+        str(overlay.get("label") or ""),
+    )
+    return (
+        str(level or ""),
+        str(selected_state or ""),
+        str(selected_district or ""),
+        str(selected_block or ""),
+        str(selected_basin or ""),
+        str(selected_subbasin or ""),
+        str(metric_col or ""),
+        str(map_value_col or ""),
+        str(baseline_col or ""),
+        str(map_mode or ""),
+        bool(hover_enabled),
+        overlay_signature,
+        bool(show_river_network),
+        str(resolved_river_basin_name or ""),
+    )
 
 
 def _level_aware_merge(
@@ -120,6 +244,7 @@ def build_map_and_rankings(
     selected_basin: str,
     selected_subbasin: str,
     spatial_family: str,
+    include_map: bool,
     crosswalk_overlay: Optional[Mapping[str, Any]],
     show_river_network: bool,
     hover_enabled: bool,
@@ -149,6 +274,12 @@ def build_map_and_rankings(
     run when required inputs are missing.
     """
     level_norm = str(adm_level or "district").strip().lower()
+    blocked_message = blocked_drilldown_message(
+        adm_level=level_norm,
+        spatial_family=spatial_family,
+        selected_state=selected_state,
+        selected_basin=selected_basin,
+    )
 
     if level_norm in {"district", "block"} and "district" not in df.columns:
         st.error("Master CSV must contain a 'district' column.")
@@ -178,19 +309,88 @@ def build_map_and_rankings(
             render_perf_panel_safe()
             st.stop()
 
-    with perf_section("merge: build merged gdf"):
-        with st.spinner("Preparing merged geometries with CSV attributes..."):
-            merged = _level_aware_merge(
-                adm2=adm2,
-                adm3=adm3,
-                df=df,
-                variable_slug=variable_slug,
-                master_csv_path=master_csv_path,
-                level=level_norm,
-            )
+    # --- Baseline column for this metric + stat (used by map & table) ---
+    baseline_col = find_baseline_column_for_stat(
+        df.columns,
+        base_metric=sel_metric,
+        stat=sel_stat,
+    )
+    ranking_source = _build_nonspatial_details_source_df(
+        df,
+        level=level_norm,
+        spatial_family=spatial_family,
+    )
+
+    # -------------------------
+    # Build ranking table
+    # -------------------------
+    with perf_section("rank_table: build"):
+        extra_rank_cols: list[str] = []
+        if level_norm == "sub_basin":
+            unit_col = "subbasin_name"
+            extra_rank_cols = ["basin_name", "basin_id", "subbasin_id"]
+        elif level_norm == "basin":
+            unit_col = "basin_name"
+            extra_rank_cols = ["basin_id"]
+        elif level_norm == "block":
+            unit_col = "block_name"
+        else:
+            unit_col = "district_name"
+        table_df, has_baseline = _build_rankings_table_df(
+            ranking_source,
+            metric_col=metric_col,
+            baseline_col=baseline_col,
+            selected_state=selected_state,
+            risk_class_from_percentile=risk_class_from_percentile,
+            district_col=unit_col,
+            state_col="state_name",
+            aspirational_col="aspirational",
+            extra_cols=extra_rank_cols,
+        )
+
+    if blocked_message:
+        return MapArtifacts(
+            merged=pd.DataFrame(),
+            table_df=pd.DataFrame(),
+            has_baseline=bool(has_baseline),
+            folium_map=None,
+            legend_block_html=None,
+            baseline_col=baseline_col,
+            map_mode=map_mode,
+            map_value_col=metric_col,
+            pretty_metric_label=str(varcfg.get("label") or variable_slug),
+            cmap_name="Reds",
+            rank_scope_label="",
+            river_overlay_message=None,
+            blocked_message=blocked_message,
+        )
+
+    needs_geometry = include_map or details_require_geometry(
+        adm_level=level_norm,
+        spatial_family=spatial_family,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        selected_block=selected_block,
+        selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
+    )
+
+    if needs_geometry:
+        with perf_section("merge: build merged gdf"):
+            with st.spinner("Preparing merged geometries with CSV attributes..."):
+                merged = _level_aware_merge(
+                    adm2=adm2,
+                    adm3=adm3,
+                    df=df,
+                    variable_slug=variable_slug,
+                    master_csv_path=master_csv_path,
+                    level=level_norm,
+                )
+    else:
+        merged = ranking_source
 
     # Handle pending block zoom (needs merged GeoDataFrame with block geometries)
-    if pending_block_zoom and "block_name" in getattr(merged, "columns", []):
+    if needs_geometry and pending_block_zoom and "block_name" in getattr(merged, "columns", []):
         zoom_state = str(pending_block_zoom.get("state", "")).strip()
         zoom_district = str(pending_block_zoom.get("district", "")).strip()
         zoom_block = str(pending_block_zoom.get("block", "")).strip()
@@ -213,12 +413,22 @@ def build_map_and_rankings(
         except Exception:
             pass
 
-    # --- Baseline column for this metric + stat (used by map & table) ---
-    baseline_col = find_baseline_column_for_stat(
-        df.columns,
-        base_metric=sel_metric,
-        stat=sel_stat,
-    )
+    if not include_map:
+        return MapArtifacts(
+            merged=merged,
+            table_df=table_df,
+            has_baseline=bool(has_baseline),
+            folium_map=None,
+            legend_block_html=None,
+            baseline_col=baseline_col,
+            map_mode=map_mode,
+            map_value_col=metric_col,
+            pretty_metric_label=str(varcfg.get("label") or variable_slug),
+            cmap_name="Reds",
+            rank_scope_label="",
+            river_overlay_message=None,
+            blocked_message=None,
+        )
 
     # --- Compute current/baseline/delta columns once (used by map + tooltip) ---
     with perf_section("map: compute current/baseline/delta"):
@@ -266,33 +476,40 @@ def build_map_and_rankings(
     # Compute color scale defaults from *visible* units (matches the map filter),
     # then default to a robust p2–p98 range so outliers don't collapse the palette.
     scale_gdf = merged
-    if selected_state != "All" and "state_name" in scale_gdf.columns:
-        state_mask = scale_gdf["state_name"].astype(str).str.strip() == selected_state
-        if not state_mask.any():
-            state_mask = (
-                scale_gdf["state_name"]
-                .astype(str)
-                .str.contains(selected_state, case=False, na=False)
-            )
-        scale_gdf = scale_gdf[state_mask]
+    scale_gdf = _filter_frame_by_selection_value(
+        scale_gdf,
+        column="state_name",
+        selected_value=selected_state,
+    )
+    scale_gdf = _filter_frame_by_selection_value(
+        scale_gdf,
+        column="district_name",
+        selected_value=selected_district,
+    )
 
-    if selected_district != "All" and "district_name" in scale_gdf.columns:
-        scale_gdf = scale_gdf[scale_gdf["district_name"].astype(str) == selected_district]
-
-    if level_norm == "block" and selected_block != "All" and "block_name" in scale_gdf.columns:
-        scale_gdf = scale_gdf[scale_gdf["block_name"].astype(str) == selected_block]
-    if level_norm == "basin" and selected_basin != "All" and "basin_name" in scale_gdf.columns:
-        scale_gdf = scale_gdf[scale_gdf["basin_name"].astype(str) == selected_basin]
+    if level_norm == "block":
+        scale_gdf = _filter_frame_by_selection_value(
+            scale_gdf,
+            column="block_name",
+            selected_value=selected_block,
+        )
+    if level_norm == "basin":
+        scale_gdf = _filter_frame_by_selection_value(
+            scale_gdf,
+            column="basin_name",
+            selected_value=selected_basin,
+        )
     if level_norm == "sub_basin":
-        if selected_basin != "All" and "basin_name" in scale_gdf.columns:
-            scale_gdf = scale_gdf[scale_gdf["basin_name"].astype(str) == selected_basin]
-        if (
-            selected_subbasin != "All"
-            and "subbasin_name" in scale_gdf.columns
-        ):
-            scale_gdf = scale_gdf[
-                scale_gdf["subbasin_name"].astype(str) == selected_subbasin
-            ]
+        scale_gdf = _filter_frame_by_selection_value(
+            scale_gdf,
+            column="basin_name",
+            selected_value=selected_basin,
+        )
+        scale_gdf = _filter_frame_by_selection_value(
+            scale_gdf,
+            column="subbasin_name",
+            selected_value=selected_subbasin,
+        )
 
     scale_vals = pd.to_numeric(
         scale_gdf.get(map_value_col, pd.Series([], dtype=float)), errors="coerce"
@@ -343,59 +560,36 @@ def build_map_and_rankings(
                 nlevels=15,
             )
 
-    # -------------------------
-    # Build ranking table
-    # -------------------------
-    with perf_section("rank_table: build"):
-        extra_rank_cols: list[str] = []
-        if level_norm == "sub_basin":
-            unit_col = "subbasin_name"
-            extra_rank_cols = ["basin_name", "basin_id", "subbasin_id"]
-        elif level_norm == "basin":
-            unit_col = "basin_name"
-            extra_rank_cols = ["basin_id"]
-        elif level_norm == "block":
-            unit_col = "block_name"
-        else:
-            unit_col = "district_name"
-        table_df, has_baseline = _build_rankings_table_df(
-            merged,
-            metric_col=metric_col,
-            baseline_col=baseline_col,
-            selected_state=selected_state,
-            risk_class_from_percentile=risk_class_from_percentile,
-            district_col=unit_col,
-            state_col="state_name",
-            aspirational_col="aspirational",
-            extra_cols=extra_rank_cols,
-        )
-
     # Filter for map display (preserves legacy behavior: block selection does not
     # hide other blocks; it only affects the details panel).
     display_gdf = merged
-    if selected_state != "All":
-        state_mask = display_gdf["state_name"].astype(str).str.strip() == selected_state
-        if not state_mask.any():
-            state_mask = (
-                display_gdf["state_name"]
-                .astype(str)
-                .str.contains(selected_state, case=False, na=False)
-            )
-        display_gdf = display_gdf[state_mask]
-
-    if selected_district != "All":
-        display_gdf = display_gdf[display_gdf["district_name"].astype(str) == selected_district]
-    if level_norm == "basin" and selected_basin != "All":
-        display_gdf = display_gdf[display_gdf["basin_name"].astype(str) == selected_basin]
+    display_gdf = _filter_frame_by_selection_value(
+        display_gdf,
+        column="state_name",
+        selected_value=selected_state,
+    )
+    display_gdf = _filter_frame_by_selection_value(
+        display_gdf,
+        column="district_name",
+        selected_value=selected_district,
+    )
+    if level_norm == "basin":
+        display_gdf = _filter_frame_by_selection_value(
+            display_gdf,
+            column="basin_name",
+            selected_value=selected_basin,
+        )
     if level_norm == "sub_basin":
-        if selected_basin != "All":
-            display_gdf = display_gdf[
-                display_gdf["basin_name"].astype(str) == selected_basin
-            ]
-        if selected_subbasin != "All":
-            display_gdf = display_gdf[
-                display_gdf["subbasin_name"].astype(str) == selected_subbasin
-            ]
+        display_gdf = _filter_frame_by_selection_value(
+            display_gdf,
+            column="basin_name",
+            selected_value=selected_basin,
+        )
+        display_gdf = _filter_frame_by_selection_value(
+            display_gdf,
+            column="subbasin_name",
+            selected_value=selected_subbasin,
+        )
 
     resolved_river_basin_name: Optional[str] = None
     river_overlay_message: Optional[str] = None
@@ -439,10 +633,28 @@ def build_map_and_rankings(
             )
 
     with perf_section("map: GeoJSON serialize+add layer"):
+        render_signature = _build_map_render_signature(
+            level=level_norm,
+            selected_state=selected_state,
+            selected_district=selected_district,
+            selected_block=selected_block,
+            selected_basin=selected_basin,
+            selected_subbasin=selected_subbasin,
+            metric_col=metric_col,
+            map_value_col=map_value_col,
+            baseline_col=baseline_col,
+            map_mode=map_mode,
+            hover_enabled=bool(hover_enabled),
+            crosswalk_overlay=crosswalk_overlay,
+            show_river_network=bool(show_river_network),
+            resolved_river_basin_name=resolved_river_basin_name,
+        )
         folium_map = build_folium_map_for_selection(
             level=level_norm,
             merged=merged,
             display_gdf=display_gdf,
+            session_state=st.session_state,
+            render_signature=render_signature,
             selected_state=selected_state,
             selected_district=selected_district,
             selected_basin=selected_basin,
@@ -496,4 +708,5 @@ def build_map_and_rankings(
         cmap_name=cmap_name,
         rank_scope_label=rank_scope_label,
         river_overlay_message=river_overlay_message,
+        blocked_message=None,
     )

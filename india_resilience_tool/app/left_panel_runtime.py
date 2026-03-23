@@ -45,6 +45,7 @@ def render_left_panel(
     # Data (for coordinate fallback in add-to-portfolio)
     merged: Any,
     river_overlay_message: Optional[str] = None,
+    blocked_message: Optional[str] = None,
 ) -> Tuple[Mapping[str, Any], str]:
     """
     Render the left panel and return the st_folium payload (if Map view ran).
@@ -78,7 +79,9 @@ def render_left_panel(
 
         # ---------- VIEW 1: MAP ----------
         if view == VIEW_MAP:
-            if river_overlay_message:
+            if blocked_message:
+                st.info(blocked_message)
+            elif river_overlay_message:
                 st.caption(river_overlay_message)
 
             # In portfolio mode, reserve a slot ABOVE the map so the add/remove control
@@ -86,24 +89,29 @@ def render_left_panel(
             analysis_mode = st.session_state.get("analysis_mode", "Single district focus")
             portfolio_action_slot = st.empty() if "Multi" in str(analysis_mode) else None
 
-            returned, clicked_district, clicked_state = render_map_view(
-                m=m,
-                variable_slug=variable_slug,
-                map_mode=map_mode,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                selected_state=selected_state,
-                selected_district=selected_district,
-                selected_block=selected_block,
-                selected_basin=selected_basin,
-                selected_subbasin=selected_subbasin,
-                map_width=map_width,
-                map_height=map_height,
-                legend_block_html=legend_block_html,
-                perf_section=perf_section,
-                level=level,
-            )
+            clicked_district: Optional[str] = None
+            clicked_state: Optional[str] = None
+            if m is not None and not blocked_message:
+                returned, clicked_district, clicked_state = render_map_view(
+                    m=m,
+                    variable_slug=variable_slug,
+                    map_mode=map_mode,
+                    sel_scenario=sel_scenario,
+                    sel_period=sel_period,
+                    sel_stat=sel_stat,
+                    selected_state=selected_state,
+                    selected_district=selected_district,
+                    selected_block=selected_block,
+                    selected_basin=selected_basin,
+                    selected_subbasin=selected_subbasin,
+                    map_width=map_width,
+                    map_height=map_height,
+                    legend_block_html=legend_block_html,
+                    perf_section=perf_section,
+                    level=level,
+                )
+            elif not blocked_message:
+                st.info("No map available for this selection.")
 
             # Show add-to-portfolio button when a unit is clicked in portfolio mode
             if portfolio_action_slot is not None:
@@ -134,20 +142,23 @@ def render_left_panel(
 
         # ---------- VIEW 2: RANKINGS ----------
         elif view == VIEW_RANKINGS:
-            render_rankings_view(
-                view=view,
-                table_df=table_df,
-                has_baseline=has_baseline,
-                variables=variables,
-                variable_slug=variable_slug_for_rankings,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                selected_state=selected_state,
-                portfolio_add=portfolio_add_fn,
-                portfolio_contains=portfolio_contains_fn,
-                portfolio_remove=portfolio_remove_fn,
-                level=level,
-            )
+            if blocked_message:
+                st.info(blocked_message)
+            else:
+                render_rankings_view(
+                    view=view,
+                    table_df=table_df,
+                    has_baseline=has_baseline,
+                    variables=variables,
+                    variable_slug=variable_slug_for_rankings,
+                    sel_scenario=sel_scenario,
+                    sel_period=sel_period,
+                    sel_stat=sel_stat,
+                    selected_state=selected_state,
+                    portfolio_add=portfolio_add_fn,
+                    portfolio_contains=portfolio_contains_fn,
+                    portfolio_remove=portfolio_remove_fn,
+                    level=level,
+                )
 
     return returned, view

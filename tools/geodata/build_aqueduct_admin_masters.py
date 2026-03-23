@@ -276,6 +276,17 @@ def _write_csv(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
     df.to_csv(path, index=False)
 
 
+def _write_master_table(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
+    """Write a runtime master table as CSV plus a Parquet companion."""
+    parquet_path = path.with_suffix(".parquet")
+    if not overwrite:
+        existing = [str(p) for p in (path, parquet_path) if p.exists()]
+        if existing:
+            raise FileExistsError(f"Output already exists (pass --overwrite): {', '.join(existing)}")
+    _write_csv(df, path, overwrite=True)
+    df.to_parquet(parquet_path, index=False)
+
+
 def build_cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build Aqueduct district and block master CSVs on canonical admin units.")
     parser.add_argument(
@@ -370,13 +381,13 @@ def main(argv: list[str] | None = None) -> int:
         for state_name, state_df in district_master_df.groupby("state", dropna=False):
             state_dir = processed_root / str(state_name)
             out_path = state_dir / district_master_name
-            _write_csv(state_df.reset_index(drop=True), out_path, overwrite=bool(args.overwrite))
+            _write_master_table(state_df.reset_index(drop=True), out_path, overwrite=bool(args.overwrite))
             state_counts.append(f"{state_name}:{len(state_df)}")
         block_state_counts: list[str] = []
         for state_name, state_df in block_master_df.groupby("state", dropna=False):
             state_dir = processed_root / str(state_name)
             out_path = state_dir / block_master_name
-            _write_csv(state_df.reset_index(drop=True), out_path, overwrite=bool(args.overwrite))
+            _write_master_table(state_df.reset_index(drop=True), out_path, overwrite=bool(args.overwrite))
             block_state_counts.append(f"{state_name}:{len(state_df)}")
 
         district_qa_path = aqueduct_dir / f"{metric_slug}_district_master_qa.csv"

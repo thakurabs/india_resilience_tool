@@ -67,6 +67,35 @@ def _featurecollections_by_selector(
     return by_selector
 
 
+def _ensure_adm3_identity_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Ensure canonical block identity columns and composite key are present."""
+    out = gdf.copy()
+
+    if "block_name" not in out.columns:
+        for c in ("block", "adm3_name", "subdistrict_name", "name"):
+            if c in out.columns:
+                out["block_name"] = out[c]
+                break
+    if "district_name" not in out.columns:
+        for c in ("district", "adm2_name", "shapeName_2", "shapeName_1"):
+            if c in out.columns:
+                out["district_name"] = out[c]
+                break
+    if "state_name" not in out.columns:
+        for c in ("state", "adm1_name", "shapeName_0", "shapeGroup"):
+            if c in out.columns:
+                out["state_name"] = out[c]
+                break
+
+    if "__bkey" not in out.columns:
+        state_key = out["state_name"].where(out["state_name"].notna(), "").astype(str).map(alias)
+        district_key = out["district_name"].where(out["district_name"].notna(), "").astype(str).map(alias)
+        block_key = out["block_name"].where(out["block_name"].notna(), "").astype(str).map(alias)
+        out["__bkey"] = state_key.str.cat(district_key, sep="|").str.cat(block_key, sep="|")
+
+    return out
+
+
 @st.cache_data
 def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
     gdf = _load_local_adm2(
@@ -236,36 +265,7 @@ def build_adm3_geojson_by_state(
     """
     _ = mtime  # used only to invalidate Streamlit's cache
 
-    gdf = load_local_adm3(path, tolerance=tolerance)
-
-    # Tolerate alternate ADM3 naming conventions.
-    if "block_name" not in gdf.columns:
-        for c in ("block", "adm3_name", "subdistrict_name", "name"):
-            if c in gdf.columns:
-                gdf["block_name"] = gdf[c]
-                break
-    if "district_name" not in gdf.columns:
-        for c in ("district", "adm2_name", "shapeName_2", "shapeName_1"):
-            if c in gdf.columns:
-                gdf["district_name"] = gdf[c]
-                break
-    if "state_name" not in gdf.columns:
-        for c in ("state", "adm1_name", "shapeName_0", "shapeGroup"):
-            if c in gdf.columns:
-                gdf["state_name"] = gdf[c]
-                break
-
-    # Build a composite key: state|district|block (normalized via alias)
-    if "__bkey" not in gdf.columns:
-
-        def _mk_bkey(r) -> str:
-            return (
-                f"{alias(r.get('state_name', ''))}|"
-                f"{alias(r.get('district_name', ''))}|"
-                f"{alias(r.get('block_name', ''))}"
-            )
-
-        gdf["__bkey"] = gdf.apply(_mk_bkey, axis=1)
+    gdf = _ensure_adm3_identity_columns(load_local_adm3(path, tolerance=tolerance))
 
     by_state = _featurecollections_by_state(
         gdf,
@@ -274,6 +274,34 @@ def build_adm3_geojson_by_state(
         keep_cols=["block_name", "district_name", "state_name", "__bkey", "geometry"],
     )
     return by_state
+
+
+@st.cache_data(ttl=3600)
+def build_adm3_geojson_by_district(
+    path: str,
+    tolerance: float,
+    mtime: float,
+) -> dict[str, dict]:
+    """
+    Build and cache an ADM3 FeatureCollection per normalized state|district key.
+
+    This is used by the block-mode render path to avoid patching an entire
+    state's worth of blocks when the sidebar is already narrowed to one
+    district.
+    """
+    _ = mtime  # used only to invalidate Streamlit's cache
+
+    gdf = _ensure_adm3_identity_columns(load_local_adm3(path, tolerance=tolerance))
+    gdf = gdf.copy()
+    state_key = gdf["state_name"].where(gdf["state_name"].notna(), "").astype(str).map(alias)
+    district_key = gdf["district_name"].where(gdf["district_name"].notna(), "").astype(str).map(alias)
+    gdf["__selector"] = state_key.str.cat(district_key, sep="|")
+
+    return _featurecollections_by_selector(
+        gdf,
+        selector_col="__selector",
+        keep_cols=["block_name", "district_name", "state_name", "__bkey", "geometry"],
+    )
 
 
 @st.cache_data(ttl=3600)

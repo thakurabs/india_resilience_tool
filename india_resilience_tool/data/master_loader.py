@@ -23,8 +23,25 @@ from typing import Any, Iterable, Optional, Sequence, Union
 
 import pandas as pd
 
+from india_resilience_tool.utils.processed_io import read_table
+
 PathLike = Union[str, Path]
 MasterSourceLike = Union[PathLike, Sequence[PathLike]]
+
+
+def resolve_preferred_master_path(path: PathLike) -> Path:
+    """
+    Resolve the preferred on-disk serving artifact for a master table.
+
+    Runtime prefers a Parquet companion when one exists next to the CSV, while
+    preserving CSV fallback for compatibility with older builds.
+    """
+    resolved = Path(path)
+    if resolved.suffix.lower() == ".csv":
+        parquet_path = resolved.with_suffix(".parquet")
+        if parquet_path.exists():
+            return parquet_path
+    return resolved
 
 
 def normalize_master_source_paths(master_source: MasterSourceLike) -> tuple[Path, ...]:
@@ -48,12 +65,13 @@ def master_source_signature(master_source: MasterSourceLike) -> tuple[tuple[str,
     """Return a stable `(resolved_path, mtime)` signature for one or many master CSVs."""
     signature: list[tuple[str, Optional[float]]] = []
     for path in normalize_master_source_paths(master_source):
+        preferred_path = resolve_preferred_master_path(path)
         try:
-            resolved = str(path.resolve())
+            resolved = str(preferred_path.resolve())
         except Exception:
-            resolved = str(path)
+            resolved = str(preferred_path)
         try:
-            mtime = path.stat().st_mtime
+            mtime = preferred_path.stat().st_mtime
         except Exception:
             mtime = None
         signature.append((resolved, mtime))
@@ -111,7 +129,10 @@ def load_master_csv(path: PathLike) -> pd.DataFrame:
 
     Intentionally thin wrapper around read_csv_robust().
     """
-    return read_csv_robust(path)
+    preferred_path = resolve_preferred_master_path(path)
+    if preferred_path.suffix.lower() == ".parquet" or preferred_path.is_dir():
+        return read_table(preferred_path)
+    return read_csv_robust(preferred_path)
 
 
 def load_master_csvs(master_source: MasterSourceLike) -> pd.DataFrame:

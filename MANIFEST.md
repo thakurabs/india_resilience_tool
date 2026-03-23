@@ -9,6 +9,9 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 
 The current working tree supports:
 - map, rankings, and details flows for district, block, basin, and sub-basin
+- drill-down-only nationwide behavior for the finest-grain views:
+  - `Admin -> Block` requires a selected state
+  - `Hydro -> Sub-basin` requires a selected basin
 - portfolio workflows for district, block, basin, and sub-basin
 - assessment-pillar and domain-based metric navigation, separating climate hazards from bio-physical hazards
 - static exposure-layer support for admin district/block views
@@ -137,7 +140,7 @@ Aqueduct methodology note:
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
 | `main.py` | Package Streamlit entrypoint |
 | `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
-| `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline |
+| `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline, including fine-grain drill-down guards and rankings-only fast paths |
 | `master_cache.py` | Streamlit session-state cache for master CSV + schema loading |
 | `master_freshness.py` | Master CSV freshness/rebuild gating helpers |
 | `perf.py` | Lightweight timing/performance instrumentation |
@@ -166,7 +169,7 @@ Aqueduct methodology note:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `master_builder.py` | Build master CSVs, including hydro master enrichment |
+| `master_builder.py` | Build master CSVs, including hydro master enrichment and Parquet companions for runtime serving |
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 
 #### `india_resilience_tool/compute/tests/`
@@ -198,7 +201,7 @@ Aqueduct methodology note:
 | `river_loader.py` | Cleaned river-display loading, validation, reconciliation, diagnostics, and hydro filtering helpers |
 | `river_topology.py` | Streamlit-free river reach validation and hydro-side river summary builders |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
-| `master_loader.py` | Robust master CSV loading, normalization, and schema parsing |
+| `master_loader.py` | Robust master-table loading, normalization, schema parsing, and Parquet-first runtime preference |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
 | `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |
 
@@ -272,11 +275,11 @@ Aqueduct methodology note:
 | `prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON, QA CSV, and India-only `future_annual` GeoJSON with source future attributes preserved |
 | `build_aqueduct_admin_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ district overlap CSVs in `EPSG:6933` |
 | `build_aqueduct_block_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ block overlap CSVs in `EPSG:6933` |
-| `build_aqueduct_admin_masters.py` | Build `processed/{aqueduct_metric_slug}/{state}/master_metrics_by_{district,block}.csv` from direct Aqueduct admin overlaps |
+| `build_aqueduct_admin_masters.py` | Build `processed/{aqueduct_metric_slug}/{state}/master_metrics_by_{district,block}.{csv,parquet}` from direct Aqueduct admin overlaps |
 | `build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs in `EPSG:6933` |
-| `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master CSVs from Aqueduct overlaps for the onboarded Aqueduct hydro metrics |
-| `build_population_admin_masters.py` | Build district/block population total and density masters from the 2025 population raster |
-| `build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook plus a canonical district alias QA package |
+| `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master `{csv,parquet}` files from Aqueduct overlaps for the onboarded hydro metrics |
+| `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster |
+| `build_groundwater_district_masters.py` | Build district groundwater assessment master `{csv,parquet}` files from the 2024-2025 GEC workbook plus a canonical district alias QA package |
 | `runs/prepare_dashboard.py` | Canonical workflow runner for climate hazard, canonical block-boundary refresh, Aqueduct, population exposure, groundwater, validation, and dashboard-package prep bundles |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |

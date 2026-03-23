@@ -1097,6 +1097,7 @@ def build_master_metrics(
             print("Writing output files...")
 
         master.to_csv(outp, index=False)
+        master.to_parquet(outp.with_suffix(".parquet"), index=False)
         state_model_df.to_csv(outp.parent / f"state_model_averages_{level}.csv", index=False)
         state_ensemble_df.to_csv(outp.parent / f"state_ensemble_stats_{level}.csv", index=False)
         state_yearly_model_df.to_csv(outp.parent / f"state_yearly_model_averages_{level}.csv", index=False)
