@@ -816,13 +816,9 @@ def build_comparison_df(
 
     # Helper functions
     def _resolve_proc_root_for_slug(slug: str) -> Path:
-        env_root = os.getenv("IRT_PROCESSED_ROOT")
-        if env_root:
-            base_path = Path(env_root)
-            if base_path.name == slug:
-                return base_path.resolve()
-            return (base_path / slug).resolve()
-        return (data_dir / "processed" / slug).resolve()
+        from india_resilience_tool.config.paths import resolve_processed_optimised_root
+
+        return resolve_processed_optimised_root(slug, data_dir=data_dir)
 
     def _resolve_state_dir(proc_root: Path, state_name: str) -> str:
         """
@@ -847,6 +843,12 @@ def build_comparison_df(
         return str(mapping.get(normalize_fn(state_name), state_name))
 
     def _load_master_and_schema_for_slug(slug: str):
+        from india_resilience_tool.data.optimized_bundle import (
+            is_optimized_metric_root,
+            optimized_master_path_from_metric_root,
+            optimized_master_sources_from_metric_root,
+        )
+
         proc_root = _resolve_proc_root_for_slug(slug)
         if is_subbasin:
             master_fname = "master_metrics_by_sub_basin.csv"
@@ -861,7 +863,10 @@ def build_comparison_df(
         concat_cache = st.session_state.setdefault("_portfolio_master_concat_cache", {})
 
         if level_norm in {"basin", "sub_basin"}:
-            master_path = proc_root / "hydro" / master_fname
+            if is_optimized_metric_root(proc_root):
+                master_path = optimized_master_path_from_metric_root(proc_root, level=level_norm)
+            else:
+                master_path = proc_root / "hydro" / master_fname
             file_key = f"{slug}::{master_path}"
             try:
                 mtime = master_path.stat().st_mtime
@@ -883,6 +888,56 @@ def build_comparison_df(
                 "metrics": metrics,
                 "by_metric": by_metric,
                 "mtime": mtime,
+            }
+            return df_all, schema_items, metrics, by_metric
+
+        if is_optimized_metric_root(proc_root):
+            sources = optimized_master_sources_from_metric_root(
+                proc_root,
+                level=level_norm,
+                selected_state="All",
+            )
+            concat_key = f"{slug}::{level_norm}::optimised::{len(sources)}"
+            signature: list[tuple[str, Optional[float]]] = []
+            dfs: list[pd.DataFrame] = []
+            missing_states: list[str] = []
+
+            for master_path in sources:
+                try:
+                    mtime = master_path.stat().st_mtime
+                except Exception:
+                    mtime = None
+                signature.append((str(master_path), mtime))
+                if not master_path.exists():
+                    missing_states.append(master_path.stem)
+                    continue
+                dfs.append(load_master_csv_fn(str(master_path)))
+
+            entry = concat_cache.get(concat_key)
+            if entry and entry.get("signature") == signature:
+                return entry["df"], entry["schema_items"], entry["metrics"], entry["by_metric"]
+
+            if not dfs:
+                missing_master_by_slug[slug] = missing_states
+                empty = pd.DataFrame()
+                concat_cache[concat_key] = {
+                    "df": empty,
+                    "schema_items": [],
+                    "metrics": [],
+                    "by_metric": {},
+                    "signature": signature,
+                }
+                return empty, [], [], {}
+
+            df_all = pd.concat(dfs, ignore_index=True, sort=False) if len(dfs) > 1 else dfs[0]
+            df_all = normalize_master_columns_fn(df_all)
+            schema_items, metrics, by_metric = parse_master_schema_fn(df_all.columns)
+            concat_cache[concat_key] = {
+                "df": df_all,
+                "schema_items": schema_items,
+                "metrics": metrics,
+                "by_metric": by_metric,
+                "signature": signature,
             }
             return df_all, schema_items, metrics, by_metric
 

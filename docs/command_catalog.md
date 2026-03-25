@@ -187,6 +187,36 @@ python -m tools.geodata.build_population_admin_masters --help
 python -m tools.geodata.build_groundwater_district_masters --help
 ```
 
+### Optimized runtime bundle
+
+```bash
+python -m tools.optimized.build_processed_optimised --help
+```
+
+Build the compact dashboard-serving bundle from the legacy `processed/` tree:
+
+```bash
+python -m tools.optimized.build_processed_optimised --overwrite
+```
+
+Resume after a late failure without deleting the partial bundle first:
+
+```bash
+python -m tools.optimized.build_processed_optimised
+```
+
+Disable nested `tqdm` progress bars:
+
+```bash
+python -m tools.optimized.build_processed_optimised --overwrite --no-progress
+```
+
+Audit optimized-bundle parity against the dashboard-visible legacy `processed/` contract:
+
+```bash
+python -m tools.optimized.audit_processed_optimised_parity
+```
+
 ### Tests
 
 ```bash
@@ -220,6 +250,14 @@ python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aquedu
 ### Groundwater
 - district masters under `IRT_DATA_DIR/processed/gw_*/{state}/`
 - alias/crosswalk QA outputs under `IRT_DATA_DIR/groundwater/`
+
+### Optimized runtime bundle
+- compact runtime bundle under `IRT_DATA_DIR/processed_optimised/`
+- Parquet masters under `IRT_DATA_DIR/processed_optimised/metrics/<slug>/masters/...`
+- yearly ensemble Parquet facts under `IRT_DATA_DIR/processed_optimised/metrics/<slug>/yearly_ensemble/...`
+- yearly model Parquet facts under `IRT_DATA_DIR/processed_optimised/metrics/<slug>/yearly_models/...`
+- simplified runtime geometry under `IRT_DATA_DIR/processed_optimised/geometry/...`
+- context artifacts, `bundle_manifest.json`, and `parity_report.json` under `IRT_DATA_DIR/processed_optimised/`
 
 ## Notes
 

@@ -136,8 +136,41 @@ streamlit run india_resilience_tool/app/main.py
 Open: `http://localhost:8501`
 
 Performance note:
-- runtime prefers `.parquet` master companions when they exist next to the legacy `.csv` masters
-- the canonical master builders now emit both formats for faster warm dashboard reads
+- the dashboard now reads the compact `processed_optimised/` runtime bundle by default
+- runtime tables in that bundle are Parquet-only
+- the legacy `processed/` tree is kept as a migration/source workspace and is not modified by the optimized-bundle build
+
+Optimized runtime bundle:
+
+```bash
+python -m tools.optimized.build_processed_optimised --overwrite
+```
+
+This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DATA_DIR/processed/` tree and current canonical geometry/context files. The optimized bundle retains:
+- yearly time-series
+- per-model yearly overlays
+- case-study export inputs
+
+while dropping duplicate runtime fields such as:
+- `std`
+- `p05`
+- `p95`
+- `n_models`
+- `values_per_model`
+
+When run in an interactive terminal, the builder now performs an exact pre-scan and shows nested `tqdm` progress bars for:
+- total tasks across the full run
+- the current active stage
+
+Use `--no-progress` to suppress the progress bars.
+
+Parity audit:
+
+```bash
+python -m tools.optimized.audit_processed_optimised_parity
+```
+
+This validates that every dashboard-visible optimized artifact expected from the legacy `processed/` tree is present under `processed_optimised/` and writes `parity_report.json` into the optimized bundle root.
 
 ## Data setup
 
@@ -211,7 +244,7 @@ Aqueduct methodology note:
 
 ### Processed outputs layout
 
-Processed outputs live under:
+Legacy processed outputs live under:
 
 ```text
 IRT_DATA_DIR/
@@ -219,7 +252,7 @@ IRT_DATA_DIR/
     └── {metric_slug}/
 ```
 
-#### Admin layout
+#### Legacy admin layout
 
 ```text
 processed/{metric_slug}/{state}/
@@ -237,7 +270,7 @@ processed/{metric_slug}/{state}/
 └── blocks/
 ```
 
-#### Hydro layout
+#### Legacy hydro layout
 
 ```text
 processed/{metric_slug}/hydro/

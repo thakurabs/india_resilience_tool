@@ -48,8 +48,9 @@ def run_app() -> None:
         RIVER_REACHES_PATH,
         RIVER_SUBBASIN_DIAGNOSTICS_PATH,
         SUBBASINS_PATH,
-        resolve_processed_root,
+        resolve_processed_optimised_root,
     )
+    from india_resilience_tool.data.optimized_bundle import optimized_context_path
 
     from india_resilience_tool.app.geo_cache import (
         build_adm1_from_adm2,
@@ -144,10 +145,15 @@ def run_app() -> None:
     ADM3_GEOJSON = BLOCKS_PATH
     BASIN_GEOJSON = BASINS_PATH
     SUBBASIN_GEOJSON = SUBBASINS_PATH
-    RIVER_DISPLAY_GEOJSON = RIVER_NETWORK_DISPLAY_PATH
-    RIVER_BASIN_RECONCILIATION_CSV = RIVER_BASIN_RECONCILIATION_PATH
-    RIVER_SUBBASIN_DIAGNOSTICS_CSV = RIVER_SUBBASIN_DIAGNOSTICS_PATH
-    RIVER_REACHES_PARQUET = RIVER_REACHES_PATH
+    optimized_river_display = optimized_context_path("river_network_display.geojson", data_dir=DATA_DIR)
+    optimized_river_basin = optimized_context_path("river_basin_name_reconciliation.parquet", data_dir=DATA_DIR)
+    optimized_river_subbasin = optimized_context_path("river_subbasin_diagnostics.parquet", data_dir=DATA_DIR)
+    optimized_river_reaches = optimized_context_path("river_reaches.parquet", data_dir=DATA_DIR)
+
+    RIVER_DISPLAY_GEOJSON = optimized_river_display if optimized_river_display.exists() else RIVER_NETWORK_DISPLAY_PATH
+    RIVER_BASIN_RECONCILIATION_CSV = optimized_river_basin if optimized_river_basin.exists() else RIVER_BASIN_RECONCILIATION_PATH
+    RIVER_SUBBASIN_DIAGNOSTICS_CSV = optimized_river_subbasin if optimized_river_subbasin.exists() else RIVER_SUBBASIN_DIAGNOSTICS_PATH
+    RIVER_REACHES_PARQUET = optimized_river_reaches if optimized_river_reaches.exists() else RIVER_REACHES_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 
@@ -383,7 +389,7 @@ def run_app() -> None:
         sel_placeholder=SEL_PLACEHOLDER,
         data_dir=DATA_DIR,
         pilot_state=PILOT_STATE,
-        resolve_processed_root_fn=resolve_processed_root,
+        resolve_processed_root_fn=resolve_processed_optimised_root,
         attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
         master_needs_rebuild_fn=master_needs_rebuild,
         state_profile_files_missing_fn=state_profile_files_missing,

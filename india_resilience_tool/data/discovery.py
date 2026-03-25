@@ -397,6 +397,128 @@ def discover_state_period_ensemble_file(
     return f if f.exists() else None
 
 
+def _first_matching_ensemble_csv(directory: Path, *, fallback_name: str) -> Optional[Path]:
+    """Return the preferred yearly-ensemble CSV inside a scenario directory."""
+    if not directory.exists():
+        return None
+    explicit = directory / fallback_name
+    if explicit.exists():
+        return explicit
+    csvs = sorted(directory.glob("*_yearly_ensemble.csv"))
+    if csvs:
+        return csvs[0]
+    return None
+
+
+def iter_district_yearly_ensemble_files(
+    *,
+    ts_root: PathLike,
+    state_dir: str,
+) -> list[tuple[str, str, Path]]:
+    """
+    Enumerate district yearly-ensemble CSVs for one state.
+
+    Returns tuples of:
+      - district directory name
+      - scenario directory name
+      - CSV path
+    """
+    base = Path(ts_root) / state_dir / "districts" / "ensembles"
+    if not base.exists():
+        return []
+
+    out: list[tuple[str, str, Path]] = []
+    for district_dir in sorted([p for p in base.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+        for scenario_dir in sorted([p for p in district_dir.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+            csv_path = _first_matching_ensemble_csv(
+                scenario_dir,
+                fallback_name="district_yearly_ensemble_stats.csv",
+            )
+            if csv_path is not None:
+                out.append((district_dir.name, scenario_dir.name, csv_path))
+    return out
+
+
+def iter_block_yearly_ensemble_files(
+    *,
+    ts_root: PathLike,
+    state_dir: str,
+) -> list[tuple[str, str, str, Path]]:
+    """
+    Enumerate block yearly-ensemble CSVs for one state.
+
+    Returns tuples of:
+      - district directory name
+      - block directory name
+      - scenario directory name
+      - CSV path
+    """
+    base = Path(ts_root) / state_dir / "blocks" / "ensembles"
+    if not base.exists():
+        return []
+
+    out: list[tuple[str, str, str, Path]] = []
+    for district_dir in sorted([p for p in base.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+        for block_dir in sorted([p for p in district_dir.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+            for scenario_dir in sorted([p for p in block_dir.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+                csv_path = _first_matching_ensemble_csv(
+                    scenario_dir,
+                    fallback_name="block_yearly_ensemble_stats.csv",
+                )
+                if csv_path is not None:
+                    out.append((district_dir.name, block_dir.name, scenario_dir.name, csv_path))
+    return out
+
+
+def iter_hydro_yearly_ensemble_files(
+    *,
+    ts_root: PathLike,
+    level: Literal["basin", "sub_basin"],
+) -> list[tuple[str, Optional[str], str, Path]]:
+    """
+    Enumerate hydro yearly-ensemble CSVs.
+
+    Returns tuples of:
+      - basin directory name
+      - sub-basin directory name or None
+      - scenario directory name
+      - CSV path
+    """
+    root = Path(ts_root) / "hydro"
+    if not root.exists():
+        return []
+
+    if str(level).strip().lower() == "basin":
+        base = root / "basins" / "ensembles"
+        if not base.exists():
+            return []
+        out: list[tuple[str, Optional[str], str, Path]] = []
+        for basin_dir in sorted([p for p in base.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+            for scenario_dir in sorted([p for p in basin_dir.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+                csv_path = _first_matching_ensemble_csv(
+                    scenario_dir,
+                    fallback_name=f"{basin_dir.name}_yearly_ensemble.csv",
+                )
+                if csv_path is not None:
+                    out.append((basin_dir.name, None, scenario_dir.name, csv_path))
+        return out
+
+    base = root / "sub_basins" / "ensembles"
+    if not base.exists():
+        return []
+    out = []
+    for basin_dir in sorted([p for p in base.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+        for subbasin_dir in sorted([p for p in basin_dir.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+            for scenario_dir in sorted([p for p in subbasin_dir.iterdir() if p.is_dir()], key=lambda p: p.name.lower()):
+                csv_path = _first_matching_ensemble_csv(
+                    scenario_dir,
+                    fallback_name=f"{subbasin_dir.name}_yearly_ensemble.csv",
+                )
+                if csv_path is not None:
+                    out.append((basin_dir.name, subbasin_dir.name, scenario_dir.name, csv_path))
+    return out
+
+
 def discover_district_model_yearly_files(
     *,
     ts_root: PathLike,

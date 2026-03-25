@@ -8,7 +8,7 @@ This module preserves the dashboard's contractual normalization behavior:
 
 Schema parsing recognizes normalized columns of the form:
     <metric>__<scenario>__<period>__<stat>
-where stat is one of: mean, median, std, p05, p95.
+where stat is one of: mean, median.
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -210,7 +210,7 @@ def parse_master_schema_obj(cols: Iterable[Any]) -> MasterSchema:
 
     Recognizes columns in the canonical normalized form:
         <metric>__<scenario>__<period>__<stat>
-    where stat is one of: mean, median, std, p05, p95
+    where stat is one of: mean, median
 
     Notes:
       - This intentionally does NOT include columns such as __n_models, __models,
@@ -218,7 +218,7 @@ def parse_master_schema_obj(cols: Iterable[Any]) -> MasterSchema:
         This matches current dashboard parsing behavior.
     """
     pat = re.compile(
-        r"^(?P<metric>[^_][^:]*)__(?P<scenario>[^_]+)__(?P<period>[^_]+)__(?P<stat>mean|median|std|p05|p95)$"
+        r"^(?P<metric>[^_][^:]*)__(?P<scenario>[^_]+)__(?P<period>[^_]+)__(?P<stat>mean|median)$"
     )
     items: list[dict[str, Any]] = []
     for c in cols:

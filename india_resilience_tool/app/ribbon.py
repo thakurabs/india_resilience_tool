@@ -17,6 +17,7 @@ import streamlit as st
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.help_text import RIBBON_HELP_MD, help_md_to_plain_text
 from india_resilience_tool.app.master_cache import make_load_master_and_schema_fn
+from india_resilience_tool.config.paths import resolve_processed_root as resolve_legacy_processed_root
 from india_resilience_tool.config.constants import SCENARIO_HELP_MD, SCENARIO_UI_LABEL
 from india_resilience_tool.config.variables import (
     VARIABLES,
@@ -28,6 +29,12 @@ from india_resilience_tool.config.variables import (
     get_pillar_for_domain,
     get_pillars,
 )
+from india_resilience_tool.data.optimized_bundle import (
+    is_optimized_metric_root,
+    optimized_master_path_from_metric_root,
+    optimized_master_sources_from_metric_root,
+)
+from india_resilience_tool.utils.processed_io import read_table
 from india_resilience_tool.viz.charts import (
     PERIOD_ORDER,
     canonical_period_label,
@@ -80,7 +87,7 @@ def _hydro_master_contract_ready(master_csv_path: Path, level: str) -> bool:
     if not master_csv_path.exists():
         return False
     try:
-        cols = set(pd.read_csv(master_csv_path, nrows=0).columns)
+        cols = set(read_table(master_csv_path).columns)
     except Exception:
         return False
     if str(level).strip().lower() == "sub_basin":
@@ -144,6 +151,13 @@ def _resolve_external_admin_master_sources(
     selected_state: str,
 ) -> tuple[Path, ...]:
     """Resolve one or many external admin master CSVs for the current state selection."""
+    if is_optimized_metric_root(processed_root):
+        return optimized_master_sources_from_metric_root(
+            processed_root,
+            level=level,
+            selected_state=selected_state,
+        )
+
     master_name = get_master_csv_filename(level)
     state_norm = str(selected_state or "All").strip() or "All"
     if state_norm != "All":
@@ -177,6 +191,36 @@ def _master_source_label(master_source: Path | tuple[Path, ...]) -> str:
     return str(master_source)
 
 
+def _resolve_hydro_master_source(
+    processed_root: Path,
+    *,
+    variable_slug: str,
+    level: str,
+    data_dir: Path,
+) -> tuple[Path, Path, Optional[Path]]:
+    """
+    Resolve the best available hydro master source.
+
+    When the runtime points at an optimized metric root but the optimized bundle
+    does not yet contain hydro artifacts, fall back to the legacy processed root
+    if a hydro master or hydro yearly source outputs exist there.
+    """
+    master_name = get_master_csv_filename(level)
+    if not is_optimized_metric_root(processed_root):
+        return processed_root, processed_root / "hydro" / master_name, None
+
+    optimized_master = optimized_master_path_from_metric_root(processed_root, level=level)
+    if optimized_master.exists():
+        return processed_root, optimized_master, None
+
+    legacy_root = resolve_legacy_processed_root(variable_slug, data_dir=data_dir, mode="portfolio")
+    legacy_master = legacy_root / "hydro" / master_name
+    if legacy_master.exists() or _hydro_outputs_available(legacy_root, level):
+        return legacy_root, legacy_master, legacy_root
+
+    return processed_root, optimized_master, legacy_root
+
+
 def _coerce_selection(
     *,
     key: str,
@@ -200,7 +244,7 @@ def render_metric_ribbon(
     pilot_state: str,
     resolve_processed_root_fn: Callable[..., Path],
     attach_centroid_geojson: str | None,
-    master_needs_rebuild_fn: Callable[[Path, Path, str], bool],
+    master_needs_rebuild_fn: Callable[[Path | tuple[Path, ...], Path, str], bool],
     state_profile_files_missing_fn: Callable[[Path, str, str], bool],
     perf_section: Callable[..., object],
     render_perf_panel_safe: Callable[[], None],
@@ -221,7 +265,9 @@ def render_metric_ribbon(
     variable_slug: Optional[str] = None
     varcfg: Optional[dict] = None
     processed_root: Optional[Path] = None
-    master_csv_path: Optional[Path] = None
+    master_csv_path: Optional[Path | tuple[Path, ...]] = None
+    hydro_checked_legacy_root: Optional[Path] = None
+    optimized_hydro_master_path: Optional[Path] = None
 
     df: Optional[pd.DataFrame] = None
     schema_items: list[dict] = []
@@ -384,8 +430,26 @@ def render_metric_ribbon(
             processed_root = resolve_processed_root_fn(variable_slug, data_dir=data_dir, mode="portfolio")
             level = str(st.session_state.get("admin_level", "district")).strip().lower()
             selected_admin_state = _selected_state_for_admin_master_loading()
-            master_name = get_master_csv_filename(level)
-            if level in {"basin", "sub_basin"}:
+            if is_optimized_metric_root(processed_root):
+                if level in {"basin", "sub_basin"}:
+                    optimized_hydro_master_path = optimized_master_path_from_metric_root(
+                        processed_root,
+                        level=level,
+                    )
+                    processed_root, master_csv_path, hydro_checked_legacy_root = _resolve_hydro_master_source(
+                        processed_root,
+                        variable_slug=variable_slug,
+                        level=level,
+                        data_dir=data_dir,
+                    )
+                else:
+                    master_csv_path = optimized_master_sources_from_metric_root(
+                        processed_root,
+                        level=level,
+                        selected_state=selected_admin_state,
+                    )
+            elif level in {"basin", "sub_basin"}:
+                master_name = get_master_csv_filename(level)
                 master_root = processed_root / "hydro"
                 master_root.mkdir(parents=True, exist_ok=True)
                 master_csv_path = master_root / master_name
@@ -396,6 +460,7 @@ def render_metric_ribbon(
                     selected_state=selected_admin_state,
                 )
             else:
+                master_name = get_master_csv_filename(level)
                 master_root = processed_root / str(pilot_state)
                 master_root.mkdir(parents=True, exist_ok=True)
                 master_csv_path = master_root / master_name
@@ -443,10 +508,15 @@ def render_metric_ribbon(
                 if not needs:
                     return False, "up-to-date"
                 if is_hydro and not _hydro_outputs_available(processed_root, level):
+                    legacy_hint = ""
+                    if hydro_checked_legacy_root is not None and is_optimized_metric_root(processed_root):
+                        legacy_hint = (
+                            f" no legacy hydro processed outputs were found under {hydro_checked_legacy_root / 'hydro'};"
+                        )
                     return (
                         False,
                         (
-                            f"no hydro processed outputs found under {processed_root / 'hydro'}; "
+                            f"no hydro processed outputs found under {processed_root / 'hydro'};{legacy_hint} "
                             f"run compute_indices_multiprocess for --level {level} first"
                         ),
                     )
@@ -513,11 +583,18 @@ def render_metric_ribbon(
                             f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}."
                         )
                 elif level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
-                    st.error(
-                        f"Hydro boundary files are loaded, but no hydro processed outputs were found for "
-                        f"{VARIABLES[variable_slug]['label']} under {processed_root / 'hydro'}. "
-                        f"Run the hydro compute pipeline for `--level {level}` first, then rebuild the master CSV."
-                    )
+                    if optimized_hydro_master_path is not None and hydro_checked_legacy_root is not None:
+                        st.error(
+                            f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {optimized_hydro_master_path}. "
+                            f"No legacy hydro processed outputs were found under {hydro_checked_legacy_root / 'hydro'}. "
+                            f"Run the hydro compute pipeline for `--level {level}` on the legacy processed tree, then rebuild `processed_optimised`."
+                        )
+                    else:
+                        st.error(
+                            f"Hydro boundary files are loaded, but no hydro processed outputs were found for "
+                            f"{VARIABLES[variable_slug]['label']} under {processed_root / 'hydro'}. "
+                            f"Run the hydro compute pipeline for `--level {level}` first, then rebuild the master CSV."
+                        )
                 else:
                     st.error(
                         f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "

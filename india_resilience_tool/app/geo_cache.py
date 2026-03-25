@@ -38,7 +38,7 @@ from india_resilience_tool.data.river_loader import (
     canonicalize_river_hydro_name as _canonicalize_river_hydro_name,
     ensure_river_key_column as _ensure_river_key_column,
     load_river_basin_reconciliation as _load_river_basin_reconciliation,
-    ensure_river_subbasin_diagnostics as _ensure_river_subbasin_diagnostics,
+    load_river_subbasin_diagnostics as _load_river_subbasin_diagnostics,
     load_local_river_display as _load_local_river_display,
 )
 from india_resilience_tool.data.river_topology import load_river_reaches as _load_river_reaches
@@ -182,9 +182,8 @@ def load_river_basin_reconciliation_cached(path: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=3600)
 def load_river_subbasin_diagnostics_cached(path: str) -> pd.DataFrame:
-    """Load the canonical hydro sub-basin river diagnostics CSV."""
-    df = pd.read_csv(path)
-    return _ensure_river_subbasin_diagnostics(df)
+    """Load the canonical hydro sub-basin river diagnostics table."""
+    return _load_river_subbasin_diagnostics(path)
 
 
 @st.cache_data(ttl=3600)

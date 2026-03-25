@@ -62,14 +62,14 @@ def test_parse_master_schema_ignores_non_stat_cols() -> None:
 def test_parse_master_schema_obj_typed_fields() -> None:
     cols = [
         "m__ssp245__2020-2040__mean",
-        "m__ssp245__2020-2040__p95",
-        "n__historical__1985-2014__std",
+        "m__ssp245__2020-2040__median",
+        "n__historical__1985-2014__p95",
     ]
     schema = parse_master_schema_obj(cols)
 
-    assert sorted(schema.metrics) == ["m", "n"]
-    assert sorted(schema.scenarios) == ["historical", "ssp245"]
-    assert sorted(schema.stats) == ["mean", "p95", "std"]
+    assert sorted(schema.metrics) == ["m"]
+    assert sorted(schema.scenarios) == ["ssp245"]
+    assert sorted(schema.stats) == ["mean", "median"]
 
 
 def test_load_master_csv_encoding_fallback(tmp_path: Path) -> None:

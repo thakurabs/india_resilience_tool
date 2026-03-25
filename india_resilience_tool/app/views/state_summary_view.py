@@ -7,6 +7,11 @@ from typing import Any, Mapping, Optional
 
 import pandas as pd
 
+from india_resilience_tool.data.optimized_bundle import (
+    is_optimized_metric_root,
+    optimized_yearly_models_path_from_metric_root,
+)
+from india_resilience_tool.utils.processed_io import read_table
 from india_resilience_tool.viz.formatting import format_metric_value
 
 
@@ -231,6 +236,45 @@ def _is_non_hazard_metric(varcfg: Mapping[str, Any]) -> bool:
     return bool(pillars) and pillars.isdisjoint({"climate hazards", "bio-physical hazards"})
 
 
+def _build_state_scenario_panel_from_master(
+    *,
+    merged_gdf: Any,
+    selected_state: str,
+    metric_col: str,
+    sel_stat: str,
+) -> pd.DataFrame:
+    """Derive state-level scenario comparison rows from retained master columns."""
+    base_metric, _sel_scenario, _sel_period, _sel_stat = _parse_metric_parts(metric_col)
+    state_col = _resolve_state_column(merged_gdf)
+    if not state_col:
+        return pd.DataFrame()
+
+    state_mask = merged_gdf[state_col].astype(str).str.strip().str.lower() == _normalize_name(selected_state)
+    state_df = merged_gdf.loc[state_mask].copy()
+    if state_df.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, object]] = []
+    stat_norm = str(sel_stat or "").strip().lower()
+    for col in state_df.columns:
+        metric_name, scenario, period, stat = _parse_metric_parts(str(col))
+        if metric_name != base_metric or stat != stat_norm:
+            continue
+        values = pd.to_numeric(state_df[col], errors="coerce").dropna()
+        if values.empty:
+            continue
+        rows.append(
+            {
+                "scenario": scenario,
+                "period": period,
+                "value": float(values.mean()),
+            }
+        )
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values(["scenario", "period"]).reset_index(drop=True)
+
+
 def render_state_summary_view(
     *,
     selected_state: str,
@@ -347,8 +391,9 @@ def render_state_summary_view(
 
     if supports_yearly_trend:
         with st.expander("Trend over time (state average)", expanded=False):
+            optimized_root = is_optimized_metric_root(processed_root)
             expected_yearly = processed_root / selected_state / f"state_yearly_ensemble_stats_{level_norm}.csv"
-            if not expected_yearly.exists():
+            if (not optimized_root) and (not expected_yearly.exists()):
                 st.info(
                     "State yearly ensemble data not available (missing file). "
                     f"Expected: {expected_yearly}. Rebuild master dataset in this mode."
@@ -373,10 +418,6 @@ def render_state_summary_view(
                         d["mean"] = pd.to_numeric(d["mean"], errors="coerce")
                     if "median" in d.columns:
                         d["median"] = pd.to_numeric(d["median"], errors="coerce")
-                    if "p05" in d.columns:
-                        d["p05"] = pd.to_numeric(d["p05"], errors="coerce")
-                    if "p95" in d.columns:
-                        d["p95"] = pd.to_numeric(d["p95"], errors="coerce")
                     d = d.dropna(subset=["year"])
 
                     show_models = st.checkbox(
@@ -390,26 +431,33 @@ def render_state_summary_view(
                         ),
                     )
 
-                    needs_band_fallback = False
-                    if ("p05" not in d.columns) or ("p95" not in d.columns):
-                        needs_band_fallback = True
-                    else:
-                        p05 = pd.to_numeric(d["p05"], errors="coerce")
-                        p95 = pd.to_numeric(d["p95"], errors="coerce")
-                        needs_band_fallback = bool(p05.isna().any() or p95.isna().any())
-
-                    model_file = discover_state_yearly_model_file(
-                        ts_root=processed_root,
-                        state_dir=selected_state,
-                        level=level_norm,
-                    )
-
                     mdf = pd.DataFrame()
-                    if model_file is not None and (show_models or needs_band_fallback):
+                    model_file = None
+                    if optimized_root:
                         try:
-                            mdf = pd.read_csv(model_file)
+                            model_file = optimized_yearly_models_path_from_metric_root(
+                                processed_root,
+                                level=level_norm,
+                                state=selected_state if level_norm in {"district", "block"} else None,
+                            )
                         except Exception:
-                            mdf = pd.DataFrame()
+                            model_file = None
+                        if model_file is not None and Path(model_file).exists() and show_models:
+                            try:
+                                mdf = read_table(Path(model_file))
+                            except Exception:
+                                mdf = pd.DataFrame()
+                    else:
+                        model_file = discover_state_yearly_model_file(
+                            ts_root=processed_root,
+                            state_dir=selected_state,
+                            level=level_norm,
+                        )
+                        if model_file is not None and show_models:
+                            try:
+                                mdf = pd.read_csv(model_file)
+                            except Exception:
+                                mdf = pd.DataFrame()
 
                     max_models = 0
                     model_ts_hist = pd.DataFrame()
@@ -461,21 +509,7 @@ def render_state_summary_view(
                     effective_show_models = bool(
                         show_models and max_models > 0 and (not model_ts_hist.empty or not model_ts_scen.empty)
                     )
-                    show_band_default = not effective_show_models
-                    show_band = st.checkbox(
-                        "Show percentile band (p05–p95)",
-                        value=bool(
-                            st.session_state.get(
-                                f"state_trend_show_band_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
-                                show_band_default,
-                            )
-                        ),
-                        key=f"state_trend_show_band_{variable_slug}_{selected_state}_{level_norm}_{sel_scenario}",
-                        help="Show the ensemble P05–P95 shading (may be visually heavy when spaghetti is enabled).",
-                    )
-
-                    if show_band and needs_band_fallback:
-                        d = _merge_missing_trend_band(ensemble_df=d, model_df=mdf)
+                    show_band = False
 
                     d = _coerce_trend_central_tendency(d, sel_stat)
                     if "mean" not in d.columns:
@@ -540,7 +574,7 @@ def render_state_summary_view(
                             model_ts_scen=model_ts_scen,
                             show_model_members=effective_show_models,
                             max_models=max_models or 15,
-                            show_band=bool(show_band),
+                            show_band=False,
                             render_context="dashboard",
                         )
                         st.plotly_chart(
@@ -551,20 +585,41 @@ def render_state_summary_view(
 
     if supports_scenario_comparison:
         with st.expander("Scenario comparison (period-mean)", expanded=False):
-            f = discover_state_period_ensemble_file(ts_root=processed_root, state_dir=selected_state, level=level_norm)
+            optimized_root = is_optimized_metric_root(processed_root)
+            f = None if optimized_root else discover_state_period_ensemble_file(ts_root=processed_root, state_dir=selected_state, level=level_norm)
             expected_period = processed_root / selected_state / f"state_ensemble_stats_{level_norm}.csv"
-            if f is None or not expected_period.exists():
+            if (not optimized_root) and (f is None or not expected_period.exists()):
                 st.info(
                     "Scenario comparison not available (missing file). "
                     f"Expected: {expected_period}. Rebuild master dataset in this mode."
                 )
             else:
-                sdf = pd.read_csv(f)
-                y_col = "ensemble_median" if str(sel_stat).strip().lower() == "median" and "ensemble_median" in sdf.columns else "ensemble_mean"
-                if sdf.empty or not {"scenario", "period", y_col}.issubset(set(sdf.columns)):
+                if optimized_root:
+                    panel_df = _build_state_scenario_panel_from_master(
+                        merged_gdf=merged_gdf,
+                        selected_state=selected_state,
+                        metric_col=metric_col,
+                        sel_stat=sel_stat,
+                    )
+                else:
+                    sdf = pd.read_csv(f)
+                    y_col = "ensemble_median" if str(sel_stat).strip().lower() == "median" and "ensemble_median" in sdf.columns else "ensemble_mean"
+                    if sdf.empty or not {"scenario", "period", y_col}.issubset(set(sdf.columns)):
+                        st.info(
+                            "Scenario comparison not available; file is empty or schema mismatch "
+                            f"(expected columns include scenario, period, {y_col})."
+                        )
+                        panel_df = pd.DataFrame()
+                    else:
+                        panel_df = sdf[["scenario", "period", y_col]].copy()
+                        panel_df = panel_df.rename(columns={y_col: "value"})
+                        panel_df["value"] = pd.to_numeric(panel_df["value"], errors="coerce")
+                        panel_df = panel_df.dropna(subset=["value"])
+
+                if panel_df.empty:
                     st.info(
                         "Scenario comparison not available; file is empty or schema mismatch "
-                        f"(expected columns include scenario, period, {y_col})."
+                        "(no state-level scenario-period values were derived)."
                     )
                 else:
                     from india_resilience_tool.viz.charts import (
@@ -583,11 +638,6 @@ def render_state_summary_view(
                         ),
                     )
                     y_axis_policy = "zero" if force_zero else "auto"
-
-                    panel_df = sdf[["scenario", "period", y_col]].copy()
-                    panel_df = panel_df.rename(columns={y_col: "value"})
-                    panel_df["value"] = pd.to_numeric(panel_df["value"], errors="coerce")
-                    panel_df = panel_df.dropna(subset=["value"])
 
                     fig_sc = make_scenario_comparison_figure_plotly(
                         panel_df=panel_df,

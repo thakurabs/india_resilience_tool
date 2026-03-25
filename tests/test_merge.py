@@ -182,3 +182,37 @@ def test_block_merge_raises_when_master_states_are_missing_from_boundaries(tmp_p
             adm2_state_col="state_name",
             master_state_col="state",
         )
+
+
+def test_merge_ignores_nullable_master_states(tmp_path: Path) -> None:
+    adm2 = pd.DataFrame(
+        {
+            "district_name": ["Alpha"],
+            "state_name": ["Telangana"],
+        }
+    )
+    master = pd.DataFrame(
+        {
+            "district": ["alpha", "orphan"],
+            "state": pd.Series(["Telangana", pd.NA], dtype="string"),
+            "m": [1.0, 2.0],
+        }
+    )
+
+    master_path = tmp_path / "master.csv"
+    master_path.write_text("x\n1\n")
+
+    merged = get_or_build_merged_for_index_cached(
+        adm2,
+        master,
+        slug="demo",
+        master_path=master_path,
+        session_state={},
+        alias_fn=_alias,
+        adm2_state_col="state_name",
+        master_state_col="state",
+    )
+
+    assert merged.shape[0] == 1
+    assert merged["district_name"].tolist() == ["Alpha"]
+    assert float(merged["m"].iloc[0]) == 1.0

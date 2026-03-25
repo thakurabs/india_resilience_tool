@@ -10,6 +10,8 @@ from shapely.geometry import LineString, Polygon
 from india_resilience_tool.data.river_loader import (
     ensure_river_basin_reconciliation,
     ensure_river_subbasin_diagnostics,
+    load_river_basin_reconciliation,
+    load_river_subbasin_diagnostics,
     resolve_river_basin_reconciliation,
     resolve_river_subbasin_diagnostics,
 )
@@ -147,3 +149,40 @@ def test_resolve_river_subbasin_diagnostics_returns_expected_message() -> None:
     assert matched["message"] is None
     assert unresolved["status"] == "review_required"
     assert "No river features" in str(unresolved["message"])
+
+
+def test_load_river_basin_reconciliation_accepts_parquet(tmp_path: Path) -> None:
+    path = tmp_path / "river_basin_name_reconciliation.parquet"
+    pd.DataFrame(
+        {
+            "hydro_basin_name": ["Godavari Basin"],
+            "hydro_basin_id": ["B01"],
+            "river_basin_name": ["Godavari"],
+            "match_status": ["matched"],
+            "notes": [""],
+        }
+    ).to_parquet(path, index=False)
+
+    out = load_river_basin_reconciliation(path)
+
+    assert out["river_basin_name"].tolist() == ["Godavari"]
+
+
+def test_load_river_subbasin_diagnostics_accepts_parquet(tmp_path: Path) -> None:
+    path = tmp_path / "river_subbasin_diagnostics.parquet"
+    pd.DataFrame(
+        {
+            "basin_id": ["B01"],
+            "basin_name": ["Godavari Basin"],
+            "subbasin_id": ["SB01"],
+            "subbasin_name": ["Pranhita and others"],
+            "matched_river_feature_count": [2],
+            "placeholder_river_feature_count": [0],
+            "match_status": ["matched"],
+            "notes": [""],
+        }
+    ).to_parquet(path, index=False)
+
+    out = load_river_subbasin_diagnostics(path)
+
+    assert out["subbasin_id"].tolist() == ["SB01"]

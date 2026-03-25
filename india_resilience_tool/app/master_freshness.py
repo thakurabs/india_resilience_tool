@@ -12,6 +12,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from india_resilience_tool.data.optimized_bundle import is_optimized_metric_root
+
 
 @st.cache_data(ttl=300)
 def latest_processed_periods_mtime(processed_root_str: str, state: str) -> float:
@@ -39,12 +41,22 @@ def latest_processed_periods_mtime(processed_root_str: str, state: str) -> float
     return float(latest)
 
 
-def master_needs_rebuild(master_path: Path, processed_root: Path, state: str) -> bool:
-    """Return True when processed artifacts are newer than the master CSV."""
-    if not master_path.exists():
+def master_needs_rebuild(master_path: Path | tuple[Path, ...], processed_root: Path, state: str) -> bool:
+    """Return True when processed artifacts are newer than the master serving artifact."""
+    if is_optimized_metric_root(processed_root):
+        if isinstance(master_path, tuple):
+            return not master_path or any(not p.exists() for p in master_path)
+        return not Path(master_path).exists()
+
+    if isinstance(master_path, tuple):
+        if not master_path:
+            return True
+        return any(master_needs_rebuild(path, processed_root, state) for path in master_path)
+
+    if not Path(master_path).exists():
         return True
     try:
-        master_mtime = master_path.stat().st_mtime
+        master_mtime = Path(master_path).stat().st_mtime
     except Exception:
         return True
     return latest_processed_periods_mtime(str(processed_root), state) > (master_mtime + 1.0)
@@ -52,6 +64,9 @@ def master_needs_rebuild(master_path: Path, processed_root: Path, state: str) ->
 
 def state_profile_files_missing(processed_root: Path, state: str, level: str) -> bool:
     """Return True when required level-specific state profile files are missing."""
+    if is_optimized_metric_root(processed_root):
+        return False
+
     level_norm = str(level or "district").strip().lower()
     state_root = Path(processed_root) / str(state)
     required = [
@@ -59,4 +74,3 @@ def state_profile_files_missing(processed_root: Path, state: str, level: str) ->
         state_root / f"state_ensemble_stats_{level_norm}.csv",
     ]
     return any(not p.exists() for p in required)
-

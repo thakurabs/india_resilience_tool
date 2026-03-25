@@ -572,9 +572,10 @@ def render_trend_over_time(
     units: Optional[str] = None,
     logo_path: Optional[Path] = None,
     create_trend_figure_fn: Callable[..., Any],
-    # Optional: support per-model spaghetti overlay (requires per-model yearly CSVs on disk)
+    # Optional: support per-model spaghetti overlay from retained yearly model data
     ts_root: Optional[PathLike] = None,
     varcfg: Optional[Mapping[str, Any]] = None,
+    alias_fn: Callable[[str], str],
     level: str = "district",
     block_name: Optional[str] = None,
 ) -> None:
@@ -611,7 +612,7 @@ def render_trend_over_time(
             return
 
         st.caption(
-            f"Looking for yearly CSVs under: {state_dir_for_fs} / {district_for_fs} "
+            f"Loading retained yearly series for {state_dir_for_fs} / {district_for_fs} "
             f"(historical + {sel_scenario})"
         )
 
@@ -621,71 +622,101 @@ def render_trend_over_time(
             key="trend_show_models",
             help=(
                 "Overlay per-model yearly series as faint lines (spaghetti) behind the ensemble median. "
-                "Requires per-model yearly CSVs to be present on disk."
+                "Requires retained per-model yearly data to be present on disk."
             ),
         )
 
         level_norm = str(level or "district").strip().lower()
         is_block = level_norm == "block" and bool(str(block_name or "").strip())
         block_disp = str(block_name or "").strip() if is_block else None
+        optimized_models = False
 
         model_files_hist: dict[str, Path] = {}
         model_files_scen: dict[str, Path] = {}
+        model_ts_hist_all: pd.DataFrame = pd.DataFrame()
+        model_ts_scen_all: pd.DataFrame = pd.DataFrame()
         max_available = 0
         n_hist = 0
         n_scen = 0
 
         if show_models and ts_root:
-            from india_resilience_tool.data.discovery import (
-                discover_block_model_yearly_files,
-                discover_district_model_yearly_files,
-            )
+            from india_resilience_tool.analysis.timeseries import load_unit_yearly_models
+            from india_resilience_tool.data.optimized_bundle import is_optimized_metric_root
 
+            optimized_models = is_optimized_metric_root(Path(ts_root))
             vc = varcfg or {}
-            if is_block and block_disp:
-                model_files_hist = dict(
-                    discover_block_model_yearly_files(
-                        ts_root=ts_root,
-                        state_dir=state_dir_for_fs,
-                        district_display=district_for_fs,
-                        block_display=block_disp,
-                        scenario_name="historical",
-                        varcfg=vc,
-                    )
+            if optimized_models:
+                model_ts_hist_all = load_unit_yearly_models(
+                    ts_root=ts_root,
+                    level=("block" if is_block else "district"),
+                    state_dir=state_dir_for_fs,
+                    district_display=district_for_fs,
+                    block_display=block_disp,
+                    scenario_name="historical",
+                    normalize_fn=alias_fn,
                 )
-                model_files_scen = dict(
-                    discover_block_model_yearly_files(
-                        ts_root=ts_root,
-                        state_dir=state_dir_for_fs,
-                        district_display=district_for_fs,
-                        block_display=block_disp,
-                        scenario_name=sel_scenario,
-                        varcfg=vc,
-                    )
+                model_ts_scen_all = load_unit_yearly_models(
+                    ts_root=ts_root,
+                    level=("block" if is_block else "district"),
+                    state_dir=state_dir_for_fs,
+                    district_display=district_for_fs,
+                    block_display=block_disp,
+                    scenario_name=sel_scenario,
+                    normalize_fn=alias_fn,
                 )
+                n_hist = int(model_ts_hist_all["model"].nunique()) if "model" in model_ts_hist_all.columns else 0
+                n_scen = int(model_ts_scen_all["model"].nunique()) if "model" in model_ts_scen_all.columns else 0
+                max_available = max(n_hist, n_scen)
             else:
-                model_files_hist = dict(
-                    discover_district_model_yearly_files(
-                        ts_root=ts_root,
-                        state_dir=state_dir_for_fs,
-                        district_display=district_for_fs,
-                        scenario_name="historical",
-                        varcfg=vc,
-                    )
-                )
-                model_files_scen = dict(
-                    discover_district_model_yearly_files(
-                        ts_root=ts_root,
-                        state_dir=state_dir_for_fs,
-                        district_display=district_for_fs,
-                        scenario_name=sel_scenario,
-                        varcfg=vc,
-                    )
+                from india_resilience_tool.data.discovery import (
+                    discover_block_model_yearly_files,
+                    discover_district_model_yearly_files,
                 )
 
-            n_hist = len(model_files_hist)
-            n_scen = len(model_files_scen)
-            max_available = max(n_hist, n_scen)
+                if is_block and block_disp:
+                    model_files_hist = dict(
+                        discover_block_model_yearly_files(
+                            ts_root=ts_root,
+                            state_dir=state_dir_for_fs,
+                            district_display=district_for_fs,
+                            block_display=block_disp,
+                            scenario_name="historical",
+                            varcfg=vc,
+                        )
+                    )
+                    model_files_scen = dict(
+                        discover_block_model_yearly_files(
+                            ts_root=ts_root,
+                            state_dir=state_dir_for_fs,
+                            district_display=district_for_fs,
+                            block_display=block_disp,
+                            scenario_name=sel_scenario,
+                            varcfg=vc,
+                        )
+                    )
+                else:
+                    model_files_hist = dict(
+                        discover_district_model_yearly_files(
+                            ts_root=ts_root,
+                            state_dir=state_dir_for_fs,
+                            district_display=district_for_fs,
+                            scenario_name="historical",
+                            varcfg=vc,
+                        )
+                    )
+                    model_files_scen = dict(
+                        discover_district_model_yearly_files(
+                            ts_root=ts_root,
+                            state_dir=state_dir_for_fs,
+                            district_display=district_for_fs,
+                            scenario_name=sel_scenario,
+                            varcfg=vc,
+                        )
+                    )
+
+                n_hist = len(model_files_hist)
+                n_scen = len(model_files_scen)
+                max_available = max(n_hist, n_scen)
 
         max_models = 0
         if show_models:
@@ -709,13 +740,7 @@ def render_trend_over_time(
                 )
 
         effective_show_models = bool(show_models and max_models > 0)
-        show_band_default = not effective_show_models
-        show_band = st.checkbox(
-            "Show percentile band (p05–p95)",
-            value=bool(st.session_state.get("trend_show_band", show_band_default)),
-            key="trend_show_band",
-            help="Show the ensemble P05–P95 shading (may be visually heavy when spaghetti is enabled).",
-        )
+        show_band = False
 
         model_ts_hist: pd.DataFrame = pd.DataFrame()
         model_ts_scen: pd.DataFrame = pd.DataFrame()
@@ -726,70 +751,80 @@ def render_trend_over_time(
                 f"(showing up to {max_models})."
             )
 
-            from india_resilience_tool.analysis.timeseries import (
-                load_unit_yearly_models_from_files,
-            )
+            if optimized_models:
+                def _limit_models(df: pd.DataFrame, k: int) -> pd.DataFrame:
+                    if df.empty or "model" not in df.columns or k <= 0:
+                        return pd.DataFrame()
+                    keep = sorted(df["model"].astype(str).unique().tolist())[:k]
+                    return df[df["model"].astype(str).isin(keep)].copy()
 
-            def _take_first(d: Mapping[str, Path], k: int) -> Mapping[str, Path]:
-                if k <= 0 or not d:
-                    return {}
-                items = sorted(d.items(), key=lambda kv: str(kv[0]).lower())
-                return dict(items[:k])
-
-            model_files_hist_sel = _take_first(model_files_hist, max_models)
-            model_files_scen_sel = _take_first(model_files_scen, max_models)
-
-            def _specs(model_files: Mapping[str, Path]) -> tuple[tuple[str, str, float], ...]:
-                specs: list[tuple[str, str, float]] = []
-                for m, p in sorted(model_files.items(), key=lambda kv: str(kv[0]).lower()):
-                    try:
-                        mtime = float(Path(p).stat().st_mtime)
-                    except Exception:
-                        mtime = 0.0
-                    specs.append((str(m), str(p), mtime))
-                return tuple(specs)
-
-            @st.cache_data(show_spinner=False)
-            def _load_models_cached(
-                specs: tuple[tuple[str, str, float], ...],
-                *,
-                scenario: str,
-                level: str,
-                state: str,
-                district: str,
-                block: Optional[str],
-            ) -> pd.DataFrame:
-                file_specs = [(m, p) for (m, p, _mt) in specs]
-                return load_unit_yearly_models_from_files(
-                    file_specs,
-                    scenario_name=scenario,
-                    level=level,
-                    state_dir=state,
-                    district_display=district,
-                    block_display=block,
+                model_ts_hist = _limit_models(model_ts_hist_all, max_models)
+                model_ts_scen = _limit_models(model_ts_scen_all, max_models)
+            else:
+                from india_resilience_tool.analysis.timeseries import (
+                    load_unit_yearly_models_from_files,
                 )
 
-            specs_hist = _specs(model_files_hist_sel)
-            specs_scen = _specs(model_files_scen_sel)
+                def _take_first(d: Mapping[str, Path], k: int) -> Mapping[str, Path]:
+                    if k <= 0 or not d:
+                        return {}
+                    items = sorted(d.items(), key=lambda kv: str(kv[0]).lower())
+                    return dict(items[:k])
 
-            if specs_hist:
-                model_ts_hist = _load_models_cached(
-                    specs_hist,
-                    scenario="historical",
-                    level=("block" if is_block else "district"),
-                    state=state_dir_for_fs,
-                    district=district_for_fs,
-                    block=block_disp,
-                )
-            if specs_scen:
-                model_ts_scen = _load_models_cached(
-                    specs_scen,
-                    scenario=sel_scenario,
-                    level=("block" if is_block else "district"),
-                    state=state_dir_for_fs,
-                    district=district_for_fs,
-                    block=block_disp,
-                )
+                model_files_hist_sel = _take_first(model_files_hist, max_models)
+                model_files_scen_sel = _take_first(model_files_scen, max_models)
+
+                def _specs(model_files: Mapping[str, Path]) -> tuple[tuple[str, str, float], ...]:
+                    specs: list[tuple[str, str, float]] = []
+                    for m, p in sorted(model_files.items(), key=lambda kv: str(kv[0]).lower()):
+                        try:
+                            mtime = float(Path(p).stat().st_mtime)
+                        except Exception:
+                            mtime = 0.0
+                        specs.append((str(m), str(p), mtime))
+                    return tuple(specs)
+
+                @st.cache_data(show_spinner=False)
+                def _load_models_cached(
+                    specs: tuple[tuple[str, str, float], ...],
+                    *,
+                    scenario: str,
+                    level: str,
+                    state: str,
+                    district: str,
+                    block: Optional[str],
+                ) -> pd.DataFrame:
+                    file_specs = [(m, p) for (m, p, _mt) in specs]
+                    return load_unit_yearly_models_from_files(
+                        file_specs,
+                        scenario_name=scenario,
+                        level=level,
+                        state_dir=state,
+                        district_display=district,
+                        block_display=block,
+                    )
+
+                specs_hist = _specs(model_files_hist_sel)
+                specs_scen = _specs(model_files_scen_sel)
+
+                if specs_hist:
+                    model_ts_hist = _load_models_cached(
+                        specs_hist,
+                        scenario="historical",
+                        level=("block" if is_block else "district"),
+                        state=state_dir_for_fs,
+                        district=district_for_fs,
+                        block=block_disp,
+                    )
+                if specs_scen:
+                    model_ts_scen = _load_models_cached(
+                        specs_scen,
+                        scenario=sel_scenario,
+                        level=("block" if is_block else "district"),
+                        state=state_dir_for_fs,
+                        district=district_for_fs,
+                        block=block_disp,
+                    )
 
         if not hist_ts.empty or not scen_ts.empty:
             # Compute compare mean for hover delta (Δ vs selected period mean)
@@ -1398,6 +1433,7 @@ def render_details_panel(
     make_case_study_pdf_fn: Callable[..., bytes],
     make_case_study_zip_fn: Callable[..., bytes],
     slugify_fs_fn: Callable[[str], str],
+    alias_fn: Callable[[str], str],
     # Optional: filesystem paths for caption
     state_dir_for_fs: Optional[str] = None,
     district_for_fs: Optional[str] = None,
@@ -1580,6 +1616,7 @@ def render_details_panel(
             create_trend_figure_fn=create_trend_figure_fn,
             ts_root=ts_root,
             varcfg=varcfg,
+            alias_fn=alias_fn,
             level=level,
             block_name=block_name,
         )

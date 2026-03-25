@@ -630,12 +630,22 @@ def render_right_panel(
 
     crosswalk_contexts: dict[str, Any] = {}
     river_context: Optional[dict[str, Any]] = None
-    crosswalk_specs = {
-        "district_subbasin": data_dir / "district_subbasin_crosswalk.csv",
-        "block_subbasin": data_dir / "block_subbasin_crosswalk.csv",
-        "district_basin": data_dir / "district_basin_crosswalk.csv",
-        "block_basin": data_dir / "block_basin_crosswalk.csv",
-    }
+    from india_resilience_tool.data.optimized_bundle import is_optimized_metric_root, optimized_context_path
+
+    if is_optimized_metric_root(processed_root):
+        crosswalk_specs = {
+            "district_subbasin": optimized_context_path("district_subbasin.parquet", data_dir=data_dir),
+            "block_subbasin": optimized_context_path("block_subbasin.parquet", data_dir=data_dir),
+            "district_basin": optimized_context_path("district_basin.parquet", data_dir=data_dir),
+            "block_basin": optimized_context_path("block_basin.parquet", data_dir=data_dir),
+        }
+    else:
+        crosswalk_specs = {
+            "district_subbasin": data_dir / "district_subbasin_crosswalk.csv",
+            "block_subbasin": data_dir / "block_subbasin_crosswalk.csv",
+            "district_basin": data_dir / "district_basin_crosswalk.csv",
+            "block_basin": data_dir / "block_basin_crosswalk.csv",
+        }
     loaded_crosswalks: dict[str, pd.DataFrame] = {}
     for kind, path in crosswalk_specs.items():
         if not path.exists():
@@ -877,6 +887,7 @@ def render_right_panel(
         make_case_study_pdf_fn=_make_district_case_study_pdf,
         make_case_study_zip_fn=_make_case_study_zip,
         slugify_fs_fn=slugify_fs,
+        alias_fn=alias_fn,
         state_dir_for_fs=state_dir_for_fs,
         district_for_fs=district_for_fs,
         ts_root=processed_root,
