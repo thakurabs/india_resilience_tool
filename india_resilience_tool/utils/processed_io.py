@@ -85,6 +85,8 @@ def read_table(
 
     suf = p.suffix.lower()
     if suf == ".parquet":
+        if filters:
+            return _read_parquet_dataset(p, columns=columns, filters=filters)
         return pd.read_parquet(p, columns=list(columns) if columns else None)
 
     # CSV / CSV.GZ

@@ -217,6 +217,46 @@ def build_choropleth_map_with_geojson_layer(
         river_fc: optional filtered FeatureCollection for a river-line overlay.
         river_layer_name: human-facing name for the river overlay layer.
     """
+    m = build_base_choropleth_map_with_geojson_layer(
+        fc=fc,
+        map_center=map_center,
+        map_zoom=map_zoom,
+        bounds_latlon=bounds_latlon,
+        adm1=adm1,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        layer_name=layer_name,
+        tooltip=tooltip,
+        highlight_function=highlight_function,
+    )
+    m = add_reference_overlay_layer(
+        m,
+        reference_fc=reference_fc,
+        reference_level=reference_level,
+        reference_layer_name=reference_layer_name,
+    )
+    m = add_river_overlay_layer(
+        m,
+        river_fc=river_fc,
+        river_layer_name=river_layer_name,
+    )
+    return m
+
+
+def build_base_choropleth_map_with_geojson_layer(
+    *,
+    fc: Mapping[str, Any],
+    map_center: list[float],
+    map_zoom: float,
+    bounds_latlon: list[list[float]],
+    adm1: Any,
+    selected_state: str,
+    selected_district: str,
+    layer_name: str,
+    tooltip: Any = None,
+    highlight_function: Optional[Callable[[dict], dict]] = None,
+) -> Any:
+    """Build the base Folium map with the patched choropleth layer only."""
     import folium
 
     m = folium.Map(
@@ -275,87 +315,115 @@ def build_choropleth_map_with_geojson_layer(
         bubblingMouseEvents=False,
     ).add_to(m)
 
-    if reference_fc and list((reference_fc or {}).get("features", []) or []):
-        reference_level_norm = str(reference_level or "").strip().lower()
+    return m
 
-        def _reference_style(_feature: dict) -> dict:
-            if reference_level_norm in {"district", "block"}:
-                outline_color = "#1d4ed8"
-            else:
-                outline_color = "#0f766e"
-            return {
-                "fillColor": "transparent",
-                "color": outline_color,
-                "weight": 2.0,
-                "fillOpacity": 0.0,
-            }
 
-        reference_tooltip = None
-        if reference_level_norm == "district":
-            reference_tooltip = folium.features.GeoJsonTooltip(
-                fields=["district_name", "state_name"],
-                aliases=["District", "State"],
-                localize=True,
-                sticky=True,
-            )
-        elif reference_level_norm == "block":
-            reference_tooltip = folium.features.GeoJsonTooltip(
-                fields=["block_name", "district_name", "state_name"],
-                aliases=["Block", "District", "State"],
-                localize=True,
-                sticky=True,
-            )
-        elif reference_level_norm == "basin":
-            reference_tooltip = folium.features.GeoJsonTooltip(
-                fields=["basin_name"],
-                aliases=["Basin"],
-                localize=True,
-                sticky=True,
-            )
-        elif reference_level_norm == "sub_basin":
-            reference_tooltip = folium.features.GeoJsonTooltip(
-                fields=["subbasin_name", "basin_name"],
-                aliases=["Sub-basin", "Basin"],
-                localize=True,
-                sticky=True,
-            )
+def add_reference_overlay_layer(
+    m: Any,
+    *,
+    reference_fc: Optional[Mapping[str, Any]] = None,
+    reference_level: Optional[str] = None,
+    reference_layer_name: Optional[str] = None,
+) -> Any:
+    """Attach the related-units overlay layer to an existing Folium map."""
+    import folium
 
-        folium.GeoJson(
-            data=dict(reference_fc),
-            name=str(reference_layer_name or "Related units"),
-            style_function=_reference_style,
-            tooltip=reference_tooltip,
-            smooth_factor=1.5,
-            zoom_on_click=False,
-            bubblingMouseEvents=False,
-        ).add_to(m)
+    if not (reference_fc and list((reference_fc or {}).get("features", []) or [])):
+        return m
 
-    if river_fc and list((river_fc or {}).get("features", []) or []):
-        river_tooltip = folium.features.GeoJsonTooltip(
-            fields=[
-                "river_name_clean",
-                "basin_name_clean",
-                "subbasin_name_clean",
-                "length_km_source",
-            ],
-            aliases=["River", "Basin", "Sub-basin", "Length (km)"],
+    reference_level_norm = str(reference_level or "").strip().lower()
+
+    def _reference_style(_feature: dict) -> dict:
+        if reference_level_norm in {"district", "block"}:
+            outline_color = "#1d4ed8"
+        else:
+            outline_color = "#0f766e"
+        return {
+            "fillColor": "transparent",
+            "color": outline_color,
+            "weight": 2.0,
+            "fillOpacity": 0.0,
+        }
+
+    reference_tooltip = None
+    if reference_level_norm == "district":
+        reference_tooltip = folium.features.GeoJsonTooltip(
+            fields=["district_name", "state_name"],
+            aliases=["District", "State"],
+            localize=True,
+            sticky=True,
+        )
+    elif reference_level_norm == "block":
+        reference_tooltip = folium.features.GeoJsonTooltip(
+            fields=["block_name", "district_name", "state_name"],
+            aliases=["Block", "District", "State"],
+            localize=True,
+            sticky=True,
+        )
+    elif reference_level_norm == "basin":
+        reference_tooltip = folium.features.GeoJsonTooltip(
+            fields=["basin_name"],
+            aliases=["Basin"],
+            localize=True,
+            sticky=True,
+        )
+    elif reference_level_norm == "sub_basin":
+        reference_tooltip = folium.features.GeoJsonTooltip(
+            fields=["subbasin_name", "basin_name"],
+            aliases=["Sub-basin", "Basin"],
             localize=True,
             sticky=True,
         )
 
-        folium.GeoJson(
-            data=dict(river_fc),
-            name=str(river_layer_name or "River network"),
-            style_function=lambda _feature: {
-                "color": "#2563eb",
-                "weight": 1.8,
-                "opacity": 0.75,
-            },
-            tooltip=river_tooltip,
-            smooth_factor=1.0,
-            zoom_on_click=False,
-            bubblingMouseEvents=False,
-        ).add_to(m)
+    folium.GeoJson(
+        data=dict(reference_fc),
+        name=str(reference_layer_name or "Related units"),
+        style_function=_reference_style,
+        tooltip=reference_tooltip,
+        smooth_factor=1.5,
+        zoom_on_click=False,
+        bubblingMouseEvents=False,
+    ).add_to(m)
+    return m
+
+
+def add_river_overlay_layer(
+    m: Any,
+    *,
+    river_fc: Optional[Mapping[str, Any]] = None,
+    river_layer_name: Optional[str] = None,
+) -> Any:
+    """Attach the river overlay layer to an existing Folium map."""
+    import folium
+
+    if not (river_fc and list((river_fc or {}).get("features", []) or [])):
+        return m
+
+    river_tooltip = folium.features.GeoJsonTooltip(
+        fields=[
+            "river_name_clean",
+            "basin_name_clean",
+            "subbasin_name_clean",
+            "length_km_source",
+        ],
+        aliases=["River", "Basin", "Sub-basin", "Length (km)"],
+        localize=True,
+        sticky=True,
+    )
+
+    folium.GeoJson(
+        data=dict(river_fc),
+        name=str(river_layer_name or "River network"),
+        style_function=lambda _feature: {
+            "color": "#2563eb",
+            "weight": 1.8,
+            "opacity": 0.75,
+        },
+        tooltip=river_tooltip,
+        smooth_factor=1.0,
+        zoom_on_click=False,
+        bubblingMouseEvents=False,
+    ).add_to(m)
 
     return m
 
@@ -857,20 +925,10 @@ def render_map_view(
     ctx = perf_section("map: render st_folium") if perf_section is not None else nullcontext()
 
     with ctx:
-        overlay_spec = st.session_state.get("crosswalk_overlay") or {}
-        overlay_signature = (
-            f"{overlay_spec.get('level', 'none')}_"
-            f"{overlay_spec.get('selected_name', 'none')}_"
-            f"{len(list(overlay_spec.get('feature_keys', []) or []))}"
-        )
-        river_signature = (
-            f"{bool(st.session_state.get('show_river_network', False))}_"
-            f"{selected_basin}_{selected_subbasin}"
-        )
         map_key = (
             f"map_{variable_slug}_{sel_scenario}_{sel_period}_{sel_stat}_"
             f"{selected_state}_{selected_district}_{selected_block}_"
-            f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}_{overlay_signature}_{river_signature}"
+            f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}"
         )
         st.markdown(
             (

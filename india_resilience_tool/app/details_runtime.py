@@ -646,8 +646,20 @@ def render_right_panel(
             "district_basin": data_dir / "district_basin_crosswalk.csv",
             "block_basin": data_dir / "block_basin_crosswalk.csv",
         }
+    if level_norm == "district":
+        required_crosswalk_kinds = {"district_basin", "district_subbasin"}
+    elif level_norm == "block":
+        required_crosswalk_kinds = {"block_basin", "block_subbasin"}
+    elif level_norm == "basin":
+        required_crosswalk_kinds = {"district_basin", "block_basin"}
+    elif level_norm == "sub_basin":
+        required_crosswalk_kinds = {"district_subbasin", "block_subbasin"}
+    else:
+        required_crosswalk_kinds = set(crosswalk_specs)
     loaded_crosswalks: dict[str, pd.DataFrame] = {}
     for kind, path in crosswalk_specs.items():
+        if kind not in required_crosswalk_kinds:
+            continue
         if not path.exists():
             continue
         try:

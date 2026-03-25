@@ -136,7 +136,7 @@ def test_filter_frame_by_selection_value_handles_case_and_alias_mismatch() -> No
     assert basin_out["basin_name"].tolist() == ["Upper Godavari"]
 
 
-def test_build_map_render_signature_changes_when_overlay_or_river_context_changes() -> None:
+def test_build_map_render_signature_ignores_overlay_and_river_context_changes() -> None:
     base = _build_map_render_signature(
         level="block",
         selected_state="Telangana",
@@ -186,5 +186,5 @@ def test_build_map_render_signature_changes_when_overlay_or_river_context_change
         resolved_river_basin_name="Godavari",
     )
 
-    assert base != overlay_changed
-    assert base != river_changed
+    assert base == overlay_changed
+    assert base == river_changed

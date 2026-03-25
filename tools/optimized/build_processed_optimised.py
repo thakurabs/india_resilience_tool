@@ -561,6 +561,20 @@ def _simplify_geometry(
     tolerance: float,
 ) -> gpd.GeoDataFrame:
     out = gdf[keep_cols + ["geometry"]].copy()
+    if "area_m2" not in out.columns:
+        from pyproj import Geod
+
+        geod = Geod(ellps="WGS84")
+        areas: list[float] = []
+        for geom in out.geometry:
+            if geom is None or geom.is_empty:
+                areas.append(0.0)
+                continue
+            try:
+                areas.append(abs(float(geod.geometry_area_perimeter(geom)[0])))
+            except Exception:
+                areas.append(0.0)
+        out["area_m2"] = areas
     out = out.to_crs(4326)
     out["geometry"] = out["geometry"].simplify(tolerance=float(tolerance), preserve_topology=True)
     return out
@@ -650,6 +664,25 @@ def _geometry_tasks(*, data_dir: Path) -> tuple[BuildTask, ...]:
             )
         )
 
+    tasks.append(
+        BuildTask(
+            stage="geometry",
+            label="admin block index",
+            level="admin_block_index",
+            source_path=Path(cfg.blocks_path),
+            target_path=optimized_context_path("admin_block_index.parquet", data_dir=data_dir),
+        )
+    )
+    tasks.append(
+        BuildTask(
+            stage="geometry",
+            label="hydro sub-basin index",
+            level="hydro_subbasin_index",
+            source_path=Path(cfg.subbasins_path),
+            target_path=optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir),
+        )
+    )
+
     return tuple(tasks)
 
 
@@ -692,6 +725,26 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
         task = task_map[("block", str(state_name), str(out_path))]
         _run_task(task, progress, lambda out=out, out_path=out_path: _write_geojson(out, out_path))
 
+    admin_block_index = (
+        adm3[["state_name", "district_name", "block_name"]]
+        .copy()
+        .dropna(subset=["state_name", "district_name", "block_name"])
+    )
+    for col in ("state_name", "district_name", "block_name"):
+        admin_block_index[col] = admin_block_index[col].astype("string").str.strip()
+    admin_block_index = admin_block_index[
+        (admin_block_index["state_name"] != "")
+        & (admin_block_index["district_name"] != "")
+        & (admin_block_index["block_name"] != "")
+    ].drop_duplicates().sort_values(["state_name", "district_name", "block_name"]).reset_index(drop=True)
+    admin_block_index_path = optimized_context_path("admin_block_index.parquet", data_dir=data_dir)
+    admin_block_index_task = task_map[("admin_block_index", None, str(admin_block_index_path))]
+    _run_task(
+        admin_block_index_task,
+        progress,
+        lambda: _write_parquet(admin_block_index, admin_block_index_path),
+    )
+
     basin = gpd.read_file(cfg.basins_path).to_crs(4326)
     basin = ensure_hydro_columns(basin, level="basin")
     basin_out = _simplify_geometry(
@@ -714,6 +767,27 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
         out_path = optimized_geometry_path(level="sub_basin", basin_id=str(basin_id), data_dir=data_dir)
         task = task_map[("sub_basin", None, str(out_path))]
         _run_task(task, progress, lambda basin_gdf=basin_gdf, out_path=out_path: _write_geojson(basin_gdf, out_path))
+
+    hydro_subbasin_index = (
+        sub[["basin_id", "basin_name", "subbasin_id", "subbasin_name"]]
+        .copy()
+        .dropna(subset=["basin_id", "basin_name", "subbasin_id", "subbasin_name"])
+    )
+    for col in ("basin_id", "basin_name", "subbasin_id", "subbasin_name"):
+        hydro_subbasin_index[col] = hydro_subbasin_index[col].astype("string").str.strip()
+    hydro_subbasin_index = hydro_subbasin_index[
+        (hydro_subbasin_index["basin_id"] != "")
+        & (hydro_subbasin_index["basin_name"] != "")
+        & (hydro_subbasin_index["subbasin_id"] != "")
+        & (hydro_subbasin_index["subbasin_name"] != "")
+    ].drop_duplicates().sort_values(["basin_name", "subbasin_name"]).reset_index(drop=True)
+    hydro_subbasin_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir)
+    hydro_subbasin_index_task = task_map[("hydro_subbasin_index", None, str(hydro_subbasin_index_path))]
+    _run_task(
+        hydro_subbasin_index_task,
+        progress,
+        lambda: _write_parquet(hydro_subbasin_index, hydro_subbasin_index_path),
+    )
 
 
 def _write_manifest(

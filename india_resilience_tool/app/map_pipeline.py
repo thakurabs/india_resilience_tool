@@ -171,12 +171,6 @@ def _build_map_render_signature(
     resolved_river_basin_name: Optional[str],
 ) -> tuple[Any, ...]:
     """Return a stable render signature for patched FeatureCollection caching."""
-    overlay = crosswalk_overlay or {}
-    overlay_signature = (
-        str(overlay.get("level") or ""),
-        tuple(str(v) for v in (overlay.get("feature_keys") or [])),
-        str(overlay.get("label") or ""),
-    )
     return (
         str(level or ""),
         str(selected_state or ""),
@@ -189,9 +183,6 @@ def _build_map_render_signature(
         str(baseline_col or ""),
         str(map_mode or ""),
         bool(hover_enabled),
-        overlay_signature,
-        bool(show_river_network),
-        str(resolved_river_basin_name or ""),
     )
 
 
@@ -632,56 +623,56 @@ def build_map_and_rankings(
                 str(resolution.get("message")).strip() if resolution.get("message") else None
             )
 
-    with perf_section("map: GeoJSON serialize+add layer"):
-        render_signature = _build_map_render_signature(
-            level=level_norm,
-            selected_state=selected_state,
-            selected_district=selected_district,
-            selected_block=selected_block,
-            selected_basin=selected_basin,
-            selected_subbasin=selected_subbasin,
-            metric_col=metric_col,
-            map_value_col=map_value_col,
-            baseline_col=baseline_col,
-            map_mode=map_mode,
-            hover_enabled=bool(hover_enabled),
-            crosswalk_overlay=crosswalk_overlay,
-            show_river_network=bool(show_river_network),
-            resolved_river_basin_name=resolved_river_basin_name,
-        )
-        folium_map = build_folium_map_for_selection(
-            level=level_norm,
-            merged=merged,
-            display_gdf=display_gdf,
-            session_state=st.session_state,
-            render_signature=render_signature,
-            selected_state=selected_state,
-            selected_district=selected_district,
-            selected_basin=selected_basin,
-            selected_subbasin=selected_subbasin,
-            map_mode=map_mode,
-            baseline_col=baseline_col,
-            rank_scope_label=rank_scope_label,
-            metric_col=metric_col,
-            map_value_col=map_value_col,
-            alias_fn=alias,
-            normalize_state_fn=normalize_state_fn,
-            adm1=adm1,
-            map_center=map_center,
-            map_zoom=map_zoom,
-            bounds_latlon=bounds_latlon,
-            hover_enabled=bool(hover_enabled),
-            adm2_geojson_path=adm2_geojson_path,
-            adm3_geojson_path=adm3_geojson_path,
-            basin_geojson_path=basin_geojson_path,
-            subbasin_geojson_path=subbasin_geojson_path,
-            river_display_geojson_path=river_display_geojson_path,
-            simplify_tolerance_adm2=simplify_tol_adm2,
-            simplify_tolerance_adm3=simplify_tol_adm3,
-            crosswalk_overlay=crosswalk_overlay,
-            show_river_network=bool(show_river_network),
-            resolved_river_basin_name=resolved_river_basin_name,
-        )
+    render_signature = _build_map_render_signature(
+        level=level_norm,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        selected_block=selected_block,
+        selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
+        metric_col=metric_col,
+        map_value_col=map_value_col,
+        baseline_col=baseline_col,
+        map_mode=map_mode,
+        hover_enabled=bool(hover_enabled),
+        crosswalk_overlay=crosswalk_overlay,
+        show_river_network=bool(show_river_network),
+        resolved_river_basin_name=resolved_river_basin_name,
+    )
+    folium_map = build_folium_map_for_selection(
+        level=level_norm,
+        merged=merged,
+        display_gdf=display_gdf,
+        session_state=st.session_state,
+        render_signature=render_signature,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
+        map_mode=map_mode,
+        baseline_col=baseline_col,
+        rank_scope_label=rank_scope_label,
+        metric_col=metric_col,
+        map_value_col=map_value_col,
+        alias_fn=alias,
+        normalize_state_fn=normalize_state_fn,
+        adm1=adm1,
+        map_center=map_center,
+        map_zoom=map_zoom,
+        bounds_latlon=bounds_latlon,
+        hover_enabled=bool(hover_enabled),
+        adm2_geojson_path=adm2_geojson_path,
+        adm3_geojson_path=adm3_geojson_path,
+        basin_geojson_path=basin_geojson_path,
+        subbasin_geojson_path=subbasin_geojson_path,
+        river_display_geojson_path=river_display_geojson_path,
+        simplify_tolerance_adm2=simplify_tol_adm2,
+        simplify_tolerance_adm3=simplify_tol_adm3,
+        crosswalk_overlay=crosswalk_overlay,
+        show_river_network=bool(show_river_network),
+        resolved_river_basin_name=resolved_river_basin_name,
+        perf_section=perf_section,
+    )
 
     legend_block_html = build_vertical_binned_legend_block_html(
         legend_title=legend_title,

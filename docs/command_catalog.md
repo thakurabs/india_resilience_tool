@@ -257,6 +257,10 @@ python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aquedu
 - yearly ensemble Parquet facts under `IRT_DATA_DIR/processed_optimised/metrics/<slug>/yearly_ensemble/...`
 - yearly model Parquet facts under `IRT_DATA_DIR/processed_optimised/metrics/<slug>/yearly_models/...`
 - simplified runtime geometry under `IRT_DATA_DIR/processed_optimised/geometry/...`
+  - optimized geometry shards persist `area_m2` for summary weighting reuse
+- compact selector indexes under `IRT_DATA_DIR/processed_optimised/context/`
+  - `admin_block_index.parquet`
+  - `hydro_subbasin_index.parquet`
 - context artifacts, `bundle_manifest.json`, and `parity_report.json` under `IRT_DATA_DIR/processed_optimised/`
 
 ## Notes

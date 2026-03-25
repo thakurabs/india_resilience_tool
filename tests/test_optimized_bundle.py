@@ -124,9 +124,22 @@ def test_write_geometry_bundle_normalizes_raw_admin_columns(
 
     district_path = optimized_geometry_path(level="district", state="Telangana", data_dir=tmp_path)
     block_path = optimized_geometry_path(level="block", state="Telangana", data_dir=tmp_path)
+    block_index_path = tmp_path / "processed_optimised" / "context" / "admin_block_index.parquet"
+    hydro_index_path = tmp_path / "processed_optimised" / "context" / "hydro_subbasin_index.parquet"
 
     assert district_path.exists()
     assert block_path.exists()
+    assert block_index_path.exists()
+    assert hydro_index_path.exists()
+
+    district_out = gpd.read_file(district_path)
+    assert "area_m2" in district_out.columns
+
+    block_index = pd.read_parquet(block_index_path)
+    assert {"state_name", "district_name", "block_name"}.issubset(set(block_index.columns))
+
+    hydro_index = pd.read_parquet(hydro_index_path)
+    assert {"basin_id", "basin_name", "subbasin_id", "subbasin_name"}.issubset(set(hydro_index.columns))
 
 
 def test_build_execution_plan_counts_exact_tasks(
@@ -205,10 +218,10 @@ def test_build_execution_plan_counts_exact_tasks(
         "yearly-models": 4,
         "yearly-ensemble": 0,
         "context": 1,
-        "geometry": 4,
+        "geometry": 6,
         "manifest": 1,
     }
-    assert plan.total_tasks == 13
+    assert plan.total_tasks == 15
 
 
 def test_build_progress_failure_summary_reports_remaining() -> None:

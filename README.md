@@ -150,6 +150,7 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 - yearly time-series
 - per-model yearly overlays
 - case-study export inputs
+- simplified runtime geometry shards plus compact selector indexes for block and sub-basin dropdowns
 
 while dropping duplicate runtime fields such as:
 - `std`
@@ -163,6 +164,13 @@ When run in an interactive terminal, the builder now performs an exact pre-scan 
 - the current active stage
 
 Use `--no-progress` to suppress the progress bars.
+
+The dashboard prefers optimized runtime assets when they are present:
+- Parquet masters and yearly facts from `processed_optimised/metrics/...`
+- simplified state/basin-scoped geometry from `processed_optimised/geometry/...`
+- compact selector metadata from `processed_optimised/context/admin_block_index.parquet` and `processed_optimised/context/hydro_subbasin_index.parquet`
+
+Optimized geometry outputs also persist `area_m2`, which the summary views reuse instead of recomputing geodesic area weights on every render.
 
 Parity audit:
 

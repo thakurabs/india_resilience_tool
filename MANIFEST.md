@@ -205,7 +205,7 @@ Aqueduct methodology note:
 | `river_topology.py` | Streamlit-free river reach validation and hydro-side river summary builders |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
 | `master_loader.py` | Robust master-table loading, normalization, schema parsing, and Parquet-first runtime preference |
-| `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle |
+| `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle, including optimized geometry and context paths |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
 | `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |
 
@@ -570,5 +570,5 @@ For questions about the codebase:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin/hydro yearly parity outputs and a post-build parity audit |
+| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin/hydro yearly parity outputs, selector-index artifacts, persisted geometry `area_m2`, and a post-build parity audit |
 | `audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the legacy processed contract and emit a parity report |

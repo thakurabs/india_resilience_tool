@@ -43,10 +43,20 @@ def _find_baseline_column(df_cols: list[str], base_metric: str) -> Optional[str]
 
 def _with_area_weights(gdf: Any) -> pd.DataFrame:
     """Return a copy of gdf with geodesic area weights in __area_m2."""
+    if gdf is None:
+        return pd.DataFrame()
+
+    out = gdf.copy()
+    if "__area_m2" in out.columns:
+        out["__area_m2"] = pd.to_numeric(out["__area_m2"], errors="coerce").fillna(0.0)
+        return out
+    if "area_m2" in out.columns:
+        out["__area_m2"] = pd.to_numeric(out["area_m2"], errors="coerce").fillna(0.0)
+        return out
+
     from pyproj import Geod
 
     geod = Geod(ellps="WGS84")
-    out = gdf.copy()
     areas: list[float] = []
     for geom in out.geometry:
         if geom is None or geom.is_empty:

@@ -17,15 +17,17 @@ import pandas as pd
 import streamlit as st
 
 from india_resilience_tool.app.geo_cache import (
+    load_admin_block_selector_index,
     list_available_states_from_processed_root_cached,
     load_basin_selector_index,
-    load_local_adm3,
+    load_hydro_subbasin_selector_index,
     load_subbasin_selector_index,
 )
 from india_resilience_tool.app.sidebar import render_analysis_mode_selector
 from india_resilience_tool.data.adm3_loader import (
     get_blocks_for_district as _get_blocks_for_district,
 )
+from india_resilience_tool.data.optimized_bundle import optimized_context_path
 from india_resilience_tool.utils.naming import alias
 
 
@@ -166,27 +168,35 @@ def _build_admin_geography(
 
     selected_block = "All"
     if str(admin_level_from_state) == "block":
-        if not adm3_geojson.exists():
-            st.error(
-                f"ADM3 geojson not found at {adm3_geojson}. Please provide block_4326.geojson."
-            )
-            st.stop()
-
-        adm3_sidebar = load_local_adm3(str(adm3_geojson), tolerance=simplify_tol_adm3)
         block_options = ["All"]
         if selected_district != "All":
-            try:
-                blocks = _get_blocks_for_district(
-                    adm3_sidebar,
-                    selected_state,
-                    selected_district,
-                    normalize_fn=alias,
-                )
-                block_options = ["All"] + sorted(
-                    [str(b).strip() for b in blocks if str(b).strip()]
-                )
-            except Exception:
-                block_options = ["All"]
+            data_dir = adm3_geojson.parent
+            block_index_path = optimized_context_path("admin_block_index.parquet", data_dir=data_dir)
+            if block_index_path.exists():
+                selector_index = load_admin_block_selector_index(str(block_index_path))
+                selector_key = f"{alias(selected_state)}|{alias(selected_district)}"
+                block_options = ["All"] + [str(v) for v in selector_index.get("blocks_by_selector", {}).get(selector_key, [])]
+            else:
+                if not adm3_geojson.exists():
+                    st.error(
+                        f"ADM3 geojson not found at {adm3_geojson}. Please provide block_4326.geojson."
+                    )
+                    st.stop()
+                from india_resilience_tool.app.geo_cache import load_local_adm3
+
+                adm3_sidebar = load_local_adm3(str(adm3_geojson), tolerance=simplify_tol_adm3)
+                try:
+                    blocks = _get_blocks_for_district(
+                        adm3_sidebar,
+                        selected_state,
+                        selected_district,
+                        normalize_fn=alias,
+                    )
+                    block_options = ["All"] + sorted(
+                        [str(b).strip() for b in blocks if str(b).strip()]
+                    )
+                except Exception:
+                    block_options = ["All"]
         else:
             st.caption("Select a district to see blocks")
 
@@ -228,16 +238,20 @@ def _build_hydro_geography(
         st.stop()
 
     level_norm = str(admin_level).strip().lower()
-    if level_norm == "sub_basin":
-        selector_index = load_subbasin_selector_index(str(subbasins_geojson))
-        basin_names = selector_index.get("basin_names", [])
-        subbasins_by_basin = selector_index.get("subbasins_by_basin", {})
-        subbasins_all = selector_index.get("subbasins_all", [])
+    data_dir = basins_geojson.parent
+    hydro_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir)
+    if hydro_index_path.exists():
+        selector_index = load_hydro_subbasin_selector_index(str(hydro_index_path))
     else:
-        selector_index = load_basin_selector_index(str(basins_geojson))
-        basin_names = selector_index.get("basin_names", [])
-        subbasins_by_basin = {}
-        subbasins_all = []
+        selector_index = (
+            load_subbasin_selector_index(str(subbasins_geojson))
+            if level_norm == "sub_basin"
+            else load_basin_selector_index(str(basins_geojson))
+        )
+
+    basin_names = selector_index.get("basin_names", [])
+    subbasins_by_basin = selector_index.get("subbasins_by_basin", {})
+    subbasins_all = selector_index.get("subbasins_all", [])
 
     basin_options = ["All"] + [str(v) for v in basin_names]
     if st.session_state.get("selected_basin") not in basin_options:

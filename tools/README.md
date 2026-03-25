@@ -206,7 +206,10 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - Parquet-only masters
   - yearly ensemble facts
   - yearly per-model facts
-  - simplified display GeoJSON
+  - simplified display GeoJSON with persisted `area_m2`
+  - compact selector indexes:
+    - `context/admin_block_index.parquet`
+    - `context/hydro_subbasin_index.parquet`
 - terminal UX:
   - exact pre-scan task counting before execution
   - nested `tqdm` progress bars during execution
@@ -215,6 +218,8 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - yearly ensemble facts are migrated directly from legacy ensemble CSVs
   - yearly model facts are migrated from legacy per-model CSVs where the UI exposes model-member overlays
   - a post-build audit reports any remaining missing optimized artifacts required by dashboard-visible flows
+- runtime preference:
+  - the dashboard prefers optimized geometry shards and selector indexes when present, falling back to canonical geometry only when an optimized artifact is missing
 - dropped runtime fields:
   - `std`
   - `p05`

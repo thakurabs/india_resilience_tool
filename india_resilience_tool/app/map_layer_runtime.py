@@ -10,13 +10,29 @@ map object for the current selection by:
 
 from __future__ import annotations
 
+import copy
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Tuple
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
 from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_BASIN_RENDER,
     SIMPLIFY_TOL_SUBBASIN_RENDER,
 )
+
+
+def _empty_fc() -> dict[str, Any]:
+    return {"type": "FeatureCollection", "features": []}
+
+
+def _union_featurecollections(collections: Sequence[Optional[Mapping[str, Any]]]) -> dict[str, Any]:
+    """Return a shallow union of FeatureCollection features."""
+    features: list[dict[str, Any]] = []
+    for fc in collections:
+        if not fc:
+            continue
+        features.extend(list((fc or {}).get("features", []) or []))
+    return {"type": "FeatureCollection", "features": features}
 
 
 def build_folium_map_for_selection(
@@ -53,6 +69,7 @@ def build_folium_map_for_selection(
     crosswalk_overlay: Optional[Mapping[str, Any]] = None,
     show_river_network: bool = False,
     resolved_river_basin_name: Optional[str] = None,
+    perf_section: Optional[Callable[[str], Any]] = None,
 ) -> Any:
     from india_resilience_tool.app.geo_cache import (
         build_adm2_geojson_by_state,
@@ -65,7 +82,11 @@ def build_folium_map_for_selection(
         build_subbasin_geojson_all,
         build_subbasin_geojson_by_basin,
     )
-    from india_resilience_tool.app.views.map_view import build_choropleth_map_with_geojson_layer
+    from india_resilience_tool.app.views.map_view import (
+        add_reference_overlay_layer,
+        add_river_overlay_layer,
+        build_base_choropleth_map_with_geojson_layer,
+    )
     from india_resilience_tool.viz.folium_featurecollection import (
         build_geojson_tooltip,
         build_props_map_from_gdf,
@@ -77,14 +98,18 @@ def build_folium_map_for_selection(
         props_map_signature,
     )
 
-    def _empty_fc() -> dict[str, Any]:
-        return {"type": "FeatureCollection", "features": []}
-
     def _patched_fc_cache() -> dict[tuple[Any, ...], dict[str, Any]]:
         cache = session_state.get("_patched_fc_cache")
         if not isinstance(cache, dict):
             cache = {}
             session_state["_patched_fc_cache"] = cache
+        return cache
+
+    def _folium_base_map_cache() -> dict[tuple[Any, ...], Any]:
+        cache = session_state.get("_folium_base_map_cache")
+        if not isinstance(cache, dict):
+            cache = {}
+            session_state["_folium_base_map_cache"] = cache
         return cache
 
     level_norm = str(level).strip().lower()
@@ -219,8 +244,11 @@ def build_folium_map_for_selection(
     reference_layer_name = None
     river_fc = None
     river_layer_name = None
-    overlay_level = str((crosswalk_overlay or {}).get("level", "")).strip().lower()
-    overlay_feature_keys = list((crosswalk_overlay or {}).get("feature_keys", []) or [])
+    overlay_spec = crosswalk_overlay or {}
+    overlay_level = str(overlay_spec.get("level", "")).strip().lower()
+    overlay_feature_keys = list(overlay_spec.get("feature_keys", []) or [])
+    overlay_scope_dimension = str(overlay_spec.get("scope_dimension", "")).strip().lower()
+    overlay_scope_values = [str(v).strip() for v in (overlay_spec.get("scope_values") or []) if str(v).strip()]
     if overlay_level in {"district", "block", "basin", "sub_basin"} and overlay_feature_keys:
         if overlay_level == "district":
             adm2_mtime = float(adm2_geojson_path.stat().st_mtime)
@@ -230,8 +258,14 @@ def build_folium_map_for_selection(
                 mtime=adm2_mtime,
             )
             overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+            overlay_source_fc = overlay_geojson_by_state["all"]
+            if overlay_scope_dimension == "state_name" and overlay_scope_values:
+                overlay_source_fc = _union_featurecollections(
+                    overlay_geojson_by_state.get(normalize_state_fn(state_name))
+                    for state_name in overlay_scope_values
+                )
             reference_fc = filter_fc_by_feature_keys(
-                overlay_geojson_by_state["all"],
+                overlay_source_fc,
                 feature_keys=overlay_feature_keys,
                 level="district",
                 alias_fn=alias_fn,
@@ -245,8 +279,14 @@ def build_folium_map_for_selection(
                 mtime=adm3_mtime,
             )
             overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+            overlay_source_fc = overlay_geojson_by_state["all"]
+            if overlay_scope_dimension == "state_name" and overlay_scope_values:
+                overlay_source_fc = _union_featurecollections(
+                    overlay_geojson_by_state.get(normalize_state_fn(state_name))
+                    for state_name in overlay_scope_values
+                )
             reference_fc = filter_fc_by_feature_keys(
-                overlay_geojson_by_state["all"],
+                overlay_source_fc,
                 feature_keys=overlay_feature_keys,
                 level="block",
                 alias_fn=alias_fn,
@@ -255,14 +295,27 @@ def build_folium_map_for_selection(
             reference_level = "block"
         elif overlay_level == "basin":
             basin_mtime = float(basin_geojson_path.stat().st_mtime)
-            overlay_geojson_by_state = build_basin_geojson_all(
-                path=str(basin_geojson_path),
-                mtime=basin_mtime,
-                tolerance=SIMPLIFY_TOL_BASIN_RENDER,
-            )
-            overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+            if overlay_scope_dimension == "basin_name" and overlay_scope_values:
+                overlay_geojson_by_state = build_basin_geojson_by_basin(
+                    path=str(basin_geojson_path),
+                    mtime=basin_mtime,
+                    tolerance=SIMPLIFY_TOL_BASIN_RENDER,
+                )
+                overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+                overlay_source_fc = _union_featurecollections(
+                    overlay_geojson_by_state.get(alias_fn(basin_name))
+                    for basin_name in overlay_scope_values
+                )
+            else:
+                overlay_geojson_by_state = build_basin_geojson_all(
+                    path=str(basin_geojson_path),
+                    mtime=basin_mtime,
+                    tolerance=SIMPLIFY_TOL_BASIN_RENDER,
+                )
+                overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+                overlay_source_fc = overlay_geojson_by_state["all"]
             reference_fc = filter_fc_by_feature_keys(
-                overlay_geojson_by_state["all"],
+                overlay_source_fc,
                 feature_keys=overlay_feature_keys,
                 level="basin",
                 alias_fn=alias_fn,
@@ -270,21 +323,34 @@ def build_folium_map_for_selection(
             reference_level = "basin"
         else:
             subbasin_mtime = float(subbasin_geojson_path.stat().st_mtime)
-            overlay_geojson_by_state = build_subbasin_geojson_all(
-                path=str(subbasin_geojson_path),
-                mtime=subbasin_mtime,
-                tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
-            )
-            overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+            if overlay_scope_dimension == "basin_name" and overlay_scope_values:
+                overlay_geojson_by_state = build_subbasin_geojson_by_basin(
+                    path=str(subbasin_geojson_path),
+                    mtime=subbasin_mtime,
+                    tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
+                )
+                overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+                overlay_source_fc = _union_featurecollections(
+                    overlay_geojson_by_state.get(alias_fn(basin_name))
+                    for basin_name in overlay_scope_values
+                )
+            else:
+                overlay_geojson_by_state = build_subbasin_geojson_all(
+                    path=str(subbasin_geojson_path),
+                    mtime=subbasin_mtime,
+                    tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
+                )
+                overlay_geojson_by_state = ensure_geojson_by_state_has_all(overlay_geojson_by_state)
+                overlay_source_fc = overlay_geojson_by_state["all"]
             reference_fc = filter_fc_by_feature_keys(
-                overlay_geojson_by_state["all"],
+                overlay_source_fc,
                 feature_keys=overlay_feature_keys,
                 level="sub_basin",
                 alias_fn=alias_fn,
             )
             reference_level = "sub_basin"
 
-        reference_layer_name = str((crosswalk_overlay or {}).get("label", "")).strip() or "Related units"
+        reference_layer_name = str(overlay_spec.get("label", "")).strip() or "Related units"
 
     if (
         show_river_network
@@ -338,21 +404,75 @@ def build_folium_map_for_selection(
             "fillOpacity": 0.9,
         }
 
-    m = build_choropleth_map_with_geojson_layer(
-        fc=fc,
-        map_center=map_center,
-        map_zoom=map_zoom,
-        bounds_latlon=bounds_latlon,
-        adm1=adm1,
-        selected_state=selected_state,
-        selected_district=selected_district,
-        layer_name=layer_name,
-        tooltip=tooltip,
-        highlight_function=highlight_fn,
-        reference_fc=reference_fc,
-        reference_level=reference_level,
-        reference_layer_name=reference_layer_name,
-        river_fc=river_fc,
-        river_layer_name=river_layer_name,
-    )
+    base_map_cache_key = ("folium_base_map", *patched_cache_key, layer_name)
+    base_map_cache = _folium_base_map_cache()
+    cached_base_map = base_map_cache.get(base_map_cache_key)
+
+    if cached_base_map is None:
+        ctx = perf_section("map: build base folium map [cache_miss]") if perf_section is not None else nullcontext()
+        with ctx:
+            m = build_base_choropleth_map_with_geojson_layer(
+                fc=fc,
+                map_center=map_center,
+                map_zoom=map_zoom,
+                bounds_latlon=bounds_latlon,
+                adm1=adm1,
+                selected_state=selected_state,
+                selected_district=selected_district,
+                layer_name=layer_name,
+                tooltip=tooltip,
+                highlight_function=highlight_fn,
+            )
+        try:
+            base_map_cache[base_map_cache_key] = copy.deepcopy(m)
+            while len(base_map_cache) > 12:
+                base_map_cache.pop(next(iter(base_map_cache)))
+        except Exception:
+            base_map_cache.pop(base_map_cache_key, None)
+    else:
+        try:
+            ctx = perf_section("map: clone cached base map [cache_hit]") if perf_section is not None else nullcontext()
+            with ctx:
+                m = copy.deepcopy(cached_base_map)
+        except Exception:
+            base_map_cache.pop(base_map_cache_key, None)
+            ctx = perf_section("map: build base folium map [clone_fallback_rebuild]") if perf_section is not None else nullcontext()
+            with ctx:
+                m = build_base_choropleth_map_with_geojson_layer(
+                    fc=fc,
+                    map_center=map_center,
+                    map_zoom=map_zoom,
+                    bounds_latlon=bounds_latlon,
+                    adm1=adm1,
+                    selected_state=selected_state,
+                    selected_district=selected_district,
+                    layer_name=layer_name,
+                    tooltip=tooltip,
+                    highlight_function=highlight_fn,
+                )
+            try:
+                base_map_cache[base_map_cache_key] = copy.deepcopy(m)
+                while len(base_map_cache) > 12:
+                    base_map_cache.pop(next(iter(base_map_cache)))
+            except Exception:
+                base_map_cache.pop(base_map_cache_key, None)
+
+    if reference_fc and list((reference_fc or {}).get("features", []) or []):
+        ctx = perf_section("map: add related overlay") if perf_section is not None else nullcontext()
+        with ctx:
+            m = add_reference_overlay_layer(
+                m,
+                reference_fc=reference_fc,
+                reference_level=reference_level,
+                reference_layer_name=reference_layer_name,
+            )
+
+    if river_fc and list((river_fc or {}).get("features", []) or []):
+        ctx = perf_section("map: add river overlay") if perf_section is not None else nullcontext()
+        with ctx:
+            m = add_river_overlay_layer(
+                m,
+                river_fc=river_fc,
+                river_layer_name=river_layer_name,
+            )
     return m

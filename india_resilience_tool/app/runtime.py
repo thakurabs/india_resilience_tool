@@ -50,11 +50,12 @@ def run_app() -> None:
         SUBBASINS_PATH,
         resolve_processed_optimised_root,
     )
-    from india_resilience_tool.data.optimized_bundle import optimized_context_path
+    from india_resilience_tool.data.optimized_bundle import optimized_context_path, optimized_geometry_path
 
     from india_resilience_tool.app.geo_cache import (
         build_adm1_from_adm2,
         enrich_adm2_with_state_names,
+        load_hydro_subbasin_selector_index,
         load_local_adm2,
         load_local_adm3,
         load_local_basin,
@@ -559,25 +560,70 @@ def run_app() -> None:
         selected_subbasin=selected_subbasin,
     )
 
+    runtime_adm2_geojson = ADM2_GEOJSON
+    if selected_state != "All":
+        optimized_district_geojson = optimized_geometry_path(
+            level="district",
+            state=selected_state,
+            data_dir=DATA_DIR,
+        )
+        if optimized_district_geojson.exists():
+            runtime_adm2_geojson = optimized_district_geojson
+            if include_map or details_need_geometry:
+                adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+
+    runtime_adm3_geojson = ADM3_GEOJSON
+    if selected_state != "All":
+        optimized_block_geojson = optimized_geometry_path(
+            level="block",
+            state=selected_state,
+            data_dir=DATA_DIR,
+        )
+        if optimized_block_geojson.exists():
+            runtime_adm3_geojson = optimized_block_geojson
+
+    runtime_basin_geojson = BASIN_GEOJSON
+    optimized_basin_geojson = optimized_geometry_path(level="basin", data_dir=DATA_DIR)
+    if optimized_basin_geojson.exists():
+        runtime_basin_geojson = optimized_basin_geojson
+
+    runtime_subbasin_geojson = SUBBASIN_GEOJSON
+    if selected_basin != "All":
+        hydro_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=DATA_DIR)
+        if hydro_index_path.exists():
+            try:
+                hydro_selector_index = load_hydro_subbasin_selector_index(str(hydro_index_path))
+            except Exception:
+                hydro_selector_index = {}
+            basin_id = str((hydro_selector_index.get("basin_ids_by_name") or {}).get(str(selected_basin).strip()) or "").strip()
+            if basin_id:
+                optimized_subbasin_geojson = optimized_geometry_path(
+                    level="sub_basin",
+                    basin_id=basin_id,
+                    data_dir=DATA_DIR,
+                )
+                if optimized_subbasin_geojson.exists():
+                    runtime_subbasin_geojson = optimized_subbasin_geojson
+
     # Load fine-grain boundaries only when the map or details panel still needs them.
     if _admin_level == "block" and (include_map or details_need_geometry):
-        if not ADM3_GEOJSON.exists():
-            st.error(f"ADM3 geojson not found at {ADM3_GEOJSON}. Please provide block_4326.geojson.")
+        if not runtime_adm3_geojson.exists():
+            st.error(f"ADM3 geojson not found at {runtime_adm3_geojson}. Please provide block_4326.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM3)
+        adm3 = load_local_adm3(str(runtime_adm3_geojson), tolerance=SIMPLIFY_TOL_ADM3)
     elif _admin_level == "basin" and (include_map or details_need_geometry):
-        if not BASIN_GEOJSON.exists():
-            st.error(f"Basin geojson not found at {BASIN_GEOJSON}. Please provide basins.geojson.")
+        if not runtime_basin_geojson.exists():
+            st.error(f"Basin geojson not found at {runtime_basin_geojson}. Please provide basins.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_basin(str(BASIN_GEOJSON))
+        adm3 = load_local_basin(str(runtime_basin_geojson))
     elif _admin_level == "sub_basin" and (include_map or details_need_geometry):
-        if not SUBBASIN_GEOJSON.exists():
-            st.error(f"Sub-basin geojson not found at {SUBBASIN_GEOJSON}. Please provide subbasins.geojson.")
+        if not runtime_subbasin_geojson.exists():
+            st.error(f"Sub-basin geojson not found at {runtime_subbasin_geojson}. Please provide subbasins.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_subbasin(str(SUBBASIN_GEOJSON))
+        adm3 = load_local_subbasin(str(runtime_subbasin_geojson))
     else:
         adm3 = None
 
@@ -625,10 +671,10 @@ def run_app() -> None:
         bounds_latlon=[[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]],
         pending_block_zoom=pending_zoom,
         normalize_state_fn=normalize_name,
-        adm2_geojson_path=ADM2_GEOJSON,
-        adm3_geojson_path=ADM3_GEOJSON,
-        basin_geojson_path=BASIN_GEOJSON,
-        subbasin_geojson_path=SUBBASIN_GEOJSON,
+        adm2_geojson_path=runtime_adm2_geojson,
+        adm3_geojson_path=runtime_adm3_geojson,
+        basin_geojson_path=runtime_basin_geojson,
+        subbasin_geojson_path=runtime_subbasin_geojson,
         river_display_geojson_path=RIVER_DISPLAY_GEOJSON,
         river_basin_reconciliation_path=RIVER_BASIN_RECONCILIATION_CSV,
         river_subbasin_diagnostics_path=RIVER_SUBBASIN_DIAGNOSTICS_CSV,

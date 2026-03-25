@@ -51,6 +51,8 @@ def _load_optimized_yearly_table(
     level: AdminLevel,
     state_dir: Optional[str],
     kind: Literal["ensemble", "models"],
+    columns: Optional[list[str]] = None,
+    filters: Optional[list[tuple[str, str, object]]] = None,
 ) -> pd.DataFrame:
     metric_root = Path(ts_root)
     if not is_optimized_metric_root(metric_root):
@@ -60,7 +62,10 @@ def _load_optimized_yearly_table(
         path = optimized_yearly_ensemble_path_from_metric_root(metric_root, level=level, state=state_dir)
     else:
         path = optimized_yearly_models_path_from_metric_root(metric_root, level=level, state=state_dir)
-    return read_table(path)
+    try:
+        return read_table(path, columns=columns, filters=filters)
+    except Exception:
+        return pd.DataFrame()
 
 
 def _filter_optimized_admin_yearly(
@@ -133,6 +138,26 @@ def load_unit_yearly_models(
         level=level,
         state_dir=state_dir,
         kind="models",
+        columns=[
+            "district_key" if level == "district" else "block_key",
+            "scenario",
+            "model",
+            "year",
+            "value",
+        ],
+        filters=[
+            (
+                "district_key" if level == "district" else "block_key",
+                "==",
+                _normalized_key(
+                    state_dir,
+                    district_display,
+                    *([str(block_display or "")] if level == "block" else []),
+                    normalize_fn=normalize_fn,
+                ),
+            ),
+            ("scenario", "==", str(scenario_name).strip().lower()),
+        ],
     )
     if df.empty:
         return pd.DataFrame()
@@ -398,6 +423,7 @@ def load_state_yearly(
             level=level,
             state_dir=state_dir,
             kind="ensemble",
+            columns=["scenario", "year", "mean", "median"],
         )
         if df.empty:
             return pd.DataFrame()
@@ -458,23 +484,22 @@ def load_district_yearly(
     """
     ts_root_p = Path(ts_root)
     if is_optimized_metric_root(ts_root_p):
+        target_key = _normalized_key(state_dir, district_display, normalize_fn=normalize_fn)
         df = _load_optimized_yearly_table(
             ts_root=ts_root_p,
             level="district",
             state_dir=state_dir,
             kind="ensemble",
-        )
-        df = _filter_optimized_admin_yearly(
-            df,
-            level="district",
-            state_dir=state_dir,
-            district_display=district_display,
-            block_display=None,
-            scenario_name=scenario_name,
-            normalize_fn=normalize_fn,
+            columns=["district_key", "scenario", "year", "mean", "median"],
+            filters=[
+                ("district_key", "==", target_key),
+                ("scenario", "==", str(scenario_name).strip().lower()),
+            ],
         )
         if df.empty:
             return pd.DataFrame()
+        df["state"] = str(state_dir).strip()
+        df["district"] = str(district_display).strip()
         return prepare_yearly_series(df)
 
     f = discover_district_yearly_file(
@@ -550,23 +575,28 @@ def load_block_yearly(
     """
     ts_root_p = Path(ts_root)
     if is_optimized_metric_root(ts_root_p):
+        target_key = _normalized_key(
+            state_dir,
+            district_display,
+            str(block_display),
+            normalize_fn=normalize_fn,
+        )
         df = _load_optimized_yearly_table(
             ts_root=ts_root_p,
             level="block",
             state_dir=state_dir,
             kind="ensemble",
-        )
-        df = _filter_optimized_admin_yearly(
-            df,
-            level="block",
-            state_dir=state_dir,
-            district_display=district_display,
-            block_display=block_display,
-            scenario_name=scenario_name,
-            normalize_fn=normalize_fn,
+            columns=["block_key", "scenario", "year", "mean", "median"],
+            filters=[
+                ("block_key", "==", target_key),
+                ("scenario", "==", str(scenario_name).strip().lower()),
+            ],
         )
         if df.empty:
             return pd.DataFrame()
+        df["state"] = str(state_dir).strip()
+        df["district"] = str(district_display).strip()
+        df["block"] = str(block_display).strip()
         return prepare_yearly_series(df)
 
     f = discover_block_yearly_file(
@@ -631,26 +661,26 @@ def load_hydro_yearly(
             level=level,
             state_dir=None,
             kind="ensemble",
+            columns=(
+                ["basin_name", "scenario", "year", "mean", "median"]
+                if level == "basin"
+                else ["basin_name", "subbasin_name", "scenario", "year", "mean", "median"]
+            ),
+            filters=(
+                [
+                    ("basin_name", "==", str(basin_display).strip()),
+                    ("scenario", "==", str(scenario_name).strip().lower()),
+                ]
+                if level == "basin" or not subbasin_display
+                else [
+                    ("basin_name", "==", str(basin_display).strip()),
+                    ("subbasin_name", "==", str(subbasin_display).strip()),
+                    ("scenario", "==", str(scenario_name).strip().lower()),
+                ]
+            ),
         )
         if df.empty:
             return pd.DataFrame()
-        scenario = str(scenario_name).strip().lower()
-        if "scenario" in df.columns:
-            df["scenario"] = df["scenario"].astype(str).str.strip().str.lower()
-            df = df[df["scenario"] == scenario]
-        if level == "sub_basin":
-            if "subbasin_name" in df.columns:
-                target = str(subbasin_display or "").strip().lower()
-                df = df[df["subbasin_name"].astype(str).str.strip().str.lower() == target]
-            elif "sub_basin" in df.columns:
-                target = str(subbasin_display or "").strip().lower()
-                df = df[df["sub_basin"].astype(str).str.strip().str.lower() == target]
-        else:
-            target = str(basin_display or "").strip().lower()
-            if "basin_name" in df.columns:
-                df = df[df["basin_name"].astype(str).str.strip().str.lower() == target]
-            elif "basin" in df.columns:
-                df = df[df["basin"].astype(str).str.strip().str.lower() == target]
         if df.empty:
             return pd.DataFrame()
         return prepare_yearly_series(df)

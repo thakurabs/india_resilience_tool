@@ -24,12 +24,43 @@ def set_crosswalk_overlay_from_context(
     feature_keys: Sequence[str],
 ) -> None:
     """Activate a related-units overlay for the current crosswalk context."""
+    scope_dimension: str | None = None
+    scope_values: tuple[str, ...] = ()
+    if context.counterpart_level in {"basin", "sub_basin"}:
+        basin_names = tuple(
+            sorted(
+                {
+                    str(overlap.basin_name).strip()
+                    for overlap in context.overlaps
+                    if str(overlap.basin_name).strip()
+                }
+            )
+        )
+        if basin_names:
+            scope_dimension = "basin_name"
+            scope_values = basin_names
+    elif context.counterpart_level in {"district", "block"}:
+        state_names = tuple(
+            sorted(
+                {
+                    str(overlap.counterpart_state_name).strip()
+                    for overlap in context.overlaps
+                    if str(overlap.counterpart_state_name).strip()
+                }
+            )
+        )
+        if state_names:
+            scope_dimension = "state_name"
+            scope_values = state_names
+
     session_state["crosswalk_overlay"] = {
         "level": context.counterpart_level,
         "feature_keys": [str(v) for v in feature_keys if str(v).strip()],
         "label": context.highlight_action_label.replace("Highlight ", ""),
         "source_direction": context.direction,
         "selected_name": context.selected_name,
+        "scope_dimension": scope_dimension,
+        "scope_values": list(scope_values),
     }
 
 
