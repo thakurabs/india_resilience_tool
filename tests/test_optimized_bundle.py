@@ -4,6 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+import pytest
 from shapely.geometry import Polygon
 
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
@@ -134,6 +135,22 @@ def test_write_geometry_bundle_normalizes_raw_admin_columns(
 
     district_out = gpd.read_file(district_path)
     assert "area_m2" in district_out.columns
+
+    basin_path = optimized_geometry_path(level="basin", data_dir=tmp_path)
+    basin_out = gpd.read_file(basin_path)
+    assert {"basin_id", "basin_name", "hydro_level", "area_m2"}.issubset(set(basin_out.columns))
+
+    subbasin_path = optimized_geometry_path(level="sub_basin", basin_id="GODAVARI", data_dir=tmp_path)
+    subbasin_out = gpd.read_file(subbasin_path)
+    assert {
+        "basin_id",
+        "basin_name",
+        "subbasin_id",
+        "subbasin_code",
+        "subbasin_name",
+        "hydro_level",
+        "area_m2",
+    }.issubset(set(subbasin_out.columns))
 
     block_index = pd.read_parquet(block_index_path)
     assert {"state_name", "district_name", "block_name"}.issubset(set(block_index.columns))
@@ -365,6 +382,158 @@ def test_build_processed_optimised_writes_admin_and_hydro_yearly_outputs(
     assert district_df["mean"].tolist() == [1.5]
     assert hydro_df["basin_name"].tolist() == ["Godavari Basin"]
     assert hydro_df["mean"].tolist() == [3.5]
+
+
+def test_build_execution_plan_adds_hydro_yearly_fallback_from_model_files(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+
+    hydro_root = tmp_path / "processed" / "tas_annual_mean" / "hydro"
+    hydro_root.mkdir(parents=True)
+    (hydro_root / "master_metrics_by_basin.csv").write_text(
+        "basin_id,basin_name,tas_annual_mean__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,3.0\n",
+        encoding="utf-8",
+    )
+    basin_model_a = hydro_root / "basins" / "Godavari Basin" / "ModelA" / "ssp245"
+    basin_model_a.mkdir(parents=True)
+    (basin_model_a / "Godavari Basin_yearly.csv").write_text("year,value\n2030,3.0\n", encoding="utf-8")
+    basin_model_b = hydro_root / "basins" / "Godavari Basin" / "ModelB" / "ssp245"
+    basin_model_b.mkdir(parents=True)
+    (basin_model_b / "Godavari Basin_yearly.csv").write_text("year,value\n2030,5.0\n", encoding="utf-8")
+
+    plan = _build_execution_plan(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        include_geometry=False,
+        include_context=False,
+    )
+
+    hydro_jobs = [job for job in plan.yearly_ensemble_jobs if job.slug == "tas_annual_mean" and job.level == "basin"]
+    assert len(hydro_jobs) == 1
+    assert hydro_jobs[0].source_mode == "hydro_model_fallback"
+    assert len(hydro_jobs[0].sources) == 2
+    assert plan.stage_totals()["yearly-ensemble"] == 3
+
+
+def test_build_processed_optimised_derives_hydro_yearly_from_model_fallback(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+
+    hydro_root = tmp_path / "processed" / "tas_annual_mean" / "hydro"
+    hydro_root.mkdir(parents=True)
+    (hydro_root / "master_metrics_by_basin.csv").write_text(
+        "basin_id,basin_name,tas_annual_mean__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,3.0\n",
+        encoding="utf-8",
+    )
+    (hydro_root / "master_metrics_by_sub_basin.csv").write_text(
+        "basin_id,basin_name,subbasin_id,subbasin_name,tas_annual_mean__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,GODAVARI-1,Pranhita,2.0\n",
+        encoding="utf-8",
+    )
+
+    basin_model_a = hydro_root / "basins" / "Godavari Basin" / "ModelA" / "ssp245"
+    basin_model_a.mkdir(parents=True)
+    (basin_model_a / "Godavari Basin_yearly.csv").write_text("year,value\n2030,3.0\n", encoding="utf-8")
+    basin_model_b = hydro_root / "basins" / "Godavari Basin" / "ModelB" / "ssp245"
+    basin_model_b.mkdir(parents=True)
+    (basin_model_b / "Godavari Basin_yearly.csv").write_text("year,value\n2030,5.0\n", encoding="utf-8")
+
+    sub_model_a = hydro_root / "sub_basins" / "Godavari Basin" / "Pranhita" / "ModelA" / "ssp245"
+    sub_model_a.mkdir(parents=True)
+    (sub_model_a / "Pranhita_yearly.csv").write_text("year,value\n2030,2.0\n", encoding="utf-8")
+    sub_model_b = hydro_root / "sub_basins" / "Godavari Basin" / "Pranhita" / "ModelB" / "ssp245"
+    sub_model_b.mkdir(parents=True)
+    (sub_model_b / "Pranhita_yearly.csv").write_text("year,value\n2030,4.0\n", encoding="utf-8")
+
+    summaries = build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+    )
+
+    assert summaries and summaries[0].wrote_yearly_ensemble is True
+
+    basin_out = (
+        tmp_path / "processed_optimised" / "metrics" / "tas_annual_mean" / "yearly_ensemble" / "hydro" / "basin" / "master.parquet"
+    )
+    sub_out = (
+        tmp_path / "processed_optimised" / "metrics" / "tas_annual_mean" / "yearly_ensemble" / "hydro" / "sub_basin" / "master.parquet"
+    )
+
+    assert basin_out.exists()
+    assert sub_out.exists()
+
+    basin_df = pd.read_parquet(basin_out)
+    sub_df = pd.read_parquet(sub_out)
+
+    assert basin_df["basin_id"].tolist() == ["GODAVARI"]
+    assert basin_df["mean"].tolist() == [4.0]
+    assert basin_df["median"].tolist() == [4.0]
+
+    assert sub_df["subbasin_id"].tolist() == ["GODAVARI-1"]
+    assert sub_df["mean"].tolist() == [3.0]
+    assert sub_df["median"].tolist() == [3.0]
+
+    report = audit_processed_optimised_parity(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        include_geometry=False,
+        include_context=False,
+        write_report=False,
+    )
+
+    assert report["issue_count"] == 0
+
+
+def test_build_processed_optimised_prefers_hydro_ensemble_csvs_over_model_fallback(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+
+    hydro_root = tmp_path / "processed" / "tas_annual_mean" / "hydro"
+    hydro_root.mkdir(parents=True)
+    (hydro_root / "master_metrics_by_basin.csv").write_text(
+        "basin_id,basin_name,tas_annual_mean__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,3.0\n",
+        encoding="utf-8",
+    )
+
+    basin_model_a = hydro_root / "basins" / "Godavari Basin" / "ModelA" / "ssp245"
+    basin_model_a.mkdir(parents=True)
+    (basin_model_a / "Godavari Basin_yearly.csv").write_text("year,value\n2030,30.0\n", encoding="utf-8")
+    basin_model_b = hydro_root / "basins" / "Godavari Basin" / "ModelB" / "ssp245"
+    basin_model_b.mkdir(parents=True)
+    (basin_model_b / "Godavari Basin_yearly.csv").write_text("year,value\n2030,50.0\n", encoding="utf-8")
+
+    basin_ensemble_dir = hydro_root / "basins" / "ensembles" / "Godavari Basin" / "ssp245"
+    basin_ensemble_dir.mkdir(parents=True)
+    (basin_ensemble_dir / "Godavari Basin_yearly_ensemble.csv").write_text(
+        "year,ensemble_mean,ensemble_median\n2030,3.5,3.4\n",
+        encoding="utf-8",
+    )
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+    )
+
+    basin_out = (
+        tmp_path / "processed_optimised" / "metrics" / "tas_annual_mean" / "yearly_ensemble" / "hydro" / "basin" / "master.parquet"
+    )
+    basin_df = pd.read_parquet(basin_out)
+
+    assert basin_df["mean"].tolist() == pytest.approx([3.5])
+    assert basin_df["median"].tolist() == pytest.approx([3.4])
 
 
 def test_audit_processed_optimised_parity_reports_missing_yearly_outputs(

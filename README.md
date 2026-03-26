@@ -152,6 +152,8 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 - case-study export inputs
 - simplified runtime geometry shards plus compact selector indexes for block and sub-basin dropdowns
 
+For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.
+
 while dropping duplicate runtime fields such as:
 - `std`
 - `p05`
@@ -353,36 +355,53 @@ python -m tools.runs.prepare_dashboard --help
 
 For a single command reference, see [`docs/command_catalog.md`](docs/command_catalog.md).
 
-### Build or refresh processed outputs
+### Prepare climate hazards for the dashboard
 
 ```bash
-python -m tools.pipeline.compute_indices_multiprocess --help
-python -m tools.pipeline.compute_indices_multiprocess --level district --metrics tas_annual_mean
-python -m tools.pipeline.compute_indices_multiprocess --level block --metrics tas_annual_mean
-python -m tools.pipeline.compute_indices_multiprocess --level basin --metrics tas_annual_mean
-python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics tas_annual_mean
+python -m tools.runs.prepare_dashboard climate-hazards
 ```
 
-### Rebuild master CSVs
+Default behavior:
+- `--level all` is implied
+- computes the requested climate outputs
+- builds admin + hydro masters
+- refreshes `processed_optimised`
+- runs the optimized parity audit
+- preserves current outputs unless `--overwrite` is supplied
+
+Hydro-only:
 
 ```bash
-python -m tools.pipeline.build_master_metrics
+python -m tools.runs.prepare_dashboard climate-hazards --level hydro
+```
+
+One metric:
+
+```bash
+python -m tools.runs.prepare_dashboard climate-hazards --metrics tas_annual_mean
+```
+
+One metric, one model, one scenario:
+
+```bash
+python -m tools.runs.prepare_dashboard climate-hazards --level hydro --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
 ```
 
 ### Prepare the dashboard package with the canonical runner
 
 ```bash
-python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite
+python -m tools.runs.prepare_dashboard dashboard-package
 ```
 
-This bundle now includes climate hazards, Aqueduct, population exposure, and groundwater prep.
+This bundle includes climate hazards, Aqueduct, population exposure, and groundwater prep,
+and now refreshes `processed_optimised` plus the final audit as part of the same run.
 When block-level products are part of the run, the runner now refreshes the canonical
 `IRT_DATA_DIR/blocks_4326.geojson` first.
 
 Preview first:
 
 ```bash
-python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite --dry-run
+python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 ```
 
 ### Build population exposure masters

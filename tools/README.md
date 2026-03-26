@@ -7,7 +7,7 @@ Run these from the **repo root** so imports like `paths.py` resolve correctly.
 
 ## Canonical runner
 
-The recommended entrypoint for common workflows is:
+The recommended operator entrypoint is:
 
 ```bash
 python -m tools.runs.prepare_dashboard --help
@@ -16,24 +16,30 @@ python -m tools.runs.prepare_dashboard --help
 Examples:
 
 ```bash
-python -m tools.runs.prepare_dashboard aqueduct --overwrite
+python -m tools.runs.prepare_dashboard climate-hazards
 ```
 
 ```bash
-python -m tools.runs.prepare_dashboard climate-hazards --level all --state Telangana --overwrite
+python -m tools.runs.prepare_dashboard climate-hazards --level hydro
 ```
 
 ```bash
-python -m tools.runs.prepare_dashboard population-exposure --overwrite
+python -m tools.runs.prepare_dashboard climate-hazards --metrics tas_annual_mean
 ```
 
 ```bash
-python -m tools.runs.prepare_dashboard groundwater --overwrite
+python -m tools.runs.prepare_dashboard aqueduct
 ```
 
 ```bash
-python -m tools.runs.prepare_dashboard dashboard-package --level all --state Telangana --overwrite --dry-run
+python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 ```
+
+By default the runner is non-destructive and dashboard-oriented:
+- climate runs default to `--level all`
+- climate and bundle runs refresh `processed_optimised`
+- the optimized parity audit runs automatically
+- use `--overwrite` only when you want to force a rebuild
 
 For the full command catalog, see [`../docs/command_catalog.md`](../docs/command_catalog.md).
 
@@ -43,7 +49,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 |---|---|---|
 | `tools/pipeline/compute_indices_multiprocess.py` | Build processed index artifacts (multi-process; district + block) | `python -m tools.pipeline.compute_indices_multiprocess --help` |
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
-| `tools/pipeline/build_master_metrics.py` | Build master CSVs (district + block) + state summary files | `python -m tools.pipeline.build_master_metrics --help` |
+| `tools/pipeline/build_master_metrics.py` | Build admin and hydro master CSVs plus summary sidecars; hydro levels auto-use `processed/{metric}/hydro/` | `python -m tools.pipeline.build_master_metrics --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
 
 ## Diagnostics
@@ -216,6 +222,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - `--no-progress` disables the bars
 - parity:
   - yearly ensemble facts are migrated directly from legacy ensemble CSVs
+  - hydro yearly ensemble facts fall back to legacy hydro per-model yearly CSVs when the legacy hydro `ensembles/` tree is missing or empty
   - yearly model facts are migrated from legacy per-model CSVs where the UI exposes model-member overlays
   - a post-build audit reports any remaining missing optimized artifacts required by dashboard-visible flows
 - runtime preference:

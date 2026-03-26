@@ -117,6 +117,7 @@ BASIN_FOLDER = "basins"
 SUB_BASIN_FOLDER = "sub_basins"
 HYDRO_ROOT_NAME = "hydro"
 COVERAGE_THRESHOLD = 0.80
+NULL_LIKE_STRINGS = {"", "nan", "<na>", "none", "nat"}
 
 # -----------------------------------------------------------------------------
 # CONFIGURATION
@@ -145,6 +146,23 @@ def setup_logging(verbose: bool = False):
 # -----------------------------------------------------------------------------
 # BASIC HELPERS
 # -----------------------------------------------------------------------------
+def _is_blank_like(value: object) -> bool:
+    """Return True when a scalar identifier-like value should be treated as missing."""
+    if value is None:
+        return True
+    try:
+        if pd.isna(value):
+            return True
+    except Exception:
+        pass
+    return str(value).strip().lower() in NULL_LIKE_STRINGS
+
+
+def _safe_component(name: object) -> str:
+    """Build a filesystem-safe folder/file component from a validated identifier."""
+    return str(name).strip().replace(" ", "_").replace("/", "_")
+
+
 def metric_root(slug: str) -> Path:
     root = BASE_OUTPUT_ROOT / slug
     root.mkdir(parents=True, exist_ok=True)
@@ -181,6 +199,31 @@ def get_boundary_path(level: AdminLevel) -> Path:
         return BASINS_PATH
     return BLOCKS_PATH if level == "block" else DISTRICTS_PATH
 
+
+def _validate_hydro_boundary_identity(
+    gdf: gpd.GeoDataFrame,
+    *,
+    level: AdminLevel,
+) -> None:
+    """Ensure hydro boundary inputs contain non-empty identifiers before mask building."""
+    if level == "sub_basin":
+        required = ["basin_id", "basin_name", "subbasin_id", "subbasin_name"]
+    elif level == "basin":
+        required = ["basin_id", "basin_name"]
+    else:
+        return
+
+    invalid_mask = pd.Series(False, index=gdf.index, dtype=bool)
+    for col in required:
+        invalid_mask |= gdf[col].map(_is_blank_like)
+
+    if invalid_mask.any():
+        sample = gdf.loc[invalid_mask, required].head(5).to_dict("records")
+        raise ValueError(
+            f"Hydro boundary inputs contain blank identity values for level={level}. "
+            f"Required={required}. Sample rows={sample}"
+        )
+
 def load_boundaries(
     path: Path,
     state_filter: Optional[str] = None,
@@ -195,6 +238,7 @@ def load_boundaries(
         if gdf.crs is None:
             gdf = gdf.set_crs("EPSG:4326")
         gdf = ensure_hydro_columns(gdf, level="sub_basin" if level == "sub_basin" else "basin")
+        _validate_hydro_boundary_identity(gdf, level=level)
         return gdf
 
     # Find state column
@@ -462,6 +506,47 @@ def _append_coverage_failure_rows(
             }
             _add_unit_fields_from_key(row, unit_key, level)
             rows.append(row)
+
+
+def _validate_output_unit_fields(
+    df: pd.DataFrame,
+    *,
+    level: AdminLevel,
+    slug: str,
+    model: str,
+    scenario: str,
+    stage_label: str,
+) -> None:
+    """Validate hydro identity columns before grouping or writing outputs."""
+    if level == "sub_basin":
+        required = ["basin", "sub_basin"]
+    elif level == "basin":
+        required = ["basin"]
+    else:
+        return
+
+    missing_cols = [col for col in required if col not in df.columns]
+    if missing_cols:
+        raise ValueError(
+            f"[{slug}] Missing required hydro identity columns before writing {stage_label} "
+            f"for level={level}, model={model}, scenario={scenario}: {missing_cols}"
+        )
+
+    invalid_mask = pd.Series(False, index=df.index, dtype=bool)
+    for col in required:
+        invalid_mask |= df[col].map(_is_blank_like)
+
+    if invalid_mask.any():
+        sample_cols = [col for col in required if col in df.columns]
+        for optional_col in ["year", "period", "value"]:
+            if optional_col in df.columns and optional_col not in sample_cols:
+                sample_cols.append(optional_col)
+        sample = df.loc[invalid_mask, sample_cols].head(5).to_dict("records")
+        raise ValueError(
+            f"[{slug}] Invalid hydro identity values before writing {stage_label} "
+            f"for level={level}, model={model}, scenario={scenario}. "
+            f"Required={required}. Sample rows={sample}"
+        )
 
 
 def _write_coverage_qc(
@@ -1924,6 +2009,7 @@ def _compute_tx90p_rows_for_metric(
     scenario_conf: dict,
     year_to_paths: dict[int, dict[str, Path]],
     masks: dict[str, xr.DataArray],
+    level: AdminLevel = "district",
 ) -> list[dict]:
     """
     SPI-like special-case: compute tx90p using multi-year baseline thresholds.
@@ -2024,14 +2110,7 @@ def _compute_tx90p_rows_for_metric(
                 "source_file": "",  # optional: you can fill with a representative file if you want
             }
 
-            # Match the pipeline’s district/block schema (same logic as default path)
-            if "||" in unit:
-                district, block = unit.split("||", 1)
-                row["district"] = district
-                row["block"] = block
-            else:
-                row["district"] = unit
-
+            _add_unit_fields_from_key(row, unit, level)
             rows.append(row)
 
     return rows
@@ -2043,6 +2122,7 @@ def _compute_spell_duration_rows_for_metric(
     scenario_conf: dict,
     year_to_paths: dict[int, dict[str, Path]],
     masks: dict[str, xr.DataArray],
+    level: AdminLevel = "district",
 ) -> list[dict]:
     """
     Special-case: warm/cold spell duration indices with ETCCDI-style
@@ -2150,12 +2230,7 @@ def _compute_spell_duration_rows_for_metric(
                 value_col: v,
                 "source_file": "",
             }
-            if "||" in unit:
-                district, block = unit.split("||", 1)
-                row["district"] = district
-                row["block"] = block
-            else:
-                row["district"] = unit
+            _add_unit_fields_from_key(row, unit, level)
             rows.append(row)
 
     return rows
@@ -2167,6 +2242,7 @@ def _compute_heatwave_percentile_rows_for_metric(
     scenario_conf: dict,
     year_to_paths: dict[int, dict[str, Path]],
     masks: dict[str, xr.DataArray],
+    level: AdminLevel = "district",
 ) -> list[dict]:
     """
     Special-case: heatwave metrics based on a percentile threshold must calibrate
@@ -2271,12 +2347,7 @@ def _compute_heatwave_percentile_rows_for_metric(
                 value_col: v,
                 "source_file": str(src_path) if src_path is not None else "",
             }
-            if "||" in unit:
-                district, block = unit.split("||", 1)
-                row["district"] = district
-                row["block"] = block
-            else:
-                row["district"] = unit
+            _add_unit_fields_from_key(row, unit, level)
             rows.append(row)
 
     return rows
@@ -2288,6 +2359,7 @@ def _compute_heatwave_baseline_rows_for_metric(
     scenario_conf: dict,
     year_to_paths: dict[int, dict[str, Path]],
     masks: dict[str, xr.DataArray],
+    level: AdminLevel = "district",
 ) -> list[dict]:
     """
     Special-case: heatwave amplitude/magnitude metrics based on percentile thresholds
@@ -2421,12 +2493,7 @@ def _compute_heatwave_baseline_rows_for_metric(
                 "source_file": str(src_path) if src_path is not None else "",
             }
 
-            if "||" in unit:
-                district, block = unit.split("||", 1)
-                row["district"] = district
-                row["block"] = block
-            else:
-                row["district"] = unit
+            _add_unit_fields_from_key(row, unit, level)
 
             rows.append(row)
 
@@ -2439,6 +2506,7 @@ def _compute_heatwave_delta_rows_for_metric(
     scenario_conf: dict,
     year_to_paths: dict[int, dict[str, Path]],
     masks: dict[str, xr.DataArray],
+    level: AdminLevel = "district",
 ) -> list[dict]:
     """
     Special-case: heatwave duration/event metrics using baseline mean + delta thresholds.
@@ -2530,12 +2598,7 @@ def _compute_heatwave_delta_rows_for_metric(
                 value_col: v,
                 "source_file": "",
             }
-            if "||" in unit:
-                district, block = unit.split("||", 1)
-                row["district"] = district
-                row["block"] = block
-            else:
-                row["district"] = unit
+            _add_unit_fields_from_key(row, unit, level)
             rows.append(row)
 
     return rows
@@ -2548,6 +2611,7 @@ def _compute_precip_percentile_rows_for_metric(
     scenario_conf: dict,
     year_to_paths: dict[int, dict[str, Path]],
     masks: dict[str, xr.DataArray],
+    level: AdminLevel = "district",
 ) -> list[dict]:
     """
     Special-case: precipitation percentile metrics (R95p, R95pTOT) must calibrate
@@ -2660,12 +2724,7 @@ def _compute_precip_percentile_rows_for_metric(
                 value_col: v,
                 "source_file": "",
             }
-            if "||" in unit:
-                district, block = unit.split("||", 1)
-                row["district"] = district
-                row["block"] = block
-            else:
-                row["district"] = unit
+            _add_unit_fields_from_key(row, unit, level)
             rows.append(row)
 
     return rows
@@ -2731,12 +2790,7 @@ def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
                     ds_cur.close()
 
             row = {"year": int(year), "value": float(v), value_col: float(v), "source_file": ""}
-            if "||" in unit:
-                district, block = unit.split("||", 1)
-                row["district"] = district
-                row["block"] = block
-            else:
-                row["district"] = unit
+            _add_unit_fields_from_key(row, unit, level)
             rows.append(row)
 
     return rows
@@ -2997,6 +3051,7 @@ def process_metric_for_model_scenario(
                 scenario_conf=SCENARIOS,   # IMPORTANT: pass the global SCENARIOS map (see note below)
                 year_to_paths=year_to_paths,
                 masks=masks,
+                level=level,
             )
         except Exception as e:
             logging.error(f"[{slug}] TX90P computation failed for {model}/{scenario}: {e}")
@@ -3015,6 +3070,7 @@ def process_metric_for_model_scenario(
                 scenario_conf=SCENARIOS,
                 year_to_paths=year_to_paths,
                 masks=masks,
+                level=level,
             )
         except Exception as e:
             logging.error(f"[{slug}] Spell duration computation failed for {model}/{scenario}: {e}")
@@ -3033,6 +3089,7 @@ def process_metric_for_model_scenario(
                 scenario_conf=SCENARIOS,
                 year_to_paths=year_to_paths,
                 masks=masks,
+                level=level,
             )
         except Exception as e:
             logging.error(f"[{slug}] Heatwave percentile computation failed for {model}/{scenario}: {e}")
@@ -3051,6 +3108,7 @@ def process_metric_for_model_scenario(
                 scenario_conf=SCENARIOS,
                 year_to_paths=year_to_paths,
                 masks=masks,
+                level=level,
             )
         except Exception as e:
             logging.error(f"[{slug}] Heatwave amplitude/magnitude computation failed for {model}/{scenario}: {e}")
@@ -3069,6 +3127,7 @@ def process_metric_for_model_scenario(
                 scenario_conf=SCENARIOS,
                 year_to_paths=year_to_paths,
                 masks=masks,
+                level=level,
             )
         except Exception as e:
             logging.error(f"[{slug}] Heatwave duration/event computation failed for {model}/{scenario}: {e}")
@@ -3087,6 +3146,7 @@ def process_metric_for_model_scenario(
                 scenario_conf=SCENARIOS,
                 year_to_paths=year_to_paths,
                 masks=masks,
+                level=level,
             )
         except Exception as e:
             logging.error(f"[{slug}] Precip percentile computation failed for {model}/{scenario}: {e}")
@@ -3171,6 +3231,14 @@ def process_metric_for_model_scenario(
     )
 
     df_yearly = pd.DataFrame(rows)
+    _validate_output_unit_fields(
+        df_yearly,
+        level=level,
+        slug=slug,
+        model=model,
+        scenario=scenario,
+        stage_label="yearly outputs",
+    )
 
     # Period aggregation (mean over years used, consistent with other day-count metrics)
     # Note: For SPI, years may come from climate-indices output which may differ from year_to_paths
@@ -3203,13 +3271,22 @@ def process_metric_for_model_scenario(
                 logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
 
     df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
+    if not df_periods.empty:
+        _validate_output_unit_fields(
+            df_periods,
+            level=level,
+            slug=slug,
+            model=model,
+            scenario=scenario,
+            stage_label="period outputs",
+        )
 
     # Write outputs with clean folder structure
     try:
         if level == "sub_basin":
             for (basin, sub_basin), grp_df in df_yearly.groupby(["basin", "sub_basin"]):
-                basin_safe = basin.replace(" ", "_").replace("/", "_")
-                sub_basin_safe = sub_basin.replace(" ", "_").replace("/", "_")
+                basin_safe = _safe_component(basin)
+                sub_basin_safe = _safe_component(sub_basin)
 
                 out_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
                 out_dir.mkdir(parents=True, exist_ok=True)
@@ -3230,7 +3307,7 @@ def process_metric_for_model_scenario(
                         period_grp.to_csv(out_dir / f"{sub_basin_safe}_periods.csv", index=False)
         elif level == "basin":
             for basin_name in df_yearly["basin"].unique():
-                basin_safe = basin_name.replace(" ", "_").replace("/", "_")
+                basin_safe = _safe_component(basin_name)
 
                 out_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
                 out_dir.mkdir(parents=True, exist_ok=True)
@@ -3249,8 +3326,8 @@ def process_metric_for_model_scenario(
         elif level == "block":
             # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
             for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
-                district_safe = district.replace(" ", "_").replace("/", "_")
-                block_safe = block.replace(" ", "_").replace("/", "_")
+                district_safe = _safe_component(district)
+                block_safe = _safe_component(block)
 
                 out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
                 out_dir.mkdir(parents=True, exist_ok=True)
@@ -3274,7 +3351,7 @@ def process_metric_for_model_scenario(
         else:
             # Structure: {metric}/{state}/districts/{district}/{model}/{scenario}/
             for dist_name in df_yearly["district"].unique():
-                dist_safe = dist_name.replace(" ", "_").replace("/", "_")
+                dist_safe = _safe_component(dist_name)
 
                 out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
                 out_dir.mkdir(parents=True, exist_ok=True)

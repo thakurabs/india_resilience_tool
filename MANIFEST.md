@@ -37,10 +37,10 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 |---------|---------|
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
-| `python -m tools.runs.prepare_dashboard --help` | Show canonical dashboard-prep workflow bundles and step commands |
-| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with exact pre-scan task counting, yearly parity migration, and nested terminal progress bars |
+| `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, Aqueduct, population, groundwater, validation, and full package workflows |
+| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with exact pre-scan task counting, yearly parity migration, hydro yearly fallback-from-models, and nested terminal progress bars |
 | `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract and write `parity_report.json` |
-| `python -m tools.pipeline.build_master_metrics` | Rebuild master CSVs |
+| `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics <slug>` | Build district outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level block --metrics <slug>` | Build block outputs |
@@ -284,7 +284,7 @@ Aqueduct methodology note:
 | `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master `{csv,parquet}` files from Aqueduct overlaps for the onboarded hydro metrics |
 | `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster |
 | `build_groundwater_district_masters.py` | Build district groundwater assessment master `{csv,parquet}` files from the 2024-2025 GEC workbook plus a canonical district alias QA package |
-| `runs/prepare_dashboard.py` | Canonical workflow runner for climate hazard, canonical block-boundary refresh, Aqueduct, population exposure, groundwater, validation, and dashboard-package prep bundles |
+| `runs/prepare_dashboard.py` | Canonical operator entrypoint that orchestrates bundle prep, optimized runtime refresh, and parity audit for climate, Aqueduct, population exposure, groundwater, validation, and dashboard-package workflows |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
@@ -570,5 +570,5 @@ For questions about the codebase:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin/hydro yearly parity outputs, selector-index artifacts, persisted geometry `area_m2`, and a post-build parity audit |
+| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin/hydro yearly parity outputs, hydro yearly fallback-from-models, selector-index artifacts, persisted geometry `area_m2`, and a post-build parity audit |
 | `audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the legacy processed contract and emit a parity report |

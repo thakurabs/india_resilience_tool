@@ -34,6 +34,7 @@ from india_resilience_tool.data.discovery import (
     iter_block_yearly_ensemble_files,
     iter_district_yearly_ensemble_files,
     iter_hydro_yearly_ensemble_files,
+    iter_hydro_yearly_model_files,
 )
 from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.data.optimized_bundle import (
@@ -114,6 +115,7 @@ class YearlyEnsembleSource:
     csv_path: Path
     name_1: str
     name_2: Optional[str] = None
+    model: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -122,6 +124,7 @@ class YearlyEnsembleJob:
     level: str
     target_path: Path
     state: Optional[str] = None
+    source_mode: str = "legacy_ensemble"
     sources: tuple[YearlyEnsembleSource, ...] = ()
 
 
@@ -465,6 +468,93 @@ def _build_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) ->
     return _safe_numeric_downcast(grouped)
 
 
+def _load_legacy_hydro_yearly_models(
+    *,
+    slug: str,
+    level: str,
+    data_dir: Path,
+    sources: tuple[YearlyEnsembleSource, ...],
+) -> pd.DataFrame:
+    """Load hydro model-yearly rows that can be aggregated into optimized ensembles."""
+    if level not in {"basin", "sub_basin"}:
+        return pd.DataFrame()
+
+    rows: list[pd.DataFrame] = []
+    basin_map, subbasin_map = _hydro_name_maps(data_dir=data_dir, slug=slug, level=level)
+
+    for source in sources:
+        df = _read_yearly_csv(source.csv_path)
+        if df.empty:
+            continue
+        value_col = _extract_value_column(df)
+        if value_col is None or "year" not in df.columns:
+            continue
+
+        df = df.copy()
+        df["year"] = pd.to_numeric(df["year"], errors="coerce")
+        df["value"] = pd.to_numeric(df[value_col], errors="coerce")
+        df = df.dropna(subset=["year", "value"])
+        if df.empty:
+            continue
+
+        df["scenario"] = str(source.scenario).strip().lower()
+        df["model"] = str(source.model or "").strip()
+
+        if level == "basin":
+            basin_name = str(source.name_1).strip()
+            basin_id, basin_name_out = basin_map.get(alias(basin_name), ("", basin_name))
+            df["basin_id"] = basin_id
+            df["basin_name"] = basin_name_out
+            rows.append(df[["basin_id", "basin_name", "scenario", "model", "year", "value"]])
+            continue
+
+        basin_name = str(source.name_1).strip()
+        sub_name = str(source.name_2 or "").strip()
+        basin_id, basin_name_out, sub_id, sub_name_out = subbasin_map.get(
+            _normalized_key(basin_name, sub_name),
+            ("", basin_name, "", sub_name),
+        )
+        df["basin_id"] = basin_id
+        df["basin_name"] = basin_name_out
+        df["subbasin_id"] = sub_id
+        df["subbasin_name"] = sub_name_out
+        rows.append(
+            df[["basin_id", "basin_name", "subbasin_id", "subbasin_name", "scenario", "model", "year", "value"]]
+        )
+
+    if not rows:
+        return pd.DataFrame()
+
+    out = pd.concat(rows, ignore_index=True, sort=False)
+    return _safe_numeric_downcast(out)
+
+
+def _build_hydro_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) -> pd.DataFrame:
+    """Aggregate hydro model-yearly rows into optimized hydro yearly ensembles."""
+    if model_df.empty:
+        return pd.DataFrame()
+
+    if level == "basin":
+        grouped = (
+            model_df.groupby(["basin_id", "basin_name", "scenario", "year"], as_index=False)["value"]
+            .agg(mean="mean", median="median")
+            .sort_values(["basin_name", "scenario", "year"], kind="stable")
+            .reset_index(drop=True)
+        )
+        return _safe_numeric_downcast(grouped)
+
+    grouped = (
+        model_df.groupby(
+            ["basin_id", "basin_name", "subbasin_id", "subbasin_name", "scenario", "year"],
+            as_index=False,
+        )["value"]
+        .agg(mean="mean", median="median")
+        .sort_values(["basin_name", "subbasin_name", "scenario", "year"], kind="stable")
+        .reset_index(drop=True)
+    )
+    return _safe_numeric_downcast(grouped)
+
+
 def _normalized_key(*parts: str) -> str:
     return "|".join(alias(part) for part in parts)
 
@@ -749,7 +839,7 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
     basin = ensure_hydro_columns(basin, level="basin")
     basin_out = _simplify_geometry(
         basin,
-        keep_cols=["basin_id", "basin_name"],
+        keep_cols=["basin_id", "basin_name", "hydro_level"],
         tolerance=SIMPLIFY_TOL_BASIN_RENDER,
     )
     basin_path = optimized_geometry_path(level="basin", data_dir=data_dir)
@@ -760,7 +850,7 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
     sub = ensure_hydro_columns(sub, level="sub_basin")
     sub_out = _simplify_geometry(
         sub,
-        keep_cols=["subbasin_id", "subbasin_name", "basin_id", "basin_name"],
+        keep_cols=["subbasin_id", "subbasin_code", "subbasin_name", "basin_id", "basin_name", "hydro_level"],
         tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
     )
     for basin_id, basin_gdf in sub_out.groupby("basin_id", dropna=False):
@@ -996,9 +1086,38 @@ def _build_execution_plan(
                                     level=level,
                                     data_dir=data_dir,
                                 ),
+                                source_mode="legacy_ensemble",
                                 sources=hydro_sources,
                             )
                         )
+                    else:
+                        hydro_model_sources = tuple(
+                            YearlyEnsembleSource(
+                                scenario=scenario,
+                                csv_path=csv_path,
+                                name_1=basin_name,
+                                name_2=subbasin_name,
+                                model=model_name,
+                            )
+                            for basin_name, subbasin_name, model_name, scenario, csv_path in iter_hydro_yearly_model_files(
+                                ts_root=legacy_root,
+                                level=level,
+                            )
+                        )
+                        if hydro_model_sources:
+                            yearly_ensemble_jobs.append(
+                                YearlyEnsembleJob(
+                                    slug=slug,
+                                    level=level,
+                                    target_path=optimized_yearly_ensemble_path(
+                                        slug,
+                                        level=level,
+                                        data_dir=data_dir,
+                                    ),
+                                    source_mode="hydro_model_fallback",
+                                    sources=hydro_model_sources,
+                                )
+                            )
 
     context_tasks: list[BuildTask] = []
     if include_context:
@@ -1199,6 +1318,7 @@ def build_processed_optimised_bundle(
     include_geometry: bool = True,
     include_context: bool = True,
     show_progress: Optional[bool] = None,
+    run_audit: bool = True,
 ) -> list[MetricBundleSummary]:
     """
     Build the optimized runtime bundle from the current legacy processed tree.
@@ -1278,6 +1398,7 @@ def build_processed_optimised_bundle(
 
         for job in plan.yearly_ensemble_jobs:
             ensemble_df: pd.DataFrame = pd.DataFrame()
+            hydro_model_df: pd.DataFrame = pd.DataFrame()
             for source in job.sources:
                 task = BuildTask(
                     stage="yearly-ensemble",
@@ -1290,6 +1411,22 @@ def build_processed_optimised_bundle(
 
                 def _read_one(source=source) -> None:
                     nonlocal ensemble_df
+                    nonlocal hydro_model_df
+                    if job.source_mode == "hydro_model_fallback":
+                        row_df = _load_legacy_hydro_yearly_models(
+                            slug=job.slug,
+                            level=job.level,
+                            data_dir=data_dir,
+                            sources=(source,),
+                        )
+                        if row_df.empty:
+                            return
+                        if hydro_model_df.empty:
+                            hydro_model_df = row_df
+                        else:
+                            hydro_model_df = pd.concat([hydro_model_df, row_df], ignore_index=True, sort=False)
+                        return
+
                     row_df = _load_legacy_yearly_ensemble(
                         slug=job.slug,
                         level=job.level,
@@ -1316,6 +1453,13 @@ def build_processed_optimised_bundle(
             )
 
             def _write_ensemble() -> None:
+                if job.source_mode == "hydro_model_fallback":
+                    derived_df = _build_hydro_yearly_ensemble_from_models(hydro_model_df, level=job.level)
+                    if derived_df.empty:
+                        return
+                    _write_parquet(derived_df, job.target_path)
+                    summaries_map[job.slug]["wrote_yearly_ensemble"] = True
+                    return
                 if ensemble_df.empty:
                     return
                 _write_parquet(_safe_numeric_downcast(ensemble_df), job.target_path)
@@ -1335,19 +1479,20 @@ def build_processed_optimised_bundle(
             progress=progress,
             task=plan.manifest_task,
         )
-        parity = audit_processed_optimised_parity(
-            data_dir=data_dir,
-            metrics=metrics,
-            include_geometry=include_geometry,
-            include_context=include_context,
-            write_report=True,
-        )
         progress.close()
-        print(
-            "PARITY AUDIT "
-            f"(metrics={parity['metrics_considered']}, issues={parity['issue_count']}, "
-            f"report={resolve_optimized_bundle_root(data_dir=data_dir) / 'parity_report.json'})"
-        )
+        if run_audit:
+            parity = audit_processed_optimised_parity(
+                data_dir=data_dir,
+                metrics=metrics,
+                include_geometry=include_geometry,
+                include_context=include_context,
+                write_report=True,
+            )
+            print(
+                "PARITY AUDIT "
+                f"(metrics={parity['metrics_considered']}, issues={parity['issue_count']}, "
+                f"report={resolve_optimized_bundle_root(data_dir=data_dir) / 'parity_report.json'})"
+            )
         return summaries
     except Exception:
         progress.close()
@@ -1361,6 +1506,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--overwrite", action="store_true", help="Delete and rebuild processed_optimised.")
     parser.add_argument("--skip-geometry", action="store_true", help="Skip optimized geometry generation.")
     parser.add_argument("--skip-context", action="store_true", help="Skip optimized context artifacts.")
+    parser.add_argument("--skip-audit", action="store_true", help="Skip the post-build parity audit.")
     parser.add_argument("--no-progress", action="store_true", help="Disable tqdm progress bars.")
     return parser
 
@@ -1376,6 +1522,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         include_geometry=not bool(args.skip_geometry),
         include_context=not bool(args.skip_context),
         show_progress=False if bool(args.no_progress) else None,
+        run_audit=not bool(args.skip_audit),
     )
 
     print("PROCESSED OPTIMISED BUNDLE")
