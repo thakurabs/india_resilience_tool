@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import argparse
 import io
+import subprocess
 from contextlib import redirect_stdout
+
+import pytest
 
 from tools.runs.prepare_dashboard import (
     BundleRuntimeScope,
+    ClimateLevelReadiness,
+    ClimateRuntimeScope,
     DEFAULT_VALIDATION_TESTS,
     PlannedCommand,
     build_aqueduct_plan,
@@ -17,7 +22,27 @@ from tools.runs.prepare_dashboard import (
     build_population_plan,
     build_cli,
     execute_plan,
+    main,
 )
+
+
+def _climate_scope(*, levels: list[str], pending_by_level: dict[str, list[str]]) -> ClimateRuntimeScope:
+    by_level: dict[str, ClimateLevelReadiness] = {}
+    for level in levels:
+        pending = tuple(pending_by_level.get(level, []))
+        selected = tuple(pending_by_level.get(level, []))
+        by_level[level] = ClimateLevelReadiness(
+            level=level,
+            selected_metrics=selected,
+            runnable_metrics=selected,
+            compute_pending_metrics=pending,
+            masters_pending_metrics=pending,
+            optimized_pending_metrics=pending,
+            complete_metrics=tuple(),
+            unrunnable_metrics=tuple(),
+            unrunnable_reasons_by_metric={},
+        )
+    return ClimateRuntimeScope(levels=tuple(levels), by_level=by_level, global_issues=())
 
 
 def test_aqueduct_bundle_builds_expected_default_steps() -> None:
@@ -92,10 +117,12 @@ def test_climate_hazards_bundle_expands_admin_levels_and_adds_runtime_steps() ->
         skip_optimised=False,
         skip_audit=False,
     )
-    scope = BundleRuntimeScope(
-        selected_metrics=["tas_annual_mean"],
-        pending_metrics=["tas_annual_mean"],
-        has_global_issues=False,
+    scope = _climate_scope(
+        levels=["district", "block"],
+        pending_by_level={
+            "district": ["tas_annual_mean"],
+            "block": ["tas_annual_mean"],
+        },
     )
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
     labels = [step.label for step in plan]
@@ -106,12 +133,14 @@ def test_climate_hazards_bundle_expands_admin_levels_and_adds_runtime_steps() ->
         "climate-compute:block:Karnataka",
         "climate-masters:district",
         "climate-masters:block",
-        "processed-optimised-build",
+        "processed-optimised-build:district+block",
         "processed-optimised-audit",
     ]
     assert any("--state" in step.argv for step in plan[:4])
+    assert "--skip-existing" in plan[0].argv
     assert "--skip-existing" in plan[4].argv
     assert plan[5].argv[-1] == "--quiet"
+    assert plan[6].argv.count("--level") == 2
 
 
 def test_climate_hazards_audit_only_only_runs_audit() -> None:
@@ -132,13 +161,13 @@ def test_climate_hazards_audit_only_only_runs_audit() -> None:
         skip_optimised=False,
         skip_audit=False,
     )
-    scope = BundleRuntimeScope(
-        selected_metrics=["tas_annual_mean"],
-        pending_metrics=["tas_annual_mean"],
-        has_global_issues=False,
+    scope = _climate_scope(
+        levels=["district", "block", "basin", "sub_basin"],
+        pending_by_level={"district": ["tas_annual_mean"]},
     )
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
     assert [step.label for step in plan] == ["processed-optimised-audit"]
+    assert plan[0].argv.count("--level") == 4
 
 
 def test_climate_hazards_skip_optimised_removes_only_build_stage() -> None:
@@ -159,14 +188,60 @@ def test_climate_hazards_skip_optimised_removes_only_build_stage() -> None:
         skip_optimised=True,
         skip_audit=False,
     )
-    scope = BundleRuntimeScope(
-        selected_metrics=["tas_annual_mean"],
-        pending_metrics=["tas_annual_mean"],
-        has_global_issues=False,
+    scope = _climate_scope(
+        levels=["basin", "sub_basin"],
+        pending_by_level={
+            "basin": ["tas_annual_mean"],
+            "sub_basin": ["tas_annual_mean"],
+        },
     )
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
     assert [step.label for step in plan][-1] == "processed-optimised-audit"
     assert "processed-optimised-build" not in [step.label for step in plan]
+
+
+def test_climate_hazards_plans_only_sub_basin_when_basin_is_complete() -> None:
+    args = argparse.Namespace(
+        level="hydro",
+        state=None,
+        metrics=["tas_annual_mean"],
+        models=None,
+        scenarios=None,
+        workers=None,
+        verbose=False,
+        spi_legacy=False,
+        spi_distribution=None,
+        skip_compute=False,
+        skip_masters=False,
+        overwrite=False,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+    )
+    scope = _climate_scope(
+        levels=["basin", "sub_basin"],
+        pending_by_level={"sub_basin": ["tas_annual_mean"]},
+    )
+    scope.by_level["basin"] = ClimateLevelReadiness(
+        level="basin",
+        selected_metrics=("tas_annual_mean",),
+        runnable_metrics=("tas_annual_mean",),
+        compute_pending_metrics=(),
+        masters_pending_metrics=(),
+        optimized_pending_metrics=(),
+        complete_metrics=("tas_annual_mean",),
+        unrunnable_metrics=(),
+        unrunnable_reasons_by_metric={},
+    )
+    plan = build_climate_hazards_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == [
+        "climate-compute:sub_basin",
+        "climate-masters:sub_basin",
+        "processed-optimised-build:sub_basin",
+        "processed-optimised-audit",
+    ]
+    assert "--level" in plan[2].argv
+    assert "sub_basin" in plan[2].argv
 
 
 def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(monkeypatch) -> None:
@@ -181,11 +256,6 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
         ]
     )
     scope_map = {
-        "climate-hazards": BundleRuntimeScope(
-            selected_metrics=["tas_annual_mean"],
-            pending_metrics=["tas_annual_mean"],
-            has_global_issues=False,
-        ),
         "aqueduct": BundleRuntimeScope(
             selected_metrics=["aq_water_stress"],
             pending_metrics=["aq_water_stress"],
@@ -202,6 +272,16 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
             has_global_issues=False,
         ),
     }
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: _climate_scope(
+            levels=["basin", "sub_basin"],
+            pending_by_level={
+                "basin": ["tas_annual_mean"],
+                "sub_basin": ["tas_annual_mean"],
+            },
+        ),
+    )
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_runtime_scope",
         lambda bundle, *_args, **_kwargs: scope_map[bundle],
@@ -298,6 +378,205 @@ def test_execute_plan_plan_only_uses_plan_prefix() -> None:
     text = buf.getvalue()
     assert rc == 0
     assert "PLAN one" in text
+
+
+def test_execute_plan_returns_nonzero_and_prints_failed_step_summary(monkeypatch) -> None:
+    plan = [PlannedCommand(label="climate-compute:basin", argv=["python", "-m", "example"])]
+
+    def _raise_called_process_error(*_args, **_kwargs):
+        raise subprocess.CalledProcessError(returncode=7, cmd=["python", "-m", "example"])
+
+    monkeypatch.setattr("tools.runs.prepare_dashboard.subprocess.run", _raise_called_process_error)
+
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = execute_plan(plan, dry_run=False, plan_only=False)
+    text = buf.getvalue()
+
+    assert rc == 7
+    assert "STEP FAILED [1/1] climate-compute:basin (exit=7)" in text
+
+
+def test_main_returns_nonzero_when_climate_readiness_remains_incomplete(monkeypatch) -> None:
+    scopes = [
+        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
+    ]
+
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: scopes.pop(0),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.build_climate_hazards_plan",
+        lambda *args, **kwargs: [PlannedCommand(label="noop", argv=["python", "-m", "noop"])],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.execute_plan",
+        lambda *args, **kwargs: 0,
+    )
+
+    rc = main(["climate-hazards", "--level", "hydro"])
+
+    assert rc == 1
+
+
+def test_main_skips_post_run_readiness_when_execute_plan_fails(
+    monkeypatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    resolve_calls = 0
+
+    def _resolve_scope(*_args, **_kwargs):
+        nonlocal resolve_calls
+        resolve_calls += 1
+        if resolve_calls > 1:
+            raise AssertionError("post-run readiness should be skipped after a failed step")
+        return _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]})
+
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        _resolve_scope,
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.build_climate_hazards_plan",
+        lambda *args, **kwargs: [PlannedCommand(label="noop", argv=["python", "-m", "noop"])],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.execute_plan",
+        lambda *args, **kwargs: 2,
+    )
+
+    rc = main(["climate-hazards", "--level", "hydro"])
+
+    captured = capsys.readouterr().out
+    assert rc == 2
+    assert resolve_calls == 1
+    assert "POST-RUN CLIMATE READINESS" not in captured
+
+
+def test_main_returns_zero_when_climate_readiness_becomes_complete(monkeypatch) -> None:
+    scopes = [
+        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
+        ClimateRuntimeScope(
+            levels=("basin", "sub_basin"),
+            by_level={
+                "basin": ClimateLevelReadiness(
+                    level="basin",
+                    selected_metrics=("tas_annual_mean",),
+                    runnable_metrics=("tas_annual_mean",),
+                    compute_pending_metrics=(),
+                    masters_pending_metrics=(),
+                    optimized_pending_metrics=(),
+                    complete_metrics=("tas_annual_mean",),
+                    unrunnable_metrics=(),
+                    unrunnable_reasons_by_metric={},
+                ),
+                "sub_basin": ClimateLevelReadiness(
+                    level="sub_basin",
+                    selected_metrics=("tas_annual_mean",),
+                    runnable_metrics=("tas_annual_mean",),
+                    compute_pending_metrics=(),
+                    masters_pending_metrics=(),
+                    optimized_pending_metrics=(),
+                    complete_metrics=("tas_annual_mean",),
+                    unrunnable_metrics=(),
+                    unrunnable_reasons_by_metric={},
+                ),
+            },
+            global_issues=(),
+        ),
+    ]
+
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: scopes.pop(0),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.build_climate_hazards_plan",
+        lambda *args, **kwargs: [PlannedCommand(label="noop", argv=["python", "-m", "noop"])],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.execute_plan",
+        lambda *args, **kwargs: 0,
+    )
+
+    rc = main(["climate-hazards", "--level", "hydro"])
+
+    assert rc == 0
+
+
+
+
+def test_climate_runtime_scope_passes_filter_scope_to_ensemble_marker_validation(monkeypatch) -> None:
+    parser = build_cli()
+    args = parser.parse_args([
+        "climate-hazards",
+        "--level",
+        "hydro",
+        "--metrics",
+        "tas_annual_mean",
+        "--models",
+        "ACCESS-CM2",
+        "--scenarios",
+        "historical",
+    ])
+
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_admin_states",
+        lambda _state: ("Telangana",),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_metrics_for_level",
+        lambda _args, level: (["tas_annual_mean"], []),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._legacy_master_ready",
+        lambda **_kwargs: True,
+    )
+
+    monkeypatch.setattr(
+        "tools.optimized.build_processed_optimised.audit_processed_optimised_parity",
+        lambda **_kwargs: {"issues": []},
+    )
+
+    class _Task:
+        slug = "tas_annual_mean"
+
+    class _Plan:
+        tasks = [_Task()]
+        skipped_reasons_by_metric = {}
+
+    monkeypatch.setattr(
+        "tools.pipeline.compute_indices_multiprocess.build_processing_task_plan",
+        lambda **_kwargs: _Plan(),
+    )
+    monkeypatch.setattr(
+        "tools.pipeline.compute_indices_multiprocess.task_completion_marker_valid",
+        lambda _task: True,
+    )
+
+    calls: list[dict[str, object]] = []
+
+    def _fake_ensemble_completion_marker_valid(**kwargs):
+        calls.append(kwargs)
+        return True
+
+    monkeypatch.setattr(
+        "tools.pipeline.compute_indices_multiprocess.ensemble_completion_marker_valid",
+        _fake_ensemble_completion_marker_valid,
+    )
+
+    from tools.runs.prepare_dashboard import _resolve_climate_runtime_scope
+
+    scope = _resolve_climate_runtime_scope(args, levels=["basin"])
+
+    readiness = scope.by_level["basin"]
+    assert readiness.compute_pending_metrics == ()
+    assert readiness.complete_metrics == ("tas_annual_mean",)
+    assert len(calls) == 1
+    assert calls[0]["allowed_models"] == ["ACCESS-CM2"]
+    assert calls[0]["allowed_scenarios"] == ["historical"]
 
 
 def test_validate_bundle_with_pytest_uses_default_targets() -> None:

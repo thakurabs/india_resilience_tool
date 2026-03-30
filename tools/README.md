@@ -28,6 +28,14 @@ python -m tools.runs.prepare_dashboard climate-hazards --metrics tas_annual_mean
 ```
 
 ```bash
+python -m tools.runs.prepare_dashboard climate-hazards --level hydro --plan-only
+```
+
+```bash
+python -m tools.runs.prepare_dashboard climate-hazards --level hydro --audit-only
+```
+
+```bash
 python -m tools.runs.prepare_dashboard aqueduct
 ```
 
@@ -37,8 +45,11 @@ python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 
 By default the runner is non-destructive and dashboard-oriented:
 - climate runs default to `--level all`
+- climate runs resolve live metrics per requested level
+- climate compute uses validated completion markers and `--skip-existing` by default unless `--overwrite` is supplied
 - climate and bundle runs refresh `processed_optimised`
 - the optimized parity audit runs automatically
+- climate runs return non-zero when the requested readiness state is still incomplete
 - use `--overwrite` only when you want to force a rebuild
 
 For the full command catalog, see [`../docs/command_catalog.md`](../docs/command_catalog.md).
@@ -47,7 +58,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 
 | Script | Purpose | Run |
 |---|---|---|
-| `tools/pipeline/compute_indices_multiprocess.py` | Build processed index artifacts (multi-process; district + block) | `python -m tools.pipeline.compute_indices_multiprocess --help` |
+| `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers and optional `--skip-existing` | `python -m tools.pipeline.compute_indices_multiprocess --help` |
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
 | `tools/pipeline/build_master_metrics.py` | Build admin and hydro master CSVs plus summary sidecars; hydro levels auto-use `processed/{metric}/hydro/` | `python -m tools.pipeline.build_master_metrics --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
@@ -78,8 +89,8 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for the onboarded Aqueduct hydro metrics under `processed/{metric_slug}/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
 | `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
 | `tools/geodata/build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook with district-alias QA outputs | `python -m tools.geodata.build_groundwater_district_masters --help` |
-| `tools/optimized/build_processed_optimised.py` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree plus canonical geometry/context files, with exact pre-scan task counting, yearly parity migration, nested terminal progress bars, and a post-build parity audit | `python -m tools.optimized.build_processed_optimised --help` |
-| `tools/optimized/audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the dashboard-visible legacy processed contract and emit `parity_report.json` | `python -m tools.optimized.audit_processed_optimised_parity --help` |
+| `tools/optimized/build_processed_optimised.py` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree plus canonical geometry/context files, with exact pre-scan task counting, yearly parity migration, level filtering, nested terminal progress bars, and a post-build parity audit | `python -m tools.optimized.build_processed_optimised --help` |
+| `tools/optimized/audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the dashboard-visible legacy processed contract, with optional level filtering, and emit `parity_report.json` | `python -m tools.optimized.audit_processed_optimised_parity --help` |
 | `tools/geodata/validate_aqueduct_workflow.py` | Validate the Aqueduct cleanup, crosswalk, coverage, sensitivity, and master-value workflow and write per-metric validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/` | `python -m tools.geodata.validate_aqueduct_workflow --help` |
 | `tools/geodata/clean_river_network.py` | Clean the Survey of India river shapefile into canonical river artifacts (`river_network.parquet`, display GeoJSON, QA CSV) | `python -m tools.geodata.clean_river_network --help` |
 | `tools/geodata/build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV used by hydro river overlays | `python -m tools.geodata.build_river_basin_reconciliation --help` |
@@ -212,6 +223,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - Parquet-only masters
   - yearly ensemble facts
   - yearly per-model facts
+  - optional level-filtered rebuilds via `--level`
   - simplified display GeoJSON with persisted `area_m2`
   - compact selector indexes:
     - `context/admin_block_index.parquet`
@@ -225,6 +237,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - hydro yearly ensemble facts fall back to legacy hydro per-model yearly CSVs when the legacy hydro `ensembles/` tree is missing or empty
   - yearly model facts are migrated from legacy per-model CSVs where the UI exposes model-member overlays
   - a post-build audit reports any remaining missing optimized artifacts required by dashboard-visible flows
+  - `tools.optimized.audit_processed_optimised_parity.py` accepts matching `--level` filters
 - runtime preference:
   - the dashboard prefers optimized geometry shards and selector indexes when present, falling back to canonical geometry only when an optimized artifact is missing
 - dropped runtime fields:

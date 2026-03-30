@@ -154,6 +154,13 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 
 For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.
 
+The optimized builder also supports level-filtered refreshes:
+
+```bash
+python -m tools.optimized.build_processed_optimised --level hydro
+python -m tools.optimized.build_processed_optimised --level sub_basin --metric tas_annual_mean
+```
+
 while dropping duplicate runtime fields such as:
 - `std`
 - `p05`
@@ -181,6 +188,13 @@ python -m tools.optimized.audit_processed_optimised_parity
 ```
 
 This validates that every dashboard-visible optimized artifact expected from the legacy `processed/` tree is present under `processed_optimised/` and writes `parity_report.json` into the optimized bundle root.
+
+The parity audit also supports level-filtered checks:
+
+```bash
+python -m tools.optimized.audit_processed_optimised_parity --level hydro
+python -m tools.optimized.audit_processed_optimised_parity --level sub_basin --metric tas_annual_mean
+```
 
 ## Data setup
 
@@ -363,10 +377,11 @@ python -m tools.runs.prepare_dashboard climate-hazards
 
 Default behavior:
 - `--level all` is implied
-- computes the requested climate outputs
-- builds admin + hydro masters
-- refreshes `processed_optimised`
-- runs the optimized parity audit
+- resolves the live climate metric set per requested level
+- computes only missing runnable climate outputs by default using validated completion markers
+- builds only missing admin + hydro masters
+- refreshes only the requested `processed_optimised` levels and metrics
+- reruns readiness verification after execution and returns non-zero if the requested bundle is still incomplete
 - preserves current outputs unless `--overwrite` is supplied
 
 Hydro-only:
@@ -385,6 +400,18 @@ One metric, one model, one scenario:
 
 ```bash
 python -m tools.runs.prepare_dashboard climate-hazards --level hydro --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
+```
+
+Plan-only:
+
+```bash
+python -m tools.runs.prepare_dashboard climate-hazards --level hydro --plan-only
+```
+
+Audit-only:
+
+```bash
+python -m tools.runs.prepare_dashboard climate-hazards --level hydro --audit-only
 ```
 
 ### Prepare the dashboard package with the canonical runner

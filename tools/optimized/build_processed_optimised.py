@@ -79,6 +79,16 @@ CONTEXT_FILENAMES = {
     "river_subbasin_diagnostics.parquet": "river_subbasin_diagnostics.csv",
 }
 
+LEVEL_SELECTIONS = {
+    "all": ("district", "block", "basin", "sub_basin"),
+    "admin": ("district", "block"),
+    "hydro": ("basin", "sub_basin"),
+    "district": ("district",),
+    "block": ("block",),
+    "basin": ("basin",),
+    "sub_basin": ("sub_basin",),
+}
+
 
 @dataclass(frozen=True)
 class BuildTask:
@@ -702,76 +712,86 @@ def _copy_context_artifacts(*, tasks: tuple[BuildTask, ...], progress: BuildProg
         _run_task(task, progress, _copy_one)
 
 
-def _geometry_tasks(*, data_dir: Path) -> tuple[BuildTask, ...]:
+def _geometry_tasks(*, data_dir: Path, selected_levels: set[str]) -> tuple[BuildTask, ...]:
     cfg = get_paths_config()
     tasks: list[BuildTask] = []
 
-    adm2 = ensure_adm2_columns(gpd.read_file(cfg.districts_path).to_crs(4326))
-    for state_name in sorted({str(v).strip() for v in adm2["state_name"].astype(str).tolist()}):
+    if "district" in selected_levels:
+        adm2 = ensure_adm2_columns(gpd.read_file(cfg.districts_path).to_crs(4326))
+        for state_name in sorted({str(v).strip() for v in adm2["state_name"].astype(str).tolist()}):
+            tasks.append(
+                BuildTask(
+                    stage="geometry",
+                    label=f"district geometry | {state_name}",
+                    state=state_name,
+                    level="district",
+                    source_path=Path(cfg.districts_path),
+                    target_path=optimized_geometry_path(level="district", state=state_name, data_dir=data_dir),
+                )
+            )
+
+    if "block" in selected_levels:
+        adm3 = ensure_adm3_columns(gpd.read_file(cfg.blocks_path).to_crs(4326))
+        for state_name in sorted({str(v).strip() for v in adm3["state_name"].astype(str).tolist()}):
+            tasks.append(
+                BuildTask(
+                    stage="geometry",
+                    label=f"block geometry | {state_name}",
+                    state=state_name,
+                    level="block",
+                    source_path=Path(cfg.blocks_path),
+                    target_path=optimized_geometry_path(level="block", state=state_name, data_dir=data_dir),
+                )
+            )
+
+    if "basin" in selected_levels:
         tasks.append(
             BuildTask(
                 stage="geometry",
-                label=f"district geometry | {state_name}",
-                state=state_name,
-                level="district",
-                source_path=Path(cfg.districts_path),
-                target_path=optimized_geometry_path(level="district", state=state_name, data_dir=data_dir),
+                label="basin geometry",
+                level="basin",
+                source_path=Path(cfg.basins_path),
+                target_path=optimized_geometry_path(level="basin", data_dir=data_dir),
             )
         )
 
-    adm3 = ensure_adm3_columns(gpd.read_file(cfg.blocks_path).to_crs(4326))
-    for state_name in sorted({str(v).strip() for v in adm3["state_name"].astype(str).tolist()}):
+    sub: Optional[gpd.GeoDataFrame] = None
+    if "sub_basin" in selected_levels or {"basin", "sub_basin"} & selected_levels:
+        sub = ensure_hydro_columns(gpd.read_file(cfg.subbasins_path).to_crs(4326), level="sub_basin")
+
+    if "sub_basin" in selected_levels and sub is not None:
+        for basin_id in sorted({str(v).strip() for v in sub["basin_id"].astype(str).tolist()}):
+            tasks.append(
+                BuildTask(
+                    stage="geometry",
+                    label=f"sub-basin geometry | {basin_id}",
+                    level="sub_basin",
+                    source_path=Path(cfg.subbasins_path),
+                    target_path=optimized_geometry_path(level="sub_basin", basin_id=basin_id, data_dir=data_dir),
+                )
+            )
+
+    if "block" in selected_levels:
         tasks.append(
             BuildTask(
                 stage="geometry",
-                label=f"block geometry | {state_name}",
-                state=state_name,
-                level="block",
+                label="admin block index",
+                level="admin_block_index",
                 source_path=Path(cfg.blocks_path),
-                target_path=optimized_geometry_path(level="block", state=state_name, data_dir=data_dir),
+                target_path=optimized_context_path("admin_block_index.parquet", data_dir=data_dir),
             )
         )
 
-    tasks.append(
-        BuildTask(
-            stage="geometry",
-            label="basin geometry",
-            level="basin",
-            source_path=Path(cfg.basins_path),
-            target_path=optimized_geometry_path(level="basin", data_dir=data_dir),
-        )
-    )
-
-    sub = ensure_hydro_columns(gpd.read_file(cfg.subbasins_path).to_crs(4326), level="sub_basin")
-    for basin_id in sorted({str(v).strip() for v in sub["basin_id"].astype(str).tolist()}):
+    if "sub_basin" in selected_levels and sub is not None:
         tasks.append(
             BuildTask(
                 stage="geometry",
-                label=f"sub-basin geometry | {basin_id}",
-                level="sub_basin",
+                label="hydro sub-basin index",
+                level="hydro_subbasin_index",
                 source_path=Path(cfg.subbasins_path),
-                target_path=optimized_geometry_path(level="sub_basin", basin_id=basin_id, data_dir=data_dir),
+                target_path=optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir),
             )
         )
-
-    tasks.append(
-        BuildTask(
-            stage="geometry",
-            label="admin block index",
-            level="admin_block_index",
-            source_path=Path(cfg.blocks_path),
-            target_path=optimized_context_path("admin_block_index.parquet", data_dir=data_dir),
-        )
-    )
-    tasks.append(
-        BuildTask(
-            stage="geometry",
-            label="hydro sub-basin index",
-            level="hydro_subbasin_index",
-            source_path=Path(cfg.subbasins_path),
-            target_path=optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir),
-        )
-    )
 
     return tuple(tasks)
 
@@ -781,103 +801,120 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
 
     task_map = {(task.level, task.state, str(task.target_path)): task for task in tasks}
 
-    adm2 = gpd.read_file(cfg.districts_path).to_crs(4326)
-    adm2 = ensure_adm2_columns(adm2)
-    adm2["district_key"] = adm2["state_name"].astype(str).map(alias).str.cat(
-        adm2["district_name"].astype(str).map(alias),
-        sep="|",
-    )
-    for state_name, state_gdf in adm2.groupby(adm2["state_name"].astype(str).str.strip(), dropna=False):
-        out = _simplify_geometry(
-            state_gdf,
-            keep_cols=["district_key", "state_name", "district_name"],
-            tolerance=SIMPLIFY_TOL_ADM2,
+    if any(task.level == "district" for task in tasks):
+        adm2 = gpd.read_file(cfg.districts_path).to_crs(4326)
+        adm2 = ensure_adm2_columns(adm2)
+        adm2["district_key"] = adm2["state_name"].astype(str).map(alias).str.cat(
+            adm2["district_name"].astype(str).map(alias),
+            sep="|",
         )
-        out_path = optimized_geometry_path(level="district", state=str(state_name), data_dir=data_dir)
-        task = task_map[("district", str(state_name), str(out_path))]
-        _run_task(task, progress, lambda out=out, out_path=out_path: _write_geojson(out, out_path))
+        for state_name, state_gdf in adm2.groupby(adm2["state_name"].astype(str).str.strip(), dropna=False):
+            out = _simplify_geometry(
+                state_gdf,
+                keep_cols=["district_key", "state_name", "district_name"],
+                tolerance=SIMPLIFY_TOL_ADM2,
+            )
+            out_path = optimized_geometry_path(level="district", state=str(state_name), data_dir=data_dir)
+            task = task_map.get(("district", str(state_name), str(out_path)))
+            if task is not None:
+                _run_task(task, progress, lambda out=out, out_path=out_path: _write_geojson(out, out_path))
 
-    adm3 = gpd.read_file(cfg.blocks_path).to_crs(4326)
-    adm3 = ensure_adm3_columns(adm3)
-    adm3["block_key"] = (
-        adm3["state_name"].astype(str)
-        .map(alias)
-        .str.cat(adm3["district_name"].astype(str).map(alias), sep="|")
-        .str.cat(adm3["block_name"].astype(str).map(alias), sep="|")
-    )
-    for state_name, state_gdf in adm3.groupby(adm3["state_name"].astype(str).str.strip(), dropna=False):
-        out = _simplify_geometry(
-            state_gdf,
-            keep_cols=["block_key", "state_name", "district_name", "block_name"],
-            tolerance=SIMPLIFY_TOL_ADM3,
+    adm3: Optional[gpd.GeoDataFrame] = None
+    if any(task.level in {"block", "admin_block_index"} for task in tasks):
+        adm3 = gpd.read_file(cfg.blocks_path).to_crs(4326)
+        adm3 = ensure_adm3_columns(adm3)
+        adm3["block_key"] = (
+            adm3["state_name"].astype(str)
+            .map(alias)
+            .str.cat(adm3["district_name"].astype(str).map(alias), sep="|")
+            .str.cat(adm3["block_name"].astype(str).map(alias), sep="|")
         )
-        out_path = optimized_geometry_path(level="block", state=str(state_name), data_dir=data_dir)
-        task = task_map[("block", str(state_name), str(out_path))]
-        _run_task(task, progress, lambda out=out, out_path=out_path: _write_geojson(out, out_path))
+    if any(task.level == "block" for task in tasks) and adm3 is not None:
+        for state_name, state_gdf in adm3.groupby(adm3["state_name"].astype(str).str.strip(), dropna=False):
+            out = _simplify_geometry(
+                state_gdf,
+                keep_cols=["block_key", "state_name", "district_name", "block_name"],
+                tolerance=SIMPLIFY_TOL_ADM3,
+            )
+            out_path = optimized_geometry_path(level="block", state=str(state_name), data_dir=data_dir)
+            task = task_map.get(("block", str(state_name), str(out_path)))
+            if task is not None:
+                _run_task(task, progress, lambda out=out, out_path=out_path: _write_geojson(out, out_path))
 
-    admin_block_index = (
-        adm3[["state_name", "district_name", "block_name"]]
-        .copy()
-        .dropna(subset=["state_name", "district_name", "block_name"])
-    )
-    for col in ("state_name", "district_name", "block_name"):
-        admin_block_index[col] = admin_block_index[col].astype("string").str.strip()
-    admin_block_index = admin_block_index[
-        (admin_block_index["state_name"] != "")
-        & (admin_block_index["district_name"] != "")
-        & (admin_block_index["block_name"] != "")
-    ].drop_duplicates().sort_values(["state_name", "district_name", "block_name"]).reset_index(drop=True)
-    admin_block_index_path = optimized_context_path("admin_block_index.parquet", data_dir=data_dir)
-    admin_block_index_task = task_map[("admin_block_index", None, str(admin_block_index_path))]
-    _run_task(
-        admin_block_index_task,
-        progress,
-        lambda: _write_parquet(admin_block_index, admin_block_index_path),
-    )
+    if any(task.level == "admin_block_index" for task in tasks) and adm3 is not None:
+        admin_block_index = (
+            adm3[["state_name", "district_name", "block_name"]]
+            .copy()
+            .dropna(subset=["state_name", "district_name", "block_name"])
+        )
+        for col in ("state_name", "district_name", "block_name"):
+            admin_block_index[col] = admin_block_index[col].astype("string").str.strip()
+        admin_block_index = admin_block_index[
+            (admin_block_index["state_name"] != "")
+            & (admin_block_index["district_name"] != "")
+            & (admin_block_index["block_name"] != "")
+        ].drop_duplicates().sort_values(["state_name", "district_name", "block_name"]).reset_index(drop=True)
+        admin_block_index_path = optimized_context_path("admin_block_index.parquet", data_dir=data_dir)
+        admin_block_index_task = task_map.get(("admin_block_index", None, str(admin_block_index_path)))
+        if admin_block_index_task is not None:
+            _run_task(
+                admin_block_index_task,
+                progress,
+                lambda: _write_parquet(admin_block_index, admin_block_index_path),
+            )
 
-    basin = gpd.read_file(cfg.basins_path).to_crs(4326)
-    basin = ensure_hydro_columns(basin, level="basin")
-    basin_out = _simplify_geometry(
-        basin,
-        keep_cols=["basin_id", "basin_name", "hydro_level"],
-        tolerance=SIMPLIFY_TOL_BASIN_RENDER,
-    )
-    basin_path = optimized_geometry_path(level="basin", data_dir=data_dir)
-    basin_task = task_map[("basin", None, str(basin_path))]
-    _run_task(basin_task, progress, lambda: _write_geojson(basin_out, basin_path))
+    if any(task.level == "basin" for task in tasks):
+        basin = gpd.read_file(cfg.basins_path).to_crs(4326)
+        basin = ensure_hydro_columns(basin, level="basin")
+        basin_out = _simplify_geometry(
+            basin,
+            keep_cols=["basin_id", "basin_name", "hydro_level"],
+            tolerance=SIMPLIFY_TOL_BASIN_RENDER,
+        )
+        basin_path = optimized_geometry_path(level="basin", data_dir=data_dir)
+        basin_task = task_map.get(("basin", None, str(basin_path)))
+        if basin_task is not None:
+            _run_task(basin_task, progress, lambda: _write_geojson(basin_out, basin_path))
 
-    sub = gpd.read_file(cfg.subbasins_path).to_crs(4326)
-    sub = ensure_hydro_columns(sub, level="sub_basin")
-    sub_out = _simplify_geometry(
-        sub,
-        keep_cols=["subbasin_id", "subbasin_code", "subbasin_name", "basin_id", "basin_name", "hydro_level"],
-        tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
-    )
-    for basin_id, basin_gdf in sub_out.groupby("basin_id", dropna=False):
-        out_path = optimized_geometry_path(level="sub_basin", basin_id=str(basin_id), data_dir=data_dir)
-        task = task_map[("sub_basin", None, str(out_path))]
-        _run_task(task, progress, lambda basin_gdf=basin_gdf, out_path=out_path: _write_geojson(basin_gdf, out_path))
+    sub: Optional[gpd.GeoDataFrame] = None
+    if any(task.level in {"sub_basin", "hydro_subbasin_index"} for task in tasks):
+        sub = gpd.read_file(cfg.subbasins_path).to_crs(4326)
+        sub = ensure_hydro_columns(sub, level="sub_basin")
 
-    hydro_subbasin_index = (
-        sub[["basin_id", "basin_name", "subbasin_id", "subbasin_name"]]
-        .copy()
-        .dropna(subset=["basin_id", "basin_name", "subbasin_id", "subbasin_name"])
-    )
-    for col in ("basin_id", "basin_name", "subbasin_id", "subbasin_name"):
-        hydro_subbasin_index[col] = hydro_subbasin_index[col].astype("string").str.strip()
-    hydro_subbasin_index = hydro_subbasin_index[
-        (hydro_subbasin_index["basin_id"] != "")
-        & (hydro_subbasin_index["basin_name"] != "")
-        & (hydro_subbasin_index["subbasin_id"] != "")
-        & (hydro_subbasin_index["subbasin_name"] != "")
-    ].drop_duplicates().sort_values(["basin_name", "subbasin_name"]).reset_index(drop=True)
-    hydro_subbasin_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir)
-    hydro_subbasin_index_task = task_map[("hydro_subbasin_index", None, str(hydro_subbasin_index_path))]
-    _run_task(
-        hydro_subbasin_index_task,
-        progress,
-        lambda: _write_parquet(hydro_subbasin_index, hydro_subbasin_index_path),
-    )
+    if any(task.level == "sub_basin" for task in tasks) and sub is not None:
+        sub_out = _simplify_geometry(
+            sub,
+            keep_cols=["subbasin_id", "subbasin_code", "subbasin_name", "basin_id", "basin_name", "hydro_level"],
+            tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
+        )
+        for basin_id, basin_gdf in sub_out.groupby("basin_id", dropna=False):
+            out_path = optimized_geometry_path(level="sub_basin", basin_id=str(basin_id), data_dir=data_dir)
+            task = task_map.get(("sub_basin", None, str(out_path)))
+            if task is not None:
+                _run_task(task, progress, lambda basin_gdf=basin_gdf, out_path=out_path: _write_geojson(basin_gdf, out_path))
+
+    if any(task.level == "hydro_subbasin_index" for task in tasks) and sub is not None:
+        hydro_subbasin_index = (
+            sub[["basin_id", "basin_name", "subbasin_id", "subbasin_name"]]
+            .copy()
+            .dropna(subset=["basin_id", "basin_name", "subbasin_id", "subbasin_name"])
+        )
+        for col in ("basin_id", "basin_name", "subbasin_id", "subbasin_name"):
+            hydro_subbasin_index[col] = hydro_subbasin_index[col].astype("string").str.strip()
+        hydro_subbasin_index = hydro_subbasin_index[
+            (hydro_subbasin_index["basin_id"] != "")
+            & (hydro_subbasin_index["basin_name"] != "")
+            & (hydro_subbasin_index["subbasin_id"] != "")
+            & (hydro_subbasin_index["subbasin_name"] != "")
+        ].drop_duplicates().sort_values(["basin_name", "subbasin_name"]).reset_index(drop=True)
+        hydro_subbasin_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir)
+        hydro_subbasin_index_task = task_map.get(("hydro_subbasin_index", None, str(hydro_subbasin_index_path)))
+        if hydro_subbasin_index_task is not None:
+            _run_task(
+                hydro_subbasin_index_task,
+                progress,
+                lambda: _write_parquet(hydro_subbasin_index, hydro_subbasin_index_path),
+            )
 
 
 def _write_manifest(
@@ -914,10 +951,28 @@ def _selected_slugs(metrics: Optional[list[str]]) -> list[str]:
     return [slug for slug in available if slug in wanted]
 
 
+def _selected_levels(levels: Optional[list[str]]) -> tuple[str, ...]:
+    if not levels:
+        return LEVEL_SELECTIONS["all"]
+
+    resolved: list[str] = []
+    for value in levels:
+        key = str(value).strip().lower()
+        if not key:
+            continue
+        if key not in LEVEL_SELECTIONS:
+            raise ValueError(f"Unsupported optimized level selection: {value!r}")
+        for level in LEVEL_SELECTIONS[key]:
+            if level not in resolved:
+                resolved.append(level)
+    return tuple(resolved or LEVEL_SELECTIONS["all"])
+
+
 def _build_execution_plan(
     *,
     data_dir: Path,
     metrics: Optional[list[str]] = None,
+    levels: Optional[list[str]] = None,
     include_geometry: bool = True,
     include_context: bool = True,
 ) -> BuildPlan:
@@ -925,6 +980,7 @@ def _build_execution_plan(
     master_tasks: list[BuildTask] = []
     yearly_model_jobs: list[YearlyModelsJob] = []
     yearly_ensemble_jobs: list[YearlyEnsembleJob] = []
+    selected_levels = set(_selected_levels(levels))
 
     for slug in _selected_slugs(metrics):
         legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
@@ -944,6 +1000,8 @@ def _build_execution_plan(
 
         for state_root in _iter_state_dirs(legacy_root):
             for level in ("district", "block"):
+                if level not in selected_levels:
+                    continue
                 source = _legacy_master_source(state_root / LEGACY_MASTER_FILENAMES[level])
                 if source is not None:
                     master_tasks.append(
@@ -963,7 +1021,7 @@ def _build_execution_plan(
                         )
                     )
 
-            if bool(varcfg.get("supports_yearly_trend", True)):
+            if bool(varcfg.get("supports_yearly_trend", True)) and "district" in selected_levels:
                 district_model_paths = _iter_yearly_csv_paths(state_root, level="district")
                 if district_model_paths:
                     yearly_model_jobs.append(
@@ -1003,6 +1061,7 @@ def _build_execution_plan(
                         )
                     )
 
+            if bool(varcfg.get("supports_yearly_trend", True)) and "block" in selected_levels:
                 block_model_paths = _iter_yearly_csv_paths(state_root, level="block")
                 if block_model_paths:
                     yearly_model_jobs.append(
@@ -1050,6 +1109,8 @@ def _build_execution_plan(
         hydro_root = legacy_root / "hydro"
         if hydro_root.exists():
             for level in ("basin", "sub_basin"):
+                if level not in selected_levels:
+                    continue
                 source = _legacy_master_source(hydro_root / LEGACY_MASTER_FILENAMES[level])
                 if source is None:
                     continue
@@ -1133,7 +1194,11 @@ def _build_execution_plan(
                 )
             )
 
-    geometry_tasks = _geometry_tasks(data_dir=data_dir) if include_geometry else tuple()
+    geometry_tasks = (
+        _geometry_tasks(data_dir=data_dir, selected_levels=selected_levels)
+        if include_geometry
+        else tuple()
+    )
     manifest_task = BuildTask(
         stage="manifest",
         label="bundle manifest",
@@ -1199,6 +1264,7 @@ def audit_processed_optimised_parity(
     *,
     data_dir: Path,
     metrics: Optional[list[str]] = None,
+    levels: Optional[list[str]] = None,
     include_geometry: bool = True,
     include_context: bool = True,
     write_report: bool = True,
@@ -1207,6 +1273,7 @@ def audit_processed_optimised_parity(
     plan = _build_execution_plan(
         data_dir=data_dir,
         metrics=metrics,
+        levels=levels,
         include_geometry=include_geometry,
         include_context=include_context,
     )
@@ -1314,6 +1381,7 @@ def build_processed_optimised_bundle(
     *,
     data_dir: Path,
     metrics: Optional[list[str]] = None,
+    levels: Optional[list[str]] = None,
     overwrite: bool = False,
     include_geometry: bool = True,
     include_context: bool = True,
@@ -1326,6 +1394,7 @@ def build_processed_optimised_bundle(
     plan = _build_execution_plan(
         data_dir=data_dir,
         metrics=metrics,
+        levels=levels,
         include_geometry=include_geometry,
         include_context=include_context,
     )
@@ -1484,6 +1553,7 @@ def build_processed_optimised_bundle(
             parity = audit_processed_optimised_parity(
                 data_dir=data_dir,
                 metrics=metrics,
+                levels=levels,
                 include_geometry=include_geometry,
                 include_context=include_context,
                 write_report=True,
@@ -1503,6 +1573,13 @@ def build_processed_optimised_bundle(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build the processed_optimised runtime bundle.")
     parser.add_argument("--metric", action="append", dest="metrics", help="One metric slug to include. Repeatable.")
+    parser.add_argument(
+        "--level",
+        action="append",
+        dest="levels",
+        choices=sorted(LEVEL_SELECTIONS.keys()),
+        help="Restrict the build to one or more level groups or concrete levels.",
+    )
     parser.add_argument("--overwrite", action="store_true", help="Delete and rebuild processed_optimised.")
     parser.add_argument("--skip-geometry", action="store_true", help="Skip optimized geometry generation.")
     parser.add_argument("--skip-context", action="store_true", help="Skip optimized context artifacts.")
@@ -1518,6 +1595,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     summaries = build_processed_optimised_bundle(
         data_dir=data_dir,
         metrics=args.metrics,
+        levels=args.levels,
         overwrite=bool(args.overwrite),
         include_geometry=not bool(args.skip_geometry),
         include_context=not bool(args.skip_context),

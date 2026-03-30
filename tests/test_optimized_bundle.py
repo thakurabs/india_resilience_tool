@@ -567,3 +567,102 @@ def test_audit_processed_optimised_parity_reports_missing_yearly_outputs(
     stages = {issue["stage"] for issue in report["issues"]}
     assert "masters" in stages
     assert "yearly-ensemble" in stages
+
+
+def test_build_execution_plan_and_audit_filter_to_sub_basin_level(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+
+    hydro_root = tmp_path / "processed" / "tas_annual_mean" / "hydro"
+    hydro_root.mkdir(parents=True)
+    (hydro_root / "master_metrics_by_basin.csv").write_text(
+        "basin_id,basin_name,tas_annual_mean__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,4.0\n",
+        encoding="utf-8",
+    )
+    (hydro_root / "master_metrics_by_sub_basin.csv").write_text(
+        "basin_id,basin_name,subbasin_id,subbasin_name,tas_annual_mean__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,GODAVARI-1,Pranhita,3.0\n",
+        encoding="utf-8",
+    )
+
+    basin_ensemble_dir = hydro_root / "basins" / "ensembles" / "Godavari Basin" / "ssp245"
+    basin_ensemble_dir.mkdir(parents=True)
+    (basin_ensemble_dir / "Godavari Basin_yearly_ensemble.csv").write_text(
+        "year,ensemble_mean\n2030,4.0\n",
+        encoding="utf-8",
+    )
+
+    sub_ensemble_dir = hydro_root / "sub_basins" / "ensembles" / "Godavari Basin" / "Pranhita" / "ssp245"
+    sub_ensemble_dir.mkdir(parents=True)
+    (sub_ensemble_dir / "Pranhita_yearly_ensemble.csv").write_text(
+        "year,ensemble_mean\n2030,3.0\n",
+        encoding="utf-8",
+    )
+
+    plan = _build_execution_plan(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        levels=["sub_basin"],
+        include_geometry=False,
+        include_context=False,
+    )
+
+    assert {task.level for task in plan.master_tasks} == {"sub_basin"}
+    assert {job.level for job in plan.yearly_ensemble_jobs} == {"sub_basin"}
+
+    sub_master_out = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "tas_annual_mean"
+        / "masters"
+        / "hydro"
+        / "sub_basin"
+        / "master.parquet"
+    )
+    sub_master_out.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        {
+            "basin_id": ["GODAVARI"],
+            "basin_name": ["Godavari Basin"],
+            "subbasin_id": ["GODAVARI-1"],
+            "subbasin_name": ["Pranhita"],
+        }
+    ).to_parquet(sub_master_out, index=False)
+
+    sub_yearly_out = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "tas_annual_mean"
+        / "yearly_ensemble"
+        / "hydro"
+        / "sub_basin"
+        / "master.parquet"
+    )
+    sub_yearly_out.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        {
+            "basin_name": ["Godavari Basin"],
+            "subbasin_name": ["Pranhita"],
+            "scenario": ["ssp245"],
+            "year": [2030],
+            "mean": [3.0],
+        }
+    ).to_parquet(sub_yearly_out, index=False)
+
+    manifest_path = tmp_path / "processed_optimised" / "bundle_manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text("{}", encoding="utf-8")
+
+    report = audit_processed_optimised_parity(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        levels=["sub_basin"],
+        include_geometry=False,
+        include_context=False,
+        write_report=False,
+    )
+
+    assert report["issue_count"] == 0

@@ -56,12 +56,15 @@ python -m tools.runs.prepare_dashboard climate-hazards
 Notes:
 - `--level all` expands to `district`, `block`, `basin`, and `sub_basin`
 - if no `--state` is passed for admin levels, the runner defaults to `Telangana`
+- live climate metrics are resolved per requested level, so `--level hydro` only plans hydro-visible climate metrics
 - the runner orchestrates:
   - `tools.pipeline.compute_indices_multiprocess`
   - `tools.pipeline.build_master_metrics`
   - `tools.optimized.build_processed_optimised`
   - `tools.optimized.audit_processed_optimised_parity`
+- climate compute uses validated completion markers and `--skip-existing` by default unless `--overwrite` is supplied
 - by default it preserves current outputs; use `--overwrite` to force rebuilds
+- `--audit-only` and normal execution return non-zero when the requested readiness state is still incomplete
 
 Useful variants:
 
@@ -69,6 +72,7 @@ Useful variants:
 python -m tools.runs.prepare_dashboard climate-hazards --level hydro
 python -m tools.runs.prepare_dashboard climate-hazards --metrics tas_annual_mean
 python -m tools.runs.prepare_dashboard climate-hazards --level hydro --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
+python -m tools.runs.prepare_dashboard climate-hazards --level hydro --plan-only
 python -m tools.runs.prepare_dashboard climate-hazards --skip-optimised
 python -m tools.runs.prepare_dashboard climate-hazards --audit-only
 ```
@@ -238,10 +242,24 @@ Disable nested `tqdm` progress bars:
 python -m tools.optimized.build_processed_optimised --overwrite --no-progress
 ```
 
+Restrict the optimized build to one or more levels:
+
+```bash
+python -m tools.optimized.build_processed_optimised --level hydro
+python -m tools.optimized.build_processed_optimised --level sub_basin --metric tas_annual_mean
+```
+
 Audit optimized-bundle parity against the dashboard-visible legacy `processed/` contract:
 
 ```bash
 python -m tools.optimized.audit_processed_optimised_parity
+```
+
+Level-filtered audit examples:
+
+```bash
+python -m tools.optimized.audit_processed_optimised_parity --level hydro
+python -m tools.optimized.audit_processed_optimised_parity --level sub_basin --metric tas_annual_mean
 ```
 
 ### Tests
