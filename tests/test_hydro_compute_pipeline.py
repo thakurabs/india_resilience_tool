@@ -11,6 +11,8 @@ from shapely.geometry import Polygon
 
 from india_resilience_tool.compute.spi_adapter import Distribution, SPIResult
 import india_resilience_tool.compute.spi_adapter as spi_adapter
+from india_resilience_tool.utils.naming import hydro_fs_token
+from india_resilience_tool.utils.processed_io import ensure_directory, path_exists, write_csv
 from tools.pipeline import compute_indices_multiprocess as CMP
 
 
@@ -22,6 +24,11 @@ def _daily_series() -> xr.DataArray:
 def _monthly_series() -> xr.DataArray:
     time = pd.date_range("2030-01-01", periods=12, freq="MS")
     return xr.DataArray(np.linspace(-1.0, 1.0, 12), coords={"time": time}, dims=["time"])
+
+
+def _sparse_daily_series() -> xr.DataArray:
+    time = pd.to_datetime(["2030-01-01"])
+    return xr.DataArray([300.0], coords={"time": time}, dims=["time"])
 
 
 def test_add_unit_fields_from_key_populates_sub_basin_fields() -> None:
@@ -81,6 +88,117 @@ def test_validate_output_unit_fields_raises_clear_error_for_invalid_hydro_rows()
     assert "spi3_drought_index" in message
     assert "ACCESS-CM2" in message
     assert "historical" in message
+
+
+def test_hydro_safe_component_shortens_long_names_deterministically() -> None:
+    long_name = "East flowing rivers between Godavari and Krishna Basin"
+
+    token = CMP._safe_component(long_name)
+
+    assert token == hydro_fs_token(long_name)
+    assert len(token) <= 48
+    assert token != long_name.replace(" ", "_")
+    assert hydro_fs_token(long_name) == token
+
+
+def test_monthly_spi_csv_path_shortens_hydro_sub_basin_tokens(tmp_path: Path) -> None:
+    basin_name = "East flowing rivers between Godavari and Krishna Basin"
+    subbasin_name = "East flowing rivers between Godavari and krishna"
+
+    monthly_path = spi_adapter._monthly_spi_csv_path(
+        metric_root_path=tmp_path / "processed" / "spi3_count_months_lt_minus1",
+        state_name="hydro",
+        level_folder="sub_basins",
+        level="sub_basin",
+        unit_key=f"{basin_name}||{subbasin_name}",
+        model="ACCESS-CM2",
+        scenario="historical",
+    )
+
+    assert hydro_fs_token(basin_name) in monthly_path.parts
+    assert hydro_fs_token(subbasin_name) in monthly_path.parts
+    assert monthly_path.name == f"{hydro_fs_token(subbasin_name)}_monthly.csv"
+
+
+def test_compute_sub_basin_ensembles_writes_shortened_hydro_filename(tmp_path: Path, monkeypatch) -> None:
+    basin_name = "East flowing rivers between Godavari and Krishna Basin"
+    subbasin_name = "East flowing rivers between Godavari and krishna"
+    basin_token = hydro_fs_token(basin_name)
+    subbasin_token = hydro_fs_token(subbasin_name)
+    scenario = "historical"
+    model = "ACCESS-CM2"
+
+    level_root = tmp_path / "processed" / "metric" / "hydro" / "sub_basins"
+    scenario_dir = level_root / basin_token / subbasin_token / model / scenario
+    ensure_directory(scenario_dir)
+    write_csv(
+        pd.DataFrame(
+        {
+            "year": [2030, 2031],
+            "value": [1.0, 2.0],
+            "basin": [basin_name, basin_name],
+            "sub_basin": [subbasin_name, subbasin_name],
+            "model": [model, model],
+            "scenario": [scenario, scenario],
+            "source_file": ["", ""],
+        }
+        ),
+        scenario_dir / f"{subbasin_token}_yearly.csv",
+        index=False,
+    )
+
+    monkeypatch.setattr(CMP, "_hydro_ensemble_scope_from_coverage_qc", lambda *args, **kwargs: None)
+
+    stats = CMP._compute_sub_basin_ensembles(
+        level_root,
+        level_root / "ensembles",
+        slug="pr_consecutive_dry_days_lt1mm",
+    )
+
+    expected = level_root / "ensembles" / basin_token / subbasin_token / scenario / f"{subbasin_token}_yearly_ensemble.csv"
+    assert stats.expected_output_count == 1
+    assert stats.written_count == 1
+    assert stats.failure_count == 0
+    assert path_exists(expected)
+
+
+def test_compute_basin_ensembles_writes_shortened_hydro_filename(tmp_path: Path, monkeypatch) -> None:
+    basin_name = "East flowing rivers between Krishna and Pennar Basin"
+    basin_token = hydro_fs_token(basin_name)
+    scenario = "historical"
+    model = "ACCESS-CM2"
+
+    level_root = tmp_path / "processed" / "metric" / "hydro" / "basins"
+    scenario_dir = level_root / basin_token / model / scenario
+    ensure_directory(scenario_dir)
+    write_csv(
+        pd.DataFrame(
+        {
+            "year": [2030, 2031],
+            "value": [1.0, 2.0],
+            "basin": [basin_name, basin_name],
+            "model": [model, model],
+            "scenario": [scenario, scenario],
+            "source_file": ["", ""],
+        }
+        ),
+        scenario_dir / f"{basin_token}_yearly.csv",
+        index=False,
+    )
+
+    monkeypatch.setattr(CMP, "_hydro_ensemble_scope_from_coverage_qc", lambda *args, **kwargs: None)
+
+    stats = CMP._compute_basin_ensembles(
+        level_root,
+        level_root / "ensembles",
+        slug="tas_annual_mean",
+    )
+
+    expected = level_root / "ensembles" / basin_token / scenario / f"{basin_token}_yearly_ensemble.csv"
+    assert stats.expected_output_count == 1
+    assert stats.written_count == 1
+    assert stats.failure_count == 0
+    assert path_exists(expected)
 
 
 def test_load_boundaries_rejects_blank_hydro_identity(monkeypatch) -> None:
@@ -177,6 +295,11 @@ def test_build_processing_task_plan_tracks_metric_specific_unrunnable_reasons(
         "yearly_files_for_dir",
         lambda path: {2030: path / "2030.nc"} if path.exists() else {},
     )
+    monkeypatch.setattr(
+        CMP,
+        "validated_year_files_for_var",
+        lambda path, _varname: ({2030: path / "2030.nc"}, {}) if path.exists() else ({}, {}),
+    )
 
     plan = CMP.build_processing_task_plan(
         metrics_filter=["tas_annual_mean", "spi3_drought_index"],
@@ -189,6 +312,144 @@ def test_build_processing_task_plan_tracks_metric_specific_unrunnable_reasons(
     assert [task.slug for task in plan.tasks] == ["tas_annual_mean"]
     assert plan.skipped_reasons_by_metric["spi3_drought_index"] == ("no_available_years",)
     assert plan.skipped_counts_by_reason["no_available_years"] == 1
+
+
+def test_build_processing_task_plan_marks_invalid_source_files(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "METRICS", [{"slug": "tas_winter_mean", "var": "tas"}])
+    monkeypatch.setattr(CMP, "MODELS", ["EC-Earth3-Veg-LR"])
+    monkeypatch.setattr(CMP, "SCENARIOS", {"ssp245": {"subdir": "ssp245/tas", "periods": {}}})
+
+    data_dir = tmp_path / "tas_EC-Earth3-Veg-LR"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    bad_file = data_dir / "2030.nc"
+    bad_file.write_text("not-used", encoding="utf-8")
+
+    monkeypatch.setattr(CMP, "var_data_dir", lambda *_args, **_kwargs: data_dir)
+    monkeypatch.setattr(CMP, "yearly_files_for_dir", lambda _path: {2030: bad_file})
+    monkeypatch.setattr(CMP, "validated_year_files_for_var", lambda *_args, **_kwargs: ({}, {2030: {"path": bad_file}}))
+
+    plan = CMP.build_processing_task_plan(
+        metrics_filter=["tas_winter_mean"],
+        models_filter=["EC-Earth3-Veg-LR"],
+        scenarios_filter=["ssp245"],
+        level="basin",
+        state="hydro",
+    )
+
+    assert plan.tasks == ()
+    assert plan.skipped_reasons_by_metric["tas_winter_mean"] == ("invalid_source_files",)
+    assert plan.skipped_counts_by_reason["invalid_source_files"] == 1
+
+
+def test_tx90p_helper_returns_nan_for_sparse_baseline(monkeypatch) -> None:
+    monkeypatch.setattr(
+        CMP,
+        "_collect_daily_mean_by_unit",
+        lambda *args, **kwargs: {"Godavari Basin": _sparse_daily_series()},
+    )
+
+    rows = CMP._compute_tx90p_rows_for_metric(
+        metric={
+            "slug": "tx90p_hot_days_pct",
+            "var": "tasmax",
+            "value_col": "tx90p",
+            "params": {"baseline_years": (2030, 2030)},
+        },
+        model="KACE-1-0-G",
+        scenario="historical",
+        scenario_conf={},
+        year_to_paths={2030: {"tasmax": Path("ignored.nc")}},
+        masks={"Godavari Basin": xr.DataArray([True])},
+        level="basin",
+    )
+
+    assert len(rows) == 1
+    assert np.isnan(rows[0]["value"])
+
+
+def test_spell_duration_helper_returns_nan_for_sparse_baseline(monkeypatch) -> None:
+    monkeypatch.setattr(
+        CMP,
+        "_collect_daily_mean_by_unit",
+        lambda *args, **kwargs: {"Godavari Basin": _sparse_daily_series()},
+    )
+
+    rows = CMP._compute_spell_duration_rows_for_metric(
+        metric={
+            "slug": "wsdi_warm_spell_days",
+            "var": "tasmax",
+            "value_col": "wsdi",
+            "compute": "warm_spell_duration_index",
+            "params": {"baseline_years": (2030, 2030)},
+        },
+        model="KACE-1-0-G",
+        scenario="historical",
+        scenario_conf={},
+        year_to_paths={2030: {"tasmax": Path("ignored.nc")}},
+        masks={"Godavari Basin": xr.DataArray([True])},
+        level="basin",
+    )
+
+    assert len(rows) == 1
+    assert np.isnan(rows[0]["value"])
+
+
+def test_heatwave_percentile_helper_returns_nan_for_sparse_baseline(monkeypatch) -> None:
+    monkeypatch.setattr(
+        CMP,
+        "_collect_daily_mean_by_unit",
+        lambda *args, **kwargs: {"Godavari Basin": _sparse_daily_series()},
+    )
+
+    rows = CMP._compute_heatwave_percentile_rows_for_metric(
+        metric={
+            "slug": "hwfi_tmean_90p",
+            "var": "tas",
+            "value_col": "hwfi",
+            "compute": "heatwave_frequency_percentile",
+            "params": {"baseline_years": (2030, 2030)},
+        },
+        model="KACE-1-0-G",
+        scenario="historical",
+        scenario_conf={},
+        year_to_paths={2030: {"tas": Path("ignored.nc")}},
+        masks={"Godavari Basin": xr.DataArray([True])},
+        level="basin",
+    )
+
+    assert len(rows) == 1
+    assert np.isnan(rows[0]["value"])
+
+
+def test_heatwave_baseline_helper_returns_nan_for_sparse_baseline(monkeypatch) -> None:
+    monkeypatch.setattr(
+        CMP,
+        "_collect_daily_mean_by_unit",
+        lambda *args, **kwargs: {"Godavari Basin": _sparse_daily_series()},
+    )
+
+    rows = CMP._compute_heatwave_baseline_rows_for_metric(
+        metric={
+            "slug": "hwa_heatwave_amplitude",
+            "var": "tas",
+            "value_col": "hwa",
+            "compute": "heatwave_amplitude",
+            "params": {"baseline_years": (2030, 2030)},
+        },
+        model="KACE-1-0-G",
+        scenario="historical",
+        scenario_conf={},
+        year_to_paths={2030: {"tas": Path("ignored.nc")}},
+        masks={"Godavari Basin": xr.DataArray([True])},
+        level="basin",
+    )
+
+    assert len(rows) == 1
+    assert np.isnan(rows[0]["value"])
 
 
 def test_task_completion_marker_validates_output_counts(
@@ -224,6 +485,42 @@ def test_task_completion_marker_validates_output_counts(
     (out_dir / "Hanumakonda_yearly.csv").unlink()
 
     assert CMP.task_completion_marker_valid(task) is False
+
+
+def test_task_completion_marker_valid_dedupes_legacy_hydro_alias_outputs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda level, state: ("/tmp/boundary.geojson", 123))
+
+    basin_name = "East flowing rivers between Krishna and Pennar Basin"
+    canonical = hydro_fs_token(basin_name)
+    legacy = basin_name.replace(" ", "_").replace("/", "_")
+    task = CMP.ProcessingTask(
+        metric_idx=0,
+        slug="tas_annual_mean",
+        model="ACCESS-CM2",
+        scenario="historical",
+        scenario_conf={},
+        task_id=0,
+        total_tasks=1,
+        level="basin",
+        state_name="hydro",
+        required_vars=("tas",),
+        common_years_hash="abc123",
+        scope_name="hydro",
+    )
+
+    for token in {canonical, legacy}:
+        out_dir = tmp_path / "processed" / "tas_annual_mean" / "hydro" / "basins" / token / "ACCESS-CM2" / "historical"
+        ensure_directory(out_dir)
+        write_csv(pd.DataFrame({"year": [2030], "value": [1.0]}), out_dir / f"{token}_yearly.csv", index=False)
+        write_csv(pd.DataFrame({"period": ["2030s"], "value": [1.0]}), out_dir / f"{token}_periods.csv", index=False)
+
+    CMP._write_task_completion_marker(task, output_meta={"yearly_file_count": 1, "period_file_count": 1})
+
+    assert CMP.task_completion_marker_valid(task) is True
 
 
 def test_build_processing_task_plan_marks_no_tasks_after_filters_per_metric(
@@ -303,6 +600,143 @@ def test_ensemble_completion_marker_validates_expected_outputs(
         allowed_models=("ACCESS-CM2",),
         allowed_scenarios=("historical",),
     ) is False
+
+
+def test_ensemble_completion_marker_valid_dedupes_legacy_hydro_alias_outputs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda level, state: ("/tmp/boundary.geojson", 123))
+    monkeypatch.setattr(CMP, "_hydro_ensemble_scope_from_coverage_qc", lambda *args, **kwargs: None)
+
+    basin_name = "East flowing rivers between Krishna and Pennar Basin"
+    canonical = hydro_fs_token(basin_name)
+    legacy = basin_name.replace(" ", "_").replace("/", "_")
+
+    for token in {canonical, legacy}:
+        out_dir = tmp_path / "processed" / "tas_annual_mean" / "hydro" / "basins" / "ensembles" / token / "historical"
+        ensure_directory(out_dir)
+        write_csv(
+            pd.DataFrame({"year": [2030], "ensemble_mean": [1.0]}),
+            out_dir / f"{token}_yearly_ensemble.csv",
+            index=False,
+        )
+
+    CMP._write_ensemble_completion_marker(
+        slug="tas_annual_mean",
+        level="basin",
+        scope_name="hydro",
+        allowed_models=("ACCESS-CM2",),
+        allowed_scenarios=("historical",),
+        expected_output_count=1,
+    )
+
+    assert CMP.ensemble_completion_marker_valid(
+        slug="tas_annual_mean",
+        level="basin",
+        scope_name="hydro",
+        allowed_models=("ACCESS-CM2",),
+        allowed_scenarios=("historical",),
+    ) is True
+
+
+def test_ensemble_output_count_counts_each_hydro_scenario_once(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "_hydro_ensemble_scope_from_coverage_qc", lambda *args, **kwargs: None)
+
+    basin_token = hydro_fs_token("East flowing rivers between Krishna and Pennar Basin")
+    for scenario in ("historical", "ssp245", "ssp585"):
+        out_dir = tmp_path / "processed" / "tas_annual_mean" / "hydro" / "basins" / "ensembles" / basin_token / scenario
+        ensure_directory(out_dir)
+        write_csv(
+            pd.DataFrame({"year": [2030], "ensemble_mean": [1.0]}),
+            out_dir / f"{basin_token}_yearly_ensemble.csv",
+            index=False,
+        )
+
+    assert (
+        CMP._ensemble_output_count(
+            slug="tas_annual_mean",
+            level="basin",
+            scope_name="hydro",
+            allowed_models=("ACCESS-CM2",),
+            allowed_scenarios=("historical", "ssp245", "ssp585"),
+        )
+        == 3
+    )
+
+
+def test_cleanup_compute_outputs_for_overwrite_removes_selected_slice_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+
+    slug = "tas_annual_mean"
+    scope_name = "hydro"
+    level_root = tmp_path / "processed" / slug / scope_name / "basins"
+    canonical = hydro_fs_token("East flowing rivers between Krishna and Pennar Basin")
+    legacy = "East_flowing_rivers_between_Krishna_and_Pennar_Basin"
+
+    for basin_token in {canonical, legacy}:
+        ensure_directory(level_root / basin_token / "ACCESS-CM2" / "historical")
+        ensure_directory(level_root / basin_token / "ACCESS-CM2" / "ssp245")
+        write_csv(
+            pd.DataFrame({"year": [2030], "value": [1.0]}),
+            level_root / basin_token / "ACCESS-CM2" / "historical" / f"{basin_token}_yearly.csv",
+            index=False,
+        )
+        write_csv(
+            pd.DataFrame({"year": [2030], "value": [1.0]}),
+            level_root / basin_token / "ACCESS-CM2" / "ssp245" / f"{basin_token}_yearly.csv",
+            index=False,
+        )
+        ensure_directory(level_root / "ensembles" / basin_token / "historical")
+        ensure_directory(level_root / "ensembles" / basin_token / "ssp245")
+        write_csv(
+            pd.DataFrame({"year": [2030], "ensemble_mean": [1.0]}),
+            level_root / "ensembles" / basin_token / "historical" / f"{basin_token}_yearly_ensemble.csv",
+            index=False,
+        )
+        write_csv(
+            pd.DataFrame({"year": [2030], "ensemble_mean": [1.0]}),
+            level_root / "ensembles" / basin_token / "ssp245" / f"{basin_token}_yearly_ensemble.csv",
+            index=False,
+        )
+
+    (level_root / "coverage_qc_ACCESS-CM2_historical.csv").write_text("x\n", encoding="utf-8")
+    (level_root / "coverage_qc_ACCESS-CM2_ssp245.csv").write_text("x\n", encoding="utf-8")
+
+    task_marker = tmp_path / "processed" / slug / ".markers" / "compute" / "basin" / "scope=hydro" / "model=ACCESS-CM2" / "scenario=historical.json"
+    ensure_directory(task_marker.parent)
+    task_marker.write_text("{}", encoding="utf-8")
+    ensemble_marker = tmp_path / "processed" / slug / ".markers" / "ensembles" / "basin" / "scope=hydro" / f"filters={CMP._ensemble_filter_scope_signature(allowed_models=('ACCESS-CM2',), allowed_scenarios=('historical',))}.json"
+    ensure_directory(ensemble_marker.parent)
+    ensemble_marker.write_text("{}", encoding="utf-8")
+
+    CMP._cleanup_compute_outputs_for_overwrite(
+        slug=slug,
+        level="basin",
+        scope_name=scope_name,
+        allowed_models=("ACCESS-CM2",),
+        allowed_scenarios=("historical",),
+    )
+
+    assert not path_exists(level_root / canonical / "ACCESS-CM2" / "historical")
+    assert not path_exists(level_root / legacy / "ACCESS-CM2" / "historical")
+    assert path_exists(level_root / canonical / "ACCESS-CM2" / "ssp245")
+    assert path_exists(level_root / legacy / "ACCESS-CM2" / "ssp245")
+    assert not path_exists(level_root / "ensembles" / canonical / "historical")
+    assert not path_exists(level_root / "ensembles" / legacy / "historical")
+    assert path_exists(level_root / "ensembles" / canonical / "ssp245")
+    assert not path_exists(level_root / "coverage_qc_ACCESS-CM2_historical.csv")
+    assert path_exists(level_root / "coverage_qc_ACCESS-CM2_ssp245.csv")
+    assert not path_exists(task_marker)
+    assert not path_exists(ensemble_marker)
 
 
 def test_compute_ensembles_for_metric_treats_zero_hydro_outputs_as_failure(

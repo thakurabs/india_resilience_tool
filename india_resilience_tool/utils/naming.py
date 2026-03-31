@@ -12,6 +12,7 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from typing import Mapping, Optional
@@ -88,3 +89,31 @@ def normalize_compact(s: str, aliases: Optional[Mapping[str, str]] = None) -> st
         Compact normalized string.
     """
     return alias(s, aliases=aliases).replace(" ", "")
+
+
+def safe_fs_component(s: str) -> str:
+    """
+    Return the legacy filesystem-safe token used by processed output folders.
+
+    This preserves the historical hydro/admin folder convention of replacing
+    spaces and slashes with underscores without changing case.
+    """
+    return str(s).strip().replace(" ", "_").replace("/", "_")
+
+
+def hydro_fs_token(s: str, *, max_length: int = 48) -> str:
+    """
+    Return a deterministic hydro folder token that stays Windows-path friendly.
+
+    For short names this preserves the legacy token exactly. For long names it
+    appends a stable hash suffix after truncation so folder names remain unique
+    while avoiding `MAX_PATH` failures on Windows.
+    """
+    token = safe_fs_component(s)
+    if len(token) <= max_length:
+        return token
+
+    digest = hashlib.sha1(token.encode("utf-8")).hexdigest()[:8]
+    prefix_len = max(1, max_length - len(digest) - 1)
+    prefix = token[:prefix_len].rstrip("_") or token[:prefix_len]
+    return f"{prefix}_{digest}"

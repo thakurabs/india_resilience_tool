@@ -25,6 +25,9 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence, Union
 
+from india_resilience_tool.utils.naming import hydro_fs_token
+from india_resilience_tool.utils.processed_io import glob_paths, path_exists
+
 PathLike = Union[str, Path]
 AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
@@ -67,6 +70,7 @@ def _generate_name_variants(name: str) -> list[str]:
         disp.replace("_", " "),
         re.sub(r"\s+", "_", disp_lower),
         slugify_fs(disp),
+        hydro_fs_token(disp),
         disp.title(),
         disp.title().replace(" ", "_"),
     ]
@@ -326,7 +330,7 @@ def discover_hydro_yearly_file(
 ) -> Optional[Path]:
     """Discover a hydro yearly ensemble CSV under processed/{metric}/hydro/."""
     root = Path(ts_root) / "hydro"
-    if not root.exists():
+    if not path_exists(root):
         return None
 
     scenario = str(scenario_name).strip()
@@ -337,7 +341,7 @@ def discover_hydro_yearly_file(
         base = root / "basins" / "ensembles"
         for basin_name in basin_variants:
             scen_dir = base / basin_name / scenario
-            if not scen_dir.exists():
+            if not path_exists(scen_dir):
                 continue
             for filename in (
                 f"{basin_name}_yearly_ensemble.csv",
@@ -345,9 +349,9 @@ def discover_hydro_yearly_file(
                 f"{basin_name.lower()}_yearly_ensemble.csv",
             ):
                 f = scen_dir / filename
-                if f.exists():
+                if path_exists(f):
                     return f
-            csvs = sorted(scen_dir.glob("*_yearly_ensemble.csv"))
+            csvs = glob_paths(scen_dir, "*_yearly_ensemble.csv")
             if csvs:
                 return csvs[0]
         return None
@@ -355,11 +359,11 @@ def discover_hydro_yearly_file(
     base = root / "sub_basins" / "ensembles"
     for basin_name in basin_variants:
         basin_dir = base / basin_name
-        if not basin_dir.exists():
+        if not path_exists(basin_dir):
             continue
         for subbasin_name in subbasin_variants:
             scen_dir = basin_dir / subbasin_name / scenario
-            if not scen_dir.exists():
+            if not path_exists(scen_dir):
                 continue
             for filename in (
                 f"{subbasin_name}_yearly_ensemble.csv",
@@ -367,9 +371,9 @@ def discover_hydro_yearly_file(
                 f"{subbasin_name.lower()}_yearly_ensemble.csv",
             ):
                 f = scen_dir / filename
-                if f.exists():
+                if path_exists(f):
                     return f
-            csvs = sorted(scen_dir.glob("*_yearly_ensemble.csv"))
+            csvs = glob_paths(scen_dir, "*_yearly_ensemble.csv")
             if csvs:
                 return csvs[0]
     return None
@@ -399,12 +403,12 @@ def discover_state_period_ensemble_file(
 
 def _first_matching_ensemble_csv(directory: Path, *, fallback_name: str) -> Optional[Path]:
     """Return the preferred yearly-ensemble CSV inside a scenario directory."""
-    if not directory.exists():
+    if not path_exists(directory):
         return None
     explicit = directory / fallback_name
-    if explicit.exists():
+    if path_exists(explicit):
         return explicit
-    csvs = sorted(directory.glob("*_yearly_ensemble.csv"))
+    csvs = glob_paths(directory, "*_yearly_ensemble.csv")
     if csvs:
         return csvs[0]
     return None

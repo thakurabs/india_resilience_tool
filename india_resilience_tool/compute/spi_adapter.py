@@ -32,6 +32,8 @@ from typing import Optional, Tuple
 import numpy as np
 import pandas as pd
 import xarray as xr
+from india_resilience_tool.utils.naming import hydro_fs_token, safe_fs_component
+from india_resilience_tool.utils.processed_io import path_exists, read_csv, write_csv
 
 # Import from climate-indices package
 try:
@@ -458,7 +460,7 @@ def _annualize_spi_counts_xarray(
 
 
 def _safe_component(name: str) -> str:
-    return str(name).strip().replace(" ", "_").replace("/", "_")
+    return safe_fs_component(name)
 
 
 def _parse_unit_key(level: str, unit_key: str) -> tuple[str, Optional[str]]:
@@ -510,7 +512,8 @@ def _monthly_spi_csv_path(
         return out_dir / f"{block_safe}_monthly.csv"
 
     if level == "sub_basin":
-        sub_basin_safe = _safe_component(secondary_name or unit_key)
+        primary_safe = hydro_fs_token(primary_name)
+        sub_basin_safe = hydro_fs_token(secondary_name or unit_key)
         out_dir = metric_root_path / state_name / level_folder / primary_safe / sub_basin_safe / model / scenario
         return out_dir / f"{sub_basin_safe}_monthly.csv"
 
@@ -527,11 +530,11 @@ def _load_monthly_spi_csv(
     expected_model: str,
     expected_scenario: str,
 ) -> Optional[xr.DataArray]:
-    if not path.exists():
+    if not path_exists(path):
         return None
 
     try:
-        df = pd.read_csv(path)
+        df = read_csv(path)
     except Exception as e:
         logger.warning(f"Failed to read monthly SPI CSV '{path}': {e}")
         return None
@@ -592,8 +595,6 @@ def _write_monthly_spi_csv(
     level: str,
     unit_key: str,
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
     times = pd.DatetimeIndex(spi_monthly["time"].values)
     times_ms = times.to_period("M").to_timestamp(how="start")
     data: dict[str, object] = {
@@ -610,7 +611,7 @@ def _write_monthly_spi_csv(
     }
     _add_unit_fields_from_key(data, level=level, unit_key=unit_key)
     df = pd.DataFrame(data)
-    df.to_csv(path, index=False)
+    write_csv(df, path, index=False)
 
 
 def compute_spi_rows_climate_indices(

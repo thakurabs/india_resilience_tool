@@ -50,6 +50,7 @@ import pandas as pd
 from paths import get_boundary_path
 
 from india_resilience_tool.data.hydro_loader import load_local_hydro
+from india_resilience_tool.utils.naming import hydro_fs_token, safe_fs_component
 
 
 def _get_mp_module():
@@ -172,7 +173,7 @@ def sanitize_colname(s: str) -> str:
 
 def hydro_folder_name(text: str) -> str:
     """Return the folder-safe hydro token used by the compute pipeline."""
-    return str(text).replace(" ", "_").replace("/", "_").strip()
+    return hydro_fs_token(text)
 
 
 def _is_hydro_level(level: AdminLevel) -> bool:
@@ -206,13 +207,20 @@ def _build_basin_lookup() -> Dict[str, Dict[str, str]]:
     gdf = load_local_hydro(get_boundary_path("basin"), level="basin")
     lookup: Dict[str, Dict[str, str]] = {}
     for _, row in gdf.iterrows():
-        folder_key = hydro_folder_name(row.get("basin_name", ""))
-        if not folder_key:
-            continue
-        lookup[folder_key] = {
-            "basin_id": str(row.get("basin_id", "")).strip(),
-            "basin_name": str(row.get("basin_name", "")).strip(),
+        basin_name = str(row.get("basin_name", "")).strip()
+        folder_keys = {
+            safe_fs_component(basin_name),
+            hydro_folder_name(basin_name),
         }
+        folder_keys.discard("")
+        if not folder_keys:
+            continue
+        basin_meta = {
+            "basin_id": str(row.get("basin_id", "")).strip(),
+            "basin_name": basin_name,
+        }
+        for folder_key in folder_keys:
+            lookup[folder_key] = basin_meta
     return lookup
 
 
@@ -221,17 +229,30 @@ def _build_subbasin_lookup() -> Dict[Tuple[str, str], Dict[str, str]]:
     gdf = load_local_hydro(get_boundary_path("sub_basin"), level="sub_basin")
     lookup: Dict[Tuple[str, str], Dict[str, str]] = {}
     for _, row in gdf.iterrows():
-        basin_key = hydro_folder_name(row.get("basin_name", ""))
-        subbasin_key = hydro_folder_name(row.get("subbasin_name", ""))
-        if not basin_key or not subbasin_key:
+        basin_name = str(row.get("basin_name", "")).strip()
+        subbasin_name = str(row.get("subbasin_name", "")).strip()
+        basin_keys = {
+            safe_fs_component(basin_name),
+            hydro_folder_name(basin_name),
+        }
+        subbasin_keys = {
+            safe_fs_component(subbasin_name),
+            hydro_folder_name(subbasin_name),
+        }
+        basin_keys.discard("")
+        subbasin_keys.discard("")
+        if not basin_keys or not subbasin_keys:
             continue
-        lookup[(basin_key, subbasin_key)] = {
+        subbasin_meta = {
             "basin_id": str(row.get("basin_id", "")).strip(),
-            "basin_name": str(row.get("basin_name", "")).strip(),
+            "basin_name": basin_name,
             "subbasin_id": str(row.get("subbasin_id", "")).strip(),
             "subbasin_code": str(row.get("subbasin_code", "")).strip(),
-            "subbasin_name": str(row.get("subbasin_name", "")).strip(),
+            "subbasin_name": subbasin_name,
         }
+        for basin_key in basin_keys:
+            for subbasin_key in subbasin_keys:
+                lookup[(basin_key, subbasin_key)] = subbasin_meta
     return lookup
 
 

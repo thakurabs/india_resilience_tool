@@ -172,6 +172,15 @@ class ClimateRuntimeScope:
         return bool(self.pending_metrics or self.global_issues)
 
 
+@dataclass(frozen=True)
+class ClimatePostRunStatus:
+    """Post-run blocking vs informational readiness for the executed stage set."""
+
+    blocking: bool
+    informational_pending: bool
+    informational_messages: tuple[str, ...] = ()
+
+
 def _py_module_cmd(module: str) -> list[str]:
     return [sys.executable, "-m", module]
 
@@ -524,6 +533,64 @@ def _climate_scope_is_ready(scope: ClimateRuntimeScope) -> bool:
     return True
 
 
+def _evaluate_climate_post_run_status(
+    scope: ClimateRuntimeScope,
+    *,
+    require_compute: bool,
+    require_masters: bool,
+    require_optimized: bool,
+    require_audit: bool,
+) -> ClimatePostRunStatus:
+    """Return blocking vs informational pending state for one climate run."""
+    informational: list[str] = []
+    blocking = False
+
+    if scope.global_issues:
+        if require_audit:
+            blocking = True
+        else:
+            informational.append(
+                f"informational global_issues={len(scope.global_issues)} (audit stage was skipped)"
+            )
+
+    for level in scope.levels:
+        readiness = scope.by_level.get(level)
+        if readiness is None:
+            continue
+
+        if readiness.compute_pending_metrics or readiness.unrunnable_metrics:
+            if require_compute:
+                blocking = True
+            else:
+                informational.append(
+                    f"informational {level}: compute_pending={len(readiness.compute_pending_metrics)} "
+                    f"unrunnable={len(readiness.unrunnable_metrics)} (compute stage was skipped)"
+                )
+
+        if readiness.masters_pending_metrics and not require_masters:
+            informational.append(
+                f"informational {level}: masters_pending={len(readiness.masters_pending_metrics)} "
+                f"(--skip-masters)"
+            )
+        elif readiness.masters_pending_metrics:
+            blocking = True
+
+        if readiness.optimized_pending_metrics and not require_optimized:
+            informational.append(
+                f"informational {level}: optimized_pending={len(readiness.optimized_pending_metrics)} "
+                f"(--skip-optimised)"
+            )
+        elif readiness.optimized_pending_metrics:
+            blocking = True
+
+    deduped = tuple(_dedupe_keep_order(informational))
+    return ClimatePostRunStatus(
+        blocking=blocking,
+        informational_pending=bool(deduped),
+        informational_messages=deduped,
+    )
+
+
 def _resolve_runtime_scope(
     bundle: str,
     args: argparse.Namespace,
@@ -777,6 +844,7 @@ def _build_climate_compute_steps(
             _append_flag(argv, "--spi-legacy", bool(getattr(args, "spi_legacy", False)))
             if getattr(args, "spi_distribution", None):
                 argv.extend(["--spi-distribution", str(args.spi_distribution)])
+            _append_flag(argv, "--overwrite", bool(getattr(args, "overwrite", False)))
             if not bool(getattr(args, "overwrite", False)):
                 argv.append("--skip-existing")
             label = f"climate-compute:{level}"
@@ -1301,9 +1369,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         if rc != 0:
             return rc
         post_scope = _resolve_climate_runtime_scope(args, levels=_resolve_levels(str(args.level)))
-        if not _climate_scope_is_ready(post_scope):
+        post_status = _evaluate_climate_post_run_status(
+            post_scope,
+            require_compute=not bool(getattr(args, "audit_only", False)) and not bool(getattr(args, "skip_compute", False)),
+            require_masters=not bool(getattr(args, "audit_only", False)) and not bool(getattr(args, "skip_masters", False)),
+            require_optimized=not bool(getattr(args, "audit_only", False)) and not bool(getattr(args, "skip_optimised", False)),
+            require_audit=not bool(getattr(args, "skip_audit", False)),
+        )
+        if post_status.blocking or post_status.informational_pending:
             print("POST-RUN CLIMATE READINESS")
             _print_climate_readiness(post_scope)
+            for message in post_status.informational_messages:
+                print(f"- {message}")
+        if post_status.blocking:
             return 1
         return rc
     plan = build_command_plan(args)

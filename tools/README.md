@@ -47,9 +47,10 @@ By default the runner is non-destructive and dashboard-oriented:
 - climate runs default to `--level all`
 - climate runs resolve live metrics per requested level
 - climate compute uses validated completion markers and `--skip-existing` by default unless `--overwrite` is supplied
+- climate `--overwrite` now clears the selected compute marker/output slice before rebuilding, including stale hydro alias trees for the selected scope
 - climate and bundle runs refresh `processed_optimised`
 - the optimized parity audit runs automatically
-- climate runs return non-zero when the requested readiness state is still incomplete
+- climate runs return non-zero when the requested readiness state is still incomplete for stages that actually ran; intentionally skipped stages remain informational in post-run readiness
 - use `--overwrite` only when you want to force a rebuild
 
 For the full command catalog, see [`../docs/command_catalog.md`](../docs/command_catalog.md).
@@ -58,7 +59,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 
 | Script | Purpose | Run |
 |---|---|---|
-| `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers and optional `--skip-existing` | `python -m tools.pipeline.compute_indices_multiprocess --help` |
+| `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers, optional `--skip-existing`, and targeted `--overwrite` cleanup for the selected slice | `python -m tools.pipeline.compute_indices_multiprocess --help` |
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
 | `tools/pipeline/build_master_metrics.py` | Build admin and hydro master CSVs plus summary sidecars; hydro levels auto-use `processed/{metric}/hydro/` | `python -m tools.pipeline.build_master_metrics --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |

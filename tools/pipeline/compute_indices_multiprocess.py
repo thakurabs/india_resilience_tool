@@ -60,7 +60,7 @@ Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
 """
 
-import os, glob, sys, time, argparse, logging, json, traceback, hashlib
+import os, glob, sys, time, argparse, logging, json, traceback, hashlib, shutil
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal, Optional, Sequence
@@ -86,6 +86,15 @@ from paths import (
 )
 from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
+from india_resilience_tool.utils.naming import hydro_fs_token
+from india_resilience_tool.utils.processed_io import (
+    ensure_directory,
+    path_exists,
+    read_csv,
+    remove_tree,
+    unlink_file,
+    write_csv,
+)
 
 # -----------------------------------------------------------------------------
 # CLIMATE-INDICES PACKAGE INTEGRATION (SPI/SPEI)
@@ -161,8 +170,8 @@ def _is_blank_like(value: object) -> bool:
 
 
 def _safe_component(name: object) -> str:
-    """Build a filesystem-safe folder/file component from a validated identifier."""
-    return str(name).strip().replace(" ", "_").replace("/", "_")
+    """Build a deterministic hydro-safe folder/file component."""
+    return hydro_fs_token(str(name).strip())
 
 
 def metric_root(slug: str) -> Path:
@@ -798,7 +807,19 @@ def _count_events(mask: np.ndarray, min_len: int) -> int:
     return events
 
 def _get_district_daily_mean(da: xr.DataArray, mask: xr.DataArray) -> xr.DataArray:
-    daily_mean = da.where(mask).mean(dim=("lat", "lon"), skipna=True)
+    if "time" not in da.dims:
+        return da
+
+    spatial_dims = tuple(dim for dim in ("lat", "lon") if dim in da.dims)
+    if any(int(da.sizes.get(dim, 0)) == 0 for dim in spatial_dims):
+        return da.isel(time=slice(0, 0))
+
+    try:
+        masked = da.where(mask)
+        daily_mean = masked.mean(dim=spatial_dims, skipna=True) if spatial_dims else masked
+    except Exception:
+        return da.isel(time=slice(0, 0))
+
     return daily_mean.dropna(dim="time", how="all") if "time" in daily_mean.dims else daily_mean
 
 
@@ -1847,7 +1868,7 @@ def _compute_spi_spei_rows(
             if not hist_dir.exists():
                 logging.warning(f"[{slug}] Historical dir missing for calibration: {hist_dir}. Using scenario series.")
             else:
-                valid_year_files, _ = validated_year_files(hist_dir)
+                valid_year_files, _ = validated_year_files_for_var(hist_dir, varname)
                 if not valid_year_files:
                     logging.warning(f"[{slug}] No valid historical files for calibration in {hist_dir}. Using scenario series.")
                 else:
@@ -2047,7 +2068,7 @@ def _resolve_baseline_year_to_paths(
         logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}.")
         return {}, True
 
-    valid_year_files, _ = validated_year_files(hist_dir)
+    valid_year_files, _ = validated_year_files_for_var(hist_dir, primary_var)
     if not valid_year_files:
         logging.warning(f"[{metric['slug']}] No valid historical yearly files for baseline in: {hist_dir}.")
         return {}, True
@@ -2061,11 +2082,13 @@ def _compute_doy_percentile_thresholds(
     window_days: int,
     quantile_method: str,
     smooth: int | None,
-) -> xr.DataArray:
+) -> xr.DataArray | None:
     """
     Build day-of-year percentile thresholds (365-day) from a baseline series.
     """
     base = _drop_feb29_time(base)
+    if base.size == 0:
+        return None
     base_doy = _dayofyear_noleap(base)
     doys = np.arange(1, 366)
 
@@ -2081,9 +2104,15 @@ def _compute_doy_percentile_thresholds(
         win = np.where(win > 365, win - 365, win)
         mask = base_doy.isin(win)
         base_win = base.where(mask, drop=True)
+        if base_win.size == 0:
+            return None
         thr = _quantile_compat(base_win, q=q, dim="time", method=quantile_method)
+        if getattr(thr, "size", 0) == 0:
+            return None
         thr_list.append(thr)
 
+    if not thr_list:
+        return None
     thresh = xr.concat(thr_list, dim="doy").assign_coords(doy=doys)
     return _smooth_doy_wrap(thresh, smooth=smooth)
 
@@ -2156,29 +2185,15 @@ def _compute_tx90p_etccdi_yearly(
     if base.size == 0:
         return {y: np.nan for y in eval_years}
 
-    # 365-day doy
-    base_doy = _dayofyear_noleap(base)
-    doys = np.arange(1, 366)
-
-    if window_days % 2 != 1:
-        raise ValueError("window_days must be odd (e.g., 5, 7, 11).")
-    half = window_days // 2
-    q = percentile / 100.0
-
-    thr_list = []
-    for d in doys:
-        win = np.arange(d - half, d + half + 1)
-        win = np.where(win < 1, win + 365, win)
-        win = np.where(win > 365, win - 365, win)
-
-        mask = base_doy.isin(win)
-        base_win = base.where(mask, drop=True)
-
-        thr = _quantile_compat(base_win, q=q, dim="time", method=quantile_method)
-        thr_list.append(thr)
-
-    thresh = xr.concat(thr_list, dim="doy").assign_coords(doy=doys)
-    thresh = _smooth_doy_wrap(thresh, smooth=smooth)
+    thresh = _compute_doy_percentile_thresholds(
+        base=base,
+        pct=percentile,
+        window_days=window_days,
+        quantile_method=quantile_method,
+        smooth=smooth,
+    )
+    if thresh is None:
+        return {y: np.nan for y in eval_years}
 
     out: dict[int, float] = {}
     for y in eval_years:
@@ -2258,7 +2273,7 @@ def _compute_tx90p_rows_for_metric(
                 logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}. Using scenario series.")
                 baseline_year_to_paths = year_to_paths
             else:
-                valid_year_files, _ = validated_year_files(hist_dir)
+                valid_year_files, _ = validated_year_files_for_var(hist_dir, primary_var)
                 if not valid_year_files:
                     logging.warning(f"[{metric['slug']}] No valid historical yearly files for baseline in: {hist_dir}. Using scenario series.")
                     baseline_year_to_paths = year_to_paths
@@ -2397,11 +2412,12 @@ def _compute_spell_duration_rows_for_metric(
                     quantile_method=quantile_method,
                     smooth=smooth,
                 )
-
-                year_vals = {}
-                if eval_series is None or eval_series.size == 0:
+                if thresh is None:
+                    year_vals = {y: np.nan for y in eval_years}
+                elif eval_series is None or eval_series.size == 0:
                     year_vals = {y: np.nan for y in eval_years}
                 else:
+                    year_vals = {}
                     eval_years_series = eval_series["time"].dt.year
                     for y in eval_years:
                         eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
@@ -2515,32 +2531,34 @@ def _compute_heatwave_percentile_rows_for_metric(
                     quantile_method=quantile_method,
                     smooth=smooth,
                 )
+                if thresh is None:
+                    year_vals = {y: np.nan for y in eval_years}
+                else:
+                    year_vals = {}
+                    for y in eval_years:
+                        if eval_series is None or eval_series.size == 0:
+                            year_vals[y] = np.nan
+                            continue
+                        eval_years_series = eval_series["time"].dt.year
+                        eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
+                        if eva.size == 0:
+                            year_vals[y] = np.nan
+                            continue
 
-                year_vals = {}
-                for y in eval_years:
-                    if eval_series is None or eval_series.size == 0:
-                        year_vals[y] = np.nan
-                        continue
-                    eval_years_series = eval_series["time"].dt.year
-                    eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
-                    if eva.size == 0:
-                        year_vals[y] = np.nan
-                        continue
+                        eva = _drop_feb29_time(eva)
+                        eva_doy = _dayofyear_noleap(eva)
+                        thr_for_days = thresh.sel(doy=eva_doy)
 
-                    eva = _drop_feb29_time(eva)
-                    eva_doy = _dayofyear_noleap(eva)
-                    thr_for_days = thresh.sel(doy=eva_doy)
+                        if exceed_ge:
+                            flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
+                        else:
+                            flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
 
-                    if exceed_ge:
-                        flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
-                    else:
-                        flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
-
-                    if compute_name == "heatwave_frequency_percentile":
-                        _, total_days = _run_length_stats(flags, min_spell_days)
-                        year_vals[y] = float(total_days)
-                    else:
-                        year_vals[y] = float(_count_events(flags, min_spell_days))
+                        if compute_name == "heatwave_frequency_percentile":
+                            _, total_days = _run_length_stats(flags, min_spell_days)
+                            year_vals[y] = float(total_days)
+                        else:
+                            year_vals[y] = float(_count_events(flags, min_spell_days))
 
         for year in eval_years:
             v = float(year_vals.get(year, np.nan))
@@ -2632,57 +2650,59 @@ def _compute_heatwave_baseline_rows_for_metric(
                     quantile_method=quantile_method,
                     smooth=smooth,
                 )
+                if thresh is None:
+                    year_vals = {y: np.nan for y in eval_years}
+                else:
+                    year_vals = {}
+                    for y in eval_years:
+                        if eval_series is None or eval_series.size == 0:
+                            year_vals[y] = np.nan
+                            continue
+                        eval_years_series = eval_series["time"].dt.year
+                        eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
+                        if eva.size == 0:
+                            year_vals[y] = np.nan
+                            continue
 
-                year_vals = {}
-                for y in eval_years:
-                    if eval_series is None or eval_series.size == 0:
-                        year_vals[y] = np.nan
-                        continue
-                    eval_years_series = eval_series["time"].dt.year
-                    eva = eval_series.sel(time=eval_series["time"][eval_years_series == y])
-                    if eva.size == 0:
-                        year_vals[y] = np.nan
-                        continue
+                        eva = _drop_feb29_time(eva)
+                        eva_doy = _dayofyear_noleap(eva)
+                        thr_for_days = thresh.sel(doy=eva_doy)
 
-                    eva = _drop_feb29_time(eva)
-                    eva_doy = _dayofyear_noleap(eva)
-                    thr_for_days = thresh.sel(doy=eva_doy)
+                        if exceed_ge:
+                            flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
+                        else:
+                            flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
 
-                    if exceed_ge:
-                        flags = np.asarray((eva >= thr_for_days).fillna(False).values, dtype=bool)
-                    else:
-                        flags = np.asarray((eva > thr_for_days).fillna(False).values, dtype=bool)
+                        spells = _spell_indices(flags, min_spell_days)
+                        if not spells:
+                            year_vals[y] = np.nan
+                            continue
 
-                    spells = _spell_indices(flags, min_spell_days)
-                    if not spells:
-                        year_vals[y] = np.nan
-                        continue
+                        # Track per-spell stats:
+                        #  - mean_exceed_k: mean exceedance above threshold (K; same numeric as °C differences)
+                        #  - mean_temp_c: mean temperature during the spell (°C)
+                        #  - max_temp_c:  peak temperature during the spell (°C)
+                        event_stats: list[tuple[float, float, float]] = []
+                        for spell in spells:
+                            event_t = eva.isel(time=spell)
+                            event_thr = thr_for_days.isel(time=spell)
 
-                    # Track per-spell stats:
-                    #  - mean_exceed_k: mean exceedance above threshold (K; same numeric as °C differences)
-                    #  - mean_temp_c: mean temperature during the spell (°C)
-                    #  - max_temp_c:  peak temperature during the spell (°C)
-                    event_stats: list[tuple[float, float, float]] = []
-                    for spell in spells:
-                        event_t = eva.isel(time=spell)
-                        event_thr = thr_for_days.isel(time=spell)
+                            mean_exceed_k = float((event_t - event_thr).mean(skipna=True).item())
+                            mean_temp_c = float(event_t.mean(skipna=True).item()) - 273.15
+                            max_temp_c = float(event_t.max(skipna=True).item()) - 273.15
 
-                        mean_exceed_k = float((event_t - event_thr).mean(skipna=True).item())
-                        mean_temp_c = float(event_t.mean(skipna=True).item()) - 273.15
-                        max_temp_c = float(event_t.max(skipna=True).item()) - 273.15
+                            event_stats.append((mean_exceed_k, mean_temp_c, max_temp_c))
 
-                        event_stats.append((mean_exceed_k, mean_temp_c, max_temp_c))
+                        # Choose the "hottest" spell by mean exceedance above the threshold
+                        hottest = max(event_stats, key=lambda x: x[0])
 
-                    # Choose the "hottest" spell by mean exceedance above the threshold
-                    hottest = max(event_stats, key=lambda x: x[0])
-
-                    # Output:
-                    #  - heatwave_magnitude: mean temperature (°C) during the hottest spell
-                    #  - heatwave_amplitude: peak temperature (°C) during the hottest spell
-                    if compute_name == "heatwave_magnitude":
-                        year_vals[y] = float(hottest[0])
-                    else:
-                        year_vals[y] = float(hottest[2])
+                        # Output:
+                        #  - heatwave_magnitude: mean temperature (°C) during the hottest spell
+                        #  - heatwave_amplitude: peak temperature (°C) during the hottest spell
+                        if compute_name == "heatwave_magnitude":
+                            year_vals[y] = float(hottest[0])
+                        else:
+                            year_vals[y] = float(hottest[2])
 
         # Emit rows for all evaluation years for this unit
         for year in eval_years:
@@ -2851,7 +2871,7 @@ def _compute_precip_percentile_rows_for_metric(
                 logging.warning(f"[{metric['slug']}] Missing historical dir for baseline: {hist_dir}. Using scenario series.")
                 baseline_year_to_paths = year_to_paths
             else:
-                valid_year_files, _ = validated_year_files(hist_dir)
+                valid_year_files, _ = validated_year_files_for_var(hist_dir, primary_var)
                 baseline_year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()} if valid_year_files else year_to_paths
             baseline_var = primary_var
 
@@ -3034,6 +3054,29 @@ def validated_year_files(data_dir: Path) -> tuple[dict, dict]:
         else: bad[year] = {"path": p, "reason": "open_failed"}
     return dict(sorted(valid.items())), bad
 
+
+def validated_year_files_for_var(data_dir: Path, varname: str) -> tuple[dict, dict]:
+    """Return yearly files that open successfully and contain the requested variable."""
+    valid, bad = validated_year_files(data_dir)
+    if not valid:
+        return valid, bad
+
+    var_valid: dict[int, Path] = {}
+    var_bad: dict[int, dict[str, Any]] = dict(bad)
+    for year, path in valid.items():
+        try:
+            ds = normalize_lat_lon(xr.open_dataset(path))
+            try:
+                if varname in ds and getattr(ds[varname], "size", 0) > 0:
+                    var_valid[year] = path
+                else:
+                    var_bad[year] = {"path": path, "reason": f"missing_variable:{varname}"}
+            finally:
+                ds.close()
+        except Exception as exc:
+            var_bad[year] = {"path": path, "reason": f"variable_check_failed:{exc}"}
+    return dict(sorted(var_valid.items())), var_bad
+
 def discover_models(data_root: Path, scenarios: dict, variables: list = None) -> list:
     if variables is None: variables = ["tas", "tasmax", "tasmin", "pr"]
     models = set()
@@ -3057,11 +3100,12 @@ def required_vars_for_metric(metric: dict) -> list[str]:
     return [str(v)] if v else []
 
 
-COMPUTE_MARKER_SCHEMA_VERSION = 1
-ENSEMBLE_MARKER_SCHEMA_VERSION = 2
+COMPUTE_MARKER_SCHEMA_VERSION = 2
+ENSEMBLE_MARKER_SCHEMA_VERSION = 3
 SKIP_REASON_MISSING_REQUIRED_VARS = "missing_required_vars"
 SKIP_REASON_NO_AVAILABLE_YEARS = "no_available_years"
 SKIP_REASON_NO_COMMON_YEARS = "no_common_years"
+SKIP_REASON_INVALID_SOURCE_FILES = "invalid_source_files"
 SKIP_REASON_NO_TASKS_AFTER_FILTERS = "no_tasks_after_filters"
 
 
@@ -3170,6 +3214,101 @@ def _filter_aware_ensemble_marker_path(
     )
 
 
+def _canonical_hydro_unit_key(path: Path, *, level: AdminLevel, ensemble: bool) -> str | tuple[str, str] | None:
+    """Return the canonical hydro unit key encoded by one output path."""
+    try:
+        if level == "basin":
+            basin_dir = path.parents[1].name if ensemble else path.parents[2].name
+            return hydro_fs_token(basin_dir)
+        basin_dir = path.parents[2].name if ensemble else path.parents[3].name
+        sub_basin_dir = path.parents[1].name if ensemble else path.parents[2].name
+        return (hydro_fs_token(basin_dir), hydro_fs_token(sub_basin_dir))
+    except IndexError:
+        return None
+
+
+def _selected_values_or_all(values: Sequence[str] | None, fallback: Sequence[str]) -> tuple[str, ...]:
+    selected = _normalize_filter_values(values)
+    return selected if selected is not None else tuple(str(value).strip() for value in fallback)
+
+
+def _remove_tree_if_exists(path: Path) -> None:
+    """Delete one directory tree if it exists."""
+    remove_tree(path)
+
+
+def _unlink_if_exists(path: Path) -> None:
+    """Delete one marker file if it exists."""
+    unlink_file(path)
+
+
+def _cleanup_compute_outputs_for_overwrite(
+    *,
+    slug: str,
+    level: AdminLevel,
+    scope_name: str,
+    allowed_models: Sequence[str] | None = None,
+    allowed_scenarios: Sequence[str] | None = None,
+) -> None:
+    """Remove selected compute outputs, coverage QC files, and markers before overwrite."""
+    models = set(_selected_values_or_all(allowed_models, MODELS))
+    scenarios = set(_selected_values_or_all(allowed_scenarios, tuple(SCENARIOS.keys())))
+
+    level_root = metric_root(slug) / scope_name / get_level_folder(level)
+    if path_exists(level_root):
+        candidate_dirs: list[Path] = []
+        for path in level_root.rglob("*"):
+            if not path.is_dir():
+                continue
+            if "ensembles" in path.parts:
+                continue
+            if path.name not in scenarios:
+                continue
+            if path.parent.name not in models:
+                continue
+            candidate_dirs.append(path)
+
+        for path in sorted(candidate_dirs, key=lambda item: len(item.parts), reverse=True):
+            _remove_tree_if_exists(path)
+
+        for model in models:
+            for scenario in scenarios:
+                _unlink_if_exists(level_root / f"coverage_qc_{model}_{scenario}.csv")
+
+    ensembles_root = level_root / "ensembles"
+    if path_exists(ensembles_root):
+        scenario_dirs = [
+            path
+            for path in ensembles_root.rglob("*")
+            if path.is_dir() and path.name in scenarios
+        ]
+        for path in sorted(scenario_dirs, key=lambda item: len(item.parts), reverse=True):
+            _remove_tree_if_exists(path)
+
+    marker_root = _markers_root_for_slug(slug)
+    if path_exists(marker_root):
+        for model in models:
+            for scenario in scenarios:
+                _unlink_if_exists(
+                    _task_marker_path(
+                        slug=slug,
+                        level=level,
+                        scope_name=scope_name,
+                        model=model,
+                        scenario=scenario,
+                    )
+                )
+        _unlink_if_exists(
+            _filter_aware_ensemble_marker_path(
+                slug=slug,
+                level=level,
+                scope_name=scope_name,
+                allowed_models=tuple(sorted(models)),
+                allowed_scenarios=tuple(sorted(scenarios)),
+            )
+        )
+
+
 def _task_output_file_counts(
     *,
     slug: str,
@@ -3182,6 +3321,32 @@ def _task_output_file_counts(
     level_root = metric_root(slug) / scope_name / get_level_folder(level)
     if not level_root.exists():
         return 0, 0
+
+    if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
+        yearly_units: set[str] | set[tuple[str, str]] = set()
+        period_units: set[str] | set[tuple[str, str]] = set()
+
+        for path in level_root.rglob("*_yearly.csv"):
+            try:
+                if path.parent.name != scenario or path.parents[1].name != model:
+                    continue
+            except IndexError:
+                continue
+            unit_key = _canonical_hydro_unit_key(path, level=level, ensemble=False)
+            if unit_key is not None:
+                yearly_units.add(unit_key)
+
+        for path in level_root.rglob("*_periods.csv"):
+            try:
+                if path.parent.name != scenario or path.parents[1].name != model:
+                    continue
+            except IndexError:
+                continue
+            unit_key = _canonical_hydro_unit_key(path, level=level, ensemble=False)
+            if unit_key is not None:
+                period_units.add(unit_key)
+
+        return len(yearly_units), len(period_units)
 
     if level == "district":
         yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
@@ -3223,6 +3388,23 @@ def _ensemble_output_count(
             allowed_models=allowed_models,
             allowed_scenarios=allowed_scenarios,
         )
+
+    if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
+        output_units: set[tuple[str, str]] | set[tuple[tuple[str, str], str]] = set()
+        for path in ensembles_root.rglob("*_yearly_ensemble.csv"):
+            scenario_name = path.parent.name
+            if allowed_scenarios_norm is not None and scenario_name not in allowed_scenarios_norm:
+                continue
+
+            unit_key = _canonical_hydro_unit_key(path, level=level, ensemble=True)
+            if unit_key is None:
+                continue
+
+            if eligible_units is not None and unit_key not in eligible_units:
+                continue
+
+            output_units.add((unit_key, scenario_name))
+        return len(output_units)
 
     count = 0
     for path in ensembles_root.rglob("*_yearly_ensemble.csv"):
@@ -3280,7 +3462,7 @@ def process_metric_for_model_scenario(
         data_dir = var_data_dir(DATA_ROOT, scenario_conf["subdir"], primary_var, model)
         if not data_dir.exists():
             return
-        valid_year_files, _bad_year_files = validated_year_files(data_dir)
+        valid_year_files, _bad_year_files = validated_year_files_for_var(data_dir, primary_var)
         if not valid_year_files:
             return
         year_to_paths = {y: {primary_var: p} for y, p in valid_year_files.items()}
@@ -3291,7 +3473,7 @@ def process_metric_for_model_scenario(
             if not vdir.exists():
                 logging.info(f"[{slug}] Skipping {model}/{scenario}: missing variable directory '{v}'")
                 return
-            valid_year_files, _bad_year_files = validated_year_files(vdir)
+            valid_year_files, _bad_year_files = validated_year_files_for_var(vdir, v)
             if not valid_year_files:
                 logging.info(f"[{slug}] Skipping {model}/{scenario}: no valid yearly files for '{v}'")
                 return
@@ -3447,7 +3629,7 @@ def process_metric_for_model_scenario(
                     if hist_conf:
                         hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], varname, model)
                         if hist_dir.exists():
-                            valid_year_files, _ = validated_year_files(hist_dir)
+                            valid_year_files, _ = validated_year_files_for_var(hist_dir, varname)
                             if valid_year_files:
                                 calib_year_to_paths = {y: {varname: p} for y, p in valid_year_files.items()}
 
@@ -3741,11 +3923,11 @@ def process_metric_for_model_scenario(
                 sub_basin_safe = _safe_component(sub_basin)
 
                 out_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
+                ensure_directory(out_dir)
                 grp_df = grp_df.copy()
                 grp_df["model"] = model
                 grp_df["scenario"] = scenario
-                grp_df.to_csv(out_dir / f"{sub_basin_safe}_yearly.csv", index=False)
+                write_csv(grp_df, out_dir / f"{sub_basin_safe}_yearly.csv", index=False)
                 yearly_file_count += 1
 
                 if not df_periods.empty:
@@ -3757,19 +3939,19 @@ def process_metric_for_model_scenario(
                     if not period_grp.empty:
                         period_grp["model"] = model
                         period_grp["scenario"] = scenario
-                        period_grp.to_csv(out_dir / f"{sub_basin_safe}_periods.csv", index=False)
+                        write_csv(period_grp, out_dir / f"{sub_basin_safe}_periods.csv", index=False)
                         period_file_count += 1
         elif level == "basin":
             for basin_name in df_yearly["basin"].unique():
                 basin_safe = _safe_component(basin_name)
 
                 out_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
+                ensure_directory(out_dir)
 
                 basin_df = df_yearly[df_yearly["basin"] == basin_name].copy()
                 basin_df["model"] = model
                 basin_df["scenario"] = scenario
-                basin_df.to_csv(out_dir / f"{basin_safe}_yearly.csv", index=False)
+                write_csv(basin_df, out_dir / f"{basin_safe}_yearly.csv", index=False)
                 yearly_file_count += 1
 
                 if not df_periods.empty:
@@ -3777,7 +3959,7 @@ def process_metric_for_model_scenario(
                     if not period_df.empty:
                         period_df["model"] = model
                         period_df["scenario"] = scenario
-                        period_df.to_csv(out_dir / f"{basin_safe}_periods.csv", index=False)
+                        write_csv(period_df, out_dir / f"{basin_safe}_periods.csv", index=False)
                         period_file_count += 1
         elif level == "block":
             # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
@@ -3786,12 +3968,12 @@ def process_metric_for_model_scenario(
                 block_safe = _safe_component(block)
 
                 out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
+                ensure_directory(out_dir)
                 grp_df = grp_df.copy()  # Avoid SettingWithCopyWarning
                 grp_df["model"] = model
                 grp_df["scenario"] = scenario
 
-                grp_df.to_csv(out_dir / f"{block_safe}_yearly.csv", index=False)
+                write_csv(grp_df, out_dir / f"{block_safe}_yearly.csv", index=False)
                 yearly_file_count += 1
 
                 if not df_periods.empty:
@@ -3804,7 +3986,7 @@ def process_metric_for_model_scenario(
                     if not period_grp.empty:
                         period_grp["model"] = model
                         period_grp["scenario"] = scenario
-                        period_grp.to_csv(out_dir / f"{block_safe}_periods.csv", index=False)
+                        write_csv(period_grp, out_dir / f"{block_safe}_periods.csv", index=False)
                         period_file_count += 1
         else:
             # Structure: {metric}/{state}/districts/{district}/{model}/{scenario}/
@@ -3812,12 +3994,12 @@ def process_metric_for_model_scenario(
                 dist_safe = _safe_component(dist_name)
 
                 out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
-                out_dir.mkdir(parents=True, exist_ok=True)
+                ensure_directory(out_dir)
 
                 dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
                 dist_df["model"] = model
                 dist_df["scenario"] = scenario
-                dist_df.to_csv(out_dir / f"{dist_safe}_yearly.csv", index=False)
+                write_csv(dist_df, out_dir / f"{dist_safe}_yearly.csv", index=False)
                 yearly_file_count += 1
 
                 if not df_periods.empty:
@@ -3825,7 +4007,7 @@ def process_metric_for_model_scenario(
                     if not period_df.empty:
                         period_df["model"] = model
                         period_df["scenario"] = scenario
-                        period_df.to_csv(out_dir / f"{dist_safe}_periods.csv", index=False)
+                        write_csv(period_df, out_dir / f"{dist_safe}_periods.csv", index=False)
                         period_file_count += 1
         
         logging.debug(f"[{slug}] Wrote {len(df_yearly)} yearly rows, {len(df_periods)} period rows for {model}/{scenario}")
@@ -4234,11 +4416,11 @@ def _compute_basin_ensembles(
             expected_output = False
             for m in model_dirs:
                 ycsv = m / scenario / f"{basin}_yearly.csv"
-                if not ycsv.exists():
+                if not path_exists(ycsv):
                     continue
                 expected_output = True
                 try:
-                    dfy = pd.read_csv(ycsv)
+                    dfy = read_csv(ycsv)
                     cleaned, skip_reason = _clean_ensemble_yearly_frame(
                         dfy,
                         metadata_columns=metadata_columns,
@@ -4293,6 +4475,7 @@ def _compute_basin_ensembles(
                     model_yearly,
                     ensembles_root / basin / scenario,
                     basin,
+                    file_stem=hydro_fs_token(basin),
                 )
                 if written == 0:
                     message = f"basin={basin} scenario={scenario}: no ensemble outputs produced"
@@ -4377,11 +4560,11 @@ def _compute_sub_basin_ensembles(
                 expected_output = False
                 for m in model_dirs:
                     ycsv = m / scenario / f"{sub_basin}_yearly.csv"
-                    if not ycsv.exists():
+                    if not path_exists(ycsv):
                         continue
                     expected_output = True
                     try:
-                        dfy = pd.read_csv(ycsv)
+                        dfy = read_csv(ycsv)
                         cleaned, skip_reason = _clean_ensemble_yearly_frame(
                             dfy,
                             metadata_columns=metadata_columns,
@@ -4443,6 +4626,7 @@ def _compute_sub_basin_ensembles(
                         model_yearly,
                         ensembles_root / basin / sub_basin / scenario,
                         sub_basin,
+                        file_stem=hydro_fs_token(sub_basin),
                     )
                     if written == 0:
                         message = (
@@ -4482,7 +4666,13 @@ def _compute_sub_basin_ensembles(
     return stats
 
 
-def _write_ensemble_stats(model_yearly: list, out_dir: Path, unit_name: str) -> int:
+def _write_ensemble_stats(
+    model_yearly: list,
+    out_dir: Path,
+    unit_name: str,
+    *,
+    file_stem: str | None = None,
+) -> int:
     """Write ensemble statistics CSV."""
     if not model_yearly:
         return 0
@@ -4503,8 +4693,7 @@ def _write_ensemble_stats(model_yearly: list, out_dir: Path, unit_name: str) -> 
         "ensemble_p95": pivot.quantile(0.95, axis=1),
     }).reset_index(drop=True)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    summary.to_csv(out_dir / f"{unit_name}_yearly_ensemble.csv", index=False)
+    write_csv(summary, out_dir / f"{file_stem or unit_name}_yearly_ensemble.csv", index=False)
     return 1
 
 # -----------------------------------------------------------------------------
@@ -4572,7 +4761,8 @@ def build_processing_task_plan(
         if key in years_cache:
             return years_cache[key]
         d = var_data_dir(DATA_ROOT, sconf["subdir"], varname, model_name)
-        yrs = set(yearly_files_for_dir(d).keys()) if d.exists() else set()
+        valid_year_files, _bad_year_files = validated_year_files_for_var(d, varname) if d.exists() else ({}, {})
+        yrs = set(valid_year_files.keys())
         years_cache[key] = yrs
         return yrs
 
@@ -4586,10 +4776,22 @@ def build_processing_task_plan(
                     skipped_reasons_by_metric[slug].add(SKIP_REASON_MISSING_REQUIRED_VARS)
                     continue
 
-                year_sets = [_years_for(model, scenario, sconf, v) for v in req_vars]
+                year_sets = []
+                source_invalid = False
+                for v in req_vars:
+                    d = var_data_dir(DATA_ROOT, sconf["subdir"], v, model)
+                    if not d.exists():
+                        year_sets.append(set())
+                        continue
+                    raw_years = yearly_files_for_dir(d)
+                    valid_year_files, _bad_year_files = validated_year_files_for_var(d, v)
+                    if raw_years and not valid_year_files:
+                        source_invalid = True
+                    year_sets.append(set(valid_year_files.keys()))
                 if any(len(years) == 0 for years in year_sets):
-                    skipped_counts[SKIP_REASON_NO_AVAILABLE_YEARS] += 1
-                    skipped_reasons_by_metric[slug].add(SKIP_REASON_NO_AVAILABLE_YEARS)
+                    reason = SKIP_REASON_INVALID_SOURCE_FILES if source_invalid else SKIP_REASON_NO_AVAILABLE_YEARS
+                    skipped_counts[reason] += 1
+                    skipped_reasons_by_metric[slug].add(reason)
                     continue
 
                 common_years = set.intersection(*year_sets) if year_sets else set()
@@ -4977,6 +5179,7 @@ def run_pipeline_parallel(
     level: AdminLevel = "district",
     state: str = "Telangana",
     skip_existing: bool = False,
+    overwrite: bool = False,
 ) -> PipelineRunResult:
     """Run the pipeline with parallel processing."""
     setup_logging(verbose)
@@ -4995,6 +5198,16 @@ def run_pipeline_parallel(
     effective_state = task_plan.scope_name
     ensemble_models = _normalize_filter_values(models_filter)
     ensemble_scenarios = _normalize_filter_values(scenarios_filter)
+
+    if overwrite:
+        for slug in sorted({task.slug for task in tasks}):
+            _cleanup_compute_outputs_for_overwrite(
+                slug=slug,
+                level=level,
+                scope_name=effective_state,
+                allowed_models=models_filter,
+                allowed_scenarios=scenarios_filter,
+            )
 
     if task_plan.skipped_counts_by_reason:
         joined = ", ".join(f"{reason}={count}" for reason, count in sorted(task_plan.skipped_counts_by_reason.items()))
@@ -5150,6 +5363,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="Skip compute tasks with validated completion markers and intact outputs.",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Delete the selected compute outputs and markers before rebuilding.",
+    )
     parser.add_argument("--list-metrics", action="store_true",
                         help="List available metrics and exit")
     parser.add_argument("--list-models", action="store_true",
@@ -5209,6 +5427,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 level=lvl,
                 state=args.state,
                 skip_existing=bool(args.skip_existing),
+                overwrite=bool(args.overwrite),
             )
         )
 

@@ -9,6 +9,9 @@ Goals:
 
 from __future__ import annotations
 
+import glob
+import os
+import shutil
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence, Union
 
@@ -63,6 +66,84 @@ def _read_parquet_dataset(
     return table.to_pandas()
 
 
+def _windows_extended_length_path(path: Path) -> str:
+    """
+    Return an extended-length absolute Windows path when running on Windows.
+
+    On non-Windows platforms, this returns the normal absolute path string.
+    """
+    resolved = path.resolve(strict=False)
+    raw = str(resolved)
+    if os.name != "nt":
+        return raw
+    if raw.startswith("\\\\?\\"):
+        return raw
+    if raw.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + raw.lstrip("\\")
+    return "\\\\?\\" + raw
+
+
+def _strip_windows_extended_prefix(path_str: str) -> str:
+    """Convert an extended-length Windows path back to a regular display path."""
+    if os.name != "nt":
+        return path_str
+    if path_str.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + path_str[len("\\\\?\\UNC\\") :]
+    if path_str.startswith("\\\\?\\"):
+        return path_str[len("\\\\?\\") :]
+    return path_str
+
+
+def path_exists(path: Path) -> bool:
+    """Check path existence with Windows long-path support."""
+    return os.path.exists(_windows_extended_length_path(Path(path)))
+
+
+def is_dir(path: Path) -> bool:
+    """Check whether a path is a directory with Windows long-path support."""
+    return os.path.isdir(_windows_extended_length_path(Path(path)))
+
+
+def ensure_directory(path: Path) -> None:
+    """Create a directory tree with Windows long-path support."""
+    os.makedirs(_windows_extended_length_path(Path(path)), exist_ok=True)
+
+
+def read_csv(path: Path, **kwargs: Any) -> pd.DataFrame:
+    """Read a CSV with Windows long-path support."""
+    return pd.read_csv(_windows_extended_length_path(Path(path)), **kwargs)
+
+
+def write_csv(df: pd.DataFrame, path: Path, **kwargs: Any) -> None:
+    """Write a CSV with Windows long-path support."""
+    target = Path(path)
+    ensure_directory(target.parent)
+    df.to_csv(_windows_extended_length_path(target), **kwargs)
+
+
+def unlink_file(path: Path) -> None:
+    """Delete one file with Windows long-path support if it exists."""
+    try:
+        os.unlink(_windows_extended_length_path(Path(path)))
+    except FileNotFoundError:
+        return
+
+
+def remove_tree(path: Path) -> None:
+    """Delete one directory tree with Windows long-path support if it exists."""
+    target = Path(path)
+    if not path_exists(target):
+        return
+    shutil.rmtree(_windows_extended_length_path(target))
+
+
+def glob_paths(directory: Path, pattern: str) -> list[Path]:
+    """Glob inside a directory with Windows long-path support."""
+    base = Path(directory)
+    matches = glob.glob(os.path.join(_windows_extended_length_path(base), pattern))
+    return sorted(Path(_strip_windows_extended_prefix(match)) for match in matches)
+
+
 def read_table(
     path: Path,
     *,
@@ -77,10 +158,10 @@ def read_table(
     - CSV ignores `filters` and is read with pandas.read_csv.
     """
     p = Path(path)
-    if not p.exists():
+    if not path_exists(p):
         return pd.DataFrame()
 
-    if p.is_dir():
+    if is_dir(p):
         return _read_parquet_dataset(p, columns=columns, filters=filters)
 
     suf = p.suffix.lower()
@@ -90,4 +171,4 @@ def read_table(
         return pd.read_parquet(p, columns=list(columns) if columns else None)
 
     # CSV / CSV.GZ
-    return pd.read_csv(p, **read_csv_kwargs)
+    return read_csv(p, **read_csv_kwargs)

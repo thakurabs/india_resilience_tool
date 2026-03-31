@@ -200,6 +200,33 @@ def test_climate_hazards_skip_optimised_removes_only_build_stage() -> None:
     assert "processed-optimised-build" not in [step.label for step in plan]
 
 
+def test_climate_hazards_overwrite_passes_flag_to_compute() -> None:
+    args = argparse.Namespace(
+        level="basin",
+        state=None,
+        metrics=["tas_annual_mean"],
+        models=None,
+        scenarios=None,
+        workers=None,
+        verbose=False,
+        spi_legacy=False,
+        spi_distribution=None,
+        skip_compute=False,
+        skip_masters=True,
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=True,
+        skip_audit=False,
+    )
+    scope = _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]})
+
+    plan = build_climate_hazards_plan(args, runtime_scope=scope)
+
+    assert plan[0].label == "climate-compute:basin"
+    assert "--overwrite" in plan[0].argv
+    assert "--skip-existing" not in plan[0].argv
+
+
 def test_climate_hazards_plans_only_sub_basin_when_basin_is_complete() -> None:
     args = argparse.Namespace(
         level="hydro",
@@ -504,6 +531,93 @@ def test_main_returns_zero_when_climate_readiness_becomes_complete(monkeypatch) 
     rc = main(["climate-hazards", "--level", "hydro"])
 
     assert rc == 0
+
+
+def test_main_returns_zero_when_only_skipped_stage_pending_remains(
+    monkeypatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scopes = [
+        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
+        ClimateRuntimeScope(
+            levels=("basin",),
+            by_level={
+                "basin": ClimateLevelReadiness(
+                    level="basin",
+                    selected_metrics=("tas_annual_mean",),
+                    runnable_metrics=("tas_annual_mean",),
+                    compute_pending_metrics=(),
+                    masters_pending_metrics=("tas_annual_mean",),
+                    optimized_pending_metrics=("tas_annual_mean",),
+                    complete_metrics=(),
+                    unrunnable_metrics=(),
+                    unrunnable_reasons_by_metric={},
+                )
+            },
+            global_issues=(),
+        ),
+    ]
+
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: scopes.pop(0),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.build_climate_hazards_plan",
+        lambda *args, **kwargs: [PlannedCommand(label="noop", argv=["python", "-m", "noop"])],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.execute_plan",
+        lambda *args, **kwargs: 0,
+    )
+
+    rc = main(["climate-hazards", "--level", "basin", "--skip-masters", "--skip-optimised"])
+
+    captured = capsys.readouterr().out
+    assert rc == 0
+    assert "POST-RUN CLIMATE READINESS" in captured
+    assert "informational basin: masters_pending=1 (--skip-masters)" in captured
+    assert "informational basin: optimized_pending=1 (--skip-optimised)" in captured
+
+
+def test_main_keeps_compute_pending_blocking_even_when_later_stages_are_skipped(monkeypatch) -> None:
+    scopes = [
+        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
+        ClimateRuntimeScope(
+            levels=("basin",),
+            by_level={
+                "basin": ClimateLevelReadiness(
+                    level="basin",
+                    selected_metrics=("tas_annual_mean",),
+                    runnable_metrics=("tas_annual_mean",),
+                    compute_pending_metrics=("tas_annual_mean",),
+                    masters_pending_metrics=("tas_annual_mean",),
+                    optimized_pending_metrics=("tas_annual_mean",),
+                    complete_metrics=(),
+                    unrunnable_metrics=(),
+                    unrunnable_reasons_by_metric={},
+                )
+            },
+            global_issues=(),
+        ),
+    ]
+
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: scopes.pop(0),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.build_climate_hazards_plan",
+        lambda *args, **kwargs: [PlannedCommand(label="noop", argv=["python", "-m", "noop"])],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.execute_plan",
+        lambda *args, **kwargs: 0,
+    )
+
+    rc = main(["climate-hazards", "--level", "basin", "--skip-masters", "--skip-optimised"])
+
+    assert rc == 1
 
 
 

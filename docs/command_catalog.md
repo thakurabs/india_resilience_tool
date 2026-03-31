@@ -281,7 +281,7 @@ python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aquedu
 - master CSVs from `tools.pipeline.build_master_metrics`
 
 ### Aqueduct
-- crosswalks under `IRT_DATA_DIR/aqueduct/`
+- crosswalks under `IRT_DATA_DIR/aqueduct/`l
 - district/block masters under `IRT_DATA_DIR/processed/{metric_slug}/{state}/`
 - hydro masters under `IRT_DATA_DIR/processed/{metric_slug}/hydro/`
 - validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/`
