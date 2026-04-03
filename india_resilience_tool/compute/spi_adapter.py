@@ -32,6 +32,8 @@ from typing import Optional, Tuple
 import numpy as np
 import pandas as pd
 import xarray as xr
+from india_resilience_tool.utils.naming import hydro_fs_token, safe_fs_component
+from india_resilience_tool.utils.processed_io import path_exists, read_csv, write_csv
 
 # Import from climate-indices package
 try:
@@ -458,16 +460,37 @@ def _annualize_spi_counts_xarray(
 
 
 def _safe_component(name: str) -> str:
-    return str(name).strip().replace(" ", "_").replace("/", "_")
+    return safe_fs_component(name)
 
 
 def _parse_unit_key(level: str, unit_key: str) -> tuple[str, Optional[str]]:
-    if level == "block":
+    if level in {"block", "sub_basin"}:
         if "||" in unit_key:
-            district, block = unit_key.split("||", 1)
-            return district, block
+            primary_name, secondary_name = unit_key.split("||", 1)
+            return primary_name, secondary_name
         return "Unknown", unit_key
     return unit_key, None
+
+
+def _add_unit_fields_from_key(row: dict[str, object], *, level: str, unit_key: str) -> None:
+    """Populate level-specific identity fields from a pipeline unit key."""
+    if level == "block":
+        district, block = _parse_unit_key(level, unit_key)
+        row["district"] = district
+        row["block"] = block or unit_key
+        return
+
+    if level == "sub_basin":
+        basin, sub_basin = _parse_unit_key(level, unit_key)
+        row["basin"] = basin
+        row["sub_basin"] = sub_basin or unit_key
+        return
+
+    if level == "basin":
+        row["basin"] = unit_key
+        return
+
+    row["district"] = unit_key
 
 
 def _monthly_spi_csv_path(
@@ -480,16 +503,22 @@ def _monthly_spi_csv_path(
     model: str,
     scenario: str,
 ) -> Path:
-    district, block = _parse_unit_key(level, unit_key)
-    district_safe = _safe_component(district)
+    primary_name, secondary_name = _parse_unit_key(level, unit_key)
+    primary_safe = _safe_component(primary_name)
 
     if level == "block":
-        block_safe = _safe_component(block or unit_key)
-        out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
+        block_safe = _safe_component(secondary_name or unit_key)
+        out_dir = metric_root_path / state_name / level_folder / primary_safe / block_safe / model / scenario
         return out_dir / f"{block_safe}_monthly.csv"
 
-    out_dir = metric_root_path / state_name / level_folder / district_safe / model / scenario
-    return out_dir / f"{district_safe}_monthly.csv"
+    if level == "sub_basin":
+        primary_safe = hydro_fs_token(primary_name)
+        sub_basin_safe = hydro_fs_token(secondary_name or unit_key)
+        out_dir = metric_root_path / state_name / level_folder / primary_safe / sub_basin_safe / model / scenario
+        return out_dir / f"{sub_basin_safe}_monthly.csv"
+
+    out_dir = metric_root_path / state_name / level_folder / primary_safe / model / scenario
+    return out_dir / f"{primary_safe}_monthly.csv"
 
 
 def _load_monthly_spi_csv(
@@ -501,11 +530,11 @@ def _load_monthly_spi_csv(
     expected_model: str,
     expected_scenario: str,
 ) -> Optional[xr.DataArray]:
-    if not path.exists():
+    if not path_exists(path):
         return None
 
     try:
-        df = pd.read_csv(path)
+        df = read_csv(path)
     except Exception as e:
         logger.warning(f"Failed to read monthly SPI CSV '{path}': {e}")
         return None
@@ -563,30 +592,26 @@ def _write_monthly_spi_csv(
     baseline_years: Tuple[int, int],
     model: str,
     scenario: str,
-    district: str,
-    block: Optional[str],
+    level: str,
+    unit_key: str,
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
     times = pd.DatetimeIndex(spi_monthly["time"].values)
     times_ms = times.to_period("M").to_timestamp(how="start")
-    df = pd.DataFrame(
-        {
-            "time": times_ms,
-            "year": times_ms.year.astype(int),
-            "month": times_ms.month.astype(int),
-            "spi": spi_monthly.values.astype(float),
-            "scale_months": int(scale_months),
-            "distribution": distribution.value,
-            "baseline_start_year": int(baseline_years[0]),
-            "baseline_end_year": int(baseline_years[1]),
-            "model": model,
-            "scenario": scenario,
-            "district": district,
-            "block": block or "",
-        }
-    )
-    df.to_csv(path, index=False)
+    data: dict[str, object] = {
+        "time": times_ms,
+        "year": times_ms.year.astype(int),
+        "month": times_ms.month.astype(int),
+        "spi": spi_monthly.values.astype(float),
+        "scale_months": int(scale_months),
+        "distribution": distribution.value,
+        "baseline_start_year": int(baseline_years[0]),
+        "baseline_end_year": int(baseline_years[1]),
+        "model": model,
+        "scenario": scenario,
+    }
+    _add_unit_fields_from_key(data, level=level, unit_key=unit_key)
+    df = pd.DataFrame(data)
+    write_csv(df, path, index=False)
 
 
 def compute_spi_rows_climate_indices(
@@ -612,6 +637,8 @@ def compute_spi_rows_climate_indices(
     Writes per-unit monthly SPI CSVs alongside yearly outputs:
       - districts: {district_safe}_monthly.csv
       - blocks:    {block_safe}_monthly.csv
+      - basins:    {basin_safe}_monthly.csv
+      - sub-basins:{sub_basin_safe}_monthly.csv
 
     If a compatible monthly file exists, it is reused as a cache.
     """
@@ -634,8 +661,6 @@ def compute_spi_rows_climate_indices(
     rows: list[dict] = []
 
     for unit_key in masks.keys():
-        district, block = _parse_unit_key(level, unit_key)
-
         monthly_path: Optional[Path] = None
         if enable_monthly_paths:
             monthly_path = _monthly_spi_csv_path(
@@ -696,8 +721,8 @@ def compute_spi_rows_climate_indices(
                         baseline_years=baseline_years,
                         model=model,
                         scenario=scenario,
-                        district=district,
-                        block=block,
+                        level=level,
+                        unit_key=unit_key,
                     )
                 except Exception as e:
                     logger.warning(f"[{slug}] Failed to write monthly SPI CSV for unit={unit_key}: {e}")
@@ -736,10 +761,8 @@ def compute_spi_rows_climate_indices(
                 "value": v,
                 value_col: v,
                 "source_file": source_path,
-                "district": district if level == "block" else unit_key,
             }
-            if level == "block":
-                row["block"] = block or unit_key
+            _add_unit_fields_from_key(row, level=level, unit_key=unit_key)
 
             rows.append(row)
 

@@ -179,6 +179,8 @@ def test_set_crosswalk_overlay_from_context_sets_expected_overlay() -> None:
         "label": "related sub-basins",
         "source_direction": "district_to_sub_basin",
         "selected_name": "Nizamabad",
+        "scope_dimension": "basin_name",
+        "scope_values": ["Godavari"],
     }
 
 

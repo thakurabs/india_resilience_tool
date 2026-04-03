@@ -14,6 +14,8 @@ from typing import Callable, Literal, Mapping, Optional, Sequence, Union
 
 import pandas as pd
 
+from india_resilience_tool.utils.processed_io import read_table
+
 
 PathLike = Union[str, Path]
 CrosswalkLevel = Literal["district", "block", "basin", "sub_basin"]
@@ -219,22 +221,22 @@ class CrosswalkContext:
 
 def load_district_subbasin_crosswalk(path: PathLike) -> pd.DataFrame:
     """Load and validate the canonical district ↔ sub-basin crosswalk CSV."""
-    return ensure_district_subbasin_crosswalk(pd.read_csv(path))
+    return ensure_district_subbasin_crosswalk(read_table(Path(path)))
 
 
 def load_block_subbasin_crosswalk(path: PathLike) -> pd.DataFrame:
     """Load and validate the canonical block ↔ sub-basin crosswalk CSV."""
-    return ensure_block_subbasin_crosswalk(pd.read_csv(path))
+    return ensure_block_subbasin_crosswalk(read_table(Path(path)))
 
 
 def load_district_basin_crosswalk(path: PathLike) -> pd.DataFrame:
     """Load and validate the canonical district ↔ basin crosswalk CSV."""
-    return ensure_district_basin_crosswalk(pd.read_csv(path))
+    return ensure_district_basin_crosswalk(read_table(Path(path)))
 
 
 def load_block_basin_crosswalk(path: PathLike) -> pd.DataFrame:
     """Load and validate the canonical block ↔ basin crosswalk CSV."""
-    return ensure_block_basin_crosswalk(pd.read_csv(path))
+    return ensure_block_basin_crosswalk(read_table(Path(path)))
 
 
 def ensure_district_subbasin_crosswalk(df: pd.DataFrame) -> pd.DataFrame:

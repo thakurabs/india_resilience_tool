@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import deque
 from pathlib import Path
 
+from india_resilience_tool.data.optimized_bundle import list_optimized_states_for_metric_root
+
 _RESERVED_PROCESSED_DIR_NAMES = {"hydro"}
 _INVALID_STATE_DIR_NAMES = {"", "nan", "none", "null", "nat"}
 
@@ -89,6 +91,14 @@ def list_available_states_from_processed_root(processed_root_str: str) -> list[s
     """List state folders under processed root that contain usable data structures."""
     processed_root = Path(processed_root_str)
     if not processed_root.exists() or not processed_root.is_dir():
+        return []
+
+    masters_admin = processed_root / "masters" / "admin"
+    if masters_admin.exists():
+        for level in ("district", "block"):
+            states = list_optimized_states_for_metric_root(processed_root, level=level)
+            if states:
+                return states
         return []
 
     states: list[str] = []

@@ -6,6 +6,29 @@ The canonical entrypoint is `run_app()`, which runs on every Streamlit rerun.
 
 from __future__ import annotations
 
+from typing import Mapping
+
+
+def _resolve_pre_render_view(
+    session_state: Mapping[str, object],
+    *,
+    default_view: str,
+) -> str:
+    """
+    Resolve the left-panel view to use before the view radio is rendered.
+
+    The radio widget writes back to `main_view_selector` first, while
+    `active_view` can still reflect the previous rerun. We therefore prefer the
+    widget-backed value and only fall back to `active_view`.
+    """
+    view = session_state.get("main_view_selector")
+    if isinstance(view, str) and view.strip():
+        return view
+    view = session_state.get("active_view")
+    if isinstance(view, str) and view.strip():
+        return view
+    return default_view
+
 
 def run_app() -> None:
     """Run the Streamlit dashboard."""
@@ -25,12 +48,14 @@ def run_app() -> None:
         RIVER_REACHES_PATH,
         RIVER_SUBBASIN_DIAGNOSTICS_PATH,
         SUBBASINS_PATH,
-        resolve_processed_root,
+        resolve_processed_optimised_root,
     )
+    from india_resilience_tool.data.optimized_bundle import optimized_context_path, optimized_geometry_path
 
     from india_resilience_tool.app.geo_cache import (
         build_adm1_from_adm2,
         enrich_adm2_with_state_names,
+        load_hydro_subbasin_selector_index,
         load_local_adm2,
         load_local_adm3,
         load_local_basin,
@@ -91,7 +116,10 @@ def run_app() -> None:
         build_portfolio_multiindex_df as _build_portfolio_multiindex_df_impl,
     )
 
-    from india_resilience_tool.app.map_pipeline import build_map_and_rankings
+    from india_resilience_tool.app.map_pipeline import (
+        build_map_and_rankings,
+        details_require_geometry,
+    )
 
     DEBUG = bool(int(os.getenv("IRT_DEBUG", "0")))
 
@@ -118,10 +146,15 @@ def run_app() -> None:
     ADM3_GEOJSON = BLOCKS_PATH
     BASIN_GEOJSON = BASINS_PATH
     SUBBASIN_GEOJSON = SUBBASINS_PATH
-    RIVER_DISPLAY_GEOJSON = RIVER_NETWORK_DISPLAY_PATH
-    RIVER_BASIN_RECONCILIATION_CSV = RIVER_BASIN_RECONCILIATION_PATH
-    RIVER_SUBBASIN_DIAGNOSTICS_CSV = RIVER_SUBBASIN_DIAGNOSTICS_PATH
-    RIVER_REACHES_PARQUET = RIVER_REACHES_PATH
+    optimized_river_display = optimized_context_path("river_network_display.geojson", data_dir=DATA_DIR)
+    optimized_river_basin = optimized_context_path("river_basin_name_reconciliation.parquet", data_dir=DATA_DIR)
+    optimized_river_subbasin = optimized_context_path("river_subbasin_diagnostics.parquet", data_dir=DATA_DIR)
+    optimized_river_reaches = optimized_context_path("river_reaches.parquet", data_dir=DATA_DIR)
+
+    RIVER_DISPLAY_GEOJSON = optimized_river_display if optimized_river_display.exists() else RIVER_NETWORK_DISPLAY_PATH
+    RIVER_BASIN_RECONCILIATION_CSV = optimized_river_basin if optimized_river_basin.exists() else RIVER_BASIN_RECONCILIATION_PATH
+    RIVER_SUBBASIN_DIAGNOSTICS_CSV = optimized_river_subbasin if optimized_river_subbasin.exists() else RIVER_SUBBASIN_DIAGNOSTICS_PATH
+    RIVER_REACHES_PARQUET = optimized_river_reaches if optimized_river_reaches.exists() else RIVER_REACHES_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 
@@ -357,7 +390,7 @@ def run_app() -> None:
         sel_placeholder=SEL_PLACEHOLDER,
         data_dir=DATA_DIR,
         pilot_state=PILOT_STATE,
-        resolve_processed_root_fn=resolve_processed_root,
+        resolve_processed_root_fn=resolve_processed_optimised_root,
         attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
         master_needs_rebuild_fn=master_needs_rebuild,
         state_profile_files_missing_fn=state_profile_files_missing,
@@ -447,6 +480,12 @@ def run_app() -> None:
     selected_subbasin = geo_ctx.selected_subbasin
     show_river_network = geo_ctx.show_river_network
     gdf_state_districts = geo_ctx.gdf_state_districts
+    current_view = _resolve_pre_render_view(
+        st.session_state,
+        default_view=VIEW_MAP,
+    )
+    st.session_state["active_view"] = current_view
+    include_map = current_view == VIEW_MAP
 
     from india_resilience_tool.app.portfolio_state_runtime import (
         _portfolio_add,
@@ -511,25 +550,80 @@ def run_app() -> None:
     # Merge attributes (district vs block)
     _admin_level = str(st.session_state.get("admin_level", "district") or "district").strip().lower()
 
-    # Load ADM3 boundaries only when needed
-    if _admin_level == "block":
-        if not ADM3_GEOJSON.exists():
-            st.error(f"ADM3 geojson not found at {ADM3_GEOJSON}. Please provide block_4326.geojson.")
+    details_need_geometry = details_require_geometry(
+        adm_level=_admin_level,
+        spatial_family=spatial_family,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        selected_block=selected_block,
+        selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
+    )
+
+    runtime_adm2_geojson = ADM2_GEOJSON
+    if selected_state != "All":
+        optimized_district_geojson = optimized_geometry_path(
+            level="district",
+            state=selected_state,
+            data_dir=DATA_DIR,
+        )
+        if optimized_district_geojson.exists():
+            runtime_adm2_geojson = optimized_district_geojson
+            if include_map or details_need_geometry:
+                adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+
+    runtime_adm3_geojson = ADM3_GEOJSON
+    if selected_state != "All":
+        optimized_block_geojson = optimized_geometry_path(
+            level="block",
+            state=selected_state,
+            data_dir=DATA_DIR,
+        )
+        if optimized_block_geojson.exists():
+            runtime_adm3_geojson = optimized_block_geojson
+
+    runtime_basin_geojson = BASIN_GEOJSON
+    optimized_basin_geojson = optimized_geometry_path(level="basin", data_dir=DATA_DIR)
+    if optimized_basin_geojson.exists():
+        runtime_basin_geojson = optimized_basin_geojson
+
+    runtime_subbasin_geojson = SUBBASIN_GEOJSON
+    if selected_basin != "All":
+        hydro_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=DATA_DIR)
+        if hydro_index_path.exists():
+            try:
+                hydro_selector_index = load_hydro_subbasin_selector_index(str(hydro_index_path))
+            except Exception:
+                hydro_selector_index = {}
+            basin_id = str((hydro_selector_index.get("basin_ids_by_name") or {}).get(str(selected_basin).strip()) or "").strip()
+            if basin_id:
+                optimized_subbasin_geojson = optimized_geometry_path(
+                    level="sub_basin",
+                    basin_id=basin_id,
+                    data_dir=DATA_DIR,
+                )
+                if optimized_subbasin_geojson.exists():
+                    runtime_subbasin_geojson = optimized_subbasin_geojson
+
+    # Load fine-grain boundaries only when the map or details panel still needs them.
+    if _admin_level == "block" and (include_map or details_need_geometry):
+        if not runtime_adm3_geojson.exists():
+            st.error(f"ADM3 geojson not found at {runtime_adm3_geojson}. Please provide block_4326.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_adm3(str(ADM3_GEOJSON), tolerance=SIMPLIFY_TOL_ADM3)
-    elif _admin_level == "basin":
-        if not BASIN_GEOJSON.exists():
-            st.error(f"Basin geojson not found at {BASIN_GEOJSON}. Please provide basins.geojson.")
+        adm3 = load_local_adm3(str(runtime_adm3_geojson), tolerance=SIMPLIFY_TOL_ADM3)
+    elif _admin_level == "basin" and (include_map or details_need_geometry):
+        if not runtime_basin_geojson.exists():
+            st.error(f"Basin geojson not found at {runtime_basin_geojson}. Please provide basins.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_basin(str(BASIN_GEOJSON))
-    elif _admin_level == "sub_basin":
-        if not SUBBASIN_GEOJSON.exists():
-            st.error(f"Sub-basin geojson not found at {SUBBASIN_GEOJSON}. Please provide subbasins.geojson.")
+        adm3 = load_local_basin(str(runtime_basin_geojson))
+    elif _admin_level == "sub_basin" and (include_map or details_need_geometry):
+        if not runtime_subbasin_geojson.exists():
+            st.error(f"Sub-basin geojson not found at {runtime_subbasin_geojson}. Please provide subbasins.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_subbasin(str(SUBBASIN_GEOJSON))
+        adm3 = load_local_subbasin(str(runtime_subbasin_geojson))
     else:
         adm3 = None
 
@@ -568,6 +662,7 @@ def run_app() -> None:
         selected_basin=selected_basin,
         selected_subbasin=selected_subbasin,
         spatial_family=spatial_family,
+        include_map=include_map,
         crosswalk_overlay=st.session_state.get("crosswalk_overlay"),
         show_river_network=show_river_network,
         hover_enabled=bool(st.session_state.get("hover_enabled", True)),
@@ -576,10 +671,10 @@ def run_app() -> None:
         bounds_latlon=[[MIN_LAT, MIN_LON], [MAX_LAT, MAX_LON]],
         pending_block_zoom=pending_zoom,
         normalize_state_fn=normalize_name,
-        adm2_geojson_path=ADM2_GEOJSON,
-        adm3_geojson_path=ADM3_GEOJSON,
-        basin_geojson_path=BASIN_GEOJSON,
-        subbasin_geojson_path=SUBBASIN_GEOJSON,
+        adm2_geojson_path=runtime_adm2_geojson,
+        adm3_geojson_path=runtime_adm3_geojson,
+        basin_geojson_path=runtime_basin_geojson,
+        subbasin_geojson_path=runtime_subbasin_geojson,
         river_display_geojson_path=RIVER_DISPLAY_GEOJSON,
         river_basin_reconciliation_path=RIVER_BASIN_RECONCILIATION_CSV,
         river_subbasin_diagnostics_path=RIVER_SUBBASIN_DIAGNOSTICS_CSV,
@@ -621,6 +716,7 @@ def run_app() -> None:
         portfolio_normalize_fn=_portfolio_normalize,
         merged=artifacts.merged,
         river_overlay_message=artifacts.river_overlay_message,
+        blocked_message=artifacts.blocked_message,
     )
 
     if rhs_collapsed:
@@ -641,70 +737,73 @@ def run_app() -> None:
             st.markdown('<div class="irt-rhs-scroll-marker"></div>', unsafe_allow_html=True)
             _inject_rhs_scroll_target_hook()
 
-            from india_resilience_tool.app.details_runtime import render_right_panel
-            from india_resilience_tool.analysis.metrics import risk_class_from_percentile
+            if artifacts.blocked_message:
+                st.info(artifacts.blocked_message)
+            else:
+                from india_resilience_tool.app.details_runtime import render_right_panel
+                from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 
-            # Adapt the Streamlit-free helper (keyword-only) to the older positional
-            # signature expected by the case-study builder.
-            def _find_baseline_column_for_stat_compat(cols: object, metric: str, stat: str) -> str | None:
-                return find_baseline_column_for_stat(cols, base_metric=metric, stat=stat)
+                # Adapt the Streamlit-free helper (keyword-only) to the older positional
+                # signature expected by the case-study builder.
+                def _find_baseline_column_for_stat_compat(cols: object, metric: str, stat: str) -> str | None:
+                    return find_baseline_column_for_stat(cols, base_metric=metric, stat=stat)
 
-            render_right_panel(
-                returned=returned,
-                selected_state=selected_state,
-                selected_district=selected_district,
-                selected_block=selected_block,
-                admin_level=_admin_level,
-                spatial_family=spatial_family,
-                selected_basin=selected_basin,
-                selected_subbasin=selected_subbasin,
-                variables=VARIABLES,
-                variable_slug=str(VARIABLE_SLUG or ""),
-                index_group_labels=INDEX_GROUP_LABELS,
-                sel_metric=sel_metric,
-                sel_scenario=sel_scenario,
-                sel_period=sel_period,
-                sel_stat=sel_stat,
-                metric_col=str(metric_col or ""),
-                merged=artifacts.merged,
-                adm1=adm1,
-                df=df if isinstance(df, pd.DataFrame) else pd.DataFrame(),
-                schema_items=schema_items,
-                processed_root=PROCESSED_ROOT if PROCESSED_ROOT is not None else Path("."),
-                pilot_state=PILOT_STATE,
-                data_dir=DATA_DIR,
-                river_reaches_path=RIVER_REACHES_PARQUET,
-                river_overlay_message=artifacts.river_overlay_message,
-                logo_path=LOGO_PATH,
-                fig_size_panel=FIG_SIZE_PANEL,
-                fig_dpi_panel=FIG_DPI_PANEL,
-                font_size_title=FONT_SIZE_TITLE,
-                font_size_label=FONT_SIZE_LABEL,
-                font_size_ticks=FONT_SIZE_TICKS,
-                font_size_legend=FONT_SIZE_LEGEND,
-                period_order=PERIOD_ORDER,
-                scenario_display=SCENARIO_DISPLAY,
-                alias_fn=alias,
-                name_aliases=NAME_ALIASES,
-                varcfg=VARCFG or {},
-                portfolio_add_fn=_portfolio_add,
-                portfolio_remove_fn=_portfolio_remove,
-                portfolio_contains_fn=_portfolio_contains,
-                portfolio_key_fn=_portfolio_key,
-                portfolio_set_flash_fn=_portfolio_set_flash,
-                portfolio_normalize_fn=_portfolio_normalize,
-                portfolio_remove_all_fn=_portfolio_remove_all,
-                build_portfolio_multiindex_df_fn=_build_portfolio_multiindex_df_impl,
-                load_master_csv_fn=load_master_csv,
-                normalize_master_columns_fn=normalize_master_columns,
-                parse_master_schema_fn=parse_master_schema,
-                resolve_metric_column_fn=resolve_metric_column,
-                find_baseline_column_for_stat_fn=_find_baseline_column_for_stat_compat,
-                risk_class_from_percentile_fn=risk_class_from_percentile,
-                load_master_and_schema_fn=_load_master_and_schema,
-                build_scenario_comparison_panel_for_row_fn=build_scenario_comparison_panel_for_row,
-                make_scenario_comparison_figure_fn=make_scenario_comparison_figure_dashboard,
-            )
+                render_right_panel(
+                    returned=returned,
+                    selected_state=selected_state,
+                    selected_district=selected_district,
+                    selected_block=selected_block,
+                    admin_level=_admin_level,
+                    spatial_family=spatial_family,
+                    selected_basin=selected_basin,
+                    selected_subbasin=selected_subbasin,
+                    variables=VARIABLES,
+                    variable_slug=str(VARIABLE_SLUG or ""),
+                    index_group_labels=INDEX_GROUP_LABELS,
+                    sel_metric=sel_metric,
+                    sel_scenario=sel_scenario,
+                    sel_period=sel_period,
+                    sel_stat=sel_stat,
+                    metric_col=str(metric_col or ""),
+                    merged=artifacts.merged,
+                    adm1=adm1,
+                    df=df if isinstance(df, pd.DataFrame) else pd.DataFrame(),
+                    schema_items=schema_items,
+                    processed_root=PROCESSED_ROOT if PROCESSED_ROOT is not None else Path("."),
+                    pilot_state=PILOT_STATE,
+                    data_dir=DATA_DIR,
+                    river_reaches_path=RIVER_REACHES_PARQUET,
+                    river_overlay_message=artifacts.river_overlay_message,
+                    logo_path=LOGO_PATH,
+                    fig_size_panel=FIG_SIZE_PANEL,
+                    fig_dpi_panel=FIG_DPI_PANEL,
+                    font_size_title=FONT_SIZE_TITLE,
+                    font_size_label=FONT_SIZE_LABEL,
+                    font_size_ticks=FONT_SIZE_TICKS,
+                    font_size_legend=FONT_SIZE_LEGEND,
+                    period_order=PERIOD_ORDER,
+                    scenario_display=SCENARIO_DISPLAY,
+                    alias_fn=alias,
+                    name_aliases=NAME_ALIASES,
+                    varcfg=VARCFG or {},
+                    portfolio_add_fn=_portfolio_add,
+                    portfolio_remove_fn=_portfolio_remove,
+                    portfolio_contains_fn=_portfolio_contains,
+                    portfolio_key_fn=_portfolio_key,
+                    portfolio_set_flash_fn=_portfolio_set_flash,
+                    portfolio_normalize_fn=_portfolio_normalize,
+                    portfolio_remove_all_fn=_portfolio_remove_all,
+                    build_portfolio_multiindex_df_fn=_build_portfolio_multiindex_df_impl,
+                    load_master_csv_fn=load_master_csv,
+                    normalize_master_columns_fn=normalize_master_columns,
+                    parse_master_schema_fn=parse_master_schema,
+                    resolve_metric_column_fn=resolve_metric_column,
+                    find_baseline_column_for_stat_fn=_find_baseline_column_for_stat_compat,
+                    risk_class_from_percentile_fn=risk_class_from_percentile,
+                    load_master_and_schema_fn=_load_master_and_schema,
+                    build_scenario_comparison_panel_for_row_fn=build_scenario_comparison_panel_for_row,
+                    make_scenario_comparison_figure_fn=make_scenario_comparison_figure_dashboard,
+                )
 
     render_perf_panel_safe()
     st.markdown("---")

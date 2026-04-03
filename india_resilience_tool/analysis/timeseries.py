@@ -29,9 +29,158 @@ from india_resilience_tool.data.discovery import (
     discover_hydro_yearly_file,
     discover_state_yearly_file,
 )
+from india_resilience_tool.data.optimized_bundle import (
+    is_optimized_metric_root,
+    optimized_yearly_ensemble_path_from_metric_root,
+    optimized_yearly_models_path_from_metric_root,
+)
+from india_resilience_tool.utils.processed_io import read_table
 
 PathLike = Union[str, Path]
 AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+
+
+def _normalized_key(*parts: str, normalize_fn: Optional[callable] = None) -> str:
+    norm = normalize_fn or (lambda s: str(s or "").strip().lower())
+    return "|".join(norm(part) for part in parts)
+
+
+def _load_optimized_yearly_table(
+    *,
+    ts_root: PathLike,
+    level: AdminLevel,
+    state_dir: Optional[str],
+    kind: Literal["ensemble", "models"],
+    columns: Optional[list[str]] = None,
+    filters: Optional[list[tuple[str, str, object]]] = None,
+) -> pd.DataFrame:
+    metric_root = Path(ts_root)
+    if not is_optimized_metric_root(metric_root):
+        return pd.DataFrame()
+
+    if kind == "ensemble":
+        path = optimized_yearly_ensemble_path_from_metric_root(metric_root, level=level, state=state_dir)
+    else:
+        path = optimized_yearly_models_path_from_metric_root(metric_root, level=level, state=state_dir)
+    try:
+        return read_table(path, columns=columns, filters=filters)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _filter_optimized_admin_yearly(
+    df: pd.DataFrame,
+    *,
+    level: Literal["district", "block"],
+    state_dir: str,
+    district_display: str,
+    block_display: Optional[str],
+    scenario_name: str,
+    normalize_fn: Optional[callable],
+) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    out = df.copy()
+    scenario = str(scenario_name).strip().lower()
+    if "scenario" in out.columns:
+        out["scenario"] = out["scenario"].astype(str).str.strip().str.lower()
+        out = out[out["scenario"] == scenario]
+
+    if level == "block":
+        target_key = _normalized_key(
+            state_dir,
+            district_display,
+            str(block_display or ""),
+            normalize_fn=normalize_fn,
+        )
+        key_col = "block_key"
+    else:
+        target_key = _normalized_key(state_dir, district_display, normalize_fn=normalize_fn)
+        key_col = "district_key"
+
+    if key_col not in out.columns:
+        return pd.DataFrame()
+
+    out[key_col] = out[key_col].astype(str)
+    out = out[out[key_col] == target_key]
+    if out.empty:
+        return pd.DataFrame()
+
+    if "state" not in out.columns:
+        out["state"] = str(state_dir).strip()
+    if "district" not in out.columns:
+        out["district"] = str(district_display).strip()
+    if level == "block" and "block" not in out.columns:
+        out["block"] = str(block_display or "").strip()
+
+    return out
+
+
+def load_unit_yearly_models(
+    *,
+    ts_root: PathLike,
+    level: Literal["district", "block"],
+    state_dir: str,
+    district_display: str,
+    scenario_name: str,
+    block_display: Optional[str] = None,
+    normalize_fn: Optional[callable] = None,
+) -> pd.DataFrame:
+    """
+    Load tidy per-model yearly series from the optimized runtime bundle.
+
+    Returns an empty DataFrame when the optimized root or the requested unit path
+    is not available.
+    """
+    df = _load_optimized_yearly_table(
+        ts_root=ts_root,
+        level=level,
+        state_dir=state_dir,
+        kind="models",
+        columns=[
+            "district_key" if level == "district" else "block_key",
+            "scenario",
+            "model",
+            "year",
+            "value",
+        ],
+        filters=[
+            (
+                "district_key" if level == "district" else "block_key",
+                "==",
+                _normalized_key(
+                    state_dir,
+                    district_display,
+                    *([str(block_display or "")] if level == "block" else []),
+                    normalize_fn=normalize_fn,
+                ),
+            ),
+            ("scenario", "==", str(scenario_name).strip().lower()),
+        ],
+    )
+    if df.empty:
+        return pd.DataFrame()
+
+    out = _filter_optimized_admin_yearly(
+        df,
+        level=level,
+        state_dir=state_dir,
+        district_display=district_display,
+        block_display=block_display,
+        scenario_name=scenario_name,
+        normalize_fn=normalize_fn,
+    )
+    if out.empty:
+        return pd.DataFrame()
+
+    if "value" in out.columns:
+        out["value"] = pd.to_numeric(out["value"], errors="coerce")
+    if "year" in out.columns:
+        out["year"] = pd.to_numeric(out["year"], errors="coerce")
+    out = out.dropna(subset=["year", "value"])
+    keep_cols = [c for c in ("year", "value", "model", "scenario", "state", "district", "block") if c in out.columns]
+    return out[keep_cols].sort_values(["model", "year"]).reset_index(drop=True)
 
 
 def read_yearly_csv_robust(path: PathLike) -> pd.DataFrame:
@@ -267,6 +416,37 @@ def load_state_yearly(
         varcfg: Variable configuration dict (optional)
         level: "district" or "block" - used for level-specific state summaries
     """
+    ts_root_p = Path(ts_root)
+    if is_optimized_metric_root(ts_root_p):
+        df = _load_optimized_yearly_table(
+            ts_root=ts_root_p,
+            level=level,
+            state_dir=state_dir,
+            kind="ensemble",
+            columns=["scenario", "year", "mean", "median"],
+        )
+        if df.empty:
+            return pd.DataFrame()
+        if "scenario" in df.columns:
+            df["scenario"] = df["scenario"].astype(str).str.strip()
+        if "year" in df.columns:
+            df["year"] = pd.to_numeric(df["year"], errors="coerce")
+        aggregates: dict[str, str] = {}
+        if "mean" in df.columns:
+            aggregates["mean"] = "mean"
+        if "median" in df.columns:
+            aggregates["median"] = "median"
+        if not aggregates:
+            return pd.DataFrame()
+        grouped = (
+            df.dropna(subset=["year"])
+            .groupby(["scenario", "year"], as_index=False)
+            .agg(aggregates)
+            .sort_values(["scenario", "year"])
+            .reset_index(drop=True)
+        )
+        return grouped
+
     f = discover_state_yearly_file(
         ts_root=ts_root, 
         state_dir=state_dir, 
@@ -302,6 +482,26 @@ def load_district_yearly(
       - If it lacks 'scenario'/'district' columns, infer them from inputs.
       - Requires at least 'year' and 'mean' to return non-empty.
     """
+    ts_root_p = Path(ts_root)
+    if is_optimized_metric_root(ts_root_p):
+        target_key = _normalized_key(state_dir, district_display, normalize_fn=normalize_fn)
+        df = _load_optimized_yearly_table(
+            ts_root=ts_root_p,
+            level="district",
+            state_dir=state_dir,
+            kind="ensemble",
+            columns=["district_key", "scenario", "year", "mean", "median"],
+            filters=[
+                ("district_key", "==", target_key),
+                ("scenario", "==", str(scenario_name).strip().lower()),
+            ],
+        )
+        if df.empty:
+            return pd.DataFrame()
+        df["state"] = str(state_dir).strip()
+        df["district"] = str(district_display).strip()
+        return prepare_yearly_series(df)
+
     f = discover_district_yearly_file(
         ts_root=ts_root,
         state_dir=state_dir,
@@ -373,6 +573,32 @@ def load_block_yearly(
     Returns:
         DataFrame with columns: year, mean, [p05, p95, std, median], block, district, scenario
     """
+    ts_root_p = Path(ts_root)
+    if is_optimized_metric_root(ts_root_p):
+        target_key = _normalized_key(
+            state_dir,
+            district_display,
+            str(block_display),
+            normalize_fn=normalize_fn,
+        )
+        df = _load_optimized_yearly_table(
+            ts_root=ts_root_p,
+            level="block",
+            state_dir=state_dir,
+            kind="ensemble",
+            columns=["block_key", "scenario", "year", "mean", "median"],
+            filters=[
+                ("block_key", "==", target_key),
+                ("scenario", "==", str(scenario_name).strip().lower()),
+            ],
+        )
+        if df.empty:
+            return pd.DataFrame()
+        df["state"] = str(state_dir).strip()
+        df["district"] = str(district_display).strip()
+        df["block"] = str(block_display).strip()
+        return prepare_yearly_series(df)
+
     f = discover_block_yearly_file(
         ts_root=ts_root,
         state_dir=state_dir,
@@ -428,6 +654,37 @@ def load_hydro_yearly(
     scenario_name: str,
 ) -> pd.DataFrame:
     """Load a hydro yearly ensemble CSV using processed/{metric}/hydro/ discovery."""
+    ts_root_p = Path(ts_root)
+    if is_optimized_metric_root(ts_root_p):
+        df = _load_optimized_yearly_table(
+            ts_root=ts_root_p,
+            level=level,
+            state_dir=None,
+            kind="ensemble",
+            columns=(
+                ["basin_name", "scenario", "year", "mean", "median"]
+                if level == "basin"
+                else ["basin_name", "subbasin_name", "scenario", "year", "mean", "median"]
+            ),
+            filters=(
+                [
+                    ("basin_name", "==", str(basin_display).strip()),
+                    ("scenario", "==", str(scenario_name).strip().lower()),
+                ]
+                if level == "basin" or not subbasin_display
+                else [
+                    ("basin_name", "==", str(basin_display).strip()),
+                    ("subbasin_name", "==", str(subbasin_display).strip()),
+                    ("scenario", "==", str(scenario_name).strip().lower()),
+                ]
+            ),
+        )
+        if df.empty:
+            return pd.DataFrame()
+        if df.empty:
+            return pd.DataFrame()
+        return prepare_yearly_series(df)
+
     f = discover_hydro_yearly_file(
         ts_root=ts_root,
         level=level,

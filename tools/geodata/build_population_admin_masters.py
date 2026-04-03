@@ -238,6 +238,19 @@ def _write_csv(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
     df.to_csv(path, index=False)
 
 
+def _write_master_table(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
+    """Write a master CSV plus a Parquet companion for faster runtime reads."""
+    parquet_path = path.with_suffix(".parquet")
+    if not overwrite:
+        existing = [str(p) for p in (path, parquet_path) if p.exists()]
+        if existing:
+            raise FileExistsError(
+                f"Refusing to overwrite existing file without --overwrite: {', '.join(existing)}"
+            )
+    _write_csv(df, path, overwrite=True)
+    df.to_parquet(parquet_path, index=False)
+
+
 def _write_state_slices(
     master_df: pd.DataFrame,
     *,
@@ -253,7 +266,7 @@ def _write_state_slices(
         if not state_label:
             raise ValueError(f"Population {level} master contains an empty state value.")
         out_path = processed_root / state_label / out_name
-        _write_csv(state_df.reset_index(drop=True), out_path, overwrite=overwrite)
+        _write_master_table(state_df.reset_index(drop=True), out_path, overwrite=overwrite)
         counts[state_label] = int(state_df.shape[0])
     return counts
 

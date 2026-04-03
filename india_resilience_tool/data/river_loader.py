@@ -16,6 +16,8 @@ import pandas as pd
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform
 
+from india_resilience_tool.utils.processed_io import read_table
+
 
 PathLike = Union[str, Path]
 BBox = Tuple[float, float, float, float]
@@ -246,9 +248,15 @@ def ensure_river_subbasin_diagnostics(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_river_basin_reconciliation(path: PathLike) -> pd.DataFrame:
-    """Load the canonical hydro-basin to river-basin reconciliation CSV."""
-    df = pd.read_csv(str(path))
+    """Load the canonical hydro-basin to river-basin reconciliation table."""
+    df = read_table(Path(path))
     return ensure_river_basin_reconciliation(df)
+
+
+def load_river_subbasin_diagnostics(path: PathLike) -> pd.DataFrame:
+    """Load the canonical hydro sub-basin river diagnostics table."""
+    df = read_table(Path(path))
+    return ensure_river_subbasin_diagnostics(df)
 
 
 def resolve_river_basin_reconciliation(

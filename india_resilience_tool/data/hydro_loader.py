@@ -70,6 +70,29 @@ def _assert_required_columns(gdf: gpd.GeoDataFrame, *, level: HydroLevel) -> Non
         )
 
 
+def _fill_optimized_runtime_columns(
+    gdf: gpd.GeoDataFrame,
+    *,
+    level: HydroLevel,
+) -> gpd.GeoDataFrame:
+    """
+    Backfill columns omitted from optimized runtime hydro geometry shards.
+
+    The optimized geometry bundle may ship a minimal hydro schema for rendering.
+    Runtime loaders should tolerate those files while canonical validation for
+    the full exported GeoJSONs remains strict elsewhere.
+    """
+    out = gdf.copy()
+    if "hydro_level" not in out.columns:
+        out["hydro_level"] = str(level)
+
+    if level == "sub_basin" and "subbasin_code" not in out.columns:
+        source = out["subbasin_id"] if "subbasin_id" in out.columns else ""
+        out["subbasin_code"] = source
+
+    return out
+
+
 def _validate_geometries(gdf: gpd.GeoDataFrame, *, level: HydroLevel) -> None:
     if gdf.geometry.isna().any():
         raise ValueError(f"Hydro {level} layer contains null geometries.")
@@ -87,9 +110,12 @@ def ensure_hydro_columns(
     gdf: gpd.GeoDataFrame,
     *,
     level: HydroLevel,
+    allow_optimized_missing: bool = False,
 ) -> gpd.GeoDataFrame:
     """Validate and normalize the canonical hydro columns."""
     out = gdf.copy()
+    if allow_optimized_missing:
+        out = _fill_optimized_runtime_columns(out, level=level)
     _assert_required_columns(out, level=level)
     _validate_geometries(out, level=level)
 
@@ -174,6 +200,6 @@ def load_local_hydro(
     gdf = gpd.read_file(str(path))
     gdf["geometry"] = gdf["geometry"].apply(drop_z)
     gdf = ensure_epsg4326(gdf)
-    gdf = ensure_hydro_columns(gdf, level=level)
+    gdf = ensure_hydro_columns(gdf, level=level, allow_optimized_missing=True)
     gdf = crop_to_bbox(gdf, bbox)
     return gdf.reset_index(drop=True)

@@ -9,6 +9,9 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 
 The current working tree supports:
 - map, rankings, and details flows for district, block, basin, and sub-basin
+- drill-down-only nationwide behavior for the finest-grain views:
+  - `Admin -> Block` requires a selected state
+  - `Hydro -> Sub-basin` requires a selected basin
 - portfolio workflows for district, block, basin, and sub-basin
 - assessment-pillar and domain-based metric navigation, separating climate hazards from bio-physical hazards
 - static exposure-layer support for admin district/block views
@@ -34,8 +37,10 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 |---------|---------|
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
-| `python -m tools.runs.prepare_dashboard --help` | Show canonical dashboard-prep workflow bundles and step commands |
-| `python -m tools.pipeline.build_master_metrics` | Rebuild master CSVs |
+| `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, Aqueduct, population, groundwater, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
+| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with exact pre-scan task counting, yearly parity migration, hydro yearly fallback-from-models, optional `--level` filtering, and nested terminal progress bars |
+| `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` filtering, and write `parity_report.json` |
+| `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics <slug>` | Build district outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level block --metrics <slug>` | Build block outputs |
@@ -68,6 +73,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `IRT_PILOT_STATE` | `Telangana` | Default admin state in the UI |
 | `IRT_DATA_DIR` | resolved in `paths.py` | Base directory for boundaries, crosswalks, and processed outputs |
 | `IRT_PROCESSED_ROOT` | `IRT_DATA_DIR/processed/{metric}` | Optional processed-root override |
+| `IRT_PROCESSED_OPTIMISED_ROOT` | `IRT_DATA_DIR/processed_optimised` | Optional optimized runtime-bundle override |
 | `IRT_DEBUG` | `0` | Enable debug/perf output |
 
 ## Top-level repo map
@@ -137,7 +143,7 @@ Aqueduct methodology note:
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
 | `main.py` | Package Streamlit entrypoint |
 | `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
-| `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline |
+| `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline, including fine-grain drill-down guards and rankings-only fast paths |
 | `master_cache.py` | Streamlit session-state cache for master CSV + schema loading |
 | `master_freshness.py` | Master CSV freshness/rebuild gating helpers |
 | `perf.py` | Lightweight timing/performance instrumentation |
@@ -166,7 +172,7 @@ Aqueduct methodology note:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `master_builder.py` | Build master CSVs, including hydro master enrichment |
+| `master_builder.py` | Build master CSVs, including hydro master enrichment and Parquet companions for runtime serving |
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 
 #### `india_resilience_tool/compute/tests/`
@@ -198,7 +204,8 @@ Aqueduct methodology note:
 | `river_loader.py` | Cleaned river-display loading, validation, reconciliation, diagnostics, and hydro filtering helpers |
 | `river_topology.py` | Streamlit-free river reach validation and hydro-side river summary builders |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
-| `master_loader.py` | Robust master CSV loading, normalization, and schema parsing |
+| `master_loader.py` | Robust master-table loading, normalization, schema parsing, and Parquet-first runtime preference |
+| `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle, including optimized geometry and context paths |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
 | `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |
 
@@ -272,12 +279,12 @@ Aqueduct methodology note:
 | `prepare_aqueduct_baseline.py` | Build a clean Aqueduct baseline GeoJSON, QA CSV, and India-only `future_annual` GeoJSON with source future attributes preserved |
 | `build_aqueduct_admin_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ district overlap CSVs in `EPSG:6933` |
 | `build_aqueduct_block_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ block overlap CSVs in `EPSG:6933` |
-| `build_aqueduct_admin_masters.py` | Build `processed/{aqueduct_metric_slug}/{state}/master_metrics_by_{district,block}.csv` from direct Aqueduct admin overlaps |
+| `build_aqueduct_admin_masters.py` | Build `processed/{aqueduct_metric_slug}/{state}/master_metrics_by_{district,block}.{csv,parquet}` from direct Aqueduct admin overlaps |
 | `build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs in `EPSG:6933` |
-| `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master CSVs from Aqueduct overlaps for the onboarded Aqueduct hydro metrics |
-| `build_population_admin_masters.py` | Build district/block population total and density masters from the 2025 population raster |
-| `build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook plus a canonical district alias QA package |
-| `runs/prepare_dashboard.py` | Canonical workflow runner for climate hazard, canonical block-boundary refresh, Aqueduct, population exposure, groundwater, validation, and dashboard-package prep bundles |
+| `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master `{csv,parquet}` files from Aqueduct overlaps for the onboarded hydro metrics |
+| `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster |
+| `build_groundwater_district_masters.py` | Build district groundwater assessment master `{csv,parquet}` files from the 2024-2025 GEC workbook plus a canonical district alias QA package |
+| `runs/prepare_dashboard.py` | Canonical operator entrypoint that orchestrates bundle prep, optimized runtime refresh, and final readiness verification for climate, Aqueduct, population exposure, groundwater, validation, and dashboard-package workflows |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
@@ -558,3 +565,10 @@ Long-lived deferred work and shelved initiatives are tracked in `docs/BACKLOG.md
 For questions about the codebase:
 - **Author:** Abu Bakar Siddiqui Thakur
 - **Email:** absthakur@resilience.org.in
+### `tools/optimized/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin/hydro yearly parity outputs, hydro yearly fallback-from-models, selector-index artifacts, persisted geometry `area_m2`, optional level filtering, and a post-build parity audit |
+| `audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the legacy processed contract, with optional level filtering, and emit a parity report |

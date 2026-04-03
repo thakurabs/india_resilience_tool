@@ -58,3 +58,43 @@ def test_resolve_processed_root_env_portfolio_mode_uses_slug_dir_when_already_po
 
     out = resolve_processed_root(slug, data_dir=tmp_path, mode="portfolio")
     assert out == env_root.resolve()
+
+
+def test_resolve_processed_optimised_root_default_no_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("IRT_PROCESSED_OPTIMISED_ROOT", raising=False)
+
+    from india_resilience_tool.config.paths import resolve_processed_optimised_root
+
+    slug = "days_gt_32C"
+    out = resolve_processed_optimised_root(slug, data_dir=tmp_path)
+    assert out == (tmp_path / "processed_optimised" / "metrics" / slug).resolve()
+
+
+def test_resolve_processed_optimised_root_env_uses_metrics_base(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from india_resilience_tool.config.paths import resolve_processed_optimised_root
+
+    slug = "days_gt_32C"
+    env_root = tmp_path / "processed_optimised"
+    monkeypatch.setenv("IRT_PROCESSED_OPTIMISED_ROOT", str(env_root))
+
+    out = resolve_processed_optimised_root(slug, data_dir=tmp_path)
+    assert out == (env_root / "metrics" / slug).resolve()
+
+
+def test_resolve_processed_optimised_root_accepts_legacy_mode_keyword(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("IRT_PROCESSED_OPTIMISED_ROOT", raising=False)
+
+    from india_resilience_tool.config.paths import resolve_processed_optimised_root
+
+    slug = "days_gt_32C"
+    out = resolve_processed_optimised_root(slug, data_dir=tmp_path, mode="portfolio")
+    assert out == (tmp_path / "processed_optimised" / "metrics" / slug).resolve()

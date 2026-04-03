@@ -18,6 +18,7 @@ import pandas as pd
 from india_resilience_tool.data.master_loader import MasterSourceLike, master_source_signature
 
 AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+_NULL_LIKE_STRINGS = {"", "<na>", "nan", "none", "nat"}
 
 
 def get_master_mtime(master_path: MasterSourceLike) -> Optional[float]:
@@ -45,12 +46,12 @@ def restrict_boundaries_to_master_states(
     if boundary_state_col not in boundary_df.columns or master_state_col not in master_df.columns:
         return boundary_df
 
-    state_keys = master_df[master_state_col].astype(str).map(alias_fn)
+    state_keys = _normalized_nonempty_series(master_df[master_state_col], alias_fn=alias_fn)
     valid_states = set(state_keys.dropna().tolist())
     if not valid_states:
         return boundary_df
 
-    mask = boundary_df[boundary_state_col].astype(str).map(alias_fn).isin(valid_states)
+    mask = _normalized_nonempty_series(boundary_df[boundary_state_col], alias_fn=alias_fn).isin(valid_states)
     return boundary_df[mask].copy()
 
 
@@ -70,17 +71,11 @@ def find_missing_boundary_states(
     if boundary_state_col not in boundary_df.columns or master_state_col not in master_df.columns:
         return []
 
-    master_states = (
-        master_df[master_state_col]
-        .astype(str)
-        .map(alias_fn)
-        .dropna()
-        .tolist()
-    )
+    raw_master_states = _clean_string_series(master_df[master_state_col])
+    normalized_master_states = _normalized_nonempty_series(master_df[master_state_col], alias_fn=alias_fn)
+    master_states = normalized_master_states.dropna().tolist()
     boundary_states = set(
-        boundary_df[boundary_state_col]
-        .astype(str)
-        .map(alias_fn)
+        _normalized_nonempty_series(boundary_df[boundary_state_col], alias_fn=alias_fn)
         .dropna()
         .tolist()
     )
@@ -90,12 +85,35 @@ def find_missing_boundary_states(
 
     missing_ordered: list[str] = []
     seen: set[str] = set()
-    for raw_state, norm_state in zip(master_df[master_state_col].astype(str), master_df[master_state_col].astype(str).map(alias_fn)):
-        if not norm_state or norm_state in boundary_states or norm_state in seen:
+    for raw_state, norm_state in zip(raw_master_states.tolist(), normalized_master_states.tolist()):
+        if pd.isna(raw_state) or pd.isna(norm_state):
             continue
-        seen.add(norm_state)
+        norm_state_str = str(norm_state)
+        if not norm_state_str or norm_state_str in boundary_states or norm_state_str in seen:
+            continue
+        seen.add(norm_state_str)
         missing_ordered.append(str(raw_state).strip())
     return missing_ordered
+
+
+def _clean_string_series(series: pd.Series) -> pd.Series:
+    """Return a trimmed pandas string series while preserving missing values."""
+    out = series.astype("string").str.strip()
+    lower = out.str.lower()
+    return out.where(out.notna() & ~lower.isin(_NULL_LIKE_STRINGS))
+
+
+def _normalized_nonempty_series(
+    series: pd.Series,
+    *,
+    alias_fn: Callable[[str], str],
+) -> pd.Series:
+    """Normalize a name-like series without converting missing values into string literals."""
+    out = _clean_string_series(series)
+    out = out.map(lambda value: alias_fn(str(value)) if pd.notna(value) else pd.NA)
+    out = out.astype("string").str.strip()
+    lower = out.str.lower()
+    return out.where(out.notna() & ~lower.isin(_NULL_LIKE_STRINGS))
 
 
 def merge_adm2_with_master(
@@ -259,17 +277,23 @@ def get_or_build_merged_for_index_cached(
     if cache_entry is not None and cache_entry.get("source_signature") == source_signature:
         return cache_entry["gdf"]
 
+    master_c = master_df
+    if level in {"district", "block"} and master_state_col in master_df.columns:
+        valid_master_rows = _normalized_nonempty_series(master_df[master_state_col], alias_fn=alias_fn).notna()
+        if not valid_master_rows.all():
+            master_c = master_df.loc[valid_master_rows].copy()
+
     # Restrict to states present in master
     boundary_c = restrict_boundaries_to_master_states(
         adm2_df,
-        master_df,
+        master_c,
         boundary_state_col=adm2_state_col,
         master_state_col=master_state_col,
         alias_fn=alias_fn,
     )
     missing_states = find_missing_boundary_states(
         boundary_c,
-        master_df,
+        master_c,
         boundary_state_col=adm2_state_col,
         master_state_col=master_state_col,
         alias_fn=alias_fn,
@@ -281,13 +305,13 @@ def get_or_build_merged_for_index_cached(
 
     # Merge based on level
     if level == "sub_basin":
-        merged = merge_subbasin_with_master(boundary_c, master_df, alias_fn=alias_fn)
+        merged = merge_subbasin_with_master(boundary_c, master_c, alias_fn=alias_fn)
     elif level == "basin":
-        merged = merge_basin_with_master(boundary_c, master_df, alias_fn=alias_fn)
+        merged = merge_basin_with_master(boundary_c, master_c, alias_fn=alias_fn)
     elif level == "block":
-        merged = merge_adm3_with_master(boundary_c, master_df, alias_fn=alias_fn)
+        merged = merge_adm3_with_master(boundary_c, master_c, alias_fn=alias_fn)
     else:
-        merged = merge_adm2_with_master(boundary_c, master_df, alias_fn=alias_fn)
+        merged = merge_adm2_with_master(boundary_c, master_c, alias_fn=alias_fn)
 
     merged_cache[cache_key] = {"source_signature": source_signature, "gdf": merged}
     return merged

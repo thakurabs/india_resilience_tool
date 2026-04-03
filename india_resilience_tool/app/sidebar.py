@@ -335,7 +335,7 @@ def render_view_selector(
 
     ss = st.session_state
     options = [VIEW_MAP, VIEW_RANKINGS]
-    current = ss.get("active_view", VIEW_MAP)
+    current = ss.get("main_view_selector", ss.get("active_view", VIEW_MAP))
     try:
         index = options.index(current)
     except Exception:

@@ -77,6 +77,7 @@ class PathsConfig:
     district_basin_crosswalk_path: Path
     block_basin_crosswalk_path: Path
     base_output_root: Path
+    optimized_output_root: Path
 
 
 def _get_data_dir(repo_root: Path) -> Path:
@@ -129,6 +130,7 @@ def get_paths_config() -> PathsConfig:
         district_basin_crosswalk_path=data_dir / "district_basin_crosswalk.csv",
         block_basin_crosswalk_path=data_dir / "block_basin_crosswalk.csv",
         base_output_root=data_dir / "processed",
+        optimized_output_root=data_dir / "processed_optimised",
     )
 
 
@@ -203,6 +205,43 @@ def resolve_processed_root(
         data_dir = get_paths_config().data_dir
 
     return (data_dir / "processed" / slug).resolve()
+
+
+def resolve_processed_optimised_root(
+    slug: str,
+    *,
+    data_dir: Optional[Path] = None,
+    mode: ProcessedRootMode = "portfolio",
+) -> Path:
+    """
+    Resolve the optimized processed root for one metric slug.
+
+    Contract:
+      - If `IRT_PROCESSED_OPTIMISED_ROOT` is set and already points at `<slug>`,
+        use it directly.
+      - If it is set to a base bundle root, append `/metrics/<slug>`.
+      - Otherwise default to `DATA_DIR/processed_optimised/metrics/<slug>`.
+
+    Compatibility:
+      - Accepts the legacy `mode` keyword so callers can swap between
+        `resolve_processed_root(...)` and `resolve_processed_optimised_root(...)`
+        without branching on function signatures.
+      - `mode` does not affect optimized-root resolution.
+    """
+    _ = mode
+    env_root = os.getenv("IRT_PROCESSED_OPTIMISED_ROOT")
+    if env_root:
+        base_path = Path(env_root).expanduser()
+        if base_path.name == slug:
+            return base_path.resolve()
+        if base_path.name == "metrics":
+            return (base_path / slug).resolve()
+        return (base_path / "metrics" / slug).resolve()
+
+    if data_dir is None:
+        data_dir = get_paths_config().data_dir
+
+    return (data_dir / "processed_optimised" / "metrics" / slug).resolve()
 
 
 def get_boundary_path(level: AdminLevel) -> Path:
@@ -280,3 +319,4 @@ BLOCK_SUBBASIN_CROSSWALK_PATH: Path = _CFG.block_subbasin_crosswalk_path
 DISTRICT_BASIN_CROSSWALK_PATH: Path = _CFG.district_basin_crosswalk_path
 BLOCK_BASIN_CROSSWALK_PATH: Path = _CFG.block_basin_crosswalk_path
 BASE_OUTPUT_ROOT: Path = _CFG.base_output_root
+OPTIMIZED_OUTPUT_ROOT: Path = _CFG.optimized_output_root

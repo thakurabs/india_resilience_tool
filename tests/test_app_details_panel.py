@@ -27,6 +27,14 @@ def test_details_panel_exports_render_details_panel() -> None:
     assert callable(render_details_panel)
 
 
+def test_render_details_panel_accepts_alias_fn_keyword() -> None:
+    """The details panel contract should accept alias_fn for optimized trend loading."""
+    from india_resilience_tool.app.views.details_panel import render_details_panel
+
+    sig = inspect.signature(render_details_panel)
+    assert "alias_fn" in sig.parameters
+
+
 def test_details_panel_exports_subrenderers() -> None:
     """Test that all sub-renderers are exported and callable."""
     from india_resilience_tool.app.views.details_panel import (
@@ -46,6 +54,14 @@ def test_details_panel_exports_subrenderers() -> None:
     assert callable(render_detailed_statistics)
     assert callable(render_case_study_export)
     assert callable(render_district_comparison)
+
+
+def test_render_trend_over_time_accepts_alias_fn_keyword() -> None:
+    """The trend renderer should accept alias_fn for optimized model-series loading."""
+    from india_resilience_tool.app.views.details_panel import render_trend_over_time
+
+    sig = inspect.signature(render_trend_over_time)
+    assert "alias_fn" in sig.parameters
 
 
 def test_render_river_context_uses_plain_language_label() -> None:

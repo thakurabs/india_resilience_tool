@@ -103,6 +103,12 @@ Entry fields:
 - `Dependency / trigger`: requires a settled reach-level analytical contract and clear methodology for river-native metrics.
 - `Done when`: river reaches can participate in metric computation and serving contracts in a scientifically explicit way.
 
+### BL-0012 — Converge from `processed` plus `processed_optimised` to one final runtime-serving contract
+- `Area`: storage, architecture, deployment
+- `Why deferred`: the current two-step flow is the safest migration path while the compact runtime contract is still being validated, but it adds duplication, rebuild drift risk, and operational complexity if kept forever.
+- `Dependency / trigger`: revisit after `processed_optimised` is validated across climate, Aqueduct, population, groundwater, hydro, time-series, and case-study flows, and once the retained field/artifact contract is considered stable.
+- `Done when`: the team explicitly decides whether to keep a permanent build-vs-runtime split or move to one canonical dashboard-serving processed directory, with a documented migration plan and clear separation for raw/build/QA artifacts.
+
 ## Icebox
 
 - No items recorded yet.

@@ -13,10 +13,11 @@ Contract:
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
 
-import pandas as pd
 import folium
+import pandas as pd
 
 
 def ensure_geojson_by_state_has_all(geojson_by_state: Mapping[str, dict]) -> dict[str, dict]:
@@ -190,24 +191,43 @@ def filter_fc_by_feature_keys(
     return out
 
 
-def _feature_key_for_row(
-    row: Mapping[str, Any],
-    *,
-    level: str,
-    alias_fn: Callable[[str], str],
-    feature_key_col: str,
-) -> str:
-    if level == "block":
-        return (
-            f"{alias_fn(row.get('state_name', ''))}|"
-            f"{alias_fn(row.get('district_name', ''))}|"
-            f"{alias_fn(row.get('block_name', ''))}"
-        )
-    if level == "sub_basin":
-        return alias_fn(row.get("subbasin_id", ""))
-    if level == "basin":
-        return alias_fn(row.get("basin_id", ""))
-    return alias_fn(row.get("district_name", ""))
+def clone_featurecollection_for_patch(fc: Mapping[str, Any]) -> dict[str, Any]:
+    """
+    Clone a FeatureCollection cheaply for property patching.
+
+    Geometry objects are reused as-is; only the top-level dict, feature list,
+    feature dicts, and properties dicts are cloned.
+    """
+    out = dict(fc)
+    features_out: list[dict[str, Any]] = []
+    for feature in fc.get("features", []) or []:
+        feature_out = dict(feature)
+        props = feature.get("properties")
+        feature_out["properties"] = dict(props) if isinstance(props, Mapping) else {}
+        features_out.append(feature_out)
+    out["features"] = features_out
+    return out
+
+
+def props_map_signature(props_map: Mapping[str, Mapping[str, Any]]) -> str:
+    """Return a stable signature for a patched-properties payload."""
+    hasher = hashlib.sha1()
+    for feature_key in sorted(str(k) for k in props_map.keys()):
+        hasher.update(feature_key.encode("utf-8"))
+        props = props_map.get(feature_key) or {}
+        for prop_key, prop_value in sorted(props.items(), key=lambda item: str(item[0])):
+            hasher.update(str(prop_key).encode("utf-8"))
+            if hasattr(prop_value, "item"):
+                prop_value = prop_value.item()
+            hasher.update(repr(prop_value).encode("utf-8"))
+    return hasher.hexdigest()
+
+
+def _string_series(frame: pd.DataFrame, column: str) -> pd.Series:
+    """Return a string series with nulls normalized to empty strings."""
+    if column not in frame.columns:
+        return pd.Series("", index=frame.index, dtype="object")
+    return frame[column].where(frame[column].notna(), "").astype(str)
 
 
 def build_props_map_from_gdf(
@@ -226,24 +246,27 @@ def build_props_map_from_gdf(
       (props_map, value_cols, text_cols)
     """
     prop_work = prop_gdf.copy()
+    level_norm = str(level).strip().lower()
 
-    is_block_level = str(level).strip().lower() == "block"
+    is_block_level = level_norm == "block"
 
     if is_block_level and "block_name" not in prop_work.columns and "block" in prop_work.columns:
         prop_work["block_name"] = prop_work["block"]
-    if str(level).strip().lower() == "sub_basin" and "subbasin_name" not in prop_work.columns and "subbasin" in prop_work.columns:
+    if level_norm == "sub_basin" and "subbasin_name" not in prop_work.columns and "subbasin" in prop_work.columns:
         prop_work["subbasin_name"] = prop_work["subbasin"]
 
     if feature_key_col not in prop_work.columns:
-        prop_work[feature_key_col] = prop_work.apply(
-            lambda r: _feature_key_for_row(
-                r,
-                level=str(level).strip().lower(),
-                alias_fn=alias_fn,
-                feature_key_col=feature_key_col,
-            ),
-            axis=1,
-        )
+        if is_block_level:
+            state_key = _string_series(prop_work, "state_name").map(alias_fn)
+            district_key = _string_series(prop_work, "district_name").map(alias_fn)
+            block_key = _string_series(prop_work, "block_name").map(alias_fn)
+            prop_work[feature_key_col] = state_key.str.cat(district_key, sep="|").str.cat(block_key, sep="|")
+        elif level_norm == "sub_basin":
+            prop_work[feature_key_col] = _string_series(prop_work, "subbasin_id").map(alias_fn)
+        elif level_norm == "basin":
+            prop_work[feature_key_col] = _string_series(prop_work, "basin_id").map(alias_fn)
+        else:
+            prop_work[feature_key_col] = _string_series(prop_work, "district_name").map(alias_fn)
 
     value_cols: list[str] = []
     for c in (
@@ -264,11 +287,11 @@ def build_props_map_from_gdf(
             text_cols.append(c)
 
     keep_cols: list[str] = []
-    if str(level).strip().lower() == "sub_basin":
+    if level_norm == "sub_basin":
         for c in ("subbasin_name", "subbasin_id", "subbasin_code", "basin_name", "basin_id"):
             if c in prop_work.columns:
                 keep_cols.append(c)
-    elif str(level).strip().lower() == "basin":
+    elif level_norm == "basin":
         for c in ("basin_name", "basin_id"):
             if c in prop_work.columns:
                 keep_cols.append(c)
@@ -284,39 +307,41 @@ def build_props_map_from_gdf(
     keep_cols.extend(value_cols)
     keep_cols.extend(text_cols)
 
+    keep_cols = list(dict.fromkeys(keep_cols))
     prop_work = prop_work[keep_cols].copy()
+    prop_work = prop_work.where(prop_work.notna(), None)
 
     props_map: dict[str, dict] = {}
-    for _, r in prop_work.iterrows():
-        k = r.get(feature_key_col)
+    for record in prop_work.to_dict("records"):
+        k = record.get(feature_key_col)
         if not isinstance(k, str) or not k:
             continue
 
         upd: dict = {
-            "district_name": r.get("district_name"),
-            "state_name": r.get("state_name") if "state_name" in prop_work.columns else None,
+            "district_name": record.get("district_name"),
+            "state_name": record.get("state_name") if "state_name" in prop_work.columns else None,
         }
-        if str(level).strip().lower() == "sub_basin":
-            upd["subbasin_name"] = r.get("subbasin_name")
-            upd["subbasin_id"] = r.get("subbasin_id")
-            upd["subbasin_code"] = r.get("subbasin_code")
-            upd["basin_name"] = r.get("basin_name")
-            upd["basin_id"] = r.get("basin_id")
-        elif str(level).strip().lower() == "basin":
-            upd["basin_name"] = r.get("basin_name")
-            upd["basin_id"] = r.get("basin_id")
+        if level_norm == "sub_basin":
+            upd["subbasin_name"] = record.get("subbasin_name")
+            upd["subbasin_id"] = record.get("subbasin_id")
+            upd["subbasin_code"] = record.get("subbasin_code")
+            upd["basin_name"] = record.get("basin_name")
+            upd["basin_id"] = record.get("basin_id")
+        elif level_norm == "basin":
+            upd["basin_name"] = record.get("basin_name")
+            upd["basin_id"] = record.get("basin_id")
         if is_block_level and "block_name" in prop_work.columns:
-            upd["block_name"] = r.get("block_name")
+            upd["block_name"] = record.get("block_name")
 
-        fill = r.get("fillColor")
+        fill = record.get("fillColor")
         upd["fillColor"] = fill if isinstance(fill, str) and fill else "#cccccc"
 
         for c in value_cols:
-            v = r.get(c)
+            v = record.get(c)
             upd[c] = None if pd.isna(v) else v
 
         for c in text_cols:
-            v = r.get(c)
+            v = record.get(c)
             upd[c] = None if pd.isna(v) else v
 
         props_map[k] = upd

@@ -67,6 +67,14 @@ def test_hydro_loader_requires_canonical_columns() -> None:
         ensure_hydro_columns(gdf, level="sub_basin")
 
 
+def test_hydro_loader_can_backfill_optimized_runtime_columns() -> None:
+    gdf = _subbasin_gdf().drop(columns=["subbasin_code", "hydro_level"])
+    out = ensure_hydro_columns(gdf, level="sub_basin", allow_optimized_missing=True)
+
+    assert out["hydro_level"].tolist() == ["sub_basin", "sub_basin"]
+    assert out["subbasin_code"].tolist() == ["SB01", "SB02"]
+
+
 def test_hydro_loader_adds_deterministic_keys() -> None:
     gdf = ensure_hydro_columns(_subbasin_gdf(), level="sub_basin")
     keyed = ensure_hydro_key_column(gdf, level="sub_basin", alias_fn=lambda s: str(s).lower())

@@ -38,11 +38,12 @@ from india_resilience_tool.data.river_loader import (
     canonicalize_river_hydro_name as _canonicalize_river_hydro_name,
     ensure_river_key_column as _ensure_river_key_column,
     load_river_basin_reconciliation as _load_river_basin_reconciliation,
-    ensure_river_subbasin_diagnostics as _ensure_river_subbasin_diagnostics,
+    load_river_subbasin_diagnostics as _load_river_subbasin_diagnostics,
     load_local_river_display as _load_local_river_display,
 )
 from india_resilience_tool.data.river_topology import load_river_reaches as _load_river_reaches
 from india_resilience_tool.utils.naming import alias, normalize_name
+from india_resilience_tool.utils.processed_io import read_table
 
 
 def _featurecollections_by_selector(
@@ -52,19 +53,77 @@ def _featurecollections_by_selector(
     keep_cols: list[str],
 ) -> dict[str, dict]:
     """Build geometry-only FeatureCollections keyed by a normalized selector column."""
-    by_selector = _featurecollections_by_state(
-        gdf,
-        state_col=selector_col,
-        normalize_state_fn=alias,
-        keep_cols=keep_cols,
-    )
-    if "all" not in by_selector:
-        all_features: list[dict] = []
-        for fc in by_selector.values():
-            all_features.extend((fc or {}).get("features", []) or [])
-        by_selector = dict(by_selector)
-        by_selector["all"] = {"type": "FeatureCollection", "features": all_features}
+    if "geometry" not in keep_cols:
+        keep_cols = [*keep_cols, "geometry"]
+
+    props_cols = [c for c in keep_cols if c != "geometry" and c in gdf.columns]
+    by_selector: dict[str, dict] = {}
+    all_features: list[dict] = []
+
+    for raw_selector, group in gdf.groupby(selector_col, dropna=False):
+        selector_key = str(raw_selector).strip()
+        if not selector_key or selector_key.lower() in {"<na>", "nan", "none"}:
+            continue
+
+        features: list[dict] = []
+        for _, row in group.iterrows():
+            geom = row.get("geometry")
+            if geom is None:
+                continue
+
+            props: dict[str, object] = {}
+            for col in props_cols:
+                value = row.get(col)
+                if pd.isna(value):
+                    value = None
+                elif hasattr(value, "item"):
+                    value = value.item()
+                props[col] = value
+
+            feature = {
+                "type": "Feature",
+                "properties": props,
+                "geometry": geom.__geo_interface__,
+            }
+            features.append(feature)
+            all_features.append(feature)
+
+        by_selector[selector_key] = {
+            "type": "FeatureCollection",
+            "features": features,
+        }
+
+    by_selector["all"] = {"type": "FeatureCollection", "features": all_features}
     return by_selector
+
+
+def _ensure_adm3_identity_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Ensure canonical block identity columns and composite key are present."""
+    out = gdf.copy()
+
+    if "block_name" not in out.columns:
+        for c in ("block", "adm3_name", "subdistrict_name", "name"):
+            if c in out.columns:
+                out["block_name"] = out[c]
+                break
+    if "district_name" not in out.columns:
+        for c in ("district", "adm2_name", "shapeName_2", "shapeName_1"):
+            if c in out.columns:
+                out["district_name"] = out[c]
+                break
+    if "state_name" not in out.columns:
+        for c in ("state", "adm1_name", "shapeName_0", "shapeGroup"):
+            if c in out.columns:
+                out["state_name"] = out[c]
+                break
+
+    if "__bkey" not in out.columns:
+        state_key = out["state_name"].where(out["state_name"].notna(), "").astype(str).map(alias)
+        district_key = out["district_name"].where(out["district_name"].notna(), "").astype(str).map(alias)
+        block_key = out["block_name"].where(out["block_name"].notna(), "").astype(str).map(alias)
+        out["__bkey"] = state_key.str.cat(district_key, sep="|").str.cat(block_key, sep="|")
+
+    return out
 
 
 @st.cache_data
@@ -153,9 +212,8 @@ def load_river_basin_reconciliation_cached(path: str) -> pd.DataFrame:
 
 @st.cache_data(ttl=3600)
 def load_river_subbasin_diagnostics_cached(path: str) -> pd.DataFrame:
-    """Load the canonical hydro sub-basin river diagnostics CSV."""
-    df = pd.read_csv(path)
-    return _ensure_river_subbasin_diagnostics(df)
+    """Load the canonical hydro sub-basin river diagnostics table."""
+    return _load_river_subbasin_diagnostics(path)
 
 
 @st.cache_data(ttl=3600)
@@ -171,6 +229,68 @@ def load_basin_selector_index(path: str) -> dict[str, object]:
     basin_names = sorted(gdf["basin_name"].astype(str).str.strip().unique().tolist())
     return {
         "basin_names": basin_names,
+    }
+
+
+@st.cache_data(ttl=3600)
+def load_admin_block_selector_index(path: str) -> dict[str, object]:
+    """Return cached block selector metadata keyed by normalized state|district."""
+    df = read_table(path)
+    if df is None or df.empty:
+        return {"blocks_by_selector": {}}
+
+    out = df.copy()
+    required = {"state_name", "district_name", "block_name"}
+    if not required.issubset(set(out.columns)):
+        return {"blocks_by_selector": {}}
+
+    for col in ("state_name", "district_name", "block_name"):
+        out[col] = out[col].astype("string").fillna("").str.strip()
+    out = out[(out["state_name"] != "") & (out["district_name"] != "") & (out["block_name"] != "")]
+    if out.empty:
+        return {"blocks_by_selector": {}}
+
+    blocks_by_selector: dict[str, list[str]] = {}
+    selector = out["state_name"].map(alias).str.cat(out["district_name"].map(alias), sep="|")
+    for selector_key, group in out.groupby(selector, dropna=False):
+        blocks_by_selector[str(selector_key)] = sorted(group["block_name"].drop_duplicates().tolist())
+
+    return {"blocks_by_selector": blocks_by_selector}
+
+
+@st.cache_data(ttl=3600)
+def load_hydro_subbasin_selector_index(path: str) -> dict[str, object]:
+    """Return cached basin/sub-basin selector metadata from a compact optimized index."""
+    df = read_table(path)
+    if df is None or df.empty:
+        return {"basin_names": [], "subbasins_all": [], "subbasins_by_basin": {}, "basin_ids_by_name": {}}
+
+    out = df.copy()
+    required = {"basin_id", "basin_name", "subbasin_id", "subbasin_name"}
+    if not required.issubset(set(out.columns)):
+        return {"basin_names": [], "subbasins_all": [], "subbasins_by_basin": {}, "basin_ids_by_name": {}}
+
+    for col in ("basin_id", "basin_name", "subbasin_id", "subbasin_name"):
+        out[col] = out[col].astype("string").fillna("").str.strip()
+    out = out[(out["basin_id"] != "") & (out["basin_name"] != "") & (out["subbasin_id"] != "") & (out["subbasin_name"] != "")]
+    if out.empty:
+        return {"basin_names": [], "subbasins_all": [], "subbasins_by_basin": {}, "basin_ids_by_name": {}}
+
+    basin_names = sorted(out["basin_name"].drop_duplicates().tolist())
+    subbasins_all = sorted(out["subbasin_name"].drop_duplicates().tolist())
+    subbasins_by_basin: dict[str, list[str]] = {}
+    basin_ids_by_name: dict[str, str] = {}
+    for basin_name, basin_df in out.groupby("basin_name", dropna=False):
+        basin_key = str(basin_name).strip()
+        subbasins_by_basin[basin_key] = sorted(basin_df["subbasin_name"].drop_duplicates().tolist())
+        if basin_key and basin_key not in basin_ids_by_name:
+            basin_ids_by_name[basin_key] = str(basin_df["basin_id"].iloc[0]).strip()
+
+    return {
+        "basin_names": basin_names,
+        "subbasins_all": subbasins_all,
+        "subbasins_by_basin": subbasins_by_basin,
+        "basin_ids_by_name": basin_ids_by_name,
     }
 
 
@@ -236,36 +356,7 @@ def build_adm3_geojson_by_state(
     """
     _ = mtime  # used only to invalidate Streamlit's cache
 
-    gdf = load_local_adm3(path, tolerance=tolerance)
-
-    # Tolerate alternate ADM3 naming conventions.
-    if "block_name" not in gdf.columns:
-        for c in ("block", "adm3_name", "subdistrict_name", "name"):
-            if c in gdf.columns:
-                gdf["block_name"] = gdf[c]
-                break
-    if "district_name" not in gdf.columns:
-        for c in ("district", "adm2_name", "shapeName_2", "shapeName_1"):
-            if c in gdf.columns:
-                gdf["district_name"] = gdf[c]
-                break
-    if "state_name" not in gdf.columns:
-        for c in ("state", "adm1_name", "shapeName_0", "shapeGroup"):
-            if c in gdf.columns:
-                gdf["state_name"] = gdf[c]
-                break
-
-    # Build a composite key: state|district|block (normalized via alias)
-    if "__bkey" not in gdf.columns:
-
-        def _mk_bkey(r) -> str:
-            return (
-                f"{alias(r.get('state_name', ''))}|"
-                f"{alias(r.get('district_name', ''))}|"
-                f"{alias(r.get('block_name', ''))}"
-            )
-
-        gdf["__bkey"] = gdf.apply(_mk_bkey, axis=1)
+    gdf = _ensure_adm3_identity_columns(load_local_adm3(path, tolerance=tolerance))
 
     by_state = _featurecollections_by_state(
         gdf,
@@ -274,6 +365,34 @@ def build_adm3_geojson_by_state(
         keep_cols=["block_name", "district_name", "state_name", "__bkey", "geometry"],
     )
     return by_state
+
+
+@st.cache_data(ttl=3600)
+def build_adm3_geojson_by_district(
+    path: str,
+    tolerance: float,
+    mtime: float,
+) -> dict[str, dict]:
+    """
+    Build and cache an ADM3 FeatureCollection per normalized state|district key.
+
+    This is used by the block-mode render path to avoid patching an entire
+    state's worth of blocks when the sidebar is already narrowed to one
+    district.
+    """
+    _ = mtime  # used only to invalidate Streamlit's cache
+
+    gdf = _ensure_adm3_identity_columns(load_local_adm3(path, tolerance=tolerance))
+    gdf = gdf.copy()
+    state_key = gdf["state_name"].where(gdf["state_name"].notna(), "").astype(str).map(alias)
+    district_key = gdf["district_name"].where(gdf["district_name"].notna(), "").astype(str).map(alias)
+    gdf["__selector"] = state_key.str.cat(district_key, sep="|")
+
+    return _featurecollections_by_selector(
+        gdf,
+        selector_col="__selector",
+        keep_cols=["block_name", "district_name", "state_name", "__bkey", "geometry"],
+    )
 
 
 @st.cache_data(ttl=3600)
