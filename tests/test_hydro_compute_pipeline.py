@@ -523,6 +523,112 @@ def test_task_completion_marker_valid_dedupes_legacy_hydro_alias_outputs(
     assert CMP.task_completion_marker_valid(task) is True
 
 
+def test_task_completion_marker_uses_hydro_csv_identity_over_directory_name(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda level, state: ("/tmp/boundary.geojson", 123))
+
+    basin_name = "East flowing rivers between Krishna and Pennar Basin"
+    canonical = hydro_fs_token(basin_name)
+    stale_alias = "East_flowing_rivers_between_Krishna_and_Pennar_basin"
+    task = CMP.ProcessingTask(
+        metric_idx=0,
+        slug="tas_annual_mean",
+        model="ACCESS-CM2",
+        scenario="historical",
+        scenario_conf={},
+        task_id=0,
+        total_tasks=1,
+        level="basin",
+        state_name="hydro",
+        required_vars=("tas",),
+        common_years_hash="abc123",
+        scope_name="hydro",
+    )
+
+    for token in {canonical, stale_alias}:
+        out_dir = tmp_path / "processed" / "tas_annual_mean" / "hydro" / "basins" / token / "ACCESS-CM2" / "historical"
+        ensure_directory(out_dir)
+        write_csv(
+            pd.DataFrame({"year": [2030], "value": [1.0], "basin": [basin_name]}),
+            out_dir / f"{token}_yearly.csv",
+            index=False,
+        )
+        write_csv(
+            pd.DataFrame({"period": ["2030s"], "value": [1.0], "basin": [basin_name]}),
+            out_dir / f"{token}_periods.csv",
+            index=False,
+        )
+
+    CMP._write_task_completion_marker(task, output_meta={"yearly_file_count": 1, "period_file_count": 1})
+
+    assert CMP.task_completion_marker_valid(task) is True
+    status = CMP.task_completion_marker_status(task)
+    assert status.valid is True
+
+
+def test_sub_basin_task_completion_marker_uses_hydro_csv_identity_over_directory_name(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda level, state: ("/tmp/boundary.geojson", 123))
+
+    basin_name = "East flowing rivers between Godavari and Krishna Basin"
+    sub_basin_name = "East flowing rivers between Godavari and krishna"
+    basin_token = hydro_fs_token(basin_name)
+    sub_basin_token = hydro_fs_token(sub_basin_name)
+    stale_sub_basin_alias = "East_flowing_rivers_between_Godavari_and_Krishna"
+    task = CMP.ProcessingTask(
+        metric_idx=0,
+        slug="tas_annual_mean",
+        model="ACCESS-CM2",
+        scenario="historical",
+        scenario_conf={},
+        task_id=0,
+        total_tasks=1,
+        level="sub_basin",
+        state_name="hydro",
+        required_vars=("tas",),
+        common_years_hash="abc123",
+        scope_name="hydro",
+    )
+
+    for token in {sub_basin_token, stale_sub_basin_alias}:
+        out_dir = (
+            tmp_path
+            / "processed"
+            / "tas_annual_mean"
+            / "hydro"
+            / "sub_basins"
+            / basin_token
+            / token
+            / "ACCESS-CM2"
+            / "historical"
+        )
+        ensure_directory(out_dir)
+        write_csv(
+            pd.DataFrame(
+                {"year": [2030], "value": [1.0], "basin": [basin_name], "sub_basin": [sub_basin_name]}
+            ),
+            out_dir / f"{token}_yearly.csv",
+            index=False,
+        )
+        write_csv(
+            pd.DataFrame(
+                {"period": ["2030s"], "value": [1.0], "basin": [basin_name], "sub_basin": [sub_basin_name]}
+            ),
+            out_dir / f"{token}_periods.csv",
+            index=False,
+        )
+
+    CMP._write_task_completion_marker(task, output_meta={"yearly_file_count": 1, "period_file_count": 1})
+
+    assert CMP.task_completion_marker_valid(task) is True
+
+
 def test_build_processing_task_plan_marks_no_tasks_after_filters_per_metric(
     tmp_path: Path,
     monkeypatch,
@@ -668,6 +774,117 @@ def test_ensemble_output_count_counts_each_hydro_scenario_once(
         )
         == 3
     )
+
+
+def test_ensemble_completion_marker_uses_hydro_csv_identity_over_directory_name(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda level, state: ("/tmp/boundary.geojson", 123))
+    monkeypatch.setattr(CMP, "_hydro_ensemble_scope_from_coverage_qc", lambda *args, **kwargs: None)
+
+    basin_name = "East flowing rivers between Krishna and Pennar Basin"
+    canonical = hydro_fs_token(basin_name)
+    stale_alias = "East_flowing_rivers_between_Krishna_and_Pennar_basin"
+
+    for token in {canonical, stale_alias}:
+        out_dir = tmp_path / "processed" / "tas_annual_mean" / "hydro" / "basins" / "ensembles" / token / "historical"
+        ensure_directory(out_dir)
+        write_csv(
+            pd.DataFrame(
+                {
+                    "year": [2030],
+                    "ensemble_mean": [1.0],
+                    "basin": [basin_name],
+                }
+            ),
+            out_dir / f"{token}_yearly_ensemble.csv",
+            index=False,
+        )
+
+    CMP._write_ensemble_completion_marker(
+        slug="tas_annual_mean",
+        level="basin",
+        scope_name="hydro",
+        allowed_models=None,
+        allowed_scenarios=None,
+        expected_output_count=1,
+    )
+
+    assert CMP.ensemble_completion_marker_valid(
+        slug="tas_annual_mean",
+        level="basin",
+        scope_name="hydro",
+        allowed_models=None,
+        allowed_scenarios=None,
+    ) is True
+    status = CMP.ensemble_completion_marker_status(
+        slug="tas_annual_mean",
+        level="basin",
+        scope_name="hydro",
+        allowed_models=None,
+        allowed_scenarios=None,
+    )
+    assert status.valid is True
+
+
+def test_sub_basin_ensemble_completion_marker_uses_hydro_csv_identity_over_directory_name(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(CMP, "BASE_OUTPUT_ROOT", tmp_path / "processed")
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda level, state: ("/tmp/boundary.geojson", 123))
+    monkeypatch.setattr(CMP, "_hydro_ensemble_scope_from_coverage_qc", lambda *args, **kwargs: None)
+
+    basin_name = "East flowing rivers between Godavari and Krishna Basin"
+    sub_basin_name = "East flowing rivers between Godavari and krishna"
+    basin_token = hydro_fs_token(basin_name)
+    sub_basin_token = hydro_fs_token(sub_basin_name)
+    stale_sub_basin_alias = "East_flowing_rivers_between_Godavari_and_Krishna"
+
+    for token in {sub_basin_token, stale_sub_basin_alias}:
+        out_dir = (
+            tmp_path
+            / "processed"
+            / "tas_annual_mean"
+            / "hydro"
+            / "sub_basins"
+            / "ensembles"
+            / basin_token
+            / token
+            / "historical"
+        )
+        ensure_directory(out_dir)
+        write_csv(
+            pd.DataFrame(
+                {
+                    "year": [2030],
+                    "ensemble_mean": [1.0],
+                    "basin": [basin_name],
+                    "sub_basin": [sub_basin_name],
+                }
+            ),
+            out_dir / f"{token}_yearly_ensemble.csv",
+            index=False,
+        )
+
+    CMP._write_ensemble_completion_marker(
+        slug="tas_annual_mean",
+        level="sub_basin",
+        scope_name="hydro",
+        allowed_models=None,
+        allowed_scenarios=None,
+        expected_output_count=1,
+    )
+
+    assert CMP.ensemble_completion_marker_valid(
+        slug="tas_annual_mean",
+        level="sub_basin",
+        scope_name="hydro",
+        allowed_models=None,
+        allowed_scenarios=None,
+    ) is True
 
 
 def test_cleanup_compute_outputs_for_overwrite_removes_selected_slice_only(

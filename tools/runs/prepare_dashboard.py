@@ -591,6 +591,93 @@ def _evaluate_climate_post_run_status(
     )
 
 
+def _collect_climate_failure_diagnostics(
+    args: argparse.Namespace,
+    scope: ClimateRuntimeScope,
+) -> tuple[str, ...]:
+    """Return one concrete post-run failure explanation per metric/level."""
+    from tools.pipeline.compute_indices_multiprocess import (
+        build_processing_task_plan,
+        ensemble_completion_marker_status,
+        task_completion_marker_status,
+    )
+
+    admin_states = _resolve_admin_states(getattr(args, "state", None))
+    allowed_models = _split_csv_values(getattr(args, "models", None)) or None
+    allowed_scenarios = _split_csv_values(getattr(args, "scenarios", None)) or None
+    diagnostics: list[str] = []
+
+    for level in scope.levels:
+        readiness = scope.by_level.get(level)
+        if readiness is None:
+            continue
+
+        metrics_needing_explanation = _dedupe_keep_order(
+            list(readiness.compute_pending_metrics)
+            + list(readiness.masters_pending_metrics)
+            + list(readiness.optimized_pending_metrics)
+            + list(readiness.unrunnable_metrics)
+        )
+        if not metrics_needing_explanation:
+            continue
+
+        scope_names = _scope_names_for_level(level, admin_states)
+        for scope_name in scope_names:
+            task_plan = build_processing_task_plan(
+                metrics_filter=metrics_needing_explanation,
+                models_filter=allowed_models,
+                scenarios_filter=allowed_scenarios,
+                level=level,
+                state=scope_name,
+            )
+            tasks_by_metric: dict[str, list[Any]] = {}
+            for task in task_plan.tasks:
+                tasks_by_metric.setdefault(task.slug, []).append(task)
+
+            for metric in metrics_needing_explanation:
+                prefix = f"{level}/{metric}/{scope_name}"
+
+                if metric in readiness.unrunnable_metrics:
+                    reasons = readiness.unrunnable_reasons_by_metric.get(metric, ())
+                    diagnostics.append(
+                        f"{prefix}: unrunnable ({', '.join(reasons) or 'unknown_reason'})"
+                    )
+                    continue
+
+                for task in tasks_by_metric.get(metric, []):
+                    status = task_completion_marker_status(task)
+                    if not status.valid:
+                        detail = f" [{status.detail}]" if status.detail else ""
+                        diagnostics.append(
+                            f"{prefix}: compute marker invalid for {task.model}/{task.scenario}: "
+                            f"{status.reason}{detail}"
+                        )
+                        break
+                else:
+                    ensemble_status = ensemble_completion_marker_status(
+                        slug=metric,
+                        level=level,
+                        scope_name=scope_name,
+                        allowed_models=allowed_models,
+                        allowed_scenarios=allowed_scenarios,
+                    )
+                    if not ensemble_status.valid:
+                        detail = f" [{ensemble_status.detail}]" if ensemble_status.detail else ""
+                        diagnostics.append(
+                            f"{prefix}: ensemble marker invalid: {ensemble_status.reason}{detail}"
+                        )
+                        continue
+
+                    if metric in readiness.masters_pending_metrics:
+                        diagnostics.append(f"{prefix}: legacy master not ready")
+                        continue
+
+                    if metric in readiness.optimized_pending_metrics:
+                        diagnostics.append(f"{prefix}: optimized parity issue remains")
+
+    return tuple(_dedupe_keep_order(diagnostics))
+
+
 def _resolve_runtime_scope(
     bundle: str,
     args: argparse.Namespace,
@@ -1382,6 +1469,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             for message in post_status.informational_messages:
                 print(f"- {message}")
         if post_status.blocking:
+            diagnostics = _collect_climate_failure_diagnostics(args, post_scope)
+            if diagnostics:
+                print("POST-RUN CLIMATE FAILURE DETAILS")
+                for message in diagnostics:
+                    print(f"- {message}")
             return 1
         return rc
     plan = build_command_plan(args)

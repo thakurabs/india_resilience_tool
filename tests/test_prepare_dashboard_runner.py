@@ -620,6 +620,56 @@ def test_main_keeps_compute_pending_blocking_even_when_later_stages_are_skipped(
     assert rc == 1
 
 
+def test_main_prints_post_run_failure_diagnostics(
+    monkeypatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    scopes = [
+        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
+        ClimateRuntimeScope(
+            levels=("basin",),
+            by_level={
+                "basin": ClimateLevelReadiness(
+                    level="basin",
+                    selected_metrics=("tas_annual_mean",),
+                    runnable_metrics=("tas_annual_mean",),
+                    compute_pending_metrics=("tas_annual_mean",),
+                    masters_pending_metrics=("tas_annual_mean",),
+                    optimized_pending_metrics=("tas_annual_mean",),
+                    complete_metrics=(),
+                    unrunnable_metrics=(),
+                    unrunnable_reasons_by_metric={},
+                )
+            },
+            global_issues=(),
+        ),
+    ]
+
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: scopes.pop(0),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.build_climate_hazards_plan",
+        lambda *args, **kwargs: [PlannedCommand(label="noop", argv=["python", "-m", "noop"])],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard.execute_plan",
+        lambda *args, **kwargs: 0,
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
+        lambda *_args, **_kwargs: ("basin/tas_annual_mean/hydro: compute marker invalid for ACCESS-CM2/historical: compute_marker_output_count_mismatch",),
+    )
+
+    rc = main(["climate-hazards", "--level", "basin"])
+
+    captured = capsys.readouterr().out
+    assert rc == 1
+    assert "POST-RUN CLIMATE FAILURE DETAILS" in captured
+    assert "compute_marker_output_count_mismatch" in captured
+
+
 
 
 def test_climate_runtime_scope_passes_filter_scope_to_ensemble_marker_validation(monkeypatch) -> None:

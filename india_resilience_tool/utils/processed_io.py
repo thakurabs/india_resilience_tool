@@ -140,7 +140,10 @@ def remove_tree(path: Path) -> None:
 def glob_paths(directory: Path, pattern: str) -> list[Path]:
     """Glob inside a directory with Windows long-path support."""
     base = Path(directory)
-    matches = glob.glob(os.path.join(_windows_extended_length_path(base), pattern))
+    matches = glob.glob(
+        os.path.join(_windows_extended_length_path(base), pattern),
+        recursive=True,
+    )
     return sorted(Path(_strip_windows_extended_prefix(match)) for match in matches)
 
 

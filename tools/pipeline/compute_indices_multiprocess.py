@@ -89,6 +89,7 @@ from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
 from india_resilience_tool.utils.naming import hydro_fs_token
 from india_resilience_tool.utils.processed_io import (
     ensure_directory,
+    glob_paths,
     path_exists,
     read_csv,
     remove_tree,
@@ -3227,6 +3228,63 @@ def _canonical_hydro_unit_key(path: Path, *, level: AdminLevel, ensemble: bool) 
         return None
 
 
+def _hydro_unit_key_from_output_contents(
+    path: Path,
+    *,
+    level: AdminLevel,
+) -> str | tuple[str, str] | None:
+    """Return the canonical hydro unit key encoded by one output CSV's identity columns."""
+    identity_columns = {"basin", "sub_basin", "basin_name", "subbasin_name"}
+    try:
+        df = read_csv(path, usecols=lambda column: str(column) in identity_columns, nrows=1)
+    except Exception:
+        return None
+
+    if df.empty:
+        return None
+
+    row = df.iloc[0]
+    basin_value = next(
+        (
+            str(row.get(column)).strip()
+            for column in ("basin", "basin_name")
+            if column in df.columns and not _is_blank_like(row.get(column))
+        ),
+        "",
+    )
+    if not basin_value:
+        return None
+
+    if level == "basin":
+        return hydro_fs_token(basin_value)
+
+    sub_basin_value = next(
+        (
+            str(row.get(column)).strip()
+            for column in ("sub_basin", "subbasin_name")
+            if column in df.columns and not _is_blank_like(row.get(column))
+        ),
+        "",
+    )
+    if not sub_basin_value:
+        return None
+    return (hydro_fs_token(basin_value), hydro_fs_token(sub_basin_value))
+
+
+def _hydro_output_unit_key(
+    path: Path,
+    *,
+    level: AdminLevel,
+    ensemble: bool,
+) -> str | tuple[str, str] | None:
+    """Return the canonical hydro unit key for one output, preferring file contents over directory names."""
+    return _hydro_unit_key_from_output_contents(path, level=level) or _canonical_hydro_unit_key(
+        path,
+        level=level,
+        ensemble=ensemble,
+    )
+
+
 def _selected_values_or_all(values: Sequence[str] | None, fallback: Sequence[str]) -> tuple[str, ...]:
     selected = _normalize_filter_values(values)
     return selected if selected is not None else tuple(str(value).strip() for value in fallback)
@@ -3326,23 +3384,20 @@ def _task_output_file_counts(
         yearly_units: set[str] | set[tuple[str, str]] = set()
         period_units: set[str] | set[tuple[str, str]] = set()
 
-        for path in level_root.rglob("*_yearly.csv"):
-            try:
-                if path.parent.name != scenario or path.parents[1].name != model:
-                    continue
-            except IndexError:
-                continue
-            unit_key = _canonical_hydro_unit_key(path, level=level, ensemble=False)
+        if level == "basin":
+            yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
+            periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
+        else:
+            yearly_pattern = f"*/*/{model}/{scenario}/*_yearly.csv"
+            periods_pattern = f"*/*/{model}/{scenario}/*_periods.csv"
+
+        for path in glob_paths(level_root, yearly_pattern):
+            unit_key = _hydro_output_unit_key(path, level=level, ensemble=False)
             if unit_key is not None:
                 yearly_units.add(unit_key)
 
-        for path in level_root.rglob("*_periods.csv"):
-            try:
-                if path.parent.name != scenario or path.parents[1].name != model:
-                    continue
-            except IndexError:
-                continue
-            unit_key = _canonical_hydro_unit_key(path, level=level, ensemble=False)
+        for path in glob_paths(level_root, periods_pattern):
+            unit_key = _hydro_output_unit_key(path, level=level, ensemble=False)
             if unit_key is not None:
                 period_units.add(unit_key)
 
@@ -3378,6 +3433,7 @@ def _ensemble_output_count(
     ensembles_root = metric_root(slug) / scope_name / get_level_folder(level) / "ensembles"
     if not ensembles_root.exists():
         return 0
+    yearly_pattern = "**/*_yearly_ensemble.csv"
 
     allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
     eligible_units: set[str] | set[tuple[str, str]] | None = None
@@ -3391,12 +3447,12 @@ def _ensemble_output_count(
 
     if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
         output_units: set[tuple[str, str]] | set[tuple[tuple[str, str], str]] = set()
-        for path in ensembles_root.rglob("*_yearly_ensemble.csv"):
+        for path in glob_paths(ensembles_root, yearly_pattern):
             scenario_name = path.parent.name
             if allowed_scenarios_norm is not None and scenario_name not in allowed_scenarios_norm:
                 continue
 
-            unit_key = _canonical_hydro_unit_key(path, level=level, ensemble=True)
+            unit_key = _hydro_output_unit_key(path, level=level, ensemble=True)
             if unit_key is None:
                 continue
 
@@ -3407,7 +3463,7 @@ def _ensemble_output_count(
         return len(output_units)
 
     count = 0
-    for path in ensembles_root.rglob("*_yearly_ensemble.csv"):
+    for path in glob_paths(ensembles_root, yearly_pattern):
         scenario_name = path.parent.name
         if allowed_scenarios_norm is not None and scenario_name not in allowed_scenarios_norm:
             continue
@@ -4851,8 +4907,17 @@ def _write_marker_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def task_completion_marker_valid(task: ProcessingTask) -> bool:
-    """Return True when one compute task marker can safely skip rerun."""
+@dataclass(frozen=True)
+class MarkerValidationStatus:
+    """Explain whether one compute or ensemble marker is currently reusable."""
+
+    valid: bool
+    reason: str
+    detail: str = ""
+
+
+def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatus:
+    """Return validator status for one compute task marker."""
     marker_path = _task_marker_path(
         slug=task.slug,
         level=task.level,
@@ -4862,29 +4927,29 @@ def task_completion_marker_valid(task: ProcessingTask) -> bool:
     )
     payload = _load_marker_json(marker_path)
     if not payload:
-        return False
+        return MarkerValidationStatus(valid=False, reason="missing_compute_marker")
 
     boundary_path, boundary_mtime_ns = _boundary_signature(task.level, task.state_name)
     if int(payload.get("schema_version", -1)) != COMPUTE_MARKER_SCHEMA_VERSION:
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_schema_mismatch")
     if str(payload.get("slug", "")).strip() != task.slug:
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_slug_mismatch")
     if str(payload.get("level", "")).strip() != task.level:
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_level_mismatch")
     if str(payload.get("scope", "")).strip() != task.scope_name:
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_scope_mismatch")
     if str(payload.get("model", "")).strip() != task.model:
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_model_mismatch")
     if str(payload.get("scenario", "")).strip() != task.scenario:
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_scenario_mismatch")
     if tuple(payload.get("required_vars", [])) != tuple(task.required_vars):
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_required_vars_mismatch")
     if str(payload.get("common_years_hash", "")).strip() != task.common_years_hash:
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_common_years_mismatch")
     if str(payload.get("boundary_path", "")).strip() != boundary_path:
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_boundary_path_mismatch")
     if int(payload.get("boundary_mtime_ns", -1)) != int(boundary_mtime_ns):
-        return False
+        return MarkerValidationStatus(valid=False, reason="compute_marker_boundary_mtime_mismatch")
 
     yearly_expected = int(payload.get("yearly_file_count", -1))
     periods_expected = int(payload.get("period_file_count", -1))
@@ -4895,7 +4960,78 @@ def task_completion_marker_valid(task: ProcessingTask) -> bool:
         model=task.model,
         scenario=task.scenario,
     )
-    return yearly_actual == yearly_expected and periods_actual == periods_expected
+    if yearly_actual != yearly_expected or periods_actual != periods_expected:
+        return MarkerValidationStatus(
+            valid=False,
+            reason="compute_marker_output_count_mismatch",
+            detail=(
+                f"expected(yearly={yearly_expected}, periods={periods_expected}) "
+                f"actual(yearly={yearly_actual}, periods={periods_actual})"
+            ),
+        )
+
+    return MarkerValidationStatus(valid=True, reason="ok")
+
+
+def task_completion_marker_valid(task: ProcessingTask) -> bool:
+    """Return True when one compute task marker can safely skip rerun."""
+    return task_completion_marker_status(task).valid
+
+
+def ensemble_completion_marker_status(
+    *,
+    slug: str,
+    level: AdminLevel,
+    scope_name: str,
+    allowed_models: Sequence[str] | None = None,
+    allowed_scenarios: Sequence[str] | None = None,
+) -> MarkerValidationStatus:
+    """Return validator status for one ensemble marker."""
+    marker_path = _filter_aware_ensemble_marker_path(
+        slug=slug,
+        level=level,
+        scope_name=scope_name,
+        allowed_models=allowed_models,
+        allowed_scenarios=allowed_scenarios,
+    )
+    payload = _load_marker_json(marker_path)
+    if not payload:
+        return MarkerValidationStatus(valid=False, reason="missing_ensemble_marker")
+
+    boundary_path, boundary_mtime_ns = _boundary_signature(level, scope_name)
+    if int(payload.get("schema_version", -1)) != ENSEMBLE_MARKER_SCHEMA_VERSION:
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_schema_mismatch")
+    if str(payload.get("slug", "")).strip() != str(slug).strip():
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_slug_mismatch")
+    if str(payload.get("level", "")).strip() != str(level).strip():
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_level_mismatch")
+    if str(payload.get("scope", "")).strip() != str(scope_name).strip():
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_scope_mismatch")
+    if str(payload.get("boundary_path", "")).strip() != boundary_path:
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_boundary_path_mismatch")
+    if int(payload.get("boundary_mtime_ns", -1)) != int(boundary_mtime_ns):
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_boundary_mtime_mismatch")
+    if payload.get("filter_scope") != _ensemble_filter_scope_payload(
+        allowed_models=allowed_models,
+        allowed_scenarios=allowed_scenarios,
+    ):
+        return MarkerValidationStatus(valid=False, reason="ensemble_marker_filter_scope_mismatch")
+
+    expected = int(payload.get("expected_output_count", -1))
+    actual = _ensemble_output_count(
+        slug=slug,
+        level=level,
+        scope_name=scope_name,
+        allowed_models=allowed_models,
+        allowed_scenarios=allowed_scenarios,
+    )
+    if actual != expected:
+        return MarkerValidationStatus(
+            valid=False,
+            reason="ensemble_marker_output_count_mismatch",
+            detail=f"expected={expected} actual={actual}",
+        )
+    return MarkerValidationStatus(valid=True, reason="ok")
 
 
 def ensemble_completion_marker_valid(
@@ -4907,45 +5043,13 @@ def ensemble_completion_marker_valid(
     allowed_scenarios: Sequence[str] | None = None,
 ) -> bool:
     """Return True when one ensemble marker can safely skip rebuild."""
-    marker_path = _filter_aware_ensemble_marker_path(
+    return ensemble_completion_marker_status(
         slug=slug,
         level=level,
         scope_name=scope_name,
         allowed_models=allowed_models,
         allowed_scenarios=allowed_scenarios,
-    )
-    payload = _load_marker_json(marker_path)
-    if not payload:
-        return False
-
-    boundary_path, boundary_mtime_ns = _boundary_signature(level, scope_name)
-    if int(payload.get("schema_version", -1)) != ENSEMBLE_MARKER_SCHEMA_VERSION:
-        return False
-    if str(payload.get("slug", "")).strip() != str(slug).strip():
-        return False
-    if str(payload.get("level", "")).strip() != str(level).strip():
-        return False
-    if str(payload.get("scope", "")).strip() != str(scope_name).strip():
-        return False
-    if str(payload.get("boundary_path", "")).strip() != boundary_path:
-        return False
-    if int(payload.get("boundary_mtime_ns", -1)) != int(boundary_mtime_ns):
-        return False
-    if payload.get("filter_scope") != _ensemble_filter_scope_payload(
-        allowed_models=allowed_models,
-        allowed_scenarios=allowed_scenarios,
-    ):
-        return False
-
-    expected = int(payload.get("expected_output_count", -1))
-    actual = _ensemble_output_count(
-        slug=slug,
-        level=level,
-        scope_name=scope_name,
-        allowed_models=allowed_models,
-        allowed_scenarios=allowed_scenarios,
-    )
-    return actual == expected
+    ).valid
 
 
 def _write_task_completion_marker(task: ProcessingTask, *, output_meta: Optional[dict[str, int]] = None) -> None:
