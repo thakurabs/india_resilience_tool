@@ -11,6 +11,7 @@ The current working tree supports:
 - a default climate-hazard landing / discovery surface that opens on an India state-level bundle map and drills down India -> state -> district before handing off to the detailed workflow
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
 - type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
+- a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff
 - map, rankings, and details flows for district, block, basin, and sub-basin
 - drill-down-only nationwide behavior for the finest-grain views:
   - `Admin -> Block` requires a selected state

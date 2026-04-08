@@ -8,7 +8,41 @@ to focused modules.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any, Callable, Mapping, Optional, Tuple
+
+
+def _queue_pending_map_navigation(
+    *,
+    session_state: Any,
+    level: str,
+    clicked_district: Optional[str],
+    clicked_state: Optional[str],
+    selected_state: str,
+    selected_district: str,
+    analysis_mode: str,
+) -> bool:
+    """Queue a click-driven admin geography change and report whether a rerun is needed."""
+    if "Multi" in str(analysis_mode):
+        return False
+
+    level_norm = str(level).strip().lower()
+    if level_norm not in {"district", "block"}:
+        return False
+
+    next_district = str(clicked_district or "").strip()
+    if not next_district:
+        return False
+
+    next_state = str(clicked_state or selected_state or "").strip() or "All"
+    current_state = str(selected_state or "").strip() or "All"
+    current_district = str(selected_district or "").strip() or "All"
+    if next_state == current_state and next_district == current_district:
+        return False
+
+    session_state["pending_selected_state"] = next_state
+    session_state["pending_selected_district"] = next_district
+    return True
 
 
 def render_left_panel(
@@ -92,24 +126,26 @@ def render_left_panel(
             clicked_district: Optional[str] = None
             clicked_state: Optional[str] = None
             if m is not None and not blocked_message:
-                returned, clicked_district, clicked_state = render_map_view(
-                    m=m,
-                    variable_slug=variable_slug,
-                    map_mode=map_mode,
-                    sel_scenario=sel_scenario,
-                    sel_period=sel_period,
-                    sel_stat=sel_stat,
-                    selected_state=selected_state,
-                    selected_district=selected_district,
-                    selected_block=selected_block,
-                    selected_basin=selected_basin,
-                    selected_subbasin=selected_subbasin,
-                    map_width=map_width,
-                    map_height=map_height,
-                    legend_block_html=legend_block_html,
-                    perf_section=perf_section,
-                    level=level,
-                )
+                ctx = perf_section("left_panel: render_map_view") if perf_section is not None else nullcontext()
+                with ctx:
+                    returned, clicked_district, clicked_state = render_map_view(
+                        m=m,
+                        variable_slug=variable_slug,
+                        map_mode=map_mode,
+                        sel_scenario=sel_scenario,
+                        sel_period=sel_period,
+                        sel_stat=sel_stat,
+                        selected_state=selected_state,
+                        selected_district=selected_district,
+                        selected_block=selected_block,
+                        selected_basin=selected_basin,
+                        selected_subbasin=selected_subbasin,
+                        map_width=map_width,
+                        map_height=map_height,
+                        legend_block_html=legend_block_html,
+                        perf_section=perf_section,
+                        level=level,
+                    )
             elif not blocked_message:
                 st.info("No map available for this selection.")
 
@@ -135,10 +171,16 @@ def render_left_panel(
                         level=level,
                     )
 
-            if clicked_district and str(level).strip().lower() in {"district", "block"}:
-                st.session_state["pending_selected_district"] = clicked_district
-                if clicked_state:
-                    st.session_state["pending_selected_state"] = clicked_state
+            if _queue_pending_map_navigation(
+                session_state=st.session_state,
+                level=level,
+                clicked_district=clicked_district,
+                clicked_state=clicked_state,
+                selected_state=selected_state,
+                selected_district=selected_district,
+                analysis_mode=analysis_mode,
+            ):
+                st.rerun()
 
         # ---------- VIEW 2: RANKINGS ----------
         elif view == VIEW_RANKINGS:

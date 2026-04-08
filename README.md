@@ -145,6 +145,8 @@ Open: `http://localhost:8501`
 Launch behavior:
 - the app now opens into a climate-hazard discovery landing surface by default
 - the landing search bar filters state and district suggestions as you type
+- the Deep Dive screen includes a top-right `Back to Glance` action
+- `Back to Glance` restores the current climate/admin district context when compatible, and otherwise reopens the last stored glance context
 - use `Deep Dive` from the landing page to enter the existing detailed ribbon/sidebar workflow
 
 Performance note:

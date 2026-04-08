@@ -62,7 +62,10 @@ def run_app() -> None:
         load_local_subbasin,
     )
     from india_resilience_tool.app.geography_controls import render_geography_and_analysis_focus
-    from india_resilience_tool.app.landing_runtime import render_landing_page
+    from india_resilience_tool.app.landing_runtime import (
+        build_glance_handoff_from_deep_dive,
+        render_landing_page,
+    )
     from india_resilience_tool.app.master_freshness import (
         master_needs_rebuild,
         state_profile_files_missing,
@@ -225,7 +228,16 @@ def run_app() -> None:
 
         perf_panel_placeholder = st.empty()
 
-    st.title("India Resilience Tool")
+    header_col, action_col = st.columns([8.5, 1.5])
+    with header_col:
+        st.title("India Resilience Tool")
+    with action_col:
+        st.write("")
+        if st.button("Back to Glance", key="btn_back_to_glance", use_container_width=True):
+            updates = build_glance_handoff_from_deep_dive(st.session_state)
+            for key, value in updates.items():
+                st.session_state[key] = value
+            st.rerun()
 
     # Pilot state default
     PILOT_STATE = os.getenv("IRT_PILOT_STATE", "Telangana")

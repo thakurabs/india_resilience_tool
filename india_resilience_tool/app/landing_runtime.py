@@ -223,6 +223,75 @@ def build_deep_dive_handoff(
     }
 
 
+def build_glance_handoff_from_deep_dive(
+    detailed_state: Mapping[str, object],
+) -> dict[str, object]:
+    """
+    Build the reverse handoff from deep dive back to the landing/glance view.
+
+    Contract:
+    - Always re-enable landing mode.
+    - Reset landing search widget state so a stale selection is not reapplied.
+    - If the current deep-dive context is compatible with landing, mirror that
+      context back into landing session state.
+    - Otherwise preserve the last known landing context already stored in
+      session state.
+    """
+    updates: dict[str, object] = {
+        "landing_active": True,
+        "landing_search_selection": None,
+        "landing_search_last_applied": None,
+        "landing_search_reset_pending": True,
+    }
+
+    spatial_family = str(detailed_state.get("spatial_family") or "").strip().lower()
+    admin_level = str(detailed_state.get("admin_level") or "").strip().lower()
+    selected_pillar = str(detailed_state.get("selected_pillar") or "").strip()
+    selected_bundle = str(detailed_state.get("selected_bundle") or "").strip()
+    sel_scenario = str(detailed_state.get("sel_scenario") or "").strip()
+    sel_period = str(detailed_state.get("sel_period") or "").strip()
+
+    if not (
+        spatial_family == "admin"
+        and admin_level == "district"
+        and selected_pillar == "Climate Hazards"
+        and selected_bundle
+        and sel_scenario
+        and sel_period
+    ):
+        return updates
+
+    selected_state = str(detailed_state.get("selected_state") or "").strip()
+    selected_district = str(detailed_state.get("selected_district") or "").strip()
+    landing_period = canonical_period_label(sel_period)
+
+    updates.update(
+        {
+            "landing_bundle": selected_bundle,
+            "landing_scenario": sel_scenario,
+            "landing_period": landing_period,
+            "landing_context_pair": (sel_scenario, landing_period),
+        }
+    )
+
+    if selected_state == "All" or not selected_state:
+        updates["landing_focus_level"] = "india"
+        updates["landing_selected_state"] = None
+        updates["landing_selected_district"] = None
+        return updates
+
+    if selected_district == "All" or not selected_district:
+        updates["landing_focus_level"] = "state"
+        updates["landing_selected_state"] = selected_state
+        updates["landing_selected_district"] = None
+        return updates
+
+    updates["landing_focus_level"] = "district"
+    updates["landing_selected_state"] = selected_state
+    updates["landing_selected_district"] = selected_district
+    return updates
+
+
 def _landing_bundle_domains() -> list[str]:
     """Return the supported landing bundles in a stable UX order."""
     climate_domains = set(

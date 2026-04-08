@@ -206,15 +206,19 @@ def build_folium_map_for_selection(
     prop_gdf = display_gdf if getattr(display_gdf, "empty", False) is False else merged
     feature_key_col = "__bkey" if level_norm == "block" else "__key"
 
-    props_map, _value_cols, _text_cols = build_props_map_from_gdf(
-        prop_gdf,
-        level=level_norm,
-        alias_fn=alias_fn,
-        feature_key_col=feature_key_col,
-        metric_col=metric_col,
-        map_value_col=map_value_col,
-    )
-    prop_signature = props_map_signature(props_map)
+    ctx = perf_section("map: build props map") if perf_section is not None else nullcontext()
+    with ctx:
+        props_map, _value_cols, _text_cols = build_props_map_from_gdf(
+            prop_gdf,
+            level=level_norm,
+            alias_fn=alias_fn,
+            feature_key_col=feature_key_col,
+            metric_col=metric_col,
+            map_value_col=map_value_col,
+        )
+    ctx = perf_section("map: props signature") if perf_section is not None else nullcontext()
+    with ctx:
+        prop_signature = props_map_signature(props_map)
     patched_cache_key = (
         "patched_fc",
         *render_signature,
@@ -225,14 +229,16 @@ def build_folium_map_for_selection(
     patched_fc_cache = _patched_fc_cache()
     cached_fc = patched_fc_cache.get(patched_cache_key)
     if cached_fc is None:
-        fc = clone_featurecollection_for_patch(base_fc)
-        fc = patch_fc_properties(
-            fc,
-            level=level_norm,
-            alias_fn=alias_fn,
-            feature_key_col=feature_key_col,
-            props_map=props_map,
-        )
+        ctx = perf_section("map: patch featurecollection [cache_miss]") if perf_section is not None else nullcontext()
+        with ctx:
+            fc = clone_featurecollection_for_patch(base_fc)
+            fc = patch_fc_properties(
+                fc,
+                level=level_norm,
+                alias_fn=alias_fn,
+                feature_key_col=feature_key_col,
+                props_map=props_map,
+            )
         patched_fc_cache[patched_cache_key] = clone_featurecollection_for_patch(fc)
         while len(patched_fc_cache) > 24:
             patched_fc_cache.pop(next(iter(patched_fc_cache)))

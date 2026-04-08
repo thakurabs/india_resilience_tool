@@ -1039,48 +1039,50 @@ def render_map_view(
     if not isinstance(returned, dict):
         returned = {}
 
-    level_norm = str(level).strip().lower()
-    clicked_district: Optional[str] = None
-    clicked_state: Optional[str] = None
-    clicked_block: Optional[str] = None
+    extract_ctx = perf_section("map: extract click payload") if perf_section is not None else nullcontext()
+    with extract_ctx:
+        level_norm = str(level).strip().lower()
+        clicked_district: Optional[str] = None
+        clicked_state: Optional[str] = None
+        clicked_block: Optional[str] = None
 
-    if level_norm == "state":
-        clicked_state = extract_clicked_state(returned)
-        st.session_state.pop("clicked_block", None)
-        st.session_state.pop("clicked_basin_name", None)
-        st.session_state.pop("clicked_basin_id", None)
-        st.session_state.pop("clicked_subbasin_name", None)
-        st.session_state.pop("clicked_subbasin_id", None)
-    elif level_norm == "block":
-        clicked_district, clicked_state = extract_clicked_district_state(returned)
-        b, d, s = extract_clicked_block_district_state(returned)
-        clicked_block = b
-        clicked_district = d or clicked_district
-        clicked_state = s or clicked_state
-        st.session_state["clicked_block"] = clicked_block
-    elif level_norm == "basin":
-        clicked_district, clicked_state = extract_clicked_district_state(returned)
-        st.session_state.pop("clicked_block", None)
-        basin_name, basin_id = extract_clicked_basin(returned)
-        st.session_state["clicked_basin_name"] = basin_name
-        st.session_state["clicked_basin_id"] = basin_id
-        st.session_state.pop("clicked_subbasin_name", None)
-        st.session_state.pop("clicked_subbasin_id", None)
-    else:
-        clicked_district, clicked_state = extract_clicked_district_state(returned)
-        if "clicked_block" in st.session_state:
-            st.session_state.pop("clicked_block")
-        if level_norm == "sub_basin":
-            subbasin_name, subbasin_id, basin_name, basin_id = extract_clicked_subbasin(returned)
-            st.session_state["clicked_basin_name"] = basin_name
-            st.session_state["clicked_basin_id"] = basin_id
-            st.session_state["clicked_subbasin_name"] = subbasin_name
-            st.session_state["clicked_subbasin_id"] = subbasin_id
-        else:
+        if level_norm == "state":
+            clicked_state = extract_clicked_state(returned)
+            st.session_state.pop("clicked_block", None)
             st.session_state.pop("clicked_basin_name", None)
             st.session_state.pop("clicked_basin_id", None)
             st.session_state.pop("clicked_subbasin_name", None)
             st.session_state.pop("clicked_subbasin_id", None)
+        elif level_norm == "block":
+            clicked_district, clicked_state = extract_clicked_district_state(returned)
+            b, d, s = extract_clicked_block_district_state(returned)
+            clicked_block = b
+            clicked_district = d or clicked_district
+            clicked_state = s or clicked_state
+            st.session_state["clicked_block"] = clicked_block
+        elif level_norm == "basin":
+            clicked_district, clicked_state = extract_clicked_district_state(returned)
+            st.session_state.pop("clicked_block", None)
+            basin_name, basin_id = extract_clicked_basin(returned)
+            st.session_state["clicked_basin_name"] = basin_name
+            st.session_state["clicked_basin_id"] = basin_id
+            st.session_state.pop("clicked_subbasin_name", None)
+            st.session_state.pop("clicked_subbasin_id", None)
+        else:
+            clicked_district, clicked_state = extract_clicked_district_state(returned)
+            if "clicked_block" in st.session_state:
+                st.session_state.pop("clicked_block")
+            if level_norm == "sub_basin":
+                subbasin_name, subbasin_id, basin_name, basin_id = extract_clicked_subbasin(returned)
+                st.session_state["clicked_basin_name"] = basin_name
+                st.session_state["clicked_basin_id"] = basin_id
+                st.session_state["clicked_subbasin_name"] = subbasin_name
+                st.session_state["clicked_subbasin_id"] = subbasin_id
+            else:
+                st.session_state.pop("clicked_basin_name", None)
+                st.session_state.pop("clicked_basin_id", None)
+                st.session_state.pop("clicked_subbasin_name", None)
+                st.session_state.pop("clicked_subbasin_id", None)
 
     return returned, clicked_district, clicked_state
 

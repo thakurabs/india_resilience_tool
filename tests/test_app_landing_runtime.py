@@ -17,6 +17,7 @@ from india_resilience_tool.app.landing_runtime import (
     _intersect_bundle_scenario_period_pairs,
     apply_landing_back,
     build_deep_dive_handoff,
+    build_glance_handoff_from_deep_dive,
     ensure_landing_state,
     set_landing_focus_district,
     set_landing_focus_india,
@@ -166,6 +167,117 @@ def test_build_deep_dive_handoff_requires_non_empty_metric_slug() -> None:
             bundle_domain="Heat Risk",
             metric_slug="",
         )
+
+
+def test_build_glance_handoff_from_deep_dive_maps_compatible_district_context() -> None:
+    detailed_state = {
+        "spatial_family": "admin",
+        "admin_level": "district",
+        "selected_pillar": "Climate Hazards",
+        "selected_bundle": "Heat Risk",
+        "sel_scenario": "ssp585",
+        "sel_period": "2040-2060",
+        "selected_state": "Telangana",
+        "selected_district": "Nalgonda",
+    }
+
+    handoff = build_glance_handoff_from_deep_dive(detailed_state)
+
+    assert handoff["landing_active"] is True
+    assert handoff["landing_bundle"] == "Heat Risk"
+    assert handoff["landing_scenario"] == "ssp585"
+    assert handoff["landing_period"] == "2040-2060"
+    assert handoff["landing_context_pair"] == ("ssp585", "2040-2060")
+    assert handoff["landing_focus_level"] == "district"
+    assert handoff["landing_selected_state"] == "Telangana"
+    assert handoff["landing_selected_district"] == "Nalgonda"
+    assert handoff["landing_search_selection"] is None
+    assert handoff["landing_search_last_applied"] is None
+    assert handoff["landing_search_reset_pending"] is True
+
+
+def test_build_glance_handoff_from_deep_dive_maps_compatible_state_context() -> None:
+    detailed_state = {
+        "spatial_family": "admin",
+        "admin_level": "district",
+        "selected_pillar": "Climate Hazards",
+        "selected_bundle": "Heat Risk",
+        "sel_scenario": "ssp585",
+        "sel_period": "2040-2060",
+        "selected_state": "Telangana",
+        "selected_district": "All",
+    }
+
+    handoff = build_glance_handoff_from_deep_dive(detailed_state)
+
+    assert handoff["landing_focus_level"] == "state"
+    assert handoff["landing_selected_state"] == "Telangana"
+    assert handoff["landing_selected_district"] is None
+
+
+def test_build_glance_handoff_from_deep_dive_maps_compatible_india_context() -> None:
+    detailed_state = {
+        "spatial_family": "admin",
+        "admin_level": "district",
+        "selected_pillar": "Climate Hazards",
+        "selected_bundle": "Heat Risk",
+        "sel_scenario": "ssp585",
+        "sel_period": "2040-2060",
+        "selected_state": "All",
+        "selected_district": "All",
+    }
+
+    handoff = build_glance_handoff_from_deep_dive(detailed_state)
+
+    assert handoff["landing_focus_level"] == "india"
+    assert handoff["landing_selected_state"] is None
+    assert handoff["landing_selected_district"] is None
+
+
+def test_build_glance_handoff_from_deep_dive_preserves_prior_landing_state_for_hydro() -> None:
+    detailed_state = {
+        "spatial_family": "hydro",
+        "admin_level": "basin",
+        "selected_pillar": "Climate Hazards",
+        "selected_bundle": "Heat Risk",
+        "sel_scenario": "ssp585",
+        "sel_period": "2040-2060",
+        "landing_bundle": "Drought Risk",
+        "landing_scenario": "ssp245",
+        "landing_period": "2020-2040",
+        "landing_focus_level": "state",
+        "landing_selected_state": "Maharashtra",
+        "landing_selected_district": None,
+    }
+
+    handoff = build_glance_handoff_from_deep_dive(detailed_state)
+
+    assert handoff == {
+        "landing_active": True,
+        "landing_search_selection": None,
+        "landing_search_last_applied": None,
+        "landing_search_reset_pending": True,
+    }
+
+
+def test_build_glance_handoff_from_deep_dive_preserves_landing_ui_state_when_incompatible() -> None:
+    detailed_state = {
+        "spatial_family": "admin",
+        "admin_level": "district",
+        "selected_pillar": "Exposure",
+        "selected_bundle": "Population",
+        "sel_scenario": "snapshot",
+        "sel_period": "2025",
+        "landing_tab": "Compare",
+        "landing_compare_selection": ["Telangana"],
+    }
+
+    handoff = build_glance_handoff_from_deep_dive(detailed_state)
+
+    assert "landing_tab" not in handoff
+    assert "landing_compare_selection" not in handoff
+    assert handoff["landing_active"] is True
+    assert handoff["landing_search_reset_pending"] is True
 
 
 def test_intersect_bundle_scenario_period_pairs_uses_required_metric_intersection() -> None:
