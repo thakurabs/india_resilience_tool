@@ -76,4 +76,5 @@ processed/
 # --------------------------------
 # Python files
 # --------------------------------
-mouse_nudge.py 
+mouse_nudge.py
+/wip_agent/

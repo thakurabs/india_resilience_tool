@@ -8,6 +8,9 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 - **Hydro**: basin, sub-basin
 
 The current working tree supports:
+- a default climate-hazard landing / discovery surface that opens on an India state-level bundle map and drills down India -> state -> district before handing off to the detailed workflow
+- explicit state-click handling on the India overview map and validated district-click handling within state focus
+- type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
 - map, rankings, and details flows for district, block, basin, and sub-basin
 - drill-down-only nationwide behavior for the finest-grain views:
   - `Admin -> Block` requires a selected state
@@ -120,6 +123,7 @@ Aqueduct methodology note:
 
 | File | Purpose |
 |------|---------|
+| `bundle_scores.py` | Streamlit-free landing bundle-score normalization, aggregation, and driver helpers |
 | `__init__.py` | Package marker |
 | `map_enrichment.py` | Streamlit-free map enrichment helpers: baseline/delta, ranking, tooltip prep |
 | `metrics.py` | Risk-class and percentile/ranking helpers |
@@ -140,6 +144,7 @@ Aqueduct methodology note:
 | `geography.py` | Filesystem-backed admin geography discovery helpers |
 | `geography_controls.py` | Sidebar geography + analysis-focus controls for admin and hydro |
 | `help_text.py` | Tooltip/help-text helpers for ribbon widgets |
+| `landing_runtime.py` | Climate-hazard landing/discovery orchestrator, state transitions, and Deep Dive handoff |
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
 | `main.py` | Package Streamlit entrypoint |
 | `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
@@ -163,7 +168,7 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `details_panel.py` | Render the single-unit details panel and crosswalk context/actions |
-| `map_view.py` | Render Folium map and extract click payloads |
+| `map_view.py` | Render Folium map and extract level-aware click payloads, including landing state clicks |
 | `rankings_view.py` | Rankings table rendering and portfolio add flows |
 | `state_summary_view.py` | State summary view for admin-focused overview flows |
 

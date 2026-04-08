@@ -62,6 +62,7 @@ def run_app() -> None:
         load_local_subbasin,
     )
     from india_resilience_tool.app.geography_controls import render_geography_and_analysis_focus
+    from india_resilience_tool.app.landing_runtime import render_landing_page
     from india_resilience_tool.app.master_freshness import (
         master_needs_rebuild,
         state_profile_files_missing,
@@ -157,6 +158,28 @@ def run_app() -> None:
     RIVER_REACHES_PARQUET = optimized_river_reaches if optimized_river_reaches.exists() else RIVER_REACHES_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
+
+    if bool(st.session_state.get("landing_active", False)):
+        if not ADM2_GEOJSON.exists():
+            st.error(
+                f"ADM2 geojson not found at {ADM2_GEOJSON}. Place your districts_4326.geojson at this path."
+            )
+            st.stop()
+
+        adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+        if "__key" not in adm2.columns and "district_name" in adm2.columns:
+            adm2["__key"] = adm2["district_name"].map(alias)
+
+        adm1 = build_adm1_from_adm2(adm2)
+        with st.spinner("Preparing landing geography..."):
+            adm2 = enrich_adm2_with_state_names(adm2, adm1)
+
+        render_landing_page(
+            adm1=adm1,
+            adm2=adm2,
+            data_dir=DATA_DIR,
+        )
+        return
 
     with st.sidebar:
         render_sidebar_branding(logo_path=LOGO_PATH)

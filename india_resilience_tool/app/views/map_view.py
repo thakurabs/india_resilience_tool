@@ -472,6 +472,29 @@ def extract_clicked_district_state(ret: Optional[Mapping[str, Any]]) -> Tuple[Op
     return None, None
 
 
+def extract_clicked_state(ret: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """
+    Extract a clicked state name from an st_folium return payload.
+
+    The landing India overview uses state polygons, so this helper scans the
+    common state-like property keys and returns the first non-empty match.
+    """
+    if not ret:
+        return None
+
+    for props in _iter_clicked_payloads(ret):
+        key_name = props.get("__state_key")
+        display_name = props.get("state_name") or props.get("shapeName")
+        if key_name and display_name:
+            return str(display_name).strip()
+        for pk in ("state_name", "shapeName", "name", "NAME", "SHAPE_NAME"):
+            value = props.get(pk)
+            if value:
+                return str(value).strip()
+
+    return None
+
+
 def extract_clicked_basin(ret: Optional[Mapping[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
     """Extract `(basin_name, basin_id)` from an st_folium return payload."""
     for props in _iter_clicked_payloads(ret):
@@ -566,18 +589,56 @@ def extract_click_coordinates(ret: Optional[Mapping[str, Any]]) -> Tuple[Optiona
     """
     if not ret:
         return None, None
-    
-    last_click = ret.get("last_object_clicked") or ret.get("last_clicked")
-    if isinstance(last_click, dict):
+
+    for key in ("last_clicked", "last_object_clicked", "last_active_drawing", "last_object"):
+        last_click = ret.get(key)
+        if not isinstance(last_click, dict):
+            continue
         lat = last_click.get("lat")
         lng = last_click.get("lng") or last_click.get("lon")
         if lat is not None and lng is not None:
             try:
                 return float(lat), float(lng)
             except (TypeError, ValueError):
-                pass
-    
+                continue
+
     return None, None
+
+
+def find_state_at_coordinates(
+    merged: Any,  # GeoDataFrame
+    lat: float,
+    lon: float,
+) -> Optional[str]:
+    """
+    Find state containing or nearest to the given coordinates.
+
+    Args:
+        merged: GeoDataFrame with state geometry and `shapeName`/`state_name`.
+        lat: Latitude.
+        lon: Longitude.
+
+    Returns:
+        Canonical state display name if found else None.
+    """
+    from shapely.geometry import Point
+
+    try:
+        pt = Point(float(lon), float(lat))
+        mask = merged.geometry.contains(pt)
+        if mask.any():
+            row = merged[mask].iloc[0]
+        else:
+            dists = merged.geometry.centroid.distance(pt)
+            row = merged.loc[dists.idxmin()]
+
+        state_name = str(row.get("shapeName") or row.get("state_name") or "").strip()
+        if state_name:
+            return state_name
+    except Exception:
+        pass
+
+    return None
 
 
 def find_district_at_coordinates(
@@ -792,7 +853,7 @@ def render_map_view(
       - Uses a deterministic st_folium key tied to variable/scenario/period/stat and selection
       - Adds portfolio-mode point markers from session_state if present
       - Adds portfolio legend in portfolio mode
-      - Returns the st_folium payload and extracted clicked (district, state)
+      - Returns the st_folium payload and extracted clicked geography for the requested level
 
     Args:
         m: Pre-built folium.Map (including GeoJson layer, styles, etc.)
@@ -947,7 +1008,7 @@ def render_map_view(
                     m,
                     width=map_width,
                     height=map_height,
-                    returned_objects=["last_object_clicked"],
+                    returned_objects=["last_object_clicked", "last_clicked", "last_active_drawing"],
                     use_container_width=True,
                     key=map_key,
                 )
@@ -966,7 +1027,7 @@ def render_map_view(
                 m,
                 width=map_width,
                 height=map_height,
-                returned_objects=["last_object_clicked"],
+                returned_objects=["last_object_clicked", "last_clicked", "last_active_drawing"],
                 use_container_width=False,
                 key=map_key,
             )
@@ -978,19 +1039,27 @@ def render_map_view(
     if not isinstance(returned, dict):
         returned = {}
 
-    # Default (district) click extraction
-    clicked_district, clicked_state = extract_clicked_district_state(returned)
-
-    # Block-aware click extraction (stores clicked_block in session_state)
-    clicked_block: Optional[str] = None
     level_norm = str(level).strip().lower()
-    if level_norm == "block":
+    clicked_district: Optional[str] = None
+    clicked_state: Optional[str] = None
+    clicked_block: Optional[str] = None
+
+    if level_norm == "state":
+        clicked_state = extract_clicked_state(returned)
+        st.session_state.pop("clicked_block", None)
+        st.session_state.pop("clicked_basin_name", None)
+        st.session_state.pop("clicked_basin_id", None)
+        st.session_state.pop("clicked_subbasin_name", None)
+        st.session_state.pop("clicked_subbasin_id", None)
+    elif level_norm == "block":
+        clicked_district, clicked_state = extract_clicked_district_state(returned)
         b, d, s = extract_clicked_block_district_state(returned)
         clicked_block = b
         clicked_district = d or clicked_district
         clicked_state = s or clicked_state
         st.session_state["clicked_block"] = clicked_block
     elif level_norm == "basin":
+        clicked_district, clicked_state = extract_clicked_district_state(returned)
         st.session_state.pop("clicked_block", None)
         basin_name, basin_id = extract_clicked_basin(returned)
         st.session_state["clicked_basin_name"] = basin_name
@@ -998,6 +1067,7 @@ def render_map_view(
         st.session_state.pop("clicked_subbasin_name", None)
         st.session_state.pop("clicked_subbasin_id", None)
     else:
+        clicked_district, clicked_state = extract_clicked_district_state(returned)
         if "clicked_block" in st.session_state:
             st.session_state.pop("clicked_block")
         if level_norm == "sub_basin":

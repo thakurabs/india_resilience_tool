@@ -14,6 +14,13 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 ## Current capabilities
 
 ### Core dashboard
+- Default landing discovery surface:
+  - launches into an India state-level climate-hazard screening map
+  - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
+  - supports India -> state -> district drill-down before entering Deep Dive
+  - uses explicit state clicks at India overview and district clicks within the selected state
+  - top-bar geography search provides type-to-filter state and district suggestions
+  - Deep Dive preserves current bundle, scenario-period, and geography and opens the existing detailed workflow
 - Spatial-family selector: `Admin` or `Hydro`
 - Level selector:
   - Admin: `District` / `Block`
@@ -134,6 +141,11 @@ streamlit run india_resilience_tool/app/main.py
 ```
 
 Open: `http://localhost:8501`
+
+Launch behavior:
+- the app now opens into a climate-hazard discovery landing surface by default
+- the landing search bar filters state and district suggestions as you type
+- use `Deep Dive` from the landing page to enter the existing detailed ribbon/sidebar workflow
 
 Performance note:
 - the dashboard now reads the compact `processed_optimised/` runtime bundle by default
