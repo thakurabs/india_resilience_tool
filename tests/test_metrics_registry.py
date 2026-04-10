@@ -77,6 +77,59 @@ def test_wbd_metrics_registered() -> None:
     assert humid.value_col == "wbd_le_6_days"
 
 
+def test_tropical_nights_gt25_metric_is_registered_for_heat_risk() -> None:
+    assert "tasmin_tropical_nights_gt25" in METRICS_BY_SLUG
+
+    metric = METRICS_BY_SLUG["tasmin_tropical_nights_gt25"]
+    assert metric.value_col == "tropical_nights_gt_25C"
+    assert metric.params["thresh_k"] == 25.0 + 273.15
+
+    heat_risk_metrics = set(get_metrics_for_bundle("Heat Risk", spatial_family="admin", level="district"))
+    assert "tasmin_tropical_nights_gt25" in heat_risk_metrics
+    assert "tasmin_tropical_nights_gt20" not in heat_risk_metrics
+
+
+def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
+    assert "twb_summer_mean" in METRICS_BY_SLUG
+    assert "tasmin_tropical_nights_gt28" in METRICS_BY_SLUG
+    assert "wbd_gt3_le6" in METRICS_BY_SLUG
+    assert "wbd_le_3_consecutive_days" in METRICS_BY_SLUG
+    assert "twb_days_ge_28" in METRICS_BY_SLUG
+
+    summer = METRICS_BY_SLUG["twb_summer_mean"]
+    tropical_nights = METRICS_BY_SLUG["tasmin_tropical_nights_gt28"]
+    moderate = METRICS_BY_SLUG["wbd_gt3_le6"]
+    consecutive = METRICS_BY_SLUG["wbd_le_3_consecutive_days"]
+    threshold = METRICS_BY_SLUG["twb_days_ge_28"]
+
+    assert summer.compute == "wet_bulb_seasonal_mean_stull"
+    assert summer.params["months"] == [3, 4, 5]
+    assert tropical_nights.params["thresh_k"] == 28.0 + 273.15
+    assert moderate.compute == "wet_bulb_depression_days_range_stull"
+    assert moderate.params["lower_c"] == 3.0
+    assert moderate.params["upper_c"] == 6.0
+    assert consecutive.compute == "wet_bulb_depression_longest_run_le_threshold_stull"
+    assert consecutive.params["min_spell_days"] == 3
+    assert threshold.compute == "wet_bulb_days_ge_threshold_stull"
+    assert threshold.params["thresh_c"] == 28.0
+
+    heat_stress_metrics = get_metrics_for_bundle("Heat Stress", spatial_family="admin", level="district")
+    assert heat_stress_metrics == [
+        "twb_annual_mean",
+        "twb_summer_mean",
+        "twb_annual_max",
+        "twb_days_ge_30",
+        "wbd_le_3",
+        "wbd_gt3_le6",
+        "tasmin_tropical_nights_gt28",
+        "tn90p_warm_nights_pct",
+        "wbd_le_3_consecutive_days",
+        "wsdi_warm_spell_days",
+        "twb_days_ge_28",
+    ]
+    assert "wbd_le_6" not in heat_stress_metrics
+
+
 def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
     pipeline_bundles = get_pipeline_bundles()
     dashboard_only = {

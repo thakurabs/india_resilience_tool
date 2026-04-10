@@ -17,6 +17,8 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Default landing discovery surface:
   - launches into an India state-level climate-hazard screening map
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
+  - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
+  - uses approved custom metric weights for `Heat Risk` and `Heat Stress`; other visible Glance bundles remain equal-weight for now
   - supports India -> state -> district drill-down before entering Deep Dive
   - uses explicit state clicks at India overview and district clicks within the selected state
   - top-bar geography search provides type-to-filter state and district suggestions

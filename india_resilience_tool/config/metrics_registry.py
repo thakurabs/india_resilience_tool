@@ -406,6 +406,22 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     ),
 },
 {
+    "name": "Wet-Bulb Temperature (Summer Mean; MAM Mean)",
+    "slug": "twb_summer_mean",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "summer_twb_mean_C",
+    "units": "°C",
+    "compute": "wet_bulb_seasonal_mean_stull",
+    "params": {"months": [3, 4, 5]},
+    "group": "temperature",
+    "description": (
+        "Mean wet-bulb temperature (°C) during summer (March-May), derived from "
+        "near-surface air temperature (tas) and relative humidity (hurs) using "
+        "the Stull (2011) approximation."
+    ),
+},
+{
     "name": "Wet-Bulb Temperature (Annual Max)",
     "slug": "twb_annual_max",
     "var": "tas",
@@ -467,6 +483,27 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "indicates humid conditions and reduced evaporative cooling."
     ),
 },
+{
+    "name": "Moderate Humid-Heat Days (3°C < WBD ≤ 6°C)",
+    "slug": "wbd_gt3_le6",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "wbd_gt_3_le_6_days",
+    "units": "days",
+    "compute": "wet_bulb_depression_days_range_stull",
+    "params": {
+        "lower_c": 3.0,
+        "upper_c": 6.0,
+        "lower_inclusive": False,
+        "upper_inclusive": True,
+    },
+    "group": "temperature",
+    "description": (
+        "Number of days per year where wet-bulb depression (tas - Twb) falls in the "
+        "moderate humid-heat range 3°C < WBD <= 6°C, derived from tas and hurs using "
+        "the Stull (2011) approximation."
+    ),
+},
     {
         "name": "Hot Days (TX ≥ 30°C)",
         "slug": "txge30_hot_days",
@@ -507,6 +544,65 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Number of nights when daily minimum temperature exceeds 20°C. "
             "Climdex index TR."
+        ),
+    },
+    {
+        "name": "Tropical Nights (TR, TN > 25°C)",
+        "slug": "tasmin_tropical_nights_gt25",
+        "var": "tasmin",
+        "value_col": "tropical_nights_gt_25C",
+        "units": "days",
+        "compute": "count_days_above_threshold",
+        "params": {"thresh_k": 25.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of nights when daily minimum temperature exceeds 25°C. "
+            "This higher tropical-nights threshold is used for the Indian Heat Risk bundle context."
+        ),
+    },
+    {
+        "name": "Tropical Nights (TR, TN > 28°C)",
+        "slug": "tasmin_tropical_nights_gt28",
+        "var": "tasmin",
+        "value_col": "tropical_nights_gt_28C",
+        "units": "days",
+        "compute": "count_days_above_threshold",
+        "params": {"thresh_k": 28.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of nights when daily minimum temperature exceeds 28°C. "
+            "This higher threshold is used for the Heat Stress bundle's night-time heat component."
+        ),
+    },
+    {
+        "name": "Heat Stress Days (Twb ≥ 28°C)",
+        "slug": "twb_days_ge_28",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "twb_days_ge_28_days",
+        "units": "days",
+        "compute": "wet_bulb_days_ge_threshold_stull",
+        "params": {"thresh_c": 28.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with wet-bulb temperature >= 28°C, derived from tas "
+            "and hurs using the Stull (2011) approximation."
+        ),
+    },
+    {
+        "name": "Consecutive Wet-Bulb Stress Days (WBD ≤ 3°C)",
+        "slug": "wbd_le_3_consecutive_days",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbd_le_3_consecutive_days",
+        "units": "days",
+        "compute": "wet_bulb_depression_longest_run_le_threshold_stull",
+        "params": {"thresh_c": 3.0, "min_spell_days": 3},
+        "group": "temperature",
+        "description": (
+            "Maximum length of a humid-heat spell where wet-bulb depression (tas - Twb) "
+            "stays <= 3°C for at least 3 consecutive days, derived from tas and hurs using "
+            "the Stull (2011) approximation."
         ),
     },
     
@@ -1752,7 +1848,7 @@ DOMAINS: dict[str, list[str]] = {
         
         "txge35_extreme_heat_days",
         # "su_summer_days_gt25",
-        "tasmin_tropical_nights_gt20",
+        "tasmin_tropical_nights_gt25",
         # Wet-bulb thermal stress
         
         
@@ -1782,10 +1878,16 @@ DOMAINS: dict[str, list[str]] = {
     ],
     "Heat Stress": [
         "twb_annual_mean",
+        "twb_summer_mean",
         "twb_annual_max",
         "twb_days_ge_30",
         "wbd_le_3",
-        "wbd_le_6",
+        "wbd_gt3_le6",
+        "tasmin_tropical_nights_gt28",
+        "tn90p_warm_nights_pct",
+        "wbd_le_3_consecutive_days",
+        "wsdi_warm_spell_days",
+        "twb_days_ge_28",
     ],
     "Cold Risk": [
         "tas_winter_mean",

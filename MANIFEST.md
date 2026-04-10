@@ -9,6 +9,8 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 
 The current working tree supports:
 - a default climate-hazard landing / discovery surface that opens on an India state-level bundle map and drills down India -> state -> district before handing off to the detailed workflow
+- a Glance bundle scope limited to `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`, with other climate domains still available in Deep Dive
+- declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, currently used for the `Heat Risk` and `Heat Stress` bundles
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
 - type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
 - a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff

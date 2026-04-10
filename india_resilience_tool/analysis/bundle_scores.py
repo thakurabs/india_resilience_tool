@@ -9,7 +9,8 @@ Methodology
 - Input metrics may have different units and numeric ranges.
 - Each metric is first normalized onto a 0-100 scale.
 - Higher values always mean worse hazard after normalization.
-- Bundle scores are the equal-weight mean of available normalized metrics only.
+- Bundle scores are weighted means of available normalized metrics only.
+- When custom bundle weights are not supplied, equal weights are used.
 - Missing metrics yield partial results; geographies with no valid metrics
   receive NaN bundle scores.
 
@@ -36,6 +37,7 @@ class BundleMetricSpec:
     slug: str
     label: str
     column: str
+    weight: float = 1.0
     higher_is_worse: bool = True
 
 
@@ -93,11 +95,12 @@ def compute_bundle_score_frame(
     id_columns: Sequence[str],
 ) -> pd.DataFrame:
     """
-    Compute equal-weight bundle scores from a wide metric frame.
+    Compute weighted bundle scores from a wide metric frame.
 
     Missing-data behavior:
     - Metrics missing from `df` are skipped.
-    - Rows with some valid normalized metrics receive the mean of those values.
+    - Rows with some valid normalized metrics receive the weighted mean of those values.
+    - Weights are renormalized across available metrics within each row.
     - Rows with no valid normalized metrics receive NaN bundle scores.
 
     Args:
@@ -114,6 +117,7 @@ def compute_bundle_score_frame(
 
     out = df.loc[:, [col for col in id_columns if col in df.columns]].copy()
     normalized_columns: list[str] = []
+    normalized_weights: list[float] = []
 
     for spec in metric_specs:
         if spec.column not in df.columns:
@@ -124,6 +128,7 @@ def compute_bundle_score_frame(
             higher_is_worse=bool(spec.higher_is_worse),
         )
         normalized_columns.append(norm_col)
+        normalized_weights.append(float(spec.weight))
 
     if not normalized_columns:
         out["bundle_score"] = np.nan
@@ -131,7 +136,10 @@ def compute_bundle_score_frame(
         return out
 
     norm_frame = out[normalized_columns]
-    out["bundle_score"] = norm_frame.mean(axis=1, skipna=True)
+    weight_series = pd.Series(normalized_weights, index=normalized_columns, dtype=float)
+    available_weights = norm_frame.notna().mul(weight_series, axis=1).sum(axis=1)
+    weighted_sum = norm_frame.mul(weight_series, axis=1).sum(axis=1, skipna=True)
+    out["bundle_score"] = weighted_sum.div(available_weights.where(available_weights > 0.0))
     out["available_metric_count"] = norm_frame.notna().sum(axis=1).astype(int)
     out.loc[out["available_metric_count"] == 0, "bundle_score"] = np.nan
     return out

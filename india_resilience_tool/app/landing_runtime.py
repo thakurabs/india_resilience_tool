@@ -22,6 +22,7 @@ from india_resilience_tool.analysis.bundle_scores import (
     compute_metric_driver_frame,
     normalized_metric_column,
 )
+from india_resilience_tool.config.bundle_weights import get_bundle_weights
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.views.map_view import (
     build_choropleth_map_with_geojson_layer,
@@ -87,12 +88,11 @@ LANDING_DOMAIN_ORDER: tuple[str, ...] = (
     "Heat Risk",
     "Drought Risk",
     "Flood & Extreme Rainfall Risk",
-    "Rainfall Totals & Typical Wetness",
     "Heat Stress",
     "Cold Risk",
     "Agriculture & Growing Conditions",
-    "Temperature Variability",
 )
+LANDING_VISIBLE_DOMAINS: tuple[str, ...] = LANDING_DOMAIN_ORDER
 
 LANDING_PERIOD_SHORT_LABELS: dict[str, str] = {
     "2020-2040": "Early century",
@@ -301,11 +301,11 @@ def _landing_bundle_domains() -> list[str]:
             level="district",
         )
     )
-
-    ordered = [domain for domain in LANDING_DOMAIN_ORDER if domain in climate_domains]
+    visible_domains = climate_domains.intersection(LANDING_VISIBLE_DOMAINS)
+    ordered = [domain for domain in LANDING_DOMAIN_ORDER if domain in visible_domains]
     if ordered:
         return ordered
-    return sorted(climate_domains)
+    return sorted(visible_domains)
 
 
 def _landing_bundle_display(bundle_domain: str) -> str:
@@ -515,6 +515,7 @@ def _load_metric_district_values_cached(
 
 def _bundle_metric_specs(bundle_domain: str) -> list[BundleMetricSpec]:
     """Return normalized bundle metric specs for the landing score."""
+    configured_weights = {entry.metric_slug: entry for entry in get_bundle_weights(bundle_domain)}
     specs: list[BundleMetricSpec] = []
     for metric_slug in get_metrics_for_bundle(
         bundle_domain,
@@ -522,11 +523,13 @@ def _bundle_metric_specs(bundle_domain: str) -> list[BundleMetricSpec]:
         level="district",
     ):
         varcfg = VARIABLES.get(metric_slug, {})
+        weight_entry = configured_weights.get(metric_slug)
         specs.append(
             BundleMetricSpec(
                 slug=metric_slug,
                 label=str(varcfg.get("label") or metric_slug),
                 column=metric_slug,
+                weight=float(weight_entry.weight) if weight_entry is not None else 1.0,
                 higher_is_worse=bool(varcfg.get("rank_higher_is_worse", True)),
             )
         )
@@ -557,13 +560,18 @@ def _collect_bundle_metric_contexts(
     contexts: list[LandingMetricContext] = []
     for spec in _bundle_metric_specs(bundle_domain):
         sources = _resolve_metric_master_sources(spec.slug, data_dir=data_dir)
-        source_signature = master_source_signature(sources)
-        source_paths = tuple(str(path) for path in sources)
-        available_pairs = _load_metric_scenario_period_pairs_cached(
-            spec.slug,
-            source_signature,
-            source_paths,
-        )
+        if sources:
+            source_signature = master_source_signature(sources)
+            source_paths = tuple(str(path) for path in sources)
+            available_pairs = _load_metric_scenario_period_pairs_cached(
+                spec.slug,
+                source_signature,
+                source_paths,
+            )
+        else:
+            source_signature = ()
+            source_paths = ()
+            available_pairs = ()
         contexts.append(
             LandingMetricContext(
                 spec=spec,
@@ -2019,7 +2027,8 @@ def render_landing_page(
         )
 
     st.caption(
-        "Method note: landing bundle scores are equal-weight averages of normalized hazard metrics "
-        "within the selected bundle. Only scenario-periods with full required bundle-metric coverage "
-        "are shown. They are hazard summaries only, not resilience scores."
+        "Method note: landing bundle scores are weighted averages of normalized hazard metrics "
+        "where approved bundle weights are configured, and equal-weight averages otherwise. "
+        "Only scenario-periods with full required bundle-metric coverage are shown. "
+        "They are hazard summaries only, not resilience scores."
     )

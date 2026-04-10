@@ -896,17 +896,20 @@ def _wet_bulb_stull_c(t_c: xr.DataArray, rh_pct: xr.DataArray) -> xr.DataArray:
     )
 
 
-def wet_bulb_annual_mean_stull(tas_da: xr.DataArray, hurs_da: xr.DataArray, mask: xr.DataArray) -> float:
-    """Annual mean wet-bulb temperature (°C) using Stull approximation."""
+def _wet_bulb_daily_mean_c(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> xr.DataArray | None:
+    """Return a district-mean daily wet-bulb series in °C using the Stull approximation."""
     tas_k = _get_district_daily_mean(tas_da, mask)
     rh = _get_district_daily_mean(hurs_da, mask)
     if tas_k.sizes.get("time", 0) == 0:
-        return np.nan
+        return None
 
     tas_k = _drop_feb29_time(tas_k)
     rh = _drop_feb29_time(rh)
 
-    # Robust RH scaling: accept either 0–1 (fraction) or 0–100 (%).
     try:
         rh_max = float(rh.max(dim="time", skipna=True).item())
         if rh_max <= 1.5:
@@ -914,55 +917,72 @@ def wet_bulb_annual_mean_stull(tas_da: xr.DataArray, hurs_da: xr.DataArray, mask
     except Exception:
         pass
 
-    twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
+    return _wet_bulb_stull_c(tas_k - 273.15, rh)
+
+
+def _wet_bulb_depression_daily_mean_c(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> xr.DataArray | None:
+    """Return a district-mean daily wet-bulb depression series in °C."""
+    twb_c = _wet_bulb_daily_mean_c(tas_da, hurs_da, mask)
+    if twb_c is None:
+        return None
+
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return None
+    tas_k = _drop_feb29_time(tas_k)
+    tas_c = tas_k - 273.15
+    return tas_c - twb_c
+
+
+def wet_bulb_annual_mean_stull(tas_da: xr.DataArray, hurs_da: xr.DataArray, mask: xr.DataArray) -> float:
+    """Annual mean wet-bulb temperature (°C) using Stull approximation."""
+    twb = _wet_bulb_daily_mean_c(tas_da, hurs_da, mask)
+    if twb is None:
+        return np.nan
     return float(twb.mean(dim="time", skipna=True).item())
 
 
 def wet_bulb_annual_max_stull(tas_da: xr.DataArray, hurs_da: xr.DataArray, mask: xr.DataArray) -> float:
     """Annual maximum wet-bulb temperature (°C) using Stull approximation."""
-    tas_k = _get_district_daily_mean(tas_da, mask)
-    rh = _get_district_daily_mean(hurs_da, mask)
-    if tas_k.sizes.get("time", 0) == 0:
+    twb = _wet_bulb_daily_mean_c(tas_da, hurs_da, mask)
+    if twb is None:
         return np.nan
-
-    tas_k = _drop_feb29_time(tas_k)
-    rh = _drop_feb29_time(rh)
-
-    # Robust RH scaling: accept either 0–1 (fraction) or 0–100 (%).
-    try:
-        rh_max = float(rh.max(dim="time", skipna=True).item())
-        if rh_max <= 1.5:
-            rh = rh * 100.0
-    except Exception:
-        pass
-
-    twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
     return float(twb.max(dim="time", skipna=True).item())
+
+
+def wet_bulb_seasonal_mean_stull(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    months: Sequence[int],
+    **kwargs: Any,
+) -> float:
+    """Seasonal mean wet-bulb temperature (°C) using the Stull approximation."""
+    _ = kwargs
+    twb = _wet_bulb_daily_mean_c(tas_da, hurs_da, mask)
+    if twb is None or "time" not in twb.dims:
+        return np.nan
+    ds = twb.sel(time=twb["time"].dt.month.isin(months))
+    if ds.sizes.get("time", 0) == 0:
+        return np.nan
+    return float(ds.mean(dim="time", skipna=True).item())
 
 def wet_bulb_days_ge_threshold_stull(
     tas_da: xr.DataArray,
     hurs_da: xr.DataArray,
     mask: xr.DataArray,
     thresh_c: float = 30.0,
+    **kwargs: Any,
 ) -> int:
     """Count of days per year where wet-bulb temperature (°C) is >= `thresh_c` (Stull)."""
-    tas_k = _get_district_daily_mean(tas_da, mask)
-    rh = _get_district_daily_mean(hurs_da, mask)
-    if tas_k.sizes.get("time", 0) == 0:
+    _ = kwargs
+    twb = _wet_bulb_daily_mean_c(tas_da, hurs_da, mask)
+    if twb is None:
         return 0
-
-    tas_k = _drop_feb29_time(tas_k)
-    rh = _drop_feb29_time(rh)
-
-    # Robust RH scaling: accept either 0–1 (fraction) or 0–100 (%).
-    try:
-        rh_max = float(rh.max(dim="time", skipna=True).item())
-        if rh_max <= 1.5:
-            rh = rh * 100.0
-    except Exception:
-        pass
-
-    twb = _wet_bulb_stull_c(tas_k - 273.15, rh)
     flags = (twb >= float(thresh_c)).fillna(False)
     return int(flags.sum(dim="time").item())
 
@@ -972,29 +992,55 @@ def wet_bulb_depression_days_le_threshold_stull(
     hurs_da: xr.DataArray,
     mask: xr.DataArray,
     thresh_c: float = 3.0,
+    **kwargs: Any,
 ) -> int:
     """Count of days per year where wet-bulb depression (tas - Twb) is <= `thresh_c` (Stull)."""
-    tas_k = _get_district_daily_mean(tas_da, mask)
-    rh = _get_district_daily_mean(hurs_da, mask)
-    if tas_k.sizes.get("time", 0) == 0:
+    _ = kwargs
+    wbd = _wet_bulb_depression_daily_mean_c(tas_da, hurs_da, mask)
+    if wbd is None:
         return 0
-
-    tas_k = _drop_feb29_time(tas_k)
-    rh = _drop_feb29_time(rh)
-
-    # Robust RH scaling: accept either 0–1 (fraction) or 0–100 (%).
-    try:
-        rh_max = float(rh.max(dim="time", skipna=True).item())
-        if rh_max <= 1.5:
-            rh = rh * 100.0
-    except Exception:
-        pass
-
-    tas_c = tas_k - 273.15
-    twb_c = _wet_bulb_stull_c(tas_c, rh)
-    wbd = tas_c - twb_c
     flags = (wbd <= float(thresh_c)).fillna(False)
     return int(flags.sum(dim="time").item())
+
+
+def wet_bulb_depression_days_range_stull(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    lower_c: float,
+    upper_c: float,
+    lower_inclusive: bool = False,
+    upper_inclusive: bool = True,
+    **kwargs: Any,
+) -> int:
+    """Count of days where wet-bulb depression falls within a configured °C range."""
+    _ = kwargs
+    wbd = _wet_bulb_depression_daily_mean_c(tas_da, hurs_da, mask)
+    if wbd is None:
+        return 0
+
+    lower = wbd >= float(lower_c) if lower_inclusive else wbd > float(lower_c)
+    upper = wbd <= float(upper_c) if upper_inclusive else wbd < float(upper_c)
+    flags = (lower & upper).fillna(False)
+    return int(flags.sum(dim="time").item())
+
+
+def wet_bulb_depression_longest_run_le_threshold_stull(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_c: float = 3.0,
+    min_spell_days: int = 3,
+    **kwargs: Any,
+) -> int:
+    """Return the longest humid-heat run with wet-bulb depression at or below the threshold."""
+    _ = kwargs
+    wbd = _wet_bulb_depression_daily_mean_c(tas_da, hurs_da, mask)
+    if wbd is None:
+        return 0
+    arr = np.asarray((wbd <= float(thresh_c)).fillna(False).values, dtype=bool)
+    max_run, _ = _run_length_stats(arr, int(min_spell_days))
+    return int(max_run)
 
 # -----------------------------------------------------------------------------
 # TEMPERATURE COMPUTE FUNCTIONS
@@ -4252,31 +4298,90 @@ def _compute_district_ensembles(level_root: Path, ensembles_root: Path) -> Ensem
         district = ddir.name
         model_dirs = [p for p in ddir.iterdir() if p.is_dir()]
         scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+        metadata_columns = {"district", "model", "scenario", "year", "source_file"}
         
         for scenario in scenarios:
             model_yearly = []
+            expected_output = False
             for m in model_dirs:
                 ycsv = m / scenario / f"{district}_yearly.csv"
-                if ycsv.exists():
-                    try:
-                        dfy = pd.read_csv(ycsv)
-                        if "value" not in dfy.columns:
-                            cols = [c for c in dfy.columns if c not in {"district", "model", "scenario", "year", "source_file"}]
-                            if cols: dfy["value"] = dfy[cols[0]]
-                        dfy["model"] = m.name
-                        model_yearly.append(dfy)
-                    except:
-                        pass
-            
-            if model_yearly:
+                if not ycsv.exists():
+                    continue
+                expected_output = True
+                try:
+                    dfy = pd.read_csv(ycsv)
+                    cleaned, skip_reason = _clean_ensemble_yearly_frame(
+                        dfy,
+                        metadata_columns=metadata_columns,
+                        model_name=m.name,
+                    )
+                    if cleaned is None:
+                        message = f"district={district} model={m.name} scenario={scenario}: {skip_reason}"
+                        stats = _merge_ensemble_stats(
+                            stats,
+                            EnsembleBuildStats(
+                                skipped_input_count=1,
+                                skipped_reasons=(message,),
+                            ),
+                        )
+                        continue
+                    model_yearly.append(cleaned)
+                except Exception as e:
+                    message = f"district={district} model={m.name} scenario={scenario}: {e}"
+                    stats = _merge_ensemble_stats(
+                        stats,
+                        EnsembleBuildStats(
+                            failure_count=1,
+                            errors=(message,),
+                        ),
+                    )
+
+            if not expected_output:
+                continue
+            stats = _merge_ensemble_stats(
+                stats,
+                EnsembleBuildStats(expected_output_count=1),
+            )
+
+            if not model_yearly:
+                message = f"district={district} scenario={scenario}: no valid filtered yearly inputs"
                 stats = _merge_ensemble_stats(
                     stats,
                     EnsembleBuildStats(
-                        written_count=_write_ensemble_stats(
-                            model_yearly,
-                            ensembles_root / district / scenario,
-                            district,
-                        )
+                        missing_expected_output_count=1,
+                        errors=(message,),
+                    ),
+                )
+                continue
+
+            try:
+                written = _write_ensemble_stats(
+                    model_yearly,
+                    ensembles_root / district / scenario,
+                    district,
+                )
+                if written == 0:
+                    message = f"district={district} scenario={scenario}: no ensemble outputs produced"
+                    stats = _merge_ensemble_stats(
+                        stats,
+                        EnsembleBuildStats(
+                            missing_expected_output_count=1,
+                            errors=(message,),
+                        ),
+                    )
+                else:
+                    stats = _merge_ensemble_stats(
+                        stats,
+                        EnsembleBuildStats(written_count=written),
+                    )
+            except Exception as e:
+                message = f"district={district} scenario={scenario}: {e}"
+                stats = _merge_ensemble_stats(
+                    stats,
+                    EnsembleBuildStats(
+                        failure_count=1,
+                        missing_expected_output_count=1,
+                        errors=(message,),
                     ),
                 )
     return stats
@@ -4298,55 +4403,124 @@ def _compute_block_ensembles(level_root: Path, ensembles_root: Path) -> Ensemble
             block = bdir.name
             model_dirs = [p for p in bdir.iterdir() if p.is_dir()]
             scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+            metadata_columns = {"district", "block", "model", "scenario", "year", "source_file"}
             
             for scenario in scenarios:
                 model_yearly = []
+                expected_output = False
                 for m in model_dirs:
                     ycsv = m / scenario / f"{block}_yearly.csv"
-                    if ycsv.exists():
-                        try:
-                            dfy = pd.read_csv(ycsv)
-                            if "value" not in dfy.columns:
-                                cols = [c for c in dfy.columns if c not in {"district", "block", "model", "scenario", "year", "source_file"}]
-                                if cols: dfy["value"] = dfy[cols[0]]
-                            dfy["model"] = m.name
-                            model_yearly.append(dfy)
-                        except:
-                            pass
-                
-                if model_yearly:
-                    out_dir = ensembles_root / district / block / scenario
+                    if not ycsv.exists():
+                        continue
+                    expected_output = True
                     try:
+                        dfy = pd.read_csv(ycsv)
+                        cleaned, skip_reason = _clean_ensemble_yearly_frame(
+                            dfy,
+                            metadata_columns=metadata_columns,
+                            model_name=m.name,
+                        )
+                        if cleaned is None:
+                            message = (
+                                f"district={district} block={block} model={m.name} "
+                                f"scenario={scenario}: {skip_reason}"
+                            )
+                            stats = _merge_ensemble_stats(
+                                stats,
+                                EnsembleBuildStats(
+                                    skipped_input_count=1,
+                                    skipped_reasons=(message,),
+                                ),
+                            )
+                            continue
+                        model_yearly.append(cleaned)
+                    except Exception as e:
+                        message = (
+                            f"district={district} block={block} model={m.name} "
+                            f"scenario={scenario}: {e}"
+                        )
                         stats = _merge_ensemble_stats(
                             stats,
                             EnsembleBuildStats(
-                                written_count=_write_ensemble_stats(model_yearly, out_dir, block)
+                                failure_count=1,
+                                errors=(message,),
                             ),
                         )
-                    except Exception as e:
-                        logging.warning(
-                            "Failed to write ensemble yearly for block=%s district=%s scenario=%s: %s",
-                            block,
-                            district,
-                            scenario,
-                            e,
-                                    )
-                        continue
 
-                    # After successfully writing ensemble outputs, delete per-model yearly CSVs
-                    out_csv = out_dir / f"{block}_yearly_ensemble.csv"
-                    if out_csv.exists():
-                        for m in model_dirs:
-                            ycsv = m / scenario / f"{block}_yearly.csv"
-                            if ycsv.exists():
-                                try:
-                                    ycsv.unlink()
-                                except Exception as e:
-                                    logging.debug(
-                                        "Could not delete per-model block yearly CSV: %s (%s)",
-                                        ycsv,
-                                        e,
-                                    )
+                if not expected_output:
+                    continue
+                stats = _merge_ensemble_stats(
+                    stats,
+                    EnsembleBuildStats(expected_output_count=1),
+                )
+
+                if not model_yearly:
+                    message = (
+                        f"district={district} block={block} scenario={scenario}: "
+                        "no valid filtered yearly inputs"
+                    )
+                    stats = _merge_ensemble_stats(
+                        stats,
+                        EnsembleBuildStats(
+                            missing_expected_output_count=1,
+                            errors=(message,),
+                        ),
+                    )
+                    continue
+
+                out_dir = ensembles_root / district / block / scenario
+                try:
+                    written = _write_ensemble_stats(model_yearly, out_dir, block)
+                    if written == 0:
+                        message = (
+                            f"district={district} block={block} scenario={scenario}: "
+                            "no ensemble outputs produced"
+                        )
+                        stats = _merge_ensemble_stats(
+                            stats,
+                            EnsembleBuildStats(
+                                missing_expected_output_count=1,
+                                errors=(message,),
+                            ),
+                        )
+                        continue
+                    stats = _merge_ensemble_stats(
+                        stats,
+                        EnsembleBuildStats(written_count=written),
+                    )
+                except Exception as e:
+                    logging.warning(
+                        "Failed to write ensemble yearly for block=%s district=%s scenario=%s: %s",
+                        block,
+                        district,
+                        scenario,
+                        e,
+                    )
+                    message = f"district={district} block={block} scenario={scenario}: {e}"
+                    stats = _merge_ensemble_stats(
+                        stats,
+                        EnsembleBuildStats(
+                            failure_count=1,
+                            missing_expected_output_count=1,
+                            errors=(message,),
+                        ),
+                    )
+                    continue
+
+                # After successfully writing ensemble outputs, delete per-model yearly CSVs
+                out_csv = out_dir / f"{block}_yearly_ensemble.csv"
+                if out_csv.exists():
+                    for m in model_dirs:
+                        ycsv = m / scenario / f"{block}_yearly.csv"
+                        if ycsv.exists():
+                            try:
+                                ycsv.unlink()
+                            except Exception as e:
+                                logging.debug(
+                                    "Could not delete per-model block yearly CSV: %s (%s)",
+                                    ycsv,
+                                    e,
+                                )
     return stats
 
 

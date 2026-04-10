@@ -13,7 +13,10 @@ from india_resilience_tool.app.landing_runtime import (
     LandingMetricContext,
     _apply_landing_map_click,
     _assemble_bundle_context,
+    _bundle_metric_specs,
     _build_landing_search_options,
+    _landing_bundle_domains,
+    _sanitize_landing_context,
     _intersect_bundle_scenario_period_pairs,
     apply_landing_back,
     build_deep_dive_handoff,
@@ -85,6 +88,63 @@ def test_ensure_landing_state_sets_frozen_defaults() -> None:
     assert session_state["landing_search_selection"] is None
     assert session_state["landing_search_last_applied"] is None
     assert session_state["landing_search_reset_pending"] is False
+
+
+def test_landing_bundle_domains_hide_non_glance_bundles() -> None:
+    assert _landing_bundle_domains() == [
+        "Heat Risk",
+        "Drought Risk",
+        "Flood & Extreme Rainfall Risk",
+        "Heat Stress",
+        "Cold Risk",
+        "Agriculture & Growing Conditions",
+    ]
+
+
+def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp_path: Path) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Temperature Variability",
+        "landing_scenario": "ssp585",
+        "landing_period": "2040-2060",
+    }
+
+    monkeypatch.setattr(
+        landing_runtime,
+        "_bundle_scenario_period_options",
+        lambda bundle_domain, *, data_dir: [("ssp585", "2040-2060")],
+    )
+
+    _sanitize_landing_context(session_state, data_dir=tmp_path)
+
+    assert session_state["landing_bundle"] == "Heat Risk"
+    assert session_state["landing_scenario"] == "ssp585"
+    assert session_state["landing_period"] == "2040-2060"
+
+
+def test_bundle_metric_specs_use_custom_heat_risk_weights() -> None:
+    specs = _bundle_metric_specs("Heat Risk")
+    by_slug = {spec.slug: spec for spec in specs}
+
+    assert by_slug["tasmin_tropical_nights_gt25"].weight == 0.2 / 3.0
+    assert by_slug["hwfi_tmean_90p"].weight == 0.15 / 2.0
+
+
+def test_bundle_metric_specs_use_custom_heat_stress_weights() -> None:
+    specs = _bundle_metric_specs("Heat Stress")
+    by_slug = {spec.slug: spec for spec in specs}
+
+    assert len(specs) == 11
+    assert by_slug["twb_summer_mean"].weight == 0.20 / 2.0
+    assert by_slug["wbd_gt3_le6"].weight == 0.15 / 2.0
+    assert by_slug["twb_days_ge_28"].weight == 0.25 / 3.0
+    assert "wbd_le_6" not in by_slug
+
+
+def test_bundle_metric_specs_default_to_equal_weights_without_custom_config() -> None:
+    specs = _bundle_metric_specs("Drought Risk")
+
+    assert specs
+    assert all(spec.weight == 1.0 for spec in specs)
 
 
 def test_sync_landing_widget_state_updates_scenario_period_pair() -> None:
