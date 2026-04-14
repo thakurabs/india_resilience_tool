@@ -2028,7 +2028,7 @@ def render_landing_page(
 
     st.caption(
         "Method note: landing bundle scores are weighted averages of normalized hazard metrics "
-        "where approved bundle weights are configured, and equal-weight averages otherwise. "
+        "using approved bundle definitions. "
         "Only scenario-periods with full required bundle-metric coverage are shown. "
         "They are hazard summaries only, not resilience scores."
     )

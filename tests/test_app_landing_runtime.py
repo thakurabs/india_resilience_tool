@@ -140,8 +140,50 @@ def test_bundle_metric_specs_use_custom_heat_stress_weights() -> None:
     assert "wbd_le_6" not in by_slug
 
 
-def test_bundle_metric_specs_default_to_equal_weights_without_custom_config() -> None:
+def test_bundle_metric_specs_use_custom_cold_risk_weights() -> None:
+    specs = _bundle_metric_specs("Cold Risk")
+    by_slug = {spec.slug: spec for spec in specs}
+
+    assert len(specs) == 11
+    assert by_slug["tasmin_winter_min"].weight == 0.20 / 2.0
+    assert by_slug["tnle10_cold_nights"].weight == 0.25 / 3.0
+    assert by_slug["tnle10_consecutive_cold_nights"].weight == 0.20 / 2.0
+    assert "fd_frost_days" not in by_slug
+    assert "tnlt2_cold_nights" not in by_slug
+
+
+def test_bundle_metric_specs_use_custom_drought_risk_weights() -> None:
     specs = _bundle_metric_specs("Drought Risk")
+    by_slug = {spec.slug: spec for spec in specs}
+
+    assert len(specs) == 3
+    assert by_slug["spi3_count_events_lt_minus1"].weight == 0.20
+    assert by_slug["spi6_count_events_lt_minus1"].weight == 0.30
+    assert by_slug["spi12_count_events_lt_minus1"].weight == 0.50
+
+
+def test_bundle_metric_specs_use_custom_flood_weights() -> None:
+    specs = _bundle_metric_specs("Flood & Extreme Rainfall Risk")
+    by_slug = {spec.slug: spec for spec in specs}
+
+    assert len(specs) == 6
+    assert by_slug["pr_max_1day_precip"].weight == 0.25 / 2.0
+    assert by_slug["r20mm_very_heavy_precip_days"].weight == 0.25
+    assert by_slug["cwd_consecutive_wet_days"].weight == 0.25
+
+
+def test_bundle_metric_specs_use_custom_agriculture_weights() -> None:
+    specs = _bundle_metric_specs("Agriculture & Growing Conditions")
+    by_slug = {spec.slug: spec for spec in specs}
+
+    assert len(specs) == 9
+    assert by_slug["gsl_growing_season"].weight == 0.20
+    assert by_slug["prcptot_annual_total"].weight == 0.20 / 2.0
+    assert by_slug["dtr_daily_temp_range"].weight == 0.20
+
+
+def test_bundle_metric_specs_default_to_equal_weights_without_custom_config() -> None:
+    specs = _bundle_metric_specs("Rainfall Totals & Typical Wetness")
 
     assert specs
     assert all(spec.weight == 1.0 for spec in specs)

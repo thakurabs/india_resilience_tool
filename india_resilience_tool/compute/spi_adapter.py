@@ -15,6 +15,7 @@ Additional IRT behavior:
 - Supports annual aggregations derived from monthly SPI:
     - mean (legacy behavior)
     - count_months_lt / count_months_gt using thresholds (e.g., -1, -2, +1, +2)
+    - count_events_lt for contiguous monthly SPI runs below a threshold
 - Can reuse an existing monthly CSV on disk as a cache if metadata matches.
 
 Author: Abu Bakar Siddiqui Thakur
@@ -459,6 +460,57 @@ def _annualize_spi_counts_xarray(
     return annual_counts
 
 
+def _count_events_1d(mask: np.ndarray, min_len: int = 1) -> int:
+    """Return the number of contiguous True runs meeting ``min_len``."""
+    arr = np.asarray(mask, dtype=bool)
+    if arr.size == 0:
+        return 0
+
+    events = 0
+    run_len = 0
+    for value in arr:
+        if value:
+            run_len += 1
+        else:
+            if run_len >= min_len:
+                events += 1
+            run_len = 0
+    if run_len >= min_len:
+        events += 1
+    return events
+
+
+def _annualize_spi_event_counts_xarray(
+    spi_monthly: xr.DataArray,
+    threshold: float,
+    min_months_per_year: int = 9,
+) -> Optional[xr.DataArray]:
+    """Aggregate monthly SPI to annual counts of contiguous below-threshold events."""
+    if spi_monthly is None or spi_monthly.sizes.get("time", 0) == 0:
+        return None
+
+    grouped = spi_monthly.groupby("time.year")
+    valid_counts = grouped.count(dim="time")
+    event_rows: list[tuple[int, int]] = []
+
+    for year, values in grouped:
+        if int(valid_counts.sel(year=year).item()) < int(min_months_per_year):
+            continue
+        flags = (values < threshold).fillna(False).values
+        event_rows.append((int(year), _count_events_1d(flags, min_len=1)))
+
+    if not event_rows:
+        return None
+
+    annual_counts = xr.DataArray(
+        [count for _, count in event_rows],
+        coords={"year": [year for year, _ in event_rows]},
+        dims=["year"],
+        name="spi_annual_count",
+    )
+    return annual_counts
+
+
 def _safe_component(name: str) -> str:
     return safe_fs_component(name)
 
@@ -737,6 +789,13 @@ def compute_spi_rows_climate_indices(
                 spi_monthly=spi_monthly,
                 threshold=threshold,
                 mode=annual_agg,
+                min_months_per_year=min_months_per_year,
+            )
+        elif annual_agg == "count_events_lt":
+            threshold = float(metric.get("params", {}).get("threshold"))
+            spi_yearly = _annualize_spi_event_counts_xarray(
+                spi_monthly=spi_monthly,
+                threshold=threshold,
                 min_months_per_year=min_months_per_year,
             )
         else:

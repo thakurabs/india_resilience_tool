@@ -886,6 +886,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
+        "name": "Winter Minimum Tmin (DJF Min TN)",
+        "slug": "tasmin_winter_min",
+        "var": "tasmin",
+        "value_col": "winter_tasmin_min_C",
+        "units": "°C",
+        "compute": "seasonal_min",
+        "params": {"months": [12, 1, 2]},
+        "group": "temperature",
+        "description": (
+            "Minimum of daily minimum temperature during winter (December-February). "
+            "This captures the coldest winter night in the season."
+        ),
+    },
+    {
         "name": "Daily Temperature Range (DTR)",
         "slug": "dtr_daily_temp_range",
         "var": "tasmax",  # Primary var (also requires tasmin)
@@ -959,6 +973,62 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Number of days when daily minimum temperature is below 2°C. "
             "Climdex TNlt2 index."
+        ),
+    },
+    {
+        "name": "Cold Nights (TN <= 10°C)",
+        "slug": "tnle10_cold_nights",
+        "var": "tasmin",
+        "value_col": "days_tn_le_10C",
+        "units": "days",
+        "compute": "count_days_le_threshold",
+        "params": {"thresh_k": 10.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of days when daily minimum temperature is at or below 10°C. "
+            "This workbook-aligned threshold captures cold nights relevant to plains and central India."
+        ),
+    },
+    {
+        "name": "Severe Cold Nights (TN <= 5°C)",
+        "slug": "tnle5_severe_cold_nights",
+        "var": "tasmin",
+        "value_col": "days_tn_le_5C",
+        "units": "days",
+        "compute": "count_days_le_threshold",
+        "params": {"thresh_k": 5.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of days when daily minimum temperature is at or below 5°C. "
+            "This workbook-aligned threshold captures more severe night-time cold."
+        ),
+    },
+    {
+        "name": "Cold Days (TX <= 15°C)",
+        "slug": "txle15_cold_days",
+        "var": "tasmax",
+        "value_col": "days_tx_le_15C",
+        "units": "days",
+        "compute": "count_days_le_threshold",
+        "params": {"thresh_k": 15.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of days when daily maximum temperature is at or below 15°C. "
+            "This workbook-aligned daytime cold metric strengthens the threshold-based cold group."
+        ),
+    },
+    {
+        "name": "Consecutive Cold Nights (TN <= 10°C)",
+        "slug": "tnle10_consecutive_cold_nights",
+        "var": "tasmin",
+        "value_col": "tn_le_10C_consecutive_days",
+        "units": "days",
+        "compute": "longest_consecutive_run_le_threshold",
+        "params": {"thresh_k": 10.0 + 273.15, "min_len": 1},
+        "group": "temperature",
+        "description": (
+            "Maximum consecutive run length of nights when daily minimum temperature is at "
+            "or below 10°C."
         ),
     },
     # {
@@ -1193,6 +1263,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Total Wet-Day Precipitation (PRCPTOT)",
         "slug": "prcptot_annual_total",
+        "rank_higher_is_worse": False,
         "var": "pr",
         "value_col": "prcptot_mm",
         "units": "mm",
@@ -1332,6 +1403,22 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": "Annual count of months with SPI3 below -1 (moderate meteorological drought persistence).",
     },
     {
+        "name": "SPI3: Count of drought events with SPI < -1",
+        "slug": "spi3_count_events_lt_minus1",
+        "var": "pr",
+        "value_col": "spi3_events_lt_minus1",
+        "units": "events",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 3,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_events_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of contiguous SPI3 drought events below -1 (moderate seasonal drought episodes).",
+    },
+    {
         "name": "SPI3: Count of months with SPI < -2 (severe drought)",
         "slug": "spi3_count_months_lt_minus2",
         "var": "pr",
@@ -1398,6 +1485,22 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": "Annual count of months with SPI6 below -1 (moderate meteorological drought persistence).",
     },
     {
+        "name": "SPI6: Count of drought events with SPI < -1",
+        "slug": "spi6_count_events_lt_minus1",
+        "var": "pr",
+        "value_col": "spi6_events_lt_minus1",
+        "units": "events",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 6,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_events_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of contiguous SPI6 drought events below -1 (meteorological drought episodes).",
+    },
+    {
         "name": "SPI6: Count of months with SPI < -2 (severe drought)",
         "slug": "spi6_count_months_lt_minus2",
         "var": "pr",
@@ -1462,6 +1565,22 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         },
         "group": "rain",
         "description": "Annual count of months with SPI12 below -1 (moderate long-term drought persistence).",
+    },
+    {
+        "name": "SPI12: Count of drought events with SPI < -1",
+        "slug": "spi12_count_events_lt_minus1",
+        "var": "pr",
+        "value_col": "spi12_events_lt_minus1",
+        "units": "events",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 12,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_events_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of contiguous SPI12 drought events below -1 (long-term drought episodes).",
     },
     {
         "name": "SPI12: Count of months with SPI < -2 (severe drought)",
@@ -1892,26 +2011,29 @@ DOMAINS: dict[str, list[str]] = {
     "Cold Risk": [
         "tas_winter_mean",
         "tasmin_winter_mean",
-        # Cold thresholds
-        "fd_frost_days",
-        # "id_icing_days",
-        "tnlt2_cold_nights",
-        # "tnltm2_very_cold_nights",
-        # Cold percentiles & persistence
+        "tnn_annual_min",
+        "tasmin_winter_min",
+        # Threshold-based cold days
+        "tnle10_cold_nights",
+        "tnle5_severe_cold_nights",
+        "txle15_cold_days",
+        # Relative cold
         "tx10p_cool_days_pct",
         "tn10p_cool_nights_pct",
+        # Cold spell characteristics
         "csdi_cold_spell_days",
-        # Cold baseline context
-        # "txn_annual_min",
-        "tnn_annual_min",
+        "tnle10_consecutive_cold_nights",
     ],
     "Agriculture & Growing Conditions": [
-        # Growing season
         "gsl_growing_season",
-        # Supporting seasonal context
         "tasmax_summer_mean",
         "tasmin_winter_mean",
         "dtr_daily_temp_range",
+        "txge35_extreme_heat_days",
+        "tnle10_cold_nights",
+        "wsdi_warm_spell_days",
+        "spi3_drought_index",
+        "prcptot_annual_total",
     ],
     "Flood & Extreme Rainfall Risk": [
         # Peak intensity
@@ -1938,13 +2060,9 @@ DOMAINS: dict[str, list[str]] = {
         "rain_gt_2p5mm",
     ],
     "Drought Risk": [
-        # Default, streamlined view (most interpretable):
-        # 1) Persistence (how long it lasts)
-        "pr_consecutive_dry_days_lt1mm",
-        # 2) Intensity (how “dry” overall)
-        "spi6_drought_index",
-        # 3) Frequency (how often drought months occur)
-        "spi6_count_months_lt_minus1",
+        "spi3_count_events_lt_minus1",
+        "spi6_count_events_lt_minus1",
+        "spi12_count_events_lt_minus1",
     ],
     "Drought Risk (Advanced)": [
         # Short-term vs long-term SPI + severity splits (keep available but not default)

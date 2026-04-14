@@ -980,29 +980,41 @@ def _build_climate_runtime_plan(
 
     plan: list[PlannedCommand] = []
     if not bool(getattr(args, "skip_optimised", False)):
-        grouped: dict[tuple[tuple[str, ...], tuple[str, ...]], list[str]] = {}
-        for level in scope.levels:
-            readiness = scope.by_level[level]
-            pending_metrics = tuple(readiness.optimized_pending_metrics)
-            has_level_global_issues = any(
-                str(issue.get("level") or "").strip() in {"", level}
-                for issue in scope.global_issues
-            )
-            if not pending_metrics and not has_level_global_issues:
-                continue
-            key = (pending_metrics, tuple())
-            grouped.setdefault(key, []).append(level)
-
-        for (pending_metrics, _unused), grouped_levels in grouped.items():
-            label_levels = "+".join(grouped_levels)
-            plan.append(
-                _build_optimised_step(
-                    args,
-                    pending_metrics,
-                    levels=grouped_levels,
-                    label=f"processed-optimised-build:{label_levels}",
+        if bool(getattr(args, "overwrite", False)):
+            if scope.selected_metrics or scope.has_global_issues:
+                label_levels = "+".join(scope.levels)
+                plan.append(
+                    _build_optimised_step(
+                        args,
+                        scope.selected_metrics,
+                        levels=scope.levels,
+                        label=f"processed-optimised-build:{label_levels}",
+                    )
                 )
-            )
+        else:
+            grouped: dict[tuple[tuple[str, ...], tuple[str, ...]], list[str]] = {}
+            for level in scope.levels:
+                readiness = scope.by_level[level]
+                pending_metrics = tuple(readiness.optimized_pending_metrics)
+                has_level_global_issues = any(
+                    str(issue.get("level") or "").strip() in {"", level}
+                    for issue in scope.global_issues
+                )
+                if not pending_metrics and not has_level_global_issues:
+                    continue
+                key = (pending_metrics, tuple())
+                grouped.setdefault(key, []).append(level)
+
+            for (pending_metrics, _unused), grouped_levels in grouped.items():
+                label_levels = "+".join(grouped_levels)
+                plan.append(
+                    _build_optimised_step(
+                        args,
+                        pending_metrics,
+                        levels=grouped_levels,
+                        label=f"processed-optimised-build:{label_levels}",
+                    )
+                )
 
     if not bool(getattr(args, "skip_audit", False)):
         plan.append(

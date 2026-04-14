@@ -71,6 +71,35 @@ def test_compute_district_ensembles_marks_missing_when_inputs_invalid(tmp_path: 
     assert any("no valid filtered yearly inputs" in message for message in stats.errors)
 
 
+def test_compute_district_ensembles_respect_model_and_scenario_filters(tmp_path: Path) -> None:
+    level_root = tmp_path / "Telangana" / "districts"
+    ensembles_root = level_root / "ensembles"
+    _write_yearly_csv(
+        level_root / "ADILABAD" / "ModelA" / "historical" / "ADILABAD_yearly.csv",
+        rows=[{"year": 2000, "value": 1.0}],
+    )
+    _write_yearly_csv(
+        level_root / "ADILABAD" / "ModelA" / "ssp245" / "ADILABAD_yearly.csv",
+        rows=[{"year": 2030, "value": 2.0}],
+    )
+    _write_yearly_csv(
+        level_root / "ADILABAD" / "ModelB" / "historical" / "ADILABAD_yearly.csv",
+        rows=[{"year": 2000, "value": 3.0}],
+    )
+
+    stats = CMP._compute_district_ensembles(
+        level_root,
+        ensembles_root,
+        allowed_models=("ModelA",),
+        allowed_scenarios=("historical",),
+    )
+
+    assert stats.expected_output_count == 1
+    assert stats.written_count == 1
+    assert (ensembles_root / "ADILABAD" / "historical" / "ADILABAD_yearly_ensemble.csv").exists()
+    assert not (ensembles_root / "ADILABAD" / "ssp245" / "ADILABAD_yearly_ensemble.csv").exists()
+
+
 def test_compute_block_ensembles_counts_expected_and_written_outputs(tmp_path: Path) -> None:
     level_root = tmp_path / "Telangana" / "blocks"
     ensembles_root = level_root / "ensembles"
@@ -139,3 +168,32 @@ def test_compute_block_ensembles_marks_missing_when_inputs_invalid(tmp_path: Pat
     assert stats.missing_expected_output_count == 1
     assert stats.skipped_input_count == 1
     assert any("no valid filtered yearly inputs" in message for message in stats.errors)
+
+
+def test_compute_block_ensembles_respect_model_and_scenario_filters(tmp_path: Path) -> None:
+    level_root = tmp_path / "Telangana" / "blocks"
+    ensembles_root = level_root / "ensembles"
+    _write_yearly_csv(
+        level_root / "ADILABAD" / "BLOCK_A" / "ModelA" / "historical" / "BLOCK_A_yearly.csv",
+        rows=[{"year": 2000, "value": 1.0}],
+    )
+    _write_yearly_csv(
+        level_root / "ADILABAD" / "BLOCK_A" / "ModelA" / "ssp245" / "BLOCK_A_yearly.csv",
+        rows=[{"year": 2030, "value": 2.0}],
+    )
+    _write_yearly_csv(
+        level_root / "ADILABAD" / "BLOCK_A" / "ModelB" / "historical" / "BLOCK_A_yearly.csv",
+        rows=[{"year": 2000, "value": 3.0}],
+    )
+
+    stats = CMP._compute_block_ensembles(
+        level_root,
+        ensembles_root,
+        allowed_models=("ModelA",),
+        allowed_scenarios=("historical",),
+    )
+
+    assert stats.expected_output_count == 1
+    assert stats.written_count == 1
+    assert (ensembles_root / "ADILABAD" / "BLOCK_A" / "historical" / "BLOCK_A_yearly_ensemble.csv").exists()
+    assert not (ensembles_root / "ADILABAD" / "BLOCK_A" / "ssp245" / "BLOCK_A_yearly_ensemble.csv").exists()

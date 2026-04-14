@@ -130,6 +130,107 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
     assert "wbd_le_6" not in heat_stress_metrics
 
 
+def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
+    assert "tasmin_winter_min" in METRICS_BY_SLUG
+    assert "tnle10_cold_nights" in METRICS_BY_SLUG
+    assert "tnle5_severe_cold_nights" in METRICS_BY_SLUG
+    assert "txle15_cold_days" in METRICS_BY_SLUG
+    assert "tnle10_consecutive_cold_nights" in METRICS_BY_SLUG
+
+    winter_min = METRICS_BY_SLUG["tasmin_winter_min"]
+    cold_nights = METRICS_BY_SLUG["tnle10_cold_nights"]
+    severe_nights = METRICS_BY_SLUG["tnle5_severe_cold_nights"]
+    cold_days = METRICS_BY_SLUG["txle15_cold_days"]
+    consecutive = METRICS_BY_SLUG["tnle10_consecutive_cold_nights"]
+
+    assert winter_min.compute == "seasonal_min"
+    assert winter_min.params["months"] == [12, 1, 2]
+    assert cold_nights.compute == "count_days_le_threshold"
+    assert cold_nights.params["thresh_k"] == 10.0 + 273.15
+    assert severe_nights.params["thresh_k"] == 5.0 + 273.15
+    assert cold_days.compute == "count_days_le_threshold"
+    assert cold_days.params["thresh_k"] == 15.0 + 273.15
+    assert consecutive.compute == "longest_consecutive_run_le_threshold"
+    assert consecutive.params["min_len"] == 1
+
+    cold_risk_metrics = get_metrics_for_bundle("Cold Risk", spatial_family="admin", level="district")
+    assert cold_risk_metrics == [
+        "tas_winter_mean",
+        "tasmin_winter_mean",
+        "tnn_annual_min",
+        "tasmin_winter_min",
+        "tnle10_cold_nights",
+        "tnle5_severe_cold_nights",
+        "txle15_cold_days",
+        "tx10p_cool_days_pct",
+        "tn10p_cool_nights_pct",
+        "csdi_cold_spell_days",
+        "tnle10_consecutive_cold_nights",
+    ]
+    assert "fd_frost_days" not in cold_risk_metrics
+    assert "tnlt2_cold_nights" not in cold_risk_metrics
+
+
+def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
+    assert "spi3_count_events_lt_minus1" in METRICS_BY_SLUG
+    assert "spi6_count_events_lt_minus1" in METRICS_BY_SLUG
+    assert "spi12_count_events_lt_minus1" in METRICS_BY_SLUG
+
+    spi3 = METRICS_BY_SLUG["spi3_count_events_lt_minus1"]
+    spi6 = METRICS_BY_SLUG["spi6_count_events_lt_minus1"]
+    spi12 = METRICS_BY_SLUG["spi12_count_events_lt_minus1"]
+
+    assert spi3.compute == "standardised_precipitation_index"
+    assert spi3.params["scale_months"] == 3
+    assert spi3.params["annual_aggregation"] == "count_events_lt"
+    assert spi3.params["threshold"] == -1.0
+    assert spi6.params["scale_months"] == 6
+    assert spi12.params["scale_months"] == 12
+
+    drought_metrics = get_metrics_for_bundle("Drought Risk", spatial_family="admin", level="district")
+    assert drought_metrics == [
+        "spi3_count_events_lt_minus1",
+        "spi6_count_events_lt_minus1",
+        "spi12_count_events_lt_minus1",
+    ]
+
+
+def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
+    flood_metrics = get_metrics_for_bundle(
+        "Flood & Extreme Rainfall Risk",
+        spatial_family="admin",
+        level="district",
+    )
+    assert flood_metrics == [
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "r20mm_very_heavy_precip_days",
+        "r95p_very_wet_precip",
+        "r95ptot_contribution_pct",
+        "cwd_consecutive_wet_days",
+    ]
+
+
+def test_agriculture_bundle_membership_is_the_approved_nine_metric_mix() -> None:
+    agriculture_metrics = get_metrics_for_bundle(
+        "Agriculture & Growing Conditions",
+        spatial_family="admin",
+        level="district",
+    )
+    assert agriculture_metrics == [
+        "gsl_growing_season",
+        "tasmax_summer_mean",
+        "tasmin_winter_mean",
+        "dtr_daily_temp_range",
+        "txge35_extreme_heat_days",
+        "tnle10_cold_nights",
+        "wsdi_warm_spell_days",
+        "spi3_drought_index",
+        "prcptot_annual_total",
+    ]
+    assert METRICS_BY_SLUG["prcptot_annual_total"].rank_higher_is_worse is False
+
+
 def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
     pipeline_bundles = get_pipeline_bundles()
     dashboard_only = {

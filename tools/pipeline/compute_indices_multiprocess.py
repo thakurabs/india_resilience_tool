@@ -1088,6 +1088,20 @@ def count_days_below_threshold(da, mask, thresh_k):
     flags = (dm < float(thresh_k)).fillna(False)
     return int(flags.sum(dim="time").item())
 
+def count_days_le_threshold(da, mask, thresh_k):
+    """
+    Count days where the (area-mean) daily series is at or below a threshold.
+
+    Notes:
+      - Intended for threshold definitions that are explicitly inclusive in the methodology.
+      - Treats missing values as non-events.
+    """
+    dm = _get_district_daily_mean(da, mask)
+    if dm.size == 0:
+        return 0
+    flags = (dm <= float(thresh_k)).fillna(False)
+    return int(flags.sum(dim="time").item())
+
 def annual_mean(da, mask):
     dm = _get_district_daily_mean(da, mask)
     return float(dm.mean(dim="time").item()) - 273.15 if dm.size > 0 else np.nan
@@ -1099,6 +1113,14 @@ def seasonal_mean(da, mask, months):
     if ds.sizes.get("time", 0) == 0: return np.nan
     daily = ds.mean(dim=("lat", "lon"), skipna=True).dropna(dim="time", how="all")
     return float(daily.mean(dim="time").item()) - 273.15 if daily.size > 0 else np.nan
+
+def seasonal_min(da, mask, months):
+    dm = da.where(mask)
+    if "time" not in dm.dims: raise ValueError("Expected 'time' dimension")
+    ds = dm.sel(time=dm["time"].dt.month.isin(months))
+    if ds.sizes.get("time", 0) == 0: return np.nan
+    daily = ds.mean(dim=("lat", "lon"), skipna=True).dropna(dim="time", how="all")
+    return float(daily.min(dim="time").item()) - 273.15 if daily.size > 0 else np.nan
 
 def annual_max_temperature(da, mask):
     dm = _get_district_daily_mean(da, mask)
@@ -1112,6 +1134,13 @@ def longest_consecutive_run_above_threshold(da, mask, thresh_k, min_len=1):
     dm = _get_district_daily_mean(da, mask)
     if dm.size == 0: return 0
     arr = np.asarray((dm > float(thresh_k)).fillna(False).values, dtype=bool)
+    max_run, _ = _run_length_stats(arr, int(min_len))
+    return int(max_run)
+
+def longest_consecutive_run_le_threshold(da, mask, thresh_k, min_len=1):
+    dm = _get_district_daily_mean(da, mask)
+    if dm.size == 0: return 0
+    arr = np.asarray((dm <= float(thresh_k)).fillna(False).values, dtype=bool)
     max_run, _ = _run_length_stats(arr, int(min_len))
     return int(max_run)
 
@@ -1845,6 +1874,7 @@ def _annualize_spi(
       - "mean": annual mean SPI over available months
       - "count_months_lt": count months with SPI < threshold
       - "count_months_gt": count months with SPI > threshold
+      - "count_events_lt": count contiguous SPI < threshold monthly runs
     """
     if spi_monthly.sizes.get("time", 0) == 0:
         return xr.DataArray([], dims=("year",))
@@ -1872,6 +1902,37 @@ def _annualize_spi(
         out = flags.groupby("time.year").sum(dim="time")
         out = out.where(n_valid >= int(min_months_per_year), drop=True)
         out.name = "spi_yearly"
+        return out
+
+    if annual_aggregation == "count_events_lt":
+        if threshold is None:
+            raise ValueError(f"annual_aggregation='{annual_aggregation}' requires a numeric threshold")
+
+        flags = (spi_monthly < float(threshold)).fillna(False)
+        years = flags.groupby("time.year")
+        n_valid = grp.count(dim="time")
+
+        event_rows: list[tuple[int, int]] = []
+        for year, year_flags in years:
+            valid_months = int(n_valid.sel(year=year).item())
+            if valid_months < int(min_months_per_year):
+                continue
+            event_rows.append(
+                (
+                    int(year),
+                    int(_count_events(np.asarray(year_flags.values, dtype=bool), min_len=1)),
+                )
+            )
+
+        if not event_rows:
+            return xr.DataArray([], dims=("year",))
+
+        out = xr.DataArray(
+            [count for _, count in event_rows],
+            coords={"year": [year for year, _ in event_rows]},
+            dims=("year",),
+            name="spi_yearly",
+        )
         return out
 
     raise ValueError(f"Unsupported annual_aggregation='{annual_aggregation}'")
@@ -3147,7 +3208,7 @@ def required_vars_for_metric(metric: dict) -> list[str]:
     return [str(v)] if v else []
 
 
-COMPUTE_MARKER_SCHEMA_VERSION = 2
+COMPUTE_MARKER_SCHEMA_VERSION = 3
 ENSEMBLE_MARKER_SCHEMA_VERSION = 3
 SKIP_REASON_MISSING_REQUIRED_VARS = "missing_required_vars"
 SKIP_REASON_NO_AVAILABLE_YEARS = "no_available_years"
@@ -3465,6 +3526,11 @@ def _task_output_file_counts(
     yearly_count = sum(1 for _ in level_root.glob(yearly_pattern))
     periods_count = sum(1 for _ in level_root.glob(periods_pattern))
     return yearly_count, periods_count
+
+
+def _compute_marker_yearly_cleanup_policy(level: AdminLevel) -> str:
+    """Return the yearly-output retention policy encoded in compute markers."""
+    return "delete_after_ensemble" if level == "block" else "preserve"
 
 
 def _ensemble_output_count(
@@ -4281,11 +4347,30 @@ def compute_ensembles_generic(
             allowed_scenarios=allowed_scenarios,
         )
     elif level == "block":
-        return _compute_block_ensembles(level_root, ensembles_root)
+        return _compute_block_ensembles(
+            level_root,
+            ensembles_root,
+            slug=slug,
+            allowed_models=allowed_models,
+            allowed_scenarios=allowed_scenarios,
+        )
     else:
-        return _compute_district_ensembles(level_root, ensembles_root)
+        return _compute_district_ensembles(
+            level_root,
+            ensembles_root,
+            slug=slug,
+            allowed_models=allowed_models,
+            allowed_scenarios=allowed_scenarios,
+        )
 
-def _compute_district_ensembles(level_root: Path, ensembles_root: Path) -> EnsembleBuildStats:
+def _compute_district_ensembles(
+    level_root: Path,
+    ensembles_root: Path,
+    *,
+    slug: str | None = None,
+    allowed_models: Sequence[str] | None = None,
+    allowed_scenarios: Sequence[str] | None = None,
+) -> EnsembleBuildStats:
     """Compute ensembles for district-level data."""
     stats = EnsembleBuildStats()
     skip_dirs = {"ensembles"}
@@ -4296,8 +4381,14 @@ def _compute_district_ensembles(level_root: Path, ensembles_root: Path) -> Ensem
     
     for ddir in district_dirs:
         district = ddir.name
-        model_dirs = [p for p in ddir.iterdir() if p.is_dir()]
-        scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+        model_dirs = _sorted_child_dirs(ddir, allowed_names=allowed_models)
+        if not model_dirs:
+            continue
+        allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
+        if allowed_scenarios_norm is None:
+            scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+        else:
+            scenarios = list(allowed_scenarios_norm)
         metadata_columns = {"district", "model", "scenario", "year", "source_file"}
         
         for scenario in scenarios:
@@ -4305,11 +4396,11 @@ def _compute_district_ensembles(level_root: Path, ensembles_root: Path) -> Ensem
             expected_output = False
             for m in model_dirs:
                 ycsv = m / scenario / f"{district}_yearly.csv"
-                if not ycsv.exists():
+                if not path_exists(ycsv):
                     continue
                 expected_output = True
                 try:
-                    dfy = pd.read_csv(ycsv)
+                    dfy = read_csv(ycsv)
                     cleaned, skip_reason = _clean_ensemble_yearly_frame(
                         dfy,
                         metadata_columns=metadata_columns,
@@ -4386,7 +4477,14 @@ def _compute_district_ensembles(level_root: Path, ensembles_root: Path) -> Ensem
                 )
     return stats
 
-def _compute_block_ensembles(level_root: Path, ensembles_root: Path) -> EnsembleBuildStats:
+def _compute_block_ensembles(
+    level_root: Path,
+    ensembles_root: Path,
+    *,
+    slug: str | None = None,
+    allowed_models: Sequence[str] | None = None,
+    allowed_scenarios: Sequence[str] | None = None,
+) -> EnsembleBuildStats:
     """Compute ensembles for block-level data."""
     stats = EnsembleBuildStats()
     skip_dirs = {"ensembles"}
@@ -4401,8 +4499,14 @@ def _compute_block_ensembles(level_root: Path, ensembles_root: Path) -> Ensemble
         
         for bdir in block_dirs:
             block = bdir.name
-            model_dirs = [p for p in bdir.iterdir() if p.is_dir()]
-            scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+            model_dirs = _sorted_child_dirs(bdir, allowed_names=allowed_models)
+            if not model_dirs:
+                continue
+            allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
+            if allowed_scenarios_norm is None:
+                scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
+            else:
+                scenarios = list(allowed_scenarios_norm)
             metadata_columns = {"district", "block", "model", "scenario", "year", "source_file"}
             
             for scenario in scenarios:
@@ -4410,11 +4514,11 @@ def _compute_block_ensembles(level_root: Path, ensembles_root: Path) -> Ensemble
                 expected_output = False
                 for m in model_dirs:
                     ycsv = m / scenario / f"{block}_yearly.csv"
-                    if not ycsv.exists():
+                    if not path_exists(ycsv):
                         continue
                     expected_output = True
                     try:
-                        dfy = pd.read_csv(ycsv)
+                        dfy = read_csv(ycsv)
                         cleaned, skip_reason = _clean_ensemble_yearly_frame(
                             dfy,
                             metadata_columns=metadata_columns,
@@ -4509,12 +4613,12 @@ def _compute_block_ensembles(level_root: Path, ensembles_root: Path) -> Ensemble
 
                 # After successfully writing ensemble outputs, delete per-model yearly CSVs
                 out_csv = out_dir / f"{block}_yearly_ensemble.csv"
-                if out_csv.exists():
+                if path_exists(out_csv):
                     for m in model_dirs:
                         ycsv = m / scenario / f"{block}_yearly.csv"
-                        if ycsv.exists():
+                        if path_exists(ycsv):
                             try:
-                                ycsv.unlink()
+                                unlink_file(ycsv)
                             except Exception as e:
                                 logging.debug(
                                     "Could not delete per-model block yearly CSV: %s (%s)",
@@ -5127,6 +5231,9 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
 
     yearly_expected = int(payload.get("yearly_file_count", -1))
     periods_expected = int(payload.get("period_file_count", -1))
+    yearly_cleanup_policy = str(
+        payload.get("yearly_cleanup_policy", _compute_marker_yearly_cleanup_policy(task.level))
+    ).strip()
     yearly_actual, periods_actual = _task_output_file_counts(
         slug=task.slug,
         level=task.level,
@@ -5134,7 +5241,15 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
         model=task.model,
         scenario=task.scenario,
     )
-    if yearly_actual != yearly_expected or periods_actual != periods_expected:
+    yearly_counts_valid = yearly_actual == yearly_expected
+    if (
+        task.level == "block"
+        and yearly_cleanup_policy == "delete_after_ensemble"
+        and yearly_actual == 0
+        and yearly_expected >= 0
+    ):
+        yearly_counts_valid = True
+    if not yearly_counts_valid or periods_actual != periods_expected:
         return MarkerValidationStatus(
             valid=False,
             reason="compute_marker_output_count_mismatch",
@@ -5242,6 +5357,7 @@ def _write_task_completion_marker(task: ProcessingTask, *, output_meta: Optional
         "boundary_mtime_ns": int(boundary_mtime_ns),
         "yearly_file_count": int(output_meta.get("yearly_file_count", 0)),
         "period_file_count": int(output_meta.get("period_file_count", 0)),
+        "yearly_cleanup_policy": _compute_marker_yearly_cleanup_policy(task.level),
         "completed_at": time.time(),
     }
     _write_marker_json(
