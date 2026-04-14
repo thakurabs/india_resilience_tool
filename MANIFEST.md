@@ -10,7 +10,7 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 The current working tree supports:
 - a default climate-hazard landing / discovery surface that opens on an India state-level bundle map and drills down India -> state -> district before handing off to the detailed workflow
 - a Glance bundle scope limited to `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`, with other climate domains still available in Deep Dive
-- declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, currently used for the `Heat Risk` and `Heat Stress` bundles
+- declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance climate bundles
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
 - type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
 - a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff
@@ -44,7 +44,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
 | `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, Aqueduct, population, groundwater, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
-| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with exact pre-scan task counting, yearly parity migration, hydro yearly fallback-from-models, optional `--level` filtering, and nested terminal progress bars |
+| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with exact pre-scan task counting, deterministic parallel yearly processing, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
 | `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` filtering, and write `parity_report.json` |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |

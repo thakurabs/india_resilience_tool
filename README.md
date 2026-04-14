@@ -18,7 +18,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - launches into an India state-level climate-hazard screening map
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
   - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
-  - uses approved custom metric weights for `Heat Risk` and `Heat Stress`; other visible Glance bundles remain equal-weight for now
+  - uses approved custom metric weights for all visible Glance climate bundles
   - supports India -> state -> district drill-down before entering Deep Dive
   - uses explicit state clicks at India overview and district clicks within the selected state
   - top-bar geography search provides type-to-filter state and district suggestions
@@ -170,11 +170,14 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 
 For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.
 
+By default, the builder now parallelizes yearly-model and yearly-ensemble stages using roughly `80%` of available logical CPUs. Use `--workers 1` to force serial execution, or pass an explicit worker count when you want tighter control.
+
 The optimized builder also supports level-filtered refreshes:
 
 ```bash
 python -m tools.optimized.build_processed_optimised --level hydro
 python -m tools.optimized.build_processed_optimised --level sub_basin --metric tas_annual_mean
+python -m tools.optimized.build_processed_optimised --metric tas_annual_mean --workers 4 --skip-geometry --skip-context --skip-audit
 ```
 
 while dropping duplicate runtime fields such as:

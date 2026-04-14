@@ -4,6 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+from pandas.testing import assert_frame_equal
 import pytest
 from shapely.geometry import Polygon
 
@@ -19,8 +20,125 @@ from tools.optimized.build_processed_optimised import (
     _build_execution_plan,
     audit_processed_optimised_parity,
     build_processed_optimised_bundle,
+    default_build_workers_80pct,
+    resolve_build_workers,
     _write_geometry_bundle,
 )
+
+
+def _write_admin_legacy_metric_fixture(tmp_path: Path, *, slug: str = "txx_annual_max") -> None:
+    legacy_root = tmp_path / "processed" / slug / "Telangana"
+    legacy_root.mkdir(parents=True)
+    (legacy_root / "master_metrics_by_district.csv").write_text(
+        f"state,district,{slug}__ssp245__2030-2040__mean\nTelangana,Hanumakonda,1.0\n",
+        encoding="utf-8",
+    )
+    (legacy_root / "master_metrics_by_block.csv").write_text(
+        f"state,district,block,{slug}__ssp245__2030-2040__mean\nTelangana,Hanumakonda,Atmakur,2.0\n",
+        encoding="utf-8",
+    )
+
+    district_model_dir = legacy_root / "districts" / "Hanumakonda" / "ModelA" / "ssp245"
+    district_model_dir.mkdir(parents=True)
+    (district_model_dir / "Hanumakonda_yearly.csv").write_text("year,value\n2030,1.0\n", encoding="utf-8")
+
+    district_ensemble_dir = legacy_root / "districts" / "ensembles" / "Hanumakonda" / "ssp245"
+    district_ensemble_dir.mkdir(parents=True)
+    (district_ensemble_dir / "Hanumakonda_yearly_ensemble.csv").write_text(
+        "year,ensemble_mean\n2030,1.5\n",
+        encoding="utf-8",
+    )
+
+    block_model_dir = legacy_root / "blocks" / "Hanumakonda" / "Atmakur" / "ModelA" / "ssp245"
+    block_model_dir.mkdir(parents=True)
+    (block_model_dir / "Atmakur_yearly.csv").write_text("year,value\n2030,2.0\n", encoding="utf-8")
+
+    block_ensemble_dir = legacy_root / "blocks" / "ensembles" / "Hanumakonda" / "Atmakur" / "ssp245"
+    block_ensemble_dir.mkdir(parents=True)
+    (block_ensemble_dir / "Atmakur_yearly_ensemble.csv").write_text(
+        "year,ensemble_mean\n2030,2.5\n",
+        encoding="utf-8",
+    )
+
+
+def _write_hydro_legacy_metric_fixture(tmp_path: Path, *, slug: str = "txx_annual_max") -> None:
+    hydro_root = tmp_path / "processed" / slug / "hydro"
+    hydro_root.mkdir(parents=True)
+    (hydro_root / "master_metrics_by_basin.csv").write_text(
+        f"basin_id,basin_name,{slug}__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,3.0\n",
+        encoding="utf-8",
+    )
+    (hydro_root / "master_metrics_by_sub_basin.csv").write_text(
+        f"basin_id,basin_name,subbasin_id,subbasin_name,{slug}__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,GODAVARI-1,Pranhita,2.0\n",
+        encoding="utf-8",
+    )
+
+    basin_ensemble_dir = hydro_root / "basins" / "ensembles" / "Godavari Basin" / "ssp245"
+    basin_ensemble_dir.mkdir(parents=True)
+    (basin_ensemble_dir / "Godavari Basin_yearly_ensemble.csv").write_text(
+        "year,ensemble_mean,ensemble_median\n2030,3.5,3.4\n",
+        encoding="utf-8",
+    )
+
+    sub_ensemble_dir = hydro_root / "sub_basins" / "ensembles" / "Godavari Basin" / "Pranhita" / "ssp245"
+    sub_ensemble_dir.mkdir(parents=True)
+    (sub_ensemble_dir / "Pranhita_yearly_ensemble.csv").write_text(
+        "year,ensemble_mean,ensemble_median\n2030,2.5,2.4\n",
+        encoding="utf-8",
+    )
+
+
+def _write_geometry_fixture(tmp_path: Path) -> None:
+    district_gdf = gpd.GeoDataFrame(
+        {"STATE_UT": ["Telangana"], "DISTRICT": ["Hanumakonda"]},
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        crs="EPSG:4326",
+    )
+    district_gdf.to_file(tmp_path / "districts_4326.geojson", driver="GeoJSON")
+
+    block_gdf = gpd.GeoDataFrame(
+        {"STATE_UT": ["Telangana"], "District": ["Hanumakonda"], "Sub_dist": ["Atmakur"]},
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        crs="EPSG:4326",
+    )
+    block_gdf.to_file(tmp_path / "blocks_4326.geojson", driver="GeoJSON")
+
+    basin_gdf = gpd.GeoDataFrame(
+        {"basin_id": ["GODAVARI"], "basin_name": ["Godavari Basin"], "hydro_level": ["basin"]},
+        geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
+        crs="EPSG:4326",
+    )
+    basin_gdf.to_file(tmp_path / "basins.geojson", driver="GeoJSON")
+
+    subbasin_gdf = gpd.GeoDataFrame(
+        {
+            "basin_id": ["GODAVARI"],
+            "basin_name": ["Godavari Basin"],
+            "subbasin_id": ["GODAVARI-1"],
+            "subbasin_code": ["G1"],
+            "subbasin_name": ["Pranhita"],
+            "hydro_level": ["sub_basin"],
+        },
+        geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
+        crs="EPSG:4326",
+    )
+    subbasin_gdf.to_file(tmp_path / "subbasins.geojson", driver="GeoJSON")
+
+
+def _read_output_tables(bundle_root: Path, *, slug: str) -> dict[str, pd.DataFrame]:
+    paths = {
+        "district_master": bundle_root / "metrics" / slug / "masters" / "admin" / "district" / "state=Telangana.parquet",
+        "block_master": bundle_root / "metrics" / slug / "masters" / "admin" / "block" / "state=Telangana.parquet",
+        "basin_master": bundle_root / "metrics" / slug / "masters" / "hydro" / "basin" / "master.parquet",
+        "sub_basin_master": bundle_root / "metrics" / slug / "masters" / "hydro" / "sub_basin" / "master.parquet",
+        "district_yearly_ensemble": bundle_root / "metrics" / slug / "yearly_ensemble" / "admin" / "district" / "state=Telangana.parquet",
+        "block_yearly_ensemble": bundle_root / "metrics" / slug / "yearly_ensemble" / "admin" / "block" / "state=Telangana.parquet",
+        "basin_yearly_ensemble": bundle_root / "metrics" / slug / "yearly_ensemble" / "hydro" / "basin" / "master.parquet",
+        "sub_basin_yearly_ensemble": bundle_root / "metrics" / slug / "yearly_ensemble" / "hydro" / "sub_basin" / "master.parquet",
+        "district_yearly_models": bundle_root / "metrics" / slug / "yearly_models" / "admin" / "district" / "state=Telangana.parquet",
+        "block_yearly_models": bundle_root / "metrics" / slug / "yearly_models" / "admin" / "block" / "state=Telangana.parquet",
+    }
+    return {name: pd.read_parquet(path) for name, path in paths.items()}
 
 
 def test_list_available_states_from_optimized_metric_root(tmp_path: Path) -> None:
@@ -269,6 +387,23 @@ def test_build_progress_failure_summary_reports_remaining() -> None:
     assert "current=m2" in summary
 
 
+def test_default_build_workers_80pct(monkeypatch) -> None:
+    monkeypatch.setattr("tools.optimized.build_processed_optimised.os.cpu_count", lambda: 10)
+
+    assert default_build_workers_80pct() == 8
+    assert resolve_build_workers(None) == 8
+    assert resolve_build_workers(1) == 1
+    assert resolve_build_workers(3) == 3
+
+
+def test_resolve_build_workers_rejects_non_positive() -> None:
+    with pytest.raises(ValueError):
+        resolve_build_workers(0)
+
+    with pytest.raises(ValueError):
+        resolve_build_workers(-2)
+
+
 def test_build_processed_optimised_writes_admin_and_hydro_yearly_outputs(
     tmp_path: Path,
     monkeypatch,
@@ -382,6 +517,48 @@ def test_build_processed_optimised_writes_admin_and_hydro_yearly_outputs(
     assert district_df["mean"].tolist() == [1.5]
     assert hydro_df["basin_name"].tolist() == ["Godavari Basin"]
     assert hydro_df["mean"].tolist() == [3.5]
+
+
+def test_build_processed_optimised_parallel_matches_serial_outputs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    serial_root = tmp_path / "serial"
+    parallel_root = tmp_path / "parallel"
+    for root in (serial_root, parallel_root):
+        _write_admin_legacy_metric_fixture(root)
+        _write_hydro_legacy_metric_fixture(root)
+        _write_geometry_fixture(root)
+
+    monkeypatch.setenv("IRT_DATA_DIR", str(serial_root))
+    build_processed_optimised_bundle(
+        data_dir=serial_root,
+        metrics=["txx_annual_max"],
+        workers=1,
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+    serial_tables = _read_output_tables(serial_root / "processed_optimised", slug="txx_annual_max")
+
+    monkeypatch.setenv("IRT_DATA_DIR", str(parallel_root))
+    build_processed_optimised_bundle(
+        data_dir=parallel_root,
+        metrics=["txx_annual_max"],
+        workers=2,
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+    parallel_tables = _read_output_tables(parallel_root / "processed_optimised", slug="txx_annual_max")
+
+    assert serial_tables.keys() == parallel_tables.keys()
+    for name in sorted(serial_tables):
+        assert_frame_equal(serial_tables[name], parallel_tables[name], check_like=False)
 
 
 def test_build_execution_plan_adds_hydro_yearly_fallback_from_model_files(
@@ -567,6 +744,75 @@ def test_audit_processed_optimised_parity_reports_missing_yearly_outputs(
     stages = {issue["stage"] for issue in report["issues"]}
     assert "masters" in stages
     assert "yearly-ensemble" in stages
+
+
+def test_build_processed_optimised_overwrite_resets_prior_level_outputs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path)
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        levels=["district"],
+        overwrite=True,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    district_master = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "txx_annual_max"
+        / "masters"
+        / "admin"
+        / "district"
+        / "state=Telangana.parquet"
+    )
+    block_master = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "txx_annual_max"
+        / "masters"
+        / "admin"
+        / "block"
+        / "state=Telangana.parquet"
+    )
+
+    assert district_master.exists()
+    assert not block_master.exists()
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        levels=["block"],
+        overwrite=True,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    assert block_master.exists()
+    assert not district_master.exists()
+
+    report = audit_processed_optimised_parity(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        levels=["district", "block"],
+        include_geometry=False,
+        include_context=False,
+        write_report=False,
+    )
+
+    assert report["issue_count"] >= 1
+    assert any(issue["level"] == "district" for issue in report["issues"])
 
 
 def test_build_execution_plan_and_audit_filter_to_sub_basin_level(
