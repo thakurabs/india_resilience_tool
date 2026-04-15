@@ -406,6 +406,22 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     ),
 },
 {
+    "name": "Wet-Bulb Temperature (Summer Mean; MAM Mean)",
+    "slug": "twb_summer_mean",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "summer_twb_mean_C",
+    "units": "°C",
+    "compute": "wet_bulb_seasonal_mean_stull",
+    "params": {"months": [3, 4, 5]},
+    "group": "temperature",
+    "description": (
+        "Mean wet-bulb temperature (°C) during summer (March-May), derived from "
+        "near-surface air temperature (tas) and relative humidity (hurs) using "
+        "the Stull (2011) approximation."
+    ),
+},
+{
     "name": "Wet-Bulb Temperature (Annual Max)",
     "slug": "twb_annual_max",
     "var": "tas",
@@ -467,6 +483,27 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "indicates humid conditions and reduced evaporative cooling."
     ),
 },
+{
+    "name": "Moderate Humid-Heat Days (3°C < WBD ≤ 6°C)",
+    "slug": "wbd_gt3_le6",
+    "var": "tas",
+    "vars": ["tas", "hurs"],
+    "value_col": "wbd_gt_3_le_6_days",
+    "units": "days",
+    "compute": "wet_bulb_depression_days_range_stull",
+    "params": {
+        "lower_c": 3.0,
+        "upper_c": 6.0,
+        "lower_inclusive": False,
+        "upper_inclusive": True,
+    },
+    "group": "temperature",
+    "description": (
+        "Number of days per year where wet-bulb depression (tas - Twb) falls in the "
+        "moderate humid-heat range 3°C < WBD <= 6°C, derived from tas and hurs using "
+        "the Stull (2011) approximation."
+    ),
+},
     {
         "name": "Hot Days (TX ≥ 30°C)",
         "slug": "txge30_hot_days",
@@ -507,6 +544,65 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Number of nights when daily minimum temperature exceeds 20°C. "
             "Climdex index TR."
+        ),
+    },
+    {
+        "name": "Tropical Nights (TR, TN > 25°C)",
+        "slug": "tasmin_tropical_nights_gt25",
+        "var": "tasmin",
+        "value_col": "tropical_nights_gt_25C",
+        "units": "days",
+        "compute": "count_days_above_threshold",
+        "params": {"thresh_k": 25.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of nights when daily minimum temperature exceeds 25°C. "
+            "This higher tropical-nights threshold is used for the Indian Heat Risk bundle context."
+        ),
+    },
+    {
+        "name": "Tropical Nights (TR, TN > 28°C)",
+        "slug": "tasmin_tropical_nights_gt28",
+        "var": "tasmin",
+        "value_col": "tropical_nights_gt_28C",
+        "units": "days",
+        "compute": "count_days_above_threshold",
+        "params": {"thresh_k": 28.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of nights when daily minimum temperature exceeds 28°C. "
+            "This higher threshold is used for the Heat Stress bundle's night-time heat component."
+        ),
+    },
+    {
+        "name": "Heat Stress Days (Twb ≥ 28°C)",
+        "slug": "twb_days_ge_28",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "twb_days_ge_28_days",
+        "units": "days",
+        "compute": "wet_bulb_days_ge_threshold_stull",
+        "params": {"thresh_c": 28.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with wet-bulb temperature >= 28°C, derived from tas "
+            "and hurs using the Stull (2011) approximation."
+        ),
+    },
+    {
+        "name": "Consecutive Wet-Bulb Stress Days (WBD ≤ 3°C)",
+        "slug": "wbd_le_3_consecutive_days",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbd_le_3_consecutive_days",
+        "units": "days",
+        "compute": "wet_bulb_depression_longest_run_le_threshold_stull",
+        "params": {"thresh_c": 3.0, "min_spell_days": 3},
+        "group": "temperature",
+        "description": (
+            "Maximum length of a humid-heat spell where wet-bulb depression (tas - Twb) "
+            "stays <= 3°C for at least 3 consecutive days, derived from tas and hurs using "
+            "the Stull (2011) approximation."
         ),
     },
     
@@ -790,6 +886,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
+        "name": "Winter Minimum Tmin (DJF Min TN)",
+        "slug": "tasmin_winter_min",
+        "var": "tasmin",
+        "value_col": "winter_tasmin_min_C",
+        "units": "°C",
+        "compute": "seasonal_min",
+        "params": {"months": [12, 1, 2]},
+        "group": "temperature",
+        "description": (
+            "Minimum of daily minimum temperature during winter (December-February). "
+            "This captures the coldest winter night in the season."
+        ),
+    },
+    {
         "name": "Daily Temperature Range (DTR)",
         "slug": "dtr_daily_temp_range",
         "var": "tasmax",  # Primary var (also requires tasmin)
@@ -863,6 +973,62 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Number of days when daily minimum temperature is below 2°C. "
             "Climdex TNlt2 index."
+        ),
+    },
+    {
+        "name": "Cold Nights (TN <= 10°C)",
+        "slug": "tnle10_cold_nights",
+        "var": "tasmin",
+        "value_col": "days_tn_le_10C",
+        "units": "days",
+        "compute": "count_days_le_threshold",
+        "params": {"thresh_k": 10.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of days when daily minimum temperature is at or below 10°C. "
+            "This workbook-aligned threshold captures cold nights relevant to plains and central India."
+        ),
+    },
+    {
+        "name": "Severe Cold Nights (TN <= 5°C)",
+        "slug": "tnle5_severe_cold_nights",
+        "var": "tasmin",
+        "value_col": "days_tn_le_5C",
+        "units": "days",
+        "compute": "count_days_le_threshold",
+        "params": {"thresh_k": 5.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of days when daily minimum temperature is at or below 5°C. "
+            "This workbook-aligned threshold captures more severe night-time cold."
+        ),
+    },
+    {
+        "name": "Cold Days (TX <= 15°C)",
+        "slug": "txle15_cold_days",
+        "var": "tasmax",
+        "value_col": "days_tx_le_15C",
+        "units": "days",
+        "compute": "count_days_le_threshold",
+        "params": {"thresh_k": 15.0 + 273.15},
+        "group": "temperature",
+        "description": (
+            "Number of days when daily maximum temperature is at or below 15°C. "
+            "This workbook-aligned daytime cold metric strengthens the threshold-based cold group."
+        ),
+    },
+    {
+        "name": "Consecutive Cold Nights (TN <= 10°C)",
+        "slug": "tnle10_consecutive_cold_nights",
+        "var": "tasmin",
+        "value_col": "tn_le_10C_consecutive_days",
+        "units": "days",
+        "compute": "longest_consecutive_run_le_threshold",
+        "params": {"thresh_k": 10.0 + 273.15, "min_len": 1},
+        "group": "temperature",
+        "description": (
+            "Maximum consecutive run length of nights when daily minimum temperature is at "
+            "or below 10°C."
         ),
     },
     # {
@@ -1097,6 +1263,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Total Wet-Day Precipitation (PRCPTOT)",
         "slug": "prcptot_annual_total",
+        "rank_higher_is_worse": False,
         "var": "pr",
         "value_col": "prcptot_mm",
         "units": "mm",
@@ -1236,6 +1403,22 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": "Annual count of months with SPI3 below -1 (moderate meteorological drought persistence).",
     },
     {
+        "name": "SPI3: Count of drought events with SPI < -1",
+        "slug": "spi3_count_events_lt_minus1",
+        "var": "pr",
+        "value_col": "spi3_events_lt_minus1",
+        "units": "events",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 3,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_events_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of contiguous SPI3 drought events below -1 (moderate seasonal drought episodes).",
+    },
+    {
         "name": "SPI3: Count of months with SPI < -2 (severe drought)",
         "slug": "spi3_count_months_lt_minus2",
         "var": "pr",
@@ -1302,6 +1485,22 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": "Annual count of months with SPI6 below -1 (moderate meteorological drought persistence).",
     },
     {
+        "name": "SPI6: Count of drought events with SPI < -1",
+        "slug": "spi6_count_events_lt_minus1",
+        "var": "pr",
+        "value_col": "spi6_events_lt_minus1",
+        "units": "events",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 6,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_events_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of contiguous SPI6 drought events below -1 (meteorological drought episodes).",
+    },
+    {
         "name": "SPI6: Count of months with SPI < -2 (severe drought)",
         "slug": "spi6_count_months_lt_minus2",
         "var": "pr",
@@ -1366,6 +1565,22 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         },
         "group": "rain",
         "description": "Annual count of months with SPI12 below -1 (moderate long-term drought persistence).",
+    },
+    {
+        "name": "SPI12: Count of drought events with SPI < -1",
+        "slug": "spi12_count_events_lt_minus1",
+        "var": "pr",
+        "value_col": "spi12_events_lt_minus1",
+        "units": "events",
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 12,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "count_events_lt",
+            "threshold": -1.0,
+        },
+        "group": "rain",
+        "description": "Annual count of contiguous SPI12 drought events below -1 (long-term drought episodes).",
     },
     {
         "name": "SPI12: Count of months with SPI < -2 (severe drought)",
@@ -1752,7 +1967,7 @@ DOMAINS: dict[str, list[str]] = {
         
         "txge35_extreme_heat_days",
         # "su_summer_days_gt25",
-        "tasmin_tropical_nights_gt20",
+        "tasmin_tropical_nights_gt25",
         # Wet-bulb thermal stress
         
         
@@ -1782,34 +1997,43 @@ DOMAINS: dict[str, list[str]] = {
     ],
     "Heat Stress": [
         "twb_annual_mean",
+        "twb_summer_mean",
         "twb_annual_max",
         "twb_days_ge_30",
         "wbd_le_3",
-        "wbd_le_6",
+        "wbd_gt3_le6",
+        "tasmin_tropical_nights_gt28",
+        "tn90p_warm_nights_pct",
+        "wbd_le_3_consecutive_days",
+        "wsdi_warm_spell_days",
+        "twb_days_ge_28",
     ],
     "Cold Risk": [
         "tas_winter_mean",
         "tasmin_winter_mean",
-        # Cold thresholds
-        "fd_frost_days",
-        # "id_icing_days",
-        "tnlt2_cold_nights",
-        # "tnltm2_very_cold_nights",
-        # Cold percentiles & persistence
+        "tnn_annual_min",
+        "tasmin_winter_min",
+        # Threshold-based cold days
+        "tnle10_cold_nights",
+        "tnle5_severe_cold_nights",
+        "txle15_cold_days",
+        # Relative cold
         "tx10p_cool_days_pct",
         "tn10p_cool_nights_pct",
+        # Cold spell characteristics
         "csdi_cold_spell_days",
-        # Cold baseline context
-        # "txn_annual_min",
-        "tnn_annual_min",
+        "tnle10_consecutive_cold_nights",
     ],
     "Agriculture & Growing Conditions": [
-        # Growing season
         "gsl_growing_season",
-        # Supporting seasonal context
         "tasmax_summer_mean",
         "tasmin_winter_mean",
         "dtr_daily_temp_range",
+        "txge35_extreme_heat_days",
+        "tnle10_cold_nights",
+        "wsdi_warm_spell_days",
+        "spi3_drought_index",
+        "prcptot_annual_total",
     ],
     "Flood & Extreme Rainfall Risk": [
         # Peak intensity
@@ -1836,13 +2060,9 @@ DOMAINS: dict[str, list[str]] = {
         "rain_gt_2p5mm",
     ],
     "Drought Risk": [
-        # Default, streamlined view (most interpretable):
-        # 1) Persistence (how long it lasts)
-        "pr_consecutive_dry_days_lt1mm",
-        # 2) Intensity (how “dry” overall)
-        "spi6_drought_index",
-        # 3) Frequency (how often drought months occur)
-        "spi6_count_months_lt_minus1",
+        "spi3_count_events_lt_minus1",
+        "spi6_count_events_lt_minus1",
+        "spi12_count_events_lt_minus1",
     ],
     "Drought Risk (Advanced)": [
         # Short-term vs long-term SPI + severity splits (keep available but not default)

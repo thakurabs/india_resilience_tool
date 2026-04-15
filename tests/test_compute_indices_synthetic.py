@@ -1262,6 +1262,42 @@ class TestTierKDroughtIndices:
         spei = CMP.standardised_precipitation_evapotranspiration_index(data, mask, scale_months=3)
         assert abs(spi - spei) < TOL_INDEX
 
+    def test_annualize_spi_counts_contiguous_drought_events(self) -> None:
+        """Contiguous monthly SPI runs below threshold should count as one event each."""
+        times = xr.date_range("2000-01-01", periods=12, freq="MS", use_cftime=True)
+        spi_monthly = xr.DataArray(
+            [-1.2, -1.1, 0.0, -1.3, -1.2, np.nan, -1.4, 0.0, -0.2, -1.5, -1.4, -0.8],
+            coords={"time": times},
+            dims=("time",),
+        )
+
+        result = CMP._annualize_spi(
+            spi_monthly,
+            min_months_per_year=9,
+            annual_aggregation="count_events_lt",
+            threshold=-1.0,
+        )
+
+        assert int(result.sel(year=2000).item()) == 4
+
+    def test_annualize_spi_treats_all_below_threshold_months_as_one_event(self) -> None:
+        """One uninterrupted drought year should count as a single event."""
+        times = xr.date_range("2000-01-01", periods=12, freq="MS", use_cftime=True)
+        spi_monthly = xr.DataArray(
+            np.full(12, -1.2),
+            coords={"time": times},
+            dims=("time",),
+        )
+
+        result = CMP._annualize_spi(
+            spi_monthly,
+            min_months_per_year=9,
+            annual_aggregation="count_events_lt",
+            threshold=-1.0,
+        )
+
+        assert int(result.sel(year=2000).item()) == 1
+
 
 # =============================================================================
 # TIER L: GROWING SEASON & SEASONAL MEANS

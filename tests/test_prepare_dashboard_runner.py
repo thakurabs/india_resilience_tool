@@ -227,6 +227,88 @@ def test_climate_hazards_overwrite_passes_flag_to_compute() -> None:
     assert "--skip-existing" not in plan[0].argv
 
 
+def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_selected_scope() -> None:
+    args = argparse.Namespace(
+        level="all",
+        state=None,
+        metrics=["metric_a", "metric_b"],
+        models=None,
+        scenarios=None,
+        workers=None,
+        verbose=False,
+        spi_legacy=False,
+        spi_distribution=None,
+        skip_compute=True,
+        skip_masters=True,
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+    )
+    scope = ClimateRuntimeScope(
+        levels=("district", "block", "basin", "sub_basin"),
+        by_level={
+            "district": ClimateLevelReadiness(
+                level="district",
+                selected_metrics=("metric_a", "metric_b"),
+                runnable_metrics=("metric_a", "metric_b"),
+                compute_pending_metrics=("metric_a",),
+                masters_pending_metrics=("metric_a",),
+                optimized_pending_metrics=("metric_a",),
+                complete_metrics=("metric_b",),
+                unrunnable_metrics=(),
+                unrunnable_reasons_by_metric={},
+            ),
+            "block": ClimateLevelReadiness(
+                level="block",
+                selected_metrics=("metric_a", "metric_b"),
+                runnable_metrics=("metric_a", "metric_b"),
+                compute_pending_metrics=("metric_b",),
+                masters_pending_metrics=("metric_b",),
+                optimized_pending_metrics=("metric_b",),
+                complete_metrics=("metric_a",),
+                unrunnable_metrics=(),
+                unrunnable_reasons_by_metric={},
+            ),
+            "basin": ClimateLevelReadiness(
+                level="basin",
+                selected_metrics=("metric_a", "metric_b"),
+                runnable_metrics=("metric_a", "metric_b"),
+                compute_pending_metrics=(),
+                masters_pending_metrics=(),
+                optimized_pending_metrics=(),
+                complete_metrics=("metric_a", "metric_b"),
+                unrunnable_metrics=(),
+                unrunnable_reasons_by_metric={},
+            ),
+            "sub_basin": ClimateLevelReadiness(
+                level="sub_basin",
+                selected_metrics=("metric_a", "metric_b"),
+                runnable_metrics=("metric_a", "metric_b"),
+                compute_pending_metrics=("metric_b",),
+                masters_pending_metrics=("metric_b",),
+                optimized_pending_metrics=("metric_b",),
+                complete_metrics=("metric_a",),
+                unrunnable_metrics=(),
+                unrunnable_reasons_by_metric={},
+            ),
+        },
+        global_issues=(),
+    )
+
+    plan = build_climate_hazards_plan(args, runtime_scope=scope)
+
+    assert [step.label for step in plan] == [
+        "processed-optimised-build:district+block+basin+sub_basin",
+        "processed-optimised-audit",
+    ]
+    assert plan[0].argv.count("--level") == 4
+    assert "--overwrite" in plan[0].argv
+    assert plan[0].argv.count("--metric") == 2
+    assert "metric_a" in plan[0].argv
+    assert "metric_b" in plan[0].argv
+
+
 def test_climate_hazards_plans_only_sub_basin_when_basin_is_complete() -> None:
     args = argparse.Namespace(
         level="hydro",

@@ -9,12 +9,15 @@ This tool is intentionally non-destructive: it reads from the current
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import shutil
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, Optional, TypeVar
 
 import geopandas as gpd
 import pandas as pd
@@ -88,6 +91,9 @@ LEVEL_SELECTIONS = {
     "basin": ("basin",),
     "sub_basin": ("sub_basin",),
 }
+
+YEARLY_PARALLEL_CHUNK_SIZE = 64
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -192,42 +198,57 @@ class BuildProgress:
         joined = ", ".join(f"{stage}={count}" for stage, count in totals.items())
         print(f"PLANNED TASKS total={self._plan.total_tasks} ({joined})")
 
-    def start_task(self, task: BuildTask) -> None:
-        self._current_task = task
+    def _ensure_stage(self, *, stage: str, label: str) -> None:
         if not self._enabled:
             return
-
-        if task.stage != self._stage_name:
+        if stage != self._stage_name:
             if self._stage_bar is not None:
                 self._stage_bar.close()
-            self._stage_name = task.stage
+            self._stage_name = stage
             self._stage_bar = tqdm(
-                total=self._stage_totals[task.stage],
-                desc=task.stage,
+                total=self._stage_totals[stage],
+                desc=stage,
                 unit="task",
                 position=1,
                 leave=False,
                 dynamic_ncols=True,
             )
-            completed = self._stage_completed[task.stage]
+            completed = self._stage_completed[stage]
             if completed:
                 self._stage_bar.update(completed)
-
         if self._overall_bar is not None:
-            self._overall_bar.set_postfix_str(task.label)
+            self._overall_bar.set_postfix_str(label)
         if self._stage_bar is not None:
-            self._stage_bar.set_postfix_str(task.label)
+            self._stage_bar.set_postfix_str(label)
 
-    def finish_task(self, task: BuildTask) -> None:
-        self._stage_completed[task.stage] += 1
-        self._completed_total += 1
+    def start_task(self, task: BuildTask) -> None:
+        self._current_task = task
+        self._ensure_stage(stage=task.stage, label=task.label)
+
+    def finish_task(self, task: BuildTask, *, count: int = 1) -> None:
+        self._stage_completed[task.stage] += count
+        self._completed_total += count
         self._current_task = None
         if not self._enabled:
             return
         if self._overall_bar is not None:
-            self._overall_bar.update(1)
+            self._overall_bar.update(count)
         if self._stage_bar is not None:
-            self._stage_bar.update(1)
+            self._stage_bar.update(count)
+
+    def advance_stage(self, *, stage: str, label: str, count: int) -> None:
+        if count <= 0:
+            return
+        self._current_task = BuildTask(stage=stage, label=label)
+        self._ensure_stage(stage=stage, label=label)
+        self._stage_completed[stage] += count
+        self._completed_total += count
+        if not self._enabled:
+            return
+        if self._overall_bar is not None:
+            self._overall_bar.update(count)
+        if self._stage_bar is not None:
+            self._stage_bar.update(count)
 
     def failure_summary(self) -> str:
         remaining = self._plan.total_tasks - self._completed_total
@@ -259,6 +280,34 @@ def _run_task(task: BuildTask, progress: BuildProgress, action) -> None:
     except Exception:
         raise
     progress.finish_task(task)
+
+
+def default_build_workers_80pct() -> int:
+    """Return the default worker count as 80% of available logical CPUs."""
+    try:
+        cpu_count = os.cpu_count() or 1
+    except Exception:
+        cpu_count = 1
+    return max(1, int(cpu_count * 0.8))
+
+
+def resolve_build_workers(workers: Optional[int]) -> int:
+    """Resolve the effective worker count for the optimized builder."""
+    if workers is None:
+        return default_build_workers_80pct()
+    resolved = int(workers)
+    if resolved < 1:
+        raise ValueError(f"workers must be >= 1, got {workers!r}")
+    return resolved
+
+
+def _chunk_tuple(items: tuple[T, ...], *, chunk_size: int) -> tuple[tuple[T, ...], ...]:
+    """Split a tuple into stable, contiguous chunks."""
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size!r}")
+    if not items:
+        return tuple()
+    return tuple(items[i : i + chunk_size] for i in range(0, len(items), chunk_size))
 
 
 def _write_parquet(df: pd.DataFrame, path: Path) -> None:
@@ -405,6 +454,99 @@ def _extract_value_column(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
+def _load_one_legacy_admin_yearly_model(
+    csv_path: Path,
+    *,
+    state_name: str,
+    level: str,
+) -> pd.DataFrame:
+    """Load one admin yearly model CSV into the optimized yearly-model schema."""
+    df = _read_yearly_csv(csv_path)
+    if df.empty:
+        return pd.DataFrame()
+
+    value_col = _extract_value_column(df)
+    if value_col is None or "year" not in df.columns:
+        return pd.DataFrame()
+
+    df = df.copy()
+    df["year"] = pd.to_numeric(df["year"], errors="coerce")
+    df["value"] = pd.to_numeric(df[value_col], errors="coerce")
+    df = df.dropna(subset=["year", "value"])
+    if df.empty:
+        return pd.DataFrame()
+
+    if level == "district":
+        district_name = csv_path.parts[-4]
+        df["district_key"] = _normalized_key(state_name, district_name)
+        key_col = "district_key"
+    else:
+        district_name = csv_path.parts[-5]
+        block_name = csv_path.parts[-4]
+        df["block_key"] = _normalized_key(state_name, district_name, block_name)
+        key_col = "block_key"
+
+    if "scenario" not in df.columns:
+        df["scenario"] = csv_path.parts[-2]
+    if "model" not in df.columns:
+        df["model"] = csv_path.parts[-3]
+
+    keep_cols = ["year", "value", "scenario", "model", key_col]
+    return df[keep_cols]
+
+
+def _load_legacy_admin_yearly_models_chunk(
+    chunk_index: int,
+    path_strings: tuple[str, ...],
+    *,
+    state_name: str,
+    level: str,
+) -> tuple[int, pd.DataFrame]:
+    """Load one chunk of admin yearly-model CSVs in stable source order."""
+    rows: list[pd.DataFrame] = []
+    for path_string in path_strings:
+        row_df = _load_one_legacy_admin_yearly_model(Path(path_string), state_name=state_name, level=level)
+        if not row_df.empty:
+            rows.append(row_df)
+    if not rows:
+        return chunk_index, pd.DataFrame()
+    return chunk_index, pd.concat(rows, ignore_index=True, sort=False)
+
+
+def _execute_parallel_chunks(
+    *,
+    progress: BuildProgress,
+    stage: str,
+    label_prefix: str,
+    chunks: tuple[tuple[str, ...], ...],
+    worker_count: int,
+    worker_fn,
+    worker_kwargs: dict[str, object],
+) -> list[tuple[int, pd.DataFrame]]:
+    """Execute chunked worker tasks and preserve deterministic chunk ordering."""
+    if not chunks:
+        return []
+
+    max_workers = max(1, min(int(worker_count), len(chunks)))
+    results: list[tuple[int, pd.DataFrame]] = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {
+            executor.submit(worker_fn, chunk_index, chunk, **worker_kwargs): (chunk_index, len(chunk))
+            for chunk_index, chunk in enumerate(chunks)
+        }
+        for future in as_completed(future_map):
+            chunk_index, chunk_size = future_map[future]
+            chunk_result = future.result()
+            progress.advance_stage(
+                stage=stage,
+                label=f"{label_prefix} | chunk {chunk_index + 1}/{len(chunks)}",
+                count=chunk_size,
+            )
+            results.append(chunk_result)
+    results.sort(key=lambda item: item[0])
+    return results
+
+
 def _load_legacy_admin_yearly_models(
     *,
     slug: str,
@@ -412,52 +554,53 @@ def _load_legacy_admin_yearly_models(
     level: str,
     csv_paths: tuple[Path, ...],
     progress: BuildProgress,
+    workers: int = 1,
 ) -> pd.DataFrame:
-    rows: list[pd.DataFrame] = []
-    for csv_path in csv_paths:
-        task = BuildTask(
-            stage="yearly-models",
-            label=f"{slug} | {state_name} | {level} | {csv_path.name}",
-            slug=slug,
-            state=state_name,
-            level=level,
-            source_path=csv_path,
-        )
-        progress.start_task(task)
-        try:
-            df = _read_yearly_csv(csv_path)
-            if not df.empty:
-                value_col = _extract_value_column(df)
-                if value_col is not None and "year" in df.columns:
-                    df = df.copy()
-                    df["year"] = pd.to_numeric(df["year"], errors="coerce")
-                    df["value"] = pd.to_numeric(df[value_col], errors="coerce")
-                    df = df.dropna(subset=["year", "value"])
-                    if not df.empty:
-                        if level == "district":
-                            district_name = csv_path.parts[-4]
-                            df["district_key"] = _normalized_key(state_name, district_name)
-                        else:
-                            district_name = csv_path.parts[-5]
-                            block_name = csv_path.parts[-4]
-                            df["block_key"] = _normalized_key(state_name, district_name, block_name)
+    if workers <= 1 or len(csv_paths) <= 1:
+        rows: list[pd.DataFrame] = []
+        for csv_path in csv_paths:
+            task = BuildTask(
+                stage="yearly-models",
+                label=f"{slug} | {state_name} | {level} | {csv_path.name}",
+                slug=slug,
+                state=state_name,
+                level=level,
+                source_path=csv_path,
+            )
+            progress.start_task(task)
+            try:
+                row_df = _load_one_legacy_admin_yearly_model(csv_path, state_name=state_name, level=level)
+                if not row_df.empty:
+                    rows.append(row_df)
+            except Exception:
+                raise
+            progress.finish_task(task)
+        if not rows:
+            return pd.DataFrame()
+        out = pd.concat(rows, ignore_index=True, sort=False)
+        out["scenario"] = out["scenario"].astype(str).str.strip().str.lower()
+        out["model"] = out["model"].astype(str).str.strip()
+        return _safe_numeric_downcast(out)
 
-                        if "scenario" not in df.columns:
-                            df["scenario"] = csv_path.parts[-2]
-                        if "model" not in df.columns:
-                            df["model"] = csv_path.parts[-3]
-                        keep_cols = [
-                            "year",
-                            "value",
-                            "scenario",
-                            "model",
-                            "district_key" if level == "district" else "block_key",
-                        ]
-                        rows.append(df[keep_cols])
-        except Exception:
-            raise
-        progress.finish_task(task)
-
+    parallel_task = BuildTask(
+        stage="yearly-models",
+        label=f"{slug} | {state_name} | {level} | parallel yearly-model reads",
+        slug=slug,
+        state=state_name,
+        level=level,
+    )
+    progress.start_task(parallel_task)
+    path_chunks = _chunk_tuple(tuple(str(path) for path in csv_paths), chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
+    chunk_results = _execute_parallel_chunks(
+        progress=progress,
+        stage="yearly-models",
+        label_prefix=f"{slug} | {state_name} | {level}",
+        chunks=path_chunks,
+        worker_count=workers,
+        worker_fn=_load_legacy_admin_yearly_models_chunk,
+        worker_kwargs={"state_name": state_name, "level": level},
+    )
+    rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
     if not rows:
         return pd.DataFrame()
     out = pd.concat(rows, ignore_index=True, sort=False)
@@ -480,63 +623,52 @@ def _build_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) ->
 
 def _load_legacy_hydro_yearly_models(
     *,
-    slug: str,
     level: str,
-    data_dir: Path,
     sources: tuple[YearlyEnsembleSource, ...],
+    basin_map: dict[str, tuple[str, str]],
+    subbasin_map: dict[str, tuple[str, str, str, str]],
+    progress: BuildProgress,
+    label_prefix: str = "hydro",
+    workers: int = 1,
 ) -> pd.DataFrame:
     """Load hydro model-yearly rows that can be aggregated into optimized ensembles."""
     if level not in {"basin", "sub_basin"}:
         return pd.DataFrame()
 
-    rows: list[pd.DataFrame] = []
-    basin_map, subbasin_map = _hydro_name_maps(data_dir=data_dir, slug=slug, level=level)
+    if workers <= 1 or len(sources) <= 1:
+        rows: list[pd.DataFrame] = []
+        for source in sources:
+            row_df = _load_one_legacy_hydro_yearly_model_source(
+                source=source,
+                level=level,
+                basin_map=basin_map,
+                subbasin_map=subbasin_map,
+            )
+            if not row_df.empty:
+                rows.append(row_df)
+        if not rows:
+            return pd.DataFrame()
+        return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
 
-    for source in sources:
-        df = _read_yearly_csv(source.csv_path)
-        if df.empty:
-            continue
-        value_col = _extract_value_column(df)
-        if value_col is None or "year" not in df.columns:
-            continue
-
-        df = df.copy()
-        df["year"] = pd.to_numeric(df["year"], errors="coerce")
-        df["value"] = pd.to_numeric(df[value_col], errors="coerce")
-        df = df.dropna(subset=["year", "value"])
-        if df.empty:
-            continue
-
-        df["scenario"] = str(source.scenario).strip().lower()
-        df["model"] = str(source.model or "").strip()
-
-        if level == "basin":
-            basin_name = str(source.name_1).strip()
-            basin_id, basin_name_out = basin_map.get(alias(basin_name), ("", basin_name))
-            df["basin_id"] = basin_id
-            df["basin_name"] = basin_name_out
-            rows.append(df[["basin_id", "basin_name", "scenario", "model", "year", "value"]])
-            continue
-
-        basin_name = str(source.name_1).strip()
-        sub_name = str(source.name_2 or "").strip()
-        basin_id, basin_name_out, sub_id, sub_name_out = subbasin_map.get(
-            _normalized_key(basin_name, sub_name),
-            ("", basin_name, "", sub_name),
-        )
-        df["basin_id"] = basin_id
-        df["basin_name"] = basin_name_out
-        df["subbasin_id"] = sub_id
-        df["subbasin_name"] = sub_name_out
-        rows.append(
-            df[["basin_id", "basin_name", "subbasin_id", "subbasin_name", "scenario", "model", "year", "value"]]
-        )
-
+    progress.start_task(BuildTask(stage="yearly-ensemble", label=f"{label_prefix} | parallel hydro model reads"))
+    source_chunks = _chunk_tuple(sources, chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
+    chunk_results = _execute_parallel_chunks(
+        progress=progress,
+        stage="yearly-ensemble",
+        label_prefix=label_prefix,
+        chunks=source_chunks,
+        worker_count=workers,
+        worker_fn=_load_legacy_hydro_yearly_models_chunk,
+        worker_kwargs={
+            "level": level,
+            "basin_map": basin_map,
+            "subbasin_map": subbasin_map,
+        },
+    )
+    rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
     if not rows:
         return pd.DataFrame()
-
-    out = pd.concat(rows, ignore_index=True, sort=False)
-    return _safe_numeric_downcast(out)
+    return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
 
 
 def _build_hydro_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) -> pd.DataFrame:
@@ -569,8 +701,13 @@ def _normalized_key(*parts: str) -> str:
     return "|".join(alias(part) for part in parts)
 
 
-def _hydro_name_maps(*, data_dir: Path, slug: str, level: str) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, str, str]]]:
+@lru_cache(maxsize=None)
+def _hydro_name_maps_cached(
+    data_dir_str: str,
+    slug: str,
+) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, str, str]]]:
     """Build normalized hydro name -> id lookup maps from the legacy hydro masters."""
+    data_dir = Path(data_dir_str)
     legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
     hydro_root = legacy_root / "hydro"
     basin_map: dict[str, tuple[str, str]] = {}
@@ -604,54 +741,202 @@ def _hydro_name_maps(*, data_dir: Path, slug: str, level: str) -> tuple[dict[str
     return basin_map, subbasin_map
 
 
-def _load_legacy_yearly_ensemble(
+def _hydro_name_maps(
     *,
+    data_dir: Path,
     slug: str,
     level: str,
-    data_dir: Path,
+) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, str, str]]]:
+    _ = level
+    basin_map, subbasin_map = _hydro_name_maps_cached(str(Path(data_dir).resolve()), slug)
+    return dict(basin_map), dict(subbasin_map)
+
+
+def _load_one_legacy_yearly_ensemble_source(
+    *,
+    source: YearlyEnsembleSource,
+    level: str,
     state_name: Optional[str],
-    sources: tuple[YearlyEnsembleSource, ...],
+    basin_map: Optional[dict[str, tuple[str, str]]] = None,
+    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
 ) -> pd.DataFrame:
-    """Load optimized yearly-ensemble rows directly from legacy ensemble CSVs."""
-    rows: list[pd.DataFrame] = []
-    basin_map: dict[str, tuple[str, str]] = {}
-    subbasin_map: dict[str, tuple[str, str, str, str]] = {}
-    if level in {"basin", "sub_basin"}:
-        basin_map, subbasin_map = _hydro_name_maps(data_dir=data_dir, slug=slug, level=level)
-
-    for source in sources:
-        df = _normalize_legacy_ensemble_df(_read_yearly_csv(source.csv_path))
-        if df.empty:
-            continue
-        df = df.copy()
-        df["scenario"] = str(source.scenario).strip().lower()
-        if level == "district":
-            df["district_key"] = _normalized_key(str(state_name or ""), source.name_1)
-        elif level == "block":
-            df["block_key"] = _normalized_key(str(state_name or ""), source.name_1, str(source.name_2 or ""))
-        elif level == "basin":
-            basin_name = str(source.name_1).strip()
-            basin_id, basin_name_out = basin_map.get(alias(basin_name), ("", basin_name))
-            df["basin_id"] = basin_id
-            df["basin_name"] = basin_name_out
-        else:
-            basin_name = str(source.name_1).strip()
-            sub_name = str(source.name_2 or "").strip()
-            basin_id, basin_name_out, sub_id, sub_name_out = subbasin_map.get(
-                _normalized_key(basin_name, sub_name),
-                ("", basin_name, "", sub_name),
-            )
-            df["basin_id"] = basin_id
-            df["basin_name"] = basin_name_out
-            df["subbasin_id"] = sub_id
-            df["subbasin_name"] = sub_name_out
-        rows.append(df)
-
-    if not rows:
+    """Load one optimized yearly-ensemble frame from a legacy yearly source."""
+    df = _normalize_legacy_ensemble_df(_read_yearly_csv(source.csv_path))
+    if df.empty:
         return pd.DataFrame()
 
-    out = pd.concat(rows, ignore_index=True, sort=False)
-    return _safe_numeric_downcast(out)
+    df = df.copy()
+    df["scenario"] = str(source.scenario).strip().lower()
+    if level == "district":
+        df["district_key"] = _normalized_key(str(state_name or ""), source.name_1)
+    elif level == "block":
+        df["block_key"] = _normalized_key(str(state_name or ""), source.name_1, str(source.name_2 or ""))
+    elif level == "basin":
+        basin_lookup = basin_map or {}
+        basin_name = str(source.name_1).strip()
+        basin_id, basin_name_out = basin_lookup.get(alias(basin_name), ("", basin_name))
+        df["basin_id"] = basin_id
+        df["basin_name"] = basin_name_out
+    else:
+        sub_lookup = subbasin_map or {}
+        basin_name = str(source.name_1).strip()
+        sub_name = str(source.name_2 or "").strip()
+        basin_id, basin_name_out, sub_id, sub_name_out = sub_lookup.get(
+            _normalized_key(basin_name, sub_name),
+            ("", basin_name, "", sub_name),
+        )
+        df["basin_id"] = basin_id
+        df["basin_name"] = basin_name_out
+        df["subbasin_id"] = sub_id
+        df["subbasin_name"] = sub_name_out
+    return df
+
+
+def _load_legacy_yearly_ensemble_chunk(
+    chunk_index: int,
+    sources: tuple[YearlyEnsembleSource, ...],
+    *,
+    level: str,
+    state_name: Optional[str],
+    basin_map: Optional[dict[str, tuple[str, str]]] = None,
+    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
+) -> tuple[int, pd.DataFrame]:
+    """Load one chunk of legacy yearly-ensemble sources in stable order."""
+    rows: list[pd.DataFrame] = []
+    for source in sources:
+        row_df = _load_one_legacy_yearly_ensemble_source(
+            source=source,
+            level=level,
+            state_name=state_name,
+            basin_map=basin_map,
+            subbasin_map=subbasin_map,
+        )
+        if not row_df.empty:
+            rows.append(row_df)
+    if not rows:
+        return chunk_index, pd.DataFrame()
+    return chunk_index, pd.concat(rows, ignore_index=True, sort=False)
+
+
+def _load_one_legacy_hydro_yearly_model_source(
+    *,
+    source: YearlyEnsembleSource,
+    level: str,
+    basin_map: dict[str, tuple[str, str]],
+    subbasin_map: dict[str, tuple[str, str, str, str]],
+) -> pd.DataFrame:
+    """Load one hydro yearly model CSV into the optimized model-fallback schema."""
+    df = _read_yearly_csv(source.csv_path)
+    if df.empty:
+        return pd.DataFrame()
+    value_col = _extract_value_column(df)
+    if value_col is None or "year" not in df.columns:
+        return pd.DataFrame()
+
+    df = df.copy()
+    df["year"] = pd.to_numeric(df["year"], errors="coerce")
+    df["value"] = pd.to_numeric(df[value_col], errors="coerce")
+    df = df.dropna(subset=["year", "value"])
+    if df.empty:
+        return pd.DataFrame()
+
+    df["scenario"] = str(source.scenario).strip().lower()
+    df["model"] = str(source.model or "").strip()
+
+    if level == "basin":
+        basin_name = str(source.name_1).strip()
+        basin_id, basin_name_out = basin_map.get(alias(basin_name), ("", basin_name))
+        df["basin_id"] = basin_id
+        df["basin_name"] = basin_name_out
+        return df[["basin_id", "basin_name", "scenario", "model", "year", "value"]]
+
+    basin_name = str(source.name_1).strip()
+    sub_name = str(source.name_2 or "").strip()
+    basin_id, basin_name_out, sub_id, sub_name_out = subbasin_map.get(
+        _normalized_key(basin_name, sub_name),
+        ("", basin_name, "", sub_name),
+    )
+    df["basin_id"] = basin_id
+    df["basin_name"] = basin_name_out
+    df["subbasin_id"] = sub_id
+    df["subbasin_name"] = sub_name_out
+    return df[["basin_id", "basin_name", "subbasin_id", "subbasin_name", "scenario", "model", "year", "value"]]
+
+
+def _load_legacy_hydro_yearly_models_chunk(
+    chunk_index: int,
+    sources: tuple[YearlyEnsembleSource, ...],
+    *,
+    level: str,
+    basin_map: dict[str, tuple[str, str]],
+    subbasin_map: dict[str, tuple[str, str, str, str]],
+) -> tuple[int, pd.DataFrame]:
+    """Load one chunk of hydro yearly model sources in stable order."""
+    rows: list[pd.DataFrame] = []
+    for source in sources:
+        row_df = _load_one_legacy_hydro_yearly_model_source(
+            source=source,
+            level=level,
+            basin_map=basin_map,
+            subbasin_map=subbasin_map,
+        )
+        if not row_df.empty:
+            rows.append(row_df)
+    if not rows:
+        return chunk_index, pd.DataFrame()
+    return chunk_index, pd.concat(rows, ignore_index=True, sort=False)
+
+
+def _load_legacy_yearly_ensemble(
+    *,
+    level: str,
+    state_name: Optional[str],
+    sources: tuple[YearlyEnsembleSource, ...],
+    basin_map: Optional[dict[str, tuple[str, str]]] = None,
+    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
+    progress: BuildProgress,
+    label_prefix: str = "ensemble",
+    workers: int = 1,
+) -> pd.DataFrame:
+    """Load optimized yearly-ensemble rows directly from legacy ensemble CSVs."""
+    basin_lookup = basin_map or {}
+    subbasin_lookup = subbasin_map or {}
+    if workers <= 1 or len(sources) <= 1:
+        rows: list[pd.DataFrame] = []
+        for source in sources:
+            row_df = _load_one_legacy_yearly_ensemble_source(
+                source=source,
+                level=level,
+                state_name=state_name,
+                basin_map=basin_lookup,
+                subbasin_map=subbasin_lookup,
+            )
+            if not row_df.empty:
+                rows.append(row_df)
+        if not rows:
+            return pd.DataFrame()
+        return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
+
+    progress.start_task(BuildTask(stage="yearly-ensemble", label=f"{label_prefix} | parallel ensemble reads"))
+    source_chunks = _chunk_tuple(sources, chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
+    chunk_results = _execute_parallel_chunks(
+        progress=progress,
+        stage="yearly-ensemble",
+        label_prefix=label_prefix,
+        chunks=source_chunks,
+        worker_count=workers,
+        worker_fn=_load_legacy_yearly_ensemble_chunk,
+        worker_kwargs={
+            "level": level,
+            "state_name": state_name,
+            "basin_map": basin_lookup,
+            "subbasin_map": subbasin_lookup,
+        },
+    )
+    rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
+    if not rows:
+        return pd.DataFrame()
+    return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
 
 
 def _simplify_geometry(
@@ -1382,6 +1667,7 @@ def build_processed_optimised_bundle(
     data_dir: Path,
     metrics: Optional[list[str]] = None,
     levels: Optional[list[str]] = None,
+    workers: Optional[int] = None,
     overwrite: bool = False,
     include_geometry: bool = True,
     include_context: bool = True,
@@ -1405,6 +1691,7 @@ def build_processed_optimised_bundle(
 
     progress = BuildProgress(plan, enabled=_progress_enabled(show_progress))
     progress.print_plan_summary()
+    resolved_workers = resolve_build_workers(workers)
 
     summaries_map = {
         seed.slug: {
@@ -1446,6 +1733,7 @@ def build_processed_optimised_bundle(
                 level=job.level,
                 csv_paths=job.csv_paths,
                 progress=progress,
+                workers=resolved_workers,
             )
 
             model_task = BuildTask(
@@ -1466,51 +1754,39 @@ def build_processed_optimised_bundle(
             _run_task(model_task, progress, _write_models)
 
         for job in plan.yearly_ensemble_jobs:
-            ensemble_df: pd.DataFrame = pd.DataFrame()
-            hydro_model_df: pd.DataFrame = pd.DataFrame()
-            for source in job.sources:
-                task = BuildTask(
-                    stage="yearly-ensemble",
-                    label=f"{job.slug} | {job.state or 'hydro'} | {job.level} | {source.csv_path.name}",
+            label_prefix = f"{job.slug} | {job.state or 'hydro'} | {job.level}"
+            basin_map: dict[str, tuple[str, str]] = {}
+            subbasin_map: dict[str, tuple[str, str, str, str]] = {}
+            if job.level in {"basin", "sub_basin"}:
+                basin_map, subbasin_map = _hydro_name_maps(
+                    data_dir=data_dir,
                     slug=job.slug,
-                    state=job.state,
                     level=job.level,
-                    source_path=source.csv_path,
                 )
 
-                def _read_one(source=source) -> None:
-                    nonlocal ensemble_df
-                    nonlocal hydro_model_df
-                    if job.source_mode == "hydro_model_fallback":
-                        row_df = _load_legacy_hydro_yearly_models(
-                            slug=job.slug,
-                            level=job.level,
-                            data_dir=data_dir,
-                            sources=(source,),
-                        )
-                        if row_df.empty:
-                            return
-                        if hydro_model_df.empty:
-                            hydro_model_df = row_df
-                        else:
-                            hydro_model_df = pd.concat([hydro_model_df, row_df], ignore_index=True, sort=False)
-                        return
-
-                    row_df = _load_legacy_yearly_ensemble(
-                        slug=job.slug,
-                        level=job.level,
-                        data_dir=data_dir,
-                        state_name=job.state,
-                        sources=(source,),
-                    )
-                    if row_df.empty:
-                        return
-                    if ensemble_df.empty:
-                        ensemble_df = row_df
-                    else:
-                        ensemble_df = pd.concat([ensemble_df, row_df], ignore_index=True, sort=False)
-
-                _run_task(task, progress, _read_one)
+            if job.source_mode == "hydro_model_fallback":
+                hydro_model_df = _load_legacy_hydro_yearly_models(
+                    level=job.level,
+                    sources=job.sources,
+                    basin_map=basin_map,
+                    subbasin_map=subbasin_map,
+                    progress=progress,
+                    label_prefix=label_prefix,
+                    workers=resolved_workers,
+                )
+                ensemble_df = pd.DataFrame()
+            else:
+                ensemble_df = _load_legacy_yearly_ensemble(
+                    level=job.level,
+                    state_name=job.state,
+                    sources=job.sources,
+                    basin_map=basin_map,
+                    subbasin_map=subbasin_map,
+                    progress=progress,
+                    label_prefix=label_prefix,
+                    workers=resolved_workers,
+                )
+                hydro_model_df = pd.DataFrame()
 
             ensemble_task = BuildTask(
                 stage="yearly-ensemble",
@@ -1584,6 +1860,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-geometry", action="store_true", help="Skip optimized geometry generation.")
     parser.add_argument("--skip-context", action="store_true", help="Skip optimized context artifacts.")
     parser.add_argument("--skip-audit", action="store_true", help="Skip the post-build parity audit.")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        help="Worker count for parallel yearly processing. Defaults to 80%% of logical CPUs; use 1 for serial execution.",
+    )
     parser.add_argument("--no-progress", action="store_true", help="Disable tqdm progress bars.")
     return parser
 
@@ -1596,6 +1877,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         data_dir=data_dir,
         metrics=args.metrics,
         levels=args.levels,
+        workers=args.workers,
         overwrite=bool(args.overwrite),
         include_geometry=not bool(args.skip_geometry),
         include_context=not bool(args.skip_context),
