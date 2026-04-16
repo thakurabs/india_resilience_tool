@@ -50,6 +50,11 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - Total Population on district and block units
   - Population Density on district and block units
   - fixed snapshot semantics: `snapshot`, `2025`
+- JRC flood-depth onboarding:
+  - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
+  - `RP-10 Flood Depth`, `RP-50 Flood Depth`, `RP-100 Flood Depth`, `RP-500 Flood Depth`
+  - fixed snapshot semantics: `snapshot`, `Current`
+  - block values use maximum in-polygon depth; district values use area-weighted means of child block maxima
 - Water-risk Aqueduct onboarding:
   - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
   - Aqueduct interannual variability on SOI basin, SOI sub-basin, district, and block units
@@ -159,7 +164,7 @@ Performance note:
 Optimized runtime bundle:
 
 ```bash
-python -m tools.optimized.build_processed_optimised --overwrite
+python -m tools.optimized.build_processed_optimised
 ```
 
 This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DATA_DIR/processed/` tree and current canonical geometry/context files. The optimized bundle retains:
@@ -175,10 +180,19 @@ By default, the builder now parallelizes yearly-model and yearly-ensemble stages
 The optimized builder also supports level-filtered refreshes:
 
 ```bash
+python -m tools.optimized.build_processed_optimised --overwrite --level hydro
+python -m tools.optimized.build_processed_optimised --overwrite --prune-scope --level sub_basin --metric tas_annual_mean
 python -m tools.optimized.build_processed_optimised --level hydro
 python -m tools.optimized.build_processed_optimised --level sub_basin --metric tas_annual_mean
 python -m tools.optimized.build_processed_optimised --metric tas_annual_mean --workers 4 --skip-geometry --skip-context --skip-audit
 ```
+
+Flag semantics:
+- default runs rewrite planned outputs in place and preserve unrelated bundle contents
+- `--overwrite` forces rewrite of the selected targets only
+- `--overwrite --prune-scope` removes stale files only inside the selected metric/level ownership roots before rewriting
+- `--full-rebuild` is the destructive whole-bundle reset
+- `--dry-run` prints the resolved write/delete plan without mutating `processed_optimised/`
 
 while dropping duplicate runtime fields such as:
 - `std`
@@ -439,7 +453,7 @@ python -m tools.runs.prepare_dashboard climate-hazards --level hydro --audit-onl
 python -m tools.runs.prepare_dashboard dashboard-package
 ```
 
-This bundle includes climate hazards, Aqueduct, population exposure, and groundwater prep,
+This bundle includes climate hazards, Aqueduct, population exposure, groundwater prep, and optional Telangana JRC flood-depth prep,
 and now refreshes `processed_optimised` plus the final audit as part of the same run.
 When block-level products are part of the run, the runner now refreshes the canonical
 `IRT_DATA_DIR/blocks_4326.geojson` first.
@@ -449,6 +463,16 @@ Preview first:
 ```bash
 python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 ```
+
+Optional JRC flood-depth pilot:
+
+```bash
+python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.runs.prepare_dashboard dashboard-package --include-jrc-flood-depth --jrc-source-dir /path/to/Floodlayers_JRC --jrc-assume-units m --overwrite
+```
+
+For the JRC pilot, runner `--overwrite` refreshes the Telangana JRC masters and QA outputs but does not wipe unrelated
+`processed_optimised` metric artifacts.
 
 ### Build population exposure masters
 
@@ -476,6 +500,26 @@ district GeoJSON through an explicit alias workflow, and writes:
 - `processed/gw_future_availability_ham/{state}/master_metrics_by_district.csv`
 - `processed/gw_extractable_resource_ham/{state}/master_metrics_by_district.csv`
 - `processed/gw_total_extraction_ham/{state}/master_metrics_by_district.csv`
+
+### Build Telangana JRC flood-depth masters
+
+```bash
+python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.geodata.build_jrc_flood_depth_admin_masters --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+```
+
+This builds Telangana-only district and block snapshot masters for:
+- `processed/jrc_flood_depth_rp10/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_rp10/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_depth_rp50/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_rp50/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_depth_rp100/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_rp100/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_depth_rp500/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_rp500/Telangana/master_metrics_by_block.csv`
+
+JRC coverage is interpreted from raster extent overlap for this dataset family: positive values contribute flood depth,
+and zero values inside raster extent are treated as dry cells.
 
 ### Rebuild the canonical block boundaries
 

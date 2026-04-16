@@ -19,6 +19,7 @@ from tools.runs.prepare_dashboard import (
     build_command_plan,
     build_dashboard_package_plan,
     build_groundwater_plan,
+    build_jrc_flood_depth_plan,
     build_population_plan,
     build_cli,
     execute_plan,
@@ -78,6 +79,8 @@ def test_aqueduct_bundle_builds_expected_default_steps() -> None:
         "processed-optimised-audit",
     ]
     assert "--overwrite" in plan[-2].argv
+    assert "--prune-scope" not in plan[-2].argv
+    assert "--full-rebuild" not in plan[-2].argv
     assert "--metric" in plan[-2].argv
     assert "--skip-audit" in plan[-2].argv
 
@@ -304,6 +307,8 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
     ]
     assert plan[0].argv.count("--level") == 4
     assert "--overwrite" in plan[0].argv
+    assert "--prune-scope" not in plan[0].argv
+    assert "--full-rebuild" not in plan[0].argv
     assert plan[0].argv.count("--metric") == 2
     assert "metric_a" in plan[0].argv
     assert "metric_b" in plan[0].argv
@@ -417,6 +422,100 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     assert labels[-1] == "pytest-validation"
 
 
+def test_dashboard_package_with_jrc_requires_prefixed_inputs_unless_audit_only() -> None:
+    parser = build_cli()
+    args = parser.parse_args(["dashboard-package", "--include-jrc-flood-depth"])
+    with pytest.raises(SystemExit, match="requires --jrc-source-dir and --jrc-assume-units m"):
+        build_dashboard_package_plan(args)
+
+
+def test_dashboard_package_audit_only_allows_missing_jrc_inputs(monkeypatch) -> None:
+    parser = build_cli()
+    args = parser.parse_args(["dashboard-package", "--include-jrc-flood-depth", "--audit-only"])
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
+    )
+    scope_map = {
+        "aqueduct": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "population-exposure": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "groundwater": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "jrc-flood-depth": BundleRuntimeScope(
+            selected_metrics=["jrc_flood_depth_rp10"],
+            pending_metrics=["jrc_flood_depth_rp10"],
+            has_global_issues=False,
+        ),
+    }
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_runtime_scope",
+        lambda bundle, *_args, **_kwargs: scope_map[bundle],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_bundle_metrics",
+        lambda bundle, _args: ["tas_annual_mean", "jrc_flood_depth_rp10"] if bundle == "dashboard-package" else [],
+    )
+    plan = build_dashboard_package_plan(args)
+    assert [step.label for step in plan] == ["processed-optimised-audit"]
+
+
+def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refresh(monkeypatch) -> None:
+    parser = build_cli()
+    args = parser.parse_args(
+        [
+            "dashboard-package",
+            "--level",
+            "admin",
+            "--overwrite",
+            "--include-jrc-flood-depth",
+            "--jrc-source-dir",
+            "/tmp/jrc",
+            "--jrc-assume-units",
+            "m",
+        ]
+    )
+    scope_map = {
+        "aqueduct": BundleRuntimeScope(selected_metrics=["aq_water_stress"], pending_metrics=["aq_water_stress"], has_global_issues=False),
+        "population-exposure": BundleRuntimeScope(selected_metrics=["population_total"], pending_metrics=["population_total"], has_global_issues=False),
+        "groundwater": BundleRuntimeScope(selected_metrics=["gw_stage_extraction_pct"], pending_metrics=["gw_stage_extraction_pct"], has_global_issues=False),
+        "jrc-flood-depth": BundleRuntimeScope(
+            selected_metrics=["jrc_flood_depth_rp10", "jrc_flood_depth_rp50"],
+            pending_metrics=["jrc_flood_depth_rp10", "jrc_flood_depth_rp50"],
+            has_global_issues=False,
+        ),
+    }
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_args, **_kwargs: _climate_scope(
+            levels=["district", "block"],
+            pending_by_level={"district": ["tas_annual_mean"], "block": ["tas_annual_mean"]},
+        ),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_runtime_scope",
+        lambda bundle, *_args, **_kwargs: scope_map[bundle],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_bundle_metrics",
+        lambda bundle, _args: [
+            "tas_annual_mean",
+            "aq_water_stress",
+            "population_total",
+            "gw_stage_extraction_pct",
+            "jrc_flood_depth_rp10",
+            "jrc_flood_depth_rp50",
+        ]
+        if bundle == "dashboard-package"
+        else [],
+    )
+    plan = build_dashboard_package_plan(args)
+    labels = [step.label for step in plan]
+    assert labels.count("blocks-geojson") == 1
+    assert "jrc-flood-depth-admin-masters" in labels
+    assert labels.count("processed-optimised-build") == 1
+    assert labels.count("processed-optimised-audit") == 1
+    assert plan[labels.index("jrc-flood-depth-admin-masters")].argv.count("--dry-run") == 0
+
+
 def test_population_bundle_builds_expected_steps() -> None:
     args = argparse.Namespace(
         overwrite=True,
@@ -459,6 +558,97 @@ def test_groundwater_bundle_builds_expected_steps() -> None:
         "processed-optimised-build",
         "processed-optimised-audit",
     ]
+
+
+def test_jrc_bundle_builds_expected_steps_and_never_forwards_builder_dry_run() -> None:
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        source_dir="/tmp/jrc",
+        assume_units="m",
+        districts_path=None,
+        blocks_path=None,
+        qa_dir=None,
+        dry_run=True,
+        plan_only=False,
+    )
+    scope = BundleRuntimeScope(
+        selected_metrics=[
+            "jrc_flood_depth_rp10",
+            "jrc_flood_depth_rp50",
+            "jrc_flood_depth_rp100",
+            "jrc_flood_depth_rp500",
+        ],
+        pending_metrics=[
+            "jrc_flood_depth_rp10",
+            "jrc_flood_depth_rp50",
+            "jrc_flood_depth_rp100",
+            "jrc_flood_depth_rp500",
+        ],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == [
+        "blocks-geojson",
+        "jrc-flood-depth-admin-masters",
+        "processed-optimised-build",
+        "processed-optimised-audit",
+    ]
+    assert "--source-dir" in plan[1].argv
+    assert "--assume-units" in plan[1].argv
+    assert "--overwrite" in plan[1].argv
+    assert plan[1].argv.count("--dry-run") == 0
+    assert "--overwrite" not in plan[2].argv
+
+
+def test_jrc_bundle_requires_source_flags_for_plan_only() -> None:
+    parser = build_cli()
+    args = parser.parse_args(["jrc-flood-depth", "--plan-only"])
+    with pytest.raises(SystemExit, match="requires --source-dir and --assume-units m"):
+        build_command_plan(args)
+
+
+def test_jrc_bundle_audit_only_does_not_require_source_flags() -> None:
+    parser = build_cli()
+    args = parser.parse_args(["jrc-flood-depth", "--audit-only"])
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp10"],
+        pending_metrics=["jrc_flood_depth_rp10"],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == ["processed-optimised-audit"]
+
+
+def test_jrc_step_passthrough_includes_builder_inputs_but_not_builder_dry_run() -> None:
+    parser = build_cli()
+    args = parser.parse_args(
+        [
+            "jrc-flood-depth-admin-masters",
+            "--source-dir",
+            "/tmp/jrc",
+            "--assume-units",
+            "m",
+            "--districts-path",
+            "/tmp/districts.geojson",
+            "--blocks-path",
+            "/tmp/blocks.geojson",
+            "--qa-dir",
+            "/tmp/qa",
+            "--overwrite",
+            "--dry-run",
+        ]
+    )
+    plan = build_command_plan(args)
+    assert [step.label for step in plan] == ["jrc-flood-depth-admin-masters"]
+    assert "--source-dir" in plan[0].argv
+    assert "--districts-path" in plan[0].argv
+    assert "--blocks-path" in plan[0].argv
+    assert "--qa-dir" in plan[0].argv
+    assert "--overwrite" in plan[0].argv
+    assert plan[0].argv.count("--dry-run") == 0
 
 
 def test_blocks_geojson_step_builds_expected_command() -> None:

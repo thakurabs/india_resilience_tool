@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import geopandas as gpd
@@ -139,6 +140,10 @@ def _read_output_tables(bundle_root: Path, *, slug: str) -> dict[str, pd.DataFra
         "block_yearly_models": bundle_root / "metrics" / slug / "yearly_models" / "admin" / "block" / "state=Telangana.parquet",
     }
     return {name: pd.read_parquet(path) for name, path in paths.items()}
+
+
+def _read_manifest(bundle_root: Path) -> dict:
+    return json.loads((bundle_root / "bundle_manifest.json").read_text(encoding="utf-8"))
 
 
 def test_list_available_states_from_optimized_metric_root(tmp_path: Path) -> None:
@@ -746,23 +751,26 @@ def test_audit_processed_optimised_parity_reports_missing_yearly_outputs(
     assert "yearly-ensemble" in stages
 
 
-def test_build_processed_optimised_overwrite_resets_prior_level_outputs(
+def test_build_processed_optimised_overwrite_preserves_prior_level_outputs_and_rebuilds_manifest_inventory(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
     _write_admin_legacy_metric_fixture(tmp_path)
+    _write_admin_legacy_metric_fixture(tmp_path, slug="tas_annual_mean")
 
     build_processed_optimised_bundle(
         data_dir=tmp_path,
-        metrics=["txx_annual_max"],
-        levels=["district"],
-        overwrite=True,
+        metrics=["txx_annual_max", "tas_annual_mean"],
+        overwrite=False,
         include_geometry=False,
         include_context=False,
         show_progress=False,
         run_audit=False,
     )
+
+    parity_report = tmp_path / "processed_optimised" / "parity_report.json"
+    parity_report.write_text('{"stale": true}', encoding="utf-8")
 
     district_master = (
         tmp_path
@@ -786,7 +794,7 @@ def test_build_processed_optimised_overwrite_resets_prior_level_outputs(
     )
 
     assert district_master.exists()
-    assert not block_master.exists()
+    assert block_master.exists()
 
     build_processed_optimised_bundle(
         data_dir=tmp_path,
@@ -800,19 +808,160 @@ def test_build_processed_optimised_overwrite_resets_prior_level_outputs(
     )
 
     assert block_master.exists()
-    assert not district_master.exists()
+    assert district_master.exists()
+    assert not parity_report.exists()
 
-    report = audit_processed_optimised_parity(
+    manifest = _read_manifest(tmp_path / "processed_optimised")
+    summaries = {entry["slug"]: entry for entry in manifest["summaries"]}
+    assert manifest["artifact_version"] == 2
+    assert manifest["summary_semantics"] == "bundle_inventory"
+    assert {"txx_annual_max", "tas_annual_mean"}.issubset(set(summaries))
+    assert summaries["tas_annual_mean"]["has_masters"] is True
+    assert summaries["tas_annual_mean"]["has_yearly_ensemble"] is True
+    assert summaries["tas_annual_mean"]["has_yearly_models"] is True
+
+
+def test_build_processed_optimised_prune_scope_removes_selected_owned_roots_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path)
+    _write_admin_legacy_metric_fixture(tmp_path, slug="tas_annual_mean")
+
+    build_processed_optimised_bundle(
         data_dir=tmp_path,
-        metrics=["txx_annual_max"],
-        levels=["district", "block"],
+        metrics=["txx_annual_max", "tas_annual_mean"],
+        overwrite=False,
         include_geometry=False,
         include_context=False,
-        write_report=False,
+        show_progress=False,
+        run_audit=False,
     )
 
-    assert report["issue_count"] >= 1
-    assert any(issue["level"] == "district" for issue in report["issues"])
+    stale_selected_block = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "txx_annual_max"
+        / "masters"
+        / "admin"
+        / "block"
+        / "stale.txt"
+    )
+    stale_selected_block.write_text("remove me", encoding="utf-8")
+
+    stale_selected_district = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "txx_annual_max"
+        / "masters"
+        / "admin"
+        / "district"
+        / "stale.txt"
+    )
+    stale_selected_district.write_text("keep me", encoding="utf-8")
+
+    stale_other_metric_block = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "tas_annual_mean"
+        / "masters"
+        / "admin"
+        / "block"
+        / "stale.txt"
+    )
+    stale_other_metric_block.write_text("keep me too", encoding="utf-8")
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        levels=["block"],
+        overwrite=True,
+        prune_scope=True,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    assert not stale_selected_block.exists()
+    assert stale_selected_district.exists()
+    assert stale_other_metric_block.exists()
+    assert (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "txx_annual_max"
+        / "masters"
+        / "admin"
+        / "block"
+        / "state=Telangana.parquet"
+    ).exists()
+
+
+def test_build_processed_optimised_full_rebuild_dry_run_preserves_existing_bundle(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path)
+    _write_geometry_fixture(tmp_path)
+
+    bundle_root = tmp_path / "processed_optimised"
+    bundle_root.mkdir(parents=True)
+    marker = bundle_root / "marker.txt"
+    marker.write_text("keep", encoding="utf-8")
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        full_rebuild=True,
+        dry_run=True,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    assert marker.exists()
+
+
+def test_build_processed_optimised_full_rebuild_rejects_suspicious_root(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("IRT_PROCESSED_OPTIMISED_ROOT", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path)
+    _write_geometry_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="Refusing to delete suspicious optimized bundle root"):
+        build_processed_optimised_bundle(
+            data_dir=tmp_path,
+            full_rebuild=True,
+            show_progress=False,
+            run_audit=False,
+        )
+
+
+def test_build_processed_optimised_rejects_explicit_empty_scope(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="No buildable legacy processed sources found"):
+        build_processed_optimised_bundle(
+            data_dir=tmp_path,
+            metrics=["txx_annual_max"],
+            levels=["basin"],
+            overwrite=True,
+            include_geometry=False,
+            include_context=False,
+            show_progress=False,
+            run_audit=False,
+        )
 
 
 def test_build_execution_plan_and_audit_filter_to_sub_basin_level(

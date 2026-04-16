@@ -113,6 +113,25 @@ This bundle writes district-only masters for:
 - `gw_extractable_resource_ham`
 - `gw_total_extraction_ham`
 
+### Build Telangana JRC flood-depth masters
+
+```bash
+python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+```
+
+This bundle runs:
+1. `blocks-geojson`
+2. `jrc-flood-depth-admin-masters`
+3. `processed-optimised-build`
+4. `processed-optimised-audit`
+
+Notes:
+- Telangana-only pilot coverage
+- fixed snapshot selectors: `snapshot`, `Current`, `mean`
+- runner `--overwrite` refreshes JRC masters and QA outputs without wiping unrelated `processed_optimised` artifacts
+- zero values inside raster extent are treated as dry cells for this JRC raster family
+- `dashboard-package --include-jrc-flood-depth` also requires `--jrc-source-dir` and `--jrc-assume-units m` unless `--audit-only` is set
+
 ### Prepare the dashboard package end to end
 
 ```bash
@@ -126,6 +145,7 @@ This bundle now includes:
 - Aqueduct prep + validation
 - population exposure master builds
 - groundwater district master builds
+- optional Telangana JRC flood-depth prep when `--include-jrc-flood-depth` is set
 
 Optional validation tests at the end:
 
@@ -216,6 +236,12 @@ python -m tools.geodata.build_population_admin_masters --help
 python -m tools.geodata.build_groundwater_district_masters --help
 ```
 
+### JRC flood depth
+
+```bash
+python -m tools.geodata.build_jrc_flood_depth_admin_masters --help
+```
+
 ### Optimized runtime bundle
 
 ```bash
@@ -225,7 +251,7 @@ python -m tools.optimized.build_processed_optimised --help
 Build the compact dashboard-serving bundle from the legacy `processed/` tree:
 
 ```bash
-python -m tools.optimized.build_processed_optimised --overwrite
+python -m tools.optimized.build_processed_optimised
 ```
 
 This build prefers legacy hydro yearly ensemble CSVs and falls back to legacy hydro per-model yearly CSVs when needed so basin/sub-basin trend panels can still be served from `processed_optimised`.
@@ -245,8 +271,17 @@ python -m tools.optimized.build_processed_optimised --overwrite --no-progress
 Restrict the optimized build to one or more levels:
 
 ```bash
+python -m tools.optimized.build_processed_optimised --overwrite --level hydro
+python -m tools.optimized.build_processed_optimised --overwrite --prune-scope --level sub_basin --metric tas_annual_mean
 python -m tools.optimized.build_processed_optimised --level hydro
 python -m tools.optimized.build_processed_optimised --level sub_basin --metric tas_annual_mean
+```
+
+Destructive whole-bundle reset:
+
+```bash
+python -m tools.optimized.build_processed_optimised --full-rebuild
+python -m tools.optimized.build_processed_optimised --full-rebuild --dry-run
 ```
 
 Audit optimized-bundle parity against the dashboard-visible legacy `processed/` contract:
