@@ -83,7 +83,6 @@ LANDING_DOMAIN_DISPLAY: dict[str, str] = {
     "Heat Stress": "Heat Stress",
     "Cold Risk": "Cold",
     "Agriculture & Growing Conditions": "Agriculture",
-    "Flood Inundation Depth (JRC)": "Flood",
     "Flood & Extreme Rainfall Risk": "Extreme Rainfall",
     "Rainfall Totals & Typical Wetness": "Rainfall",
     "Drought Risk": "Drought",
@@ -93,7 +92,6 @@ LANDING_DOMAIN_DISPLAY: dict[str, str] = {
 LANDING_DOMAIN_ORDER: tuple[str, ...] = (
     "Heat Risk",
     "Drought Risk",
-    "Flood Inundation Depth (JRC)",
     "Flood & Extreme Rainfall Risk",
     "Heat Stress",
     "Cold Risk",
@@ -367,19 +365,8 @@ def build_deep_dive_handoff(
     selected_state = str(landing_state.get("landing_selected_state") or "").strip()
     selected_district = str(landing_state.get("landing_selected_district") or "").strip()
     selected_pillar = get_pillar_for_domain(bundle_domain) or "Climate Hazards"
-    metric_cfg = VARIABLES.get(metric_slug, {})
-    supported_states = [
-        str(state_name).strip()
-        for state_name in metric_cfg.get("supported_admin_states", [])
-        if str(state_name).strip()
-    ]
-
     pending_state = selected_state if focus_level in {"state", "district"} and selected_state else "All"
     pending_district = selected_district if focus_level == "district" and selected_district else "All"
-    if supported_states and pending_state not in supported_states:
-        pending_state = supported_states[0]
-        pending_district = "All"
-
     return {
         "landing_active": False,
         "spatial_family": "admin",
@@ -500,13 +487,6 @@ def _landing_context_chip(scenario: str, period: str) -> str:
     period_key = canonical_period_label(period)
     period_label = LANDING_PERIOD_SHORT_LABELS.get(period_key, period_display_label(period_key))
     return f"{scenario_label} • {period_label}"
-
-
-def _landing_bundle_notice(bundle_domain: str) -> str:
-    """Return any trust-critical landing disclosure for the selected bundle."""
-    if str(bundle_domain).strip() == "Flood Inundation Depth (JRC)":
-        return "Snapshot pilot, Telangana only. Flood scores are relative across currently available Telangana districts."
-    return ""
 
 
 def _landing_map_label(
@@ -725,18 +705,6 @@ def _landing_metric_slugs(bundle_domain: str) -> list[str]:
             ordered.append(slug)
         return ordered
     return get_metrics_for_bundle(bundle_domain, spatial_family="admin", level="district")
-
-
-def _bundle_supported_admin_states(bundle_domain: str) -> tuple[str, ...]:
-    """Return the supported admin states for a landing bundle, if restricted."""
-    states: set[str] = set()
-    for metric_slug in _landing_metric_slugs(bundle_domain):
-        cfg = VARIABLES.get(metric_slug, {})
-        for state_name in cfg.get("supported_admin_states", []) or []:
-            state = str(state_name).strip()
-            if state:
-                states.add(state)
-    return tuple(sorted(states))
 
 
 def _bundle_metric_specs(bundle_domain: str) -> list[BundleMetricSpec]:
@@ -988,29 +956,6 @@ def _sanitize_landing_context(session_state: MutableMapping[str, object], *, dat
         else:
             set_landing_focus_india(session_state)
 
-    bundle_domain = str(session_state.get("landing_bundle") or LANDING_DEFAULT_BUNDLE).strip()
-    supported_states = _bundle_supported_admin_states(bundle_domain)
-    focus_level = str(session_state.get("landing_focus_level", "india")).strip().lower()
-    selected_state = str(session_state.get("landing_selected_state") or "").strip()
-    selected_district = str(session_state.get("landing_selected_district") or "").strip()
-    if supported_states and selected_state and selected_state not in supported_states:
-        set_landing_focus_india(session_state)
-        return
-    if supported_states and focus_level == "district" and selected_state and selected_district:
-        district_scores, _state_scores, _metric_specs = _prepare_bundle_context(
-            bundle_domain,
-            scenario=current_pair[0],
-            period=current_pair[1],
-            stat=LANDING_SCORE_STAT,
-            data_dir=data_dir,
-        )
-        valid_district_aliases = {
-            alias(str(row.district_name))
-            for row in district_scores.itertuples(index=False)
-            if str(row.state_name).strip() == selected_state and pd.notna(getattr(row, "bundle_score", np.nan))
-        }
-        if alias(selected_district) not in valid_district_aliases:
-            set_landing_focus_state(session_state, selected_state)
 
 
 def _assemble_bundle_context(
@@ -2240,10 +2185,6 @@ def render_landing_page(
                 data_dir=data_dir,
                 metric_contexts=metric_contexts,
             )
-    bundle_notice = _landing_bundle_notice(bundle_domain)
-    if bundle_notice:
-        st.caption(bundle_notice)
-
     if _apply_landing_search_selection(
         st.session_state,
         search_selection=search_selection,
@@ -2466,6 +2407,4 @@ def render_landing_page(
         "Only scenario-periods with full required bundle-metric coverage are shown. "
         "They are hazard summaries only, not resilience scores."
     )
-    if bundle_notice:
-        method_note = f"{method_note} {bundle_notice}"
     st.caption(method_note)

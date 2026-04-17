@@ -28,7 +28,6 @@ from india_resilience_tool.app.landing_runtime import (
     sync_landing_widget_state,
 )
 
-
 def _metric_context(
     slug: str,
     *,
@@ -53,13 +52,11 @@ def _metric_context(
         available_pairs=pairs,
     )
 
-
 @pytest.fixture(autouse=True)
 def _clear_landing_runtime_caches() -> None:
     landing_runtime._prepare_bundle_context_cached.clear()
     yield
     landing_runtime._prepare_bundle_context_cached.clear()
-
 
 def _adm1_gdf() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(
@@ -73,7 +70,6 @@ def _adm1_gdf() -> gpd.GeoDataFrame:
         geometry="geometry",
         crs="EPSG:4326",
     )
-
 
 def _adm2_gdf() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(
@@ -90,7 +86,6 @@ def _adm2_gdf() -> gpd.GeoDataFrame:
         crs="EPSG:4326",
     )
 
-
 class _DummyContext:
     def __enter__(self) -> "_DummyContext":
         return self
@@ -98,10 +93,8 @@ class _DummyContext:
     def __exit__(self, exc_type, exc, tb) -> bool:
         return False
 
-
 class _DummyRerun(RuntimeError):
     pass
-
 
 class _DummyStreamlit:
     def __init__(self, session_state: dict[str, object]) -> None:
@@ -160,7 +153,6 @@ class _DummyStreamlit:
     def json(self, *args, **kwargs) -> None:
         return None
 
-
 def test_ensure_landing_state_sets_frozen_defaults() -> None:
     session_state: dict[str, object] = {}
 
@@ -180,18 +172,15 @@ def test_ensure_landing_state_sets_frozen_defaults() -> None:
     assert session_state[landing_runtime.LANDING_MAP_CONTEXT_KEY] is None
     assert session_state[landing_runtime.LANDING_MAP_INPUT_ARMED_KEY] is False
 
-
-def test_landing_bundle_domains_hide_non_glance_bundles() -> None:
+def test_landing_bundle_domains_exclude_jrc_flood_bundle() -> None:
     assert _landing_bundle_domains() == [
         "Heat Risk",
         "Drought Risk",
-        "Flood Inundation Depth (JRC)",
         "Flood & Extreme Rainfall Risk",
         "Heat Stress",
         "Cold Risk",
         "Agriculture & Growing Conditions",
     ]
-
 
 def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp_path: Path) -> None:
     session_state: dict[str, object] = {
@@ -212,14 +201,12 @@ def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp
     assert session_state["landing_scenario"] == "ssp585"
     assert session_state["landing_period"] == "2040-2060"
 
-
 def test_bundle_metric_specs_use_custom_heat_risk_weights() -> None:
     specs = _bundle_metric_specs("Heat Risk")
     by_slug = {spec.slug: spec for spec in specs}
 
     assert by_slug["tasmin_tropical_nights_gt25"].weight == 0.2 / 3.0
     assert by_slug["hwfi_tmean_90p"].weight == 0.15 / 2.0
-
 
 def test_bundle_metric_specs_use_custom_heat_stress_weights() -> None:
     specs = _bundle_metric_specs("Heat Stress")
@@ -230,7 +217,6 @@ def test_bundle_metric_specs_use_custom_heat_stress_weights() -> None:
     assert by_slug["wbd_gt3_le6"].weight == 0.15 / 2.0
     assert by_slug["twb_days_ge_28"].weight == 0.25 / 3.0
     assert "wbd_le_6" not in by_slug
-
 
 def test_bundle_metric_specs_use_custom_cold_risk_weights() -> None:
     specs = _bundle_metric_specs("Cold Risk")
@@ -243,7 +229,6 @@ def test_bundle_metric_specs_use_custom_cold_risk_weights() -> None:
     assert "fd_frost_days" not in by_slug
     assert "tnlt2_cold_nights" not in by_slug
 
-
 def test_bundle_metric_specs_use_custom_drought_risk_weights() -> None:
     specs = _bundle_metric_specs("Drought Risk")
     by_slug = {spec.slug: spec for spec in specs}
@@ -253,13 +238,11 @@ def test_bundle_metric_specs_use_custom_drought_risk_weights() -> None:
     assert by_slug["spi6_count_events_lt_minus1"].weight == 0.30
     assert by_slug["spi12_count_events_lt_minus1"].weight == 0.50
 
-
 def test_bundle_metric_specs_use_custom_jrc_flood_weights_only() -> None:
     specs = _bundle_metric_specs("Flood Inundation Depth (JRC)")
 
     assert [spec.slug for spec in specs] == ["jrc_flood_depth_index_rp100"]
     assert specs[0].weight == 1.0
-
 
 def test_bundle_metric_specs_use_custom_flood_weights() -> None:
     specs = _bundle_metric_specs("Flood & Extreme Rainfall Risk")
@@ -270,7 +253,6 @@ def test_bundle_metric_specs_use_custom_flood_weights() -> None:
     assert by_slug["r20mm_very_heavy_precip_days"].weight == 0.25
     assert by_slug["cwd_consecutive_wet_days"].weight == 0.25
 
-
 def test_bundle_metric_specs_use_custom_agriculture_weights() -> None:
     specs = _bundle_metric_specs("Agriculture & Growing Conditions")
     by_slug = {spec.slug: spec for spec in specs}
@@ -280,13 +262,11 @@ def test_bundle_metric_specs_use_custom_agriculture_weights() -> None:
     assert by_slug["prcptot_annual_total"].weight == 0.20 / 2.0
     assert by_slug["dtr_daily_temp_range"].weight == 0.20
 
-
 def test_bundle_metric_specs_default_to_equal_weights_without_custom_config() -> None:
     specs = _bundle_metric_specs("Rainfall Totals & Typical Wetness")
 
     assert specs
     assert all(spec.weight == 1.0 for spec in specs)
-
 
 def test_sync_landing_widget_state_updates_scenario_period_pair() -> None:
     session_state: dict[str, object] = {
@@ -299,7 +279,6 @@ def test_sync_landing_widget_state_updates_scenario_period_pair() -> None:
 
     assert session_state["landing_scenario"] == "ssp245"
     assert session_state["landing_period"] == "2020-2040"
-
 
 def test_landing_focus_transitions_cover_india_state_district_back_reset() -> None:
     session_state: dict[str, object] = {}
@@ -331,7 +310,6 @@ def test_landing_focus_transitions_cover_india_state_district_back_reset() -> No
     assert session_state["landing_selected_state"] is None
     assert session_state["landing_selected_district"] is None
 
-
 def test_apply_landing_search_selection_updates_focus_without_bundle_notice_dependency() -> None:
     session_state: dict[str, object] = {
         "landing_search_last_applied": None,
@@ -356,7 +334,6 @@ def test_apply_landing_search_selection_updates_focus_without_bundle_notice_depe
     assert landing_runtime.LANDING_MAP_CLICK_TOKEN_KEY not in session_state
     assert landing_runtime.LANDING_PENDING_MAP_TRANSITION_KEY not in session_state
 
-
 def test_queue_and_consume_pending_landing_map_transition_for_state_focus() -> None:
     session_state: dict[str, object] = {}
 
@@ -380,7 +357,6 @@ def test_queue_and_consume_pending_landing_map_transition_for_state_focus() -> N
     assert session_state["landing_selected_district"] is None
     assert landing_runtime.LANDING_PENDING_MAP_TRANSITION_KEY not in session_state
 
-
 def test_queue_landing_map_transition_rejects_noop_without_mutating_session_state() -> None:
     session_state: dict[str, object] = {
         "landing_focus_level": "india",
@@ -400,7 +376,6 @@ def test_queue_landing_map_transition_rejects_noop_without_mutating_session_stat
     assert session_state["landing_selected_state"] is None
     assert session_state["landing_selected_district"] is None
     assert landing_runtime.LANDING_PENDING_MAP_TRANSITION_KEY not in session_state
-
 
 def test_queue_landing_map_transition_preserves_valid_focus_actions() -> None:
     state_session: dict[str, object] = {}
@@ -439,7 +414,6 @@ def test_queue_landing_map_transition_preserves_valid_focus_actions() -> None:
         "hyderabad",
     )
 
-
 def test_identical_landing_click_is_allowed_again_after_pending_transition_is_consumed() -> None:
     session_state: dict[str, object] = {}
 
@@ -468,7 +442,6 @@ def test_identical_landing_click_is_allowed_again_after_pending_transition_is_co
     assert session_state["landing_focus_level"] == "state"
     assert session_state["landing_selected_state"] == "Telangana"
     assert session_state["landing_selected_district"] is None
-
 
 def test_replayed_india_click_noop_does_not_recreate_pending_transition() -> None:
     adm1 = _adm1_gdf()
@@ -519,13 +492,12 @@ def test_replayed_india_click_noop_does_not_recreate_pending_transition() -> Non
     assert replay_queued is False
     assert landing_runtime.LANDING_PENDING_MAP_TRANSITION_KEY not in session_state
 
-
 def test_sync_landing_map_input_gate_disarms_until_context_reports_empty_payload() -> None:
     session_state: dict[str, object] = {}
     context = landing_runtime._landing_map_context_token(
-        bundle_domain="Flood Inundation Depth (JRC)",
-        scenario="snapshot",
-        period="Current",
+        bundle_domain="Heat Risk",
+        scenario="ssp245",
+        period="2020-2040",
         focus_level="state",
         selected_state="Telangana",
         selected_district=None,
@@ -552,13 +524,12 @@ def test_sync_landing_map_input_gate_disarms_until_context_reports_empty_payload
     assert context_changed is False
     assert session_state[landing_runtime.LANDING_MAP_INPUT_ARMED_KEY] is True
 
-
 def test_sync_landing_map_input_gate_arms_immediately_for_empty_new_context() -> None:
     session_state: dict[str, object] = {}
     context = landing_runtime._landing_map_context_token(
-        bundle_domain="Flood Inundation Depth (JRC)",
-        scenario="snapshot",
-        period="Current",
+        bundle_domain="Heat Risk",
+        scenario="ssp245",
+        period="2020-2040",
         focus_level="india",
         selected_state=None,
         selected_district=None,
@@ -575,11 +546,10 @@ def test_sync_landing_map_input_gate_arms_immediately_for_empty_new_context() ->
     assert session_state[landing_runtime.LANDING_MAP_CONTEXT_KEY] == context
     assert session_state[landing_runtime.LANDING_MAP_INPUT_ARMED_KEY] is True
 
-
 def test_clear_landing_pending_map_transition_clears_map_input_gate() -> None:
     session_state: dict[str, object] = {
         landing_runtime.LANDING_PENDING_MAP_TRANSITION_KEY: ("state", "telangana", ""),
-        landing_runtime.LANDING_MAP_CONTEXT_KEY: ("flood", "snapshot", "Current", "state", "telangana", "", "district"),
+        landing_runtime.LANDING_MAP_CONTEXT_KEY: ("heat risk", "ssp245", "2020-2040", "state", "telangana", "", "district"),
         landing_runtime.LANDING_MAP_INPUT_ARMED_KEY: True,
         landing_runtime.LANDING_MAP_REPLAY_GUARD_KEY: ("legacy",),
         landing_runtime.LANDING_MAP_CLICK_TOKEN_KEY: ("focus_state", "telangana", ""),
@@ -593,7 +563,6 @@ def test_clear_landing_pending_map_transition_clears_map_input_gate() -> None:
     assert landing_runtime.LANDING_MAP_REPLAY_GUARD_KEY not in session_state
     assert landing_runtime.LANDING_MAP_CLICK_TOKEN_KEY not in session_state
 
-
 def test_render_landing_page_ignores_stale_payloads_until_first_empty_then_accepts_real_click(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -603,9 +572,9 @@ def test_render_landing_page_ignores_stale_payloads_until_first_empty_then_accep
     visible_districts["bundle_score"] = [72.0, 64.0]
 
     session_state: dict[str, object] = {
-        "landing_bundle": "Flood Inundation Depth (JRC)",
-        "landing_scenario": "snapshot",
-        "landing_period": "Current",
+        "landing_bundle": "Heat Risk",
+        "landing_scenario": "ssp245",
+        "landing_period": "2020-2040",
         "landing_focus_level": "india",
         "landing_selected_state": None,
         "landing_selected_district": None,
@@ -670,7 +639,7 @@ def test_render_landing_page_ignores_stale_payloads_until_first_empty_then_accep
     monkeypatch.setattr(
         landing_runtime,
         "_intersect_bundle_scenario_period_pairs",
-        lambda metric_contexts: [("snapshot", "Current")],
+        lambda metric_contexts: [("ssp245", "2020-2040")],
     )
     monkeypatch.setattr(
         landing_runtime,
@@ -690,7 +659,7 @@ def test_render_landing_page_ignores_stale_payloads_until_first_empty_then_accep
                     "bundle_score": [75.0, 55.0],
                 }
             ),
-            [BundleMetricSpec(slug="jrc_flood_depth_index_rp100", label="Flood", column="jrc_flood_depth_index_rp100")],
+            [BundleMetricSpec(slug="tas_annual_mean", label="Temperature", column="tas_annual_mean")],
         ),
     )
     monkeypatch.setattr(landing_runtime, "_build_landing_search_options", lambda *args, **kwargs: {})
@@ -732,7 +701,6 @@ def test_render_landing_page_ignores_stale_payloads_until_first_empty_then_accep
     assert session_state["landing_selected_state"] == "Telangana"
     assert session_state["landing_selected_district"] == "Nalgonda"
 
-
 def test_consume_pending_landing_map_transition_ignores_non_matching_focus() -> None:
     session_state: dict[str, object] = {
         landing_runtime.LANDING_PENDING_MAP_TRANSITION_KEY: ("state", "telangana", ""),
@@ -748,7 +716,6 @@ def test_consume_pending_landing_map_transition_ignores_non_matching_focus() -> 
     assert consumed is False
     assert session_state[landing_runtime.LANDING_PENDING_MAP_TRANSITION_KEY] == ("state", "telangana", "")
 
-
 def test_ensure_landing_state_clears_legacy_sticky_map_click_token() -> None:
     session_state: dict[str, object] = {
         landing_runtime.LANDING_MAP_CLICK_TOKEN_KEY: ("focus_state", "telangana", ""),
@@ -757,7 +724,6 @@ def test_ensure_landing_state_clears_legacy_sticky_map_click_token() -> None:
     landing_runtime.ensure_landing_state(session_state)
 
     assert landing_runtime.LANDING_MAP_CLICK_TOKEN_KEY not in session_state
-
 
 def test_build_deep_dive_handoff_preserves_bundle_and_geography_context() -> None:
     landing_state = {
@@ -787,32 +753,6 @@ def test_build_deep_dive_handoff_preserves_bundle_and_geography_context() -> Non
     assert handoff["selected_district"] == "Nalgonda"
     assert handoff["map_mode"] == "Absolute value"
 
-
-def test_build_deep_dive_handoff_for_flood_uses_biophysical_pillar_and_telangana_default() -> None:
-    landing_state = {
-        "landing_bundle": "Flood Inundation Depth (JRC)",
-        "landing_scenario": "snapshot",
-        "landing_period": "Current",
-        "landing_focus_level": "india",
-        "landing_selected_state": None,
-        "landing_selected_district": None,
-    }
-
-    handoff = build_deep_dive_handoff(
-        landing_state,
-        bundle_domain="Flood Inundation Depth (JRC)",
-        metric_slug="jrc_flood_depth_index_rp100",
-    )
-
-    assert handoff["selected_pillar"] == "Bio-physical Hazards"
-    assert handoff["selected_bundle"] == "Flood Inundation Depth (JRC)"
-    assert handoff["selected_var"] == "jrc_flood_depth_index_rp100"
-    assert handoff["sel_scenario"] == "snapshot"
-    assert handoff["sel_period"] == "Current"
-    assert handoff["selected_state"] == "Telangana"
-    assert handoff["selected_district"] == "All"
-
-
 def test_build_deep_dive_handoff_requires_non_empty_metric_slug() -> None:
     with pytest.raises(ValueError, match="metric_slug"):
         build_deep_dive_handoff(
@@ -820,7 +760,6 @@ def test_build_deep_dive_handoff_requires_non_empty_metric_slug() -> None:
             bundle_domain="Heat Risk",
             metric_slug="",
         )
-
 
 def test_build_glance_handoff_from_deep_dive_maps_compatible_district_context() -> None:
     detailed_state = {
@@ -848,7 +787,6 @@ def test_build_glance_handoff_from_deep_dive_maps_compatible_district_context() 
     assert handoff["landing_search_last_applied"] is None
     assert handoff["landing_search_reset_pending"] is True
 
-
 def test_build_glance_handoff_from_deep_dive_maps_compatible_state_context() -> None:
     detailed_state = {
         "spatial_family": "admin",
@@ -867,7 +805,6 @@ def test_build_glance_handoff_from_deep_dive_maps_compatible_state_context() -> 
     assert handoff["landing_selected_state"] == "Telangana"
     assert handoff["landing_selected_district"] is None
 
-
 def test_build_glance_handoff_from_deep_dive_maps_compatible_india_context() -> None:
     detailed_state = {
         "spatial_family": "admin",
@@ -885,29 +822,6 @@ def test_build_glance_handoff_from_deep_dive_maps_compatible_india_context() -> 
     assert handoff["landing_focus_level"] == "india"
     assert handoff["landing_selected_state"] is None
     assert handoff["landing_selected_district"] is None
-
-
-def test_build_glance_handoff_from_deep_dive_maps_compatible_flood_context() -> None:
-    detailed_state = {
-        "spatial_family": "admin",
-        "admin_level": "district",
-        "selected_pillar": "Bio-physical Hazards",
-        "selected_bundle": "Flood Inundation Depth (JRC)",
-        "sel_scenario": "snapshot",
-        "sel_period": "Current",
-        "selected_state": "Telangana",
-        "selected_district": "All",
-    }
-
-    handoff = build_glance_handoff_from_deep_dive(detailed_state)
-
-    assert handoff["landing_bundle"] == "Flood Inundation Depth (JRC)"
-    assert handoff["landing_scenario"] == "snapshot"
-    assert handoff["landing_period"] == "Current"
-    assert handoff["landing_focus_level"] == "state"
-    assert handoff["landing_selected_state"] == "Telangana"
-    assert handoff["landing_selected_district"] is None
-
 
 def test_build_glance_handoff_from_deep_dive_preserves_prior_landing_state_for_hydro() -> None:
     detailed_state = {
@@ -934,7 +848,6 @@ def test_build_glance_handoff_from_deep_dive_preserves_prior_landing_state_for_h
         "landing_search_reset_pending": True,
     }
 
-
 def test_build_glance_handoff_from_deep_dive_preserves_landing_ui_state_when_incompatible() -> None:
     detailed_state = {
         "spatial_family": "admin",
@@ -954,71 +867,6 @@ def test_build_glance_handoff_from_deep_dive_preserves_landing_ui_state_when_inc
     assert handoff["landing_active"] is True
     assert handoff["landing_search_reset_pending"] is True
 
-
-def test_sanitize_landing_context_resets_unsupported_state_for_flood(monkeypatch, tmp_path: Path) -> None:
-    session_state: dict[str, object] = {
-        "landing_bundle": "Flood Inundation Depth (JRC)",
-        "landing_scenario": "ssp585",
-        "landing_period": "2040-2060",
-        "landing_focus_level": "state",
-        "landing_selected_state": "Maharashtra",
-        "landing_selected_district": None,
-    }
-    monkeypatch.setattr(
-        landing_runtime,
-        "_bundle_scenario_period_options",
-        lambda bundle_domain, *, data_dir: [("snapshot", "Current")],
-    )
-
-    _sanitize_landing_context(session_state, data_dir=tmp_path)
-
-    assert session_state["landing_scenario"] == "snapshot"
-    assert session_state["landing_period"] == "Current"
-    assert session_state["landing_focus_level"] == "india"
-    assert session_state["landing_selected_state"] is None
-    assert session_state["landing_selected_district"] is None
-
-
-def test_sanitize_landing_context_downgrades_invalid_telangana_district_for_flood(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    session_state: dict[str, object] = {
-        "landing_bundle": "Flood Inundation Depth (JRC)",
-        "landing_scenario": "snapshot",
-        "landing_period": "Current",
-        "landing_focus_level": "district",
-        "landing_selected_state": "Telangana",
-        "landing_selected_district": "Khammam",
-    }
-    monkeypatch.setattr(
-        landing_runtime,
-        "_bundle_scenario_period_options",
-        lambda bundle_domain, *, data_dir: [("snapshot", "Current")],
-    )
-    monkeypatch.setattr(
-        landing_runtime,
-        "_prepare_bundle_context",
-        lambda *args, **kwargs: (
-            pd.DataFrame(
-                {
-                    "state_name": ["Telangana"],
-                    "district_name": ["Hyderabad"],
-                    "bundle_score": [75.0],
-                }
-            ),
-            pd.DataFrame({"state_name": ["Telangana"], "bundle_score": [75.0]}),
-            [BundleMetricSpec(slug="jrc_flood_depth_index_rp100", label="Flood", column="jrc_flood_depth_index_rp100")],
-        ),
-    )
-
-    _sanitize_landing_context(session_state, data_dir=tmp_path)
-
-    assert session_state["landing_focus_level"] == "state"
-    assert session_state["landing_selected_state"] == "Telangana"
-    assert session_state["landing_selected_district"] is None
-
-
 def test_intersect_bundle_scenario_period_pairs_uses_required_metric_intersection() -> None:
     contexts = [
         _metric_context(
@@ -1036,7 +884,6 @@ def test_intersect_bundle_scenario_period_pairs_uses_required_metric_intersectio
     ]
 
     assert _intersect_bundle_scenario_period_pairs(contexts) == [("ssp245", "2020-2040")]
-
 
 def test_context_key_round_trip_preserves_metric_specs() -> None:
     contexts = [
@@ -1069,7 +916,6 @@ def test_context_key_round_trip_preserves_metric_specs() -> None:
         ("metric_a", "metric_a_col", 2.5, False),
         ("metric_b", "metric_b_col", 0.75, True),
     ]
-
 
 def test_prepare_bundle_context_cached_uses_available_pairs_not_source_paths(
     monkeypatch: pytest.MonkeyPatch,
@@ -1116,7 +962,6 @@ def test_prepare_bundle_context_cached_uses_available_pairs_not_source_paths(
     assert not state_scores.empty
     assert district_scores["bundle_score"].notna().all()
     assert state_scores["bundle_score"].notna().all()
-
 
 def test_prepare_bundle_context_cached_preserves_weighted_scoring_round_trip(
     monkeypatch: pytest.MonkeyPatch,
@@ -1185,7 +1030,6 @@ def test_prepare_bundle_context_cached_preserves_weighted_scoring_round_trip(
     assert district_by_name.loc["Hyderabad", "bundle_score"] == pytest.approx(200.0 / 3.0)
     assert state_scores.set_index("state_name").loc["Telangana", "bundle_score"] == pytest.approx(50.0)
 
-
 def test_prepare_bundle_context_cached_returns_empty_for_unsupported_pair() -> None:
     contexts = [
         _metric_context(
@@ -1209,12 +1053,10 @@ def test_prepare_bundle_context_cached_returns_empty_for_unsupported_pair() -> N
     assert district_scores.empty
     assert state_scores.empty
 
-
 @pytest.mark.parametrize("bad_entry", [("a", "b", "c", 1.0, True, (), ()), ("a", "b", "c", 1.0, True, (), (), (), ())])
 def test_decode_context_key_entry_rejects_malformed_schema(bad_entry: tuple[object, ...]) -> None:
     with pytest.raises(ValueError, match="expected 8 fields"):
         landing_runtime._decode_context_key_entry(bad_entry)
-
 
 def test_assemble_bundle_context_builds_ranked_outputs_deterministically() -> None:
     merged_frame = pd.DataFrame(
@@ -1242,7 +1084,6 @@ def test_assemble_bundle_context_builds_ranked_outputs_deterministically() -> No
     assert district_by_name.loc["Two", "district_rank"] == 1.0
     assert district_by_name.loc["One", "district_rank"] == 2.0
     assert district_by_name.loc["Two", "district_count"] == 2
-
 
 def test_resolve_first_valid_landing_metric_skips_invalid_first_metric(monkeypatch: pytest.MonkeyPatch) -> None:
     contexts = [
@@ -1276,7 +1117,6 @@ def test_resolve_first_valid_landing_metric_skips_invalid_first_metric(monkeypat
 
     assert metric_slug == "metric_b"
 
-
 def test_resolve_first_valid_landing_metric_returns_none_when_no_metric_has_data(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1306,7 +1146,6 @@ def test_resolve_first_valid_landing_metric_returns_none_when_no_metric_has_data
 
     assert metric_slug is None
 
-
 def test_build_landing_search_options_includes_state_and_district_labels() -> None:
     state_scores = pd.DataFrame({"state_name": ["Telangana", "Maharashtra"]})
     district_scores = pd.DataFrame(
@@ -1326,7 +1165,6 @@ def test_build_landing_search_options_includes_state_and_district_labels() -> No
         "Jayashankar Bhupalpalli",
     )
 
-
 def test_build_landing_search_options_orders_states_before_districts() -> None:
     state_scores = pd.DataFrame({"state_name": ["Telangana", "Andhra Pradesh"]})
     district_scores = pd.DataFrame(
@@ -1345,7 +1183,6 @@ def test_build_landing_search_options_orders_states_before_districts() -> None:
         "District: Visakhapatnam, Andhra Pradesh",
         "District: Nalgonda, Telangana",
     ]
-
 
 def test_build_district_map_frame_sorts_deterministically_for_feature_serialization() -> None:
     adm2 = _adm2_gdf().iloc[[1, 0, 2]].reset_index(drop=True)
@@ -1374,7 +1211,6 @@ def test_build_district_map_frame_sorts_deterministically_for_feature_serializat
         for feature in feature_collection["features"]
     ] == ["telangana|khammam", "telangana|nalgonda"]
 
-
 def test_apply_landing_map_click_enters_state_focus_from_india() -> None:
     adm1 = _adm1_gdf()
     adm2 = _adm2_gdf()
@@ -1396,7 +1232,6 @@ def test_apply_landing_map_click_enters_state_focus_from_india() -> None:
 
     assert action == ("focus_state", "Telangana", None)
 
-
 def test_apply_landing_map_click_enters_state_focus_from_coordinates_only() -> None:
     adm1 = _adm1_gdf()
     adm2 = _adm2_gdf()
@@ -1414,7 +1249,6 @@ def test_apply_landing_map_click_enters_state_focus_from_coordinates_only() -> N
 
     assert action == ("focus_state", "Telangana", None)
 
-
 def test_apply_landing_map_click_noops_on_invalid_india_click() -> None:
     adm1 = _adm1_gdf()
     adm2 = _adm2_gdf()
@@ -1431,7 +1265,6 @@ def test_apply_landing_map_click_noops_on_invalid_india_click() -> None:
     )
 
     assert action == ("noop", None, None)
-
 
 def test_apply_landing_map_click_enters_district_focus_from_state() -> None:
     adm1 = _adm1_gdf()
@@ -1461,7 +1294,6 @@ def test_apply_landing_map_click_enters_district_focus_from_state() -> None:
 
     assert action == ("focus_district", "Telangana", "Nalgonda")
 
-
 def test_apply_landing_map_click_switches_district_within_state_focus() -> None:
     adm1 = _adm1_gdf()
     adm2 = _adm2_gdf()
@@ -1489,7 +1321,6 @@ def test_apply_landing_map_click_switches_district_within_state_focus() -> None:
     )
 
     assert action == ("focus_district", "Telangana", "Khammam")
-
 
 def test_apply_landing_map_click_noops_on_same_district_selection() -> None:
     adm1 = _adm1_gdf()
@@ -1519,7 +1350,6 @@ def test_apply_landing_map_click_noops_on_same_district_selection() -> None:
 
     assert action == ("noop", None, None)
 
-
 def test_apply_landing_map_click_noops_on_invalid_district_payload() -> None:
     adm1 = _adm1_gdf()
     adm2 = _adm2_gdf()
@@ -1539,7 +1369,6 @@ def test_apply_landing_map_click_noops_on_invalid_district_payload() -> None:
     )
 
     assert action == ("noop", None, None)
-
 
 def test_apply_landing_map_click_noops_on_replayed_state_payload_before_coords_fallback() -> None:
     adm1 = _adm1_gdf()
@@ -1570,7 +1399,6 @@ def test_apply_landing_map_click_noops_on_replayed_state_payload_before_coords_f
 
     assert action == ("noop", None, None)
 
-
 def test_apply_landing_map_click_enters_district_focus_from_coordinates_only() -> None:
     adm1 = _adm1_gdf()
     adm2 = _adm2_gdf()
@@ -1590,7 +1418,6 @@ def test_apply_landing_map_click_enters_district_focus_from_coordinates_only() -
     )
 
     assert action == ("focus_district", "Telangana", "Nalgonda")
-
 
 def test_apply_landing_map_click_noops_when_replayed_coordinates_resolve_to_no_score_district() -> None:
     adm1 = _adm1_gdf()
