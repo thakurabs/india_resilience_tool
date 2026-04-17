@@ -238,6 +238,11 @@ def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
         "aq_interannual_variability",
         "aq_seasonal_variability",
         "aq_water_depletion",
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_depth_rp10",
+        "jrc_flood_depth_rp50",
+        "jrc_flood_depth_rp100",
+        "jrc_flood_depth_rp500",
     }
     assert dashboard_only.isdisjoint({slug for slugs in pipeline_bundles.values() for slug in slugs})
     for slug in dashboard_only:
@@ -306,7 +311,11 @@ def test_population_exposure_domain_is_admin_only() -> None:
 
 def test_groundwater_domain_is_admin_district_only() -> None:
     admin_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="district")
-    assert admin_domains == ["Aqueduct Water Risk", "Groundwater Status & Availability"]
+    assert admin_domains == [
+        "Aqueduct Water Risk",
+        "Groundwater Status & Availability",
+        "Flood Inundation Depth (JRC)",
+    ]
     admin_metrics = set(
         get_metrics_for_bundle("Groundwater Status & Availability", spatial_family="admin", level="district")
     )
@@ -318,4 +327,36 @@ def test_groundwater_domain_is_admin_district_only() -> None:
     }
 
     block_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="block")
-    assert block_domains == ["Aqueduct Water Risk"]
+    assert block_domains == ["Aqueduct Water Risk", "Flood Inundation Depth (JRC)"]
+
+
+def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None:
+    district_metrics = get_metrics_for_bundle(
+        "Flood Inundation Depth (JRC)",
+        spatial_family="admin",
+        level="district",
+    )
+    block_metrics = get_metrics_for_bundle(
+        "Flood Inundation Depth (JRC)",
+        spatial_family="admin",
+        level="block",
+    )
+    assert district_metrics == [
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_depth_rp10",
+        "jrc_flood_depth_rp50",
+        "jrc_flood_depth_rp100",
+        "jrc_flood_depth_rp500",
+    ]
+    assert block_metrics == district_metrics
+    assert get_metrics_for_bundle(
+        "Flood Inundation Depth (JRC)",
+        spatial_family="hydro",
+        level="basin",
+    ) == []
+    spec = METRICS_BY_SLUG["jrc_flood_depth_index_rp100"]
+    assert spec.supported_admin_states == ("Telangana",)
+    assert spec.fixed_period == "Current"
+    assert spec.supports_yearly_trend is False
+    assert spec.supports_baseline_comparison is False
+    assert spec.supports_scenario_comparison is False

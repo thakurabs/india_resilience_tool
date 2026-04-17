@@ -81,6 +81,13 @@ def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
 
+def test_jrc_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
+    entries = get_bundle_weights("Flood Inundation Depth (JRC)")
+
+    assert [entry.metric_slug for entry in entries] == ["jrc_flood_depth_index_rp100"]
+    assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+
+
 def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
     entries = get_bundle_weights("Flood & Extreme Rainfall Risk")
 
@@ -116,12 +123,13 @@ def test_validate_bundle_weights_reports_no_issues() -> None:
     assert validate_bundle_weights() == []
 
 
-def test_all_visible_glance_climate_bundles_have_custom_weights_in_this_pass() -> None:
+def test_all_visible_glance_bundles_have_custom_weights_in_this_pass() -> None:
     assert set(LANDING_BUNDLE_WEIGHTS) == {
         "Heat Risk",
         "Heat Stress",
         "Cold Risk",
         "Drought Risk",
+        "Flood Inundation Depth (JRC)",
         "Flood & Extreme Rainfall Risk",
         "Agriculture & Growing Conditions",
     }

@@ -9,8 +9,8 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 
 The current working tree supports:
 - a default climate-hazard landing / discovery surface that opens on an India state-level bundle map and drills down India -> state -> district before handing off to the detailed workflow
-- a Glance bundle scope limited to `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`, with other climate domains still available in Deep Dive
-- declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance climate bundles
+- a Glance bundle scope covering `Heat Risk`, `Heat Stress`, `Drought Risk`, Telangana-only snapshot `Flood`, `Flood & Extreme Rainfall Risk` (displayed as `Extreme Rainfall`), `Cold Risk`, and `Agriculture & Growing Conditions`
+- declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance bundles
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
 - type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
 - a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff
@@ -292,7 +292,7 @@ Aqueduct methodology note:
 | `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master `{csv,parquet}` files from Aqueduct overlaps for the onboarded hydro metrics |
 | `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster |
 | `build_groundwater_district_masters.py` | Build district groundwater assessment master `{csv,parquet}` files from the 2024-2025 GEC workbook plus a canonical district alias QA package |
-| `build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth master `{csv,parquet}` files plus stable QA CSVs for `RP10`, `RP50`, `RP100`, and `RP500` |
+| `build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth master `{csv,parquet}` files plus the derived RP100 flood-index masters and stable QA CSVs |
 | `runs/prepare_dashboard.py` | Canonical operator entrypoint that orchestrates bundle prep, optimized runtime refresh, and final readiness verification for climate, Aqueduct, population exposure, groundwater, Telangana JRC flood depth, validation, and dashboard-package workflows |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |

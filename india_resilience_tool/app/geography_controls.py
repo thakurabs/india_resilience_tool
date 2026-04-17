@@ -24,6 +24,7 @@ from india_resilience_tool.app.geo_cache import (
     load_subbasin_selector_index,
 )
 from india_resilience_tool.app.sidebar import render_analysis_mode_selector
+from india_resilience_tool.config.variables import VARIABLES
 from india_resilience_tool.data.adm3_loader import (
     get_blocks_for_district as _get_blocks_for_district,
 )
@@ -73,6 +74,14 @@ def _resolve_available_admin_states(processed_root: Optional[Path]) -> tuple[lis
     return ["All"] + discovered_states, True
 
 
+def _supported_admin_states_for_selected_metric() -> list[str]:
+    slug = str(st.session_state.get("selected_var", "")).strip()
+    if not slug or slug not in VARIABLES:
+        return []
+    supported = VARIABLES[slug].get("supported_admin_states") or []
+    return [str(state).strip() for state in supported if str(state).strip()]
+
+
 def _build_admin_geography(
     *,
     analysis_ready: bool,
@@ -85,6 +94,7 @@ def _build_admin_geography(
     admin_level: str,
 ) -> tuple[str, str, str, Any]:
     metric_ready_for_geography = processed_root is not None
+    restricted_states = _supported_admin_states_for_selected_metric()
 
     if not metric_ready_for_geography:
         st.info(
@@ -93,11 +103,22 @@ def _build_admin_geography(
         available_states = ["All"]
     else:
         available_states, has_available_data = _resolve_available_admin_states(processed_root)
+        if restricted_states:
+            available_states = restricted_states
         if not has_available_data:
             processed_root_resolved = processed_root.resolve()
             st.warning(
                 f"No processed data found under IRT_PROCESSED_ROOT={processed_root_resolved}"
             )
+
+    metric_slug = str(st.session_state.get("selected_var", "")).strip()
+    previous_metric_slug = str(st.session_state.get("__admin_geography_metric_slug", "")).strip()
+    restricted_states = _supported_admin_states_for_selected_metric()
+    if restricted_states and metric_slug != previous_metric_slug:
+        st.session_state["selected_state"] = restricted_states[0]
+        st.session_state["selected_district"] = "All"
+        st.session_state["selected_block"] = "All"
+    st.session_state["__admin_geography_metric_slug"] = metric_slug
 
     if st.session_state.get("selected_state") not in available_states:
         st.session_state["selected_state"] = available_states[0]
@@ -109,6 +130,9 @@ def _build_admin_geography(
         key="selected_state",
         disabled=(not analysis_ready) or (not metric_ready_for_geography),
     )
+
+    if restricted_states:
+        st.caption("This metric is currently available for Telangana only.")
 
     if selected_state == "All":
         gdf_state_districts = adm2.copy()

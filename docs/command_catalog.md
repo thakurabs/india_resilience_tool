@@ -128,6 +128,7 @@ This bundle runs:
 Notes:
 - Telangana-only pilot coverage
 - fixed snapshot selectors: `snapshot`, `Current`, `mean`
+- the JRC workflow now also writes the derived `jrc_flood_depth_index_rp100` severity-class masters used by the Glance `Flood` bundle
 - runner `--overwrite` refreshes JRC masters and QA outputs without wiping unrelated `processed_optimised` artifacts
 - zero values inside raster extent are treated as dry cells for this JRC raster family
 - `dashboard-package --include-jrc-flood-depth` also requires `--jrc-source-dir` and `--jrc-assume-units m` unless `--audit-only` is set

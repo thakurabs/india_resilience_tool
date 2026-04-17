@@ -8,6 +8,7 @@ from contextlib import redirect_stdout
 import pytest
 
 from tools.runs.prepare_dashboard import (
+    _resolve_bundle_metrics,
     BundleRuntimeScope,
     ClimateLevelReadiness,
     ClimateRuntimeScope,
@@ -601,6 +602,28 @@ def test_jrc_bundle_builds_expected_steps_and_never_forwards_builder_dry_run() -
     assert "--overwrite" in plan[1].argv
     assert plan[1].argv.count("--dry-run") == 0
     assert "--overwrite" not in plan[2].argv
+
+
+def test_jrc_bundle_metric_resolution_includes_derived_index_slug() -> None:
+    args = argparse.Namespace(include_jrc_flood_depth=False, level="admin", metric_slug=None)
+
+    metrics = _resolve_bundle_metrics("jrc-flood-depth", args)
+
+    assert metrics == [
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_depth_rp10",
+        "jrc_flood_depth_rp50",
+        "jrc_flood_depth_rp100",
+        "jrc_flood_depth_rp500",
+    ]
+
+
+def test_dashboard_package_jrc_scope_resolution_includes_derived_index_slug() -> None:
+    args = argparse.Namespace(include_jrc_flood_depth=True, level="admin", metric_slug=None)
+
+    metrics = _resolve_bundle_metrics("dashboard-package", args)
+
+    assert "jrc_flood_depth_index_rp100" in metrics
 
 
 def test_jrc_bundle_requires_source_flags_for_plan_only() -> None:

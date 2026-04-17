@@ -305,6 +305,15 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             workbook_group="Long-term Drought",
         ),
     ),
+    "Flood Inundation Depth (JRC)": (
+        BundleWeightEntry(
+            bundle_domain="Flood Inundation Depth (JRC)",
+            metric_slug="jrc_flood_depth_index_rp100",
+            weight=1.0,
+            source_note="Bundles_comp_Score.xlsx / Flood / RP100 depth index pilot",
+            workbook_group="Inundation Severity",
+        ),
+    ),
     "Flood & Extreme Rainfall Risk": (
         BundleWeightEntry(
             bundle_domain="Flood & Extreme Rainfall Risk",
@@ -431,13 +440,16 @@ def has_bundle_weights(bundle_domain: str) -> bool:
 
 def validate_bundle_weights() -> list[str]:
     """Return validation issues for configured landing bundle weights."""
-    from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG
+    from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG, get_metrics_for_bundle
 
     issues: list[str] = []
     for bundle_domain, entries in LANDING_BUNDLE_WEIGHTS.items():
         if not entries:
             issues.append(f"Bundle {bundle_domain!r} has no weight entries.")
             continue
+        available_bundle_metrics = set(
+            get_metrics_for_bundle(bundle_domain, spatial_family="admin", level="district")
+        )
 
         total = 0.0
         seen: set[str] = set()
@@ -453,6 +465,11 @@ def validate_bundle_weights() -> list[str]:
             seen.add(entry.metric_slug)
             if entry.metric_slug not in METRICS_BY_SLUG:
                 issues.append(f"Bundle {bundle_domain!r} references unknown metric slug {entry.metric_slug!r}.")
+            elif entry.metric_slug not in available_bundle_metrics:
+                issues.append(
+                    f"Bundle {bundle_domain!r} references metric slug {entry.metric_slug!r} "
+                    "that is not available for admin/district Glance scoring in this bundle."
+                )
             if float(entry.weight) <= 0.0:
                 issues.append(f"Bundle {bundle_domain!r} has non-positive weight for {entry.metric_slug!r}.")
             total += float(entry.weight)

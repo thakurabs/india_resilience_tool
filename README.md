@@ -17,8 +17,8 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Default landing discovery surface:
   - launches into an India state-level climate-hazard screening map
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
-  - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
-  - uses approved custom metric weights for all visible Glance climate bundles
+  - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood`, `Extreme Rainfall`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
+  - uses approved custom metric weights for all visible Glance bundles
   - supports India -> state -> district drill-down before entering Deep Dive
   - uses explicit state clicks at India overview and district clicks within the selected state
   - top-bar geography search provides type-to-filter state and district suggestions
@@ -52,6 +52,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - fixed snapshot semantics: `snapshot`, `2025`
 - JRC flood-depth onboarding:
   - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
+  - derived `Flood Depth Index (RP-100)` persisted from the RP-100 depth layer for Glance `Flood`
   - `RP-10 Flood Depth`, `RP-50 Flood Depth`, `RP-100 Flood Depth`, `RP-500 Flood Depth`
   - fixed snapshot semantics: `snapshot`, `Current`
   - block values use maximum in-polygon depth; district values use area-weighted means of child block maxima
@@ -509,6 +510,8 @@ python -m tools.geodata.build_jrc_flood_depth_admin_masters --source-dir /path/t
 ```
 
 This builds Telangana-only district and block snapshot masters for:
+- `processed/jrc_flood_depth_index_rp100/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_index_rp100/Telangana/master_metrics_by_block.csv`
 - `processed/jrc_flood_depth_rp10/Telangana/master_metrics_by_district.csv`
 - `processed/jrc_flood_depth_rp10/Telangana/master_metrics_by_block.csv`
 - `processed/jrc_flood_depth_rp50/Telangana/master_metrics_by_district.csv`
@@ -520,6 +523,8 @@ This builds Telangana-only district and block snapshot masters for:
 
 JRC coverage is interpreted from raster extent overlap for this dataset family: positive values contribute flood depth,
 and zero values inside raster extent are treated as dry cells.
+The same workflow also writes the derived `jrc_flood_depth_index_rp100` severity-class masters and a fifth `run_summary.csv`
+row tagged as `derived_index` for Glance `Flood`.
 
 ### Rebuild the canonical block boundaries
 

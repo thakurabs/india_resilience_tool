@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import types
 from pathlib import Path
 
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
@@ -48,3 +49,14 @@ def test_available_states_missing_or_empty_root(tmp_path: Path) -> None:
     assert list_available_states_from_processed_root(str(missing)) == []
 
     assert list_available_states_from_processed_root(str(tmp_path)) == []
+
+
+def test_jrc_metric_supports_only_telangana_in_geography_controls(monkeypatch) -> None:
+    from india_resilience_tool.app import geography_controls
+
+    monkeypatch.setattr(
+        geography_controls,
+        "st",
+        types.SimpleNamespace(session_state={"selected_var": "jrc_flood_depth_rp100"}),
+    )
+    assert geography_controls._supported_admin_states_for_selected_metric() == ["Telangana"]

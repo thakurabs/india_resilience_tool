@@ -40,6 +40,7 @@ FONT_SIZE_LEGEND: int = 8
 
 # ---- Period ordering for display ----
 PERIOD_ORDER: list[str] = [
+    "Current",
     "1979-2019",
     "1995-2014",
     "2021-2040",
