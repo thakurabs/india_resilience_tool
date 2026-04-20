@@ -51,6 +51,8 @@ class MetricSpec:
     vars: Optional[Sequence[str]] = None
     value_col: Optional[str] = None
     units: Optional[str] = None
+    display_units: Optional[str] = None
+    display_scale: float = 1.0
     compute: Optional[str] = None
     params: Mapping[str, Any] = field(default_factory=dict)
 
@@ -100,6 +102,8 @@ class MetricSpec:
             vars=tuple(vars_list) if vars_list else None,
             value_col=value_col or None,
             units=str(d.get("units") or "") or None,
+            display_units=str(d.get("display_units") or "") or None,
+            display_scale=float(d.get("display_scale", 1.0) or 1.0),
             compute=str(d.get("compute") or "") or None,
             params=d.get("params") or {},
             name=str(d.get("name") or "") or None,
@@ -1973,6 +1977,40 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "rank_higher_is_worse": True,
     },
     {
+        "name": "RP-100 Flood Extent",
+        "slug": "jrc_flood_extent_rp100",
+        "label": "RP-100 Flood Extent",
+        "group": "water",
+        "value_col": "jrc_flood_extent_rp100",
+        "periods_metric_col": "jrc_flood_extent_rp100",
+        "units": "fraction",
+        "display_units": "%",
+        "display_scale": 100.0,
+        "description": (
+            "Telangana-only JRC RP-100 flood extent, defined as the share of total polygon "
+            "area covered by positive modeled flood depth. Block and district values are "
+            "both based on total polygon area, while raster-supported area is retained as QA."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "--source-dir <JRC_DIR> --assume-units m --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": ("Telangana",),
+        "rank_higher_is_worse": True,
+    },
+    {
         "name": "RP-10 Flood Depth",
         "slug": "jrc_flood_depth_rp10",
         "label": "RP-10 Flood Depth",
@@ -2272,6 +2310,7 @@ DOMAINS: dict[str, list[str]] = {
     ],
     "Flood Inundation Depth (JRC)": [
         "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp10",
         "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
@@ -2358,10 +2397,10 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "future groundwater availability."
     ),
     "Flood Inundation Depth (JRC)": (
-        "Telangana-only JRC flood-depth snapshot domain covering the derived RP-100 "
-        "Flood Depth Index plus RP-10, RP-50, RP-100, and RP-500 depth layers. "
-        "Block values are maximum in-polygon depth and district values are "
-        "area-weighted means of child block maxima."
+        "Telangana-only JRC flood snapshot domain covering the derived RP-100 "
+        "Flood Depth Index, RP-100 Flood Extent, plus RP-10, RP-50, RP-100, "
+        "and RP-500 depth layers. Flood extent uses total polygon area, while "
+        "depth layers keep the existing block-max and district rollup methodology."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "
@@ -2486,6 +2525,8 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             # Backwards compatible: some codepaths look for "unit"
             "units": units,
             "unit": units,
+            "display_units": str(spec.display_units or "").strip() or units,
+            "display_scale": float(spec.display_scale),
             "description": spec.description or "",
             "source_type": spec.source_type,
             "supports_yearly_trend": bool(spec.supports_yearly_trend),

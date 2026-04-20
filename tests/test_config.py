@@ -140,6 +140,7 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
 
     for slug, label in [
         ("jrc_flood_depth_index_rp100", "Flood Depth Index (RP-100)"),
+        ("jrc_flood_extent_rp100", "RP-100 Flood Extent"),
         ("jrc_flood_depth_rp10", "RP-10 Flood Depth"),
         ("jrc_flood_depth_rp50", "RP-50 Flood Depth"),
         ("jrc_flood_depth_rp100", "RP-100 Flood Depth"),
@@ -161,6 +162,10 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
         assert cfg["supported_admin_states"] == ["Telangana"]
         if slug == "jrc_flood_depth_index_rp100":
             assert cfg["units"] == "severity class (1-5)"
+        elif slug == "jrc_flood_extent_rp100":
+            assert cfg["units"] == "fraction"
+            assert cfg["display_units"] == "%"
+            assert cfg["display_scale"] == 100.0
         else:
             assert cfg["units"] == "m"
         assert "Flood Inundation Depth (JRC)" in cfg["domains"]

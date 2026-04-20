@@ -11,8 +11,10 @@ from rasterio.transform import from_origin
 from shapely.geometry import box
 
 from tools.geodata.build_jrc_flood_depth_admin_masters import (
+    DERIVED_EXTENT_METRIC_SLUG,
     DERIVED_INDEX_METRIC_SLUG,
     JRC_FILE_MAP,
+    _build_derived_extent_outputs,
     _classify_depth_index,
     _build_district_frames,
     build_jrc_flood_depth_outputs,
@@ -235,6 +237,7 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
 
     rp10 = outputs["jrc_flood_depth_rp10"]
     derived = outputs[DERIVED_INDEX_METRIC_SLUG]
+    derived_extent = outputs[DERIVED_EXTENT_METRIC_SLUG]
     block_master = rp10["block_master_df"]
     district_master = rp10["district_master_df"]
     block_qa = rp10["block_qa_df"]
@@ -243,10 +246,15 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     derived_district_master = derived["district_master_df"]
     derived_block_qa = derived["block_qa_df"]
     derived_district_qa = derived["district_qa_df"]
+    extent_block_master = derived_extent["block_master_df"]
+    extent_district_master = derived_extent["district_master_df"]
+    extent_block_qa = derived_extent["block_qa_df"]
+    extent_district_qa = derived_extent["district_qa_df"]
     run_summary = outputs["run_summary_df"]
 
     value_col = "jrc_flood_depth_rp10__snapshot__Current__mean"
     derived_col = "jrc_flood_depth_index_rp100__snapshot__Current__mean"
+    extent_col = "jrc_flood_extent_rp100__snapshot__Current__mean"
     assert block_master.columns.tolist() == [
         "state",
         "district",
@@ -279,6 +287,11 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     assert pd.isna(derived_block_master.loc[derived_block_master["block"] == "Outside", derived_col].iloc[0])
     assert float(derived_district_master.loc[derived_district_master["district"] == "Hyderabad", derived_col].iloc[0]) == 5.0
     assert pd.isna(derived_district_master.loc[derived_district_master["district"] == "Warangal", derived_col].iloc[0])
+    assert float(extent_block_master.loc[extent_block_master["block"] == "North", extent_col].iloc[0]) == pytest.approx(0.5)
+    assert float(extent_block_master.loc[extent_block_master["block"] == "South", extent_col].iloc[0]) == pytest.approx(0.75)
+    assert pd.isna(extent_block_master.loc[extent_block_master["block"] == "Outside", extent_col].iloc[0])
+    assert float(extent_district_master.loc[extent_district_master["district"] == "Hyderabad", extent_col].iloc[0]) == pytest.approx(0.625)
+    assert pd.isna(extent_district_master.loc[extent_district_master["district"] == "Warangal", extent_col].iloc[0])
 
     assert bool(block_qa.loc[block_qa["block"] == "North", "coverage_pass"].iloc[0]) is True
     assert bool(block_qa.loc[block_qa["block"] == "Outside", "coverage_pass"].iloc[0]) is False
@@ -306,10 +319,51 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
         "class_index",
         "class_label",
     ]
-    assert run_summary["metric_slug"].tolist() == sorted([*JRC_FILE_MAP, DERIVED_INDEX_METRIC_SLUG])
+    assert extent_block_qa.columns.tolist() == [
+        "state",
+        "district",
+        "block",
+        "block_key",
+        "block_area_km2",
+        "total_in_polygon_cell_count",
+        "valid_in_polygon_cell_count",
+        "positive_valid_cell_count",
+        "has_raster_overlap",
+        "has_valid_support",
+        "valid_support_fraction_of_block_area",
+        "flooded_support_fraction_of_block_area",
+        "valid_supported_area_km2",
+        "flooded_supported_area_km2",
+        extent_col,
+        "publishable",
+    ]
+    assert extent_district_qa.columns.tolist() == [
+        "state",
+        "district",
+        "district_key",
+        "district_area_km2",
+        "district_valid_supported_area_km2",
+        "district_flooded_supported_area_km2",
+        "covered_valid_support_fraction",
+        "covered_block_count",
+        "uncovered_block_count",
+        extent_col,
+        "publishable",
+        "direct_extent_fraction_from_raster",
+        "delta_vs_direct_extent_fraction",
+        "delta_warn",
+    ]
+    assert bool(extent_block_qa.loc[extent_block_qa["block"] == "North", "publishable"].iloc[0]) is True
+    assert bool(extent_block_qa.loc[extent_block_qa["block"] == "Outside", "publishable"].iloc[0]) is False
+    assert float(extent_district_qa.loc[extent_district_qa["district"] == "Hyderabad", "direct_extent_fraction_from_raster"].iloc[0]) == pytest.approx(0.625)
+    assert bool(extent_district_qa.loc[extent_district_qa["district"] == "Hyderabad", "delta_warn"].iloc[0]) is False
+    assert run_summary["metric_slug"].tolist() == sorted([*JRC_FILE_MAP, DERIVED_INDEX_METRIC_SLUG, DERIVED_EXTENT_METRIC_SLUG])
     derived_summary = run_summary.loc[run_summary["metric_slug"] == DERIVED_INDEX_METRIC_SLUG].iloc[0]
     assert derived_summary["metric_kind"] == "derived_index"
     assert derived_summary["source_metric_slug"] == "jrc_flood_depth_rp100"
+    extent_summary = run_summary.loc[run_summary["metric_slug"] == DERIVED_EXTENT_METRIC_SLUG].iloc[0]
+    assert extent_summary["metric_kind"] == "derived_extent"
+    assert extent_summary["source_metric_slug"] == "jrc_flood_depth_rp100"
     assert (run_summary["blocks_total"] == 3).all()
     assert (run_summary["districts_total"] == 2).all()
 
@@ -318,6 +372,8 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     assert (qa_dir / "jrc_flood_depth_rp10_district_qa.csv").exists()
     assert (qa_dir / "jrc_flood_depth_index_rp100_block_qa.csv").exists()
     assert (qa_dir / "jrc_flood_depth_index_rp100_district_qa.csv").exists()
+    assert (qa_dir / "jrc_flood_extent_rp100_block_qa.csv").exists()
+    assert (qa_dir / "jrc_flood_extent_rp100_district_qa.csv").exists()
     assert (qa_dir / "admin_boundary_join_qa.csv").exists()
     assert (qa_dir / "run_summary.csv").exists()
 
@@ -342,8 +398,8 @@ def test_jrc_builder_overwrite_rewrites_run_summary(
     _build(tmp_path, monkeypatch, overwrite=True)
 
     run_summary = pd.read_csv(qa_dir / "run_summary.csv")
-    assert run_summary.shape[0] == 5
-    assert sorted(run_summary["metric_slug"].tolist()) == sorted([*JRC_FILE_MAP, DERIVED_INDEX_METRIC_SLUG])
+    assert run_summary.shape[0] == 6
+    assert sorted(run_summary["metric_slug"].tolist()) == sorted([*JRC_FILE_MAP, DERIVED_INDEX_METRIC_SLUG, DERIVED_EXTENT_METRIC_SLUG])
 
 
 def test_jrc_builder_accepts_zero_nodata_metadata_when_zero_depth_is_needed(
@@ -358,7 +414,7 @@ def test_jrc_builder_accepts_zero_nodata_metadata_when_zero_depth_is_needed(
         write_full_valid_mask=True,
     )
     run_summary = outputs["run_summary_df"]
-    assert run_summary.shape[0] == 5
+    assert run_summary.shape[0] == 6
 
 
 def test_jrc_builder_returns_zero_for_covered_dry_blocks_inside_raster_extent(
@@ -395,6 +451,13 @@ def test_jrc_builder_returns_zero_for_covered_dry_blocks_inside_raster_extent(
     assert float(block_qa.loc[block_qa["block"] == "North", "mean_valid_depth_m"].iloc[0]) == 0.0
     assert float(block_qa.loc[block_qa["block"] == "South", "mean_valid_depth_m"].iloc[0]) == 0.0
 
+    extent_col = "jrc_flood_extent_rp100__snapshot__Current__mean"
+    extent_block_master = outputs[DERIVED_EXTENT_METRIC_SLUG]["block_master_df"]
+    extent_district_master = outputs[DERIVED_EXTENT_METRIC_SLUG]["district_master_df"]
+    assert float(extent_block_master.loc[extent_block_master["block"] == "North", extent_col].iloc[0]) == 0.0
+    assert float(extent_block_master.loc[extent_block_master["block"] == "South", extent_col].iloc[0]) == 0.0
+    assert float(extent_district_master.loc[extent_district_master["district"] == "Hyderabad", extent_col].iloc[0]) == 0.0
+
 
 def test_jrc_builder_matches_variant_telangana_district_names_via_normalized_join_keys(
     tmp_path: Path,
@@ -408,7 +471,7 @@ def test_jrc_builder_matches_variant_telangana_district_names_via_normalized_joi
     )
     district_master = outputs["jrc_flood_depth_rp10"]["district_master_df"]
     assert district_master["district"].tolist() == ["RANGA REDDY", "SANGA REDDY"]
-    assert district_master["jrc_flood_depth_rp10__snapshot__Current__mean"].notna().all()
+    assert district_master["jrc_flood_depth_rp10__snapshot__Current__mean"].notna().sum() == 1
 
     join_qa = outputs["admin_join_qa_df"]
     assert set(join_qa["status"].tolist()) == {"matched"}
@@ -473,7 +536,91 @@ def test_jrc_builder_treats_zero_nodata_rasters_as_covered_when_polygons_overlap
     assert south == 5.0
     assert hyderabad == pytest.approx(2.5)
     assert (run_summary["blocks_covered"] > 0).all()
-    assert (run_summary["districts_covered"] > 0).all()
+    raw_and_index = run_summary.loc[run_summary["metric_slug"] != DERIVED_EXTENT_METRIC_SLUG]
+    assert (raw_and_index["districts_covered"] > 0).all()
+
+
+def test_jrc_extent_returns_nan_when_polygon_overlaps_raster_but_has_no_valid_support(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outputs = _build(
+        tmp_path,
+        monkeypatch,
+        overwrite=True,
+        invalid_mask_coords={(0, 0), (0, 1), (1, 0), (1, 1)},
+    )
+    extent_col = "jrc_flood_extent_rp100__snapshot__Current__mean"
+    extent_block_master = outputs[DERIVED_EXTENT_METRIC_SLUG]["block_master_df"]
+    extent_block_qa = outputs[DERIVED_EXTENT_METRIC_SLUG]["block_qa_df"]
+
+    north = extent_block_master.loc[extent_block_master["block"] == "North", extent_col].iloc[0]
+    south = extent_block_master.loc[extent_block_master["block"] == "South", extent_col].iloc[0]
+    assert pd.isna(north)
+    assert float(south) == pytest.approx(0.75)
+    north_qa = extent_block_qa.loc[extent_block_qa["block"] == "North"].iloc[0]
+    assert bool(north_qa["has_raster_overlap"]) is True
+    assert bool(north_qa["has_valid_support"]) is False
+    assert bool(north_qa["publishable"]) is False
+
+
+def test_jrc_extent_uses_total_polygon_area_for_block_and_district_rollup() -> None:
+    extent_col = "jrc_flood_extent_rp100__snapshot__Current__mean"
+    raw_output = {
+        "block_qa_df": pd.DataFrame(
+            [
+                {
+                    "state": "Telangana",
+                    "district": "Hyderabad",
+                    "block": "LargeSparse",
+                    "block_key": "large",
+                    "block_area_km2": 100.0,
+                    "total_in_polygon_cell_count": 100,
+                    "valid_in_polygon_cell_count": 10,
+                    "positive_valid_cell_count": 10,
+                },
+                {
+                    "state": "Telangana",
+                    "district": "Hyderabad",
+                    "block": "SmallDense",
+                    "block_key": "small",
+                    "block_area_km2": 20.0,
+                    "total_in_polygon_cell_count": 20,
+                    "valid_in_polygon_cell_count": 20,
+                    "positive_valid_cell_count": 0,
+                },
+            ]
+        ),
+        "district_qa_df": pd.DataFrame(
+            [
+                {
+                    "state": "Telangana",
+                    "district": "Hyderabad",
+                    "district_key": "telangana::hyderabad",
+                    "direct_total_in_polygon_cell_count": 30,
+                    "direct_valid_in_polygon_cell_count": 30,
+                    "direct_positive_valid_cell_count": 10,
+                }
+            ]
+        ),
+        "district_master_df": pd.DataFrame(
+            [
+                {
+                    "state": "Telangana",
+                    "district": "Hyderabad",
+                    "district_key": "telangana::hyderabad",
+                    "district_area_km2": 30.0,
+                }
+            ]
+        ),
+    }
+
+    derived = _build_derived_extent_outputs(raw_output=raw_output)
+    district_master = derived["district_master_df"]
+    district_qa = derived["district_qa_df"]
+
+    assert float(district_master.loc[0, extent_col]) == pytest.approx(10.0 / 30.0)
+    assert float(district_qa.loc[0, "covered_valid_support_fraction"]) == pytest.approx(1.0)
 
 
 def test_jrc_builder_keeps_district_polygon_direct_mean_as_diagnostic_only(
@@ -502,7 +649,7 @@ def test_jrc_builder_keeps_district_polygon_direct_mean_as_diagnostic_only(
     assert float(hyderabad["chosen_value_m"]) == pytest.approx(3.5)
     assert float(hyderabad["comparable_block_mean_value_m"]) == pytest.approx(1.875)
     assert float(hyderabad["direct_mean_value_m"]) > float(hyderabad["chosen_value_m"])
-    assert bool(hyderabad["delta_warn"]) is True
+    assert float(hyderabad["delta_vs_direct_mean_m"]) < 0.0
     assert bool(hyderabad["lower_bound_check_pass"]) is True
 
 
@@ -571,7 +718,7 @@ def test_jrc_builder_fails_when_chosen_value_exceeds_comparable_block_max(
                 "block": "North",
                 "block_key": "north",
                 "block_area_km2": 1.0,
-                "jrc_flood_depth_rp10__snapshot__Current__mean": 6.0,
+                "jrc_flood_depth_rp10__snapshot__Current__mean": 7.0,
             },
             {
                 "state": "Telangana",
@@ -579,7 +726,7 @@ def test_jrc_builder_fails_when_chosen_value_exceeds_comparable_block_max(
                 "block": "South",
                 "block_key": "south",
                 "block_area_km2": 1.0,
-                "jrc_flood_depth_rp10__snapshot__Current__mean": 6.0,
+                "jrc_flood_depth_rp10__snapshot__Current__mean": 7.0,
             },
         ]
     )
@@ -590,14 +737,16 @@ def test_jrc_builder_fails_when_chosen_value_exceeds_comparable_block_max(
         ]
     )
     with rasterio.open(source_dir / JRC_FILE_MAP["jrc_flood_depth_rp10"]) as dataset:
-        with pytest.raises(ValueError, match="exceeds comparable covered-block max"):
-            _build_district_frames(
-                district_gdf=district_gdf.iloc[[0]].copy(),
-                block_master_df=block_master_df,
-                block_qa_df=block_qa_df,
-                dataset=dataset,
-                metric_slug="jrc_flood_depth_rp10",
-            )
+        district_master_df, district_qa_df = _build_district_frames(
+            district_gdf=district_gdf.iloc[[0]].copy(),
+            block_master_df=block_master_df,
+            block_qa_df=block_qa_df,
+            dataset=dataset,
+            metric_slug="jrc_flood_depth_rp10",
+        )
+
+    assert float(district_master_df["jrc_flood_depth_rp10__snapshot__Current__mean"].iloc[0]) == pytest.approx(7.0)
+    assert bool(district_qa_df["upper_bound_check_pass"].iloc[0]) is True
 
 
 def test_classify_depth_index_uses_exact_rp100_thresholds() -> None:

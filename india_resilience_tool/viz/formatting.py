@@ -18,10 +18,57 @@ import math
 
 import numpy as np
 
+from india_resilience_tool.config.variables import VARIABLES
+
 
 _METRIC_DISPLAY_DECIMALS: dict[str, int] = {
     "population_total": 0,
 }
+
+
+def get_metric_display_meta(
+    *,
+    metric_slug: Optional[str] = None,
+    units: Optional[str] = None,
+) -> tuple[str, float]:
+    """Return human-facing display units and scaling for one metric."""
+    slug = str(metric_slug or "").strip().lower()
+    cfg = VARIABLES.get(slug, {}) if slug else {}
+
+    raw_units = str(units or cfg.get("units") or cfg.get("unit") or "").strip()
+    display_units = str(cfg.get("display_units") or "").strip() or raw_units
+    try:
+        display_scale = float(cfg.get("display_scale", 1.0) or 1.0)
+    except Exception:
+        display_scale = 1.0
+    return display_units, display_scale
+
+
+def get_metric_display_units(
+    *,
+    metric_slug: Optional[str] = None,
+    units: Optional[str] = None,
+) -> str:
+    """Return the units string that should appear in the UI."""
+    display_units, _ = get_metric_display_meta(metric_slug=metric_slug, units=units)
+    return display_units
+
+
+def get_metric_display_value(
+    x: object,
+    *,
+    metric_slug: Optional[str] = None,
+    units: Optional[str] = None,
+) -> object:
+    """Return the UI display value after applying any metric-specific scaling."""
+    if _is_na(x):
+        return x
+    try:
+        xf = float(x)  # type: ignore[arg-type]
+    except Exception:
+        return x
+    _, display_scale = get_metric_display_meta(metric_slug=metric_slug, units=units)
+    return xf * display_scale
 
 
 def _is_na(x: object) -> bool:
@@ -73,9 +120,10 @@ def infer_metric_decimals(
 ) -> int:
     """Infer decimals with optional metric-specific overrides."""
     slug = str(metric_slug or "").strip().lower()
+    display_units, _ = get_metric_display_meta(metric_slug=metric_slug, units=units)
     if slug in _METRIC_DISPLAY_DECIMALS:
         return int(_METRIC_DISPLAY_DECIMALS[slug])
-    return infer_decimals(units=units, value_range=value_range, default=default)
+    return infer_decimals(units=display_units or units, value_range=value_range, default=default)
 
 
 def format_number(
@@ -133,6 +181,7 @@ def format_metric_number(
     na: str = "—",
 ) -> str:
     """Format a metric value as a number without appending units."""
+    scaled_x = get_metric_display_value(x, metric_slug=metric_slug, units=units)
     if decimals is not None:
         d = int(decimals)
     else:
@@ -143,12 +192,12 @@ def format_metric_number(
         slug = str(metric_slug or "").strip().lower()
         if slug not in _METRIC_DISPLAY_DECIMALS:
             try:
-                xf = float(x)  # type: ignore[arg-type]
+                xf = float(scaled_x)  # type: ignore[arg-type]
             except Exception:
                 xf = None
             if xf is not None and math.isfinite(xf) and abs(xf - round(xf)) < 1e-10:
                 d = 0
-    return format_number(x, decimals=d, thousand_sep=thousand_sep, na=na)
+    return format_number(scaled_x, decimals=d, thousand_sep=thousand_sep, na=na)
 
 
 def format_metric_value(
@@ -161,11 +210,43 @@ def format_metric_value(
     na: str = "—",
 ) -> str:
     """Format a metric value with metric-aware decimals and optional units."""
+    display_units, _ = get_metric_display_meta(metric_slug=metric_slug, units=units)
+    scaled_x = get_metric_display_value(x, metric_slug=metric_slug, units=units)
     d = int(decimals) if decimals is not None else infer_metric_decimals(
         metric_slug=metric_slug,
         units=units,
     )
-    return format_value(x, units=units, decimals=d, thousand_sep=thousand_sep, na=na)
+    return format_value(scaled_x, units=display_units, decimals=d, thousand_sep=thousand_sep, na=na)
+
+
+def format_metric_compact(
+    x: object,
+    *,
+    metric_slug: Optional[str] = None,
+    units: Optional[str] = None,
+    decimals: Optional[int] = None,
+    thousand_sep: bool = True,
+    na: str = "—",
+) -> str:
+    """Format a metric compactly, appending units only when needed for clarity."""
+    display_units, _ = get_metric_display_meta(metric_slug=metric_slug, units=units)
+    if display_units == "%":
+        return format_metric_value(
+            x,
+            metric_slug=metric_slug,
+            units=units,
+            decimals=decimals,
+            thousand_sep=thousand_sep,
+            na=na,
+        )
+    return format_metric_number(
+        x,
+        metric_slug=metric_slug,
+        units=units,
+        decimals=decimals,
+        thousand_sep=thousand_sep,
+        na=na,
+    )
 
 
 def format_delta(

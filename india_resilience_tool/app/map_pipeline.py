@@ -27,6 +27,10 @@ from india_resilience_tool.analysis.map_enrichment import (
     add_rank_percentile_risk,
     add_tooltip_strings,
 )
+from india_resilience_tool.viz.formatting import (
+    get_metric_display_meta,
+    get_metric_display_units,
+)
 from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 from india_resilience_tool.app.color_range_controls import compute_color_range_defaults
 from india_resilience_tool.app.geo_cache import (
@@ -70,7 +74,10 @@ class MapArtifacts:
 
 def _build_legend_title(varcfg: Mapping[str, Any]) -> str:
     """Return the minimal legend title text derived from metric units."""
-    return str(varcfg.get("unit") or varcfg.get("units") or "").strip()
+    return get_metric_display_units(
+        metric_slug=str(varcfg.get("slug") or ""),
+        units=str(varcfg.get("display_units") or varcfg.get("unit") or varcfg.get("units") or "").strip(),
+    )
 
 
 def details_require_geometry(
@@ -513,18 +520,29 @@ def build_map_and_rankings(
         st.stop()
 
     data_min, data_max, vmin_default, vmax_default = compute_color_range_defaults(scale_vals)
+    display_units, display_scale = get_metric_display_meta(
+        metric_slug=variable_slug,
+        units=str(varcfg.get("unit") or varcfg.get("units") or "").strip(),
+    )
+    slider_min = float(data_min * display_scale)
+    slider_max = float(data_max * display_scale)
+    slider_default = (float(vmin_default * display_scale), float(vmax_default * display_scale))
+    slider_step = max((slider_max - slider_min) / 200.0, 0.001)
+    slider_label = "Color range (min → max)"
+    if display_units:
+        slider_label = f"{slider_label} [{display_units}]"
 
     with st.sidebar:
         vmin_vmax = color_slider_placeholder.slider(
-            "Color range (min → max)",
-            min_value=float(data_min),
-            max_value=float(data_max),
-            value=(vmin_default, vmax_default),
-            step=max((data_max - data_min) / 200.0, 0.001),
+            slider_label,
+            min_value=slider_min,
+            max_value=slider_max,
+            value=slider_default,
+            step=slider_step,
             key="color_range_slider",
         )
 
-    vmin, vmax = float(vmin_vmax[0]), float(vmin_vmax[1])
+    vmin, vmax = float(vmin_vmax[0] / display_scale), float(vmin_vmax[1] / display_scale)
 
     # Choose colormap: sequential for absolute, diverging for change
     if supports_baseline_comparison and map_mode == "Change from 1990-2010 baseline":
@@ -679,6 +697,7 @@ def build_map_and_rankings(
         vmin=vmin,
         vmax=vmax,
         cmap_name=cmap_name,
+        display_scale=display_scale,
         nlevels=15,
         nticks=5,
         include_zero_tick=True,

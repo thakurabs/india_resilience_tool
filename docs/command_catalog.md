@@ -129,6 +129,8 @@ Notes:
 - Telangana-only pilot coverage
 - fixed snapshot selectors: `snapshot`, `Current`, `mean`
 - the JRC workflow now also writes the derived `jrc_flood_depth_index_rp100` severity-class masters used by the Glance `Flood` bundle
+- the same RP-100 workflow also writes `jrc_flood_extent_rp100`, stored as a `0-1` fraction and displayed as a percent
+- flood extent is defined as the share of total polygon area covered by positive depth, with raster-supported area retained in QA diagnostics
 - runner `--overwrite` refreshes JRC masters and QA outputs without wiping unrelated `processed_optimised` artifacts
 - zero values inside raster extent are treated as dry cells for this JRC raster family
 - `dashboard-package --include-jrc-flood-depth` also requires `--jrc-source-dir` and `--jrc-assume-units m` unless `--audit-only` is set

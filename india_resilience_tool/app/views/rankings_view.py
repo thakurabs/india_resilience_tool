@@ -18,7 +18,7 @@ from typing import Any, Callable, Literal, Mapping, Optional
 import pandas as pd
 
 from india_resilience_tool.app.state import VIEW_RANKINGS
-from india_resilience_tool.viz.formatting import format_metric_number
+from india_resilience_tool.viz.formatting import format_metric_compact
 
 AdminLevel = Literal["district", "block", "basin", "sub_basin"]
 
@@ -28,7 +28,7 @@ def _format_rankings_numeric_columns(df: pd.DataFrame, *, variable_slug: str) ->
     out = df.copy()
     for col in ("value", "baseline", "delta_abs"):
         if col in out.columns:
-            out[col] = out[col].map(lambda x: format_metric_number(x, metric_slug=variable_slug))
+            out[col] = out[col].map(lambda x: format_metric_compact(x, metric_slug=variable_slug))
     return out
 
 

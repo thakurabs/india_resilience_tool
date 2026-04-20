@@ -90,7 +90,13 @@ def compute_robust_range(
     return vmin, vmax
 
 
-def format_legend_value(x: float, *, vmin: float, vmax: float) -> str:
+def format_legend_value(
+    x: float,
+    *,
+    vmin: float,
+    vmax: float,
+    display_scale: float = 1.0,
+) -> str:
     """
     Format legend numbers with adaptive precision based on the data range.
 
@@ -103,14 +109,18 @@ def format_legend_value(x: float, *, vmin: float, vmax: float) -> str:
         Formatted string (or "—" if x is not finite)
     """
     try:
-        xf = float(x)
+        xf = float(x) * float(display_scale)
     except Exception:
         return "—"
 
     if not np.isfinite(xf):
         return "—"
 
-    span = float(abs(float(vmax) - float(vmin))) if np.isfinite(vmin) and np.isfinite(vmax) else 0.0
+    span = (
+        float(abs(float(vmax) - float(vmin))) * float(display_scale)
+        if np.isfinite(vmin) and np.isfinite(vmax)
+        else 0.0
+    )
 
     if span >= 10.0:
         decimals = 1
@@ -314,6 +324,7 @@ def build_vertical_binned_legend_block_html(
     vmin: float,
     vmax: float,
     cmap_name: str,
+    display_scale: float = 1.0,
     nlevels: int = 15,
     nticks: int = 5,
     include_zero_tick: bool = True,
@@ -396,7 +407,7 @@ def build_vertical_binned_legend_block_html(
             parts: list[str] = []
             tol_zero = max(abs(span) * 1e-12, 1e-12)
             for i, t in enumerate(ticks):
-                t_str = format_legend_value(t, vmin=vmin_f, vmax=vmax_f)
+                t_str = format_legend_value(t, vmin=vmin_f, vmax=vmax_f, display_scale=display_scale)
                 is_zero = abs(t) <= tol_zero and (vmin_f < 0.0 < vmax_f)
                 weight_css = " font-weight: 700;" if is_zero else ""
 

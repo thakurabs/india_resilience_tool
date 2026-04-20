@@ -239,6 +239,7 @@ def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
         "aq_seasonal_variability",
         "aq_water_depletion",
         "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp10",
         "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
@@ -343,6 +344,7 @@ def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None
     )
     assert district_metrics == [
         "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp10",
         "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
@@ -360,3 +362,7 @@ def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None
     assert spec.supports_yearly_trend is False
     assert spec.supports_baseline_comparison is False
     assert spec.supports_scenario_comparison is False
+    extent_spec = METRICS_BY_SLUG["jrc_flood_extent_rp100"]
+    assert extent_spec.units == "fraction"
+    assert extent_spec.display_units == "%"
+    assert extent_spec.display_scale == 100.0

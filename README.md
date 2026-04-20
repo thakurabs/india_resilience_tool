@@ -53,9 +53,11 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - JRC flood-depth onboarding:
   - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
   - derived `Flood Depth Index (RP-100)` persisted from the RP-100 depth layer for Glance `Flood`
+  - derived `RP-100 Flood Extent` persisted from the RP-100 depth layer as the share of total polygon area covered by positive depth
   - `RP-10 Flood Depth`, `RP-50 Flood Depth`, `RP-100 Flood Depth`, `RP-500 Flood Depth`
   - fixed snapshot semantics: `snapshot`, `Current`
-  - block values use maximum in-polygon depth; district values use area-weighted means of child block maxima
+  - block depth values use maximum in-polygon depth; district depth values use area-weighted means of child block maxima
+  - extent is stored as a `0-1` fraction, displayed as a percent, and uses total-polygon-area semantics at both block and district levels
 - Water-risk Aqueduct onboarding:
   - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
   - Aqueduct interannual variability on SOI basin, SOI sub-basin, district, and block units
@@ -512,6 +514,8 @@ python -m tools.geodata.build_jrc_flood_depth_admin_masters --source-dir /path/t
 This builds Telangana-only district and block snapshot masters for:
 - `processed/jrc_flood_depth_index_rp100/Telangana/master_metrics_by_district.csv`
 - `processed/jrc_flood_depth_index_rp100/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_extent_rp100/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_extent_rp100/Telangana/master_metrics_by_block.csv`
 - `processed/jrc_flood_depth_rp10/Telangana/master_metrics_by_district.csv`
 - `processed/jrc_flood_depth_rp10/Telangana/master_metrics_by_block.csv`
 - `processed/jrc_flood_depth_rp50/Telangana/master_metrics_by_district.csv`
@@ -523,8 +527,10 @@ This builds Telangana-only district and block snapshot masters for:
 
 JRC coverage is interpreted from raster extent overlap for this dataset family: positive values contribute flood depth,
 and zero values inside raster extent are treated as dry cells.
-The same workflow also writes the derived `jrc_flood_depth_index_rp100` severity-class masters and a fifth `run_summary.csv`
-row tagged as `derived_index` for Glance `Flood`.
+The same workflow also writes the derived `jrc_flood_depth_index_rp100` severity-class masters and
+`jrc_flood_extent_rp100` extent masters. Flood extent is stored as a fraction, displayed as a percent,
+and uses total-polygon-area semantics, with raster-supported area retained in QA outputs. The `run_summary.csv`
+now includes `derived_index` and `derived_extent` rows for the RP-100 derived products.
 
 ### Rebuild the canonical block boundaries
 

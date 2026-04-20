@@ -8,6 +8,8 @@ from typing import Any, Mapping, Optional
 
 import pandas as pd
 
+from india_resilience_tool.viz.formatting import format_metric_value, get_metric_display_units
+
 from india_resilience_tool.app.views.state_summary_view import (
     _compute_position_in_india,
     _find_baseline_column,
@@ -131,7 +133,10 @@ def render_hydro_summary_view(
 
     varcfg = variables.get(variable_slug, {}) or {}
     variable_label = varcfg.get("label", variable_slug)
-    units = varcfg.get("units") or varcfg.get("unit")
+    units = get_metric_display_units(
+        metric_slug=variable_slug,
+        units=varcfg.get("units") or varcfg.get("unit"),
+    )
     rank_higher_is_worse = bool(varcfg.get("rank_higher_is_worse", True))
     supports_yearly_trend = bool(varcfg.get("supports_yearly_trend", True))
 
@@ -171,13 +176,20 @@ def render_hydro_summary_view(
         c1, c2, c3 = st.columns(3)
         with c1:
             st.markdown("**Historical baseline**")
-            st.metric("", f"{baseline_val:.2f} {units or ''}" if baseline_val is not None else "N/A")
+            st.metric(
+                "",
+                format_metric_value(baseline_val, metric_slug=variable_slug, units=units)
+                if baseline_val is not None
+                else "N/A",
+            )
         with c2:
             st.markdown("**Current value**")
             delta = (current_val - baseline_val) if (current_val is not None and baseline_val is not None) else None
             st.metric(
                 "",
-                f"{current_val:.2f} {units or ''}" if current_val is not None else "N/A",
+                format_metric_value(current_val, metric_slug=variable_slug, units=units)
+                if current_val is not None
+                else "N/A",
                 f"{delta:+.2f}" if delta is not None else None,
             )
         with c3:

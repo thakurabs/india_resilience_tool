@@ -12,7 +12,7 @@ from india_resilience_tool.data.optimized_bundle import (
     optimized_yearly_models_path_from_metric_root,
 )
 from india_resilience_tool.utils.processed_io import read_table
-from india_resilience_tool.viz.formatting import format_metric_value
+from india_resilience_tool.viz.formatting import format_metric_value, get_metric_display_units
 
 
 def _normalize_name(value: str) -> str:
@@ -308,7 +308,10 @@ def render_state_summary_view(
     )
 
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
-    units = variables.get(variable_slug, {}).get("units") or variables.get(variable_slug, {}).get("unit")
+    units = get_metric_display_units(
+        metric_slug=variable_slug,
+        units=variables.get(variable_slug, {}).get("units") or variables.get(variable_slug, {}).get("unit"),
+    )
     level_norm = str(level).strip().lower()
     varcfg = variables.get(variable_slug, {}) or {}
     rank_higher_is_worse = bool(varcfg.get("rank_higher_is_worse", True))

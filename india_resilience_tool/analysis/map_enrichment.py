@@ -17,7 +17,7 @@ from typing import Callable, Optional, Tuple
 
 import pandas as pd
 
-from india_resilience_tool.viz.formatting import format_metric_number
+from india_resilience_tool.viz.formatting import format_metric_compact
 
 
 def add_current_baseline_delta(
@@ -141,7 +141,7 @@ def add_tooltip_strings(
     """
 
     def _fmt_number(x) -> str:
-        return format_metric_number(x, metric_slug=variable_slug)
+        return format_metric_compact(x, metric_slug=variable_slug)
 
     if map_mode == "Change from 1990-2010 baseline":
         merged["_tooltip_value"] = merged.get("_delta_abs", pd.Series([pd.NA] * len(merged), index=merged.index)).apply(

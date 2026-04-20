@@ -5,7 +5,8 @@ Build Telangana district and block JRC flood-depth masters.
 This tool aggregates four fixed return-period flood-depth rasters from JRC onto
 canonical Telangana admin polygons. Block values use the maximum in-polygon
 flood depth, while district values use an area-weighted mean of child block
-maxima with explicit coverage thresholds and QA outputs.
+maxima with explicit coverage thresholds and QA outputs. The RP-100 pass also
+emits derived flood-depth-index and flood-extent products with dedicated QA.
 """
 
 from __future__ import annotations
@@ -37,6 +38,8 @@ TARGET_STATE = "Telangana"
 MIN_VALID_COVERAGE_FRACTION = 0.995
 DERIVED_INDEX_METRIC_SLUG = "jrc_flood_depth_index_rp100"
 DERIVED_INDEX_SOURCE_METRIC_SLUG = "jrc_flood_depth_rp100"
+DERIVED_EXTENT_METRIC_SLUG = "jrc_flood_extent_rp100"
+DERIVED_EXTENT_SOURCE_METRIC_SLUG = "jrc_flood_depth_rp100"
 DERIVED_INDEX_LABELS: dict[int, str] = {
     1: "Very Low",
     2: "Low",
@@ -50,6 +53,11 @@ JRC_FILE_MAP: dict[str, str] = {
     "jrc_flood_depth_rp100": "RP100_depth.tif",
     "jrc_flood_depth_rp500": "RP500_depth.tif",
 }
+DERIVED_METRIC_SLUGS: tuple[str, ...] = (
+    DERIVED_INDEX_METRIC_SLUG,
+    DERIVED_EXTENT_METRIC_SLUG,
+)
+ALL_OUTPUT_METRIC_SLUGS: tuple[str, ...] = tuple(JRC_FILE_MAP) + DERIVED_METRIC_SLUGS
 
 
 @dataclass(frozen=True)
@@ -86,6 +94,18 @@ def _is_zero_nodata(value: object) -> bool:
         return bool(np.isclose(float(value), 0.0))
     except (TypeError, ValueError):
         return False
+
+
+def _safe_fraction(numerator: object, denominator: object) -> float:
+    """Return a finite fraction or NaN when the denominator is not positive."""
+    try:
+        num = float(numerator)
+        den = float(denominator)
+    except (TypeError, ValueError):
+        return float("nan")
+    if not np.isfinite(num) or not np.isfinite(den) or den <= 0.0:
+        return float("nan")
+    return float(num / den)
 
 
 @dataclass(frozen=True)
@@ -568,6 +588,9 @@ def _build_district_frames(
                 "comparable_block_max_value_m": comparable_block_max,
                 "direct_mean_value_m": direct_mean,
                 "direct_max_value_m": direct_max,
+                "direct_total_in_polygon_cell_count": direct_stats.total_in_polygon_cell_count,
+                "direct_valid_in_polygon_cell_count": direct_stats.valid_in_polygon_cell_count,
+                "direct_positive_valid_cell_count": direct_stats.positive_valid_cell_count,
                 "delta_vs_direct_mean_m": delta_vs_direct_mean,
                 "delta_vs_direct_max_m": delta_vs_direct_max,
                 "upper_bound_check_pass": upper_bound_check_pass,
@@ -651,6 +674,131 @@ def _build_derived_index_outputs(
     }
 
 
+def _build_derived_extent_outputs(
+    *,
+    raw_output: dict[str, pd.DataFrame],
+) -> dict[str, pd.DataFrame]:
+    """Build the persisted RP100 flood-extent masters and QA frames."""
+    derived_col = _derived_metric_column(DERIVED_EXTENT_METRIC_SLUG)
+
+    block_qa_raw = raw_output["block_qa_df"].copy()
+    district_qa_raw = raw_output["district_qa_df"].copy()
+    district_master_raw = raw_output["district_master_df"].copy()
+
+    block_qa = block_qa_raw.loc[
+        :,
+        [
+            "state",
+            "district",
+            "block",
+            "block_key",
+            "block_area_km2",
+            "total_in_polygon_cell_count",
+            "valid_in_polygon_cell_count",
+            "positive_valid_cell_count",
+        ],
+    ].copy()
+    block_qa["district_join_key"] = block_qa["district"].map(
+        lambda value: _district_join_key(TARGET_STATE, value)
+    )
+    block_qa["has_raster_overlap"] = block_qa["total_in_polygon_cell_count"].gt(0)
+    block_qa["has_valid_support"] = block_qa["valid_in_polygon_cell_count"].gt(0)
+    block_qa["valid_support_fraction_of_block_area"] = [
+        _safe_fraction(valid, total)
+        for valid, total in zip(block_qa["valid_in_polygon_cell_count"], block_qa["total_in_polygon_cell_count"])
+    ]
+    block_qa["flooded_support_fraction_of_block_area"] = [
+        _safe_fraction(positive, total)
+        for positive, total in zip(block_qa["positive_valid_cell_count"], block_qa["total_in_polygon_cell_count"])
+    ]
+    block_qa["valid_supported_area_km2"] = block_qa["block_area_km2"] * block_qa["valid_support_fraction_of_block_area"]
+    block_qa["flooded_supported_area_km2"] = (
+        block_qa["block_area_km2"] * block_qa["flooded_support_fraction_of_block_area"]
+    )
+    block_qa[derived_col] = block_qa["flooded_support_fraction_of_block_area"]
+    block_qa.loc[~block_qa["has_valid_support"], derived_col] = np.nan
+    block_qa["publishable"] = block_qa["has_valid_support"]
+
+    block_master = block_qa.loc[
+        :,
+        ["state", "district", "block", "block_key", "block_area_km2", derived_col],
+    ].copy()
+
+    district_lookup = district_master_raw.loc[
+        :,
+        ["district", "district_key", "district_area_km2"],
+    ].copy()
+    district_lookup["district_join_key"] = district_lookup["district"].map(
+        lambda value: _district_join_key(TARGET_STATE, value)
+    )
+    district_qa_rows: list[dict[str, object]] = []
+    for district_row in district_lookup.itertuples(index=False):
+        block_rows = block_qa.loc[
+            block_qa["district_join_key"].astype(str) == str(district_row.district_join_key)
+        ].copy()
+        covered_block_count = int(block_rows["has_valid_support"].fillna(False).astype(bool).sum())
+        uncovered_block_count = int(block_rows.shape[0] - covered_block_count)
+        district_valid_supported_area_km2 = float(
+            pd.to_numeric(block_rows["valid_supported_area_km2"], errors="coerce").fillna(0.0).sum()
+        )
+        district_flooded_supported_area_km2 = float(
+            pd.to_numeric(block_rows["flooded_supported_area_km2"], errors="coerce").fillna(0.0).sum()
+        )
+        district_area_km2 = float(district_row.district_area_km2)
+        covered_valid_support_fraction = _safe_fraction(district_valid_supported_area_km2, district_area_km2)
+        publishable = bool(district_valid_supported_area_km2 > 0.0)
+        extent_fraction = _safe_fraction(district_flooded_supported_area_km2, district_area_km2)
+        if not publishable:
+            extent_fraction = float("nan")
+
+        direct_row = district_qa_raw.loc[
+            district_qa_raw["district_key"].astype(str) == str(district_row.district_key)
+        ]
+        direct_total = direct_row["direct_total_in_polygon_cell_count"].iloc[0] if not direct_row.empty else np.nan
+        direct_valid = direct_row["direct_valid_in_polygon_cell_count"].iloc[0] if not direct_row.empty else np.nan
+        direct_positive = direct_row["direct_positive_valid_cell_count"].iloc[0] if not direct_row.empty else np.nan
+        direct_extent_fraction = _safe_fraction(direct_positive, direct_total)
+        delta_vs_direct = (
+            float(extent_fraction - direct_extent_fraction)
+            if pd.notna(extent_fraction) and pd.notna(direct_extent_fraction)
+            else np.nan
+        )
+        delta_warn = bool(pd.notna(delta_vs_direct) and abs(delta_vs_direct) > 0.02)
+
+        district_qa_rows.append(
+            {
+                "state": TARGET_STATE,
+                "district": district_row.district,
+                "district_key": district_row.district_key,
+                "district_area_km2": district_area_km2,
+                "district_valid_supported_area_km2": district_valid_supported_area_km2,
+                "district_flooded_supported_area_km2": district_flooded_supported_area_km2,
+                "covered_valid_support_fraction": covered_valid_support_fraction,
+                "covered_block_count": covered_block_count,
+                "uncovered_block_count": uncovered_block_count,
+                derived_col: extent_fraction,
+                "publishable": publishable,
+                "direct_extent_fraction_from_raster": direct_extent_fraction,
+                "delta_vs_direct_extent_fraction": delta_vs_direct,
+                "delta_warn": delta_warn,
+            }
+        )
+
+    district_qa = pd.DataFrame(district_qa_rows).sort_values(["state", "district"]).reset_index(drop=True)
+    block_qa = block_qa.drop(columns=["district_join_key"])
+    district_master = district_qa.loc[
+        :,
+        ["state", "district", "district_key", "district_area_km2", derived_col],
+    ].copy()
+
+    return {
+        "block_master_df": block_master,
+        "district_master_df": district_master,
+        "block_qa_df": block_qa,
+        "district_qa_df": district_qa,
+    }
+
+
 def _write_csv(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
     if path.exists() and not overwrite:
         raise FileExistsError(f"Refusing to overwrite existing file without --overwrite: {path}")
@@ -705,7 +853,7 @@ def build_jrc_flood_depth_outputs(
     block_gdf = _add_area_km2(block_gdf, area_col="block_area_km2")
 
     all_target_paths: list[Path] = []
-    for metric_slug in tuple(JRC_FILE_MAP) + (DERIVED_INDEX_METRIC_SLUG,):
+    for metric_slug in ALL_OUTPUT_METRIC_SLUGS:
         all_target_paths.extend(_expected_output_paths(metric_slug=metric_slug, qa_dir=qa_dir))
     all_target_paths.append(qa_dir / "admin_boundary_join_qa.csv")
     all_target_paths.append(qa_dir / "run_summary.csv")
@@ -796,67 +944,94 @@ def build_jrc_flood_depth_outputs(
             _write_csv(block_qa_df, qa_dir / f"{metric_slug}_block_qa.csv", overwrite=overwrite)
             _write_csv(district_qa_df, qa_dir / f"{metric_slug}_district_qa.csv", overwrite=overwrite)
 
-    derived_output = _build_derived_index_outputs(raw_output=outputs[DERIVED_INDEX_SOURCE_METRIC_SLUG])
-    outputs[DERIVED_INDEX_METRIC_SLUG] = derived_output
-    derived_block_master_df = derived_output["block_master_df"]
-    derived_district_master_df = derived_output["district_master_df"]
-    derived_block_qa_df = derived_output["block_qa_df"]
-    derived_district_qa_df = derived_output["district_qa_df"]
-    run_summary_rows.append(
-        {
-            "run_utc": pd.Timestamp.utcnow().isoformat(),
-            "metric_slug": DERIVED_INDEX_METRIC_SLUG,
-            "metric_kind": "derived_index",
-            "source_metric_slug": DERIVED_INDEX_SOURCE_METRIC_SLUG,
-            "source_dir": str(contract.source_dir),
-            "assume_units": assume_units,
-            "raster_crs": contract.raster_crs,
-            "raster_shape": contract.raster_shape,
-            "nodata_value": contract.nodata_value,
-            "blocks_total": int(derived_block_master_df.shape[0]),
-            "blocks_covered": int(derived_block_master_df[_derived_metric_column(DERIVED_INDEX_METRIC_SLUG)].notna().sum()),
-            "blocks_uncovered": int(derived_block_master_df[_derived_metric_column(DERIVED_INDEX_METRIC_SLUG)].isna().sum()),
-            "districts_total": int(derived_district_master_df.shape[0]),
-            "districts_covered": int(
-                derived_district_master_df[_derived_metric_column(DERIVED_INDEX_METRIC_SLUG)].notna().sum()
-            ),
-            "districts_uncovered": int(
-                derived_district_master_df[_derived_metric_column(DERIVED_INDEX_METRIC_SLUG)].isna().sum()
-            ),
-            "district_delta_warn_count": 0,
-            "boundary_join_missing_count": int(
-                join_validation.missing_in_blocks + join_validation.missing_in_districts
-            ),
-            "boundary_join_duplicate_count": int(join_validation.duplicate_within_source),
-        }
-    )
-    if not dry_run:
-        processed_root = resolve_processed_root(
-            DERIVED_INDEX_METRIC_SLUG,
-            data_dir=get_paths_config().data_dir,
-            mode="portfolio",
+    derived_outputs = {
+        DERIVED_INDEX_METRIC_SLUG: _build_derived_index_outputs(raw_output=outputs[DERIVED_INDEX_SOURCE_METRIC_SLUG]),
+        DERIVED_EXTENT_METRIC_SLUG: _build_derived_extent_outputs(raw_output=outputs[DERIVED_EXTENT_SOURCE_METRIC_SLUG]),
+    }
+    derived_sources = {
+        DERIVED_INDEX_METRIC_SLUG: DERIVED_INDEX_SOURCE_METRIC_SLUG,
+        DERIVED_EXTENT_METRIC_SLUG: DERIVED_EXTENT_SOURCE_METRIC_SLUG,
+    }
+    derived_kinds = {
+        DERIVED_INDEX_METRIC_SLUG: "derived_index",
+        DERIVED_EXTENT_METRIC_SLUG: "derived_extent",
+    }
+    for metric_slug, derived_output in derived_outputs.items():
+        outputs[metric_slug] = derived_output
+        derived_block_master_df = derived_output["block_master_df"]
+        derived_district_master_df = derived_output["district_master_df"]
+        derived_block_qa_df = derived_output["block_qa_df"]
+        derived_district_qa_df = derived_output["district_qa_df"]
+        metric_col = _derived_metric_column(metric_slug)
+        publishable_block_col = "publishable" if "publishable" in derived_block_qa_df.columns else metric_col
+        publishable_district_col = "publishable" if "publishable" in derived_district_qa_df.columns else metric_col
+        run_summary_rows.append(
+            {
+                "run_utc": pd.Timestamp.utcnow().isoformat(),
+                "metric_slug": metric_slug,
+                "metric_kind": derived_kinds[metric_slug],
+                "source_metric_slug": derived_sources[metric_slug],
+                "source_dir": str(contract.source_dir),
+                "assume_units": assume_units,
+                "raster_crs": contract.raster_crs,
+                "raster_shape": contract.raster_shape,
+                "nodata_value": contract.nodata_value,
+                "blocks_total": int(derived_block_master_df.shape[0]),
+                "blocks_covered": int(
+                    derived_block_qa_df[publishable_block_col].fillna(False).astype(bool).sum()
+                    if publishable_block_col == "publishable"
+                    else derived_block_master_df[metric_col].notna().sum()
+                ),
+                "blocks_uncovered": int(
+                    (~derived_block_qa_df[publishable_block_col].fillna(False).astype(bool)).sum()
+                    if publishable_block_col == "publishable"
+                    else derived_block_master_df[metric_col].isna().sum()
+                ),
+                "districts_total": int(derived_district_master_df.shape[0]),
+                "districts_covered": int(
+                    derived_district_qa_df[publishable_district_col].fillna(False).astype(bool).sum()
+                    if publishable_district_col == "publishable"
+                    else derived_district_master_df[metric_col].notna().sum()
+                ),
+                "districts_uncovered": int(
+                    (~derived_district_qa_df[publishable_district_col].fillna(False).astype(bool)).sum()
+                    if publishable_district_col == "publishable"
+                    else derived_district_master_df[metric_col].isna().sum()
+                ),
+                "district_delta_warn_count": int(derived_district_qa_df.get("delta_warn", pd.Series(dtype=bool)).fillna(False).astype(bool).sum()),
+                "boundary_join_missing_count": int(
+                    join_validation.missing_in_blocks + join_validation.missing_in_districts
+                ),
+                "boundary_join_duplicate_count": int(join_validation.duplicate_within_source),
+            }
         )
-        state_root = processed_root / TARGET_STATE
-        _write_master(
-            derived_district_master_df,
-            state_root / get_master_csv_filename("district"),
-            overwrite=overwrite,
-        )
-        _write_master(
-            derived_block_master_df,
-            state_root / get_master_csv_filename("block"),
-            overwrite=overwrite,
-        )
-        _write_csv(
-            derived_block_qa_df,
-            qa_dir / f"{DERIVED_INDEX_METRIC_SLUG}_block_qa.csv",
-            overwrite=overwrite,
-        )
-        _write_csv(
-            derived_district_qa_df,
-            qa_dir / f"{DERIVED_INDEX_METRIC_SLUG}_district_qa.csv",
-            overwrite=overwrite,
-        )
+        if not dry_run:
+            processed_root = resolve_processed_root(
+                metric_slug,
+                data_dir=get_paths_config().data_dir,
+                mode="portfolio",
+            )
+            state_root = processed_root / TARGET_STATE
+            _write_master(
+                derived_district_master_df,
+                state_root / get_master_csv_filename("district"),
+                overwrite=overwrite,
+            )
+            _write_master(
+                derived_block_master_df,
+                state_root / get_master_csv_filename("block"),
+                overwrite=overwrite,
+            )
+            _write_csv(
+                derived_block_qa_df,
+                qa_dir / f"{metric_slug}_block_qa.csv",
+                overwrite=overwrite,
+            )
+            _write_csv(
+                derived_district_qa_df,
+                qa_dir / f"{metric_slug}_district_qa.csv",
+                overwrite=overwrite,
+            )
 
     run_summary_df = pd.DataFrame(run_summary_rows).sort_values("metric_slug").reset_index(drop=True)
     if not dry_run:
@@ -869,7 +1044,10 @@ def build_jrc_flood_depth_outputs(
 
 def build_cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Build Telangana block and district JRC flood-depth masters for RP-10, RP-50, RP-100, and RP-500."
+        description=(
+            "Build Telangana block and district JRC flood-depth masters for RP-10, RP-50, RP-100, "
+            "and RP-500, plus the derived RP-100 flood-depth-index and flood-extent outputs."
+        )
     )
     parser.add_argument("--source-dir", required=True, help="Directory containing the required JRC flood-depth rasters.")
     parser.add_argument("--assume-units", choices=[ASSUME_UNITS], required=True, help="Attest the raster depth units.")
@@ -899,7 +1077,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     print(f"source_dir: {contract.source_dir}")
     print(f"raster_crs: {contract.raster_crs}")
     print(f"raster_shape: {contract.raster_shape}")
-    print(f"metrics: {', '.join(sorted(slug for slug in outputs if slug.startswith('jrc_flood_depth_')))}")
+    print(f"metrics: {', '.join(sorted(slug for slug in outputs if slug in ALL_OUTPUT_METRIC_SLUGS))}")
     print(f"run_summary_rows: {int(run_summary_df.shape[0])}")
     if bool(args.dry_run):
         print("dry_run: True")

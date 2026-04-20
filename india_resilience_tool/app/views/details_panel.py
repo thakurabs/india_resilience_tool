@@ -23,7 +23,12 @@ import pandas as pd
 
 from india_resilience_tool.app.state import VIEW_RANKINGS
 from india_resilience_tool.data.crosswalks import CrosswalkContext, CrosswalkOverlap
-from india_resilience_tool.viz.formatting import format_delta, format_metric_number, format_percent
+from india_resilience_tool.viz.formatting import (
+    format_delta,
+    format_metric_number,
+    format_percent,
+    get_metric_display_units,
+)
 
 PathLike = Union[str, Path]
 
@@ -1466,10 +1471,13 @@ def render_details_panel(
 
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
     varcfg = variables.get(variable_slug, {}) or {}
-    units = (
-        variables.get(variable_slug, {}).get("unit")
-        or variables.get(variable_slug, {}).get("units")
-        or ""
+    units = get_metric_display_units(
+        metric_slug=variable_slug,
+        units=(
+            variables.get(variable_slug, {}).get("unit")
+            or variables.get(variable_slug, {}).get("units")
+            or ""
+        ),
     )
     summary_title = "Metric summary" if _is_non_hazard_metric(varcfg) else "Risk summary"
 
