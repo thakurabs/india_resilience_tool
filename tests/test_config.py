@@ -164,7 +164,7 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
             assert cfg["units"] == "severity class (1-5)"
             assert cfg["display_units"] == ""
             assert cfg["class_display_mode"] == "label_with_score"
-            assert cfg["class_labels"][1] == "VeryLow/No"
+            assert cfg["class_labels"][1] == "VeryLow"
         elif slug == "jrc_flood_extent_rp100":
             assert cfg["units"] == "fraction"
             assert cfg["display_units"] == "%"

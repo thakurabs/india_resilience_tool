@@ -96,11 +96,11 @@ def test_apply_fillcolor_classed_uses_fixed_class_colors() -> None:
 def test_build_categorical_legend_block_contains_labels_and_title() -> None:
     html = build_vertical_categorical_legend_block_html(
         legend_title="Flood Severity Index (RP-100)",
-        labels=["VeryLow/No", "Low", "Moderate", "High", "Extreme"],
+        labels=["VeryLow", "Low", "Moderate", "High", "Extreme"],
         colors=FLOOD_SEVERITY_CLASS_COLORS,
         map_height=700,
     )
 
     assert "Flood Severity Index (RP-100)" in html
-    assert "VeryLow/No" in html
+    assert "VeryLow" in html
     assert "Extreme" in html

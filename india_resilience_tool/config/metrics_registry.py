@@ -31,7 +31,7 @@ def infer_group_from_var(var: str) -> str:
 
 
 SEVERITY_CLASS_LABELS: dict[int, str] = {
-    1: "VeryLow/No",
+    1: "VeryLow",
     2: "Low",
     3: "Moderate",
     4: "High",
@@ -1973,7 +1973,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
             "and RP-100 flood extent using a fixed 5x5 depth-by-extent scoring matrix. "
             "Depth uses flooded-cell p95 block depth and flooded-area-weighted district "
             "depth; extent uses the share of total polygon area covered by positive "
-            "modeled depth. Class 1 is VeryLow/No and class 5 is Extreme. This is an "
+            "modeled depth. Class 1 is VeryLow and class 5 is Extreme. This is an "
             "externally sourced snapshot severity index, not a climate scenario projection."
         ),
         "source_type": "external",

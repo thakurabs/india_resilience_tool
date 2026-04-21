@@ -539,10 +539,11 @@ def build_vertical_categorical_legend_block_html(
     segment_height = max(bar_height_px / len(pairs), 18.0)
     label_blocks = []
     color_blocks = []
-    for label, color in reversed(pairs):
+    for label, _color in reversed(pairs):
         label_blocks.append(
             f'<div style="height:{segment_height}px; display:flex; align-items:center; justify-content:flex-end; white-space:nowrap;">{label}</div>'
         )
+    for _label, color in pairs:
         color_blocks.append(
             f'<div style="height:{segment_height}px; width:100%; background:{color};"></div>'
         )

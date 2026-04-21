@@ -40,7 +40,7 @@ DERIVED_INDEX_SOURCE_METRIC_SLUG = "jrc_flood_depth_rp100"
 DERIVED_EXTENT_METRIC_SLUG = "jrc_flood_extent_rp100"
 DERIVED_EXTENT_SOURCE_METRIC_SLUG = "jrc_flood_depth_rp100"
 DERIVED_INDEX_LABELS: dict[int, str] = {
-    1: "VeryLow/No",
+    1: "VeryLow",
     2: "Low",
     3: "Moderate",
     4: "High",
