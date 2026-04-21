@@ -30,6 +30,15 @@ def infer_group_from_var(var: str) -> str:
     return "other"
 
 
+SEVERITY_CLASS_LABELS: dict[int, str] = {
+    1: "VeryLow/No",
+    2: "Low",
+    3: "Moderate",
+    4: "High",
+    5: "Extreme",
+}
+
+
 @dataclass(frozen=True)
 class MetricSpec:
     """
@@ -53,6 +62,8 @@ class MetricSpec:
     units: Optional[str] = None
     display_units: Optional[str] = None
     display_scale: float = 1.0
+    class_labels: Optional[Mapping[int, str]] = None
+    class_display_mode: Optional[str] = None
     compute: Optional[str] = None
     params: Mapping[str, Any] = field(default_factory=dict)
 
@@ -104,6 +115,8 @@ class MetricSpec:
             units=str(d.get("units") or "") or None,
             display_units=str(d.get("display_units") or "") or None,
             display_scale=float(d.get("display_scale", 1.0) or 1.0),
+            class_labels=d.get("class_labels"),
+            class_display_mode=str(d.get("class_display_mode") or "").strip() or None,
             compute=str(d.get("compute") or "") or None,
             params=d.get("params") or {},
             name=str(d.get("name") or "") or None,
@@ -1945,17 +1958,23 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "rank_higher_is_worse": True,
     },
     {
-        "name": "Flood Depth Index (RP-100)",
+        "name": "Flood Severity Index (RP-100)",
         "slug": "jrc_flood_depth_index_rp100",
-        "label": "Flood Depth Index (RP-100)",
+        "label": "Flood Severity Index (RP-100)",
         "group": "water",
         "value_col": "jrc_flood_depth_index_rp100",
         "periods_metric_col": "jrc_flood_depth_index_rp100",
         "units": "severity class (1-5)",
+        "display_units": "",
+        "class_labels": SEVERITY_CLASS_LABELS,
+        "class_display_mode": "label_with_score",
         "description": (
-            "Telangana-only ordinal severity class derived from RP-100 JRC flood depth. "
-            "Class 1 is Very Low and class 5 is Extreme. This is an externally sourced "
-            "snapshot flood-severity index, not a climate scenario projection."
+            "Telangana-only ordinal severity class derived from RP-100 JRC flood depth "
+            "and RP-100 flood extent using a fixed 5x5 depth-by-extent scoring matrix. "
+            "Depth uses flooded-cell p95 block depth and flooded-area-weighted district "
+            "depth; extent uses the share of total polygon area covered by positive "
+            "modeled depth. Class 1 is VeryLow/No and class 5 is Extreme. This is an "
+            "externally sourced snapshot severity index, not a climate scenario projection."
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
@@ -2020,9 +2039,9 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "units": "m",
         "description": (
             "Telangana-only JRC flood-depth snapshot for the 10-year return period. "
-            "Block values are maximum in-polygon depth and district values are area-weighted "
-            "means of child block maxima. This is an externally sourced inundation layer, not a "
-            "climate scenario projection."
+            "Block values use flooded-cell p95 depth and district values use flooded-area-"
+            "weighted means of child block flooded-cell p95 depth. This is an externally "
+            "sourced inundation layer, not a climate scenario projection."
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
@@ -2053,9 +2072,9 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "units": "m",
         "description": (
             "Telangana-only JRC flood-depth snapshot for the 50-year return period. "
-            "Block values are maximum in-polygon depth and district values are area-weighted "
-            "means of child block maxima. This is an externally sourced inundation layer, not a "
-            "climate scenario projection."
+            "Block values use flooded-cell p95 depth and district values use flooded-area-"
+            "weighted means of child block flooded-cell p95 depth. This is an externally "
+            "sourced inundation layer, not a climate scenario projection."
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
@@ -2086,9 +2105,9 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "units": "m",
         "description": (
             "Telangana-only JRC flood-depth snapshot for the 100-year return period. "
-            "Block values are maximum in-polygon depth and district values are area-weighted "
-            "means of child block maxima. This is an externally sourced inundation layer, not a "
-            "climate scenario projection."
+            "Block values use flooded-cell p95 depth and district values use flooded-area-"
+            "weighted means of child block flooded-cell p95 depth. This is an externally "
+            "sourced inundation layer, not a climate scenario projection."
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
@@ -2119,9 +2138,9 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "units": "m",
         "description": (
             "Telangana-only JRC flood-depth snapshot for the 500-year return period. "
-            "Block values are maximum in-polygon depth and district values are area-weighted "
-            "means of child block maxima. This is an externally sourced inundation layer, not a "
-            "climate scenario projection."
+            "Block values use flooded-cell p95 depth and district values use flooded-area-"
+            "weighted means of child block flooded-cell p95 depth. This is an externally "
+            "sourced inundation layer, not a climate scenario projection."
         ),
         "source_type": "external",
         "supports_yearly_trend": False,
@@ -2398,9 +2417,10 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
     ),
     "Flood Inundation Depth (JRC)": (
         "Telangana-only JRC flood snapshot domain covering the derived RP-100 "
-        "Flood Depth Index, RP-100 Flood Extent, plus RP-10, RP-50, RP-100, "
+        "Flood Severity Index, RP-100 Flood Extent, plus RP-10, RP-50, RP-100, "
         "and RP-500 depth layers. Flood extent uses total polygon area, while "
-        "depth layers keep the existing block-max and district rollup methodology."
+        "depth layers use flooded-cell p95 block depth and flooded-area-weighted "
+        "district rollups."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "
@@ -2525,8 +2545,10 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             # Backwards compatible: some codepaths look for "unit"
             "units": units,
             "unit": units,
-            "display_units": str(spec.display_units or "").strip() or units,
+            "display_units": str(spec.display_units or "").strip(),
             "display_scale": float(spec.display_scale),
+            "class_labels": dict(spec.class_labels or {}),
+            "class_display_mode": spec.class_display_mode,
             "description": spec.description or "",
             "source_type": spec.source_type,
             "supports_yearly_trend": bool(spec.supports_yearly_trend),

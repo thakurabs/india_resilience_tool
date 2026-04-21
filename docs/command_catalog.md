@@ -128,8 +128,11 @@ This bundle runs:
 Notes:
 - Telangana-only pilot coverage
 - fixed snapshot selectors: `snapshot`, `Current`, `mean`
-- the JRC workflow now also writes the derived `jrc_flood_depth_index_rp100` severity-class masters used by the Glance `Flood` bundle
+- the JRC workflow now also writes the derived `jrc_flood_depth_index_rp100` Flood Severity Index masters used by the Glance `Flood` bundle
 - the same RP-100 workflow also writes `jrc_flood_extent_rp100`, stored as a `0-1` fraction and displayed as a percent
+- block depth values are persisted as flooded-cell `p95` depth after nodata/mask filtering
+- district depth values are persisted as flooded-area-weighted means of child block flooded-cell `p95` depths; district valid-support coverage is retained in QA diagnostics rather than used as a hard publication gate
+- the reused RP-100 severity slug now combines RP-100 depth class and RP-100 extent class through a fixed 5x5 severity matrix, so older persisted outputs under that slug must be rebuilt before use
 - flood extent is defined as the share of total polygon area covered by positive depth, with raster-supported area retained in QA diagnostics
 - runner `--overwrite` refreshes JRC masters and QA outputs without wiping unrelated `processed_optimised` artifacts
 - zero values inside raster extent are treated as dry cells for this JRC raster family

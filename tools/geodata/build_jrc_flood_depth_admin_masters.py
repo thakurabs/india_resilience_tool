@@ -3,10 +3,10 @@
 Build Telangana district and block JRC flood-depth masters.
 
 This tool aggregates four fixed return-period flood-depth rasters from JRC onto
-canonical Telangana admin polygons. Block values use the maximum in-polygon
-flood depth, while district values use an area-weighted mean of child block
-maxima with explicit coverage thresholds and QA outputs. The RP-100 pass also
-emits derived flood-depth-index and flood-extent products with dedicated QA.
+canonical Telangana admin polygons. Block values use the p95 flooded-cell depth
+within each polygon, while district values use a flooded-area-weighted mean of
+child block p95 depths with QA outputs. The RP-100 pass also emits derived
+flood-severity-index and flood-extent products with dedicated QA.
 """
 
 from __future__ import annotations
@@ -35,18 +35,24 @@ from tools.geodata.build_district_subbasin_crosswalk import (
 AREA_EPSG = 6933
 ASSUME_UNITS = "m"
 TARGET_STATE = "Telangana"
-MIN_VALID_COVERAGE_FRACTION = 0.995
 DERIVED_INDEX_METRIC_SLUG = "jrc_flood_depth_index_rp100"
 DERIVED_INDEX_SOURCE_METRIC_SLUG = "jrc_flood_depth_rp100"
 DERIVED_EXTENT_METRIC_SLUG = "jrc_flood_extent_rp100"
 DERIVED_EXTENT_SOURCE_METRIC_SLUG = "jrc_flood_depth_rp100"
 DERIVED_INDEX_LABELS: dict[int, str] = {
-    1: "Very Low",
+    1: "VeryLow/No",
     2: "Low",
     3: "Moderate",
     4: "High",
     5: "Extreme",
 }
+DERIVED_INDEX_MATRIX: tuple[tuple[int, ...], ...] = (
+    (1, 2, 2, 3, 4),
+    (2, 2, 3, 4, 4),
+    (2, 3, 4, 4, 5),
+    (3, 4, 4, 5, 5),
+    (4, 5, 5, 5, 5),
+)
 JRC_FILE_MAP: dict[str, str] = {
     "jrc_flood_depth_rp10": "RP10_depth.tif",
     "jrc_flood_depth_rp50": "RP50_depth.tif",
@@ -82,6 +88,7 @@ class GeometryCoverageStats:
     positive_valid_cell_count: int
     max_valid_depth_m: float
     mean_valid_depth_m: float
+    p95_positive_depth_m: float
 
 
 def _derived_metric_column(metric_slug: str) -> str:
@@ -106,6 +113,16 @@ def _safe_fraction(numerator: object, denominator: object) -> float:
     if not np.isfinite(num) or not np.isfinite(den) or den <= 0.0:
         return float("nan")
     return float(num / den)
+
+
+def _quantile_linear(values: np.ndarray, q: float) -> float:
+    """Return one quantile using explicit linear interpolation across NumPy versions."""
+    if values.size == 0:
+        return float("nan")
+    try:
+        return float(np.quantile(values, q, method="linear"))
+    except TypeError:
+        return float(np.quantile(values, q, interpolation="linear"))
 
 
 @dataclass(frozen=True)
@@ -340,16 +357,16 @@ def _geometry_coverage_stats(
     geom,
 ) -> GeometryCoverageStats:
     if geom is None or geom.is_empty:
-        return GeometryCoverageStats(0, 0, 0.0, 0, 0, np.nan, np.nan)
+        return GeometryCoverageStats(0, 0, 0.0, 0, 0, np.nan, np.nan, np.nan)
     try:
         window = geometry_window(dataset, [mapping(geom)])
     except WindowError:
-        return GeometryCoverageStats(0, 0, 0.0, 0, 0, np.nan, np.nan)
+        return GeometryCoverageStats(0, 0, 0.0, 0, 0, np.nan, np.nan, np.nan)
 
     masked_data = dataset.read(1, window=window, masked=True)
     data = np.asarray(masked_data.data, dtype=float)
     if data.size == 0:
-        return GeometryCoverageStats(0, 0, 0.0, 0, 0, np.nan, np.nan)
+        return GeometryCoverageStats(0, 0, 0.0, 0, 0, np.nan, np.nan, np.nan)
 
     in_polygon_mask = geometry_mask(
         [mapping(geom)],
@@ -360,7 +377,7 @@ def _geometry_coverage_stats(
     )
     total_in_polygon = int(np.count_nonzero(in_polygon_mask))
     if total_in_polygon == 0:
-        return GeometryCoverageStats(0, 0, 0.0, 0, 0, np.nan, np.nan)
+        return GeometryCoverageStats(0, 0, 0.0, 0, 0, np.nan, np.nan, np.nan)
 
     raw_mask = np.ma.getmaskarray(masked_data)
     finite_mask = np.isfinite(data)
@@ -378,9 +395,10 @@ def _geometry_coverage_stats(
     valid_count = int(valid.size)
     coverage_fraction = float(valid_count / total_in_polygon) if total_in_polygon else 0.0
     if valid_count == 0:
-        return GeometryCoverageStats(total_in_polygon, 0, coverage_fraction, 0, 0, np.nan, np.nan)
+        return GeometryCoverageStats(total_in_polygon, 0, coverage_fraction, 0, 0, np.nan, np.nan, np.nan)
     zero_count = int(np.count_nonzero(np.isclose(valid, 0.0)))
     positive_count = int(np.count_nonzero(valid > 0.0))
+    positive_valid = valid[valid > 0.0]
     return GeometryCoverageStats(
         total_in_polygon,
         valid_count,
@@ -389,6 +407,7 @@ def _geometry_coverage_stats(
         positive_count,
         float(np.nanmax(valid)),
         float(np.nanmean(valid)),
+        _quantile_linear(positive_valid, 0.95),
     )
 
 
@@ -408,13 +427,25 @@ def _build_block_frames(
             dataset,
             raster_row.geometry,
         )
-        coverage_pass = stats.total_in_polygon_cell_count > 0
+        coverage_pass = stats.valid_in_polygon_cell_count > 0
+        valid_support_fraction = _safe_fraction(
+            stats.valid_in_polygon_cell_count,
+            stats.total_in_polygon_cell_count,
+        )
+        flooded_support_fraction = _safe_fraction(
+            stats.positive_valid_cell_count,
+            stats.total_in_polygon_cell_count,
+        )
+        valid_supported_area_km2 = float(src_row.block_area_km2) * valid_support_fraction if pd.notna(valid_support_fraction) else np.nan
+        flooded_supported_area_km2 = (
+            float(src_row.block_area_km2) * flooded_support_fraction if pd.notna(flooded_support_fraction) else np.nan
+        )
         if not coverage_pass:
             dashboard_value = np.nan
         elif stats.positive_valid_cell_count == 0:
             dashboard_value = 0.0
         else:
-            dashboard_value = stats.max_valid_depth_m
+            dashboard_value = stats.p95_positive_depth_m
 
         master_rows.append(
             {
@@ -440,6 +471,11 @@ def _build_block_frames(
                 "positive_valid_cell_count": stats.positive_valid_cell_count,
                 "max_valid_depth_m": stats.max_valid_depth_m,
                 "mean_valid_depth_m": (0.0 if coverage_pass and stats.positive_valid_cell_count == 0 else stats.mean_valid_depth_m),
+                "p95_positive_depth_m": (0.0 if coverage_pass and stats.positive_valid_cell_count == 0 else stats.p95_positive_depth_m),
+                "valid_support_fraction_of_block_area": valid_support_fraction,
+                "flooded_support_fraction_of_block_area": flooded_support_fraction,
+                "valid_supported_area_km2": valid_supported_area_km2,
+                "flooded_supported_area_km2": flooded_supported_area_km2,
                 "dashboard_value_m": dashboard_value,
                 "coverage_pass": bool(coverage_pass),
             }
@@ -488,79 +524,111 @@ def _build_district_frames(
                 f"District {src_row.district_name!r} has no Telangana child blocks after normalized matching."
             )
         district_blocks = district_blocks.merge(
-            block_qa_df[["block_key", "mean_valid_depth_m"]],
+            block_qa_df[
+                [
+                    "block_key",
+                    "mean_valid_depth_m",
+                    "p95_positive_depth_m",
+                    "valid_supported_area_km2",
+                    "flooded_supported_area_km2",
+                ]
+            ],
             on="block_key",
             how="left",
             validate="one_to_one",
         )
         district_blocks[col] = pd.to_numeric(district_blocks[col], errors="coerce")
         district_blocks["block_area_km2"] = pd.to_numeric(district_blocks["block_area_km2"], errors="coerce").fillna(0.0)
-        district_area_km2 = float(district_blocks["block_area_km2"].sum())
-        covered = district_blocks.loc[district_blocks[col].notna()].copy()
-        covered["mean_valid_depth_m"] = pd.to_numeric(covered.get("mean_valid_depth_m"), errors="coerce")
-        covered_area_km2 = float(covered["block_area_km2"].sum())
-        uncovered_area_km2 = float(district_area_km2 - covered_area_km2)
-        covered_area_fraction = float(covered_area_km2 / district_area_km2) if district_area_km2 > 0 else 0.0
+        district_blocks["valid_supported_area_km2"] = pd.to_numeric(
+            district_blocks.get("valid_supported_area_km2"),
+            errors="coerce",
+        ).fillna(0.0)
+        district_blocks["flooded_supported_area_km2"] = pd.to_numeric(
+            district_blocks.get("flooded_supported_area_km2"),
+            errors="coerce",
+        ).fillna(0.0)
+        district_blocks["p95_positive_depth_m"] = pd.to_numeric(
+            district_blocks.get("p95_positive_depth_m"),
+            errors="coerce",
+        )
+        district_blocks["mean_valid_depth_m"] = pd.to_numeric(
+            district_blocks.get("mean_valid_depth_m"),
+            errors="coerce",
+        )
+        district_area_km2 = float(src_row.district_area_km2)
+        child_block_area_sum_km2 = float(district_blocks["block_area_km2"].sum())
+        child_block_area_gap_km2 = float(district_area_km2 - child_block_area_sum_km2)
+        district_valid_supported_area_km2 = float(district_blocks["valid_supported_area_km2"].sum())
+        district_flooded_supported_area_km2 = float(district_blocks["flooded_supported_area_km2"].sum())
+        district_valid_support_fraction = (
+            float(district_valid_supported_area_km2 / district_area_km2) if district_area_km2 > 0 else 0.0
+        )
+        covered = district_blocks.loc[district_blocks["valid_supported_area_km2"] > 0.0].copy()
+        covered_flooded = district_blocks.loc[district_blocks["flooded_supported_area_km2"] > 0.0].copy()
 
-        if covered_area_fraction < MIN_VALID_COVERAGE_FRACTION or covered.empty:
+        if district_valid_supported_area_km2 <= 0.0:
             chosen_value = np.nan
-            comparable_block_mean = np.nan
-            comparable_block_max = np.nan
-            lower_bound_check_applicable = False
-            upper_bound_check_applicable = False
+            covered_block_min_p95 = np.nan
+            covered_block_max_p95 = np.nan
+        elif district_flooded_supported_area_km2 <= 0.0:
+            chosen_value = 0.0
+            covered_block_min_p95 = np.nan
+            covered_block_max_p95 = np.nan
         else:
-            numerator = float((covered["block_area_km2"] * covered[col]).sum())
-            chosen_value = float(numerator / covered_area_km2) if covered_area_km2 > 0 else np.nan
-            if covered["mean_valid_depth_m"].isna().any():
-                missing_blocks = covered.loc[covered["mean_valid_depth_m"].isna(), "block"].astype(str).tolist()
+            if covered_flooded["p95_positive_depth_m"].isna().any():
+                missing_blocks = covered_flooded.loc[
+                    covered_flooded["p95_positive_depth_m"].isna(), "block"
+                ].astype(str).tolist()
                 raise ValueError(
-                    f"{metric_slug} district {src_row.district_name!r} has covered blocks missing mean_valid_depth_m: {missing_blocks[:8]}"
+                    f"{metric_slug} district {src_row.district_name!r} has flooded blocks missing p95_positive_depth_m: {missing_blocks[:8]}"
                 )
-            comparable_numerator = float((covered["block_area_km2"] * covered["mean_valid_depth_m"]).sum())
-            comparable_block_mean = float(comparable_numerator / covered_area_km2) if covered_area_km2 > 0 else np.nan
-            comparable_block_max = float(pd.to_numeric(covered[col], errors="coerce").max())
-            lower_bound_check_applicable = True
-            upper_bound_check_applicable = True
+            numerator = float((covered_flooded["p95_positive_depth_m"] * covered_flooded["flooded_supported_area_km2"]).sum())
+            chosen_value = float(numerator / district_flooded_supported_area_km2)
+            covered_block_min_p95 = float(covered_flooded["p95_positive_depth_m"].min())
+            covered_block_max_p95 = float(covered_flooded["p95_positive_depth_m"].max())
 
         direct_stats = _geometry_coverage_stats(
             dataset,
             raster_row.geometry,
         )
-        direct_mean = direct_stats.mean_valid_depth_m
-        direct_max = direct_stats.max_valid_depth_m
-        upper_bound_check_pass = bool(
-            (not upper_bound_check_applicable)
-            or pd.isna(chosen_value)
-            or pd.isna(comparable_block_max)
-            or chosen_value <= (comparable_block_max + 1e-6)
+        direct_p95_positive = (
+            0.0
+            if direct_stats.valid_in_polygon_cell_count > 0 and direct_stats.positive_valid_cell_count == 0
+            else direct_stats.p95_positive_depth_m
         )
-        lower_bound_check_pass = bool(
-            (not lower_bound_check_applicable)
-            or pd.isna(chosen_value)
-            or pd.isna(comparable_block_mean)
-            or chosen_value >= (comparable_block_mean - 1e-6)
-        )
-        delta_vs_direct_mean = (
-            float(chosen_value - direct_mean)
-            if pd.notna(chosen_value) and pd.notna(direct_mean)
+        delta_vs_direct_p95 = (
+            float(chosen_value - direct_p95_positive)
+            if pd.notna(chosen_value) and pd.notna(direct_p95_positive)
             else np.nan
         )
-        delta_vs_direct_max = (
-            float(chosen_value - direct_max)
-            if pd.notna(chosen_value) and pd.notna(direct_max)
-            else np.nan
-        )
-        delta_warn = bool(pd.notna(delta_vs_direct_mean) and abs(delta_vs_direct_mean) > 1.0)
+        delta_warn = bool(pd.notna(delta_vs_direct_p95) and abs(delta_vs_direct_p95) > 1.0)
 
-        if not upper_bound_check_pass:
+        if district_flooded_supported_area_km2 < -1e-6 or district_valid_supported_area_km2 < -1e-6:
             raise ValueError(
-                f"{metric_slug} district {src_row.district_name!r} exceeds comparable covered-block max "
-                f"({chosen_value} > {comparable_block_max})."
+                f"{metric_slug} district {src_row.district_name!r} produced negative supported area diagnostics."
             )
-        if not lower_bound_check_pass:
+        if district_flooded_supported_area_km2 > district_valid_supported_area_km2 + 1e-6:
             raise ValueError(
-                f"{metric_slug} district {src_row.district_name!r} falls below comparable covered-block mean "
-                f"({chosen_value} < {comparable_block_mean})."
+                f"{metric_slug} district {src_row.district_name!r} has flooded supported area exceeding valid supported area."
+            )
+        if district_valid_supported_area_km2 > district_area_km2 + 1e-6:
+            raise ValueError(
+                f"{metric_slug} district {src_row.district_name!r} has valid supported area exceeding district polygon area."
+            )
+        if district_valid_supported_area_km2 > 0.0 and district_flooded_supported_area_km2 <= 0.0:
+            if not np.isclose(chosen_value, 0.0):
+                raise ValueError(
+                    f"{metric_slug} district {src_row.district_name!r} must publish 0.0 when valid support exists but flooded area is zero."
+                )
+        if district_flooded_supported_area_km2 > 0.0 and pd.notna(chosen_value):
+            if chosen_value < covered_block_min_p95 - 1e-6 or chosen_value > covered_block_max_p95 + 1e-6:
+                raise ValueError(
+                    f"{metric_slug} district {src_row.district_name!r} depth {chosen_value} falls outside covered block p95 bounds "
+                    f"[{covered_block_min_p95}, {covered_block_max_p95}]."
+                )
+        if covered_flooded.empty and district_flooded_supported_area_km2 > 0.0:
+            raise ValueError(
+                f"{metric_slug} district {src_row.district_name!r} has flooded supported area but no flooded blocks."
             )
 
         master_rows.append(
@@ -578,24 +646,25 @@ def _build_district_frames(
                 "district": src_row.district_name,
                 "district_key": src_row.district_key,
                 "district_area_km2": district_area_km2,
-                "covered_block_area_km2": covered_area_km2,
-                "uncovered_block_area_km2": uncovered_area_km2,
-                "covered_area_fraction": covered_area_fraction,
+                "child_block_area_sum_km2": child_block_area_sum_km2,
+                "child_block_area_gap_km2": child_block_area_gap_km2,
+                "district_valid_supported_area_km2": district_valid_supported_area_km2,
+                "district_flooded_supported_area_km2": district_flooded_supported_area_km2,
+                "district_valid_support_fraction": district_valid_support_fraction,
+                "covered_area_fraction": district_valid_support_fraction,
                 "covered_block_count": int(covered.shape[0]),
                 "uncovered_block_count": int(district_blocks.shape[0] - covered.shape[0]),
+                "covered_flooded_block_count": int(covered_flooded.shape[0]),
+                "covered_nonflooded_block_count": int(covered.shape[0] - covered_flooded.shape[0]),
                 "chosen_value_m": chosen_value,
-                "comparable_block_mean_value_m": comparable_block_mean,
-                "comparable_block_max_value_m": comparable_block_max,
-                "direct_mean_value_m": direct_mean,
-                "direct_max_value_m": direct_max,
+                "published_depth_m": chosen_value,
+                "covered_block_min_p95_positive_depth_m": covered_block_min_p95,
+                "covered_block_max_p95_positive_depth_m": covered_block_max_p95,
+                "direct_p95_positive_depth_m": direct_p95_positive,
                 "direct_total_in_polygon_cell_count": direct_stats.total_in_polygon_cell_count,
                 "direct_valid_in_polygon_cell_count": direct_stats.valid_in_polygon_cell_count,
                 "direct_positive_valid_cell_count": direct_stats.positive_valid_cell_count,
-                "delta_vs_direct_mean_m": delta_vs_direct_mean,
-                "delta_vs_direct_max_m": delta_vs_direct_max,
-                "upper_bound_check_pass": upper_bound_check_pass,
-                "lower_bound_check_applicable": lower_bound_check_applicable,
-                "lower_bound_check_pass": lower_bound_check_pass,
+                "delta_vs_direct_p95_positive_m": delta_vs_direct_p95,
                 "delta_warn": delta_warn,
             }
         )
@@ -605,66 +674,216 @@ def _build_district_frames(
     return master_df, qa_df
 
 
-def _classify_depth_index(depth_m: object) -> tuple[float, str]:
-    """Map one RP100 flood-depth value to the persisted ordinal class index."""
+def _class_label(value: object) -> str:
+    """Return the shared class label for one class index."""
+    try:
+        numeric = int(value)
+    except (TypeError, ValueError):
+        return ""
+    return DERIVED_INDEX_LABELS.get(numeric, "")
+
+
+def _coerce_depth_m(depth_m: object) -> Optional[float]:
+    """Validate one raw RP-100 depth value in meters."""
     try:
         value = float(depth_m)
     except (TypeError, ValueError):
-        return np.nan, ""
+        return None
     if not np.isfinite(value):
-        return np.nan, ""
+        return None
+    if value < 0.0:
+        raise ValueError(f"RP-100 flood depth cannot be negative: {value}")
+    return value
+
+
+def _coerce_extent_fraction(extent_fraction: object) -> Optional[float]:
+    """Validate one raw RP-100 extent value stored as a fraction in [0, 1]."""
+    try:
+        value = float(extent_fraction)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(value):
+        return None
+    if value < 0.0 or value > 1.0:
+        raise ValueError(f"RP-100 flood extent fraction must be within [0, 1]: {value}")
+    return value
+
+
+def _classify_depth_index(depth_m: object) -> Optional[int]:
+    """Map one raw RP-100 flood-depth value to the configured depth class."""
+    value = _coerce_depth_m(depth_m)
+    if value is None:
+        return None
+    if value <= 0.2:
+        return 1
+    if value <= 0.5:
+        return 2
+    if value <= 1.0:
+        return 3
+    if value <= 2.5:
+        return 4
+    return 5
+
+
+def _classify_extent_index(extent_fraction: object) -> Optional[int]:
+    """Map one raw RP-100 extent fraction to the configured extent class."""
+    value = _coerce_extent_fraction(extent_fraction)
+    if value is None:
+        return None
+    if value <= 0.01:
+        return 1
+    if value <= 0.05:
+        return 2
+    if value <= 0.15:
+        return 3
     if value <= 0.25:
-        return 1.0, DERIVED_INDEX_LABELS[1]
-    if value <= 0.50:
-        return 2.0, DERIVED_INDEX_LABELS[2]
-    if value <= 1.20:
-        return 3.0, DERIVED_INDEX_LABELS[3]
-    if value <= 2.50:
-        return 4.0, DERIVED_INDEX_LABELS[4]
-    return 5.0, DERIVED_INDEX_LABELS[5]
+        return 4
+    return 5
+
+
+def _lookup_severity_index(extent_class: Optional[int], depth_class: Optional[int]) -> Optional[int]:
+    """Return the final RP-100 severity class from the agreed depth × extent matrix."""
+    try:
+        extent_numeric = float(extent_class) if extent_class is not None else float("nan")
+        depth_numeric = float(depth_class) if depth_class is not None else float("nan")
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(extent_numeric) or not np.isfinite(depth_numeric):
+        return None
+    extent_int = int(round(extent_numeric))
+    depth_int = int(round(depth_numeric))
+    if not np.isclose(extent_numeric, extent_int) or not np.isclose(depth_numeric, depth_int):
+        raise ValueError(
+            f"RP-100 severity lookup expects integer classes 1..5, got extent={extent_class}, depth={depth_class}"
+        )
+    if extent_int not in DERIVED_INDEX_LABELS or depth_int not in DERIVED_INDEX_LABELS:
+        raise ValueError(
+            f"RP-100 severity lookup expects classes 1..5, got extent={extent_class}, depth={depth_class}"
+        )
+    return int(DERIVED_INDEX_MATRIX[extent_int - 1][depth_int - 1])
 
 
 def _build_derived_index_outputs(
     *,
-    raw_output: dict[str, pd.DataFrame],
+    raw_depth_output: dict[str, pd.DataFrame],
+    extent_output: dict[str, pd.DataFrame],
 ) -> dict[str, pd.DataFrame]:
-    """Build the persisted RP100 derived flood-index masters and QA frames."""
+    """Build the persisted RP100 severity-index masters and QA frames."""
     raw_col = _derived_metric_column(DERIVED_INDEX_SOURCE_METRIC_SLUG)
     derived_col = _derived_metric_column(DERIVED_INDEX_METRIC_SLUG)
+    extent_col = _derived_metric_column(DERIVED_EXTENT_METRIC_SLUG)
 
-    block_master = raw_output["block_master_df"].copy()
-    block_master = block_master.rename(columns={raw_col: derived_col})
-    block_classes = block_master[derived_col].map(_classify_depth_index)
-    block_master[derived_col] = block_classes.map(lambda item: item[0] if isinstance(item, tuple) else np.nan)
+    block_master = raw_depth_output["block_master_df"].copy()
+    block_master = block_master.rename(columns={raw_col: "raw_rp100_depth_m"})
+    block_extent = extent_output["block_master_df"].loc[
+        :, ["state", "district", "block", "block_key", extent_col]
+    ].rename(columns={extent_col: "raw_rp100_extent_fraction"})
+    block_master = block_master.merge(
+        block_extent,
+        on=["state", "district", "block", "block_key"],
+        how="left",
+        validate="one_to_one",
+    )
+    block_master["depth_class_index"] = block_master["raw_rp100_depth_m"].map(_classify_depth_index)
+    block_master["extent_class_index"] = block_master["raw_rp100_extent_fraction"].map(_classify_extent_index)
+    block_master[derived_col] = pd.to_numeric(
+        block_master.apply(
+            lambda row: _lookup_severity_index(
+                row["extent_class_index"],
+                row["depth_class_index"],
+            ),
+            axis=1,
+        ),
+        errors="coerce",
+    )
+    block_master = block_master.drop(
+        columns=["raw_rp100_depth_m", "raw_rp100_extent_fraction", "depth_class_index", "extent_class_index"]
+    )
 
-    district_master = raw_output["district_master_df"].copy()
-    district_master = district_master.rename(columns={raw_col: derived_col})
-    district_classes = district_master[derived_col].map(_classify_depth_index)
-    district_master[derived_col] = district_classes.map(lambda item: item[0] if isinstance(item, tuple) else np.nan)
+    district_master = raw_depth_output["district_master_df"].copy()
+    district_master = district_master.rename(columns={raw_col: "raw_rp100_depth_m"})
+    district_extent = extent_output["district_master_df"].loc[
+        :, ["state", "district", "district_key", extent_col]
+    ].rename(columns={extent_col: "raw_rp100_extent_fraction"})
+    district_master = district_master.merge(
+        district_extent,
+        on=["state", "district", "district_key"],
+        how="left",
+        validate="one_to_one",
+    )
+    district_master["depth_class_index"] = district_master["raw_rp100_depth_m"].map(_classify_depth_index)
+    district_master["extent_class_index"] = district_master["raw_rp100_extent_fraction"].map(_classify_extent_index)
+    district_master[derived_col] = pd.to_numeric(
+        district_master.apply(
+            lambda row: _lookup_severity_index(
+                row["extent_class_index"],
+                row["depth_class_index"],
+            ),
+            axis=1,
+        ),
+        errors="coerce",
+    )
+    district_master = district_master.drop(
+        columns=["raw_rp100_depth_m", "raw_rp100_extent_fraction", "depth_class_index", "extent_class_index"]
+    )
 
-    block_qa = raw_output["block_qa_df"].loc[
+    block_qa = raw_depth_output["block_qa_df"].loc[
         :,
         ["state", "district", "block", "block_key", "dashboard_value_m", "coverage_pass"],
     ].copy()
     block_qa = block_qa.rename(columns={"dashboard_value_m": "raw_rp100_depth_m"})
-    block_qa["class_index"] = block_qa["raw_rp100_depth_m"].map(
-        lambda value: _classify_depth_index(value)[0]
+    block_qa = block_qa.merge(
+        block_extent,
+        on=["state", "district", "block", "block_key"],
+        how="left",
+        validate="one_to_one",
     )
-    block_qa["class_label"] = block_qa["raw_rp100_depth_m"].map(
-        lambda value: _classify_depth_index(value)[1]
+    block_qa["depth_class_index"] = block_qa["raw_rp100_depth_m"].map(_classify_depth_index)
+    block_qa["depth_class_label"] = block_qa["depth_class_index"].map(_class_label)
+    block_qa["extent_class_index"] = block_qa["raw_rp100_extent_fraction"].map(_classify_extent_index)
+    block_qa["extent_class_label"] = block_qa["extent_class_index"].map(_class_label)
+    block_qa["depth_class_index"] = pd.to_numeric(block_qa["depth_class_index"], errors="coerce")
+    block_qa["extent_class_index"] = pd.to_numeric(block_qa["extent_class_index"], errors="coerce")
+    block_qa["class_index"] = pd.to_numeric(
+        block_qa.apply(
+            lambda row: _lookup_severity_index(
+                row["extent_class_index"],
+                row["depth_class_index"],
+            ),
+            axis=1,
+        ),
+        errors="coerce",
     )
+    block_qa["class_label"] = block_qa["class_index"].map(_class_label)
 
-    district_qa = raw_output["district_qa_df"].loc[
+    district_qa = raw_depth_output["district_qa_df"].loc[
         :,
-        ["state", "district", "district_key", "chosen_value_m", "covered_area_fraction"],
+        ["state", "district", "district_key", "chosen_value_m", "district_valid_support_fraction"],
     ].copy()
     district_qa = district_qa.rename(columns={"chosen_value_m": "raw_rp100_depth_m"})
-    district_qa["class_index"] = district_qa["raw_rp100_depth_m"].map(
-        lambda value: _classify_depth_index(value)[0]
+    district_qa = district_qa.merge(
+        district_extent,
+        on=["state", "district", "district_key"],
+        how="left",
+        validate="one_to_one",
     )
-    district_qa["class_label"] = district_qa["raw_rp100_depth_m"].map(
-        lambda value: _classify_depth_index(value)[1]
+    district_qa["depth_class_index"] = district_qa["raw_rp100_depth_m"].map(_classify_depth_index)
+    district_qa["depth_class_label"] = district_qa["depth_class_index"].map(_class_label)
+    district_qa["extent_class_index"] = district_qa["raw_rp100_extent_fraction"].map(_classify_extent_index)
+    district_qa["extent_class_label"] = district_qa["extent_class_index"].map(_class_label)
+    district_qa["depth_class_index"] = pd.to_numeric(district_qa["depth_class_index"], errors="coerce")
+    district_qa["extent_class_index"] = pd.to_numeric(district_qa["extent_class_index"], errors="coerce")
+    district_qa["class_index"] = pd.to_numeric(
+        district_qa.apply(
+            lambda row: _lookup_severity_index(
+                row["extent_class_index"],
+                row["depth_class_index"],
+            ),
+            axis=1,
+        ),
+        errors="coerce",
     )
+    district_qa["class_label"] = district_qa["class_index"].map(_class_label)
 
     return {
         "block_master_df": block_master,
@@ -696,6 +915,10 @@ def _build_derived_extent_outputs(
             "total_in_polygon_cell_count",
             "valid_in_polygon_cell_count",
             "positive_valid_cell_count",
+            "valid_support_fraction_of_block_area",
+            "flooded_support_fraction_of_block_area",
+            "valid_supported_area_km2",
+            "flooded_supported_area_km2",
         ],
     ].copy()
     block_qa["district_join_key"] = block_qa["district"].map(
@@ -703,18 +926,6 @@ def _build_derived_extent_outputs(
     )
     block_qa["has_raster_overlap"] = block_qa["total_in_polygon_cell_count"].gt(0)
     block_qa["has_valid_support"] = block_qa["valid_in_polygon_cell_count"].gt(0)
-    block_qa["valid_support_fraction_of_block_area"] = [
-        _safe_fraction(valid, total)
-        for valid, total in zip(block_qa["valid_in_polygon_cell_count"], block_qa["total_in_polygon_cell_count"])
-    ]
-    block_qa["flooded_support_fraction_of_block_area"] = [
-        _safe_fraction(positive, total)
-        for positive, total in zip(block_qa["positive_valid_cell_count"], block_qa["total_in_polygon_cell_count"])
-    ]
-    block_qa["valid_supported_area_km2"] = block_qa["block_area_km2"] * block_qa["valid_support_fraction_of_block_area"]
-    block_qa["flooded_supported_area_km2"] = (
-        block_qa["block_area_km2"] * block_qa["flooded_support_fraction_of_block_area"]
-    )
     block_qa[derived_col] = block_qa["flooded_support_fraction_of_block_area"]
     block_qa.loc[~block_qa["has_valid_support"], derived_col] = np.nan
     block_qa["publishable"] = block_qa["has_valid_support"]
@@ -905,21 +1116,22 @@ def build_jrc_flood_depth_outputs(
                 "metric_slug": metric_slug,
                 "metric_kind": "raw_raster",
                 "source_metric_slug": "",
+                "component_metric_slugs": "",
                 "source_dir": str(contract.source_dir),
                 "assume_units": assume_units,
                 "raster_crs": contract.raster_crs,
                 "raster_shape": contract.raster_shape,
                 "nodata_value": contract.nodata_value,
+                "depth_method": "block_p95_positive__district_flooded_area_weighted_v2",
+                "district_area_denominator": "district_polygon_area_epsg6933_v2",
+                "percentile_method": "q95_linear__positive_depth_only_v2",
+                "severity_method": "",
                 "blocks_total": int(block_qa_df.shape[0]),
                 "blocks_covered": int(block_qa_df["coverage_pass"].fillna(False).astype(bool).sum()),
                 "blocks_uncovered": int((~block_qa_df["coverage_pass"].fillna(False).astype(bool)).sum()),
                 "districts_total": int(district_qa_df.shape[0]),
-                "districts_covered": int(
-                    district_qa_df["covered_area_fraction"].fillna(0.0).ge(MIN_VALID_COVERAGE_FRACTION).sum()
-                ),
-                "districts_uncovered": int(
-                    district_qa_df["covered_area_fraction"].fillna(0.0).lt(MIN_VALID_COVERAGE_FRACTION).sum()
-                ),
+                "districts_covered": int(district_qa_df["chosen_value_m"].notna().sum()),
+                "districts_uncovered": int(district_qa_df["chosen_value_m"].isna().sum()),
                 "district_delta_warn_count": int(district_qa_df["delta_warn"].fillna(False).astype(bool).sum()),
                 "boundary_join_missing_count": int(
                     join_validation.missing_in_blocks + join_validation.missing_in_districts
@@ -944,16 +1156,20 @@ def build_jrc_flood_depth_outputs(
             _write_csv(block_qa_df, qa_dir / f"{metric_slug}_block_qa.csv", overwrite=overwrite)
             _write_csv(district_qa_df, qa_dir / f"{metric_slug}_district_qa.csv", overwrite=overwrite)
 
+    derived_extent_output = _build_derived_extent_outputs(raw_output=outputs[DERIVED_EXTENT_SOURCE_METRIC_SLUG])
     derived_outputs = {
-        DERIVED_INDEX_METRIC_SLUG: _build_derived_index_outputs(raw_output=outputs[DERIVED_INDEX_SOURCE_METRIC_SLUG]),
-        DERIVED_EXTENT_METRIC_SLUG: _build_derived_extent_outputs(raw_output=outputs[DERIVED_EXTENT_SOURCE_METRIC_SLUG]),
+        DERIVED_EXTENT_METRIC_SLUG: derived_extent_output,
+        DERIVED_INDEX_METRIC_SLUG: _build_derived_index_outputs(
+            raw_depth_output=outputs[DERIVED_INDEX_SOURCE_METRIC_SLUG],
+            extent_output=derived_extent_output,
+        ),
     }
     derived_sources = {
         DERIVED_INDEX_METRIC_SLUG: DERIVED_INDEX_SOURCE_METRIC_SLUG,
         DERIVED_EXTENT_METRIC_SLUG: DERIVED_EXTENT_SOURCE_METRIC_SLUG,
     }
     derived_kinds = {
-        DERIVED_INDEX_METRIC_SLUG: "derived_index",
+        DERIVED_INDEX_METRIC_SLUG: "derived_severity_matrix",
         DERIVED_EXTENT_METRIC_SLUG: "derived_extent",
     }
     for metric_slug, derived_output in derived_outputs.items():
@@ -971,11 +1187,24 @@ def build_jrc_flood_depth_outputs(
                 "metric_slug": metric_slug,
                 "metric_kind": derived_kinds[metric_slug],
                 "source_metric_slug": derived_sources[metric_slug],
+                "component_metric_slugs": (
+                    "jrc_flood_depth_rp100;jrc_flood_extent_rp100"
+                    if metric_slug == DERIVED_INDEX_METRIC_SLUG
+                    else ""
+                ),
                 "source_dir": str(contract.source_dir),
                 "assume_units": assume_units,
                 "raster_crs": contract.raster_crs,
                 "raster_shape": contract.raster_shape,
                 "nodata_value": contract.nodata_value,
+                "depth_method": "block_p95_positive__district_flooded_area_weighted_v2",
+                "district_area_denominator": "district_polygon_area_epsg6933_v2",
+                "percentile_method": "q95_linear__positive_depth_only_v2",
+                "severity_method": (
+                    "rp100_depth_extent_matrix_v1"
+                    if metric_slug == DERIVED_INDEX_METRIC_SLUG
+                    else ""
+                ),
                 "blocks_total": int(derived_block_master_df.shape[0]),
                 "blocks_covered": int(
                     derived_block_qa_df[publishable_block_col].fillna(False).astype(bool).sum()

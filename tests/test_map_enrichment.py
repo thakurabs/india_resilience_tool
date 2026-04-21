@@ -103,3 +103,22 @@ def test_add_tooltip_strings_rounds_population_total_to_whole_persons() -> None:
     )
 
     assert out["_tooltip_value"].tolist() == ["1,931,514"]
+
+
+def test_add_tooltip_strings_uses_class_labels_for_jrc_flood_severity() -> None:
+    merged = pd.DataFrame(
+        {
+            "_current_value": [4.0, 3.6],
+            "_baseline_value": [pd.NA, pd.NA],
+            "_delta_abs": [pd.NA, pd.NA],
+            "_rank_in_state": [1.0, 2.0],
+        }
+    )
+
+    out = add_tooltip_strings(
+        merged.copy(),
+        map_mode="Absolute value",
+        variable_slug="jrc_flood_depth_index_rp100",
+    )
+
+    assert out["_tooltip_value"].tolist() == ["High (4)", "3.6 / 5"]

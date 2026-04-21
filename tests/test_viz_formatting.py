@@ -27,3 +27,15 @@ def test_jrc_flood_extent_scales_fraction_for_display() -> None:
     assert format_metric_value(0.34, metric_slug="jrc_flood_extent_rp100") == "34%"
     assert format_metric_compact(0.34, metric_slug="jrc_flood_extent_rp100") == "34%"
     assert get_metric_display_units(metric_slug="jrc_flood_extent_rp100") == "%"
+
+
+def test_jrc_flood_severity_formats_integer_classes_with_label_and_score() -> None:
+    assert format_metric_value(4.0, metric_slug="jrc_flood_depth_index_rp100") == "High (4)"
+    assert format_metric_compact(5.0, metric_slug="jrc_flood_depth_index_rp100") == "Extreme (5)"
+    assert format_metric_number(4.0, metric_slug="jrc_flood_depth_index_rp100") == "4"
+    assert get_metric_display_units(metric_slug="jrc_flood_depth_index_rp100") == ""
+
+
+def test_jrc_flood_severity_formats_non_integer_aggregates_numerically() -> None:
+    assert format_metric_value(4.23, metric_slug="jrc_flood_depth_index_rp100") == "4.2 / 5"
+    assert format_metric_compact(3.75, metric_slug="jrc_flood_depth_index_rp100") == "3.8 / 5"

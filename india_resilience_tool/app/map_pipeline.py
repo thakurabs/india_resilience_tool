@@ -48,11 +48,17 @@ from india_resilience_tool.data.river_loader import (
 )
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.colors import (
+    FLOOD_SEVERITY_CLASS_COLORS,
+    apply_fillcolor_classed,
     apply_fillcolor_binned,
+    build_vertical_categorical_legend_block_html,
     build_vertical_binned_legend_block_html,
 )
 from india_resilience_tool.viz.tables import build_rankings_table_df as _build_rankings_table_df
 from india_resilience_tool.viz.charts import period_display_label
+
+
+FLOOD_SEVERITY_METRIC_SLUG = "jrc_flood_depth_index_rp100"
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,13 @@ def _build_legend_title(varcfg: Mapping[str, Any]) -> str:
     return get_metric_display_units(
         metric_slug=str(varcfg.get("slug") or ""),
         units=str(varcfg.get("display_units") or varcfg.get("unit") or varcfg.get("units") or "").strip(),
+    )
+
+
+def _uses_fixed_class_scale(variable_slug: str, varcfg: Mapping[str, Any]) -> bool:
+    return (
+        str(variable_slug or "").strip().lower() == FLOOD_SEVERITY_METRIC_SLUG
+        and str(varcfg.get("class_display_mode") or "").strip().lower() == "label_with_score"
     )
 
 
@@ -519,30 +532,39 @@ def build_map_and_rankings(
         render_perf_panel_safe()
         st.stop()
 
+    use_fixed_class_scale = _uses_fixed_class_scale(variable_slug, varcfg)
+    class_labels = {
+        int(key): str(value)
+        for key, value in dict(varcfg.get("class_labels") or {}).items()
+    } if use_fixed_class_scale else {}
     data_min, data_max, vmin_default, vmax_default = compute_color_range_defaults(scale_vals)
     display_units, display_scale = get_metric_display_meta(
         metric_slug=variable_slug,
         units=str(varcfg.get("unit") or varcfg.get("units") or "").strip(),
     )
-    slider_min = float(data_min * display_scale)
-    slider_max = float(data_max * display_scale)
-    slider_default = (float(vmin_default * display_scale), float(vmax_default * display_scale))
-    slider_step = max((slider_max - slider_min) / 200.0, 0.001)
-    slider_label = "Color range (min → max)"
-    if display_units:
-        slider_label = f"{slider_label} [{display_units}]"
+    if use_fixed_class_scale:
+        color_slider_placeholder.empty()
+        vmin, vmax = 1.0, 5.0
+    else:
+        slider_min = float(data_min * display_scale)
+        slider_max = float(data_max * display_scale)
+        slider_default = (float(vmin_default * display_scale), float(vmax_default * display_scale))
+        slider_step = max((slider_max - slider_min) / 200.0, 0.001)
+        slider_label = "Color range (min → max)"
+        if display_units:
+            slider_label = f"{slider_label} [{display_units}]"
 
-    with st.sidebar:
-        vmin_vmax = color_slider_placeholder.slider(
-            slider_label,
-            min_value=slider_min,
-            max_value=slider_max,
-            value=slider_default,
-            step=slider_step,
-            key="color_range_slider",
-        )
+        with st.sidebar:
+            vmin_vmax = color_slider_placeholder.slider(
+                slider_label,
+                min_value=slider_min,
+                max_value=slider_max,
+                value=slider_default,
+                step=slider_step,
+                key="color_range_slider",
+            )
 
-    vmin, vmax = float(vmin_vmax[0] / display_scale), float(vmin_vmax[1] / display_scale)
+        vmin, vmax = float(vmin_vmax[0] / display_scale), float(vmin_vmax[1] / display_scale)
 
     # Choose colormap: sequential for absolute, diverging for change
     if supports_baseline_comparison and map_mode == "Change from 1990-2010 baseline":
@@ -560,14 +582,26 @@ def build_map_and_rankings(
 
     with perf_section("colors: apply_fillcolor_binned"):
         with st.spinner("Computing colors..."):
-            merged = apply_fillcolor_binned(
-                merged,
-                map_value_col,
-                vmin,
-                vmax,
-                cmap_name=cmap_name,
-                nlevels=15,
-            )
+            if use_fixed_class_scale:
+                value_to_color = {
+                    class_index: FLOOD_SEVERITY_CLASS_COLORS[class_index - 1]
+                    for class_index in sorted(class_labels)
+                    if 1 <= class_index <= len(FLOOD_SEVERITY_CLASS_COLORS)
+                }
+                merged = apply_fillcolor_classed(
+                    merged,
+                    map_value_col,
+                    value_to_color=value_to_color,
+                )
+            else:
+                merged = apply_fillcolor_binned(
+                    merged,
+                    map_value_col,
+                    vmin,
+                    vmax,
+                    cmap_name=cmap_name,
+                    nlevels=15,
+                )
 
     # Filter for map display (preserves legacy behavior: block selection does not
     # hide other blocks; it only affects the details panel).
@@ -692,18 +726,31 @@ def build_map_and_rankings(
         perf_section=perf_section,
     )
 
-    legend_block_html = build_vertical_binned_legend_block_html(
-        legend_title=legend_title,
-        vmin=vmin,
-        vmax=vmax,
-        cmap_name=cmap_name,
-        display_scale=display_scale,
-        nlevels=15,
-        nticks=5,
-        include_zero_tick=True,
-        map_height=map_height,
-        bar_width_px=18,
-    )
+    if use_fixed_class_scale:
+        legend_block_html = build_vertical_categorical_legend_block_html(
+            legend_title=str(varcfg.get("label") or variable_slug),
+            labels=[
+                str(class_labels[index])
+                for index in sorted(class_labels)
+                if index in class_labels
+            ],
+            colors=list(FLOOD_SEVERITY_CLASS_COLORS[: len(class_labels)]),
+            map_height=map_height,
+            bar_width_px=18,
+        )
+    else:
+        legend_block_html = build_vertical_binned_legend_block_html(
+            legend_title=legend_title,
+            vmin=vmin,
+            vmax=vmax,
+            cmap_name=cmap_name,
+            display_scale=display_scale,
+            nlevels=15,
+            nticks=5,
+            include_zero_tick=True,
+            map_height=map_height,
+            bar_width_px=18,
+        )
 
     return MapArtifacts(
         merged=merged,

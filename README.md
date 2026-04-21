@@ -52,11 +52,11 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - fixed snapshot semantics: `snapshot`, `2025`
 - JRC flood-depth onboarding:
   - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
-  - derived `Flood Depth Index (RP-100)` persisted from the RP-100 depth layer for Glance `Flood`
+  - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix and reused by Glance `Flood`
   - derived `RP-100 Flood Extent` persisted from the RP-100 depth layer as the share of total polygon area covered by positive depth
   - `RP-10 Flood Depth`, `RP-50 Flood Depth`, `RP-100 Flood Depth`, `RP-500 Flood Depth`
   - fixed snapshot semantics: `snapshot`, `Current`
-  - block depth values use maximum in-polygon depth; district depth values use area-weighted means of child block maxima
+  - block depth values use flooded-cell `p95` depth; district depth values use flooded-area-weighted means of child block flooded-cell `p95` depths
   - extent is stored as a `0-1` fraction, displayed as a percent, and uses total-polygon-area semantics at both block and district levels
 - Water-risk Aqueduct onboarding:
   - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
@@ -529,8 +529,10 @@ JRC coverage is interpreted from raster extent overlap for this dataset family: 
 and zero values inside raster extent are treated as dry cells.
 The same workflow also writes the derived `jrc_flood_depth_index_rp100` severity-class masters and
 `jrc_flood_extent_rp100` extent masters. Flood extent is stored as a fraction, displayed as a percent,
-and uses total-polygon-area semantics, with raster-supported area retained in QA outputs. The `run_summary.csv`
-now includes `derived_index` and `derived_extent` rows for the RP-100 derived products.
+and uses total-polygon-area semantics, with raster-supported area retained in QA outputs. The RP-100 severity
+index now combines RP-100 depth and RP-100 extent through the fixed 5x5 severity matrix, and the `run_summary.csv`
+records that provenance with a `derived_severity_matrix` row. Rebuild the JRC masters and optimized outputs after
+pulling this change because older persisted `jrc_flood_depth_index_rp100` outputs are methodologically incompatible.
 
 ### Rebuild the canonical block boundaries
 

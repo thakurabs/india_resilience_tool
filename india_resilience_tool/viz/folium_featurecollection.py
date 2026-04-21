@@ -437,6 +437,7 @@ def build_geojson_tooltip(
     map_mode: str,
     has_baseline: bool,
     rank_scope_label: str,
+    metric_slug: str | None = None,
 ) -> folium.features.GeoJsonTooltip:
     """
     Build a stable GeoJsonTooltip for the patched FeatureCollection.
@@ -461,8 +462,12 @@ def build_geojson_tooltip(
         tooltip_fields += ["_tooltip_baseline", "_tooltip_delta"]
         tooltip_aliases += ["Baseline (1990–2010)", "Δ vs baseline"]
 
-    tooltip_fields += ["_risk_class", "_tooltip_rank"]
-    tooltip_aliases += ["Risk class", f"Rank in {rank_scope_label}"]
+    metric_slug_norm = str(metric_slug or "").strip().lower()
+    if metric_slug_norm != "jrc_flood_depth_index_rp100":
+        tooltip_fields.append("_risk_class")
+        tooltip_aliases.append("Risk class")
+    tooltip_fields.append("_tooltip_rank")
+    tooltip_aliases.append(f"Rank in {rank_scope_label}")
 
     return folium.features.GeoJsonTooltip(
         fields=tooltip_fields,

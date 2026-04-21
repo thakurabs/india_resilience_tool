@@ -244,6 +244,53 @@ def test_bundle_metric_specs_use_custom_jrc_flood_weights_only() -> None:
     assert [spec.slug for spec in specs] == ["jrc_flood_depth_index_rp100"]
     assert specs[0].weight == 1.0
 
+
+def test_build_landing_map_artifacts_keeps_bundle_score_legend_for_jrc_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        landing_runtime,
+        "build_choropleth_map_with_geojson_layer",
+        lambda **kwargs: {"tooltip": kwargs["tooltip"]},
+    )
+
+    state_scores = pd.DataFrame(
+        {
+            "__state_key": ["telangana"],
+            "state_name": ["Telangana"],
+            "bundle_score": [78.0],
+            "bundle_score_display": ["78.0"],
+            "score_band": ["High"],
+        }
+    )
+    district_scores = pd.DataFrame(
+        {
+            "__district_key": ["telangana::nalgonda"],
+            "__state_key": ["telangana"],
+            "state_name": ["Telangana"],
+            "district_name": ["Nalgonda"],
+            "bundle_score": [82.0],
+            "bundle_score_display": ["82.0"],
+            "score_band": ["Extreme"],
+        }
+    )
+
+    _map, legend_html, _label, _frame = landing_runtime._build_landing_map_artifacts(
+        adm1=_adm1_gdf(),
+        adm2=_adm2_gdf(),
+        state_scores=state_scores,
+        district_scores=district_scores,
+        bundle_domain="Flood Inundation Depth (JRC)",
+        scenario="snapshot",
+        period="Current",
+        focus_level="india",
+        selected_state=None,
+        selected_district=None,
+    )
+
+    assert legend_html is not None
+    assert "Bundle score" in legend_html
+
 def test_bundle_metric_specs_use_custom_flood_weights() -> None:
     specs = _bundle_metric_specs("Flood & Extreme Rainfall Risk")
     by_slug = {spec.slug: spec for spec in specs}

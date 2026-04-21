@@ -6,6 +6,7 @@ import pandas as pd
 
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.folium_featurecollection import (
+    build_geojson_tooltip,
     build_props_map_from_gdf,
     clone_featurecollection_for_patch,
     patch_fc_properties,
@@ -88,3 +89,29 @@ def test_build_props_map_from_gdf_vectorizes_block_keys_and_patch_preserves_geom
     assert patched["features"][0]["geometry"] is geometry
     assert patched["features"][0]["properties"]["fillColor"] == "#ff0000"
     assert fc["features"][0]["properties"].get("fillColor") is None
+
+
+def test_build_geojson_tooltip_omits_percentile_risk_class_for_jrc_flood_severity() -> None:
+    tooltip = build_geojson_tooltip(
+        level="block",
+        map_mode="Absolute value",
+        has_baseline=False,
+        rank_scope_label="district",
+        metric_slug="jrc_flood_depth_index_rp100",
+    )
+
+    assert tooltip.fields == ["block_name", "district_name", "state_name", "_tooltip_value", "_tooltip_rank"]
+    assert tooltip.aliases == ["Block", "District", "State", "Value", "Rank in district"]
+
+
+def test_build_geojson_tooltip_keeps_percentile_risk_class_for_standard_metrics() -> None:
+    tooltip = build_geojson_tooltip(
+        level="district",
+        map_mode="Absolute value",
+        has_baseline=False,
+        rank_scope_label="state",
+        metric_slug="tas_annual_mean",
+    )
+
+    assert tooltip.fields == ["district_name", "state_name", "_tooltip_value", "_risk_class", "_tooltip_rank"]
+    assert tooltip.aliases == ["District", "State", "Value", "Risk class", "Rank in state"]
