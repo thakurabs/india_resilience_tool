@@ -17,8 +17,9 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Default landing discovery surface:
   - launches into an India state-level climate-hazard screening map
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
-  - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood`, `Extreme Rainfall`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
-  - uses approved custom metric weights for all visible Glance bundles
+  - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Extreme Rainfall`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
+  - each visible Glance bundle now reads one persisted composite admin metric from disk; the dashboard no longer computes visible bundle scores at runtime
+  - `Deep Dive` from Glance opens the matching persisted composite metric such as `Composite Heat Stress`
   - supports India -> state -> district drill-down before entering Deep Dive
   - uses explicit state clicks at India overview and district clicks within the selected state
   - top-bar geography search provides type-to-filter state and district suggestions
@@ -52,7 +53,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - fixed snapshot semantics: `snapshot`, `2025`
 - JRC flood-depth onboarding:
   - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
-  - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix and reused by Glance `Flood`
+  - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
   - derived `RP-100 Flood Extent` persisted from the RP-100 depth layer as the share of total polygon area covered by positive depth
   - `RP-10 Flood Depth`, `RP-50 Flood Depth`, `RP-100 Flood Depth`, `RP-500 Flood Depth`
   - fixed snapshot semantics: `snapshot`, `Current`
@@ -157,7 +158,7 @@ Launch behavior:
 - the landing search bar filters state and district suggestions as you type
 - the Deep Dive screen includes a top-right `Back to Glance` action
 - `Back to Glance` restores the current climate/admin district context when compatible, and otherwise reopens the last stored glance context
-- use `Deep Dive` from the landing page to enter the existing detailed ribbon/sidebar workflow
+- use `Deep Dive` from the landing page to enter the existing detailed ribbon/sidebar workflow on the persisted composite metric for the active Glance bundle
 
 Performance note:
 - the dashboard now reads the compact `processed_optimised/` runtime bundle by default
@@ -216,6 +217,18 @@ The dashboard prefers optimized runtime assets when they are present:
 - compact selector metadata from `processed_optimised/context/admin_block_index.parquet` and `processed_optimised/context/hydro_subbasin_index.parquet`
 
 Optimized geometry outputs also persist `area_m2`, which the summary views reuse instead of recomputing geodesic area weights on every render.
+
+Persisted visible-Glance composite metrics:
+
+```bash
+python -m tools.pipeline.build_composite_metrics --help
+```
+
+This writes admin-only district and block composite masters for the 6 visible Glance bundles under:
+- `IRT_DATA_DIR/processed/<composite_slug>/<state>/master_metrics_by_district.csv`
+- `IRT_DATA_DIR/processed/<composite_slug>/<state>/master_metrics_by_block.csv`
+
+The canonical prep runner now schedules this composite step automatically after climate master builds and before optimized runtime refresh for admin climate runs.
 
 Parity audit:
 

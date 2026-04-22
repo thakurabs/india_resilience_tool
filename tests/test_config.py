@@ -175,6 +175,40 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
         assert "Bio-physical Hazards" in cfg["pillars"]
 
 
+def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> None:
+    from india_resilience_tool.config.variables import VARIABLES
+
+    for slug, label, domain in [
+        ("composite_heat_risk", "Composite Heat Risk", "Heat Risk"),
+        ("composite_drought_risk", "Composite Drought Risk", "Drought Risk"),
+        (
+            "composite_flood_extreme_rainfall_risk",
+            "Composite Flood & Extreme Rainfall Risk",
+            "Flood & Extreme Rainfall Risk",
+        ),
+        ("composite_heat_stress", "Composite Heat Stress", "Heat Stress"),
+        ("composite_cold_risk", "Composite Cold Risk", "Cold Risk"),
+        (
+            "composite_agriculture_growing_conditions",
+            "Composite Agriculture & Growing Conditions",
+            "Agriculture & Growing Conditions",
+        ),
+    ]:
+        cfg = VARIABLES[slug]
+        assert cfg["label"] == label
+        assert cfg["source_type"] == "derived"
+        assert cfg["selection_mode"] == "scenario_period"
+        assert cfg["supported_levels"] == ["district", "block"]
+        assert cfg["supported_spatial_families"] == ["admin"]
+        assert cfg["supported_statistics"] == ["mean"]
+        assert cfg["supports_yearly_trend"] is False
+        assert cfg["supports_baseline_comparison"] is False
+        assert cfg["supports_scenario_comparison"] is False
+        assert cfg["supported_scenarios"] == ["ssp245", "ssp585"]
+        assert cfg["units"] == "score"
+        assert domain in cfg["domains"]
+
+
 def test_current_period_display_label_is_stable() -> None:
     from india_resilience_tool.viz.charts import period_display_label
 

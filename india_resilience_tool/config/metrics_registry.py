@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
 
+from india_resilience_tool.config.composite_metrics import VISIBLE_GLANCE_COMPOSITES
+
 
 def infer_group_from_var(var: str) -> str:
     """
@@ -2161,6 +2163,36 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
+    *[
+        {
+            "name": spec.composite_label,
+            "slug": spec.composite_slug,
+            "label": spec.composite_label,
+            "group": "other",
+            "value_col": spec.composite_slug,
+            "periods_metric_col": spec.composite_slug,
+            "units": "score",
+            "display_units": "score",
+            "display_scale": 1.0,
+            "description": (
+                f"Persisted weighted composite hazard score for the {spec.bundle_domain} bundle. "
+                "Computed offline from approved bundle weights and per-scenario-period normalization."
+            ),
+            "source_type": "derived",
+            "supports_yearly_trend": False,
+            "selection_mode": "scenario_period",
+            "supported_statistics": ("mean",),
+            "supports_baseline_comparison": False,
+            "supports_scenario_comparison": False,
+            "admin_rebuild_command": "python -m tools.pipeline.build_composite_metrics",
+            "supported_scenarios": ("ssp245", "ssp585"),
+            "preferred_period_order": ("2020-2040", "2040-2060", "2060-2080"),
+            "supported_spatial_families": spec.supported_spatial_families,
+            "supported_levels": spec.supported_levels,
+            "rank_higher_is_worse": True,
+        }
+        for spec in VISIBLE_GLANCE_COMPOSITES
+    ],
 ]
 
 ALL_METRICS_RAW: list[dict[str, Any]] = PIPELINE_METRICS_RAW + DASHBOARD_ONLY_METRICS_RAW
@@ -2182,6 +2214,7 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(ALL_METRIC
 
 DOMAINS: dict[str, list[str]] = {
     "Heat Risk": [
+        "composite_heat_risk",
         "tas_annual_mean",
         "txx_annual_max",        
         # Heat thresholds (absolute temperature thresholds)
@@ -2219,6 +2252,7 @@ DOMAINS: dict[str, list[str]] = {
         # "tasmin_annual_mean",
     ],
     "Heat Stress": [
+        "composite_heat_stress",
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
@@ -2232,6 +2266,7 @@ DOMAINS: dict[str, list[str]] = {
         "twb_days_ge_28",
     ],
     "Cold Risk": [
+        "composite_cold_risk",
         "tas_winter_mean",
         "tasmin_winter_mean",
         "tnn_annual_min",
@@ -2248,6 +2283,7 @@ DOMAINS: dict[str, list[str]] = {
         "tnle10_consecutive_cold_nights",
     ],
     "Agriculture & Growing Conditions": [
+        "composite_agriculture_growing_conditions",
         "gsl_growing_season",
         "tasmax_summer_mean",
         "tasmin_winter_mean",
@@ -2259,6 +2295,7 @@ DOMAINS: dict[str, list[str]] = {
         "prcptot_annual_total",
     ],
     "Flood & Extreme Rainfall Risk": [
+        "composite_flood_extreme_rainfall_risk",
         # Peak intensity
         "pr_max_1day_precip",
         "pr_max_5day_precip",
@@ -2283,6 +2320,7 @@ DOMAINS: dict[str, list[str]] = {
         "rain_gt_2p5mm",
     ],
     "Drought Risk": [
+        "composite_drought_risk",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",

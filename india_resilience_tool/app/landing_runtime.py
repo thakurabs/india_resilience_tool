@@ -19,10 +19,10 @@ from india_resilience_tool.analysis.bundle_scores import (
     BundleMetricSpec,
     aggregate_state_bundle_scores,
     compute_bundle_score_frame,
-    compute_metric_driver_frame,
     normalized_metric_column,
 )
 from india_resilience_tool.config.bundle_weights import get_bundle_weights
+from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.views.map_view import (
     build_choropleth_map_with_geojson_layer,
@@ -904,9 +904,22 @@ def _bundle_scenario_period_options(
     *,
     data_dir: Path,
 ) -> list[tuple[str, str]]:
-    """Return full-coverage future scenario-period pairs for the landing bundle."""
-    return _intersect_bundle_scenario_period_pairs(
-        _collect_bundle_metric_contexts(bundle_domain, data_dir=data_dir)
+    """Return available scenario-period pairs for one persisted landing composite."""
+    composite_spec = get_composite_metric_for_bundle(bundle_domain)
+    if composite_spec is None:
+        return []
+
+    source_paths = _resolve_metric_master_sources(composite_spec.composite_slug, data_dir=data_dir)
+    if not source_paths:
+        return []
+
+    source_signature = master_source_signature(source_paths)
+    return list(
+        _load_metric_scenario_period_pairs_cached(
+            composite_spec.composite_slug,
+            source_signature,
+            tuple(str(path) for path in source_paths),
+        )
     )
 
 
@@ -1075,19 +1088,106 @@ def _prepare_bundle_context(
     stat: str,
     data_dir: Path,
     metric_contexts: Optional[Sequence[LandingMetricContext]] = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, list[BundleMetricSpec]]:
-    """Load bundle metrics and compute cached district/state landing score tables."""
-    contexts = list(metric_contexts) if metric_contexts is not None else _collect_bundle_metric_contexts(
-        bundle_domain,
-        data_dir=data_dir,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load persisted composite metric values and assemble landing score tables."""
+    _ = metric_contexts
+    def _empty_context() -> tuple[pd.DataFrame, pd.DataFrame]:
+        empty = pd.DataFrame(
+            columns=[
+                "state_name",
+                "district_name",
+                "bundle_score",
+                "bundle_score_display",
+                "score_band",
+                "district_rank",
+                "district_count",
+                "state_bundle_score",
+                "state_rank",
+                "state_count",
+            ]
+        )
+        state_empty = pd.DataFrame(
+            columns=[
+                "state_name",
+                "bundle_score",
+                "__state_key",
+                "score_band",
+                "bundle_score_display",
+                "state_rank",
+                "state_count",
+            ]
+        )
+        return empty, state_empty
+
+    composite_spec = get_composite_metric_for_bundle(bundle_domain)
+    if composite_spec is None:
+        return _empty_context()
+
+    source_paths = _resolve_metric_master_sources(composite_spec.composite_slug, data_dir=data_dir)
+    if not source_paths:
+        return _empty_context()
+
+    source_signature = master_source_signature(source_paths)
+    available_pairs = set(
+        _load_metric_scenario_period_pairs_cached(
+            composite_spec.composite_slug,
+            source_signature,
+            tuple(str(path) for path in source_paths),
+        )
     )
-    return _prepare_bundle_context_cached(
-        bundle_domain,
+    selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
+    if selected_pair not in available_pairs:
+        return _empty_context()
+
+    metric_frame = _load_metric_district_values_cached(
+        composite_spec.composite_slug,
         scenario,
         period,
         stat,
-        _bundle_context_cache_key(contexts),
+        source_signature,
+        tuple(str(path) for path in source_paths),
     )
+    if metric_frame.empty:
+        return _empty_context()
+
+    district_scores = metric_frame.rename(columns={"raw_metric_value": "bundle_score"}).copy()
+    district_scores["__state_key"] = district_scores["state_name"].astype(str).map(alias)
+    district_scores["__district_key"] = (
+        district_scores["state_name"].astype(str).map(alias)
+        + "|"
+        + district_scores["district_name"].astype(str).map(alias)
+    )
+    district_scores["score_band"] = district_scores["bundle_score"].map(_score_band)
+    district_scores["bundle_score_display"] = district_scores["bundle_score"].map(_format_score)
+
+    state_scores = aggregate_state_bundle_scores(district_scores)
+    state_scores["__state_key"] = state_scores["state_name"].astype(str).map(alias)
+    state_scores["score_band"] = state_scores["bundle_score"].map(_score_band)
+    state_scores["bundle_score_display"] = state_scores["bundle_score"].map(_format_score)
+    state_scores["state_rank"] = (
+        state_scores["bundle_score"].rank(method="min", ascending=False, na_option="bottom")
+        .where(state_scores["bundle_score"].notna())
+    )
+    state_count = int(pd.to_numeric(state_scores["bundle_score"], errors="coerce").notna().sum())
+    state_scores["state_count"] = state_count
+
+    district_scores["district_rank"] = (
+        district_scores.groupby("state_name", dropna=False)["bundle_score"]
+        .rank(method="min", ascending=False, na_option="bottom")
+        .where(district_scores["bundle_score"].notna())
+    )
+    district_scores["district_count"] = (
+        district_scores.groupby("state_name", dropna=False)["bundle_score"]
+        .transform(lambda series: int(pd.to_numeric(series, errors="coerce").notna().sum()))
+    )
+    district_scores = district_scores.merge(
+        state_scores[["state_name", "bundle_score", "state_rank", "state_count"]].rename(
+            columns={"bundle_score": "state_bundle_score"}
+        ),
+        on="state_name",
+        how="left",
+    )
+    return district_scores, state_scores
 
 
 def _build_distribution_frame(score_series: pd.Series) -> pd.DataFrame:
@@ -1778,9 +1878,6 @@ def _render_state_summary(
     state_name: str,
     district_scores: pd.DataFrame,
     state_scores: pd.DataFrame,
-    metric_specs: Sequence[BundleMetricSpec],
-    data_dir: Path,
-    metric_contexts: Sequence[LandingMetricContext],
     deep_dive_disabled: bool = False,
 ) -> None:
     """Render the expanded drawer for state focus."""
@@ -1813,23 +1910,13 @@ def _render_state_summary(
         st.markdown("**District Score Distribution**")
         st.bar_chart(_build_distribution_frame(state_scope["bundle_score"]).set_index("Band"))
 
-        st.markdown("**Metric Drivers**")
-        _render_driver_table(
-            compute_metric_driver_frame(state_scope, metric_specs=metric_specs),
-            top_n=5,
-        )
-
         if st.button(
             "Deep Dive",
             key="landing_deep_dive_state",
             use_container_width=True,
             disabled=deep_dive_disabled,
         ):
-            _enter_deep_dive(
-                st.session_state,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
-            )
+            _enter_deep_dive(st.session_state)
 
 
 def _render_district_summary(
@@ -1837,9 +1924,6 @@ def _render_district_summary(
     state_name: str,
     district_name: str,
     district_scores: pd.DataFrame,
-    metric_specs: Sequence[BundleMetricSpec],
-    data_dir: Path,
-    metric_contexts: Sequence[LandingMetricContext],
     deep_dive_disabled: bool = False,
 ) -> None:
     """Render the district-focus drawer with peer and driver context."""
@@ -1874,28 +1958,13 @@ def _render_district_summary(
                     f"(state average {state_mean:.1f})"
                 )
 
-        st.markdown("**Metric Drivers**")
-        norm_columns = [normalized_metric_column(spec.slug) for spec in metric_specs]
-        driver_source = district_row[[col for col in norm_columns if col in district_row.columns]].copy()
-        if driver_source.empty:
-            st.caption("No driver detail is available for this district.")
-        else:
-            _render_driver_table(
-                compute_metric_driver_frame(district_row, metric_specs=metric_specs),
-                top_n=5,
-            )
-
         if st.button(
             "Deep Dive",
             key="landing_deep_dive_district",
             use_container_width=True,
             disabled=deep_dive_disabled,
         ):
-            _enter_deep_dive(
-                st.session_state,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
-            )
+            _enter_deep_dive(st.session_state)
 
 
 def _render_landing_rankings(
@@ -2052,37 +2121,18 @@ def _render_landing_compare(
 
 def _enter_deep_dive(
     session_state: MutableMapping[str, object],
-    *,
-    data_dir: Path,
-    metric_contexts: Optional[Sequence[LandingMetricContext]] = None,
 ) -> None:
     """Apply the landing -> detailed workflow handoff and rerun the app."""
     bundle_domain = str(session_state.get("landing_bundle") or LANDING_DEFAULT_BUNDLE).strip()
-    metric_options = get_metrics_for_bundle(
-        bundle_domain,
-        spatial_family="admin",
-        level="district",
-    )
-    if not metric_options:
-        st.warning("Deep Dive is unavailable because this bundle has no configured district metrics.")
-        return
-
-    metric_slug = _resolve_first_valid_landing_metric(
-        bundle_domain,
-        scenario=str(session_state.get("landing_scenario") or LANDING_DEFAULT_SCENARIO),
-        period=str(session_state.get("landing_period") or LANDING_DEFAULT_PERIOD),
-        stat=LANDING_SCORE_STAT,
-        data_dir=data_dir,
-        metric_contexts=metric_contexts,
-    )
-    if not metric_slug:
-        st.warning("Deep Dive is unavailable because no valid metric has data for the current scenario-period.")
+    composite_spec = get_composite_metric_for_bundle(bundle_domain)
+    if composite_spec is None:
+        st.warning("Deep Dive is unavailable because this Glance bundle has no configured composite metric.")
         return
 
     handoff = build_deep_dive_handoff(
         session_state,
         bundle_domain=bundle_domain,
-        metric_slug=metric_slug,
+        metric_slug=composite_spec.composite_slug,
     )
     for key, value in handoff.items():
         session_state[key] = value
@@ -2111,15 +2161,13 @@ def render_landing_page(
         st.error("No Glance bundles are available for the landing experience.")
         return
 
-    metric_contexts = _collect_bundle_metric_contexts(bundle_domain, data_dir=data_dir)
-    scenario_options = _intersect_bundle_scenario_period_pairs(metric_contexts)
-    district_scores, state_scores, metric_specs = _prepare_bundle_context(
+    scenario_options = _bundle_scenario_period_options(bundle_domain, data_dir=data_dir)
+    district_scores, state_scores = _prepare_bundle_context(
         bundle_domain,
         scenario=scenario,
         period=period,
         stat=LANDING_SCORE_STAT,
         data_dir=data_dir,
-        metric_contexts=metric_contexts,
     )
     search_options = _build_landing_search_options(state_scores, district_scores)
     if str(st.session_state.get("landing_tab") or LANDING_DEFAULT_TAB) not in LANDING_TABS:
@@ -2182,8 +2230,6 @@ def render_landing_page(
         ):
             _enter_deep_dive(
                 st.session_state,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
             )
     if _apply_landing_search_selection(
         st.session_state,
@@ -2355,25 +2401,19 @@ def render_landing_page(
                 bundle_domain=bundle_domain,
             )
         elif focus_level == "state" and selected_state:
-            _render_state_summary(
-                state_name=selected_state,
-                district_scores=district_scores,
-                state_scores=state_scores,
-                metric_specs=metric_specs,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
-                deep_dive_disabled=not scenario_options,
-            )
+                _render_state_summary(
+                    state_name=selected_state,
+                    district_scores=district_scores,
+                    state_scores=state_scores,
+                    deep_dive_disabled=not scenario_options,
+                )
         elif focus_level == "district" and selected_state and selected_district:
-            _render_district_summary(
-                state_name=selected_state,
-                district_name=selected_district,
-                district_scores=district_scores,
-                metric_specs=metric_specs,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
-                deep_dive_disabled=not scenario_options,
-            )
+                _render_district_summary(
+                    state_name=selected_state,
+                    district_name=selected_district,
+                    district_scores=district_scores,
+                    deep_dive_disabled=not scenario_options,
+                )
 
     st.write("")
     st.radio(

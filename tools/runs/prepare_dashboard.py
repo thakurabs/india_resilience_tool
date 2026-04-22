@@ -348,6 +348,70 @@ def _legacy_master_ready(*, slug: str, level: str, scope_name: str, data_dir: Pa
     return (not df.empty) and required.issubset(set(df.columns))
 
 
+def _resolve_composite_metric_slugs() -> list[str]:
+    from india_resilience_tool.config.composite_metrics import get_visible_glance_composite_slugs
+
+    return list(get_visible_glance_composite_slugs())
+
+
+def _resolve_composite_runtime_scope(
+    *,
+    levels: Sequence[str],
+    admin_states: Sequence[str],
+    data_dir: Path,
+    overwrite: bool,
+) -> BundleRuntimeScope:
+    composite_levels = [level for level in levels if level in {"district", "block"}]
+    selected_metrics = _resolve_composite_metric_slugs() if composite_levels else []
+    pending_metrics: list[str] = []
+    if overwrite:
+        pending_metrics = list(selected_metrics)
+    else:
+        for slug in selected_metrics:
+            for level in composite_levels:
+                if not all(
+                    _legacy_master_ready(
+                        slug=slug,
+                        level=level,
+                        scope_name=state_name,
+                        data_dir=data_dir,
+                    )
+                    for state_name in admin_states
+                ):
+                    pending_metrics.append(slug)
+                    break
+    return BundleRuntimeScope(
+        selected_metrics=selected_metrics,
+        pending_metrics=_dedupe_keep_order(pending_metrics),
+        has_global_issues=False,
+    )
+
+
+def _build_composite_master_steps(
+    args: argparse.Namespace,
+    *,
+    levels: Sequence[str],
+    admin_states: Sequence[str],
+    scope: BundleRuntimeScope,
+) -> list[PlannedCommand]:
+    plan: list[PlannedCommand] = []
+    if not scope.selected_metrics:
+        return plan
+    metrics = _select_metrics_for_execution(scope) or scope.selected_metrics
+    for level in levels:
+        if level not in {"district", "block"}:
+            continue
+        argv = _py_module_cmd("tools.pipeline.build_composite_metrics")
+        argv.extend(["--level", level])
+        _append_repeat(argv, "--state", admin_states)
+        _append_repeat(argv, "--metric", metrics)
+        _append_flag(argv, "--overwrite", bool(getattr(args, "overwrite", False)))
+        if not bool(getattr(args, "verbose", False)):
+            argv.append("--quiet")
+        plan.append(PlannedCommand(label=f"composite-masters:{level}", argv=argv))
+    return plan
+
+
 def _resolve_climate_runtime_scope(
     args: argparse.Namespace,
     *,
@@ -1075,10 +1139,13 @@ def _build_climate_runtime_plan(
     args: argparse.Namespace,
     *,
     scope: ClimateRuntimeScope,
+    extra_metrics: Sequence[str] | None = None,
+    extra_runtime_needed: bool = False,
 ) -> list[PlannedCommand]:
+    selected_metrics = _dedupe_keep_order(list(scope.selected_metrics) + list(extra_metrics or ()))
     if bool(getattr(args, "audit_only", False)):
         return [] if bool(getattr(args, "skip_audit", False)) else [
-            _build_audit_step(args, scope.selected_metrics, levels=scope.levels)
+            _build_audit_step(args, selected_metrics, levels=scope.levels)
         ]
 
     plan: list[PlannedCommand] = []
@@ -1089,7 +1156,7 @@ def _build_climate_runtime_plan(
                 plan.append(
                     _build_optimised_step(
                         args,
-                        scope.selected_metrics,
+                        selected_metrics,
                         levels=scope.levels,
                         label=f"processed-optimised-build:{label_levels}",
                     )
@@ -1113,8 +1180,20 @@ def _build_climate_runtime_plan(
                 plan.append(
                     _build_optimised_step(
                         args,
-                        pending_metrics,
+                        _dedupe_keep_order(list(pending_metrics) + list(extra_metrics or ())),
                         levels=grouped_levels,
+                        label=f"processed-optimised-build:{label_levels}",
+                    )
+                )
+        if extra_runtime_needed and not plan and extra_metrics:
+            admin_levels = [level for level in scope.levels if level in {"district", "block"}]
+            if admin_levels:
+                label_levels = "+".join(admin_levels)
+                plan.append(
+                    _build_optimised_step(
+                        args,
+                        extra_metrics,
+                        levels=admin_levels,
                         label=f"processed-optimised-build:{label_levels}",
                     )
                 )
@@ -1123,7 +1202,7 @@ def _build_climate_runtime_plan(
         plan.append(
             _build_audit_step(
                 args,
-                scope.selected_metrics,
+                selected_metrics,
                 levels=scope.levels,
             )
         )
@@ -1136,9 +1215,17 @@ def build_climate_hazards_plan(
     include_runtime: bool = True,
     runtime_scope: Optional[ClimateRuntimeScope] = None,
 ) -> list[PlannedCommand]:
+    from india_resilience_tool.config.paths import get_paths_config
+
     levels = _resolve_levels(str(args.level))
     admin_states = _resolve_admin_states(getattr(args, "state", None))
     scope = runtime_scope or _resolve_climate_runtime_scope(args, levels=levels)
+    composite_scope = _resolve_composite_runtime_scope(
+        levels=levels,
+        admin_states=admin_states,
+        data_dir=get_paths_config().data_dir,
+        overwrite=bool(getattr(args, "overwrite", False)),
+    )
 
     compute_metrics_by_level = {
         level: list(scope.by_level[level].compute_pending_metrics)
@@ -1171,9 +1258,24 @@ def build_climate_hazards_plan(
                     admin_states=admin_states,
                 )
             )
+            plan.extend(
+                _build_composite_master_steps(
+                    args,
+                    levels=levels,
+                    admin_states=admin_states,
+                    scope=composite_scope,
+                )
+            )
 
     if include_runtime:
-        plan.extend(_build_climate_runtime_plan(args, scope=scope))
+        plan.extend(
+            _build_climate_runtime_plan(
+                args,
+                scope=scope,
+                extra_metrics=composite_scope.selected_metrics if composite_scope.selected_metrics else (),
+                extra_runtime_needed=composite_scope.runtime_needed,
+            )
+        )
     return plan
 
 
@@ -1192,6 +1294,8 @@ def build_validation_plan(args: argparse.Namespace) -> list[PlannedCommand]:
 
 
 def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedCommand]:
+    from india_resilience_tool.config.paths import get_paths_config
+
     if bool(getattr(args, "include_jrc_flood_depth", False)):
         _validate_jrc_inputs(
             args,
@@ -1213,13 +1317,21 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     )
 
     package_scope = BundleRuntimeScope(
-        selected_metrics=_resolve_bundle_metrics("dashboard-package", args),
+        selected_metrics=_dedupe_keep_order(
+            _resolve_bundle_metrics("dashboard-package", args) + _resolve_composite_metric_slugs()
+        ),
         pending_metrics=_dedupe_keep_order(
             climate_scope.pending_metrics
             + aqueduct_scope.pending_metrics
             + population_scope.pending_metrics
             + groundwater_scope.pending_metrics
             + jrc_scope.pending_metrics
+            + _resolve_composite_runtime_scope(
+                levels=climate_levels,
+                admin_states=_resolve_admin_states(getattr(args, "state", None)),
+                data_dir=get_paths_config().data_dir,
+                overwrite=bool(getattr(args, "overwrite", False)),
+            ).pending_metrics
         ),
         has_global_issues=(
             climate_scope.has_global_issues

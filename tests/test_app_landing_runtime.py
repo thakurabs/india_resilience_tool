@@ -706,7 +706,6 @@ def test_render_landing_page_ignores_stale_payloads_until_first_empty_then_accep
                     "bundle_score": [75.0, 55.0],
                 }
             ),
-            [BundleMetricSpec(slug="tas_annual_mean", label="Temperature", column="tas_annual_mean")],
         ),
     )
     monkeypatch.setattr(landing_runtime, "_build_landing_search_options", lambda *args, **kwargs: {})
@@ -807,6 +806,61 @@ def test_build_deep_dive_handoff_requires_non_empty_metric_slug() -> None:
             bundle_domain="Heat Risk",
             metric_slug="",
         )
+
+
+def test_enter_deep_dive_uses_persisted_composite_metric_for_visible_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Heat Stress",
+        "landing_scenario": "ssp585",
+        "landing_period": "2040-2060",
+        "landing_focus_level": "district",
+        "landing_selected_state": "Telangana",
+        "landing_selected_district": "Nalgonda",
+    }
+
+    monkeypatch.setattr(landing_runtime.st, "rerun", lambda: (_ for _ in ()).throw(_DummyRerun()))
+
+    with pytest.raises(_DummyRerun):
+        landing_runtime._enter_deep_dive(session_state)
+
+    assert session_state["selected_bundle"] == "Heat Stress"
+    assert session_state["selected_var"] == "composite_heat_stress"
+    assert session_state["registry_metric"] == "composite_heat_stress"
+
+
+def test_prepare_bundle_context_reads_persisted_composite_metric(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        landing_runtime,
+        "_resolve_metric_master_sources",
+        lambda metric_slug, *, data_dir: (Path("/tmp") / f"{metric_slug}.csv",),
+    )
+    monkeypatch.setattr(
+        landing_runtime,
+        "_load_metric_scenario_period_pairs_cached",
+        lambda metric_slug, source_signature, source_paths: (("ssp585", "2040-2060"),),
+    )
+    monkeypatch.setattr(
+        landing_runtime,
+        "_load_metric_district_values_cached",
+        lambda metric_slug, scenario, period, stat, source_signature, source_paths: pd.DataFrame(
+            {
+                "state_name": ["Telangana", "Telangana"],
+                "district_name": ["A", "B"],
+                "raw_metric_value": [20.0, 80.0],
+            }
+        ),
+    )
+
+    district_scores, state_scores = landing_runtime._prepare_bundle_context(
+        "Heat Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert district_scores["bundle_score"].tolist() == [20.0, 80.0]
+    assert state_scores["bundle_score"].tolist() == [50.0]
 
 def test_build_glance_handoff_from_deep_dive_maps_compatible_district_context() -> None:
     detailed_state = {

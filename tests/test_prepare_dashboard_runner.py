@@ -137,14 +137,17 @@ def test_climate_hazards_bundle_expands_admin_levels_and_adds_runtime_steps() ->
         "climate-compute:block:Karnataka",
         "climate-masters:district",
         "climate-masters:block",
+        "composite-masters:district",
+        "composite-masters:block",
         "processed-optimised-build:district+block",
         "processed-optimised-audit",
     ]
     assert any("--state" in step.argv for step in plan[:4])
     assert "--skip-existing" in plan[0].argv
     assert "--skip-existing" in plan[4].argv
-    assert plan[5].argv[-1] == "--quiet"
-    assert plan[6].argv.count("--level") == 2
+    assert plan[6].argv[-1] == "--quiet"
+    assert plan[7].argv[-1] == "--quiet"
+    assert plan[8].argv.count("--level") == 2
 
 
 def test_climate_hazards_audit_only_only_runs_audit() -> None:
@@ -202,6 +205,34 @@ def test_climate_hazards_skip_optimised_removes_only_build_stage() -> None:
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
     assert [step.label for step in plan][-1] == "processed-optimised-audit"
     assert "processed-optimised-build" not in [step.label for step in plan]
+
+
+def test_climate_hazards_skip_masters_skips_composite_stage() -> None:
+    args = argparse.Namespace(
+        level="admin",
+        state=["Telangana"],
+        metrics=["tas_annual_mean"],
+        models=None,
+        scenarios=None,
+        workers=None,
+        verbose=False,
+        spi_legacy=False,
+        spi_distribution=None,
+        skip_compute=False,
+        skip_masters=True,
+        overwrite=False,
+        audit_only=False,
+        skip_optimised=True,
+        skip_audit=False,
+    )
+    scope = _climate_scope(
+        levels=["district", "block"],
+        pending_by_level={"district": ["tas_annual_mean"], "block": ["tas_annual_mean"]},
+    )
+
+    plan = build_climate_hazards_plan(args, runtime_scope=scope)
+
+    assert not any(step.label.startswith("composite-masters:") for step in plan)
 
 
 def test_climate_hazards_overwrite_passes_flag_to_compute() -> None:
@@ -310,7 +341,8 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
     assert "--overwrite" in plan[0].argv
     assert "--prune-scope" not in plan[0].argv
     assert "--full-rebuild" not in plan[0].argv
-    assert plan[0].argv.count("--metric") == 2
+    assert plan[0].argv.count("--metric") == 8
+    assert "composite_heat_risk" in plan[0].argv
     assert "metric_a" in plan[0].argv
     assert "metric_b" in plan[0].argv
 

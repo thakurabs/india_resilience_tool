@@ -50,6 +50,7 @@ python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 By default the runner is non-destructive and dashboard-oriented:
 - climate runs default to `--level all`
 - climate runs resolve live metrics per requested level
+- admin climate runs now build persisted district/block composite masters for the 6 visible Glance bundles after climate master generation and before optimized refresh
 - JRC `jrc-flood-depth --overwrite` refreshes only the JRC masters/QA and updates optimized outputs in place without wiping unrelated bundle contents
 - the reused `jrc_flood_depth_index_rp100` slug now represents the RP-100 Flood Severity Index derived from RP-100 depth plus RP-100 extent, so operators must rebuild JRC outputs after pulling that methodology change
 - climate compute uses validated completion markers and `--skip-existing` by default unless `--overwrite` is supplied
@@ -68,6 +69,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers, optional `--skip-existing`, and targeted `--overwrite` cleanup for the selected slice | `python -m tools.pipeline.compute_indices_multiprocess --help` |
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
 | `tools/pipeline/build_master_metrics.py` | Build admin and hydro master CSVs plus summary sidecars; hydro levels auto-use `processed/{metric}/hydro/` | `python -m tools.pipeline.build_master_metrics --help` |
+| `tools/pipeline/build_composite_metrics.py` | Build persisted district/block composite masters for the 6 visible Glance bundles under `processed/<composite_slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}` | `python -m tools.pipeline.build_composite_metrics --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
 
 ## Diagnostics
