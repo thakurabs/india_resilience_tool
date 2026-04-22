@@ -115,6 +115,7 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
 
     heat_stress_metrics = get_metrics_for_bundle("Heat Stress", spatial_family="admin", level="district")
     assert heat_stress_metrics == [
+        "composite_heat_stress",
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
@@ -155,6 +156,7 @@ def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
 
     cold_risk_metrics = get_metrics_for_bundle("Cold Risk", spatial_family="admin", level="district")
     assert cold_risk_metrics == [
+        "composite_cold_risk",
         "tas_winter_mean",
         "tasmin_winter_mean",
         "tnn_annual_min",
@@ -189,6 +191,7 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
 
     drought_metrics = get_metrics_for_bundle("Drought Risk", spatial_family="admin", level="district")
     assert drought_metrics == [
+        "composite_drought_risk",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
@@ -202,6 +205,7 @@ def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
         level="district",
     )
     assert flood_metrics == [
+        "composite_flood_extreme_rainfall_risk",
         "pr_max_1day_precip",
         "pr_max_5day_precip",
         "r20mm_very_heavy_precip_days",
@@ -218,6 +222,7 @@ def test_agriculture_bundle_membership_is_the_approved_nine_metric_mix() -> None
         level="district",
     )
     assert agriculture_metrics == [
+        "composite_agriculture_growing_conditions",
         "gsl_growing_season",
         "tasmax_summer_mean",
         "tasmin_winter_mean",
@@ -231,6 +236,34 @@ def test_agriculture_bundle_membership_is_the_approved_nine_metric_mix() -> None
     assert METRICS_BY_SLUG["prcptot_annual_total"].rank_higher_is_worse is False
 
 
+def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hydro() -> None:
+    expected = {
+        "Heat Risk": "composite_heat_risk",
+        "Drought Risk": "composite_drought_risk",
+        "Flood & Extreme Rainfall Risk": "composite_flood_extreme_rainfall_risk",
+        "Heat Stress": "composite_heat_stress",
+        "Cold Risk": "composite_cold_risk",
+        "Agriculture & Growing Conditions": "composite_agriculture_growing_conditions",
+    }
+
+    for domain, slug in expected.items():
+        district_metrics = get_metrics_for_bundle(domain, spatial_family="admin", level="district")
+        block_metrics = get_metrics_for_bundle(domain, spatial_family="admin", level="block")
+        assert district_metrics[0] == slug
+        assert block_metrics[0] == slug
+        assert slug not in get_metrics_for_bundle(domain, spatial_family="hydro", level="basin")
+
+        spec = METRICS_BY_SLUG[slug]
+        assert spec.source_type == "derived"
+        assert spec.selection_mode == "scenario_period"
+        assert spec.supported_statistics == ("mean",)
+        assert spec.supported_spatial_families == ("admin",)
+        assert spec.supported_levels == ("district", "block")
+        assert spec.supports_yearly_trend is False
+        assert spec.supports_baseline_comparison is False
+        assert spec.supports_scenario_comparison is False
+
+
 def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
     pipeline_bundles = get_pipeline_bundles()
     dashboard_only = {
@@ -238,6 +271,12 @@ def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
         "aq_interannual_variability",
         "aq_seasonal_variability",
         "aq_water_depletion",
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
+        "jrc_flood_depth_rp10",
+        "jrc_flood_depth_rp50",
+        "jrc_flood_depth_rp100",
+        "jrc_flood_depth_rp500",
     }
     assert dashboard_only.isdisjoint({slug for slugs in pipeline_bundles.values() for slug in slugs})
     for slug in dashboard_only:
@@ -306,7 +345,11 @@ def test_population_exposure_domain_is_admin_only() -> None:
 
 def test_groundwater_domain_is_admin_district_only() -> None:
     admin_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="district")
-    assert admin_domains == ["Aqueduct Water Risk", "Groundwater Status & Availability"]
+    assert admin_domains == [
+        "Aqueduct Water Risk",
+        "Groundwater Status & Availability",
+        "Flood Inundation Depth (JRC)",
+    ]
     admin_metrics = set(
         get_metrics_for_bundle("Groundwater Status & Availability", spatial_family="admin", level="district")
     )
@@ -318,4 +361,50 @@ def test_groundwater_domain_is_admin_district_only() -> None:
     }
 
     block_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="block")
-    assert block_domains == ["Aqueduct Water Risk"]
+    assert block_domains == ["Aqueduct Water Risk", "Flood Inundation Depth (JRC)"]
+
+
+def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None:
+    district_metrics = get_metrics_for_bundle(
+        "Flood Inundation Depth (JRC)",
+        spatial_family="admin",
+        level="district",
+    )
+    block_metrics = get_metrics_for_bundle(
+        "Flood Inundation Depth (JRC)",
+        spatial_family="admin",
+        level="block",
+    )
+    assert district_metrics == [
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
+        "jrc_flood_depth_rp10",
+        "jrc_flood_depth_rp50",
+        "jrc_flood_depth_rp100",
+        "jrc_flood_depth_rp500",
+    ]
+    assert block_metrics == district_metrics
+    assert get_metrics_for_bundle(
+        "Flood Inundation Depth (JRC)",
+        spatial_family="hydro",
+        level="basin",
+    ) == []
+    spec = METRICS_BY_SLUG["jrc_flood_depth_index_rp100"]
+    assert spec.supported_admin_states == ("Telangana",)
+    assert spec.fixed_period == "Current"
+    assert spec.supports_yearly_trend is False
+    assert spec.supports_baseline_comparison is False
+    assert spec.supports_scenario_comparison is False
+    assert spec.label == "Flood Severity Index (RP-100)"
+    assert spec.class_display_mode == "label_with_score"
+    assert spec.class_labels == {
+        1: "VeryLow",
+        2: "Low",
+        3: "Moderate",
+        4: "High",
+        5: "Extreme",
+    }
+    extent_spec = METRICS_BY_SLUG["jrc_flood_extent_rp100"]
+    assert extent_spec.units == "fraction"
+    assert extent_spec.display_units == "%"
+    assert extent_spec.display_scale == 100.0

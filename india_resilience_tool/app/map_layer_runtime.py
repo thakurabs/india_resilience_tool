@@ -401,6 +401,7 @@ def build_folium_map_for_selection(
             map_mode=map_mode,
             has_baseline=bool(baseline_col and (baseline_col in getattr(merged, "columns", []))),
             rank_scope_label=rank_scope_label,
+            metric_slug=metric_col,
         )
 
         highlight_fn = lambda _f: {

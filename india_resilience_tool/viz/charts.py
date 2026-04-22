@@ -38,9 +38,10 @@ PathLike = Union[str, Path]
 # Scenario / period helpers (index-agnostic)
 # -------------------------
 
-SCENARIO_ORDER = ["historical", "ssp245", "ssp585", "bau", "opt", "pes"]
+SCENARIO_ORDER = ["snapshot", "historical", "ssp245", "ssp585", "bau", "opt", "pes"]
 
 SCENARIO_DISPLAY = {
+    "snapshot": "Snapshot",
     "historical": "Historical",
     "ssp245": "SSP2-4.5",
     "ssp585": "SSP5-8.5",
@@ -121,6 +122,7 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{a:.3f})"
 
 PERIOD_ORDER = [
+    "Current",
     "1979-2019",
     "1990-2010",
     "2020-2040",
@@ -133,6 +135,7 @@ PERIOD_ORDER = [
 
 # Human-friendly labels used in UI and chart axes (keys must match PERIOD_ORDER)
 PERIOD_DISPLAY: dict[str, str] = {
+    "Current": "Current",
     "1979-2019": "Baseline (1979-2019)",
     "1990-2010": "1990–2010",
     "2020-2040": "Early century (2020–2040)",

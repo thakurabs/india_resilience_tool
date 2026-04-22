@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
 
+from india_resilience_tool.config.composite_metrics import VISIBLE_GLANCE_COMPOSITES
+
 
 def infer_group_from_var(var: str) -> str:
     """
@@ -28,6 +30,15 @@ def infer_group_from_var(var: str) -> str:
     if v in {"pr", "precip", "precipitation"}:
         return "rain"
     return "other"
+
+
+SEVERITY_CLASS_LABELS: dict[int, str] = {
+    1: "VeryLow",
+    2: "Low",
+    3: "Moderate",
+    4: "High",
+    5: "Extreme",
+}
 
 
 @dataclass(frozen=True)
@@ -51,6 +62,10 @@ class MetricSpec:
     vars: Optional[Sequence[str]] = None
     value_col: Optional[str] = None
     units: Optional[str] = None
+    display_units: Optional[str] = None
+    display_scale: float = 1.0
+    class_labels: Optional[Mapping[int, str]] = None
+    class_display_mode: Optional[str] = None
     compute: Optional[str] = None
     params: Mapping[str, Any] = field(default_factory=dict)
 
@@ -72,6 +87,7 @@ class MetricSpec:
     preferred_period_order: Sequence[str] = field(default_factory=tuple)
     supported_spatial_families: Sequence[str] = field(default_factory=tuple)
     supported_levels: Sequence[str] = field(default_factory=tuple)
+    supported_admin_states: Sequence[str] = field(default_factory=tuple)
 
     # Discovery templates
     district_yearly_candidates: Optional[Sequence[str]] = None
@@ -99,6 +115,10 @@ class MetricSpec:
             vars=tuple(vars_list) if vars_list else None,
             value_col=value_col or None,
             units=str(d.get("units") or "") or None,
+            display_units=str(d.get("display_units") or "") or None,
+            display_scale=float(d.get("display_scale", 1.0) or 1.0),
+            class_labels=d.get("class_labels"),
+            class_display_mode=str(d.get("class_display_mode") or "").strip() or None,
             compute=str(d.get("compute") or "") or None,
             params=d.get("params") or {},
             name=str(d.get("name") or "") or None,
@@ -120,6 +140,7 @@ class MetricSpec:
             preferred_period_order=tuple(str(v) for v in (d.get("preferred_period_order") or ())),
             supported_spatial_families=tuple(str(v) for v in (d.get("supported_spatial_families") or ())),
             supported_levels=tuple(str(v) for v in (d.get("supported_levels") or ())),
+            supported_admin_states=tuple(str(v) for v in (d.get("supported_admin_states") or ())),
             district_yearly_candidates=d.get("district_yearly_candidates"),
             state_yearly_candidates=d.get("state_yearly_candidates"),
         )
@@ -1938,6 +1959,240 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_levels": ("district",),
         "rank_higher_is_worse": True,
     },
+    {
+        "name": "Flood Severity Index (RP-100)",
+        "slug": "jrc_flood_depth_index_rp100",
+        "label": "Flood Severity Index (RP-100)",
+        "group": "water",
+        "value_col": "jrc_flood_depth_index_rp100",
+        "periods_metric_col": "jrc_flood_depth_index_rp100",
+        "units": "severity class (1-5)",
+        "display_units": "",
+        "class_labels": SEVERITY_CLASS_LABELS,
+        "class_display_mode": "label_with_score",
+        "description": (
+            "Telangana-only ordinal severity class derived from RP-100 JRC flood depth "
+            "and RP-100 flood extent using a fixed 5x5 depth-by-extent scoring matrix. "
+            "Depth uses flooded-cell p95 block depth and flooded-area-weighted district "
+            "depth; extent uses the share of total polygon area covered by positive "
+            "modeled depth. Class 1 is VeryLow and class 5 is Extreme. This is an "
+            "externally sourced snapshot severity index, not a climate scenario projection."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "--source-dir <JRC_DIR> --assume-units m --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": ("Telangana",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "RP-100 Flood Extent",
+        "slug": "jrc_flood_extent_rp100",
+        "label": "RP-100 Flood Extent",
+        "group": "water",
+        "value_col": "jrc_flood_extent_rp100",
+        "periods_metric_col": "jrc_flood_extent_rp100",
+        "units": "fraction",
+        "display_units": "%",
+        "display_scale": 100.0,
+        "description": (
+            "Telangana-only JRC RP-100 flood extent, defined as the share of total polygon "
+            "area covered by positive modeled flood depth. Block and district values are "
+            "both based on total polygon area, while raster-supported area is retained as QA."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "--source-dir <JRC_DIR> --assume-units m --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": ("Telangana",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "RP-10 Flood Depth",
+        "slug": "jrc_flood_depth_rp10",
+        "label": "RP-10 Flood Depth",
+        "group": "water",
+        "value_col": "jrc_flood_depth_rp10",
+        "periods_metric_col": "jrc_flood_depth_rp10",
+        "units": "m",
+        "description": (
+            "Telangana-only JRC flood-depth snapshot for the 10-year return period. "
+            "Block values use flooded-cell p95 depth and district values use flooded-area-"
+            "weighted means of child block flooded-cell p95 depth. This is an externally "
+            "sourced inundation layer, not a climate scenario projection."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "--source-dir <JRC_DIR> --assume-units m --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": ("Telangana",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "RP-50 Flood Depth",
+        "slug": "jrc_flood_depth_rp50",
+        "label": "RP-50 Flood Depth",
+        "group": "water",
+        "value_col": "jrc_flood_depth_rp50",
+        "periods_metric_col": "jrc_flood_depth_rp50",
+        "units": "m",
+        "description": (
+            "Telangana-only JRC flood-depth snapshot for the 50-year return period. "
+            "Block values use flooded-cell p95 depth and district values use flooded-area-"
+            "weighted means of child block flooded-cell p95 depth. This is an externally "
+            "sourced inundation layer, not a climate scenario projection."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "--source-dir <JRC_DIR> --assume-units m --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": ("Telangana",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "RP-100 Flood Depth",
+        "slug": "jrc_flood_depth_rp100",
+        "label": "RP-100 Flood Depth",
+        "group": "water",
+        "value_col": "jrc_flood_depth_rp100",
+        "periods_metric_col": "jrc_flood_depth_rp100",
+        "units": "m",
+        "description": (
+            "Telangana-only JRC flood-depth snapshot for the 100-year return period. "
+            "Block values use flooded-cell p95 depth and district values use flooded-area-"
+            "weighted means of child block flooded-cell p95 depth. This is an externally "
+            "sourced inundation layer, not a climate scenario projection."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "--source-dir <JRC_DIR> --assume-units m --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": ("Telangana",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "RP-500 Flood Depth",
+        "slug": "jrc_flood_depth_rp500",
+        "label": "RP-500 Flood Depth",
+        "group": "water",
+        "value_col": "jrc_flood_depth_rp500",
+        "periods_metric_col": "jrc_flood_depth_rp500",
+        "units": "m",
+        "description": (
+            "Telangana-only JRC flood-depth snapshot for the 500-year return period. "
+            "Block values use flooded-cell p95 depth and district values use flooded-area-"
+            "weighted means of child block flooded-cell p95 depth. This is an externally "
+            "sourced inundation layer, not a climate scenario projection."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "--source-dir <JRC_DIR> --assume-units m --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": ("Telangana",),
+        "rank_higher_is_worse": True,
+    },
+    *[
+        {
+            "name": spec.composite_label,
+            "slug": spec.composite_slug,
+            "label": spec.composite_label,
+            "group": "other",
+            "value_col": spec.composite_slug,
+            "periods_metric_col": spec.composite_slug,
+            "units": "score",
+            "display_units": "score",
+            "display_scale": 1.0,
+            "description": (
+                f"Persisted weighted composite hazard score for the {spec.bundle_domain} bundle. "
+                "Computed offline from approved bundle weights and per-scenario-period normalization."
+            ),
+            "source_type": "derived",
+            "supports_yearly_trend": False,
+            "selection_mode": "scenario_period",
+            "supported_statistics": ("mean",),
+            "supports_baseline_comparison": False,
+            "supports_scenario_comparison": False,
+            "admin_rebuild_command": "python -m tools.pipeline.build_composite_metrics",
+            "supported_scenarios": ("ssp245", "ssp585"),
+            "preferred_period_order": ("2020-2040", "2040-2060", "2060-2080"),
+            "supported_spatial_families": spec.supported_spatial_families,
+            "supported_levels": spec.supported_levels,
+            "rank_higher_is_worse": True,
+        }
+        for spec in VISIBLE_GLANCE_COMPOSITES
+    ],
 ]
 
 ALL_METRICS_RAW: list[dict[str, Any]] = PIPELINE_METRICS_RAW + DASHBOARD_ONLY_METRICS_RAW
@@ -1959,6 +2214,7 @@ METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(ALL_METRIC
 
 DOMAINS: dict[str, list[str]] = {
     "Heat Risk": [
+        "composite_heat_risk",
         "tas_annual_mean",
         "txx_annual_max",        
         # Heat thresholds (absolute temperature thresholds)
@@ -1996,6 +2252,7 @@ DOMAINS: dict[str, list[str]] = {
         # "tasmin_annual_mean",
     ],
     "Heat Stress": [
+        "composite_heat_stress",
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
@@ -2009,6 +2266,7 @@ DOMAINS: dict[str, list[str]] = {
         "twb_days_ge_28",
     ],
     "Cold Risk": [
+        "composite_cold_risk",
         "tas_winter_mean",
         "tasmin_winter_mean",
         "tnn_annual_min",
@@ -2025,6 +2283,7 @@ DOMAINS: dict[str, list[str]] = {
         "tnle10_consecutive_cold_nights",
     ],
     "Agriculture & Growing Conditions": [
+        "composite_agriculture_growing_conditions",
         "gsl_growing_season",
         "tasmax_summer_mean",
         "tasmin_winter_mean",
@@ -2036,6 +2295,7 @@ DOMAINS: dict[str, list[str]] = {
         "prcptot_annual_total",
     ],
     "Flood & Extreme Rainfall Risk": [
+        "composite_flood_extreme_rainfall_risk",
         # Peak intensity
         "pr_max_1day_precip",
         "pr_max_5day_precip",
@@ -2060,6 +2320,7 @@ DOMAINS: dict[str, list[str]] = {
         "rain_gt_2p5mm",
     ],
     "Drought Risk": [
+        "composite_drought_risk",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
@@ -2104,6 +2365,14 @@ DOMAINS: dict[str, list[str]] = {
         "gw_extractable_resource_ham",
         "gw_total_extraction_ham",
     ],
+    "Flood Inundation Depth (JRC)": [
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
+        "jrc_flood_depth_rp10",
+        "jrc_flood_depth_rp50",
+        "jrc_flood_depth_rp100",
+        "jrc_flood_depth_rp500",
+    ],
 }
 
 # Domain display order for UI
@@ -2120,6 +2389,7 @@ DOMAIN_ORDER: list[str] = [
     "Population Exposure",
     "Aqueduct Water Risk",
     "Groundwater Status & Availability",
+    "Flood Inundation Depth (JRC)",
 ]
 
 PILLAR_DOMAINS: dict[str, list[str]] = {
@@ -2137,6 +2407,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
     "Bio-physical Hazards": [
         "Aqueduct Water Risk",
         "Groundwater Status & Availability",
+        "Flood Inundation Depth (JRC)",
     ],
     "Exposure": [
         "Population Exposure",
@@ -2181,6 +2452,13 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "District groundwater assessment layers from the 2024-2025 GEC workbook, "
         "covering extraction stage, extractable resource, total extraction, and "
         "future groundwater availability."
+    ),
+    "Flood Inundation Depth (JRC)": (
+        "Telangana-only JRC flood snapshot domain covering the derived RP-100 "
+        "Flood Severity Index, RP-100 Flood Extent, plus RP-10, RP-50, RP-100, "
+        "and RP-500 depth layers. Flood extent uses total polygon area, while "
+        "depth layers use flooded-cell p95 block depth and flooded-area-weighted "
+        "district rollups."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "
@@ -2305,6 +2583,10 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             # Backwards compatible: some codepaths look for "unit"
             "units": units,
             "unit": units,
+            "display_units": str(spec.display_units or "").strip(),
+            "display_scale": float(spec.display_scale),
+            "class_labels": dict(spec.class_labels or {}),
+            "class_display_mode": spec.class_display_mode,
             "description": spec.description or "",
             "source_type": spec.source_type,
             "supports_yearly_trend": bool(spec.supports_yearly_trend),
@@ -2320,6 +2602,7 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             "preferred_period_order": list(spec.preferred_period_order),
             "supported_spatial_families": list(spec.supported_spatial_families),
             "supported_levels": list(spec.supported_levels),
+            "supported_admin_states": list(spec.supported_admin_states),
             "domains": domains_for_slug,
             "pillars": pillars_for_slug,
             "district_yearly_candidates": district_yearly_candidates,

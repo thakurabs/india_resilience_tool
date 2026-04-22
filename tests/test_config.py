@@ -132,3 +132,84 @@ def test_groundwater_metrics_are_exposed_as_static_district_layers() -> None:
         assert cfg["rank_higher_is_worse"] is worse_high
         assert "Groundwater Status & Availability" in cfg["domains"]
         assert "Bio-physical Hazards" in cfg["pillars"]
+
+
+def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
+    """JRC metrics should appear as static Telangana-only admin layers."""
+    from india_resilience_tool.config.variables import VARIABLES
+
+    for slug, label in [
+        ("jrc_flood_depth_index_rp100", "Flood Severity Index (RP-100)"),
+        ("jrc_flood_extent_rp100", "RP-100 Flood Extent"),
+        ("jrc_flood_depth_rp10", "RP-10 Flood Depth"),
+        ("jrc_flood_depth_rp50", "RP-50 Flood Depth"),
+        ("jrc_flood_depth_rp100", "RP-100 Flood Depth"),
+        ("jrc_flood_depth_rp500", "RP-500 Flood Depth"),
+    ]:
+        cfg = VARIABLES[slug]
+        assert cfg["label"] == label
+        assert cfg["source_type"] == "external"
+        assert cfg["selection_mode"] == "static_snapshot"
+        assert cfg["fixed_scenario"] == "snapshot"
+        assert cfg["fixed_period"] == "Current"
+        assert cfg["supported_scenarios"] == ["snapshot"]
+        assert cfg["supported_levels"] == ["district", "block"]
+        assert cfg["supported_spatial_families"] == ["admin"]
+        assert cfg["supported_statistics"] == ["mean"]
+        assert cfg["supports_yearly_trend"] is False
+        assert cfg["supports_baseline_comparison"] is False
+        assert cfg["supports_scenario_comparison"] is False
+        assert cfg["supported_admin_states"] == ["Telangana"]
+        if slug == "jrc_flood_depth_index_rp100":
+            assert cfg["units"] == "severity class (1-5)"
+            assert cfg["display_units"] == ""
+            assert cfg["class_display_mode"] == "label_with_score"
+            assert cfg["class_labels"][1] == "VeryLow"
+        elif slug == "jrc_flood_extent_rp100":
+            assert cfg["units"] == "fraction"
+            assert cfg["display_units"] == "%"
+            assert cfg["display_scale"] == 100.0
+        else:
+            assert cfg["units"] == "m"
+        assert "Flood Inundation Depth (JRC)" in cfg["domains"]
+        assert "Bio-physical Hazards" in cfg["pillars"]
+
+
+def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> None:
+    from india_resilience_tool.config.variables import VARIABLES
+
+    for slug, label, domain in [
+        ("composite_heat_risk", "Composite Heat Risk", "Heat Risk"),
+        ("composite_drought_risk", "Composite Drought Risk", "Drought Risk"),
+        (
+            "composite_flood_extreme_rainfall_risk",
+            "Composite Flood & Extreme Rainfall Risk",
+            "Flood & Extreme Rainfall Risk",
+        ),
+        ("composite_heat_stress", "Composite Heat Stress", "Heat Stress"),
+        ("composite_cold_risk", "Composite Cold Risk", "Cold Risk"),
+        (
+            "composite_agriculture_growing_conditions",
+            "Composite Agriculture & Growing Conditions",
+            "Agriculture & Growing Conditions",
+        ),
+    ]:
+        cfg = VARIABLES[slug]
+        assert cfg["label"] == label
+        assert cfg["source_type"] == "derived"
+        assert cfg["selection_mode"] == "scenario_period"
+        assert cfg["supported_levels"] == ["district", "block"]
+        assert cfg["supported_spatial_families"] == ["admin"]
+        assert cfg["supported_statistics"] == ["mean"]
+        assert cfg["supports_yearly_trend"] is False
+        assert cfg["supports_baseline_comparison"] is False
+        assert cfg["supports_scenario_comparison"] is False
+        assert cfg["supported_scenarios"] == ["ssp245", "ssp585"]
+        assert cfg["units"] == "score"
+        assert domain in cfg["domains"]
+
+
+def test_current_period_display_label_is_stable() -> None:
+    from india_resilience_tool.viz.charts import period_display_label
+
+    assert period_display_label("Current") == "Current"

@@ -40,12 +40,19 @@ python -m tools.runs.prepare_dashboard aqueduct
 ```
 
 ```bash
+python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --plan-only
+```
+
+```bash
 python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 ```
 
 By default the runner is non-destructive and dashboard-oriented:
 - climate runs default to `--level all`
 - climate runs resolve live metrics per requested level
+- admin climate runs now build persisted district/block composite masters for the 6 visible Glance bundles after climate master generation and before optimized refresh
+- JRC `jrc-flood-depth --overwrite` refreshes only the JRC masters/QA and updates optimized outputs in place without wiping unrelated bundle contents
+- the reused `jrc_flood_depth_index_rp100` slug now represents the RP-100 Flood Severity Index derived from RP-100 depth plus RP-100 extent, so operators must rebuild JRC outputs after pulling that methodology change
 - climate compute uses validated completion markers and `--skip-existing` by default unless `--overwrite` is supplied
 - climate `--overwrite` now clears the selected compute marker/output slice before rebuilding, including stale hydro alias trees for the selected scope
 - climate and bundle runs refresh `processed_optimised`
@@ -62,6 +69,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/pipeline/compute_indices_multiprocess.py` | Build processed climate index artifacts for admin and hydro levels, with validated completion markers, optional `--skip-existing`, and targeted `--overwrite` cleanup for the selected slice | `python -m tools.pipeline.compute_indices_multiprocess --help` |
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
 | `tools/pipeline/build_master_metrics.py` | Build admin and hydro master CSVs plus summary sidecars; hydro levels auto-use `processed/{metric}/hydro/` | `python -m tools.pipeline.build_master_metrics --help` |
+| `tools/pipeline/build_composite_metrics.py` | Build persisted district/block composite masters for the 6 visible Glance bundles under `processed/<composite_slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}` | `python -m tools.pipeline.build_composite_metrics --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
 
 ## Diagnostics
@@ -90,6 +98,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for the onboarded Aqueduct hydro metrics under `processed/{metric_slug}/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
 | `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
 | `tools/geodata/build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook with district-alias QA outputs | `python -m tools.geodata.build_groundwater_district_masters --help` |
+| `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth masters using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 flood-index and flood-extent masters and stable QA CSVs | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
 | `tools/optimized/build_processed_optimised.py` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree plus canonical geometry/context files, with exact pre-scan task counting, deterministic parallel yearly processing, level filtering, nested terminal progress bars, and a post-build parity audit | `python -m tools.optimized.build_processed_optimised --help` |
 | `tools/optimized/audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the dashboard-visible legacy processed contract, with optional level filtering, and emit `parity_report.json` | `python -m tools.optimized.audit_processed_optimised_parity --help` |
 | `tools/geodata/validate_aqueduct_workflow.py` | Validate the Aqueduct cleanup, crosswalk, coverage, sensitivity, and master-value workflow and write per-metric validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/` | `python -m tools.geodata.validate_aqueduct_workflow --help` |
@@ -231,6 +240,10 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
     - `context/hydro_subbasin_index.parquet`
 - terminal UX:
   - exact pre-scan task counting before execution
+  - `--overwrite` rewrites only the selected optimized targets in place
+  - `--overwrite --prune-scope` deletes stale files only inside the selected metric/level ownership roots before rewriting
+  - `--full-rebuild` is the explicit destructive whole-bundle reset
+  - `--dry-run` prints the resolved write/delete plan without mutating the bundle
   - yearly-model and yearly-ensemble stages use deterministic process-parallel execution by default at roughly `80%` of logical CPUs
   - `--workers <N>` overrides the default worker count
   - `--workers 1` forces serial execution

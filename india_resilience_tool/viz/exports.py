@@ -36,6 +36,7 @@ from india_resilience_tool.viz.charts import (
     create_trend_figure_for_index,
     make_scenario_comparison_figure,
 )
+from india_resilience_tool.viz.formatting import format_metric_compact, get_metric_display_units
 from india_resilience_tool.viz.style import (
     IRTFigureStyle,
     add_ra_logo,
@@ -839,7 +840,10 @@ def make_district_case_study_pdf(
                     continue
 
                 idx_label = row_idx.get("index_label", slug)
-                units = str(row_idx.get("units") or row_idx.get("unit") or "").strip()
+                units = get_metric_display_units(
+                    metric_slug=slug,
+                    units=str(row_idx.get("units") or row_idx.get("unit") or "").strip(),
+                )
 
                 ts = ts_dict.get(slug, {}) or {}
                 hist_ts = ts.get("historical", pd.DataFrame())
@@ -1017,15 +1021,9 @@ def make_district_case_study_pdf(
                         def _fmt_num(val: object, unit_str: str, *, add_unit: bool = True) -> str:
                             if val is None or (isinstance(val, float) and pd.isna(val)):
                                 return ""
-                            try:
-                                d = _decimals_for_units(unit_str)
-                                num = float(val)
-                                s_num = f"{num:.{d}f}"
-                                if add_unit and unit_str:
-                                    return f"{s_num} {unit_str}"
-                                return s_num
-                            except Exception:
-                                return ""
+                            if add_unit:
+                                return format_metric_compact(val, metric_slug=slug, units=unit_str, na="")
+                            return format_metric_compact(val, metric_slug=slug, units=unit_str, na="").replace(unit_str, "").strip()
 
                         current_s = _fmt_num(row_idx.get("current"), u, add_unit=True)
                         baseline_s = _fmt_num(row_idx.get("baseline"), u, add_unit=True)
@@ -1169,7 +1167,10 @@ def make_district_case_study_pdf(
                     # Build cell text (row-specific unit-aware formatting).
                     cell_text: list[list[str]] = []
                     for _, r in chunk.iterrows():
-                        units = str(r.get("units") or r.get("unit") or "").strip()
+                        units = get_metric_display_units(
+                            metric_slug=str(r.get("index_slug") or "").strip(),
+                            units=str(r.get("units") or r.get("unit") or "").strip(),
+                        )
                         dec = _decimals_for_units(units)
                         idx_label = str(r.get("index_label") or r.get("index_slug") or "").strip()
                         if units and units not in idx_label:
@@ -1185,7 +1186,15 @@ def make_district_case_study_pdf(
                                 grp_disp = grp.replace("_", " ").title() if grp else ""
                                 row_cells.append(_wrap_text(grp_disp, c["wrap"]) if c["wrap"] else grp_disp)
                             elif key in {"current", "baseline", "delta_abs"}:
-                                row_cells.append(_fmt_float(r.get(key), dec))
+                                row_cells.append(
+                                    format_metric_compact(
+                                        r.get(key),
+                                        metric_slug=str(r.get("index_slug") or "").strip(),
+                                        units=units,
+                                        decimals=dec,
+                                        na="",
+                                    )
+                                )
                             elif key == "delta_pct":
                                 row_cells.append(_fmt_float(r.get(key), 1))
                             elif key == "percentile_in_state":

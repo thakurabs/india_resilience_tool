@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, Optional, Sequence
+from typing import Any, Mapping, MutableMapping, NamedTuple, Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,7 @@ from india_resilience_tool.analysis.bundle_scores import (
     normalized_metric_column,
 )
 from india_resilience_tool.config.bundle_weights import get_bundle_weights
+from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.views.map_view import (
     build_choropleth_map_with_geojson_layer,
@@ -34,8 +35,8 @@ from india_resilience_tool.app.views.map_view import (
 from india_resilience_tool.config.constants import MAX_LAT, MAX_LON, MIN_LAT, MIN_LON
 from india_resilience_tool.config.variables import (
     VARIABLES,
-    get_domains_for_pillar,
     get_metrics_for_bundle,
+    get_pillar_for_domain,
 )
 from india_resilience_tool.data.master_columns import resolve_metric_column
 from india_resilience_tool.data.master_loader import (
@@ -71,6 +72,11 @@ LANDING_SCORE_STAT = "mean"
 LANDING_SEARCH_PLACEHOLDER = "Search geography..."
 LANDING_COMPARE_KEY = "landing_compare_selection"
 LANDING_SCENARIO_PAIR_KEY = "landing_context_pair"
+LANDING_MAP_CLICK_TOKEN_KEY = "landing_last_map_click_token"
+LANDING_PENDING_MAP_TRANSITION_KEY = "landing_pending_map_transition"
+LANDING_MAP_REPLAY_GUARD_KEY = "landing_map_replay_guard"
+LANDING_MAP_CONTEXT_KEY = "landing_map_context"
+LANDING_MAP_INPUT_ARMED_KEY = "landing_map_input_armed"
 LANDING_TABS = ("Rankings", "Compare")
 
 LANDING_DOMAIN_DISPLAY: dict[str, str] = {
@@ -95,6 +101,7 @@ LANDING_DOMAIN_ORDER: tuple[str, ...] = (
 LANDING_VISIBLE_DOMAINS: tuple[str, ...] = LANDING_DOMAIN_ORDER
 
 LANDING_PERIOD_SHORT_LABELS: dict[str, str] = {
+    "Current": "Current",
     "2020-2040": "Early century",
     "2040-2060": "Mid-century",
     "2060-2080": "End century",
@@ -111,6 +118,58 @@ class LandingMetricContext:
     available_pairs: tuple[tuple[str, str], ...]
 
 
+@dataclass(frozen=True)
+class LandingDriverContext:
+    """Best-effort component-metric context used only for Glance driver display."""
+
+    district_scores: pd.DataFrame
+    metric_specs: list[BundleMetricSpec]
+    available: bool
+    reason: Optional[str] = None
+
+
+class _ContextKeyEntry(NamedTuple):
+    """Decoded landing bundle-context cache entry."""
+
+    slug: str
+    label: str
+    column: str
+    weight: float
+    higher_is_worse: bool
+    source_signature: tuple[tuple[str, Optional[float]], ...]
+    source_paths: tuple[str, ...]
+    available_pairs: tuple[tuple[str, str], ...]
+
+
+def _clear_landing_map_click_token(session_state: MutableMapping[str, object]) -> None:
+    """Drop any stored landing map-click debounce token."""
+    session_state.pop(LANDING_MAP_CLICK_TOKEN_KEY, None)
+
+
+def _clear_landing_map_replay_guard(session_state: MutableMapping[str, object]) -> None:
+    """Drop the short-lived landing replay fingerprint guard."""
+    session_state.pop(LANDING_MAP_REPLAY_GUARD_KEY, None)
+
+
+def _clear_landing_pending_transition_token(session_state: MutableMapping[str, object]) -> None:
+    """Drop only the pending landing transition token."""
+    session_state.pop(LANDING_PENDING_MAP_TRANSITION_KEY, None)
+
+
+def _clear_landing_map_input_gate(session_state: MutableMapping[str, object]) -> None:
+    """Drop the current landing map-context settle gate state."""
+    session_state.pop(LANDING_MAP_CONTEXT_KEY, None)
+    session_state.pop(LANDING_MAP_INPUT_ARMED_KEY, None)
+
+
+def _clear_landing_pending_map_transition(session_state: MutableMapping[str, object]) -> None:
+    """Drop pending landing map transitions and all short-lived map interaction state."""
+    _clear_landing_pending_transition_token(session_state)
+    _clear_landing_map_replay_guard(session_state)
+    _clear_landing_map_click_token(session_state)
+    _clear_landing_map_input_gate(session_state)
+
+
 def _landing_defaults() -> dict[str, object]:
     """Return the landing-mode session defaults."""
     return {
@@ -122,6 +181,11 @@ def _landing_defaults() -> dict[str, object]:
         "landing_selected_state": None,
         "landing_selected_district": None,
         "landing_tab": LANDING_DEFAULT_TAB,
+        "landing_search_selection": None,
+        "landing_search_last_applied": None,
+        "landing_search_reset_pending": False,
+        LANDING_MAP_CONTEXT_KEY: None,
+        LANDING_MAP_INPUT_ARMED_KEY: False,
     }
 
 
@@ -135,6 +199,9 @@ def sync_landing_widget_state(session_state: MutableMapping[str, object]) -> Non
 
 def ensure_landing_state(session_state: MutableMapping[str, object]) -> None:
     """Ensure landing-specific session keys exist without clobbering user state."""
+    # Clear legacy replay/debounce state if it lingers from earlier buggy sessions.
+    _clear_landing_map_click_token(session_state)
+    _clear_landing_map_replay_guard(session_state)
     for key, value in _landing_defaults().items():
         if key not in session_state:
             session_state[key] = value
@@ -178,6 +245,117 @@ def apply_landing_back(session_state: MutableMapping[str, object]) -> None:
     set_landing_focus_india(session_state)
 
 
+def _apply_landing_search_selection(
+    session_state: MutableMapping[str, object],
+    *,
+    search_selection: Optional[str],
+    search_options: Mapping[str, tuple[str, Optional[str], Optional[str]]],
+) -> bool:
+    """Apply a landing search selection once and report whether a rerun is needed."""
+    selection = str(search_selection or "").strip()
+    if not selection or selection == str(session_state.get("landing_search_last_applied") or "").strip():
+        return False
+
+    resolved = search_options.get(selection)
+    if resolved is None:
+        return False
+
+    search_kind, state_name, district_name = resolved
+    session_state["landing_search_last_applied"] = selection
+    session_state["landing_search_reset_pending"] = True
+    _clear_landing_pending_map_transition(session_state)
+
+    if search_kind == "state" and state_name:
+        set_landing_focus_state(session_state, state_name)
+        return True
+    if search_kind == "district" and state_name and district_name:
+        set_landing_focus_district(session_state, state_name, district_name)
+        return True
+    return False
+
+
+def _landing_pending_map_transition(
+    *,
+    focus_level: str,
+    state_name: Optional[str],
+    district_name: Optional[str],
+) -> Optional[tuple[str, str, str]]:
+    """Return a stable token for one landing focus transition target."""
+    focus_value = str(focus_level or "").strip().lower()
+    if focus_value not in {"state", "district"}:
+        return None
+    return (
+        focus_value,
+        alias(str(state_name or "").strip()),
+        alias(str(district_name or "").strip()),
+    )
+
+
+def _queue_landing_map_transition(
+    session_state: MutableMapping[str, object],
+    *,
+    action: str,
+    state_name: Optional[str],
+    district_name: Optional[str],
+) -> bool:
+    """Apply one landing map click and mark the resulting rerun as pending."""
+    action_value = str(action or "").strip().lower()
+    if action_value not in {"focus_state", "focus_district"}:
+        return False
+
+    focus_level = "state" if action_value == "focus_state" else "district"
+    if focus_level == "state" and not state_name:
+        return False
+    if focus_level == "district" and (not state_name or not district_name):
+        return False
+
+    token = _landing_pending_map_transition(
+        focus_level=focus_level,
+        state_name=state_name,
+        district_name=district_name,
+    )
+    if token is None:
+        return False
+
+    session_state[LANDING_PENDING_MAP_TRANSITION_KEY] = token
+    if focus_level == "state" and state_name:
+        set_landing_focus_state(session_state, state_name)
+        return True
+    if focus_level == "district" and state_name and district_name:
+        set_landing_focus_district(session_state, state_name, district_name)
+        return True
+    return False
+
+
+def _consume_pending_landing_map_transition(
+    session_state: MutableMapping[str, object],
+    *,
+    focus_level: str,
+    selected_state: Optional[str],
+    selected_district: Optional[str],
+) -> bool:
+    """Suppress one replayed map payload after a successful landing transition rerun."""
+    pending = session_state.get(LANDING_PENDING_MAP_TRANSITION_KEY)
+    if not isinstance(pending, (tuple, list)) or len(pending) != 3:
+        return False
+
+    expected = _landing_pending_map_transition(
+        focus_level=focus_level,
+        state_name=selected_state,
+        district_name=selected_district,
+    )
+    pending_token = (
+        str(pending[0]).strip().lower(),
+        alias(str(pending[1]).strip()),
+        alias(str(pending[2]).strip()),
+    )
+    if expected != pending_token:
+        return False
+
+    _clear_landing_pending_transition_token(session_state)
+    return True
+
+
 def build_deep_dive_handoff(
     landing_state: Mapping[str, object],
     *,
@@ -187,7 +365,8 @@ def build_deep_dive_handoff(
     """
     Build the detailed-flow session-state handoff from the landing context.
 
-    The landing flow always hands off into the climate-hazards admin workflow.
+    The landing flow always hands off into the admin deep-dive workflow for the
+    selected landing bundle/domain.
     """
     metric_slug = str(metric_slug).strip()
     if not metric_slug:
@@ -196,10 +375,9 @@ def build_deep_dive_handoff(
     focus_level = str(landing_state.get("landing_focus_level", "india")).strip().lower()
     selected_state = str(landing_state.get("landing_selected_state") or "").strip()
     selected_district = str(landing_state.get("landing_selected_district") or "").strip()
-
+    selected_pillar = get_pillar_for_domain(bundle_domain) or "Climate Hazards"
     pending_state = selected_state if focus_level in {"state", "district"} and selected_state else "All"
     pending_district = selected_district if focus_level == "district" and selected_district else "All"
-
     return {
         "landing_active": False,
         "spatial_family": "admin",
@@ -207,7 +385,7 @@ def build_deep_dive_handoff(
         "analysis_mode": "Single district focus",
         "active_view": "Map view",
         "main_view_selector": "Map view",
-        "selected_pillar": "Climate Hazards",
+        "selected_pillar": selected_pillar,
         "selected_bundle": bundle_domain,
         "selected_var": metric_slug,
         "registry_metric": str(VARIABLES.get(metric_slug, {}).get("periods_metric_col") or metric_slug),
@@ -250,11 +428,15 @@ def build_glance_handoff_from_deep_dive(
     selected_bundle = str(detailed_state.get("selected_bundle") or "").strip()
     sel_scenario = str(detailed_state.get("sel_scenario") or "").strip()
     sel_period = str(detailed_state.get("sel_period") or "").strip()
+    bundle_pillar = get_pillar_for_domain(selected_bundle)
+    visible_bundles = set(_landing_bundle_domains())
 
     if not (
         spatial_family == "admin"
         and admin_level == "district"
-        and selected_pillar == "Climate Hazards"
+        and selected_bundle in visible_bundles
+        and bundle_pillar
+        and selected_pillar == bundle_pillar
         and selected_bundle
         and sel_scenario
         and sel_period
@@ -294,15 +476,12 @@ def build_glance_handoff_from_deep_dive(
 
 def _landing_bundle_domains() -> list[str]:
     """Return the supported landing bundles in a stable UX order."""
-    climate_domains = set(
-        get_domains_for_pillar(
-            "Climate Hazards",
-            spatial_family="admin",
-            level="district",
-        )
-    )
-    visible_domains = climate_domains.intersection(LANDING_VISIBLE_DOMAINS)
-    ordered = [domain for domain in LANDING_DOMAIN_ORDER if domain in visible_domains]
+    visible_domains = [
+        domain
+        for domain in LANDING_VISIBLE_DOMAINS
+        if get_metrics_for_bundle(domain, spatial_family="admin", level="district")
+    ]
+    ordered = [domain for domain in LANDING_DOMAIN_ORDER if domain in set(visible_domains)]
     if ordered:
         return ordered
     return sorted(visible_domains)
@@ -456,7 +635,7 @@ def _load_metric_scenario_period_pairs_cached(
     metric_base = str(VARIABLES.get(metric_slug, {}).get("periods_metric_col") or metric_slug).strip()
     items = by_metric.get(metric_base, []) or schema_items
 
-    allowed_scenarios = {"ssp245", "ssp585"}
+    allowed_scenarios = {"ssp245", "ssp585", "snapshot"}
     pairs = {
         (str(item["scenario"]).strip().lower(), canonical_period_label(str(item["period"]).strip()))
         for item in items
@@ -513,15 +692,37 @@ def _load_metric_district_values_cached(
     return grouped
 
 
+def _landing_metric_slugs(bundle_domain: str) -> list[str]:
+    """Return the ordered metric slugs that define one landing bundle."""
+    configured_weights = tuple(get_bundle_weights(bundle_domain))
+    available_metrics = set(
+        get_metrics_for_bundle(bundle_domain, spatial_family="admin", level="district")
+    )
+    if configured_weights:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for entry in configured_weights:
+            slug = str(entry.metric_slug).strip()
+            if slug in seen:
+                raise ValueError(f"Bundle {bundle_domain!r} repeats weighted metric slug {slug!r}.")
+            if slug not in VARIABLES:
+                raise ValueError(f"Bundle {bundle_domain!r} references unknown weighted metric slug {slug!r}.")
+            if slug not in available_metrics:
+                raise ValueError(
+                    f"Bundle {bundle_domain!r} references weighted metric slug {slug!r} "
+                    "that is not available for admin/district landing."
+                )
+            seen.add(slug)
+            ordered.append(slug)
+        return ordered
+    return get_metrics_for_bundle(bundle_domain, spatial_family="admin", level="district")
+
+
 def _bundle_metric_specs(bundle_domain: str) -> list[BundleMetricSpec]:
     """Return normalized bundle metric specs for the landing score."""
     configured_weights = {entry.metric_slug: entry for entry in get_bundle_weights(bundle_domain)}
     specs: list[BundleMetricSpec] = []
-    for metric_slug in get_metrics_for_bundle(
-        bundle_domain,
-        spatial_family="admin",
-        level="district",
-    ):
+    for metric_slug in _landing_metric_slugs(bundle_domain):
         varcfg = VARIABLES.get(metric_slug, {})
         weight_entry = configured_weights.get(metric_slug)
         specs.append(
@@ -613,6 +814,7 @@ def _bundle_context_cache_key(
             ctx.spec.slug,
             ctx.spec.label,
             ctx.spec.column,
+            float(ctx.spec.weight),
             bool(ctx.spec.higher_is_worse),
             ctx.source_signature,
             ctx.source_paths,
@@ -622,18 +824,52 @@ def _bundle_context_cache_key(
     )
 
 
+def _decode_context_key_entry(entry: tuple[object, ...]) -> _ContextKeyEntry:
+    """Decode and validate one serialized landing metric-context cache entry."""
+    if len(entry) != 8:
+        raise ValueError(
+            f"Malformed landing context-key entry: expected 8 fields, got {len(entry)}"
+        )
+
+    (
+        slug,
+        label,
+        column,
+        weight,
+        higher_is_worse,
+        source_signature,
+        source_paths,
+        available_pairs,
+    ) = entry
+    return _ContextKeyEntry(
+        slug=str(slug),
+        label=str(label),
+        column=str(column),
+        weight=float(weight),
+        higher_is_worse=bool(higher_is_worse),
+        source_signature=tuple(source_signature),  # type: ignore[arg-type]
+        source_paths=tuple(str(path) for path in source_paths),  # type: ignore[arg-type]
+        available_pairs=tuple(
+            (str(pair[0]).strip(), canonical_period_label(str(pair[1]).strip()))
+            for pair in available_pairs  # type: ignore[arg-type]
+        ),
+    )
+
+
 def _metric_specs_from_context_key(
     context_key: tuple[tuple[object, ...], ...],
 ) -> list[BundleMetricSpec]:
     """Reconstruct bundle metric specs from the serialized context cache key."""
     specs: list[BundleMetricSpec] = []
-    for slug, label, column, higher_is_worse, _source_signature, _source_paths, _pairs in context_key:
+    for entry in context_key:
+        parsed = _decode_context_key_entry(entry)
         specs.append(
             BundleMetricSpec(
-                slug=str(slug),
-                label=str(label),
-                column=str(column),
-                higher_is_worse=bool(higher_is_worse),
+                slug=parsed.slug,
+                label=parsed.label,
+                column=parsed.column,
+                weight=parsed.weight,
+                higher_is_worse=parsed.higher_is_worse,
             )
         )
     return specs
@@ -679,9 +915,22 @@ def _bundle_scenario_period_options(
     *,
     data_dir: Path,
 ) -> list[tuple[str, str]]:
-    """Return full-coverage future scenario-period pairs for the landing bundle."""
-    return _intersect_bundle_scenario_period_pairs(
-        _collect_bundle_metric_contexts(bundle_domain, data_dir=data_dir)
+    """Return available scenario-period pairs for one persisted landing composite."""
+    composite_spec = get_composite_metric_for_bundle(bundle_domain)
+    if composite_spec is None:
+        return []
+
+    source_paths = _resolve_metric_master_sources(composite_spec.composite_slug, data_dir=data_dir)
+    if not source_paths:
+        return []
+
+    source_signature = master_source_signature(source_paths)
+    return list(
+        _load_metric_scenario_period_pairs_cached(
+            composite_spec.composite_slug,
+            source_signature,
+            tuple(str(path) for path in source_paths),
+        )
     )
 
 
@@ -730,6 +979,7 @@ def _sanitize_landing_context(session_state: MutableMapping[str, object], *, dat
             set_landing_focus_state(session_state, selected_state)
         else:
             set_landing_focus_india(session_state)
+
 
 
 def _assemble_bundle_context(
@@ -809,24 +1059,25 @@ def _prepare_bundle_context_cached(
         return _build_empty_bundle_context(metric_specs)
 
     selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
-    if any(selected_pair not in set(entry[6]) for entry in context_key):
+    parsed_entries = [_decode_context_key_entry(entry) for entry in context_key]
+    if any(selected_pair not in set(entry.available_pairs) for entry in parsed_entries):
         return _build_empty_bundle_context(metric_specs)
 
     merged_frame: Optional[pd.DataFrame] = None
-    for slug, _label, _column, _higher_is_worse, source_signature, source_paths, _available_pairs in context_key:
+    for entry in parsed_entries:
         metric_frame = _load_metric_district_values_cached(
-            str(slug),
+            entry.slug,
             scenario,
             period,
             stat,
-            source_signature,  # type: ignore[arg-type]
-            source_paths,  # type: ignore[arg-type]
+            entry.source_signature,
+            entry.source_paths,
         )
         if metric_frame.empty:
             continue
 
-        metric_frame = metric_frame.rename(columns={"raw_metric_value": str(slug)})
-        metric_frame = metric_frame[["state_name", "district_name", str(slug)]].copy()
+        metric_frame = metric_frame.rename(columns={"raw_metric_value": entry.slug})
+        metric_frame = metric_frame[["state_name", "district_name", entry.slug]].copy()
 
         if merged_frame is None:
             merged_frame = metric_frame
@@ -848,19 +1099,172 @@ def _prepare_bundle_context(
     stat: str,
     data_dir: Path,
     metric_contexts: Optional[Sequence[LandingMetricContext]] = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, list[BundleMetricSpec]]:
-    """Load bundle metrics and compute cached district/state landing score tables."""
-    contexts = list(metric_contexts) if metric_contexts is not None else _collect_bundle_metric_contexts(
-        bundle_domain,
-        data_dir=data_dir,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load persisted composite metric values and assemble landing score tables."""
+    _ = metric_contexts
+    def _empty_context() -> tuple[pd.DataFrame, pd.DataFrame]:
+        empty = pd.DataFrame(
+            columns=[
+                "state_name",
+                "district_name",
+                "bundle_score",
+                "bundle_score_display",
+                "score_band",
+                "district_rank",
+                "district_count",
+                "state_bundle_score",
+                "state_rank",
+                "state_count",
+            ]
+        )
+        state_empty = pd.DataFrame(
+            columns=[
+                "state_name",
+                "bundle_score",
+                "__state_key",
+                "score_band",
+                "bundle_score_display",
+                "state_rank",
+                "state_count",
+            ]
+        )
+        return empty, state_empty
+
+    composite_spec = get_composite_metric_for_bundle(bundle_domain)
+    if composite_spec is None:
+        return _empty_context()
+
+    source_paths = _resolve_metric_master_sources(composite_spec.composite_slug, data_dir=data_dir)
+    if not source_paths:
+        return _empty_context()
+
+    source_signature = master_source_signature(source_paths)
+    available_pairs = set(
+        _load_metric_scenario_period_pairs_cached(
+            composite_spec.composite_slug,
+            source_signature,
+            tuple(str(path) for path in source_paths),
+        )
     )
-    return _prepare_bundle_context_cached(
-        bundle_domain,
+    selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
+    if selected_pair not in available_pairs:
+        return _empty_context()
+
+    metric_frame = _load_metric_district_values_cached(
+        composite_spec.composite_slug,
         scenario,
         period,
         stat,
-        _bundle_context_cache_key(contexts),
+        source_signature,
+        tuple(str(path) for path in source_paths),
     )
+    if metric_frame.empty:
+        return _empty_context()
+
+    district_scores = metric_frame.rename(columns={"raw_metric_value": "bundle_score"}).copy()
+    district_scores["__state_key"] = district_scores["state_name"].astype(str).map(alias)
+    district_scores["__district_key"] = (
+        district_scores["state_name"].astype(str).map(alias)
+        + "|"
+        + district_scores["district_name"].astype(str).map(alias)
+    )
+    district_scores["score_band"] = district_scores["bundle_score"].map(_score_band)
+    district_scores["bundle_score_display"] = district_scores["bundle_score"].map(_format_score)
+
+    state_scores = aggregate_state_bundle_scores(district_scores)
+    state_scores["__state_key"] = state_scores["state_name"].astype(str).map(alias)
+    state_scores["score_band"] = state_scores["bundle_score"].map(_score_band)
+    state_scores["bundle_score_display"] = state_scores["bundle_score"].map(_format_score)
+    state_scores["state_rank"] = (
+        state_scores["bundle_score"].rank(method="min", ascending=False, na_option="bottom")
+        .where(state_scores["bundle_score"].notna())
+    )
+    state_count = int(pd.to_numeric(state_scores["bundle_score"], errors="coerce").notna().sum())
+    state_scores["state_count"] = state_count
+
+    district_scores["district_rank"] = (
+        district_scores.groupby("state_name", dropna=False)["bundle_score"]
+        .rank(method="min", ascending=False, na_option="bottom")
+        .where(district_scores["bundle_score"].notna())
+    )
+    district_scores["district_count"] = (
+        district_scores.groupby("state_name", dropna=False)["bundle_score"]
+        .transform(lambda series: int(pd.to_numeric(series, errors="coerce").notna().sum()))
+    )
+    district_scores = district_scores.merge(
+        state_scores[["state_name", "bundle_score", "state_rank", "state_count"]].rename(
+            columns={"bundle_score": "state_bundle_score"}
+        ),
+        on="state_name",
+        how="left",
+    )
+    return district_scores, state_scores
+
+
+def _prepare_driver_context(
+    bundle_domain: str,
+    *,
+    scenario: str,
+    period: str,
+    stat: str,
+    data_dir: Path,
+) -> LandingDriverContext:
+    """Load component metrics for driver display without affecting composite landing behavior."""
+    try:
+        contexts = _collect_bundle_metric_contexts(bundle_domain, data_dir=data_dir)
+        if not contexts:
+            return LandingDriverContext(
+                district_scores=pd.DataFrame(),
+                metric_specs=[],
+                available=False,
+                reason="no_metric_contexts",
+            )
+
+        context_key = _bundle_context_cache_key(contexts)
+        selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
+        available_pairs = set(_intersect_bundle_scenario_period_pairs(contexts))
+        if selected_pair not in available_pairs:
+            return LandingDriverContext(
+                district_scores=pd.DataFrame(),
+                metric_specs=_metric_specs_from_context_key(context_key),
+                available=False,
+                reason="pair_unsupported",
+            )
+
+        district_scores, _state_scores, metric_specs = _prepare_bundle_context_cached(
+            bundle_domain,
+            scenario,
+            period,
+            stat,
+            context_key,
+        )
+        if not metric_specs:
+            return LandingDriverContext(
+                district_scores=district_scores,
+                metric_specs=[],
+                available=False,
+                reason="empty_metric_specs",
+            )
+        if district_scores.empty:
+            return LandingDriverContext(
+                district_scores=district_scores,
+                metric_specs=metric_specs,
+                available=False,
+                reason="empty_component_frame",
+            )
+        return LandingDriverContext(
+            district_scores=district_scores,
+            metric_specs=metric_specs,
+            available=True,
+            reason=None,
+        )
+    except Exception:
+        return LandingDriverContext(
+            district_scores=pd.DataFrame(),
+            metric_specs=[],
+            available=False,
+            reason="exception",
+        )
 
 
 def _build_distribution_frame(score_series: pd.Series) -> pd.DataFrame:
@@ -989,6 +1393,21 @@ def _selection_to_feature_collection(
     return {"type": "FeatureCollection", "features": features}
 
 
+def _sort_landing_map_frame(gdf: pd.DataFrame) -> pd.DataFrame:
+    """Return a stably sorted landing map frame for deterministic FeatureCollection output."""
+    if gdf is None or gdf.empty:
+        return gdf
+
+    sort_columns = [
+        column
+        for column in ("__state_key", "state_name", "__district_key", "district_name", "shapeName")
+        if column in gdf.columns
+    ]
+    if not sort_columns:
+        return gdf
+    return gdf.sort_values(sort_columns, kind="stable").reset_index(drop=True)
+
+
 def _build_state_map_frame(adm1: Any, state_scores: pd.DataFrame) -> pd.DataFrame:
     """Merge state-level landing scores onto ADM1 geometry."""
     gdf = adm1.copy()
@@ -1005,7 +1424,7 @@ def _build_state_map_frame(adm1: Any, state_scores: pd.DataFrame) -> pd.DataFram
         suffixes=("", "_score"),
     )
     merged["state_name"] = merged["state_name"].fillna(merged["shapeName"])
-    return merged
+    return _sort_landing_map_frame(merged)
 
 
 def _build_district_map_frame(
@@ -1031,7 +1450,7 @@ def _build_district_map_frame(
         suffixes=("", "_score"),
     )
     merged["state_name"] = merged["state_name"].fillna(selected_state)
-    return merged
+    return _sort_landing_map_frame(merged)
 
 
 def _build_landing_map_artifacts(
@@ -1210,6 +1629,16 @@ def _district_exists(districts: pd.DataFrame, state_name: Optional[str], distric
     return not matches.empty
 
 
+def _district_row_has_landing_score(row: Optional[pd.Series]) -> bool:
+    """Return whether a resolved district row has a usable landing bundle score."""
+    if row is None:
+        return False
+    if "bundle_score" not in row.index:
+        return True
+    score = pd.to_numeric(pd.Series([row.get("bundle_score")]), errors="coerce").iloc[0]
+    return bool(np.isfinite(score))
+
+
 def _landing_click_payloads(returned: Optional[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Collect candidate click payload property dictionaries from the raw map return payload."""
     if not returned:
@@ -1223,6 +1652,71 @@ def _landing_click_payloads(returned: Optional[Mapping[str, Any]]) -> list[dict[
         if isinstance(props, dict):
             payloads.append(props)
     return payloads
+
+
+def _landing_rendered_map_level(focus_level: str) -> str:
+    """Return the rendered landing map level for the current focus."""
+    return "state" if str(focus_level or "india").strip().lower() == "india" else "district"
+
+
+def _landing_map_context_token(
+    *,
+    bundle_domain: str,
+    scenario: str,
+    period: str,
+    focus_level: str,
+    selected_state: Optional[str],
+    selected_district: Optional[str],
+) -> tuple[str, str, str, str, str, str, str]:
+    """Return the canonical landing map context token for one rendered landing map."""
+    return (
+        alias(str(bundle_domain or "").strip()),
+        str(scenario or "").strip().lower(),
+        canonical_period_label(str(period or "").strip()),
+        str(focus_level or "india").strip().lower(),
+        alias(str(selected_state or "").strip()),
+        alias(str(selected_district or "").strip()),
+        _landing_rendered_map_level(focus_level),
+    )
+
+
+def _landing_map_payload_is_empty(returned: Optional[Mapping[str, Any]]) -> bool:
+    """Return whether the raw landing map payload contains no actionable click state."""
+    if _landing_click_payloads(returned):
+        return False
+    lat, lon = extract_click_coordinates(returned)
+    return lat is None and lon is None
+
+
+def _sync_landing_map_input_gate(
+    session_state: MutableMapping[str, object],
+    *,
+    context_token: tuple[str, str, str, str, str, str, str],
+    payload_is_empty: bool,
+) -> tuple[bool, bool]:
+    """
+    Synchronize the landing map settle gate for the current rendered context.
+
+    Returns:
+        `(input_armed, context_changed)` for the current render pass.
+    """
+    stored_context = session_state.get(LANDING_MAP_CONTEXT_KEY)
+    normalized_stored: Optional[tuple[str, str, str, str, str, str, str]]
+    if isinstance(stored_context, tuple) and len(stored_context) == 7:
+        normalized_stored = tuple(str(part) for part in stored_context)  # type: ignore[assignment]
+    else:
+        normalized_stored = None
+
+    if normalized_stored != context_token:
+        session_state[LANDING_MAP_CONTEXT_KEY] = context_token
+        session_state[LANDING_MAP_INPUT_ARMED_KEY] = bool(payload_is_empty)
+        return bool(payload_is_empty), True
+
+    input_armed = bool(session_state.get(LANDING_MAP_INPUT_ARMED_KEY, False))
+    if not input_armed and payload_is_empty:
+        session_state[LANDING_MAP_INPUT_ARMED_KEY] = True
+        return True, False
+    return input_armed, False
 
 
 def _canonical_state_name(adm1: pd.DataFrame, state_name: Optional[str] = None, state_key: Optional[str] = None) -> Optional[str]:
@@ -1345,6 +1839,7 @@ def _apply_landing_map_click(
 
     district_frame = visible_districts if visible_districts is not None else adm2
     resolved_row: Optional[pd.Series] = None
+    had_payloads = bool(payloads)
 
     for props in payloads:
         district_key = props.get("__district_key")
@@ -1358,6 +1853,14 @@ def _apply_landing_map_click(
         )
         if resolved_row is not None:
             break
+
+    # If the map returned a feature payload but we could not resolve it as a
+    # district row in the current district map, treat it as stale/incompatible
+    # rather than falling through to coordinate lookup. This prevents replayed
+    # India-state payloads from being reinterpreted as fresh district clicks
+    # after the map key changes on state drill-down.
+    if resolved_row is None and had_payloads:
+        return "noop", None, None
 
     if resolved_row is None and clicked_district:
         resolved_row = _resolve_district_row(
@@ -1377,6 +1880,8 @@ def _apply_landing_map_click(
             )
 
     if resolved_row is None:
+        return "noop", None, None
+    if not _district_row_has_landing_score(resolved_row):
         return "noop", None, None
     resolved_state = str(resolved_row.get("state_name") or "").strip() or None
     district_name = str(resolved_row.get("district_name") or "").strip() or None
@@ -1450,9 +1955,7 @@ def _render_state_summary(
     state_name: str,
     district_scores: pd.DataFrame,
     state_scores: pd.DataFrame,
-    metric_specs: Sequence[BundleMetricSpec],
-    data_dir: Path,
-    metric_contexts: Sequence[LandingMetricContext],
+    driver_context: LandingDriverContext,
     deep_dive_disabled: bool = False,
 ) -> None:
     """Render the expanded drawer for state focus."""
@@ -1484,10 +1987,14 @@ def _render_state_summary(
 
         st.markdown("**District Score Distribution**")
         st.bar_chart(_build_distribution_frame(state_scope["bundle_score"]).set_index("Band"))
-
         st.markdown("**Metric Drivers**")
+        driver_scope = pd.DataFrame()
+        if driver_context.available and not driver_context.district_scores.empty:
+            driver_scope = driver_context.district_scores[
+                driver_context.district_scores["__state_key"].astype(str) == alias(state_name)
+            ].copy()
         _render_driver_table(
-            compute_metric_driver_frame(state_scope, metric_specs=metric_specs),
+            compute_metric_driver_frame(driver_scope, metric_specs=driver_context.metric_specs),
             top_n=5,
         )
 
@@ -1497,11 +2004,7 @@ def _render_state_summary(
             use_container_width=True,
             disabled=deep_dive_disabled,
         ):
-            _enter_deep_dive(
-                st.session_state,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
-            )
+            _enter_deep_dive(st.session_state)
 
 
 def _render_district_summary(
@@ -1509,9 +2012,7 @@ def _render_district_summary(
     state_name: str,
     district_name: str,
     district_scores: pd.DataFrame,
-    metric_specs: Sequence[BundleMetricSpec],
-    data_dir: Path,
-    metric_contexts: Sequence[LandingMetricContext],
+    driver_context: LandingDriverContext,
     deep_dive_disabled: bool = False,
 ) -> None:
     """Render the district-focus drawer with peer and driver context."""
@@ -1547,15 +2048,17 @@ def _render_district_summary(
                 )
 
         st.markdown("**Metric Drivers**")
-        norm_columns = [normalized_metric_column(spec.slug) for spec in metric_specs]
-        driver_source = district_row[[col for col in norm_columns if col in district_row.columns]].copy()
-        if driver_source.empty:
+        driver_scope = pd.DataFrame()
+        if driver_context.available and not driver_context.district_scores.empty:
+            district_key = f"{alias(state_name)}|{alias(district_name)}"
+            driver_scope = driver_context.district_scores[
+                driver_context.district_scores["__district_key"].astype(str) == district_key
+            ].copy()
+        driver_df = compute_metric_driver_frame(driver_scope, metric_specs=driver_context.metric_specs)
+        if driver_df.empty:
             st.caption("No driver detail is available for this district.")
         else:
-            _render_driver_table(
-                compute_metric_driver_frame(district_row, metric_specs=metric_specs),
-                top_n=5,
-            )
+            _render_driver_table(driver_df, top_n=5)
 
         if st.button(
             "Deep Dive",
@@ -1563,11 +2066,7 @@ def _render_district_summary(
             use_container_width=True,
             disabled=deep_dive_disabled,
         ):
-            _enter_deep_dive(
-                st.session_state,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
-            )
+            _enter_deep_dive(st.session_state)
 
 
 def _render_landing_rankings(
@@ -1724,37 +2223,18 @@ def _render_landing_compare(
 
 def _enter_deep_dive(
     session_state: MutableMapping[str, object],
-    *,
-    data_dir: Path,
-    metric_contexts: Optional[Sequence[LandingMetricContext]] = None,
 ) -> None:
     """Apply the landing -> detailed workflow handoff and rerun the app."""
     bundle_domain = str(session_state.get("landing_bundle") or LANDING_DEFAULT_BUNDLE).strip()
-    metric_options = get_metrics_for_bundle(
-        bundle_domain,
-        spatial_family="admin",
-        level="district",
-    )
-    if not metric_options:
-        st.warning("Deep Dive is unavailable because this bundle has no configured district metrics.")
-        return
-
-    metric_slug = _resolve_first_valid_landing_metric(
-        bundle_domain,
-        scenario=str(session_state.get("landing_scenario") or LANDING_DEFAULT_SCENARIO),
-        period=str(session_state.get("landing_period") or LANDING_DEFAULT_PERIOD),
-        stat=LANDING_SCORE_STAT,
-        data_dir=data_dir,
-        metric_contexts=metric_contexts,
-    )
-    if not metric_slug:
-        st.warning("Deep Dive is unavailable because no valid metric has data for the current scenario-period.")
+    composite_spec = get_composite_metric_for_bundle(bundle_domain)
+    if composite_spec is None:
+        st.warning("Deep Dive is unavailable because this Glance bundle has no configured composite metric.")
         return
 
     handoff = build_deep_dive_handoff(
         session_state,
         bundle_domain=bundle_domain,
-        metric_slug=metric_slug,
+        metric_slug=composite_spec.composite_slug,
     )
     for key, value in handoff.items():
         session_state[key] = value
@@ -1780,18 +2260,23 @@ def render_landing_page(
     selected_district = str(st.session_state.get("landing_selected_district") or "").strip() or None
     bundle_options = _landing_bundle_domains()
     if not bundle_options:
-        st.error("No climate-hazard bundles are available for the landing experience.")
+        st.error("No Glance bundles are available for the landing experience.")
         return
 
-    metric_contexts = _collect_bundle_metric_contexts(bundle_domain, data_dir=data_dir)
-    scenario_options = _intersect_bundle_scenario_period_pairs(metric_contexts)
-    district_scores, state_scores, metric_specs = _prepare_bundle_context(
+    scenario_options = _bundle_scenario_period_options(bundle_domain, data_dir=data_dir)
+    district_scores, state_scores = _prepare_bundle_context(
         bundle_domain,
         scenario=scenario,
         period=period,
         stat=LANDING_SCORE_STAT,
         data_dir=data_dir,
-        metric_contexts=metric_contexts,
+    )
+    driver_context = _prepare_driver_context(
+        bundle_domain,
+        scenario=scenario,
+        period=period,
+        stat=LANDING_SCORE_STAT,
+        data_dir=data_dir,
     )
     search_options = _build_landing_search_options(state_scores, district_scores)
     if str(st.session_state.get("landing_tab") or LANDING_DEFAULT_TAB) not in LANDING_TABS:
@@ -1854,20 +2339,13 @@ def render_landing_page(
         ):
             _enter_deep_dive(
                 st.session_state,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
             )
-
-        if search_selection and search_selection != st.session_state.get("landing_search_last_applied"):
-            search_kind, state_name, district_name = search_options[search_selection]
-            st.session_state["landing_search_last_applied"] = search_selection
-            st.session_state["landing_search_reset_pending"] = True
-            if search_kind == "state" and state_name:
-                set_landing_focus_state(st.session_state, state_name)
-                st.rerun()
-            if search_kind == "district" and state_name and district_name:
-                set_landing_focus_district(st.session_state, state_name, district_name)
-                st.rerun()
+    if _apply_landing_search_selection(
+        st.session_state,
+        search_selection=search_selection,
+        search_options=search_options,
+    ):
+        st.rerun()
 
     if not scenario_options:
         st.info(
@@ -1878,6 +2356,7 @@ def render_landing_page(
     if focus_level == "state" and selected_state and not (
         adm1["shapeName"].astype(str).map(alias) == alias(selected_state)
     ).any():
+        _clear_landing_pending_map_transition(st.session_state)
         set_landing_focus_india(st.session_state)
         st.rerun()
 
@@ -1887,6 +2366,7 @@ def render_landing_page(
             & (adm2["district_name"].astype(str).map(alias) == alias(selected_district))
         ]
         if district_exists.empty:
+            _clear_landing_pending_map_transition(st.session_state)
             set_landing_focus_state(st.session_state, selected_state)
             st.rerun()
 
@@ -1900,10 +2380,12 @@ def render_landing_page(
                 disabled=focus_level == "india",
                 use_container_width=True,
             ):
+                _clear_landing_pending_map_transition(st.session_state)
                 apply_landing_back(st.session_state)
                 st.rerun()
         with action_cols[1]:
             if st.button("Reset to India", key="landing_reset", use_container_width=True):
+                _clear_landing_pending_map_transition(st.session_state)
                 set_landing_focus_india(st.session_state)
                 st.rerun()
         with action_cols[2]:
@@ -1942,6 +2424,37 @@ def render_landing_page(
             level="state" if focus_level == "india" else "district",
             perf_section=None,
         )
+        raw_returned = returned
+        raw_clicked_district = clicked_district
+        raw_clicked_state = clicked_state
+        raw_payload_is_empty = _landing_map_payload_is_empty(raw_returned)
+        map_context_token = _landing_map_context_token(
+            bundle_domain=bundle_domain,
+            scenario=scenario,
+            period=period,
+            focus_level=focus_level,
+            selected_state=selected_state,
+            selected_district=selected_district,
+        )
+        map_input_armed, map_context_changed = _sync_landing_map_input_gate(
+            st.session_state,
+            context_token=map_context_token,
+            payload_is_empty=raw_payload_is_empty,
+        )
+        rerun_reason: Optional[str] = None
+        if _consume_pending_landing_map_transition(
+            st.session_state,
+            focus_level=focus_level,
+            selected_state=selected_state,
+            selected_district=selected_district,
+        ):
+            returned = {}
+            clicked_district = None
+            clicked_state = None
+        if not map_input_armed:
+            returned = {}
+            clicked_district = None
+            clicked_state = None
         click_action, next_state, next_district = _apply_landing_map_click(
             focus_level=focus_level,
             returned=returned,
@@ -1953,25 +2466,42 @@ def render_landing_page(
             adm2=adm2,
             visible_districts=visible_map_gdf if focus_level in {"state", "district"} else None,
         )
+        rerun_reason = (
+            "landing_map_click_transition"
+            if click_action in {"focus_state", "focus_district"}
+            else None
+        )
         if bool(st.session_state.get("perf_enabled", False)):
             with st.expander("Landing click debug", expanded=False):
                 st.json(
                     {
                         "focus_level": focus_level,
                         "returned": returned,
+                        "raw_returned": raw_returned,
                         "clicked_state": clicked_state,
                         "clicked_district": clicked_district,
+                        "raw_clicked_state": raw_clicked_state,
+                        "raw_clicked_district": raw_clicked_district,
                         "click_action": click_action,
                         "next_state": next_state,
                         "next_district": next_district,
+                        "pending_transition": st.session_state.get(LANDING_PENDING_MAP_TRANSITION_KEY),
+                        "map_context_token": map_context_token,
+                        "map_context_changed": map_context_changed,
+                        "map_input_armed": st.session_state.get(LANDING_MAP_INPUT_ARMED_KEY, False),
+                        "raw_payload_is_empty": raw_payload_is_empty,
+                        "rerun_reason": rerun_reason,
                     }
                 )
-        if click_action == "focus_state" and next_state:
-            set_landing_focus_state(st.session_state, next_state)
+        if _queue_landing_map_transition(
+            st.session_state,
+            action=click_action,
+            state_name=next_state,
+            district_name=next_district,
+        ):
             st.rerun()
-        if click_action == "focus_district" and next_state and next_district:
-            set_landing_focus_district(st.session_state, next_state, next_district)
-            st.rerun()
+        if click_action == "noop" and raw_payload_is_empty:
+            _clear_landing_pending_transition_token(st.session_state)
 
     with drawer_col:
         if focus_level == "india":
@@ -1980,25 +2510,21 @@ def render_landing_page(
                 bundle_domain=bundle_domain,
             )
         elif focus_level == "state" and selected_state:
-            _render_state_summary(
-                state_name=selected_state,
-                district_scores=district_scores,
-                state_scores=state_scores,
-                metric_specs=metric_specs,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
-                deep_dive_disabled=not scenario_options,
-            )
+                _render_state_summary(
+                    state_name=selected_state,
+                    district_scores=district_scores,
+                    state_scores=state_scores,
+                    driver_context=driver_context,
+                    deep_dive_disabled=not scenario_options,
+                )
         elif focus_level == "district" and selected_state and selected_district:
-            _render_district_summary(
-                state_name=selected_state,
-                district_name=selected_district,
-                district_scores=district_scores,
-                metric_specs=metric_specs,
-                data_dir=data_dir,
-                metric_contexts=metric_contexts,
-                deep_dive_disabled=not scenario_options,
-            )
+                _render_district_summary(
+                    state_name=selected_state,
+                    district_name=selected_district,
+                    district_scores=district_scores,
+                    driver_context=driver_context,
+                    deep_dive_disabled=not scenario_options,
+                )
 
     st.write("")
     st.radio(
@@ -2026,9 +2552,10 @@ def render_landing_page(
             district_scores=district_scores,
         )
 
-    st.caption(
+    method_note = (
         "Method note: landing bundle scores are weighted averages of normalized hazard metrics "
         "using approved bundle definitions. "
         "Only scenario-periods with full required bundle-metric coverage are shown. "
         "They are hazard summaries only, not resilience scores."
     )
+    st.caption(method_note)

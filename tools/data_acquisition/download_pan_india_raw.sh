@@ -5,9 +5,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-DEFAULT_DATA_DIR="$(cd "${REPO_ROOT}/.." && pwd)/irt_data"
+DEFAULT_DATA_DIR="$(cd "${REPO_ROOT}/.." && pwd)/irt_data_pan_india"
 
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-irt}"
+USER_SET_IRT_DATA_DIR=0
+if [[ -n "${IRT_DATA_DIR:-}" ]]; then
+  USER_SET_IRT_DATA_DIR=1
+fi
 IRT_DATA_DIR="${IRT_DATA_DIR:-${DEFAULT_DATA_DIR}}"
 
 INDIA_SOUTH="${INDIA_SOUTH:-6}"
@@ -29,6 +33,26 @@ log() {
 fail() {
   printf '[ERROR] %s\n' "$*" >&2
   exit 1
+}
+
+is_nonempty_dir() {
+  local dir_path="$1"
+  [[ -d "${dir_path}" ]] || return 1
+  find "${dir_path}" -mindepth 1 -maxdepth 1 -print -quit | grep -q .
+}
+
+sanitize_output() {
+  local line=""
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line//$'\r'/}"
+    line="${line//\\//}"
+    printf '%s\n' "${line}"
+  done
+}
+
+run_logged_command() {
+  "$@" 2>&1 | sanitize_output
+  return "${PIPESTATUS[0]}"
 }
 
 append_python_candidate() {
@@ -205,13 +229,16 @@ check_cds_credentials() {
 }
 
 prepare_dirs() {
+  if [[ "${USER_SET_IRT_DATA_DIR}" -eq 0 ]] && is_nonempty_dir "${IRT_DATA_DIR}"; then
+    fail "Default fresh directory '${IRT_DATA_DIR}' already exists and is not empty. Remove it first, or set IRT_DATA_DIR explicitly."
+  fi
   mkdir -p "${IRT_DATA_DIR}" "${IRT_DATA_DIR}/era5"
 }
 
 run_nex_download() {
   local variable="$1"
   log "Downloading NEX-GDDP-CMIP6 variable '${variable}' for the India bbox into ${IRT_DATA_DIR}"
-  "${PYTHON_BIN}" - "${variable}" "${IRT_DATA_DIR}" "${INDIA_SOUTH}" "${INDIA_NORTH}" "${INDIA_WEST}" "${INDIA_EAST}" <<'PY'
+  run_logged_command "${PYTHON_BIN}" -u - "${variable}" "${IRT_DATA_DIR}" "${INDIA_SOUTH}" "${INDIA_NORTH}" "${INDIA_WEST}" "${INDIA_EAST}" <<'PY'
 import sys
 
 import tools.data_acquisition.nex_india_subset_download_s3_v1 as m
@@ -237,7 +264,7 @@ run_all_nex_downloads() {
 
 run_era5_downloads() {
   log "Downloading ERA5 daily statistics for the India bbox into ${IRT_DATA_DIR}/era5"
-  "${PYTHON_BIN}" - "${IRT_DATA_DIR}" "${ERA5_YEARS}" "${INDIA_SOUTH}" "${INDIA_NORTH}" "${INDIA_WEST}" "${INDIA_EAST}" <<'PY'
+  run_logged_command "${PYTHON_BIN}" -u - "${IRT_DATA_DIR}" "${ERA5_YEARS}" "${INDIA_SOUTH}" "${INDIA_NORTH}" "${INDIA_WEST}" "${INDIA_EAST}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -295,7 +322,7 @@ PY
 
 run_era5_hurs_derivation() {
   log "Deriving ERA5 hurs monthly files from tas + tdps"
-  "${PYTHON_BIN}" - "${IRT_DATA_DIR}" <<'PY'
+  run_logged_command "${PYTHON_BIN}" -u - "${IRT_DATA_DIR}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -308,7 +335,7 @@ PY
 
 stage_era5_for_pipeline() {
   log "Staging ERA5 precipitation into pipeline layout under IRT_DATA_DIR/r1i1p1f1"
-  "${PYTHON_BIN}" -m tools.data_prep.prepare_reanalysis_for_pipeline \
+  run_logged_command "${PYTHON_BIN}" -u -m tools.data_prep.prepare_reanalysis_for_pipeline \
     --years "${ERA5_YEARS}" \
     --bbox "${INDIA_SOUTH},${INDIA_NORTH},${INDIA_WEST},${INDIA_EAST}" \
     --era5-nc-dir "${IRT_DATA_DIR}/era5/nc" \

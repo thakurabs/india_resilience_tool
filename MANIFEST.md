@@ -9,11 +9,12 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 
 The current working tree supports:
 - a default climate-hazard landing / discovery surface that opens on an India state-level bundle map and drills down India -> state -> district before handing off to the detailed workflow
-- a Glance bundle scope limited to `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`, with other climate domains still available in Deep Dive
-- declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance climate bundles
+- a Glance bundle scope covering `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk` (displayed as `Extreme Rainfall`), `Cold Risk`, and `Agriculture & Growing Conditions`
+- declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance bundles
+- persisted visible-Glance composite metrics declared in `india_resilience_tool/config/composite_metrics.py` and built offline into admin master files
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
 - type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
-- a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff
+- a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff, with Glance -> Deep Dive now opening the matching persisted composite metric
 - map, rankings, and details flows for district, block, basin, and sub-basin
 - drill-down-only nationwide behavior for the finest-grain views:
   - `Admin -> Block` requires a selected state
@@ -43,8 +44,9 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 |---------|---------|
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
-| `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, Aqueduct, population, groundwater, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
-| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with exact pre-scan task counting, deterministic parallel yearly processing, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
+| `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, persisted visible-Glance composites, Aqueduct, population, groundwater, Telangana JRC flood depth, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
+| `python -m tools.pipeline.build_composite_metrics --help` | Build persisted district/block composite masters for the 6 visible Glance bundles under the legacy `processed/` metric layout |
+| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional `--prune-scope`, destructive `--full-rebuild`, `--dry-run`, exact pre-scan task counting, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
 | `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` filtering, and write `parity_report.json` |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
@@ -147,7 +149,7 @@ Aqueduct methodology note:
 | `geography.py` | Filesystem-backed admin geography discovery helpers |
 | `geography_controls.py` | Sidebar geography + analysis-focus controls for admin and hydro |
 | `help_text.py` | Tooltip/help-text helpers for ribbon widgets |
-| `landing_runtime.py` | Climate-hazard landing/discovery orchestrator, state transitions, and Deep Dive handoff |
+| `landing_runtime.py` | Climate-hazard landing/discovery orchestrator, persisted visible-Glance composite loading, state transitions, and Deep Dive handoff |
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
 | `main.py` | Package Streamlit entrypoint |
 | `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
@@ -180,6 +182,7 @@ Aqueduct methodology note:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
+| `composite_metrics.py` | Streamlit-free builders for persisted district/block composite Glance metric masters |
 | `master_builder.py` | Build master CSVs, including hydro master enrichment and Parquet companions for runtime serving |
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 
@@ -194,6 +197,7 @@ Aqueduct methodology note:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
+| `composite_metrics.py` | Declarative visible-Glance bundle -> persisted composite metric mapping and helpers |
 | `constants.py` | UI, styling, scenario, and geometry-render constants |
 | `metrics_registry.py` | Canonical metric, pillar, and domain registry |
 | `paths.py` | Library-side path config mirroring root `paths.py` |
@@ -292,7 +296,8 @@ Aqueduct methodology note:
 | `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master `{csv,parquet}` files from Aqueduct overlaps for the onboarded hydro metrics |
 | `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster |
 | `build_groundwater_district_masters.py` | Build district groundwater assessment master `{csv,parquet}` files from the 2024-2025 GEC workbook plus a canonical district alias QA package |
-| `runs/prepare_dashboard.py` | Canonical operator entrypoint that orchestrates bundle prep, optimized runtime refresh, and final readiness verification for climate, Aqueduct, population exposure, groundwater, validation, and dashboard-package workflows |
+| `build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth master `{csv,parquet}` files using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 Flood Severity Index, RP100 flood-extent masters, provenance-aware run summary rows, and stable QA CSVs |
+| `runs/prepare_dashboard.py` | Canonical operator entrypoint that orchestrates bundle prep, optimized runtime refresh, and final readiness verification for climate, Aqueduct, population exposure, groundwater, Telangana JRC flood depth, validation, and dashboard-package workflows |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
@@ -314,6 +319,7 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `build_all_csv.ps1` | PowerShell helper for CSV build workflows |
+| `build_composite_metrics.py` | CLI wrapper that writes persisted district/block composite masters for the visible Glance bundles |
 | `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
 | `compute_indices_multiprocess.py` | Main multi-process compute pipeline for admin and hydro |

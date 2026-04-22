@@ -23,7 +23,13 @@ import pandas as pd
 
 from india_resilience_tool.app.state import VIEW_RANKINGS
 from india_resilience_tool.data.crosswalks import CrosswalkContext, CrosswalkOverlap
-from india_resilience_tool.viz.formatting import format_delta, format_metric_number, format_percent
+from india_resilience_tool.viz.formatting import (
+    format_delta,
+    format_metric_value,
+    format_metric_number,
+    format_percent,
+    get_metric_display_units,
+)
 
 PathLike = Union[str, Path]
 
@@ -223,6 +229,15 @@ def render_risk_summary(
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
 
+    def _formatted_metric_parts(value: float) -> tuple[str, Optional[str]]:
+        current_units = (units or "").strip()
+        if current_units:
+            return format_metric_number(value, metric_slug=variable_slug), current_units
+        return (
+            format_metric_value(value, metric_slug=variable_slug, units=units),
+            None,
+        )
+
     # Baseline descriptor for tooltip/help
     if baseline_col:
         parts = str(baseline_col).split("__")
@@ -263,11 +278,11 @@ def render_risk_summary(
             with col_baseline:
                 st.markdown("**Historical baseline**")
                 if baseline_val_f is not None:
-                    number_str = format_metric_number(baseline_val_f, metric_slug=variable_slug)
+                    number_str, number_units = _formatted_metric_parts(baseline_val_f)
                     st.markdown(
                         _risk_metric_html(
                             number_str=number_str,
-                            units=units,
+                            units=number_units,
                             help_text=f"Historical baseline: {baseline_desc}",
                         ),
                         unsafe_allow_html=True,
@@ -279,12 +294,12 @@ def render_risk_summary(
             with col_current:
                 st.markdown("**Current value**")
                 if current_val_f is not None:
-                    number_str = format_metric_number(current_val_f, metric_slug=variable_slug)
+                    number_str, number_units = _formatted_metric_parts(current_val_f)
                     help_text = f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})"
                     st.markdown(
                         _risk_metric_html(
                             number_str=number_str,
-                            units=units,
+                            units=number_units,
                             delta_text=delta_str,
                             delta_kind=delta_kind,
                             help_text=help_text,
@@ -302,12 +317,12 @@ def render_risk_summary(
             with col_current:
                 st.markdown("**Selected value**")
                 if current_val_f is not None:
-                    number_str = format_metric_number(current_val_f, metric_slug=variable_slug)
+                    number_str, number_units = _formatted_metric_parts(current_val_f)
                     help_text = f"{variable_label} ({sel_scenario}, {sel_period}, {sel_stat})"
                     st.markdown(
                         _risk_metric_html(
                             number_str=number_str,
-                            units=units,
+                            units=number_units,
                             help_text=help_text,
                         ),
                         unsafe_allow_html=True,
@@ -1466,10 +1481,13 @@ def render_details_panel(
 
     variable_label = variables.get(variable_slug, {}).get("label", variable_slug)
     varcfg = variables.get(variable_slug, {}) or {}
-    units = (
-        variables.get(variable_slug, {}).get("unit")
-        or variables.get(variable_slug, {}).get("units")
-        or ""
+    units = get_metric_display_units(
+        metric_slug=variable_slug,
+        units=(
+            variables.get(variable_slug, {}).get("unit")
+            or variables.get(variable_slug, {}).get("units")
+            or ""
+        ),
     )
     summary_title = "Metric summary" if _is_non_hazard_metric(varcfg) else "Risk summary"
 

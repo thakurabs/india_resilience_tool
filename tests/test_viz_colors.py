@@ -10,8 +10,11 @@ from __future__ import annotations
 import pandas as pd
 
 from india_resilience_tool.viz.colors import (
+    FLOOD_SEVERITY_CLASS_COLORS,
     apply_fillcolor,
+    apply_fillcolor_classed,
     apply_fillcolor_binned,
+    build_vertical_categorical_legend_block_html,
     build_vertical_binned_legend_block_html,
     build_vertical_gradient_legend_html,
     get_cmap_hex_list,
@@ -74,3 +77,30 @@ def test_build_binned_legend_block_contains_min_max_and_title() -> None:
     assert "Δ TM Mean" in html
     assert "1.11" in html
     assert "0.96" in html
+
+
+def test_apply_fillcolor_classed_uses_fixed_class_colors() -> None:
+    df = pd.DataFrame({"x": [1.0, 3.0, 5.0, None]})
+    out = apply_fillcolor_classed(
+        df,
+        "x",
+        value_to_color={index: color for index, color in enumerate(FLOOD_SEVERITY_CLASS_COLORS, start=1)},
+    )
+
+    assert out.loc[0, "fillColor"] == FLOOD_SEVERITY_CLASS_COLORS[0]
+    assert out.loc[1, "fillColor"] == FLOOD_SEVERITY_CLASS_COLORS[2]
+    assert out.loc[2, "fillColor"] == FLOOD_SEVERITY_CLASS_COLORS[4]
+    assert out.loc[3, "fillColor"] == "#cccccc"
+
+
+def test_build_categorical_legend_block_contains_labels_and_title() -> None:
+    html = build_vertical_categorical_legend_block_html(
+        legend_title="Flood Severity Index (RP-100)",
+        labels=["VeryLow", "Low", "Moderate", "High", "Extreme"],
+        colors=FLOOD_SEVERITY_CLASS_COLORS,
+        map_height=700,
+    )
+
+    assert "Flood Severity Index (RP-100)" in html
+    assert "VeryLow" in html
+    assert "Extreme" in html

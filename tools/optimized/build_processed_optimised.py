@@ -51,7 +51,7 @@ from india_resilience_tool.data.optimized_bundle import (
     resolve_optimized_bundle_root,
 )
 from india_resilience_tool.utils.naming import alias
-from india_resilience_tool.utils.processed_io import read_table
+from india_resilience_tool.utils.processed_io import read_table, remove_tree, unlink_file
 
 
 LEGACY_MASTER_FILENAMES = {
@@ -93,6 +93,8 @@ LEVEL_SELECTIONS = {
 }
 
 YEARLY_PARALLEL_CHUNK_SIZE = 64
+MANIFEST_ARTIFACT_VERSION = 2
+PARITY_REPORT_FILENAME = "parity_report.json"
 T = TypeVar("T")
 
 
@@ -1202,8 +1204,44 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
             )
 
 
+def _parity_report_path(*, data_dir: Path) -> Path:
+    return resolve_optimized_bundle_root(data_dir=data_dir) / PARITY_REPORT_FILENAME
+
+
+def _dir_has_parquet(path: Path) -> bool:
+    return path.exists() and any(path.rglob("*.parquet"))
+
+
+def _bundle_inventory_summaries(*, data_dir: Path) -> list[dict[str, object]]:
+    bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
+    metrics_root = bundle_root / "metrics"
+    if not metrics_root.exists():
+        return []
+
+    summaries: list[dict[str, object]] = []
+    for metric_root in sorted(metrics_root.iterdir()):
+        if not metric_root.is_dir():
+            continue
+        slug = metric_root.name
+        has_masters = _dir_has_parquet(metric_root / "masters")
+        has_yearly_ensemble = _dir_has_parquet(metric_root / "yearly_ensemble")
+        has_yearly_models = _dir_has_parquet(metric_root / "yearly_models")
+        if not (has_masters or has_yearly_ensemble or has_yearly_models):
+            continue
+        varcfg = VARIABLES.get(slug, {})
+        summaries.append(
+            {
+                "slug": slug,
+                "source_type": str(varcfg.get("source_type") or "unknown"),
+                "has_masters": has_masters,
+                "has_yearly_ensemble": has_yearly_ensemble,
+                "has_yearly_models": has_yearly_models,
+            }
+        )
+    return summaries
+
+
 def _write_manifest(
-    summaries: list[MetricBundleSummary],
     *,
     data_dir: Path,
     progress: BuildProgress,
@@ -1211,13 +1249,14 @@ def _write_manifest(
 ) -> None:
     manifest = {
         "bundle_dirname": OPTIMIZED_DIRNAME,
-        "artifact_version": 1,
+        "artifact_version": MANIFEST_ARTIFACT_VERSION,
+        "summary_semantics": "bundle_inventory",
         "stats_contract": {
             "climate": ["mean", "median"],
             "static_snapshot": ["mean"],
             "removed": ["std", "p05", "p95", "n_models", "values_per_model", "models"],
         },
-        "summaries": [summary.__dict__ for summary in summaries],
+        "summaries": _bundle_inventory_summaries(data_dir=data_dir),
     }
     path = bundle_manifest_path(data_dir=data_dir)
 
@@ -1232,7 +1271,10 @@ def _selected_slugs(metrics: Optional[list[str]]) -> list[str]:
     available = sorted(VARIABLES.keys())
     if not metrics:
         return available
-    wanted = {str(v).strip() for v in metrics if str(v).strip()}
+    wanted = [str(v).strip() for v in metrics if str(v).strip()]
+    unknown = sorted({slug for slug in wanted if slug not in set(available)})
+    if unknown:
+        raise ValueError(f"Unsupported optimized metric selection: {', '.join(unknown)}")
     return [slug for slug in available if slug in wanted]
 
 
@@ -1507,6 +1549,230 @@ def _progress_enabled(show_progress: Optional[bool]) -> bool:
     return bool(sys.stderr.isatty())
 
 
+def _metric_task_count(plan: BuildPlan) -> int:
+    return len(plan.master_tasks) + len(plan.yearly_model_jobs) + len(plan.yearly_ensemble_jobs)
+
+
+def _validate_build_request(
+    *,
+    data_dir: Path,
+    plan: BuildPlan,
+    metrics: Optional[list[str]],
+    levels: Optional[list[str]],
+    overwrite: bool,
+    prune_scope: bool,
+    full_rebuild: bool,
+    include_geometry: bool,
+    include_context: bool,
+) -> None:
+    if prune_scope and not overwrite:
+        raise ValueError("--prune-scope requires --overwrite.")
+    if full_rebuild and overwrite:
+        raise ValueError("--full-rebuild cannot be combined with --overwrite.")
+    if full_rebuild and prune_scope:
+        raise ValueError("--full-rebuild cannot be combined with --prune-scope.")
+    if full_rebuild and metrics:
+        raise ValueError("--full-rebuild only supports an unfiltered whole-bundle rebuild.")
+    if full_rebuild and levels:
+        raise ValueError("--full-rebuild only supports an unfiltered whole-bundle rebuild.")
+    if full_rebuild and not include_geometry:
+        raise ValueError("--full-rebuild cannot be combined with --skip-geometry.")
+    if full_rebuild and not include_context:
+        raise ValueError("--full-rebuild cannot be combined with --skip-context.")
+
+    explicit_selection = bool(metrics) or bool(levels)
+    metric_task_count = _metric_task_count(plan)
+    if explicit_selection and metric_task_count == 0:
+        levels_msg = ", ".join(_selected_levels(levels))
+        metrics_msg = ", ".join(metrics or [])
+        raise ValueError(
+            "No buildable legacy processed sources found for the requested selection "
+            f"(metrics={metrics_msg or 'ALL'}, levels={levels_msg or 'ALL'})."
+        )
+
+    if not explicit_selection and metric_task_count == 0 and not plan.context_tasks and not plan.geometry_tasks:
+        print(
+            "NO OPTIMIZED OUTPUTS "
+            f"(data_dir={Path(data_dir).resolve()}, bundle_root={resolve_optimized_bundle_root(data_dir=data_dir)})"
+        )
+
+
+def _iter_unique_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
+    ordered: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        resolved = str(Path(path))
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        ordered.append(Path(path))
+    return tuple(ordered)
+
+
+def _owned_scope_paths(
+    *,
+    data_dir: Path,
+    slugs: Iterable[str],
+    levels: Iterable[str],
+    include_geometry: bool,
+    include_context: bool,
+) -> tuple[Path, ...]:
+    bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
+    metrics_root = bundle_root / "metrics"
+    owned: list[Path] = []
+
+    for slug in slugs:
+        metric_root = metrics_root / slug
+        if "district" in levels:
+            owned.extend(
+                [
+                    metric_root / "masters" / "admin" / "district",
+                    metric_root / "yearly_models" / "admin" / "district",
+                    metric_root / "yearly_ensemble" / "admin" / "district",
+                ]
+            )
+        if "block" in levels:
+            owned.extend(
+                [
+                    metric_root / "masters" / "admin" / "block",
+                    metric_root / "yearly_models" / "admin" / "block",
+                    metric_root / "yearly_ensemble" / "admin" / "block",
+                ]
+            )
+        if "basin" in levels:
+            owned.extend(
+                [
+                    metric_root / "masters" / "hydro" / "basin",
+                    metric_root / "yearly_ensemble" / "hydro" / "basin",
+                ]
+            )
+        if "sub_basin" in levels:
+            owned.extend(
+                [
+                    metric_root / "masters" / "hydro" / "sub_basin",
+                    metric_root / "yearly_ensemble" / "hydro" / "sub_basin",
+                ]
+            )
+
+    if include_geometry:
+        geometry_root = bundle_root / "geometry"
+        if "district" in levels:
+            owned.append(geometry_root / "admin" / "district")
+        if "block" in levels:
+            owned.append(geometry_root / "admin" / "block")
+        if "basin" in levels:
+            owned.append(geometry_root / "hydro" / "basin.geojson")
+        if "sub_basin" in levels:
+            owned.append(geometry_root / "hydro" / "sub_basin")
+
+    if include_context:
+        if "block" in levels:
+            owned.append(optimized_context_path("admin_block_index.parquet", data_dir=data_dir))
+        if "sub_basin" in levels:
+            owned.append(optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir))
+
+    return _iter_unique_paths(owned)
+
+
+def _delete_owned_paths(paths: Iterable[Path]) -> None:
+    for path in paths:
+        if path.exists() and path.is_dir():
+            remove_tree(path)
+            continue
+        unlink_file(path)
+
+
+def _invalidate_bundle_metadata(*, data_dir: Path) -> None:
+    unlink_file(bundle_manifest_path(data_dir=data_dir))
+    unlink_file(_parity_report_path(data_dir=data_dir))
+
+
+def _validate_full_rebuild_root(*, bundle_root: Path, data_dir: Path) -> None:
+    resolved_root = Path(bundle_root).resolve()
+    default_root = (Path(data_dir).resolve() / OPTIMIZED_DIRNAME).resolve()
+    suspicious_targets = {
+        Path(data_dir).resolve(),
+        get_paths_config().repo_root.resolve(),
+        Path.home().resolve(),
+    }
+    if resolved_root == resolved_root.parent:
+        raise ValueError(f"Refusing to delete filesystem root: {resolved_root}")
+    if resolved_root in suspicious_targets:
+        raise ValueError(f"Refusing to delete suspicious optimized bundle root: {resolved_root}")
+    if resolved_root == default_root:
+        return
+    if resolved_root.name != OPTIMIZED_DIRNAME:
+        raise ValueError(
+            "Refusing to delete custom optimized bundle root unless it is explicitly named "
+            f"`{OPTIMIZED_DIRNAME}`: {resolved_root}"
+        )
+    if not resolved_root.exists():
+        return
+    if not resolved_root.is_dir():
+        raise ValueError(f"Refusing to delete non-directory optimized bundle root: {resolved_root}")
+    child_names = {child.name for child in resolved_root.iterdir()}
+    allowed_markers = {"metrics", "geometry", "context", "bundle_manifest.json", PARITY_REPORT_FILENAME}
+    if child_names and not (child_names & allowed_markers):
+        raise ValueError(f"Refusing to delete custom root that does not look like an optimized bundle: {resolved_root}")
+
+
+def _collect_write_targets(*, plan: BuildPlan, data_dir: Path, run_audit: bool) -> tuple[Path, ...]:
+    targets: list[Path] = []
+    for task in plan.master_tasks:
+        if task.target_path is not None:
+            targets.append(task.target_path)
+    for job in plan.yearly_model_jobs:
+        targets.append(job.models_path)
+    for job in plan.yearly_ensemble_jobs:
+        targets.append(job.target_path)
+    for task in plan.context_tasks:
+        if task.target_path is not None:
+            targets.append(task.target_path)
+    for task in plan.geometry_tasks:
+        if task.target_path is not None:
+            targets.append(task.target_path)
+    if plan.manifest_task.target_path is not None:
+        targets.append(plan.manifest_task.target_path)
+    if run_audit:
+        targets.append(_parity_report_path(data_dir=data_dir))
+    return _iter_unique_paths(targets)
+
+
+def _print_dry_run(
+    *,
+    data_dir: Path,
+    bundle_root: Path,
+    plan: BuildPlan,
+    overwrite: bool,
+    prune_scope: bool,
+    full_rebuild: bool,
+    include_geometry: bool,
+    include_context: bool,
+    run_audit: bool,
+    levels: Optional[list[str]],
+) -> None:
+    selected_slugs = [seed.slug for seed in plan.summaries_seed]
+    selected_levels = _selected_levels(levels)
+    print("PROCESSED OPTIMISED DRY RUN")
+    print(f"data_dir: {Path(data_dir).resolve()}")
+    print(f"bundle_root: {bundle_root}")
+    if full_rebuild:
+        print(f"full_rebuild_delete_root: {bundle_root}")
+    print(f"metadata_invalidated: {bundle_manifest_path(data_dir=data_dir)}")
+    print(f"metadata_invalidated: {_parity_report_path(data_dir=data_dir)}")
+    if overwrite and prune_scope:
+        for path in _owned_scope_paths(
+            data_dir=data_dir,
+            slugs=selected_slugs,
+            levels=selected_levels,
+            include_geometry=include_geometry,
+            include_context=include_context,
+        ):
+            print(f"scope_prune: {path}")
+    for path in _collect_write_targets(plan=plan, data_dir=data_dir, run_audit=run_audit):
+        print(f"write_target: {path}")
+
+
 def _required_columns_for_master(level: str) -> set[str]:
     level_norm = str(level).strip().lower()
     if level_norm == "district":
@@ -1669,6 +1935,9 @@ def build_processed_optimised_bundle(
     levels: Optional[list[str]] = None,
     workers: Optional[int] = None,
     overwrite: bool = False,
+    prune_scope: bool = False,
+    full_rebuild: bool = False,
+    dry_run: bool = False,
     include_geometry: bool = True,
     include_context: bool = True,
     show_progress: Optional[bool] = None,
@@ -1684,15 +1953,19 @@ def build_processed_optimised_bundle(
         include_geometry=include_geometry,
         include_context=include_context,
     )
+    _validate_build_request(
+        data_dir=data_dir,
+        plan=plan,
+        metrics=metrics,
+        levels=levels,
+        overwrite=overwrite,
+        prune_scope=prune_scope,
+        full_rebuild=full_rebuild,
+        include_geometry=include_geometry,
+        include_context=include_context,
+    )
 
     bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
-    if bundle_root.exists() and overwrite:
-        shutil.rmtree(bundle_root)
-
-    progress = BuildProgress(plan, enabled=_progress_enabled(show_progress))
-    progress.print_plan_summary()
-    resolved_workers = resolve_build_workers(workers)
-
     summaries_map = {
         seed.slug: {
             "slug": seed.slug,
@@ -1703,6 +1976,46 @@ def build_processed_optimised_bundle(
         }
         for seed in plan.summaries_seed
     }
+    metric_task_count = _metric_task_count(plan)
+    if metric_task_count == 0 and not plan.context_tasks and not plan.geometry_tasks:
+        return []
+
+    if dry_run:
+        if full_rebuild:
+            _validate_full_rebuild_root(bundle_root=bundle_root, data_dir=data_dir)
+        _print_dry_run(
+            data_dir=data_dir,
+            bundle_root=bundle_root,
+            plan=plan,
+            overwrite=overwrite,
+            prune_scope=prune_scope,
+            full_rebuild=full_rebuild,
+            include_geometry=include_geometry,
+            include_context=include_context,
+            run_audit=run_audit,
+            levels=levels,
+        )
+        return [MetricBundleSummary(**payload) for payload in summaries_map.values()]
+
+    if full_rebuild:
+        _validate_full_rebuild_root(bundle_root=bundle_root, data_dir=data_dir)
+        remove_tree(bundle_root)
+    else:
+        _invalidate_bundle_metadata(data_dir=data_dir)
+        if overwrite and prune_scope:
+            _delete_owned_paths(
+                _owned_scope_paths(
+                    data_dir=data_dir,
+                    slugs=[seed.slug for seed in plan.summaries_seed],
+                    levels=_selected_levels(levels),
+                    include_geometry=include_geometry,
+                    include_context=include_context,
+                )
+            )
+
+    progress = BuildProgress(plan, enabled=_progress_enabled(show_progress))
+    progress.print_plan_summary()
+    resolved_workers = resolve_build_workers(workers)
 
     try:
         for task in plan.master_tasks:
@@ -1819,7 +2132,6 @@ def build_processed_optimised_bundle(
 
         summaries = [MetricBundleSummary(**payload) for payload in summaries_map.values()]
         _write_manifest(
-            summaries,
             data_dir=data_dir,
             progress=progress,
             task=plan.manifest_task,
@@ -1856,7 +2168,26 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=sorted(LEVEL_SELECTIONS.keys()),
         help="Restrict the build to one or more level groups or concrete levels.",
     )
-    parser.add_argument("--overwrite", action="store_true", help="Delete and rebuild processed_optimised.")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Rewrite only the selected optimized outputs in place without deleting the bundle root.",
+    )
+    parser.add_argument(
+        "--prune-scope",
+        action="store_true",
+        help="With --overwrite, delete stale files only inside the selected metric/level ownership roots before rewriting.",
+    )
+    parser.add_argument(
+        "--full-rebuild",
+        action="store_true",
+        help="Delete and rebuild the entire processed_optimised bundle. This is destructive.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the resolved write/delete plan without mutating processed_optimised.",
+    )
     parser.add_argument("--skip-geometry", action="store_true", help="Skip optimized geometry generation.")
     parser.add_argument("--skip-context", action="store_true", help="Skip optimized context artifacts.")
     parser.add_argument("--skip-audit", action="store_true", help="Skip the post-build parity audit.")
@@ -1879,6 +2210,9 @@ def main(argv: Optional[list[str]] = None) -> int:
         levels=args.levels,
         workers=args.workers,
         overwrite=bool(args.overwrite),
+        prune_scope=bool(args.prune_scope),
+        full_rebuild=bool(args.full_rebuild),
+        dry_run=bool(args.dry_run),
         include_geometry=not bool(args.skip_geometry),
         include_context=not bool(args.skip_context),
         show_progress=False if bool(args.no_progress) else None,
@@ -1888,6 +2222,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     print("PROCESSED OPTIMISED BUNDLE")
     print(f"data_dir: {data_dir}")
     print(f"bundle_root: {resolve_optimized_bundle_root(data_dir=data_dir)}")
+    print(f"mode: {'dry-run' if bool(args.dry_run) else 'build'}")
     print(f"metrics_written: {len(summaries)}")
     wrote_yearly = sum(1 for s in summaries if s.wrote_yearly_ensemble or s.wrote_yearly_models)
     print(f"metrics_with_yearly: {wrote_yearly}")

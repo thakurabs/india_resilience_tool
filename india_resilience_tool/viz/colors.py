@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 import hashlib
+from typing import Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -22,6 +23,15 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+
+
+FLOOD_SEVERITY_CLASS_COLORS: tuple[str, ...] = (
+    "#00a651",
+    "#8ccf4d",
+    "#fff200",
+    "#ff1a1a",
+    "#b30000",
+)
 
 
 @lru_cache(maxsize=16)
@@ -90,7 +100,13 @@ def compute_robust_range(
     return vmin, vmax
 
 
-def format_legend_value(x: float, *, vmin: float, vmax: float) -> str:
+def format_legend_value(
+    x: float,
+    *,
+    vmin: float,
+    vmax: float,
+    display_scale: float = 1.0,
+) -> str:
     """
     Format legend numbers with adaptive precision based on the data range.
 
@@ -103,14 +119,18 @@ def format_legend_value(x: float, *, vmin: float, vmax: float) -> str:
         Formatted string (or "—" if x is not finite)
     """
     try:
-        xf = float(x)
+        xf = float(x) * float(display_scale)
     except Exception:
         return "—"
 
     if not np.isfinite(xf):
         return "—"
 
-    span = float(abs(float(vmax) - float(vmin))) if np.isfinite(vmin) and np.isfinite(vmax) else 0.0
+    span = (
+        float(abs(float(vmax) - float(vmin))) * float(display_scale)
+        if np.isfinite(vmin) and np.isfinite(vmax)
+        else 0.0
+    )
 
     if span >= 10.0:
         decimals = 1
@@ -259,6 +279,40 @@ def apply_fillcolor_binned(
     return merged_df
 
 
+def apply_fillcolor_classed(
+    merged_df: pd.DataFrame,
+    metric_col: str,
+    *,
+    value_to_color: Mapping[int, str],
+    tolerance: float = 1e-6,
+) -> pd.DataFrame:
+    """
+    Add class-driven fill colors for ordinal metrics with fixed integer classes.
+
+    Contract:
+      - merged_df is modified in-place and returned
+      - NaN/inf or non-class values -> '#cccccc'
+      - also writes '_metric_val' with numeric-coerced values
+    """
+    vals = pd.to_numeric(
+        merged_df.get(metric_col, pd.Series(index=merged_df.index, dtype=float)),
+        errors="coerce",
+    )
+    arr = vals.to_numpy(dtype=float)
+    fill = np.full(arr.shape, "#cccccc", dtype=object)
+
+    merged_df["_metric_val"] = vals
+    for idx, value in enumerate(arr):
+        if not np.isfinite(value):
+            continue
+        rounded = int(round(float(value)))
+        if abs(float(value) - rounded) <= tolerance and rounded in value_to_color:
+            fill[idx] = str(value_to_color[rounded])
+
+    merged_df["fillColor"] = fill
+    return merged_df
+
+
 def build_vertical_gradient_legend_html(
     *,
     pretty_metric_label: str,
@@ -314,6 +368,7 @@ def build_vertical_binned_legend_block_html(
     vmin: float,
     vmax: float,
     cmap_name: str,
+    display_scale: float = 1.0,
     nlevels: int = 15,
     nticks: int = 5,
     include_zero_tick: bool = True,
@@ -396,7 +451,7 @@ def build_vertical_binned_legend_block_html(
             parts: list[str] = []
             tol_zero = max(abs(span) * 1e-12, 1e-12)
             for i, t in enumerate(ticks):
-                t_str = format_legend_value(t, vmin=vmin_f, vmax=vmax_f)
+                t_str = format_legend_value(t, vmin=vmin_f, vmax=vmax_f, display_scale=display_scale)
                 is_zero = abs(t) <= tol_zero and (vmin_f < 0.0 < vmax_f)
                 weight_css = " font-weight: 700;" if is_zero else ""
 
@@ -433,6 +488,79 @@ def build_vertical_binned_legend_block_html(
       <div style="position: relative; width: 34px; height: {bar_height_px}px; margin-right: 6px;
                   font-size: {label_font}; color: #000;">
         {tick_labels_html}
+      </div>
+      <div style="height: {bar_height_px}px; width: {bar_width_px}px; border-radius: 6px;
+                  border: 1px solid rgba(0,0,0,0.18);
+                  box-shadow: 0 2px 6px rgba(0,0,0,0.20);
+                  overflow: hidden; display: flex; flex-direction: column-reverse;">
+        {segments_html}
+      </div>
+    </div>
+    {title_html}
+  </div>
+</div>
+"""
+
+
+def build_vertical_categorical_legend_block_html(
+    *,
+    legend_title: str = "",
+    labels: Sequence[str],
+    colors: Sequence[str],
+    map_height: int = 700,
+    bar_width_px: int = 18,
+    label_font: str = "12px",
+    bar_height_fraction: float = 0.82,
+) -> str:
+    """Build a container-relative categorical legend with fixed labels and colors."""
+    pairs = [(str(label), str(color)) for label, color in zip(labels, colors) if str(label).strip()]
+    if not pairs:
+        return build_vertical_binned_legend_block_html(
+            legend_title=legend_title,
+            vmin=1.0,
+            vmax=5.0,
+            cmap_name="Reds",
+            map_height=map_height,
+        )
+
+    title_text = str(legend_title or "").strip()
+    outer_pad_top_px = 30
+    outer_pad_bottom_px = 18
+    available_height_px = max(int(map_height) - outer_pad_top_px - outer_pad_bottom_px, 160)
+    bar_height_px = max(int(available_height_px * bar_height_fraction), 120)
+    title_html = ""
+    if title_text:
+        title_html = (
+            '<div style="writing-mode: vertical-rl; transform: rotate(180deg);'
+            f' font-size: {label_font}; white-space: nowrap; align-self: center; color: #000;">'
+            f"{title_text}</div>"
+        )
+
+    segment_height = max(bar_height_px / len(pairs), 18.0)
+    label_blocks = []
+    color_blocks = []
+    for label, _color in reversed(pairs):
+        label_blocks.append(
+            f'<div style="height:{segment_height}px; display:flex; align-items:center; justify-content:flex-end; white-space:nowrap;">{label}</div>'
+        )
+    for _label, color in pairs:
+        color_blocks.append(
+            f'<div style="height:{segment_height}px; width:100%; background:{color};"></div>'
+        )
+
+    labels_html = "\n".join(label_blocks)
+    segments_html = "\n".join(color_blocks)
+
+    return f"""
+<div style="height: 100%; width: 100%; display: flex; align-items: center; justify-content: center;
+            box-sizing: border-box; font-family: Arial, Helvetica, sans-serif;">
+  <div style="display: flex; align-items: center; justify-content: center; gap: 8px;
+              padding: {outer_pad_top_px}px 0 {outer_pad_bottom_px}px 0;
+              min-width: 120px; max-width: 100%; box-sizing: border-box;">
+    <div style="position: relative; display: flex; align-items: center; height: {bar_height_px}px;">
+      <div style="display:flex; flex-direction:column; justify-content:space-between; height:{bar_height_px}px; margin-right: 6px;
+                  font-size:{label_font}; color:#000;">
+        {labels_html}
       </div>
       <div style="height: {bar_height_px}px; width: {bar_width_px}px; border-radius: 6px;
                   border: 1px solid rgba(0,0,0,0.18);

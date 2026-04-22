@@ -49,17 +49,20 @@ DEFAULT_VALIDATION_TESTS = [
     "tests/test_aqueduct_admin_transfer.py",
     "tests/test_aqueduct_hydro_transfer.py",
     "tests/test_groundwater_district_masters.py",
+    "tests/test_jrc_flood_depth_admin_masters.py",
     "tests/test_population_admin_masters.py",
     "tests/test_validate_aqueduct_workflow.py",
     "tests/test_metrics_registry.py",
     "tests/test_config.py",
     "tests/test_available_states.py",
     "tests/test_crosswalk_generator.py",
+    "tests/test_prepare_dashboard_runner.py",
 ]
 CLIMATE_PILLAR = "Climate Hazards"
 AQUEDUCT_DOMAIN = "Aqueduct Water Risk"
 POPULATION_DOMAIN = "Population Exposure"
 GROUNDWATER_DOMAIN = "Groundwater Status & Availability"
+JRC_DOMAIN = "Flood Inundation Depth (JRC)"
 LEVEL_GROUPS = {
     "all": ["district", "block", "basin", "sub_basin"],
     "admin": ["district", "block"],
@@ -82,8 +85,8 @@ LEGACY_MASTER_FILENAMES = {
     "sub_basin": "master_metrics_by_sub_basin.csv",
 }
 MASTER_REQUIRED_COLUMNS = {
-    "district": {"state", "district"},
-    "block": {"state", "district", "block"},
+    "district": {"state", "district", "district_key"},
+    "block": {"state", "district", "block", "block_key"},
     "basin": {"basin_id", "basin_name"},
     "sub_basin": {"basin_id", "basin_name", "subbasin_id", "subbasin_name"},
 }
@@ -299,12 +302,16 @@ def _resolve_bundle_metrics(bundle: str, args: argparse.Namespace) -> list[str]:
         return _metrics_for_domain(POPULATION_DOMAIN)
     if bundle == "groundwater":
         return _metrics_for_domain(GROUNDWATER_DOMAIN)
+    if bundle == "jrc-flood-depth":
+        return _metrics_for_domain(JRC_DOMAIN)
     if bundle == "dashboard-package":
         metrics: list[str] = []
         metrics.extend(_resolve_climate_bundle_metrics(args))
         metrics.extend(_split_csv_values(getattr(args, "metric_slug", None)) or _metrics_for_domain(AQUEDUCT_DOMAIN))
         metrics.extend(_metrics_for_domain(POPULATION_DOMAIN))
         metrics.extend(_metrics_for_domain(GROUNDWATER_DOMAIN))
+        if bool(getattr(args, "include_jrc_flood_depth", False)):
+            metrics.extend(_metrics_for_domain(JRC_DOMAIN))
         return _dedupe_keep_order(metrics)
     return []
 
@@ -339,6 +346,70 @@ def _legacy_master_ready(*, slug: str, level: str, scope_name: str, data_dir: Pa
         return False
     required = MASTER_REQUIRED_COLUMNS[level]
     return (not df.empty) and required.issubset(set(df.columns))
+
+
+def _resolve_composite_metric_slugs() -> list[str]:
+    from india_resilience_tool.config.composite_metrics import get_visible_glance_composite_slugs
+
+    return list(get_visible_glance_composite_slugs())
+
+
+def _resolve_composite_runtime_scope(
+    *,
+    levels: Sequence[str],
+    admin_states: Sequence[str],
+    data_dir: Path,
+    overwrite: bool,
+) -> BundleRuntimeScope:
+    composite_levels = [level for level in levels if level in {"district", "block"}]
+    selected_metrics = _resolve_composite_metric_slugs() if composite_levels else []
+    pending_metrics: list[str] = []
+    if overwrite:
+        pending_metrics = list(selected_metrics)
+    else:
+        for slug in selected_metrics:
+            for level in composite_levels:
+                if not all(
+                    _legacy_master_ready(
+                        slug=slug,
+                        level=level,
+                        scope_name=state_name,
+                        data_dir=data_dir,
+                    )
+                    for state_name in admin_states
+                ):
+                    pending_metrics.append(slug)
+                    break
+    return BundleRuntimeScope(
+        selected_metrics=selected_metrics,
+        pending_metrics=_dedupe_keep_order(pending_metrics),
+        has_global_issues=False,
+    )
+
+
+def _build_composite_master_steps(
+    args: argparse.Namespace,
+    *,
+    levels: Sequence[str],
+    admin_states: Sequence[str],
+    scope: BundleRuntimeScope,
+) -> list[PlannedCommand]:
+    plan: list[PlannedCommand] = []
+    if not scope.selected_metrics:
+        return plan
+    metrics = _select_metrics_for_execution(scope) or scope.selected_metrics
+    for level in levels:
+        if level not in {"district", "block"}:
+            continue
+        argv = _py_module_cmd("tools.pipeline.build_composite_metrics")
+        argv.extend(["--level", level])
+        _append_repeat(argv, "--state", admin_states)
+        _append_repeat(argv, "--metric", metrics)
+        _append_flag(argv, "--overwrite", bool(getattr(args, "overwrite", False)))
+        if not bool(getattr(args, "verbose", False)):
+            argv.append("--quiet")
+        plan.append(PlannedCommand(label=f"composite-masters:{level}", argv=argv))
+    return plan
 
 
 def _resolve_climate_runtime_scope(
@@ -742,11 +813,12 @@ def _build_optimised_step(
     *,
     levels: Sequence[str] | None = None,
     label: str = "processed-optimised-build",
+    overwrite: Optional[bool] = None,
 ) -> PlannedCommand:
     argv = _py_module_cmd("tools.optimized.build_processed_optimised")
     _append_repeat(argv, "--metric", metrics)
     _append_repeat(argv, "--level", levels)
-    _append_flag(argv, "--overwrite", bool(args.overwrite))
+    _append_flag(argv, "--overwrite", bool(args.overwrite) if overwrite is None else bool(overwrite))
     argv.append("--skip-audit")
     return PlannedCommand(label=label, argv=argv)
 
@@ -769,13 +841,20 @@ def _build_runtime_plan(
     *,
     scope: BundleRuntimeScope,
     allow_optimised: bool = True,
+    overwrite_optimised: Optional[bool] = None,
 ) -> list[PlannedCommand]:
     if bool(getattr(args, "audit_only", False)):
         return [] if bool(getattr(args, "skip_audit", False)) else [_build_audit_step(args, scope.selected_metrics)]
 
     plan: list[PlannedCommand] = []
     if allow_optimised and not bool(getattr(args, "skip_optimised", False)) and scope.runtime_needed:
-        plan.append(_build_optimised_step(args, _select_metrics_for_execution(scope)))
+        plan.append(
+            _build_optimised_step(
+                args,
+                _select_metrics_for_execution(scope),
+                overwrite=overwrite_optimised,
+            )
+        )
     if not bool(getattr(args, "skip_audit", False)):
         plan.append(_build_audit_step(args, scope.selected_metrics))
     return plan
@@ -797,6 +876,68 @@ def _build_aqueduct_metric_args(args: argparse.Namespace) -> list[str]:
     argv: list[str] = []
     for slug in metric_slugs:
         argv.extend(["--metric-slug", slug])
+    return argv
+
+
+def _add_jrc_flags(parser: argparse.ArgumentParser, *, prefixed: bool = False) -> None:
+    if prefixed:
+        parser.add_argument("--include-jrc-flood-depth", action="store_true", help="Include the Telangana JRC flood-depth pilot bundle.")
+        parser.add_argument("--jrc-source-dir", default=None, help="Directory containing the required JRC flood-depth rasters.")
+        parser.add_argument("--jrc-assume-units", default=None, help="Attested JRC flood-depth units; must be 'm' when provided.")
+        parser.add_argument("--jrc-districts-path", default=None, help="Optional override path to canonical district boundaries.")
+        parser.add_argument("--jrc-blocks-path", default=None, help="Optional override path to canonical block boundaries.")
+        parser.add_argument("--jrc-qa-dir", default=None, help="Optional override directory for JRC QA outputs.")
+        return
+    parser.add_argument("--source-dir", default=None, help="Directory containing the required JRC flood-depth rasters.")
+    parser.add_argument("--assume-units", default=None, help="Attested JRC flood-depth units; must be 'm'.")
+    parser.add_argument("--districts-path", default=None, help="Optional override path to canonical district boundaries.")
+    parser.add_argument("--blocks-path", default=None, help="Optional override path to canonical block boundaries.")
+    parser.add_argument("--qa-dir", default=None, help="Optional override directory for JRC QA outputs.")
+
+
+def _validate_jrc_inputs(
+    args: argparse.Namespace,
+    *,
+    prefixed: bool = False,
+    require_source: bool,
+) -> None:
+    source_dir_attr = "jrc_source_dir" if prefixed else "source_dir"
+    assume_units_attr = "jrc_assume_units" if prefixed else "assume_units"
+    source_dir = getattr(args, source_dir_attr, None)
+    assume_units = getattr(args, assume_units_attr, None)
+    if not require_source:
+        return
+    if not source_dir or not assume_units:
+        prefix = "--jrc-" if prefixed else "--"
+        raise SystemExit(
+            f"JRC flood-depth planning requires {prefix}source-dir and {prefix}assume-units m unless --audit-only is set."
+        )
+    if str(assume_units).strip().lower() != "m":
+        prefix = "--jrc-" if prefixed else "--"
+        raise SystemExit(f"JRC flood-depth planning requires {prefix}assume-units m.")
+
+
+def _build_jrc_builder_args(
+    args: argparse.Namespace,
+    *,
+    prefixed: bool = False,
+) -> list[str]:
+    argv: list[str] = []
+    source_dir_attr = "jrc_source_dir" if prefixed else "source_dir"
+    assume_units_attr = "jrc_assume_units" if prefixed else "assume_units"
+    districts_attr = "jrc_districts_path" if prefixed else "districts_path"
+    blocks_attr = "jrc_blocks_path" if prefixed else "blocks_path"
+    qa_attr = "jrc_qa_dir" if prefixed else "qa_dir"
+    if getattr(args, source_dir_attr, None):
+        argv.extend(["--source-dir", str(getattr(args, source_dir_attr))])
+    if getattr(args, assume_units_attr, None):
+        argv.extend(["--assume-units", str(getattr(args, assume_units_attr))])
+    if getattr(args, districts_attr, None):
+        argv.extend(["--districts-path", str(getattr(args, districts_attr))])
+    if getattr(args, blocks_attr, None):
+        argv.extend(["--blocks-path", str(getattr(args, blocks_attr))])
+    if getattr(args, qa_attr, None):
+        argv.extend(["--qa-dir", str(getattr(args, qa_attr))])
     return argv
 
 
@@ -904,6 +1045,32 @@ def build_groundwater_plan(
     return plan
 
 
+def build_jrc_flood_depth_plan(
+    args: argparse.Namespace,
+    *,
+    include_blocks_geojson: bool = True,
+    include_runtime: bool = True,
+    runtime_scope: Optional[BundleRuntimeScope] = None,
+) -> list[PlannedCommand]:
+    """Build the Telangana JRC flood-depth admin prep plan."""
+    require_source = not bool(getattr(args, "audit_only", False))
+    _validate_jrc_inputs(args, require_source=require_source)
+    scope = runtime_scope or _resolve_runtime_scope("jrc-flood-depth", args, levels=("district", "block"))
+    plan: list[PlannedCommand] = []
+    if not bool(getattr(args, "audit_only", False)) and (
+        bool(args.overwrite) or scope.runtime_needed or not include_runtime
+    ):
+        if include_blocks_geojson:
+            plan.extend(build_blocks_geojson_plan(args))
+        argv = _py_module_cmd("tools.geodata.build_jrc_flood_depth_admin_masters")
+        argv.extend(_build_jrc_builder_args(args))
+        _append_flag(argv, "--overwrite", bool(args.overwrite))
+        plan.append(PlannedCommand(label="jrc-flood-depth-admin-masters", argv=argv))
+    if include_runtime:
+        plan.extend(_build_runtime_plan(args, scope=scope, overwrite_optimised=False))
+    return plan
+
+
 def _build_climate_compute_steps(
     args: argparse.Namespace,
     *,
@@ -972,10 +1139,13 @@ def _build_climate_runtime_plan(
     args: argparse.Namespace,
     *,
     scope: ClimateRuntimeScope,
+    extra_metrics: Sequence[str] | None = None,
+    extra_runtime_needed: bool = False,
 ) -> list[PlannedCommand]:
+    selected_metrics = _dedupe_keep_order(list(scope.selected_metrics) + list(extra_metrics or ()))
     if bool(getattr(args, "audit_only", False)):
         return [] if bool(getattr(args, "skip_audit", False)) else [
-            _build_audit_step(args, scope.selected_metrics, levels=scope.levels)
+            _build_audit_step(args, selected_metrics, levels=scope.levels)
         ]
 
     plan: list[PlannedCommand] = []
@@ -986,7 +1156,7 @@ def _build_climate_runtime_plan(
                 plan.append(
                     _build_optimised_step(
                         args,
-                        scope.selected_metrics,
+                        selected_metrics,
                         levels=scope.levels,
                         label=f"processed-optimised-build:{label_levels}",
                     )
@@ -1010,8 +1180,20 @@ def _build_climate_runtime_plan(
                 plan.append(
                     _build_optimised_step(
                         args,
-                        pending_metrics,
+                        _dedupe_keep_order(list(pending_metrics) + list(extra_metrics or ())),
                         levels=grouped_levels,
+                        label=f"processed-optimised-build:{label_levels}",
+                    )
+                )
+        if extra_runtime_needed and not plan and extra_metrics:
+            admin_levels = [level for level in scope.levels if level in {"district", "block"}]
+            if admin_levels:
+                label_levels = "+".join(admin_levels)
+                plan.append(
+                    _build_optimised_step(
+                        args,
+                        extra_metrics,
+                        levels=admin_levels,
                         label=f"processed-optimised-build:{label_levels}",
                     )
                 )
@@ -1020,7 +1202,7 @@ def _build_climate_runtime_plan(
         plan.append(
             _build_audit_step(
                 args,
-                scope.selected_metrics,
+                selected_metrics,
                 levels=scope.levels,
             )
         )
@@ -1033,9 +1215,17 @@ def build_climate_hazards_plan(
     include_runtime: bool = True,
     runtime_scope: Optional[ClimateRuntimeScope] = None,
 ) -> list[PlannedCommand]:
+    from india_resilience_tool.config.paths import get_paths_config
+
     levels = _resolve_levels(str(args.level))
     admin_states = _resolve_admin_states(getattr(args, "state", None))
     scope = runtime_scope or _resolve_climate_runtime_scope(args, levels=levels)
+    composite_scope = _resolve_composite_runtime_scope(
+        levels=levels,
+        admin_states=admin_states,
+        data_dir=get_paths_config().data_dir,
+        overwrite=bool(getattr(args, "overwrite", False)),
+    )
 
     compute_metrics_by_level = {
         level: list(scope.by_level[level].compute_pending_metrics)
@@ -1068,9 +1258,24 @@ def build_climate_hazards_plan(
                     admin_states=admin_states,
                 )
             )
+            plan.extend(
+                _build_composite_master_steps(
+                    args,
+                    levels=levels,
+                    admin_states=admin_states,
+                    scope=composite_scope,
+                )
+            )
 
     if include_runtime:
-        plan.extend(_build_climate_runtime_plan(args, scope=scope))
+        plan.extend(
+            _build_climate_runtime_plan(
+                args,
+                scope=scope,
+                extra_metrics=composite_scope.selected_metrics if composite_scope.selected_metrics else (),
+                extra_runtime_needed=composite_scope.runtime_needed,
+            )
+        )
     return plan
 
 
@@ -1089,6 +1294,14 @@ def build_validation_plan(args: argparse.Namespace) -> list[PlannedCommand]:
 
 
 def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedCommand]:
+    from india_resilience_tool.config.paths import get_paths_config
+
+    if bool(getattr(args, "include_jrc_flood_depth", False)):
+        _validate_jrc_inputs(
+            args,
+            prefixed=True,
+            require_source=not bool(getattr(args, "audit_only", False)),
+        )
     climate_levels = _resolve_levels(str(args.level))
     climate_scope = _resolve_climate_runtime_scope(
         args,
@@ -1097,20 +1310,35 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     aqueduct_scope = _resolve_runtime_scope("aqueduct", args)
     population_scope = _resolve_runtime_scope("population-exposure", args)
     groundwater_scope = _resolve_runtime_scope("groundwater", args)
+    jrc_scope = (
+        _resolve_runtime_scope("jrc-flood-depth", args, levels=("district", "block"))
+        if bool(getattr(args, "include_jrc_flood_depth", False))
+        else BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False)
+    )
 
     package_scope = BundleRuntimeScope(
-        selected_metrics=_resolve_bundle_metrics("dashboard-package", args),
+        selected_metrics=_dedupe_keep_order(
+            _resolve_bundle_metrics("dashboard-package", args) + _resolve_composite_metric_slugs()
+        ),
         pending_metrics=_dedupe_keep_order(
             climate_scope.pending_metrics
             + aqueduct_scope.pending_metrics
             + population_scope.pending_metrics
             + groundwater_scope.pending_metrics
+            + jrc_scope.pending_metrics
+            + _resolve_composite_runtime_scope(
+                levels=climate_levels,
+                admin_states=_resolve_admin_states(getattr(args, "state", None)),
+                data_dir=get_paths_config().data_dir,
+                overwrite=bool(getattr(args, "overwrite", False)),
+            ).pending_metrics
         ),
         has_global_issues=(
             climate_scope.has_global_issues
             or aqueduct_scope.has_global_issues
             or population_scope.has_global_issues
             or groundwater_scope.has_global_issues
+            or jrc_scope.has_global_issues
         ),
     )
 
@@ -1121,14 +1349,32 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     aqueduct_plan = build_aqueduct_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=aqueduct_scope)
     population_plan = build_population_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=population_scope)
     groundwater_plan = build_groundwater_plan(args, include_runtime=False, runtime_scope=groundwater_scope)
+    jrc_plan = (
+        build_jrc_flood_depth_plan(
+            argparse.Namespace(
+                **vars(args),
+                source_dir=getattr(args, "jrc_source_dir", None),
+                assume_units=getattr(args, "jrc_assume_units", None),
+                districts_path=getattr(args, "jrc_districts_path", None),
+                blocks_path=getattr(args, "jrc_blocks_path", None),
+                qa_dir=getattr(args, "jrc_qa_dir", None),
+            ),
+            include_blocks_geojson=False,
+            include_runtime=False,
+            runtime_scope=jrc_scope,
+        )
+        if bool(getattr(args, "include_jrc_flood_depth", False))
+        else []
+    )
 
     plan: list[PlannedCommand] = []
-    if aqueduct_plan or population_plan:
+    if aqueduct_plan or population_plan or jrc_plan:
         plan.extend(build_blocks_geojson_plan(args))
     plan.extend(climate_plan)
     plan.extend(aqueduct_plan)
     plan.extend(population_plan)
     plan.extend(groundwater_plan)
+    plan.extend(jrc_plan)
     plan.extend(_build_runtime_plan(args, scope=package_scope))
 
     if bool(getattr(args, "include_pytest", False)) and not bool(getattr(args, "audit_only", False)):
@@ -1156,6 +1402,7 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         "aqueduct-validate": "tools.geodata.validate_aqueduct_workflow",
         "population-admin-masters": "tools.geodata.build_population_admin_masters",
         "groundwater-district-masters": "tools.geodata.build_groundwater_district_masters",
+        "jrc-flood-depth-admin-masters": "tools.geodata.build_jrc_flood_depth_admin_masters",
     }
     if step in module_map:
         argv = _py_module_cmd(module_map[step])
@@ -1169,6 +1416,9 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
                 argv.extend(["--workbook", str(args.groundwater_workbook)])
             if getattr(args, "groundwater_alias_csv", None):
                 argv.extend(["--district-alias-csv", str(args.groundwater_alias_csv)])
+        if step == "jrc-flood-depth-admin-masters":
+            _validate_jrc_inputs(args, require_source=True)
+            argv.extend(_build_jrc_builder_args(args))
         return [PlannedCommand(label=step, argv=argv)]
 
     if step == "climate-compute":
@@ -1242,6 +1492,8 @@ def build_command_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         return build_population_plan(args, include_blocks_geojson=True, include_runtime=True)
     if command == "groundwater":
         return build_groundwater_plan(args, include_runtime=True)
+    if command == "jrc-flood-depth":
+        return build_jrc_flood_depth_plan(args, include_runtime=True)
     if command == "dashboard-package":
         return build_dashboard_package_plan(args)
     if command == "validate":
@@ -1255,6 +1507,7 @@ def _print_available_commands() -> None:
     print("  climate-hazards")
     print("  population-exposure")
     print("  groundwater")
+    print("  jrc-flood-depth")
     print("  dashboard-package")
     print("  validate")
     print("")
@@ -1270,6 +1523,7 @@ def _print_available_commands() -> None:
         "aqueduct-validate",
         "population-admin-masters",
         "groundwater-district-masters",
+        "jrc-flood-depth-admin-masters",
         "climate-compute",
         "climate-masters",
         "pytest-validation",
@@ -1404,12 +1658,17 @@ def build_cli() -> argparse.ArgumentParser:
     _add_common_runner_flags(p_groundwater, include_runtime_controls=True)
     _add_groundwater_flags(p_groundwater)
 
+    p_jrc = subparsers.add_parser("jrc-flood-depth", help="Prepare the Telangana JRC flood-depth dashboard bundle.")
+    _add_common_runner_flags(p_jrc, include_runtime_controls=True)
+    _add_jrc_flags(p_jrc, prefixed=False)
+
     p_pkg = subparsers.add_parser("dashboard-package", help="Prepare all dashboard bundles end to end.")
     _add_common_runner_flags(p_pkg, include_runtime_controls=True)
     _add_climate_flags(p_pkg)
     _add_aqueduct_flags(p_pkg, bundle=True)
     _add_population_flags(p_pkg)
     _add_groundwater_flags(p_pkg)
+    _add_jrc_flags(p_pkg, prefixed=True)
     p_pkg.add_argument("--include-pytest", action="store_true", help="Run the default validation pytest set at the end.")
 
     p_validate = subparsers.add_parser("validate", help="Run Aqueduct validation and optional targeted pytest checks.")
@@ -1428,6 +1687,7 @@ def build_cli() -> argparse.ArgumentParser:
         "aqueduct-validate",
         "population-admin-masters",
         "groundwater-district-masters",
+        "jrc-flood-depth-admin-masters",
     ]:
         sub = subparsers.add_parser(name, help=f"Run the `{name}` step only.")
         _add_common_runner_flags(sub)
@@ -1435,6 +1695,8 @@ def build_cli() -> argparse.ArgumentParser:
             _add_population_flags(sub)
         elif name == "groundwater-district-masters":
             _add_groundwater_flags(sub)
+        elif name == "jrc-flood-depth-admin-masters":
+            _add_jrc_flags(sub, prefixed=False)
         elif name != "blocks-geojson":
             _add_aqueduct_flags(sub, bundle=(name == "aqueduct-baseline"))
 

@@ -17,8 +17,9 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Default landing discovery surface:
   - launches into an India state-level climate-hazard screening map
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
-  - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
-  - uses approved custom metric weights for all visible Glance climate bundles
+  - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Extreme Rainfall`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
+  - each visible Glance bundle now reads one persisted composite admin metric from disk; the dashboard no longer computes visible bundle scores at runtime
+  - `Deep Dive` from Glance opens the matching persisted composite metric such as `Composite Heat Stress`
   - supports India -> state -> district drill-down before entering Deep Dive
   - uses explicit state clicks at India overview and district clicks within the selected state
   - top-bar geography search provides type-to-filter state and district suggestions
@@ -50,6 +51,14 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - Total Population on district and block units
   - Population Density on district and block units
   - fixed snapshot semantics: `snapshot`, `2025`
+- JRC flood-depth onboarding:
+  - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
+  - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
+  - derived `RP-100 Flood Extent` persisted from the RP-100 depth layer as the share of total polygon area covered by positive depth
+  - `RP-10 Flood Depth`, `RP-50 Flood Depth`, `RP-100 Flood Depth`, `RP-500 Flood Depth`
+  - fixed snapshot semantics: `snapshot`, `Current`
+  - block depth values use flooded-cell `p95` depth; district depth values use flooded-area-weighted means of child block flooded-cell `p95` depths
+  - extent is stored as a `0-1` fraction, displayed as a percent, and uses total-polygon-area semantics at both block and district levels
 - Water-risk Aqueduct onboarding:
   - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
   - Aqueduct interannual variability on SOI basin, SOI sub-basin, district, and block units
@@ -149,7 +158,7 @@ Launch behavior:
 - the landing search bar filters state and district suggestions as you type
 - the Deep Dive screen includes a top-right `Back to Glance` action
 - `Back to Glance` restores the current climate/admin district context when compatible, and otherwise reopens the last stored glance context
-- use `Deep Dive` from the landing page to enter the existing detailed ribbon/sidebar workflow
+- use `Deep Dive` from the landing page to enter the existing detailed ribbon/sidebar workflow on the persisted composite metric for the active Glance bundle
 
 Performance note:
 - the dashboard now reads the compact `processed_optimised/` runtime bundle by default
@@ -159,7 +168,7 @@ Performance note:
 Optimized runtime bundle:
 
 ```bash
-python -m tools.optimized.build_processed_optimised --overwrite
+python -m tools.optimized.build_processed_optimised
 ```
 
 This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DATA_DIR/processed/` tree and current canonical geometry/context files. The optimized bundle retains:
@@ -175,10 +184,19 @@ By default, the builder now parallelizes yearly-model and yearly-ensemble stages
 The optimized builder also supports level-filtered refreshes:
 
 ```bash
+python -m tools.optimized.build_processed_optimised --overwrite --level hydro
+python -m tools.optimized.build_processed_optimised --overwrite --prune-scope --level sub_basin --metric tas_annual_mean
 python -m tools.optimized.build_processed_optimised --level hydro
 python -m tools.optimized.build_processed_optimised --level sub_basin --metric tas_annual_mean
 python -m tools.optimized.build_processed_optimised --metric tas_annual_mean --workers 4 --skip-geometry --skip-context --skip-audit
 ```
+
+Flag semantics:
+- default runs rewrite planned outputs in place and preserve unrelated bundle contents
+- `--overwrite` forces rewrite of the selected targets only
+- `--overwrite --prune-scope` removes stale files only inside the selected metric/level ownership roots before rewriting
+- `--full-rebuild` is the destructive whole-bundle reset
+- `--dry-run` prints the resolved write/delete plan without mutating `processed_optimised/`
 
 while dropping duplicate runtime fields such as:
 - `std`
@@ -199,6 +217,18 @@ The dashboard prefers optimized runtime assets when they are present:
 - compact selector metadata from `processed_optimised/context/admin_block_index.parquet` and `processed_optimised/context/hydro_subbasin_index.parquet`
 
 Optimized geometry outputs also persist `area_m2`, which the summary views reuse instead of recomputing geodesic area weights on every render.
+
+Persisted visible-Glance composite metrics:
+
+```bash
+python -m tools.pipeline.build_composite_metrics --help
+```
+
+This writes admin-only district and block composite masters for the 6 visible Glance bundles under:
+- `IRT_DATA_DIR/processed/<composite_slug>/<state>/master_metrics_by_district.csv`
+- `IRT_DATA_DIR/processed/<composite_slug>/<state>/master_metrics_by_block.csv`
+
+The canonical prep runner now schedules this composite step automatically after climate master builds and before optimized runtime refresh for admin climate runs.
 
 Parity audit:
 
@@ -439,7 +469,7 @@ python -m tools.runs.prepare_dashboard climate-hazards --level hydro --audit-onl
 python -m tools.runs.prepare_dashboard dashboard-package
 ```
 
-This bundle includes climate hazards, Aqueduct, population exposure, and groundwater prep,
+This bundle includes climate hazards, Aqueduct, population exposure, groundwater prep, and optional Telangana JRC flood-depth prep,
 and now refreshes `processed_optimised` plus the final audit as part of the same run.
 When block-level products are part of the run, the runner now refreshes the canonical
 `IRT_DATA_DIR/blocks_4326.geojson` first.
@@ -449,6 +479,16 @@ Preview first:
 ```bash
 python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 ```
+
+Optional JRC flood-depth pilot:
+
+```bash
+python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.runs.prepare_dashboard dashboard-package --include-jrc-flood-depth --jrc-source-dir /path/to/Floodlayers_JRC --jrc-assume-units m --overwrite
+```
+
+For the JRC pilot, runner `--overwrite` refreshes the Telangana JRC masters and QA outputs but does not wipe unrelated
+`processed_optimised` metric artifacts.
 
 ### Build population exposure masters
 
@@ -476,6 +516,36 @@ district GeoJSON through an explicit alias workflow, and writes:
 - `processed/gw_future_availability_ham/{state}/master_metrics_by_district.csv`
 - `processed/gw_extractable_resource_ham/{state}/master_metrics_by_district.csv`
 - `processed/gw_total_extraction_ham/{state}/master_metrics_by_district.csv`
+
+### Build Telangana JRC flood-depth masters
+
+```bash
+python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.geodata.build_jrc_flood_depth_admin_masters --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+```
+
+This builds Telangana-only district and block snapshot masters for:
+- `processed/jrc_flood_depth_index_rp100/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_index_rp100/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_extent_rp100/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_extent_rp100/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_depth_rp10/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_rp10/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_depth_rp50/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_rp50/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_depth_rp100/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_rp100/Telangana/master_metrics_by_block.csv`
+- `processed/jrc_flood_depth_rp500/Telangana/master_metrics_by_district.csv`
+- `processed/jrc_flood_depth_rp500/Telangana/master_metrics_by_block.csv`
+
+JRC coverage is interpreted from raster extent overlap for this dataset family: positive values contribute flood depth,
+and zero values inside raster extent are treated as dry cells.
+The same workflow also writes the derived `jrc_flood_depth_index_rp100` severity-class masters and
+`jrc_flood_extent_rp100` extent masters. Flood extent is stored as a fraction, displayed as a percent,
+and uses total-polygon-area semantics, with raster-supported area retained in QA outputs. The RP-100 severity
+index now combines RP-100 depth and RP-100 extent through the fixed 5x5 severity matrix, and the `run_summary.csv`
+records that provenance with a `derived_severity_matrix` row. Rebuild the JRC masters and optimized outputs after
+pulling this change because older persisted `jrc_flood_depth_index_rp100` outputs are methodologically incompatible.
 
 ### Rebuild the canonical block boundaries
 
