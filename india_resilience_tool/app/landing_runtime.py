@@ -19,6 +19,7 @@ from india_resilience_tool.analysis.bundle_scores import (
     BundleMetricSpec,
     aggregate_state_bundle_scores,
     compute_bundle_score_frame,
+    compute_metric_driver_frame,
     normalized_metric_column,
 )
 from india_resilience_tool.config.bundle_weights import get_bundle_weights
@@ -115,6 +116,16 @@ class LandingMetricContext:
     source_signature: tuple[tuple[str, Optional[float]], ...]
     source_paths: tuple[str, ...]
     available_pairs: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class LandingDriverContext:
+    """Best-effort component-metric context used only for Glance driver display."""
+
+    district_scores: pd.DataFrame
+    metric_specs: list[BundleMetricSpec]
+    available: bool
+    reason: Optional[str] = None
 
 
 class _ContextKeyEntry(NamedTuple):
@@ -1190,6 +1201,72 @@ def _prepare_bundle_context(
     return district_scores, state_scores
 
 
+def _prepare_driver_context(
+    bundle_domain: str,
+    *,
+    scenario: str,
+    period: str,
+    stat: str,
+    data_dir: Path,
+) -> LandingDriverContext:
+    """Load component metrics for driver display without affecting composite landing behavior."""
+    try:
+        contexts = _collect_bundle_metric_contexts(bundle_domain, data_dir=data_dir)
+        if not contexts:
+            return LandingDriverContext(
+                district_scores=pd.DataFrame(),
+                metric_specs=[],
+                available=False,
+                reason="no_metric_contexts",
+            )
+
+        context_key = _bundle_context_cache_key(contexts)
+        selected_pair = (str(scenario).strip(), canonical_period_label(str(period).strip()))
+        available_pairs = set(_intersect_bundle_scenario_period_pairs(contexts))
+        if selected_pair not in available_pairs:
+            return LandingDriverContext(
+                district_scores=pd.DataFrame(),
+                metric_specs=_metric_specs_from_context_key(context_key),
+                available=False,
+                reason="pair_unsupported",
+            )
+
+        district_scores, _state_scores, metric_specs = _prepare_bundle_context_cached(
+            bundle_domain,
+            scenario,
+            period,
+            stat,
+            context_key,
+        )
+        if not metric_specs:
+            return LandingDriverContext(
+                district_scores=district_scores,
+                metric_specs=[],
+                available=False,
+                reason="empty_metric_specs",
+            )
+        if district_scores.empty:
+            return LandingDriverContext(
+                district_scores=district_scores,
+                metric_specs=metric_specs,
+                available=False,
+                reason="empty_component_frame",
+            )
+        return LandingDriverContext(
+            district_scores=district_scores,
+            metric_specs=metric_specs,
+            available=True,
+            reason=None,
+        )
+    except Exception:
+        return LandingDriverContext(
+            district_scores=pd.DataFrame(),
+            metric_specs=[],
+            available=False,
+            reason="exception",
+        )
+
+
 def _build_distribution_frame(score_series: pd.Series) -> pd.DataFrame:
     """Return a stable score-band distribution table for small summary charts."""
     categories = ["Low", "Moderate", "High", "Very High"]
@@ -1878,6 +1955,7 @@ def _render_state_summary(
     state_name: str,
     district_scores: pd.DataFrame,
     state_scores: pd.DataFrame,
+    driver_context: LandingDriverContext,
     deep_dive_disabled: bool = False,
 ) -> None:
     """Render the expanded drawer for state focus."""
@@ -1909,6 +1987,16 @@ def _render_state_summary(
 
         st.markdown("**District Score Distribution**")
         st.bar_chart(_build_distribution_frame(state_scope["bundle_score"]).set_index("Band"))
+        st.markdown("**Metric Drivers**")
+        driver_scope = pd.DataFrame()
+        if driver_context.available and not driver_context.district_scores.empty:
+            driver_scope = driver_context.district_scores[
+                driver_context.district_scores["__state_key"].astype(str) == alias(state_name)
+            ].copy()
+        _render_driver_table(
+            compute_metric_driver_frame(driver_scope, metric_specs=driver_context.metric_specs),
+            top_n=5,
+        )
 
         if st.button(
             "Deep Dive",
@@ -1924,6 +2012,7 @@ def _render_district_summary(
     state_name: str,
     district_name: str,
     district_scores: pd.DataFrame,
+    driver_context: LandingDriverContext,
     deep_dive_disabled: bool = False,
 ) -> None:
     """Render the district-focus drawer with peer and driver context."""
@@ -1957,6 +2046,19 @@ def _render_district_summary(
                     f"Compared with the {state_name} average: {delta:+.1f} points "
                     f"(state average {state_mean:.1f})"
                 )
+
+        st.markdown("**Metric Drivers**")
+        driver_scope = pd.DataFrame()
+        if driver_context.available and not driver_context.district_scores.empty:
+            district_key = f"{alias(state_name)}|{alias(district_name)}"
+            driver_scope = driver_context.district_scores[
+                driver_context.district_scores["__district_key"].astype(str) == district_key
+            ].copy()
+        driver_df = compute_metric_driver_frame(driver_scope, metric_specs=driver_context.metric_specs)
+        if driver_df.empty:
+            st.caption("No driver detail is available for this district.")
+        else:
+            _render_driver_table(driver_df, top_n=5)
 
         if st.button(
             "Deep Dive",
@@ -2163,6 +2265,13 @@ def render_landing_page(
 
     scenario_options = _bundle_scenario_period_options(bundle_domain, data_dir=data_dir)
     district_scores, state_scores = _prepare_bundle_context(
+        bundle_domain,
+        scenario=scenario,
+        period=period,
+        stat=LANDING_SCORE_STAT,
+        data_dir=data_dir,
+    )
+    driver_context = _prepare_driver_context(
         bundle_domain,
         scenario=scenario,
         period=period,
@@ -2405,6 +2514,7 @@ def render_landing_page(
                     state_name=selected_state,
                     district_scores=district_scores,
                     state_scores=state_scores,
+                    driver_context=driver_context,
                     deep_dive_disabled=not scenario_options,
                 )
         elif focus_level == "district" and selected_state and selected_district:
@@ -2412,6 +2522,7 @@ def render_landing_page(
                     state_name=selected_state,
                     district_name=selected_district,
                     district_scores=district_scores,
+                    driver_context=driver_context,
                     deep_dive_disabled=not scenario_options,
                 )
 

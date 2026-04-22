@@ -100,11 +100,16 @@ class _DummyStreamlit:
     def __init__(self, session_state: dict[str, object]) -> None:
         self.session_state = session_state
         self.rerun_calls = 0
+        self.captions: list[str] = []
+        self.dataframes: list[pd.DataFrame] = []
 
     def columns(self, spec) -> list[_DummyContext]:
         return [_DummyContext() for _ in spec]
 
     def expander(self, *args, **kwargs) -> _DummyContext:
+        return _DummyContext()
+
+    def container(self, *args, **kwargs) -> _DummyContext:
         return _DummyContext()
 
     def selectbox(self, _label, options, index=None, key=None, **kwargs):
@@ -139,6 +144,8 @@ class _DummyStreamlit:
         return None
 
     def caption(self, *args, **kwargs) -> None:
+        if args:
+            self.captions.append(str(args[0]))
         return None
 
     def info(self, *args, **kwargs) -> None:
@@ -152,6 +159,31 @@ class _DummyStreamlit:
 
     def json(self, *args, **kwargs) -> None:
         return None
+
+    def metric(self, *args, **kwargs) -> None:
+        return None
+
+    def bar_chart(self, *args, **kwargs) -> None:
+        return None
+
+    def dataframe(self, data, *args, **kwargs) -> None:
+        self.dataframes.append(data.copy() if isinstance(data, pd.DataFrame) else data)
+        return None
+
+
+def _driver_context(
+    district_scores: pd.DataFrame,
+    *,
+    metric_specs: list[BundleMetricSpec],
+    available: bool = True,
+    reason: str | None = None,
+) -> landing_runtime.LandingDriverContext:
+    return landing_runtime.LandingDriverContext(
+        district_scores=district_scores,
+        metric_specs=metric_specs,
+        available=available,
+        reason=reason,
+    )
 
 def test_ensure_landing_state_sets_frozen_defaults() -> None:
     session_state: dict[str, object] = {}
@@ -861,6 +893,301 @@ def test_prepare_bundle_context_reads_persisted_composite_metric(monkeypatch: py
 
     assert district_scores["bundle_score"].tolist() == [20.0, 80.0]
     assert state_scores["bundle_score"].tolist() == [50.0]
+
+
+def test_render_landing_page_passes_composite_scores_and_component_driver_context_to_state_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Heat Risk",
+        "landing_scenario": "ssp585",
+        "landing_period": "2040-2060",
+        "landing_focus_level": "state",
+        "landing_selected_state": "Telangana",
+        "landing_selected_district": None,
+    }
+    stub_st = _DummyStreamlit(session_state)
+    captured: dict[str, object] = {}
+    composite_district_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["A"],
+            "bundle_score": [88.0],
+        }
+    )
+    composite_state_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "bundle_score": [77.0],
+            "state_rank": [1.0],
+            "state_count": [1],
+        }
+    )
+    component_district_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["A"],
+            "__state_key": ["telangana"],
+            "__district_key": ["telangana|a"],
+            "metric_a__landing_norm": [10.0],
+        }
+    )
+    driver_context = _driver_context(
+        component_district_scores,
+        metric_specs=[BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a")],
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+    monkeypatch.setattr(landing_runtime, "_sanitize_landing_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_bundle_scenario_period_options", lambda *args, **kwargs: [("ssp585", "2040-2060")])
+    monkeypatch.setattr(landing_runtime, "_prepare_bundle_context", lambda *args, **kwargs: (composite_district_scores, composite_state_scores))
+    monkeypatch.setattr(landing_runtime, "_prepare_driver_context", lambda *args, **kwargs: driver_context)
+    monkeypatch.setattr(landing_runtime, "_build_landing_search_options", lambda *args, **kwargs: {})
+    monkeypatch.setattr(landing_runtime, "_build_landing_map_artifacts", lambda **kwargs: (object(), None, "Map", _adm2_gdf()))
+    monkeypatch.setattr(landing_runtime, "render_map_view", lambda **kwargs: ({}, None, None))
+    monkeypatch.setattr(landing_runtime, "_render_national_summary", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_render_landing_compare", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_render_landing_rankings", lambda *args, **kwargs: None)
+
+    def fake_render_state_summary(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(landing_runtime, "_render_state_summary", fake_render_state_summary)
+    monkeypatch.setattr(landing_runtime, "_render_district_summary", lambda *args, **kwargs: None)
+
+    landing_runtime.render_landing_page(adm1=_adm1_gdf(), adm2=_adm2_gdf(), data_dir=Path("."))
+
+    assert captured["district_scores"] is composite_district_scores
+    assert captured["state_scores"] is composite_state_scores
+    assert captured["driver_context"] is driver_context
+    assert captured["state_name"] == "Telangana"
+
+
+def test_render_landing_page_passes_composite_scores_and_component_driver_context_to_district_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Heat Risk",
+        "landing_scenario": "ssp585",
+        "landing_period": "2040-2060",
+        "landing_focus_level": "district",
+        "landing_selected_state": "Telangana",
+        "landing_selected_district": "Nalgonda",
+    }
+    stub_st = _DummyStreamlit(session_state)
+    captured: dict[str, object] = {}
+    composite_district_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Nalgonda"],
+            "bundle_score": [88.0],
+            "district_rank": [1.0],
+            "district_count": [1],
+        }
+    )
+    composite_state_scores = pd.DataFrame({"state_name": ["Telangana"], "bundle_score": [88.0]})
+    component_district_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Nalgonda"],
+            "__state_key": ["telangana"],
+            "__district_key": ["telangana|nalgonda"],
+            "metric_a__landing_norm": [10.0],
+        }
+    )
+    driver_context = _driver_context(
+        component_district_scores,
+        metric_specs=[BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a")],
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+    monkeypatch.setattr(landing_runtime, "_sanitize_landing_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_bundle_scenario_period_options", lambda *args, **kwargs: [("ssp585", "2040-2060")])
+    monkeypatch.setattr(landing_runtime, "_prepare_bundle_context", lambda *args, **kwargs: (composite_district_scores, composite_state_scores))
+    monkeypatch.setattr(landing_runtime, "_prepare_driver_context", lambda *args, **kwargs: driver_context)
+    monkeypatch.setattr(landing_runtime, "_build_landing_search_options", lambda *args, **kwargs: {})
+    monkeypatch.setattr(landing_runtime, "_build_landing_map_artifacts", lambda **kwargs: (object(), None, "Map", _adm2_gdf()))
+    monkeypatch.setattr(landing_runtime, "render_map_view", lambda **kwargs: ({}, None, None))
+    monkeypatch.setattr(landing_runtime, "_render_national_summary", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_render_landing_compare", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_render_landing_rankings", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_render_state_summary", lambda *args, **kwargs: None)
+
+    def fake_render_district_summary(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(landing_runtime, "_render_district_summary", fake_render_district_summary)
+
+    landing_runtime.render_landing_page(adm1=_adm1_gdf(), adm2=_adm2_gdf(), data_dir=Path("."))
+
+    assert captured["district_scores"] is composite_district_scores
+    assert captured["driver_context"] is driver_context
+    assert captured["state_name"] == "Telangana"
+    assert captured["district_name"] == "Nalgonda"
+
+
+def test_state_driver_scope_uses_selected_state_only_with_partial_component_coverage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_state: dict[str, object] = {"landing_bundle": "Heat Risk"}
+    stub_st = _DummyStreamlit(session_state)
+    composite_district_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana", "Telangana"],
+            "district_name": ["A", "B"],
+            "bundle_score": [55.0, 65.0],
+        }
+    )
+    composite_state_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "bundle_score": [60.0],
+            "state_rank": [1.0],
+            "state_count": [1],
+        }
+    )
+    driver_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana", "Telangana", "Maharashtra"],
+            "district_name": ["A", "B", "Pune"],
+            "__state_key": ["telangana", "telangana", "maharashtra"],
+            "__district_key": ["telangana|a", "telangana|b", "maharashtra|pune"],
+            "metric_a__landing_norm": [10.0, 30.0, 99.0],
+            "metric_b__landing_norm": [70.0, 50.0, 1.0],
+        }
+    )
+    driver_context = _driver_context(
+        driver_scores,
+        metric_specs=[
+            BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a"),
+            BundleMetricSpec(slug="metric_b", label="Metric B", column="metric_b"),
+        ],
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_state_summary(
+        state_name="Telangana",
+        district_scores=composite_district_scores,
+        state_scores=composite_state_scores,
+        driver_context=driver_context,
+    )
+
+    assert stub_st.dataframes
+    rendered = stub_st.dataframes[-1]
+    assert rendered["Metric driver"].tolist() == ["Metric B", "Metric A"]
+    assert rendered["Normalized score"].tolist() == ["60.0", "20.0"]
+
+
+def test_district_driver_scope_falls_back_when_selected_district_has_no_component_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_state: dict[str, object] = {"landing_bundle": "Heat Risk"}
+    stub_st = _DummyStreamlit(session_state)
+    composite_district_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Nalgonda"],
+            "bundle_score": [55.0],
+            "district_rank": [1.0],
+            "district_count": [1],
+        }
+    )
+    driver_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Khammam"],
+            "__state_key": ["telangana"],
+            "__district_key": ["telangana|khammam"],
+            "metric_a__landing_norm": [10.0],
+        }
+    )
+    driver_context = _driver_context(
+        driver_scores,
+        metric_specs=[BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a")],
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_district_summary(
+        state_name="Telangana",
+        district_name="Nalgonda",
+        district_scores=composite_district_scores,
+        driver_context=driver_context,
+    )
+
+    assert "No driver detail is available for this district." in stub_st.captions
+
+
+def test_driver_frame_skips_all_nan_normalized_metrics_and_shows_existing_caption(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_state: dict[str, object] = {"landing_bundle": "Heat Risk"}
+    stub_st = _DummyStreamlit(session_state)
+    composite_district_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["A"],
+            "bundle_score": [60.0],
+        }
+    )
+    composite_state_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "bundle_score": [60.0],
+            "state_rank": [1.0],
+            "state_count": [1],
+        }
+    )
+    driver_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["A"],
+            "__state_key": ["telangana"],
+            "__district_key": ["telangana|a"],
+            "metric_a__landing_norm": [float("nan")],
+            "metric_b__landing_norm": [float("nan")],
+        }
+    )
+    driver_context = _driver_context(
+        driver_scores,
+        metric_specs=[
+            BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a"),
+            BundleMetricSpec(slug="metric_b", label="Metric B", column="metric_b"),
+        ],
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_state_summary(
+        state_name="Telangana",
+        district_scores=composite_district_scores,
+        state_scores=composite_state_scores,
+        driver_context=driver_context,
+    )
+
+    assert "No driver detail is available for this scope." in stub_st.captions
+
+
+def test_deep_dive_handoff_still_uses_persisted_composite_after_driver_restore(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Heat Stress",
+        "landing_scenario": "ssp585",
+        "landing_period": "2040-2060",
+        "landing_focus_level": "district",
+        "landing_selected_state": "Telangana",
+        "landing_selected_district": "Nalgonda",
+    }
+
+    monkeypatch.setattr(landing_runtime.st, "rerun", lambda: (_ for _ in ()).throw(_DummyRerun()))
+
+    with pytest.raises(_DummyRerun):
+        landing_runtime._enter_deep_dive(session_state)
+
+    assert session_state["selected_var"] == "composite_heat_stress"
+    assert session_state["registry_metric"] == "composite_heat_stress"
 
 def test_build_glance_handoff_from_deep_dive_maps_compatible_district_context() -> None:
     detailed_state = {
