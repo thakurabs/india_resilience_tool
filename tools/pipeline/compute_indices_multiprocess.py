@@ -1535,6 +1535,26 @@ def rx5day_events_over_threshold(da, mask, event_thresh_mm=50.0, window_days=5):
     rolling = dm.rolling(time=window_days, min_periods=window_days).sum()
     return _count_events((rolling >= event_thresh_mm).fillna(False).values, 1)
 
+def consecutive_heavy_rainfall_events(
+    da,
+    mask,
+    daily_thresh_mm=150.0,
+    min_event_days=2,
+):
+    """Count heavy-rainfall events as runs of consecutive days above a daily threshold.
+
+    Contract:
+      - One event is one run of at least `min_event_days` consecutive days with
+        precipitation >= `daily_thresh_mm`.
+      - Longer runs count as a single event.
+      - Missing values break runs and are treated as non-events.
+    """
+    dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
+    if dm.size == 0:
+        return 0
+    flags = (dm >= float(daily_thresh_mm)).fillna(False).values
+    return _count_events(flags, int(min_event_days))
+
 def simple_daily_intensity_index(da, mask, wet_day_thresh_mm=1.0):
     dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
     if dm.size == 0: return np.nan
@@ -1580,8 +1600,12 @@ def percentile_precipitation_total(
     baseline_wet = _filter_to_baseline(wet, baseline_years)
     if baseline_wet.size == 0:
         baseline_wet = wet  # Fall back to full series if no baseline data
-    thresh = float(baseline_wet.quantile(percentile / 100.0).item())
-    return float(dm.where(dm > thresh, 0).sum().item())
+    thresh = float(_quantile_compat(baseline_wet, q=percentile / 100.0, dim="time", method=quantile_method).item())
+    if exceed_ge:
+        selected = dm.where(dm >= thresh, 0)
+    else:
+        selected = dm.where(dm > thresh, 0)
+    return float(selected.sum().item())
 
 def percentile_precipitation_contribution(
     da,
@@ -1602,8 +1626,12 @@ def percentile_precipitation_contribution(
     baseline_wet = _filter_to_baseline(wet, baseline_years)
     if baseline_wet.size == 0:
         baseline_wet = wet  # Fall back to full series if no baseline data
-    thresh = float(baseline_wet.quantile(percentile / 100.0).item())
-    return 100.0 * float(dm.where(dm > thresh, 0).sum().item()) / prcptot
+    thresh = float(_quantile_compat(baseline_wet, q=percentile / 100.0, dim="time", method=quantile_method).item())
+    if exceed_ge:
+        selected = dm.where(dm >= thresh, 0)
+    else:
+        selected = dm.where(dm > thresh, 0)
+    return 100.0 * float(selected.sum().item()) / prcptot
 
 def standardised_precipitation_index(
     da,
