@@ -215,6 +215,30 @@ def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
     ]
 
 
+def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_domains() -> None:
+    assert "r99p_extreme_wet_precip" in METRICS_BY_SLUG
+    assert "pr_2day_heavy_rainfall_events_ge150mm" in METRICS_BY_SLUG
+
+    r99p = METRICS_BY_SLUG["r99p_extreme_wet_precip"]
+    heavy_rain = METRICS_BY_SLUG["pr_2day_heavy_rainfall_events_ge150mm"]
+
+    assert r99p.compute == "percentile_precipitation_total"
+    assert r99p.params["percentile"] == 99
+    assert r99p.params["quantile_method"] == "nearest"
+    assert r99p.params["exceed_ge"] is True
+    assert heavy_rain.compute == "consecutive_heavy_rainfall_events"
+    assert heavy_rain.params["daily_thresh_mm"] == 150.0
+    assert heavy_rain.params["min_event_days"] == 2
+
+    flood_metrics = get_metrics_for_bundle(
+        "Flood & Extreme Rainfall Risk",
+        spatial_family="admin",
+        level="district",
+    )
+    assert "r99p_extreme_wet_precip" not in flood_metrics
+    assert "pr_2day_heavy_rainfall_events_ge150mm" not in flood_metrics
+
+
 def test_agriculture_bundle_membership_is_the_approved_nine_metric_mix() -> None:
     agriculture_metrics = get_metrics_for_bundle(
         "Agriculture & Growing Conditions",

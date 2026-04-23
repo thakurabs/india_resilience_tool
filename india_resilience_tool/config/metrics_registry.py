@@ -1138,6 +1138,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Climdex Rx5day index."
         ),
     },
+    {
+        "name": "Heavy Rainfall Events (>= 2 consecutive days >= 150mm)",
+        "slug": "pr_2day_heavy_rainfall_events_ge150mm",
+        "var": "pr",
+        "value_col": "heavy_rainfall_events_2day_ge_150mm",
+        "units": "events",
+        "compute": "consecutive_heavy_rainfall_events",
+        "params": {"daily_thresh_mm": 150.0, "min_event_days": 2},
+        "group": "rain",
+        "description": (
+            "Annual count of heavy-rainfall events defined as runs of at least two "
+            "consecutive days with precipitation >= 150mm/day."
+        ),
+    },
     
     # --- Precipitation Threshold Indices ---
     {
@@ -1217,20 +1231,27 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "(ETCCDI R95p)."
         ),
     },
-    # {
-    #     "name": "Extremely Wet Day Precipitation (R99p)",
-    #     "slug": "r99p_extreme_wet_precip",
-    #     "var": "pr",
-    #     "value_col": "r99p_mm",
-    #     "units": "mm",
-    #     "compute": "percentile_precipitation_total",
-    #     "params": {"percentile": 99, "baseline_years": (1981, 2010)},
-    #     "group": "rain",
-    #     "description": (
-    #         "Total precipitation on days exceeding the 99th percentile of "
-    #         "wet-day precipitation. Climdex R99p index."
-    #     ),
-    # },
+    {
+        "name": "Extremely Wet Day Precipitation (R99p)",
+        "slug": "r99p_extreme_wet_precip",
+        "var": "pr",
+        "value_col": "r99p_mm",
+        "units": "mm",
+        "compute": "percentile_precipitation_total",
+        "params": {
+            "percentile": 99,
+            "baseline_years": (1981, 2010),
+            "quantile_method": "nearest",
+            "exceed_ge": True,
+            "wet_day_mm": 1.0,
+        },
+        "group": "rain",
+        "description": (
+            "Total precipitation from extremely wet days, defined as days with precipitation "
+            "exceeding the 99th percentile of wet-day precipitation in the baseline period "
+            "(ETCCDI R99p)."
+        ),
+    },
     {
         "name": "Very Wet Day Contribution (R95pTOT)",
         "slug": "r95ptot_contribution_pct",

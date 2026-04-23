@@ -70,6 +70,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/pipeline/compute_indices.py` | Build processed index artifacts (single-process; debug) | `python -m tools.pipeline.compute_indices --help` |
 | `tools/pipeline/build_master_metrics.py` | Build admin and hydro master CSVs plus summary sidecars; hydro levels auto-use `processed/{metric}/hydro/` | `python -m tools.pipeline.build_master_metrics --help` |
 | `tools/pipeline/build_composite_metrics.py` | Build persisted district/block composite masters for the 6 visible Glance bundles under `processed/<composite_slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}` | `python -m tools.pipeline.build_composite_metrics --help` |
+| `tools/pipeline/build_proposal_bundles.py` | Build persisted district/block proposal climate-risk bundle masters plus the `r95p_interannual_variability` helper masters under `processed/<slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}` without surfacing those bundles in the current dashboard UI | `python -m tools.pipeline.build_proposal_bundles --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
 
 ## Diagnostics

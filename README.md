@@ -153,6 +153,14 @@ streamlit run india_resilience_tool/app/main.py
 
 Open: `http://localhost:8501`
 
+Proposal bundle builder:
+
+```bash
+python -m tools.pipeline.build_proposal_bundles --help
+```
+
+This offline builder computes the proposal climate-risk bundles for admin `district` and `block` units only. It writes persisted proposal bundle masters under `IRT_DATA_DIR/processed/<composite_slug>/<state>/` without adding those bundles to the current dashboard UI.
+
 Launch behavior:
 - the app now opens into a climate-hazard discovery landing surface by default
 - the landing search bar filters state and district suggestions as you type

@@ -46,6 +46,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
 | `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, persisted visible-Glance composites, Aqueduct, population, groundwater, Telangana JRC flood depth, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
 | `python -m tools.pipeline.build_composite_metrics --help` | Build persisted district/block composite masters for the 6 visible Glance bundles under the legacy `processed/` metric layout |
+| `python -m tools.pipeline.build_proposal_bundles --help` | Build persisted admin district/block proposal climate-risk bundle masters under `processed/<proposal_composite_slug>/<state>/` and the helper `r95p_interannual_variability` masters |
 | `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional `--prune-scope`, destructive `--full-rebuild`, `--dry-run`, exact pre-scan task counting, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
 | `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` filtering, and write `parity_report.json` |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
@@ -183,6 +184,7 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `composite_metrics.py` | Streamlit-free builders for persisted district/block composite Glance metric masters |
+| `proposal_bundles.py` | Streamlit-free builders for persisted proposal climate-risk bundle masters plus the `r95p_interannual_variability` helper masters |
 | `master_builder.py` | Build master CSVs, including hydro master enrichment and Parquet companions for runtime serving |
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 
@@ -198,6 +200,7 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `composite_metrics.py` | Declarative visible-Glance bundle -> persisted composite metric mapping and helpers |
+| `proposal_bundles.py` | Declarative proposal climate-risk bundle specs, exact rule order, and validation helpers for the offline proposal-bundle builder |
 | `constants.py` | UI, styling, scenario, and geometry-render constants |
 | `metrics_registry.py` | Canonical metric, pillar, and domain registry |
 | `paths.py` | Library-side path config mirroring root `paths.py` |
@@ -320,6 +323,7 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `build_all_csv.ps1` | PowerShell helper for CSV build workflows |
 | `build_composite_metrics.py` | CLI wrapper that writes persisted district/block composite masters for the visible Glance bundles |
+| `build_proposal_bundles.py` | CLI wrapper that writes persisted district/block proposal climate-risk bundle masters and the `r95p_interannual_variability` helper masters |
 | `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
 | `compute_indices_multiprocess.py` | Main multi-process compute pipeline for admin and hydro |
