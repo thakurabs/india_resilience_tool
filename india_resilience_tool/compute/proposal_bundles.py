@@ -21,6 +21,8 @@ from india_resilience_tool.config.proposal_bundles import (
     ProposalRuleSpec,
 )
 from india_resilience_tool.data.master_columns import find_baseline_column_for_metric, resolve_metric_column
+from india_resilience_tool.data.adm2_loader import load_local_adm2
+from india_resilience_tool.data.adm3_loader import load_local_adm3
 from india_resilience_tool.data.master_loader import (
     load_master_csv,
     normalize_master_columns,
@@ -87,6 +89,10 @@ def _required_id_columns(level: str) -> tuple[str, ...]:
     return ID_COLUMNS_BY_LEVEL[level]
 
 
+def _canonical_key_column(level: str) -> str:
+    return "district_key" if level == "district" else "block_key"
+
+
 def _normalize_frame_identifiers(df: pd.DataFrame, *, level: str) -> pd.DataFrame:
     out = df.copy()
     rename_map: dict[str, str] = {}
@@ -130,6 +136,65 @@ def _ensure_required_id_columns(df: pd.DataFrame, *, level: str) -> pd.DataFrame
     return out
 
 
+def _sample_identifier_records(df: pd.DataFrame, *, level: str, limit: int = 5) -> list[dict[str, str]]:
+    cols = ["state", "district", "district_key"] if level == "district" else ["state", "district", "block", "block_key"]
+    available = [col for col in cols if col in df.columns]
+    if not available:
+        return []
+    sample = df.loc[:, available].head(limit).fillna("")
+    return [{col: str(row[col]) for col in available} for _, row in sample.iterrows()]
+
+
+def _validate_unique_canonical_keys(
+    df: pd.DataFrame,
+    *,
+    level: str,
+    context: str,
+) -> pd.DataFrame:
+    key_col = _canonical_key_column(level)
+    if key_col not in df.columns:
+        raise TargetBuildError(f"{context} is missing canonical key column {key_col!r}.")
+
+    dup_mask = df[key_col].astype("string").fillna("").duplicated(keep=False)
+    if dup_mask.any():
+        duplicate_rows = df.loc[dup_mask].copy()
+        duplicate_count = int(len(duplicate_rows))
+        duplicate_keys = int(duplicate_rows[key_col].nunique(dropna=False))
+        sample = _sample_identifier_records(duplicate_rows, level=level)
+        raise TargetBuildError(
+            f"{context} contains duplicate canonical keys on {key_col!r}: "
+            f"duplicate_rows={duplicate_count}, duplicate_keys={duplicate_keys}, sample={sample}"
+        )
+    return df
+
+
+def _load_canonical_unit_frame(
+    *,
+    level: str,
+    state_name: str,
+    data_dir: Path,
+) -> pd.DataFrame:
+    if level == "district":
+        gdf = load_local_adm2(data_dir / "districts_4326.geojson", tolerance=0.0, bbox=None, min_area=0.0)
+        source = gdf.rename(columns={"state_name": "state", "district_name": "district"})
+    else:
+        gdf = load_local_adm3(data_dir / "blocks_4326.geojson", tolerance=0.0, bbox=None, min_area=0.0)
+        source = gdf.rename(columns={"state_name": "state", "district_name": "district", "block_name": "block"})
+
+    filtered = source.loc[source["state"].map(alias) == alias(state_name)].copy()
+    if filtered.empty:
+        return pd.DataFrame(columns=list(_required_id_columns(level)))
+
+    filtered = _ensure_required_id_columns(filtered, level=level)
+    filtered = filtered.loc[:, list(_required_id_columns(level))].drop_duplicates().reset_index(drop=True)
+    filtered = _validate_unique_canonical_keys(
+        filtered,
+        level=level,
+        context=f"Canonical boundary units for level={level!r}, state={state_name!r}",
+    )
+    return filtered.sort_values(_target_sort_columns(level), kind="stable").reset_index(drop=True)
+
+
 def _state_roots_for_bundle(bundle: ProposalBundleSpec, *, data_dir: Path) -> list[Path]:
     state_roots: list[Path] = []
     seen: set[str] = set()
@@ -159,21 +224,12 @@ def _load_metric_master(metric_slug: str, *, level: str, state_name: str, data_d
             f"Missing mandatory master for metric={metric_slug!r}, level={level!r}, state={state_name!r}: {source_path}"
         )
     frame = normalize_master_columns(load_master_csv(preferred))
-    return _ensure_required_id_columns(frame, level=level)
-
-
-def _stable_key_frame(component_frames: dict[str, pd.DataFrame], *, level: str) -> pd.DataFrame:
-    id_columns = list(_required_id_columns(level))
-    merged: Optional[pd.DataFrame] = None
-    for frame in component_frames.values():
-        key_frame = frame.loc[:, id_columns].drop_duplicates().copy()
-        if merged is None:
-            merged = key_frame
-        else:
-            merged = merged.merge(key_frame, on=id_columns, how="outer")
-    if merged is None:
-        return pd.DataFrame(columns=id_columns)
-    return merged
+    frame = _ensure_required_id_columns(frame, level=level)
+    return _validate_unique_canonical_keys(
+        frame,
+        level=level,
+        context=f"Source master metric={metric_slug!r}, level={level!r}, state={state_name!r}",
+    )
 
 
 def _resolve_baseline_column(df: pd.DataFrame, metric_slug: str) -> Optional[str]:
@@ -203,11 +259,11 @@ def _series_for_rule(
     scenario: str,
     period: str,
 ) -> pd.Series:
-    id_columns = list(_required_id_columns(level))
+    key_col = _canonical_key_column(level)
     metric_column = _metric_column(source_frame, metric_slug, scenario, period)
     merged = key_frame.merge(
-        source_frame.loc[:, id_columns + ([metric_column] if metric_column else [])],
-        on=id_columns,
+        source_frame.loc[:, [key_col] + ([metric_column] if metric_column else [])],
+        on=key_col,
         how="left",
     )
     if metric_column is None:
@@ -266,8 +322,8 @@ def _build_change_rule(
         )
         return pd.Series(np.nan, index=current_values.index, dtype=float)
 
-    id_columns = list(_required_id_columns(level))
-    merged = key_frame.merge(source_frame.loc[:, id_columns + [baseline_column]], on=id_columns, how="left")
+    key_col = _canonical_key_column(level)
+    merged = key_frame.merge(source_frame.loc[:, [key_col, baseline_column]], on=key_col, how="left")
     baseline_values = _coerce_numeric(merged[baseline_column])
     score = pd.Series(np.nan, index=current_values.index, dtype=float)
     valid = current_values.notna() & baseline_values.notna() & (baseline_values.abs() >= 1e-6)
@@ -499,6 +555,12 @@ def compute_proposal_bundle_master_frame(
     if warnings is None:
         warnings = []
 
+    key_frame = _load_canonical_unit_frame(level=level, state_name=state_name, data_dir=data_dir)
+    if key_frame.empty:
+        raise TargetBuildError(
+            f"No canonical IDs available for bundle={bundle.composite_slug!r}, level={level!r}, state={state_name!r}."
+        )
+
     metric_frames: dict[str, pd.DataFrame] = {}
     for rule in bundle.rules:
         if rule.metric_slug == HELPER_METRIC_SLUG:
@@ -510,12 +572,6 @@ def compute_proposal_bundle_master_frame(
                 state_name=state_name,
                 data_dir=data_dir,
             )
-
-    key_frame = _stable_key_frame(metric_frames, level=level)
-    if key_frame.empty:
-        raise TargetBuildError(
-            f"No canonical IDs available for bundle={bundle.composite_slug!r}, level={level!r}, state={state_name!r}."
-        )
 
     output = key_frame.copy()
     ordered_columns = list(_required_id_columns(level))
@@ -582,7 +638,18 @@ def compute_proposal_bundle_master_frame(
             ordered_columns.extend([bundle_score_column, available_count_column])
 
     output = output.loc[:, ordered_columns]
-    return output.sort_values(_target_sort_columns(level), kind="stable").reset_index(drop=True)
+    output = output.sort_values(_target_sort_columns(level), kind="stable").reset_index(drop=True)
+    output = _validate_unique_canonical_keys(
+        output,
+        level=level,
+        context=f"Proposal bundle output bundle={bundle.composite_slug!r}, level={level!r}, state={state_name!r}",
+    )
+    if len(output) != len(key_frame):
+        raise TargetBuildError(
+            f"Proposal bundle output row-count mismatch for bundle={bundle.composite_slug!r}, "
+            f"level={level!r}, state={state_name!r}: expected_rows={len(key_frame)}, actual_rows={len(output)}"
+        )
+    return output
 
 
 def _write_bundle_master_frame(

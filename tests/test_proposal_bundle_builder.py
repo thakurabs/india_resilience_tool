@@ -5,7 +5,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+import india_resilience_tool.compute.proposal_bundles as proposal_bundle_module
 from india_resilience_tool.compute.proposal_bundles import (
+    TargetBuildError,
     compute_proposal_bundle_master_frame,
     compute_r95p_interannual_variability_master_frame,
     parse_args,
@@ -13,6 +15,23 @@ from india_resilience_tool.compute.proposal_bundles import (
 )
 from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG
 from india_resilience_tool.config.proposal_bundles import PROPOSAL_BUNDLES_BY_SLUG
+
+
+def _patch_canonical_units(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    district_df: pd.DataFrame | None = None,
+    block_df: pd.DataFrame | None = None,
+) -> None:
+    def _loader(*, level: str, state_name: str, data_dir: Path) -> pd.DataFrame:
+        _ = state_name, data_dir
+        if level == "district":
+            assert district_df is not None
+            return district_df.copy()
+        assert block_df is not None
+        return block_df.copy()
+
+    monkeypatch.setattr(proposal_bundle_module, "_load_canonical_unit_frame", _loader)
 
 
 def _write_master(
@@ -44,7 +63,10 @@ def _write_district_yearly(
     df.to_csv(root / "district_yearly_ensemble_stats.csv", index=False)
 
 
-def test_compute_proposal_bundle_master_frame_scores_thresholds_and_baseline_change(tmp_path: Path) -> None:
+def test_compute_proposal_bundle_master_frame_scores_thresholds_and_baseline_change(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state_name = "Telangana"
     ids = pd.DataFrame(
         {
@@ -53,6 +75,7 @@ def test_compute_proposal_bundle_master_frame_scores_thresholds_and_baseline_cha
             "district_key": ["telangana|a", "telangana|b"],
         }
     )
+    _patch_canonical_units(monkeypatch, district_df=ids)
     metric_values = {
         "pr_max_1day_precip": [220.0, 180.0],
         "pr_max_5day_precip": [320.0, 280.0],
@@ -129,7 +152,10 @@ def test_compute_r95p_interannual_variability_master_frame_uses_cv_and_nan_for_i
     assert pd.isna(values["B"])
 
 
-def test_build_proposal_bundles_fails_target_when_trend_series_missing(tmp_path: Path) -> None:
+def test_build_proposal_bundles_fails_target_when_trend_series_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state_name = "Telangana"
     ids = pd.DataFrame(
         {
@@ -138,6 +164,7 @@ def test_build_proposal_bundles_fails_target_when_trend_series_missing(tmp_path:
             "district_key": ["telangana|a"],
         }
     )
+    _patch_canonical_units(monkeypatch, district_df=ids)
     for slug in (
         "pr_max_1day_precip",
         "pr_max_5day_precip",
@@ -167,7 +194,10 @@ def test_build_proposal_bundles_fails_target_when_trend_series_missing(tmp_path:
     assert "Missing mandatory yearly ensemble series" in failures[0]
 
 
-def test_build_proposal_bundles_dry_run_auto_discovers_states_and_returns_target_paths(tmp_path: Path) -> None:
+def test_build_proposal_bundles_dry_run_auto_discovers_states_and_returns_target_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state_name = "Telangana"
     ids = pd.DataFrame(
         {
@@ -176,6 +206,7 @@ def test_build_proposal_bundles_dry_run_auto_discovers_states_and_returns_target
             "district_key": ["telangana|a"],
         }
     )
+    _patch_canonical_units(monkeypatch, district_df=ids)
     for slug in (
         "txx_annual_max",
         "wsdi_warm_spell_days",
@@ -201,6 +232,151 @@ def test_build_proposal_bundles_dry_run_auto_discovers_states_and_returns_target
     assert written == [
         tmp_path / "processed" / "composite_health_risk" / state_name / "master_metrics_by_district.csv"
     ]
+
+
+def test_compute_proposal_bundle_master_frame_merges_block_metrics_by_canonical_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    canonical_blocks = pd.DataFrame(
+        {
+            "state": [state_name],
+            "district": ["Adilabad"],
+            "block": ["Adilabad Rural"],
+            "block_key": ["telangana|adilabad|adilabad rural"],
+        }
+    )
+    _patch_canonical_units(monkeypatch, block_df=canonical_blocks)
+
+    bundle = PROPOSAL_BUNDLES_BY_SLUG["composite_life_livelihood_loss_risk"]
+    rows_by_slug = {
+        "pr_max_1day_precip": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
+        "pr_2day_heavy_rainfall_events_ge150mm": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
+        "pr_consecutive_dry_days_lt1mm": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
+        "wsdi_warm_spell_days": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
+    }
+    values_by_slug = {
+        "pr_max_1day_precip": 220.0,
+        "pr_2day_heavy_rainfall_events_ge150mm": 2.0,
+        "pr_consecutive_dry_days_lt1mm": 20.0,
+        "wsdi_warm_spell_days": 7.0,
+    }
+
+    for slug, row in rows_by_slug.items():
+        df = pd.DataFrame([row])
+        metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df[f"{metric_base}__ssp245__2040-2060__mean"] = [values_by_slug[slug]]
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="block", df=df)
+
+    out = compute_proposal_bundle_master_frame(
+        bundle,
+        level="block",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+    assert out.shape[0] == 1
+    row = out.iloc[0]
+    assert row["state"] == "Telangana"
+    assert row["district"] == "Adilabad"
+    assert row["block"] == "Adilabad Rural"
+    assert row["block_key"] == "telangana|adilabad|adilabad rural"
+    assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__available_rule_count"] == 4
+    assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"] == 75.0
+
+
+def test_compute_proposal_bundle_master_frame_fails_on_duplicate_source_block_keys(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    canonical_blocks = pd.DataFrame(
+        {
+            "state": [state_name],
+            "district": ["Adilabad"],
+            "block": ["Adilabad Rural"],
+            "block_key": ["telangana|adilabad|adilabad rural"],
+        }
+    )
+    _patch_canonical_units(monkeypatch, block_df=canonical_blocks)
+
+    duplicate_metric = pd.DataFrame(
+        [
+            {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
+            {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
+        ]
+    )
+    metric_base = METRICS_BY_SLUG["pr_max_1day_precip"].periods_metric_col or METRICS_BY_SLUG["pr_max_1day_precip"].value_col
+    duplicate_metric[f"{metric_base}__ssp245__2040-2060__mean"] = [220.0, 150.0]
+    _write_master(tmp_path, slug="pr_max_1day_precip", state_name=state_name, level="block", df=duplicate_metric)
+
+    for slug, value in (
+        ("pr_2day_heavy_rainfall_events_ge150mm", 2.0),
+        ("pr_consecutive_dry_days_lt1mm", 20.0),
+        ("wsdi_warm_spell_days", 7.0),
+    ):
+        df = canonical_blocks[["state", "district", "block"]].copy()
+        metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df[f"{metric_base}__ssp245__2040-2060__mean"] = [value]
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="block", df=df)
+
+    with pytest.raises(TargetBuildError, match="pr_max_1day_precip"):
+        compute_proposal_bundle_master_frame(
+            PROPOSAL_BUNDLES_BY_SLUG["composite_life_livelihood_loss_risk"],
+            level="block",
+            state_name=state_name,
+            data_dir=tmp_path,
+            warnings=[],
+        )
+
+
+def test_compute_proposal_bundle_master_frame_preserves_full_canonical_block_universe(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    canonical_blocks = pd.DataFrame(
+        {
+            "state": [state_name, state_name],
+            "district": ["Adilabad", "Adilabad"],
+            "block": ["North", "South"],
+            "block_key": ["telangana|adilabad|north", "telangana|adilabad|south"],
+        }
+    )
+    _patch_canonical_units(monkeypatch, block_df=canonical_blocks)
+
+    first_only = pd.DataFrame(
+        {
+            "state": [state_name],
+            "district": ["ADILABAD"],
+            "block": ["NORTH"],
+        }
+    )
+    for slug, value in (
+        ("pr_max_1day_precip", 220.0),
+        ("pr_2day_heavy_rainfall_events_ge150mm", 2.0),
+        ("pr_consecutive_dry_days_lt1mm", 45.0),
+        ("wsdi_warm_spell_days", 7.0),
+    ):
+        df = first_only.copy()
+        metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df[f"{metric_base}__ssp245__2040-2060__mean"] = [value]
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="block", df=df)
+
+    out = compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_life_livelihood_loss_risk"],
+        level="block",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+    assert out["block_key"].tolist() == ["telangana|adilabad|north", "telangana|adilabad|south"]
+    south = out.loc[out["block_key"] == "telangana|adilabad|south"].iloc[0]
+    assert south["composite_life_livelihood_loss_risk__ssp245__2040-2060__available_rule_count"] == 0
+    assert pd.isna(south["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"])
 
 
 def test_parse_args_rejects_bundle_and_metric_together() -> None:
