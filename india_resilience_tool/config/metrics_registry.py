@@ -18,6 +18,12 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
 
 from india_resilience_tool.config.composite_metrics import VISIBLE_GLANCE_COMPOSITES
+from india_resilience_tool.config.dashboard_bundles import (
+    DASHBOARD_BUNDLES,
+    THEMATIC_DASHBOARD_BUNDLES,
+)
+
+THEMATIC_DASHBOARD_BUNDLE_NAMES = frozenset(spec.canonical_bundle for spec in THEMATIC_DASHBOARD_BUNDLES)
 
 
 def infer_group_from_var(var: str) -> str:
@@ -2196,8 +2202,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
             "display_units": "score",
             "display_scale": 1.0,
             "description": (
-                f"Persisted weighted composite hazard score for the {spec.bundle_domain} bundle. "
+                f"Persisted weighted composite hazard score for the {spec.canonical_bundle} bundle. "
                 "Computed offline from approved bundle weights and per-scenario-period normalization."
+                if spec.canonical_bundle in THEMATIC_DASHBOARD_BUNDLE_NAMES
+                else (
+                    f"Persisted sector-wise climate-risk composite for the {spec.canonical_bundle} domain. "
+                    "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+                )
             ),
             "source_type": "derived",
             "supports_yearly_trend": False,
@@ -2205,14 +2216,20 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
             "supported_statistics": ("mean",),
             "supports_baseline_comparison": False,
             "supports_scenario_comparison": False,
-            "admin_rebuild_command": "python -m tools.pipeline.build_composite_metrics",
+            "admin_rebuild_command": (
+                "python -m tools.pipeline.build_composite_metrics"
+                if spec.canonical_bundle in THEMATIC_DASHBOARD_BUNDLE_NAMES
+                else "python -m tools.pipeline.build_proposal_bundles"
+            ),
+            "hydro_rebuild_command": None,
             "supported_scenarios": ("ssp245", "ssp585"),
             "preferred_period_order": ("2020-2040", "2040-2060", "2060-2080"),
-            "supported_spatial_families": spec.supported_spatial_families,
+            "supported_spatial_families": ("admin",),
             "supported_levels": spec.supported_levels,
+            "supported_admin_states": (),
             "rank_higher_is_worse": True,
         }
-        for spec in VISIBLE_GLANCE_COMPOSITES
+        for spec in DASHBOARD_BUNDLES
     ],
 ]
 
@@ -2346,6 +2363,30 @@ DOMAINS: dict[str, list[str]] = {
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
     ],
+    "Agricultural Risk": [
+        "composite_agricultural_risk",
+    ],
+    "Health Risk": [
+        "composite_health_risk",
+    ],
+    "Industrial Risk": [
+        "composite_industrial_risk",
+    ],
+    "Investment / Financial Risk": [
+        "composite_investment_financial_risk",
+    ],
+    "Infrastructure Risk": [
+        "composite_infrastructure_risk",
+    ],
+    "Asset Risk (Thermal Power Plants)": [
+        "composite_asset_risk_thermal_power",
+    ],
+    "Asset Risk (Hydropower Plants)": [
+        "composite_asset_risk_hydropower",
+    ],
+    "Life & Livelihood Loss Risk": [
+        "composite_life_livelihood_loss_risk",
+    ],
     "Drought Risk (Advanced)": [
         # Short-term vs long-term SPI + severity splits (keep available but not default)
         "spi3_drought_index",
@@ -2399,12 +2440,20 @@ DOMAINS: dict[str, list[str]] = {
 # Domain display order for UI
 DOMAIN_ORDER: list[str] = [
     "Heat Risk",
+    "Drought Risk",
+    "Flood & Extreme Rainfall Risk",
     "Heat Stress",
     "Cold Risk",
     "Agriculture & Growing Conditions",
-    "Flood & Extreme Rainfall Risk",
+    "Agricultural Risk",
+    "Health Risk",
+    "Industrial Risk",
+    "Investment / Financial Risk",
+    "Infrastructure Risk",
+    "Asset Risk (Thermal Power Plants)",
+    "Asset Risk (Hydropower Plants)",
+    "Life & Livelihood Loss Risk",
     "Rainfall Totals & Typical Wetness",
-    "Drought Risk",
     "Drought Risk (Advanced)",
     "Temperature Variability",
     "Population Exposure",
@@ -2416,12 +2465,20 @@ DOMAIN_ORDER: list[str] = [
 PILLAR_DOMAINS: dict[str, list[str]] = {
     "Climate Hazards": [
         "Heat Risk",
+        "Drought Risk",
+        "Flood & Extreme Rainfall Risk",
         "Heat Stress",
         "Cold Risk",
         "Agriculture & Growing Conditions",
-        "Flood & Extreme Rainfall Risk",
+        "Agricultural Risk",
+        "Health Risk",
+        "Industrial Risk",
+        "Investment / Financial Risk",
+        "Infrastructure Risk",
+        "Asset Risk (Thermal Power Plants)",
+        "Asset Risk (Hydropower Plants)",
+        "Life & Livelihood Loss Risk",
         "Rainfall Totals & Typical Wetness",
-        "Drought Risk",
         "Drought Risk (Advanced)",
         "Temperature Variability",
     ],
@@ -2504,6 +2561,38 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
     "Drought Risk": (
         "Metrics related to dry spells and drought conditions. "
         "Includes SPI and SPEI indices at multiple timescales."
+    ),
+    "Agricultural Risk": (
+        "Persisted sector-wise climate-risk composite for agriculture. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Health Risk": (
+        "Persisted sector-wise climate-risk composite for health. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Industrial Risk": (
+        "Persisted sector-wise climate-risk composite for industry. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Investment / Financial Risk": (
+        "Persisted sector-wise climate-risk composite for investment and financial exposure. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Infrastructure Risk": (
+        "Persisted sector-wise climate-risk composite for infrastructure. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Asset Risk (Thermal Power Plants)": (
+        "Persisted sector-wise climate-risk composite for thermal power assets. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Asset Risk (Hydropower Plants)": (
+        "Persisted sector-wise climate-risk composite for hydropower assets. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Life & Livelihood Loss Risk": (
+        "Persisted sector-wise climate-risk composite for life and livelihood loss exposure. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
     ),
     "Temperature Variability": (
         "Metrics for daily and annual temperature variability. "

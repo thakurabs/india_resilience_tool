@@ -1,7 +1,7 @@
-"""Declarative config for proposal climate-risk bundles.
+"""Declarative compute-owned config for proposal climate-risk bundles.
 
-These bundles are intentionally offline/admin-only in v1 and must not be added
-to UI-facing registry surfaces such as DOMAINS, VARIABLES, or landing bundles.
+The scoring rules and supported build levels remain owned here. Dashboard
+exposure is controlled separately by ``config.dashboard_bundles``.
 """
 
 from __future__ import annotations

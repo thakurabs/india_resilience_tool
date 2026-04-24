@@ -22,8 +22,17 @@ from india_resilience_tool.analysis.bundle_scores import (
     compute_metric_driver_frame,
     normalized_metric_column,
 )
+from india_resilience_tool.app.dashboard_bundle_runtime import (
+    available_dashboard_bundle_names,
+    dashboard_bundle_display,
+    dashboard_bundle_scenario_period_options,
+    resolve_dashboard_bundle_master_sources,
+)
 from india_resilience_tool.config.bundle_weights import get_bundle_weights
-from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
+from india_resilience_tool.config.dashboard_bundles import (
+    dashboard_bundle_names,
+    get_dashboard_bundle_spec,
+)
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.views.map_view import (
     build_choropleth_map_with_geojson_layer,
@@ -78,27 +87,6 @@ LANDING_MAP_REPLAY_GUARD_KEY = "landing_map_replay_guard"
 LANDING_MAP_CONTEXT_KEY = "landing_map_context"
 LANDING_MAP_INPUT_ARMED_KEY = "landing_map_input_armed"
 LANDING_TABS = ("Rankings", "Compare")
-
-LANDING_DOMAIN_DISPLAY: dict[str, str] = {
-    "Heat Risk": "Heat",
-    "Heat Stress": "Heat Stress",
-    "Cold Risk": "Cold",
-    "Agriculture & Growing Conditions": "Agriculture",
-    "Flood & Extreme Rainfall Risk": "Extreme Rainfall",
-    "Rainfall Totals & Typical Wetness": "Rainfall",
-    "Drought Risk": "Drought",
-    "Temperature Variability": "Temperature Variability",
-}
-
-LANDING_DOMAIN_ORDER: tuple[str, ...] = (
-    "Heat Risk",
-    "Drought Risk",
-    "Flood & Extreme Rainfall Risk",
-    "Heat Stress",
-    "Cold Risk",
-    "Agriculture & Growing Conditions",
-)
-LANDING_VISIBLE_DOMAINS: tuple[str, ...] = LANDING_DOMAIN_ORDER
 
 LANDING_PERIOD_SHORT_LABELS: dict[str, str] = {
     "Current": "Current",
@@ -429,7 +417,7 @@ def build_glance_handoff_from_deep_dive(
     sel_scenario = str(detailed_state.get("sel_scenario") or "").strip()
     sel_period = str(detailed_state.get("sel_period") or "").strip()
     bundle_pillar = get_pillar_for_domain(selected_bundle)
-    visible_bundles = set(_landing_bundle_domains())
+    visible_bundles = set(dashboard_bundle_names(level="district", landing_only=True))
 
     if not (
         spatial_family == "admin"
@@ -474,22 +462,14 @@ def build_glance_handoff_from_deep_dive(
     return updates
 
 
-def _landing_bundle_domains() -> list[str]:
+def _landing_bundle_domains(*, data_dir: Path) -> list[str]:
     """Return the supported landing bundles in a stable UX order."""
-    visible_domains = [
-        domain
-        for domain in LANDING_VISIBLE_DOMAINS
-        if get_metrics_for_bundle(domain, spatial_family="admin", level="district")
-    ]
-    ordered = [domain for domain in LANDING_DOMAIN_ORDER if domain in set(visible_domains)]
-    if ordered:
-        return ordered
-    return sorted(visible_domains)
+    return available_dashboard_bundle_names(level="district", data_dir=data_dir, landing_only=True)
 
 
 def _landing_bundle_display(bundle_domain: str) -> str:
     """Return the user-facing landing label for a bundle/domain."""
-    return LANDING_DOMAIN_DISPLAY.get(str(bundle_domain).strip(), str(bundle_domain).strip())
+    return dashboard_bundle_display(bundle_domain)
 
 
 def _landing_context_chip(scenario: str, period: str) -> str:
@@ -916,27 +896,14 @@ def _bundle_scenario_period_options(
     data_dir: Path,
 ) -> list[tuple[str, str]]:
     """Return available scenario-period pairs for one persisted landing composite."""
-    composite_spec = get_composite_metric_for_bundle(bundle_domain)
-    if composite_spec is None:
-        return []
-
-    source_paths = _resolve_metric_master_sources(composite_spec.composite_slug, data_dir=data_dir)
-    if not source_paths:
-        return []
-
-    source_signature = master_source_signature(source_paths)
-    return list(
-        _load_metric_scenario_period_pairs_cached(
-            composite_spec.composite_slug,
-            source_signature,
-            tuple(str(path) for path in source_paths),
-        )
+    return _ordered_scenario_period_pairs(
+        dashboard_bundle_scenario_period_options(bundle_domain, level="district", data_dir=data_dir)
     )
 
 
 def _sanitize_landing_context(session_state: MutableMapping[str, object], *, data_dir: Path) -> None:
     """Ensure landing bundle and scenario-period choices remain valid."""
-    bundle_domains = _landing_bundle_domains()
+    bundle_domains = _landing_bundle_domains(data_dir=data_dir)
     if not bundle_domains:
         return
 
@@ -1130,18 +1097,18 @@ def _prepare_bundle_context(
         )
         return empty, state_empty
 
-    composite_spec = get_composite_metric_for_bundle(bundle_domain)
-    if composite_spec is None:
+    dashboard_spec = get_dashboard_bundle_spec(bundle_domain)
+    if dashboard_spec is None:
         return _empty_context()
 
-    source_paths = _resolve_metric_master_sources(composite_spec.composite_slug, data_dir=data_dir)
+    source_paths = resolve_dashboard_bundle_master_sources(bundle_domain, level="district", data_dir=data_dir)
     if not source_paths:
         return _empty_context()
 
     source_signature = master_source_signature(source_paths)
     available_pairs = set(
         _load_metric_scenario_period_pairs_cached(
-            composite_spec.composite_slug,
+            dashboard_spec.composite_slug,
             source_signature,
             tuple(str(path) for path in source_paths),
         )
@@ -1151,7 +1118,7 @@ def _prepare_bundle_context(
         return _empty_context()
 
     metric_frame = _load_metric_district_values_cached(
-        composite_spec.composite_slug,
+        dashboard_spec.composite_slug,
         scenario,
         period,
         stat,
@@ -1210,6 +1177,15 @@ def _prepare_driver_context(
     data_dir: Path,
 ) -> LandingDriverContext:
     """Load component metrics for driver display without affecting composite landing behavior."""
+    dashboard_spec = get_dashboard_bundle_spec(bundle_domain)
+    if dashboard_spec is not None and dashboard_spec.group_key != "thematic":
+        return LandingDriverContext(
+            district_scores=pd.DataFrame(),
+            metric_specs=[],
+            available=False,
+            reason="unsupported_bundle_type",
+        )
+
     try:
         contexts = _collect_bundle_metric_contexts(bundle_domain, data_dir=data_dir)
         if not contexts:
@@ -2226,15 +2202,15 @@ def _enter_deep_dive(
 ) -> None:
     """Apply the landing -> detailed workflow handoff and rerun the app."""
     bundle_domain = str(session_state.get("landing_bundle") or LANDING_DEFAULT_BUNDLE).strip()
-    composite_spec = get_composite_metric_for_bundle(bundle_domain)
-    if composite_spec is None:
+    dashboard_spec = get_dashboard_bundle_spec(bundle_domain)
+    if dashboard_spec is None:
         st.warning("Deep Dive is unavailable because this Glance bundle has no configured composite metric.")
         return
 
     handoff = build_deep_dive_handoff(
         session_state,
         bundle_domain=bundle_domain,
-        metric_slug=composite_spec.composite_slug,
+        metric_slug=dashboard_spec.composite_slug,
     )
     for key, value in handoff.items():
         session_state[key] = value
@@ -2258,7 +2234,7 @@ def render_landing_page(
     focus_level = str(st.session_state.get("landing_focus_level", "india")).strip().lower()
     selected_state = str(st.session_state.get("landing_selected_state") or "").strip() or None
     selected_district = str(st.session_state.get("landing_selected_district") or "").strip() or None
-    bundle_options = _landing_bundle_domains()
+    bundle_options = _landing_bundle_domains(data_dir=data_dir)
     if not bundle_options:
         st.error("No Glance bundles are available for the landing experience.")
         return

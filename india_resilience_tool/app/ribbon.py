@@ -14,11 +14,16 @@ from typing import Callable, Optional
 import pandas as pd
 import streamlit as st
 
+from india_resilience_tool.app.dashboard_bundle_runtime import (
+    available_dashboard_bundle_names,
+    dashboard_bundle_display,
+)
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.help_text import RIBBON_HELP_MD, help_md_to_plain_text
 from india_resilience_tool.app.master_cache import make_load_master_and_schema_fn
 from india_resilience_tool.config.paths import resolve_processed_root as resolve_legacy_processed_root
 from india_resilience_tool.config.constants import SCENARIO_HELP_MD, SCENARIO_UI_LABEL
+from india_resilience_tool.config.dashboard_bundles import is_dashboard_bundle
 from india_resilience_tool.config.variables import (
     VARIABLES,
     get_domain_description,
@@ -142,6 +147,36 @@ def _selected_state_for_admin_master_loading() -> str:
         return str(pending).strip() or "All"
     selected = st.session_state.get("selected_state", "All")
     return str(selected).strip() or "All"
+
+
+def _domain_display_label(domain: str) -> str:
+    """Return the user-facing label for one ribbon domain option."""
+    return dashboard_bundle_display(domain) if is_dashboard_bundle(domain) else str(domain)
+
+
+def _domain_options_for_context(
+    *,
+    selected_pillar: str,
+    spatial_family: str,
+    current_level: str,
+    data_dir: Path,
+) -> list[str]:
+    """Return ordered domain options for the current ribbon context."""
+    all_domains = get_domains_for_pillar(
+        selected_pillar,
+        spatial_family=spatial_family,
+        level=current_level,
+    )
+    if not (
+        spatial_family == "admin"
+        and current_level in {"district", "block"}
+        and selected_pillar == "Climate Hazards"
+    ):
+        return all_domains
+
+    dashboard_domains = available_dashboard_bundle_names(level=current_level, data_dir=data_dir)
+    remaining_domains = [domain for domain in all_domains if not is_dashboard_bundle(domain)]
+    return dashboard_domains + remaining_domains
 
 
 def _resolve_external_admin_master_sources(
@@ -334,10 +369,11 @@ def render_metric_ribbon(
             all_domains: list[str] = []
             domain_options = [sel_placeholder]
         else:
-            all_domains = get_domains_for_pillar(
-                selected_pillar,
+            all_domains = _domain_options_for_context(
+                selected_pillar=selected_pillar,
                 spatial_family=spatial_family,
-                level=current_level,
+                current_level=current_level,
+                data_dir=data_dir,
             )
             domain_options = [sel_placeholder] + all_domains
 
@@ -366,6 +402,7 @@ def render_metric_ribbon(
                 label_visibility="visible",
                 disabled=domain_disabled,
                 help=bundle_help,
+                format_func=_domain_display_label,
             )
 
         # --- Metric selection (filtered by domain) ---

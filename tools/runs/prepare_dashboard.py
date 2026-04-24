@@ -354,6 +354,12 @@ def _resolve_composite_metric_slugs() -> list[str]:
     return list(get_visible_glance_composite_slugs())
 
 
+def _resolve_sector_wise_bundle_slugs() -> list[str]:
+    from india_resilience_tool.config.dashboard_bundles import SECTOR_WISE_DASHBOARD_BUNDLES
+
+    return [spec.composite_slug for spec in SECTOR_WISE_DASHBOARD_BUNDLES]
+
+
 def _resolve_composite_runtime_scope(
     *,
     levels: Sequence[str],
@@ -369,6 +375,39 @@ def _resolve_composite_runtime_scope(
     else:
         for slug in selected_metrics:
             for level in composite_levels:
+                if not all(
+                    _legacy_master_ready(
+                        slug=slug,
+                        level=level,
+                        scope_name=state_name,
+                        data_dir=data_dir,
+                    )
+                    for state_name in admin_states
+                ):
+                    pending_metrics.append(slug)
+                    break
+    return BundleRuntimeScope(
+        selected_metrics=selected_metrics,
+        pending_metrics=_dedupe_keep_order(pending_metrics),
+        has_global_issues=False,
+    )
+
+
+def _resolve_proposal_runtime_scope(
+    *,
+    levels: Sequence[str],
+    admin_states: Sequence[str],
+    data_dir: Path,
+    overwrite: bool,
+) -> BundleRuntimeScope:
+    proposal_levels = [level for level in levels if level in {"district", "block"}]
+    selected_metrics = _resolve_sector_wise_bundle_slugs() if proposal_levels else []
+    pending_metrics: list[str] = []
+    if overwrite:
+        pending_metrics = list(selected_metrics)
+    else:
+        for slug in selected_metrics:
+            for level in proposal_levels:
                 if not all(
                     _legacy_master_ready(
                         slug=slug,
@@ -409,6 +448,31 @@ def _build_composite_master_steps(
         if not bool(getattr(args, "verbose", False)):
             argv.append("--quiet")
         plan.append(PlannedCommand(label=f"composite-masters:{level}", argv=argv))
+    return plan
+
+
+def _build_proposal_bundle_steps(
+    args: argparse.Namespace,
+    *,
+    levels: Sequence[str],
+    admin_states: Sequence[str],
+    scope: BundleRuntimeScope,
+) -> list[PlannedCommand]:
+    plan: list[PlannedCommand] = []
+    if not scope.selected_metrics:
+        return plan
+    metrics = _select_metrics_for_execution(scope) or scope.selected_metrics
+    for level in levels:
+        if level not in {"district", "block"}:
+            continue
+        argv = _py_module_cmd("tools.pipeline.build_proposal_bundles")
+        argv.extend(["--level", level])
+        _append_repeat(argv, "--state", admin_states)
+        _append_repeat(argv, "--bundle", metrics)
+        _append_flag(argv, "--overwrite", bool(getattr(args, "overwrite", False)))
+        if not bool(getattr(args, "verbose", False)):
+            argv.append("--quiet")
+        plan.append(PlannedCommand(label=f"proposal-bundles:{level}", argv=argv))
     return plan
 
 
@@ -1307,6 +1371,18 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
         args,
         levels=climate_levels,
     )
+    composite_scope = _resolve_composite_runtime_scope(
+        levels=climate_levels,
+        admin_states=_resolve_admin_states(getattr(args, "state", None)),
+        data_dir=get_paths_config().data_dir,
+        overwrite=bool(getattr(args, "overwrite", False)),
+    )
+    proposal_scope = _resolve_proposal_runtime_scope(
+        levels=climate_levels,
+        admin_states=_resolve_admin_states(getattr(args, "state", None)),
+        data_dir=get_paths_config().data_dir,
+        overwrite=bool(getattr(args, "overwrite", False)),
+    )
     aqueduct_scope = _resolve_runtime_scope("aqueduct", args)
     population_scope = _resolve_runtime_scope("population-exposure", args)
     groundwater_scope = _resolve_runtime_scope("groundwater", args)
@@ -1318,23 +1394,22 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
 
     package_scope = BundleRuntimeScope(
         selected_metrics=_dedupe_keep_order(
-            _resolve_bundle_metrics("dashboard-package", args) + _resolve_composite_metric_slugs()
+            _resolve_bundle_metrics("dashboard-package", args)
+            + composite_scope.selected_metrics
+            + proposal_scope.selected_metrics
         ),
         pending_metrics=_dedupe_keep_order(
             climate_scope.pending_metrics
+            + composite_scope.pending_metrics
+            + proposal_scope.pending_metrics
             + aqueduct_scope.pending_metrics
             + population_scope.pending_metrics
             + groundwater_scope.pending_metrics
             + jrc_scope.pending_metrics
-            + _resolve_composite_runtime_scope(
-                levels=climate_levels,
-                admin_states=_resolve_admin_states(getattr(args, "state", None)),
-                data_dir=get_paths_config().data_dir,
-                overwrite=bool(getattr(args, "overwrite", False)),
-            ).pending_metrics
         ),
         has_global_issues=(
             climate_scope.has_global_issues
+            or proposal_scope.has_global_issues
             or aqueduct_scope.has_global_issues
             or population_scope.has_global_issues
             or groundwater_scope.has_global_issues
@@ -1346,6 +1421,12 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
         return _build_runtime_plan(args, scope=package_scope)
 
     climate_plan = build_climate_hazards_plan(args, include_runtime=False, runtime_scope=climate_scope)
+    proposal_plan = _build_proposal_bundle_steps(
+        args,
+        levels=climate_levels,
+        admin_states=_resolve_admin_states(getattr(args, "state", None)),
+        scope=proposal_scope,
+    )
     aqueduct_plan = build_aqueduct_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=aqueduct_scope)
     population_plan = build_population_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=population_scope)
     groundwater_plan = build_groundwater_plan(args, include_runtime=False, runtime_scope=groundwater_scope)
@@ -1371,6 +1452,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     if aqueduct_plan or population_plan or jrc_plan:
         plan.extend(build_blocks_geojson_plan(args))
     plan.extend(climate_plan)
+    plan.extend(proposal_plan)
     plan.extend(aqueduct_plan)
     plan.extend(population_plan)
     plan.extend(groundwater_plan)

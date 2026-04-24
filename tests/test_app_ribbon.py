@@ -5,6 +5,8 @@ from pathlib import Path
 import pandas as pd
 
 from india_resilience_tool.app.ribbon import (
+    _domain_display_label,
+    _domain_options_for_context,
     _hydro_master_contract_ready,
     _resolve_external_admin_master_sources,
     _resolve_hydro_master_source,
@@ -84,3 +86,57 @@ def test_hydro_master_contract_ready_accepts_optimized_parquet(tmp_path: Path) -
     ).to_parquet(master_path, index=False)
 
     assert _hydro_master_contract_ready(master_path, "basin") is True
+
+
+def test_domain_display_label_uses_grouped_dashboard_labels() -> None:
+    assert _domain_display_label("Heat Risk") == "Thematic - Heat Risk"
+    assert _domain_display_label("Health Risk") == "Sector-wise - Health Risk"
+    assert _domain_display_label("Population Exposure") == "Population Exposure"
+
+
+def test_domain_options_for_admin_climate_hazards_prioritize_valid_dashboard_bundles(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        "india_resilience_tool.app.ribbon.get_domains_for_pillar",
+        lambda *args, **kwargs: [
+            "Heat Risk",
+            "Drought Risk",
+            "Health Risk",
+            "Rainfall Totals & Typical Wetness",
+            "Temperature Variability",
+        ],
+    )
+    monkeypatch.setattr(
+        "india_resilience_tool.app.ribbon.available_dashboard_bundle_names",
+        lambda *, level, data_dir: ["Heat Risk", "Drought Risk", "Health Risk"],
+    )
+
+    options = _domain_options_for_context(
+        selected_pillar="Climate Hazards",
+        spatial_family="admin",
+        current_level="district",
+        data_dir=tmp_path,
+    )
+
+    assert options == [
+        "Heat Risk",
+        "Drought Risk",
+        "Health Risk",
+        "Rainfall Totals & Typical Wetness",
+        "Temperature Variability",
+    ]
+
+
+def test_domain_options_for_non_dashboard_context_preserve_existing_registry_order(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(
+        "india_resilience_tool.app.ribbon.get_domains_for_pillar",
+        lambda *args, **kwargs: ["Population Exposure", "Aqueduct Water Risk"],
+    )
+
+    options = _domain_options_for_context(
+        selected_pillar="Exposure",
+        spatial_family="admin",
+        current_level="district",
+        data_dir=tmp_path,
+    )
+
+    assert options == ["Population Exposure", "Aqueduct Water Risk"]

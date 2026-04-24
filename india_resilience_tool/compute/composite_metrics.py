@@ -149,11 +149,15 @@ def _load_component_master(
 
 def _available_pairs_for_frame(df: pd.DataFrame, *, metric_slug: str) -> set[tuple[str, str]]:
     """Return supported scenario-period pairs for one master frame."""
-    metric_base = METRICS_BY_SLUG[metric_slug].periods_metric_col or METRICS_BY_SLUG[metric_slug].value_col or metric_slug
     available: set[tuple[str, str]] = set()
     for scenario in SUPPORTED_SCENARIOS:
         for period in SUPPORTED_PERIODS:
-            if resolve_metric_column(df, metric_base, scenario, period, SUPPORTED_STAT):
+            if _resolve_component_metric_column(
+                df,
+                metric_slug=metric_slug,
+                scenario=scenario,
+                period=period,
+            ):
                 available.add((scenario, period))
     return available
 
@@ -191,6 +195,36 @@ def _bundle_metric_specs(spec: CompositeMetricSpec) -> list[BundleMetricSpec]:
     ]
 
 
+def _resolve_component_metric_column(
+    frame: pd.DataFrame,
+    *,
+    metric_slug: str,
+    scenario: str,
+    period: str,
+) -> str | None:
+    """Resolve one component metric column with legacy slug fallback.
+
+    Persisted masters normally use the registry `periods_metric_col` / `value_col`
+    base. Some older fixtures and legacy outputs still expose the raw metric slug
+    as the left-most token, so we accept that as a compatibility fallback.
+    """
+    registry_spec = METRICS_BY_SLUG[metric_slug]
+    candidates: list[str] = []
+    for candidate in (
+        registry_spec.periods_metric_col,
+        registry_spec.value_col,
+        metric_slug,
+    ):
+        value = str(candidate or "").strip()
+        if value and value not in candidates:
+            candidates.append(value)
+    for candidate in candidates:
+        resolved = resolve_metric_column(frame, candidate, scenario, period, SUPPORTED_STAT)
+        if resolved:
+            return resolved
+    return None
+
+
 def _build_wide_component_frame(
     component_frames: dict[str, pd.DataFrame],
     *,
@@ -202,12 +236,12 @@ def _build_wide_component_frame(
     id_columns = list(_required_id_columns(level))
     merged: Optional[pd.DataFrame] = None
     for metric_slug, frame in component_frames.items():
-        metric_base = (
-            METRICS_BY_SLUG[metric_slug].periods_metric_col
-            or METRICS_BY_SLUG[metric_slug].value_col
-            or metric_slug
+        metric_column = _resolve_component_metric_column(
+            frame,
+            metric_slug=metric_slug,
+            scenario=scenario,
+            period=period,
         )
-        metric_column = resolve_metric_column(frame, metric_base, scenario, period, SUPPORTED_STAT)
         metric_frame = frame.loc[:, id_columns].copy()
         metric_frame[metric_slug] = (
             pd.to_numeric(frame[metric_column], errors="coerce") if metric_column in frame.columns else pd.NA

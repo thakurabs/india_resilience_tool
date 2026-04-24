@@ -209,6 +209,56 @@ def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> Non
         assert domain in cfg["domains"]
 
 
+def test_sector_wise_composites_are_exposed_as_admin_derived_metrics() -> None:
+    from india_resilience_tool.config.variables import VARIABLES
+
+    for slug, label, domain, levels in [
+        ("composite_agricultural_risk", "Composite Agricultural Risk", "Agricultural Risk", ["district", "block"]),
+        ("composite_health_risk", "Composite Health Risk", "Health Risk", ["district", "block"]),
+        ("composite_industrial_risk", "Composite Industrial Risk", "Industrial Risk", ["district", "block"]),
+        (
+            "composite_investment_financial_risk",
+            "Composite Investment / Financial Risk",
+            "Investment / Financial Risk",
+            ["district", "block"],
+        ),
+        ("composite_infrastructure_risk", "Composite Infrastructure Risk", "Infrastructure Risk", ["district", "block"]),
+        (
+            "composite_asset_risk_thermal_power",
+            "Composite Asset Risk (Thermal Power Plants)",
+            "Asset Risk (Thermal Power Plants)",
+            ["district", "block"],
+        ),
+        (
+            "composite_asset_risk_hydropower",
+            "Composite Asset Risk (Hydropower Plants)",
+            "Asset Risk (Hydropower Plants)",
+            ["district", "block"],
+        ),
+        (
+            "composite_life_livelihood_loss_risk",
+            "Composite Life & Livelihood Loss Risk",
+            "Life & Livelihood Loss Risk",
+            ["district"],
+        ),
+    ]:
+        cfg = VARIABLES[slug]
+        assert cfg["label"] == label
+        assert cfg["source_type"] == "derived"
+        assert cfg["selection_mode"] == "scenario_period"
+        assert cfg["supported_levels"] == levels
+        assert cfg["supported_spatial_families"] == ["admin"]
+        assert cfg["supported_statistics"] == ["mean"]
+        assert cfg["supports_yearly_trend"] is False
+        assert cfg["supports_baseline_comparison"] is False
+        assert cfg["supports_scenario_comparison"] is False
+        assert cfg["supported_scenarios"] == ["ssp245", "ssp585"]
+        assert cfg["units"] == "score"
+        assert cfg["admin_rebuild_command"] == "python -m tools.pipeline.build_proposal_bundles"
+        assert cfg["hydro_rebuild_command"] is None
+        assert domain in cfg["domains"]
+
+
 def test_current_period_display_label_is_stable() -> None:
     from india_resilience_tool.viz.charts import period_display_label
 

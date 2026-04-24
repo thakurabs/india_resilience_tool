@@ -430,6 +430,14 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
         ),
     )
     monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_composite_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_proposal_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+    )
+    monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_runtime_scope",
         lambda bundle, *_args, **_kwargs: scope_map[bundle],
     )
@@ -468,6 +476,14 @@ def test_dashboard_package_audit_only_allows_missing_jrc_inputs(monkeypatch) -> 
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
         lambda *_args, **_kwargs: _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_composite_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(selected_metrics=["composite_heat_risk"], pending_metrics=["composite_heat_risk"], has_global_issues=False),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_proposal_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(selected_metrics=["composite_health_risk"], pending_metrics=["composite_health_risk"], has_global_issues=False),
     )
     scope_map = {
         "aqueduct": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
@@ -524,6 +540,22 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
         ),
     )
     monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_composite_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(
+            selected_metrics=["composite_heat_risk", "composite_heat_stress"],
+            pending_metrics=["composite_heat_risk", "composite_heat_stress"],
+            has_global_issues=False,
+        ),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_proposal_runtime_scope",
+        lambda **_kwargs: BundleRuntimeScope(
+            selected_metrics=["composite_health_risk", "composite_industrial_risk"],
+            pending_metrics=["composite_health_risk", "composite_industrial_risk"],
+            has_global_issues=False,
+        ),
+    )
+    monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_runtime_scope",
         lambda bundle, *_args, **_kwargs: scope_map[bundle],
     )
@@ -543,6 +575,10 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
     plan = build_dashboard_package_plan(args)
     labels = [step.label for step in plan]
     assert labels.count("blocks-geojson") == 1
+    assert "proposal-bundles:district" in labels
+    assert "proposal-bundles:block" in labels
+    assert labels.index("proposal-bundles:district") > labels.index("composite-masters:block")
+    assert labels.index("proposal-bundles:district") < labels.index("aqueduct-admin-crosswalk")
     assert "jrc-flood-depth-admin-masters" in labels
     assert labels.count("processed-optimised-build") == 1
     assert labels.count("processed-optimised-audit") == 1

@@ -17,7 +17,10 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Default landing discovery surface:
   - launches into an India state-level climate-hazard screening map
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
-  - currently surfaces `Heat Risk`, `Heat Stress`, `Drought Risk`, `Extreme Rainfall`, `Cold Risk`, and `Agriculture & Growing Conditions` in Glance View
+  - surfaces one grouped bundle list in Glance and Deep Dive with exact selector labels such as `Thematic - Heat Risk` and `Sector-wise - Health Risk`
+  - thematic bundles remain available for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`
+  - sector-wise bundles are available for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
+  - `Life & Livelihood Loss Risk` is intentionally hidden at block level until its current duplication defect is fixed
   - each visible Glance bundle now reads one persisted composite admin metric from disk; the dashboard no longer computes visible bundle scores at runtime
   - `Deep Dive` from Glance opens the matching persisted composite metric such as `Composite Heat Stress`
   - supports India -> state -> district drill-down before entering Deep Dive
@@ -159,7 +162,8 @@ Proposal bundle builder:
 python -m tools.pipeline.build_proposal_bundles --help
 ```
 
-This offline builder computes the proposal climate-risk bundles for admin `district` and `block` units only. It writes persisted proposal bundle masters under `IRT_DATA_DIR/processed/<composite_slug>/<state>/` without adding those bundles to the current dashboard UI.
+This offline builder computes the proposal climate-risk bundles for admin `district` and `block` units only. It writes persisted proposal bundle masters under `IRT_DATA_DIR/processed/<composite_slug>/<state>/`.
+The dashboard surfaces those sector-wise proposal composites through grouped labels like `Sector-wise - Health Risk`; `Life & Livelihood Loss Risk` remains district-only in the UI until the current block-level duplication issue is fixed.
 
 Launch behavior:
 - the app now opens into a climate-hazard discovery landing surface by default

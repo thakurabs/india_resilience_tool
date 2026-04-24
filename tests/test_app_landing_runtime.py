@@ -204,15 +204,50 @@ def test_ensure_landing_state_sets_frozen_defaults() -> None:
     assert session_state[landing_runtime.LANDING_MAP_CONTEXT_KEY] is None
     assert session_state[landing_runtime.LANDING_MAP_INPUT_ARMED_KEY] is False
 
-def test_landing_bundle_domains_exclude_jrc_flood_bundle() -> None:
-    assert _landing_bundle_domains() == [
+def test_landing_bundle_domains_exclude_jrc_flood_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        landing_runtime,
+        "available_dashboard_bundle_names",
+        lambda *, level, data_dir, landing_only: [
+            "Heat Risk",
+            "Drought Risk",
+            "Flood & Extreme Rainfall Risk",
+            "Heat Stress",
+            "Cold Risk",
+            "Agriculture & Growing Conditions",
+            "Agricultural Risk",
+            "Health Risk",
+            "Industrial Risk",
+            "Investment / Financial Risk",
+            "Infrastructure Risk",
+            "Asset Risk (Thermal Power Plants)",
+            "Asset Risk (Hydropower Plants)",
+            "Life & Livelihood Loss Risk",
+        ],
+    )
+    assert _landing_bundle_domains(data_dir=Path("/tmp")) == [
         "Heat Risk",
         "Drought Risk",
         "Flood & Extreme Rainfall Risk",
         "Heat Stress",
         "Cold Risk",
         "Agriculture & Growing Conditions",
+        "Agricultural Risk",
+        "Health Risk",
+        "Industrial Risk",
+        "Investment / Financial Risk",
+        "Infrastructure Risk",
+        "Asset Risk (Thermal Power Plants)",
+        "Asset Risk (Hydropower Plants)",
+        "Life & Livelihood Loss Risk",
     ]
+
+
+def test_landing_bundle_display_uses_exact_grouped_label() -> None:
+    assert landing_runtime._landing_bundle_display("Flood & Extreme Rainfall Risk") == (
+        "Thematic - Flood & Extreme Rainfall Risk"
+    )
+    assert landing_runtime._landing_bundle_display("Health Risk") == "Sector-wise - Health Risk"
 
 def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp_path: Path) -> None:
     session_state: dict[str, object] = {
@@ -221,6 +256,11 @@ def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp
         "landing_period": "2040-2060",
     }
 
+    monkeypatch.setattr(
+        landing_runtime,
+        "_landing_bundle_domains",
+        lambda *, data_dir: ["Heat Risk", "Health Risk"],
+    )
     monkeypatch.setattr(
         landing_runtime,
         "_bundle_scenario_period_options",
@@ -714,6 +754,7 @@ def test_render_landing_page_ignores_stale_payloads_until_first_empty_then_accep
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
     monkeypatch.setattr(landing_runtime, "_sanitize_landing_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_landing_bundle_domains", lambda *, data_dir: ["Heat Risk", "Health Risk"])
     monkeypatch.setattr(landing_runtime, "_collect_bundle_metric_contexts", lambda *args, **kwargs: [])
     monkeypatch.setattr(
         landing_runtime,
@@ -860,11 +901,44 @@ def test_enter_deep_dive_uses_persisted_composite_metric_for_visible_bundle(monk
     assert session_state["registry_metric"] == "composite_heat_stress"
 
 
+def test_enter_deep_dive_uses_sector_wise_composite_metric(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Health Risk",
+        "landing_scenario": "ssp585",
+        "landing_period": "2040-2060",
+        "landing_focus_level": "district",
+        "landing_selected_state": "Telangana",
+        "landing_selected_district": "Nalgonda",
+    }
+
+    monkeypatch.setattr(landing_runtime.st, "rerun", lambda: (_ for _ in ()).throw(_DummyRerun()))
+
+    with pytest.raises(_DummyRerun):
+        landing_runtime._enter_deep_dive(session_state)
+
+    assert session_state["selected_bundle"] == "Health Risk"
+    assert session_state["selected_var"] == "composite_health_risk"
+    assert session_state["registry_metric"] == "composite_health_risk"
+
+
+def test_prepare_driver_context_returns_unsupported_for_sector_wise_bundle(tmp_path: Path) -> None:
+    context = landing_runtime._prepare_driver_context(
+        "Health Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert context.available is False
+    assert context.reason == "unsupported_bundle_type"
+
+
 def test_prepare_bundle_context_reads_persisted_composite_metric(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         landing_runtime,
-        "_resolve_metric_master_sources",
-        lambda metric_slug, *, data_dir: (Path("/tmp") / f"{metric_slug}.csv",),
+        "resolve_dashboard_bundle_master_sources",
+        lambda bundle_domain, *, level, data_dir: (Path("/tmp") / f"{bundle_domain}_{level}.csv",),
     )
     monkeypatch.setattr(
         landing_runtime,
@@ -939,6 +1013,7 @@ def test_render_landing_page_passes_composite_scores_and_component_driver_contex
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
     monkeypatch.setattr(landing_runtime, "_sanitize_landing_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_landing_bundle_domains", lambda *, data_dir: ["Heat Risk", "Health Risk"])
     monkeypatch.setattr(landing_runtime, "_bundle_scenario_period_options", lambda *args, **kwargs: [("ssp585", "2040-2060")])
     monkeypatch.setattr(landing_runtime, "_prepare_bundle_context", lambda *args, **kwargs: (composite_district_scores, composite_state_scores))
     monkeypatch.setattr(landing_runtime, "_prepare_driver_context", lambda *args, **kwargs: driver_context)
@@ -1002,6 +1077,7 @@ def test_render_landing_page_passes_composite_scores_and_component_driver_contex
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
     monkeypatch.setattr(landing_runtime, "_sanitize_landing_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_landing_bundle_domains", lambda *, data_dir: ["Heat Risk", "Health Risk"])
     monkeypatch.setattr(landing_runtime, "_bundle_scenario_period_options", lambda *args, **kwargs: [("ssp585", "2040-2060")])
     monkeypatch.setattr(landing_runtime, "_prepare_bundle_context", lambda *args, **kwargs: (composite_district_scores, composite_state_scores))
     monkeypatch.setattr(landing_runtime, "_prepare_driver_context", lambda *args, **kwargs: driver_context)

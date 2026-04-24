@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from india_resilience_tool.config.composite_metrics import get_visible_glance_composite_slugs
-from india_resilience_tool.config.metrics_registry import DOMAINS
+from india_resilience_tool.config.dashboard_bundles import SECTOR_WISE_DASHBOARD_BUNDLES
+from india_resilience_tool.config.metrics_registry import DOMAINS, PIPELINE_SLUGS
 from india_resilience_tool.config.proposal_bundles import (
     PROPOSAL_BUNDLES,
     validate_proposal_bundle_specs,
@@ -75,9 +75,15 @@ def test_proposal_bundle_labels_slugs_and_rule_order_are_exact() -> None:
     assert observed == expected
 
 
-def test_proposal_bundles_do_not_leak_into_ui_surfaces() -> None:
+def test_sector_wise_dashboard_catalog_matches_proposal_bundle_order() -> None:
+    observed = [(spec.bundle_label, spec.composite_slug) for spec in PROPOSAL_BUNDLES]
+    expected = [(spec.canonical_bundle, spec.composite_slug) for spec in SECTOR_WISE_DASHBOARD_BUNDLES]
+    assert expected == observed
+
+
+def test_sector_wise_proposal_bundles_are_exposed_in_dashboard_registry_but_not_pipeline() -> None:
     proposal_slugs = {spec.composite_slug for spec in PROPOSAL_BUNDLES}
     domain_slugs = {slug for slugs in DOMAINS.values() for slug in slugs}
-    assert proposal_slugs.isdisjoint(domain_slugs)
-    assert proposal_slugs.isdisjoint(set(VARIABLES))
-    assert proposal_slugs.isdisjoint(set(get_visible_glance_composite_slugs()))
+    assert proposal_slugs.issubset(domain_slugs)
+    assert proposal_slugs.issubset(set(VARIABLES))
+    assert proposal_slugs.isdisjoint(PIPELINE_SLUGS)

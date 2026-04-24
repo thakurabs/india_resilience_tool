@@ -9,7 +9,10 @@ IRT is a Streamlit-based climate-risk and resilience dashboard organized around 
 
 The current working tree supports:
 - a default climate-hazard landing / discovery surface that opens on an India state-level bundle map and drills down India -> state -> district before handing off to the detailed workflow
-- a Glance bundle scope covering `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk` (displayed as `Extreme Rainfall`), `Cold Risk`, and `Agriculture & Growing Conditions`
+- a grouped dashboard bundle scope covering exact selector labels like `Thematic - Heat Risk` and `Sector-wise - Health Risk`
+- thematic bundles for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`
+- sector-wise bundles for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
+- `Life & Livelihood Loss Risk` is intentionally district-only in the dashboard until its block-level duplication issue is fixed
 - declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance bundles
 - persisted visible-Glance composite metrics declared in `india_resilience_tool/config/composite_metrics.py` and built offline into admin master files
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
@@ -45,7 +48,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
 | `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, persisted visible-Glance composites, Aqueduct, population, groundwater, Telangana JRC flood depth, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
-| `python -m tools.pipeline.build_composite_metrics --help` | Build persisted district/block composite masters for the 6 visible Glance bundles under the legacy `processed/` metric layout |
+| `python -m tools.pipeline.build_composite_metrics --help` | Build persisted district/block composite masters for the 6 thematic dashboard bundles under the legacy `processed/` metric layout |
 | `python -m tools.pipeline.build_proposal_bundles --help` | Build persisted admin district/block proposal climate-risk bundle masters under `processed/<proposal_composite_slug>/<state>/` and the helper `r95p_interannual_variability` masters |
 | `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional `--prune-scope`, destructive `--full-rebuild`, `--dry-run`, exact pre-scan task counting, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
 | `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` filtering, and write `parity_report.json` |
@@ -322,7 +325,7 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `build_all_csv.ps1` | PowerShell helper for CSV build workflows |
-| `build_composite_metrics.py` | CLI wrapper that writes persisted district/block composite masters for the visible Glance bundles |
+| `build_composite_metrics.py` | CLI wrapper that writes persisted district/block composite masters for the thematic dashboard bundles |
 | `build_proposal_bundles.py` | CLI wrapper that writes persisted district/block proposal climate-risk bundle masters and the `r95p_interannual_variability` helper masters |
 | `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
