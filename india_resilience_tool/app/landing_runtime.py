@@ -33,6 +33,10 @@ from india_resilience_tool.config.dashboard_bundles import (
     dashboard_bundle_names,
     get_dashboard_bundle_spec,
 )
+from india_resilience_tool.config.proposal_bundles import (
+    get_proposal_bundle_spec_by_slug,
+    proposal_rule_score_column,
+)
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.views.map_view import (
     build_choropleth_map_with_geojson_layer,
@@ -717,6 +721,31 @@ def _bundle_metric_specs(bundle_domain: str) -> list[BundleMetricSpec]:
     return specs
 
 
+def _proposal_rule_metric_specs(composite_slug: str) -> list[BundleMetricSpec]:
+    """Return display-ready rule specs for one persisted proposal bundle."""
+    proposal_spec = get_proposal_bundle_spec_by_slug(composite_slug)
+    if proposal_spec is None:
+        raise ValueError(f"Expected proposal bundle slug, got {composite_slug!r}")
+    return [
+        BundleMetricSpec(
+            slug=rule.rule_slug,
+            label=rule.display_label,
+            column=rule.rule_slug,
+            weight=1.0,
+            higher_is_worse=True,
+        )
+        for rule in proposal_spec.rules
+    ]
+
+
+def _landing_driver_heading(bundle_domain: str) -> str:
+    """Return the appropriate Glance driver heading for one bundle."""
+    dashboard_spec = get_dashboard_bundle_spec(bundle_domain)
+    if dashboard_spec is not None and dashboard_spec.group_key == "sector_wise":
+        return "Top Rule Signals"
+    return "Metric Drivers"
+
+
 def _ordered_scenario_period_pairs(
     pairs: Sequence[tuple[str, str]] | set[tuple[str, str]],
 ) -> list[tuple[str, str]]:
@@ -1168,6 +1197,130 @@ def _prepare_bundle_context(
     return district_scores, state_scores
 
 
+@st.cache_data(show_spinner=False)
+def _load_proposal_bundle_driver_scores_cached(
+    composite_slug: str,
+    scenario: str,
+    period: str,
+    source_signature: tuple[tuple[str, Optional[float]], ...],
+    source_paths: tuple[str, ...],
+) -> pd.DataFrame:
+    """Load persisted proposal rule scores for sector-wise Glance driver display."""
+    _ = source_signature
+    base_columns = ["state_name", "district_name", "__state_key", "__district_key"]
+    if not source_paths:
+        return pd.DataFrame(columns=base_columns)
+
+    proposal_spec = get_proposal_bundle_spec_by_slug(composite_slug)
+    if proposal_spec is None:
+        return pd.DataFrame(columns=base_columns)
+
+    df = normalize_master_columns(load_master_csvs(source_paths))
+    df = _standardize_admin_district_frame(df)
+    if df.empty:
+        return pd.DataFrame(columns=base_columns)
+
+    out = df.loc[:, ["state_name", "district_name"]].copy()
+    out["__state_key"] = out["state_name"].astype(str).map(alias)
+    out["__district_key"] = (
+        out["state_name"].astype(str).map(alias)
+        + "|"
+        + out["district_name"].astype(str).map(alias)
+    )
+
+    mapped_columns: list[str] = []
+    selected_period = canonical_period_label(str(period).strip())
+    for rule in proposal_spec.rules:
+        source_column = proposal_rule_score_column(rule.rule_slug, scenario, selected_period)
+        if source_column not in df.columns:
+            continue
+        norm_col = normalized_metric_column(rule.rule_slug)
+        out[norm_col] = pd.to_numeric(df[source_column], errors="coerce")
+        mapped_columns.append(norm_col)
+
+    if mapped_columns:
+        grouped = (
+            out.groupby(base_columns, as_index=False, dropna=False)[mapped_columns]
+            .mean()
+            .reset_index(drop=True)
+        )
+    else:
+        grouped = out.loc[:, base_columns].drop_duplicates().reset_index(drop=True)
+    return grouped.sort_values(["state_name", "district_name"], kind="stable").reset_index(drop=True)
+
+
+def _prepare_sector_bundle_driver_context(
+    bundle_domain: str,
+    *,
+    scenario: str,
+    period: str,
+    data_dir: Path,
+) -> LandingDriverContext:
+    """Load persisted proposal rule scores for one sector-wise dashboard bundle."""
+    dashboard_spec = get_dashboard_bundle_spec(bundle_domain)
+    if dashboard_spec is None:
+        return LandingDriverContext(
+            district_scores=pd.DataFrame(),
+            metric_specs=[],
+            available=False,
+            reason="no_metric_contexts",
+        )
+
+    proposal_spec = get_proposal_bundle_spec_by_slug(dashboard_spec.composite_slug)
+    if proposal_spec is None:
+        return LandingDriverContext(
+            district_scores=pd.DataFrame(),
+            metric_specs=[],
+            available=False,
+            reason="missing_proposal_spec",
+        )
+
+    source_paths = resolve_dashboard_bundle_master_sources(bundle_domain, level="district", data_dir=data_dir)
+    if not source_paths:
+        return LandingDriverContext(
+            district_scores=pd.DataFrame(),
+            metric_specs=[],
+            available=False,
+            reason="no_source_paths",
+        )
+
+    metric_specs = _proposal_rule_metric_specs(dashboard_spec.composite_slug)
+    district_scores = _load_proposal_bundle_driver_scores_cached(
+        dashboard_spec.composite_slug,
+        scenario,
+        period,
+        master_source_signature(source_paths),
+        tuple(str(path) for path in source_paths),
+    )
+    if district_scores.empty:
+        return LandingDriverContext(
+            district_scores=district_scores,
+            metric_specs=metric_specs,
+            available=False,
+            reason="empty_component_frame",
+        )
+
+    available_rule_columns = [
+        normalized_metric_column(rule.rule_slug)
+        for rule in proposal_spec.rules
+        if normalized_metric_column(rule.rule_slug) in district_scores.columns
+    ]
+    if not available_rule_columns:
+        return LandingDriverContext(
+            district_scores=district_scores,
+            metric_specs=metric_specs,
+            available=False,
+            reason="pair_unsupported",
+        )
+
+    return LandingDriverContext(
+        district_scores=district_scores,
+        metric_specs=metric_specs,
+        available=True,
+        reason=None,
+    )
+
+
 def _prepare_driver_context(
     bundle_domain: str,
     *,
@@ -1178,12 +1331,12 @@ def _prepare_driver_context(
 ) -> LandingDriverContext:
     """Load component metrics for driver display without affecting composite landing behavior."""
     dashboard_spec = get_dashboard_bundle_spec(bundle_domain)
-    if dashboard_spec is not None and dashboard_spec.group_key != "thematic":
-        return LandingDriverContext(
-            district_scores=pd.DataFrame(),
-            metric_specs=[],
-            available=False,
-            reason="unsupported_bundle_type",
+    if dashboard_spec is not None and dashboard_spec.group_key == "sector_wise":
+        return _prepare_sector_bundle_driver_context(
+            bundle_domain,
+            scenario=scenario,
+            period=period,
+            data_dir=data_dir,
         )
 
     try:
@@ -1928,6 +2081,7 @@ def _render_national_summary(
 
 def _render_state_summary(
     *,
+    bundle_domain: str,
     state_name: str,
     district_scores: pd.DataFrame,
     state_scores: pd.DataFrame,
@@ -1963,7 +2117,7 @@ def _render_state_summary(
 
         st.markdown("**District Score Distribution**")
         st.bar_chart(_build_distribution_frame(state_scope["bundle_score"]).set_index("Band"))
-        st.markdown("**Metric Drivers**")
+        st.markdown(f"**{_landing_driver_heading(bundle_domain)}**")
         driver_scope = pd.DataFrame()
         if driver_context.available and not driver_context.district_scores.empty:
             driver_scope = driver_context.district_scores[
@@ -1985,6 +2139,7 @@ def _render_state_summary(
 
 def _render_district_summary(
     *,
+    bundle_domain: str,
     state_name: str,
     district_name: str,
     district_scores: pd.DataFrame,
@@ -2023,7 +2178,7 @@ def _render_district_summary(
                     f"(state average {state_mean:.1f})"
                 )
 
-        st.markdown("**Metric Drivers**")
+        st.markdown(f"**{_landing_driver_heading(bundle_domain)}**")
         driver_scope = pd.DataFrame()
         if driver_context.available and not driver_context.district_scores.empty:
             district_key = f"{alias(state_name)}|{alias(district_name)}"
@@ -2487,6 +2642,7 @@ def render_landing_page(
             )
         elif focus_level == "state" and selected_state:
                 _render_state_summary(
+                    bundle_domain=bundle_domain,
                     state_name=selected_state,
                     district_scores=district_scores,
                     state_scores=state_scores,
@@ -2495,6 +2651,7 @@ def render_landing_page(
                 )
         elif focus_level == "district" and selected_state and selected_district:
                 _render_district_summary(
+                    bundle_domain=bundle_domain,
                     state_name=selected_state,
                     district_name=selected_district,
                     district_scores=district_scores,

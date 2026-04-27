@@ -30,6 +30,11 @@ from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_SUBBASIN_RENDER,
 )
 from india_resilience_tool.config.paths import get_paths_config, resolve_processed_root
+from india_resilience_tool.config.proposal_bundles import (
+    get_proposal_bundle_spec_by_slug,
+    proposal_available_rule_count_column,
+    proposal_rule_score_column,
+)
 from india_resilience_tool.config.variables import VARIABLES
 from india_resilience_tool.data.adm2_loader import ensure_adm2_columns
 from india_resilience_tool.data.adm3_loader import ensure_adm3_columns
@@ -340,6 +345,35 @@ def _metric_value_cols(df: pd.DataFrame, *, supported_stats: Iterable[str]) -> l
     return out
 
 
+def _proposal_retained_admin_master_cols(
+    df: pd.DataFrame,
+    *,
+    slug: str,
+    level: str,
+) -> list[str]:
+    """Return proposal-only admin master columns retained in the optimized bundle."""
+    level_norm = str(level).strip().lower()
+    if level_norm not in {"district", "block"}:
+        return []
+
+    bundle_spec = get_proposal_bundle_spec_by_slug(slug)
+    if bundle_spec is None:
+        return []
+
+    keep_cols: list[str] = []
+    available_cols = set(df.columns)
+    for scenario in ("ssp245", "ssp585"):
+        for period in ("2020-2040", "2040-2060", "2060-2080"):
+            available_count_col = proposal_available_rule_count_column(bundle_spec.composite_slug, scenario, period)
+            if available_count_col in available_cols:
+                keep_cols.append(available_count_col)
+            for rule in bundle_spec.rules:
+                score_col = proposal_rule_score_column(rule.rule_slug, scenario, period)
+                if score_col in available_cols:
+                    keep_cols.append(score_col)
+    return keep_cols
+
+
 def _admin_keys(df: pd.DataFrame, *, level: str) -> pd.DataFrame:
     out = df.copy()
     if level == "district":
@@ -359,12 +393,15 @@ def _admin_keys(df: pd.DataFrame, *, level: str) -> pd.DataFrame:
 def _select_master_columns(
     df: pd.DataFrame,
     *,
+    slug: str,
     level: str,
     supported_stats: Iterable[str],
 ) -> pd.DataFrame:
     id_cols = list(ADMIN_ID_COLS[level]) if level in ADMIN_ID_COLS else list(HYDRO_ID_COLS[level])
     keep_cols = [c for c in id_cols if c in df.columns]
     keep_cols.extend(_metric_value_cols(df, supported_stats=supported_stats))
+    keep_cols.extend(_proposal_retained_admin_master_cols(df, slug=slug, level=level))
+    keep_cols = list(dict.fromkeys(keep_cols))
     out = df[keep_cols].copy()
     if level in {"district", "block"}:
         out = _admin_keys(out, level=level)
@@ -1253,6 +1290,7 @@ def _write_manifest(
         "summary_semantics": "bundle_inventory",
         "stats_contract": {
             "climate": ["mean", "median"],
+            "proposal_bundle": ["mean", "score", "available_rule_count"],
             "static_snapshot": ["mean"],
             "removed": ["std", "p05", "p95", "n_models", "values_per_model", "models"],
         },
@@ -2031,7 +2069,7 @@ def build_processed_optimised_bundle(
                 df = _read_legacy_master(source)
                 if df.empty:
                     return
-                out = _select_master_columns(df, level=str(task.level), supported_stats=supported_stats)
+                out = _select_master_columns(df, slug=slug, level=str(task.level), supported_stats=supported_stats)
                 if out.empty:
                     return
                 _write_parquet(out, target)

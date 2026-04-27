@@ -55,8 +55,10 @@ def _metric_context(
 @pytest.fixture(autouse=True)
 def _clear_landing_runtime_caches() -> None:
     landing_runtime._prepare_bundle_context_cached.clear()
+    landing_runtime._load_proposal_bundle_driver_scores_cached.clear()
     yield
     landing_runtime._prepare_bundle_context_cached.clear()
+    landing_runtime._load_proposal_bundle_driver_scores_cached.clear()
 
 def _adm1_gdf() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(
@@ -184,6 +186,12 @@ def _driver_context(
         available=available,
         reason=reason,
     )
+
+
+def _write_health_risk_driver_master(tmp_path: Path, rows: list[dict[str, object]]) -> Path:
+    path = tmp_path / "health_risk_district.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+    return path
 
 def test_ensure_landing_state_sets_frozen_defaults() -> None:
     session_state: dict[str, object] = {}
@@ -921,7 +929,181 @@ def test_enter_deep_dive_uses_sector_wise_composite_metric(monkeypatch: pytest.M
     assert session_state["registry_metric"] == "composite_health_risk"
 
 
-def test_prepare_driver_context_returns_unsupported_for_sector_wise_bundle(tmp_path: Path) -> None:
+def test_load_proposal_bundle_driver_scores_cached_maps_existing_rule_scores_only(tmp_path: Path) -> None:
+    source = _write_health_risk_driver_master(
+        tmp_path,
+        [
+            {
+                "state": "Telangana",
+                "district": "Nalgonda",
+                "composite_health_risk__ssp585__2040-2060__mean": 75.0,
+                "txx_ge_45__ssp585__2040-2060__score": 100.0,
+            }
+        ],
+    )
+
+    out = landing_runtime._load_proposal_bundle_driver_scores_cached(
+        "composite_health_risk",
+        "ssp585",
+        "2040-2060",
+        (),
+        (str(source),),
+    )
+
+    assert set(["state_name", "district_name", "__state_key", "__district_key"]).issubset(out.columns)
+    assert landing_runtime.normalized_metric_column("txx_ge_45") in out.columns
+    assert landing_runtime.normalized_metric_column("wsdi_ge_5") not in out.columns
+    assert [column for column in out.columns if column.endswith("__landing_norm")] == [
+        landing_runtime.normalized_metric_column("txx_ge_45")
+    ]
+
+
+def test_load_proposal_bundle_driver_scores_cached_collapses_duplicate_district_rows_by_mean(tmp_path: Path) -> None:
+    source = _write_health_risk_driver_master(
+        tmp_path,
+        [
+            {
+                "state": "Telangana",
+                "district": "Nalgonda",
+                "txx_ge_45__ssp585__2040-2060__score": 100.0,
+            },
+            {
+                "state": "Telangana",
+                "district": "Nalgonda",
+                "txx_ge_45__ssp585__2040-2060__score": 50.0,
+            },
+        ],
+    )
+
+    out = landing_runtime._load_proposal_bundle_driver_scores_cached(
+        "composite_health_risk",
+        "ssp585",
+        "2040-2060",
+        (),
+        (str(source),),
+    )
+
+    assert len(out) == 1
+    assert out.loc[0, landing_runtime.normalized_metric_column("txx_ge_45")] == pytest.approx(75.0)
+
+
+def test_load_proposal_bundle_driver_scores_cached_does_not_treat_composite_mean_as_driver_support(tmp_path: Path) -> None:
+    source = _write_health_risk_driver_master(
+        tmp_path,
+        [
+            {
+                "state": "Telangana",
+                "district": "Nalgonda",
+                "composite_health_risk__ssp585__2040-2060__mean": 75.0,
+            }
+        ],
+    )
+
+    out = landing_runtime._load_proposal_bundle_driver_scores_cached(
+        "composite_health_risk",
+        "ssp585",
+        "2040-2060",
+        (),
+        (str(source),),
+    )
+
+    assert list(out.columns) == ["state_name", "district_name", "__state_key", "__district_key"]
+
+
+def test_prepare_driver_context_uses_proposal_rule_scores_for_sector_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    source = _write_health_risk_driver_master(
+        tmp_path,
+        [
+            {
+                "state": "Telangana",
+                "district": "Nalgonda",
+                "txx_ge_45__ssp585__2040-2060__score": 100.0,
+                "wsdi_ge_5__ssp585__2040-2060__score": 50.0,
+            },
+            {
+                "state": "Telangana",
+                "district": "Khammam",
+                "txx_ge_45__ssp585__2040-2060__score": 25.0,
+                "wsdi_ge_5__ssp585__2040-2060__score": 75.0,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        landing_runtime,
+        "resolve_dashboard_bundle_master_sources",
+        lambda bundle_domain, *, level, data_dir: (source,),
+    )
+
+    context = landing_runtime._prepare_driver_context(
+        "Health Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert context.available is True
+    assert context.reason is None
+    assert [spec.label for spec in context.metric_specs] == [
+        "Annual max temperature >= 45 degC",
+        "Warm spell days >= 5",
+        "Annual max nighttime temperature >= 30 degC",
+        "1-day rainfall >= 200 mm",
+        "Consecutive wet days >= 5",
+    ]
+    telangana_scope = context.district_scores[
+        context.district_scores["__state_key"].astype(str) == "telangana"
+    ].copy()
+    driver_df = landing_runtime.compute_metric_driver_frame(telangana_scope, metric_specs=context.metric_specs)
+    assert not driver_df.empty
+
+
+def test_prepare_driver_context_sector_bundle_missing_proposal_spec_returns_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        landing_runtime,
+        "get_dashboard_bundle_spec",
+        lambda bundle_domain: type(
+            "Spec",
+            (),
+            {"group_key": "sector_wise", "composite_slug": "missing_bundle"},
+        )(),
+    )
+
+    context = landing_runtime._prepare_driver_context(
+        "Missing Sector Bundle",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert context.available is False
+    assert context.reason == "missing_proposal_spec"
+
+
+def test_prepare_driver_context_sector_bundle_pair_unsupported_when_only_composite_mean_exists(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _write_health_risk_driver_master(
+        tmp_path,
+        [
+            {
+                "state": "Telangana",
+                "district": "Nalgonda",
+                "composite_health_risk__ssp585__2040-2060__mean": 75.0,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        landing_runtime,
+        "resolve_dashboard_bundle_master_sources",
+        lambda bundle_domain, *, level, data_dir: (source,),
+    )
+
     context = landing_runtime._prepare_driver_context(
         "Health Risk",
         scenario="ssp585",
@@ -931,7 +1113,48 @@ def test_prepare_driver_context_returns_unsupported_for_sector_wise_bundle(tmp_p
     )
 
     assert context.available is False
-    assert context.reason == "unsupported_bundle_type"
+    assert context.reason == "pair_unsupported"
+
+
+def test_prepare_driver_context_sector_bundle_keeps_available_rules_when_some_rule_scores_are_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _write_health_risk_driver_master(
+        tmp_path,
+        [
+            {
+                "state": "Telangana",
+                "district": "Nalgonda",
+                "txx_ge_45__ssp585__2040-2060__score": 100.0,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        landing_runtime,
+        "resolve_dashboard_bundle_master_sources",
+        lambda bundle_domain, *, level, data_dir: (source,),
+    )
+
+    context = landing_runtime._prepare_driver_context(
+        "Health Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert context.available is True
+    driver_df = landing_runtime.compute_metric_driver_frame(context.district_scores, metric_specs=context.metric_specs)
+    assert driver_df["metric_label"].tolist() == ["Annual max temperature >= 45 degC"]
+
+
+def test_landing_driver_heading_uses_top_rule_signals_for_sector_bundle() -> None:
+    assert landing_runtime._landing_driver_heading("Health Risk") == "Top Rule Signals"
+
+
+def test_landing_driver_heading_uses_metric_drivers_for_thematic_bundle() -> None:
+    assert landing_runtime._landing_driver_heading("Heat Risk") == "Metric Drivers"
 
 
 def test_prepare_bundle_context_reads_persisted_composite_metric(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -1035,6 +1258,7 @@ def test_render_landing_page_passes_composite_scores_and_component_driver_contex
     assert captured["district_scores"] is composite_district_scores
     assert captured["state_scores"] is composite_state_scores
     assert captured["driver_context"] is driver_context
+    assert captured["bundle_domain"] == "Heat Risk"
     assert captured["state_name"] == "Telangana"
 
 
@@ -1098,6 +1322,7 @@ def test_render_landing_page_passes_composite_scores_and_component_driver_contex
 
     assert captured["district_scores"] is composite_district_scores
     assert captured["driver_context"] is driver_context
+    assert captured["bundle_domain"] == "Heat Risk"
     assert captured["state_name"] == "Telangana"
     assert captured["district_name"] == "Nalgonda"
 
@@ -1143,6 +1368,7 @@ def test_state_driver_scope_uses_selected_state_only_with_partial_component_cove
     monkeypatch.setattr(landing_runtime, "st", stub_st)
 
     landing_runtime._render_state_summary(
+        bundle_domain="Heat Risk",
         state_name="Telangana",
         district_scores=composite_district_scores,
         state_scores=composite_state_scores,
@@ -1186,6 +1412,7 @@ def test_district_driver_scope_falls_back_when_selected_district_has_no_componen
     monkeypatch.setattr(landing_runtime, "st", stub_st)
 
     landing_runtime._render_district_summary(
+        bundle_domain="Heat Risk",
         state_name="Telangana",
         district_name="Nalgonda",
         district_scores=composite_district_scores,
@@ -1236,6 +1463,7 @@ def test_driver_frame_skips_all_nan_normalized_metrics_and_shows_existing_captio
     monkeypatch.setattr(landing_runtime, "st", stub_st)
 
     landing_runtime._render_state_summary(
+        bundle_domain="Heat Risk",
         state_name="Telangana",
         district_scores=composite_district_scores,
         state_scores=composite_state_scores,

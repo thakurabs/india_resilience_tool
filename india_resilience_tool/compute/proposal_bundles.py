@@ -19,6 +19,9 @@ from india_resilience_tool.config.proposal_bundles import (
     PROPOSAL_BUNDLES_BY_SLUG,
     ProposalBundleSpec,
     ProposalRuleSpec,
+    proposal_available_rule_count_column,
+    proposal_bundle_mean_column,
+    proposal_rule_score_column,
 )
 from india_resilience_tool.data.master_columns import find_baseline_column_for_metric, resolve_metric_column
 from india_resilience_tool.data.adm2_loader import load_local_adm2
@@ -136,6 +139,19 @@ def _ensure_required_id_columns(df: pd.DataFrame, *, level: str) -> pd.DataFrame
     return out
 
 
+def _derived_join_key_series(df: pd.DataFrame, *, level: str) -> pd.Series:
+    """Return normalized proposal-bundle join keys from canonical admin labels."""
+    if level == "district":
+        return df["state"].map(alias).astype("string").str.cat(df["district"].map(alias).astype("string"), sep="|")
+    return (
+        df["state"]
+        .map(alias)
+        .astype("string")
+        .str.cat(df["district"].map(alias).astype("string"), sep="|")
+        .str.cat(df["block"].map(alias).astype("string"), sep="|")
+    )
+
+
 def _sample_identifier_records(df: pd.DataFrame, *, level: str, limit: int = 5) -> list[dict[str, str]]:
     cols = ["state", "district", "district_key"] if level == "district" else ["state", "district", "block", "block_key"]
     available = [col for col in cols if col in df.columns]
@@ -186,6 +202,8 @@ def _load_canonical_unit_frame(
         return pd.DataFrame(columns=list(_required_id_columns(level)))
 
     filtered = _ensure_required_id_columns(filtered, level=level)
+    if level == "block":
+        filtered["block_key"] = _derived_join_key_series(filtered, level=level)
     filtered = filtered.loc[:, list(_required_id_columns(level))].drop_duplicates().reset_index(drop=True)
     filtered = _validate_unique_canonical_keys(
         filtered,
@@ -579,7 +597,7 @@ def compute_proposal_bundle_master_frame(
         for period in SUPPORTED_PERIODS:
             rule_columns: list[str] = []
             for rule in bundle.rules:
-                score_column = f"{rule.rule_slug}__{scenario}__{period}__score"
+                score_column = proposal_rule_score_column(rule.rule_slug, scenario, period)
                 if rule.rule_type == "threshold":
                     score = _build_threshold_rule(
                         key_frame,
@@ -630,8 +648,8 @@ def compute_proposal_bundle_master_frame(
                 rule_columns.append(score_column)
                 ordered_columns.append(score_column)
 
-            bundle_score_column = f"{bundle.composite_slug}__{scenario}__{period}__{SUPPORTED_STAT}"
-            available_count_column = f"{bundle.composite_slug}__{scenario}__{period}__available_rule_count"
+            bundle_score_column = proposal_bundle_mean_column(bundle.composite_slug, scenario, period)
+            available_count_column = proposal_available_rule_count_column(bundle.composite_slug, scenario, period)
             output[available_count_column] = output[rule_columns].notna().sum(axis=1).astype(int)
             output[bundle_score_column] = output[rule_columns].mean(axis=1, skipna=True)
             output.loc[output[available_count_column] == 0, bundle_score_column] = np.nan

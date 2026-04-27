@@ -8,6 +8,7 @@ from india_resilience_tool.app.ribbon import (
     _domain_display_label,
     _domain_options_for_context,
     _hydro_master_contract_ready,
+    _resolve_admin_master_source,
     _resolve_external_admin_master_sources,
     _resolve_hydro_master_source,
 )
@@ -72,6 +73,160 @@ def test_resolve_hydro_master_source_falls_back_to_legacy_when_optimized_missing
 
     assert resolved_root == legacy_root.resolve()
     assert master_path == (legacy_root / "hydro" / "master_metrics_by_basin.csv").resolve()
+    assert legacy_checked == legacy_root.resolve()
+
+
+def test_resolve_admin_master_source_falls_back_to_legacy_when_optimized_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    slug = "composite_life_livelihood_loss_risk"
+    optimized_root = tmp_path / "processed_optimised" / "metrics" / slug
+    (optimized_root / "masters" / "admin" / "district").mkdir(parents=True)
+
+    legacy_root = tmp_path / "processed" / slug
+    legacy_state_root = legacy_root / "Telangana"
+    legacy_state_root.mkdir(parents=True)
+    (legacy_state_root / "master_metrics_by_district.csv").write_text(
+        "state,district,district_key,composite_life_livelihood_loss_risk__ssp245__2020-2040__mean\n"
+        "Telangana,A,telangana|a,1.0\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
+    monkeypatch.delenv("IRT_PROCESSED_OPTIMISED_ROOT", raising=False)
+
+    resolved_root, master_paths, legacy_checked = _resolve_admin_master_source(
+        optimized_root,
+        variable_slug=slug,
+        level="district",
+        selected_state="Telangana",
+        data_dir=tmp_path,
+        optimized_intent=True,
+    )
+
+    assert resolved_root == legacy_root.resolve()
+    assert master_paths == ((legacy_root / "Telangana" / "master_metrics_by_district.csv").resolve(),)
+    assert legacy_checked == legacy_root.resolve()
+
+
+def test_resolve_admin_master_source_falls_back_to_legacy_when_optimized_root_is_absent(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    slug = "composite_life_livelihood_loss_risk"
+    optimized_root = tmp_path / "processed_optimised" / "metrics" / slug
+
+    legacy_root = tmp_path / "processed" / slug
+    legacy_state_root = legacy_root / "Telangana"
+    legacy_state_root.mkdir(parents=True)
+    (legacy_state_root / "master_metrics_by_district.csv").write_text(
+        "state,district,district_key,composite_life_livelihood_loss_risk__ssp245__2020-2040__mean\n"
+        "Telangana,A,telangana|a,1.0\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
+    monkeypatch.delenv("IRT_PROCESSED_OPTIMISED_ROOT", raising=False)
+
+    resolved_root, master_paths, legacy_checked = _resolve_admin_master_source(
+        optimized_root,
+        variable_slug=slug,
+        level="district",
+        selected_state="Telangana",
+        data_dir=tmp_path,
+        optimized_intent=True,
+    )
+
+    assert resolved_root == legacy_root.resolve()
+    assert master_paths == ((legacy_root / "Telangana" / "master_metrics_by_district.csv").resolve(),)
+    assert legacy_checked == legacy_root.resolve()
+
+
+def test_resolve_admin_master_source_falls_back_to_legacy_when_optimized_root_has_no_runtime_dirs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    slug = "composite_life_livelihood_loss_risk"
+    optimized_root = tmp_path / "processed_optimised" / "metrics" / slug
+    optimized_root.mkdir(parents=True)
+
+    legacy_root = tmp_path / "processed" / slug
+    legacy_state_root = legacy_root / "Telangana"
+    legacy_state_root.mkdir(parents=True)
+    (legacy_state_root / "master_metrics_by_district.csv").write_text(
+        "state,district,district_key,composite_life_livelihood_loss_risk__ssp245__2020-2040__mean\n"
+        "Telangana,A,telangana|a,1.0\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
+    monkeypatch.delenv("IRT_PROCESSED_OPTIMISED_ROOT", raising=False)
+
+    resolved_root, master_paths, legacy_checked = _resolve_admin_master_source(
+        optimized_root,
+        variable_slug=slug,
+        level="district",
+        selected_state="Telangana",
+        data_dir=tmp_path,
+        optimized_intent=True,
+    )
+
+    assert resolved_root == legacy_root.resolve()
+    assert master_paths == ((legacy_root / "Telangana" / "master_metrics_by_district.csv").resolve(),)
+    assert legacy_checked == legacy_root.resolve()
+
+
+def test_resolve_admin_master_source_for_all_falls_back_to_legacy_when_optimized_state_coverage_is_partial(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    slug = "composite_life_livelihood_loss_risk"
+    optimized_root = tmp_path / "processed_optimised" / "metrics" / slug
+    optimized_district_root = optimized_root / "masters" / "admin" / "district"
+    optimized_district_root.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "state": ["Telangana"],
+            "district": ["A"],
+            "district_key": ["telangana|a"],
+            "composite_life_livelihood_loss_risk__ssp245__2020-2040__mean": [1.0],
+        }
+    ).to_parquet(optimized_district_root / "state=Telangana.parquet", index=False)
+
+    legacy_root = tmp_path / "processed" / slug
+    telangana_root = legacy_root / "Telangana"
+    telangana_root.mkdir(parents=True)
+    (telangana_root / "master_metrics_by_district.csv").write_text(
+        "state,district,district_key,composite_life_livelihood_loss_risk__ssp245__2020-2040__mean\n"
+        "Telangana,A,telangana|a,1.0\n",
+        encoding="utf-8",
+    )
+    odisha_root = legacy_root / "Odisha"
+    odisha_root.mkdir(parents=True)
+    (odisha_root / "master_metrics_by_district.csv").write_text(
+        "state,district,district_key,composite_life_livelihood_loss_risk__ssp245__2020-2040__mean\n"
+        "Odisha,B,odisha|b,2.0\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
+    monkeypatch.delenv("IRT_PROCESSED_OPTIMISED_ROOT", raising=False)
+
+    resolved_root, master_paths, legacy_checked = _resolve_admin_master_source(
+        optimized_root,
+        variable_slug=slug,
+        level="district",
+        selected_state="All",
+        data_dir=tmp_path,
+        optimized_intent=True,
+    )
+
+    assert resolved_root == legacy_root.resolve()
+    assert master_paths == (
+        (legacy_root / "Odisha" / "master_metrics_by_district.csv").resolve(),
+        (legacy_root / "Telangana" / "master_metrics_by_district.csv").resolve(),
+    )
     assert legacy_checked == legacy_root.resolve()
 
 

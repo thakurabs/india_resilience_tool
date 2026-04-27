@@ -234,6 +234,40 @@ def test_build_proposal_bundles_dry_run_auto_discovers_states_and_returns_target
     ]
 
 
+def test_load_canonical_unit_frame_normalizes_stale_block_keys_from_adm3_loader(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    stale_blocks = pd.DataFrame(
+        {
+            "state_name": [state_name, state_name],
+            "district_name": ["Adilabad", "Adilabad"],
+            "block_name": ["Adilabad Rural", "Bazar Hatnur"],
+            "block_key": [
+                "TELANGANA::Adilabad::Adilabad Rural",
+                "TELANGANA::Adilabad::Bazar Hatnur",
+            ],
+        }
+    )
+
+    def _fake_load_local_adm3(*args, **kwargs) -> pd.DataFrame:
+        return stale_blocks.copy()
+
+    monkeypatch.setattr(proposal_bundle_module, "load_local_adm3", _fake_load_local_adm3)
+
+    out = proposal_bundle_module._load_canonical_unit_frame(
+        level="block",
+        state_name=state_name,
+        data_dir=tmp_path,
+    )
+
+    assert out["block_key"].tolist() == [
+        "telangana|adilabad|adilabad rural",
+        "telangana|adilabad|bazar hatnur",
+    ]
+
+
 def test_compute_proposal_bundle_master_frame_merges_block_metrics_by_canonical_key(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -282,6 +316,60 @@ def test_compute_proposal_bundle_master_frame_merges_block_metrics_by_canonical_
     assert row["state"] == "Telangana"
     assert row["district"] == "Adilabad"
     assert row["block"] == "Adilabad Rural"
+    assert row["block_key"] == "telangana|adilabad|adilabad rural"
+    assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__available_rule_count"] == 4
+    assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"] == 75.0
+
+
+def test_compute_proposal_bundle_master_frame_normalizes_stale_canonical_block_keys(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    stale_blocks = pd.DataFrame(
+        {
+            "state_name": [state_name],
+            "district_name": ["Adilabad"],
+            "block_name": ["Adilabad Rural"],
+            "block_key": ["TELANGANA::Adilabad::Adilabad Rural"],
+        }
+    )
+
+    def _fake_load_local_adm3(*args, **kwargs) -> pd.DataFrame:
+        return stale_blocks.copy()
+
+    monkeypatch.setattr(proposal_bundle_module, "load_local_adm3", _fake_load_local_adm3)
+
+    bundle = PROPOSAL_BUNDLES_BY_SLUG["composite_life_livelihood_loss_risk"]
+    rows_by_slug = {
+        "pr_max_1day_precip": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
+        "pr_2day_heavy_rainfall_events_ge150mm": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
+        "pr_consecutive_dry_days_lt1mm": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
+        "wsdi_warm_spell_days": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
+    }
+    values_by_slug = {
+        "pr_max_1day_precip": 220.0,
+        "pr_2day_heavy_rainfall_events_ge150mm": 2.0,
+        "pr_consecutive_dry_days_lt1mm": 20.0,
+        "wsdi_warm_spell_days": 7.0,
+    }
+
+    for slug, row in rows_by_slug.items():
+        df = pd.DataFrame([row])
+        metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df[f"{metric_base}__ssp245__2040-2060__mean"] = [values_by_slug[slug]]
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="block", df=df)
+
+    out = compute_proposal_bundle_master_frame(
+        bundle,
+        level="block",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+    assert out.shape[0] == 1
+    row = out.iloc[0]
     assert row["block_key"] == "telangana|adilabad|adilabad rural"
     assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__available_rule_count"] == 4
     assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"] == 75.0

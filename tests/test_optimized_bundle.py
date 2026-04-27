@@ -524,6 +524,69 @@ def test_build_processed_optimised_writes_admin_and_hydro_yearly_outputs(
     assert hydro_df["mean"].tolist() == [3.5]
 
 
+def test_build_processed_optimised_writes_proposal_bundle_admin_masters(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+
+    slug = "composite_health_risk"
+    legacy_root = tmp_path / "processed" / slug / "Telangana"
+    legacy_root.mkdir(parents=True)
+    (legacy_root / "master_metrics_by_district.csv").write_text(
+        "state,district,district_key,"
+        "composite_health_risk__ssp585__2040-2060__mean,"
+        "composite_health_risk__ssp585__2040-2060__available_rule_count,"
+        "txx_ge_45__ssp585__2040-2060__score,"
+        "wsdi_ge_5__ssp585__2040-2060__score,"
+        "debug_internal_counter\n"
+        "Telangana,Hanumakonda,telangana|hanumakonda,75.0,2,100.0,50.0,99\n",
+        encoding="utf-8",
+    )
+    (legacy_root / "master_metrics_by_block.csv").write_text(
+        "state,district,block,block_key,"
+        "composite_health_risk__ssp585__2040-2060__mean,"
+        "composite_health_risk__ssp585__2040-2060__available_rule_count,"
+        "txx_ge_45__ssp585__2040-2060__score,"
+        "wsdi_ge_5__ssp585__2040-2060__score,"
+        "debug_internal_counter\n"
+        "Telangana,Hanumakonda,Atmakur,telangana|hanumakonda|atmakur,80.0,2,75.0,25.0,101\n",
+        encoding="utf-8",
+    )
+
+    summaries = build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=[slug],
+        levels=["district", "block"],
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    assert summaries and summaries[0].wrote_masters is True
+    district_master = (
+        tmp_path / "processed_optimised" / "metrics" / slug / "masters" / "admin" / "district" / "state=Telangana.parquet"
+    )
+    block_master = (
+        tmp_path / "processed_optimised" / "metrics" / slug / "masters" / "admin" / "block" / "state=Telangana.parquet"
+    )
+
+    assert district_master.exists()
+    assert block_master.exists()
+
+    district_df = pd.read_parquet(district_master)
+    block_df = pd.read_parquet(block_master)
+
+    for df in (district_df, block_df):
+        assert "composite_health_risk__ssp585__2040-2060__mean" in df.columns
+        assert "composite_health_risk__ssp585__2040-2060__available_rule_count" in df.columns
+        assert "txx_ge_45__ssp585__2040-2060__score" in df.columns
+        assert "wsdi_ge_5__ssp585__2040-2060__score" in df.columns
+        assert "debug_internal_counter" not in df.columns
+
+    manifest = _read_manifest(tmp_path / "processed_optimised")
+    assert manifest["stats_contract"]["proposal_bundle"] == ["mean", "score", "available_rule_count"]
+
+
 def test_build_processed_optimised_parallel_matches_serial_outputs(
     tmp_path: Path,
     monkeypatch,

@@ -426,6 +426,7 @@ def run_app() -> None:
         data_dir=DATA_DIR,
         pilot_state=PILOT_STATE,
         resolve_processed_root_fn=resolve_processed_optimised_root,
+        prefer_optimized_runtime=True,
         attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON,
         master_needs_rebuild_fn=master_needs_rebuild,
         state_profile_files_missing_fn=state_profile_files_missing,

@@ -23,7 +23,7 @@ from india_resilience_tool.app.help_text import RIBBON_HELP_MD, help_md_to_plain
 from india_resilience_tool.app.master_cache import make_load_master_and_schema_fn
 from india_resilience_tool.config.paths import resolve_processed_root as resolve_legacy_processed_root
 from india_resilience_tool.config.constants import SCENARIO_HELP_MD, SCENARIO_UI_LABEL
-from india_resilience_tool.config.dashboard_bundles import is_dashboard_bundle
+from india_resilience_tool.config.dashboard_bundles import is_dashboard_bundle, is_dashboard_bundle_slug
 from india_resilience_tool.config.variables import (
     VARIABLES,
     get_domain_description,
@@ -34,8 +34,10 @@ from india_resilience_tool.config.variables import (
     get_pillar_for_domain,
     get_pillars,
 )
+from india_resilience_tool.data.master_loader import resolve_preferred_master_path
 from india_resilience_tool.data.optimized_bundle import (
     is_optimized_metric_root,
+    list_optimized_states_for_metric_root,
     optimized_master_path_from_metric_root,
     optimized_master_sources_from_metric_root,
 )
@@ -210,8 +212,8 @@ def _resolve_external_admin_master_sources(
 def _master_source_exists(master_source: Path | tuple[Path, ...]) -> bool:
     """Return True when the resolved master source has at least one readable file."""
     if isinstance(master_source, tuple):
-        return bool(master_source) and all(path.exists() for path in master_source)
-    return master_source.exists()
+        return bool(master_source) and all(resolve_preferred_master_path(path).exists() for path in master_source)
+    return resolve_preferred_master_path(master_source).exists()
 
 
 def _master_source_label(master_source: Path | tuple[Path, ...]) -> str:
@@ -224,6 +226,23 @@ def _master_source_label(master_source: Path | tuple[Path, ...]) -> str:
         root = master_source[0].parents[1] if len(master_source[0].parents) >= 2 else master_source[0].parent
         return f"{root}/*/{master_source[0].name}"
     return str(master_source)
+
+
+def _admin_source_states(master_sources: tuple[Path, ...], *, optimized: bool) -> tuple[str, ...]:
+    """Return ordered state names represented by one admin master source tuple."""
+    states: list[str] = []
+    for path in master_sources:
+        if optimized:
+            stem = path.stem
+            if stem.startswith("state="):
+                state_name = stem.split("=", 1)[1].strip()
+            else:
+                state_name = ""
+        else:
+            state_name = path.parent.name.strip()
+        if state_name and state_name not in states:
+            states.append(state_name)
+    return tuple(states)
 
 
 def _resolve_hydro_master_source(
@@ -256,6 +275,85 @@ def _resolve_hydro_master_source(
     return processed_root, optimized_master, legacy_root
 
 
+def _resolve_admin_master_source(
+    processed_root: Path,
+    *,
+    variable_slug: str,
+    level: str,
+    selected_state: str,
+    data_dir: Path,
+    optimized_intent: bool = False,
+) -> tuple[Path, tuple[Path, ...], Optional[Path]]:
+    """
+    Resolve the best available admin master source.
+
+    When the runtime points at an optimized metric root but the optimized bundle
+    does not yet contain the requested admin master shard, fall back to the
+    legacy processed root if that state-level admin master exists there.
+    """
+    if not optimized_intent:
+        return (
+            processed_root,
+            _resolve_external_admin_master_sources(
+                processed_root,
+                level=level,
+                selected_state=selected_state,
+            ),
+            None,
+        )
+
+    optimized_sources = optimized_master_sources_from_metric_root(
+        processed_root,
+        level=level,
+        selected_state=selected_state,
+    )
+    if _master_source_exists(optimized_sources):
+        return processed_root, optimized_sources, None
+
+    legacy_root = resolve_legacy_processed_root(variable_slug, data_dir=data_dir, mode="portfolio")
+    legacy_sources = _resolve_external_admin_master_sources(
+        legacy_root,
+        level=level,
+        selected_state=selected_state,
+    )
+    if str(selected_state or "All").strip() == "All":
+        optimized_states = set(list_optimized_states_for_metric_root(processed_root, level=level))
+        legacy_states = set(_admin_source_states(legacy_sources, optimized=False))
+        if legacy_states:
+            if optimized_states == legacy_states and _master_source_exists(optimized_sources):
+                return processed_root, optimized_sources, legacy_root
+            return legacy_root, legacy_sources, legacy_root
+        if _master_source_exists(optimized_sources):
+            return processed_root, optimized_sources, legacy_root
+        return processed_root, optimized_sources, legacy_root
+
+    if _master_source_exists(legacy_sources):
+        return legacy_root, legacy_sources, legacy_root
+
+    return processed_root, optimized_sources, legacy_root
+
+
+def _warn_once_for_admin_legacy_fallback(
+    *,
+    variable_slug: str,
+    level: str,
+    selected_state: str,
+) -> None:
+    """Emit one warning per active slug/level/state when optimized intent falls back to legacy."""
+    warning_key = (
+        f"_legacy_admin_fallback_warned::{variable_slug}::{str(level).strip().lower()}::{str(selected_state or 'All').strip() or 'All'}"
+    )
+    if st.session_state.get(warning_key):
+        return
+    label = VARIABLES.get(variable_slug, {}).get("label", variable_slug)
+    st.warning(
+        f"Using legacy processed master for {label} because processed_optimised is missing the requested admin shard. "
+        f"Run `python -m tools.optimized.build_processed_optimised --metric {variable_slug} --level {level} --overwrite --prune-scope` "
+        "to refresh the runtime bundle."
+    )
+    st.session_state[warning_key] = True
+
+
 def _coerce_selection(
     *,
     key: str,
@@ -278,6 +376,7 @@ def render_metric_ribbon(
     data_dir: Path,
     pilot_state: str,
     resolve_processed_root_fn: Callable[..., Path],
+    prefer_optimized_runtime: bool = False,
     attach_centroid_geojson: str | None,
     master_needs_rebuild_fn: Callable[[Path | tuple[Path, ...], Path, str], bool],
     state_profile_files_missing_fn: Callable[[Path, str, str], bool],
@@ -467,7 +566,24 @@ def render_metric_ribbon(
             processed_root = resolve_processed_root_fn(variable_slug, data_dir=data_dir, mode="portfolio")
             level = str(st.session_state.get("admin_level", "district")).strip().lower()
             selected_admin_state = _selected_state_for_admin_master_loading()
-            if is_optimized_metric_root(processed_root):
+            admin_checked_legacy_root: Optional[Path] = None
+            optimized_admin_master_sources: tuple[Path, ...] = ()
+            optimized_admin_intent = prefer_optimized_runtime and level in {"district", "block"}
+            if optimized_admin_intent:
+                optimized_admin_master_sources = optimized_master_sources_from_metric_root(
+                    processed_root,
+                    level=level,
+                    selected_state=selected_admin_state,
+                )
+                processed_root, master_csv_path, admin_checked_legacy_root = _resolve_admin_master_source(
+                    processed_root,
+                    variable_slug=variable_slug,
+                    level=level,
+                    selected_state=selected_admin_state,
+                    data_dir=data_dir,
+                    optimized_intent=True,
+                )
+            elif is_optimized_metric_root(processed_root):
                 if level in {"basin", "sub_basin"}:
                     optimized_hydro_master_path = optimized_master_path_from_metric_root(
                         processed_root,
@@ -478,12 +594,6 @@ def render_metric_ribbon(
                         variable_slug=variable_slug,
                         level=level,
                         data_dir=data_dir,
-                    )
-                else:
-                    master_csv_path = optimized_master_sources_from_metric_root(
-                        processed_root,
-                        level=level,
-                        selected_state=selected_admin_state,
                     )
             elif level in {"basin", "sub_basin"}:
                 master_name = get_master_csv_filename(level)
@@ -509,6 +619,9 @@ def render_metric_ribbon(
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
                 is_hydro = level in {"basin", "sub_basin"}
                 is_external = _is_external_metric(varcfg)
+                uses_dedicated_dashboard_bundle_builder = (
+                    level in {"district", "block"} and is_dashboard_bundle_slug(variable_slug)
+                )
                 if is_external:
                     if _master_source_exists(master_csv_path):
                         return False, "up-to-date"
@@ -530,6 +643,26 @@ def render_metric_ribbon(
                             ),
                         )
                     return False, "external metric master CSV missing"
+                if uses_dedicated_dashboard_bundle_builder:
+                    if _master_source_exists(master_csv_path):
+                        return False, "up-to-date"
+                    rebuild_cmd = _metric_rebuild_command(varcfg, level=level)
+                    if admin_checked_legacy_root is not None and prefer_optimized_runtime:
+                        return (
+                            False,
+                            (
+                                "dashboard bundle master not found in the optimized runtime bundle and no legacy admin "
+                                f"master was found under {admin_checked_legacy_root}; run "
+                                f"{rebuild_cmd or 'the bundle-specific admin builder'} and rebuild processed_optimised"
+                            ),
+                        )
+                    return (
+                        False,
+                        (
+                            "dashboard bundle masters are built by dedicated tooling; "
+                            f"run {rebuild_cmd or 'the bundle-specific admin builder'}"
+                        ),
+                    )
                 needs = (
                     force
                     or (is_hydro and not _hydro_master_contract_ready(master_csv_path, level))
@@ -574,7 +707,8 @@ def render_metric_ribbon(
                     if master_csv_path.exists():
                         return True, "rebuilt"
                     if getattr(master_df, "empty", True):
-                        return False, f"builder found no source rows for {level} under {master_root}"
+                        source_root = processed_root / str(pilot_state) if level in {"district", "block"} else processed_root / "hydro"
+                        return False, f"builder found no source rows for {level} under {source_root}"
                     return False, f"builder finished but did not create {master_csv_path}"
                 except Exception as e:
                     return False, f"rebuild failed: {e}"
@@ -582,6 +716,18 @@ def render_metric_ribbon(
             # Ensure master exists/fresh for this metric (only once a metric is chosen)
             try:
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
+                if (
+                    prefer_optimized_runtime
+                    and level in {"district", "block"}
+                    and admin_checked_legacy_root is not None
+                    and processed_root == admin_checked_legacy_root
+                    and _master_source_exists(master_csv_path)
+                ):
+                    _warn_once_for_admin_legacy_fallback(
+                        variable_slug=variable_slug,
+                        level=level,
+                        selected_state=selected_admin_state,
+                    )
                 needs_rebuild = False
                 if _is_external_metric(varcfg):
                     needs_rebuild = not _master_source_exists(master_csv_path)
@@ -618,6 +764,20 @@ def render_metric_ribbon(
                     else:
                         st.error(
                             f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}."
+                        )
+                elif level in {"district", "block"} and is_dashboard_bundle_slug(variable_slug):
+                    rebuild_cmd = _metric_rebuild_command(varcfg, level=level)
+                    if admin_checked_legacy_root is not None and optimized_admin_master_sources:
+                        optimized_label = _master_source_label(optimized_admin_master_sources)
+                        st.error(
+                            f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {optimized_label}. "
+                            f"No legacy admin master was found under {admin_checked_legacy_root}. "
+                            f"Run `{rebuild_cmd or 'the bundle-specific admin builder'}` and rebuild `processed_optimised`."
+                        )
+                    else:
+                        st.error(
+                            f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
+                            f"Run `{rebuild_cmd or 'the bundle-specific admin builder'}` first."
                         )
                 elif level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
                     if optimized_hydro_master_path is not None and hydro_checked_legacy_root is not None:
