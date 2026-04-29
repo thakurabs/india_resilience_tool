@@ -10,6 +10,7 @@ from india_resilience_tool.config.dashboard_bundles import SECTOR_WISE_DASHBOARD
 from india_resilience_tool.config.metrics_registry import DOMAINS, PIPELINE_SLUGS
 from india_resilience_tool.config.proposal_bundles import (
     PROPOSAL_BUNDLES,
+    get_proposal_bundle_source_metric_slugs,
     get_proposal_bundle_spec_by_slug,
     is_proposal_bundle_slug,
     proposal_available_rule_count_column,
@@ -169,6 +170,25 @@ def test_get_proposal_bundle_spec_by_slug_returns_expected_bundle() -> None:
 def test_is_proposal_bundle_slug_matches_catalog() -> None:
     assert is_proposal_bundle_slug("composite_health_risk") is True
     assert is_proposal_bundle_slug("composite_heat_risk") is False
+
+
+def test_get_proposal_bundle_source_metric_slugs_are_exact_and_deduplicated() -> None:
+    assert get_proposal_bundle_source_metric_slugs("composite_infrastructure_risk") == (
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "txx_annual_max",
+    )
+    assert get_proposal_bundle_source_metric_slugs("composite_health_risk") == (
+        "txx_annual_max",
+        "wsdi_warm_spell_days",
+        "tnx_annual_max",
+        "pr_max_1day_precip",
+        "cwd_consecutive_wet_days",
+    )
+
+
+def test_get_proposal_bundle_source_metric_slugs_returns_empty_tuple_for_unknown_slug() -> None:
+    assert get_proposal_bundle_source_metric_slugs("unknown_slug") == ()
 
 
 def test_proposal_persisted_column_helpers_are_exact() -> None:

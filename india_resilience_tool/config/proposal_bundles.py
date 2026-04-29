@@ -370,6 +370,22 @@ def is_proposal_bundle_slug(composite_slug: str) -> bool:
     return get_proposal_bundle_spec_by_slug(composite_slug) is not None
 
 
+def get_proposal_bundle_source_metric_slugs(composite_slug: str) -> tuple[str, ...]:
+    """Return declared source metric slugs for one proposal bundle in stable order."""
+    spec = get_proposal_bundle_spec_by_slug(composite_slug)
+    if spec is None:
+        return ()
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for rule in spec.rules:
+        metric_slug = str(rule.metric_slug).strip()
+        if not metric_slug or metric_slug in seen:
+            continue
+        seen.add(metric_slug)
+        ordered.append(metric_slug)
+    return tuple(ordered)
+
+
 def proposal_rule_score_column(rule_slug: str, scenario: str, period: str) -> str:
     """Return the persisted score-column name for one proposal rule selection."""
     return f"{str(rule_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__score"

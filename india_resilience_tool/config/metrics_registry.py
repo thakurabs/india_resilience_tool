@@ -21,7 +21,9 @@ from india_resilience_tool.config.composite_metrics import VISIBLE_GLANCE_COMPOS
 from india_resilience_tool.config.dashboard_bundles import (
     DASHBOARD_BUNDLES,
     THEMATIC_DASHBOARD_BUNDLES,
+    get_dashboard_bundle_spec,
 )
+from india_resilience_tool.config.proposal_bundles import get_proposal_bundle_source_metric_slugs
 
 THEMATIC_DASHBOARD_BUNDLE_NAMES = frozenset(spec.canonical_bundle for spec in THEMATIC_DASHBOARD_BUNDLES)
 
@@ -2327,6 +2329,35 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
+    {
+        "name": "Very Wet Day Precipitation Interannual Variability (R95p CV)",
+        "slug": "r95p_interannual_variability",
+        "label": "Very Wet Day Precipitation Interannual Variability (R95p CV)",
+        "group": "rain",
+        "value_col": "r95p_interannual_variability",
+        "periods_metric_col": "r95p_interannual_variability",
+        "units": "ratio",
+        "display_units": "ratio",
+        "display_scale": 1.0,
+        "description": (
+            "Coefficient of variation of annual R95p values within the selected future period; "
+            "used as the hydropower-sector variability input."
+        ),
+        "source_type": "derived",
+        "supports_yearly_trend": False,
+        "selection_mode": "scenario_period",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.pipeline.build_proposal_bundles",
+        "hydro_rebuild_command": None,
+        "supported_scenarios": ("ssp245", "ssp585"),
+        "preferred_period_order": ("2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": (),
+        "rank_higher_is_worse": True,
+    },
     *[
         {
             "name": spec.composite_label,
@@ -2899,6 +2930,37 @@ def _metric_supported_in_context(
     return True
 
 
+def _sector_wise_domain_metric_slugs(
+    domain: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str] | None:
+    """Return sector-wise domain metrics in supported contexts, or None if not sector-wise."""
+    spec = get_dashboard_bundle_spec(domain)
+    if spec is None or spec.group_key != "sector_wise":
+        return None
+
+    family = str(spatial_family or "").strip().lower()
+    level_norm = str(level or "").strip().lower()
+    supported_levels = {str(value).strip().lower() for value in spec.supported_levels if str(value).strip()}
+
+    if family and family != "admin":
+        return []
+    if level_norm and level_norm not in supported_levels:
+        return []
+
+    candidate_slugs = [spec.composite_slug, *get_proposal_bundle_source_metric_slugs(spec.composite_slug)]
+    filtered: list[str] = []
+    for slug in candidate_slugs:
+        metric_spec = METRICS_BY_SLUG.get(slug)
+        if metric_spec is None:
+            continue
+        if _metric_supported_in_context(metric_spec, spatial_family=spatial_family, level=level):
+            filtered.append(slug)
+    return filtered
+
+
 def get_pipeline_bundles() -> dict[str, list[str]]:
     """Return bundle contents restricted to pipeline-backed metrics."""
     out: dict[str, list[str]] = {}
@@ -2974,6 +3036,14 @@ def get_metrics_for_domain(
 ) -> list[str]:
     """Return metric slugs for a domain in the current context."""
     canonical_domain = normalize_domain_name(domain)
+    sector_wise_slugs = _sector_wise_domain_metric_slugs(
+        canonical_domain,
+        spatial_family=spatial_family,
+        level=level,
+    )
+    if sector_wise_slugs is not None:
+        return sector_wise_slugs
+
     slugs = list(DOMAINS.get(canonical_domain, []))
     filtered: list[str] = []
     for slug in slugs:
@@ -2997,8 +3067,8 @@ def get_domains_for_metric(
         return []
     return [
         domain
-        for domain, slugs in DOMAINS.items()
-        if slug in slugs and get_metrics_for_domain(domain, spatial_family=spatial_family, level=level)
+        for domain in DOMAIN_ORDER
+        if slug in get_metrics_for_domain(domain, spatial_family=spatial_family, level=level)
     ]
 
 

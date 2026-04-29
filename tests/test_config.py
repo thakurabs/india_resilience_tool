@@ -259,6 +259,28 @@ def test_sector_wise_composites_are_exposed_as_admin_derived_metrics() -> None:
         assert domain in cfg["domains"]
 
 
+def test_r95p_interannual_variability_is_exposed_as_dashboard_derived_metric() -> None:
+    from india_resilience_tool.config.variables import VARIABLES
+
+    cfg = VARIABLES["r95p_interannual_variability"]
+    assert cfg["label"] == "Very Wet Day Precipitation Interannual Variability (R95p CV)"
+    assert cfg["source_type"] == "derived"
+    assert cfg["selection_mode"] == "scenario_period"
+    assert cfg["supported_levels"] == ["district", "block"]
+    assert cfg["supported_spatial_families"] == ["admin"]
+    assert cfg["supported_statistics"] == ["mean"]
+    assert cfg["supports_yearly_trend"] is False
+    assert cfg["supports_baseline_comparison"] is False
+    assert cfg["supports_scenario_comparison"] is False
+    assert cfg["supported_scenarios"] == ["ssp245", "ssp585"]
+    assert cfg["units"] == "ratio"
+    assert cfg["display_units"] == "ratio"
+    assert cfg["display_scale"] == 1.0
+    assert cfg["admin_rebuild_command"] == "python -m tools.pipeline.build_proposal_bundles"
+    assert cfg["hydro_rebuild_command"] is None
+    assert "Asset Risk (Hydropower Plants)" in cfg["domains"]
+
+
 def test_current_period_display_label_is_stable() -> None:
     from india_resilience_tool.viz.charts import period_display_label
 

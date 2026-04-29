@@ -1045,11 +1045,11 @@ def test_prepare_driver_context_uses_proposal_rule_scores_for_sector_bundle(tmp_
     assert context.available is True
     assert context.reason is None
     assert [spec.label for spec in context.metric_specs] == [
-        "Annual max temperature >= 45 degC",
-        "Warm spell days >= 5",
-        "Annual max nighttime temperature >= 30 degC",
-        "1-day rainfall >= 200 mm",
-        "Consecutive wet days >= 5",
+        "Extreme daytime heat pressure",
+        "Warm-spell duration pressure",
+        "Night-time heat pressure",
+        "1-day rainfall disruption pressure",
+        "Consecutive wet-day pressure",
     ]
     telangana_scope = context.district_scores[
         context.district_scores["__state_key"].astype(str) == "telangana"
@@ -1146,7 +1146,7 @@ def test_prepare_driver_context_sector_bundle_keeps_available_rules_when_some_ru
 
     assert context.available is True
     driver_df = landing_runtime.compute_metric_driver_frame(context.district_scores, metric_specs=context.metric_specs)
-    assert driver_df["metric_label"].tolist() == ["Annual max temperature >= 45 degC"]
+    assert driver_df["metric_label"].tolist() == ["Extreme daytime heat pressure"]
 
 
 def test_landing_driver_heading_uses_top_rule_signals_for_sector_bundle() -> None:

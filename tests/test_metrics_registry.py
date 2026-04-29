@@ -17,7 +17,9 @@ from india_resilience_tool.config.metrics_registry import (
     get_default_pillar,
     get_bundles,
     get_domain_description,
+    get_domains_for_metric,
     get_domains_for_pillar,
+    get_metrics_for_domain,
     get_metrics_for_bundle,
     get_pillar_for_domain,
     get_pillars,
@@ -371,6 +373,103 @@ def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
     assert dashboard_only.isdisjoint({slug for slugs in pipeline_bundles.values() for slug in slugs})
     for slug in dashboard_only:
         assert slug in METRICS_BY_SLUG
+
+
+def test_sector_wise_domains_expand_to_composite_plus_source_metrics_in_exact_order() -> None:
+    assert get_metrics_for_domain(
+        "Infrastructure Risk",
+        spatial_family="admin",
+        level="district",
+    ) == [
+        "composite_infrastructure_risk",
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "txx_annual_max",
+    ]
+    assert get_metrics_for_domain(
+        "Infrastructure Risk",
+        spatial_family="admin",
+        level="block",
+    ) == [
+        "composite_infrastructure_risk",
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "txx_annual_max",
+    ]
+    assert get_metrics_for_domain(
+        "Health Risk",
+        spatial_family="admin",
+        level="district",
+    ) == [
+        "composite_health_risk",
+        "txx_annual_max",
+        "wsdi_warm_spell_days",
+        "tnx_annual_max",
+        "pr_max_1day_precip",
+        "cwd_consecutive_wet_days",
+    ]
+
+
+def test_sector_wise_domains_remain_hidden_in_unsupported_contexts() -> None:
+    assert get_metrics_for_domain(
+        "Life & Livelihood Loss Risk",
+        spatial_family="admin",
+        level="block",
+    ) == []
+    assert get_metrics_for_domain(
+        "Health Risk",
+        spatial_family="hydro",
+        level="basin",
+    ) == []
+
+
+def test_sector_wise_reverse_membership_is_context_aware() -> None:
+    district_domains = get_domains_for_metric(
+        "pr_max_1day_precip",
+        spatial_family="admin",
+        level="district",
+    )
+    assert "Flood & Extreme Rainfall Risk" in district_domains
+    assert "Agricultural Risk" in district_domains
+    assert "Health Risk" in district_domains
+    assert "Industrial Risk" in district_domains
+    assert "Infrastructure Risk" in district_domains
+    assert "Life & Livelihood Loss Risk" in district_domains
+
+    block_domains = get_domains_for_metric(
+        "pr_max_1day_precip",
+        spatial_family="admin",
+        level="block",
+    )
+    assert "Life & Livelihood Loss Risk" not in block_domains
+
+    hydro_domains = get_domains_for_metric(
+        "pr_max_1day_precip",
+        spatial_family="hydro",
+        level="basin",
+    )
+    assert "Health Risk" not in hydro_domains
+    assert "Infrastructure Risk" not in hydro_domains
+
+
+def test_hydropower_sector_bundle_includes_helper_metric() -> None:
+    assert get_metrics_for_domain(
+        "Asset Risk (Hydropower Plants)",
+        spatial_family="admin",
+        level="district",
+    ) == [
+        "composite_asset_risk_hydropower",
+        "pr_max_5day_precip",
+        "pr_consecutive_dry_days_lt1mm",
+        "r95p_interannual_variability",
+    ]
+
+
+def test_get_pipeline_bundles_remains_static_for_sector_wise_domains() -> None:
+    pipeline_bundles = get_pipeline_bundles()
+    assert "Health Risk" not in pipeline_bundles
+    assert "Infrastructure Risk" not in pipeline_bundles
+    assert "Life & Livelihood Loss Risk" not in pipeline_bundles
 
 
 def test_aqueduct_metric_is_context_limited_to_supported_views() -> None:
