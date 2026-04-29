@@ -633,6 +633,143 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     
+    {
+        "name": "WBGT, Shaded/No-Solar Approximation (Annual Mean)",
+        "slug": "wbgt_shade_stull_annual_mean",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbgt_shade_stull_annual_mean_C",
+        "units": "°C",
+        "compute": "wbgt_shade_stull_annual_mean",
+        "params": {},
+        "group": "temperature",
+        "description": (
+            "Annual mean shaded/no-solar WBGT approximation (°C), computed as "
+            "0.7 × Stull wet-bulb temperature + 0.3 × near-surface air temperature. "
+            "This metric uses tas and hurs only; it does not model black-globe "
+            "temperature, wind speed, solar radiation, or outdoor direct-sun radiant heat."
+        ),
+    },
+    {
+        "name": "WBGT, Shaded/No-Solar Approximation Days (≥ 28°C)",
+        "slug": "wbgt_shade_stull_days_ge_28",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbgt_shade_stull_days_ge_28_days",
+        "units": "days",
+        "compute": "wbgt_shade_stull_days_ge_threshold",
+        "params": {"thresh_c": 28.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with shaded/no-solar WBGT approximation ≥ 28°C, "
+            "computed from tas and hurs using Stull wet-bulb temperature. This is not "
+            "outdoor/direct-sun WBGT because black-globe temperature, wind speed, and "
+            "solar radiation are not modelled."
+        ),
+    },
+    {
+        "name": "WBGT, Shaded/No-Solar Approximation Days (≥ 30°C)",
+        "slug": "wbgt_shade_stull_days_ge_30",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbgt_shade_stull_days_ge_30_days",
+        "units": "days",
+        "compute": "wbgt_shade_stull_days_ge_threshold",
+        "params": {"thresh_c": 30.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with shaded/no-solar WBGT approximation ≥ 30°C, "
+            "computed from tas and hurs using Stull wet-bulb temperature. This is not "
+            "outdoor/direct-sun WBGT because black-globe temperature, wind speed, and "
+            "solar radiation are not modelled."
+        ),
+    },
+    {
+        "name": "WBGT, Shaded/No-Solar Approximation Days (≥ 32°C)",
+        "slug": "wbgt_shade_stull_days_ge_32",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbgt_shade_stull_days_ge_32_days",
+        "units": "days",
+        "compute": "wbgt_shade_stull_days_ge_threshold",
+        "params": {"thresh_c": 32.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with shaded/no-solar WBGT approximation ≥ 32°C, "
+            "computed from tas and hurs using Stull wet-bulb temperature. This is not "
+            "outdoor/direct-sun WBGT because black-globe temperature, wind speed, and "
+            "solar radiation are not modelled."
+        ),
+    },
+    {
+        "name": "Simplified Empirical WBGT Proxy (Annual Mean)",
+        "slug": "swbgt_empirical_annual_mean",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "swbgt_empirical_annual_mean_C",
+        "units": "°C",
+        "compute": "swbgt_empirical_annual_mean",
+        "params": {},
+        "group": "temperature",
+        "description": (
+            "Annual mean simplified empirical WBGT proxy (°C), computed as "
+            "0.567 × near-surface air temperature + 0.393 × vapour pressure + 3.94. "
+            "This proxy uses tas and hurs only; it does not model wind speed, solar "
+            "radiation, black-globe temperature, or outdoor direct-sun radiant heat."
+        ),
+    },
+    {
+        "name": "Simplified Empirical WBGT Proxy Days (≥ 28°C)",
+        "slug": "swbgt_empirical_days_ge_28",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "swbgt_empirical_days_ge_28_days",
+        "units": "days",
+        "compute": "swbgt_empirical_days_ge_threshold",
+        "params": {"thresh_c": 28.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with simplified empirical WBGT proxy ≥ 28°C, "
+            "computed from tas and hurs via vapour pressure. This proxy does not model "
+            "wind speed, solar radiation, black-globe temperature, or outdoor direct-sun "
+            "radiant heat."
+        ),
+    },
+    {
+        "name": "Simplified Empirical WBGT Proxy Days (≥ 30°C)",
+        "slug": "swbgt_empirical_days_ge_30",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "swbgt_empirical_days_ge_30_days",
+        "units": "days",
+        "compute": "swbgt_empirical_days_ge_threshold",
+        "params": {"thresh_c": 30.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with simplified empirical WBGT proxy ≥ 30°C, "
+            "computed from tas and hurs via vapour pressure. This proxy does not model "
+            "wind speed, solar radiation, black-globe temperature, or outdoor direct-sun "
+            "radiant heat."
+        ),
+    },
+    {
+        "name": "Simplified Empirical WBGT Proxy Days (≥ 32°C)",
+        "slug": "swbgt_empirical_days_ge_32",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "swbgt_empirical_days_ge_32_days",
+        "units": "days",
+        "compute": "swbgt_empirical_days_ge_threshold",
+        "params": {"thresh_c": 32.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with simplified empirical WBGT proxy ≥ 32°C, "
+            "computed from tas and hurs via vapour pressure. This proxy does not model "
+            "wind speed, solar radiation, black-globe temperature, or outdoor direct-sun "
+            "radiant heat."
+        ),
+    },
+
     # --- Warm/Heat Spell Indices ---
     {
         "name": "Warm Spell Duration Index (WSDI)",
@@ -2302,6 +2439,14 @@ DOMAINS: dict[str, list[str]] = {
         "wbd_le_3_consecutive_days",
         "wsdi_warm_spell_days",
         "twb_days_ge_28",
+        "wbgt_shade_stull_annual_mean",
+        "wbgt_shade_stull_days_ge_28",
+        "wbgt_shade_stull_days_ge_30",
+        "wbgt_shade_stull_days_ge_32",
+        "swbgt_empirical_annual_mean",
+        "swbgt_empirical_days_ge_28",
+        "swbgt_empirical_days_ge_30",
+        "swbgt_empirical_days_ge_32",
     ],
     "Cold Risk": [
         "composite_cold_risk",

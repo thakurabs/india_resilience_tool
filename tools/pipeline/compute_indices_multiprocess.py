@@ -987,6 +987,151 @@ def wet_bulb_days_ge_threshold_stull(
     return int(flags.sum(dim="time").item())
 
 
+def _wbgt_shade_stull_daily_mean_c(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> xr.DataArray | None:
+    """
+    Return district-mean daily shaded/no-solar WBGT approximation in °C.
+
+    The calculation uses daily near-surface air temperature and relative humidity:
+    WBGT_shade = 0.7 * Twb_Stull + 0.3 * Ta.
+
+    Missing/invalid values propagate as NaN in the daily series; downstream summary
+    functions ignore NaNs for means and treat NaNs as non-events for threshold counts.
+    """
+    twb_c = _wet_bulb_daily_mean_c(tas_da, hurs_da, mask)
+    if twb_c is None:
+        return None
+
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return None
+    tas_c = _drop_feb29_time(tas_k) - 273.15
+
+    return 0.7 * twb_c + 0.3 * tas_c
+
+
+def _relative_humidity_to_percent(rh: xr.DataArray) -> xr.DataArray:
+    """
+    Return relative humidity in percent, accepting either 0-1 or 0-100 inputs.
+
+    Missing values are preserved. Values outside the physical 0-100% range are
+    clipped to avoid invalid powers in heat-stress formulae.
+    """
+    try:
+        rh_max = float(rh.max(dim="time", skipna=True).item())
+        if rh_max <= 1.5:
+            rh = rh * 100.0
+    except Exception:
+        pass
+    return rh.clip(min=0.0, max=100.0)
+
+
+def _swbgt_empirical_daily_mean_c(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> xr.DataArray | None:
+    """
+    Return district-mean daily simplified empirical WBGT proxy in °C.
+
+    The calculation uses daily near-surface air temperature and relative humidity:
+    sWBGT = 0.567 * Ta + 0.393 * e + 3.94, where e is vapour pressure in hPa.
+
+    Missing/invalid values propagate as NaN in the daily series; downstream summary
+    functions ignore NaNs for means and treat NaNs as non-events for threshold counts.
+    """
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    rh = _get_district_daily_mean(hurs_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return None
+
+    tas_c = _drop_feb29_time(tas_k) - 273.15
+    rh = _relative_humidity_to_percent(_drop_feb29_time(rh))
+
+    saturation_vapour_pressure_hpa = 6.112 * np.exp(
+        (17.67 * tas_c) / (tas_c + 243.5)
+    )
+    vapour_pressure_hpa = (rh / 100.0) * saturation_vapour_pressure_hpa
+    return 0.567 * tas_c + 0.393 * vapour_pressure_hpa + 3.94
+
+
+def wbgt_shade_stull_annual_mean(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """
+    Annual mean shaded/no-solar WBGT approximation (°C).
+
+    Missing daily values are ignored in the annual mean. If no valid daily values
+    are available for the unit/year, NaN is returned.
+    """
+    wbgt = _wbgt_shade_stull_daily_mean_c(tas_da, hurs_da, mask)
+    if wbgt is None:
+        return np.nan
+    return float(wbgt.mean(dim="time", skipna=True).item())
+
+
+def wbgt_shade_stull_days_ge_threshold(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_c: float = 30.0,
+    **kwargs: Any,
+) -> int:
+    """
+    Count days where shaded/no-solar WBGT approximation is >= `thresh_c` °C.
+
+    Missing daily values are treated as non-events for threshold counts.
+    """
+    _ = kwargs
+    wbgt = _wbgt_shade_stull_daily_mean_c(tas_da, hurs_da, mask)
+    if wbgt is None:
+        return 0
+    flags = (wbgt >= float(thresh_c)).fillna(False)
+    return int(flags.sum(dim="time").item())
+
+
+def swbgt_empirical_annual_mean(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """
+    Annual mean simplified empirical WBGT proxy (°C).
+
+    Missing daily values are ignored in the annual mean. If no valid daily values
+    are available for the unit/year, NaN is returned.
+    """
+    swbgt = _swbgt_empirical_daily_mean_c(tas_da, hurs_da, mask)
+    if swbgt is None:
+        return np.nan
+    return float(swbgt.mean(dim="time", skipna=True).item())
+
+
+def swbgt_empirical_days_ge_threshold(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_c: float = 30.0,
+    **kwargs: Any,
+) -> int:
+    """
+    Count days where simplified empirical WBGT proxy is >= `thresh_c` °C.
+
+    Missing daily values are treated as non-events for threshold counts.
+    """
+    _ = kwargs
+    swbgt = _swbgt_empirical_daily_mean_c(tas_da, hurs_da, mask)
+    if swbgt is None:
+        return 0
+    flags = (swbgt >= float(thresh_c)).fillna(False)
+    return int(flags.sum(dim="time").item())
+
+
 def wet_bulb_depression_days_le_threshold_stull(
     tas_da: xr.DataArray,
     hurs_da: xr.DataArray,
