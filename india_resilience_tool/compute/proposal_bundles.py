@@ -1,4 +1,12 @@
-"""Offline builders for proposal climate-risk bundles."""
+"""Offline builders for proposal climate-risk bundles.
+
+The builder persists Phase-1 sector climate hazard-pressure scores. These
+outputs are not full sectoral risk scores because exposure, vulnerability, and
+adaptive capacity are not included in this compute path.
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
+"""
 
 from __future__ import annotations
 
@@ -289,43 +297,145 @@ def _series_for_rule(
     return _coerce_numeric(merged[metric_column])
 
 
-def _build_threshold_rule(
+def _normalize_direction(direction: str) -> str:
+    """Return a supported score direction for climate hazard-pressure rules."""
+    normalized = str(direction or "higher_worse").strip().lower()
+    if normalized not in {"higher_worse", "lower_worse"}:
+        raise TargetBuildError(f"Unsupported proposal rule direction: {direction!r}")
+    return normalized
+
+
+def _valid_numeric(values: pd.Series) -> pd.Series:
+    """Return finite numeric values while preserving the original index."""
+    numeric = _coerce_numeric(values)
+    return numeric.loc[np.isfinite(numeric)]
+
+
+def _score_by_reference_distribution(
+    values: pd.Series,
+    *,
+    direction: str = "higher_worse",
+    lower_quantile: float = 0.10,
+    upper_quantile: float = 0.90,
+    flat_score: float = 50.0,
+) -> pd.Series:
+    """Convert a metric vector to a robust 0-100 relative pressure score.
+
+    Missing or invalid values return NaN. Valid values are scaled between the
+    reference distribution's p10 and p90 to reduce outlier sensitivity. If all
+    valid values are identical, valid rows receive ``flat_score`` and quality
+    diagnostics can warn on the downstream rule or bundle column.
+    """
+    direction = _normalize_direction(direction)
+    numeric = _coerce_numeric(values)
+    score = pd.Series(np.nan, index=numeric.index, dtype=float)
+    finite = _valid_numeric(numeric)
+    if finite.empty:
+        return score
+
+    lo = float(finite.quantile(lower_quantile))
+    hi = float(finite.quantile(upper_quantile))
+    if not np.isfinite(lo) or not np.isfinite(hi):
+        return score
+    if np.isclose(hi, lo):
+        score.loc[finite.index] = float(flat_score)
+        return score
+
+    raw = (finite - lo) / (hi - lo)
+    if direction == "lower_worse":
+        raw = 1.0 - raw
+    score.loc[finite.index] = np.clip(raw.to_numpy(dtype=float), 0.0, 1.0) * 100.0
+    return score
+
+
+def _score_impact_threshold(
+    values: pd.Series,
+    *,
+    impact_low: float | None,
+    impact_high: float | None,
+    direction: str = "higher_worse",
+) -> pd.Series:
+    """Convert defensible low/high impact thresholds to a continuous score.
+
+    Missing or incomplete thresholds return NaN so the impact component is
+    ignored row-wise. For higher-worse metrics, ``impact_low`` is the onset of
+    concern and ``impact_high`` is the severe threshold. For lower-worse metrics,
+    the two values may be reversed.
+    """
+    direction = _normalize_direction(direction)
+    numeric = _coerce_numeric(values)
+    score = pd.Series(np.nan, index=numeric.index, dtype=float)
+    if impact_low is None or impact_high is None:
+        return score
+    low = float(impact_low)
+    high = float(impact_high)
+    if np.isclose(low, high):
+        return score
+
+    finite = _valid_numeric(numeric)
+    if finite.empty:
+        return score
+    if direction == "higher_worse":
+        raw = (finite - low) / (high - low)
+    else:
+        raw = (low - finite) / (low - high)
+    score.loc[finite.index] = np.clip(raw.to_numpy(dtype=float), 0.0, 1.0) * 100.0
+    return score
+
+
+def _is_temperature_metric(metric_slug: str) -> bool:
+    """Return whether a metric slug should default to absolute Celsius change."""
+    normalized = str(metric_slug or "").strip().lower()
+    return normalized.startswith(("tas", "tx", "tn")) or "temperature" in normalized or "heat" in normalized
+
+
+def _change_values(
+    current_values: pd.Series,
+    baseline_values: pd.Series,
+    *,
+    metric_slug: str,
+    change_mode: str,
+) -> pd.Series:
+    """Return future-minus-baseline values for continuous change scoring.
+
+    Invalid source values return NaN. ``relative_pct`` protects against tiny
+    denominators by returning NaN for those rows rather than exploding the score.
+    """
+    current = _coerce_numeric(current_values)
+    baseline = _coerce_numeric(baseline_values)
+    mode = str(change_mode or "auto").strip().lower()
+    if mode == "auto":
+        mode = "absolute_delta" if _is_temperature_metric(metric_slug) else "relative_pct"
+    if mode not in {"absolute_delta", "relative_pct"}:
+        raise TargetBuildError(f"Unsupported change mode for metric={metric_slug!r}: {change_mode!r}")
+
+    change = pd.Series(np.nan, index=current.index, dtype=float)
+    valid = current.notna() & baseline.notna()
+    if mode == "absolute_delta":
+        change.loc[valid] = current.loc[valid] - baseline.loc[valid]
+        return change
+
+    safe = valid & (baseline.abs() >= 1e-6)
+    change.loc[safe] = ((current.loc[safe] - baseline.loc[safe]) / baseline.loc[safe].abs()) * 100.0
+    return change
+
+
+def _baseline_values_for_rule(
     key_frame: pd.DataFrame,
     source_frame: pd.DataFrame,
     *,
     level: str,
     rule: ProposalRuleSpec,
-    scenario: str,
-    period: str,
-) -> pd.Series:
-    values = _series_for_rule(key_frame, source_frame, level=level, metric_slug=rule.metric_slug, scenario=scenario, period=period)
-    score = pd.Series(np.nan, index=values.index, dtype=float)
-    mask = values.notna()
-    score.loc[mask] = np.where(values.loc[mask] >= float(rule.threshold), 100.0, 0.0)
-    return score
-
-
-def _build_change_rule(
-    key_frame: pd.DataFrame,
-    source_frame: pd.DataFrame,
-    *,
-    level: str,
-    metric_slug: str,
-    scenario: str,
-    period: str,
     warnings: list[BuildWarning],
     bundle_slug: str,
     state_name: str,
 ) -> pd.Series:
-    current_values = _series_for_rule(
-        key_frame,
-        source_frame,
-        level=level,
-        metric_slug=metric_slug,
-        scenario=scenario,
-        period=period,
-    )
-    baseline_column = _resolve_baseline_column(source_frame, metric_slug)
+    """Return baseline values aligned to ``key_frame`` or NaN with a warning.
+
+    Missing baseline columns return NaN. The build continues so other score
+    components and other rules can still produce partial, explainable outputs.
+    """
+    baseline_column = _resolve_baseline_column(source_frame, rule.metric_slug)
     if not baseline_column:
         warnings.append(
             BuildWarning(
@@ -333,21 +443,98 @@ def _build_change_rule(
                 level=level,
                 state_name=state_name,
                 message=(
-                    f"Missing historical baseline mean column for metric={metric_slug!r}; "
-                    "change-vs-baseline rule scored as NaN."
+                    f"Missing historical baseline mean column for rule={rule.rule_slug!r}, "
+                    f"metric={rule.metric_slug!r}; change component scored as NaN."
                 ),
             )
         )
-        return pd.Series(np.nan, index=current_values.index, dtype=float)
+        return pd.Series(np.nan, index=key_frame.index, dtype=float)
 
     key_col = _canonical_key_column(level)
     merged = key_frame.merge(source_frame.loc[:, [key_col, baseline_column]], on=key_col, how="left")
-    baseline_values = _coerce_numeric(merged[baseline_column])
-    score = pd.Series(np.nan, index=current_values.index, dtype=float)
-    valid = current_values.notna() & baseline_values.notna() & (baseline_values.abs() >= 1e-6)
-    pct_change = ((current_values.loc[valid] - baseline_values.loc[valid]) / baseline_values.loc[valid].abs()) * 100.0
-    score.loc[valid] = np.where(pct_change > 20.0, 100.0, 0.0)
-    return score
+    return _coerce_numeric(merged[baseline_column])
+
+
+def _weighted_component_score(component_scores: list[pd.Series], component_weights: list[float]) -> pd.Series:
+    """Return a row-wise weighted mean across available component scores."""
+    if not component_scores:
+        return pd.Series(dtype=float)
+    aligned_scores = pd.concat(component_scores, axis=1)
+    weights = np.asarray(component_weights, dtype=float)
+    valid = aligned_scores.notna()
+    weighted = aligned_scores.multiply(weights, axis=1).where(valid)
+    denominator = valid.multiply(weights, axis=1).sum(axis=1)
+    score = weighted.sum(axis=1, skipna=True) / denominator.replace(0.0, np.nan)
+    return score.astype(float)
+
+
+def _build_blended_rule(
+    key_frame: pd.DataFrame,
+    source_frame: pd.DataFrame,
+    *,
+    level: str,
+    rule: ProposalRuleSpec,
+    scenario: str,
+    period: str,
+    warnings: list[BuildWarning],
+    bundle_slug: str,
+    state_name: str,
+) -> pd.Series:
+    """Build a continuous sector climate hazard-pressure rule.
+
+    Missing current or baseline data returns NaN for the affected component.
+    The final rule score is the weighted mean of available components, allowing
+    partial but transparent results when one component is unavailable.
+    """
+    current_values = _series_for_rule(
+        key_frame,
+        source_frame,
+        level=level,
+        metric_slug=rule.metric_slug,
+        scenario=scenario,
+        period=period,
+    )
+    component_scores: list[pd.Series] = []
+    component_weights: list[float] = []
+
+    if rule.absolute_weight > 0.0:
+        component_scores.append(_score_by_reference_distribution(current_values, direction=rule.direction))
+        component_weights.append(float(rule.absolute_weight))
+
+    if rule.change_weight > 0.0:
+        baseline_values = _baseline_values_for_rule(
+            key_frame,
+            source_frame,
+            level=level,
+            rule=rule,
+            warnings=warnings,
+            bundle_slug=bundle_slug,
+            state_name=state_name,
+        )
+        changes = _change_values(
+            current_values,
+            baseline_values,
+            metric_slug=rule.metric_slug,
+            change_mode=rule.change_mode,
+        )
+        component_scores.append(_score_by_reference_distribution(changes, direction=rule.direction))
+        component_weights.append(float(rule.change_weight))
+
+    if rule.impact_weight > 0.0:
+        component_scores.append(
+            _score_impact_threshold(
+                current_values,
+                impact_low=rule.impact_low,
+                impact_high=rule.impact_high,
+                direction=rule.direction,
+            )
+        )
+        component_weights.append(float(rule.impact_weight))
+
+    score = _weighted_component_score(component_scores, component_weights)
+    if score.empty:
+        return pd.Series(np.nan, index=current_values.index, dtype=float)
+    return score.reindex(current_values.index).astype(float)
 
 
 def _empty_varcfg() -> dict[str, tuple[str, ...]]:
@@ -409,17 +596,25 @@ def _build_trend_rule(
     key_frame: pd.DataFrame,
     *,
     level: str,
-    metric_slug: str,
+    rule: ProposalRuleSpec,
     scenario: str,
     period: str,
     data_dir: Path,
     bundle_slug: str,
     state_name: str,
 ) -> pd.Series:
-    scores: list[float] = []
+    """Build a continuous adverse-trend pressure score from yearly series.
+
+    Missing yearly data raises ``TargetBuildError`` because trend rules cannot be
+    reconstructed from period means. Units with fewer than 10 period years return
+    NaN. Non-adverse slopes score zero; positive adverse slopes are scaled within
+    the state/level/scenario/period reference distribution.
+    """
+    adverse_slopes: list[float] = []
+    direction = _normalize_direction(rule.direction)
     for _, row in key_frame.iterrows():
         yearly = _load_legacy_yearly_series(
-            metric_slug=metric_slug,
+            metric_slug=rule.metric_slug,
             level=level,
             state_name=str(row["state"]),
             district_name=str(row["district"]),
@@ -429,16 +624,25 @@ def _build_trend_rule(
         )
         if yearly.empty:
             raise TargetBuildError(
-                f"Missing mandatory yearly ensemble series for metric={metric_slug!r}, bundle={bundle_slug!r}, "
+                f"Missing mandatory yearly ensemble series for metric={rule.metric_slug!r}, bundle={bundle_slug!r}, "
                 f"level={level!r}, state={state_name!r}, unit={_row_labels(row, level=level)!r}."
             )
         prepared = _prepare_period_yearly(yearly, period=period)
         if len(prepared) < 10:
-            scores.append(np.nan)
+            adverse_slopes.append(np.nan)
             continue
         slope = float(np.polyfit(prepared["year"].to_numpy(dtype=float), prepared["mean"].to_numpy(dtype=float), 1)[0])
-        scores.append(100.0 if slope > 0.0 else 0.0)
-    return pd.Series(scores, index=key_frame.index, dtype=float)
+        adverse_slopes.append(max(slope, 0.0) if direction == "higher_worse" else max(-slope, 0.0))
+
+    slope_values = pd.Series(adverse_slopes, index=key_frame.index, dtype=float)
+    finite = _valid_numeric(slope_values)
+    if finite.empty:
+        return pd.Series(np.nan, index=key_frame.index, dtype=float)
+    if finite.max() <= 0.0:
+        score = pd.Series(np.nan, index=key_frame.index, dtype=float)
+        score.loc[finite.index] = 0.0
+        return score
+    return _score_by_reference_distribution(slope_values, direction="higher_worse")
 
 
 def _build_spi_proxy_rule(
@@ -449,6 +653,7 @@ def _build_spi_proxy_rule(
     scenario: str,
     period: str,
 ) -> pd.Series:
+    """Build a continuous low-flow drought proxy score from SPI month counts."""
     values = _series_for_rule(
         key_frame,
         source_frame,
@@ -457,10 +662,7 @@ def _build_spi_proxy_rule(
         scenario=scenario,
         period=period,
     )
-    score = pd.Series(np.nan, index=values.index, dtype=float)
-    valid = values.notna()
-    score.loc[valid] = np.clip(values.loc[valid] / 12.0, 0.0, 1.0) * 100.0
-    return score
+    return _score_by_reference_distribution(values, direction="higher_worse")
 
 
 def _compute_r95p_interannual_variability_from_yearly(yearly: pd.DataFrame, *, period: str) -> float:
@@ -541,17 +743,53 @@ def _build_variability_proxy_rule(
     values = _coerce_numeric(helper_frame[metric_column]) if metric_column in helper_frame.columns else pd.Series(
         np.nan, index=helper_frame.index, dtype=float
     )
-    score = pd.Series(np.nan, index=values.index, dtype=float)
-    finite = values[np.isfinite(values)]
-    if finite.empty:
-        return score
-    lo = float(finite.min())
-    hi = float(finite.max())
-    if hi == lo:
-        score.loc[finite.index] = 50.0
-        return score
-    score.loc[finite.index] = ((finite - lo) / (hi - lo)) * 100.0
-    return score
+    return _score_by_reference_distribution(values, direction="higher_worse")
+
+
+def _append_score_quality_warnings(
+    values: pd.Series,
+    *,
+    warnings: list[BuildWarning],
+    bundle_slug: str,
+    level: str,
+    state_name: str,
+    column_name: str,
+    label: str,
+) -> None:
+    """Append non-fatal flatness and saturation diagnostics for score columns."""
+    finite = _valid_numeric(values)
+    valid_count = int(len(finite))
+    if valid_count < 2:
+        return
+    unique_count = int(finite.nunique(dropna=True))
+    if unique_count <= 1:
+        warnings.append(
+            BuildWarning(
+                bundle_slug=bundle_slug,
+                level=level,
+                state_name=state_name,
+                message=(
+                    f"Flat proposal {label} score column {column_name!r}: "
+                    f"valid_count={valid_count}, unique_count={unique_count}."
+                ),
+            )
+        )
+    if valid_count < 5:
+        return
+    low_share = float((finite <= 1.0).mean())
+    high_share = float((finite >= 99.0).mean())
+    if low_share >= 0.95 or high_share >= 0.95:
+        warnings.append(
+            BuildWarning(
+                bundle_slug=bundle_slug,
+                level=level,
+                state_name=state_name,
+                message=(
+                    f"Saturated proposal {label} score column {column_name!r}: "
+                    f"valid_count={valid_count}, share_le_1={low_share:.3f}, share_ge_99={high_share:.3f}."
+                ),
+            )
+        )
 
 
 def _target_sort_columns(level: str) -> list[str]:
@@ -598,53 +836,61 @@ def compute_proposal_bundle_master_frame(
             rule_columns: list[str] = []
             for rule in bundle.rules:
                 score_column = proposal_rule_score_column(rule.rule_slug, scenario, period)
-                if rule.rule_type == "threshold":
-                    score = _build_threshold_rule(
-                        key_frame,
-                        metric_frames[rule.metric_slug],
-                        level=level,
-                        rule=rule,
-                        scenario=scenario,
-                        period=period,
-                    )
-                elif rule.rule_type == "change_vs_baseline":
-                    score = _build_change_rule(
-                        key_frame,
-                        metric_frames[rule.metric_slug],
-                        level=level,
-                        metric_slug=rule.metric_slug,
-                        scenario=scenario,
-                        period=period,
-                        warnings=warnings,
-                        bundle_slug=bundle.composite_slug,
-                        state_name=state_name,
-                    )
+                if rule.rule_type == "blended":
+                    if rule.rule_slug == "spi3_low_flow_proxy_norm":
+                        score = _build_spi_proxy_rule(
+                            key_frame,
+                            metric_frames["spi3_count_months_lt_minus1"],
+                            level=level,
+                            scenario=scenario,
+                            period=period,
+                        )
+                    elif rule.rule_slug == "r95p_interannual_variability_norm":
+                        if helper_frame is None:
+                            raise TargetBuildError(
+                                "Hydropower bundle requires a precomputed R95p variability helper frame."
+                            )
+                        score = _build_variability_proxy_rule(
+                            helper_frame,
+                            level=level,
+                            scenario=scenario,
+                            period=period,
+                        )
+                    else:
+                        score = _build_blended_rule(
+                            key_frame,
+                            metric_frames[rule.metric_slug],
+                            level=level,
+                            rule=rule,
+                            scenario=scenario,
+                            period=period,
+                            warnings=warnings,
+                            bundle_slug=bundle.composite_slug,
+                            state_name=state_name,
+                        )
                 elif rule.rule_type == "trend":
                     score = _build_trend_rule(
                         key_frame,
                         level=level,
-                        metric_slug=rule.metric_slug,
+                        rule=rule,
                         scenario=scenario,
                         period=period,
                         data_dir=data_dir,
                         bundle_slug=bundle.composite_slug,
                         state_name=state_name,
                     )
-                elif rule.rule_slug == "spi3_low_flow_proxy_norm":
-                    score = _build_spi_proxy_rule(
-                        key_frame,
-                        metric_frames["spi3_count_months_lt_minus1"],
-                        level=level,
-                        scenario=scenario,
-                        period=period,
-                    )
-                elif rule.rule_slug == "r95p_interannual_variability_norm":
-                    if helper_frame is None:
-                        raise TargetBuildError("Hydropower bundle requires a precomputed R95p variability helper frame.")
-                    score = _build_variability_proxy_rule(helper_frame, level=level, scenario=scenario, period=period)
                 else:
                     raise TargetBuildError(f"Unsupported proposal rule implementation: {rule.rule_slug!r}")
                 output[score_column] = score
+                _append_score_quality_warnings(
+                    score,
+                    warnings=warnings,
+                    bundle_slug=bundle.composite_slug,
+                    level=level,
+                    state_name=state_name,
+                    column_name=score_column,
+                    label=f"rule {rule.rule_slug}",
+                )
                 rule_columns.append(score_column)
                 ordered_columns.append(score_column)
 
@@ -653,6 +899,15 @@ def compute_proposal_bundle_master_frame(
             output[available_count_column] = output[rule_columns].notna().sum(axis=1).astype(int)
             output[bundle_score_column] = output[rule_columns].mean(axis=1, skipna=True)
             output.loc[output[available_count_column] == 0, bundle_score_column] = np.nan
+            _append_score_quality_warnings(
+                output[bundle_score_column],
+                warnings=warnings,
+                bundle_slug=bundle.composite_slug,
+                level=level,
+                state_name=state_name,
+                column_name=bundle_score_column,
+                label="bundle",
+            )
             ordered_columns.extend([bundle_score_column, available_count_column])
 
     output = output.loc[:, ordered_columns]

@@ -1,7 +1,11 @@
 """Declarative compute-owned config for proposal climate-risk bundles.
 
-The scoring rules and supported build levels remain owned here. Dashboard
-exposure is controlled separately by ``config.dashboard_bundles``.
+Proposal bundles are Phase-1 sector climate hazard-pressure scores. They are
+not full sectoral risk scores because exposure, vulnerability, and adaptive
+capacity are not included in this compute path.
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
 """
 
 from __future__ import annotations
@@ -9,9 +13,19 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+VALID_RULE_TYPES = {"blended", "trend"}
+VALID_DIRECTIONS = {"higher_worse", "lower_worse"}
+VALID_CHANGE_MODES = {"auto", "absolute_delta", "relative_pct"}
+
+
 @dataclass(frozen=True)
 class ProposalRuleSpec:
-    """One deterministic rule within a proposal bundle."""
+    """One deterministic rule within a proposal bundle.
+
+    Missing source data for a rule returns NaN at build time and reduces the
+    available-rule count for the affected geography. Continuous component scores
+    are 0-100, with higher values representing higher sector hazard pressure.
+    """
 
     rule_slug: str
     display_label: str
@@ -19,6 +33,14 @@ class ProposalRuleSpec:
     rule_type: str
     threshold: float | None = None
     source_mode: str = "master"
+    direction: str = "higher_worse"
+    absolute_weight: float = 1.0
+    change_weight: float = 0.0
+    impact_weight: float = 0.0
+    impact_low: float | None = None
+    impact_high: float | None = None
+    change_mode: str = "auto"
+    method_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -31,21 +53,80 @@ class ProposalBundleSpec:
     rules: tuple[ProposalRuleSpec, ...]
 
 
+def _pressure_rule(
+    rule_slug: str,
+    display_label: str,
+    metric_slug: str,
+    *,
+    absolute_weight: float = 0.65,
+    change_weight: float = 0.35,
+    impact_weight: float = 0.0,
+    impact_low: float | None = None,
+    impact_high: float | None = None,
+    change_mode: str = "auto",
+    source_mode: str = "master",
+    method_note: str = "",
+) -> ProposalRuleSpec:
+    """Return a continuous sector-hazard-pressure rule specification."""
+    return ProposalRuleSpec(
+        rule_slug=rule_slug,
+        display_label=display_label,
+        metric_slug=metric_slug,
+        rule_type="blended",
+        source_mode=source_mode,
+        absolute_weight=absolute_weight,
+        change_weight=change_weight,
+        impact_weight=impact_weight,
+        impact_low=impact_low,
+        impact_high=impact_high,
+        change_mode=change_mode,
+        method_note=method_note,
+    )
+
+
+def _trend_rule(rule_slug: str, display_label: str, metric_slug: str) -> ProposalRuleSpec:
+    """Return a continuous adverse-trend pressure rule specification."""
+    return ProposalRuleSpec(
+        rule_slug=rule_slug,
+        display_label=display_label,
+        metric_slug=metric_slug,
+        rule_type="trend",
+        source_mode="yearly",
+        method_note="Continuous adverse yearly-slope pressure within the selected future period.",
+    )
+
+
 PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
     ProposalBundleSpec(
         bundle_label="Agricultural Risk",
         composite_slug="composite_agricultural_risk",
         supported_levels=("district", "block"),
         rules=(
-            ProposalRuleSpec("rx1day_ge_200", "1-day rainfall >= 200 mm", "pr_max_1day_precip", "threshold", threshold=200.0),
-            ProposalRuleSpec("rx5day_ge_300", "5-day rainfall >= 300 mm", "pr_max_5day_precip", "threshold", threshold=300.0),
-            ProposalRuleSpec("cdd_ge_20", "Consecutive dry days >= 20", "pr_consecutive_dry_days_lt1mm", "threshold", threshold=20.0),
-            ProposalRuleSpec("txx_ge_40", "Annual max temperature >= 40 degC", "txx_annual_max", "threshold", threshold=40.0),
-            ProposalRuleSpec(
+            _pressure_rule("rx1day_ge_200", "1-day rainfall pressure", "pr_max_1day_precip"),
+            _pressure_rule("rx5day_ge_300", "5-day rainfall pressure", "pr_max_5day_precip"),
+            _pressure_rule("cdd_ge_20", "Dry-spell pressure", "pr_consecutive_dry_days_lt1mm"),
+            _pressure_rule(
+                "txx_ge_40",
+                "Extreme daytime heat pressure",
+                "txx_annual_max",
+                absolute_weight=0.40,
+                change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=40.0,
+                impact_high=45.0,
+                change_mode="absolute_delta",
+                method_note=(
+                    "Heat component combines future severity, warming from baseline, "
+                    "and a soft 40-45 degC impact band."
+                ),
+            ),
+            _pressure_rule(
                 "r95p_change_gt_20pct_vs_baseline",
-                "Very wet precipitation change > 20% vs baseline",
+                "Very wet precipitation change pressure",
                 "r95p_very_wet_precip",
-                "change_vs_baseline",
+                absolute_weight=0.30,
+                change_weight=0.70,
+                change_mode="relative_pct",
             ),
         ),
     ),
@@ -54,11 +135,49 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         composite_slug="composite_health_risk",
         supported_levels=("district", "block"),
         rules=(
-            ProposalRuleSpec("txx_ge_45", "Annual max temperature >= 45 degC", "txx_annual_max", "threshold", threshold=45.0),
-            ProposalRuleSpec("wsdi_ge_5", "Warm spell days >= 5", "wsdi_warm_spell_days", "threshold", threshold=5.0),
-            ProposalRuleSpec("tnx_ge_30", "Annual max nighttime temperature >= 30 degC", "tnx_annual_max", "threshold", threshold=30.0),
-            ProposalRuleSpec("rx1day_ge_200", "1-day rainfall >= 200 mm", "pr_max_1day_precip", "threshold", threshold=200.0),
-            ProposalRuleSpec("cwd_ge_5", "Consecutive wet days >= 5", "cwd_consecutive_wet_days", "threshold", threshold=5.0),
+            _pressure_rule(
+                "txx_ge_45",
+                "Extreme daytime heat pressure",
+                "txx_annual_max",
+                absolute_weight=0.40,
+                change_weight=0.25,
+                impact_weight=0.35,
+                impact_low=40.0,
+                impact_high=45.0,
+                change_mode="absolute_delta",
+            ),
+            _pressure_rule(
+                "wsdi_ge_5",
+                "Warm-spell duration pressure",
+                "wsdi_warm_spell_days",
+                absolute_weight=0.70,
+                change_weight=0.30,
+            ),
+            _pressure_rule(
+                "tnx_ge_30",
+                "Night-time heat pressure",
+                "tnx_annual_max",
+                absolute_weight=0.40,
+                change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=30.0,
+                impact_high=35.0,
+                change_mode="absolute_delta",
+            ),
+            _pressure_rule(
+                "rx1day_ge_200",
+                "1-day rainfall disruption pressure",
+                "pr_max_1day_precip",
+                absolute_weight=0.70,
+                change_weight=0.30,
+            ),
+            _pressure_rule(
+                "cwd_ge_5",
+                "Consecutive wet-day pressure",
+                "cwd_consecutive_wet_days",
+                absolute_weight=0.70,
+                change_weight=0.30,
+            ),
         ),
     ),
     ProposalBundleSpec(
@@ -66,10 +185,20 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         composite_slug="composite_industrial_risk",
         supported_levels=("district", "block"),
         rules=(
-            ProposalRuleSpec("rx1day_ge_150", "1-day rainfall >= 150 mm", "pr_max_1day_precip", "threshold", threshold=150.0),
-            ProposalRuleSpec("rx5day_ge_250", "5-day rainfall >= 250 mm", "pr_max_5day_precip", "threshold", threshold=250.0),
-            ProposalRuleSpec("cdd_ge_30", "Consecutive dry days >= 30", "pr_consecutive_dry_days_lt1mm", "threshold", threshold=30.0),
-            ProposalRuleSpec("txx_ge_45", "Annual max temperature >= 45 degC", "txx_annual_max", "threshold", threshold=45.0),
+            _pressure_rule("rx1day_ge_150", "1-day rainfall disruption pressure", "pr_max_1day_precip"),
+            _pressure_rule("rx5day_ge_250", "5-day rainfall disruption pressure", "pr_max_5day_precip"),
+            _pressure_rule("cdd_ge_30", "Dry-spell water-stress pressure", "pr_consecutive_dry_days_lt1mm"),
+            _pressure_rule(
+                "txx_ge_45",
+                "Extreme heat operations pressure",
+                "txx_annual_max",
+                absolute_weight=0.40,
+                change_weight=0.25,
+                impact_weight=0.35,
+                impact_low=40.0,
+                impact_high=45.0,
+                change_mode="absolute_delta",
+            ),
         ),
     ),
     ProposalBundleSpec(
@@ -77,16 +206,18 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         composite_slug="composite_investment_financial_risk",
         supported_levels=("district", "block"),
         rules=(
-            ProposalRuleSpec("rx1day_positive_trend", "Increasing 1-day rainfall intensity", "pr_max_1day_precip", "trend", source_mode="yearly"),
-            ProposalRuleSpec("rx5day_positive_trend", "Increasing 5-day rainfall intensity", "pr_max_5day_precip", "trend", source_mode="yearly"),
-            ProposalRuleSpec("r99p_positive_trend", "Increasing extreme wet precipitation", "r99p_extreme_wet_precip", "trend", source_mode="yearly"),
-            ProposalRuleSpec(
+            _trend_rule("rx1day_positive_trend", "1-day rainfall intensity trend pressure", "pr_max_1day_precip"),
+            _trend_rule("rx5day_positive_trend", "5-day rainfall intensity trend pressure", "pr_max_5day_precip"),
+            _trend_rule("r99p_positive_trend", "Extreme wet precipitation trend pressure", "r99p_extreme_wet_precip"),
+            _pressure_rule(
                 "cdd_change_gt_20pct_vs_baseline",
-                "Consecutive dry days change > 20% vs baseline",
+                "Dry-spell change pressure",
                 "pr_consecutive_dry_days_lt1mm",
-                "change_vs_baseline",
+                absolute_weight=0.30,
+                change_weight=0.70,
+                change_mode="relative_pct",
             ),
-            ProposalRuleSpec("hwfi_positive_trend", "Increasing heatwave frequency", "hwfi_tmean_90p", "trend", source_mode="yearly"),
+            _trend_rule("hwfi_positive_trend", "Heatwave frequency trend pressure", "hwfi_tmean_90p"),
         ),
     ),
     ProposalBundleSpec(
@@ -94,9 +225,31 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         composite_slug="composite_infrastructure_risk",
         supported_levels=("district", "block"),
         rules=(
-            ProposalRuleSpec("rx1day_ge_200", "1-day rainfall >= 200 mm", "pr_max_1day_precip", "threshold", threshold=200.0),
-            ProposalRuleSpec("rx5day_ge_400", "5-day rainfall >= 400 mm", "pr_max_5day_precip", "threshold", threshold=400.0),
-            ProposalRuleSpec("txx_ge_45", "Annual max temperature >= 45 degC", "txx_annual_max", "threshold", threshold=45.0),
+            _pressure_rule(
+                "rx1day_ge_200",
+                "1-day rainfall design pressure",
+                "pr_max_1day_precip",
+                absolute_weight=0.70,
+                change_weight=0.30,
+            ),
+            _pressure_rule(
+                "rx5day_ge_400",
+                "5-day rainfall design pressure",
+                "pr_max_5day_precip",
+                absolute_weight=0.70,
+                change_weight=0.30,
+            ),
+            _pressure_rule(
+                "txx_ge_45",
+                "Extreme heat asset pressure",
+                "txx_annual_max",
+                absolute_weight=0.45,
+                change_weight=0.25,
+                impact_weight=0.30,
+                impact_low=40.0,
+                impact_high=45.0,
+                change_mode="absolute_delta",
+            ),
         ),
     ),
     ProposalBundleSpec(
@@ -104,9 +257,31 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         composite_slug="composite_asset_risk_thermal_power",
         supported_levels=("district", "block"),
         rules=(
-            ProposalRuleSpec("cdd_ge_30", "Consecutive dry days >= 30", "pr_consecutive_dry_days_lt1mm", "threshold", threshold=30.0),
-            ProposalRuleSpec("txx_ge_45", "Annual max temperature >= 45 degC", "txx_annual_max", "threshold", threshold=45.0),
-            ProposalRuleSpec("spi3_low_flow_proxy_norm", "Low-flow drought proxy severity", "spi3_count_months_lt_minus1", "continuous_proxy"),
+            _pressure_rule(
+                "cdd_ge_30",
+                "Dry-spell cooling-water pressure",
+                "pr_consecutive_dry_days_lt1mm",
+                absolute_weight=0.50,
+                change_weight=0.50,
+            ),
+            _pressure_rule(
+                "txx_ge_45",
+                "Extreme heat cooling-efficiency pressure",
+                "txx_annual_max",
+                absolute_weight=0.45,
+                change_weight=0.25,
+                impact_weight=0.30,
+                impact_low=40.0,
+                impact_high=45.0,
+                change_mode="absolute_delta",
+            ),
+            _pressure_rule(
+                "spi3_low_flow_proxy_norm",
+                "Low-flow drought proxy pressure",
+                "spi3_count_months_lt_minus1",
+                absolute_weight=1.0,
+                change_weight=0.0,
+            ),
         ),
     ),
     ProposalBundleSpec(
@@ -114,13 +289,26 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         composite_slug="composite_asset_risk_hydropower",
         supported_levels=("district", "block"),
         rules=(
-            ProposalRuleSpec("rx5day_ge_500", "5-day rainfall >= 500 mm", "pr_max_5day_precip", "threshold", threshold=500.0),
-            ProposalRuleSpec("cdd_ge_60", "Consecutive dry days >= 60", "pr_consecutive_dry_days_lt1mm", "threshold", threshold=60.0),
-            ProposalRuleSpec(
+            _pressure_rule(
+                "rx5day_ge_500",
+                "5-day rainfall operations pressure",
+                "pr_max_5day_precip",
+                absolute_weight=0.50,
+                change_weight=0.50,
+            ),
+            _pressure_rule(
+                "cdd_ge_60",
+                "Dry-spell flow pressure",
+                "pr_consecutive_dry_days_lt1mm",
+                absolute_weight=0.50,
+                change_weight=0.50,
+            ),
+            _pressure_rule(
                 "r95p_interannual_variability_norm",
-                "Very wet precipitation variability severity",
+                "Very wet precipitation variability pressure",
                 "r95p_interannual_variability",
-                "continuous_proxy",
+                absolute_weight=1.0,
+                change_weight=0.0,
                 source_mode="helper_master",
             ),
         ),
@@ -130,16 +318,34 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         composite_slug="composite_life_livelihood_loss_risk",
         supported_levels=("district", "block"),
         rules=(
-            ProposalRuleSpec("rx1day_ge_200", "1-day rainfall >= 200 mm", "pr_max_1day_precip", "threshold", threshold=200.0),
-            ProposalRuleSpec(
-                "heavy_rain_2day_event_ge_1",
-                "2-day heavy rainfall events >= 1",
-                "pr_2day_heavy_rainfall_events_ge150mm",
-                "threshold",
-                threshold=1.0,
+            _pressure_rule(
+                "rx1day_ge_200",
+                "1-day rainfall exposure pressure",
+                "pr_max_1day_precip",
+                absolute_weight=0.70,
+                change_weight=0.30,
             ),
-            ProposalRuleSpec("cdd_ge_40", "Consecutive dry days >= 40", "pr_consecutive_dry_days_lt1mm", "threshold", threshold=40.0),
-            ProposalRuleSpec("wsdi_ge_5", "Warm spell days >= 5", "wsdi_warm_spell_days", "threshold", threshold=5.0),
+            _pressure_rule(
+                "rx5day_livelihood_pressure",
+                "5-day rainfall exposure pressure",
+                "pr_max_5day_precip",
+                absolute_weight=0.70,
+                change_weight=0.30,
+            ),
+            _pressure_rule(
+                "cdd_ge_40",
+                "Dry-spell livelihood pressure",
+                "pr_consecutive_dry_days_lt1mm",
+                absolute_weight=0.60,
+                change_weight=0.40,
+            ),
+            _pressure_rule(
+                "wsdi_ge_5",
+                "Warm-spell livelihood pressure",
+                "wsdi_warm_spell_days",
+                absolute_weight=0.70,
+                change_weight=0.30,
+            ),
         ),
     ),
 )
@@ -179,6 +385,12 @@ def proposal_available_rule_count_column(composite_slug: str, scenario: str, per
     return f"{str(composite_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__available_rule_count"
 
 
+def _validate_weight(value: float, *, field_name: str, rule_slug: str, issues: list[str]) -> None:
+    """Append a validation issue if a score-component weight is invalid."""
+    if value < 0.0:
+        issues.append(f"Proposal rule {rule_slug!r} has negative {field_name}: {value!r}")
+
+
 def validate_proposal_bundle_specs() -> list[str]:
     """Return validation issues for the proposal bundle config."""
     issues: list[str] = []
@@ -200,19 +412,36 @@ def validate_proposal_bundle_specs() -> list[str]:
         for rule in spec.rules:
             if rule.rule_slug in seen_rule_slugs:
                 issues.append(
-                    f"Proposal bundle {spec.composite_slug!r} repeats rule slug {rule.rule_slug!r}."
+                    f"Proposal bundle {spec.composite_slug!r} has duplicate rule slug {rule.rule_slug!r}."
                 )
             seen_rule_slugs.add(rule.rule_slug)
-            if not str(rule.display_label).strip():
-                issues.append(
-                    f"Proposal bundle {spec.composite_slug!r} rule {rule.rule_slug!r} is missing a display label."
-                )
-            if rule.rule_type not in {"threshold", "change_vs_baseline", "trend", "continuous_proxy"}:
-                issues.append(
-                    f"Proposal bundle {spec.composite_slug!r} uses unsupported rule type {rule.rule_type!r}."
-                )
-            if rule.rule_type == "threshold" and rule.threshold is None:
-                issues.append(
-                    f"Proposal bundle {spec.composite_slug!r} threshold rule {rule.rule_slug!r} is missing a threshold."
-                )
+            if not rule.rule_slug.strip():
+                issues.append(f"Proposal bundle {spec.composite_slug!r} has a blank rule slug.")
+            if not rule.display_label.strip():
+                issues.append(f"Proposal rule {rule.rule_slug!r} has a blank display label.")
+            if not rule.metric_slug.strip():
+                issues.append(f"Proposal rule {rule.rule_slug!r} has a blank metric slug.")
+            if rule.rule_type not in VALID_RULE_TYPES:
+                issues.append(f"Proposal rule {rule.rule_slug!r} has unsupported type {rule.rule_type!r}.")
+            if rule.direction not in VALID_DIRECTIONS:
+                issues.append(f"Proposal rule {rule.rule_slug!r} has unsupported direction {rule.direction!r}.")
+            if rule.change_mode not in VALID_CHANGE_MODES:
+                issues.append(f"Proposal rule {rule.rule_slug!r} has unsupported change mode {rule.change_mode!r}.")
+            _validate_weight(
+                rule.absolute_weight,
+                field_name="absolute_weight",
+                rule_slug=rule.rule_slug,
+                issues=issues,
+            )
+            _validate_weight(rule.change_weight, field_name="change_weight", rule_slug=rule.rule_slug, issues=issues)
+            _validate_weight(rule.impact_weight, field_name="impact_weight", rule_slug=rule.rule_slug, issues=issues)
+            active_weight = rule.absolute_weight + rule.change_weight + rule.impact_weight
+            if rule.rule_type == "blended" and active_weight <= 0.0:
+                issues.append(f"Proposal rule {rule.rule_slug!r} must have at least one active blended component.")
+            if rule.rule_type == "trend" and rule.source_mode != "yearly":
+                issues.append(f"Proposal trend rule {rule.rule_slug!r} must use yearly source mode.")
+            if rule.impact_weight > 0.0 and (rule.impact_low is None or rule.impact_high is None):
+                issues.append(f"Proposal rule {rule.rule_slug!r} has impact_weight but incomplete impact thresholds.")
+            if rule.impact_low is not None and rule.impact_high is not None and rule.impact_low == rule.impact_high:
+                issues.append(f"Proposal rule {rule.rule_slug!r} impact thresholds must differ.")
     return issues

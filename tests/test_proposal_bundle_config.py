@@ -1,3 +1,9 @@
+"""Tests for proposal bundle configuration.
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
+"""
+
 from __future__ import annotations
 
 from india_resilience_tool.config.dashboard_bundles import SECTOR_WISE_DASHBOARD_BUNDLES
@@ -16,6 +22,15 @@ from india_resilience_tool.config.variables import VARIABLES
 
 def test_proposal_bundle_specs_validate_cleanly() -> None:
     assert validate_proposal_bundle_specs() == []
+
+
+def test_proposal_rules_use_continuous_phase_one_pressure_schema() -> None:
+    for spec in PROPOSAL_BUNDLES:
+        for rule in spec.rules:
+            assert rule.rule_type in {"blended", "trend"}
+            assert rule.direction == "higher_worse"
+            if rule.rule_type == "blended":
+                assert rule.absolute_weight + rule.change_weight + rule.impact_weight > 0.0
 
 
 def test_proposal_bundle_labels_slugs_and_rule_order_are_exact() -> None:
@@ -70,7 +85,7 @@ def test_proposal_bundle_labels_slugs_and_rule_order_are_exact() -> None:
         (
             "Life & Livelihood Loss Risk",
             "composite_life_livelihood_loss_risk",
-            ["rx1day_ge_200", "heavy_rain_2day_event_ge_1", "cdd_ge_40", "wsdi_ge_5"],
+            ["rx1day_ge_200", "rx5day_livelihood_pressure", "cdd_ge_40", "wsdi_ge_5"],
         ),
     ]
     observed = [
@@ -87,52 +102,52 @@ def test_proposal_bundle_rule_display_labels_are_exact() -> None:
     }
     assert observed == {
         "Agricultural Risk": {
-            "rx1day_ge_200": "1-day rainfall >= 200 mm",
-            "rx5day_ge_300": "5-day rainfall >= 300 mm",
-            "cdd_ge_20": "Consecutive dry days >= 20",
-            "txx_ge_40": "Annual max temperature >= 40 degC",
-            "r95p_change_gt_20pct_vs_baseline": "Very wet precipitation change > 20% vs baseline",
+            "rx1day_ge_200": "1-day rainfall pressure",
+            "rx5day_ge_300": "5-day rainfall pressure",
+            "cdd_ge_20": "Dry-spell pressure",
+            "txx_ge_40": "Extreme daytime heat pressure",
+            "r95p_change_gt_20pct_vs_baseline": "Very wet precipitation change pressure",
         },
         "Health Risk": {
-            "txx_ge_45": "Annual max temperature >= 45 degC",
-            "wsdi_ge_5": "Warm spell days >= 5",
-            "tnx_ge_30": "Annual max nighttime temperature >= 30 degC",
-            "rx1day_ge_200": "1-day rainfall >= 200 mm",
-            "cwd_ge_5": "Consecutive wet days >= 5",
+            "txx_ge_45": "Extreme daytime heat pressure",
+            "wsdi_ge_5": "Warm-spell duration pressure",
+            "tnx_ge_30": "Night-time heat pressure",
+            "rx1day_ge_200": "1-day rainfall disruption pressure",
+            "cwd_ge_5": "Consecutive wet-day pressure",
         },
         "Industrial Risk": {
-            "rx1day_ge_150": "1-day rainfall >= 150 mm",
-            "rx5day_ge_250": "5-day rainfall >= 250 mm",
-            "cdd_ge_30": "Consecutive dry days >= 30",
-            "txx_ge_45": "Annual max temperature >= 45 degC",
+            "rx1day_ge_150": "1-day rainfall disruption pressure",
+            "rx5day_ge_250": "5-day rainfall disruption pressure",
+            "cdd_ge_30": "Dry-spell water-stress pressure",
+            "txx_ge_45": "Extreme heat operations pressure",
         },
         "Investment / Financial Risk": {
-            "rx1day_positive_trend": "Increasing 1-day rainfall intensity",
-            "rx5day_positive_trend": "Increasing 5-day rainfall intensity",
-            "r99p_positive_trend": "Increasing extreme wet precipitation",
-            "cdd_change_gt_20pct_vs_baseline": "Consecutive dry days change > 20% vs baseline",
-            "hwfi_positive_trend": "Increasing heatwave frequency",
+            "rx1day_positive_trend": "1-day rainfall intensity trend pressure",
+            "rx5day_positive_trend": "5-day rainfall intensity trend pressure",
+            "r99p_positive_trend": "Extreme wet precipitation trend pressure",
+            "cdd_change_gt_20pct_vs_baseline": "Dry-spell change pressure",
+            "hwfi_positive_trend": "Heatwave frequency trend pressure",
         },
         "Infrastructure Risk": {
-            "rx1day_ge_200": "1-day rainfall >= 200 mm",
-            "rx5day_ge_400": "5-day rainfall >= 400 mm",
-            "txx_ge_45": "Annual max temperature >= 45 degC",
+            "rx1day_ge_200": "1-day rainfall design pressure",
+            "rx5day_ge_400": "5-day rainfall design pressure",
+            "txx_ge_45": "Extreme heat asset pressure",
         },
         "Asset Risk (Thermal Power Plants)": {
-            "cdd_ge_30": "Consecutive dry days >= 30",
-            "txx_ge_45": "Annual max temperature >= 45 degC",
-            "spi3_low_flow_proxy_norm": "Low-flow drought proxy severity",
+            "cdd_ge_30": "Dry-spell cooling-water pressure",
+            "txx_ge_45": "Extreme heat cooling-efficiency pressure",
+            "spi3_low_flow_proxy_norm": "Low-flow drought proxy pressure",
         },
         "Asset Risk (Hydropower Plants)": {
-            "rx5day_ge_500": "5-day rainfall >= 500 mm",
-            "cdd_ge_60": "Consecutive dry days >= 60",
-            "r95p_interannual_variability_norm": "Very wet precipitation variability severity",
+            "rx5day_ge_500": "5-day rainfall operations pressure",
+            "cdd_ge_60": "Dry-spell flow pressure",
+            "r95p_interannual_variability_norm": "Very wet precipitation variability pressure",
         },
         "Life & Livelihood Loss Risk": {
-            "rx1day_ge_200": "1-day rainfall >= 200 mm",
-            "heavy_rain_2day_event_ge_1": "2-day heavy rainfall events >= 1",
-            "cdd_ge_40": "Consecutive dry days >= 40",
-            "wsdi_ge_5": "Warm spell days >= 5",
+            "rx1day_ge_200": "1-day rainfall exposure pressure",
+            "rx5day_livelihood_pressure": "5-day rainfall exposure pressure",
+            "cdd_ge_40": "Dry-spell livelihood pressure",
+            "wsdi_ge_5": "Warm-spell livelihood pressure",
         },
     }
 

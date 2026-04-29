@@ -1,3 +1,9 @@
+"""Tests for proposal bundle builders.
+
+Author: Abu Bakar Siddiqui Thakur
+Email: absthakur@resilience.org.in
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -101,8 +107,9 @@ def test_compute_proposal_bundle_master_frame_scores_thresholds_and_baseline_cha
 
     score_col = "composite_agricultural_risk__ssp245__2020-2040__mean"
     by_district = dict(zip(out["district"], out[score_col]))
-    assert by_district["A"] == 100.0
-    assert by_district["B"] == 0.0
+    assert by_district["A"] > by_district["B"]
+    assert 0.0 <= by_district["B"] <= 100.0
+    assert 0.0 <= by_district["A"] <= 100.0
 
 
 def test_compute_r95p_interannual_variability_master_frame_uses_cv_and_nan_for_insufficient_points(tmp_path: Path) -> None:
@@ -286,13 +293,13 @@ def test_compute_proposal_bundle_master_frame_merges_block_metrics_by_canonical_
     bundle = PROPOSAL_BUNDLES_BY_SLUG["composite_life_livelihood_loss_risk"]
     rows_by_slug = {
         "pr_max_1day_precip": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
-        "pr_2day_heavy_rainfall_events_ge150mm": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
+        "pr_max_5day_precip": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
         "pr_consecutive_dry_days_lt1mm": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
         "wsdi_warm_spell_days": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
     }
     values_by_slug = {
         "pr_max_1day_precip": 220.0,
-        "pr_2day_heavy_rainfall_events_ge150mm": 2.0,
+        "pr_max_5day_precip": 240.0,
         "pr_consecutive_dry_days_lt1mm": 20.0,
         "wsdi_warm_spell_days": 7.0,
     }
@@ -318,7 +325,7 @@ def test_compute_proposal_bundle_master_frame_merges_block_metrics_by_canonical_
     assert row["block"] == "Adilabad Rural"
     assert row["block_key"] == "telangana|adilabad|adilabad rural"
     assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__available_rule_count"] == 4
-    assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"] == 75.0
+    assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"] == 50.0
 
 
 def test_compute_proposal_bundle_master_frame_normalizes_stale_canonical_block_keys(
@@ -343,13 +350,13 @@ def test_compute_proposal_bundle_master_frame_normalizes_stale_canonical_block_k
     bundle = PROPOSAL_BUNDLES_BY_SLUG["composite_life_livelihood_loss_risk"]
     rows_by_slug = {
         "pr_max_1day_precip": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
-        "pr_2day_heavy_rainfall_events_ge150mm": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
+        "pr_max_5day_precip": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
         "pr_consecutive_dry_days_lt1mm": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
         "wsdi_warm_spell_days": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
     }
     values_by_slug = {
         "pr_max_1day_precip": 220.0,
-        "pr_2day_heavy_rainfall_events_ge150mm": 2.0,
+        "pr_max_5day_precip": 240.0,
         "pr_consecutive_dry_days_lt1mm": 20.0,
         "wsdi_warm_spell_days": 7.0,
     }
@@ -372,7 +379,7 @@ def test_compute_proposal_bundle_master_frame_normalizes_stale_canonical_block_k
     row = out.iloc[0]
     assert row["block_key"] == "telangana|adilabad|adilabad rural"
     assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__available_rule_count"] == 4
-    assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"] == 75.0
+    assert row["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"] == 50.0
 
 
 def test_compute_proposal_bundle_master_frame_fails_on_duplicate_source_block_keys(
@@ -401,7 +408,7 @@ def test_compute_proposal_bundle_master_frame_fails_on_duplicate_source_block_ke
     _write_master(tmp_path, slug="pr_max_1day_precip", state_name=state_name, level="block", df=duplicate_metric)
 
     for slug, value in (
-        ("pr_2day_heavy_rainfall_events_ge150mm", 2.0),
+        ("pr_max_5day_precip", 240.0),
         ("pr_consecutive_dry_days_lt1mm", 20.0),
         ("wsdi_warm_spell_days", 7.0),
     ):
@@ -444,7 +451,7 @@ def test_compute_proposal_bundle_master_frame_preserves_full_canonical_block_uni
     )
     for slug, value in (
         ("pr_max_1day_precip", 220.0),
-        ("pr_2day_heavy_rainfall_events_ge150mm", 2.0),
+        ("pr_max_5day_precip", 240.0),
         ("pr_consecutive_dry_days_lt1mm", 45.0),
         ("wsdi_warm_spell_days", 7.0),
     ):
@@ -465,6 +472,63 @@ def test_compute_proposal_bundle_master_frame_preserves_full_canonical_block_uni
     south = out.loc[out["block_key"] == "telangana|adilabad|south"].iloc[0]
     assert south["composite_life_livelihood_loss_risk__ssp245__2040-2060__available_rule_count"] == 0
     assert pd.isna(south["composite_life_livelihood_loss_risk__ssp245__2040-2060__mean"])
+
+
+def test_score_by_reference_distribution_handles_direction_and_flat_values() -> None:
+    values = pd.Series([10.0, 20.0, 30.0])
+
+    higher = proposal_bundle_module._score_by_reference_distribution(values, direction="higher_worse")
+    lower = proposal_bundle_module._score_by_reference_distribution(values, direction="lower_worse")
+    flat = proposal_bundle_module._score_by_reference_distribution(pd.Series([5.0, 5.0, 5.0]))
+
+    assert higher.iloc[0] < higher.iloc[1] < higher.iloc[2]
+    assert lower.iloc[0] > lower.iloc[1] > lower.iloc[2]
+    assert flat.tolist() == [50.0, 50.0, 50.0]
+
+
+def test_score_impact_threshold_is_continuous() -> None:
+    values = pd.Series([39.0, 40.0, 42.5, 45.0, 46.0])
+
+    score = proposal_bundle_module._score_impact_threshold(
+        values,
+        impact_low=40.0,
+        impact_high=45.0,
+        direction="higher_worse",
+    )
+
+    assert score.tolist() == [0.0, 0.0, 50.0, 100.0, 100.0]
+
+
+def test_change_values_returns_nan_for_zero_relative_baseline() -> None:
+    current = pd.Series([5.0, 20.0])
+    baseline = pd.Series([0.0, 10.0])
+
+    change = proposal_bundle_module._change_values(
+        current,
+        baseline,
+        metric_slug="pr_max_1day_precip",
+        change_mode="relative_pct",
+    )
+
+    assert pd.isna(change.iloc[0])
+    assert change.iloc[1] == 100.0
+
+
+def test_append_score_quality_warnings_flags_flat_score_columns() -> None:
+    warnings: list[proposal_bundle_module.BuildWarning] = []
+
+    proposal_bundle_module._append_score_quality_warnings(
+        pd.Series([50.0, 50.0, 50.0]),
+        warnings=warnings,
+        bundle_slug="composite_test",
+        level="district",
+        state_name="Telangana",
+        column_name="flat_score",
+        label="bundle",
+    )
+
+    assert warnings
+    assert "Flat proposal bundle score" in warnings[0].message
 
 
 def test_parse_args_rejects_bundle_and_metric_together() -> None:
