@@ -144,34 +144,42 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
 def test_wbgt_metrics_registered_under_heat_stress() -> None:
     expected = {
         "wbgt_shade_stull_annual_mean": (
+            "Shaded WBGT (Annual Mean)",
             "wbgt_shade_stull_annual_mean",
             "wbgt_shade_stull_annual_mean_C",
         ),
         "wbgt_shade_stull_days_ge_28": (
+            "Shaded WBGT Days (≥ 28°C)",
             "wbgt_shade_stull_days_ge_threshold",
             "wbgt_shade_stull_days_ge_28_days",
         ),
         "wbgt_shade_stull_days_ge_30": (
+            "Shaded WBGT Days (≥ 30°C)",
             "wbgt_shade_stull_days_ge_threshold",
             "wbgt_shade_stull_days_ge_30_days",
         ),
         "wbgt_shade_stull_days_ge_32": (
+            "Shaded WBGT Days (≥ 32°C)",
             "wbgt_shade_stull_days_ge_threshold",
             "wbgt_shade_stull_days_ge_32_days",
         ),
         "swbgt_empirical_annual_mean": (
+            "Outdoor WBGT (Annual Mean)",
             "swbgt_empirical_annual_mean",
             "swbgt_empirical_annual_mean_C",
         ),
         "swbgt_empirical_days_ge_28": (
+            "Outdoor WBGT Days (≥ 28°C)",
             "swbgt_empirical_days_ge_threshold",
             "swbgt_empirical_days_ge_28_days",
         ),
         "swbgt_empirical_days_ge_30": (
+            "Outdoor WBGT Days (≥ 30°C)",
             "swbgt_empirical_days_ge_threshold",
             "swbgt_empirical_days_ge_30_days",
         ),
         "swbgt_empirical_days_ge_32": (
+            "Outdoor WBGT Days (≥ 32°C)",
             "swbgt_empirical_days_ge_threshold",
             "swbgt_empirical_days_ge_32_days",
         ),
@@ -179,11 +187,12 @@ def test_wbgt_metrics_registered_under_heat_stress() -> None:
 
     heat_stress_metrics = set(get_metrics_for_bundle("Heat Stress", spatial_family="admin", level="district"))
 
-    for slug, (compute, value_col) in expected.items():
+    for slug, (label, compute, value_col) in expected.items():
         assert slug in METRICS_BY_SLUG
         assert slug in heat_stress_metrics
 
         spec = METRICS_BY_SLUG[slug]
+        assert spec.label == label
         assert spec.var == "tas"
         assert list(spec.vars or []) == ["tas", "hurs"]
         assert spec.compute == compute
@@ -192,11 +201,17 @@ def test_wbgt_metrics_registered_under_heat_stress() -> None:
         assert "tas" in spec.description
         assert "hurs" in spec.description
         if slug.startswith("wbgt_shade"):
-            assert "shaded/no-solar" in spec.description
-            assert "not model" in spec.description or "does not model" in spec.description
+            assert "shaded" in spec.description.lower()
+            assert "no-direct-sun" in spec.description.lower()
+            assert "direct solar radiation" in spec.description.lower()
+            assert "radiant heat load" in spec.description.lower()
         else:
-            assert "proxy" in spec.description
+            assert "outdoor heat-stress screening indicator" in spec.description.lower()
+            assert "wbgt-style estimate" in spec.description.lower()
             assert "vapour pressure" in spec.description
+            assert "solar radiation" in spec.description.lower()
+            assert "wind speed" in spec.description.lower()
+            assert "black-globe temperature" in spec.description.lower()
 
 
 def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
