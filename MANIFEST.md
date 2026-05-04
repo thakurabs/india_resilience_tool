@@ -148,6 +148,7 @@ Aqueduct methodology note:
 | `case_study_runtime.py` | Runtime helpers for district-focused case-study export |
 | `color_range_controls.py` | Robust color-range default calculation for maps |
 | `crosswalk_runtime.py` | App-layer crosswalk navigation and overlay-state helpers |
+| `dashboard_bundle_runtime.py` | Runtime helpers for dashboard bundle visibility and composite-source lookup |
 | `details_runtime.py` | Right-panel orchestration and data prep for details views |
 | `geo_cache.py` | Streamlit-cached admin and hydro geometry loading/builders |
 | `geography.py` | Filesystem-backed admin geography discovery helpers |
@@ -178,6 +179,7 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `details_panel.py` | Render the single-unit details panel and crosswalk context/actions |
 | `map_view.py` | Render Folium map and extract level-aware click payloads, including landing state clicks |
+| `hydro_summary_view.py` | Hydro basin summary panel for basin-wide sub-basin selections |
 | `rankings_view.py` | Rankings table rendering and portfolio add flows |
 | `state_summary_view.py` | State summary view for admin-focused overview flows |
 
@@ -202,7 +204,9 @@ Aqueduct methodology note:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
+| `bundle_weights.py` | Declarative landing bundle weights used for all visible Glance bundle score aggregations |
 | `composite_metrics.py` | Declarative visible-Glance bundle -> persisted composite metric mapping and helpers |
+| `dashboard_bundles.py` | Declarative dashboard bundle catalog: ordering, grouped selector labels, canonical bundle names, and composite-slug mapping |
 | `proposal_bundles.py` | Declarative proposal climate-risk bundle specs, exact rule order, and validation helpers for the offline proposal-bundle builder |
 | `constants.py` | UI, styling, scenario, and geometry-render constants |
 | `metrics_registry.py` | Canonical metric, pillar, and domain registry |
@@ -303,7 +307,6 @@ Aqueduct methodology note:
 | `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster |
 | `build_groundwater_district_masters.py` | Build district groundwater assessment master `{csv,parquet}` files from the 2024-2025 GEC workbook plus a canonical district alias QA package |
 | `build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth master `{csv,parquet}` files using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 Flood Severity Index, RP100 flood-extent masters, provenance-aware run summary rows, and stable QA CSVs |
-| `runs/prepare_dashboard.py` | Canonical operator entrypoint that orchestrates bundle prep, optimized runtime refresh, and final readiness verification for climate, Aqueduct, population exposure, groundwater, Telangana JRC flood depth, validation, and dashboard-package workflows |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
@@ -331,6 +334,13 @@ Aqueduct methodology note:
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
 | `compute_indices_multiprocess.py` | Main multi-process compute pipeline for admin and hydro |
 
+### `tools/runs/`
+
+| File | Purpose |
+|------|---------|
+| `__init__.py` | Package marker |
+| `prepare_dashboard.py` | Canonical operator entrypoint that orchestrates bundle prep, optimized runtime refresh, and final readiness verification for climate, Aqueduct, population exposure, groundwater, Telangana JRC flood depth, validation, and dashboard-package workflows |
+
 ## Test inventory
 
 ### Test entrypoint
@@ -345,15 +355,24 @@ python -m pytest -q
 - `test_app_adm2_cache.py`
 - `test_app_dashboard_entry.py`
 - `test_app_details_panel.py`
+- `test_app_geo_cache.py`
+- `test_app_geography_controls.py`
+- `test_app_landing_runtime.py`
+- `test_app_left_panel_runtime.py`
+- `test_app_map_layer_runtime.py`
+- `test_app_map_pipeline.py`
 - `test_app_map_view_extract.py`
 - `test_app_orchestrator_entry.py`
 - `test_app_perf.py`
 - `test_app_point_selection_ui.py`
 - `test_app_portfolio_ui.py`
 - `test_app_rankings_view.py`
+- `test_app_ribbon.py`
+- `test_app_runtime_view.py`
 - `test_app_sidebar_import.py`
 - `test_app_state.py`
 - `test_app_state_summary_view.py`
+- `test_hydro_summary_view.py`
 - `test_legend_html.py`
 - `test_main_app_import.py`
 - `test_map_view_layout.py`
@@ -367,17 +386,24 @@ python -m pytest -q
 - `test_clean_river_network.py`
 - `test_aqueduct_admin_transfer.py`
 - `test_aqueduct_hydro_transfer.py`
+- `test_build_blocks_geojson.py`
 - `test_crosswalk_context.py`
 - `test_crosswalk_generator.py`
 - `test_crosswalk_runtime.py`
+- `test_groundwater_district_masters.py`
 - `test_hydro_contracts.py`
 - `test_import_boundaries.py`
 - `test_imports_smoke.py`
+- `test_jrc_flood_depth_admin_masters.py`
 - `test_master_loader.py`
 - `test_merge.py`
 - `test_metrics_registry.py`
 - `test_naming.py`
+- `test_optimized_bundle.py`
 - `test_paths_resolution.py`
+- `test_population_admin_masters.py`
+- `test_prepare_aqueduct_baseline.py`
+- `test_prepare_dashboard_runner.py`
 - `test_processed_io_parquet_filters.py`
 - `test_prune_legacy_csv.py`
 - `test_river_loader.py`
@@ -386,6 +412,16 @@ python -m pytest -q
 - `test_river_topology.py`
 - `test_timeseries.py`
 - `test_timeseries_models.py`
+- `test_timeseries_optimized.py`
+- `test_validate_aqueduct_workflow.py`
+
+#### Config and bundles
+- `test_bundle_scores.py`
+- `test_bundle_weights.py`
+- `test_composite_metrics.py`
+- `test_dashboard_bundles.py`
+- `test_proposal_bundle_builder.py`
+- `test_proposal_bundle_config.py`
 
 #### Analysis, enrichment, portfolio
 - `test_analysis_metrics.py`
@@ -399,8 +435,14 @@ python -m pytest -q
 
 #### Compute and legacy parity
 - `test_build_master_state_summaries.py`
+- `test_compute_indices_admin_ensembles.py`
+- `test_compute_indices_cold_risk_metrics.py`
+- `test_compute_indices_heat_stress_metrics.py`
+- `test_compute_indices_marker_validation.py`
+- `test_compute_indices_proposal_metrics.py`
 - `test_compute_indices_synthetic.py`
 - `test_compute_indices_synthetic_comprehensive.py`
+- `test_hydro_compute_pipeline.py`
 - `test_legacy_dashboard_map_portfolio_wiring.py`
 - `test_legacy_dashboard_portfolio_panel_call.py`
 - `test_legacy_dashboard_state_profile_files.py`
@@ -409,6 +451,8 @@ python -m pytest -q
 - `test_viz_charts.py`
 - `test_viz_colors.py`
 - `test_viz_exports.py`
+- `test_viz_folium_featurecollection.py`
+- `test_viz_formatting.py`
 - `test_viz_scenario_yaxis_scaling.py`
 - `test_viz_tables.py`
 - `test_viz_trend_spaghetti.py`
@@ -422,13 +466,26 @@ python -m pytest -q
 
 | File | Purpose |
 |------|---------|
+| `BACKLOG.md` | Long-lived deferred work and shelved initiatives |
 | `HANDOFF.md` | Persistent handoff ledger |
+| `aqueduct_field_contract.md` | Canonical Aqueduct source-field mappings for onboarded district, block, and hydro metrics |
+| `aqueduct_onboarding_methodology.md` | Narrative for Aqueduct cleanup, pfaf_id normalization, direct admin transfer, and HydroSHEDS → SOI hydro transfer |
+| `bundle_task_master.md` | Task tracking for bundle-weight methodology migration |
+| `climate_risk_indicator_inventory.md` | Working inventory for aligning dashboard taxonomy with proposed climate risk indicators |
+| `command_catalog.md` | Canonical operator-facing command catalog for dashboard prep workflows |
 | `dead_code_candidate_report.md` | Dead-code analysis notes |
 | `functionality_contract.md` | Product/functionality contract notes |
 | `manual_smoke_test.md` | Manual smoke-test checklist |
 | `module_responsibility_map.md` | Historical module responsibility notes |
+| `proposal_bundle_methodology.md` | Methodology narrative for sector climate hazard pressure proposal bundles |
 | `pytest_baseline_failures.md` | Known/recorded pytest baseline failures |
 | `refactor_acceptance.md` | Refactor acceptance criteria/history |
+
+#### `docs/benchmarks/`
+
+| File | Purpose |
+|------|---------|
+| `bechmark_iith_groundwater_dashboard.md` | Benchmark review comparing IITH groundwater dashboard against IRT |
 
 ### Other notable root assets
 
