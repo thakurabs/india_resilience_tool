@@ -308,10 +308,10 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
     "Flood Inundation Depth (JRC)": (
         BundleWeightEntry(
             bundle_domain="Flood Inundation Depth (JRC)",
-            metric_slug="jrc_flood_depth_index_rp100",
+            metric_slug="jrc_flood_depth_rp100",
             weight=1.0,
-            source_note="Bundles_comp_Score.xlsx / Flood / RP100 depth index pilot",
-            workbook_group="Inundation Severity",
+            source_note="RP-100 depth only; severity index removed from bundle",
+            workbook_group="Inundation Depth",
         ),
     ),
     "Flood & Extreme Rainfall Risk": (

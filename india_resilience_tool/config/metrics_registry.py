@@ -2612,12 +2612,8 @@ DOMAINS: dict[str, list[str]] = {
         "gw_total_extraction_ham",
     ],
     "Flood Inundation Depth (JRC)": [
-        "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
-        "jrc_flood_depth_rp10",
-        "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
-        "jrc_flood_depth_rp500",
     ],
 }
 
@@ -2716,11 +2712,9 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "future groundwater availability."
     ),
     "Flood Inundation Depth (JRC)": (
-        "Telangana-only JRC flood snapshot domain covering the derived RP-100 "
-        "Flood Severity Index, RP-100 Flood Extent, plus RP-10, RP-50, RP-100, "
-        "and RP-500 depth layers. Flood extent uses total polygon area, while "
-        "depth layers use flooded-cell p95 block depth and flooded-area-weighted "
-        "district rollups."
+        "Telangana-only JRC flood snapshot domain covering RP-100 Flood Extent "
+        "and RP-100 Flood Depth. Flood extent uses total polygon area; depth uses "
+        "flooded-cell p95 block depth and flooded-area-weighted district rollups."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "

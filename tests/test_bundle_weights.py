@@ -84,7 +84,7 @@ def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
 def test_jrc_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
     entries = get_bundle_weights("Flood Inundation Depth (JRC)")
 
-    assert [entry.metric_slug for entry in entries] == ["jrc_flood_depth_index_rp100"]
+    assert [entry.metric_slug for entry in entries] == ["jrc_flood_depth_rp100"]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
 

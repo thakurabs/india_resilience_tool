@@ -580,12 +580,8 @@ def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None
         level="block",
     )
     assert district_metrics == [
-        "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
-        "jrc_flood_depth_rp10",
-        "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
-        "jrc_flood_depth_rp500",
     ]
     assert block_metrics == district_metrics
     assert get_metrics_for_bundle(
@@ -593,21 +589,6 @@ def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None
         spatial_family="hydro",
         level="basin",
     ) == []
-    spec = METRICS_BY_SLUG["jrc_flood_depth_index_rp100"]
-    assert spec.supported_admin_states == ("Telangana",)
-    assert spec.fixed_period == "Current"
-    assert spec.supports_yearly_trend is False
-    assert spec.supports_baseline_comparison is False
-    assert spec.supports_scenario_comparison is False
-    assert spec.label == "Flood Severity Index (RP-100)"
-    assert spec.class_display_mode == "label_with_score"
-    assert spec.class_labels == {
-        1: "VeryLow",
-        2: "Low",
-        3: "Moderate",
-        4: "High",
-        5: "Extreme",
-    }
     extent_spec = METRICS_BY_SLUG["jrc_flood_extent_rp100"]
     assert extent_spec.units == "fraction"
     assert extent_spec.display_units == "%"

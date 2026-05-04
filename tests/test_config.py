@@ -139,12 +139,8 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
     from india_resilience_tool.config.variables import VARIABLES
 
     for slug, label in [
-        ("jrc_flood_depth_index_rp100", "Flood Severity Index (RP-100)"),
         ("jrc_flood_extent_rp100", "RP-100 Flood Extent"),
-        ("jrc_flood_depth_rp10", "RP-10 Flood Depth"),
-        ("jrc_flood_depth_rp50", "RP-50 Flood Depth"),
         ("jrc_flood_depth_rp100", "RP-100 Flood Depth"),
-        ("jrc_flood_depth_rp500", "RP-500 Flood Depth"),
     ]:
         cfg = VARIABLES[slug]
         assert cfg["label"] == label
@@ -160,12 +156,7 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
         assert cfg["supports_baseline_comparison"] is False
         assert cfg["supports_scenario_comparison"] is False
         assert cfg["supported_admin_states"] == ["Telangana"]
-        if slug == "jrc_flood_depth_index_rp100":
-            assert cfg["units"] == "severity class (1-5)"
-            assert cfg["display_units"] == ""
-            assert cfg["class_display_mode"] == "label_with_score"
-            assert cfg["class_labels"][1] == "VeryLow"
-        elif slug == "jrc_flood_extent_rp100":
+        if slug == "jrc_flood_extent_rp100":
             assert cfg["units"] == "fraction"
             assert cfg["display_units"] == "%"
             assert cfg["display_scale"] == 100.0
