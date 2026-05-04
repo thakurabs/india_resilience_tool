@@ -87,7 +87,13 @@ python -m tools.geodata.build_groundwater_district_masters --help
 
 ## Validation
 
-For any tools refactor:
-- Run the module with `--help` and verify help text is correct
-- Run one minimal no-op or `--dry-run` path if available
-- Run: `python -m pytest -q`
+Tools are low testing priority. The right check depends on what the script does:
+
+| Change | Requirement |
+|--------|-------------|
+| New script or significant refactor | Run with `--help`; run one minimal `--dry-run` path if available |
+| Destructive operation added | Always add `--dry-run` support before anything else |
+| Shared utility function used by multiple scripts | Run existing tests; add a pytest test if the function implements non-trivial logic |
+| CLI argument or path resolution change | Manual `--help` + `--dry-run` check is sufficient |
+
+Run: `python -m pytest -q` after any change that touches shared utilities.

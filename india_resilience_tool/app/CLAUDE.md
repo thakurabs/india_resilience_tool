@@ -34,10 +34,15 @@ Goal: keep the UI responsive and predictable. Avoid expensive recomputation and 
 
 ---
 
-## Validation
+## When to add tests
 
-For any UI change: provide a **click-path manual test plan** (state → action → expected result).
+The app layer is the lowest testing priority — Streamlit is hard to test well and UI changes frequently.
 
-For any extracted helper: suggest a small pytest test in `tests/` for the helper logic.
+| Change | Requirement |
+|--------|-------------|
+| UI layout, widget, or label change | Manual click-path check only (state → action → expected result); no pytest |
+| Helper logic extracted from UI into a pure function | Add a small pytest test for the extracted function only |
+| Session-state logic change | Manual click-path check; add pytest only if the logic is complex and reusable |
+| Caching or performance change | Manual check that the UI renders correctly without rerun loops |
 
-Run: `python -m pytest -q`
+Run existing tests after any change to confirm nothing regressed: `python -m pytest -q`

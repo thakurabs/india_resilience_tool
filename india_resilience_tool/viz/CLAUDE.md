@@ -40,12 +40,16 @@ Any export change must include a manual validation checklist:
 
 ---
 
-## Validation
+## When to add tests
 
-Run: `python -m pytest -q`
+Visualization is low testing priority — prefer testing the data transforms that feed plots, not the rendering itself.
 
-Key test files after viz changes:
-- `tests/test_viz_charts.py`
-- `tests/test_viz_colors.py`
-- `tests/test_viz_exports.py`
-- `tests/test_viz_tables.py`
+| Change | Requirement |
+|--------|-------------|
+| Color scale or normalization logic | Add a test for the data transform only if the logic is non-trivial |
+| Autoscaling or limit calculation | Manual check across 2-3 metrics with edge cases (all-NaN, single value) |
+| Export change (PDF/image) | Manual checklist: file opens, pages render, labels/legends present |
+| Chart layout or label change | Manual visual check only; no pytest |
+| Formatting helper change | Run existing tests; add a test only if the helper feeds downstream logic |
+
+Run existing tests after any change: `python -m pytest -q`

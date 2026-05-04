@@ -56,8 +56,15 @@ python -m tools.pipeline.build_composite_metrics --help
 
 ---
 
-## Validation
+## When to add tests
+
+Config changes are medium risk — misconfiguration propagates quietly into paths and masters.
+
+| Change | Requirement |
+|--------|-------------|
+| New metric slug or slug rename | Run `tests/test_metrics_registry.py` and `tests/test_config.py`; add a test only if new validation logic is introduced |
+| New bundle or composite metric | Run existing tests; confirm downstream masters rebuild correctly |
+| Constant or threshold change | Run existing tests; no new test unless the constant feeds scientific logic |
+| Import-time side effect introduced | Always fix; add a regression test to confirm clean import |
 
 Run: `python -m pytest -q`
-
-Pay particular attention to `tests/test_metrics_registry.py` and `tests/test_config.py` after any config change.

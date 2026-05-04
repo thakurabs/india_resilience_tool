@@ -66,14 +66,19 @@ Do not bypass this preference without explicit discussion.
 
 ---
 
-## Validation
+## When to add tests
 
-Prefer small synthetic tests in `tests/` for schema helpers and matching edge cases.
+Data contracts are high-risk — broken identifiers or CRS mismatches corrupt merges silently across the whole dashboard.
 
-Key test files to run after data layer changes:
-- `tests/test_master_loader.py`
-- `tests/test_merge.py`
-- `tests/test_naming.py`
-- `tests/test_crosswalk_context.py`
+| Change | Requirement |
+|--------|-------------|
+| Identifier column rename or drop | Always add a regression test asserting the column is present post-load |
+| Master column naming format change | Always add a test; the double-underscore format is load-bearing |
+| CRS handling change | Always add a test confirming output is EPSG:4326 |
+| Spatial matching logic change | Add a test if fallback behavior or no-match behavior changes |
+| Schema helper or loader refactor | Run existing tests; add a test only if new edge-case behavior is introduced |
+| Pure I/O path change | Run existing tests; no new test required |
+
+Key test files: `tests/test_master_loader.py`, `tests/test_merge.py`, `tests/test_naming.py`, `tests/test_crosswalk_context.py`
 
 Run: `python -m pytest -q`

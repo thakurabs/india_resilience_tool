@@ -48,9 +48,17 @@ If a change impacts outputs:
 
 ---
 
-## Validation checklist
+## When to add tests
 
-For any ranking or scoring change:
-- Manual sanity check: pick one known district/block; verify expected monotonicity
-- Pytest test: assert ordering + tie behavior on synthetic inputs
-- Run: `python -m pytest -q`
+This layer handles scientific logic — the highest-risk category. Apply this tier:
+
+| Change | Requirement |
+|--------|-------------|
+| Ranking, scoring, or aggregation logic | Always add a pytest test asserting ordering + tie behavior on synthetic inputs |
+| Baseline or threshold change | Always add a test; include a known-value assertion |
+| NaN handling in a core compute path | Add a test only if the behavior is non-obvious or previously caused a bug |
+| Pure refactor, no logic change | Run existing tests; add nothing |
+
+For ranking changes: also do a quick manual sanity check — one known district/block, verify expected monotonicity.
+
+Run: `python -m pytest -q`

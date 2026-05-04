@@ -44,8 +44,18 @@ Document what is accepted and what is ignored in the entrypoint docstring.
 
 ---
 
-## Validation
+## When to add tests
 
-For any parameter-mapping or calendar/aggregation change:
-- Add or adjust tests in `india_resilience_tool/compute/tests/` or `tests/`
-- Run: `python -m pytest -q`
+Compute is high-risk — scientific bugs here propagate silently into all outputs.
+
+| Change | Requirement |
+|--------|-------------|
+| SPI / climate index logic, gamma fitting, calibration | Always add a test; include a reference validation assertion |
+| Baseline period handling or historical calibration | Always add a test confirming future-scenario values remain comparable |
+| Parameter mapping or kwarg compatibility | Add a test if the mapping is non-trivial or previously caused a pipeline failure |
+| NaN / missing-period handling | Add a test only if the behavior is non-obvious |
+| Pure refactor, no logic change | Run existing tests; add nothing |
+
+Run: `python -m pytest -q`
+
+Key test file: `india_resilience_tool/compute/tests/test_spi_adapter.py`

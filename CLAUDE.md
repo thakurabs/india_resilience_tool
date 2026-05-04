@@ -78,12 +78,19 @@ Test suite lives in `tests/`. Run with:
 python -m pytest -q
 ```
 
-For non-trivial logic changes, always include:
-- A short manual test plan
-- A suggested pytest test (path + assertion)
-- Edge cases: empty inputs, all-NaN, single-point, extremes
+**Scale testing effort to risk level — do not add tests reflexively.**
 
-If tests cannot be run (environment or data missing), state what blocked you and provide a manual validation checklist.
+| Change type | Test requirement |
+|-------------|-----------------|
+| Scientific compute (SPI, indices, ranking, aggregation) | Always add or update a pytest test |
+| Data contract (identifiers, column naming, CRS) | Always add or update a pytest test |
+| Known regression risk (past bugs) | Always add a regression guard |
+| Config change (new slug, bundle weight) | Run existing tests; add a test only if new validation logic is introduced |
+| UI / viz change | Manual check is sufficient; no pytest required |
+| Tools / pipeline script | `--dry-run` check is sufficient; no pytest required |
+| Refactor with no logic change | Run existing tests; add nothing unless coverage was previously absent |
+
+If tests cannot be run (environment or data missing), state what blocked you and provide a focused manual checklist — only for the risk tier that warrants it.
 
 After any accepted/applied code, contract, or workflow change, explicitly check:
 - Does `README.md` need updating?
