@@ -138,6 +138,7 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
     from india_resilience_tool.config.variables import VARIABLES
 
     for slug, label in [
+        ("jrc_flood_depth_index_rp100", "Flood Severity Index (RP-100)"),
         ("jrc_flood_extent_rp100", "RP-100 Flood Extent"),
         ("jrc_flood_depth_rp100", "RP-100 Flood Depth"),
     ]:
@@ -159,6 +160,9 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
             assert cfg["units"] == "fraction"
             assert cfg["display_units"] == "%"
             assert cfg["display_scale"] == 100.0
+        elif slug == "jrc_flood_depth_index_rp100":
+            assert cfg["units"] == "severity class (1-5)"
+            assert cfg.get("class_labels") is not None
         else:
             assert cfg["units"] == "m"
         assert "Flood Inundation Depth (JRC)" in cfg["domains"]
@@ -175,6 +179,11 @@ def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> Non
             "composite_flood_extreme_rainfall_risk",
             "Composite Flood & Extreme Rainfall Risk",
             "Flood & Extreme Rainfall Risk",
+        ),
+        (
+            "composite_flood_jrc_depth",
+            "RP-100 Flood Severity Index",
+            "Flood Inundation Depth (JRC)",
         ),
         ("composite_heat_stress", "Composite Heat Stress", "Heat Stress"),
         ("composite_cold_risk", "Composite Cold Risk", "Cold Risk"),

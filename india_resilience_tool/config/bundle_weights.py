@@ -17,6 +17,7 @@ class BundleWeightEntry:
     source_note: str
     substitution_note: str = ""
     workbook_group: Optional[str] = None
+    is_attribute: bool = False
 
 
 LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
@@ -308,10 +309,26 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
     "Flood Inundation Depth (JRC)": (
         BundleWeightEntry(
             bundle_domain="Flood Inundation Depth (JRC)",
-            metric_slug="jrc_flood_depth_rp100",
+            metric_slug="jrc_flood_depth_index_rp100",
             weight=1.0,
-            source_note="RP-100 depth only; severity index removed from bundle",
+            source_note="RP-100 severity index (depth × extent matrix); depth and extent shown as inline glance attributes",
+            workbook_group="Inundation Severity",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Flood Inundation Depth (JRC)",
+            metric_slug="jrc_flood_depth_rp100",
+            weight=0.0,
+            source_note="",
+            is_attribute=True,
             workbook_group="Inundation Depth",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Flood Inundation Depth (JRC)",
+            metric_slug="jrc_flood_extent_rp100",
+            weight=0.0,
+            source_note="",
+            is_attribute=True,
+            workbook_group="Inundation Extent",
         ),
     ),
     "Flood & Extreme Rainfall Risk": (
@@ -438,6 +455,15 @@ def has_bundle_weights(bundle_domain: str) -> bool:
     return bool(get_bundle_weights(bundle_domain))
 
 
+def get_bundle_attribute_slugs(bundle_domain: str) -> tuple[str, ...]:
+    """Return metric slugs declared as inline glance attributes for a bundle."""
+    return tuple(
+        e.metric_slug
+        for e in LANDING_BUNDLE_WEIGHTS.get(str(bundle_domain).strip(), ())
+        if e.is_attribute
+    )
+
+
 def validate_bundle_weights() -> list[str]:
     """Return validation issues for configured landing bundle weights."""
     from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG, get_metrics_for_bundle
@@ -465,16 +491,23 @@ def validate_bundle_weights() -> list[str]:
             seen.add(entry.metric_slug)
             if entry.metric_slug not in METRICS_BY_SLUG:
                 issues.append(f"Bundle {bundle_domain!r} references unknown metric slug {entry.metric_slug!r}.")
-            elif entry.metric_slug not in available_bundle_metrics:
+            elif not entry.is_attribute and entry.metric_slug not in available_bundle_metrics:
                 issues.append(
                     f"Bundle {bundle_domain!r} references metric slug {entry.metric_slug!r} "
                     "that is not available for admin/district Glance scoring in this bundle."
                 )
-            if float(entry.weight) <= 0.0:
+            if not entry.is_attribute and float(entry.weight) <= 0.0:
                 issues.append(f"Bundle {bundle_domain!r} has non-positive weight for {entry.metric_slug!r}.")
+            if entry.is_attribute and float(entry.weight) != 0.0:
+                issues.append(
+                    f"Bundle {bundle_domain!r} attribute entry {entry.metric_slug!r} must have weight=0.0."
+                )
             total += float(entry.weight)
 
-        if not isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-9):
-            issues.append(f"Bundle {bundle_domain!r} weights sum to {total:.12f}, expected 1.0.")
+        non_attr_weights = sum(float(e.weight) for e in entries if not e.is_attribute)
+        if not isclose(non_attr_weights, 1.0, rel_tol=0.0, abs_tol=1e-9):
+            issues.append(
+                f"Bundle {bundle_domain!r} non-attribute weights sum to {non_attr_weights:.12f}, expected 1.0."
+            )
 
     return issues

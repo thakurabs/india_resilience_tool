@@ -57,6 +57,16 @@ DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
     DashboardBundleSpec(
         group_key="thematic",
         group_label="Thematic",
+        canonical_bundle="Flood Inundation Depth (JRC)",
+        selector_label="Thematic - Flood Inundation Depth (JRC)",
+        composite_slug="composite_flood_jrc_depth",
+        composite_label="RP-100 Flood Severity Index",
+        supported_levels=("district", "block"),
+        show_in_landing=True,
+    ),
+    DashboardBundleSpec(
+        group_key="thematic",
+        group_label="Thematic",
         canonical_bundle="Heat Stress",
         selector_label="Thematic - Heat Stress",
         composite_slug="composite_heat_stress",

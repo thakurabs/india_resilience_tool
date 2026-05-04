@@ -35,7 +35,11 @@ VISIBLE_GLANCE_COMPOSITES: tuple[CompositeMetricSpec, ...] = tuple(
         bundle_domain=spec.canonical_bundle,
         composite_slug=spec.composite_slug,
         composite_label=spec.composite_label,
-        component_metric_slugs=tuple(entry.metric_slug for entry in get_bundle_weights(spec.canonical_bundle)),
+        component_metric_slugs=tuple(
+            entry.metric_slug
+            for entry in get_bundle_weights(spec.canonical_bundle)
+            if not entry.is_attribute
+        ),
         supported_levels=spec.supported_levels,
     )
     for spec in THEMATIC_DASHBOARD_BUNDLES

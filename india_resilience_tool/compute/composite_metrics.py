@@ -34,8 +34,8 @@ ID_COLUMNS_BY_LEVEL = {
     "district": ("state", "district", "district_key"),
     "block": ("state", "district", "block", "block_key"),
 }
-SUPPORTED_SCENARIOS = ("ssp245", "ssp585")
-SUPPORTED_PERIODS = ("2020-2040", "2040-2060", "2060-2080")
+SUPPORTED_SCENARIOS = ("ssp245", "ssp585", "snapshot")
+SUPPORTED_PERIODS = ("2020-2040", "2040-2060", "2060-2080", "Current")
 SUPPORTED_STAT = "mean"
 
 
@@ -152,12 +152,15 @@ def _available_pairs_for_frame(df: pd.DataFrame, *, metric_slug: str) -> set[tup
     available: set[tuple[str, str]] = set()
     for scenario in SUPPORTED_SCENARIOS:
         for period in SUPPORTED_PERIODS:
-            if _resolve_component_metric_column(
+            col = _resolve_component_metric_column(
                 df,
                 metric_slug=metric_slug,
                 scenario=scenario,
                 period=period,
-            ):
+            )
+            # Guard against fuzzy-fallback false positives: verify the resolved
+            # column actually encodes the expected period token.
+            if col and f"__{period.lower()}__" in col.lower():
                 available.add((scenario, period))
     return available
 

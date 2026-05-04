@@ -4,6 +4,7 @@ import math
 
 from india_resilience_tool.config.bundle_weights import (
     LANDING_BUNDLE_WEIGHTS,
+    get_bundle_attribute_slugs,
     get_bundle_weights,
     validate_bundle_weights,
 )
@@ -84,8 +85,18 @@ def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
 def test_jrc_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
     entries = get_bundle_weights("Flood Inundation Depth (JRC)")
 
-    assert [entry.metric_slug for entry in entries] == ["jrc_flood_depth_rp100"]
-    assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    non_attr = [e for e in entries if not e.is_attribute]
+    attr = [e for e in entries if e.is_attribute]
+
+    assert [e.metric_slug for e in non_attr] == ["jrc_flood_depth_index_rp100"]
+    assert [e.metric_slug for e in attr] == ["jrc_flood_depth_rp100", "jrc_flood_extent_rp100"]
+    assert all(e.weight == 0.0 for e in attr)
+    assert math.isclose(sum(e.weight for e in non_attr), 1.0, rel_tol=0.0, abs_tol=1e-9)
+
+    assert get_bundle_attribute_slugs("Flood Inundation Depth (JRC)") == (
+        "jrc_flood_depth_rp100",
+        "jrc_flood_extent_rp100",
+    )
 
 
 def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:

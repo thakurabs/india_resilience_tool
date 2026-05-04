@@ -28,7 +28,7 @@ from india_resilience_tool.app.dashboard_bundle_runtime import (
     dashboard_bundle_scenario_period_options,
     resolve_dashboard_bundle_master_sources,
 )
-from india_resilience_tool.config.bundle_weights import get_bundle_weights
+from india_resilience_tool.config.bundle_weights import get_bundle_attribute_slugs, get_bundle_weights
 from india_resilience_tool.config.dashboard_bundles import (
     dashboard_bundle_names,
     get_dashboard_bundle_spec,
@@ -677,7 +677,7 @@ def _load_metric_district_values_cached(
 
 
 def _landing_metric_slugs(bundle_domain: str) -> list[str]:
-    """Return the ordered metric slugs that define one landing bundle."""
+    """Return the ordered metric slugs that define one landing bundle (excludes attribute entries)."""
     configured_weights = tuple(get_bundle_weights(bundle_domain))
     available_metrics = set(
         get_metrics_for_bundle(bundle_domain, spatial_family="admin", level="district")
@@ -686,6 +686,8 @@ def _landing_metric_slugs(bundle_domain: str) -> list[str]:
         ordered: list[str] = []
         seen: set[str] = set()
         for entry in configured_weights:
+            if entry.is_attribute:
+                continue
             slug = str(entry.metric_slug).strip()
             if slug in seen:
                 raise ValueError(f"Bundle {bundle_domain!r} repeats weighted metric slug {slug!r}.")
@@ -1087,6 +1089,65 @@ def _prepare_bundle_context_cached(
     return _assemble_bundle_context(merged_frame, metric_specs=metric_specs)
 
 
+def _bundle_render_raw_slugs(bundle_domain: str) -> tuple[str, ...]:
+    """Return raw-value slugs needed to render the glance card for one bundle.
+
+    Includes the primary component slug when it is an ordinal class metric
+    (has class_labels), plus all declared attribute slugs.
+    """
+    weights = get_bundle_weights(bundle_domain)
+    render: list[str] = []
+    non_attr = [e for e in weights if not e.is_attribute]
+    if len(non_attr) == 1:
+        slug = non_attr[0].metric_slug
+        if VARIABLES.get(slug, {}).get("class_labels"):
+            render.append(slug)
+    render.extend(e.metric_slug for e in weights if e.is_attribute)
+    return tuple(render)
+
+
+def _load_bundle_render_raw_values(
+    bundle_domain: str,
+    *,
+    data_dir: Path,
+) -> pd.DataFrame:
+    """Load district-level raw values for the bundle's glance card render slugs.
+
+    Always uses scenario='snapshot' and period='Current' since all render
+    slugs are static snapshot metrics. Returns a frame with state_name,
+    district_name, and one column per render slug (NaN when unavailable).
+    """
+    render_slugs = _bundle_render_raw_slugs(bundle_domain)
+    if not render_slugs:
+        return pd.DataFrame()
+
+    merged: Optional[pd.DataFrame] = None
+    for slug in render_slugs:
+        sources = _resolve_metric_master_sources(slug, data_dir=data_dir)
+        if not sources:
+            continue
+        source_sig = master_source_signature(sources)
+        source_paths = tuple(str(p) for p in sources)
+        frame = _load_metric_district_values_cached(
+            slug,
+            "snapshot",
+            "Current",
+            "mean",
+            source_sig,
+            source_paths,
+        )
+        if frame.empty:
+            continue
+        frame = frame.rename(columns={"raw_metric_value": slug})
+        frame = frame[["state_name", "district_name", slug]].copy()
+        if merged is None:
+            merged = frame
+        else:
+            merged = merged.merge(frame, on=["state_name", "district_name"], how="outer")
+
+    return merged if merged is not None else pd.DataFrame()
+
+
 def _prepare_bundle_context(
     bundle_domain: str,
     *,
@@ -1194,6 +1255,15 @@ def _prepare_bundle_context(
         on="state_name",
         how="left",
     )
+
+    render_raw = _load_bundle_render_raw_values(bundle_domain, data_dir=data_dir)
+    if not render_raw.empty:
+        district_scores = district_scores.merge(
+            render_raw,
+            on=["state_name", "district_name"],
+            how="left",
+        )
+
     return district_scores, state_scores
 
 
@@ -2157,10 +2227,28 @@ def _render_district_summary(
             return
 
         row = district_row.iloc[0]
-        st.metric(
-            label=f"{_landing_bundle_display(str(st.session_state.get('landing_bundle') or LANDING_DEFAULT_BUNDLE))} bundle score",
-            value=_format_score(row.get("bundle_score")),
+
+        # Primary card: use raw ordinal class + label when available.
+        non_attr = [e for e in get_bundle_weights(bundle_domain) if not e.is_attribute]
+        primary_slug = non_attr[0].metric_slug if len(non_attr) == 1 else None
+        primary_class_labels: dict = (
+            VARIABLES.get(primary_slug or "", {}).get("class_labels") or {}
         )
+        raw_primary = None if not primary_slug else pd.to_numeric(
+            pd.Series([row.get(primary_slug)]), errors="coerce"
+        ).iloc[0]
+
+        if primary_class_labels and raw_primary is not None and np.isfinite(raw_primary):
+            cls = int(round(raw_primary))
+            class_label = primary_class_labels.get(cls, str(cls))
+            primary_label = str(VARIABLES.get(primary_slug, {}).get("label") or primary_slug)
+            st.metric(label=primary_label, value=f"{cls} — {class_label}")
+        else:
+            st.metric(
+                label=f"{_landing_bundle_display(str(st.session_state.get('landing_bundle') or LANDING_DEFAULT_BUNDLE))} bundle score",
+                value=_format_score(row.get("bundle_score")),
+            )
+
         st.caption(f"Risk band: {_score_band(row.get('bundle_score'))}")
 
         rank_value = row.get("district_rank")
@@ -2177,6 +2265,17 @@ def _render_district_summary(
                     f"Compared with the {state_name} average: {delta:+.1f} points "
                     f"(state average {state_mean:.1f})"
                 )
+
+        # Inline attribute captions (e.g. raw depth and extent for JRC flood).
+        for attr_slug in get_bundle_attribute_slugs(bundle_domain):
+            attr_val = pd.to_numeric(pd.Series([row.get(attr_slug)]), errors="coerce").iloc[0]
+            if np.isfinite(attr_val):
+                spec = VARIABLES.get(attr_slug, {})
+                scale = float(spec.get("display_scale") or 1.0)
+                units = str(spec.get("display_units") or spec.get("units") or "").strip()
+                label = str(spec.get("label") or attr_slug)
+                display = f"{attr_val * scale:.1f} {units}".strip()
+                st.caption(f"{label}: {display}")
 
         st.markdown(f"**{_landing_driver_heading(bundle_domain)}**")
         driver_scope = pd.DataFrame()

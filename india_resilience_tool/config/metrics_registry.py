@@ -2612,6 +2612,7 @@ DOMAINS: dict[str, list[str]] = {
         "gw_total_extraction_ham",
     ],
     "Flood Inundation Depth (JRC)": [
+        "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp100",
     ],
