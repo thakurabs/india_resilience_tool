@@ -146,6 +146,38 @@ Entry fields:
 - `Why deferred`: the current two-step flow is the safest migration path while the compact runtime contract is still being validated, but it adds duplication, rebuild drift risk, and operational complexity if kept forever.
 - `Dependency / trigger`: revisit after `processed_optimised` is validated across climate, Aqueduct, population, groundwater, hydro, time-series, and case-study flows, and once the retained field/artifact contract is considered stable.
 - `Done when`: the team explicitly decides whether to keep a permanent build-vs-runtime split or move to one canonical dashboard-serving processed directory, with a documented migration plan and clear separation for raw/build/QA artifacts.
+- `Audit context (2026-05-04)`: a full data-feed audit was performed across `runtime.py`, `ribbon.py`, `timeseries.py`, `geo_cache.py`, `geography_controls.py`, `details_runtime.py`, and `master_freshness.py`. The following is the current state:
+
+  **Already routed through `processed_optimised` (optimised-first, legacy fallback):**
+  - Master CSVs for all metric types: climate, Aqueduct, population, groundwater, JRC flood depth, and dashboard bundle composites — routed via `resolve_processed_optimised_root` with `prefer_optimized_runtime=True` in `ribbon.py`; falls back to `processed/{slug}/{state}/master_metrics_by_{level}.{csv,parquet}`
+  - Yearly ensemble timeseries for district, block, and hydro — `timeseries.py` checks `is_optimized_metric_root()` first, falls back to legacy CSV discovery
+  - Per-model yearly timeseries (spaghetti charts) — `metrics/{slug}/yearly_models/admin/{level}/state={STATE}.parquet`; falls back to `discover_district_model_yearly_files()` / `discover_block_model_yearly_files()`
+  - State-level yearly trend (trend chart) — aggregated from optimised state parquet; falls back to `state_yearly_ensemble_stats_{level}.csv`
+  - District/block geometry when a state is selected — `geometry/admin/{level}/state={STATE}.geojson`; falls back to nationwide `districts_4326.geojson` / `blocks_4326.geojson`
+  - Basin geometry — `geometry/hydro/basin.geojson`; falls back to `basins.geojson`
+  - Sub-basin geometry when a basin is selected — `geometry/hydro/sub_basin/basin_id={id}.geojson`; falls back to `subbasins.geojson`
+  - River display, reconciliation, diagnostics, reaches — `context/river_*.{geojson,parquet}`; falls back to legacy `IRT_DATA_DIR` flat files
+  - Crosswalk context (details panel) — `context/{district,block}_{subbasin,basin}.parquet`; falls back to legacy crosswalk CSVs
+  - Block dropdown index — `context/admin_block_index.parquet` (no graceful fallback — see BL-0019)
+  - Sub-basin dropdown index — `context/hydro_subbasin_index.parquet`; falls back to loading `subbasins.geojson` directly
+
+  **Not yet routed through `processed_optimised` — gaps:**
+  1. Landing page ADM2 geometry: `runtime.py` always reads the raw nationwide `districts_4326.geojson` on the landing page (`ADM2_GEOJSON = DISTRICTS_PATH`), even when a state-sharded optimised GeoJSON exists. See BL-0019.
+  2. ADM1 (state boundary dissolve): built by dissolving the raw ADM2; follows from gap 1.
+  3. Block selector fallback: if `admin_block_index.parquet` is missing, `geography_controls.py` has no graceful fallback. See BL-0019.
+  4. Legacy master rebuild output: when a climate metric falls back to legacy, `build_master_metrics()` writes the rebuilt master into `processed/{slug}/{state}/` rather than into `processed_optimised/`. The rebuild path still targets the legacy tree.
+
+  **Long-term action (when ready to remove legacy fallback branches):** remove the legacy fallback arms from `_resolve_admin_master_source`, `_resolve_hydro_master_source`, and the timeseries loaders. This makes the dashboard fail fast and clearly when the bundle is incomplete, rather than silently reading stale legacy data. Block this on confirming `processed_optimised` is complete across all metric slugs and levels.
+
+### BL-0019 — Fix two remaining data-feed gaps: landing page geometry and block selector fallback
+- `Area`: app, data-loading, processed_optimised
+- `Why deferred`: both are non-blocking for the current dashboard state (landing page works via raw GeoJSON; block selector works when `admin_block_index.parquet` exists), but they leave the dashboard partially dependent on legacy paths in ways that will matter at deployment time.
+- `Dependency / trigger`: fix before the first deployment where `IRT_DATA_DIR` boundary flat files are not co-deployed alongside `processed_optimised`.
+- `Done when`:
+  1. `runtime.py` landing page: in state-focused landing mode (when `selected_state != "All"`), tries `optimized_geometry_path(level="district", state=selected_state)` before falling back to `DISTRICTS_PATH`. For the India-level overview (`state=All`) the raw nationwide GeoJSON remains correct.
+  2. `geography_controls.py` block selector: if `admin_block_index.parquet` is missing, falls back to loading block names from `blocks_4326.geojson` directly (matching the pattern already used by the sub-basin selector when `hydro_subbasin_index.parquet` is absent).
+- `Files to change`: `india_resilience_tool/app/runtime.py`, `india_resilience_tool/app/geography_controls.py`
+- `Test to add`: extend `tests/test_app_geography_controls.py` to assert that block selector gracefully returns an empty-but-valid index when the optimised context artifact is absent.
 
 ## Icebox
 
