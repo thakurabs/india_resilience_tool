@@ -73,7 +73,6 @@ def test_aqueduct_metrics_are_exposed_to_dashboard_variables() -> None:
         assert cfg["supported_scenarios"] == ["historical", "bau", "opt", "pes"]
         assert cfg["supported_levels"] == ["district", "block", "basin", "sub_basin"]
         assert "Aqueduct Water Risk" in cfg["domains"]
-        assert "Bio-physical Hazards" in cfg["pillars"]
 
 
 def test_population_metrics_are_exposed_as_static_admin_layers() -> None:

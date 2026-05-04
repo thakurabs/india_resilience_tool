@@ -2663,7 +2663,6 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
         "Temperature Variability",
     ],
     "Bio-physical Hazards": [
-        "Aqueduct Water Risk",
         "Groundwater Status & Availability",
         "Flood Inundation Depth (JRC)",
     ],

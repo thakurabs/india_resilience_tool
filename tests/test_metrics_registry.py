@@ -521,11 +521,11 @@ def test_taxonomy_exposes_climate_and_biophysical_pillars() -> None:
     assert get_default_pillar(spatial_family="admin", level="district") == "Climate Hazards"
 
 
-def test_aqueduct_domain_lives_under_biophysical_hazards() -> None:
+def test_aqueduct_domain_is_unassigned_from_pillars() -> None:
     domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="hydro", level="basin")
-    assert domains == ["Aqueduct Water Risk"]
-    assert get_pillar_for_domain("Aqueduct Water Risk") == "Bio-physical Hazards"
-    assert get_pillar_for_domain("Water Risk") == "Bio-physical Hazards"
+    assert domains == []
+    assert get_pillar_for_domain("Aqueduct Water Risk") == ""
+    assert get_pillar_for_domain("Water Risk") == ""
     assert "Aqueduct" in get_domain_description("Aqueduct Water Risk")
 
 
@@ -550,7 +550,6 @@ def test_population_exposure_domain_is_admin_only() -> None:
 def test_groundwater_domain_is_admin_district_only() -> None:
     admin_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="district")
     assert admin_domains == [
-        "Aqueduct Water Risk",
         "Groundwater Status & Availability",
         "Flood Inundation Depth (JRC)",
     ]
@@ -565,7 +564,7 @@ def test_groundwater_domain_is_admin_district_only() -> None:
     }
 
     block_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="block")
-    assert block_domains == ["Aqueduct Water Risk", "Flood Inundation Depth (JRC)"]
+    assert block_domains == ["Flood Inundation Depth (JRC)"]
 
 
 def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None:
