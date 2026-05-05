@@ -29,6 +29,7 @@ The current working tree supports:
 - hydro boundary loading and hydro processed-output discovery
 - Aqueduct direct district/block masters plus SOI hydro masters for water stress, interannual variability, seasonal variability, and water depletion
 - population exposure masters for total population and population density on district/block units
+- `population_exposure_2025_raster` display-only overlay support across admin and hydro map levels, backed by exported PNG/metadata artifacts rather than the raw TIFF
 - groundwater district masters for extraction stage, future availability, extractable resource, and total extraction
 - actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
 - shared reference overlay framework for the hydro river network and the admin RP-100 flood-depth raster
@@ -70,7 +71,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_aqueduct_admin_masters --help` | Build Aqueduct district/block master CSVs on canonical admin units |
 | `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ SOI basin/sub-basin overlap CSVs |
 | `python -m tools.geodata.build_aqueduct_hydro_masters --help` | Build Aqueduct hydro master CSVs on SOI basin/sub-basin units |
-| `python -m tools.geodata.build_population_admin_masters --help` | Build district/block population exposure master CSVs from the 2025 raster |
+| `python -m tools.geodata.build_population_admin_masters --help` | Build district/block population exposure master CSVs plus the display-only population exposure PNG/metadata overlay from the 2025 raster |
 | `python -m tools.geodata.build_groundwater_district_masters --help` | Build district groundwater assessment master CSVs from the 2024-2025 GEC workbook |
 | `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
 | `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
@@ -119,6 +120,12 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 Notes:
 - `__pycache__/` directories are intentionally omitted below.
 - Local logs, zips, and untracked working files are not treated as canonical repo modules.
+
+Reference overlay contracts:
+- `rp100_flood_depth_raster`: display-only RP-100 flood-depth raster overlay backed by `jrc_flood_depth/overlay/rp100_depth_overlay.png` and metadata, with optimized copies under `processed_optimised/context/`.
+- `population_exposure_2025_raster`: display-only India-wide population exposure overlay backed by `population/overlay/population_exposure_2025_overlay.png` and `population/overlay/population_exposure_2025_overlay_meta.json`, with optimized copies under `processed_optimised/context/population/overlay/`.
+- Population overlay display semantics are binned people per source cell from `ind_pop_2025_CN_1km_R2025A_UA_v1.tif`; the canonical ramp is transparent for `<=0`, then `#fff7bc`, `#fee391`, `#fec44f`, `#fe9929`, `#ec7014`, `#cc4c02`, `#993404`, `#7f1d1d`, and `#4c0519` for values above 10000.
+- Dashboard runtime reads exported overlay artifacts only; it does not read source TIFFs.
 
 Aqueduct methodology note:
 - `docs/aqueduct_onboarding_methodology.md` is the canonical narrative for Aqueduct cleanup, HydroSHEDS `pfaf_id` normalization, direct `pfaf_id -> district/block` transfer, and HydroSHEDS → SOI hydro transfer.
@@ -305,7 +312,7 @@ Aqueduct methodology note:
 | `build_aqueduct_admin_masters.py` | Build `processed/{aqueduct_metric_slug}/{state}/master_metrics_by_{district,block}.{csv,parquet}` from direct Aqueduct admin overlaps |
 | `build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs in `EPSG:6933` |
 | `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master `{csv,parquet}` files from Aqueduct overlaps for the onboarded hydro metrics |
-| `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster |
+| `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster plus `population/overlay/population_exposure_2025_overlay.{png,json}` |
 | `build_groundwater_district_masters.py` | Build district groundwater assessment master `{csv,parquet}` files from the 2024-2025 GEC workbook plus a canonical district alias QA package |
 | `build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth master `{csv,parquet}` files using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 Flood Severity Index, RP100 flood-extent masters, RP-100 display overlay PNG/metadata, provenance-aware run summary rows, and stable QA CSVs |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |

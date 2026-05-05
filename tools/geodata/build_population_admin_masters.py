@@ -10,6 +10,7 @@ contract used by the dashboard.
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -17,8 +18,11 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+from affine import Affine
+from PIL import Image
 from rasterio.errors import WindowError
 from rasterio.features import geometry_mask, geometry_window
+from rasterio.warp import Resampling, calculate_default_transform, reproject
 from shapely.geometry import mapping
 
 from paths import get_master_csv_filename, get_paths_config, resolve_processed_root
@@ -34,6 +38,22 @@ POPULATION_TOTAL_COL = "population_total__snapshot__2025__mean"
 POPULATION_DENSITY_COL = "population_density__snapshot__2025__mean"
 AREA_EPSG = 6933
 DEFAULT_RASTER_NAME = "ind_pop_2025_CN_1km_R2025A_UA_v1.tif"
+POPULATION_EXPOSURE_OVERLAY_ID = "population_exposure_2025_raster"
+POPULATION_OVERLAY_SOURCE_NAME = DEFAULT_RASTER_NAME
+POPULATION_OVERLAY_MAX_DIMENSION = 4096
+POPULATION_OVERLAY_DISPLAY_MAX = 10000.0
+POPULATION_COLOR_RAMP: list[dict[str, object]] = [
+    {"min_value_exclusive": None, "max_value_inclusive": 0.0, "color_hex": None, "transparent": True},
+    {"min_value_exclusive": 0.0, "max_value_inclusive": 25.0, "color_hex": "#fff7bc", "transparent": False},
+    {"min_value_exclusive": 25.0, "max_value_inclusive": 100.0, "color_hex": "#fee391", "transparent": False},
+    {"min_value_exclusive": 100.0, "max_value_inclusive": 250.0, "color_hex": "#fec44f", "transparent": False},
+    {"min_value_exclusive": 250.0, "max_value_inclusive": 500.0, "color_hex": "#fe9929", "transparent": False},
+    {"min_value_exclusive": 500.0, "max_value_inclusive": 1000.0, "color_hex": "#ec7014", "transparent": False},
+    {"min_value_exclusive": 1000.0, "max_value_inclusive": 2500.0, "color_hex": "#cc4c02", "transparent": False},
+    {"min_value_exclusive": 2500.0, "max_value_inclusive": 5000.0, "color_hex": "#993404", "transparent": False},
+    {"min_value_exclusive": 5000.0, "max_value_inclusive": 10000.0, "color_hex": "#7f1d1d", "transparent": False},
+    {"min_value_exclusive": 10000.0, "max_value_inclusive": None, "color_hex": "#4c0519", "transparent": False},
+]
 
 
 def _find_default_population_raster() -> Path:
@@ -59,6 +79,17 @@ def _find_default_population_raster() -> Path:
 
 def _default_population_output_dir() -> Path:
     return get_paths_config().data_dir / "population"
+
+
+def _default_overlay_dir() -> Path:
+    return get_paths_config().data_dir / "population" / "overlay"
+
+
+def _population_overlay_paths(overlay_dir: Path) -> tuple[Path, Path]:
+    return (
+        overlay_dir / "population_exposure_2025_overlay.png",
+        overlay_dir / "population_exposure_2025_overlay_meta.json",
+    )
 
 
 def _get_admin_identity_columns(level: AdminLevel) -> list[str]:
@@ -251,6 +282,114 @@ def _write_master_table(df: pd.DataFrame, path: Path, *, overwrite: bool) -> Non
     df.to_parquet(parquet_path, index=False)
 
 
+def _hex_to_rgba(color_hex: str, alpha: int = 255) -> tuple[int, int, int, int]:
+    value = color_hex.lstrip("#")
+    if len(value) != 6:
+        raise ValueError(f"Invalid color hex: {color_hex!r}")
+    return (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16), int(alpha))
+
+
+def _population_rgba(data: np.ndarray) -> np.ndarray:
+    rgba = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.uint8)
+    finite = np.isfinite(data)
+    bins = (
+        (finite & (data > 0.0) & (data <= 25.0), "#fff7bc"),
+        (finite & (data > 25.0) & (data <= 100.0), "#fee391"),
+        (finite & (data > 100.0) & (data <= 250.0), "#fec44f"),
+        (finite & (data > 250.0) & (data <= 500.0), "#fe9929"),
+        (finite & (data > 500.0) & (data <= 1000.0), "#ec7014"),
+        (finite & (data > 1000.0) & (data <= 2500.0), "#cc4c02"),
+        (finite & (data > 2500.0) & (data <= 5000.0), "#993404"),
+        (finite & (data > 5000.0) & (data <= 10000.0), "#7f1d1d"),
+        (finite & (data > 10000.0), "#4c0519"),
+    )
+    for mask, color_hex in bins:
+        rgba[mask] = _hex_to_rgba(color_hex)
+    return rgba
+
+
+def _metadata_bounds_latlon(transform: Affine, width: int, height: int) -> list[list[float]]:
+    west = float(transform.c)
+    north = float(transform.f)
+    east = float(transform.c + transform.a * width)
+    south = float(transform.f + transform.e * height)
+    return [[round(min(south, north), 6), round(min(west, east), 6)], [round(max(south, north), 6), round(max(west, east), 6)]]
+
+
+def _build_population_overlay_artifact(
+    *,
+    raster_path: Path,
+    overlay_dir: Path,
+    overwrite: bool,
+    dry_run: bool,
+) -> dict[str, object]:
+    png_path, meta_path = _population_overlay_paths(overlay_dir)
+    if not dry_run and not overwrite:
+        existing = [str(path) for path in (png_path, meta_path) if path.exists()]
+        if existing:
+            raise FileExistsError(
+                f"Refusing to overwrite existing population overlay artifact without --overwrite: {', '.join(existing)}"
+            )
+
+    with rasterio.open(raster_path) as src:
+        if src.crs is None:
+            raise ValueError(f"Population raster has no CRS: {raster_path}")
+        dst_transform, dst_width, dst_height = calculate_default_transform(
+            src.crs,
+            "EPSG:4326",
+            src.width,
+            src.height,
+            *src.bounds,
+        )
+        max_dim = max(int(dst_width), int(dst_height))
+        if max_dim > POPULATION_OVERLAY_MAX_DIMENSION:
+            scale = max_dim / float(POPULATION_OVERLAY_MAX_DIMENSION)
+            target_width = max(1, int(round(dst_width / scale)))
+            target_height = max(1, int(round(dst_height / scale)))
+            dst_transform = dst_transform * Affine.scale(
+                dst_width / float(target_width),
+                dst_height / float(target_height),
+            )
+            dst_width, dst_height = target_width, target_height
+
+        dst = np.full((int(dst_height), int(dst_width)), np.nan, dtype=np.float32)
+        reproject(
+            source=rasterio.band(src, 1),
+            destination=dst,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            src_nodata=src.nodata,
+            dst_transform=dst_transform,
+            dst_crs="EPSG:4326",
+            dst_nodata=np.nan,
+            resampling=Resampling.nearest,
+        )
+        valid_positive = np.isfinite(dst) & (dst > 0.0)
+        source_positive_max = float(np.nanmax(dst[valid_positive])) if np.any(valid_positive) else 0.0
+        metadata = {
+            "overlay_id": POPULATION_EXPOSURE_OVERLAY_ID,
+            "source_raster_name": POPULATION_OVERLAY_SOURCE_NAME,
+            "source_crs": str(src.crs),
+            "bounds_latlon": _metadata_bounds_latlon(dst_transform, int(dst_width), int(dst_height)),
+            "display_units": "people per source cell",
+            "display_transform": "binned_people_per_source_cell",
+            "display_value_min_people_per_cell": 0.0,
+            "display_value_max_people_per_cell": float(POPULATION_OVERLAY_DISPLAY_MAX),
+            "source_positive_max_people_per_cell": source_positive_max,
+            "clipped_above_display_max": bool(source_positive_max > POPULATION_OVERLAY_DISPLAY_MAX),
+            "width_px": int(dst_width),
+            "height_px": int(dst_height),
+            "color_ramp": [dict(item) for item in POPULATION_COLOR_RAMP],
+        }
+
+        if not dry_run:
+            overlay_dir.mkdir(parents=True, exist_ok=True)
+            Image.fromarray(_population_rgba(dst), mode="RGBA").save(png_path)
+            meta_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    return {"png_path": png_path, "meta_path": meta_path, "metadata": metadata}
+
+
 def _write_state_slices(
     master_df: pd.DataFrame,
     *,
@@ -293,10 +432,12 @@ def build_population_admin_outputs(
     districts_path: Path,
     blocks_path: Path,
     qa_dir: Path,
+    overlay_dir: Optional[Path] = None,
     overwrite: bool,
     dry_run: bool,
 ) -> dict[str, object]:
     """Build the full district + block population outputs."""
+    resolved_overlay_dir = overlay_dir if overlay_dir is not None else _default_overlay_dir()
     district_gdf = load_district_boundaries(districts_path)
     block_gdf = load_block_boundaries(blocks_path)
 
@@ -316,6 +457,12 @@ def build_population_admin_outputs(
         district_master_df,
         block_master_df,
         district_qa_df=district_qa_df,
+    )
+    population_overlay = _build_population_overlay_artifact(
+        raster_path=raster_path,
+        overlay_dir=resolved_overlay_dir,
+        overwrite=overwrite,
+        dry_run=dry_run,
     )
 
     if not dry_run:
@@ -361,6 +508,7 @@ def build_population_admin_outputs(
         "national_summary_df": national_summary_df,
         "district_counts": district_counts,
         "block_counts": block_counts,
+        "population_overlay": population_overlay,
     }
 
 
@@ -372,6 +520,7 @@ def build_cli() -> argparse.ArgumentParser:
     parser.add_argument("--districts", type=str, default=str(get_paths_config().districts_path))
     parser.add_argument("--blocks", type=str, default=str(get_paths_config().blocks_path))
     parser.add_argument("--qa-dir", type=str, default=str(_default_population_output_dir()))
+    parser.add_argument("--overlay-dir", type=str, default=str(_default_overlay_dir()))
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--dry-run", action="store_true", help="Compute summaries without writing files.")
     return parser
@@ -385,6 +534,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     districts_path = Path(args.districts).expanduser().resolve()
     blocks_path = Path(args.blocks).expanduser().resolve()
     qa_dir = Path(args.qa_dir).expanduser().resolve()
+    overlay_dir = Path(args.overlay_dir).expanduser().resolve()
 
     if not raster_path.exists():
         raise FileNotFoundError(f"Population raster not found: {raster_path}")
@@ -398,6 +548,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         districts_path=districts_path,
         blocks_path=blocks_path,
         qa_dir=qa_dir,
+        overlay_dir=overlay_dir,
         overwrite=bool(args.overwrite),
         dry_run=bool(args.dry_run),
     )
@@ -407,6 +558,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     district_counts = outputs["district_counts"]
     block_counts = outputs["block_counts"]
     national_summary_df = outputs["national_summary_df"]
+    population_overlay = outputs["population_overlay"]
 
     print("POPULATION ADMIN MASTERS")
     print(f"raster: {raster_path}")
@@ -431,6 +583,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("dry_run: True")
     else:
         print(f"qa_dir: {qa_dir}")
+        print(f"population_overlay_png: {population_overlay['png_path']}")
+        print(f"population_overlay_meta: {population_overlay['meta_path']}")
     return 0
 
 

@@ -21,6 +21,7 @@ RESPONSIVE_MAP_MIN_HEIGHT = 420
 RESPONSIVE_MAP_MAX_HEIGHT = 700
 
 PANE_BASE_POLYGONS = "irt-base-polygons"
+PANE_POPULATION_RASTER = "irt-population-raster"
 PANE_FLOOD_RASTER = "irt-flood-raster"
 PANE_CROSSWALK_OVERLAY = "irt-crosswalk-overlay"
 PANE_RIVER_OVERLAY = "irt-river-overlay"
@@ -446,6 +447,7 @@ def _ensure_overlay_panes(m: Any) -> None:
         return
     for pane_name, z_index in (
         (PANE_BASE_POLYGONS, 400),
+        (PANE_POPULATION_RASTER, 405),
         (PANE_FLOOD_RASTER, 410),
         (PANE_CROSSWALK_OVERLAY, 420),
         (PANE_RIVER_OVERLAY, 430),
@@ -468,7 +470,7 @@ def add_overlay_render_layers(m: Any, *, overlay_layers: tuple[Any, ...]) -> Any
                 interactive=False,
                 cross_origin=False,
                 opacity=float(layer.opacity),
-                pane=PANE_FLOOD_RASTER,
+                pane=str(getattr(layer, "pane", None) or PANE_FLOOD_RASTER),
             ).add_to(m)
         elif getattr(layer, "kind", "") == "geojson":
             add_river_overlay_layer(

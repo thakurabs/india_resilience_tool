@@ -87,6 +87,8 @@ CONTEXT_FILENAMES = {
     "river_subbasin_diagnostics.parquet": "river_subbasin_diagnostics.csv",
     "jrc_flood_depth/overlay/rp100_depth_overlay.png": "jrc_flood_depth/overlay/rp100_depth_overlay.png",
     "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json": "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json",
+    "population/overlay/population_exposure_2025_overlay.png": "population/overlay/population_exposure_2025_overlay.png",
+    "population/overlay/population_exposure_2025_overlay_meta.json": "population/overlay/population_exposure_2025_overlay_meta.json",
 }
 
 LEVEL_SELECTIONS = {

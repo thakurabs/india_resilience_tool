@@ -218,6 +218,32 @@ def test_optimized_context_copies_rp100_overlay_artifacts(tmp_path: Path) -> Non
     ).read_text(encoding="utf-8") == '{"artifact": true}'
 
 
+def test_optimized_context_copies_population_overlay_artifacts_and_manifest_version(tmp_path: Path) -> None:
+    source_dir = tmp_path / "population" / "overlay"
+    source_dir.mkdir(parents=True)
+    (source_dir / "population_exposure_2025_overlay.png").write_bytes(b"png")
+    (source_dir / "population_exposure_2025_overlay_meta.json").write_text('{"artifact": true}', encoding="utf-8")
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=[],
+        include_geometry=False,
+        include_context=True,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    assert optimized_context_path(
+        "population/overlay/population_exposure_2025_overlay.png",
+        data_dir=tmp_path,
+    ).read_bytes() == b"png"
+    assert optimized_context_path(
+        "population/overlay/population_exposure_2025_overlay_meta.json",
+        data_dir=tmp_path,
+    ).read_text(encoding="utf-8") == '{"artifact": true}'
+    assert _read_manifest(tmp_path / "processed_optimised")["artifact_version"] == 2
+
+
 def test_write_geometry_bundle_normalizes_raw_admin_columns(
     tmp_path: Path,
     monkeypatch,

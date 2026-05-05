@@ -54,6 +54,8 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - Total Population on district and block units
   - Population Density on district and block units
   - fixed snapshot semantics: `snapshot`, `2025`
+  - optional `Reference overlays` sidebar section across admin and hydro views can display a binned `Population exposure (2025)` raster overlay
+  - the dashboard runtime reads only exported population overlay PNG/metadata artifacts, not the raw population TIFF
 - JRC flood-depth onboarding:
   - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
   - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
@@ -198,6 +200,13 @@ JRC RP-100 reference overlay artifacts:
 - the overlay is a visualization reference only; metrics, rankings, legends, and details continue to use the persisted master tables
 - dashboard runtime never reads `RP100_depth.tif`
 
+Population exposure reference overlay artifacts:
+- the population build command also exports `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay.png`
+- metadata is written to `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay_meta.json`
+- optimized runtime copies live under `IRT_DATA_DIR/processed_optimised/context/population/overlay/`
+- the overlay is a display-only binned people-per-source-cell reference; population metrics, rankings, legends, and details continue to use the persisted master tables
+- dashboard runtime never reads `ind_pop_2025_CN_1km_R2025A_UA_v1.tif`
+
 For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.
 
 By default, the builder now parallelizes yearly-model and yearly-ensemble stages using roughly `80%` of available logical CPUs. Use `--workers 1` to force serial execution, or pass an explicit worker count when you want tighter control.
@@ -317,6 +326,8 @@ Place these in `IRT_DATA_DIR`:
 - `aqueduct/aq_water_depletion_district_master_qa.csv` (optional QA for Aqueduct water-depletion district masters)
 - `aqueduct/aq_water_depletion_block_master_qa.csv` (optional QA for Aqueduct water-depletion block masters)
 - `population-*/population/ind_pop_2025_CN_1km_R2025A_UA_v1.tif` (optional source raster for population exposure onboarding)
+- `population/overlay/population_exposure_2025_overlay.png` (optional display-only population exposure overlay)
+- `population/overlay/population_exposure_2025_overlay_meta.json` (optional population overlay metadata)
 - `population/population_district_master_qa.csv` (optional QA for district population masters)
 - `population/population_block_master_qa.csv` (optional QA for block population masters)
 - `population/population_district_vs_blocks_qa.csv` (optional district vs sum(blocks) consistency QA)
@@ -523,6 +534,10 @@ This aggregates the 2025 1 km population raster onto canonical district and bloc
 - `processed/population_total/{state}/master_metrics_by_block.csv`
 - `processed/population_density/{state}/master_metrics_by_district.csv`
 - `processed/population_density/{state}/master_metrics_by_block.csv`
+- `population/overlay/population_exposure_2025_overlay.png`
+- `population/overlay/population_exposure_2025_overlay_meta.json`
+
+The overlay is a display-only India raster reference using binned people-per-source-cell colors. Runtime maps use the exported PNG/metadata pair, including the optimized copies under `processed_optimised/context/population/overlay/`, and never read the raw TIFF.
 
 ### Build groundwater district masters
 

@@ -97,7 +97,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_aqueduct_admin_masters.py` | Build district and block master CSVs for the onboarded Aqueduct metrics under `processed/{metric_slug}/{state}/master_metrics_by_{district,block}.csv` | `python -m tools.geodata.build_aqueduct_admin_masters --help` |
 | `tools/geodata/build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs for area-weighted transfer | `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` |
 | `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for the onboarded Aqueduct hydro metrics under `processed/{metric_slug}/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
-| `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
+| `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) and the display-only population overlay PNG/metadata from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
 | `tools/geodata/build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook with district-alias QA outputs | `python -m tools.geodata.build_groundwater_district_masters --help` |
 | `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth masters using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 flood-index, flood-extent masters, RP-100 display overlay artifacts, and stable QA CSVs | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
 | `tools/optimized/build_processed_optimised.py` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree plus canonical geometry/context files, with exact pre-scan task counting, deterministic parallel yearly processing, level filtering, nested terminal progress bars, and a post-build parity audit | `python -m tools.optimized.build_processed_optimised --help` |
@@ -207,8 +207,11 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
   - `IRT_DATA_DIR/processed/population_total/{state}/master_metrics_by_block.csv`
   - `IRT_DATA_DIR/processed/population_density/{state}/master_metrics_by_district.csv`
   - `IRT_DATA_DIR/processed/population_density/{state}/master_metrics_by_block.csv`
+  - `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay.png`
+  - `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay_meta.json`
 - QA CSVs under `IRT_DATA_DIR/population/`
 - uses raster cell-center inclusion (`all_touched=False`) and canonical polygon area in `EPSG:6933`
+- the overlay is display-only binned people-per-source-cell context; dashboard runtime and optimized bundles read the exported PNG/metadata, never the raw TIFF
 
 `tools/geodata/build_groundwater_district_masters.py` notes:
 - source workbook:

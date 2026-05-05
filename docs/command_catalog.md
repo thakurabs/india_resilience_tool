@@ -90,6 +90,13 @@ python -m tools.runs.prepare_dashboard climate-hazards --audit-only
 python -m tools.runs.prepare_dashboard population-exposure
 ```
 
+Builds district/block population total and density masters and exports the display-only `Population exposure (2025)` reference overlay:
+- `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay.png`
+- `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay_meta.json`
+- optimized copies under `IRT_DATA_DIR/processed_optimised/context/population/overlay/`
+
+The overlay uses binned people-per-source-cell colors and is runtime context only; the dashboard does not read the raw population TIFF.
+
 Optional raster override:
 
 ```bash

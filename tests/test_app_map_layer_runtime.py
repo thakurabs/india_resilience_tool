@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from india_resilience_tool.app.overlays import OverlayRenderLayer, POPULATION_EXPOSURE_OVERLAY_ID
 from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
 from india_resilience_tool.utils.naming import alias
 
@@ -63,6 +64,34 @@ def _common_kwargs(tmp_path: Path) -> dict:
         "overlay_cache_signature": (),
         "hover_enabled": False,
     }
+
+
+def test_image_overlay_pane_passes_through_and_population_z_order(tmp_path: Path) -> None:
+    import folium
+    import india_resilience_tool.app.views.map_view as map_view
+
+    image_path = tmp_path / "population.png"
+    image_path.write_bytes(b"png")
+    layer = OverlayRenderLayer(
+        overlay_id=POPULATION_EXPOSURE_OVERLAY_ID,
+        kind="image",
+        name="Population Exposure 2025 Raster",
+        opacity=0.5,
+        opacity_pct=50,
+        image_path=image_path,
+        bounds_latlon=[[0.0, 0.0], [1.0, 1.0]],
+        pane=map_view.PANE_POPULATION_RASTER,
+    )
+    m = folium.Map(location=[0.0, 0.0], zoom_start=5)
+    map_view.add_overlay_render_layers(m, overlay_layers=(layer,))
+    html = m.get_root().render()
+    assert map_view.PANE_BASE_POLYGONS in html
+    assert map_view.PANE_POPULATION_RASTER in html
+    assert map_view.PANE_FLOOD_RASTER in html
+    assert ".style.zIndex = 400" in html
+    assert ".style.zIndex = 405" in html
+    assert ".style.zIndex = 410" in html
+    assert map_view.PANE_POPULATION_RASTER in html
 
 
 def test_build_folium_map_for_selection_uses_district_scoped_block_shard(

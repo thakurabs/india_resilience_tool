@@ -73,6 +73,8 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "hydro_admin_context_level": "district",
     "overlay_rp100_flood_depth_raster_enabled": False,
     "overlay_rp100_flood_depth_raster_opacity_pct": 65,
+    "overlay_population_exposure_2025_raster_enabled": False,
+    "overlay_population_exposure_2025_raster_opacity_pct": 50,
     "overlay_river_network_enabled": False,
     "overlay_river_network_opacity_pct": 75,
 
