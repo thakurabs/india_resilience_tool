@@ -24,7 +24,7 @@ import pandas as pd
 import rasterio
 from rasterio.errors import WindowError
 from rasterio.features import geometry_mask, geometry_window
-from rasterio.warp import Resampling, calculate_default_transform, reproject
+from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 from shapely.geometry import mapping
 from PIL import Image
 
@@ -268,14 +268,17 @@ def _rgba_for_depth_grid(depth_m: np.ndarray) -> np.ndarray:
     return rgba
 
 
-def _bounds_latlon_from_transform(transform: Affine, *, width: int, height: int) -> list[list[float]]:
+def _bounds_latlon_from_mercator_transform(transform: Affine, *, width: int, height: int) -> list[list[float]]:
     west = float(transform.c)
     north = float(transform.f)
     east = float(transform.c + transform.a * width)
     south = float(transform.f + transform.e * height)
     south, north = sorted((south, north))
     west, east = sorted((west, east))
-    return [[round(south, 6), round(west, 6)], [round(north, 6), round(east, 6)]]
+    wgs84_left, wgs84_bottom, wgs84_right, wgs84_top = transform_bounds(
+        "EPSG:3857", "EPSG:4326", west, south, east, north
+    )
+    return [[round(wgs84_bottom, 6), round(wgs84_left, 6)], [round(wgs84_top, 6), round(wgs84_right, 6)]]
 
 
 def export_rp100_depth_overlay(
@@ -296,9 +299,11 @@ def export_rp100_depth_overlay(
             )
 
     with rasterio.open(raster_path) as src:
+        # Leaflet renders ImageOverlay in Web Mercator screen space, so the PNG
+        # pixels must be Mercator-native even though metadata bounds are WGS84.
         dst_transform, dst_width, dst_height = calculate_default_transform(
             src.crs,
-            "EPSG:4326",
+            "EPSG:3857",
             src.width,
             src.height,
             *src.bounds,
@@ -322,7 +327,7 @@ def export_rp100_depth_overlay(
             src_crs=src.crs,
             src_nodata=src.nodata,
             dst_transform=dst_transform,
-            dst_crs="EPSG:4326",
+            dst_crs="EPSG:3857",
             dst_nodata=np.nan,
             resampling=Resampling.nearest,
         )
@@ -333,7 +338,8 @@ def export_rp100_depth_overlay(
             "overlay_id": RP100_OVERLAY_ID,
             "source_raster_name": RP100_OVERLAY_SOURCE_NAME,
             "source_crs": src.crs.to_string(),
-            "bounds_latlon": _bounds_latlon_from_transform(
+            "image_crs": "EPSG:3857",
+            "bounds_latlon": _bounds_latlon_from_mercator_transform(
                 dst_transform,
                 width=int(dst_width),
                 height=int(dst_height),

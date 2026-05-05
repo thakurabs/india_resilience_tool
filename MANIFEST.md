@@ -530,7 +530,7 @@ python -m pytest -q
 | `river_missing_assignments.csv` | Focused diagnostics for reaches still missing basin/sub-basin assignment |
 | `river_missing_assignments.geojson` | Visual-debug layer for unresolved river reach assignments |
 | `jrc_flood_depth/overlay/rp100_depth_overlay.png` | Canonical RP-100 flood-depth display overlay exported from `RP100_depth.tif` |
-| `jrc_flood_depth/overlay/rp100_depth_overlay_meta.json` | RP-100 overlay metadata with EPSG:4326 bounds, source maximum, and fixed display scale |
+| `jrc_flood_depth/overlay/rp100_depth_overlay_meta.json` | RP-100 overlay metadata with Web Mercator image CRS, EPSG:4326 bounds, source maximum, and fixed display scale |
 
 ### Canonical identifier expectations
 
@@ -636,8 +636,10 @@ Current behavior:
 River and RP-100 flood-depth references share `india_resilience_tool/app/overlays.py`.
 The RP-100 overlay is display-only: the builder exports `rp100_depth_overlay.png`
 and `rp100_depth_overlay_meta.json` from `RP100_depth.tif`; dashboard runtime reads
-only those artifacts. The display scale is fixed at `0.0-10.0 m`; `depth <= 0.0`
-is transparent, `0.0 < depth <= 0.5` is `#d6f0ff`, `0.5 < depth <= 1.0` is
+only those artifacts. The PNG is exported in EPSG:3857 for Leaflet ImageOverlay
+alignment, while metadata stores EPSG:4326 bounds for placement. The display
+scale is fixed at `0.0-10.0 m`; `depth <= 0.0` is transparent,
+`0.0 < depth <= 0.5` is `#d6f0ff`, `0.5 < depth <= 1.0` is
 `#9dd9ff`, `1.0 < depth <= 2.0` is `#5bb7f0`, `2.0 < depth <= 4.0` is
 `#2f7fc1`, `4.0 < depth <= 7.0` is `#1d4f91`, and `depth > 7.0` is `#0f2f5f`.
 

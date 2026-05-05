@@ -22,6 +22,7 @@ from tools.geodata.build_jrc_flood_depth_admin_masters import (
     _classify_extent_index,
     _lookup_severity_index,
     build_jrc_flood_depth_outputs,
+    export_rp100_depth_overlay,
 )
 
 
@@ -292,6 +293,9 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     metadata = json.loads(overlay["meta_path"].read_text(encoding="utf-8"))
     assert metadata["overlay_id"] == "rp100_flood_depth_raster"
     assert metadata["source_raster_name"] == "RP100_depth.tif"
+    assert metadata["source_crs"] == "EPSG:4326"
+    assert metadata["image_crs"] == "EPSG:3857"
+    assert np.allclose(np.asarray(metadata["bounds_latlon"]), np.array([[0.0, 0.0], [4.0, 4.0]]), atol=0.05)
     assert metadata["display_value_min_m"] == 0.0
     assert metadata["display_value_max_m"] == 10.0
     assert metadata["display_units"] == "meters"
@@ -424,6 +428,45 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     assert (qa_dir / "jrc_flood_extent_rp100_district_qa.csv").exists()
     assert (qa_dir / "admin_boundary_join_qa.csv").exists()
     assert (qa_dir / "run_summary.csv").exists()
+
+
+def test_rp100_overlay_export_uses_mercator_png_with_wgs84_bounds(tmp_path: Path) -> None:
+    raster_path = tmp_path / "RP100_depth.tif"
+    data = np.array(
+        [
+            [1.0, 2.0, 0.0, -9999.0],
+            [0.0, 3.0, 4.0, -9999.0],
+            [0.0, 0.0, 5.0, -9999.0],
+            [-9999.0, -9999.0, -9999.0, -9999.0],
+        ],
+        dtype=np.float32,
+    )
+    with rasterio.open(
+        raster_path,
+        "w",
+        driver="GTiff",
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_origin(70.0, 14.0, 1.0, 1.0),
+        nodata=-9999.0,
+    ) as dst:
+        dst.write(data, 1)
+
+    overlay = export_rp100_depth_overlay(
+        raster_path=raster_path,
+        overlay_dir=tmp_path / "overlay",
+        overwrite=True,
+        dry_run=False,
+    )
+
+    metadata = overlay["metadata"]
+    assert overlay["png_path"].exists()
+    assert metadata["source_crs"] == "EPSG:4326"
+    assert metadata["image_crs"] == "EPSG:3857"
+    assert np.allclose(np.asarray(metadata["bounds_latlon"]), np.array([[10.0, 70.0], [14.0, 74.0]]), atol=0.05)
 
 
 def test_jrc_builder_refuses_existing_outputs_without_overwrite(

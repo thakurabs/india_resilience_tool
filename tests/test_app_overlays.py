@@ -21,6 +21,7 @@ from india_resilience_tool.app.overlays import (
     overlay_cache_signature,
     resolve_overlay_control_states,
     validate_population_exposure_overlay_metadata,
+    validate_rp100_overlay_metadata,
 )
 
 
@@ -34,7 +35,8 @@ def _write_valid_pair(root: Path, *, width: int = 2, overlay_id: str = RP100_FLO
             {
                 "overlay_id": overlay_id,
                 "source_raster_name": "RP100_depth.tif",
-                "source_crs": "EPSG:3857",
+                "source_crs": "EPSG:4326",
+                "image_crs": "EPSG:3857",
                 "bounds_latlon": [[10.0, 70.0], [20.0, 80.0]],
                 "display_value_min_m": 0.0,
                 "display_value_max_m": 10.0,
@@ -259,6 +261,30 @@ def test_population_metadata_validator_returns_normalized_schema() -> None:
     assert normalized["color_ramp"] == POPULATION_COLOR_RAMP
 
 
+def test_rp100_metadata_validator_requires_mercator_image_crs() -> None:
+    raw = {
+        "overlay_id": RP100_FLOOD_OVERLAY_ID,
+        "source_raster_name": "RP100_depth.tif",
+        "source_crs": "EPSG:4326",
+        "image_crs": "EPSG:3857",
+        "bounds_latlon": [[10.0, 70.0], [20.0, 80.0]],
+        "display_value_min_m": 0.0,
+        "display_value_max_m": 10.0,
+        "source_positive_max_m": 12.0,
+        "clipped_above_display_max": True,
+        "display_units": "meters",
+        "width_px": 2,
+        "height_px": 2,
+    }
+    normalized = validate_rp100_overlay_metadata(raw)
+    assert normalized["image_crs"] == "EPSG:3857"
+
+    stale = dict(raw)
+    stale.pop("image_crs")
+    with pytest.raises(ValueError, match="image_crs must equal EPSG:3857"):
+        validate_rp100_overlay_metadata(stale)
+
+
 def test_active_population_overlay_zero_opacity_returns_image_layer(tmp_path: Path) -> None:
     png, _ = _write_valid_population_pair(tmp_path / "population" / "overlay")
     states = {
@@ -306,7 +332,8 @@ def test_active_population_overlay_zero_opacity_returns_image_layer(tmp_path: Pa
                 {
                     "overlay_id": RP100_FLOOD_OVERLAY_ID,
                     "source_raster_name": "RP100_depth.tif",
-                    "source_crs": "EPSG:3857",
+                    "source_crs": "EPSG:4326",
+                    "image_crs": "EPSG:3857",
                     "bounds_latlon": [[20.0, 70.0], [10.0, 80.0]],
                     "display_value_min_m": 0.0,
                     "display_value_max_m": 10.0,

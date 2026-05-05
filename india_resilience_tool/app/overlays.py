@@ -208,6 +208,9 @@ def validate_rp100_overlay_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
     source_crs = str(meta.get("source_crs") or "").strip()
     if not source_crs:
         raise ValueError("metadata source_crs is required.")
+    image_crs = str(meta.get("image_crs") or "").strip()
+    if image_crs != "EPSG:3857":
+        raise ValueError("metadata image_crs must equal EPSG:3857. Rebuild the RP-100 overlay artifacts.")
     bounds = _validate_bounds_latlon(meta.get("bounds_latlon"))
 
     display_min = float(meta.get("display_value_min_m"))
@@ -232,6 +235,7 @@ def validate_rp100_overlay_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
         "overlay_id": RP100_FLOOD_OVERLAY_ID,
         "source_raster_name": "RP100_depth.tif",
         "source_crs": source_crs,
+        "image_crs": "EPSG:3857",
         "bounds_latlon": bounds,
         "display_value_min_m": 0.0,
         "display_value_max_m": 10.0,
