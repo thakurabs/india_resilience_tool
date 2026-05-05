@@ -763,6 +763,82 @@ def _lookup_severity_index(extent_class: Optional[int], depth_class: Optional[in
     return int(DERIVED_INDEX_MATRIX[extent_int - 1][depth_int - 1])
 
 
+def _aggregate_block_severity_to_districts(
+    *,
+    block_severity_df: pd.DataFrame,
+    block_flooded_areas: pd.DataFrame,
+    derived_col: str,
+) -> pd.DataFrame:
+    """
+    Aggregate block severity classes to district level using flooded-area weighting.
+
+    Direct classification of district-level depth/extent fractions collapses most
+    districts to severity class 1-2 because district polygons are much larger than
+    blocks and the thresholds were calibrated at block scale. This bottom-up approach
+    preserves genuine hazard signal by weighting each block's severity by its flooded
+    footprint.
+
+    Aggregation rules:
+    - Only blocks with flooded_supported_area_km2 > 0 contribute to the weighted mean.
+    - Districts with valid raster coverage but no flooded child blocks receive 1.0
+      (VeryLow), consistent with the block-level convention for zero-depth polygons.
+    - Districts where all child blocks have NaN severity receive NaN.
+
+    Returns one row per distinct district in block_severity_df with columns:
+    district, derived_col (float in [1, 5]), flooded_block_count,
+    total_flooded_area_km2, min_block_severity, max_block_severity.
+    """
+    merged = block_severity_df[["state", "district", "block_key", derived_col]].merge(
+        block_flooded_areas[["block_key", "flooded_supported_area_km2"]],
+        on="block_key",
+        how="left",
+        validate="one_to_one",
+    )
+    merged[derived_col] = pd.to_numeric(merged[derived_col], errors="coerce")
+    merged["flooded_supported_area_km2"] = (
+        pd.to_numeric(merged["flooded_supported_area_km2"], errors="coerce").fillna(0.0)
+    )
+
+    district_rows: list[dict[str, object]] = []
+    for district_name, group in merged.groupby("district", sort=True):
+        covered = group.dropna(subset=[derived_col])
+        flooded = covered.loc[covered["flooded_supported_area_km2"] > 0.0]
+
+        if covered.empty:
+            severity_value: object = np.nan
+            flooded_block_count = 0
+            total_flooded_area_km2 = 0.0
+            min_sev: object = np.nan
+            max_sev: object = np.nan
+        elif flooded.empty:
+            severity_value = 1.0
+            flooded_block_count = 0
+            total_flooded_area_km2 = 0.0
+            min_sev = np.nan
+            max_sev = np.nan
+        else:
+            weights = flooded["flooded_supported_area_km2"]
+            values = flooded[derived_col]
+            severity_value = float((values * weights).sum() / weights.sum())
+            flooded_block_count = int(len(flooded))
+            total_flooded_area_km2 = float(weights.sum())
+            min_sev = float(values.min())
+            max_sev = float(values.max())
+
+        district_rows.append(
+            {
+                "district": district_name,
+                derived_col: severity_value,
+                "flooded_block_count": flooded_block_count,
+                "total_flooded_area_km2": total_flooded_area_km2,
+                "min_block_severity": min_sev,
+                "max_block_severity": max_sev,
+            }
+        )
+
+    return pd.DataFrame(district_rows)
+
+
 def _build_derived_index_outputs(
     *,
     raw_depth_output: dict[str, pd.DataFrame],
@@ -800,32 +876,27 @@ def _build_derived_index_outputs(
         columns=["raw_rp100_depth_m", "raw_rp100_extent_fraction", "depth_class_index", "extent_class_index"]
     )
 
-    district_master = raw_depth_output["district_master_df"].copy()
-    district_master = district_master.rename(columns={raw_col: "raw_rp100_depth_m"})
-    district_extent = extent_output["district_master_df"].loc[
-        :, ["state", "district", "district_key", extent_col]
-    ].rename(columns={extent_col: "raw_rp100_extent_fraction"})
-    district_master = district_master.merge(
-        district_extent,
-        on=["state", "district", "district_key"],
+    block_flooded_areas = extent_output["block_qa_df"][
+        ["block_key", "flooded_supported_area_km2"]
+    ].copy()
+    district_agg = _aggregate_block_severity_to_districts(
+        block_severity_df=block_master,
+        block_flooded_areas=block_flooded_areas,
+        derived_col=derived_col,
+    )
+    # Normalize district names before joining: block GDF uses title case ("Adilabad"),
+    # district GDF uses uppercase ("ADILABAD"). normalize_compact resolves both to the
+    # same token so the merge succeeds.
+    district_master_base = raw_depth_output["district_master_df"].drop(columns=[raw_col]).copy()
+    district_master_base["_djk"] = district_master_base["district"].map(normalize_compact)
+    district_agg_keyed = district_agg.copy()
+    district_agg_keyed["_djk"] = district_agg_keyed["district"].map(normalize_compact)
+    district_master = district_master_base.merge(
+        district_agg_keyed[["_djk", derived_col]],
+        on="_djk",
         how="left",
         validate="one_to_one",
-    )
-    district_master["depth_class_index"] = district_master["raw_rp100_depth_m"].map(_classify_depth_index)
-    district_master["extent_class_index"] = district_master["raw_rp100_extent_fraction"].map(_classify_extent_index)
-    district_master[derived_col] = pd.to_numeric(
-        district_master.apply(
-            lambda row: _lookup_severity_index(
-                row["extent_class_index"],
-                row["depth_class_index"],
-            ),
-            axis=1,
-        ),
-        errors="coerce",
-    )
-    district_master = district_master.drop(
-        columns=["raw_rp100_depth_m", "raw_rp100_extent_fraction", "depth_class_index", "extent_class_index"]
-    )
+    ).drop(columns=["_djk"])
 
     block_qa = raw_depth_output["block_qa_df"].loc[
         :,
@@ -858,32 +929,26 @@ def _build_derived_index_outputs(
 
     district_qa = raw_depth_output["district_qa_df"].loc[
         :,
-        ["state", "district", "district_key", "chosen_value_m", "district_valid_support_fraction"],
+        ["state", "district", "district_key", "district_valid_support_fraction"],
     ].copy()
-    district_qa = district_qa.rename(columns={"chosen_value_m": "raw_rp100_depth_m"})
+    district_qa["_djk"] = district_qa["district"].map(normalize_compact)
     district_qa = district_qa.merge(
-        district_extent,
-        on=["state", "district", "district_key"],
+        district_agg_keyed[[
+            "_djk",
+            derived_col,
+            "flooded_block_count",
+            "total_flooded_area_km2",
+            "min_block_severity",
+            "max_block_severity",
+        ]],
+        on="_djk",
         how="left",
         validate="one_to_one",
+    ).drop(columns=["_djk"])
+    district_qa = district_qa.rename(columns={derived_col: "district_severity_index"})
+    district_qa["class_label"] = district_qa["district_severity_index"].map(
+        lambda v: _class_label(round(v)) if pd.notna(v) else ""
     )
-    district_qa["depth_class_index"] = district_qa["raw_rp100_depth_m"].map(_classify_depth_index)
-    district_qa["depth_class_label"] = district_qa["depth_class_index"].map(_class_label)
-    district_qa["extent_class_index"] = district_qa["raw_rp100_extent_fraction"].map(_classify_extent_index)
-    district_qa["extent_class_label"] = district_qa["extent_class_index"].map(_class_label)
-    district_qa["depth_class_index"] = pd.to_numeric(district_qa["depth_class_index"], errors="coerce")
-    district_qa["extent_class_index"] = pd.to_numeric(district_qa["extent_class_index"], errors="coerce")
-    district_qa["class_index"] = pd.to_numeric(
-        district_qa.apply(
-            lambda row: _lookup_severity_index(
-                row["extent_class_index"],
-                row["depth_class_index"],
-            ),
-            axis=1,
-        ),
-        errors="coerce",
-    )
-    district_qa["class_label"] = district_qa["class_index"].map(_class_label)
 
     return {
         "block_master_df": block_master,
@@ -1201,7 +1266,7 @@ def build_jrc_flood_depth_outputs(
                 "district_area_denominator": "district_polygon_area_epsg6933_v2",
                 "percentile_method": "q95_linear__positive_depth_only_v2",
                 "severity_method": (
-                    "rp100_depth_extent_matrix_v1"
+                    "rp100_block_severity_flooded_area_weighted_v1"
                     if metric_slug == DERIVED_INDEX_METRIC_SLUG
                     else ""
                 ),

@@ -284,7 +284,7 @@ def apply_fillcolor_classed(
     metric_col: str,
     *,
     value_to_color: Mapping[int, str],
-    tolerance: float = 1e-6,
+    tolerance: float = 0.5,
 ) -> pd.DataFrame:
     """
     Add class-driven fill colors for ordinal metrics with fixed integer classes.
@@ -293,6 +293,8 @@ def apply_fillcolor_classed(
       - merged_df is modified in-place and returned
       - NaN/inf or non-class values -> '#cccccc'
       - also writes '_metric_val' with numeric-coerced values
+      - tolerance=0.5 rounds any float to nearest class (handles bottom-up
+        district aggregates which are continuous in [1, 5])
     """
     vals = pd.to_numeric(
         merged_df.get(metric_col, pd.Series(index=merged_df.index, dtype=float)),
