@@ -22,7 +22,7 @@ from affine import Affine
 from PIL import Image
 from rasterio.errors import WindowError
 from rasterio.features import geometry_mask, geometry_window
-from rasterio.warp import Resampling, calculate_default_transform, reproject
+from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 from shapely.geometry import mapping
 
 from paths import get_master_csv_filename, get_paths_config, resolve_processed_root
@@ -334,9 +334,10 @@ def _build_population_overlay_artifact(
     with rasterio.open(raster_path) as src:
         if src.crs is None:
             raise ValueError(f"Population raster has no CRS: {raster_path}")
+        # Reproject to Web Mercator so Leaflet's ImageOverlay pixel-stretch matches Mercator screen space.
         dst_transform, dst_width, dst_height = calculate_default_transform(
             src.crs,
-            "EPSG:4326",
+            "EPSG:3857",
             src.width,
             src.height,
             *src.bounds,
@@ -360,17 +361,28 @@ def _build_population_overlay_artifact(
             src_crs=src.crs,
             src_nodata=src.nodata,
             dst_transform=dst_transform,
-            dst_crs="EPSG:4326",
+            dst_crs="EPSG:3857",
             dst_nodata=np.nan,
             resampling=Resampling.nearest,
         )
+        merc_west = float(dst_transform.c)
+        merc_east = float(dst_transform.c + dst_transform.a * int(dst_width))
+        merc_north = float(dst_transform.f)
+        merc_south = float(dst_transform.f + dst_transform.e * int(dst_height))
+        wgs84_left, wgs84_bottom, wgs84_right, wgs84_top = transform_bounds(
+            "EPSG:3857", "EPSG:4326", merc_west, merc_south, merc_east, merc_north
+        )
+        bounds_latlon = [
+            [round(wgs84_bottom, 6), round(wgs84_left, 6)],
+            [round(wgs84_top, 6), round(wgs84_right, 6)],
+        ]
         valid_positive = np.isfinite(dst) & (dst > 0.0)
         source_positive_max = float(np.nanmax(dst[valid_positive])) if np.any(valid_positive) else 0.0
         metadata = {
             "overlay_id": POPULATION_EXPOSURE_OVERLAY_ID,
             "source_raster_name": POPULATION_OVERLAY_SOURCE_NAME,
             "source_crs": str(src.crs),
-            "bounds_latlon": _metadata_bounds_latlon(dst_transform, int(dst_width), int(dst_height)),
+            "bounds_latlon": bounds_latlon,
             "display_units": "people per source cell",
             "display_transform": "binned_people_per_source_cell",
             "display_value_min_people_per_cell": 0.0,
