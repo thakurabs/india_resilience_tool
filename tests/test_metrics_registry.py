@@ -579,13 +579,14 @@ def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None
         level="block",
     )
     assert district_metrics == [
+        "composite_flood_jrc_depth",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp100",
     ]
     assert block_metrics == district_metrics
-    # Severity index is first so deep-dive defaults to it.
-    assert district_metrics[0] == "jrc_flood_depth_index_rp100"
+    # Composite is first so Deep Dive opens the same choropleth as Glance.
+    assert district_metrics[0] == "composite_flood_jrc_depth"
     assert get_metrics_for_bundle(
         "Riverine Flood",
         spatial_family="hydro",

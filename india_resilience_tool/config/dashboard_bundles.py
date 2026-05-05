@@ -21,6 +21,7 @@ class DashboardBundleSpec:
     composite_label: str
     supported_levels: tuple[str, ...]
     show_in_landing: bool
+    supported_scenarios: tuple[str, ...] = ("ssp245", "ssp585")
 
 
 DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
@@ -60,9 +61,10 @@ DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
         canonical_bundle="Riverine Flood",
         selector_label="Thematic - Riverine Flood",
         composite_slug="composite_flood_jrc_depth",
-        composite_label="RP-100 Flood Severity Index",
+        composite_label="Composite Riverine Flood Risk",
         supported_levels=("district", "block"),
         show_in_landing=True,
+        supported_scenarios=("snapshot",),
     ),
     DashboardBundleSpec(
         group_key="thematic",

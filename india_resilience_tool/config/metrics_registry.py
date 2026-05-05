@@ -2388,7 +2388,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
             ),
             "source_type": "derived",
             "supports_yearly_trend": False,
-            "selection_mode": "scenario_period",
+            "selection_mode": (
+                "static_snapshot"
+                if spec.supported_scenarios == ("snapshot",)
+                else "scenario_period"
+            ),
+            "fixed_scenario": "snapshot" if spec.supported_scenarios == ("snapshot",) else None,
+            "fixed_period": "Current" if spec.supported_scenarios == ("snapshot",) else None,
             "supported_statistics": ("mean",),
             "supports_baseline_comparison": False,
             "supports_scenario_comparison": False,
@@ -2398,8 +2404,12 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
                 else "python -m tools.pipeline.build_proposal_bundles"
             ),
             "hydro_rebuild_command": None,
-            "supported_scenarios": ("ssp245", "ssp585"),
-            "preferred_period_order": ("2020-2040", "2040-2060", "2060-2080"),
+            "supported_scenarios": spec.supported_scenarios,
+            "preferred_period_order": (
+                ("Current",)
+                if spec.supported_scenarios == ("snapshot",)
+                else ("2020-2040", "2040-2060", "2060-2080")
+            ),
             "supported_spatial_families": ("admin",),
             "supported_levels": spec.supported_levels,
             "supported_admin_states": (),
@@ -2612,6 +2622,7 @@ DOMAINS: dict[str, list[str]] = {
         "gw_total_extraction_ham",
     ],
     "Riverine Flood": [
+        "composite_flood_jrc_depth",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp100",

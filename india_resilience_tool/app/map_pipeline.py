@@ -52,6 +52,7 @@ from india_resilience_tool.viz.colors import (
 )
 from india_resilience_tool.viz.tables import build_rankings_table_df as _build_rankings_table_df
 from india_resilience_tool.viz.charts import period_display_label
+from india_resilience_tool.config.dashboard_bundles import is_dashboard_bundle_slug
 
 
 FLOOD_SEVERITY_METRIC_SLUG = "jrc_flood_depth_index_rp100"
@@ -539,9 +540,14 @@ def build_map_and_rankings(
         metric_slug=variable_slug,
         units=str(varcfg.get("unit") or varcfg.get("units") or "").strip(),
     )
+    use_composite_bundle_scale = is_dashboard_bundle_slug(variable_slug) and not use_fixed_class_scale
+
     if use_fixed_class_scale:
         color_slider_placeholder.empty()
         vmin, vmax = 1.0, 5.0
+    elif use_composite_bundle_scale:
+        color_slider_placeholder.empty()
+        vmin, vmax = 0.0, 100.0
     else:
         slider_min = float(data_min * display_scale)
         slider_max = float(data_max * display_scale)
@@ -563,12 +569,18 @@ def build_map_and_rankings(
 
         vmin, vmax = float(vmin_vmax[0] / display_scale), float(vmin_vmax[1] / display_scale)
 
-    # Choose colormap: sequential for absolute, diverging for change
+    # Choose colormap: diverging for baseline-change; YlOrRd for composite bundle
+    # scores (matches Glance 0-100 palette); Reds for all other metrics.
     if supports_baseline_comparison and map_mode == "Change from 1990-2010 baseline":
         cmap_name = "RdBu_r"  # blue-negative, red-positive
         pretty_metric_label = (
             f"Δ {str(varcfg.get('label') or variable_slug)} vs 1990–2010 · "
             f"{sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
+        )
+    elif use_composite_bundle_scale:
+        cmap_name = "YlOrRd"
+        pretty_metric_label = (
+            f"{str(varcfg.get('label') or variable_slug)} · {sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
         )
     else:
         cmap_name = "Reds"

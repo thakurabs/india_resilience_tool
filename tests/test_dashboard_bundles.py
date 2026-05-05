@@ -58,6 +58,16 @@ def test_dashboard_bundle_catalog_is_exact() -> None:
         (
             "thematic",
             "Thematic",
+            "Riverine Flood",
+            "Thematic - Riverine Flood",
+            "composite_flood_jrc_depth",
+            "Composite Riverine Flood Risk",
+            ("district", "block"),
+            True,
+        ),
+        (
+            "thematic",
+            "Thematic",
             "Heat Stress",
             "Thematic - Heat Stress",
             "composite_heat_stress",

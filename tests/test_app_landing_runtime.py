@@ -909,6 +909,29 @@ def test_enter_deep_dive_uses_persisted_composite_metric_for_visible_bundle(monk
     assert session_state["registry_metric"] == "composite_heat_stress"
 
 
+def test_enter_deep_dive_uses_persisted_composite_for_riverine_flood(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Riverine Flood",
+        "landing_scenario": "snapshot",
+        "landing_period": "Current",
+        "landing_focus_level": "district",
+        "landing_selected_state": "Telangana",
+        "landing_selected_district": "Khammam",
+    }
+
+    monkeypatch.setattr(landing_runtime.st, "rerun", lambda: (_ for _ in ()).throw(_DummyRerun()))
+
+    with pytest.raises(_DummyRerun):
+        landing_runtime._enter_deep_dive(session_state)
+
+    assert session_state["selected_bundle"] == "Riverine Flood"
+    assert session_state["selected_var"] == "composite_flood_jrc_depth"
+    assert session_state["registry_metric"] == "composite_flood_jrc_depth"
+    assert session_state["sel_scenario"] == "snapshot"
+    assert session_state["sel_period"] == "Current"
+    assert session_state["selected_pillar"] == "Bio-physical Hazards"
+
+
 def test_enter_deep_dive_uses_sector_wise_composite_metric(monkeypatch: pytest.MonkeyPatch) -> None:
     session_state: dict[str, object] = {
         "landing_bundle": "Health Risk",
