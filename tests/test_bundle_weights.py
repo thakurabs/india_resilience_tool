@@ -83,7 +83,7 @@ def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
 
 
 def test_jrc_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Flood Inundation Depth (JRC)")
+    entries = get_bundle_weights("Riverine Flood")
 
     non_attr = [e for e in entries if not e.is_attribute]
     attr = [e for e in entries if e.is_attribute]
@@ -93,14 +93,14 @@ def test_jrc_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
     assert all(e.weight == 0.0 for e in attr)
     assert math.isclose(sum(e.weight for e in non_attr), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
-    assert get_bundle_attribute_slugs("Flood Inundation Depth (JRC)") == (
+    assert get_bundle_attribute_slugs("Riverine Flood") == (
         "jrc_flood_depth_rp100",
         "jrc_flood_extent_rp100",
     )
 
 
 def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Flood & Extreme Rainfall Risk")
+    entries = get_bundle_weights("Extreme Rainfall | Flash Flood Risk")
 
     assert [entry.metric_slug for entry in entries] == [
         "pr_max_1day_precip",
@@ -140,7 +140,7 @@ def test_all_visible_glance_bundles_have_custom_weights_in_this_pass() -> None:
         "Heat Stress",
         "Cold Risk",
         "Drought Risk",
-        "Flood Inundation Depth (JRC)",
-        "Flood & Extreme Rainfall Risk",
+        "Riverine Flood",
+        "Extreme Rainfall | Flash Flood Risk",
         "Agriculture & Growing Conditions",
     }

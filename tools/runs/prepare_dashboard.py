@@ -62,7 +62,7 @@ CLIMATE_PILLAR = "Climate Hazards"
 AQUEDUCT_DOMAIN = "Aqueduct Water Risk"
 POPULATION_DOMAIN = "Population Exposure"
 GROUNDWATER_DOMAIN = "Groundwater Status & Availability"
-JRC_DOMAIN = "Flood Inundation Depth (JRC)"
+JRC_DOMAIN = "Riverine Flood"
 LEVEL_GROUPS = {
     "all": ["district", "block", "basin", "sub_basin"],
     "admin": ["district", "block"],

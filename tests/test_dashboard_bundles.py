@@ -48,10 +48,10 @@ def test_dashboard_bundle_catalog_is_exact() -> None:
         (
             "thematic",
             "Thematic",
-            "Flood & Extreme Rainfall Risk",
-            "Thematic - Flood & Extreme Rainfall Risk",
+            "Extreme Rainfall | Flash Flood Risk",
+            "Thematic - Extreme Rainfall | Flash Flood Risk",
             "composite_flood_extreme_rainfall_risk",
-            "Composite Flood & Extreme Rainfall Risk",
+            "Composite Flash Flood Risk",
             ("district", "block"),
             True,
         ),
@@ -170,7 +170,7 @@ def test_dashboard_bundle_catalog_is_exact() -> None:
 
 def test_dashboard_bundle_helpers_are_exact() -> None:
     assert validate_dashboard_bundle_specs() == []
-    assert grouped_bundle_label("Flood & Extreme Rainfall Risk") == "Thematic - Flood & Extreme Rainfall Risk"
+    assert grouped_bundle_label("Extreme Rainfall | Flash Flood Risk") == "Thematic - Extreme Rainfall | Flash Flood Risk"
     assert composite_slug_for_bundle("Health Risk") == "composite_health_risk"
 
 

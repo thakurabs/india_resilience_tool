@@ -306,16 +306,16 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             workbook_group="Long-term Drought",
         ),
     ),
-    "Flood Inundation Depth (JRC)": (
+    "Riverine Flood": (
         BundleWeightEntry(
-            bundle_domain="Flood Inundation Depth (JRC)",
+            bundle_domain="Riverine Flood",
             metric_slug="jrc_flood_depth_index_rp100",
             weight=1.0,
             source_note="RP-100 severity index (depth × extent matrix); depth and extent shown as inline glance attributes",
             workbook_group="Inundation Severity",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood Inundation Depth (JRC)",
+            bundle_domain="Riverine Flood",
             metric_slug="jrc_flood_depth_rp100",
             weight=0.0,
             source_note="",
@@ -323,7 +323,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             workbook_group="Inundation Depth",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood Inundation Depth (JRC)",
+            bundle_domain="Riverine Flood",
             metric_slug="jrc_flood_extent_rp100",
             weight=0.0,
             source_note="",
@@ -331,9 +331,9 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             workbook_group="Inundation Extent",
         ),
     ),
-    "Flood & Extreme Rainfall Risk": (
+    "Extreme Rainfall | Flash Flood Risk": (
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="pr_max_1day_precip",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
@@ -341,35 +341,35 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             workbook_group="Peak Intensity",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="pr_max_5day_precip",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Peak Intensity",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="r20mm_very_heavy_precip_days",
             weight=0.25,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Heavy Rain Frequency",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="r95p_very_wet_precip",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Very Wet Contribution",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="r95ptot_contribution_pct",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Very Wet Contribution",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="cwd_consecutive_wet_days",
             weight=0.25,
             source_note="Approved flood bundle / current available metrics pass",

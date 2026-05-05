@@ -219,7 +219,7 @@ def test_landing_bundle_domains_exclude_jrc_flood_bundle(monkeypatch: pytest.Mon
         lambda *, level, data_dir, landing_only: [
             "Heat Risk",
             "Drought Risk",
-            "Flood & Extreme Rainfall Risk",
+            "Extreme Rainfall | Flash Flood Risk",
             "Heat Stress",
             "Cold Risk",
             "Agriculture & Growing Conditions",
@@ -236,7 +236,7 @@ def test_landing_bundle_domains_exclude_jrc_flood_bundle(monkeypatch: pytest.Mon
     assert _landing_bundle_domains(data_dir=Path("/tmp")) == [
         "Heat Risk",
         "Drought Risk",
-        "Flood & Extreme Rainfall Risk",
+        "Extreme Rainfall | Flash Flood Risk",
         "Heat Stress",
         "Cold Risk",
         "Agriculture & Growing Conditions",
@@ -252,8 +252,8 @@ def test_landing_bundle_domains_exclude_jrc_flood_bundle(monkeypatch: pytest.Mon
 
 
 def test_landing_bundle_display_uses_exact_grouped_label() -> None:
-    assert landing_runtime._landing_bundle_display("Flood & Extreme Rainfall Risk") == (
-        "Thematic - Flood & Extreme Rainfall Risk"
+    assert landing_runtime._landing_bundle_display("Extreme Rainfall | Flash Flood Risk") == (
+        "Thematic - Extreme Rainfall | Flash Flood Risk"
     )
     assert landing_runtime._landing_bundle_display("Health Risk") == "Sector-wise - Health Risk"
 
@@ -319,7 +319,7 @@ def test_bundle_metric_specs_use_custom_drought_risk_weights() -> None:
     assert by_slug["spi12_count_events_lt_minus1"].weight == 0.50
 
 def test_bundle_metric_specs_use_custom_jrc_flood_weights_only() -> None:
-    specs = _bundle_metric_specs("Flood Inundation Depth (JRC)")
+    specs = _bundle_metric_specs("Riverine Flood")
 
     assert [spec.slug for spec in specs] == ["jrc_flood_depth_index_rp100"]
     assert specs[0].weight == 1.0
@@ -360,7 +360,7 @@ def test_build_landing_map_artifacts_keeps_bundle_score_legend_for_jrc_bundle(
         adm2=_adm2_gdf(),
         state_scores=state_scores,
         district_scores=district_scores,
-        bundle_domain="Flood Inundation Depth (JRC)",
+        bundle_domain="Riverine Flood",
         scenario="snapshot",
         period="Current",
         focus_level="india",
@@ -372,7 +372,7 @@ def test_build_landing_map_artifacts_keeps_bundle_score_legend_for_jrc_bundle(
     assert "Bundle score" in legend_html
 
 def test_bundle_metric_specs_use_custom_flood_weights() -> None:
-    specs = _bundle_metric_specs("Flood & Extreme Rainfall Risk")
+    specs = _bundle_metric_specs("Extreme Rainfall | Flash Flood Risk")
     by_slug = {spec.slug: spec for spec in specs}
 
     assert len(specs) == 6
@@ -1682,7 +1682,7 @@ def test_prepare_bundle_context_cached_uses_available_pairs_not_source_paths(
     monkeypatch.setattr(landing_runtime, "_load_metric_district_values_cached", fake_loader)
 
     district_scores, state_scores, metric_specs = landing_runtime._prepare_bundle_context_cached(
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
         "snapshot",
         "Current",
         "mean",

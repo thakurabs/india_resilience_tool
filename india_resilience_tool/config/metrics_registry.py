@@ -2516,7 +2516,7 @@ DOMAINS: dict[str, list[str]] = {
         "spi3_drought_index",
         "prcptot_annual_total",
     ],
-    "Flood & Extreme Rainfall Risk": [
+    "Extreme Rainfall | Flash Flood Risk": [
         "composite_flood_extreme_rainfall_risk",
         # Peak intensity
         "pr_max_1day_precip",
@@ -2611,7 +2611,7 @@ DOMAINS: dict[str, list[str]] = {
         "gw_extractable_resource_ham",
         "gw_total_extraction_ham",
     ],
-    "Flood Inundation Depth (JRC)": [
+    "Riverine Flood": [
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp100",
@@ -2622,7 +2622,7 @@ DOMAINS: dict[str, list[str]] = {
 DOMAIN_ORDER: list[str] = [
     "Heat Risk",
     "Drought Risk",
-    "Flood & Extreme Rainfall Risk",
+    "Extreme Rainfall | Flash Flood Risk",
     "Heat Stress",
     "Cold Risk",
     "Agriculture & Growing Conditions",
@@ -2640,14 +2640,14 @@ DOMAIN_ORDER: list[str] = [
     "Population Exposure",
     "Aqueduct Water Risk",
     "Groundwater Status & Availability",
-    "Flood Inundation Depth (JRC)",
+    "Riverine Flood",
 ]
 
 PILLAR_DOMAINS: dict[str, list[str]] = {
     "Climate Hazards": [
         "Heat Risk",
         "Drought Risk",
-        "Flood & Extreme Rainfall Risk",
+        "Extreme Rainfall | Flash Flood Risk",
         "Heat Stress",
         "Cold Risk",
         "Agriculture & Growing Conditions",
@@ -2665,7 +2665,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
     ],
     "Bio-physical Hazards": [
         "Groundwater Status & Availability",
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
     ],
     "Exposure": [
         "Population Exposure",
@@ -2711,7 +2711,7 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "covering extraction stage, extractable resource, total extraction, and "
         "future groundwater availability."
     ),
-    "Flood Inundation Depth (JRC)": (
+    "Riverine Flood": (
         "Telangana-only JRC flood snapshot domain covering RP-100 Flood Extent "
         "and RP-100 Flood Depth. Flood extent uses total polygon area; depth uses "
         "flooded-cell p95 block depth and flooded-area-weighted district rollups."
@@ -2728,7 +2728,7 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "Metrics relevant to crop suitability and growing season length. "
         "Useful for non-disaster framing of climate impacts on agriculture."
     ),
-    "Flood & Extreme Rainfall Risk": (
+    "Extreme Rainfall | Flash Flood Risk": (
         "Metrics related to extreme precipitation events and flood risk. "
         "Includes peak intensity, heavy rain frequency, and wet spell persistence."
     ),

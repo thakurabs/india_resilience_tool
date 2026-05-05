@@ -283,7 +283,7 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
 
 def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
     flood_metrics = get_metrics_for_bundle(
-        "Flood & Extreme Rainfall Risk",
+        "Extreme Rainfall | Flash Flood Risk",
         spatial_family="admin",
         level="district",
     )
@@ -314,7 +314,7 @@ def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_dom
     assert heavy_rain.params["min_event_days"] == 2
 
     flood_metrics = get_metrics_for_bundle(
-        "Flood & Extreme Rainfall Risk",
+        "Extreme Rainfall | Flash Flood Risk",
         spatial_family="admin",
         level="district",
     )
@@ -347,7 +347,7 @@ def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hy
     expected = {
         "Heat Risk": "composite_heat_risk",
         "Drought Risk": "composite_drought_risk",
-        "Flood & Extreme Rainfall Risk": "composite_flood_extreme_rainfall_risk",
+        "Extreme Rainfall | Flash Flood Risk": "composite_flood_extreme_rainfall_risk",
         "Heat Stress": "composite_heat_stress",
         "Cold Risk": "composite_cold_risk",
         "Agriculture & Growing Conditions": "composite_agriculture_growing_conditions",
@@ -444,7 +444,7 @@ def test_sector_wise_reverse_membership_is_context_aware() -> None:
         spatial_family="admin",
         level="district",
     )
-    assert "Flood & Extreme Rainfall Risk" in district_domains
+    assert "Extreme Rainfall | Flash Flood Risk" in district_domains
     assert "Agricultural Risk" in district_domains
     assert "Health Risk" in district_domains
     assert "Industrial Risk" in district_domains
@@ -551,7 +551,7 @@ def test_groundwater_domain_is_admin_district_only() -> None:
     admin_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="district")
     assert admin_domains == [
         "Groundwater Status & Availability",
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
     ]
     admin_metrics = set(
         get_metrics_for_bundle("Groundwater Status & Availability", spatial_family="admin", level="district")
@@ -564,17 +564,17 @@ def test_groundwater_domain_is_admin_district_only() -> None:
     }
 
     block_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="block")
-    assert block_domains == ["Flood Inundation Depth (JRC)"]
+    assert block_domains == ["Riverine Flood"]
 
 
 def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None:
     district_metrics = get_metrics_for_bundle(
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
         spatial_family="admin",
         level="district",
     )
     block_metrics = get_metrics_for_bundle(
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
         spatial_family="admin",
         level="block",
     )
@@ -587,7 +587,7 @@ def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None
     # Severity index is first so deep-dive defaults to it.
     assert district_metrics[0] == "jrc_flood_depth_index_rp100"
     assert get_metrics_for_bundle(
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
         spatial_family="hydro",
         level="basin",
     ) == []
