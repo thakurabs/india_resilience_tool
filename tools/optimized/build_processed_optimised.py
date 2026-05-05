@@ -85,6 +85,8 @@ CONTEXT_FILENAMES = {
     "river_network_display.geojson": "river_network_display.geojson",
     "river_basin_name_reconciliation.parquet": "river_basin_name_reconciliation.csv",
     "river_subbasin_diagnostics.parquet": "river_subbasin_diagnostics.csv",
+    "jrc_flood_depth/overlay/rp100_depth_overlay.png": "jrc_flood_depth/overlay/rp100_depth_overlay.png",
+    "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json": "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json",
 }
 
 LEVEL_SELECTIONS = {
@@ -1025,9 +1027,7 @@ def _copy_context_artifacts(*, tasks: tuple[BuildTask, ...], progress: BuildProg
 
         def _copy_one() -> None:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            if src.suffix.lower() == ".geojson":
-                shutil.copy2(src, dst)
-            elif src.suffix.lower() == ".parquet":
+            if src.suffix.lower() in {".geojson", ".parquet", ".png", ".json"}:
                 shutil.copy2(src, dst)
             else:
                 df = pd.read_csv(src)

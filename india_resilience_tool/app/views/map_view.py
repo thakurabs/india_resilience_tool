@@ -20,6 +20,11 @@ from typing import Any, Callable, Mapping, Optional, Tuple
 RESPONSIVE_MAP_MIN_HEIGHT = 420
 RESPONSIVE_MAP_MAX_HEIGHT = 700
 
+PANE_BASE_POLYGONS = "irt-base-polygons"
+PANE_FLOOD_RASTER = "irt-flood-raster"
+PANE_CROSSWALK_OVERLAY = "irt-crosswalk-overlay"
+PANE_RIVER_OVERLAY = "irt-river-overlay"
+
 
 def clamp_map_height(
     available_height: float,
@@ -271,6 +276,7 @@ def build_base_choropleth_map_with_geojson_layer(
         dragging=True,
         scrollWheelZoom=True,
     )
+    _ensure_overlay_panes(m)
 
     # Fit state bounds when a state is selected but district is "All"
     try:
@@ -313,6 +319,7 @@ def build_base_choropleth_map_with_geojson_layer(
         smooth_factor=1.5,
         zoom_on_click=False,
         bubblingMouseEvents=False,
+        pane=PANE_BASE_POLYGONS,
     ).add_to(m)
 
     return m
@@ -383,6 +390,7 @@ def add_reference_overlay_layer(
         smooth_factor=1.5,
         zoom_on_click=False,
         bubblingMouseEvents=False,
+        pane=PANE_CROSSWALK_OVERLAY,
     ).add_to(m)
     return m
 
@@ -392,6 +400,7 @@ def add_river_overlay_layer(
     *,
     river_fc: Optional[Mapping[str, Any]] = None,
     river_layer_name: Optional[str] = None,
+    opacity: float = 0.75,
 ) -> Any:
     """Attach the river overlay layer to an existing Folium map."""
     import folium
@@ -417,14 +426,57 @@ def add_river_overlay_layer(
         style_function=lambda _feature: {
             "color": "#2563eb",
             "weight": 1.8,
-            "opacity": 0.75,
+            "opacity": float(opacity),
         },
         tooltip=river_tooltip,
         smooth_factor=1.0,
         zoom_on_click=False,
         bubblingMouseEvents=False,
+        pane=PANE_RIVER_OVERLAY,
     ).add_to(m)
 
+    return m
+
+
+def _ensure_overlay_panes(m: Any) -> None:
+    """Create the fixed z-order panes used by IRT map overlays."""
+    import folium
+
+    if getattr(m, "_irt_overlay_panes_added", False):
+        return
+    for pane_name, z_index in (
+        (PANE_BASE_POLYGONS, 400),
+        (PANE_FLOOD_RASTER, 410),
+        (PANE_CROSSWALK_OVERLAY, 420),
+        (PANE_RIVER_OVERLAY, 430),
+    ):
+        folium.map.CustomPane(pane_name, z_index=z_index).add_to(m)
+    setattr(m, "_irt_overlay_panes_added", True)
+
+
+def add_overlay_render_layers(m: Any, *, overlay_layers: tuple[Any, ...]) -> Any:
+    """Attach generic reference overlay render layers to an existing Folium map."""
+    import folium
+
+    _ensure_overlay_panes(m)
+    for layer in overlay_layers:
+        if getattr(layer, "kind", "") == "image":
+            folium.raster_layers.ImageOverlay(
+                image=str(layer.image_path),
+                bounds=layer.bounds_latlon,
+                name=str(layer.name),
+                interactive=False,
+                cross_origin=False,
+                opacity=float(layer.opacity),
+                pane=PANE_FLOOD_RASTER,
+            ).add_to(m)
+        elif getattr(layer, "kind", "") == "geojson":
+            add_river_overlay_layer(
+                m,
+                river_fc=layer.feature_collection,
+                river_layer_name=str(layer.name),
+                opacity=float(layer.opacity),
+            )
     return m
 
 

@@ -62,6 +62,8 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - fixed snapshot semantics: `snapshot`, `Current`
   - block depth values use flooded-cell `p95` depth; district depth values use flooded-area-weighted means of child block flooded-cell `p95` depths
   - extent is stored as a `0-1` fraction, displayed as a percent, and uses total-polygon-area semantics at both block and district levels
+  - optional `Reference overlays` sidebar section in admin district/block views can display the RP-100 flood-depth raster as a display-only overlay
+  - the dashboard runtime reads only exported overlay artifacts, not the raw `RP100_depth.tif`
 - Water-risk Aqueduct onboarding:
   - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
   - Aqueduct interannual variability on SOI basin, SOI sub-basin, district, and block units
@@ -94,7 +96,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - uses `river_network_display.geojson`
   - basin matching is mediated by `river_basin_name_reconciliation.csv`
   - available only in hydro basin/sub-basin views
-  - toggle is off by default
+  - exposed through the shared `Reference overlays` sidebar section and off by default
 - Offline river topology artifacts:
   - `river_reaches.parquet`
   - `river_nodes.parquet`
@@ -188,6 +190,13 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 - per-model yearly overlays
 - case-study export inputs
 - simplified runtime geometry shards plus compact selector indexes for block and sub-basin dropdowns
+- reference overlay context files, including river display artifacts and the JRC RP-100 flood-depth overlay PNG/metadata when present
+
+JRC RP-100 reference overlay artifacts:
+- the existing JRC build command also exports `IRT_DATA_DIR/jrc_flood_depth/overlay/rp100_depth_overlay.png`
+- metadata is written to `IRT_DATA_DIR/jrc_flood_depth/overlay/rp100_depth_overlay_meta.json`
+- the overlay is a visualization reference only; metrics, rankings, legends, and details continue to use the persisted master tables
+- dashboard runtime never reads `RP100_depth.tif`
 
 For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.
 

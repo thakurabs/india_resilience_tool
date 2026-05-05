@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import geopandas as gpd
@@ -9,6 +10,7 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import box
+from PIL import Image
 
 from tools.geodata.build_jrc_flood_depth_admin_masters import (
     DERIVED_EXTENT_METRIC_SLUG,
@@ -253,6 +255,7 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     extent_block_qa = derived_extent["block_qa_df"]
     extent_district_qa = derived_extent["district_qa_df"]
     run_summary = outputs["run_summary_df"]
+    overlay = outputs["rp100_overlay"]
 
     value_col = "jrc_flood_depth_rp10__snapshot__Current__mean"
     derived_col = "jrc_flood_depth_index_rp100__snapshot__Current__mean"
@@ -284,6 +287,23 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     warangal = district_master.loc[district_master["district"] == "Warangal", value_col].iloc[0]
     assert hyderabad == pytest.approx(3.72)
     assert pd.isna(warangal)
+    assert overlay["png_path"].exists()
+    assert overlay["meta_path"].exists()
+    metadata = json.loads(overlay["meta_path"].read_text(encoding="utf-8"))
+    assert metadata["overlay_id"] == "rp100_flood_depth_raster"
+    assert metadata["source_raster_name"] == "RP100_depth.tif"
+    assert metadata["display_value_min_m"] == 0.0
+    assert metadata["display_value_max_m"] == 10.0
+    assert metadata["display_units"] == "meters"
+    assert metadata["width_px"] > 0
+    assert metadata["height_px"] > 0
+    assert metadata["source_positive_max_m"] == pytest.approx(5.0)
+    assert metadata["clipped_above_display_max"] is False
+    overlay_rgba = np.asarray(Image.open(overlay["png_path"]))
+    assert overlay_rgba.shape[2] == 4
+    assert overlay_rgba[0, 0, 3] == 255
+    assert overlay_rgba[1, 0, 3] == 0
+    assert overlay_rgba[3, 0, 3] == 0
     assert float(derived_block_master.loc[derived_block_master["block"] == "North", derived_col].iloc[0]) == 5.0
     assert float(derived_block_master.loc[derived_block_master["block"] == "South", derived_col].iloc[0]) == 5.0
     assert pd.isna(derived_block_master.loc[derived_block_master["block"] == "Outside", derived_col].iloc[0])
@@ -325,14 +345,12 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
         "state",
         "district",
         "district_key",
-        "raw_rp100_depth_m",
         "district_valid_support_fraction",
-        "raw_rp100_extent_fraction",
-        "depth_class_index",
-        "depth_class_label",
-        "extent_class_index",
-        "extent_class_label",
-        "class_index",
+        "district_severity_index",
+        "flooded_block_count",
+        "total_flooded_area_km2",
+        "min_block_severity",
+        "max_block_severity",
         "class_label",
     ]
     north_index = derived_block_qa.loc[derived_block_qa["block"] == "North"].iloc[0]
@@ -386,7 +404,7 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     assert derived_summary["metric_kind"] == "derived_severity_matrix"
     assert derived_summary["source_metric_slug"] == "jrc_flood_depth_rp100"
     assert derived_summary["component_metric_slugs"] == "jrc_flood_depth_rp100;jrc_flood_extent_rp100"
-    assert derived_summary["severity_method"] == "rp100_depth_extent_matrix_v1"
+    assert derived_summary["severity_method"] == "rp100_block_severity_flooded_area_weighted_v1"
     extent_summary = run_summary.loc[run_summary["metric_slug"] == DERIVED_EXTENT_METRIC_SLUG].iloc[0]
     assert extent_summary["metric_kind"] == "derived_extent"
     assert extent_summary["source_metric_slug"] == "jrc_flood_depth_rp100"

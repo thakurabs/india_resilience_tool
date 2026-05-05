@@ -33,18 +33,14 @@ from india_resilience_tool.viz.formatting import (
 )
 from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 from india_resilience_tool.app.color_range_controls import compute_color_range_defaults
-from india_resilience_tool.app.geo_cache import (
-    load_river_basin_reconciliation_cached,
-    load_river_subbasin_diagnostics_cached,
+from india_resilience_tool.app.overlays import (
+    OverlayControlState,
+    build_overlay_render_layers,
 )
 from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
 from india_resilience_tool.data.master_columns import find_baseline_column_for_stat
 from india_resilience_tool.data.merge import (
     get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
-)
-from india_resilience_tool.data.river_loader import (
-    resolve_river_basin_reconciliation,
-    resolve_river_subbasin_diagnostics,
 )
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.colors import (
@@ -74,7 +70,7 @@ class MapArtifacts:
     pretty_metric_label: str
     cmap_name: str
     rank_scope_label: str
-    river_overlay_message: Optional[str]
+    overlay_messages: tuple[str, ...]
     blocked_message: Optional[str]
 
 
@@ -187,8 +183,7 @@ def _build_map_render_signature(
     map_mode: str,
     hover_enabled: bool,
     crosswalk_overlay: Optional[Mapping[str, Any]],
-    show_river_network: bool,
-    resolved_river_basin_name: Optional[str],
+    overlay_cache_signature: tuple[Any, ...],
 ) -> tuple[Any, ...]:
     """Return a stable render signature for patched FeatureCollection caching."""
     return (
@@ -203,6 +198,7 @@ def _build_map_render_signature(
         str(baseline_col or ""),
         str(map_mode or ""),
         bool(hover_enabled),
+        tuple(overlay_cache_signature),
     )
 
 
@@ -257,7 +253,7 @@ def build_map_and_rankings(
     spatial_family: str,
     include_map: bool,
     crosswalk_overlay: Optional[Mapping[str, Any]],
-    show_river_network: bool,
+    overlay_states: Mapping[str, OverlayControlState],
     hover_enabled: bool,
     map_center: list[float],
     map_zoom: float,
@@ -271,6 +267,7 @@ def build_map_and_rankings(
     river_display_geojson_path: Path,
     river_basin_reconciliation_path: Path,
     river_subbasin_diagnostics_path: Path,
+    data_dir: Path,
     simplify_tol_adm2: float,
     simplify_tol_adm3: float,
     map_height: int,
@@ -372,7 +369,7 @@ def build_map_and_rankings(
             pretty_metric_label=str(varcfg.get("label") or variable_slug),
             cmap_name="Reds",
             rank_scope_label="",
-            river_overlay_message=None,
+            overlay_messages=(),
             blocked_message=blocked_message,
         )
 
@@ -437,7 +434,7 @@ def build_map_and_rankings(
             pretty_metric_label=str(varcfg.get("label") or variable_slug),
             cmap_name="Reds",
             rank_scope_label="",
-            river_overlay_message=None,
+            overlay_messages=(),
             blocked_message=None,
         )
 
@@ -634,46 +631,18 @@ def build_map_and_rankings(
             selected_value=selected_subbasin,
         )
 
-    resolved_river_basin_name: Optional[str] = None
-    river_overlay_message: Optional[str] = None
-    if (
-        bool(show_river_network)
-        and str(spatial_family).strip().lower() == "hydro"
-        and level_norm in {"basin", "sub_basin"}
-        and selected_basin != "All"
-    ):
-        if level_norm == "basin" or selected_subbasin == "All":
-            if river_basin_reconciliation_path.exists():
-                reconciliation_df = load_river_basin_reconciliation_cached(
-                    str(river_basin_reconciliation_path)
-                )
-            else:
-                reconciliation_df = None
-            resolution = resolve_river_basin_reconciliation(
-                hydro_basin_name=selected_basin,
-                reconciliation_df=reconciliation_df,
-                alias_fn=alias,
-            )
-            if resolution.get("status") == "matched":
-                resolved_river_basin_name = str(resolution.get("river_basin_name") or "").strip() or None
-            river_overlay_message = (
-                str(resolution.get("message")).strip() if resolution.get("message") else None
-            )
-        else:
-            if river_subbasin_diagnostics_path.exists():
-                diagnostics_df = load_river_subbasin_diagnostics_cached(
-                    str(river_subbasin_diagnostics_path)
-                )
-            else:
-                diagnostics_df = None
-            resolution = resolve_river_subbasin_diagnostics(
-                hydro_subbasin_name=selected_subbasin,
-                diagnostics_df=diagnostics_df,
-                alias_fn=alias,
-            )
-            river_overlay_message = (
-                str(resolution.get("message")).strip() if resolution.get("message") else None
-            )
+    overlay_layers, overlay_messages, overlay_cache_sig = build_overlay_render_layers(
+        overlay_states=overlay_states,
+        spatial_family=spatial_family,
+        admin_level=level_norm,
+        selected_basin=selected_basin,
+        selected_subbasin=selected_subbasin,
+        data_dir=data_dir,
+        river_display_geojson_path=river_display_geojson_path,
+        river_basin_reconciliation_path=river_basin_reconciliation_path,
+        river_subbasin_diagnostics_path=river_subbasin_diagnostics_path,
+        alias_fn=alias,
+    )
 
     render_signature = _build_map_render_signature(
         level=level_norm,
@@ -688,8 +657,7 @@ def build_map_and_rankings(
         map_mode=map_mode,
         hover_enabled=bool(hover_enabled),
         crosswalk_overlay=crosswalk_overlay,
-        show_river_network=bool(show_river_network),
-        resolved_river_basin_name=resolved_river_basin_name,
+        overlay_cache_signature=overlay_cache_sig,
     )
     folium_map = build_folium_map_for_selection(
         level=level_norm,
@@ -721,8 +689,8 @@ def build_map_and_rankings(
         simplify_tolerance_adm2=simplify_tol_adm2,
         simplify_tolerance_adm3=simplify_tol_adm3,
         crosswalk_overlay=crosswalk_overlay,
-        show_river_network=bool(show_river_network),
-        resolved_river_basin_name=resolved_river_basin_name,
+        overlay_layers=overlay_layers,
+        overlay_cache_signature=overlay_cache_sig,
         perf_section=perf_section,
     )
 
@@ -764,6 +732,6 @@ def build_map_and_rankings(
         pretty_metric_label=pretty_metric_label,
         cmap_name=cmap_name,
         rank_scope_label=rank_scope_label,
-        river_overlay_message=river_overlay_message,
+        overlay_messages=overlay_messages,
         blocked_message=None,
     )

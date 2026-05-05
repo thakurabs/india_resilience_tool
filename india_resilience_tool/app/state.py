@@ -71,7 +71,10 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "selected_basin": "All",
     "selected_subbasin": "All",
     "hydro_admin_context_level": "district",
-    "show_river_network": False,
+    "overlay_rp100_flood_depth_raster_enabled": False,
+    "overlay_rp100_flood_depth_raster_opacity_pct": 65,
+    "overlay_river_network_enabled": False,
+    "overlay_river_network_opacity_pct": 75,
 
     # Other stable keys (widget keys / caches)
     # NOTE: Do NOT pre-seed unified metric selection keys here. The legacy dashboard

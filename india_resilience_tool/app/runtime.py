@@ -505,6 +505,7 @@ def run_app() -> None:
         basins_geojson=BASIN_GEOJSON,
         subbasins_geojson=SUBBASIN_GEOJSON,
         river_display_geojson=RIVER_DISPLAY_GEOJSON,
+        data_dir=DATA_DIR,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
     )
 
@@ -514,7 +515,7 @@ def run_app() -> None:
     selected_block = geo_ctx.selected_block
     selected_basin = geo_ctx.selected_basin
     selected_subbasin = geo_ctx.selected_subbasin
-    show_river_network = geo_ctx.show_river_network
+    overlay_states = geo_ctx.overlay_states
     gdf_state_districts = geo_ctx.gdf_state_districts
     current_view = _resolve_pre_render_view(
         st.session_state,
@@ -700,7 +701,7 @@ def run_app() -> None:
         spatial_family=spatial_family,
         include_map=include_map,
         crosswalk_overlay=st.session_state.get("crosswalk_overlay"),
-        show_river_network=show_river_network,
+        overlay_states=overlay_states,
         hover_enabled=bool(st.session_state.get("hover_enabled", True)),
         map_center=list(st.session_state["map_center"]),
         map_zoom=float(st.session_state["map_zoom"]),
@@ -714,6 +715,7 @@ def run_app() -> None:
         river_display_geojson_path=RIVER_DISPLAY_GEOJSON,
         river_basin_reconciliation_path=RIVER_BASIN_RECONCILIATION_CSV,
         river_subbasin_diagnostics_path=RIVER_SUBBASIN_DIAGNOSTICS_CSV,
+        data_dir=DATA_DIR,
         simplify_tol_adm2=SIMPLIFY_TOL_ADM2,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
         map_height=MAP_HEIGHT,
@@ -751,7 +753,7 @@ def run_app() -> None:
         portfolio_remove_fn=_portfolio_remove,
         portfolio_normalize_fn=_portfolio_normalize,
         merged=artifacts.merged,
-        river_overlay_message=artifacts.river_overlay_message,
+        overlay_messages=artifacts.overlay_messages,
         blocked_message=artifacts.blocked_message,
     )
 
@@ -809,7 +811,7 @@ def run_app() -> None:
                     pilot_state=PILOT_STATE,
                     data_dir=DATA_DIR,
                     river_reaches_path=RIVER_REACHES_PARQUET,
-                    river_overlay_message=artifacts.river_overlay_message,
+                    river_overlay_message=artifacts.overlay_messages[0] if artifacts.overlay_messages else None,
                     logo_path=LOGO_PATH,
                     fig_size_panel=FIG_SIZE_PANEL,
                     fig_dpi_panel=FIG_DPI_PANEL,

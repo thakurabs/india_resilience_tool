@@ -12,17 +12,21 @@ flood-severity-index and flood-extent products with dedicated QA.
 from __future__ import annotations
 
 import argparse
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from affine import Affine
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.errors import WindowError
 from rasterio.features import geometry_mask, geometry_window
+from rasterio.warp import Resampling, calculate_default_transform, reproject
 from shapely.geometry import mapping
+from PIL import Image
 
 from india_resilience_tool.utils.naming import normalize_compact, normalize_name
 from paths import get_master_csv_filename, get_paths_config, resolve_processed_root
@@ -64,6 +68,19 @@ DERIVED_METRIC_SLUGS: tuple[str, ...] = (
     DERIVED_EXTENT_METRIC_SLUG,
 )
 ALL_OUTPUT_METRIC_SLUGS: tuple[str, ...] = tuple(JRC_FILE_MAP) + DERIVED_METRIC_SLUGS
+RP100_OVERLAY_ID = "rp100_flood_depth_raster"
+RP100_OVERLAY_SOURCE_NAME = "RP100_depth.tif"
+RP100_OVERLAY_MAX_DIMENSION = 4096
+RP100_OVERLAY_DISPLAY_MIN_M = 0.0
+RP100_OVERLAY_DISPLAY_MAX_M = 10.0
+RP100_OVERLAY_COLORS: tuple[tuple[float, tuple[int, int, int]], ...] = (
+    (0.5, (214, 240, 255)),
+    (1.0, (157, 217, 255)),
+    (2.0, (91, 183, 240)),
+    (4.0, (47, 127, 193)),
+    (7.0, (29, 79, 145)),
+    (float("inf"), (15, 47, 95)),
+)
 
 
 @dataclass(frozen=True)
@@ -137,6 +154,14 @@ class AdminJoinValidation:
 
 def _default_qa_dir() -> Path:
     return get_paths_config().data_dir / "jrc_flood_depth" / "qa"
+
+
+def _default_overlay_dir() -> Path:
+    return get_paths_config().data_dir / "jrc_flood_depth" / "overlay"
+
+
+def _rp100_overlay_paths(*, overlay_dir: Path) -> tuple[Path, Path]:
+    return overlay_dir / "rp100_depth_overlay.png", overlay_dir / "rp100_depth_overlay_meta.json"
 
 
 def _district_join_key(state_name: object, district_name: object) -> str:
@@ -226,6 +251,107 @@ def _validate_raster_contract(source_dir: Path, *, assume_units: str) -> RasterC
         raster_shape=raster_shape,
         nodata_value=nodata_value,
     )
+
+
+def _rgba_for_depth_grid(depth_m: np.ndarray) -> np.ndarray:
+    """Return an RGBA display grid for RP-100 flood depth values in meters."""
+    rgba = np.zeros((depth_m.shape[0], depth_m.shape[1], 4), dtype=np.uint8)
+    finite_positive = np.isfinite(depth_m) & (depth_m > 0.0)
+    previous = np.zeros(depth_m.shape, dtype=bool)
+    for upper, rgb in RP100_OVERLAY_COLORS:
+        mask = finite_positive & (~previous) & (depth_m <= upper)
+        rgba[mask, 0] = rgb[0]
+        rgba[mask, 1] = rgb[1]
+        rgba[mask, 2] = rgb[2]
+        rgba[mask, 3] = 255
+        previous |= mask
+    return rgba
+
+
+def _bounds_latlon_from_transform(transform: Affine, *, width: int, height: int) -> list[list[float]]:
+    west = float(transform.c)
+    north = float(transform.f)
+    east = float(transform.c + transform.a * width)
+    south = float(transform.f + transform.e * height)
+    south, north = sorted((south, north))
+    west, east = sorted((west, east))
+    return [[round(south, 6), round(west, 6)], [round(north, 6), round(east, 6)]]
+
+
+def export_rp100_depth_overlay(
+    *,
+    raster_path: Path,
+    overlay_dir: Path,
+    overwrite: bool,
+    dry_run: bool,
+) -> dict[str, object]:
+    """Export the canonical RP-100 display-only overlay PNG and metadata JSON."""
+    png_path, meta_path = _rp100_overlay_paths(overlay_dir=overlay_dir)
+    if not overwrite:
+        existing = [path for path in (png_path, meta_path) if path.exists()]
+        if existing:
+            raise FileExistsError(
+                "Refusing to overwrite existing RP-100 overlay artifacts without --overwrite: "
+                + ", ".join(str(path) for path in existing)
+            )
+
+    with rasterio.open(raster_path) as src:
+        dst_transform, dst_width, dst_height = calculate_default_transform(
+            src.crs,
+            "EPSG:4326",
+            src.width,
+            src.height,
+            *src.bounds,
+        )
+        max_dim = max(int(dst_width), int(dst_height))
+        if max_dim > RP100_OVERLAY_MAX_DIMENSION:
+            scale = max_dim / float(RP100_OVERLAY_MAX_DIMENSION)
+            target_width = max(1, int(round(dst_width / scale)))
+            target_height = max(1, int(round(dst_height / scale)))
+            dst_transform = dst_transform * Affine.scale(
+                dst_width / float(target_width),
+                dst_height / float(target_height),
+            )
+            dst_width, dst_height = target_width, target_height
+
+        dst = np.full((int(dst_height), int(dst_width)), np.nan, dtype=np.float32)
+        reproject(
+            source=rasterio.band(src, 1),
+            destination=dst,
+            src_transform=src.transform,
+            src_crs=src.crs,
+            src_nodata=src.nodata,
+            dst_transform=dst_transform,
+            dst_crs="EPSG:4326",
+            dst_nodata=np.nan,
+            resampling=Resampling.nearest,
+        )
+        positive = dst[np.isfinite(dst) & (dst > 0.0)]
+        source_positive_max_m = float(np.nanmax(positive)) if positive.size else 0.0
+        rgba = _rgba_for_depth_grid(dst)
+        metadata = {
+            "overlay_id": RP100_OVERLAY_ID,
+            "source_raster_name": RP100_OVERLAY_SOURCE_NAME,
+            "source_crs": src.crs.to_string(),
+            "bounds_latlon": _bounds_latlon_from_transform(
+                dst_transform,
+                width=int(dst_width),
+                height=int(dst_height),
+            ),
+            "display_value_min_m": RP100_OVERLAY_DISPLAY_MIN_M,
+            "display_value_max_m": RP100_OVERLAY_DISPLAY_MAX_M,
+            "source_positive_max_m": source_positive_max_m,
+            "clipped_above_display_max": bool(source_positive_max_m > RP100_OVERLAY_DISPLAY_MAX_M),
+            "display_units": "meters",
+            "width_px": int(dst_width),
+            "height_px": int(dst_height),
+        }
+
+    if not dry_run:
+        overlay_dir.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(rgba, mode="RGBA").save(png_path)
+        meta_path.write_text(json.dumps(metadata, indent=2, sort_keys=True), encoding="utf-8")
+    return {"png_path": png_path, "meta_path": meta_path, "metadata": metadata}
 
 
 def _load_telangana_admin(
@@ -1118,6 +1244,7 @@ def build_jrc_flood_depth_outputs(
     assume_units: str,
     overwrite: bool,
     dry_run: bool,
+    overlay_dir: Optional[Path] = None,
 ) -> dict[str, object]:
     """Build Telangana block and district masters plus QA for the four JRC rasters."""
     contract = _validate_raster_contract(source_dir, assume_units=assume_units)
@@ -1133,6 +1260,8 @@ def build_jrc_flood_depth_outputs(
         all_target_paths.extend(_expected_output_paths(metric_slug=metric_slug, qa_dir=qa_dir))
     all_target_paths.append(qa_dir / "admin_boundary_join_qa.csv")
     all_target_paths.append(qa_dir / "run_summary.csv")
+    resolved_overlay_dir = overlay_dir or _default_overlay_dir()
+    all_target_paths.extend(_rp100_overlay_paths(overlay_dir=resolved_overlay_dir))
     if not overwrite:
         existing = [path for path in all_target_paths if path.exists()]
         if existing:
@@ -1333,6 +1462,12 @@ def build_jrc_flood_depth_outputs(
     outputs["run_summary_df"] = run_summary_df
     outputs["contract"] = contract
     outputs["admin_join_qa_df"] = join_validation.qa_df
+    outputs["rp100_overlay"] = export_rp100_depth_overlay(
+        raster_path=contract.raster_paths[DERIVED_INDEX_SOURCE_METRIC_SLUG],
+        overlay_dir=resolved_overlay_dir,
+        overwrite=overwrite,
+        dry_run=dry_run,
+    )
     return outputs
 
 
@@ -1348,6 +1483,7 @@ def build_cli() -> argparse.ArgumentParser:
     parser.add_argument("--districts-path", default=str(get_paths_config().districts_path))
     parser.add_argument("--blocks-path", default=str(get_paths_config().blocks_path))
     parser.add_argument("--qa-dir", default=str(_default_qa_dir()))
+    parser.add_argument("--overlay-dir", default=str(_default_overlay_dir()))
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs and compute summaries without writing files.")
     return parser
@@ -1361,6 +1497,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         districts_path=Path(args.districts_path).expanduser().resolve(),
         blocks_path=Path(args.blocks_path).expanduser().resolve(),
         qa_dir=Path(args.qa_dir).expanduser().resolve(),
+        overlay_dir=Path(args.overlay_dir).expanduser().resolve(),
         assume_units=str(args.assume_units),
         overwrite=bool(args.overwrite),
         dry_run=bool(args.dry_run),
@@ -1377,6 +1514,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("dry_run: True")
     else:
         print(f"qa_dir: {Path(args.qa_dir).expanduser().resolve()}")
+        overlay = outputs.get("rp100_overlay", {})
+        if isinstance(overlay, dict):
+            print(f"rp100_overlay_png: {overlay.get('png_path')}")
+            print(f"rp100_overlay_meta: {overlay.get('meta_path')}")
     return 0
 
 

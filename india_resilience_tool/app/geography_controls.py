@@ -23,6 +23,11 @@ from india_resilience_tool.app.geo_cache import (
     load_hydro_subbasin_selector_index,
     load_subbasin_selector_index,
 )
+from india_resilience_tool.app.overlays import (
+    OverlayControlState,
+    ensure_overlay_session_state,
+    resolve_overlay_control_states,
+)
 from india_resilience_tool.app.sidebar import render_analysis_mode_selector
 from india_resilience_tool.config.variables import VARIABLES
 from india_resilience_tool.data.adm3_loader import (
@@ -41,7 +46,7 @@ class GeographyContext:
     selected_block: str
     selected_basin: str
     selected_subbasin: str
-    show_river_network: bool
+    overlay_states: dict[str, OverlayControlState]
     gdf_state_districts: Any
 
 
@@ -332,6 +337,7 @@ def render_geography_and_analysis_focus(
     basins_geojson: Path,
     subbasins_geojson: Path,
     river_display_geojson: Path,
+    data_dir: Path,
     simplify_tol_adm3: float,
 ) -> GeographyContext:
     """Render the geography controls and return the active selection context."""
@@ -395,8 +401,8 @@ def render_geography_and_analysis_focus(
             selected_block = "All"
             selected_basin = "All"
             selected_subbasin = "All"
-            show_river_network = bool(st.session_state.get("show_river_network", False))
             gdf_state_districts = adm2.copy()
+            ensure_overlay_session_state(st.session_state)
 
             if str(spatial_family).strip().lower() == "hydro":
                 selected_basin, selected_subbasin = _build_hydro_geography(
@@ -405,22 +411,6 @@ def render_geography_and_analysis_focus(
                     basins_geojson=basins_geojson,
                     subbasins_geojson=subbasins_geojson,
                 )
-                if selected_basin == "All":
-                    st.session_state["show_river_network"] = False
-                show_river_network = st.checkbox(
-                    "Show river network",
-                    key="show_river_network",
-                    value=bool(st.session_state.get("show_river_network", False)),
-                    disabled=(not analysis_ready) or (selected_basin == "All"),
-                    help=(
-                        "Show cleaned river lines for the selected basin or sub-basin. "
-                        "Available only when a specific basin is selected."
-                    ),
-                )
-                if not river_display_geojson.exists():
-                    st.session_state["show_river_network"] = False
-                    show_river_network = False
-                    st.caption("River overlay unavailable: river_network_display.geojson not found.")
             else:
                 (
                     selected_state,
@@ -437,8 +427,54 @@ def render_geography_and_analysis_focus(
                     simplify_tol_adm3=simplify_tol_adm3,
                     admin_level=admin_level,
                 )
-                st.session_state["show_river_network"] = False
-                show_river_network = False
+
+            overlay_states = resolve_overlay_control_states(
+                session_state=st.session_state,
+                spatial_family=spatial_family,
+                admin_level=admin_level,
+                selected_state=selected_state,
+                selected_basin=selected_basin,
+                river_display_geojson_path=river_display_geojson,
+                data_dir=data_dir,
+            )
+            visible_overlay_states = [state for state in overlay_states.values() if state.visible]
+            if visible_overlay_states:
+                st.markdown("#### Reference overlays")
+                for overlay_state in visible_overlay_states:
+                    st.checkbox(
+                        overlay_state.label,
+                        key=overlay_state.enabled_key,
+                        disabled=(not analysis_ready) or (not overlay_state.available),
+                    )
+                    st.slider(
+                        overlay_state.slider_label,
+                        min_value=0,
+                        max_value=100,
+                        value=int(overlay_state.opacity_pct),
+                        step=5,
+                        key=overlay_state.opacity_key,
+                        disabled=(not analysis_ready) or (not overlay_state.available),
+                    )
+                    if overlay_state.unavailable_caption:
+                        st.caption(overlay_state.unavailable_caption)
+                    if overlay_state.availability_reason:
+                        st.caption(overlay_state.availability_reason)
+                overlay_states = {
+                    overlay_id: OverlayControlState(
+                        overlay_id=state.overlay_id,
+                        label=state.label,
+                        slider_label=state.slider_label,
+                        enabled_key=state.enabled_key,
+                        opacity_key=state.opacity_key,
+                        visible=state.visible,
+                        available=state.available,
+                        enabled=bool(st.session_state.get(state.enabled_key, False)) and state.available,
+                        opacity_pct=max(0, min(100, int(st.session_state.get(state.opacity_key, state.opacity_pct)))),
+                        unavailable_caption=state.unavailable_caption,
+                        availability_reason=state.availability_reason,
+                    )
+                    for overlay_id, state in overlay_states.items()
+                }
 
     return GeographyContext(
         analysis_mode=analysis_mode,
@@ -448,6 +484,6 @@ def render_geography_and_analysis_focus(
         selected_block=str(selected_block or "All"),
         selected_basin=str(selected_basin or "All"),
         selected_subbasin=str(selected_subbasin or "All"),
-        show_river_network=bool(show_river_network),
+        overlay_states=overlay_states,
         gdf_state_districts=gdf_state_districts,
     )

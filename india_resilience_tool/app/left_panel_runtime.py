@@ -78,7 +78,7 @@ def render_left_panel(
     portfolio_normalize_fn: Callable[[str], str],
     # Data (for coordinate fallback in add-to-portfolio)
     merged: Any,
-    river_overlay_message: Optional[str] = None,
+    overlay_messages: tuple[str, ...] = (),
     blocked_message: Optional[str] = None,
 ) -> Tuple[Mapping[str, Any], str]:
     """
@@ -115,8 +115,10 @@ def render_left_panel(
         if view == VIEW_MAP:
             if blocked_message:
                 st.info(blocked_message)
-            elif river_overlay_message:
-                st.caption(river_overlay_message)
+            else:
+                for overlay_message in overlay_messages:
+                    if str(overlay_message).strip():
+                        st.caption(str(overlay_message).strip())
 
             # In portfolio mode, reserve a slot ABOVE the map so the add/remove control
             # is visible even when the user is scrolling inside the right panel.

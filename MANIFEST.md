@@ -31,7 +31,7 @@ The current working tree supports:
 - population exposure masters for total population and population density on district/block units
 - groundwater district masters for extraction stage, future availability, extractable resource, and total extraction
 - actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
-- optional hydro-only river overlay in basin/sub-basin maps
+- shared reference overlay framework for the hydro river network and the admin RP-100 flood-depth raster
 
 The crosswalk layer is currently **read-optimized and explanatory**. It is not yet a full weighted transfer engine across spatial families.
 
@@ -161,6 +161,7 @@ Aqueduct methodology note:
 | `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline, including fine-grain drill-down guards and rankings-only fast paths |
 | `master_cache.py` | Streamlit session-state cache for master CSV + schema loading |
 | `master_freshness.py` | Master CSV freshness/rebuild gating helpers |
+| `overlays.py` | Shared reference-overlay framework: session keys, visibility/availability, RP-100 artifact validation/discovery, and river/flood render-layer contracts |
 | `perf.py` | Lightweight timing/performance instrumentation |
 | `point_selection_ui.py` | Coordinate input, preview, and saved-point support |
 | `portfolio_multistate.py` | Multi-state portfolio helper functions |
@@ -306,7 +307,7 @@ Aqueduct methodology note:
 | `build_aqueduct_hydro_masters.py` | Build `processed/{aqueduct_metric_slug}/hydro/` master `{csv,parquet}` files from Aqueduct overlaps for the onboarded hydro metrics |
 | `build_population_admin_masters.py` | Build district/block population total and density master `{csv,parquet}` files from the 2025 population raster |
 | `build_groundwater_district_masters.py` | Build district groundwater assessment master `{csv,parquet}` files from the 2024-2025 GEC workbook plus a canonical district alias QA package |
-| `build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth master `{csv,parquet}` files using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 Flood Severity Index, RP100 flood-extent masters, provenance-aware run summary rows, and stable QA CSVs |
+| `build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth master `{csv,parquet}` files using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 Flood Severity Index, RP100 flood-extent masters, RP-100 display overlay PNG/metadata, provenance-aware run summary rows, and stable QA CSVs |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
 | `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
@@ -521,6 +522,8 @@ python -m pytest -q
 | `river_topology_qa.csv` | QA rows for topology-ready reach artifacts |
 | `river_missing_assignments.csv` | Focused diagnostics for reaches still missing basin/sub-basin assignment |
 | `river_missing_assignments.geojson` | Visual-debug layer for unresolved river reach assignments |
+| `jrc_flood_depth/overlay/rp100_depth_overlay.png` | Canonical RP-100 flood-depth display overlay exported from `RP100_depth.tif` |
+| `jrc_flood_depth/overlay/rp100_depth_overlay_meta.json` | RP-100 overlay metadata with EPSG:4326 bounds, source maximum, and fixed display scale |
 
 ### Canonical identifier expectations
 
@@ -620,6 +623,16 @@ Current behavior:
 - sub-basin overlay diagnostics are supported via `river_subbasin_diagnostics.csv`
 - topology-ready reach/node/adjacency artifacts are supported offline
 - no upstream/downstream routing UI, river crosswalks, or river-based metric computation yet
+
+### Reference overlays
+
+River and RP-100 flood-depth references share `india_resilience_tool/app/overlays.py`.
+The RP-100 overlay is display-only: the builder exports `rp100_depth_overlay.png`
+and `rp100_depth_overlay_meta.json` from `RP100_depth.tif`; dashboard runtime reads
+only those artifacts. The display scale is fixed at `0.0-10.0 m`; `depth <= 0.0`
+is transparent, `0.0 < depth <= 0.5` is `#d6f0ff`, `0.5 < depth <= 1.0` is
+`#9dd9ff`, `1.0 < depth <= 2.0` is `#5bb7f0`, `2.0 < depth <= 4.0` is
+`#2f7fc1`, `4.0 < depth <= 7.0` is `#1d4f91`, and `depth > 7.0` is `#0f2f5f`.
 
 ## Current status vs deferred work
 

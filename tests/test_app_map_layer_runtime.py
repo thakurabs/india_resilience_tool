@@ -59,8 +59,8 @@ def _common_kwargs(tmp_path: Path) -> dict:
         "alias_fn": alias,
         "normalize_state_fn": alias,
         "crosswalk_overlay": None,
-        "show_river_network": False,
-        "resolved_river_basin_name": None,
+        "overlay_layers": (),
+        "overlay_cache_signature": (),
         "hover_enabled": False,
     }
 
@@ -91,7 +91,7 @@ def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
     monkeypatch.setattr(geo_cache, "build_adm3_geojson_by_state", _state_builder)
     monkeypatch.setattr(map_view, "build_base_choropleth_map_with_geojson_layer", lambda **kwargs: kwargs["fc"])
     monkeypatch.setattr(map_view, "add_reference_overlay_layer", lambda m, **kwargs: m)
-    monkeypatch.setattr(map_view, "add_river_overlay_layer", lambda m, **kwargs: m)
+    monkeypatch.setattr(map_view, "add_overlay_render_layers", lambda m, **kwargs: m)
 
     merged = pd.DataFrame(
         {
@@ -149,7 +149,7 @@ def test_build_folium_map_for_selection_reuses_patched_featurecollection_cache(
 
     monkeypatch.setattr(map_view, "build_base_choropleth_map_with_geojson_layer", _base_builder)
     monkeypatch.setattr(map_view, "add_reference_overlay_layer", lambda m, **kwargs: m)
-    monkeypatch.setattr(map_view, "add_river_overlay_layer", lambda m, **kwargs: m)
+    monkeypatch.setattr(map_view, "add_overlay_render_layers", lambda m, **kwargs: m)
 
     patch_calls = {"count": 0}
     original_patch = fc_helpers.patch_fc_properties
@@ -234,7 +234,7 @@ def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
     )
     monkeypatch.setattr(map_view, "build_base_choropleth_map_with_geojson_layer", lambda **kwargs: {"type": "base"})
     monkeypatch.setattr(map_view, "add_reference_overlay_layer", lambda m, **kwargs: kwargs["reference_fc"])
-    monkeypatch.setattr(map_view, "add_river_overlay_layer", lambda m, **kwargs: m)
+    monkeypatch.setattr(map_view, "add_overlay_render_layers", lambda m, **kwargs: m)
 
     merged = pd.DataFrame(
         {
@@ -322,7 +322,7 @@ def test_build_folium_map_for_selection_reuses_base_map_on_overlay_only_reruns(
 
     monkeypatch.setattr(map_view, "build_base_choropleth_map_with_geojson_layer", _base_builder)
     monkeypatch.setattr(map_view, "add_reference_overlay_layer", _overlay_builder)
-    monkeypatch.setattr(map_view, "add_river_overlay_layer", lambda m, **kwargs: m)
+    monkeypatch.setattr(map_view, "add_overlay_render_layers", lambda m, **kwargs: m)
 
     merged = pd.DataFrame(
         {

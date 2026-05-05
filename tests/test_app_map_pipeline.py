@@ -150,8 +150,7 @@ def test_build_map_render_signature_ignores_overlay_and_river_context_changes() 
         map_mode="Change from 1990-2010 baseline",
         hover_enabled=True,
         crosswalk_overlay={"level": "district", "feature_keys": ["Telangana::Adilabad"]},
-        show_river_network=False,
-        resolved_river_basin_name=None,
+        overlay_cache_signature=(),
     )
     overlay_changed = _build_map_render_signature(
         level="block",
@@ -166,8 +165,7 @@ def test_build_map_render_signature_ignores_overlay_and_river_context_changes() 
         map_mode="Change from 1990-2010 baseline",
         hover_enabled=True,
         crosswalk_overlay={"level": "district", "feature_keys": ["Telangana::Nirmal"]},
-        show_river_network=False,
-        resolved_river_basin_name=None,
+        overlay_cache_signature=(),
     )
     river_changed = _build_map_render_signature(
         level="block",
@@ -182,9 +180,8 @@ def test_build_map_render_signature_ignores_overlay_and_river_context_changes() 
         map_mode="Change from 1990-2010 baseline",
         hover_enabled=True,
         crosswalk_overlay={"level": "district", "feature_keys": ["Telangana::Adilabad"]},
-        show_river_network=True,
-        resolved_river_basin_name="Godavari",
+        overlay_cache_signature=(("river_network", True, 75, "/tmp/river.geojson", 1.0),),
     )
 
     assert base == overlay_changed
-    assert base == river_changed
+    assert base != river_changed

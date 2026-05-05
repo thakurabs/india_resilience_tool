@@ -11,6 +11,7 @@ from shapely.geometry import Polygon
 
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.data.optimized_bundle import (
+    optimized_context_path,
     optimized_geometry_path,
     optimized_master_sources_from_metric_root,
 )
@@ -19,6 +20,7 @@ from tools.optimized.build_processed_optimised import (
     BuildProgress,
     BuildTask,
     _build_execution_plan,
+    _copy_context_artifacts,
     audit_processed_optimised_parity,
     build_processed_optimised_bundle,
     default_build_workers_80pct,
@@ -174,6 +176,46 @@ def test_optimized_master_sources_from_metric_root_for_all_states(tmp_path: Path
     )
 
     assert sources == (odisha, telangana)
+
+
+def test_optimized_context_copies_rp100_overlay_artifacts(tmp_path: Path) -> None:
+    source_dir = tmp_path / "jrc_flood_depth" / "overlay"
+    source_dir.mkdir(parents=True)
+    (source_dir / "rp100_depth_overlay.png").write_bytes(b"png")
+    (source_dir / "rp100_depth_overlay_meta.json").write_text('{"artifact": true}', encoding="utf-8")
+
+    plan = _build_execution_plan(
+        data_dir=tmp_path,
+        metrics=[],
+        include_geometry=False,
+        include_context=True,
+    )
+    overlay_tasks = tuple(
+        task for task in plan.context_tasks if "rp100_depth_overlay" in str(task.target_path)
+    )
+    progress = BuildProgress(
+        BuildPlan(
+            summaries_seed=(),
+            master_tasks=(),
+            yearly_model_jobs=(),
+            yearly_ensemble_jobs=(),
+            context_tasks=overlay_tasks,
+            geometry_tasks=(),
+            manifest_task=BuildTask(stage="manifest", label="bundle manifest"),
+        ),
+        enabled=False,
+    )
+
+    _copy_context_artifacts(tasks=overlay_tasks, progress=progress)
+
+    assert optimized_context_path(
+        "jrc_flood_depth/overlay/rp100_depth_overlay.png",
+        data_dir=tmp_path,
+    ).read_bytes() == b"png"
+    assert optimized_context_path(
+        "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json",
+        data_dir=tmp_path,
+    ).read_text(encoding="utf-8") == '{"artifact": true}'
 
 
 def test_write_geometry_bundle_normalizes_raw_admin_columns(
