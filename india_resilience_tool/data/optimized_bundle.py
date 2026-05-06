@@ -23,7 +23,6 @@ _METRICS_DIRNAME = "metrics"
 _GEOMETRY_DIRNAME = "geometry"
 _CONTEXT_DIRNAME = "context"
 _MANIFEST_FILENAME = "bundle_manifest.json"
-GLANCE_ARTIFACT_VERSION = 1
 
 
 def resolve_optimized_bundle_root(*, data_dir: Optional[Path] = None) -> Path:
@@ -211,12 +210,7 @@ def optimized_glance_root(
     data_dir: Optional[Path] = None,
 ) -> Path:
     """Return the optimized Glance view-model root or one scenario-period directory."""
-    root = (
-        resolve_optimized_bundle_root(data_dir=data_dir)
-        / _CONTEXT_DIRNAME
-        / "glance"
-        / f"v{GLANCE_ARTIFACT_VERSION}"
-    )
+    root = resolve_optimized_bundle_root(data_dir=data_dir) / _CONTEXT_DIRNAME / "glance"
     if composite_slug is None:
         return root
     slug_root = root / str(composite_slug).strip()
