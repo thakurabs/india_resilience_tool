@@ -53,6 +53,7 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "landing_focus_level": "india",
     "landing_selected_state": None,
     "landing_selected_district": None,
+    "landing_selected_block": None,
     "landing_tab": "Rankings",
     "landing_search": "",
     "landing_search_selection": None,

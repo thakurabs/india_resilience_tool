@@ -23,6 +23,7 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["landing_focus_level"] == "india"
     assert ss["landing_selected_state"] is None
     assert ss["landing_selected_district"] is None
+    assert ss["landing_selected_block"] is None
     assert ss["landing_tab"] == "Rankings"
     assert isinstance(ss["portfolio_districts"], list)
     assert isinstance(ss["portfolio_blocks"], list)

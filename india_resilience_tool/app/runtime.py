@@ -54,6 +54,7 @@ def run_app() -> None:
 
     from india_resilience_tool.app.geo_cache import (
         build_adm1_from_adm2,
+        build_adm3_geojson_by_district,
         enrich_adm2_with_state_names,
         load_hydro_subbasin_selector_index,
         load_local_adm2,
@@ -176,10 +177,20 @@ def run_app() -> None:
         adm1 = build_adm1_from_adm2(adm2)
         with st.spinner("Preparing landing geography..."):
             adm2 = enrich_adm2_with_state_names(adm2, adm1)
+            adm3_by_district = (
+                build_adm3_geojson_by_district(
+                    str(ADM3_GEOJSON),
+                    tolerance=SIMPLIFY_TOL_ADM3,
+                    mtime=ADM3_GEOJSON.stat().st_mtime,
+                )
+                if ADM3_GEOJSON.exists()
+                else None
+            )
 
         render_landing_page(
             adm1=adm1,
             adm2=adm2,
+            adm3_by_district=adm3_by_district,
             data_dir=DATA_DIR,
         )
         return
