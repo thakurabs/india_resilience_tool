@@ -14,6 +14,12 @@ def _write_optimized_district_master(tmp_path: Path, slug: str, rows: list[dict[
     pd.DataFrame(rows).to_parquet(path, index=False)
 
 
+def _write_optimized_block_master(tmp_path: Path, slug: str, rows: list[dict[str, object]]) -> None:
+    path = tmp_path / "processed_optimised" / "metrics" / slug / "masters" / "admin" / "block" / "state=Telangana.parquet"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_parquet(path, index=False)
+
+
 def test_glance_builder_persists_ranks_deltas_drivers_and_distributions(tmp_path: Path) -> None:
     _write_optimized_district_master(
         tmp_path,
@@ -60,6 +66,79 @@ def test_glance_builder_persists_ranks_deltas_drivers_and_distributions(tmp_path
     assert set(distributions["band"]) == {"Low", "Moderate", "High", "Very High"}
 
 
+def test_glance_builder_persists_block_thematic_drivers(tmp_path: Path) -> None:
+    _write_optimized_district_master(
+        tmp_path,
+        "composite_heat_risk",
+        [
+            {"state": "Telangana", "district": "JAGTIAL", "composite_heat_risk__ssp585__2040-2060__mean": 80.0},
+        ],
+    )
+    _write_optimized_district_master(
+        tmp_path,
+        "tasmin_tropical_nights_gt25",
+        [
+            {"state": "Telangana", "district": "JAGTIAL", "tropical_nights_gt_25C__ssp585__2040-2060__mean": 5.0},
+        ],
+    )
+    _write_optimized_block_master(
+        tmp_path,
+        "composite_heat_risk",
+        [
+            {
+                "state": "Telangana",
+                "district": "JAGTIAL",
+                "block": "VELGATUR",
+                "composite_heat_risk__ssp585__2040-2060__mean": 90.0,
+            },
+            {
+                "state": "Telangana",
+                "district": "JAGTIAL",
+                "block": "RAIKAL",
+                "composite_heat_risk__ssp585__2040-2060__mean": 40.0,
+            },
+        ],
+    )
+    _write_optimized_block_master(
+        tmp_path,
+        "tasmin_tropical_nights_gt25",
+        [
+            {
+                "state": "Telangana",
+                "district": "JAGTIAL",
+                "block": "VELGATUR",
+                "tropical_nights_gt_25C__ssp585__2040-2060__mean": 10.0,
+            },
+            {
+                "state": "Telangana",
+                "district": "JAGTIAL",
+                "block": "RAIKAL",
+                "tropical_nights_gt_25C__ssp585__2040-2060__mean": 1.0,
+            },
+        ],
+    )
+
+    build_glance_view_models(
+        data_dir=tmp_path,
+        composite_slugs=["composite_heat_risk"],
+        overwrite=True,
+    )
+
+    root = optimized_glance_root(
+        "composite_heat_risk",
+        scenario="ssp585",
+        period="2040-2060",
+        data_dir=tmp_path,
+    )
+    drivers = pd.read_parquet(root / "drivers.parquet")
+    block_drivers = drivers[drivers["scope_level"] == "block"].sort_values("block_name", kind="stable")
+
+    assert {"block_name", "__block_key"} <= set(drivers.columns)
+    assert {"state", "district", "block"} <= set(drivers["scope_level"])
+    assert block_drivers["__block_key"].tolist() == ["telangana|jagtial|raikal", "telangana|jagtial|velgatur"]
+    assert block_drivers["driver_score_display"].tolist() == ["0.0", "100.0"]
+
+
 def test_glance_builder_uses_sector_rule_score_drivers(tmp_path: Path) -> None:
     _write_optimized_district_master(
         tmp_path,
@@ -90,6 +169,60 @@ def test_glance_builder_uses_sector_rule_score_drivers(tmp_path: Path) -> None:
 
     assert drivers["driver_slug"].tolist() == ["txx_ge_45", "txx_ge_45"]
     assert drivers["driver_source"].eq("proposal_rule_score").all()
+
+
+def test_glance_builder_persists_block_sector_rule_score_drivers(tmp_path: Path) -> None:
+    _write_optimized_district_master(
+        tmp_path,
+        "composite_health_risk",
+        [
+            {
+                "state": "Telangana",
+                "district": "A",
+                "composite_health_risk__ssp585__2040-2060__mean": 75.0,
+                "txx_ge_45__ssp585__2040-2060__score": 100.0,
+            }
+        ],
+    )
+    _write_optimized_block_master(
+        tmp_path,
+        "composite_health_risk",
+        [
+            {
+                "state": "Telangana",
+                "district": "A",
+                "block": "One",
+                "composite_health_risk__ssp585__2040-2060__mean": 80.0,
+                "txx_ge_45__ssp585__2040-2060__score": 91.0,
+            },
+            {
+                "state": "Telangana",
+                "district": "A",
+                "block": "Two",
+                "composite_health_risk__ssp585__2040-2060__mean": 40.0,
+                "txx_ge_45__ssp585__2040-2060__score": 12.0,
+            },
+        ],
+    )
+
+    build_glance_view_models(
+        data_dir=tmp_path,
+        composite_slugs=["composite_health_risk"],
+        overwrite=True,
+    )
+
+    root = optimized_glance_root(
+        "composite_health_risk",
+        scenario="ssp585",
+        period="2040-2060",
+        data_dir=tmp_path,
+    )
+    drivers = pd.read_parquet(root / "drivers.parquet")
+    block_drivers = drivers[drivers["scope_level"] == "block"]
+
+    assert block_drivers["driver_source"].eq("proposal_rule_score").all()
+    assert block_drivers["__block_key"].tolist() == ["telangana|a|one", "telangana|a|two"]
+    assert block_drivers["driver_score_display"].tolist() == ["91.0", "12.0"]
 
 
 def test_glance_builder_persists_raw_primary_class_metric_for_riverine_flood(tmp_path: Path) -> None:

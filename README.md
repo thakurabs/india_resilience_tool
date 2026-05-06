@@ -24,6 +24,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - each visible Glance bundle now reads a persisted optimized Glance view model from disk; the dashboard no longer computes scores, ranks, bands, drivers, attributes, or distributions at runtime
   - `Deep Dive` from Glance opens the matching persisted composite metric such as `Composite Heat Stress`
   - supports India -> state -> district drill-down before entering Deep Dive
+  - block drill-down drawers use block-scoped persisted driver rows when available, with a clearly labeled parent-district fallback for older Glance artifacts or bundles without block driver inputs
   - uses explicit state clicks at India overview and district clicks within the selected state
   - top-bar geography search provides type-to-filter state and district suggestions
   - Deep Dive preserves current bundle, scenario-period, and geography and opens the existing detailed workflow

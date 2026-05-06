@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from india_resilience_tool.analysis.bundle_scores import normalize_metric_series
+from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 from india_resilience_tool.config.bundle_weights import get_bundle_weights
 from india_resilience_tool.config.dashboard_bundles import (
     DashboardBundleSpec,
@@ -44,8 +45,10 @@ GLANCE_DRIVER_COLUMNS = [
     "scope_level",
     "state_name",
     "district_name",
+    "block_name",
     "__state_key",
     "__district_key",
+    "__block_key",
     "driver_rank",
     "driver_slug",
     "driver_label",
@@ -116,8 +119,10 @@ GLANCE_REQUIRED_COLUMNS: dict[str, set[str]] = {
         "scope_level",
         "state_name",
         "district_name",
+        "block_name",
         "__state_key",
         "__district_key",
+        "__block_key",
         "driver_rank",
         "driver_slug",
         "driver_label",
@@ -143,6 +148,40 @@ GLANCE_REQUIRED_COLUMNS: dict[str, set[str]] = {
         "band",
         "band_order",
         "count",
+    },
+    "block.parquet": {
+        "bundle_slug",
+        "bundle_name",
+        "group_key",
+        "selector_label",
+        "scenario",
+        "period",
+        "state_name",
+        "district_name",
+        "block_name",
+        "__state_key",
+        "__district_key",
+        "__block_key",
+        "bundle_score",
+        "bundle_score_display",
+        "score_band",
+        "block_rank_within_district",
+        "block_count_within_district",
+        "block_percentile_within_district",
+        "risk_class_within_district",
+        "block_rank_within_state",
+        "block_count_within_state",
+        "block_percentile_within_state",
+        "risk_class_within_state",
+        "national_block_rank",
+        "national_block_count",
+        "district_bundle_score",
+        "district_bundle_score_display",
+        "district_rank",
+        "state_bundle_score",
+        "state_bundle_score_display",
+        "state_rank",
+        "state_count",
     },
 }
 
@@ -196,19 +235,23 @@ def _format_signed_delta(value: object) -> Optional[str]:
     return f"{numeric:+.1f}"
 
 
-def _admin_sources_for_slug(slug: str, *, data_dir: Path) -> tuple[Path, ...]:
+def _admin_sources_for_slug(slug: str, *, data_dir: Path, level: str = "district") -> tuple[Path, ...]:
+    level_norm = str(level or "district").strip().lower()
+    if level_norm not in {"district", "block"}:
+        raise ValueError(f"Unsupported admin level for Glance sources: {level!r}")
+
     metric_root = resolve_optimized_metric_root(slug, data_dir=data_dir)
     if metric_root.exists():
         optimized = tuple(
             path
-            for path in optimized_master_sources_from_metric_root(metric_root, level="district", selected_state="All")
+            for path in optimized_master_sources_from_metric_root(metric_root, level=level_norm, selected_state="All")
             if path.exists()
         )
         if optimized:
             return optimized
 
     legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
-    master_name = get_master_csv_filename("district")
+    master_name = get_master_csv_filename(level_norm)
     states = sorted(path for path in legacy_root.iterdir() if path.is_dir()) if legacy_root.exists() else []
     return tuple(
         resolved
@@ -218,7 +261,11 @@ def _admin_sources_for_slug(slug: str, *, data_dir: Path) -> tuple[Path, ...]:
     )
 
 
-def _standardize_district_frame(df: pd.DataFrame) -> pd.DataFrame:
+def _standardize_admin_frame(df: pd.DataFrame, *, level: str) -> pd.DataFrame:
+    level_norm = str(level or "district").strip().lower()
+    if level_norm not in {"district", "block"}:
+        raise ValueError(f"Unsupported admin level for Glance frame: {level!r}")
+
     out = df.copy()
     rename_map: dict[str, str] = {}
     if "state_name" not in out.columns:
@@ -231,16 +278,32 @@ def _standardize_district_frame(df: pd.DataFrame) -> pd.DataFrame:
             if candidate in out.columns:
                 rename_map[candidate] = "district_name"
                 break
+    if level_norm == "block" and "block_name" not in out.columns:
+        for candidate in ("block", "BLOCK", "shapeName_3", "subdistrict", "subdistrict_name"):
+            if candidate in out.columns:
+                rename_map[candidate] = "block_name"
+                break
     if rename_map:
         out = out.rename(columns=rename_map)
-    for col in ("state_name", "district_name"):
+    required = ["state_name", "district_name"]
+    if level_norm == "block":
+        required.append("block_name")
+    for col in required:
         if col not in out.columns:
             out[col] = ""
         out[col] = out[col].astype("string").fillna("").str.strip()
     out = out[(out["state_name"] != "") & (out["district_name"] != "")]
+    if level_norm == "block":
+        out = out[out["block_name"] != ""]
     out["__state_key"] = out["state_name"].astype(str).map(alias)
     out["__district_key"] = out["__state_key"] + "|" + out["district_name"].astype(str).map(alias)
+    if level_norm == "block":
+        out["__block_key"] = out["__district_key"] + "|" + out["block_name"].astype(str).map(alias)
     return out.reset_index(drop=True)
+
+
+def _standardize_district_frame(df: pd.DataFrame) -> pd.DataFrame:
+    return _standardize_admin_frame(df, level="district")
 
 
 def _load_metric_values(
@@ -250,25 +313,28 @@ def _load_metric_values(
     period: str,
     stat: str,
     data_dir: Path,
+    level: str = "district",
 ) -> pd.DataFrame:
-    sources = _admin_sources_for_slug(slug, data_dir=data_dir)
-    columns = ["state_name", "district_name", "__state_key", "__district_key", slug]
+    level_norm = str(level or "district").strip().lower()
+    if level_norm not in {"district", "block"}:
+        raise ValueError(f"Unsupported admin level for Glance metric values: {level!r}")
+    sources = _admin_sources_for_slug(slug, data_dir=data_dir, level=level_norm)
+    key_cols = ["state_name", "district_name", "__state_key", "__district_key"]
+    if level_norm == "block":
+        key_cols.extend(["block_name", "__block_key"])
+    columns = [*key_cols, slug]
     if not sources:
         return pd.DataFrame(columns=columns)
-    df = _standardize_district_frame(normalize_master_columns(load_master_csvs(sources)))
+    df = _standardize_admin_frame(normalize_master_columns(load_master_csvs(sources)), level=level_norm)
     metric_base = str(VARIABLES.get(slug, {}).get("periods_metric_col") or slug).strip()
     value_col = resolve_metric_column(df, metric_base, scenario, canonical_period_label(period), stat)
-    out = df[["state_name", "district_name", "__state_key", "__district_key"]].copy()
+    out = df[key_cols].copy()
     out[slug] = pd.to_numeric(df[value_col], errors="coerce") if value_col in df.columns else np.nan
-    return (
-        out.groupby(["state_name", "district_name", "__state_key", "__district_key"], as_index=False, dropna=False)[slug]
-        .mean()
-        .reset_index(drop=True)
-    )
+    return out.groupby(key_cols, as_index=False, dropna=False)[slug].mean().reset_index(drop=True)
 
 
-def _available_pairs_for_slug(slug: str, *, data_dir: Path) -> tuple[tuple[str, str], ...]:
-    sources = _admin_sources_for_slug(slug, data_dir=data_dir)
+def _available_pairs_for_slug(slug: str, *, data_dir: Path, level: str = "district") -> tuple[tuple[str, str], ...]:
+    sources = _admin_sources_for_slug(slug, data_dir=data_dir, level=level)
     if not sources:
         return ()
     df = normalize_master_columns(load_master_csvs(sources))
@@ -302,6 +368,26 @@ def _bundle_pairs(spec: DashboardBundleSpec, *, data_dir: Path) -> tuple[tuple[s
         for period in ordered_period_keys(by_scenario.get(scenario, [])):
             ordered.append((scenario, period))
     return tuple(ordered)
+
+
+def _add_rank_percentile(
+    frame: pd.DataFrame,
+    *,
+    score_col: str,
+    group_key: object,
+    rank_col: str,
+    count_col: str,
+    percentile_col: str,
+    risk_col: str,
+) -> pd.DataFrame:
+    out = frame.copy()
+    scores = pd.to_numeric(out[score_col], errors="coerce")
+    grouped = scores.groupby(group_key, dropna=False)
+    out[rank_col] = grouped.rank(method="min", ascending=False, na_option="bottom").where(scores.notna())
+    out[count_col] = grouped.transform(lambda series: int(pd.to_numeric(series, errors="coerce").notna().sum()))
+    out[percentile_col] = (grouped.rank(pct=True, method="max", ascending=True) * 100.0).where(scores.notna())
+    out[risk_col] = out[percentile_col].map(risk_class_from_percentile)
+    return out
 
 
 def _base_score_tables(
@@ -447,6 +533,122 @@ def _base_score_tables(
     )
 
 
+def _block_score_table(
+    spec: DashboardBundleSpec,
+    *,
+    scenario: str,
+    period: str,
+    data_dir: Path,
+    district: pd.DataFrame,
+) -> pd.DataFrame:
+    if "block" not in {level.lower() for level in spec.supported_levels}:
+        return pd.DataFrame(columns=sorted(GLANCE_REQUIRED_COLUMNS["block.parquet"]))
+    if (str(scenario).strip().lower(), canonical_period_label(period)) not in set(
+        _available_pairs_for_slug(spec.composite_slug, data_dir=data_dir, level="block")
+    ):
+        return pd.DataFrame(columns=sorted(GLANCE_REQUIRED_COLUMNS["block.parquet"]))
+
+    score_frame = _load_metric_values(
+        spec.composite_slug,
+        scenario=scenario,
+        period=period,
+        stat="mean",
+        data_dir=data_dir,
+        level="block",
+    ).rename(columns={spec.composite_slug: "bundle_score"})
+    if score_frame.empty:
+        return pd.DataFrame(columns=sorted(GLANCE_REQUIRED_COLUMNS["block.parquet"]))
+
+    block = score_frame.copy()
+    block["bundle_slug"] = spec.composite_slug
+    block["bundle_name"] = spec.canonical_bundle
+    block["group_key"] = spec.group_key
+    block["selector_label"] = spec.selector_label
+    block["scenario"] = str(scenario).strip().lower()
+    block["period"] = canonical_period_label(period)
+    block["bundle_score"] = pd.to_numeric(block["bundle_score"], errors="coerce")
+    block["bundle_score_display"] = block["bundle_score"].map(format_score)
+    block["score_band"] = block["bundle_score"].map(score_band)
+
+    block = _add_rank_percentile(
+        block,
+        score_col="bundle_score",
+        group_key=block["__district_key"],
+        rank_col="block_rank_within_district",
+        count_col="block_count_within_district",
+        percentile_col="block_percentile_within_district",
+        risk_col="risk_class_within_district",
+    )
+    block = _add_rank_percentile(
+        block,
+        score_col="bundle_score",
+        group_key=block["__state_key"],
+        rank_col="block_rank_within_state",
+        count_col="block_count_within_state",
+        percentile_col="block_percentile_within_state",
+        risk_col="risk_class_within_state",
+    )
+    score_values = pd.to_numeric(block["bundle_score"], errors="coerce")
+    block["national_block_rank"] = score_values.rank(method="min", ascending=False, na_option="bottom").where(
+        score_values.notna()
+    )
+    block["national_block_count"] = int(score_values.notna().sum())
+
+    parent_cols = [
+        "__district_key",
+        "bundle_score",
+        "bundle_score_display",
+        "district_rank",
+        "state_bundle_score",
+        "state_bundle_score_display",
+        "state_rank",
+        "state_count",
+    ]
+    parent = district[parent_cols].rename(
+        columns={
+            "bundle_score": "district_bundle_score",
+            "bundle_score_display": "district_bundle_score_display",
+        }
+    )
+    block = block.merge(parent, on="__district_key", how="left")
+
+    block_cols = [
+        "bundle_slug",
+        "bundle_name",
+        "group_key",
+        "selector_label",
+        "scenario",
+        "period",
+        "state_name",
+        "district_name",
+        "block_name",
+        "__state_key",
+        "__district_key",
+        "__block_key",
+        "bundle_score",
+        "bundle_score_display",
+        "score_band",
+        "block_rank_within_district",
+        "block_count_within_district",
+        "block_percentile_within_district",
+        "risk_class_within_district",
+        "block_rank_within_state",
+        "block_count_within_state",
+        "block_percentile_within_state",
+        "risk_class_within_state",
+        "national_block_rank",
+        "national_block_count",
+        "district_bundle_score",
+        "district_bundle_score_display",
+        "district_rank",
+        "state_bundle_score",
+        "state_bundle_score_display",
+        "state_rank",
+        "state_count",
+    ]
+    return block[block_cols].sort_values(["state_name", "district_name", "block_name"], kind="stable")
+
+
 def _driver_rows_for_scope(
     values: pd.DataFrame,
     *,
@@ -454,12 +656,14 @@ def _driver_rows_for_scope(
     scope_level: str,
 ) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
-    group_cols = ["state_name", "__state_key"] if scope_level == "state" else [
-        "state_name",
-        "district_name",
-        "__state_key",
-        "__district_key",
-    ]
+    group_cols_by_scope = {
+        "state": ["state_name", "__state_key"],
+        "district": ["state_name", "district_name", "__state_key", "__district_key"],
+        "block": ["state_name", "district_name", "block_name", "__state_key", "__district_key", "__block_key"],
+    }
+    if scope_level not in group_cols_by_scope:
+        raise ValueError(f"Unsupported driver scope level: {scope_level!r}")
+    group_cols = group_cols_by_scope[scope_level]
     for keys, group in values.groupby(group_cols, dropna=False):
         key_values = keys if isinstance(keys, tuple) else (keys,)
         base = dict(zip(group_cols, key_values))
@@ -485,8 +689,10 @@ def _driver_rows_for_scope(
                     "scope_level": scope_level,
                     "state_name": base.get("state_name"),
                     "district_name": base.get("district_name"),
+                    "block_name": base.get("block_name"),
                     "__state_key": base.get("__state_key"),
                     "__district_key": base.get("__district_key"),
+                    "__block_key": base.get("__block_key"),
                     "driver_rank": rank,
                     "driver_slug": item["driver_slug"],
                     "driver_label": item["driver_label"],
@@ -506,7 +712,9 @@ def _thematic_drivers(
     data_dir: Path,
 ) -> pd.DataFrame:
     values: Optional[pd.DataFrame] = None
+    block_values: Optional[pd.DataFrame] = None
     driver_specs: list[tuple[str, str, str]] = []
+    block_driver_specs: list[tuple[str, str, str]] = []
     for entry in get_bundle_weights(spec.canonical_bundle):
         if entry.is_attribute:
             continue
@@ -524,15 +732,39 @@ def _thematic_drivers(
             how="outer",
         )
         driver_specs.append((slug, str(VARIABLES.get(slug, {}).get("label") or slug), "thematic_component_norm"))
+        block_frame = _load_metric_values(
+            slug,
+            scenario=scenario,
+            period=period,
+            stat="mean",
+            data_dir=data_dir,
+            level="block",
+        )
+        if block_frame.empty:
+            continue
+        block_norm = normalize_metric_series(
+            block_frame[slug],
+            higher_is_worse=bool(VARIABLES.get(slug, {}).get("rank_higher_is_worse", True)),
+        )
+        block_frame = block_frame[
+            ["state_name", "district_name", "block_name", "__state_key", "__district_key", "__block_key"]
+        ].copy()
+        block_frame[slug] = block_norm
+        block_values = block_frame if block_values is None else block_values.merge(
+            block_frame,
+            on=["state_name", "district_name", "block_name", "__state_key", "__district_key", "__block_key"],
+            how="outer",
+        )
+        block_driver_specs.append((slug, str(VARIABLES.get(slug, {}).get("label") or slug), "thematic_component_norm"))
     if values is None or not driver_specs:
         return pd.DataFrame(columns=GLANCE_DRIVER_COLUMNS)
-    return pd.concat(
-        [
-            _driver_rows_for_scope(values, driver_specs=driver_specs, scope_level="state"),
-            _driver_rows_for_scope(values, driver_specs=driver_specs, scope_level="district"),
-        ],
-        ignore_index=True,
-    )
+    frames = [
+        _driver_rows_for_scope(values, driver_specs=driver_specs, scope_level="state"),
+        _driver_rows_for_scope(values, driver_specs=driver_specs, scope_level="district"),
+    ]
+    if block_values is not None and block_driver_specs:
+        frames.append(_driver_rows_for_scope(block_values, driver_specs=block_driver_specs, scope_level="block"))
+    return pd.concat(frames, ignore_index=True)
 
 
 def _sector_drivers(
@@ -560,13 +792,28 @@ def _sector_drivers(
         driver_specs.append((rule.rule_slug, rule.display_label, "proposal_rule_score"))
     if not driver_specs:
         return pd.DataFrame(columns=GLANCE_DRIVER_COLUMNS)
-    return pd.concat(
-        [
-            _driver_rows_for_scope(values, driver_specs=driver_specs, scope_level="state"),
-            _driver_rows_for_scope(values, driver_specs=driver_specs, scope_level="district"),
-        ],
-        ignore_index=True,
-    )
+    frames = [
+        _driver_rows_for_scope(values, driver_specs=driver_specs, scope_level="state"),
+        _driver_rows_for_scope(values, driver_specs=driver_specs, scope_level="district"),
+    ]
+
+    block_sources = _admin_sources_for_slug(spec.composite_slug, data_dir=data_dir, level="block")
+    if block_sources:
+        block_df = _standardize_admin_frame(normalize_master_columns(load_master_csvs(block_sources)), level="block")
+        block_values = block_df[
+            ["state_name", "district_name", "block_name", "__state_key", "__district_key", "__block_key"]
+        ].copy()
+        block_driver_specs: list[tuple[str, str, str]] = []
+        for rule in proposal_spec.rules:
+            column = proposal_rule_score_column(rule.rule_slug, scenario, selected_period)
+            if column not in block_df.columns:
+                continue
+            block_values[rule.rule_slug] = pd.to_numeric(block_df[column], errors="coerce")
+            block_driver_specs.append((rule.rule_slug, rule.display_label, "proposal_rule_score"))
+        if block_driver_specs:
+            frames.append(_driver_rows_for_scope(block_values, driver_specs=block_driver_specs, scope_level="block"))
+
+    return pd.concat(frames, ignore_index=True)
 
 
 def _attribute_display(slug: str, value: object) -> Optional[str]:
@@ -641,11 +888,17 @@ def build_glance_view_model_for_bundle(
         results.append(GlanceBuildResult(spec.composite_slug, scenario, period, out_root, wrote=not dry_run))
         if dry_run:
             continue
-        if out_root.exists() and not overwrite and all((out_root / name).exists() for name in GLANCE_FILENAMES):
+        block_expected = "block" in {level.lower() for level in spec.supported_levels} and (
+            str(scenario).strip().lower(),
+            canonical_period_label(period),
+        ) in set(_available_pairs_for_slug(spec.composite_slug, data_dir=data_dir, level="block"))
+        expected_filenames = (*GLANCE_FILENAMES, "block.parquet") if block_expected else GLANCE_FILENAMES
+        if out_root.exists() and not overwrite and all((out_root / name).exists() for name in expected_filenames):
             continue
         district, state = _base_score_tables(spec, scenario=scenario, period=period, data_dir=data_dir)
         if district.empty and state.empty:
             continue
+        block = _block_score_table(spec, scenario=scenario, period=period, data_dir=data_dir, district=district)
         drivers = (
             _sector_drivers(spec, scenario=scenario, period=period, data_dir=data_dir)
             if spec.group_key == "sector_wise"
@@ -659,6 +912,8 @@ def build_glance_view_model_for_bundle(
         drivers.to_parquet(out_root / "drivers.parquet", index=False)
         attrs.to_parquet(out_root / "attributes.parquet", index=False)
         distributions.to_parquet(out_root / "distributions.parquet", index=False)
+        if not block.empty:
+            block.to_parquet(out_root / "block.parquet", index=False)
     return results
 
 
