@@ -427,6 +427,7 @@ def test_build_execution_plan_counts_exact_tasks(
         "yearly-ensemble": 0,
         "context": 1,
         "geometry": 6,
+        "glance": 0,
         "manifest": 1,
     }
     assert plan.total_tasks == 15

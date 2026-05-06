@@ -14,7 +14,7 @@ The current working tree supports:
 - sector-wise bundles for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
 - `Life & Livelihood Loss Risk` is intentionally district-only in the dashboard until its block-level duplication issue is fixed
 - declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance bundles
-- persisted visible-Glance composite metrics declared in `india_resilience_tool/config/composite_metrics.py` and built offline into admin master files
+- persisted visible-Glance composite metrics declared in `india_resilience_tool/config/composite_metrics.py` and optimized Glance view-model artifacts built offline from admin master files
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
 - type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
 - a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff, with Glance -> Deep Dive now opening the matching persisted composite metric
@@ -51,6 +51,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, persisted visible-Glance composites, Aqueduct, population, groundwater, Telangana JRC flood depth, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
 | `python -m tools.pipeline.build_composite_metrics --help` | Build persisted district/block composite masters for the 6 thematic dashboard bundles under the legacy `processed/` metric layout |
 | `python -m tools.pipeline.build_proposal_bundles --help` | Build persisted admin district/block proposal climate-risk bundle masters under `processed/<proposal_composite_slug>/<state>/` and the helper `r95p_interannual_variability` masters |
+| `python -m tools.pipeline.build_glance_view_model --help` | Build persisted optimized Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal dashboard prep gets these through `build_processed_optimised` |
 | `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional `--prune-scope`, destructive `--full-rebuild`, `--dry-run`, exact pre-scan task counting, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
 | `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` filtering, and write `parity_report.json` |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
@@ -163,7 +164,7 @@ Aqueduct methodology note:
 | `geography.py` | Filesystem-backed admin geography discovery helpers |
 | `geography_controls.py` | Sidebar geography + analysis-focus controls for admin and hydro |
 | `help_text.py` | Tooltip/help-text helpers for ribbon widgets |
-| `landing_runtime.py` | Climate-hazard landing/discovery orchestrator, persisted visible-Glance composite loading, state transitions, and Deep Dive handoff |
+| `landing_runtime.py` | Climate-hazard landing/discovery orchestrator that loads persisted optimized Glance view models only, plus state transitions and Deep Dive handoff |
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
 | `main.py` | Package Streamlit entrypoint |
 | `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
@@ -199,6 +200,7 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `composite_metrics.py` | Streamlit-free builders for persisted district/block composite Glance metric masters |
+| `glance_view_model.py` | Streamlit-free builder for persisted optimized Glance district/state scores, drivers, attributes, and distributions |
 | `proposal_bundles.py` | Streamlit-free builders for persisted proposal climate-risk bundle masters plus the `r95p_interannual_variability` helper masters |
 | `master_builder.py` | Build master CSVs, including hydro master enrichment and Parquet companions for runtime serving |
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
@@ -237,7 +239,7 @@ Aqueduct methodology note:
 | `river_topology.py` | Streamlit-free river reach validation and hydro-side river summary builders |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
 | `master_loader.py` | Robust master-table loading, normalization, schema parsing, and Parquet-first runtime preference |
-| `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle, including optimized geometry and context paths |
+| `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle, including optimized geometry, context, and Glance view-model paths |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
 | `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |
 

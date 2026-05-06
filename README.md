@@ -21,7 +21,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - thematic bundles remain available for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`
   - sector-wise bundles are available for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
   - `Life & Livelihood Loss Risk` is intentionally hidden at block level until its current duplication defect is fixed
-  - each visible Glance bundle now reads one persisted composite admin metric from disk; the dashboard no longer computes visible bundle scores at runtime
+  - each visible Glance bundle now reads a persisted optimized Glance view model from disk; the dashboard no longer computes scores, ranks, bands, drivers, attributes, or distributions at runtime
   - `Deep Dive` from Glance opens the matching persisted composite metric such as `Composite Heat Stress`
   - supports India -> state -> district drill-down before entering Deep Dive
   - uses explicit state clicks at India overview and district clicks within the selected state
@@ -193,6 +193,15 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 - case-study export inputs
 - simplified runtime geometry shards plus compact selector indexes for block and sub-basin dropdowns
 - reference overlay context files, including river display artifacts and the JRC RP-100 flood-depth overlay PNG/metadata when present
+- Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`
+
+Glance artifacts can also be built directly for debugging:
+
+```bash
+python -m tools.pipeline.build_glance_view_model --help
+```
+
+The normal operator sequence is: build climate/proposal/JRC masters, run `python -m tools.optimized.build_processed_optimised`, then deploy the dashboard. Streamlit reads the persisted Glance view-model Parquet files only; formatting or scoring changes require rebuilding those artifacts.
 
 JRC RP-100 reference overlay artifacts:
 - the existing JRC build command also exports `IRT_DATA_DIR/jrc_flood_depth/overlay/rp100_depth_overlay.png`

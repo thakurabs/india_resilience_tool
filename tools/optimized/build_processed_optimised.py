@@ -29,6 +29,16 @@ from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_BASIN_RENDER,
     SIMPLIFY_TOL_SUBBASIN_RENDER,
 )
+from india_resilience_tool.compute.glance_view_model import (
+    GLANCE_FILENAMES,
+    GLANCE_REQUIRED_COLUMNS,
+    build_glance_view_models,
+    glance_manifest_payload,
+)
+from india_resilience_tool.config.dashboard_bundles import (
+    get_dashboard_bundle_spec_by_slug,
+    get_dashboard_bundle_specs,
+)
 from india_resilience_tool.config.paths import get_paths_config, resolve_processed_root
 from india_resilience_tool.config.proposal_bundles import (
     get_proposal_bundle_spec_by_slug,
@@ -48,11 +58,14 @@ from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.data.optimized_bundle import (
     OPTIMIZED_DIRNAME,
     bundle_manifest_path,
+    optimized_glance_root,
     optimized_context_path,
     optimized_geometry_path,
     optimized_master_path,
+    optimized_master_sources_from_metric_root,
     optimized_yearly_ensemble_path,
     optimized_yearly_models_path,
+    resolve_optimized_metric_root,
     resolve_optimized_bundle_root,
 )
 from india_resilience_tool.utils.naming import alias
@@ -164,6 +177,7 @@ class BuildPlan:
     context_tasks: tuple[BuildTask, ...]
     geometry_tasks: tuple[BuildTask, ...]
     manifest_task: BuildTask
+    glance_slugs: tuple[str, ...] = ()
 
     def stage_totals(self) -> dict[str, int]:
         return {
@@ -172,6 +186,7 @@ class BuildPlan:
             "yearly-ensemble": sum(len(job.sources) + 1 for job in self.yearly_ensemble_jobs),
             "context": len(self.context_tasks),
             "geometry": len(self.geometry_tasks),
+            "glance": len(self.glance_slugs),
             "manifest": 1,
         }
 
@@ -1297,6 +1312,7 @@ def _write_manifest(
             "removed": ["std", "p05", "p95", "n_models", "values_per_model", "models"],
         },
         "summaries": _bundle_inventory_summaries(data_dir=data_dir),
+        "glance_view_model": glance_manifest_payload(data_dir=data_dir),
     }
     path = bundle_manifest_path(data_dir=data_dir)
 
@@ -1333,6 +1349,27 @@ def _selected_levels(levels: Optional[list[str]]) -> tuple[str, ...]:
             if level not in resolved:
                 resolved.append(level)
     return tuple(resolved or LEVEL_SELECTIONS["all"])
+
+
+def _admin_sources_for_glance_slug(slug: str, *, data_dir: Path) -> bool:
+    """Return whether a dashboard composite has district master inputs for Glance."""
+    optimized_root = resolve_optimized_metric_root(slug, data_dir=data_dir)
+    if optimized_root.exists():
+        if any(
+            path.exists()
+            for path in optimized_master_sources_from_metric_root(
+                optimized_root,
+                level="district",
+                selected_state="All",
+            )
+        ):
+            return True
+
+    legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
+    if not legacy_root.exists():
+        return False
+    master_name = LEGACY_MASTER_FILENAMES["district"]
+    return any(_legacy_master_source(state_root / master_name) is not None for state_root in _iter_state_dirs(legacy_root))
 
 
 def _build_execution_plan(
@@ -1566,6 +1603,20 @@ def _build_execution_plan(
         if include_geometry
         else tuple()
     )
+    glance_slugs: tuple[str, ...] = ()
+    if include_context and "district" in selected_levels:
+        selected_metric_set = {str(slug).strip() for slug in metrics or [] if str(slug).strip()}
+        dashboard_specs = [
+            spec
+            for spec in get_dashboard_bundle_specs()
+            if spec.show_in_landing
+            and (not selected_metric_set or spec.composite_slug in selected_metric_set)
+        ]
+        glance_slugs = tuple(
+            spec.composite_slug
+            for spec in dashboard_specs
+            if _admin_sources_for_glance_slug(spec.composite_slug, data_dir=data_dir)
+        )
     manifest_task = BuildTask(
         stage="manifest",
         label="bundle manifest",
@@ -1579,6 +1630,7 @@ def _build_execution_plan(
         yearly_ensemble_jobs=tuple(yearly_ensemble_jobs),
         context_tasks=tuple(context_tasks),
         geometry_tasks=tuple(geometry_tasks),
+        glance_slugs=glance_slugs,
         manifest_task=manifest_task,
     )
 
@@ -1710,6 +1762,10 @@ def _owned_scope_paths(
             owned.append(optimized_context_path("admin_block_index.parquet", data_dir=data_dir))
         if "sub_basin" in levels:
             owned.append(optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir))
+        if "district" in levels:
+            for slug in slugs:
+                if get_dashboard_bundle_spec_by_slug(slug) is not None:
+                    owned.append(optimized_glance_root(slug, data_dir=data_dir))
 
     return _iter_unique_paths(owned)
 
@@ -1771,6 +1827,15 @@ def _collect_write_targets(*, plan: BuildPlan, data_dir: Path, run_audit: bool) 
     for task in plan.geometry_tasks:
         if task.target_path is not None:
             targets.append(task.target_path)
+    for slug in plan.glance_slugs:
+        for result in build_glance_view_models(
+            data_dir=data_dir,
+            composite_slugs=[slug],
+            overwrite=True,
+            dry_run=True,
+        ):
+            for filename in GLANCE_FILENAMES:
+                targets.append(result.output_root / filename)
     if plan.manifest_task.target_path is not None:
         targets.append(plan.manifest_task.target_path)
     if run_audit:
@@ -1925,6 +1990,27 @@ def audit_processed_optimised_parity(
                 }
             )
 
+    for slug in plan.glance_slugs:
+        for result in build_glance_view_models(
+            data_dir=data_dir,
+            composite_slugs=[slug],
+            overwrite=True,
+            dry_run=True,
+        ):
+            for filename in GLANCE_FILENAMES:
+                path = result.output_root / filename
+                ok, missing_cols = _table_has_required_columns(path, GLANCE_REQUIRED_COLUMNS[filename])
+                if not ok:
+                    issues.append(
+                        {
+                            "stage": "glance",
+                            "slug": slug,
+                            "level": "district",
+                            "target": str(path),
+                            "missing_columns": missing_cols,
+                        }
+                    )
+
     for task in plan.geometry_tasks:
         if task.target_path is not None and not task.target_path.exists():
             issues.append(
@@ -1956,6 +2042,7 @@ def audit_processed_optimised_parity(
         "expected_yearly_ensemble_outputs": len(plan.yearly_ensemble_jobs),
         "expected_context_outputs": len(plan.context_tasks),
         "expected_geometry_outputs": len(plan.geometry_tasks),
+        "expected_glance_outputs": len(plan.glance_slugs) * len(GLANCE_FILENAMES),
         "issue_count": len(issues),
         "issues": issues,
     }
@@ -2167,6 +2254,18 @@ def build_processed_optimised_bundle(
 
         if include_context:
             _copy_context_artifacts(tasks=plan.context_tasks, progress=progress)
+            for slug in plan.glance_slugs:
+                task = BuildTask(stage="glance", label=f"glance | {slug}", slug=slug)
+
+                def _write_glance(slug=slug) -> None:
+                    build_glance_view_models(
+                        data_dir=data_dir,
+                        composite_slugs=[slug],
+                        overwrite=overwrite,
+                        dry_run=False,
+                    )
+
+                _run_task(task, progress, _write_glance)
         if include_geometry:
             _write_geometry_bundle(data_dir=data_dir, tasks=plan.geometry_tasks, progress=progress)
 
