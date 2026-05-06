@@ -8,9 +8,12 @@ from india_resilience_tool.app.map_pipeline import (
     _build_map_render_signature,
     _build_nonspatial_details_source_df,
     _filter_frame_by_selection_value,
+    _stack_legend_blocks,
     blocked_drilldown_message,
     details_require_geometry,
 )
+from india_resilience_tool.app.overlays import RP100_FLOOD_DEPTH_BINS
+from india_resilience_tool.viz.colors import build_rp100_flood_depth_legend_html
 
 
 def test_blocked_drilldown_message_requires_narrowing_for_fine_grain_views() -> None:
@@ -185,3 +188,19 @@ def test_build_map_render_signature_ignores_overlay_and_river_context_changes() 
 
     assert base == overlay_changed
     assert base != river_changed
+
+
+def test_stack_legend_blocks_keeps_both_legend_fragments() -> None:
+    html = _stack_legend_blocks('<div id="main"></div>', '<div id="rp100"></div>', map_height=560)
+
+    assert 'id="main"' in html
+    assert 'id="rp100"' in html
+    assert "flex-direction:row" in html
+    assert "gap:28px" in html
+    assert "height:560px" in html
+
+
+def test_rp100_overlay_legend_uses_responsive_map_height() -> None:
+    html = build_rp100_flood_depth_legend_html(bins=RP100_FLOOD_DEPTH_BINS, map_height=560)
+
+    assert "height: 419px" in html

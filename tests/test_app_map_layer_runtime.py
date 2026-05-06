@@ -81,6 +81,7 @@ def test_image_overlay_pane_passes_through_and_population_z_order(tmp_path: Path
         image_path=image_path,
         bounds_latlon=[[0.0, 0.0], [1.0, 1.0]],
         pane=map_view.PANE_POPULATION_RASTER,
+        legend_html="<div>Population legend</div>",
     )
     m = folium.Map(location=[0.0, 0.0], zoom_start=5)
     map_view.add_overlay_render_layers(m, overlay_layers=(layer,))

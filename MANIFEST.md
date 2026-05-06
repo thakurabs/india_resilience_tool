@@ -123,6 +123,8 @@ Notes:
 
 Reference overlay contracts:
 - `rp100_flood_depth_raster`: display-only RP-100 flood-depth raster overlay backed by `jrc_flood_depth/overlay/rp100_depth_overlay.png` and metadata, with optimized copies under `processed_optimised/context/`.
+- The RP-100 overlay render layer may carry `OverlayRenderLayer.legend_html`, derived from static `RP100_FLOOD_DEPTH_BINS`, so the active reference overlay can share the existing map legend column.
+- `build_rp100_flood_depth_legend_html()` builds the compact RP-100 legend from those bins; its swatches mirror the exporter `RP100_OVERLAY_COLORS` ramp: transparent `<=0`, then `#d6f0ff`, `#9dd9ff`, `#5bb7f0`, `#2f7fc1`, `#1d4f91`, and `#0f2f5f`.
 - `population_exposure_2025_raster`: display-only India-wide population exposure overlay backed by `population/overlay/population_exposure_2025_overlay.png` and `population/overlay/population_exposure_2025_overlay_meta.json`, with optimized copies under `processed_optimised/context/population/overlay/`.
 - Population overlay display semantics are binned people per source cell from `ind_pop_2025_CN_1km_R2025A_UA_v1.tif`; the canonical ramp is transparent for `<=0`, then `#fff7bc`, `#fee391`, `#fec44f`, `#fe9929`, `#ec7014`, `#cc4c02`, `#993404`, `#7f1d1d`, and `#4c0519` for values above 10000.
 - Dashboard runtime reads exported overlay artifacts only; it does not read source TIFFs.

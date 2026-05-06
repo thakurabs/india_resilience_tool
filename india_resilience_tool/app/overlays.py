@@ -39,6 +39,16 @@ POPULATION_COLOR_RAMP: list[dict[str, Any]] = [
     {"min_value_exclusive": 10000.0, "max_value_inclusive": None, "color_hex": "#4c0519", "transparent": False},
 ]
 
+RP100_FLOOD_DEPTH_BINS: tuple[tuple[str, str], ...] = (
+    ("<=0 m (no flood)", "rgba(255,255,255,0)"),
+    ("0-0.5 m", "#d6f0ff"),
+    ("0.5-1 m", "#9dd9ff"),
+    ("1-2 m", "#5bb7f0"),
+    ("2-4 m", "#2f7fc1"),
+    ("4-7 m", "#1d4f91"),
+    (">7 m", "#0f2f5f"),
+)
+
 
 @dataclass(frozen=True)
 class OverlayDefinition:
@@ -90,6 +100,7 @@ class OverlayRenderLayer:
     feature_collection: Optional[Mapping[str, Any]] = None
     tooltip_fields: Optional[tuple[str, ...]] = None
     pane: Optional[str] = None
+    legend_html: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.kind == "image":
@@ -508,6 +519,7 @@ def build_overlay_render_layers(
         resolve_river_subbasin_diagnostics,
     )
     from india_resilience_tool.viz.folium_featurecollection import clone_featurecollection_for_patch
+    from india_resilience_tool.viz.colors import build_rp100_flood_depth_legend_html
 
     layers: list[OverlayRenderLayer] = []
     messages: list[str] = []
@@ -527,6 +539,7 @@ def build_overlay_render_layers(
                     opacity_pct=flood_state.opacity_pct,
                     image_path=png_path,
                     bounds_latlon=meta["bounds_latlon"],
+                    legend_html=build_rp100_flood_depth_legend_html(bins=RP100_FLOOD_DEPTH_BINS),
                 )
             )
 

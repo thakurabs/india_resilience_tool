@@ -321,6 +321,42 @@ def test_active_population_overlay_zero_opacity_returns_image_layer(tmp_path: Pa
     hash(signature)
 
 
+def test_active_rp100_overlay_layer_carries_legend_html(tmp_path: Path) -> None:
+    _write_valid_pair(tmp_path / "jrc_flood_depth" / "overlay")
+    states = {
+        RP100_FLOOD_OVERLAY_ID: resolve_overlay_control_states(
+            session_state={
+                "overlay_rp100_flood_depth_raster_enabled": True,
+            },
+            spatial_family="admin",
+            admin_level="district",
+            selected_state="Telangana",
+            selected_basin="All",
+            river_display_geojson_path=tmp_path / "river_network_display.geojson",
+            data_dir=tmp_path,
+        )[RP100_FLOOD_OVERLAY_ID]
+    }
+    layers, messages, signature = build_overlay_render_layers(
+        overlay_states=states,
+        spatial_family="admin",
+        admin_level="district",
+        selected_basin="All",
+        selected_subbasin="All",
+        data_dir=tmp_path,
+        river_display_geojson_path=tmp_path / "river_network_display.geojson",
+        river_basin_reconciliation_path=tmp_path / "river_basin_name_reconciliation.csv",
+        river_subbasin_diagnostics_path=tmp_path / "river_subbasin_diagnostics.csv",
+        alias_fn=lambda value: str(value).strip().lower(),
+    )
+    rp100_layer = next(layer for layer in layers if layer.overlay_id == RP100_FLOOD_OVERLAY_ID)
+
+    assert messages == ()
+    assert rp100_layer.legend_html is not None
+    assert "RP-100 flood depth" in rp100_layer.legend_html
+    assert ">7 m" in rp100_layer.legend_html
+    hash(signature)
+
+
 @pytest.mark.parametrize(
     "mutate",
     [

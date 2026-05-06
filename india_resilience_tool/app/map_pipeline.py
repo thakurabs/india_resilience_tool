@@ -35,6 +35,8 @@ from india_resilience_tool.analysis.metrics import risk_class_from_percentile
 from india_resilience_tool.app.color_range_controls import compute_color_range_defaults
 from india_resilience_tool.app.overlays import (
     OverlayControlState,
+    RP100_FLOOD_DEPTH_BINS,
+    RP100_FLOOD_OVERLAY_ID,
     build_overlay_render_layers,
 )
 from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
@@ -47,6 +49,7 @@ from india_resilience_tool.viz.colors import (
     FLOOD_SEVERITY_CLASS_COLORS,
     apply_fillcolor_classed,
     apply_fillcolor_binned,
+    build_rp100_flood_depth_legend_html,
     build_vertical_categorical_legend_block_html,
     build_vertical_binned_legend_block_html,
 )
@@ -88,6 +91,21 @@ def _uses_fixed_class_scale(variable_slug: str, varcfg: Mapping[str, Any]) -> bo
         str(variable_slug or "").strip().lower() == FLOOD_SEVERITY_METRIC_SLUG
         and str(varcfg.get("class_display_mode") or "").strip().lower() == "label_with_score"
     )
+
+
+def _stack_legend_blocks(primary_html: str, overlay_html: str, *, map_height: int) -> str:
+    """Pair the choropleth legend and active overlay legend in one legend column."""
+    return f"""
+<div style="height:{int(map_height)}px; width:100%; display:flex; flex-direction:row;
+            align-items:center; justify-content:center; gap:28px; min-width:0; overflow:visible;">
+  <div style="height:100%; min-width:0; overflow:visible;">
+    {primary_html}
+  </div>
+  <div style="height:100%; min-width:0; overflow:visible;">
+    {overlay_html}
+  </div>
+</div>
+"""
 
 
 def details_require_geometry(
@@ -731,6 +749,26 @@ def build_map_and_rankings(
             map_height=map_height,
             bar_width_px=18,
         )
+
+    overlay_legend_html = next(
+        (
+            build_rp100_flood_depth_legend_html(
+                bins=RP100_FLOOD_DEPTH_BINS,
+                map_height=map_height,
+            )
+            for layer in overlay_layers
+            if layer.overlay_id == RP100_FLOOD_OVERLAY_ID and layer.legend_html
+        ),
+        None,
+    )
+    if legend_block_html and overlay_legend_html:
+        legend_block_html = _stack_legend_blocks(
+            legend_block_html,
+            overlay_legend_html,
+            map_height=map_height,
+        )
+    elif overlay_legend_html:
+        legend_block_html = overlay_legend_html
 
     return MapArtifacts(
         merged=merged,
