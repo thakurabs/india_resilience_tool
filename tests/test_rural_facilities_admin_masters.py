@@ -112,7 +112,7 @@ def test_build_outputs_zero_count_admin_units_and_per_capita(monkeypatch, tmp_pa
     denom_district = pd.DataFrame(
         {
             "state": ["Telangana"],
-            "district": ["Demo District"],
+            "district": ["DEMO DISTRICT"],
             POPULATION_DENOMINATOR_COL: [3000.0],
         }
     )
@@ -139,6 +139,7 @@ def test_build_outputs_zero_count_admin_units_and_per_capita(monkeypatch, tmp_pa
     block_rates = dict(zip(outputs.block_master["block"], outputs.block_master[RATE_METRIC_SLUGS["total"]]))
     assert block_rates["A Block"] == pytest.approx(300.0)
     assert np.isnan(block_rates["B Block"])
+    assert outputs.district_master["district"].iloc[0] == "DEMO DISTRICT"
     assert float(outputs.district_master[COUNT_METRIC_SLUGS["total"]].iloc[0]) == 3.0
     assert float(outputs.district_master[RATE_METRIC_SLUGS["total"]].iloc[0]) == pytest.approx(100.0)
     assert (tmp_path / "qa" / "rural_facilities_population_denominator_issues.csv").exists()
