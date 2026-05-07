@@ -11,16 +11,21 @@ from india_resilience_tool.app.overlays import (
     OVERLAY_DEFINITIONS,
     POPULATION_COLOR_RAMP,
     POPULATION_EXPOSURE_OVERLAY_ID,
+    RURAL_FACILITIES_CATEGORIES,
+    RURAL_FACILITIES_COLOR_RAMP,
+    RURAL_FACILITIES_DENSITY_OVERLAY_ID,
     RP100_FLOOD_OVERLAY_ID,
     RIVER_NETWORK_OVERLAY_ID,
     OverlayRenderLayer,
     build_overlay_render_layers,
     discover_population_exposure_overlay_artifact,
+    discover_rural_facilities_density_overlay_artifact,
     discover_rp100_overlay_artifact,
     ensure_overlay_session_state,
     overlay_cache_signature,
     resolve_overlay_control_states,
     validate_population_exposure_overlay_metadata,
+    validate_rural_facilities_density_overlay_metadata,
     validate_rp100_overlay_metadata,
 )
 
@@ -79,6 +84,40 @@ def _write_valid_population_pair(root: Path, *, width: int = 2, bounds=None) -> 
     return png, meta
 
 
+def _valid_rural_facilities_metadata(*, category: str = "total", width: int = 2, bounds=None) -> dict:
+    return {
+        "overlay_id": RURAL_FACILITIES_DENSITY_OVERLAY_ID,
+        "category": category,
+        "source_shapefile_names": ["Agroinfrastructure.shp"],
+        "snapshot_period": "2019-2021",
+        "display_units": "facilities per 1,000 km2",
+        "display_transform": "assigned_points_per_effective_area_1000km2",
+        "grid_crs": "EPSG:6933",
+        "grid_cell_size_m": 10000,
+        "image_crs": "EPSG:3857",
+        "bounds_latlon": bounds or [[10.0, 70.0], [20.0, 80.0]],
+        "width_px": width,
+        "height_px": 2,
+        "color_ramp": RURAL_FACILITIES_COLOR_RAMP,
+        "source_row_counts": [],
+        "valid_coordinate_count": 4,
+        "assigned_count": 3,
+        "unmatched_count": 1,
+        "ambiguous_count": 0,
+        "source_positive_max": 25.0,
+        "clipped_above_display_max": False,
+    }
+
+
+def _write_valid_rural_facilities_pair(root: Path, *, category: str = "total", width: int = 2) -> tuple[Path, Path]:
+    png = root / f"rural_facilities_density_{category}_overlay.png"
+    meta = root / f"rural_facilities_density_{category}_overlay_meta.json"
+    root.mkdir(parents=True, exist_ok=True)
+    png.write_bytes(b"png")
+    meta.write_text(json.dumps(_valid_rural_facilities_metadata(category=category, width=width)), encoding="utf-8")
+    return png, meta
+
+
 def test_overlay_session_state_defaults_clamps_and_migrates_legacy_river_key() -> None:
     ss = {"show_river_network": True, "overlay_rp100_flood_depth_raster_opacity_pct": 150}
     ensure_overlay_session_state(ss)
@@ -87,6 +126,9 @@ def test_overlay_session_state_defaults_clamps_and_migrates_legacy_river_key() -
     assert ss["overlay_rp100_flood_depth_raster_opacity_pct"] == 100
     assert ss["overlay_population_exposure_2025_raster_enabled"] is False
     assert ss["overlay_population_exposure_2025_raster_opacity_pct"] == 50
+    assert ss["overlay_rural_facilities_density_enabled"] is False
+    assert ss["overlay_rural_facilities_density_opacity_pct"] == 55
+    assert ss["overlay_rural_facilities_density_category"] == "total"
 
 
 def test_flood_visibility_availability_and_forced_off_for_non_telangana(tmp_path: Path) -> None:
@@ -165,6 +207,70 @@ def test_population_overlay_available_in_hydro_all_basin_while_river_is_not(tmp_
     )
     assert states[POPULATION_EXPOSURE_OVERLAY_ID].available is True
     assert states[RIVER_NETWORK_OVERLAY_ID].available is False
+
+
+def test_rural_facilities_overlay_category_precedence_and_signature(tmp_path: Path) -> None:
+    optimized = tmp_path / "processed_optimised" / "context" / "rural_facilities" / "overlay"
+    canonical = tmp_path / "rural_facilities" / "overlay"
+    opt_png, _ = _write_valid_rural_facilities_pair(optimized, category="health")
+    _write_valid_rural_facilities_pair(canonical, category="health")
+    found, meta, reason = discover_rural_facilities_density_overlay_artifact(data_dir=tmp_path, category="health")
+    assert found == opt_png
+    assert meta is not None
+    assert reason is None
+
+    states = resolve_overlay_control_states(
+        session_state={
+            "overlay_rural_facilities_density_enabled": True,
+            "overlay_rural_facilities_density_category": "health",
+        },
+        spatial_family="hydro",
+        admin_level="basin",
+        selected_state="All",
+        selected_basin="All",
+        river_display_geojson_path=tmp_path / "river_network_display.geojson",
+        data_dir=tmp_path,
+    )
+    rural = states[RURAL_FACILITIES_DENSITY_OVERLAY_ID]
+    assert rural.available is True
+    assert rural.selected_category == "health"
+    assert rural.category_choices == RURAL_FACILITIES_CATEGORIES
+
+    layers, messages, signature = build_overlay_render_layers(
+        overlay_states={RURAL_FACILITIES_DENSITY_OVERLAY_ID: rural},
+        spatial_family="hydro",
+        admin_level="basin",
+        selected_basin="All",
+        selected_subbasin="All",
+        data_dir=tmp_path,
+        river_display_geojson_path=tmp_path / "river_network_display.geojson",
+        river_basin_reconciliation_path=tmp_path / "river_basin_name_reconciliation.csv",
+        river_subbasin_diagnostics_path=tmp_path / "river_subbasin_diagnostics.csv",
+        alias_fn=lambda value: str(value).strip().lower(),
+    )
+    assert messages == ()
+    assert len(layers) == 1
+    assert layers[0].selected_category == "health"
+    assert "health" in signature
+
+
+def test_rural_facilities_overlay_missing_messages(tmp_path: Path) -> None:
+    states = resolve_overlay_control_states(
+        session_state={},
+        spatial_family="admin",
+        admin_level="district",
+        selected_state="All",
+        selected_basin="All",
+        river_display_geojson_path=tmp_path / "river_network_display.geojson",
+        data_dir=tmp_path,
+    )
+    assert states[RURAL_FACILITIES_DENSITY_OVERLAY_ID].availability_reason == (
+        "Rural facilities density overlay artifacts are not exported yet. Run the rural facilities build to create the PNG and metadata."
+    )
+
+    _write_valid_rural_facilities_pair(tmp_path / "rural_facilities" / "overlay", category="total")
+    _png, _meta, reason = discover_rural_facilities_density_overlay_artifact(data_dir=tmp_path, category="agro")
+    assert "category 'agro'" in str(reason)
 
 
 def test_population_overlay_missing_artifacts_use_actionable_message(tmp_path: Path) -> None:
@@ -259,6 +365,14 @@ def test_population_metadata_validator_returns_normalized_schema() -> None:
         "color_ramp",
     }
     assert normalized["color_ramp"] == POPULATION_COLOR_RAMP
+
+
+def test_rural_facilities_metadata_validator_returns_normalized_schema() -> None:
+    normalized = validate_rural_facilities_density_overlay_metadata(_valid_rural_facilities_metadata(category="agro"))
+    assert normalized["overlay_id"] == RURAL_FACILITIES_DENSITY_OVERLAY_ID
+    assert normalized["category"] == "agro"
+    assert normalized["image_crs"] == "EPSG:3857"
+    assert normalized["color_ramp"] == RURAL_FACILITIES_COLOR_RAMP
 
 
 def test_rp100_metadata_validator_requires_mercator_image_crs() -> None:
@@ -423,5 +537,6 @@ def test_overlay_definition_sidebar_order() -> None:
     assert tuple(OVERLAY_DEFINITIONS) == (
         RP100_FLOOD_OVERLAY_ID,
         POPULATION_EXPOSURE_OVERLAY_ID,
+        RURAL_FACILITIES_DENSITY_OVERLAY_ID,
         RIVER_NETWORK_OVERLAY_ID,
     )

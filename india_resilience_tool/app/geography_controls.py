@@ -446,6 +446,20 @@ def render_geography_and_analysis_focus(
                         key=overlay_state.enabled_key,
                         disabled=(not analysis_ready) or (not overlay_state.available),
                     )
+                    if overlay_state.category_key and overlay_state.category_choices:
+                        current_category = overlay_state.selected_category or overlay_state.category_choices[0]
+                        index = (
+                            overlay_state.category_choices.index(current_category)
+                            if current_category in overlay_state.category_choices
+                            else 0
+                        )
+                        st.selectbox(
+                            f"{overlay_state.label} category",
+                            options=list(overlay_state.category_choices),
+                            index=index,
+                            key=overlay_state.category_key,
+                            disabled=(not analysis_ready) or (not overlay_state.available),
+                        )
                     st.slider(
                         overlay_state.slider_label,
                         min_value=0,
@@ -466,6 +480,13 @@ def render_geography_and_analysis_focus(
                         slider_label=state.slider_label,
                         enabled_key=state.enabled_key,
                         opacity_key=state.opacity_key,
+                        category_key=state.category_key,
+                        selected_category=(
+                            str(st.session_state.get(state.category_key, state.selected_category))
+                            if state.category_key
+                            else None
+                        ),
+                        category_choices=state.category_choices,
                         visible=state.visible,
                         available=state.available,
                         enabled=bool(st.session_state.get(state.enabled_key, False)) and state.available,

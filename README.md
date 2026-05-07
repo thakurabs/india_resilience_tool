@@ -57,6 +57,11 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - fixed snapshot semantics: `snapshot`, `2025`
   - optional `Reference overlays` sidebar section across admin and hydro views can display a binned `Population exposure (2025)` raster overlay
   - the dashboard runtime reads only exported population overlay PNG/metadata artifacts, not the raw population TIFF
+- Rural facilities exposure onboarding:
+  - Total, agro, education, health, and service rural facility counts on district and block units
+  - matching per-100k people rates using the 2025 population denominator masters
+  - fixed snapshot semantics: `snapshot`, `2019-2021`
+  - optional `Reference overlays` sidebar section across admin and hydro views can display category-selectable rural facilities density artifacts
 - JRC flood-depth onboarding:
   - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
   - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
@@ -216,6 +221,11 @@ Population exposure reference overlay artifacts:
 - optimized runtime copies live under `IRT_DATA_DIR/processed_optimised/context/population/overlay/`
 - the overlay is a display-only binned people-per-source-cell reference; population metrics, rankings, legends, and details continue to use the persisted master tables
 - dashboard runtime never reads `ind_pop_2025_CN_1km_R2025A_UA_v1.tif`
+
+Rural facilities density reference overlay artifacts:
+- the rural facilities build command exports five category PNG/metadata pairs under `IRT_DATA_DIR/rural_facilities/overlay/`
+- optimized runtime copies live under `IRT_DATA_DIR/processed_optimised/context/rural_facilities/overlay/`
+- the overlay is a display-only density reference in facilities per 1,000 km2; rural facilities metrics, rankings, legends, and details continue to use persisted master tables
 
 For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.
 
@@ -548,6 +558,20 @@ This aggregates the 2025 1 km population raster onto canonical district and bloc
 - `population/overlay/population_exposure_2025_overlay_meta.json`
 
 The overlay is a display-only India raster reference using binned people-per-source-cell colors. Runtime maps use the exported PNG/metadata pair, including the optimized copies under `processed_optimised/context/population/overlay/`, and never read the raw TIFF.
+
+### Build rural facilities exposure masters
+
+```bash
+python -m tools.runs.prepare_dashboard rural-facilities --overwrite
+python -m tools.runs.prepare_dashboard dashboard-package --include-rural-facilities --overwrite
+```
+
+Optional inputs:
+- `--rural-facilities-source-dir /path/to/Ruralfacilties_4files`
+- `--rural-facilities-qa-dir /path/to/qa`
+- `--rural-facilities-overlay-dir /path/to/overlay`
+
+Outputs include `processed/rural_facilities_*/*/master_metrics_by_{district,block}.{csv,parquet}` plus `rural_facilities/overlay/rural_facilities_density_<category>_overlay.{png,json}` for `total`, `agro`, `education`, `health`, and `service`.
 
 ### Build groundwater district masters
 

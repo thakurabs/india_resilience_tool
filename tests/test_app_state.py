@@ -41,6 +41,9 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["hydro_admin_context_level"] == "district"
     assert ss["overlay_rp100_flood_depth_raster_enabled"] is False
     assert ss["overlay_rp100_flood_depth_raster_opacity_pct"] == 65
+    assert ss["overlay_rural_facilities_density_enabled"] is False
+    assert ss["overlay_rural_facilities_density_opacity_pct"] == 55
+    assert ss["overlay_rural_facilities_density_category"] == "total"
     assert ss["overlay_river_network_enabled"] is False
     assert ss["overlay_river_network_opacity_pct"] == 75
     assert ss["_pending_crosswalk_navigation"] is None

@@ -76,6 +76,9 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "overlay_rp100_flood_depth_raster_opacity_pct": 65,
     "overlay_population_exposure_2025_raster_enabled": False,
     "overlay_population_exposure_2025_raster_opacity_pct": 50,
+    "overlay_rural_facilities_density_enabled": False,
+    "overlay_rural_facilities_density_opacity_pct": 55,
+    "overlay_rural_facilities_density_category": "total",
     "overlay_river_network_enabled": False,
     "overlay_river_network_opacity_pct": 75,
 

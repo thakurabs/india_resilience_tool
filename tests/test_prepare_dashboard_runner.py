@@ -22,6 +22,7 @@ from tools.runs.prepare_dashboard import (
     build_groundwater_plan,
     build_jrc_flood_depth_plan,
     build_population_plan,
+    build_rural_facilities_plan,
     build_cli,
     execute_plan,
     main,
@@ -341,7 +342,7 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
     assert "--overwrite" in plan[0].argv
     assert "--prune-scope" not in plan[0].argv
     assert "--full-rebuild" not in plan[0].argv
-    assert plan[0].argv.count("--metric") == 8
+    assert plan[0].argv.count("--metric") == 9
     assert "composite_heat_risk" in plan[0].argv
     assert "metric_a" in plan[0].argv
     assert "metric_b" in plan[0].argv
@@ -680,13 +681,57 @@ def test_jrc_bundle_metric_resolution_includes_derived_index_slug() -> None:
     metrics = _resolve_bundle_metrics("jrc-flood-depth", args)
 
     assert metrics == [
+        "composite_flood_jrc_depth",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
-        "jrc_flood_depth_rp10",
-        "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
-        "jrc_flood_depth_rp500",
     ]
+
+
+def test_rural_facilities_bundle_metric_resolution_and_plan() -> None:
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        dry_run=True,
+        plan_only=False,
+        rural_facilities_source_dir="/tmp/rural",
+        rural_facilities_qa_dir="/tmp/qa",
+        rural_facilities_overlay_dir="/tmp/overlay",
+    )
+    metrics = _resolve_bundle_metrics("rural-facilities", args)
+    assert metrics == [
+        "rural_facilities_total_count",
+        "rural_facilities_agro_count",
+        "rural_facilities_education_count",
+        "rural_facilities_health_count",
+        "rural_facilities_service_count",
+        "rural_facilities_total_count_per_100k",
+        "rural_facilities_agro_count_per_100k",
+        "rural_facilities_education_count_per_100k",
+        "rural_facilities_health_count_per_100k",
+        "rural_facilities_service_count_per_100k",
+    ]
+    scope = BundleRuntimeScope(selected_metrics=metrics, pending_metrics=metrics, has_global_issues=False)
+    plan = build_rural_facilities_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == [
+        "blocks-geojson",
+        "rural-facilities-admin-masters",
+        "admin-exposure-summary",
+        "processed-optimised-build",
+        "processed-optimised-audit",
+    ]
+    assert "--source-dir" in plan[1].argv
+    assert "--qa-dir" in plan[1].argv
+    assert "--overlay-dir" in plan[1].argv
+
+
+def test_dashboard_package_can_include_rural_facilities() -> None:
+    args = argparse.Namespace(include_jrc_flood_depth=False, include_rural_facilities=True, level="admin", metric_slug=None)
+    metrics = _resolve_bundle_metrics("dashboard-package", args)
+    assert "rural_facilities_total_count" in metrics
+    assert "rural_facilities_service_count_per_100k" in metrics
 
 
 def test_dashboard_package_jrc_scope_resolution_includes_derived_index_slug() -> None:

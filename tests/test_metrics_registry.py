@@ -539,9 +539,12 @@ def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
 
 def test_population_exposure_domain_is_admin_only() -> None:
     admin_domains = get_domains_for_pillar("Exposure", spatial_family="admin", level="district")
-    assert admin_domains == ["Population Exposure"]
+    assert admin_domains == ["Population Exposure", "Rural Facilities Exposure"]
     admin_metrics = set(get_metrics_for_bundle("Population Exposure", spatial_family="admin", level="block"))
     assert admin_metrics == {"population_total", "population_density"}
+    rural_metrics = set(get_metrics_for_bundle("Rural Facilities Exposure", spatial_family="admin", level="block"))
+    assert "rural_facilities_total_count" in rural_metrics
+    assert "rural_facilities_total_count_per_100k" in rural_metrics
 
     hydro_pillars = get_pillars(spatial_family="hydro", level="basin")
     assert "Exposure" not in hydro_pillars

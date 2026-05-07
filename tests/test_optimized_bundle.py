@@ -244,6 +244,34 @@ def test_optimized_context_copies_population_overlay_artifacts_and_manifest_vers
     assert _read_manifest(tmp_path / "processed_optimised")["artifact_version"] == 2
 
 
+def test_optimized_context_copies_rural_facilities_overlay_artifacts(tmp_path: Path) -> None:
+    source_dir = tmp_path / "rural_facilities" / "overlay"
+    source_dir.mkdir(parents=True)
+    for category in ("total", "agro", "education", "health", "service"):
+        (source_dir / f"rural_facilities_density_{category}_overlay.png").write_bytes(b"png")
+        (source_dir / f"rural_facilities_density_{category}_overlay_meta.json").write_text('{"artifact": true}', encoding="utf-8")
+
+    plan = _build_execution_plan(
+        data_dir=tmp_path,
+        metrics=[],
+        include_geometry=False,
+        include_context=True,
+    )
+    rural_tasks = tuple(
+        task for task in plan.context_tasks if "rural_facilities_density_" in str(task.target_path)
+    )
+
+    assert len(rural_tasks) == 10
+    assert {
+        task.target_path.relative_to(tmp_path / "processed_optimised" / "context").as_posix()
+        for task in rural_tasks
+    } == {
+        f"rural_facilities/overlay/rural_facilities_density_{category}_overlay{suffix}"
+        for category in ("total", "agro", "education", "health", "service")
+        for suffix in (".png", "_meta.json")
+    }
+
+
 def test_write_geometry_bundle_normalizes_raw_admin_columns(
     tmp_path: Path,
     monkeypatch,

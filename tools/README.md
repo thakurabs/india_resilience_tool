@@ -214,6 +214,20 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 - uses raster cell-center inclusion (`all_touched=False`) and canonical polygon area in `EPSG:6933`
 - the overlay is display-only binned people-per-source-cell context; dashboard runtime and optimized bundles read the exported PNG/metadata, never the raw TIFF
 
+`tools/geodata/build_rural_facilities_admin_masters.py` notes:
+- source shapefiles:
+  - `Agroinfrastructure.shp`
+  - `Educationinfrastructure.shp`
+  - `Healthinfrastructure.shp`
+  - `Serviceinfrastructure.shp`
+- outputs:
+  - `IRT_DATA_DIR/processed/rural_facilities_*/*/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/rural_facilities_*/*/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_<category>_overlay.png`
+  - `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_<category>_overlay_meta.json`
+- QA files are written under `IRT_DATA_DIR/rural_facilities/`
+- counts use deterministic point coverage into canonical blocks, with unmatched/ambiguous/invalid coordinates reported in QA
+
 `tools/geodata/build_groundwater_district_masters.py` notes:
 - source workbook:
   - `IRT_DATA_DIR/CentralReport1773820094787.xlsx`

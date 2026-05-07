@@ -2029,6 +2029,48 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_levels": ("district", "block"),
         "rank_higher_is_worse": True,
     },
+    *[
+        {
+            "name": label,
+            "slug": slug,
+            "label": label,
+            "group": "other",
+            "value_col": slug,
+            "periods_metric_col": slug,
+            "units": units,
+            "description": (
+                "2019-2021 rural facilities snapshot assigned to canonical blocks and "
+                "rolled up to districts. Higher ranks indicate higher facility "
+                "exposure/concentration, not service adequacy."
+            ),
+            "source_type": "external",
+            "supports_yearly_trend": False,
+            "selection_mode": "static_snapshot",
+            "fixed_scenario": "snapshot",
+            "fixed_period": "2019-2021",
+            "supported_statistics": ("mean",),
+            "supports_baseline_comparison": False,
+            "supports_scenario_comparison": False,
+            "admin_rebuild_command": "python -m tools.geodata.build_rural_facilities_admin_masters --overwrite",
+            "supported_scenarios": ("snapshot",),
+            "preferred_period_order": ("2019-2021",),
+            "supported_spatial_families": ("admin",),
+            "supported_levels": ("district", "block"),
+            "rank_higher_is_worse": True,
+        }
+        for slug, label, units in (
+            ("rural_facilities_total_count", "Total Rural Facilities", "facilities"),
+            ("rural_facilities_agro_count", "Agro Infrastructure Facilities", "facilities"),
+            ("rural_facilities_education_count", "Education Infrastructure Facilities", "facilities"),
+            ("rural_facilities_health_count", "Health Infrastructure Facilities", "facilities"),
+            ("rural_facilities_service_count", "Service Infrastructure Facilities", "facilities"),
+            ("rural_facilities_total_count_per_100k", "Total Rural Facilities per 100k People", "facilities/100k people"),
+            ("rural_facilities_agro_count_per_100k", "Agro Infrastructure Facilities per 100k People", "facilities/100k people"),
+            ("rural_facilities_education_count_per_100k", "Education Infrastructure Facilities per 100k People", "facilities/100k people"),
+            ("rural_facilities_health_count_per_100k", "Health Infrastructure Facilities per 100k People", "facilities/100k people"),
+            ("rural_facilities_service_count_per_100k", "Service Infrastructure Facilities per 100k People", "facilities/100k people"),
+        )
+    ],
     {
         "name": "Stage of Ground Water Extraction",
         "slug": "gw_stage_extraction_pct",
@@ -2609,6 +2651,18 @@ DOMAINS: dict[str, list[str]] = {
         "population_total",
         "population_density",
     ],
+    "Rural Facilities Exposure": [
+        "rural_facilities_total_count",
+        "rural_facilities_agro_count",
+        "rural_facilities_education_count",
+        "rural_facilities_health_count",
+        "rural_facilities_service_count",
+        "rural_facilities_total_count_per_100k",
+        "rural_facilities_agro_count_per_100k",
+        "rural_facilities_education_count_per_100k",
+        "rural_facilities_health_count_per_100k",
+        "rural_facilities_service_count_per_100k",
+    ],
     "Aqueduct Water Risk": [
         "aq_water_stress",
         "aq_interannual_variability",
@@ -2649,6 +2703,7 @@ DOMAIN_ORDER: list[str] = [
     "Drought Risk (Advanced)",
     "Temperature Variability",
     "Population Exposure",
+    "Rural Facilities Exposure",
     "Aqueduct Water Risk",
     "Groundwater Status & Availability",
     "Riverine Flood",
@@ -2680,6 +2735,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
     ],
     "Exposure": [
         "Population Exposure",
+        "Rural Facilities Exposure",
     ],
     "Vulnerability": [],
     "Adaptive Capacity": [],
@@ -2716,6 +2772,11 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
     "Population Exposure": (
         "Static population exposure layers derived from the 2025 population raster "
         "and aggregated onto canonical district and block units."
+    ),
+    "Rural Facilities Exposure": (
+        "Static rural facilities exposure/concentration layers from the 2019-2021 "
+        "rural facilities snapshot, assigned deterministically to canonical blocks "
+        "and rolled up to districts."
     ),
     "Groundwater Status & Availability": (
         "District groundwater assessment layers from the 2024-2025 GEC workbook, "

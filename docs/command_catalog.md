@@ -104,6 +104,24 @@ Optional raster override:
 python -m tools.runs.prepare_dashboard population-exposure --population-raster /path/to/ind_pop_2025_CN_1km_R2025A_UA_v1.tif
 ```
 
+### Build rural facilities exposure masters
+
+```bash
+python -m tools.runs.prepare_dashboard rural-facilities
+python -m tools.runs.prepare_dashboard dashboard-package --include-rural-facilities
+```
+
+Builds district/block rural facilities counts and per-100k people rates for the `2019-2021` snapshot, plus category-selectable display overlays:
+- `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_total_overlay.png`
+- `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_<agro|education|health|service>_overlay.png`
+- matching `_meta.json` files and optimized copies under `IRT_DATA_DIR/processed_optimised/context/rural_facilities/overlay/`
+
+Optional overrides:
+
+```bash
+python -m tools.runs.prepare_dashboard rural-facilities --rural-facilities-source-dir /path/to/Ruralfacilties_4files --rural-facilities-qa-dir /path/to/qa --rural-facilities-overlay-dir /path/to/overlay
+```
+
 The runner refreshes the canonical block boundaries first:
 
 ```bash

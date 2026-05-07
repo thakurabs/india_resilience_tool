@@ -51,6 +51,7 @@ DEFAULT_VALIDATION_TESTS = [
     "tests/test_groundwater_district_masters.py",
     "tests/test_jrc_flood_depth_admin_masters.py",
     "tests/test_population_admin_masters.py",
+    "tests/test_rural_facilities_admin_masters.py",
     "tests/test_validate_aqueduct_workflow.py",
     "tests/test_metrics_registry.py",
     "tests/test_config.py",
@@ -61,6 +62,7 @@ DEFAULT_VALIDATION_TESTS = [
 CLIMATE_PILLAR = "Climate Hazards"
 AQUEDUCT_DOMAIN = "Aqueduct Water Risk"
 POPULATION_DOMAIN = "Population Exposure"
+RURAL_FACILITIES_DOMAIN = "Rural Facilities Exposure"
 GROUNDWATER_DOMAIN = "Groundwater Status & Availability"
 JRC_DOMAIN = "Riverine Flood"
 LEVEL_GROUPS = {
@@ -300,6 +302,8 @@ def _resolve_bundle_metrics(bundle: str, args: argparse.Namespace) -> list[str]:
         return explicit or _metrics_for_domain(AQUEDUCT_DOMAIN)
     if bundle == "population-exposure":
         return _metrics_for_domain(POPULATION_DOMAIN)
+    if bundle == "rural-facilities":
+        return _metrics_for_domain(RURAL_FACILITIES_DOMAIN)
     if bundle == "groundwater":
         return _metrics_for_domain(GROUNDWATER_DOMAIN)
     if bundle == "jrc-flood-depth":
@@ -309,6 +313,8 @@ def _resolve_bundle_metrics(bundle: str, args: argparse.Namespace) -> list[str]:
         metrics.extend(_resolve_climate_bundle_metrics(args))
         metrics.extend(_split_csv_values(getattr(args, "metric_slug", None)) or _metrics_for_domain(AQUEDUCT_DOMAIN))
         metrics.extend(_metrics_for_domain(POPULATION_DOMAIN))
+        if bool(getattr(args, "include_rural_facilities", False)):
+            metrics.extend(_metrics_for_domain(RURAL_FACILITIES_DOMAIN))
         metrics.extend(_metrics_for_domain(GROUNDWATER_DOMAIN))
         if bool(getattr(args, "include_jrc_flood_depth", False)):
             metrics.extend(_metrics_for_domain(JRC_DOMAIN))
@@ -1085,6 +1091,40 @@ def build_population_plan(
     return plan
 
 
+def build_rural_facilities_plan(
+    args: argparse.Namespace,
+    *,
+    include_blocks_geojson: bool = True,
+    include_runtime: bool = True,
+    runtime_scope: Optional[BundleRuntimeScope] = None,
+) -> list[PlannedCommand]:
+    """Build the rural facilities exposure prep plan."""
+    scope = runtime_scope or _resolve_runtime_scope("rural-facilities", args)
+    plan: list[PlannedCommand] = []
+    if not bool(getattr(args, "audit_only", False)) and (
+        bool(args.overwrite) or scope.runtime_needed or not include_runtime
+    ):
+        if include_blocks_geojson:
+            plan.extend(build_blocks_geojson_plan(args))
+        argv = _py_module_cmd("tools.geodata.build_rural_facilities_admin_masters")
+        _append_flag(argv, "--overwrite", bool(args.overwrite))
+        if getattr(args, "rural_facilities_source_dir", None):
+            argv.extend(["--source-dir", str(args.rural_facilities_source_dir)])
+        if getattr(args, "rural_facilities_qa_dir", None):
+            argv.extend(["--qa-dir", str(args.rural_facilities_qa_dir)])
+        if getattr(args, "rural_facilities_overlay_dir", None):
+            argv.extend(["--overlay-dir", str(args.rural_facilities_overlay_dir)])
+        plan.append(PlannedCommand(label="rural-facilities-admin-masters", argv=argv))
+        summary_argv = _py_module_cmd("tools.pipeline.build_admin_exposure_summary")
+        from india_resilience_tool.config.paths import get_paths_config
+
+        summary_argv.extend(["--data-dir", str(get_paths_config().data_dir)])
+        plan.append(PlannedCommand(label="admin-exposure-summary", argv=summary_argv))
+    if include_runtime:
+        plan.extend(_build_runtime_plan(args, scope=scope))
+    return plan
+
+
 def build_groundwater_plan(
     args: argparse.Namespace,
     *,
@@ -1385,6 +1425,11 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     )
     aqueduct_scope = _resolve_runtime_scope("aqueduct", args)
     population_scope = _resolve_runtime_scope("population-exposure", args)
+    rural_facilities_scope = (
+        _resolve_runtime_scope("rural-facilities", args)
+        if bool(getattr(args, "include_rural_facilities", False))
+        else BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False)
+    )
     groundwater_scope = _resolve_runtime_scope("groundwater", args)
     jrc_scope = (
         _resolve_runtime_scope("jrc-flood-depth", args, levels=("district", "block"))
@@ -1404,6 +1449,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
             + proposal_scope.pending_metrics
             + aqueduct_scope.pending_metrics
             + population_scope.pending_metrics
+            + rural_facilities_scope.pending_metrics
             + groundwater_scope.pending_metrics
             + jrc_scope.pending_metrics
         ),
@@ -1412,6 +1458,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
             or proposal_scope.has_global_issues
             or aqueduct_scope.has_global_issues
             or population_scope.has_global_issues
+            or rural_facilities_scope.has_global_issues
             or groundwater_scope.has_global_issues
             or jrc_scope.has_global_issues
         ),
@@ -1429,6 +1476,11 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     )
     aqueduct_plan = build_aqueduct_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=aqueduct_scope)
     population_plan = build_population_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=population_scope)
+    rural_facilities_plan = (
+        build_rural_facilities_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=rural_facilities_scope)
+        if bool(getattr(args, "include_rural_facilities", False))
+        else []
+    )
     groundwater_plan = build_groundwater_plan(args, include_runtime=False, runtime_scope=groundwater_scope)
     jrc_plan = (
         build_jrc_flood_depth_plan(
@@ -1449,12 +1501,13 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     )
 
     plan: list[PlannedCommand] = []
-    if aqueduct_plan or population_plan or jrc_plan:
+    if aqueduct_plan or population_plan or rural_facilities_plan or jrc_plan:
         plan.extend(build_blocks_geojson_plan(args))
     plan.extend(climate_plan)
     plan.extend(proposal_plan)
     plan.extend(aqueduct_plan)
     plan.extend(population_plan)
+    plan.extend(rural_facilities_plan)
     plan.extend(groundwater_plan)
     plan.extend(jrc_plan)
     plan.extend(_build_runtime_plan(args, scope=package_scope))
@@ -1483,6 +1536,7 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         "aqueduct-hydro-masters": "tools.geodata.build_aqueduct_hydro_masters",
         "aqueduct-validate": "tools.geodata.validate_aqueduct_workflow",
         "population-admin-masters": "tools.geodata.build_population_admin_masters",
+        "rural-facilities-admin-masters": "tools.geodata.build_rural_facilities_admin_masters",
         "groundwater-district-masters": "tools.geodata.build_groundwater_district_masters",
         "jrc-flood-depth-admin-masters": "tools.geodata.build_jrc_flood_depth_admin_masters",
     }
@@ -1493,6 +1547,13 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
             argv.extend(_build_aqueduct_metric_args(args))
         if step == "population-admin-masters" and getattr(args, "population_raster", None):
             argv.extend(["--raster", str(args.population_raster)])
+        if step == "rural-facilities-admin-masters":
+            if getattr(args, "rural_facilities_source_dir", None):
+                argv.extend(["--source-dir", str(args.rural_facilities_source_dir)])
+            if getattr(args, "rural_facilities_qa_dir", None):
+                argv.extend(["--qa-dir", str(args.rural_facilities_qa_dir)])
+            if getattr(args, "rural_facilities_overlay_dir", None):
+                argv.extend(["--overlay-dir", str(args.rural_facilities_overlay_dir)])
         if step == "groundwater-district-masters":
             if getattr(args, "groundwater_workbook", None):
                 argv.extend(["--workbook", str(args.groundwater_workbook)])
@@ -1572,6 +1633,8 @@ def build_command_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         return build_climate_hazards_plan(args, include_runtime=True)
     if command == "population-exposure":
         return build_population_plan(args, include_blocks_geojson=True, include_runtime=True)
+    if command == "rural-facilities":
+        return build_rural_facilities_plan(args, include_blocks_geojson=True, include_runtime=True)
     if command == "groundwater":
         return build_groundwater_plan(args, include_runtime=True)
     if command == "jrc-flood-depth":
@@ -1588,6 +1651,7 @@ def _print_available_commands() -> None:
     print("  aqueduct")
     print("  climate-hazards")
     print("  population-exposure")
+    print("  rural-facilities")
     print("  groundwater")
     print("  jrc-flood-depth")
     print("  dashboard-package")
@@ -1604,6 +1668,7 @@ def _print_available_commands() -> None:
         "aqueduct-hydro-masters",
         "aqueduct-validate",
         "population-admin-masters",
+        "rural-facilities-admin-masters",
         "groundwater-district-masters",
         "jrc-flood-depth-admin-masters",
         "climate-compute",
@@ -1667,6 +1732,24 @@ def _add_population_flags(parser: argparse.ArgumentParser) -> None:
         "--population-raster",
         default=None,
         help="Optional override path to the 2025 population raster used by population exposure prep.",
+    )
+
+
+def _add_rural_facilities_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--rural-facilities-source-dir",
+        default=None,
+        help="Optional override path to the rural facilities shapefile directory.",
+    )
+    parser.add_argument(
+        "--rural-facilities-qa-dir",
+        default=None,
+        help="Optional override directory for rural facilities QA outputs.",
+    )
+    parser.add_argument(
+        "--rural-facilities-overlay-dir",
+        default=None,
+        help="Optional override directory for rural facilities overlay artifacts.",
     )
 
 
@@ -1736,6 +1819,10 @@ def build_cli() -> argparse.ArgumentParser:
     _add_common_runner_flags(p_population, include_runtime_controls=True)
     _add_population_flags(p_population)
 
+    p_rural = subparsers.add_parser("rural-facilities", help="Prepare the rural facilities exposure dashboard bundle.")
+    _add_common_runner_flags(p_rural, include_runtime_controls=True)
+    _add_rural_facilities_flags(p_rural)
+
     p_groundwater = subparsers.add_parser("groundwater", help="Prepare the groundwater dashboard bundle.")
     _add_common_runner_flags(p_groundwater, include_runtime_controls=True)
     _add_groundwater_flags(p_groundwater)
@@ -1749,8 +1836,10 @@ def build_cli() -> argparse.ArgumentParser:
     _add_climate_flags(p_pkg)
     _add_aqueduct_flags(p_pkg, bundle=True)
     _add_population_flags(p_pkg)
+    _add_rural_facilities_flags(p_pkg)
     _add_groundwater_flags(p_pkg)
     _add_jrc_flags(p_pkg, prefixed=True)
+    p_pkg.add_argument("--include-rural-facilities", action="store_true", help="Include the rural facilities exposure bundle.")
     p_pkg.add_argument("--include-pytest", action="store_true", help="Run the default validation pytest set at the end.")
 
     p_validate = subparsers.add_parser("validate", help="Run Aqueduct validation and optional targeted pytest checks.")
@@ -1768,6 +1857,7 @@ def build_cli() -> argparse.ArgumentParser:
         "aqueduct-hydro-masters",
         "aqueduct-validate",
         "population-admin-masters",
+        "rural-facilities-admin-masters",
         "groundwater-district-masters",
         "jrc-flood-depth-admin-masters",
     ]:
@@ -1775,6 +1865,8 @@ def build_cli() -> argparse.ArgumentParser:
         _add_common_runner_flags(sub)
         if name == "population-admin-masters":
             _add_population_flags(sub)
+        elif name == "rural-facilities-admin-masters":
+            _add_rural_facilities_flags(sub)
         elif name == "groundwater-district-masters":
             _add_groundwater_flags(sub)
         elif name == "jrc-flood-depth-admin-masters":
