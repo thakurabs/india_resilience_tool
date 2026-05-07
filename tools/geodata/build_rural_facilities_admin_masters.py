@@ -60,6 +60,7 @@ REQUIRED_SOURCE_COLUMNS = {
     "longitude",
 }
 FACILITY_CATEGORIES: tuple[str, ...] = ("total", "agro", "education", "health", "service")
+FACILITY_OVERLAY_CATEGORIES: tuple[str, ...] = ("agro", "education", "health", "service")
 COUNT_METRIC_SLUGS: dict[str, str] = {
     "total": "rural_facilities_total_count",
     "agro": "rural_facilities_agro_count",
@@ -71,17 +72,47 @@ RATE_METRIC_SLUGS: dict[str, str] = {
     category: f"{slug}_per_100k" for category, slug in COUNT_METRIC_SLUGS.items()
 }
 RURAL_FACILITIES_METRIC_SLUGS: tuple[str, ...] = tuple(COUNT_METRIC_SLUGS.values()) + tuple(RATE_METRIC_SLUGS.values())
-RURAL_FACILITIES_COLOR_RAMP: list[dict[str, object]] = [
-    {"min_value_exclusive": None, "max_value_inclusive": 0.0, "color_hex": None, "transparent": True},
-    {"min_value_exclusive": 0.0, "max_value_inclusive": 1.0, "color_hex": "#eff6ff", "transparent": False},
-    {"min_value_exclusive": 1.0, "max_value_inclusive": 5.0, "color_hex": "#bfdbfe", "transparent": False},
-    {"min_value_exclusive": 5.0, "max_value_inclusive": 10.0, "color_hex": "#93c5fd", "transparent": False},
-    {"min_value_exclusive": 10.0, "max_value_inclusive": 25.0, "color_hex": "#60a5fa", "transparent": False},
-    {"min_value_exclusive": 25.0, "max_value_inclusive": 50.0, "color_hex": "#2563eb", "transparent": False},
-    {"min_value_exclusive": 50.0, "max_value_inclusive": 100.0, "color_hex": "#7c3aed", "transparent": False},
-    {"min_value_exclusive": 100.0, "max_value_inclusive": 250.0, "color_hex": "#be123c", "transparent": False},
-    {"min_value_exclusive": 250.0, "max_value_inclusive": None, "color_hex": "#7f1d1d", "transparent": False},
-]
+def _build_ramp(hexes: tuple[str, str, str, str, str, str, str, str]) -> list[dict[str, object]]:
+    """Build the canonical 9-row density ramp from 8 single-hue stops (light to dark)."""
+    edges: list[tuple[Optional[float], Optional[float]]] = [
+        (0.0, 1.0),
+        (1.0, 5.0),
+        (5.0, 10.0),
+        (10.0, 25.0),
+        (25.0, 50.0),
+        (50.0, 100.0),
+        (100.0, 250.0),
+        (250.0, None),
+    ]
+    ramp: list[dict[str, object]] = [
+        {"min_value_exclusive": None, "max_value_inclusive": 0.0, "color_hex": None, "transparent": True}
+    ]
+    for (lo, hi), color in zip(edges, hexes):
+        ramp.append(
+            {
+                "min_value_exclusive": lo,
+                "max_value_inclusive": hi,
+                "color_hex": color,
+                "transparent": False,
+            }
+        )
+    return ramp
+
+
+RURAL_FACILITIES_COLOR_RAMPS: dict[str, list[dict[str, object]]] = {
+    "agro": _build_ramp(
+        ("#f0fdf4", "#dcfce7", "#bbf7d0", "#86efac", "#4ade80", "#22c55e", "#16a34a", "#14532d")
+    ),
+    "education": _build_ramp(
+        ("#eff6ff", "#dbeafe", "#bfdbfe", "#93c5fd", "#60a5fa", "#3b82f6", "#1d4ed8", "#1e3a8a")
+    ),
+    "health": _build_ramp(
+        ("#fef2f2", "#fee2e2", "#fecaca", "#fca5a5", "#f87171", "#ef4444", "#dc2626", "#7f1d1d")
+    ),
+    "service": _build_ramp(
+        ("#fff7ed", "#ffedd5", "#fed7aa", "#fdba74", "#fb923c", "#f97316", "#ea580c", "#7c2d12")
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -126,8 +157,11 @@ def rural_facilities_overlay_paths(overlay_dir: Path, category: str) -> tuple[Pa
 
 def _validate_category(category: str) -> str:
     value = str(category or "").strip().lower()
-    if value not in FACILITY_CATEGORIES:
-        raise ValueError(f"Unsupported rural facilities category {category!r}; expected one of {FACILITY_CATEGORIES}.")
+    if value not in FACILITY_OVERLAY_CATEGORIES:
+        raise ValueError(
+            f"Unsupported rural facilities overlay category {category!r}; "
+            f"expected one of {FACILITY_OVERLAY_CATEGORIES}."
+        )
     return value
 
 
@@ -394,20 +428,34 @@ def _hex_to_rgba(color_hex: str, alpha: int = 255) -> tuple[int, int, int, int]:
     return (int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16), int(alpha))
 
 
-def _density_rgba(data: np.ndarray) -> np.ndarray:
+def _density_rgba(data: np.ndarray, *, category: str) -> np.ndarray:
+    """Render the density grid into RGBA using the per-category color ramp."""
+    if category not in RURAL_FACILITIES_COLOR_RAMPS:
+        raise ValueError(
+            f"Unknown rural facilities overlay category {category!r}; "
+            f"expected one of {tuple(RURAL_FACILITIES_COLOR_RAMPS.keys())}."
+        )
+    ramp = RURAL_FACILITIES_COLOR_RAMPS[category]
+    bin_edges: list[tuple[float, float, str]] = []
+    for stop in ramp:
+        if stop.get("transparent"):
+            continue
+        lo = stop.get("min_value_exclusive")
+        hi = stop.get("max_value_inclusive")
+        color_hex = str(stop.get("color_hex") or "")
+        if not color_hex:
+            continue
+        lo_value = -math.inf if lo is None else float(lo)
+        hi_value = math.inf if hi is None else float(hi)
+        bin_edges.append((lo_value, hi_value, color_hex))
+
     rgba = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.uint8)
     finite = np.isfinite(data)
-    bins = (
-        (finite & (data > 0.0) & (data <= 1.0), "#eff6ff"),
-        (finite & (data > 1.0) & (data <= 5.0), "#bfdbfe"),
-        (finite & (data > 5.0) & (data <= 10.0), "#93c5fd"),
-        (finite & (data > 10.0) & (data <= 25.0), "#60a5fa"),
-        (finite & (data > 25.0) & (data <= 50.0), "#2563eb"),
-        (finite & (data > 50.0) & (data <= 100.0), "#7c3aed"),
-        (finite & (data > 100.0) & (data <= 250.0), "#be123c"),
-        (finite & (data > 250.0), "#7f1d1d"),
-    )
-    for mask, color_hex in bins:
+    for lo_value, hi_value, color_hex in bin_edges:
+        if hi_value == math.inf:
+            mask = finite & (data > lo_value)
+        else:
+            mask = finite & (data > lo_value) & (data <= hi_value)
         rgba[mask] = _hex_to_rgba(color_hex)
     return rgba
 
@@ -452,13 +500,13 @@ def export_rural_facilities_density_overlays(
     outputs: list[dict[str, object]] = []
     points_6933 = assigned_points.to_crs(GRID_CRS) if not assigned_points.empty else assigned_points
 
-    for category in FACILITY_CATEGORIES:
+    for category in FACILITY_OVERLAY_CATEGORIES:
         png_path, meta_path = rural_facilities_overlay_paths(overlay_dir, category)
         if not dry_run and not overwrite:
             existing = [str(path) for path in (png_path, meta_path) if path.exists()]
             if existing:
                 raise FileExistsError(f"Refusing to overwrite rural facilities overlay without --overwrite: {', '.join(existing)}")
-        category_points = points_6933 if category == "total" else points_6933[points_6933["facility_family"] == category]
+        category_points = points_6933[points_6933["facility_family"] == category]
         shapes = [(mapping(geom), 1) for geom in category_points.geometry if geom is not None and not geom.is_empty]
         counts = rasterize(
             shapes,
@@ -522,7 +570,7 @@ def export_rural_facilities_density_overlays(
             "bounds_latlon": [[round(wgs84_bottom, 6), round(wgs84_left, 6)], [round(wgs84_top, 6), round(wgs84_right, 6)]],
             "width_px": int(dst_width),
             "height_px": int(dst_height),
-            "color_ramp": [dict(item) for item in RURAL_FACILITIES_COLOR_RAMP],
+            "color_ramp": [dict(item) for item in RURAL_FACILITIES_COLOR_RAMPS[category]],
             "source_row_counts": source_summary.to_dict(orient="records"),
             "valid_coordinate_count": int(assignment_summary.get("valid_coordinate_count", 0)),
             "assigned_count": int(assignment_summary.get("assigned_count", 0)),
@@ -533,7 +581,7 @@ def export_rural_facilities_density_overlays(
         }
         if not dry_run:
             overlay_dir.mkdir(parents=True, exist_ok=True)
-            Image.fromarray(_density_rgba(dst), mode="RGBA").save(png_path)
+            Image.fromarray(_density_rgba(dst, category=category), mode="RGBA").save(png_path)
             meta_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         outputs.append({"category": category, "png_path": png_path, "meta_path": meta_path, "metadata": metadata})
     return outputs
@@ -556,9 +604,19 @@ def _source_summary(raw: pd.DataFrame, invalid: pd.DataFrame) -> pd.DataFrame:
 def _district_consistency(district_master: pd.DataFrame, block_master: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     for slug in COUNT_METRIC_SLUGS.values():
-        d = district_master[["state", "district", slug]].rename(columns={slug: "district_value"})
-        b = block_master.groupby(["state", "district"], as_index=False)[slug].sum().rename(columns={slug: "sum_block_value"})
-        merged = d.merge(b, on=["state", "district"], how="left")
+        d = district_master[["state", "district", slug]].rename(columns={slug: "district_value"}).copy()
+        d["_state_token"] = d["state"].map(normalize_compact)
+        d["_district_token"] = d["district"].map(normalize_compact)
+        b = block_master.copy()
+        b["_state_token"] = b["state"].map(normalize_compact)
+        b["_district_token"] = b["district"].map(normalize_compact)
+        b = (
+            b.groupby(["_state_token", "_district_token"], as_index=False)[slug]
+            .sum()
+            .rename(columns={slug: "sum_block_value"})
+        )
+        merged = d.merge(b, on=["_state_token", "_district_token"], how="left")
+        merged = merged.drop(columns=["_state_token", "_district_token"])
         merged["metric_slug"] = slug
         merged["difference"] = merged["district_value"] - merged["sum_block_value"].fillna(0)
         rows.extend(merged.to_dict(orient="records"))
@@ -620,7 +678,7 @@ def build_rural_facilities_admin_outputs(
     for slug in RURAL_FACILITIES_METRIC_SLUGS:
         planned_paths.extend(_planned_master_paths(block_masters[slug], level="block", slug=slug))
         planned_paths.extend(_planned_master_paths(district_masters[slug], level="district", slug=slug))
-    for category in FACILITY_CATEGORIES:
+    for category in FACILITY_OVERLAY_CATEGORIES:
         planned_paths.extend(rural_facilities_overlay_paths(overlay_dir, category))
 
     source_summary = _source_summary(raw, invalid)

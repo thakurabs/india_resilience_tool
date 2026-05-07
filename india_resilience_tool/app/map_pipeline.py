@@ -37,6 +37,7 @@ from india_resilience_tool.app.overlays import (
     OverlayControlState,
     RP100_FLOOD_DEPTH_BINS,
     RP100_FLOOD_OVERLAY_ID,
+    RURAL_FACILITIES_DENSITY_OVERLAY_ID,
     build_overlay_render_layers,
 )
 from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
@@ -750,7 +751,8 @@ def build_map_and_rankings(
             bar_width_px=18,
         )
 
-    overlay_legend_html = next(
+    overlay_legend_blocks: list[str] = []
+    rp100_overlay_legend = next(
         (
             build_rp100_flood_depth_legend_html(
                 bins=RP100_FLOOD_DEPTH_BINS,
@@ -761,14 +763,29 @@ def build_map_and_rankings(
         ),
         None,
     )
-    if legend_block_html and overlay_legend_html:
-        legend_block_html = _stack_legend_blocks(
-            legend_block_html,
-            overlay_legend_html,
-            map_height=map_height,
-        )
-    elif overlay_legend_html:
-        legend_block_html = overlay_legend_html
+    if rp100_overlay_legend:
+        overlay_legend_blocks.append(rp100_overlay_legend)
+
+    rural_overlay_legend = next(
+        (
+            layer.legend_html
+            for layer in overlay_layers
+            if layer.overlay_id == RURAL_FACILITIES_DENSITY_OVERLAY_ID and layer.legend_html
+        ),
+        None,
+    )
+    if rural_overlay_legend:
+        overlay_legend_blocks.append(rural_overlay_legend)
+
+    for overlay_legend_html in overlay_legend_blocks:
+        if legend_block_html:
+            legend_block_html = _stack_legend_blocks(
+                legend_block_html,
+                overlay_legend_html,
+                map_height=map_height,
+            )
+        else:
+            legend_block_html = overlay_legend_html
 
     return MapArtifacts(
         merged=merged,
