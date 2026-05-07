@@ -244,6 +244,30 @@ def test_optimized_context_copies_population_overlay_artifacts_and_manifest_vers
     assert _read_manifest(tmp_path / "processed_optimised")["artifact_version"] == 2
 
 
+def test_optimized_context_copies_built_up_overlay_artifacts(tmp_path: Path) -> None:
+    source_dir = tmp_path / "built_up_area" / "overlay"
+    source_dir.mkdir(parents=True)
+    (source_dir / "built_up_area_current_overlay.png").write_bytes(b"png")
+    (source_dir / "built_up_area_current_overlay_meta.json").write_text('{"artifact": true}', encoding="utf-8")
+
+    plan = _build_execution_plan(
+        data_dir=tmp_path,
+        metrics=[],
+        include_geometry=False,
+        include_context=True,
+    )
+    built_tasks = tuple(task for task in plan.context_tasks if "built_up_area_current_overlay" in str(task.target_path))
+
+    assert len(built_tasks) == 2
+    assert {
+        task.target_path.relative_to(tmp_path / "processed_optimised" / "context").as_posix()
+        for task in built_tasks
+    } == {
+        "built_up_area/overlay/built_up_area_current_overlay.png",
+        "built_up_area/overlay/built_up_area_current_overlay_meta.json",
+    }
+
+
 def test_optimized_context_copies_rural_facilities_overlay_artifacts(tmp_path: Path) -> None:
     source_dir = tmp_path / "rural_facilities" / "overlay"
     source_dir.mkdir(parents=True)

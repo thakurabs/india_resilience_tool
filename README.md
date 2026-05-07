@@ -62,6 +62,12 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - matching per-100k people rates using the 2025 population denominator masters
   - fixed snapshot semantics: `snapshot`, `2019-2021`
   - optional `Reference overlays` sidebar section across admin and hydro views can display category-selectable rural facilities density artifacts
+- Built-up area exposure onboarding:
+  - Built-up Area and Built-up Area Share on district and block units
+  - fixed snapshot semantics: `snapshot`, `Current`
+  - source raster contract: `IRT_DATA_DIR/built_up_area/Cleaned_India_Built_Surface_WGS84.tif`
+  - optional `Reference overlays` sidebar section across admin and hydro views can display the display-only built-up area raster overlay
+  - the dashboard runtime reads only exported built-up overlay PNG/metadata artifacts, not the raw TIFF
 - JRC flood-depth onboarding:
   - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
   - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
@@ -207,7 +213,7 @@ Glance artifacts can also be built directly for debugging:
 python -m tools.pipeline.build_glance_view_model --help
 ```
 
-The normal operator sequence is: build climate/proposal/JRC masters, run `python -m tools.optimized.build_processed_optimised`, then deploy the dashboard. Streamlit reads the persisted Glance view-model Parquet files only; formatting or scoring changes require rebuilding those artifacts.
+The normal operator sequence is: build climate/proposal/exposure/JRC masters, run `python -m tools.optimized.build_processed_optimised`, rebuild lightweight context summaries when exposure inputs changed, then deploy the dashboard. Streamlit reads the persisted Glance view-model Parquet files only; formatting or scoring changes require rebuilding those artifacts.
 
 JRC RP-100 reference overlay artifacts:
 - the existing JRC build command also exports `IRT_DATA_DIR/jrc_flood_depth/overlay/rp100_depth_overlay.png`
@@ -226,6 +232,21 @@ Rural facilities density reference overlay artifacts:
 - the rural facilities build command exports five category PNG/metadata pairs under `IRT_DATA_DIR/rural_facilities/overlay/`
 - optimized runtime copies live under `IRT_DATA_DIR/processed_optimised/context/rural_facilities/overlay/`
 - the overlay is a display-only density reference in facilities per 1,000 km2; rural facilities metrics, rankings, legends, and details continue to use persisted master tables
+
+Built-up area reference overlay artifacts:
+- place the canonical TIFF at `IRT_DATA_DIR/built_up_area/Cleaned_India_Built_Surface_WGS84.tif`, or pass a timestamped Drive download path with `--raster` / `--built-up-raster`
+- the built-up build command exports `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay.png`
+- metadata is written to `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay_meta.json`
+- optimized runtime copies live under `IRT_DATA_DIR/processed_optimised/context/built_up_area/overlay/`
+- the overlay is a display-only binned `m2/source cell` reference; built-up metrics, rankings, legends, and details continue to use persisted master tables
+- dashboard runtime never reads `Cleaned_India_Built_Surface_WGS84.tif`
+
+Built-up area operator sequence:
+
+```bash
+python -m tools.geodata.build_built_up_area_admin_masters --help
+python -m tools.runs.prepare_dashboard built-up-area --built-up-raster "<path-to-Cleaned_India_Built_Surface_WGS84.tif>" --plan-only
+```
 
 For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.
 

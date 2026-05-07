@@ -22,7 +22,12 @@ RESPONSIVE_MAP_MAX_HEIGHT = 700
 
 PANE_BASE_POLYGONS = "irt-base-polygons"
 PANE_POPULATION_RASTER = "irt-population-raster"
+PANE_BUILT_UP_AREA_RASTER = "irt-built-up-area-raster"
 PANE_RURAL_FACILITIES_RASTER = "irt-rural-facilities-density"
+PANE_RURAL_FACILITIES_AGRO_RASTER = "irt-rural-facilities-density-agro"
+PANE_RURAL_FACILITIES_EDUCATION_RASTER = "irt-rural-facilities-density-education"
+PANE_RURAL_FACILITIES_HEALTH_RASTER = "irt-rural-facilities-density-health"
+PANE_RURAL_FACILITIES_SERVICE_RASTER = "irt-rural-facilities-density-service"
 PANE_FLOOD_RASTER = "irt-flood-raster"
 PANE_CROSSWALK_OVERLAY = "irt-crosswalk-overlay"
 PANE_RIVER_OVERLAY = "irt-river-overlay"
@@ -449,8 +454,13 @@ def _ensure_overlay_panes(m: Any) -> None:
     for pane_name, z_index in (
         (PANE_BASE_POLYGONS, 400),
         (PANE_POPULATION_RASTER, 405),
+        (PANE_BUILT_UP_AREA_RASTER, 406),
         (PANE_RURAL_FACILITIES_RASTER, 407),
-        (PANE_FLOOD_RASTER, 410),
+        (PANE_RURAL_FACILITIES_AGRO_RASTER, 407),
+        (PANE_RURAL_FACILITIES_EDUCATION_RASTER, 408),
+        (PANE_RURAL_FACILITIES_HEALTH_RASTER, 409),
+        (PANE_RURAL_FACILITIES_SERVICE_RASTER, 410),
+        (PANE_FLOOD_RASTER, 411),
         (PANE_CROSSWALK_OVERLAY, 420),
         (PANE_RIVER_OVERLAY, 430),
     ):

@@ -133,6 +133,34 @@ If the rural facilities masters already exist and only the right-panel Exposure 
 python -m tools.pipeline.build_admin_exposure_summary --data-dir /path/to/irt_data
 ```
 
+### Build built-up area exposure masters
+
+Canonical source placement:
+
+```bash
+mkdir -p "$IRT_DATA_DIR/built_up_area"
+mv /path/to/Cleaned_India_Built_Surface_WGS84.tif "$IRT_DATA_DIR/built_up_area/Cleaned_India_Built_Surface_WGS84.tif"
+```
+
+Preview the dashboard-ready run:
+
+```bash
+python -m tools.geodata.build_built_up_area_admin_masters --help
+python -m tools.runs.prepare_dashboard built-up-area --built-up-raster "<path-to-Cleaned_India_Built_Surface_WGS84.tif>" --plan-only
+```
+
+Builds district/block built-up area and built-up area share masters for the `snapshot` / `Current` selector pair, plus the display-only reference overlay:
+- `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay.png`
+- `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay_meta.json`
+- optimized copies under `IRT_DATA_DIR/processed_optimised/context/built_up_area/overlay/`
+- `IRT_DATA_DIR/processed_optimised/context/admin_exposure_summary.parquet`, which can feed the right-panel Exposure Snapshot cards
+
+Notes:
+- source values are interpreted as `m2/source cell`; `0` is valid no built-up and `65535` is invalid/background
+- the builder validates the national total before writes and fails outside `43,000-220,000 km2` unless `--allow-total-outlier` is supplied
+- metrics tabulate in the source raster CRS by reprojecting vectors, while the display overlay is an EPSG:3857 PNG
+- built-up metrics are not included in v1 composites, proposal bundles, or bundle weights
+
 The runner refreshes the canonical block boundaries first:
 
 ```bash

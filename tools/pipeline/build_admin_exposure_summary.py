@@ -32,6 +32,10 @@ _RURAL_METRICS = {
     "rural_facilities_service_count": "rural_facilities_service_count__snapshot__2019-2021__mean",
     "rural_facilities_total_count_per_100k": "rural_facilities_total_count_per_100k__snapshot__2019-2021__mean",
 }
+_BUILT_UP_METRICS = {
+    "built_up_area_km2": "built_up_area_km2__snapshot__Current__mean",
+    "built_up_area_share_pct": "built_up_area_share_pct__snapshot__Current__mean",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +105,42 @@ def _load_rural_metric(data_dir: Path, *, slug: str, source_col: str, level: str
     return out.drop_duplicates(["admin_level", "admin_key"], keep="first")
 
 
+def _load_built_up_metric(data_dir: Path, *, slug: str, source_col: str, level: str) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for path in _iter_metric_master_paths(data_dir, slug=slug, level=level):
+        df = _read_state_master(path)
+        if source_col not in df.columns:
+            continue
+        if level == "block":
+            required = {"state", "district", "block"}
+            if not required.issubset(df.columns):
+                continue
+            key = [_admin_key(row["state"], row["district"], row["block"]) for _, row in df.iterrows()]
+            block_name = df["block"].astype(str).str.strip()
+        else:
+            required = {"state", "district"}
+            if not required.issubset(df.columns):
+                continue
+            key = [_admin_key(row["state"], row["district"]) for _, row in df.iterrows()]
+            block_name = pd.Series([""] * len(df), index=df.index)
+        frames.append(
+            pd.DataFrame(
+                {
+                    "admin_key": key,
+                    "admin_level": level,
+                    "state_name": df["state"].astype(str).str.strip(),
+                    "district_name": df["district"].astype(str).str.strip(),
+                    "block_name": block_name,
+                    slug: pd.to_numeric(df[source_col], errors="coerce"),
+                }
+            )
+        )
+    if not frames:
+        return pd.DataFrame(columns=["admin_key", "admin_level", "state_name", "district_name", "block_name", slug])
+    out = pd.concat(frames, ignore_index=True)
+    return out.drop_duplicates(["admin_level", "admin_key"], keep="first")
+
+
 def _merge_rural_facilities(data_dir: Path, rows: pd.DataFrame) -> pd.DataFrame:
     if rows.empty:
         return rows
@@ -121,6 +161,61 @@ def _merge_rural_facilities(data_dir: Path, rows: pd.DataFrame) -> pd.DataFrame:
     for col in _RURAL_METRICS:
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
+    return out
+
+
+def _merge_built_up_area(data_dir: Path, rows: pd.DataFrame) -> pd.DataFrame:
+    metric_frames: list[pd.DataFrame] = []
+    for slug, source_col in _BUILT_UP_METRICS.items():
+        frames = [
+            _load_built_up_metric(data_dir, slug=slug, source_col=source_col, level=level)
+            for level in ("district", "block")
+        ]
+        non_empty = [frame for frame in frames if not frame.empty]
+        metric_df = pd.concat(non_empty, ignore_index=True) if non_empty else pd.DataFrame()
+        if metric_df.empty:
+            continue
+        metric_frames.append(metric_df)
+
+    if not metric_frames:
+        return rows
+
+    built_up_rows = metric_frames[0]
+    for metric_df in metric_frames[1:]:
+        built_up_rows = built_up_rows.merge(
+            metric_df,
+            on=["admin_key", "admin_level", "state_name", "district_name", "block_name"],
+            how="outer",
+        )
+    for col in _BUILT_UP_METRICS:
+        if col in built_up_rows.columns:
+            built_up_rows[col] = pd.to_numeric(built_up_rows[col], errors="coerce")
+
+    if rows.empty:
+        out = built_up_rows.copy()
+        out["pop_2020"] = pd.NA
+        out["parent_pop_2020"] = pd.NA
+        out["parent_level"] = out["admin_level"].map({"block": "district", "district": "state"}).fillna("")
+        out["parent_name"] = out.apply(
+            lambda r: r["district_name"] if r["admin_level"] == "block" else r["state_name"],
+            axis=1,
+        )
+        out["population_share_parent_pct"] = pd.NA
+        return out
+
+    identity = ["admin_key", "admin_level", "state_name", "district_name", "block_name"]
+    metric_cols = [col for col in _BUILT_UP_METRICS if col in built_up_rows.columns]
+    out = rows.merge(
+        built_up_rows[identity + metric_cols],
+        on=identity,
+        how="outer",
+    )
+    out["parent_level"] = out["parent_level"].fillna(
+        out["admin_level"].map({"block": "district", "district": "state"})
+    )
+    out["parent_name"] = out["parent_name"].fillna(
+        out.apply(lambda r: r["district_name"] if r["admin_level"] == "block" else r["state_name"], axis=1)
+    )
     return out
 
 
@@ -230,15 +325,14 @@ def build(data_dir: Path) -> Path:
     dist_rows = _build_district_rows(data_dir)
     block_rows = _build_block_rows(data_dir)
 
-    all_rows = pd.concat(
-        [df for df in [dist_rows, block_rows] if not df.empty],
-        ignore_index=True,
-    )
+    base_frames = [df for df in [dist_rows, block_rows] if not df.empty]
+    all_rows = pd.concat(base_frames, ignore_index=True) if base_frames else pd.DataFrame()
     all_rows = _merge_rural_facilities(data_dir, all_rows)
+    all_rows = _merge_built_up_area(data_dir, all_rows)
 
     if all_rows.empty:
         raise ValueError(
-            "No rows produced — check population_district_master_qa.csv exists under <data-dir>/population/"
+            "No rows produced — check population QA or built-up processed masters exist under <data-dir>/"
         )
 
     dupe_mask = all_rows.duplicated(["admin_level", "admin_key"], keep=False)

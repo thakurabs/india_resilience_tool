@@ -102,6 +102,8 @@ CONTEXT_FILENAMES = {
     "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json": "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json",
     "population/overlay/population_exposure_2025_overlay.png": "population/overlay/population_exposure_2025_overlay.png",
     "population/overlay/population_exposure_2025_overlay_meta.json": "population/overlay/population_exposure_2025_overlay_meta.json",
+    "built_up_area/overlay/built_up_area_current_overlay.png": "built_up_area/overlay/built_up_area_current_overlay.png",
+    "built_up_area/overlay/built_up_area_current_overlay_meta.json": "built_up_area/overlay/built_up_area_current_overlay_meta.json",
     "rural_facilities/overlay/rural_facilities_density_total_overlay.png": "rural_facilities/overlay/rural_facilities_density_total_overlay.png",
     "rural_facilities/overlay/rural_facilities_density_total_overlay_meta.json": "rural_facilities/overlay/rural_facilities_density_total_overlay_meta.json",
     "rural_facilities/overlay/rural_facilities_density_agro_overlay.png": "rural_facilities/overlay/rural_facilities_density_agro_overlay.png",

@@ -18,6 +18,7 @@ from tools.runs.prepare_dashboard import (
     build_blocks_geojson_plan,
     build_climate_hazards_plan,
     build_command_plan,
+    build_built_up_area_plan,
     build_dashboard_package_plan,
     build_groundwater_plan,
     build_jrc_flood_depth_plan,
@@ -414,6 +415,11 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
             pending_metrics=["population_total"],
             has_global_issues=False,
         ),
+        "built-up-area": BundleRuntimeScope(
+            selected_metrics=["built_up_area_km2"],
+            pending_metrics=["built_up_area_km2"],
+            has_global_issues=False,
+        ),
         "groundwater": BundleRuntimeScope(
             selected_metrics=["gw_stage_extraction_pct"],
             pending_metrics=["gw_stage_extraction_pct"],
@@ -444,7 +450,13 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     )
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_bundle_metrics",
-        lambda bundle, _args: ["tas_annual_mean", "aq_water_stress", "population_total", "gw_stage_extraction_pct"]
+        lambda bundle, _args: [
+            "tas_annual_mean",
+            "aq_water_stress",
+            "population_total",
+            "built_up_area_km2",
+            "gw_stage_extraction_pct",
+        ]
         if bundle == "dashboard-package"
         else [],
     )
@@ -460,6 +472,7 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     assert labels.count("processed-optimised-build") == 1
     assert labels.count("processed-optimised-audit") == 1
     assert "population-admin-masters" in labels
+    assert "built-up-area-admin-masters" in labels
     assert "groundwater-district-masters" in labels
     assert labels[-1] == "pytest-validation"
 
@@ -489,6 +502,7 @@ def test_dashboard_package_audit_only_allows_missing_jrc_inputs(monkeypatch) -> 
     scope_map = {
         "aqueduct": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "population-exposure": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "built-up-area": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "groundwater": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "jrc-flood-depth": BundleRuntimeScope(
             selected_metrics=["jrc_flood_depth_rp10"],
@@ -526,6 +540,7 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
     scope_map = {
         "aqueduct": BundleRuntimeScope(selected_metrics=["aq_water_stress"], pending_metrics=["aq_water_stress"], has_global_issues=False),
         "population-exposure": BundleRuntimeScope(selected_metrics=["population_total"], pending_metrics=["population_total"], has_global_issues=False),
+        "built-up-area": BundleRuntimeScope(selected_metrics=["built_up_area_km2"], pending_metrics=["built_up_area_km2"], has_global_issues=False),
         "groundwater": BundleRuntimeScope(selected_metrics=["gw_stage_extraction_pct"], pending_metrics=["gw_stage_extraction_pct"], has_global_issues=False),
         "jrc-flood-depth": BundleRuntimeScope(
             selected_metrics=["jrc_flood_depth_rp10", "jrc_flood_depth_rp50"],
@@ -566,6 +581,7 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
             "tas_annual_mean",
             "aq_water_stress",
             "population_total",
+            "built_up_area_km2",
             "gw_stage_extraction_pct",
             "jrc_flood_depth_rp10",
             "jrc_flood_depth_rp50",
@@ -727,11 +743,40 @@ def test_rural_facilities_bundle_metric_resolution_and_plan() -> None:
     assert "--overlay-dir" in plan[1].argv
 
 
+def test_built_up_area_bundle_metric_resolution_and_plan() -> None:
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        dry_run=True,
+        plan_only=False,
+        built_up_raster="/tmp/built.tif",
+        built_up_qa_dir="/tmp/qa",
+        built_up_overlay_dir="/tmp/overlay",
+    )
+    metrics = _resolve_bundle_metrics("built-up-area", args)
+    assert metrics == ["built_up_area_km2", "built_up_area_share_pct"]
+    scope = BundleRuntimeScope(selected_metrics=metrics, pending_metrics=metrics, has_global_issues=False)
+    plan = build_built_up_area_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == [
+        "blocks-geojson",
+        "built-up-area-admin-masters",
+        "processed-optimised-build",
+        "admin-exposure-summary",
+        "processed-optimised-audit",
+    ]
+    assert "--raster" in plan[1].argv
+    assert "--qa-dir" in plan[1].argv
+    assert "--overlay-dir" in plan[1].argv
+
+
 def test_dashboard_package_can_include_rural_facilities() -> None:
     args = argparse.Namespace(include_jrc_flood_depth=False, include_rural_facilities=True, level="admin", metric_slug=None)
     metrics = _resolve_bundle_metrics("dashboard-package", args)
     assert "rural_facilities_total_count" in metrics
     assert "rural_facilities_service_count_per_100k" in metrics
+    assert "built_up_area_km2" in metrics
 
 
 def test_dashboard_package_jrc_scope_resolution_includes_derived_index_slug() -> None:

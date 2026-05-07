@@ -80,4 +80,9 @@ RIBBON_HELP_MD: dict[str, str] = {
         "**Example**\n"
         "If TXx is 42°C in 2041–2060 and 40°C in baseline, change = +2°C."
     ),
+    "built_up_area_exposure": (
+        "### Built-up Area Exposure\n"
+        "Current snapshot metrics derived from the cleaned built-surface raster. "
+        "Built-up area is reported in km²; share uses full polygon area in EPSG:6933."
+    ),
 }

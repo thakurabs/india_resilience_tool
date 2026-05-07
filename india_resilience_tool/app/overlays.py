@@ -14,11 +14,13 @@ OverlayKind = Literal["image", "geojson"]
 RP100_FLOOD_OVERLAY_ID = "rp100_flood_depth_raster"
 POPULATION_EXPOSURE_OVERLAY_ID = "population_exposure_2025_raster"
 RURAL_FACILITIES_DENSITY_OVERLAY_ID = "rural_facilities_density"
+BUILT_UP_AREA_OVERLAY_ID = "built_up_area_current_raster"
 RIVER_NETWORK_OVERLAY_ID = "river_network"
 
 FLOOD_LABEL = "RP-100 flood depth"
 POPULATION_LABEL = "Population exposure (2025)"
 RURAL_FACILITIES_LABEL = "Rural facilities density"
+BUILT_UP_AREA_LABEL = "Built-up area exposure"
 RIVER_LABEL = "River network"
 FLOOD_UNAVAILABLE_CAPTION = (
     "Available for Telangana and All-state admin views when the RP-100 overlay artifact is present."
@@ -28,6 +30,9 @@ POPULATION_UNAVAILABLE_CAPTION = (
 )
 RURAL_FACILITIES_UNAVAILABLE_CAPTION = (
     "Available across all map levels when the rural facilities density overlay artifact is present."
+)
+BUILT_UP_AREA_UNAVAILABLE_CAPTION = (
+    "Available across all map levels when the built-up area overlay artifact is present."
 )
 RIVER_UNAVAILABLE_CAPTION = "Select a basin or sub-basin to enable the river network overlay."
 
@@ -54,18 +59,86 @@ RP100_FLOOD_DEPTH_BINS: tuple[tuple[str, str], ...] = (
     (">7 m", "#0f2f5f"),
 )
 
-RURAL_FACILITIES_CATEGORIES: tuple[str, ...] = ("total", "agro", "education", "health", "service")
-RURAL_FACILITIES_COLOR_RAMP: list[dict[str, Any]] = [
-    {"min_value_exclusive": None, "max_value_inclusive": 0.0, "color_hex": None, "transparent": True},
-    {"min_value_exclusive": 0.0, "max_value_inclusive": 1.0, "color_hex": "#eff6ff", "transparent": False},
-    {"min_value_exclusive": 1.0, "max_value_inclusive": 5.0, "color_hex": "#bfdbfe", "transparent": False},
-    {"min_value_exclusive": 5.0, "max_value_inclusive": 10.0, "color_hex": "#93c5fd", "transparent": False},
-    {"min_value_exclusive": 10.0, "max_value_inclusive": 25.0, "color_hex": "#60a5fa", "transparent": False},
-    {"min_value_exclusive": 25.0, "max_value_inclusive": 50.0, "color_hex": "#2563eb", "transparent": False},
-    {"min_value_exclusive": 50.0, "max_value_inclusive": 100.0, "color_hex": "#7c3aed", "transparent": False},
-    {"min_value_exclusive": 100.0, "max_value_inclusive": 250.0, "color_hex": "#be123c", "transparent": False},
-    {"min_value_exclusive": 250.0, "max_value_inclusive": None, "color_hex": "#7f1d1d", "transparent": False},
-]
+RURAL_FACILITIES_REAL_CATEGORIES: tuple[str, ...] = ("agro", "education", "health", "service")
+RURAL_FACILITIES_TOTAL_CATEGORY: str = "total"
+RURAL_FACILITIES_CATEGORIES: tuple[str, ...] = (
+    RURAL_FACILITIES_TOTAL_CATEGORY,
+    *RURAL_FACILITIES_REAL_CATEGORIES,
+)
+
+
+def _rural_facilities_ramp(hexes: tuple[str, str, str, str, str, str, str, str]) -> list[dict[str, Any]]:
+    """Build a 9-row rural-facilities density ramp from 8 single-hue hex stops (light to dark)."""
+    edges: list[tuple[Optional[float], Optional[float]]] = [
+        (0.0, 1.0),
+        (1.0, 5.0),
+        (5.0, 10.0),
+        (10.0, 25.0),
+        (25.0, 50.0),
+        (50.0, 100.0),
+        (100.0, 250.0),
+        (250.0, None),
+    ]
+    ramp: list[dict[str, Any]] = [
+        {"min_value_exclusive": None, "max_value_inclusive": 0.0, "color_hex": None, "transparent": True}
+    ]
+    for (lo, hi), color in zip(edges, hexes):
+        ramp.append(
+            {
+                "min_value_exclusive": lo,
+                "max_value_inclusive": hi,
+                "color_hex": color,
+                "transparent": False,
+            }
+        )
+    return ramp
+
+
+RURAL_FACILITIES_COLOR_RAMPS: dict[str, list[dict[str, Any]]] = {
+    "agro": _rural_facilities_ramp(
+        ("#f0fdf4", "#dcfce7", "#bbf7d0", "#86efac", "#4ade80", "#22c55e", "#16a34a", "#14532d")
+    ),
+    "education": _rural_facilities_ramp(
+        ("#eff6ff", "#dbeafe", "#bfdbfe", "#93c5fd", "#60a5fa", "#3b82f6", "#1d4ed8", "#1e3a8a")
+    ),
+    "health": _rural_facilities_ramp(
+        ("#fef2f2", "#fee2e2", "#fecaca", "#fca5a5", "#f87171", "#ef4444", "#dc2626", "#7f1d1d")
+    ),
+    "service": _rural_facilities_ramp(
+        ("#fff7ed", "#ffedd5", "#fed7aa", "#fdba74", "#fb923c", "#f97316", "#ea580c", "#7c2d12")
+    ),
+}
+
+RURAL_FACILITIES_BIN_LABELS: tuple[str, ...] = (
+    "0-1",
+    "1-5",
+    "5-10",
+    "10-25",
+    "25-50",
+    "50-100",
+    "100-250",
+    ">250",
+)
+
+BUILT_UP_AREA_BIN_EDGES_M2_PER_CELL: tuple[float, ...] = (0.0, 100.0, 500.0, 1000.0, 2500.0, 5000.0)
+BUILT_UP_AREA_BIN_COLORS_HEX: tuple[Optional[str], ...] = (
+    None,
+    "#edf8fb",
+    "#b2e2e2",
+    "#66c2a4",
+    "#2ca25f",
+    "#006d2c",
+    "#00441b",
+)
+BUILT_UP_AREA_BINS: tuple[tuple[str, str], ...] = (
+    ("0 m2/cell", "rgba(255,255,255,0)"),
+    ("0-100 m2/cell", "#edf8fb"),
+    ("100-500 m2/cell", "#b2e2e2"),
+    ("500-1000 m2/cell", "#66c2a4"),
+    ("1000-2500 m2/cell", "#2ca25f"),
+    ("2500-5000 m2/cell", "#006d2c"),
+    (">5000 m2/cell", "#00441b"),
+)
 
 
 @dataclass(frozen=True)
@@ -185,6 +258,19 @@ OVERLAY_DEFINITIONS: dict[str, OverlayDefinition] = {
         default_enabled=False,
         default_opacity_pct=55,
         unavailable_caption=RURAL_FACILITIES_UNAVAILABLE_CAPTION,
+    ),
+    BUILT_UP_AREA_OVERLAY_ID: OverlayDefinition(
+        overlay_id=BUILT_UP_AREA_OVERLAY_ID,
+        label=BUILT_UP_AREA_LABEL,
+        slider_label="Built-up area opacity",
+        enabled_key="overlay_built_up_area_current_raster_enabled",
+        opacity_key="overlay_built_up_area_current_raster_opacity_pct",
+        category_key=None,
+        default_category=None,
+        category_choices=(),
+        default_enabled=False,
+        default_opacity_pct=55,
+        unavailable_caption=BUILT_UP_AREA_UNAVAILABLE_CAPTION,
     ),
     RIVER_NETWORK_OVERLAY_ID: OverlayDefinition(
         overlay_id=RIVER_NETWORK_OVERLAY_ID,
@@ -372,8 +458,11 @@ def validate_rural_facilities_density_overlay_metadata(meta: Mapping[str, Any]) 
     if str(meta.get("overlay_id") or "") != RURAL_FACILITIES_DENSITY_OVERLAY_ID:
         raise ValueError("metadata overlay_id must equal rural_facilities_density.")
     category = str(meta.get("category") or "").strip().lower()
-    if category not in RURAL_FACILITIES_CATEGORIES:
-        raise ValueError("metadata category must be one of the canonical rural facilities categories.")
+    if category not in RURAL_FACILITIES_REAL_CATEGORIES:
+        raise ValueError(
+            "metadata category must be one of the canonical rural facilities categories: "
+            f"{RURAL_FACILITIES_REAL_CATEGORIES}."
+        )
     if str(meta.get("snapshot_period") or "") != "2019-2021":
         raise ValueError("metadata snapshot_period must equal 2019-2021.")
     if str(meta.get("display_units") or "") != "facilities per 1,000 km2":
@@ -391,8 +480,12 @@ def validate_rural_facilities_density_overlay_metadata(meta: Mapping[str, Any]) 
     height_px = int(meta.get("height_px"))
     if width_px <= 0 or height_px <= 0 or width_px > 4096 or height_px > 4096:
         raise ValueError("metadata width_px and height_px must be in 1..4096.")
-    if meta.get("color_ramp") != RURAL_FACILITIES_COLOR_RAMP:
-        raise ValueError("metadata color_ramp must match the canonical rural facilities ramp.")
+    expected_ramp = RURAL_FACILITIES_COLOR_RAMPS[category]
+    if meta.get("color_ramp") != expected_ramp:
+        raise ValueError(
+            "metadata color_ramp must match the canonical rural facilities ramp for category "
+            f"{category!r}."
+        )
     source_names = meta.get("source_shapefile_names")
     if not isinstance(source_names, list) or not source_names:
         raise ValueError("metadata source_shapefile_names must be a non-empty list.")
@@ -424,13 +517,67 @@ def validate_rural_facilities_density_overlay_metadata(meta: Mapping[str, Any]) 
         "bounds_latlon": bounds,
         "width_px": width_px,
         "height_px": height_px,
-        "color_ramp": [dict(item) for item in RURAL_FACILITIES_COLOR_RAMP],
+        "color_ramp": [dict(item) for item in expected_ramp],
         "source_row_counts": source_row_counts,
         "valid_coordinate_count": valid_coordinate_count,
         "assigned_count": assigned_count,
         "unmatched_count": unmatched_count,
         "ambiguous_count": ambiguous_count,
         "source_positive_max": source_positive_max,
+        "clipped_above_display_max": bool(clipped),
+    }
+
+
+def validate_built_up_area_overlay_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate built-up area overlay metadata and return normalized values."""
+    if str(meta.get("overlay_id") or "") != BUILT_UP_AREA_OVERLAY_ID:
+        raise ValueError("metadata overlay_id must equal built_up_area_current_raster.")
+    if str(meta.get("source_raster_name") or "") != "Cleaned_India_Built_Surface_WGS84.tif":
+        raise ValueError("metadata source_raster_name must equal Cleaned_India_Built_Surface_WGS84.tif.")
+    source_crs = str(meta.get("source_crs") or "").strip()
+    if not source_crs:
+        raise ValueError("metadata source_crs is required.")
+    if str(meta.get("image_crs") or "") != "EPSG:3857":
+        raise ValueError("metadata image_crs must equal EPSG:3857.")
+    bounds = _validate_bounds_latlon(meta.get("bounds_latlon"))
+    if str(meta.get("snapshot_period") or "") != "Current":
+        raise ValueError("metadata snapshot_period must equal Current.")
+    if str(meta.get("display_units") or "") != "m2/source cell":
+        raise ValueError("metadata display_units must equal m2/source cell.")
+    if str(meta.get("display_transform") or "") != "binned_m2_per_source_cell":
+        raise ValueError("metadata display_transform must equal binned_m2_per_source_cell.")
+    if int(meta.get("invalid_value")) != 65535:
+        raise ValueError("metadata invalid_value must equal 65535.")
+    if tuple(float(v) for v in (meta.get("bin_edges_m2_per_cell") or ())) != BUILT_UP_AREA_BIN_EDGES_M2_PER_CELL:
+        raise ValueError("metadata bin_edges_m2_per_cell must match the canonical built-up bins.")
+    colors = tuple(meta.get("bin_colors_hex") or ())
+    if colors != BUILT_UP_AREA_BIN_COLORS_HEX:
+        raise ValueError("metadata bin_colors_hex must match the canonical built-up colors.")
+    width_px = int(meta.get("width_px"))
+    height_px = int(meta.get("height_px"))
+    if width_px <= 0 or height_px <= 0 or width_px > 4096 or height_px > 4096:
+        raise ValueError("metadata width_px and height_px must be in 1..4096.")
+    source_positive_max = float(meta.get("source_positive_max_built_up_m2_per_cell"))
+    if not math.isfinite(source_positive_max) or source_positive_max < 0.0:
+        raise ValueError("metadata source_positive_max_built_up_m2_per_cell must be non-negative.")
+    clipped = meta.get("clipped_above_display_max")
+    if not isinstance(clipped, bool):
+        raise ValueError("metadata clipped_above_display_max must be boolean.")
+    return {
+        "overlay_id": BUILT_UP_AREA_OVERLAY_ID,
+        "source_raster_name": "Cleaned_India_Built_Surface_WGS84.tif",
+        "source_crs": source_crs,
+        "image_crs": "EPSG:3857",
+        "bounds_latlon": bounds,
+        "snapshot_period": "Current",
+        "display_units": "m2/source cell",
+        "display_transform": "binned_m2_per_source_cell",
+        "invalid_value": 65535,
+        "bin_edges_m2_per_cell": [float(v) for v in BUILT_UP_AREA_BIN_EDGES_M2_PER_CELL],
+        "bin_colors_hex": list(BUILT_UP_AREA_BIN_COLORS_HEX),
+        "width_px": width_px,
+        "height_px": height_px,
+        "source_positive_max_built_up_m2_per_cell": source_positive_max,
         "clipped_above_display_max": bool(clipped),
     }
 
@@ -519,6 +666,16 @@ def discover_population_exposure_overlay_artifact(
     return None, None, first_error or "Population overlay artifact pair is unavailable."
 
 
+def rural_facilities_pane_name(category: str) -> str:
+    """Return the canonical Folium pane name for a rural facilities category layer."""
+    key = str(category or "").strip().lower()
+    if key not in RURAL_FACILITIES_REAL_CATEGORIES:
+        raise ValueError(
+            f"Unknown rural facilities category {category!r}; expected one of {RURAL_FACILITIES_REAL_CATEGORIES}."
+        )
+    return f"irt-rural-facilities-density-{key}"
+
+
 def _rural_facilities_artifact_pair(data_dir: Path, category: str, *, optimized: bool) -> tuple[Path, Path]:
     root = (
         data_dir / "processed_optimised" / "context" / "rural_facilities" / "overlay"
@@ -545,15 +702,90 @@ def _load_valid_rural_facilities_artifact_pair(png_path: Path, meta_path: Path) 
     return png_path, validate_rural_facilities_density_overlay_metadata(raw_meta)
 
 
+def _built_up_area_artifact_pair(data_dir: Path, *, optimized: bool) -> tuple[Path, Path]:
+    root = (
+        data_dir / "processed_optimised" / "context" / "built_up_area" / "overlay"
+        if optimized
+        else data_dir / "built_up_area" / "overlay"
+    )
+    return (
+        root / "built_up_area_current_overlay.png",
+        root / "built_up_area_current_overlay_meta.json",
+    )
+
+
+def _load_valid_built_up_area_artifact_pair(png_path: Path, meta_path: Path) -> tuple[Path, dict[str, Any]]:
+    if not png_path.exists():
+        raise FileNotFoundError(f"Built-up area overlay PNG not found: {png_path}")
+    if not meta_path.exists():
+        raise FileNotFoundError(f"Built-up area overlay metadata not found: {meta_path}")
+    try:
+        raw_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"Built-up area overlay metadata is malformed: {meta_path}") from exc
+    if not isinstance(raw_meta, dict):
+        raise ValueError("Built-up area overlay metadata must be a JSON object.")
+    return png_path, validate_built_up_area_overlay_metadata(raw_meta)
+
+
+def discover_built_up_area_overlay_artifact(
+    *,
+    data_dir: Path,
+) -> tuple[Optional[Path], Optional[dict[str, Any]], Optional[str]]:
+    """Return the first valid optimized/canonical built-up area overlay artifact pair."""
+    candidates = (
+        _built_up_area_artifact_pair(data_dir, optimized=True),
+        _built_up_area_artifact_pair(data_dir, optimized=False),
+    )
+    first_error: Optional[str] = None
+    missing_count = 0
+    for png_path, meta_path in candidates:
+        try:
+            return (*_load_valid_built_up_area_artifact_pair(png_path, meta_path), None)
+        except Exception as exc:
+            if isinstance(exc, FileNotFoundError):
+                missing_count += 1
+            if first_error is None:
+                first_error = str(exc)
+    if missing_count == len(candidates):
+        return (
+            None,
+            None,
+            "Built-up area overlay artifacts are not exported yet. Run the built-up area build to create the PNG and metadata.",
+        )
+    return None, None, first_error or "Built-up area overlay artifact pair is unavailable."
+
+
 def discover_rural_facilities_density_overlay_artifact(
     *,
     data_dir: Path,
     category: str,
 ) -> tuple[Optional[Path], Optional[dict[str, Any]], Optional[str]]:
-    """Return the first valid optimized/canonical rural facilities artifact pair for a category."""
+    """Return the first valid optimized/canonical rural facilities artifact pair for a category.
+
+    The ``total`` category is virtual: it has no PNG of its own, and is rendered at runtime by
+    stacking the four real-category layers. Discovery for ``total`` reports availability based on
+    whether at least one real-category artifact pair exists; ``png_path`` and ``meta`` are returned
+    as ``None`` and the caller is expected to iterate the real categories itself.
+    """
     category_key = str(category or "").strip().lower()
     if category_key not in RURAL_FACILITIES_CATEGORIES:
-        category_key = "total"
+        category_key = RURAL_FACILITIES_TOTAL_CATEGORY
+
+    if category_key == RURAL_FACILITIES_TOTAL_CATEGORY:
+        any_category_exists = any(
+            any(path.exists() for path in _rural_facilities_artifact_pair(data_dir, option, optimized=optimized))
+            for option in RURAL_FACILITIES_REAL_CATEGORIES
+            for optimized in (True, False)
+        )
+        if any_category_exists:
+            return None, None, None
+        return (
+            None,
+            None,
+            "Rural facilities density overlay artifacts are not exported yet. Run the rural facilities build to create the PNG and metadata.",
+        )
+
     candidates = (
         _rural_facilities_artifact_pair(data_dir, category_key, optimized=True),
         _rural_facilities_artifact_pair(data_dir, category_key, optimized=False),
@@ -571,7 +803,7 @@ def discover_rural_facilities_density_overlay_artifact(
     if missing_count == len(candidates):
         any_category_exists = any(
             any(path.exists() for path in _rural_facilities_artifact_pair(data_dir, option, optimized=optimized))
-            for option in RURAL_FACILITIES_CATEGORIES
+            for option in RURAL_FACILITIES_REAL_CATEGORIES
             for optimized in (True, False)
         )
         if not any_category_exists:
@@ -624,7 +856,14 @@ def resolve_overlay_control_states(
         data_dir=data_dir,
         category=rural_category,
     )
-    rural_available = rural_visible and rural_png is not None
+    # `total` is virtual: discovery returns (None, None, None) when at least one real-category
+    # artifact pair exists. Treat a missing reason as available regardless of whether a single
+    # png_path was returned.
+    rural_available = rural_visible and rural_reason is None
+
+    built_up_visible = True
+    built_up_png, _built_up_meta, built_up_reason = discover_built_up_area_overlay_artifact(data_dir=data_dir)
+    built_up_available = built_up_visible and built_up_png is not None
 
     river_visible = family == "hydro" and level in {"basin", "sub_basin"}
     river_reason = None
@@ -636,6 +875,7 @@ def resolve_overlay_control_states(
         RP100_FLOOD_OVERLAY_ID: (flood_visible, flood_available, flood_reason),
         POPULATION_EXPOSURE_OVERLAY_ID: (pop_visible, pop_available, pop_reason),
         RURAL_FACILITIES_DENSITY_OVERLAY_ID: (rural_visible, rural_available, rural_reason),
+        BUILT_UP_AREA_OVERLAY_ID: (built_up_visible, built_up_available, built_up_reason),
         RIVER_NETWORK_OVERLAY_ID: (river_visible, river_available, river_reason),
     }
     resolved: dict[str, OverlayControlState] = {}
@@ -728,7 +968,11 @@ def build_overlay_render_layers(
         resolve_river_subbasin_diagnostics,
     )
     from india_resilience_tool.viz.folium_featurecollection import clone_featurecollection_for_patch
-    from india_resilience_tool.viz.colors import build_rp100_flood_depth_legend_html
+    from india_resilience_tool.viz.colors import (
+        build_built_up_area_legend_html,
+        build_rp100_flood_depth_legend_html,
+        build_rural_facilities_density_legend_html,
+    )
 
     layers: list[OverlayRenderLayer] = []
     messages: list[str] = []
@@ -771,27 +1015,72 @@ def build_overlay_render_layers(
 
     rural_state = overlay_states.get(RURAL_FACILITIES_DENSITY_OVERLAY_ID)
     if rural_state and rural_state.active:
-        category = str(rural_state.selected_category or "total").strip().lower()
-        png_path, meta, reason = discover_rural_facilities_density_overlay_artifact(
-            data_dir=data_dir,
-            category=category,
-        )
+        category = str(rural_state.selected_category or RURAL_FACILITIES_TOTAL_CATEGORY).strip().lower()
+        if category == RURAL_FACILITIES_TOTAL_CATEGORY:
+            sub_categories = RURAL_FACILITIES_REAL_CATEGORIES
+            legend_html = build_rural_facilities_density_legend_html(mode="total")
+        else:
+            if category not in RURAL_FACILITIES_REAL_CATEGORIES:
+                category = RURAL_FACILITIES_TOTAL_CATEGORY
+                sub_categories = RURAL_FACILITIES_REAL_CATEGORIES
+                legend_html = build_rural_facilities_density_legend_html(mode="total")
+            else:
+                sub_categories = (category,)
+                legend_html = build_rural_facilities_density_legend_html(mode="single", category=category)
+
+        opacity_value = float(max(0, min(100, rural_state.opacity_pct)) / 100.0)
+        opacity_pct = int(rural_state.opacity_pct)
+        rural_layers_added = 0
+        rural_messages: list[str] = []
+        for index, sub_category in enumerate(sub_categories):
+            png_path, meta, reason = discover_rural_facilities_density_overlay_artifact(
+                data_dir=data_dir,
+                category=sub_category,
+            )
+            if png_path is not None and meta is not None:
+                layers.append(
+                    OverlayRenderLayer(
+                        overlay_id=RURAL_FACILITIES_DENSITY_OVERLAY_ID,
+                        kind="image",
+                        name=f"Rural Facilities Density ({sub_category.title()})",
+                        opacity=opacity_value,
+                        opacity_pct=opacity_pct,
+                        image_path=png_path,
+                        bounds_latlon=meta["bounds_latlon"],
+                        pane=rural_facilities_pane_name(sub_category),
+                        selected_category=sub_category,
+                        legend_html=legend_html if rural_layers_added == 0 else None,
+                    )
+                )
+                rural_layers_added += 1
+            elif reason:
+                rural_messages.append(reason)
+        if rural_layers_added == 0:
+            if rural_messages:
+                messages.extend(rural_messages)
+            elif category == RURAL_FACILITIES_TOTAL_CATEGORY:
+                messages.append(
+                    "Rural facilities density overlay artifacts are not exported yet. "
+                    "Run the rural facilities build to create the PNG and metadata."
+                )
+
+    built_up_state = overlay_states.get(BUILT_UP_AREA_OVERLAY_ID)
+    if built_up_state and built_up_state.active:
+        png_path, meta, _reason = discover_built_up_area_overlay_artifact(data_dir=data_dir)
         if png_path is not None and meta is not None:
             layers.append(
                 OverlayRenderLayer(
-                    overlay_id=RURAL_FACILITIES_DENSITY_OVERLAY_ID,
+                    overlay_id=BUILT_UP_AREA_OVERLAY_ID,
                     kind="image",
-                    name=f"Rural Facilities Density ({category.title()})",
-                    opacity=float(max(0, min(100, rural_state.opacity_pct)) / 100.0),
-                    opacity_pct=rural_state.opacity_pct,
+                    name="Built-up Area Exposure",
+                    opacity=float(max(0, min(100, built_up_state.opacity_pct)) / 100.0),
+                    opacity_pct=built_up_state.opacity_pct,
                     image_path=png_path,
                     bounds_latlon=meta["bounds_latlon"],
-                    pane="irt-rural-facilities-density",
-                    selected_category=category,
+                    pane="irt-built-up-area-raster",
+                    legend_html=build_built_up_area_legend_html(bins=BUILT_UP_AREA_BINS),
                 )
             )
-        elif reason:
-            messages.append(reason)
 
     river_state = overlay_states.get(RIVER_NETWORK_OVERLAY_ID)
     if river_state and river_state.active and family == "hydro" and level in {"basin", "sub_basin"}:

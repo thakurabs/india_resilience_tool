@@ -98,3 +98,36 @@ def test_admin_exposure_summary_merges_rural_facilities(tmp_path):
     assert row["rural_facilities_total_count"] == 74
     assert row["rural_facilities_education_count"] == 20
     assert row["rural_facilities_total_count_per_100k"] == 14800
+
+
+def test_admin_exposure_summary_merges_built_up_without_population(tmp_path):
+    for slug, col, value in [
+        ("built_up_area_km2", "built_up_area_km2__snapshot__Current__mean", 12.5),
+        ("built_up_area_share_pct", "built_up_area_share_pct__snapshot__Current__mean", 8.25),
+    ]:
+        root = tmp_path / "processed" / slug / "TELANGANA"
+        root.mkdir(parents=True)
+        pd.DataFrame(
+            [
+                {
+                    "state": "TELANGANA",
+                    "district": "Hanumakonda",
+                    "block": "Bheemadevarapalle",
+                    "block_key": "TELANGANA::Hanumakonda::Bheemadevarapalle",
+                    col: value,
+                }
+            ]
+        ).to_parquet(root / "master_metrics_by_block.parquet", index=False)
+
+    out_path = build(tmp_path)
+    df = pd.read_parquet(out_path)
+    row = slice_exposure_for_admin_key(
+        df,
+        admin_key="telangana|hanumakonda|bheemadevarapalle",
+        admin_level="block",
+    )
+
+    assert row is not None
+    assert pd.isna(row["pop_2020"])
+    assert row["built_up_area_km2"] == 12.5
+    assert row["built_up_area_share_pct"] == 8.25

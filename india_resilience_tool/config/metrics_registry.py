@@ -2029,6 +2029,62 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_levels": ("district", "block"),
         "rank_higher_is_worse": True,
     },
+    {
+        "name": "Built-up Area",
+        "slug": "built_up_area_km2",
+        "label": "Built-up Area",
+        "group": "other",
+        "value_col": "built_up_area_km2",
+        "periods_metric_col": "built_up_area_km2",
+        "units": "km2",
+        "description": (
+            "Current built-up surface area aggregated from the cleaned India built-surface "
+            "raster onto canonical district and block units. Source zero values are valid "
+            "no-built-up cells; 65535 is excluded as invalid/background."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_built_up_area_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Built-up Area Share",
+        "slug": "built_up_area_share_pct",
+        "label": "Built-up Area Share",
+        "group": "other",
+        "value_col": "built_up_area_share_pct",
+        "periods_metric_col": "built_up_area_share_pct",
+        "units": "%",
+        "description": (
+            "Current built-up area as a share of full polygon area in EPSG:6933. "
+            "Raster-supported denominators are emitted only as QA and do not replace "
+            "the canonical geometry-based share."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_built_up_area_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
     *[
         {
             "name": label,
@@ -2663,6 +2719,10 @@ DOMAINS: dict[str, list[str]] = {
         "rural_facilities_health_count_per_100k",
         "rural_facilities_service_count_per_100k",
     ],
+    "Built-up Area Exposure": [
+        "built_up_area_km2",
+        "built_up_area_share_pct",
+    ],
     "Aqueduct Water Risk": [
         "aq_water_stress",
         "aq_interannual_variability",
@@ -2704,6 +2764,7 @@ DOMAIN_ORDER: list[str] = [
     "Temperature Variability",
     "Population Exposure",
     "Rural Facilities Exposure",
+    "Built-up Area Exposure",
     "Aqueduct Water Risk",
     "Groundwater Status & Availability",
     "Riverine Flood",
@@ -2736,6 +2797,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
     "Exposure": [
         "Population Exposure",
         "Rural Facilities Exposure",
+        "Built-up Area Exposure",
     ],
     "Vulnerability": [],
     "Adaptive Capacity": [],
@@ -2777,6 +2839,11 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "Static rural facilities exposure/concentration layers from the 2019-2021 "
         "rural facilities snapshot, assigned deterministically to canonical blocks "
         "and rolled up to districts."
+    ),
+    "Built-up Area Exposure": (
+        "Static built-up surface exposure layers from the cleaned India built-surface "
+        "raster. Metrics use Current snapshot semantics and geometry-based polygon "
+        "area denominators for shares."
     ),
     "Groundwater Status & Availability": (
         "District groundwater assessment layers from the 2024-2025 GEC workbook, "

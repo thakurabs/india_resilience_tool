@@ -44,6 +44,8 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["overlay_rural_facilities_density_enabled"] is False
     assert ss["overlay_rural_facilities_density_opacity_pct"] == 55
     assert ss["overlay_rural_facilities_density_category"] == "total"
+    assert ss["overlay_built_up_area_current_raster_enabled"] is False
+    assert ss["overlay_built_up_area_current_raster_opacity_pct"] == 55
     assert ss["overlay_river_network_enabled"] is False
     assert ss["overlay_river_network_opacity_pct"] == 75
     assert ss["_pending_crosswalk_navigation"] is None

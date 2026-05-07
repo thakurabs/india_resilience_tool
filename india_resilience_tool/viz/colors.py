@@ -592,6 +592,124 @@ def build_rp100_flood_depth_legend_html(
     )
 
 
+def build_rural_facilities_density_legend_html(
+    *,
+    mode: str,
+    category: str | None = None,
+    map_height: int = 700,
+) -> str:
+    """Build the rural-facilities-density overlay legend HTML.
+
+    Args:
+        mode: ``"single"`` for one category's vertical binned legend,
+              ``"total"`` for a side-by-side block showing all four real categories.
+        category: Required when ``mode == "single"``; one of the four real categories.
+        map_height: Outer container height in pixels.
+
+    Returns:
+        Sanitizer-safe HTML string suitable for st.components.html / st.markdown.
+    """
+    from india_resilience_tool.app.overlays import (
+        RURAL_FACILITIES_BIN_LABELS,
+        RURAL_FACILITIES_COLOR_RAMPS,
+        RURAL_FACILITIES_REAL_CATEGORIES,
+    )
+
+    def _ramp_hexes(cat: str) -> list[str]:
+        return [str(stop["color_hex"]) for stop in RURAL_FACILITIES_COLOR_RAMPS[cat] if not stop.get("transparent")]
+
+    bin_labels = list(RURAL_FACILITIES_BIN_LABELS)
+
+    mode_norm = str(mode or "").strip().lower()
+    if mode_norm == "single":
+        cat_key = str(category or "").strip().lower()
+        if cat_key not in RURAL_FACILITIES_REAL_CATEGORIES:
+            raise ValueError(
+                f"Rural facilities density legend: unknown category {category!r}; "
+                f"expected one of {RURAL_FACILITIES_REAL_CATEGORIES}."
+            )
+        return build_vertical_categorical_legend_block_html(
+            legend_title=f"{cat_key.title()} facilities / 1,000 km2",
+            labels=bin_labels,
+            colors=_ramp_hexes(cat_key),
+            map_height=map_height,
+            bar_width_px=18,
+        )
+
+    if mode_norm != "total":
+        raise ValueError(f"Rural facilities density legend: unknown mode {mode!r}.")
+
+    outer_pad_top_px = 30
+    outer_pad_bottom_px = 18
+    available_height_px = max(int(map_height) - outer_pad_top_px - outer_pad_bottom_px, 200)
+    bar_height_px = max(int(available_height_px * 0.78), 160)
+    segment_height = max(bar_height_px / len(bin_labels), 14.0)
+
+    label_blocks = []
+    for label in reversed(bin_labels):
+        label_blocks.append(
+            f'<div style="height:{segment_height}px; display:flex; align-items:center;'
+            f' justify-content:flex-end; white-space:nowrap;">{label}</div>'
+        )
+    labels_col_html = "\n".join(label_blocks)
+
+    category_columns_html: list[str] = []
+    for cat in RURAL_FACILITIES_REAL_CATEGORIES:
+        hexes = _ramp_hexes(cat)
+        segments = "\n".join(
+            f'<div style="height:{segment_height}px; width:100%; background:{c};"></div>'
+            for c in hexes
+        )
+        category_columns_html.append(
+            f"""
+<div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+  <div style="font-size:11px; color:#000; white-space:nowrap;">{cat.title()}</div>
+  <div style="height:{bar_height_px}px; width:14px; border-radius:4px;
+              border:1px solid rgba(0,0,0,0.18);
+              box-shadow:0 1px 4px rgba(0,0,0,0.18);
+              overflow:hidden; display:flex; flex-direction:column-reverse;">
+    {segments}
+  </div>
+</div>
+"""
+        )
+
+    columns_block_html = "\n".join(category_columns_html)
+    return f"""
+<div style="height:100%; width:100%; display:flex; align-items:center; justify-content:center;
+            box-sizing:border-box; font-family:Arial, Helvetica, sans-serif;">
+  <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;
+              gap:6px; padding:{outer_pad_top_px}px 0 {outer_pad_bottom_px}px 0;
+              min-width:180px; max-width:100%; box-sizing:border-box;">
+    <div style="font-size:11px; color:#000; white-space:nowrap;">facilities / 1,000 km2</div>
+    <div style="display:flex; flex-direction:row; align-items:flex-end; gap:8px;">
+      <div style="display:flex; flex-direction:column; justify-content:space-between;
+                  height:{bar_height_px}px; font-size:11px; color:#000;
+                  margin-bottom:0;">
+        {labels_col_html}
+      </div>
+      {columns_block_html}
+    </div>
+  </div>
+</div>
+"""
+
+
+def build_built_up_area_legend_html(
+    *,
+    bins: Sequence[tuple[str, str]],
+    map_height: int = 700,
+) -> str:
+    """Build the compact display legend for the built-up area overlay."""
+    return build_vertical_categorical_legend_block_html(
+        legend_title="Built-up area",
+        labels=[label for label, _color in bins],
+        colors=[color for _label, color in bins],
+        map_height=map_height,
+        bar_width_px=18,
+    )
+
+
 # -----------------------------------------------------------------------------
 # Discrete palette helpers (for grouped bars / categorical legends)
 # -----------------------------------------------------------------------------

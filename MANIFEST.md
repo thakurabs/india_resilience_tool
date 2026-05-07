@@ -77,6 +77,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_aqueduct_hydro_masters --help` | Build Aqueduct hydro master CSVs on SOI basin/sub-basin units |
 | `python -m tools.geodata.build_population_admin_masters --help` | Build district/block population exposure master CSVs plus the display-only population exposure PNG/metadata overlay from the 2025 raster |
 | `python -m tools.geodata.build_rural_facilities_admin_masters --help` | Build district/block rural facilities exposure master CSVs plus display-only density PNG/metadata overlays for total/agro/education/health/service categories |
+| `python -m tools.geodata.build_built_up_area_admin_masters --help` | Build district/block built-up area exposure master CSVs plus the display-only built-up area PNG/metadata overlay from the cleaned built-surface raster |
 | `python -m tools.geodata.build_groundwater_district_masters --help` | Build district groundwater assessment master CSVs from the 2024-2025 GEC workbook |
 | `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
 | `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
@@ -132,8 +133,18 @@ Reference overlay contracts:
 - `build_rp100_flood_depth_legend_html()` builds the compact RP-100 legend from those bins; its swatches mirror the exporter `RP100_OVERLAY_COLORS` ramp: transparent `<=0`, then `#d6f0ff`, `#9dd9ff`, `#5bb7f0`, `#2f7fc1`, `#1d4f91`, and `#0f2f5f`.
 - `population_exposure_2025_raster`: display-only India-wide population exposure overlay backed by `population/overlay/population_exposure_2025_overlay.png` and `population/overlay/population_exposure_2025_overlay_meta.json`, with optimized copies under `processed_optimised/context/population/overlay/`.
 - Population overlay display semantics are binned people per source cell from `ind_pop_2025_CN_1km_R2025A_UA_v1.tif`; the canonical ramp is transparent for `<=0`, then `#fff7bc`, `#fee391`, `#fec44f`, `#fe9929`, `#ec7014`, `#cc4c02`, `#993404`, `#7f1d1d`, and `#4c0519` for values above 10000.
-- `rural_facilities_density`: display-only category-selectable rural facilities density overlay backed by `rural_facilities/overlay/rural_facilities_density_<category>_overlay.png` and metadata, with optimized copies under `processed_optimised/context/rural_facilities/overlay/`.
+- `built_up_area_current_raster`: display-only India-wide built-up area overlay backed by `built_up_area/overlay/built_up_area_current_overlay.png` and `built_up_area/overlay/built_up_area_current_overlay_meta.json`, with optimized copies under `processed_optimised/context/built_up_area/overlay/`.
+- Built-up source contract: operators should place `Cleaned_India_Built_Surface_WGS84.tif` at `IRT_DATA_DIR/built_up_area/`; timestamped download paths may be passed to the builder with `--raster` but are not hard-coded defaults.
+- Built-up metric masters are `processed/built_up_area_km2/{state}/master_metrics_by_{district,block}.{csv,parquet}` and `processed/built_up_area_share_pct/{state}/master_metrics_by_{district,block}.{csv,parquet}` with columns `built_up_area_km2__snapshot__Current__mean` and `built_up_area_share_pct__snapshot__Current__mean`.
+- Built-up raster values are interpreted as `m2/source cell`; `0` is valid no built-up and `65535` is invalid/background. The builder scans the raster before writes and fails national totals outside `43,000-220,000 km2` unless `--allow-total-outlier` is supplied.
+- Built-up tabulation happens in the source raster CRS by reprojecting admin vectors to the raster CRS; the raster is not reprojected for metrics. Edge cells use `all_touched=False`.
+- Built-up area share uses full polygon area in `EPSG:6933`: `built_up_m2 / polygon_area_m2 * 100`. QA also records raster-supported area denominators, but those do not replace the canonical geometry-based share.
+- Built-up v1 is excluded from composites, proposal bundles, and bundle weights.
+- Built-up overlay display semantics are binned `m2/source cell` in an EPSG:3857 PNG; bins are transparent `0`, then `0-100`, `100-500`, `500-1000`, `1000-2500`, `2500-5000`, and `>5000 m2/cell` with colors `#edf8fb`, `#b2e2e2`, `#66c2a4`, `#2ca25f`, `#006d2c`, and `#00441b`.
+- `rural_facilities_density`: display-only category-selectable rural facilities density overlay backed by `rural_facilities/overlay/rural_facilities_density_<category>_overlay.png` and metadata, with optimized copies under `processed_optimised/context/rural_facilities/overlay/`. Artifacts are written per real category (`agro`, `education`, `health`, `service`); the `total` UI selection is virtual and is rendered at runtime by stacking the four per-category layers.
+- Each real-category PNG uses a distinct single-hue ramp (agro=greens, education=blues, health=reds, service=oranges) so the four layers stay distinguishable when stacked under `total`.
 - Rural facilities overlay display semantics are facilities per 1,000 km2 on an EPSG:6933 10 km grid reprojected to EPSG:3857 for Leaflet.
+- The Folium map registers per-category panes (`irt-rural-facilities-density-{agro,education,health,service}`); the active overlay layer carries a `legend_html` colorbar that is stacked into the map legend column.
 - Dashboard runtime reads exported overlay artifacts only; it does not read source TIFFs.
 
 Aqueduct methodology note:

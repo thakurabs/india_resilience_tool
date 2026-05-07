@@ -228,6 +228,27 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 - QA files are written under `IRT_DATA_DIR/rural_facilities/`
 - counts use deterministic point coverage into canonical blocks, with unmatched/ambiguous/invalid coordinates reported in QA
 
+`tools/geodata/build_built_up_area_admin_masters.py` notes:
+- source raster:
+  - `IRT_DATA_DIR/built_up_area/Cleaned_India_Built_Surface_WGS84.tif`
+  - a timestamped Drive download path may be supplied with `--raster`; move/rename the stable operational copy to the canonical path above for repeatable runs
+- canonical boundary inputs:
+  - `IRT_DATA_DIR/districts_4326.geojson`
+  - `IRT_DATA_DIR/blocks_4326.geojson` (optional; missing blocks warn and district outputs still build)
+- outputs:
+  - `IRT_DATA_DIR/processed/built_up_area_km2/{state}/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/built_up_area_km2/{state}/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/built_up_area_share_pct/{state}/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/built_up_area_share_pct/{state}/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay.png`
+  - `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay_meta.json`
+- QA files are written under `IRT_DATA_DIR/built_up_area/`
+- source values are `m2/source cell`; `0` is valid no built-up and `65535` is invalid/background
+- tabulation reprojects vectors to the raster CRS and uses `all_touched=False`; area-share denominators use polygon area in `EPSG:6933`
+- useful commands:
+  - `python -m tools.geodata.build_built_up_area_admin_masters --help`
+  - `python -m tools.runs.prepare_dashboard built-up-area --built-up-raster "<path>" --plan-only`
+
 `tools/geodata/build_groundwater_district_masters.py` notes:
 - source workbook:
   - `IRT_DATA_DIR/CentralReport1773820094787.xlsx`

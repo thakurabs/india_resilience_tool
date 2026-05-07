@@ -103,11 +103,16 @@ def render_exposure_snapshot_card(
     exposure_summary_row: Mapping[str, Any],
     level: str,
 ) -> None:
-    """Render population and parent-share for the selected admin unit."""
+    """Render population, rural facilities, and built-up exposure for the selected admin unit."""
     import streamlit as st
 
     pop = exposure_summary_row.get("pop_2020")
-    if _as_float(pop) is None:
+    built_up_area = exposure_summary_row.get("built_up_area_km2")
+    built_up_share = exposure_summary_row.get("built_up_area_share_pct")
+    rural_total = _as_float(exposure_summary_row.get("rural_facilities_total_count"))
+    has_population = _as_float(pop) is not None
+    has_built_up = _as_float(built_up_area) is not None or _as_float(built_up_share) is not None
+    if not (has_population or has_built_up or rural_total is not None):
         return
 
     level_norm = str(level or "district").strip().lower()
@@ -116,19 +121,19 @@ def render_exposure_snapshot_card(
 
     with _container(border=True):
         st.markdown("#### Exposure Snapshot")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.caption("Population")
-            st.markdown(f"**{_format_population(pop)}**")
-        with c2:
-            st.caption("Share of parent geography")
-            share_txt = _format_pct(share, fraction=False)
-            if share_txt == "Not available":
-                st.markdown("**Not available**")
-            else:
-                st.markdown(f"**{share_txt}** of {parent_label} population")
+        if has_population:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.caption("Population")
+                st.markdown(f"**{_format_population(pop)}**")
+            with c2:
+                st.caption("Share of parent geography")
+                share_txt = _format_pct(share, fraction=False)
+                if share_txt == "Not available":
+                    st.markdown("**Not available**")
+                else:
+                    st.markdown(f"**{share_txt}** of {parent_label} population")
 
-        rural_total = _as_float(exposure_summary_row.get("rural_facilities_total_count"))
         if rural_total is not None:
             st.divider()
             r1, r2 = st.columns(2)
@@ -151,6 +156,17 @@ def render_exposure_snapshot_card(
                     with col:
                         st.caption(label)
                         st.markdown(f"**{_format_count(value)}**")
+
+        if has_built_up:
+            st.divider()
+            b1, b2 = st.columns(2)
+            with b1:
+                st.caption("Built-up area")
+                area_val = _as_float(built_up_area)
+                st.markdown("**Not available**" if area_val is None else f"**{area_val:,.1f} km²**")
+            with b2:
+                st.caption("Built-up area share")
+                st.markdown(f"**{_format_pct(built_up_share, fraction=False)}**")
 
 
 def _hydro_chip(
