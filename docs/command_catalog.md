@@ -108,18 +108,29 @@ python -m tools.runs.prepare_dashboard population-exposure --population-raster /
 
 ```bash
 python -m tools.runs.prepare_dashboard rural-facilities
+python -m tools.runs.prepare_dashboard rural-facilities --overwrite
 python -m tools.runs.prepare_dashboard dashboard-package --include-rural-facilities
+python -m tools.runs.prepare_dashboard dashboard-package --include-rural-facilities --overwrite
 ```
 
 Builds district/block rural facilities counts and per-100k people rates for the `2019-2021` snapshot, plus category-selectable display overlays:
 - `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_total_overlay.png`
 - `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_<agro|education|health|service>_overlay.png`
 - matching `_meta.json` files and optimized copies under `IRT_DATA_DIR/processed_optimised/context/rural_facilities/overlay/`
+- `IRT_DATA_DIR/processed_optimised/context/admin_exposure_summary.parquet`, which feeds the right-panel Exposure Snapshot cards
 
 Optional overrides:
 
 ```bash
 python -m tools.runs.prepare_dashboard rural-facilities --rural-facilities-source-dir /path/to/Ruralfacilties_4files --rural-facilities-qa-dir /path/to/qa --rural-facilities-overlay-dir /path/to/overlay
+```
+
+Use `--overwrite` when refreshing rural facilities for dashboard display; otherwise the runner may only audit existing optimized metric artifacts and leave the Exposure Snapshot context summary unchanged.
+
+If the rural facilities masters already exist and only the right-panel Exposure Snapshot cards are stale, rebuild the context summary directly:
+
+```bash
+python -m tools.pipeline.build_admin_exposure_summary --data-dir /path/to/irt_data
 ```
 
 The runner refreshes the canonical block boundaries first:
@@ -428,6 +439,13 @@ python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aquedu
 - block-boundary QA outputs under `IRT_DATA_DIR/block_boundary_*.csv`
 - district/block masters under `IRT_DATA_DIR/processed/population_{total,density}/{state}/`
 - QA bundles under `IRT_DATA_DIR/population/`
+
+### Rural facilities exposure
+- district/block count masters under `IRT_DATA_DIR/processed/rural_facilities_<total|agro|education|health|service>_count/{state}/`
+- district/block rate masters under `IRT_DATA_DIR/processed/rural_facilities_<total|agro|education|health|service>_count_per_100k/{state}/`
+- density overlay PNG/metadata pairs under `IRT_DATA_DIR/rural_facilities/overlay/`
+- optimized overlay copies under `IRT_DATA_DIR/processed_optimised/context/rural_facilities/overlay/`
+- Exposure Snapshot context summary at `IRT_DATA_DIR/processed_optimised/context/admin_exposure_summary.parquet`
 
 ### Groundwater
 - district masters under `IRT_DATA_DIR/processed/gw_*/{state}/`
