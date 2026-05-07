@@ -735,6 +735,31 @@ def run_app() -> None:
         render_perf_panel_safe=render_perf_panel_safe,
     )
 
+    # Optional hydro boundary overlay — draws basin/sub-basin outline on the map
+    # when a chip is clicked in the Hydrological Context card.
+    _active_hydro = st.session_state.get("active_hydro_boundary_overlay")
+    _hydro_key_suffix = ""
+    if isinstance(_active_hydro, dict):
+        try:
+            from india_resilience_tool.app.hydro_boundary_overlay import (
+                add_hydro_boundary_overlay_to_map,
+            )
+            add_hydro_boundary_overlay_to_map(
+                m=artifacts.folium_map,
+                active_overlay=_active_hydro,
+                data_dir=DATA_DIR,
+            )
+        except Exception:
+            pass
+        try:
+            import hashlib
+            import json
+            _hydro_key_suffix = hashlib.md5(
+                json.dumps(_active_hydro, sort_keys=True).encode("utf-8")
+            ).hexdigest()[:8]
+        except Exception:
+            _hydro_key_suffix = ""
+
     from india_resilience_tool.app.left_panel_runtime import render_left_panel
 
     returned, _view = render_left_panel(
@@ -744,6 +769,7 @@ def run_app() -> None:
         map_mode=artifacts.map_mode,
         map_width=MAP_WIDTH,
         map_height=MAP_HEIGHT,
+        map_key_suffix=_hydro_key_suffix,
         perf_section=perf_section,
         variable_slug=str(VARIABLE_SLUG or ""),
         sel_scenario=sel_scenario,

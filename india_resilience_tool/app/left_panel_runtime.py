@@ -54,7 +54,8 @@ def render_left_panel(
     map_mode: str,
     map_width: int,
     map_height: int,
-    perf_section: Optional[Callable[[str], Any]],
+    map_key_suffix: str = "",
+    perf_section: Optional[Callable[[str], Any]] = None,
     # Selection context
     variable_slug: str,
     sel_scenario: str,
@@ -147,6 +148,7 @@ def render_left_panel(
                         legend_block_html=legend_block_html,
                         perf_section=perf_section,
                         level=level,
+                        map_key_suffix=map_key_suffix,
                     )
             elif not blocked_message:
                 st.info("No map available for this selection.")

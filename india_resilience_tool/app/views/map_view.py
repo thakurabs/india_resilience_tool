@@ -22,6 +22,7 @@ RESPONSIVE_MAP_MAX_HEIGHT = 700
 
 PANE_BASE_POLYGONS = "irt-base-polygons"
 PANE_POPULATION_RASTER = "irt-population-raster"
+PANE_RURAL_FACILITIES_RASTER = "irt-rural-facilities-density"
 PANE_FLOOD_RASTER = "irt-flood-raster"
 PANE_CROSSWALK_OVERLAY = "irt-crosswalk-overlay"
 PANE_RIVER_OVERLAY = "irt-river-overlay"
@@ -448,6 +449,7 @@ def _ensure_overlay_panes(m: Any) -> None:
     for pane_name, z_index in (
         (PANE_BASE_POLYGONS, 400),
         (PANE_POPULATION_RASTER, 405),
+        (PANE_RURAL_FACILITIES_RASTER, 407),
         (PANE_FLOOD_RASTER, 410),
         (PANE_CROSSWALK_OVERLAY, 420),
         (PANE_RIVER_OVERLAY, 430),
@@ -899,6 +901,7 @@ def render_map_view(
     selected_subbasin: str = "All",
     level: str = "district",
     perf_section: Optional[Callable[[str], Any]] = None,
+    map_key_suffix: str = "",
 ) -> Tuple[Mapping[str, Any], Optional[str], Optional[str]]:
     """
     Render the folium map inside Streamlit using st_folium, and extract click info.
@@ -1045,6 +1048,8 @@ def render_map_view(
             f"{selected_state}_{selected_district}_{selected_block}_"
             f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}"
         )
+        if map_key_suffix:
+            map_key = f"{map_key}_{map_key_suffix}"
         st.markdown(
             (
                 f'<div class="irt-responsive-map-marker" data-map-key="{map_key}" '

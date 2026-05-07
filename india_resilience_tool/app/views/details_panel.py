@@ -1543,12 +1543,9 @@ def render_details_panel(
         st.caption(" • ".join(parts))
 
     if crosswalk_contexts:
-        if level_norm in {"district", "block"}:
-            for hydro_level in ("basin", "sub_basin"):
-                context = crosswalk_contexts.get(hydro_level)
-                if context is not None:
-                    render_crosswalk_context(context=context)
-        elif level_norm in {"basin", "sub_basin"}:
+        # Admin mode (district/block): old basin/sub-basin expanders are replaced
+        # by the Hydrological Context card rendered above render_details_panel.
+        if level_norm in {"basin", "sub_basin"}:
             available_admin_levels = [
                 admin_level
                 for admin_level in ("district", "block")

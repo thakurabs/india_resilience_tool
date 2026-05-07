@@ -859,6 +859,65 @@ def render_right_panel(
 
     _fig_size_panel = ensure_16x9_figsize(fig_size_panel, mode="fit_width")
 
+    # Exposure Snapshot + Hydrological Context cards (admin mode only).
+    # These are lightweight runtime summaries; the dashboard degrades gracefully
+    # when the optional parquet files are absent.
+    _context_spatial_family = str(st.session_state.get("spatial_family", "admin") or "admin").strip().lower()
+    _context_level = str(admin_level or "district").strip().lower()
+    if _context_spatial_family == "admin" and _context_level in {"district", "block"}:
+        try:
+            from india_resilience_tool.app.summary_cache import (
+                load_exposure_summary_cached,
+                load_hydro_summary_cached,
+            )
+            from india_resilience_tool.app.views.context_cards import render_admin_context_cards
+            from india_resilience_tool.data.exposure_summary import slice_exposure_for_admin_key
+            from india_resilience_tool.data.hydro_summary import slice_hydro_for_admin_key
+            from india_resilience_tool.data.optimized_bundle import optimized_context_path
+
+            _state_key = alias_fn(str(row.get("state_name") or state_to_show or ""))
+            _dist_key = alias_fn(str(district_name or row.get("district_name") or ""))
+            _context_admin_key = None
+            if _state_key and _dist_key:
+                _context_admin_key = f"{_state_key}|{_dist_key}"
+                if _context_level == "block":
+                    _block_key = alias_fn(str(row.get("block_name") or block_for_fs or selected_block or ""))
+                    if _block_key and _block_key.lower() != "all":
+                        _context_admin_key = f"{_context_admin_key}|{_block_key}"
+
+            # Clear stale overlay when the user switches to a different admin unit.
+            _active_boundary = st.session_state.get("active_hydro_boundary_overlay")
+            if (
+                isinstance(_active_boundary, dict)
+                and _context_admin_key
+                and _active_boundary.get("admin_key") != _context_admin_key
+            ):
+                st.session_state["active_hydro_boundary_overlay"] = None
+
+            _exposure_row = None
+            _hydro_row = None
+            if _context_admin_key:
+                _exp_path = optimized_context_path("admin_exposure_summary.parquet", data_dir=data_dir)
+                if _exp_path.exists():
+                    _exp_df = load_exposure_summary_cached(str(_exp_path), float(_exp_path.stat().st_mtime))
+                    _exposure_row = slice_exposure_for_admin_key(_exp_df, admin_key=_context_admin_key, admin_level=_context_level)
+
+                _hyd_path = optimized_context_path("admin_hydro_summary.parquet", data_dir=data_dir)
+                if _hyd_path.exists():
+                    _hyd_df = load_hydro_summary_cached(str(_hyd_path), float(_hyd_path.stat().st_mtime))
+                    _hydro_row = slice_hydro_for_admin_key(_hyd_df, admin_key=_context_admin_key, admin_level=_context_level)
+
+            render_admin_context_cards(
+                exposure_summary_row=_exposure_row,
+                hydro_summary_row=_hydro_row,
+                level=_context_level,
+                admin_key=_context_admin_key,
+                spatial_family=_context_spatial_family,
+            )
+        except Exception:
+            # Context cards are optional — never break the core risk profile.
+            pass
+
     render_details_panel(
         row=row,
         district_name=(
