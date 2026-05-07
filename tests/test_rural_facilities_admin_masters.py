@@ -64,8 +64,8 @@ def _districts() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(
         {
             "state_name": ["Telangana"],
-            "district_name": ["Demo District"],
-            "district_key": ["Telangana::Demo District"],
+            "district_name": ["DEMO DISTRICT"],
+            "district_key": ["Telangana::DEMO DISTRICT"],
         },
         geometry=[Polygon([(78.0, 17.0), (79.5, 17.0), (79.5, 17.5), (78.0, 17.5)])],
         crs="EPSG:4326",

@@ -302,6 +302,33 @@ def _counts_by_admin(
     return out
 
 
+def _district_counts_from_block_counts(block_counts: pd.DataFrame, district_gdf: gpd.GeoDataFrame) -> pd.DataFrame:
+    """Roll block-level rural facility counts up to canonical district rows."""
+    id_cols = ["state_name", "district_name", "district_key"]
+    out = district_gdf[id_cols].copy()
+    out["_state_token"] = out["state_name"].map(normalize_compact)
+    out["_district_token"] = out["district_name"].map(normalize_compact)
+
+    if block_counts.empty:
+        counts = pd.DataFrame(columns=["_state_token", "_district_token", *COUNT_METRIC_SLUGS.values()])
+    else:
+        block_values = block_counts.copy()
+        block_values["_state_token"] = block_values["state_name"].map(normalize_compact)
+        block_values["_district_token"] = block_values["district_name"].map(normalize_compact)
+        counts = (
+            block_values.groupby(["_state_token", "_district_token"], as_index=False)[list(COUNT_METRIC_SLUGS.values())]
+            .sum()
+        )
+
+    out = out.merge(counts, on=["_state_token", "_district_token"], how="left")
+    out = out.drop(columns=["_state_token", "_district_token"])
+    for slug in COUNT_METRIC_SLUGS.values():
+        if slug not in out.columns:
+            out[slug] = 0
+        out[slug] = pd.to_numeric(out[slug], errors="coerce").fillna(0).astype(int)
+    return out
+
+
 def _add_denominator_rates(
     counts_df: pd.DataFrame,
     denominator_df: pd.DataFrame,
@@ -577,8 +604,7 @@ def build_rural_facilities_admin_outputs(
     points, invalid = normalize_rural_facility_points(raw)
     assigned, unmatched, ambiguous = assign_points_to_blocks(points, blocks)
     block_counts = _counts_by_admin(assigned, blocks, level="block")
-    district_assigned = assigned.copy()
-    district_counts = _counts_by_admin(district_assigned, districts, level="district")
+    district_counts = _district_counts_from_block_counts(block_counts, districts)
     block_full, block_pop_issues = _add_denominator_rates(block_counts, block_denoms, level="block")
     district_full, district_pop_issues = _add_denominator_rates(district_counts, district_denoms, level="district")
 
