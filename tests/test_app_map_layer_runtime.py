@@ -88,9 +88,11 @@ def test_image_overlay_pane_passes_through_and_population_z_order(tmp_path: Path
     html = m.get_root().render()
     assert map_view.PANE_BASE_POLYGONS in html
     assert map_view.PANE_POPULATION_RASTER in html
+    assert map_view.PANE_RURAL_FACILITIES_RASTER in html
     assert map_view.PANE_FLOOD_RASTER in html
     assert ".style.zIndex = 400" in html
     assert ".style.zIndex = 405" in html
+    assert ".style.zIndex = 407" in html
     assert ".style.zIndex = 410" in html
     assert map_view.PANE_POPULATION_RASTER in html
 
