@@ -12,7 +12,7 @@ The current working tree supports:
 - a grouped dashboard bundle scope covering exact selector labels like `Thematic - Heat Risk` and `Sector-wise - Health Risk`
 - thematic bundles for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`
 - sector-wise bundles for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
-- `Life & Livelihood Loss Risk` is intentionally district-only in the dashboard until its block-level duplication issue is fixed
+- `Life & Livelihood Loss Risk` is available at district and block level when the persisted block proposal bundle master has been built
 - declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance bundles
 - persisted visible-Glance composite metrics declared in `india_resilience_tool/config/composite_metrics.py` and optimized Glance view-model artifacts built offline from admin master files
 - unified Glance `drivers.parquet` artifacts carrying state, district, and optional block-scoped metric/rule drivers for block drawer drill-downs

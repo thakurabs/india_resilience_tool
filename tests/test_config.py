@@ -172,38 +172,44 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
 def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> None:
     from india_resilience_tool.config.variables import VARIABLES
 
-    for slug, label, domain in [
-        ("composite_heat_risk", "Composite Heat Risk", "Heat Risk"),
-        ("composite_drought_risk", "Composite Drought Risk", "Drought Risk"),
+    for slug, label, domain, selection_mode, scenarios in [
+        ("composite_heat_risk", "Composite Heat Risk", "Heat Risk", "scenario_period", ["ssp245", "ssp585"]),
+        ("composite_drought_risk", "Composite Drought Risk", "Drought Risk", "scenario_period", ["ssp245", "ssp585"]),
         (
             "composite_flood_extreme_rainfall_risk",
             "Composite Flash Flood Risk",
             "Extreme Rainfall | Flash Flood Risk",
+            "scenario_period",
+            ["ssp245", "ssp585"],
         ),
         (
             "composite_flood_jrc_depth",
-            "RP-100 Flood Severity Index",
+            "Composite Riverine Flood Risk",
             "Riverine Flood",
+            "static_snapshot",
+            ["snapshot"],
         ),
-        ("composite_heat_stress", "Composite Heat Stress", "Heat Stress"),
-        ("composite_cold_risk", "Composite Cold Risk", "Cold Risk"),
+        ("composite_heat_stress", "Composite Heat Stress", "Heat Stress", "scenario_period", ["ssp245", "ssp585"]),
+        ("composite_cold_risk", "Composite Cold Risk", "Cold Risk", "scenario_period", ["ssp245", "ssp585"]),
         (
             "composite_agriculture_growing_conditions",
             "Composite Agriculture & Growing Conditions",
             "Agriculture & Growing Conditions",
+            "scenario_period",
+            ["ssp245", "ssp585"],
         ),
     ]:
         cfg = VARIABLES[slug]
         assert cfg["label"] == label
         assert cfg["source_type"] == "derived"
-        assert cfg["selection_mode"] == "scenario_period"
+        assert cfg["selection_mode"] == selection_mode
         assert cfg["supported_levels"] == ["district", "block"]
         assert cfg["supported_spatial_families"] == ["admin"]
         assert cfg["supported_statistics"] == ["mean"]
         assert cfg["supports_yearly_trend"] is False
         assert cfg["supports_baseline_comparison"] is False
         assert cfg["supports_scenario_comparison"] is False
-        assert cfg["supported_scenarios"] == ["ssp245", "ssp585"]
+        assert cfg["supported_scenarios"] == scenarios
         assert cfg["units"] == "score"
         assert domain in cfg["domains"]
 
@@ -238,7 +244,7 @@ def test_sector_wise_composites_are_exposed_as_admin_derived_metrics() -> None:
             "composite_life_livelihood_loss_risk",
             "Composite Life & Livelihood Loss Risk",
             "Life & Livelihood Loss Risk",
-            ["district"],
+            ["district", "block"],
         ),
     ]:
         cfg = VARIABLES[slug]

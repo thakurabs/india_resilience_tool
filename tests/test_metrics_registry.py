@@ -427,9 +427,9 @@ def test_sector_wise_domains_expand_to_composite_plus_source_metrics_in_exact_or
 
 def test_sector_wise_domains_remain_hidden_in_unsupported_contexts() -> None:
     assert get_metrics_for_domain(
-        "Life & Livelihood Loss Risk",
+        "Health Risk",
         spatial_family="admin",
-        level="block",
+        level="basin",
     ) == []
     assert get_metrics_for_domain(
         "Health Risk",
@@ -456,7 +456,7 @@ def test_sector_wise_reverse_membership_is_context_aware() -> None:
         spatial_family="admin",
         level="block",
     )
-    assert "Life & Livelihood Loss Risk" not in block_domains
+    assert "Life & Livelihood Loss Risk" in block_domains
 
     hydro_domains = get_domains_for_metric(
         "pr_max_1day_precip",

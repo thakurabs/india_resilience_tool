@@ -172,7 +172,7 @@ def test_dashboard_bundle_catalog_is_exact() -> None:
             "Sector-wise - Life & Livelihood Loss Risk",
             "composite_life_livelihood_loss_risk",
             "Composite Life & Livelihood Loss Risk",
-            ("district",),
+            ("district", "block"),
             True,
         ),
     ]

@@ -173,7 +173,7 @@ DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
         selector_label="Sector-wise - Life & Livelihood Loss Risk",
         composite_slug="composite_life_livelihood_loss_risk",
         composite_label="Composite Life & Livelihood Loss Risk",
-        supported_levels=("district",),
+        supported_levels=("district", "block"),
         show_in_landing=True,
     ),
 )

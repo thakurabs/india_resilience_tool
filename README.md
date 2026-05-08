@@ -20,7 +20,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - surfaces one grouped bundle list in Glance and Deep Dive with exact selector labels such as `Thematic - Heat Risk` and `Sector-wise - Health Risk`
   - thematic bundles remain available for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`
   - sector-wise bundles are available for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
-  - `Life & Livelihood Loss Risk` is intentionally hidden at block level until its current duplication defect is fixed
+  - `Life & Livelihood Loss Risk` is available at district and block level when the persisted block proposal bundle master has been built
   - each visible Glance bundle now reads a persisted optimized Glance view model from disk; the dashboard no longer computes scores, ranks, bands, drivers, attributes, or distributions at runtime
   - `Deep Dive` from Glance opens the matching persisted composite metric such as `Composite Heat Stress`
   - supports India -> state -> district drill-down before entering Deep Dive
@@ -179,7 +179,7 @@ python -m tools.pipeline.build_proposal_bundles --help
 ```
 
 This offline builder computes the proposal climate-risk bundles for admin `district` and `block` units only. It writes persisted proposal bundle masters under `IRT_DATA_DIR/processed/<composite_slug>/<state>/`.
-The dashboard surfaces those sector-wise proposal composites through grouped labels like `Sector-wise - Health Risk`; `Life & Livelihood Loss Risk` remains district-only in the UI until the current block-level duplication issue is fixed.
+The dashboard surfaces those sector-wise proposal composites through grouped labels like `Sector-wise - Health Risk`, including district and block views for `Life & Livelihood Loss Risk` when its persisted block proposal bundle master is present.
 
 Launch behavior:
 - the app now opens into a climate-hazard discovery landing surface by default
