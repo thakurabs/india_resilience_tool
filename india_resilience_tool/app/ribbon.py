@@ -821,7 +821,7 @@ def render_metric_ribbon(
             )
             allowed_list = [
                 str(s).strip().lower()
-                for s in (varcfg.get("supported_scenarios") or ("ssp245", "ssp585"))
+                for s in (varcfg.get("supported_scenarios") or ("historical", "ssp245", "ssp585"))
                 if str(s).strip()
             ]
             allowed = set(allowed_list)
@@ -951,7 +951,12 @@ def render_metric_ribbon(
 
         # --- Map mode selection ---
         baseline_map_mode_label = "Change from baseline" if _is_external_metric(varcfg) else "Change from 1990-2010 baseline"
-        if metric_ready and not _supports_baseline_comparison(varcfg):
+        sel_scenario_is_historical = (
+            metric_ready
+            and sel_scenario != sel_placeholder
+            and str(sel_scenario).strip().lower() == "historical"
+        )
+        if metric_ready and (not _supports_baseline_comparison(varcfg) or sel_scenario_is_historical):
             map_mode_options = ["Absolute value"]
         else:
             map_mode_options = [sel_placeholder, "Absolute value", baseline_map_mode_label]
@@ -966,6 +971,8 @@ def render_metric_ribbon(
             map_mode_help = help_md_to_plain_text(RIBBON_HELP_MD["map_mode"])
             if metric_ready and not _supports_baseline_comparison(varcfg):
                 map_mode_help = "This metric only supports absolute-value mapping; baseline change mode is not available."
+            elif sel_scenario_is_historical:
+                map_mode_help = "Historical view shows the 1990-2010 reference period directly; change-from-baseline mode is unavailable for the historical scenario."
             map_mode = st.selectbox(
                 "Map mode",
                 options=map_mode_options,
