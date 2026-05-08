@@ -22,10 +22,12 @@ import geopandas as gpd
 import pandas as pd
 
 from paths import (
+    DATA_DIR,
     DISTRICTS_PATH,
     RIVER_NETWORK_DISPLAY_PATH,
 )
 from india_resilience_tool.data.adm2_loader import load_local_adm2
+from india_resilience_tool.data.optimized_bundle import optimized_context_path
 
 # Equal-area CRS for India (used for robust line/polygon intersection).
 _METRIC_CRS = "EPSG:7755"
@@ -123,6 +125,13 @@ def enrich(
             print(f"Backup already present, leaving as-is: {backup}")
     print(f"Writing: {output_path}")
     out.to_file(str(output_path), driver="GeoJSON")
+
+    # Keep the optimized bundle copy (if present) in sync so the dashboard
+    # runtime never reads a stale pre-enrichment version.
+    optimized_copy = optimized_context_path(output_path.name, data_dir=DATA_DIR)
+    if optimized_copy.exists() and optimized_copy.resolve() != output_path.resolve():
+        print(f"Refreshing optimized copy: {optimized_copy}")
+        shutil.copy2(output_path, optimized_copy)
     print("Done.")
 
 

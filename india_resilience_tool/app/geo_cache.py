@@ -580,9 +580,16 @@ def build_river_geojson_by_district(
     Returns an empty dict if the river artifact has not been enriched with
     `district_names_clean` (i.e. `tools.pipeline.enrich_river_network_districts`
     has not been run).
+
+    Bypasses the path-only cached `load_local_river_display` so this function's
+    own `(path, mtime)` cache is the sole authority — re-enriching the artifact
+    on disk invalidates this cache without a manual clear.
     """
     _ = mtime
-    gdf = load_local_river_display(path)
+    gdf = _load_local_river_display(
+        path=path,
+        bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
+    )
     if "district_names_clean" not in gdf.columns:
         return {}
     gdf = _ensure_river_key_column(gdf, alias_fn=alias, key_col="__key")

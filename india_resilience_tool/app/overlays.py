@@ -1115,12 +1115,22 @@ def build_overlay_render_layers(
                     "Run `python -m tools.pipeline.enrich_river_network_districts`."
                 )
             else:
-                river_fc = clone_featurecollection_for_patch(
-                    river_by_district.get(
-                        alias_fn(selected_district_norm),
-                        {"type": "FeatureCollection", "features": []},
+                lookup_key = alias_fn(selected_district_norm)
+                candidate = river_by_district.get(lookup_key)
+                if candidate is None:
+                    sample_keys = sorted(k for k in river_by_district.keys() if k != "all")[:8]
+                    messages.append(
+                        f"River network: no entry for district key {lookup_key!r} "
+                        f"(selected={selected_district_norm!r}). "
+                        f"Sample keys in artifact: {sample_keys}."
                     )
-                )
+                elif not list((candidate or {}).get("features", []) or []):
+                    messages.append(
+                        f"River network: 0 features mapped to district {selected_district_norm!r} "
+                        f"(key {lookup_key!r})."
+                    )
+                else:
+                    river_fc = clone_featurecollection_for_patch(candidate)
     elif river_state and river_state.active and family == "hydro" and level in {"basin", "sub_basin"}:
         if level == "sub_basin" and selected_subbasin != "All":
             diagnostics_df = _load_table_if_exists(
