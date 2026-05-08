@@ -679,6 +679,44 @@ def test_overlay_render_layer_invariants_and_zero_opacity() -> None:
         )
 
 
+def test_river_overlay_visible_in_admin_district_with_selected_district(tmp_path: Path) -> None:
+    river = tmp_path / "river_network_display.geojson"
+    river.write_text("{}", encoding="utf-8")
+    states = resolve_overlay_control_states(
+        session_state={},
+        spatial_family="admin",
+        admin_level="district",
+        selected_state="Telangana",
+        selected_basin="All",
+        river_display_geojson_path=river,
+        data_dir=tmp_path,
+        selected_district="Hyderabad",
+    )
+    river_state = states[RIVER_NETWORK_OVERLAY_ID]
+    assert river_state.visible is True
+    assert river_state.available is True
+    assert river_state.availability_reason is None
+
+
+def test_river_overlay_unavailable_when_admin_district_is_all(tmp_path: Path) -> None:
+    river = tmp_path / "river_network_display.geojson"
+    river.write_text("{}", encoding="utf-8")
+    states = resolve_overlay_control_states(
+        session_state={},
+        spatial_family="admin",
+        admin_level="district",
+        selected_state="Telangana",
+        selected_basin="All",
+        river_display_geojson_path=river,
+        data_dir=tmp_path,
+        selected_district="All",
+    )
+    river_state = states[RIVER_NETWORK_OVERLAY_ID]
+    assert river_state.visible is True
+    assert river_state.available is False
+    assert "Select a district" in str(river_state.availability_reason)
+
+
 def test_overlay_definition_sidebar_order() -> None:
     assert tuple(OVERLAY_DEFINITIONS) == (
         RP100_FLOOD_OVERLAY_ID,

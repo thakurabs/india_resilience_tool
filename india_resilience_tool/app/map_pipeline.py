@@ -673,6 +673,7 @@ def build_map_and_rankings(
         river_basin_reconciliation_path=river_basin_reconciliation_path,
         river_subbasin_diagnostics_path=river_subbasin_diagnostics_path,
         alias_fn=alias,
+        selected_district=selected_district,
     )
 
     render_signature = _build_map_render_signature(

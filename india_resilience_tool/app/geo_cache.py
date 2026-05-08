@@ -570,6 +570,47 @@ def build_river_geojson_by_subbasin(
     )
 
 
+@st.cache_data(ttl=3600)
+def build_river_geojson_by_district(
+    path: str,
+    mtime: float,
+) -> dict[str, dict]:
+    """Build river FeatureCollections keyed by normalized district name.
+
+    Returns an empty dict if the river artifact has not been enriched with
+    `district_names_clean` (i.e. `tools.pipeline.enrich_river_network_districts`
+    has not been run).
+    """
+    _ = mtime
+    gdf = load_local_river_display(path)
+    if "district_names_clean" not in gdf.columns:
+        return {}
+    gdf = _ensure_river_key_column(gdf, alias_fn=alias, key_col="__key")
+    gdf = gdf.copy()
+    gdf["district_names_clean"] = gdf["district_names_clean"].fillna("").astype(str)
+    exploded = gdf.assign(
+        __selector=gdf["district_names_clean"].str.split(",")
+    ).explode("__selector", ignore_index=False)
+    exploded["__selector"] = exploded["__selector"].astype(str).str.strip().map(alias)
+    exploded = exploded[exploded["__selector"] != ""]
+    return _featurecollections_by_selector(
+        exploded,
+        selector_col="__selector",
+        keep_cols=[
+            "river_feature_id",
+            "source_uid_river",
+            "river_name_clean",
+            "basin_name_clean",
+            "subbasin_name_clean",
+            "state_names_clean",
+            "district_names_clean",
+            "length_km_source",
+            "__key",
+            "geometry",
+        ],
+    )
+
+
 @st.cache_data
 def build_adm1_from_adm2(_adm2_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     # Streamlit cannot reliably hash GeoDataFrames; the leading underscore tells

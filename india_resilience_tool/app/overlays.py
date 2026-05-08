@@ -34,7 +34,9 @@ RURAL_FACILITIES_UNAVAILABLE_CAPTION = (
 BUILT_UP_AREA_UNAVAILABLE_CAPTION = (
     "Available across all map levels when the built-up area overlay artifact is present."
 )
-RIVER_UNAVAILABLE_CAPTION = "Select a basin or sub-basin to enable the river network overlay."
+RIVER_UNAVAILABLE_CAPTION = (
+    "Select a basin/sub-basin (hydro view) or a district (admin view) to enable the river network overlay."
+)
 
 POPULATION_COLOR_RAMP: list[dict[str, Any]] = [
     {"min_value_exclusive": None, "max_value_inclusive": 0.0, "color_hex": None, "transparent": True},
@@ -825,6 +827,7 @@ def resolve_overlay_control_states(
     selected_basin: str,
     river_display_geojson_path: Path,
     data_dir: Path,
+    selected_district: str = "All",
 ) -> dict[str, OverlayControlState]:
     """Resolve visible, available, enabled, and opacity state for registered overlays."""
     ensure_overlay_session_state(session_state)
@@ -865,11 +868,23 @@ def resolve_overlay_control_states(
     built_up_png, _built_up_meta, built_up_reason = discover_built_up_area_overlay_artifact(data_dir=data_dir)
     built_up_available = built_up_visible and built_up_png is not None
 
-    river_visible = family == "hydro" and level in {"basin", "sub_basin"}
-    river_reason = None
+    selected_district_norm = str(selected_district or "All").strip()
+    river_visible = (
+        (family == "hydro" and level in {"basin", "sub_basin"})
+        or (family == "admin" and level in {"district", "block"})
+    )
+    river_reason: Optional[str] = None
     if not river_display_geojson_path.exists():
         river_reason = "River overlay unavailable: river_network_display.geojson not found."
-    river_available = river_visible and river_display_geojson_path.exists() and selected_basin_norm != "All"
+        river_available = False
+    elif family == "admin" and level in {"district", "block"}:
+        if selected_district_norm == "All":
+            river_reason = "Select a district to show the river network."
+            river_available = False
+        else:
+            river_available = river_visible
+    else:
+        river_available = river_visible and selected_basin_norm != "All"
 
     state_specs = {
         RP100_FLOOD_OVERLAY_ID: (flood_visible, flood_available, flood_reason),
@@ -955,6 +970,7 @@ def build_overlay_render_layers(
     river_basin_reconciliation_path: Path,
     river_subbasin_diagnostics_path: Path,
     alias_fn: Callable[[str], str],
+    selected_district: str = "All",
 ) -> tuple[tuple[OverlayRenderLayer, ...], tuple[str, ...], tuple[Any, ...]]:
     """Resolve active control states into concrete map layers and overlay messages."""
     from india_resilience_tool.app.geo_cache import (
@@ -1083,8 +1099,29 @@ def build_overlay_render_layers(
             )
 
     river_state = overlay_states.get(RIVER_NETWORK_OVERLAY_ID)
-    if river_state and river_state.active and family == "hydro" and level in {"basin", "sub_basin"}:
-        river_fc: Optional[Mapping[str, Any]] = None
+    river_fc: Optional[Mapping[str, Any]] = None
+    if river_state and river_state.active and family == "admin" and level in {"district", "block"}:
+        from india_resilience_tool.app.geo_cache import build_river_geojson_by_district
+        selected_district_norm = str(selected_district or "All").strip()
+        if selected_district_norm != "All" and river_display_geojson_path.exists():
+            mtime = _mtime_token(river_display_geojson_path)
+            river_by_district = build_river_geojson_by_district(
+                path=str(river_display_geojson_path),
+                mtime=float(mtime or 0.0),
+            )
+            if not river_by_district:
+                messages.append(
+                    "River network has not been enriched with districts. "
+                    "Run `python -m tools.pipeline.enrich_river_network_districts`."
+                )
+            else:
+                river_fc = clone_featurecollection_for_patch(
+                    river_by_district.get(
+                        alias_fn(selected_district_norm),
+                        {"type": "FeatureCollection", "features": []},
+                    )
+                )
+    elif river_state and river_state.active and family == "hydro" and level in {"basin", "sub_basin"}:
         if level == "sub_basin" and selected_subbasin != "All":
             diagnostics_df = _load_table_if_exists(
                 river_subbasin_diagnostics_path,
@@ -1129,23 +1166,23 @@ def build_overlay_render_layers(
                     river_by_selector.get(alias_fn(resolved_name), {"type": "FeatureCollection", "features": []})
                 )
 
-        if river_fc and list((river_fc or {}).get("features", []) or []):
-            layers.append(
-                OverlayRenderLayer(
-                    overlay_id=RIVER_NETWORK_OVERLAY_ID,
-                    kind="geojson",
-                    name="River network",
-                    opacity=float(max(0, min(100, river_state.opacity_pct)) / 100.0),
-                    opacity_pct=river_state.opacity_pct,
-                    feature_collection=river_fc,
-                    tooltip_fields=(
-                        "river_name_clean",
-                        "basin_name_clean",
-                        "subbasin_name_clean",
-                        "length_km_source",
-                    ),
-                )
+    if river_state and river_fc and list((river_fc or {}).get("features", []) or []):
+        layers.append(
+            OverlayRenderLayer(
+                overlay_id=RIVER_NETWORK_OVERLAY_ID,
+                kind="geojson",
+                name="River network",
+                opacity=float(max(0, min(100, river_state.opacity_pct)) / 100.0),
+                opacity_pct=river_state.opacity_pct,
+                feature_collection=river_fc,
+                tooltip_fields=(
+                    "river_name_clean",
+                    "basin_name_clean",
+                    "subbasin_name_clean",
+                    "length_km_source",
+                ),
             )
+        )
 
     layer_tuple = tuple(layers)
     signature = overlay_cache_signature(layer_tuple)

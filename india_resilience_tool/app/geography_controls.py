@@ -436,6 +436,7 @@ def render_geography_and_analysis_focus(
                 selected_basin=selected_basin,
                 river_display_geojson_path=river_display_geojson,
                 data_dir=data_dir,
+                selected_district=selected_district,
             )
             visible_overlay_states = [state for state in overlay_states.values() if state.visible]
             if visible_overlay_states:

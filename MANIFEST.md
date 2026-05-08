@@ -35,7 +35,7 @@ The current working tree supports:
 - `rural_facilities_density` display-only overlay support across admin and hydro map levels, backed by exported category PNG/metadata artifacts
 - groundwater district masters for extraction stage, future availability, extractable resource, and total extraction
 - actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
-- shared reference overlay framework for the hydro river network and the admin RP-100 flood-depth raster
+- shared reference overlay framework for the river network (hydro basin/sub-basin views, plus admin district/block views sliced by selected district when the river artifact carries a `district_names_clean` column) and the admin RP-100 flood-depth raster
 
 The crosswalk layer is currently **read-optimized and explanatory**. It is not yet a full weighted transfer engine across spatial families.
 
@@ -83,6 +83,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
 | `python -m tools.geodata.build_river_subbasin_diagnostics --overwrite` | Build hydro sub-basin vs river-name diagnostics CSV |
 | `python -m tools.geodata.build_river_topology --overwrite` | Build topology-ready river reaches, nodes, adjacency, and QA artifacts |
+| `python -m tools.pipeline.enrich_river_network_districts [--dry-run]` | Spatial-join cleaned river display with districts and rewrite `river_network_display.geojson` in place with a `district_names_clean` column (drives admin-view river overlay; backs up original to `.bak` on first run) |
 | `python -m pytest -q` | Run tests |
 
 ### Key environment variables
