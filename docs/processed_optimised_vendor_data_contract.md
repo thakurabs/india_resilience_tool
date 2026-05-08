@@ -523,7 +523,7 @@ Recommended handover:
 | File family | Provide? | Use in JS app |
 |---|---|---|
 | `processed_optimised/geometry/...` | Yes, required | Primary map rendering geometry |
-| `processed_optimised/context/river_network_display.geojson` | Yes, if river overlay is in scope | Optional display overlay |
+| `processed_optimised/context/river_network_display.geojson` | Yes, if river overlay is in scope | Optional river display overlay |
 | Root `districts_4326.geojson` | Optional reference | Do not use by default for runtime maps |
 | Root `blocks_4326.geojson` | Optional reference | Do not use by default for runtime maps |
 | Root `basins.geojson` | Optional reference | Do not use by default for runtime maps |
@@ -534,6 +534,60 @@ needs unsimplified geometry, full national single-file layers, or a QA
 comparison against the optimized shards. If they do use canonical root geometry,
 they must confirm the same join keys exist or create them consistently:
 `district_key`, `block_key`, `basin_id`, and `subbasin_id`.
+
+### River Network Overlay
+
+The river network is an optional display overlay, not a metric layer. The
+runtime artifact is:
+
+```text
+context/river_network_display.geojson
+```
+
+Use this optimized copy for the JavaScript dashboard. The root
+`river_network_display.geojson` can be shared as reference, but the optimized
+copy is the runtime file that should travel with `processed_optimised/`.
+
+The river overlay is filtered differently by app context:
+
+| View context | Filter behavior | Required support artifacts/properties |
+|---|---|---|
+| Admin district/block | show rivers intersecting the selected district | `district_names_clean` property in `river_network_display.geojson` |
+| Hydro basin | show rivers for the reconciled river basin name | `context/river_basin_name_reconciliation.parquet` |
+| Hydro sub-basin | show rivers for the selected sub-basin when diagnostics match | `context/river_subbasin_diagnostics.parquet` |
+
+For admin district and block views, the dashboard expects the river display
+GeoJSON to be enriched with a comma-separated `district_names_clean` property on
+each river feature. If that property is missing, the current Streamlit dashboard
+reports that the artifact has not been enriched and asks the operator to run:
+
+```bash
+python -m tools.pipeline.enrich_river_network_districts
+```
+
+That enrichment command intersects the river display lines with
+`districts_4326.geojson`, writes `district_names_clean` back to
+`river_network_display.geojson`, preserves a one-time `.bak` backup, and refreshes
+`processed_optimised/context/river_network_display.geojson` when that optimized
+copy already exists. After enrichment, the vendor can filter admin river overlay
+features by matching the selected district alias against `district_names_clean`.
+
+River features may include useful display properties such as:
+
+```text
+river_feature_id
+source_uid_river
+river_name_clean
+basin_name_clean
+subbasin_name_clean
+state_names_clean
+district_names_clean
+length_km_source
+```
+
+When no feature matches the selected district, basin, or sub-basin, render the
+map without the river overlay and show a non-blocking "not available" message if
+the UI has a diagnostics area.
 
 ## Exposure Snapshot Summary
 
@@ -724,7 +778,9 @@ context/river_network_display.geojson
 ```
 
 These overlays are display-only context layers. They are not metric master
-tables and should not be used as the source of rankings or details values.
+tables and should not be used as the source of rankings or details values. The
+river overlay additionally depends on the reconciliation/diagnostics files noted
+in the Map Geometry section when filtering by hydro basin or sub-basin.
 
 ## Field Availability Rules
 
@@ -789,7 +845,10 @@ For a dashboard page load:
 8. Load yearly ensemble files only when present.
 9. Load `admin_exposure_summary.parquet` and `admin_hydro_summary.parquet` only
    for admin district/block context cards.
-10. Treat missing optional files or columns as "not available", not as zero.
+10. If river overlay is enabled, load `context/river_network_display.geojson`.
+    For admin district/block filtering, require `district_names_clean`; for
+    hydro filtering, use river reconciliation/diagnostics context files.
+11. Treat missing optional files or columns as "not available", not as zero.
 
 ## How IRT Builds This Bundle
 
@@ -827,3 +886,14 @@ artifacts built from existing metric masters and crosswalks:
 python -m tools.pipeline.build_admin_exposure_summary --data-dir D:\projects\irt_data
 python -m tools.pipeline.build_admin_hydro_summary --data-dir D:\projects\irt_data
 ```
+
+The river district enrichment command is:
+
+```bash
+python -m tools.pipeline.enrich_river_network_districts --dry-run
+python -m tools.pipeline.enrich_river_network_districts
+```
+
+Run it when `river_network_display.geojson` lacks `district_names_clean` or
+after regenerating the river display artifact. If the optimized river copy
+already exists, the command refreshes it automatically.
