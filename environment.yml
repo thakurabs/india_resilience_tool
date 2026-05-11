@@ -20,6 +20,7 @@ dependencies:
   # Pipeline / analytics
   - scipy
   - pyarrow
+  - openpyxl>=3.1
 
   # Tools retained under tools/
   - boto3

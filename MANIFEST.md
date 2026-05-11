@@ -16,6 +16,7 @@ The current working tree supports:
 - declarative landing bundle weights in `india_resilience_tool/config/bundle_weights.py`, now used for all visible Glance bundles
 - persisted visible-Glance composite metrics declared in `india_resilience_tool/config/composite_metrics.py` and optimized Glance view-model artifacts built offline from admin master files
 - unified Glance `drivers.parquet` artifacts carrying state, district, and optional block-scoped metric/rule drivers for block drawer drill-downs
+- Glance Rankings answer/export helpers that emit copyable prose, visible-row CSVs, and Excel answer packs from the same filtered ranking frame shown in the UI
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
 - type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
 - a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff, with Glance -> Deep Dive now opening the matching persisted composite metric
@@ -181,6 +182,7 @@ Aqueduct methodology note:
 | `geo_cache.py` | Streamlit-cached admin and hydro geometry loading/builders |
 | `geography.py` | Filesystem-backed admin geography discovery helpers |
 | `geography_controls.py` | Sidebar geography + analysis-focus controls for admin and hydro |
+| `glance_exports.py` | Streamlit-free Glance Rankings answer, CSV, and Excel answer-pack helpers |
 | `help_text.py` | Tooltip/help-text helpers for ribbon widgets |
 | `landing_runtime.py` | Climate-hazard landing/discovery orchestrator that loads persisted optimized Glance view models only, plus state transitions and Deep Dive handoff |
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
