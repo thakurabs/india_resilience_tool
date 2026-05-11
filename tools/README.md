@@ -110,10 +110,43 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_river_topology.py` | Build topology-ready river reaches, nodes, adjacency, and QA artifacts from the canonical river parquet | `python -m tools.geodata.build_river_topology --help` |
 | `tools/subbasin_shp_explore.py` | Inspect, optionally repair, and export canonical basin/sub-basin GeoJSONs from `waterbasin_goi.shp` | `python -m tools.subbasin_shp_explore --help` |
 | `tools/data_acquisition/download_era5_daily_stats_structured.py` | Download/structure ERA5 daily stats | `python -m tools.data_acquisition.download_era5_daily_stats_structured --help` |
-| `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | Download NEX India subset from S3 | `python -m tools.data_acquisition.nex_india_subset_download_s3_v1 --help` |
+| `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | Download NEX India subset from S3 (serial; retained as a fallback) | `python -m tools.data_acquisition.nex_india_subset_download_s3_v1 --help` |
+| `tools/data_acquisition/nex_india_subset_download_s3_v2.py` | Parallel pan-India NEX-GDDP-CMIP6 downloader: scope-cached S3 listing, ThreadPoolExecutor, atomic writes, classified retries, `--verify` quarantine, year × experiment intersection. Outputs to `${out_dir}/${member_dir}/${exp}/${var}/${model}/${year}.nc` (default `member_dir=r1i1p1f1_panIndia`). | `python -m tools.data_acquisition.nex_india_subset_download_s3_v2 --help` |
 | `tools/data_prep/prepare_reanalysis_for_pipeline.py` | Prepare ERA5/IMD inputs for pipeline | `python -m tools.data_prep.prepare_reanalysis_for_pipeline --help` |
 | `tools/data_prep/organize_era5_legacy_nc_files.py` | Reorganize legacy ERA5 NetCDF layout | `python -m tools.data_prep.organize_era5_legacy_nc_files --help` |
 | `tools/data_prep/derive_hurs_from_era5_tas_tdps.py` | Derive humidity inputs from ERA5 fields | `python -m tools.data_prep.derive_hurs_from_era5_tas_tdps --help` |
+
+`tools/data_acquisition/nex_india_subset_download_s3_v2.py` notes:
+- Output layout: `${out_dir}/${member_dir}/${experiment}/${variable}/${model}/${year}.nc` (default `member_dir=r1i1p1f1_panIndia`).
+- Default `--workers 8`; default `--open-mode download-first` (safer; `direct` additionally requires `s3fs` + `fsspec`).
+- `--skip-existing` (default) skips non-empty files. `--verify` opens existing files; corrupt ones are moved to `*.bad` unless `--delete-bad-existing` is set.
+- `--years 1990-2010,2050` is intersected with each experiment's policy range (`historical` 1951–2014; `ssp*` 2015–2100).
+- Exit codes: `0` = clean; `1` = at least one task failed (or a scope had duplicate-year keys, e.g. `gn`/`gr1` mixed); `2` = no failures but a corrupt local file was quarantined with no S3 key to replace it.
+- Atomic writes via unique `.tmp` + `os.replace`; safe on POSIX and NTFS. Temp source NetCDFs are cleaned on every path (success, failure, partial).
+
+PowerShell + conda example (Windows operator):
+```powershell
+conda activate irt
+$env:IRT_DATA_DIR = "D:\projects\irt_data_pan_india"
+python -m tools.data_acquisition.nex_india_subset_download_s3_v2 `
+    --out-dir $env:IRT_DATA_DIR `
+    --workers 8
+```
+
+WSL/bash example:
+```bash
+IRT_DATA_DIR=/mnt/d/projects/irt_data_pan_india \
+  python -m tools.data_acquisition.nex_india_subset_download_s3_v2 --workers 8
+```
+
+Scale advisory: pan-India × 5 variables × 3 experiments × all available CMIP6 models × full policy year range is a multi-hour, large-disk run even after bbox subsetting. Probe scale first with a small dry-run:
+```bash
+python -m tools.data_acquisition.nex_india_subset_download_s3_v2 \
+    --variables pr --models GFDL-ESM4 --years 2000-2001 --dry-run
+```
+Windows tip: if HDF5 writes get flaky under parallelism, fall back to `--workers 2`.
+
+**Important — output is not yet consumed by the compute pipeline.** Outputs land under `${out_dir}/r1i1p1f1_panIndia/`. The compute pipeline (`tools/pipeline/compute_indices_multiprocess.py` etc., resolved via `india_resilience_tool/config/paths.py`) currently reads `${out_dir}/r1i1p1f1/`. Until a separate staging or pipeline-config change lands, `_v2` downloads do not feed the compute pipeline. `_v1.py` and `download_pan_india_raw.sh` are unchanged and remain in service for the existing serial workflow.
 
 `tools/subbasin_shp_explore.py` notes:
 - source: `waterbasin_goi.shp`

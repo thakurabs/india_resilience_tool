@@ -301,7 +301,8 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `download_era5_daily_stats_structured.py` | Download structured ERA5 daily stats from CDS |
-| `nex_india_subset_download_s3_v1.py` | Download NEX India subsets from S3 |
+| `nex_india_subset_download_s3_v1.py` | Download NEX India subsets from S3 (serial; retained as fallback) |
+| `nex_india_subset_download_s3_v2.py` | Parallel pan-India NEX-GDDP-CMIP6 downloader. Four-layer design (CLI/config → scope-cached S3 manifest discovery → local skip/verify/quarantine policy → bounded ThreadPoolExecutor with atomic writes and classified retries). Writes to `${out_dir}/${member_dir}/...` with `member_dir` defaulting to `r1i1p1f1_panIndia` — distinct from the compute-pipeline-consumed `r1i1p1f1/` root. `_v1.py` and `download_pan_india_raw.sh` are unchanged; rewiring downstream pipeline tools to consume the pan-India root is a separate future change. |
 
 ### `tools/data_prep/`
 
