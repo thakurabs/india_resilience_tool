@@ -114,6 +114,21 @@ def _block_scores() -> pd.DataFrame:
         }
     )
 
+
+def _district_ranking_scores() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "state_name": ["Telangana", "Telangana", "Telangana"],
+            "district_name": ["Nizamabad", "Kamareddy", "Bhadradri Kothagudem"],
+            "bundle_score": [74.9, 74.5, 70.1],
+            "bundle_score_display": ["74.9", "74.5", "70.1"],
+            "score_band": ["High", "High", "Moderate"],
+            "district_rank": [1, 2, 3],
+            "district_count": [33, 33, 33],
+        }
+    )
+
+
 class _DummyContext:
     def __enter__(self) -> "_DummyContext":
         return self
@@ -131,8 +146,11 @@ class _DummyStreamlit:
         self.captions: list[str] = []
         self.dataframes: list[pd.DataFrame] = []
         self.markdowns: list[str] = []
+        self.text_areas: list[str] = []
 
     def columns(self, spec) -> list[_DummyContext]:
+        if isinstance(spec, int):
+            return [_DummyContext() for _ in range(spec)]
         return [_DummyContext() for _ in spec]
 
     def expander(self, *args, **kwargs) -> _DummyContext:
@@ -166,6 +184,12 @@ class _DummyStreamlit:
         return False
 
     def text_input(self, *args, value=None, **kwargs):
+        return value
+
+    def text_area(self, *args, value=None, key=None, **kwargs):
+        if key is not None:
+            self.session_state[key] = value
+        self.text_areas.append(str(value or ""))
         return value
 
     def rerun(self) -> None:
@@ -206,6 +230,9 @@ class _DummyStreamlit:
     def dataframe(self, data, *args, **kwargs) -> None:
         self.dataframes.append(data.copy() if isinstance(data, pd.DataFrame) else data)
         return None
+
+    def download_button(self, *args, **kwargs) -> bool:
+        return False
 
 
 def _driver_context(
@@ -2188,8 +2215,29 @@ def test_render_landing_rankings_shows_blocks_for_block_focus(monkeypatch: pytes
     )
 
     rendered = stub_st.dataframes[-1]
+    assert stub_st.captions[-1] == "Selected block: CHITYAL - rank 1 / 2, score 91.0, Extreme risk band"
     assert rendered["Block"].tolist() == ["Chityal", "Narketpalle"]
     assert rendered["Current focus"].tolist() == ["Selected", ""]
+
+
+def test_render_landing_rankings_surfaces_selected_district_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_st = _DummyStreamlit({})
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_landing_rankings(
+        focus_level="district",
+        selected_state="Telangana",
+        selected_district="Kamareddy",
+        selected_block=None,
+        state_scores=pd.DataFrame(),
+        district_scores=_district_ranking_scores(),
+        block_scores=None,
+    )
+
+    rendered = stub_st.dataframes[-1]
+    assert stub_st.captions[-1] == "Selected district: KAMAREDDY - rank 2 / 33, score 74.5, High risk band"
+    assert rendered["District"].tolist() == ["Nizamabad", "Kamareddy", "Bhadradri Kothagudem"]
+    assert rendered["Current focus"].tolist() == ["", "Selected", ""]
 
 
 def _band_filter(**overrides: object) -> dict[str, object]:
@@ -2326,3 +2374,85 @@ def test_build_block_band_distribution_returns_empty_for_empty_input() -> None:
     out = landing_runtime._build_block_band_distribution(pd.DataFrame())
     assert out.empty
     assert list(out.columns) == ["band", "count"]
+
+
+def test_glance_answer_text_area_resets_when_export_context_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_st = _DummyStreamlit(
+        {
+            "landing_glance_answer_context_token": "old",
+            "landing_glance_answer_text": "For MANCHERIAL, stale block answer.",
+            "landing_glance_answer_text_area": "For MANCHERIAL, stale block answer.",
+        }
+    )
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    visible = landing_runtime._compute_visible_ranking_rows(
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+        selected_block=None,
+        state_scores=pd.DataFrame(),
+        district_scores=pd.DataFrame(
+            {
+                "state_name": ["Telangana", "Telangana"],
+                "district_name": ["Nizamabad", "Kamareddy"],
+                "bundle_score": [74.9, 74.5],
+                "bundle_score_display": ["74.9", "74.5"],
+                "score_band": ["High", "High"],
+                "district_rank": [1, 2],
+                "district_count": [2, 2],
+            }
+        ),
+    )
+
+    landing_runtime._render_glance_answer_export_panel(
+        visible_rows=visible,
+        drivers=pd.DataFrame(),
+        bundle_domain="Extreme Rainfall | Flash Flood Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+    )
+
+    assert "For Telangana" in stub_st.session_state["landing_glance_answer_text_area"]
+    assert "Nizamabad, Kamareddy" in stub_st.session_state["landing_glance_answer_text_area"]
+    assert "MANCHERIAL" not in stub_st.session_state["landing_glance_answer_text_area"]
+
+
+def test_glance_answer_text_area_resets_to_selected_district_focus(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_st = _DummyStreamlit(
+        {
+            "landing_glance_answer_context_token": "old",
+            "landing_glance_answer_text": "For MANCHERIAL, stale block answer.",
+            "landing_glance_answer_text_area": "For MANCHERIAL, stale block answer.",
+        }
+    )
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    visible = landing_runtime._compute_visible_ranking_rows(
+        focus_level="district",
+        selected_state="Telangana",
+        selected_district="Kamareddy",
+        selected_block=None,
+        state_scores=pd.DataFrame(),
+        district_scores=_district_ranking_scores(),
+    )
+
+    landing_runtime._render_glance_answer_export_panel(
+        visible_rows=visible,
+        drivers=pd.DataFrame(),
+        bundle_domain="Extreme Rainfall | Flash Flood Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="district",
+        selected_state="Telangana",
+        selected_district="Kamareddy",
+    )
+
+    answer = stub_st.session_state["landing_glance_answer_text_area"]
+    assert answer.startswith("For Telangana district rankings, Kamareddy is the current focus.")
+    assert "It ranks 2 / 33" in answer
+    assert "Nizamabad, Kamareddy, Bhadradri Kothagudem" in answer
+    assert "MANCHERIAL" not in answer

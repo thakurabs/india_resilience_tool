@@ -16,6 +16,13 @@ import pandas as pd
 import streamlit as st
 
 from india_resilience_tool.app.dashboard_bundle_runtime import dashboard_bundle_display
+from india_resilience_tool.app.glance_exports import (
+    build_glance_answer_pack_xlsx,
+    build_glance_answer_text,
+    build_glance_csv_bytes,
+    build_glance_export_frame,
+    glance_export_filename,
+)
 from india_resilience_tool.config.bundle_weights import get_bundle_weights
 from india_resilience_tool.config.dashboard_bundles import (
     dashboard_bundle_names,
@@ -2170,19 +2177,40 @@ def _render_landing_rankings(
     district_scores: pd.DataFrame,
     block_scores: Optional[pd.DataFrame] = None,
     selected_block: Optional[str] = None,
-) -> None:
+) -> pd.DataFrame:
     """Render context-sensitive landing rankings."""
-    band_filter = _get_landing_band_filter(st.session_state)
-    if focus_level == "india":
-        scope_df = state_scores.sort_values("bundle_score", ascending=False, kind="stable").copy()
-        scope_df["Rank"] = scope_df["bundle_score"].rank(method="min", ascending=False, na_option="bottom")
-        scope_df, applied_band = _apply_landing_band_filter(
-            scope_df, band_filter, expected_scope="national"
-        )
-        _render_band_filter_status(applied_band, len(scope_df), level_noun="state")
-        display_df = scope_df.rename(
+    visible_rows = _compute_visible_ranking_rows(
+        focus_level=focus_level,
+        selected_state=selected_state,
+        selected_district=selected_district,
+        selected_block=selected_block,
+        state_scores=state_scores,
+        district_scores=district_scores,
+        block_scores=block_scores,
+        band_filter=_get_landing_band_filter(st.session_state),
+    )
+    applied_band = (
+        str(visible_rows["active_band_filter"].dropna().head(1).iloc[0])
+        if not visible_rows.empty and visible_rows["active_band_filter"].dropna().any()
+        else None
+    )
+    unit_scope = (
+        str(visible_rows["unit_scope"].dropna().head(1).iloc[0])
+        if not visible_rows.empty and "unit_scope" in visible_rows.columns
+        else ("state" if focus_level == "india" else ("block" if focus_level == "block" else "district"))
+    )
+    _render_band_filter_status(applied_band, len(visible_rows), level_noun=unit_scope)
+    if visible_rows.empty:
+        st.dataframe(pd.DataFrame(), hide_index=True, use_container_width=True)
+        return visible_rows
+    _render_selected_focus_summary(visible_rows)
+    display_df = visible_rows.copy()
+    display_df["Current focus"] = display_df["is_current_focus"].map(lambda value: "Selected" if bool(value) else "")
+    if unit_scope == "state":
+        display_df = display_df.rename(
             columns={
-                "state_name": "State",
+                "rank": "Rank",
+                "unit_name": "State",
                 "bundle_score_display": "Bundle score",
                 "score_band": "Risk band",
             }
@@ -2192,9 +2220,104 @@ def _render_landing_rankings(
             hide_index=True,
             use_container_width=True,
         )
-        return
+        return visible_rows
+    if unit_scope == "block":
+        display_df = display_df.rename(
+            columns={
+                "rank": "Rank",
+                "unit_name": "Block",
+                "bundle_score_display": "Bundle score",
+                "score_band": "Risk band",
+            }
+        )
+        st.dataframe(
+            display_df[["Rank", "Block", "Bundle score", "Risk band", "Current focus"]],
+            hide_index=True,
+            use_container_width=True,
+        )
+        return visible_rows
+    display_df = display_df.rename(
+        columns={
+            "rank": "Rank",
+            "unit_name": "District",
+            "bundle_score_display": "Bundle score",
+            "score_band": "Risk band",
+        }
+    )
+    st.dataframe(
+        display_df[["Rank", "District", "Bundle score", "Risk band", "Current focus"]],
+        hide_index=True,
+        use_container_width=True,
+    )
+    return visible_rows
 
-    if focus_level == "block" and block_scores is not None:
+
+def _ranking_scalar(value: object, *, fallback: str = "") -> str:
+    if pd.isna(value):
+        return fallback
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return str(value).strip() or fallback
+    return str(int(numeric)) if numeric.is_integer() else f"{numeric:g}"
+
+
+def _ranking_text(value: object, *, fallback: str = "") -> str:
+    if pd.isna(value):
+        return fallback
+    text = str(value).strip()
+    return text or fallback
+
+
+def _render_selected_focus_summary(visible_rows: pd.DataFrame) -> None:
+    """Render a compact selected-row summary without changing table order."""
+    if visible_rows.empty or "is_current_focus" not in visible_rows.columns:
+        return
+    focus_mask = visible_rows["is_current_focus"].fillna(False).astype(bool)
+    focus_rows = visible_rows[focus_mask].sort_values("rank", kind="stable")
+    if focus_rows.empty:
+        return
+    focus = focus_rows.iloc[0]
+    unit_scope = _ranking_text(focus.get("unit_scope"), fallback="unit").lower()
+    unit_label = {"district": "district", "block": "block", "state": "state"}.get(unit_scope, "unit")
+    unit_name = _ranking_text(focus.get("unit_name"))
+    rank = _ranking_scalar(focus.get("rank"), fallback="unranked")
+    comparison_count = _ranking_scalar(focus.get("comparison_count"), fallback=str(len(visible_rows)))
+    score = _ranking_text(focus.get("bundle_score_display")) or _ranking_text(focus.get("bundle_score"))
+    band = _ranking_text(focus.get("score_band"))
+    score_text = f", score {score}" if score else ""
+    band_text = f", {band} risk band" if band else ""
+    st.caption(
+        f"Selected {unit_label}: {unit_name.upper()} - rank {rank} / {comparison_count}"
+        f"{score_text}{band_text}"
+    )
+
+
+def _compute_visible_ranking_rows(
+    *,
+    focus_level: str,
+    selected_state: Optional[str],
+    selected_district: Optional[str],
+    selected_block: Optional[str],
+    state_scores: pd.DataFrame,
+    district_scores: pd.DataFrame,
+    block_scores: Optional[pd.DataFrame] = None,
+    band_filter: Optional[Mapping[str, object]] = None,
+) -> pd.DataFrame:
+    """Return the exact Glance ranking rows visible for the active scope."""
+    focus = str(focus_level or "india").strip().lower()
+    rank_warning = ""
+    if focus == "india":
+        scope_df = state_scores.sort_values("bundle_score", ascending=False, kind="stable").copy()
+        scope_df, applied_band = _apply_landing_band_filter(scope_df, band_filter, expected_scope="national")
+        unit_scope = "state"
+        rank_col = "state_rank"
+        count_col = "state_count"
+        unit_col = "state_name"
+        parent_state = ""
+        parent_district = ""
+        comparison_group = "India"
+    elif focus == "block" and block_scores is not None:
         scope_df = block_scores[
             (block_scores["state_name"].astype(str).map(alias) == alias(selected_state or ""))
             & (block_scores["district_name"].astype(str).map(alias) == alias(selected_district or ""))
@@ -2206,52 +2329,215 @@ def _render_landing_rankings(
             state_name=selected_state,
             district_name=selected_district,
         )
-        _render_band_filter_status(applied_band, len(scope_df), level_noun="block")
-        scope_df["Current focus"] = scope_df["block_name"].map(
-            lambda value: "Selected" if selected_block and alias(str(value)) == alias(selected_block) else ""
+        unit_scope = "block"
+        rank_col = "block_rank_within_district"
+        count_col = "block_count_within_district"
+        unit_col = "block_name"
+        parent_state = selected_state or ""
+        parent_district = selected_district or ""
+        comparison_group = selected_district or ""
+    else:
+        scope_df = district_scores[
+            district_scores["state_name"].astype(str).map(alias) == alias(selected_state or "")
+        ].sort_values("bundle_score", ascending=False, kind="stable").copy()
+        scope_df, applied_band = _apply_landing_band_filter(
+            scope_df,
+            band_filter,
+            expected_scope="state",
+            state_name=selected_state,
         )
-        display_df = scope_df.rename(
-            columns={
-                "block_rank_within_district": "Rank",
-                "block_name": "Block",
-                "bundle_score_display": "Bundle score",
-                "score_band": "Risk band",
-            }
+        unit_scope = "district"
+        rank_col = "district_rank"
+        count_col = "district_count"
+        unit_col = "district_name"
+        parent_state = selected_state or ""
+        parent_district = ""
+        comparison_group = selected_state or ""
+    if scope_df.empty:
+        return pd.DataFrame(
+            columns=[
+                "unit_scope",
+                "rank",
+                "unit_name",
+                "unit_type",
+                "parent_state",
+                "parent_district",
+                "is_current_focus",
+                "comparison_group",
+                "comparison_count",
+                "active_band_filter",
+                "rank_warning",
+            ]
         )
-        st.dataframe(
-            display_df[["Rank", "Block", "Bundle score", "Risk band", "Current focus"]],
-            hide_index=True,
+    if rank_col in scope_df.columns:
+        rank_values = pd.to_numeric(scope_df[rank_col], errors="coerce")
+    else:
+        rank_values = pd.Series([np.nan] * len(scope_df), index=scope_df.index)
+    if rank_values.isna().any():
+        rank_warning = f"{rank_col} was missing for at least one row; rank fallback used visible score order."
+        fallback = scope_df["bundle_score"].rank(method="min", ascending=False, na_option="bottom")
+        rank_values = rank_values.fillna(fallback)
+    scope_df["unit_scope"] = unit_scope
+    scope_df["rank"] = rank_values.astype("Int64")
+    scope_df["unit_name"] = scope_df[unit_col].astype(str)
+    scope_df["unit_type"] = unit_scope
+    scope_df["parent_state"] = parent_state if parent_state else scope_df.get("state_name", "")
+    scope_df["parent_district"] = parent_district if parent_district else scope_df.get("district_name", "")
+    if unit_scope == "block":
+        scope_df["is_current_focus"] = scope_df[unit_col].map(
+            lambda value: bool(selected_block and alias(str(value)) == alias(selected_block))
+        )
+    elif unit_scope == "district":
+        scope_df["is_current_focus"] = scope_df[unit_col].map(
+            lambda value: bool(selected_district and alias(str(value)) == alias(selected_district))
+        )
+    else:
+        scope_df["is_current_focus"] = False
+    scope_df["comparison_group"] = comparison_group
+    if count_col in scope_df.columns:
+        scope_df["comparison_count"] = pd.to_numeric(scope_df[count_col], errors="coerce").astype("Int64")
+    else:
+        scope_df["comparison_count"] = len(scope_df)
+    scope_df["active_band_filter"] = applied_band or ""
+    scope_df["rank_warning"] = rank_warning
+    return scope_df.sort_values(["rank", "unit_name"], kind="stable").reset_index(drop=True)
+
+
+def _render_glance_answer_export_panel(
+    *,
+    visible_rows: pd.DataFrame,
+    drivers: pd.DataFrame,
+    bundle_domain: str,
+    scenario: str,
+    period: str,
+    focus_level: str,
+    selected_state: Optional[str],
+    selected_district: Optional[str],
+) -> None:
+    """Render Glance answer and export controls from the visible rankings frame."""
+    st.markdown("#### Answer & Export")
+    if visible_rows.empty:
+        st.caption("No visible ranking rows are available to export for the current selection.")
+        st.button("Generate copyable answer", key="landing_glance_answer_disabled", disabled=True)
+        st.download_button("Download ranking CSV", data=b"", file_name="irt_glance_empty.csv", disabled=True, key="landing_glance_csv_disabled")
+        st.download_button("Download answer pack", data=b"", file_name="irt_glance_empty.xlsx", disabled=True, key="landing_glance_xlsx_disabled")
+        return
+    export_frame, driver_note = build_glance_export_frame(visible_rows, drivers)
+    unit_scope = str(visible_rows["unit_scope"].iloc[0])
+    active_band = str(visible_rows["active_band_filter"].iloc[0] or "")
+    geography = selected_district if unit_scope == "block" else selected_state if unit_scope == "district" else "India"
+    geography = geography or "India"
+    bundle_label = _landing_bundle_display(bundle_domain)
+    scenario_label = SCENARIO_DISPLAY.get(str(scenario).strip().lower(), str(scenario))
+    period_label = period_display_label(canonical_period_label(period))
+    answer_text = build_glance_answer_text(
+        export_frame,
+        bundle_label=bundle_label,
+        scenario_label=scenario_label,
+        period_label=period_label,
+        geography_label=geography,
+        is_projection=str(scenario).strip().lower() != "snapshot",
+        driver_note=driver_note,
+    )
+    current_focus_token = ""
+    if "is_current_focus" in export_frame.columns:
+        focus_rows = export_frame[export_frame["is_current_focus"].fillna(False).astype(bool)]
+        if not focus_rows.empty:
+            focus = focus_rows.sort_values("rank", kind="stable").head(1).iloc[0]
+            focus_parts = [
+                focus.get("unit_name", ""),
+                focus.get("rank", ""),
+                focus.get("comparison_count", ""),
+                focus.get("bundle_score_display", ""),
+                focus.get("score_band", ""),
+                focus.get("top_driver_1", ""),
+                focus.get("top_driver_2", ""),
+                focus.get("top_driver_3", ""),
+            ]
+            current_focus_token = "|".join(alias(part) for part in focus_parts)
+    answer_context_token = "|".join(
+        [
+            alias(bundle_domain),
+            alias(scenario),
+            alias(period),
+            alias(focus_level),
+            alias(unit_scope),
+            alias(geography),
+            alias(active_band),
+            str(len(export_frame)),
+            str(export_frame["unit_name"].astype(str).tolist()[:3]),
+            current_focus_token,
+        ]
+    )
+    if st.session_state.get("landing_glance_answer_context_token") != answer_context_token:
+        st.session_state["landing_glance_answer_context_token"] = answer_context_token
+        st.session_state["landing_glance_answer_text"] = answer_text
+        st.session_state["landing_glance_answer_text_area"] = answer_text
+    if st.button("Generate copyable answer", key="landing_glance_generate_answer", use_container_width=True):
+        st.session_state["landing_glance_answer_text"] = answer_text
+        st.session_state["landing_glance_answer_text_area"] = answer_text
+    st.text_area(
+        "Copyable answer",
+        value=str(st.session_state.get("landing_glance_answer_text_area") or answer_text),
+        key="landing_glance_answer_text_area",
+        height=120,
+    )
+    metadata = {
+        "bundle": bundle_domain,
+        "scenario": scenario,
+        "period": period,
+        "geography": geography,
+        "focus_level": focus_level,
+        "unit_scope": unit_scope,
+        "active_band_filter": active_band,
+        "score_direction": "Higher bundle score indicates higher hazard signal.",
+        "missing_data_rule": "Missing values remain blank; persisted ranks are used when available.",
+        "source_artifacts": "state.parquet, district.parquet, block.parquet when available, drivers.parquet",
+        "driver_source_artifact": "drivers.parquet",
+        "rank_warning": str(visible_rows["rank_warning"].dropna().head(1).iloc[0] or ""),
+    }
+    csv_name = glance_export_filename(
+        kind="csv",
+        bundle_slug=bundle_domain,
+        unit_scope=unit_scope,
+        scenario=scenario,
+        period=period,
+        geography=geography,
+        band_filter=active_band or None,
+    )
+    xlsx_name = glance_export_filename(
+        kind="xlsx",
+        bundle_slug=bundle_domain,
+        unit_scope=unit_scope,
+        scenario=scenario,
+        period=period,
+        geography=geography,
+        band_filter=active_band or None,
+    )
+    export_cols = st.columns(2)
+    with export_cols[0]:
+        st.download_button(
+            "Download ranking CSV",
+            data=build_glance_csv_bytes(export_frame),
+            file_name=csv_name,
+            mime="text/csv",
+            key="landing_glance_csv_download",
             use_container_width=True,
         )
-        return
-
-    scope_df = district_scores[
-        district_scores["state_name"].astype(str).map(alias) == alias(selected_state or "")
-    ].sort_values("bundle_score", ascending=False, kind="stable")
-    scope_df = scope_df.copy()
-    scope_df, applied_band = _apply_landing_band_filter(
-        scope_df,
-        band_filter,
-        expected_scope="state",
-        state_name=selected_state,
-    )
-    _render_band_filter_status(applied_band, len(scope_df), level_noun="district")
-    scope_df["Current focus"] = scope_df["district_name"].map(
-        lambda value: "Selected" if selected_district and alias(str(value)) == alias(selected_district) else ""
-    )
-    display_df = scope_df.rename(
-        columns={
-            "district_rank": "Rank",
-            "district_name": "District",
-            "bundle_score_display": "Bundle score",
-            "score_band": "Risk band",
-        }
-    )
-    st.dataframe(
-        display_df[["Rank", "District", "Bundle score", "Risk band", "Current focus"]],
-        hide_index=True,
-        use_container_width=True,
-    )
+    with export_cols[1]:
+        st.download_button(
+            "Download answer pack",
+            data=build_glance_answer_pack_xlsx(
+                answer_text=answer_text,
+                export_frame=export_frame,
+                metadata=metadata,
+                driver_note=driver_note,
+            ),
+            file_name=xlsx_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="landing_glance_xlsx_download",
+            use_container_width=True,
+        )
 
 
 def _render_band_filter_status(applied_band: Optional[str], row_count: int, *, level_noun: str) -> None:
@@ -2817,7 +3103,7 @@ def render_landing_page(
             block_scores=block_scores,
         )
     else:
-        _render_landing_rankings(
+        visible_ranking_rows = _render_landing_rankings(
             focus_level=focus_level,
             selected_state=selected_state,
             selected_district=selected_district,
@@ -2826,6 +3112,17 @@ def render_landing_page(
             district_scores=district_scores,
             block_scores=block_scores,
         )
+        if visible_ranking_rows is not None:
+            _render_glance_answer_export_panel(
+                visible_rows=visible_ranking_rows,
+                drivers=glance_context.drivers,
+                bundle_domain=bundle_domain,
+                scenario=scenario,
+                period=period,
+                focus_level=focus_level,
+                selected_state=selected_state,
+                selected_district=selected_district,
+            )
 
     method_note = (
         "Method note: landing bundle scores are weighted averages of normalized hazard metrics "
