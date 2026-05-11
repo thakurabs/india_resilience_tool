@@ -1723,7 +1723,16 @@ def _render_state_summary(
         hotspot_df = state_scope.sort_values("bundle_score", ascending=False, kind="stable").head(5)
         st.markdown("**Top Hotspot Districts**")
         for index, hotspot_row in enumerate(hotspot_df.itertuples(index=False), start=1):
-            st.write(f"{index}. {hotspot_row.district_name}")
+            hotspot_district_name = str(hotspot_row.district_name)
+            button_label = f"{index}. {hotspot_district_name}"
+            button_key = f"landing_hotspot_district_{state_name}_{index}_{hotspot_district_name}"
+            if st.button(button_label, key=button_key, use_container_width=True):
+                set_landing_focus_district(
+                    st.session_state,
+                    state_name=state_name,
+                    district_name=hotspot_district_name,
+                )
+                st.rerun()
 
         st.markdown("**District Score Distribution**")
         distributions = distributions if distributions is not None else pd.DataFrame()
@@ -1885,7 +1894,19 @@ def _render_block_summary(
             hotspot_df = district_scope.sort_values("bundle_score", ascending=False, kind="stable").head(5)
             st.markdown("**Top Hotspot Blocks**")
             for index, hotspot_row in enumerate(hotspot_df.itertuples(index=False), start=1):
-                st.write(f"{index}. {hotspot_row.block_name}")
+                hotspot_block_name = str(hotspot_row.block_name)
+                button_label = f"{index}. {hotspot_block_name}"
+                button_key = (
+                    f"landing_hotspot_block_{state_name}_{district_name}_{index}_{hotspot_block_name}"
+                )
+                if st.button(button_label, key=button_key, use_container_width=True):
+                    set_landing_focus_block(
+                        st.session_state,
+                        state_name=state_name,
+                        district_name=district_name,
+                        block_name=hotspot_block_name,
+                    )
+                    st.rerun()
             return
 
         block_key = district_key + "|" + alias(selected_block)
