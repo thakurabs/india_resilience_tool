@@ -2190,3 +2190,139 @@ def test_render_landing_rankings_shows_blocks_for_block_focus(monkeypatch: pytes
     rendered = stub_st.dataframes[-1]
     assert rendered["Block"].tolist() == ["Chityal", "Narketpalle"]
     assert rendered["Current focus"].tolist() == ["Selected", ""]
+
+
+def _band_filter(**overrides: object) -> dict[str, object]:
+    base = {
+        "band": "High",
+        "scope": "state",
+        "bundle": "Heat Risk",
+        "scenario": "ssp585",
+        "period": "2040-2060",
+        "state_name": "Telangana",
+        "district_name": None,
+    }
+    base.update(overrides)
+    return base
+
+
+def _scored_df(bands: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "state_name": ["Telangana"] * len(bands),
+            "district_name": [f"D{idx}" for idx, _ in enumerate(bands)],
+            "score_band": bands,
+            "bundle_score": list(range(len(bands))),
+        }
+    )
+
+
+def test_apply_landing_band_filter_filters_on_internal_score_band_column() -> None:
+    df = _scored_df(["High", "Moderate", "High", "Low"])
+    out, applied = landing_runtime._apply_landing_band_filter(
+        df,
+        _band_filter(band="High", scope="state", state_name="Telangana"),
+        expected_scope="state",
+        state_name="Telangana",
+    )
+    assert applied == "High"
+    assert out["score_band"].tolist() == ["High", "High"]
+
+
+def test_apply_landing_band_filter_returns_input_on_scope_mismatch() -> None:
+    df = _scored_df(["High", "Low"])
+    out, applied = landing_runtime._apply_landing_band_filter(
+        df,
+        _band_filter(scope="national", state_name=None),
+        expected_scope="state",
+        state_name="Telangana",
+    )
+    assert applied is None
+    assert len(out) == len(df)
+
+
+def test_apply_landing_band_filter_returns_input_on_state_name_mismatch() -> None:
+    df = _scored_df(["High", "Low"])
+    out, applied = landing_runtime._apply_landing_band_filter(
+        df,
+        _band_filter(state_name="Maharashtra"),
+        expected_scope="state",
+        state_name="Telangana",
+    )
+    assert applied is None
+    assert len(out) == len(df)
+
+
+def test_apply_landing_band_filter_requires_matching_district_for_block_scope() -> None:
+    df = _scored_df(["High", "High"])
+    out, applied = landing_runtime._apply_landing_band_filter(
+        df,
+        _band_filter(scope="block", state_name="Telangana", district_name="Khammam", band="High"),
+        expected_scope="block",
+        state_name="Telangana",
+        district_name="Nalgonda",
+    )
+    assert applied is None
+    assert len(out) == len(df)
+
+
+def test_clear_stale_landing_band_filter_drops_filter_on_bundle_change() -> None:
+    session: dict[str, object] = {landing_runtime.LANDING_BAND_FILTER_KEY: _band_filter()}
+    landing_runtime._clear_stale_landing_band_filter(
+        session,
+        bundle="Flood Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+    )
+    assert landing_runtime.LANDING_BAND_FILTER_KEY not in session
+
+
+def test_clear_stale_landing_band_filter_drops_filter_on_focus_mismatch() -> None:
+    session: dict[str, object] = {
+        landing_runtime.LANDING_BAND_FILTER_KEY: _band_filter(scope="national", state_name=None)
+    }
+    landing_runtime._clear_stale_landing_band_filter(
+        session,
+        bundle="Heat Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+    )
+    assert landing_runtime.LANDING_BAND_FILTER_KEY not in session
+
+
+def test_clear_stale_landing_band_filter_preserves_matching_context() -> None:
+    session: dict[str, object] = {landing_runtime.LANDING_BAND_FILTER_KEY: _band_filter()}
+    landing_runtime._clear_stale_landing_band_filter(
+        session,
+        bundle="Heat Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+    )
+    assert session[landing_runtime.LANDING_BAND_FILTER_KEY]["band"] == "High"
+
+
+def test_build_block_band_distribution_orders_present_bands_high_to_low_and_drops_zeros() -> None:
+    block_df = pd.DataFrame(
+        {
+            "block_name": ["a", "b", "c", "d"],
+            "score_band": ["Low", "High", "High", "Very High"],
+        }
+    )
+    out = landing_runtime._build_block_band_distribution(block_df)
+    assert out["band"].tolist() == ["Very High", "High", "Low"]
+    assert out["count"].tolist() == [1, 2, 1]
+
+
+def test_build_block_band_distribution_returns_empty_for_empty_input() -> None:
+    out = landing_runtime._build_block_band_distribution(pd.DataFrame())
+    assert out.empty
+    assert list(out.columns) == ["band", "count"]

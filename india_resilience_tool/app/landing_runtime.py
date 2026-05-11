@@ -64,6 +64,8 @@ LANDING_MAP_REPLAY_GUARD_KEY = "landing_map_replay_guard"
 LANDING_MAP_CONTEXT_KEY = "landing_map_context"
 LANDING_MAP_INPUT_ARMED_KEY = "landing_map_input_armed"
 LANDING_TABS = ("Rankings", "Compare")
+LANDING_BAND_FILTER_KEY = "landing_band_filter"
+LANDING_BAND_DISPLAY_ORDER = ("Very High", "High", "Moderate", "Low")
 
 LANDING_PERIOD_SHORT_LABELS: dict[str, str] = {
     "Current": "Current",
@@ -1656,6 +1658,177 @@ def _render_driver_table(driver_df: pd.DataFrame, *, top_n: int = 5) -> None:
     )
 
 
+def _set_landing_band_filter(
+    session_state: MutableMapping[str, object],
+    *,
+    band: str,
+    scope: str,
+    bundle: str,
+    scenario: str,
+    period: str,
+    state_name: Optional[str] = None,
+    district_name: Optional[str] = None,
+) -> None:
+    """Store a Glance band filter and route the user to the Rankings tab."""
+    session_state[LANDING_BAND_FILTER_KEY] = {
+        "band": str(band),
+        "scope": str(scope),
+        "bundle": str(bundle),
+        "scenario": str(scenario),
+        "period": str(period),
+        "state_name": state_name,
+        "district_name": district_name,
+    }
+    session_state["landing_tab"] = "Rankings"
+
+
+def _get_landing_band_filter(session_state: Mapping[str, object]) -> Optional[Mapping[str, object]]:
+    """Return the stored Glance band filter if present and well-formed, else None."""
+    raw = session_state.get(LANDING_BAND_FILTER_KEY)
+    if isinstance(raw, Mapping) and raw.get("band") and raw.get("scope"):
+        return raw
+    return None
+
+
+def _clear_stale_landing_band_filter(
+    session_state: MutableMapping[str, object],
+    *,
+    bundle: str,
+    scenario: str,
+    period: str,
+    focus_level: str,
+    selected_state: Optional[str],
+    selected_district: Optional[str],
+) -> None:
+    """Drop the band filter when the active Glance context no longer matches it."""
+    band_filter = _get_landing_band_filter(session_state)
+    if band_filter is None:
+        return
+    scope = str(band_filter.get("scope"))
+    if str(band_filter.get("bundle")) != bundle:
+        session_state.pop(LANDING_BAND_FILTER_KEY, None)
+        return
+    if str(band_filter.get("scenario")) != scenario or str(band_filter.get("period")) != period:
+        session_state.pop(LANDING_BAND_FILTER_KEY, None)
+        return
+    if scope == "national":
+        valid_focus = focus_level == "india"
+    elif scope == "state":
+        valid_focus = focus_level in ("state", "district")
+    elif scope == "block":
+        valid_focus = focus_level == "block"
+    else:
+        valid_focus = False
+    if not valid_focus:
+        session_state.pop(LANDING_BAND_FILTER_KEY, None)
+        return
+    if scope in ("state", "block"):
+        if alias(str(band_filter.get("state_name") or "")) != alias(str(selected_state or "")):
+            session_state.pop(LANDING_BAND_FILTER_KEY, None)
+            return
+    if scope == "block":
+        if alias(str(band_filter.get("district_name") or "")) != alias(str(selected_district or "")):
+            session_state.pop(LANDING_BAND_FILTER_KEY, None)
+
+
+def _apply_landing_band_filter(
+    df: pd.DataFrame,
+    band_filter: Optional[Mapping[str, object]],
+    *,
+    expected_scope: str,
+    state_name: Optional[str] = None,
+    district_name: Optional[str] = None,
+) -> tuple[pd.DataFrame, Optional[str]]:
+    """Filter df by the stored band when the stored scope matches expected_scope.
+
+    Returns (filtered_df, applied_band). applied_band is None when no filter
+    was applied (no filter, scope mismatch, name mismatch, or missing column).
+    """
+    if not band_filter:
+        return df, None
+    if str(band_filter.get("scope")) != expected_scope:
+        return df, None
+    if expected_scope in ("state", "block"):
+        if alias(str(band_filter.get("state_name") or "")) != alias(str(state_name or "")):
+            return df, None
+    if expected_scope == "block":
+        if alias(str(band_filter.get("district_name") or "")) != alias(str(district_name or "")):
+            return df, None
+    band = str(band_filter.get("band") or "").strip()
+    if not band or "score_band" not in df.columns:
+        return df, None
+    filtered = df[df["score_band"].astype(str) == band].copy()
+    return filtered, band
+
+
+def _current_landing_glance_context() -> tuple[str, str, str]:
+    """Read the active Glance bundle/scenario/period triple from session state."""
+    bundle = str(st.session_state.get("landing_bundle") or LANDING_DEFAULT_BUNDLE).strip()
+    scenario = str(st.session_state.get("landing_scenario") or LANDING_DEFAULT_SCENARIO).strip()
+    period = canonical_period_label(
+        str(st.session_state.get("landing_period") or LANDING_DEFAULT_PERIOD).strip()
+    )
+    return bundle, scenario, period
+
+
+def _render_band_filter_buttons(
+    dist_df: pd.DataFrame,
+    *,
+    scope: str,
+    key_prefix: str,
+    state_name: Optional[str] = None,
+    district_name: Optional[str] = None,
+) -> None:
+    """Render one button per band present in dist_df, below a distribution chart."""
+    if dist_df is None or dist_df.empty or "band" not in dist_df.columns:
+        return
+    present = set(dist_df["band"].astype(str).tolist())
+    bands = [b for b in LANDING_BAND_DISPLAY_ORDER if b in present]
+    if not bands:
+        return
+    bundle, scenario, period = _current_landing_glance_context()
+    st.caption("Click a band to filter the Rankings table.")
+    cols = st.columns(len(bands))
+    state_token = alias(str(state_name or "NA"))
+    district_token = alias(str(district_name or "NA"))
+    for col, band in zip(cols, bands):
+        button_key = f"{key_prefix}_{state_token}_{district_token}_{band}"
+        if col.button(band, key=button_key, use_container_width=True):
+            _set_landing_band_filter(
+                st.session_state,
+                band=band,
+                scope=scope,
+                bundle=bundle,
+                scenario=scenario,
+                period=period,
+                state_name=state_name,
+                district_name=district_name,
+            )
+            if scope == "block" and state_name and district_name:
+                set_landing_focus_block(
+                    st.session_state,
+                    state_name=state_name,
+                    district_name=district_name,
+                    block_name=None,
+                )
+            st.rerun()
+
+
+def _build_block_band_distribution(block_scope_df: pd.DataFrame) -> pd.DataFrame:
+    """Return a per-band count frame for a single district's blocks, ordered VH→Low."""
+    if block_scope_df is None or block_scope_df.empty or "score_band" not in block_scope_df.columns:
+        return pd.DataFrame(columns=["band", "count"])
+    counts = (
+        block_scope_df["score_band"].astype(str).value_counts(dropna=False).to_dict()
+    )
+    rows = [
+        {"band": band, "count": int(counts.get(band, 0))}
+        for band in LANDING_BAND_DISPLAY_ORDER
+        if int(counts.get(band, 0)) > 0
+    ]
+    return pd.DataFrame(rows, columns=["band", "count"])
+
+
 def _render_national_summary(
     *,
     state_scores: pd.DataFrame,
@@ -1686,6 +1859,11 @@ def _render_national_summary(
         dist_df = distributions[distributions.get("scope_level", pd.Series(dtype=str)).astype(str) == "national"].copy()
         if not dist_df.empty:
             st.bar_chart(dist_df.rename(columns={"band": "Band", "count": "Count"}).set_index("Band")["Count"])
+            _render_band_filter_buttons(
+                dist_df,
+                scope="national",
+                key_prefix="landing_band_btn_national",
+            )
 
 
 def _render_state_summary(
@@ -1742,6 +1920,12 @@ def _render_state_summary(
         ].copy()
         if not dist_df.empty:
             st.bar_chart(dist_df.rename(columns={"band": "Band", "count": "Count"}).set_index("Band")["Count"])
+            _render_band_filter_buttons(
+                dist_df,
+                scope="state",
+                key_prefix="landing_band_btn_state",
+                state_name=state_name,
+            )
         st.markdown(f"**{_landing_driver_heading(bundle_domain)}**")
         driver_scope = pd.DataFrame()
         if driver_context.available and not driver_context.district_scores.empty:
@@ -1907,6 +2091,20 @@ def _render_block_summary(
                         block_name=hotspot_block_name,
                     )
                     st.rerun()
+
+            block_dist = _build_block_band_distribution(district_scope)
+            if not block_dist.empty:
+                st.markdown("**Block Score Distribution**")
+                st.bar_chart(
+                    block_dist.rename(columns={"band": "Band", "count": "Count"}).set_index("Band")["Count"]
+                )
+                _render_band_filter_buttons(
+                    block_dist,
+                    scope="block",
+                    key_prefix="landing_band_btn_block",
+                    state_name=state_name,
+                    district_name=district_name,
+                )
             return
 
         block_key = district_key + "|" + alias(selected_block)
@@ -1974,9 +2172,14 @@ def _render_landing_rankings(
     selected_block: Optional[str] = None,
 ) -> None:
     """Render context-sensitive landing rankings."""
+    band_filter = _get_landing_band_filter(st.session_state)
     if focus_level == "india":
         scope_df = state_scores.sort_values("bundle_score", ascending=False, kind="stable").copy()
         scope_df["Rank"] = scope_df["bundle_score"].rank(method="min", ascending=False, na_option="bottom")
+        scope_df, applied_band = _apply_landing_band_filter(
+            scope_df, band_filter, expected_scope="national"
+        )
+        _render_band_filter_status(applied_band, len(scope_df), level_noun="state")
         display_df = scope_df.rename(
             columns={
                 "state_name": "State",
@@ -1996,6 +2199,14 @@ def _render_landing_rankings(
             (block_scores["state_name"].astype(str).map(alias) == alias(selected_state or ""))
             & (block_scores["district_name"].astype(str).map(alias) == alias(selected_district or ""))
         ].sort_values("bundle_score", ascending=False, kind="stable").copy()
+        scope_df, applied_band = _apply_landing_band_filter(
+            scope_df,
+            band_filter,
+            expected_scope="block",
+            state_name=selected_state,
+            district_name=selected_district,
+        )
+        _render_band_filter_status(applied_band, len(scope_df), level_noun="block")
         scope_df["Current focus"] = scope_df["block_name"].map(
             lambda value: "Selected" if selected_block and alias(str(value)) == alias(selected_block) else ""
         )
@@ -2018,6 +2229,13 @@ def _render_landing_rankings(
         district_scores["state_name"].astype(str).map(alias) == alias(selected_state or "")
     ].sort_values("bundle_score", ascending=False, kind="stable")
     scope_df = scope_df.copy()
+    scope_df, applied_band = _apply_landing_band_filter(
+        scope_df,
+        band_filter,
+        expected_scope="state",
+        state_name=selected_state,
+    )
+    _render_band_filter_status(applied_band, len(scope_df), level_noun="district")
     scope_df["Current focus"] = scope_df["district_name"].map(
         lambda value: "Selected" if selected_district and alias(str(value)) == alias(selected_district) else ""
     )
@@ -2034,6 +2252,22 @@ def _render_landing_rankings(
         hide_index=True,
         use_container_width=True,
     )
+
+
+def _render_band_filter_status(applied_band: Optional[str], row_count: int, *, level_noun: str) -> None:
+    """Show the active band filter, row count, and a Clear button."""
+    if not applied_band:
+        return
+    plural = f"{level_noun}s"
+    if row_count == 0:
+        st.caption(
+            f"Filtered to **{applied_band}** risk band — no {plural} fall in this band for the current selection."
+        )
+    else:
+        st.caption(f"Filtered to **{applied_band}** risk band — {row_count} {plural if row_count != 1 else level_noun}.")
+    if st.button("Clear filter", key="landing_band_filter_clear"):
+        st.session_state.pop(LANDING_BAND_FILTER_KEY, None)
+        st.rerun()
 
 
 def _sanitize_compare_selection(
@@ -2240,6 +2474,15 @@ def render_landing_page(
     search_options = _build_landing_search_options(state_scores, district_scores)
     if str(st.session_state.get("landing_tab") or LANDING_DEFAULT_TAB) not in LANDING_TABS:
         st.session_state["landing_tab"] = LANDING_DEFAULT_TAB
+    _clear_stale_landing_band_filter(
+        st.session_state,
+        bundle=bundle_domain,
+        scenario=scenario,
+        period=period,
+        focus_level=focus_level,
+        selected_state=selected_state,
+        selected_district=selected_district,
+    )
     if bool(st.session_state.get("landing_search_reset_pending", False)):
         st.session_state["landing_search_selection"] = None
         st.session_state["landing_search_last_applied"] = None
