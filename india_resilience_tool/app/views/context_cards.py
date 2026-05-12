@@ -89,38 +89,31 @@ def _toggle_overlay(payload: Mapping[str, Any]) -> None:
     st.rerun()
 
 
-def _container(border: bool = True):
-    import streamlit as st
-
-    try:
-        return st.container(border=border)
-    except TypeError:
-        return st.container()
-
-
 def render_exposure_snapshot_card(
     *,
     exposure_summary_row: Mapping[str, Any],
     level: str,
 ) -> None:
-    """Render population, rural facilities, and built-up exposure for the selected admin unit."""
+    """Render population, facilities, built-up, and agricultural LULC exposure."""
     import streamlit as st
 
     pop = exposure_summary_row.get("pop_2020")
     built_up_area = exposure_summary_row.get("built_up_area_km2")
     built_up_share = exposure_summary_row.get("built_up_area_share_pct")
+    lulc_agri_area = exposure_summary_row.get("lulc_agri_area_km2")
+    lulc_agri_share = exposure_summary_row.get("lulc_agri_share_pct")
     rural_total = _as_float(exposure_summary_row.get("rural_facilities_total_count"))
     has_population = _as_float(pop) is not None
     has_built_up = _as_float(built_up_area) is not None or _as_float(built_up_share) is not None
-    if not (has_population or has_built_up or rural_total is not None):
+    has_lulc_agri = _as_float(lulc_agri_area) is not None or _as_float(lulc_agri_share) is not None
+    if not (has_population or has_built_up or has_lulc_agri or rural_total is not None):
         return
 
     level_norm = str(level or "district").strip().lower()
     parent_label = "district" if level_norm == "block" else "state"
     share = exposure_summary_row.get("population_share_parent_pct")
 
-    with _container(border=True):
-        st.markdown("#### Exposure Snapshot")
+    with st.expander("Exposure Snapshot", expanded=True):
         if has_population:
             c1, c2 = st.columns(2)
             with c1:
@@ -167,6 +160,17 @@ def render_exposure_snapshot_card(
             with b2:
                 st.caption("Built-up area share")
                 st.markdown(f"**{_format_pct(built_up_share, fraction=False)}**")
+
+        if has_lulc_agri:
+            st.divider()
+            l1, l2 = st.columns(2)
+            with l1:
+                st.caption("Agricultural LULC area")
+                area_val = _as_float(lulc_agri_area)
+                st.markdown("**Not available**" if area_val is None else f"**{area_val:,.1f} km²**")
+            with l2:
+                st.caption("Agricultural LULC share")
+                st.markdown(f"**{_format_pct(lulc_agri_share, fraction=False)}**")
 
 
 def _hydro_chip(
@@ -232,9 +236,7 @@ def render_hydrological_context_card(
 
     level_norm = str(level or "district").strip().lower()
 
-    with _container(border=True):
-        st.markdown("#### Hydrological Context")
-
+    with st.expander("Hydrological Context", expanded=True):
         if basin_id and basin_name:
             st.caption("Dominant basin")
             _hydro_chip(
