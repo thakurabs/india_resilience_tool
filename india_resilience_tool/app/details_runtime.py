@@ -859,6 +859,25 @@ def render_right_panel(
 
     _fig_size_panel = ensure_16x9_figsize(fig_size_panel, mode="fit_width")
 
+    # Geography header (district / block / basin / sub-basin) — rendered here so
+    # it sits directly below the "Climate Profile" panel header, above the
+    # Exposure Snapshot and Hydrological Context cards.
+    from india_resilience_tool.app.views.details_panel import render_geography_header
+
+    render_geography_header(
+        row=row,
+        district_name=(
+            str(subbasin_name)
+            if level_norm == "sub_basin"
+            else str(basin_name) if level_norm == "basin" else district_name
+        ),
+        state_to_show=state_to_show,
+        selected_district=selected_district,
+        level=admin_level,
+        block_name=block_name,
+        parent_district_name=district_name if level_norm == "block" else None,
+    )
+
     # Exposure Snapshot + Hydrological Context cards (admin mode only).
     # These are lightweight runtime summaries; the dashboard degrades gracefully
     # when the optional parquet files are absent.

@@ -1403,6 +1403,82 @@ def render_case_study_export(
 
 
 
+def render_geography_header(
+    *,
+    row: Any,
+    district_name: str,
+    state_to_show: str,
+    selected_district: str,
+    level: str = "district",
+    block_name: Optional[str] = None,
+    parent_district_name: Optional[str] = None,
+) -> None:
+    """Render the geography subheader (e.g. district + breadcrumb) used in the
+    Climate Profile panel. Extracted from `render_details_panel` so the title
+    can be rendered directly under the panel header, ahead of context cards.
+    """
+    import streamlit as st
+
+    level_norm = str(level).strip().lower()
+    is_block = level_norm == "block"
+
+    district_title = (str(district_name or "").strip() or str(selected_district or "").strip())
+    state_title = str(state_to_show or "").strip()
+
+    def _row_get(key: str) -> str:
+        try:
+            if isinstance(row, Mapping):
+                val = row.get(key, "")
+            else:
+                val = getattr(row, key, "")
+                if val is None and hasattr(row, "get"):
+                    val = row.get(key, "")
+        except Exception:
+            val = ""
+        return str(val or "").strip()
+
+    if is_block:
+        block_title = (str(block_name or "").strip() or _row_get("block_name")).strip()
+        parent_dist_title = (
+            str(parent_district_name or "").strip()
+            or _row_get("district_name")
+            or str(selected_district or "").strip()
+        ).strip()
+
+        if block_title:
+            st.subheader(block_title)
+            parts: list[str] = ["Block"]
+            if parent_dist_title:
+                parts.append(parent_dist_title)
+            if state_title:
+                parts.append(state_title)
+            st.caption(" • ".join(parts))
+        else:
+            st.subheader(district_title)
+            parts = ["District"]
+            if state_title:
+                parts.append(state_title)
+            st.caption(" • ".join(parts))
+    elif level_norm == "sub_basin":
+        subbasin_title = _row_get("subbasin_name") or district_title
+        basin_title = _row_get("basin_name")
+        st.subheader(subbasin_title)
+        parts = ["Sub-basin"]
+        if basin_title:
+            parts.append(basin_title)
+        st.caption(" • ".join(parts))
+    elif level_norm == "basin":
+        basin_title = _row_get("basin_name") or district_title
+        st.subheader(basin_title)
+        st.caption(" • ".join(["Basin", state_title] if state_title else ["Basin"]))
+    else:
+        st.subheader(district_title)
+        parts = ["District"]
+        if state_title:
+            parts.append(state_title)
+        st.caption(" • ".join(parts))
+
+
 def render_details_panel(
     *,
     # Core district/state context
@@ -1494,53 +1570,9 @@ def render_details_panel(
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
 
-    # Header (single source of truth)
-    district_title = (str(district_name or "").strip() or str(selected_district or "").strip())
-    state_title = str(state_to_show or "").strip()
-
-    if is_block:
-        block_title = (
-            str(block_name or "").strip()
-            or (str(row.get("block_name")).strip() if "block_name" in row else "")
-        ).strip()
-        parent_dist_title = (
-            str(parent_district_name or "").strip()
-            or (str(row.get("district_name")).strip() if "district_name" in row else "")
-            or str(selected_district or "").strip()
-        ).strip()
-
-        if block_title:
-            st.subheader(block_title)
-            parts: list[str] = ["Block"]
-            if parent_dist_title:
-                parts.append(parent_dist_title)
-            if state_title:
-                parts.append(state_title)
-            st.caption(" • ".join(parts))
-        else:
-            st.subheader(district_title)
-            parts: list[str] = ["District"]
-            if state_title:
-                parts.append(state_title)
-            st.caption(" • ".join(parts))
-    elif level_norm == "sub_basin":
-        subbasin_title = str(row.get("subbasin_name", "")).strip() or district_title
-        basin_title = str(row.get("basin_name", "")).strip()
-        st.subheader(subbasin_title)
-        parts: list[str] = ["Sub-basin"]
-        if basin_title:
-            parts.append(basin_title)
-        st.caption(" • ".join(parts))
-    elif level_norm == "basin":
-        basin_title = str(row.get("basin_name", "")).strip() or district_title
-        st.subheader(basin_title)
-        st.caption(" • ".join(["Basin", state_title] if state_title else ["Basin"]))
-    else:
-        st.subheader(district_title)
-        parts: list[str] = ["District"]
-        if state_title:
-            parts.append(state_title)
-        st.caption(" • ".join(parts))
+    # Geography header is rendered upstream by `render_geography_header` so it
+    # can sit directly under the "Climate Profile" panel header, above the
+    # Exposure / Hydrological context cards.
 
     if crosswalk_contexts:
         # Admin mode (district/block): old basin/sub-basin expanders are replaced
