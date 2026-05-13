@@ -52,6 +52,7 @@ DEFAULT_VALIDATION_TESTS = [
     "tests/test_jrc_flood_depth_admin_masters.py",
     "tests/test_population_admin_masters.py",
     "tests/test_built_up_area_admin_masters.py",
+    "tests/test_lulc_admin_masters.py",
     "tests/test_rural_facilities_admin_masters.py",
     "tests/test_validate_aqueduct_workflow.py",
     "tests/test_metrics_registry.py",
@@ -65,6 +66,7 @@ AQUEDUCT_DOMAIN = "Aqueduct Water Risk"
 POPULATION_DOMAIN = "Population Exposure"
 RURAL_FACILITIES_DOMAIN = "Rural Facilities Exposure"
 BUILT_UP_AREA_DOMAIN = "Built-up Area Exposure"
+LULC_DOMAIN = "Agricultural LULC Exposure"
 GROUNDWATER_DOMAIN = "Groundwater Status & Availability"
 JRC_DOMAIN = "Riverine Flood"
 LEVEL_GROUPS = {
@@ -308,6 +310,8 @@ def _resolve_bundle_metrics(bundle: str, args: argparse.Namespace) -> list[str]:
         return _metrics_for_domain(RURAL_FACILITIES_DOMAIN)
     if bundle == "built-up-area":
         return _metrics_for_domain(BUILT_UP_AREA_DOMAIN)
+    if bundle == "lulc":
+        return _metrics_for_domain(LULC_DOMAIN)
     if bundle == "groundwater":
         return _metrics_for_domain(GROUNDWATER_DOMAIN)
     if bundle == "jrc-flood-depth":
@@ -318,6 +322,7 @@ def _resolve_bundle_metrics(bundle: str, args: argparse.Namespace) -> list[str]:
         metrics.extend(_split_csv_values(getattr(args, "metric_slug", None)) or _metrics_for_domain(AQUEDUCT_DOMAIN))
         metrics.extend(_metrics_for_domain(POPULATION_DOMAIN))
         metrics.extend(_metrics_for_domain(BUILT_UP_AREA_DOMAIN))
+        metrics.extend(_metrics_for_domain(LULC_DOMAIN))
         if bool(getattr(args, "include_rural_facilities", False)):
             metrics.extend(_metrics_for_domain(RURAL_FACILITIES_DOMAIN))
         metrics.extend(_metrics_for_domain(GROUNDWATER_DOMAIN))
@@ -1175,6 +1180,55 @@ def build_built_up_area_plan(
     return plan
 
 
+def build_lulc_plan(
+    args: argparse.Namespace,
+    *,
+    include_blocks_geojson: bool = True,
+    include_runtime: bool = True,
+    runtime_scope: Optional[BundleRuntimeScope] = None,
+) -> list[PlannedCommand]:
+    """Build the agricultural LULC exposure prep plan."""
+    scope = runtime_scope or _resolve_runtime_scope("lulc", args)
+    plan: list[PlannedCommand] = []
+    if bool(getattr(args, "audit_only", False)):
+        return [] if bool(getattr(args, "skip_audit", False)) else [_build_audit_step(args, scope.selected_metrics)]
+
+    explicit_builder_input = any(
+        getattr(args, attr, None)
+        for attr in ("lulc_raster", "lulc_qa_dir", "lulc_overlay_dir")
+    ) or any(
+        bool(getattr(args, attr, False))
+        for attr in ("lulc_allow_total_outlier", "lulc_allow_unexpected_values", "lulc_allow_share_outlier")
+    )
+    if bool(args.overwrite) or scope.runtime_needed or explicit_builder_input or not include_runtime:
+        if include_blocks_geojson:
+            plan.extend(build_blocks_geojson_plan(args))
+        argv = _py_module_cmd("tools.geodata.build_lulc_admin_masters")
+        _append_flag(argv, "--overwrite", bool(args.overwrite))
+        if getattr(args, "lulc_raster", None):
+            argv.extend(["--raster", str(args.lulc_raster)])
+        if getattr(args, "lulc_qa_dir", None):
+            argv.extend(["--qa-dir", str(args.lulc_qa_dir)])
+        if getattr(args, "lulc_overlay_dir", None):
+            argv.extend(["--overlay-dir", str(args.lulc_overlay_dir)])
+        _append_flag(argv, "--allow-total-outlier", bool(getattr(args, "lulc_allow_total_outlier", False)))
+        _append_flag(argv, "--allow-unexpected-values", bool(getattr(args, "lulc_allow_unexpected_values", False)))
+        _append_flag(argv, "--allow-share-outlier", bool(getattr(args, "lulc_allow_share_outlier", False)))
+        plan.append(PlannedCommand(label="lulc-admin-masters", argv=argv))
+        if include_runtime and not bool(getattr(args, "skip_optimised", False)):
+            plan.append(_build_optimised_step(args, _select_metrics_for_execution(scope)))
+        summary_argv = _py_module_cmd("tools.pipeline.build_admin_exposure_summary")
+        from india_resilience_tool.config.paths import get_paths_config
+
+        summary_argv.extend(["--data-dir", str(get_paths_config().data_dir)])
+        plan.append(PlannedCommand(label="admin-exposure-summary", argv=summary_argv))
+        if include_runtime and not bool(getattr(args, "skip_audit", False)):
+            plan.append(_build_audit_step(args, scope.selected_metrics))
+    elif include_runtime:
+        plan.extend(_build_runtime_plan(args, scope=scope))
+    return plan
+
+
 def build_groundwater_plan(
     args: argparse.Namespace,
     *,
@@ -1476,6 +1530,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     aqueduct_scope = _resolve_runtime_scope("aqueduct", args)
     population_scope = _resolve_runtime_scope("population-exposure", args)
     built_up_scope = _resolve_runtime_scope("built-up-area", args)
+    lulc_scope = _resolve_runtime_scope("lulc", args)
     rural_facilities_scope = (
         _resolve_runtime_scope("rural-facilities", args)
         if bool(getattr(args, "include_rural_facilities", False))
@@ -1501,6 +1556,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
             + aqueduct_scope.pending_metrics
             + population_scope.pending_metrics
             + built_up_scope.pending_metrics
+            + lulc_scope.pending_metrics
             + rural_facilities_scope.pending_metrics
             + groundwater_scope.pending_metrics
             + jrc_scope.pending_metrics
@@ -1511,6 +1567,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
             or aqueduct_scope.has_global_issues
             or population_scope.has_global_issues
             or built_up_scope.has_global_issues
+            or lulc_scope.has_global_issues
             or rural_facilities_scope.has_global_issues
             or groundwater_scope.has_global_issues
             or jrc_scope.has_global_issues
@@ -1530,6 +1587,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     aqueduct_plan = build_aqueduct_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=aqueduct_scope)
     population_plan = build_population_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=population_scope)
     built_up_plan = build_built_up_area_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=built_up_scope)
+    lulc_plan = build_lulc_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=lulc_scope)
     rural_facilities_plan = (
         build_rural_facilities_plan(args, include_blocks_geojson=False, include_runtime=False, runtime_scope=rural_facilities_scope)
         if bool(getattr(args, "include_rural_facilities", False))
@@ -1555,13 +1613,14 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     )
 
     plan: list[PlannedCommand] = []
-    if aqueduct_plan or population_plan or built_up_plan or rural_facilities_plan or jrc_plan:
+    if aqueduct_plan or population_plan or built_up_plan or lulc_plan or rural_facilities_plan or jrc_plan:
         plan.extend(build_blocks_geojson_plan(args))
     plan.extend(climate_plan)
     plan.extend(proposal_plan)
     plan.extend(aqueduct_plan)
     plan.extend(population_plan)
     plan.extend(built_up_plan)
+    plan.extend(lulc_plan)
     plan.extend(rural_facilities_plan)
     plan.extend(groundwater_plan)
     plan.extend(jrc_plan)
@@ -1593,6 +1652,7 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         "population-admin-masters": "tools.geodata.build_population_admin_masters",
         "rural-facilities-admin-masters": "tools.geodata.build_rural_facilities_admin_masters",
         "built-up-area-admin-masters": "tools.geodata.build_built_up_area_admin_masters",
+        "lulc-admin-masters": "tools.geodata.build_lulc_admin_masters",
         "groundwater-district-masters": "tools.geodata.build_groundwater_district_masters",
         "jrc-flood-depth-admin-masters": "tools.geodata.build_jrc_flood_depth_admin_masters",
     }
@@ -1617,6 +1677,16 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
                 argv.extend(["--qa-dir", str(args.built_up_qa_dir)])
             if getattr(args, "built_up_overlay_dir", None):
                 argv.extend(["--overlay-dir", str(args.built_up_overlay_dir)])
+        if step == "lulc-admin-masters":
+            if getattr(args, "lulc_raster", None):
+                argv.extend(["--raster", str(args.lulc_raster)])
+            if getattr(args, "lulc_qa_dir", None):
+                argv.extend(["--qa-dir", str(args.lulc_qa_dir)])
+            if getattr(args, "lulc_overlay_dir", None):
+                argv.extend(["--overlay-dir", str(args.lulc_overlay_dir)])
+            _append_flag(argv, "--allow-total-outlier", bool(getattr(args, "lulc_allow_total_outlier", False)))
+            _append_flag(argv, "--allow-unexpected-values", bool(getattr(args, "lulc_allow_unexpected_values", False)))
+            _append_flag(argv, "--allow-share-outlier", bool(getattr(args, "lulc_allow_share_outlier", False)))
         if step == "groundwater-district-masters":
             if getattr(args, "groundwater_workbook", None):
                 argv.extend(["--workbook", str(args.groundwater_workbook)])
@@ -1700,6 +1770,8 @@ def build_command_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         return build_rural_facilities_plan(args, include_blocks_geojson=True, include_runtime=True)
     if command == "built-up-area":
         return build_built_up_area_plan(args, include_blocks_geojson=True, include_runtime=True)
+    if command == "lulc":
+        return build_lulc_plan(args, include_blocks_geojson=True, include_runtime=True)
     if command == "groundwater":
         return build_groundwater_plan(args, include_runtime=True)
     if command == "jrc-flood-depth":
@@ -1718,6 +1790,7 @@ def _print_available_commands() -> None:
     print("  population-exposure")
     print("  rural-facilities")
     print("  built-up-area")
+    print("  lulc")
     print("  groundwater")
     print("  jrc-flood-depth")
     print("  dashboard-package")
@@ -1736,6 +1809,7 @@ def _print_available_commands() -> None:
         "population-admin-masters",
         "rural-facilities-admin-masters",
         "built-up-area-admin-masters",
+        "lulc-admin-masters",
         "groundwater-district-masters",
         "jrc-flood-depth-admin-masters",
         "climate-compute",
@@ -1838,6 +1912,39 @@ def _add_built_up_area_flags(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_lulc_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--lulc-raster",
+        default=None,
+        help="Optional override path to LULC_2_Agri.tif.",
+    )
+    parser.add_argument(
+        "--lulc-qa-dir",
+        default=None,
+        help="Optional override directory for agricultural LULC QA outputs.",
+    )
+    parser.add_argument(
+        "--lulc-overlay-dir",
+        default=None,
+        help="Optional override directory for agricultural LULC overlay artifacts.",
+    )
+    parser.add_argument(
+        "--lulc-allow-total-outlier",
+        action="store_true",
+        help="Allow agricultural LULC national total outside the default guardrail range.",
+    )
+    parser.add_argument(
+        "--lulc-allow-unexpected-values",
+        action="store_true",
+        help="Allow LULC raster values outside {0, 1}.",
+    )
+    parser.add_argument(
+        "--lulc-allow-share-outlier",
+        action="store_true",
+        help="Allow district/block agricultural LULC shares above 100.01%%.",
+    )
+
+
 def _add_groundwater_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--groundwater-workbook",
@@ -1912,6 +2019,10 @@ def build_cli() -> argparse.ArgumentParser:
     _add_common_runner_flags(p_built, include_runtime_controls=True)
     _add_built_up_area_flags(p_built)
 
+    p_lulc = subparsers.add_parser("lulc", help="Prepare the agricultural LULC exposure dashboard bundle.")
+    _add_common_runner_flags(p_lulc, include_runtime_controls=True)
+    _add_lulc_flags(p_lulc)
+
     p_groundwater = subparsers.add_parser("groundwater", help="Prepare the groundwater dashboard bundle.")
     _add_common_runner_flags(p_groundwater, include_runtime_controls=True)
     _add_groundwater_flags(p_groundwater)
@@ -1926,6 +2037,7 @@ def build_cli() -> argparse.ArgumentParser:
     _add_aqueduct_flags(p_pkg, bundle=True)
     _add_population_flags(p_pkg)
     _add_built_up_area_flags(p_pkg)
+    _add_lulc_flags(p_pkg)
     _add_rural_facilities_flags(p_pkg)
     _add_groundwater_flags(p_pkg)
     _add_jrc_flags(p_pkg, prefixed=True)
@@ -1949,6 +2061,7 @@ def build_cli() -> argparse.ArgumentParser:
         "population-admin-masters",
         "rural-facilities-admin-masters",
         "built-up-area-admin-masters",
+        "lulc-admin-masters",
         "groundwater-district-masters",
         "jrc-flood-depth-admin-masters",
     ]:
@@ -1960,6 +2073,8 @@ def build_cli() -> argparse.ArgumentParser:
             _add_rural_facilities_flags(sub)
         elif name == "built-up-area-admin-masters":
             _add_built_up_area_flags(sub)
+        elif name == "lulc-admin-masters":
+            _add_lulc_flags(sub)
         elif name == "groundwater-district-masters":
             _add_groundwater_flags(sub)
         elif name == "jrc-flood-depth-admin-masters":

@@ -22,6 +22,7 @@ RESPONSIVE_MAP_MAX_HEIGHT = 700
 
 PANE_BASE_POLYGONS = "irt-base-polygons"
 PANE_POPULATION_RASTER = "irt-population-raster"
+PANE_LULC_AGRI_RASTER = "irt-lulc-agri-raster"
 PANE_BUILT_UP_AREA_RASTER = "irt-built-up-area-raster"
 PANE_RURAL_FACILITIES_RASTER = "irt-rural-facilities-density"
 PANE_RURAL_FACILITIES_AGRO_RASTER = "irt-rural-facilities-density-agro"
@@ -453,6 +454,7 @@ def _ensure_overlay_panes(m: Any) -> None:
         return
     for pane_name, z_index in (
         (PANE_BASE_POLYGONS, 400),
+        (PANE_LULC_AGRI_RASTER, 404),
         (PANE_POPULATION_RASTER, 405),
         (PANE_BUILT_UP_AREA_RASTER, 406),
         (PANE_RURAL_FACILITIES_RASTER, 407),

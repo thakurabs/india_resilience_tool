@@ -167,6 +167,35 @@ The runner refreshes the canonical block boundaries first:
 python -m tools.runs.prepare_dashboard blocks-geojson
 ```
 
+### Build agricultural LULC exposure masters
+
+Canonical source placement:
+
+```bash
+mkdir -p "$IRT_DATA_DIR/lulc"
+mv /path/to/LULC_2_Agri.tif "$IRT_DATA_DIR/lulc/LULC_2_Agri.tif"
+```
+
+Preview the dashboard-ready run:
+
+```bash
+python -m tools.geodata.build_lulc_admin_masters --help
+python -m tools.runs.prepare_dashboard lulc --lulc-raster "<path-to-LULC_2_Agri.tif>" --plan-only
+```
+
+Builds district/block agricultural LULC area and agricultural LULC share masters for the `snapshot` / `Current` selector pair, plus the display-only reference overlay:
+- `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay.png`
+- `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay_meta.json`
+- optimized copies under `IRT_DATA_DIR/processed_optimised/context/lulc/overlay/`
+- `IRT_DATA_DIR/processed_optimised/context/admin_exposure_summary.parquet`, which can feed the right-panel Exposure Snapshot cards
+
+Notes:
+- source values are binary: `1` is agricultural LULC; `0` is nodata/background, not an explicit non-agriculture class
+- unexpected raster values fail by default; use `--lulc-allow-unexpected-values` only after validating the source
+- metrics tabulate through a nearest-neighbor `EPSG:6933` equal-area WarpedVRT with `all_touched=False`; shares use full polygon area in `EPSG:6933`
+- guardrails fail national totals outside `1,200,000-2,300,000 km2` unless `--lulc-allow-total-outlier` is supplied and district/block shares above `100.01%` unless `--lulc-allow-share-outlier` is supplied
+- LULC metrics are not included in v1 composites, proposal bundles, or bundle weights
+
 ### Build groundwater district masters
 
 ```bash
@@ -222,6 +251,8 @@ This bundle now includes:
 - optimized bundle refresh + audit
 - Aqueduct prep + validation
 - population exposure master builds
+- built-up area exposure master builds
+- agricultural LULC exposure master builds
 - groundwater district master builds
 - optional Telangana JRC flood-depth prep when `--include-jrc-flood-depth` is set
 

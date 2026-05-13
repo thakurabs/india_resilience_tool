@@ -99,6 +99,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_aqueduct_hydro_crosswalk.py` | Build Aqueduct HydroSHEDS Level 6 ↔ SOI basin/sub-basin overlap CSVs for area-weighted transfer | `python -m tools.geodata.build_aqueduct_hydro_crosswalk --help` |
 | `tools/geodata/build_aqueduct_hydro_masters.py` | Build SOI basin/sub-basin master CSVs for the onboarded Aqueduct hydro metrics under `processed/{metric_slug}/hydro/` | `python -m tools.geodata.build_aqueduct_hydro_masters --help` |
 | `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) and the display-only population overlay PNG/metadata from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
+| `tools/geodata/build_lulc_admin_masters.py` | Build district and block agricultural LULC exposure masters (`lulc_agri_area_km2`, `lulc_agri_share_pct`) and the display-only binary agricultural LULC overlay PNG/metadata from `LULC_2_Agri.tif` | `python -m tools.geodata.build_lulc_admin_masters --help` |
 | `tools/geodata/build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook with district-alias QA outputs | `python -m tools.geodata.build_groundwater_district_masters --help` |
 | `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth masters using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 flood-index, flood-extent masters, RP-100 display overlay artifacts, and stable QA CSVs | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
 | `tools/optimized/build_processed_optimised.py` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree plus canonical geometry/context files, including persisted Glance view models, exact pre-scan task counting, deterministic parallel yearly processing, level filtering, nested terminal progress bars, and a post-build parity audit | `python -m tools.optimized.build_processed_optimised --help` |
@@ -281,6 +282,28 @@ Windows tip: if HDF5 writes get flaky under parallelism, fall back to `--workers
 - useful commands:
   - `python -m tools.geodata.build_built_up_area_admin_masters --help`
   - `python -m tools.runs.prepare_dashboard built-up-area --built-up-raster "<path>" --plan-only`
+
+`tools/geodata/build_lulc_admin_masters.py` notes:
+- source raster:
+  - `IRT_DATA_DIR/lulc/LULC_2_Agri.tif`
+  - alternate source paths may be supplied with `--raster`; keep the canonical copy above for repeatable runs
+- canonical boundary inputs:
+  - `IRT_DATA_DIR/districts_4326.geojson`
+  - `IRT_DATA_DIR/blocks_4326.geojson` (optional; missing blocks warn and district outputs still build)
+- outputs:
+  - `IRT_DATA_DIR/processed/lulc_agri_area_km2/{state}/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/lulc_agri_area_km2/{state}/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/lulc_agri_share_pct/{state}/master_metrics_by_district.{csv,parquet}`
+  - `IRT_DATA_DIR/processed/lulc_agri_share_pct/{state}/master_metrics_by_block.{csv,parquet}`
+  - `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay.png`
+  - `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay_meta.json`
+- QA files are written under `IRT_DATA_DIR/lulc/`
+- source values are binary: `1` is agricultural LULC; `0` is nodata/background; unexpected values fail unless `--allow-unexpected-values` is supplied
+- tabulation reads the raster through a nearest-neighbor `EPSG:6933` WarpedVRT and uses `all_touched=False`; area-share denominators use polygon area in `EPSG:6933`
+- guardrails fail national totals outside `1,200,000-2,300,000 km2` unless `--allow-total-outlier` is supplied and district/block shares above `100.01%` unless `--allow-share-outlier` is supplied
+- useful commands:
+  - `python -m tools.geodata.build_lulc_admin_masters --help`
+  - `python -m tools.runs.prepare_dashboard lulc --lulc-raster "<path>" --plan-only`
 
 `tools/geodata/build_groundwater_district_masters.py` notes:
 - source workbook:

@@ -22,6 +22,7 @@ from tools.runs.prepare_dashboard import (
     build_dashboard_package_plan,
     build_groundwater_plan,
     build_jrc_flood_depth_plan,
+    build_lulc_plan,
     build_population_plan,
     build_rural_facilities_plan,
     build_cli,
@@ -420,6 +421,11 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
             pending_metrics=["built_up_area_km2"],
             has_global_issues=False,
         ),
+        "lulc": BundleRuntimeScope(
+            selected_metrics=["lulc_agri_area_km2"],
+            pending_metrics=["lulc_agri_area_km2"],
+            has_global_issues=False,
+        ),
         "groundwater": BundleRuntimeScope(
             selected_metrics=["gw_stage_extraction_pct"],
             pending_metrics=["gw_stage_extraction_pct"],
@@ -455,6 +461,7 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
             "aq_water_stress",
             "population_total",
             "built_up_area_km2",
+            "lulc_agri_area_km2",
             "gw_stage_extraction_pct",
         ]
         if bundle == "dashboard-package"
@@ -473,6 +480,7 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     assert labels.count("processed-optimised-audit") == 1
     assert "population-admin-masters" in labels
     assert "built-up-area-admin-masters" in labels
+    assert "lulc-admin-masters" in labels
     assert "groundwater-district-masters" in labels
     assert labels[-1] == "pytest-validation"
 
@@ -503,6 +511,7 @@ def test_dashboard_package_audit_only_allows_missing_jrc_inputs(monkeypatch) -> 
         "aqueduct": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "population-exposure": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "built-up-area": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "lulc": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "groundwater": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
         "jrc-flood-depth": BundleRuntimeScope(
             selected_metrics=["jrc_flood_depth_rp10"],
@@ -541,6 +550,7 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
         "aqueduct": BundleRuntimeScope(selected_metrics=["aq_water_stress"], pending_metrics=["aq_water_stress"], has_global_issues=False),
         "population-exposure": BundleRuntimeScope(selected_metrics=["population_total"], pending_metrics=["population_total"], has_global_issues=False),
         "built-up-area": BundleRuntimeScope(selected_metrics=["built_up_area_km2"], pending_metrics=["built_up_area_km2"], has_global_issues=False),
+        "lulc": BundleRuntimeScope(selected_metrics=["lulc_agri_area_km2"], pending_metrics=["lulc_agri_area_km2"], has_global_issues=False),
         "groundwater": BundleRuntimeScope(selected_metrics=["gw_stage_extraction_pct"], pending_metrics=["gw_stage_extraction_pct"], has_global_issues=False),
         "jrc-flood-depth": BundleRuntimeScope(
             selected_metrics=["jrc_flood_depth_rp10", "jrc_flood_depth_rp50"],
@@ -582,6 +592,7 @@ def test_dashboard_package_with_jrc_merges_scope_and_keeps_single_runtime_refres
             "aq_water_stress",
             "population_total",
             "built_up_area_km2",
+            "lulc_agri_area_km2",
             "gw_stage_extraction_pct",
             "jrc_flood_depth_rp10",
             "jrc_flood_depth_rp50",
@@ -771,12 +782,47 @@ def test_built_up_area_bundle_metric_resolution_and_plan() -> None:
     assert "--overlay-dir" in plan[1].argv
 
 
+def test_lulc_bundle_metric_resolution_and_plan() -> None:
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        dry_run=True,
+        plan_only=False,
+        lulc_raster="/tmp/lulc.tif",
+        lulc_qa_dir="/tmp/qa",
+        lulc_overlay_dir="/tmp/overlay",
+        lulc_allow_total_outlier=True,
+        lulc_allow_unexpected_values=True,
+        lulc_allow_share_outlier=True,
+    )
+    metrics = _resolve_bundle_metrics("lulc", args)
+    assert metrics == ["lulc_agri_area_km2", "lulc_agri_share_pct"]
+    scope = BundleRuntimeScope(selected_metrics=metrics, pending_metrics=metrics, has_global_issues=False)
+    plan = build_lulc_plan(args, runtime_scope=scope)
+    assert [step.label for step in plan] == [
+        "blocks-geojson",
+        "lulc-admin-masters",
+        "processed-optimised-build",
+        "admin-exposure-summary",
+        "processed-optimised-audit",
+    ]
+    assert "--raster" in plan[1].argv
+    assert "--qa-dir" in plan[1].argv
+    assert "--overlay-dir" in plan[1].argv
+    assert "--allow-total-outlier" in plan[1].argv
+    assert "--allow-unexpected-values" in plan[1].argv
+    assert "--allow-share-outlier" in plan[1].argv
+
+
 def test_dashboard_package_can_include_rural_facilities() -> None:
     args = argparse.Namespace(include_jrc_flood_depth=False, include_rural_facilities=True, level="admin", metric_slug=None)
     metrics = _resolve_bundle_metrics("dashboard-package", args)
     assert "rural_facilities_total_count" in metrics
     assert "rural_facilities_service_count_per_100k" in metrics
     assert "built_up_area_km2" in metrics
+    assert "lulc_agri_area_km2" in metrics
 
 
 def test_dashboard_package_jrc_scope_resolution_includes_derived_index_slug() -> None:
@@ -898,6 +944,10 @@ def test_main_returns_nonzero_when_climate_readiness_remains_incomplete(monkeypa
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard.execute_plan",
         lambda *args, **kwargs: 0,
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
+        lambda *_args, **_kwargs: (),
     )
 
     rc = main(["climate-hazards", "--level", "hydro"])
@@ -1027,6 +1077,10 @@ def test_main_returns_zero_when_only_skipped_stage_pending_remains(
         "tools.runs.prepare_dashboard.execute_plan",
         lambda *args, **kwargs: 0,
     )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
+        lambda *_args, **_kwargs: (),
+    )
 
     rc = main(["climate-hazards", "--level", "basin", "--skip-masters", "--skip-optimised"])
 
@@ -1070,6 +1124,10 @@ def test_main_keeps_compute_pending_blocking_even_when_later_stages_are_skipped(
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard.execute_plan",
         lambda *args, **kwargs: 0,
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
+        lambda *_args, **_kwargs: (),
     )
 
     rc = main(["climate-hazards", "--level", "basin", "--skip-masters", "--skip-optimised"])

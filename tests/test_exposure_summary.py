@@ -131,3 +131,62 @@ def test_admin_exposure_summary_merges_built_up_without_population(tmp_path):
     assert pd.isna(row["pop_2020"])
     assert row["built_up_area_km2"] == 12.5
     assert row["built_up_area_share_pct"] == 8.25
+
+
+def test_admin_exposure_summary_merges_lulc_without_population(tmp_path):
+    for slug, col, value in [
+        ("lulc_agri_area_km2", "lulc_agri_area_km2__snapshot__Current__mean", 42.0),
+        ("lulc_agri_share_pct", "lulc_agri_share_pct__snapshot__Current__mean", 61.5),
+    ]:
+        root = tmp_path / "processed" / slug / "TELANGANA"
+        root.mkdir(parents=True)
+        pd.DataFrame(
+            [
+                {
+                    "state": "TELANGANA",
+                    "district": "Hanumakonda",
+                    "block": "Bheemadevarapalle",
+                    "block_key": "TELANGANA::Hanumakonda::Bheemadevarapalle",
+                    col: value,
+                }
+            ]
+        ).to_parquet(root / "master_metrics_by_block.parquet", index=False)
+
+    out_path = build(tmp_path)
+    df = pd.read_parquet(out_path)
+    row = slice_exposure_for_admin_key(
+        df,
+        admin_key="telangana|hanumakonda|bheemadevarapalle",
+        admin_level="block",
+    )
+
+    assert row is not None
+    assert pd.isna(row["pop_2020"])
+    assert row["lulc_agri_area_km2"] == 42.0
+    assert row["lulc_agri_share_pct"] == 61.5
+
+
+def test_load_admin_exposure_summary_coerces_lulc_numeric_columns(tmp_path):
+    path = tmp_path / "admin_exposure_summary.parquet"
+    pd.DataFrame(
+        [
+            {
+                "admin_key": "telangana|hanumakonda",
+                "admin_level": "district",
+                "state_name": "TELANGANA",
+                "district_name": "Hanumakonda",
+                "block_name": "",
+                "pop_2020": "1000",
+                "parent_pop_2020": "2000",
+                "parent_level": "state",
+                "parent_name": "TELANGANA",
+                "population_share_parent_pct": "50",
+                "lulc_agri_area_km2": "42.5",
+                "lulc_agri_share_pct": "61.5",
+            }
+        ]
+    ).to_parquet(path, index=False)
+
+    df = load_admin_exposure_summary(path)
+    assert df["lulc_agri_area_km2"].iloc[0] == 42.5
+    assert df["lulc_agri_share_pct"].iloc[0] == 61.5

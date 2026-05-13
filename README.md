@@ -69,6 +69,12 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - source raster contract: `IRT_DATA_DIR/built_up_area/Cleaned_India_Built_Surface_WGS84.tif`
   - optional `Reference overlays` sidebar section across admin and hydro views can display the display-only built-up area raster overlay
   - the dashboard runtime reads only exported built-up overlay PNG/metadata artifacts, not the raw TIFF
+- Agricultural LULC exposure onboarding:
+  - Agricultural LULC Area and Agricultural LULC Share on district and block units
+  - fixed snapshot semantics: `snapshot`, `Current`
+  - source raster contract: `IRT_DATA_DIR/lulc/LULC_2_Agri.tif`
+  - optional `Reference overlays` sidebar section across admin and hydro views can display the display-only agricultural LULC raster overlay
+  - the dashboard runtime reads only exported LULC overlay PNG/metadata artifacts, not the raw TIFF
 - JRC flood-depth onboarding:
   - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
   - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
@@ -205,7 +211,7 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 - per-model yearly overlays
 - case-study export inputs
 - simplified runtime geometry shards plus compact selector indexes for block and sub-basin dropdowns
-- reference overlay context files, including river display artifacts and the JRC RP-100 flood-depth overlay PNG/metadata when present
+- reference overlay context files, including river display artifacts and exposure/hazard overlay PNG/metadata when present
 - Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`
 
 Glance artifacts can also be built directly for debugging:
@@ -247,6 +253,21 @@ Built-up area operator sequence:
 ```bash
 python -m tools.geodata.build_built_up_area_admin_masters --help
 python -m tools.runs.prepare_dashboard built-up-area --built-up-raster "<path-to-Cleaned_India_Built_Surface_WGS84.tif>" --plan-only
+```
+
+Agricultural LULC reference overlay artifacts:
+- place the canonical TIFF at `IRT_DATA_DIR/lulc/LULC_2_Agri.tif`, or pass a source path with `--raster` / `--lulc-raster`
+- the LULC build command exports `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay.png`
+- metadata is written to `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay_meta.json`
+- optimized runtime copies live under `IRT_DATA_DIR/processed_optimised/context/lulc/overlay/`
+- the overlay is a display-only binary-class reference; LULC metrics, rankings, legends, and details continue to use persisted master tables
+- dashboard runtime never reads `LULC_2_Agri.tif`
+
+Agricultural LULC operator sequence:
+
+```bash
+python -m tools.geodata.build_lulc_admin_masters --help
+python -m tools.runs.prepare_dashboard lulc --lulc-raster "<path-to-LULC_2_Agri.tif>" --plan-only
 ```
 
 For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.

@@ -79,6 +79,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_population_admin_masters --help` | Build district/block population exposure master CSVs plus the display-only population exposure PNG/metadata overlay from the 2025 raster |
 | `python -m tools.geodata.build_rural_facilities_admin_masters --help` | Build district/block rural facilities exposure master CSVs plus display-only density PNG/metadata overlays for total/agro/education/health/service categories |
 | `python -m tools.geodata.build_built_up_area_admin_masters --help` | Build district/block built-up area exposure master CSVs plus the display-only built-up area PNG/metadata overlay from the cleaned built-surface raster |
+| `python -m tools.geodata.build_lulc_admin_masters --help` | Build district/block agricultural LULC exposure master CSVs plus the display-only binary agricultural LULC PNG/metadata overlay |
 | `python -m tools.geodata.build_groundwater_district_masters --help` | Build district groundwater assessment master CSVs from the 2024-2025 GEC workbook |
 | `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
 | `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
@@ -143,6 +144,15 @@ Reference overlay contracts:
 - Built-up area share uses full polygon area in `EPSG:6933`: `built_up_m2 / polygon_area_m2 * 100`. QA also records raster-supported area denominators, but those do not replace the canonical geometry-based share.
 - Built-up v1 is excluded from composites, proposal bundles, and bundle weights.
 - Built-up overlay display semantics are binned `m2/source cell` in an EPSG:3857 PNG; bins are transparent `0`, then `0-100`, `100-500`, `500-1000`, `1000-2500`, `2500-5000`, and `>5000 m2/cell` with colors `#edf8fb`, `#b2e2e2`, `#66c2a4`, `#2ca25f`, `#006d2c`, and `#00441b`.
+- `lulc_agri_current_raster`: display-only India-wide agricultural LULC overlay backed by `lulc/overlay/lulc_agri_current_overlay.png` and `lulc/overlay/lulc_agri_current_overlay_meta.json`, with optimized copies under `processed_optimised/context/lulc/overlay/`.
+- LULC agriculture source contract: operators should place `LULC_2_Agri.tif` at `IRT_DATA_DIR/lulc/`; alternate paths may be passed to the builder with `--raster` / `--lulc-raster`.
+- LULC agriculture metric masters are `processed/lulc_agri_area_km2/{state}/master_metrics_by_{district,block}.{csv,parquet}` and `processed/lulc_agri_share_pct/{state}/master_metrics_by_{district,block}.{csv,parquet}` with columns `lulc_agri_area_km2__snapshot__Current__mean` and `lulc_agri_share_pct__snapshot__Current__mean`.
+- LULC raster values are interpreted as binary classes: only `1` is agricultural LULC; `0` is nodata/background and is never treated as an explicit non-agriculture class. The builder scans the raster before writes and rejects values outside `{0, 1}` unless `--allow-unexpected-values` is supplied.
+- LULC tabulation reads the source through a nearest-neighbor `EPSG:6933` equal-area `WarpedVRT`; area is `agri_cell_count * abs(transform.a * transform.e)`. Edge cells use `all_touched=False`.
+- LULC agriculture share uses full polygon area in `EPSG:6933`: `agri_area_m2 / polygon_area_m2 * 100`. QA records raster extent support area, support coverage, low-coverage flags, and `share_out_of_range`.
+- LULC guardrails fail national agriculture totals outside `1,200,000-2,300,000 km2` unless `--allow-total-outlier` is supplied, and fail district/block shares above `100.01%` unless `--allow-share-outlier` is supplied.
+- LULC v1 is excluded from composites, proposal bundles, and bundle weights.
+- LULC overlay display semantics are binary class colors in an EPSG:3857 PNG: transparent for `0`, `#2ca25f` for `1`.
 - `rural_facilities_density`: display-only category-selectable rural facilities density overlay backed by `rural_facilities/overlay/rural_facilities_density_<category>_overlay.png` and metadata, with optimized copies under `processed_optimised/context/rural_facilities/overlay/`. Artifacts are written per real category (`agro`, `education`, `health`, `service`); the `total` UI selection is virtual and is rendered at runtime by stacking the four per-category layers.
 - Each real-category PNG uses a distinct single-hue ramp (agro=greens, education=blues, health=reds, service=oranges) so the four layers stay distinguishable when stacked under `total`.
 - Rural facilities overlay display semantics are facilities per 1,000 km2 on an EPSG:6933 10 km grid reprojected to EPSG:3857 for Leaflet.

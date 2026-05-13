@@ -710,6 +710,21 @@ def build_built_up_area_legend_html(
     )
 
 
+def build_lulc_agri_legend_html(
+    *,
+    bins: Sequence[tuple[str, str]],
+    map_height: int = 700,
+) -> str:
+    """Build the compact display legend for the agricultural LULC overlay."""
+    return build_vertical_categorical_legend_block_html(
+        legend_title="Agricultural LULC",
+        labels=[label for label, _color in bins],
+        colors=[color for _label, color in bins],
+        map_height=map_height,
+        bar_width_px=18,
+    )
+
+
 # -----------------------------------------------------------------------------
 # Discrete palette helpers (for grouped bars / categorical legends)
 # -----------------------------------------------------------------------------

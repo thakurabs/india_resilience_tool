@@ -69,6 +69,8 @@ def load_admin_exposure_summary(path: PathLike) -> pd.DataFrame:
         "rural_facilities_total_count_per_100k",
         "built_up_area_km2",
         "built_up_area_share_pct",
+        "lulc_agri_area_km2",
+        "lulc_agri_share_pct",
     ):
         if c in out.columns:
             out[c] = pd.to_numeric(out[c], errors="coerce")

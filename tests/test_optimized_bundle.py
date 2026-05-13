@@ -268,6 +268,30 @@ def test_optimized_context_copies_built_up_overlay_artifacts(tmp_path: Path) -> 
     }
 
 
+def test_optimized_context_copies_lulc_overlay_artifacts(tmp_path: Path) -> None:
+    source_dir = tmp_path / "lulc" / "overlay"
+    source_dir.mkdir(parents=True)
+    (source_dir / "lulc_agri_current_overlay.png").write_bytes(b"png")
+    (source_dir / "lulc_agri_current_overlay_meta.json").write_text('{"artifact": true}', encoding="utf-8")
+
+    plan = _build_execution_plan(
+        data_dir=tmp_path,
+        metrics=[],
+        include_geometry=False,
+        include_context=True,
+    )
+    lulc_tasks = tuple(task for task in plan.context_tasks if "lulc_agri_current_overlay" in str(task.target_path))
+
+    assert len(lulc_tasks) == 2
+    assert {
+        task.target_path.relative_to(tmp_path / "processed_optimised" / "context").as_posix()
+        for task in lulc_tasks
+    } == {
+        "lulc/overlay/lulc_agri_current_overlay.png",
+        "lulc/overlay/lulc_agri_current_overlay_meta.json",
+    }
+
+
 def test_optimized_context_copies_rural_facilities_overlay_artifacts(tmp_path: Path) -> None:
     source_dir = tmp_path / "rural_facilities" / "overlay"
     source_dir.mkdir(parents=True)

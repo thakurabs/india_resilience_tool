@@ -2085,6 +2085,63 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_levels": ("district", "block"),
         "rank_higher_is_worse": True,
     },
+    {
+        "name": "Agricultural LULC Area",
+        "slug": "lulc_agri_area_km2",
+        "label": "Agricultural LULC Area",
+        "group": "other",
+        "value_col": "lulc_agri_area_km2",
+        "periods_metric_col": "lulc_agri_area_km2",
+        "units": "km2",
+        "description": (
+            "Current agricultural land-cover area aggregated from the binary "
+            "LULC_2_Agri.tif raster onto canonical district and block units. "
+            "Only value 1 is interpreted as agricultural LULC; value 0 is "
+            "nodata/background."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_lulc_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Agricultural LULC Share",
+        "slug": "lulc_agri_share_pct",
+        "label": "Agricultural LULC Share",
+        "group": "other",
+        "value_col": "lulc_agri_share_pct",
+        "periods_metric_col": "lulc_agri_share_pct",
+        "units": "%",
+        "description": (
+            "Current agricultural LULC area as a share of full polygon area in "
+            "EPSG:6933. Higher ranks indicate higher exposed agricultural "
+            "land-cover share for climate-risk screening."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_lulc_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
     *[
         {
             "name": label,
@@ -2723,6 +2780,10 @@ DOMAINS: dict[str, list[str]] = {
         "built_up_area_km2",
         "built_up_area_share_pct",
     ],
+    "Agricultural LULC Exposure": [
+        "lulc_agri_area_km2",
+        "lulc_agri_share_pct",
+    ],
     "Aqueduct Water Risk": [
         "aq_water_stress",
         "aq_interannual_variability",
@@ -2765,6 +2826,7 @@ DOMAIN_ORDER: list[str] = [
     "Population Exposure",
     "Rural Facilities Exposure",
     "Built-up Area Exposure",
+    "Agricultural LULC Exposure",
     "Aqueduct Water Risk",
     "Groundwater Status & Availability",
     "Riverine Flood",
@@ -2798,6 +2860,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
         "Population Exposure",
         "Rural Facilities Exposure",
         "Built-up Area Exposure",
+        "Agricultural LULC Exposure",
     ],
     "Vulnerability": [],
     "Adaptive Capacity": [],
@@ -2844,6 +2907,11 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "Static built-up surface exposure layers from the cleaned India built-surface "
         "raster. Metrics use Current snapshot semantics and geometry-based polygon "
         "area denominators for shares."
+    ),
+    "Agricultural LULC Exposure": (
+        "Static agricultural land-cover exposure layers from the binary LULC agriculture "
+        "raster. Metrics use Current snapshot semantics, EPSG:6933 equal-area tabulation, "
+        "and geometry-based polygon area denominators for shares."
     ),
     "Groundwater Status & Availability": (
         "District groundwater assessment layers from the 2024-2025 GEC workbook, "

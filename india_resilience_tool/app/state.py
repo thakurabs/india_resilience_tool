@@ -82,6 +82,8 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "overlay_rural_facilities_density_category": "total",
     "overlay_built_up_area_current_raster_enabled": False,
     "overlay_built_up_area_current_raster_opacity_pct": 55,
+    "overlay_lulc_agri_current_raster_enabled": False,
+    "overlay_lulc_agri_current_raster_opacity_pct": 55,
     "overlay_river_network_enabled": False,
     "overlay_river_network_opacity_pct": 75,
 

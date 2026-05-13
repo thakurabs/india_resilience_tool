@@ -15,12 +15,14 @@ RP100_FLOOD_OVERLAY_ID = "rp100_flood_depth_raster"
 POPULATION_EXPOSURE_OVERLAY_ID = "population_exposure_2025_raster"
 RURAL_FACILITIES_DENSITY_OVERLAY_ID = "rural_facilities_density"
 BUILT_UP_AREA_OVERLAY_ID = "built_up_area_current_raster"
+LULC_AGRI_OVERLAY_ID = "lulc_agri_current_raster"
 RIVER_NETWORK_OVERLAY_ID = "river_network"
 
 FLOOD_LABEL = "RP-100 flood depth"
 POPULATION_LABEL = "Population exposure (2025)"
 RURAL_FACILITIES_LABEL = "Rural facilities density"
 BUILT_UP_AREA_LABEL = "Built-up area exposure"
+LULC_AGRI_LABEL = "Agricultural LULC exposure"
 RIVER_LABEL = "River network"
 FLOOD_UNAVAILABLE_CAPTION = (
     "Available for Telangana and All-state admin views when the RP-100 overlay artifact is present."
@@ -33,6 +35,9 @@ RURAL_FACILITIES_UNAVAILABLE_CAPTION = (
 )
 BUILT_UP_AREA_UNAVAILABLE_CAPTION = (
     "Available across all map levels when the built-up area overlay artifact is present."
+)
+LULC_AGRI_UNAVAILABLE_CAPTION = (
+    "Available across all map levels when the agricultural LULC overlay artifact is present."
 )
 RIVER_UNAVAILABLE_CAPTION = (
     "Select a basin/sub-basin (hydro view) or a district (admin view) to enable the river network overlay."
@@ -140,6 +145,12 @@ BUILT_UP_AREA_BINS: tuple[tuple[str, str], ...] = (
     ("1000-2500 m2/cell", "#2ca25f"),
     ("2500-5000 m2/cell", "#006d2c"),
     (">5000 m2/cell", "#00441b"),
+)
+
+LULC_AGRI_COLOR_HEX = "#2ca25f"
+LULC_AGRI_BINS: tuple[tuple[str, str], ...] = (
+    ("0 background/nodata", "rgba(255,255,255,0)"),
+    ("1 agricultural LULC", LULC_AGRI_COLOR_HEX),
 )
 
 
@@ -273,6 +284,19 @@ OVERLAY_DEFINITIONS: dict[str, OverlayDefinition] = {
         default_enabled=False,
         default_opacity_pct=55,
         unavailable_caption=BUILT_UP_AREA_UNAVAILABLE_CAPTION,
+    ),
+    LULC_AGRI_OVERLAY_ID: OverlayDefinition(
+        overlay_id=LULC_AGRI_OVERLAY_ID,
+        label=LULC_AGRI_LABEL,
+        slider_label="Agricultural LULC opacity",
+        enabled_key="overlay_lulc_agri_current_raster_enabled",
+        opacity_key="overlay_lulc_agri_current_raster_opacity_pct",
+        category_key=None,
+        default_category=None,
+        category_choices=(),
+        default_enabled=False,
+        default_opacity_pct=55,
+        unavailable_caption=LULC_AGRI_UNAVAILABLE_CAPTION,
     ),
     RIVER_NETWORK_OVERLAY_ID: OverlayDefinition(
         overlay_id=RIVER_NETWORK_OVERLAY_ID,
@@ -584,6 +608,55 @@ def validate_built_up_area_overlay_metadata(meta: Mapping[str, Any]) -> dict[str
     }
 
 
+def validate_lulc_agri_overlay_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate agricultural LULC overlay metadata and return normalized values."""
+    if str(meta.get("overlay_id") or "") != LULC_AGRI_OVERLAY_ID:
+        raise ValueError("metadata overlay_id must equal lulc_agri_current_raster.")
+    if str(meta.get("source_raster_name") or "") != "LULC_2_Agri.tif":
+        raise ValueError("metadata source_raster_name must equal LULC_2_Agri.tif.")
+    source_crs = str(meta.get("source_crs") or "").strip()
+    if not source_crs:
+        raise ValueError("metadata source_crs is required.")
+    if str(meta.get("image_crs") or "") != "EPSG:3857":
+        raise ValueError("metadata image_crs must equal EPSG:3857.")
+    bounds = _validate_bounds_latlon(meta.get("bounds_latlon"))
+    if str(meta.get("snapshot_period") or "") != "Current":
+        raise ValueError("metadata snapshot_period must equal Current.")
+    if str(meta.get("display_units") or "") != "agricultural LULC binary class":
+        raise ValueError("metadata display_units must equal agricultural LULC binary class.")
+    if str(meta.get("display_transform") or "") != "nearest_binary_class":
+        raise ValueError("metadata display_transform must equal nearest_binary_class.")
+    if int(meta.get("valid_value")) != 1:
+        raise ValueError("metadata valid_value must equal 1.")
+    if int(meta.get("nodata_value")) != 0:
+        raise ValueError("metadata nodata_value must equal 0.")
+    if str(meta.get("valid_color_hex") or "") != LULC_AGRI_COLOR_HEX:
+        raise ValueError("metadata valid_color_hex must match the canonical LULC agriculture color.")
+    width_px = int(meta.get("width_px"))
+    height_px = int(meta.get("height_px"))
+    if width_px <= 0 or height_px <= 0 or width_px > 4096 or height_px > 4096:
+        raise ValueError("metadata width_px and height_px must be in 1..4096.")
+    agri_pixel_count = int(meta.get("agri_pixel_count"))
+    if agri_pixel_count < 0:
+        raise ValueError("metadata agri_pixel_count must be non-negative.")
+    return {
+        "overlay_id": LULC_AGRI_OVERLAY_ID,
+        "source_raster_name": "LULC_2_Agri.tif",
+        "source_crs": source_crs,
+        "image_crs": "EPSG:3857",
+        "bounds_latlon": bounds,
+        "snapshot_period": "Current",
+        "display_units": "agricultural LULC binary class",
+        "display_transform": "nearest_binary_class",
+        "valid_value": 1,
+        "nodata_value": 0,
+        "valid_color_hex": LULC_AGRI_COLOR_HEX,
+        "width_px": width_px,
+        "height_px": height_px,
+        "agri_pixel_count": agri_pixel_count,
+    }
+
+
 def _load_valid_rp100_artifact_pair(png_path: Path, meta_path: Path) -> tuple[Path, dict[str, Any]]:
     if not png_path.exists():
         raise FileNotFoundError(f"RP-100 overlay PNG not found: {png_path}")
@@ -730,6 +803,32 @@ def _load_valid_built_up_area_artifact_pair(png_path: Path, meta_path: Path) -> 
     return png_path, validate_built_up_area_overlay_metadata(raw_meta)
 
 
+def _lulc_agri_artifact_pair(data_dir: Path, *, optimized: bool) -> tuple[Path, Path]:
+    root = (
+        data_dir / "processed_optimised" / "context" / "lulc" / "overlay"
+        if optimized
+        else data_dir / "lulc" / "overlay"
+    )
+    return (
+        root / "lulc_agri_current_overlay.png",
+        root / "lulc_agri_current_overlay_meta.json",
+    )
+
+
+def _load_valid_lulc_agri_artifact_pair(png_path: Path, meta_path: Path) -> tuple[Path, dict[str, Any]]:
+    if not png_path.exists():
+        raise FileNotFoundError(f"Agricultural LULC overlay PNG not found: {png_path}")
+    if not meta_path.exists():
+        raise FileNotFoundError(f"Agricultural LULC overlay metadata not found: {meta_path}")
+    try:
+        raw_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(f"Agricultural LULC overlay metadata is malformed: {meta_path}") from exc
+    if not isinstance(raw_meta, dict):
+        raise ValueError("Agricultural LULC overlay metadata must be a JSON object.")
+    return png_path, validate_lulc_agri_overlay_metadata(raw_meta)
+
+
 def discover_built_up_area_overlay_artifact(
     *,
     data_dir: Path,
@@ -756,6 +855,34 @@ def discover_built_up_area_overlay_artifact(
             "Built-up area overlay artifacts are not exported yet. Run the built-up area build to create the PNG and metadata.",
         )
     return None, None, first_error or "Built-up area overlay artifact pair is unavailable."
+
+
+def discover_lulc_agri_overlay_artifact(
+    *,
+    data_dir: Path,
+) -> tuple[Optional[Path], Optional[dict[str, Any]], Optional[str]]:
+    """Return the first valid optimized/canonical agricultural LULC overlay artifact pair."""
+    candidates = (
+        _lulc_agri_artifact_pair(data_dir, optimized=True),
+        _lulc_agri_artifact_pair(data_dir, optimized=False),
+    )
+    first_error: Optional[str] = None
+    missing_count = 0
+    for png_path, meta_path in candidates:
+        try:
+            return (*_load_valid_lulc_agri_artifact_pair(png_path, meta_path), None)
+        except Exception as exc:
+            if isinstance(exc, FileNotFoundError):
+                missing_count += 1
+            if first_error is None:
+                first_error = str(exc)
+    if missing_count == len(candidates):
+        return (
+            None,
+            None,
+            "Agricultural LULC overlay artifacts are not exported yet. Run the LULC build to create the PNG and metadata.",
+        )
+    return None, None, first_error or "Agricultural LULC overlay artifact pair is unavailable."
 
 
 def discover_rural_facilities_density_overlay_artifact(
@@ -868,6 +995,10 @@ def resolve_overlay_control_states(
     built_up_png, _built_up_meta, built_up_reason = discover_built_up_area_overlay_artifact(data_dir=data_dir)
     built_up_available = built_up_visible and built_up_png is not None
 
+    lulc_visible = True
+    lulc_png, _lulc_meta, lulc_reason = discover_lulc_agri_overlay_artifact(data_dir=data_dir)
+    lulc_available = lulc_visible and lulc_png is not None
+
     selected_district_norm = str(selected_district or "All").strip()
     river_visible = (
         (family == "hydro" and level in {"basin", "sub_basin"})
@@ -891,6 +1022,7 @@ def resolve_overlay_control_states(
         POPULATION_EXPOSURE_OVERLAY_ID: (pop_visible, pop_available, pop_reason),
         RURAL_FACILITIES_DENSITY_OVERLAY_ID: (rural_visible, rural_available, rural_reason),
         BUILT_UP_AREA_OVERLAY_ID: (built_up_visible, built_up_available, built_up_reason),
+        LULC_AGRI_OVERLAY_ID: (lulc_visible, lulc_available, lulc_reason),
         RIVER_NETWORK_OVERLAY_ID: (river_visible, river_available, river_reason),
     }
     resolved: dict[str, OverlayControlState] = {}
@@ -986,6 +1118,7 @@ def build_overlay_render_layers(
     from india_resilience_tool.viz.folium_featurecollection import clone_featurecollection_for_patch
     from india_resilience_tool.viz.colors import (
         build_built_up_area_legend_html,
+        build_lulc_agri_legend_html,
         build_rp100_flood_depth_legend_html,
         build_rural_facilities_density_legend_html,
     )
@@ -1095,6 +1228,24 @@ def build_overlay_render_layers(
                     bounds_latlon=meta["bounds_latlon"],
                     pane="irt-built-up-area-raster",
                     legend_html=build_built_up_area_legend_html(bins=BUILT_UP_AREA_BINS),
+                )
+            )
+
+    lulc_state = overlay_states.get(LULC_AGRI_OVERLAY_ID)
+    if lulc_state and lulc_state.active:
+        png_path, meta, _reason = discover_lulc_agri_overlay_artifact(data_dir=data_dir)
+        if png_path is not None and meta is not None:
+            layers.append(
+                OverlayRenderLayer(
+                    overlay_id=LULC_AGRI_OVERLAY_ID,
+                    kind="image",
+                    name="Agricultural LULC Exposure",
+                    opacity=float(max(0, min(100, lulc_state.opacity_pct)) / 100.0),
+                    opacity_pct=lulc_state.opacity_pct,
+                    image_path=png_path,
+                    bounds_latlon=meta["bounds_latlon"],
+                    pane="irt-lulc-agri-raster",
+                    legend_html=build_lulc_agri_legend_html(bins=LULC_AGRI_BINS),
                 )
             )
 
