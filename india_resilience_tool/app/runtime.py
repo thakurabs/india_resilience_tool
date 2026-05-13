@@ -50,13 +50,18 @@ def run_app() -> None:
         SUBBASINS_PATH,
         resolve_processed_optimised_root,
     )
-    from india_resilience_tool.data.optimized_bundle import optimized_context_path, optimized_geometry_path
+    from india_resilience_tool.data.optimized_bundle import (
+        optimized_adm1_path,
+        optimized_context_path,
+        optimized_geometry_path,
+    )
 
     from india_resilience_tool.app.geo_cache import (
         build_adm1_from_adm2,
         build_adm3_geojson_by_district,
         enrich_adm2_with_state_names,
         load_hydro_subbasin_selector_index,
+        load_local_adm1,
         load_local_adm2,
         load_local_adm3,
         load_local_basin,
@@ -170,22 +175,26 @@ def run_app() -> None:
             )
             st.stop()
 
-        adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+        with perf_section("cold: load adm2 [landing]"):
+            adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
         if "__key" not in adm2.columns and "district_name" in adm2.columns:
             adm2["__key"] = adm2["district_name"].map(alias)
 
-        adm1 = build_adm1_from_adm2(adm2)
+        with perf_section("cold: build adm1 [landing]"):
+            adm1 = build_adm1_from_adm2(adm2)
         with st.spinner("Preparing landing geography..."):
-            adm2 = enrich_adm2_with_state_names(adm2, adm1)
-            adm3_by_district = (
-                build_adm3_geojson_by_district(
-                    str(ADM3_GEOJSON),
-                    tolerance=SIMPLIFY_TOL_ADM3,
-                    mtime=ADM3_GEOJSON.stat().st_mtime,
+            with perf_section("cold: enrich adm2 state names [landing]"):
+                adm2 = enrich_adm2_with_state_names(adm2, adm1)
+            with perf_section("cold: build adm3 by district [landing]"):
+                adm3_by_district = (
+                    build_adm3_geojson_by_district(
+                        str(ADM3_GEOJSON),
+                        tolerance=SIMPLIFY_TOL_ADM3,
+                        mtime=ADM3_GEOJSON.stat().st_mtime,
+                    )
+                    if ADM3_GEOJSON.exists()
+                    else None
                 )
-                if ADM3_GEOJSON.exists()
-                else None
-            )
 
         render_landing_page(
             adm1=adm1,
@@ -229,13 +238,12 @@ def run_app() -> None:
         master_controls_placeholder = st.empty()
         st.markdown("---")
 
-        with st.expander("Developer", expanded=False):
-            st.checkbox(
-                "Show performance timings",
-                key="perf_enabled",
-                value=st.session_state.get("perf_enabled", DEBUG),
-                help="Shows per-section timings for the current rerun.",
-            )
+        st.checkbox(
+            "Show performance timings",
+            key="perf_enabled",
+            value=st.session_state.get("perf_enabled", DEBUG),
+            help="Per-section timings for the current rerun, plus a compact 'Total ms' line above the map.",
+        )
 
         perf_panel_placeholder = st.empty()
 
@@ -424,9 +432,45 @@ def run_app() -> None:
         render_perf_panel_safe()
         st.stop()
 
-    adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
-    if "__key" not in adm2.columns and "district_name" in adm2.columns:
-        adm2["__key"] = adm2["district_name"].map(alias)
+    # ADM1-first boot: if the precomputed adm1 artifact is present, load only
+    # the lightweight state polygons and defer ADM2 to the per-state shard.
+    # Fall back to the full ADM2 monolith (with a visible warning) only when
+    # the artifact has not been built yet.
+    optimized_adm1_artifact = optimized_adm1_path(data_dir=DATA_DIR)
+    if optimized_adm1_artifact.exists():
+        with perf_section("cold: load adm1 artifact [detail]"):
+            adm1 = load_local_adm1(str(optimized_adm1_artifact))
+        adm2 = None
+        _peeked_state = str(st.session_state.get("selected_state", "All") or "All").strip()
+        if _peeked_state and _peeked_state != "All":
+            _peeked_shard = optimized_geometry_path(
+                level="district",
+                state=_peeked_state,
+                data_dir=DATA_DIR,
+            )
+            if _peeked_shard.exists():
+                with perf_section(f"cold: load adm2 [shard {_peeked_state}]"):
+                    adm2 = load_local_adm2(str(_peeked_shard), tolerance=SIMPLIFY_TOL_ADM2)
+                if (
+                    adm2 is not None
+                    and "__key" not in adm2.columns
+                    and "district_name" in adm2.columns
+                ):
+                    adm2["__key"] = adm2["district_name"].map(alias)
+    else:
+        st.caption(
+            "adm1.geojson artifact not found; loading the full ADM2 (slow first paint). "
+            "Run `python -m tools.geodata.build_adm1_geojson --overwrite` to fix."
+        )
+        with perf_section("cold: load adm2 [detail/fallback]"):
+            adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+        if "__key" not in adm2.columns and "district_name" in adm2.columns:
+            adm2["__key"] = adm2["district_name"].map(alias)
+        with perf_section("cold: build adm1 [detail/fallback]"):
+            adm1 = build_adm1_from_adm2(adm2)
+        with st.spinner("Enriching district data with state names..."):
+            with perf_section("cold: enrich adm2 state names [detail/fallback]"):
+                adm2 = enrich_adm2_with_state_names(adm2, adm1)
 
     # -------------------------
     # Metric selection ribbon (pillar → domain → metric → scenario/period/stat + map mode)
@@ -488,13 +532,6 @@ def run_app() -> None:
             st.success("Master CSV force-rebuilt.")
         else:
             st.error(f"Forced rebuild failed: {msg}")
-
-    # -------------------------
-    # Build adm1 & enrich adm2 state names
-    # -------------------------
-    adm1 = build_adm1_from_adm2(adm2)
-    with st.spinner("Enriching district data with state names..."):
-        adm2 = enrich_adm2_with_state_names(adm2, adm1)
 
     # Sync pending selections
     if "pending_selected_state" in st.session_state:
@@ -617,8 +654,25 @@ def run_app() -> None:
         )
         if optimized_district_geojson.exists():
             runtime_adm2_geojson = optimized_district_geojson
-            if include_map or details_need_geometry:
+            if (include_map or details_need_geometry) and adm2 is None:
+                with perf_section(f"cold: load adm2 [shard {selected_state}]"):
+                    adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+                if "__key" not in adm2.columns and "district_name" in adm2.columns:
+                    adm2["__key"] = adm2["district_name"].map(alias)
+        elif (include_map or details_need_geometry) and adm2 is None:
+            st.caption(
+                f"Optimized ADM2 shard not found for {selected_state}; loading the full ADM2 fallback."
+            )
+            with perf_section("cold: load adm2 [detail/fallback]"):
                 adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+            if "__key" not in adm2.columns and "district_name" in adm2.columns:
+                adm2["__key"] = adm2["district_name"].map(alias)
+    elif (include_map or details_need_geometry) and adm2 is None:
+        st.caption("Nationwide district geometry requires the full ADM2 fallback.")
+        with perf_section("cold: load adm2 [detail/all fallback]"):
+            adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+        if "__key" not in adm2.columns and "district_name" in adm2.columns:
+            adm2["__key"] = adm2["district_name"].map(alias)
 
     runtime_adm3_geojson = ADM3_GEOJSON
     if selected_state != "All":
@@ -659,19 +713,22 @@ def run_app() -> None:
             st.error(f"ADM3 geojson not found at {runtime_adm3_geojson}. Please provide block_4326.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_adm3(str(runtime_adm3_geojson), tolerance=SIMPLIFY_TOL_ADM3)
+        with perf_section("cold: load adm3"):
+            adm3 = load_local_adm3(str(runtime_adm3_geojson), tolerance=SIMPLIFY_TOL_ADM3)
     elif _admin_level == "basin" and (include_map or details_need_geometry):
         if not runtime_basin_geojson.exists():
             st.error(f"Basin geojson not found at {runtime_basin_geojson}. Please provide basins.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_basin(str(runtime_basin_geojson))
+        with perf_section("cold: load basin"):
+            adm3 = load_local_basin(str(runtime_basin_geojson))
     elif _admin_level == "sub_basin" and (include_map or details_need_geometry):
         if not runtime_subbasin_geojson.exists():
             st.error(f"Sub-basin geojson not found at {runtime_subbasin_geojson}. Please provide subbasins.geojson.")
             render_perf_panel_safe()
             st.stop()
-        adm3 = load_local_subbasin(str(runtime_subbasin_geojson))
+        with perf_section("cold: load subbasin"):
+            adm3 = load_local_subbasin(str(runtime_subbasin_geojson))
     else:
         adm3 = None
 

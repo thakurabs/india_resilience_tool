@@ -88,6 +88,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/convert_blocks_shp_to_geojson.py` | Convert block boundaries shapefile → GeoJSON | `python -m tools.geodata.convert_blocks_shp_to_geojson --help` |
 | `tools/geodata/inspect_block_shapefile.py` | Inspect boundary shapefile/GeoJSON structure | `python -m tools.geodata.inspect_block_shapefile --help` |
 | `tools/geodata/build_blocks_geojson.py` | Rebuild the canonical `blocks_4326.geojson` from the source block shapefile with label QA | `python -m tools.geodata.build_blocks_geojson --help` |
+| `tools/geodata/build_adm1_geojson.py` | Build the compact optimized ADM1 state-polygons artifact for fast dashboard boot | `python -m tools.geodata.build_adm1_geojson --help` |
 | `tools/geodata/build_district_subbasin_crosswalk.py` | Build the canonical district ↔ sub-basin crosswalk CSV from district and sub-basin GeoJSONs | `python -m tools.geodata.build_district_subbasin_crosswalk --help` |
 | `tools/geodata/build_block_subbasin_crosswalk.py` | Build the canonical block ↔ sub-basin crosswalk CSV from block and sub-basin GeoJSONs | `python -m tools.geodata.build_block_subbasin_crosswalk --help` |
 | `tools/geodata/build_district_basin_crosswalk.py` | Build the canonical district ↔ basin crosswalk CSV from district and basin GeoJSONs | `python -m tools.geodata.build_district_basin_crosswalk --help` |

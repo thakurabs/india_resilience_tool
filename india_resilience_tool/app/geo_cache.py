@@ -26,6 +26,7 @@ from india_resilience_tool.data.adm2_loader import (
     enrich_adm2_with_state_names as _enrich_adm2_with_state_names,
     ensure_key_column as _ensure_key_column,
     featurecollections_by_state as _featurecollections_by_state,
+    load_local_adm1_artifact as _load_local_adm1_artifact,
     load_local_adm2 as _load_local_adm2,
 )
 from india_resilience_tool.data.adm3_loader import load_local_adm3 as _load_local_adm3
@@ -135,6 +136,12 @@ def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoD
         min_area=0.0003,
     )
     return gdf
+
+
+@st.cache_data(ttl=3600)
+def load_local_adm1(path: str) -> gpd.GeoDataFrame:
+    """Read the precomputed ADM1 state polygons artifact (Streamlit-cached)."""
+    return _load_local_adm1_artifact(path)
 
 
 @st.cache_data(ttl=3600)

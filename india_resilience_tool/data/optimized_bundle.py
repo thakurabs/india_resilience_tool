@@ -202,6 +202,20 @@ def optimized_context_path(name: str, *, data_dir: Optional[Path] = None) -> Pat
     return resolve_optimized_bundle_root(data_dir=data_dir) / _CONTEXT_DIRNAME / str(name).strip()
 
 
+def optimized_adm1_path(*, data_dir: Optional[Path] = None) -> Path:
+    """Return the optimized ADM1 (state polygons) artifact path.
+
+    Used by the dashboard boot path to render the state selector without
+    cold-loading the full ADM2 monolith.
+    """
+    return (
+        resolve_optimized_bundle_root(data_dir=data_dir)
+        / _GEOMETRY_DIRNAME
+        / "admin"
+        / "adm1.geojson"
+    )
+
+
 def optimized_glance_root(
     composite_slug: Optional[str] = None,
     *,

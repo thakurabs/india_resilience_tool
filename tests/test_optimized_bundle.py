@@ -10,7 +10,9 @@ import pytest
 from shapely.geometry import Polygon
 
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
+from india_resilience_tool.data.adm2_loader import load_local_adm1_artifact
 from india_resilience_tool.data.optimized_bundle import (
+    optimized_adm1_path,
     optimized_context_path,
     optimized_geometry_path,
     optimized_master_sources_from_metric_root,
@@ -158,6 +160,36 @@ def test_list_available_states_from_optimized_metric_root(tmp_path: Path) -> Non
     states = list_available_states_from_processed_root(str(metric_root))
 
     assert states == ["Odisha", "Telangana"]
+
+
+def test_optimized_adm1_path_resolves_under_bundle_root(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    path = optimized_adm1_path(data_dir=tmp_path)
+    assert path == tmp_path / "processed_optimised" / "geometry" / "admin" / "adm1.geojson"
+
+
+def test_optimized_adm1_artifact_load_returns_state_polygons(tmp_path: Path) -> None:
+    path = optimized_adm1_path(data_dir=tmp_path)
+    path.parent.mkdir(parents=True)
+    source = gpd.GeoDataFrame(
+        {
+            "state_name": ["Odisha", "Telangana"],
+            "shapeName": ["Odisha", "Telangana"],
+        },
+        geometry=[
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+            Polygon([(2, 0), (3, 0), (3, 1), (2, 1)]),
+        ],
+        crs="EPSG:4326",
+    )
+    source.to_file(path, driver="GeoJSON")
+
+    loaded = load_local_adm1_artifact(path)
+
+    assert {"state_name", "shapeName", "geometry"}.issubset(set(loaded.columns))
+    assert sorted(loaded["state_name"].astype(str).tolist()) == ["Odisha", "Telangana"]
+    assert str(loaded.crs).upper().endswith("4326")
+    assert len(loaded) == 2
 
 
 def test_optimized_master_sources_from_metric_root_for_all_states(tmp_path: Path) -> None:
@@ -394,11 +426,18 @@ def test_write_geometry_bundle_normalizes_raw_admin_columns(
     block_path = optimized_geometry_path(level="block", state="Telangana", data_dir=tmp_path)
     block_index_path = tmp_path / "processed_optimised" / "context" / "admin_block_index.parquet"
     hydro_index_path = tmp_path / "processed_optimised" / "context" / "hydro_subbasin_index.parquet"
+    adm1_path = optimized_adm1_path(data_dir=tmp_path)
 
     assert district_path.exists()
     assert block_path.exists()
     assert block_index_path.exists()
     assert hydro_index_path.exists()
+    assert adm1_path.exists()
+
+    adm1_out = gpd.read_file(adm1_path)
+    assert {"state_name", "shapeName"}.issubset(set(adm1_out.columns))
+    assert sorted(adm1_out["state_name"].astype(str).str.strip().tolist()) == ["Telangana"]
+    assert str(adm1_out.crs).upper().endswith("4326")
 
     district_out = gpd.read_file(district_path)
     assert "area_m2" in district_out.columns
@@ -502,11 +541,11 @@ def test_build_execution_plan_counts_exact_tasks(
         "yearly-models": 4,
         "yearly-ensemble": 0,
         "context": 1,
-        "geometry": 6,
+        "geometry": 7,
         "glance": 0,
         "manifest": 1,
     }
-    assert plan.total_tasks == 15
+    assert plan.total_tasks == 16
 
 
 def test_build_progress_failure_summary_reports_remaining() -> None:

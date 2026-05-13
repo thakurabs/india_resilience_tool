@@ -24,6 +24,7 @@ import pandas as pd
 from tqdm.auto import tqdm
 
 from india_resilience_tool.config.constants import (
+    SIMPLIFY_TOL_ADM1,
     SIMPLIFY_TOL_ADM2,
     SIMPLIFY_TOL_ADM3,
     SIMPLIFY_TOL_BASIN_RENDER,
@@ -58,6 +59,7 @@ from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.data.optimized_bundle import (
     OPTIMIZED_DIRNAME,
     bundle_manifest_path,
+    optimized_adm1_path,
     optimized_glance_root,
     optimized_context_path,
     optimized_geometry_path,
@@ -1084,6 +1086,15 @@ def _geometry_tasks(*, data_dir: Path, selected_levels: set[str]) -> tuple[Build
                     target_path=optimized_geometry_path(level="district", state=state_name, data_dir=data_dir),
                 )
             )
+        tasks.append(
+            BuildTask(
+                stage="geometry",
+                label="adm1 state polygons",
+                level="adm1",
+                source_path=Path(cfg.districts_path),
+                target_path=optimized_adm1_path(data_dir=data_dir),
+            )
+        )
 
     if "block" in selected_levels:
         adm3 = ensure_adm3_columns(gpd.read_file(cfg.blocks_path).to_crs(4326))
@@ -1156,6 +1167,7 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
 
     task_map = {(task.level, task.state, str(task.target_path)): task for task in tasks}
 
+    adm2_for_adm1: Optional[gpd.GeoDataFrame] = None
     if any(task.level == "district" for task in tasks):
         adm2 = gpd.read_file(cfg.districts_path).to_crs(4326)
         adm2 = ensure_adm2_columns(adm2)
@@ -1163,6 +1175,7 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
             adm2["district_name"].astype(str).map(alias),
             sep="|",
         )
+        adm2_for_adm1 = adm2
         for state_name, state_gdf in adm2.groupby(adm2["state_name"].astype(str).str.strip(), dropna=False):
             out = _simplify_geometry(
                 state_gdf,
@@ -1173,6 +1186,20 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
             task = task_map.get(("district", str(state_name), str(out_path)))
             if task is not None:
                 _run_task(task, progress, lambda out=out, out_path=out_path: _write_geojson(out, out_path))
+
+    if any(task.level == "adm1" for task in tasks) and adm2_for_adm1 is not None:
+        from india_resilience_tool.data.adm2_loader import build_adm1_from_adm2
+
+        adm1 = build_adm1_from_adm2(adm2_for_adm1, state_col="state_name")
+        adm1["geometry"] = adm1["geometry"].simplify(
+            tolerance=float(SIMPLIFY_TOL_ADM1), preserve_topology=True
+        )
+        adm1_keep = [c for c in ("state_name", "shapeName") if c in adm1.columns]
+        adm1_out = adm1[[*adm1_keep, "geometry"]].reset_index(drop=True)
+        adm1_path = optimized_adm1_path(data_dir=data_dir)
+        adm1_task = task_map.get(("adm1", None, str(adm1_path)))
+        if adm1_task is not None:
+            _run_task(adm1_task, progress, lambda: _write_geojson(adm1_out, adm1_path))
 
     adm3: Optional[gpd.GeoDataFrame] = None
     if any(task.level in {"block", "admin_block_index"} for task in tasks):

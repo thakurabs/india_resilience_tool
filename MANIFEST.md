@@ -70,6 +70,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.geodata.build_district_basin_crosswalk --overwrite` | Build district ↔ basin crosswalk CSV |
 | `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
 | `python -m tools.geodata.build_blocks_geojson --overwrite` | Rebuild the canonical block GeoJSON and block-label QA outputs |
+| `python -m tools.geodata.build_adm1_geojson --overwrite` | Build the compact optimized ADM1 state-polygons artifact for fast dashboard boot |
 | `python -m tools.geodata.prepare_aqueduct_baseline --help` | Build the canonical clean Aqueduct baseline artifact and India-only future geometry subset from future geometry + baseline CSV |
 | `python -m tools.geodata.build_aqueduct_admin_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ district overlap CSVs |
 | `python -m tools.geodata.build_aqueduct_block_crosswalk --help` | Build Aqueduct HydroSHEDS ↔ block overlap CSVs |
@@ -338,6 +339,7 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `build_district_subbasin_crosswalk.py` | Shared polygon crosswalk builders plus the district ↔ sub-basin CLI |
 | `build_blocks_geojson.py` | Rebuild the canonical `blocks_4326.geojson` with canonical block identity columns and label QA |
+| `build_adm1_geojson.py` | Build `processed_optimised/geometry/admin/adm1.geojson` from canonical district boundaries for ADM1-first dashboard boot |
 | `build_block_subbasin_crosswalk.py` | Build canonical block ↔ sub-basin crosswalk CSV |
 | `build_district_basin_crosswalk.py` | Build canonical district ↔ basin crosswalk CSV |
 | `build_block_basin_crosswalk.py` | Build canonical block ↔ basin crosswalk CSV |

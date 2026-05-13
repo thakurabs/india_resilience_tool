@@ -210,6 +210,7 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 - yearly time-series
 - per-model yearly overlays
 - case-study export inputs
+- compact ADM1 state polygons at `processed_optimised/geometry/admin/adm1.geojson` for ADM1-first dashboard boot
 - simplified runtime geometry shards plus compact selector indexes for block and sub-basin dropdowns
 - reference overlay context files, including river display artifacts and exposure/hazard overlay PNG/metadata when present
 - Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`

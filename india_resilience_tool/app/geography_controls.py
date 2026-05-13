@@ -93,7 +93,7 @@ def _build_admin_geography(
     analysis_mode: str,
     processed_root: Optional[Path],
     adm1: Any,
-    adm2: Any,
+    adm2: Optional[Any],
     adm3_geojson: Path,
     simplify_tol_adm3: float,
     admin_level: str,
@@ -139,7 +139,9 @@ def _build_admin_geography(
     if restricted_states:
         st.caption("This metric is currently available for Telangana only.")
 
-    if selected_state == "All":
+    if adm2 is None:
+        gdf_state_districts = pd.DataFrame(columns=["district_name", "state_name"])
+    elif selected_state == "All":
         gdf_state_districts = adm2.copy()
     else:
         sel_state_norm = selected_state.strip().lower()
@@ -332,7 +334,7 @@ def render_geography_and_analysis_focus(
     view_map: str,
     view_rankings: str,
     adm1: Any,
-    adm2: Any,
+    adm2: Optional[Any],
     adm3_geojson: Path,
     basins_geojson: Path,
     subbasins_geojson: Path,
@@ -401,7 +403,11 @@ def render_geography_and_analysis_focus(
             selected_block = "All"
             selected_basin = "All"
             selected_subbasin = "All"
-            gdf_state_districts = adm2.copy()
+            gdf_state_districts = (
+                adm2.copy()
+                if adm2 is not None
+                else pd.DataFrame(columns=["district_name", "state_name"])
+            )
             ensure_overlay_session_state(st.session_state)
 
             if str(spatial_family).strip().lower() == "hydro":

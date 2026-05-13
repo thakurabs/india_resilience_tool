@@ -212,6 +212,27 @@ def featurecollections_by_state(
     return by_state
 
 
+def load_local_adm1_artifact(path: PathLike) -> gpd.GeoDataFrame:
+    """Read the precomputed ADM1 (state polygons) artifact.
+
+    Output contract matches ``build_adm1_from_adm2``: EPSG:4326 with columns
+    ``state_name`` and ``shapeName``.
+    """
+    gdf = gpd.read_file(str(path))
+    gdf = ensure_epsg4326(gdf)
+    if "state_name" not in gdf.columns and "shapeName" in gdf.columns:
+        gdf["state_name"] = gdf["shapeName"].astype(str).str.strip()
+    if "shapeName" not in gdf.columns and "state_name" in gdf.columns:
+        gdf["shapeName"] = gdf["state_name"].astype(str).str.strip()
+    missing = {"state_name", "shapeName"} - set(gdf.columns)
+    if missing:
+        raise ValueError(
+            "ADM1 artifact must contain state_name and shapeName columns; "
+            f"missing: {sorted(missing)}"
+        )
+    return gdf.reset_index(drop=True)
+
+
 def build_adm1_from_adm2(adm2_gdf: gpd.GeoDataFrame, *, state_col: str = "state_name") -> gpd.GeoDataFrame:
     """
     Derive an ADM1 (state) GeoDataFrame by dissolving ADM2 boundaries.
