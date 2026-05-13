@@ -121,6 +121,13 @@ class RunSummary:
 
 _thread_local = threading.local()
 
+# Global HDF5 serialization lock. The HDF5 C library is not fully thread-safe;
+# concurrent open_dataset/to_netcdf across workers can crash with
+# "NetCDF: String match to name in use". Wrap all HDF5-touching code under this
+# lock. S3 downloads (the network-bound part) stay outside so workers still run
+# in parallel for I/O.
+_HDF5_LOCK = threading.Lock()
+
 
 def get_s3_client():
     cli = getattr(_thread_local, "s3", None)
@@ -160,8 +167,19 @@ TRANSIENT_EXC: tuple[type[BaseException], ...] = (
 )
 FATAL_EXC: tuple[type[BaseException], ...] = (KeyError, ValueError, RuntimeError)
 
+# Substrings that mark a RuntimeError as an HDF5 thread-race symptom rather
+# than a genuine logic failure. The lock (see _HDF5_LOCK) should prevent these,
+# but treating them as transient is cheap insurance for any path that slips by.
+_HDF5_RACE_SIGNATURES: tuple[str, ...] = ("name in use",)
+
 
 def is_transient(exc: BaseException) -> bool:
+    # HDF5 thread-race RuntimeError: retry. Checked before the FATAL_EXC
+    # short-circuit because RuntimeError is otherwise fatal.
+    if isinstance(exc, RuntimeError) and any(
+        sig in str(exc) for sig in _HDF5_RACE_SIGNATURES
+    ):
+        return True
     if isinstance(exc, FATAL_EXC):
         return False
     if isinstance(exc, botocore.exceptions.ClientError):
@@ -507,42 +525,53 @@ def download_one(task: DownloadTask, bbox: tuple[float, float, float, float], op
     def _attempt() -> None:
         src_tmp: str | None = None
         try:
-            if open_mode == "direct":
-                ctx = xr.open_dataset(
-                    f"s3://{S3_BUCKET}/{task.s3_key}",
-                    engine="h5netcdf",
-                    storage_options={"anon": True},
-                )
-            else:
+            # S3 download: outside the HDF5 lock so multiple workers fetch in
+            # parallel. Direct mode pulls bytes via h5netcdf during open(), so
+            # its network I/O is necessarily serialized — that's an opt-in cost.
+            if open_mode != "direct":
                 s3 = get_s3_client()
                 fd, src_tmp = tempfile.mkstemp(suffix=".nc")
                 os.close(fd)
                 with open(src_tmp, "wb") as fh:
                     s3.download_fileobj(S3_BUCKET, task.s3_key, fh)
-                ctx = xr.open_dataset(src_tmp, engine="h5netcdf")
 
-            with ctx as ds:
-                lat_var, lon_var = detect_lat_lon_vars(ds)
-                if lat_var is None or lon_var is None:
-                    raise RuntimeError(
-                        f"lat/lon not detected; coords={list(ds.coords)}"
+            with _HDF5_LOCK:
+                if open_mode == "direct":
+                    ctx = xr.open_dataset(
+                        f"s3://{S3_BUCKET}/{task.s3_key}",
+                        engine="h5netcdf",
+                        storage_options={"anon": True},
                     )
-                w, e = normalize_bbox_lon_for_coord(
-                    ds[lon_var].values, west, east
-                )
-                subset = ds.sel(
-                    {
-                        lat_var: _ordered_slice(ds[lat_var].values, south, north),
-                        lon_var: _ordered_slice(ds[lon_var].values, w, e),
-                    }
-                )
-                validate_subset_nonempty(subset, lat_var, lon_var, task.s3_key)
-                subset = subset.load()
-            subset.to_netcdf(tmp_out)
-            try:
-                subset.close()
-            except Exception:
-                pass
+                else:
+                    ctx = xr.open_dataset(src_tmp, engine="h5netcdf")
+
+                with ctx as ds:
+                    lat_var, lon_var = detect_lat_lon_vars(ds)
+                    if lat_var is None or lon_var is None:
+                        raise RuntimeError(
+                            f"lat/lon not detected; coords={list(ds.coords)}"
+                        )
+                    w, e = normalize_bbox_lon_for_coord(
+                        ds[lon_var].values, west, east
+                    )
+                    subset = ds.sel(
+                        {
+                            lat_var: _ordered_slice(
+                                ds[lat_var].values, south, north
+                            ),
+                            lon_var: _ordered_slice(ds[lon_var].values, w, e),
+                        }
+                    )
+                    validate_subset_nonempty(
+                        subset, lat_var, lon_var, task.s3_key
+                    )
+                    subset = subset.load()
+                subset.to_netcdf(tmp_out)
+                try:
+                    subset.close()
+                except Exception:
+                    pass
+
             os.replace(tmp_out, out_path)
         finally:
             if src_tmp is not None:

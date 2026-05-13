@@ -338,3 +338,51 @@ def test_ordered_slice_descending_lat():
     desc = np.array([20.0, 15.0, 10.0])
     assert v2._ordered_slice(asc, 12.0, 18.0) == slice(12.0, 18.0)
     assert v2._ordered_slice(desc, 12.0, 18.0) == slice(18.0, 12.0)
+
+
+# ---------------------------------------------------------------------------
+# 8. HDF5 thread-race RuntimeError is reclassified as transient (CHG-0007)
+# ---------------------------------------------------------------------------
+
+
+def test_is_transient_hdf5_name_in_use_runtimeerror_retries():
+    exc = RuntimeError("NetCDF: String match to name in use")
+    assert v2.is_transient(exc) is True
+
+
+def test_is_transient_other_runtimeerror_still_fatal():
+    # Empty-subset or lat/lon-not-detected RuntimeErrors must remain fatal
+    # so the operator notices bbox / convention bugs immediately.
+    assert v2.is_transient(RuntimeError("bbox selection produced empty subset")) is False
+    assert v2.is_transient(RuntimeError("lat/lon not detected; coords=[...]")) is False
+
+
+# ---------------------------------------------------------------------------
+# 9. HDF5 lock exists and serializes (CHG-0006)
+# ---------------------------------------------------------------------------
+
+
+def test_hdf5_lock_serializes_concurrent_holders():
+    """Two threads contending for _HDF5_LOCK must not overlap inside the
+    critical section. Locks the actual module-level lock used by download_one.
+    """
+    import threading
+    import time
+
+    overlaps = []
+    inside = [0]
+
+    def worker():
+        with v2._HDF5_LOCK:
+            inside[0] += 1
+            if inside[0] > 1:
+                overlaps.append(True)
+            time.sleep(0.05)
+            inside[0] -= 1
+
+    t1 = threading.Thread(target=worker)
+    t2 = threading.Thread(target=worker)
+    t1.start(); t2.start()
+    t1.join(); t2.join()
+
+    assert overlaps == []
