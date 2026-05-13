@@ -6,8 +6,14 @@ and uses existing hydro identifiers: ``basin_id`` and ``subbasin_id``.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Optional
+
+from india_resilience_tool.config.constants import (
+    SIMPLIFY_TOL_BASIN_RENDER,
+    SIMPLIFY_TOL_SUBBASIN_RENDER,
+)
 
 
 def _optimized_context_path(filename: str, *, data_dir: Path) -> Path:
@@ -19,7 +25,43 @@ def _optimized_context_path(filename: str, *, data_dir: Path) -> Path:
         return Path(data_dir) / "processed_optimised" / "context" / filename
 
 
-def _candidate_boundary_paths(data_dir: Path, hydro_level: str) -> list[Path]:
+def _path_mtime(path: Path) -> float:
+    try:
+        return float(path.stat().st_mtime)
+    except OSError:
+        return 0.0
+
+
+def _optimized_geometry_path(
+    *,
+    data_dir: Path,
+    hydro_level: str,
+    basin_id: str,
+) -> Optional[Path]:
+    try:
+        from india_resilience_tool.data.optimized_bundle import optimized_geometry_path
+
+        if hydro_level == "sub_basin" and basin_id:
+            return Path(
+                optimized_geometry_path(
+                    level="sub_basin",
+                    basin_id=basin_id,
+                    data_dir=data_dir,
+                )
+            )
+        if hydro_level == "basin":
+            return Path(optimized_geometry_path(level="basin", data_dir=data_dir))
+    except Exception:
+        return None
+    return None
+
+
+def _candidate_boundary_paths(
+    data_dir: Path,
+    hydro_level: str,
+    *,
+    basin_id: str = "",
+) -> list[Path]:
     if hydro_level == "sub_basin":
         names = ("subbasins.geojson", "sub_basins.geojson", "subbasins_4326.geojson")
     else:
@@ -39,23 +81,58 @@ def _candidate_boundary_paths(data_dir: Path, hydro_level: str) -> list[Path]:
                 candidates.insert(0, Path(p))
     except Exception:
         pass
-    return candidates
+
+    optimized_path = _optimized_geometry_path(
+        data_dir=Path(data_dir),
+        hydro_level=hydro_level,
+        basin_id=basin_id,
+    )
+    if optimized_path is not None:
+        candidates.insert(0, optimized_path)
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key not in seen:
+            unique.append(candidate)
+            seen.add(key)
+    return unique
 
 
-def _read_boundary(data_dir: Path, active_overlay: Mapping[str, Any]) -> Optional[Any]:
+def _simplify_for_overlay(gdf: Any, *, hydro_level: str) -> Any:
+    tolerance = (
+        SIMPLIFY_TOL_SUBBASIN_RENDER
+        if hydro_level == "sub_basin"
+        else SIMPLIFY_TOL_BASIN_RENDER
+    )
+    try:
+        out = gdf.copy()
+        out["geometry"] = out["geometry"].simplify(
+            tolerance=float(tolerance),
+            preserve_topology=True,
+        )
+        return out
+    except Exception:
+        return gdf
+
+
+@lru_cache(maxsize=64)
+def _read_boundary_cached(
+    *,
+    path_str: str,
+    mtime: float,
+    hydro_level: str,
+    target_id: str,
+) -> Optional[Any]:
+    _ = mtime
     try:
         import geopandas as gpd
     except Exception:
         return None
 
-    hydro_level = str(active_overlay.get("hydro_level") or "basin").strip()
-    paths = _candidate_boundary_paths(data_dir, hydro_level)
-    existing = next((p for p in paths if p.exists()), None)
-    if existing is None:
-        return None
-
     try:
-        gdf = gpd.read_file(existing)
+        gdf = gpd.read_file(path_str)
     except Exception:
         return None
 
@@ -64,11 +141,9 @@ def _read_boundary(data_dir: Path, active_overlay: Mapping[str, Any]) -> Optiona
 
     if hydro_level == "sub_basin":
         target_col = "subbasin_id"
-        target_id = str(active_overlay.get("subbasin_id") or "").strip()
         alt_cols = ("sub_basin_id", "subbasin", "SUBBASIN_ID", "HYBAS_ID")
     else:
         target_col = "basin_id"
-        target_id = str(active_overlay.get("basin_id") or "").strip()
         alt_cols = ("BASIN_ID", "basin", "HYBAS_ID")
 
     if not target_id:
@@ -86,32 +161,56 @@ def _read_boundary(data_dir: Path, active_overlay: Mapping[str, Any]) -> Optiona
         subset = subset.to_crs("EPSG:4326")
     except Exception:
         pass
-    return subset
+    return _simplify_for_overlay(subset, hydro_level=hydro_level).reset_index(drop=True)
 
 
-def _read_overlap(data_dir: Path, active_overlay: Mapping[str, Any]) -> Optional[Any]:
+def _read_boundary(data_dir: Path, active_overlay: Mapping[str, Any]) -> Optional[Any]:
+    hydro_level = str(active_overlay.get("hydro_level") or "basin").strip()
+    basin_id = str(active_overlay.get("basin_id") or "").strip()
+    if hydro_level == "sub_basin":
+        target_id = str(active_overlay.get("subbasin_id") or "").strip()
+    else:
+        target_id = basin_id
+    if not target_id:
+        return None
+
+    paths = _candidate_boundary_paths(data_dir, hydro_level, basin_id=basin_id)
+    existing = next((p for p in paths if p.exists()), None)
+    if existing is None:
+        return None
+
+    return _read_boundary_cached(
+        path_str=str(existing),
+        mtime=_path_mtime(existing),
+        hydro_level=hydro_level,
+        target_id=target_id,
+    )
+
+
+@lru_cache(maxsize=128)
+def _read_overlap_cached(
+    *,
+    path_str: str,
+    mtime: float,
+    admin_key: str,
+    admin_level: str,
+    hydro_level: str,
+    basin_id: str,
+    subbasin_id: str,
+) -> Optional[Any]:
+    _ = mtime
     try:
         import geopandas as gpd
     except Exception:
         return None
 
-    path = _optimized_context_path("admin_hydro_overlaps.parquet", data_dir=data_dir)
-    if not path.exists():
-        return None
-
     try:
-        gdf = gpd.read_parquet(path)
+        gdf = gpd.read_parquet(path_str)
     except Exception:
         return None
 
     if gdf.empty:
         return None
-
-    admin_key = str(active_overlay.get("admin_key") or "").strip()
-    admin_level = str(active_overlay.get("admin_level") or "").strip().lower()
-    hydro_level = str(active_overlay.get("hydro_level") or "").strip()
-    basin_id = str(active_overlay.get("basin_id") or "").strip()
-    subbasin_id = str(active_overlay.get("subbasin_id") or "").strip()
 
     mask = gdf["admin_key"].astype(str).str.strip().eq(admin_key)
     if "admin_level" in gdf.columns:
@@ -130,7 +229,23 @@ def _read_overlap(data_dir: Path, active_overlay: Mapping[str, Any]) -> Optional
         subset = subset.to_crs("EPSG:4326")
     except Exception:
         pass
-    return subset
+    return _simplify_for_overlay(subset, hydro_level=hydro_level).reset_index(drop=True)
+
+
+def _read_overlap(data_dir: Path, active_overlay: Mapping[str, Any]) -> Optional[Any]:
+    path = _optimized_context_path("admin_hydro_overlaps.parquet", data_dir=data_dir)
+    if not path.exists():
+        return None
+
+    return _read_overlap_cached(
+        path_str=str(path),
+        mtime=_path_mtime(path),
+        admin_key=str(active_overlay.get("admin_key") or "").strip(),
+        admin_level=str(active_overlay.get("admin_level") or "").strip().lower(),
+        hydro_level=str(active_overlay.get("hydro_level") or "").strip(),
+        basin_id=str(active_overlay.get("basin_id") or "").strip(),
+        subbasin_id=str(active_overlay.get("subbasin_id") or "").strip(),
+    )
 
 
 def add_hydro_boundary_overlay_to_map(
