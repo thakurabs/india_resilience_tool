@@ -1001,7 +1001,379 @@ Open methodology comments:
 
 ## 6. Thematic - Cold Risk
 
-Pending review.
+### 6.1 Bundle Definition
+
+Dashboard selector label: `Thematic - Cold Risk`
+
+Canonical bundle name: `Cold Risk`
+
+Composite metric slug: `composite_cold_risk`
+
+Composite display label: `Composite Cold Risk`
+
+Supported levels:
+- Admin district
+- Admin block
+
+Supported scenarios:
+- `ssp245`
+- `ssp585`
+
+The active weighted composite uses 11 metrics.
+
+| Component group | Metric slug | Metric label | Weight |
+|---|---|---|---:|
+| Background Cold | `tas_winter_mean` | Winter Mean Temperature (TM; DJF Mean) | 0.100 |
+| Background Cold | `tasmin_winter_mean` | Winter Min Temperature (DJF Mean) | 0.100 |
+| Absolute Extremes | `tnn_annual_min` | Annual Minimum of Daily Minimum Temperature (TNn) | 0.100 |
+| Absolute Extremes | `tasmin_winter_min` | Winter Minimum Tmin (DJF Min TN) | 0.100 |
+| Threshold-based Cold Days | `tnle10_cold_nights` | Cold Nights (TN <= 10C) | 0.0833 |
+| Threshold-based Cold Days | `tnle5_severe_cold_nights` | Severe Cold Nights (TN <= 5C) | 0.0833 |
+| Threshold-based Cold Days | `txle15_cold_days` | Cold Days (TX <= 15C) | 0.0833 |
+| Relative Cold | `tx10p_cool_days_pct` | Cool Days (TX10p) | 0.075 |
+| Relative Cold | `tn10p_cool_nights_pct` | Cool Nights (TN10p) | 0.075 |
+| Cold Spell Characteristics | `csdi_cold_spell_days` | Cold Spell Duration Index (CSDI) | 0.100 |
+| Cold Spell Characteristics | `tnle10_consecutive_cold_nights` | Consecutive Cold Nights (TN <= 10C) | 0.100 |
+
+Implementation references:
+- Bundle catalog: `india_resilience_tool/config/dashboard_bundles.py`
+- Bundle weights: `india_resilience_tool/config/bundle_weights.py`
+- Metric registry: `india_resilience_tool/config/metrics_registry.py`
+- Temperature compute functions: `tools/pipeline/compute_indices_multiprocess.py`
+- Composite scoring: `india_resilience_tool/analysis/bundle_scores.py`
+
+### 6.2 Metric-by-Metric Index Calculation
+
+The bundle mixes:
+- absolute winter temperature level metrics;
+- absolute annual/winter minimum temperature metrics;
+- threshold cold-night/day counts;
+- relative percentile cold metrics;
+- cold-spell persistence metrics.
+
+Current spatial aggregation:
+- For each polygon, the pipeline masks grid cells to the unit and computes a
+  daily spatial mean over `lat` and `lon`.
+- Temperature index functions operate on that polygon-average daily time series.
+- Values are converted from Kelvin to Celsius for output where applicable.
+
+#### `tas_winter_mean`
+
+Unit: `C`
+
+Formula:
+- Use daily mean temperature `tas`.
+- Select DJF months: December, January, February.
+- Compute daily polygon-average temperature.
+- Return seasonal mean in Celsius.
+
+Interpretation:
+- Background winter mean thermal condition.
+- For cold risk, lower values should imply higher risk.
+
+#### `tasmin_winter_mean`
+
+Unit: `C`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Select DJF months.
+- Compute daily polygon-average Tmin.
+- Return seasonal mean Tmin in Celsius.
+
+Interpretation:
+- Background winter night-time cold condition.
+- Lower values should imply higher risk.
+
+#### `tnn_annual_min`
+
+Unit: `C`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Compute daily polygon-average Tmin.
+- Return annual minimum daily Tmin in Celsius.
+
+Interpretation:
+- Coldest night of the year.
+- Lower values should imply higher risk.
+
+#### `tasmin_winter_min`
+
+Unit: `C`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Select DJF months.
+- Compute daily polygon-average Tmin.
+- Return winter minimum daily Tmin in Celsius.
+
+Interpretation:
+- Coldest winter night.
+- Lower values should imply higher risk.
+
+#### `tnle10_cold_nights`
+
+Unit: `days`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Count days/nights where polygon-average Tmin is `<= 10C`.
+
+Interpretation:
+- Number of cold nights relevant to plains and central India.
+- Higher count means higher cold exposure.
+
+#### `tnle5_severe_cold_nights`
+
+Unit: `days`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Count days/nights where polygon-average Tmin is `<= 5C`.
+
+Interpretation:
+- Number of more severe cold nights.
+- Higher count means higher cold exposure.
+
+#### `txle15_cold_days`
+
+Unit: `days`
+
+Formula:
+- Use daily maximum temperature `tasmax`.
+- Count days where polygon-average Tmax is `<= 15C`.
+
+Interpretation:
+- Number of cold daytime conditions.
+- Higher count means higher cold exposure.
+
+#### `tx10p_cool_days_pct`
+
+Unit: `%`
+
+Formula:
+- Use daily maximum temperature `tasmax`.
+- Compute ETCCDI-style day-of-year 10th percentile thresholds from baseline
+  years.
+- Baseline currently configured as `(1981, 2010)`.
+- Uses a 5-day moving window and nearest quantile.
+- Count/evaluate days below the threshold as a percentage.
+
+Interpretation:
+- Relative frequency of unusually cool days compared with historical local
+  climate.
+- Higher percentage means more relative cold exposure.
+
+#### `tn10p_cool_nights_pct`
+
+Unit: `%`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Compute ETCCDI-style day-of-year 10th percentile thresholds from baseline
+  years.
+- Baseline currently configured as `(1981, 2010)`.
+- Uses a 5-day moving window and nearest quantile.
+- Count/evaluate nights below the threshold as a percentage.
+
+Interpretation:
+- Relative frequency of unusually cool nights compared with historical local
+  climate.
+- Higher percentage means more relative night-time cold exposure.
+
+#### `csdi_cold_spell_days`
+
+Unit: `days`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Compute ETCCDI-style day-of-year 10th percentile thresholds from baseline
+  years.
+- Baseline currently configured as `(1981, 2010)`.
+- Uses a 5-day moving window, nearest quantile, and minimum spell length of 6
+  days.
+- Count days contributing to qualifying cold spells.
+
+Interpretation:
+- Persistence of relative cold spells.
+- Higher values mean longer/more frequent cold-spell exposure.
+
+#### `tnle10_consecutive_cold_nights`
+
+Unit: `days`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Flag days/nights where Tmin is `<= 10C`.
+- Return the longest consecutive run.
+
+Interpretation:
+- Persistence of absolute cold-night conditions.
+- Higher values mean longer cold-night spells.
+
+### 6.3 Period and Ensemble Aggregation
+
+Per model and geography:
+1. Compute annual metric values.
+2. Aggregate annual values into configured periods by taking the mean across
+   available years.
+3. Historical baseline period: `1990-2010`.
+4. Future periods: `2020-2040`, `2040-2060`, `2060-2080`.
+
+Across models:
+- The master builder computes ensemble `mean`, `std`, `median`, `p05`, `p95`,
+  `n_models`, and `values_per_model`.
+- Dashboard statistic `mean` reads the ensemble mean period column.
+
+Example selected columns:
+- `winter_tas_mean_C__ssp585__2060-2080__mean`
+- `days_tn_le_10C__ssp585__2060-2080__mean`
+- `csdi_days__ssp585__2060-2080__mean`
+
+Baseline comparison columns use historical `1990-2010` where available.
+
+### 6.4 Normalization and Risk Interpretation
+
+Cold Risk is direction-sensitive.
+
+Expected direction:
+- For temperature magnitude metrics, lower is worse:
+  - `tas_winter_mean`
+  - `tasmin_winter_mean`
+  - `tnn_annual_min`
+  - `tasmin_winter_min`
+- For count/spell/percentile metrics, higher is worse:
+  - `tnle10_cold_nights`
+  - `tnle5_severe_cold_nights`
+  - `txle15_cold_days`
+  - `tx10p_cool_days_pct`
+  - `tn10p_cool_nights_pct`
+  - `csdi_cold_spell_days`
+  - `tnle10_consecutive_cold_nights`
+
+High-priority implementation review:
+- The registry default is `rank_higher_is_worse=True`.
+- The cold temperature magnitude metrics listed above must explicitly set
+  `rank_higher_is_worse=False`.
+- If they do not, composite normalization can treat warmer winter temperatures
+  as higher cold risk, which would invert part of the Cold Risk bundle.
+- This affects not only the composite score, but also rankings, percentiles,
+  risk classes, driver selection, and portfolio heatmaps for those metrics.
+
+For individual metric deep-dive views:
+- `Index value` is the selected raw metric/statistic.
+- `Delta vs baseline` is selected value minus historical baseline.
+- For cold temperature magnitude metrics, positive deltas usually mean warming /
+  reduced cold exposure, not increased cold risk. UI interpretation needs
+  direction-aware language.
+
+Risk class from percentile:
+- The generic percentile class system assumes higher percentile is worse after
+  direction handling.
+- This is only scientifically correct if `rank_higher_is_worse` is set
+  correctly for each metric.
+
+### 6.5 Bundle Score Calculation
+
+For composite scoring:
+1. Resolve each of the 11 component metric columns for the selected scenario and
+   period.
+2. Normalize each component across the available geography frame to a `0-100`
+   higher-is-worse risk scale.
+3. Apply configured weights.
+4. Renormalize weights row-wise across available component metrics.
+5. Set score to `NaN` if no component is available.
+
+Formula:
+
+```text
+bundle_score =
+  sum(normalized_metric_i * weight_i for available metrics)
+  / sum(weight_i for available metrics)
+```
+
+Direction handling is essential:
+- For lower-is-worse temperature metrics, normalization should invert the scale.
+- For higher-is-worse count/spell metrics, normalization should not invert the
+  scale.
+
+### 6.6 UI Presentation
+
+Deep Dive metric view:
+- Raw metric values should be interpreted carefully:
+  - lower temperatures can indicate higher cold hazard;
+  - higher cold-day/cold-night counts indicate higher cold hazard.
+- Baseline deltas should be interpreted directionally:
+  - warming deltas for Tmin/Tas winter metrics can reduce cold risk;
+  - increasing cold-day counts can increase cold risk.
+- Scenario comparison is available for climate metrics.
+- Trends may be available where yearly outputs exist.
+
+Portfolio heatmap:
+- Displays percentiles, not raw values.
+- Percentiles must be direction-aware to be meaningful for lower-is-worse
+  temperature metrics.
+- A high percentile should always mean higher cold risk; this depends on correct
+  registry direction flags.
+
+Glance / bundle view:
+- Displays persisted `composite_cold_risk` bundle scores.
+- Component drivers should be checked after direction correction, because
+  inverted metrics could produce misleading drivers.
+
+### 6.7 Validation Checks and Open Methodology Comments
+
+Recommended validation checks:
+1. Pick one district/block and verify one lower-is-worse metric:
+   - `tasmin_winter_min` raw value.
+   - expected cold-risk direction.
+   - normalized score direction.
+   - ranking and percentile direction.
+2. Verify threshold count metrics:
+   - `tnle10_cold_nights`
+   - `tnle5_severe_cold_nights`
+   - `txle15_cold_days`
+3. Verify percentile cold metrics:
+   - `tx10p_cool_days_pct`
+   - `tn10p_cool_nights_pct`
+   - `csdi_cold_spell_days`
+4. Verify composite:
+   - pull all 11 component columns for one geography;
+   - normalize with correct direction for each component;
+   - apply weights;
+   - compare to `composite_cold_risk`.
+
+Open methodology comments:
+- Directionality is the biggest issue for this bundle. Lower winter temperature
+  and lower Tmin metrics should be flagged `rank_higher_is_worse=False`;
+  otherwise the composite may invert part of the cold-risk signal.
+- DJF handling needs explicit review. The current seasonal functions select
+  months `[12, 1, 2]` within each processed year. That may not represent
+  meteorological winter as a cross-year season spanning December of one year and
+  January-February of the next. This affects `tas_winter_mean`,
+  `tasmin_winter_mean`, and `tasmin_winter_min`.
+- The right DJF convention should be chosen and documented:
+  - calendar-year DJF subset: Jan-Feb and Dec from the same calendar year;
+  - meteorological winter season: Dec of previous year plus Jan-Feb of current
+    winter year;
+  - water/climate-year convention if the input pipeline uses one.
+- If the current implementation is retained, UI/docs should avoid implying
+  cross-year meteorological DJF unless that is actually computed.
+- TN10p/TX10p/CSDI use `baseline_years: (1981, 2010)` while dashboard
+  historical deltas use `1990-2010`. This recurring baseline mismatch should be
+  consolidated and resolved across percentile metrics.
+- Registry descriptions for CSDI say cold spell uses `TN < 10th percentile`,
+  while the configured `exceed_ge=True` with `direction="below"` makes the
+  special-case workflow inclusive (`<= threshold`). This may be small numerically
+  but should be aligned with the intended ETCCDI convention.
+- Spatial aggregation should be reviewed. Current method computes indices from
+  polygon-average daily temperature. For local cold extremes, grid-cell index
+  calculation followed by zonal aggregation may better preserve localized cold
+  pockets, especially in heterogeneous terrain.
+- Threshold choices need provenance: `TN <= 10C`, `TN <= 5C`, and `TX <= 15C`
+  are workbook-aligned, but should be documented with rationale for
+  India/Telangana use.
 
 ## 7. Thematic - Agriculture & Growing Conditions
 
