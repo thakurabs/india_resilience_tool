@@ -477,7 +477,245 @@ Heat Risk vs Heat Stress:
 
 ## 2. Thematic - Drought Risk
 
-Pending review.
+### 2.1 Bundle Definition
+
+Dashboard selector label: `Thematic - Drought Risk`
+
+Canonical bundle name: `Drought Risk`
+
+Composite metric slug: `composite_drought_risk`
+
+Composite display label: `Composite Drought Risk`
+
+Supported levels:
+- Admin district
+- Admin block
+
+Supported scenarios:
+- `ssp245`
+- `ssp585`
+
+The active Drought Risk bundle uses three Standardised Precipitation Index
+(SPI) drought-event metrics. The configured weights sum to 1.0. All component
+metrics are currently interpreted as higher-is-worse because they count drought
+events.
+
+| Component group | Metric slug | Metric label | Weight |
+|---|---|---|---:|
+| Seasonal Drought | `spi3_count_events_lt_minus1` | SPI3: Count of drought events with SPI < -1 | 0.20 |
+| Meteorological Drought | `spi6_count_events_lt_minus1` | SPI6: Count of drought events with SPI < -1 | 0.30 |
+| Long-term Drought | `spi12_count_events_lt_minus1` | SPI12: Count of drought events with SPI < -1 | 0.50 |
+
+Implementation references:
+- Bundle catalog: `india_resilience_tool/config/dashboard_bundles.py`
+- Bundle weights: `india_resilience_tool/config/bundle_weights.py`
+- Metric registry: `india_resilience_tool/config/metrics_registry.py`
+- SPI workflow: `tools/pipeline/compute_indices_multiprocess.py`
+- Core score helpers: `india_resilience_tool/analysis/bundle_scores.py`
+
+### 2.2 Metric-by-Metric Index Calculation
+
+Drought Risk uses precipitation variable `pr`.
+
+Precipitation unit handling:
+- Daily precipitation is converted to `mm/day` where needed.
+- Daily precipitation is aggregated to monthly precipitation totals before SPI
+  calculation.
+
+Current spatial aggregation:
+- For each geography polygon, the pipeline masks grid cells to the unit and
+  computes a daily spatial mean over `lat` and `lon`.
+- Monthly totals and SPI are then computed from that polygon-average daily time
+  series.
+
+SPI workflow:
+1. Aggregate daily precipitation to monthly totals.
+2. Compute rolling accumulated precipitation over the configured SPI scale.
+3. Fit a Gamma distribution per calendar month on the configured baseline
+   period, with zero-precipitation handling.
+4. Transform monthly accumulated precipitation to a standard normal SPI value.
+5. Annualize monthly SPI values using the configured annual aggregation.
+
+For future scenarios:
+- SPI parameters are fitted from the same model's historical baseline period.
+- Those fitted historical parameters are then applied to the future scenario
+  monthly precipitation series.
+
+Annual aggregation:
+- The three Drought Risk metrics use `annual_aggregation: count_events_lt`.
+- The threshold is `-1.0`.
+- A drought event is a contiguous run of monthly SPI values below `-1.0`.
+- The annual value is the number of contiguous drought-event runs in that year.
+- A minimum valid-months check is applied; the default is 9 valid months per
+  year.
+
+#### SPI3 Drought Events: `spi3_count_events_lt_minus1`
+
+Output base column: `spi3_events_lt_minus1`
+
+Unit: `events`
+
+Formula:
+- Compute 3-month rolling precipitation accumulations.
+- Convert to SPI3 using Gamma parameters fitted per calendar month from the
+  configured baseline.
+- Within each year, count contiguous monthly runs where `SPI3 < -1.0`.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Scale: 3 months.
+- Threshold: `SPI < -1.0`.
+
+Interpretation:
+- Seasonal / short-term drought episode count.
+- Higher values imply more frequent moderate-or-worse short-term drought
+  episodes.
+
+#### SPI6 Drought Events: `spi6_count_events_lt_minus1`
+
+Output base column: `spi6_events_lt_minus1`
+
+Unit: `events`
+
+Formula:
+- Compute 6-month rolling precipitation accumulations.
+- Convert to SPI6 using Gamma parameters fitted per calendar month from the
+  configured baseline.
+- Within each year, count contiguous monthly runs where `SPI6 < -1.0`.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Scale: 6 months.
+- Threshold: `SPI < -1.0`.
+
+Interpretation:
+- Medium-term meteorological drought episode count.
+- Higher values imply more frequent half-year rainfall-deficit episodes.
+
+#### SPI12 Drought Events: `spi12_count_events_lt_minus1`
+
+Output base column: `spi12_events_lt_minus1`
+
+Unit: `events`
+
+Formula:
+- Compute 12-month rolling precipitation accumulations.
+- Convert to SPI12 using Gamma parameters fitted per calendar month from the
+  configured baseline.
+- Within each year, count contiguous monthly runs where `SPI12 < -1.0`.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Scale: 12 months.
+- Threshold: `SPI < -1.0`.
+
+Interpretation:
+- Long-term drought episode count.
+- Higher values imply more frequent persistent annual-scale rainfall-deficit
+  episodes.
+- This metric receives the largest bundle weight, so the composite is tilted
+  toward long-term drought persistence.
+
+### 2.3 Period and Ensemble Aggregation
+
+Per model and geography:
+1. Compute annual drought-event counts.
+2. Aggregate annual values into configured periods by taking the mean across
+   available years.
+3. Historical baseline period: `1990-2010`.
+4. Future periods: `2020-2040`, `2040-2060`, `2060-2080`.
+
+Across models:
+- The master builder computes ensemble `mean`, `std`, `median`, `p05`, `p95`,
+  `n_models`, and `values_per_model`.
+- Dashboard views commonly use statistic `mean`, so they read the ensemble mean
+  columns.
+
+Example selected table column:
+- `spi12_events_lt_minus1__ssp585__2060-2080__mean`
+
+Baseline comparison column:
+- `spi12_events_lt_minus1__historical__1990-2010__mean`
+
+### 2.4 Normalization and Risk Interpretation
+
+For each component metric:
+- Raw event counts are normalized across the active comparison frame to a
+  0-100 higher-worse scale.
+- Since all Drought Risk metrics are event counts, higher event counts receive
+  higher normalized scores.
+- If all finite values are identical, all finite rows receive `50.0`.
+- Missing values remain missing for that component.
+
+Composite score:
+
+```text
+Drought Risk score =
+  0.20 * norm(spi3_count_events_lt_minus1)
++ 0.30 * norm(spi6_count_events_lt_minus1)
++ 0.50 * norm(spi12_count_events_lt_minus1)
+```
+
+Missing-data behavior:
+- Metrics missing from the source frame are skipped.
+- For a row with some valid component metrics, weights are renormalized across
+  available metrics.
+- Rows with no valid component metrics receive `NaN`.
+
+Risk meaning:
+- Higher composite score means higher relative meteorological Drought Risk
+  within the comparison frame.
+- The score is a relative screening index, not an absolute probability of
+  drought damage.
+
+### 2.5 Rankings, Percentiles, and UI Presentation
+
+For dashboard rankings:
+- `Rank (value)` ranks the active metric or composite value.
+- Percentiles are calculated within the active geographic comparison scope.
+- For district views, the comparison scope is the selected state.
+- For block views, the comparison scope is the selected district when a district
+  scope is active.
+
+Risk classes:
+- Risk class is assigned from the percentile value.
+- Higher percentiles indicate higher relative risk for this bundle.
+
+### 2.6 Validation Checks and Open Methodology Comments
+
+1. Baseline consistency:
+   - SPI metrics currently use `(1981, 2010)` for calibration.
+   - Dashboard delta baselines use `1990-2010` historical period columns.
+   - This should be resolved consistently across bundles if the mismatch was
+     not intentional.
+
+2. Event count does not encode duration or severity:
+   - A one-month SPI drought event and a six-month SPI drought event both count
+     as one event.
+   - The bundle does not currently encode event duration, accumulated SPI
+     deficit, minimum SPI value, or drought-area persistence.
+
+3. Long-term drought emphasis:
+   - SPI12 receives 50% of the composite weight.
+   - This makes the bundle more sensitive to persistent annual-scale deficits
+     than to short seasonal failures.
+   - This is defensible, but should remain explicit in the methodology.
+
+4. Spatial aggregation:
+   - Current implementation computes polygon-average precipitation first and
+     then calculates SPI.
+   - Computing SPI at grid-cell level first and then aggregating to polygons
+     would better preserve localized rainfall deficits.
+
+5. Meteorological drought only:
+   - SPI uses precipitation only.
+   - It does not account for temperature-driven evaporative demand.
+   - The bundle should be interpreted as meteorological drought risk, not full
+     agricultural, ecological, or hydrological drought risk.
+
+6. Future enhancement:
+   - SPEI or PET-aware drought indicators could be added if the goal is to
+     capture warming-driven atmospheric demand.
 
 ## 3. Thematic - Extreme Rainfall | Flash Flood Risk
 
