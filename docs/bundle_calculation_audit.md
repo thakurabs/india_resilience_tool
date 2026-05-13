@@ -30,7 +30,450 @@ Status:
 
 ## 1. Thematic - Heat Risk
 
-Pending review.
+### 1.1 Bundle Definition
+
+Dashboard selector label: `Thematic - Heat Risk`
+
+Canonical bundle name: `Heat Risk`
+
+Composite metric slug: `composite_heat_risk`
+
+Composite display label: `Composite Heat Risk`
+
+Supported levels:
+- Admin district
+- Admin block
+
+Supported scenarios:
+- `ssp245`
+- `ssp585`
+
+The active Heat Risk bundle uses fourteen temperature, warm-night, threshold,
+percentile, and heatwave-persistence metrics. The configured weights sum to
+1.0. All component metrics are currently interpreted as higher-is-worse.
+
+| Component group | Metric slug | Metric label | Weight |
+|---|---|---|---:|
+| Mean & Background Heat | `tas_annual_mean` | Annual Mean Temperature (TM Mean) | 0.0667 |
+| Mean & Background Heat | `tasmax_summer_mean` | Summer Max Temperature (MAM Mean) | 0.0667 |
+| Mean & Background Heat | `tas_summer_mean` | Summer Mean Temperature (TM; MAM Mean) | 0.0667 |
+| Extremes | `txx_annual_max` | Annual Maximum Temperature (TXx) | 0.0833 |
+| Extremes | `tn90p_warm_nights_pct` | Warm Nights (TN90p) | 0.0833 |
+| Extremes | `hwa_heatwave_amplitude` | Heatwave Amplitude (peak day) | 0.0833 |
+| Threshold-based Frequency | `txge30_hot_days` | Hot Days (TX >= 30 deg C) | 0.0667 |
+| Threshold-based Frequency | `txge35_extreme_heat_days` | Extreme Heat Days (TX >= 35 deg C) | 0.0667 |
+| Threshold-based Frequency | `tasmin_tropical_nights_gt25` | Tropical Nights (TR, TN > 25 deg C) | 0.0667 |
+| Percentile Extremes | `hwfi_tmean_90p` | Heat Wave Frequency Index (HWFI, days) | 0.0750 |
+| Percentile Extremes | `hwfi_events_tmean_90p` | Heat Wave Frequency (events) | 0.0750 |
+| Heatwave Characteristics | `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | 0.0667 |
+| Heatwave Characteristics | `tnx_annual_max` | Warmest Night | 0.0667 |
+| Heatwave Characteristics | `tx90p_hot_days_pct` | Hot Days (TX90p) | 0.0667 |
+
+Implementation references:
+- Bundle catalog: `india_resilience_tool/config/dashboard_bundles.py`
+- Bundle weights: `india_resilience_tool/config/bundle_weights.py`
+- Metric registry: `india_resilience_tool/config/metrics_registry.py`
+- Composite builder: `india_resilience_tool/compute/composite_metrics.py`
+- Core score helpers: `india_resilience_tool/analysis/bundle_scores.py`
+
+### 1.2 Metric-by-Metric Index Calculation
+
+Heat Risk uses temperature variables:
+- `tas`: daily mean near-surface air temperature
+- `tasmax`: daily maximum near-surface air temperature
+- `tasmin`: daily minimum near-surface air temperature
+
+Temperature unit handling:
+- Source model temperature is expected in Kelvin.
+- Reported degree-temperature metrics subtract `273.15` and are stored in
+  degrees Celsius.
+- Temperature differences, where used, are numerically identical in K and
+  degrees Celsius.
+
+Current spatial aggregation:
+- For each geography polygon, the pipeline masks grid cells to the unit and
+  computes a daily spatial mean over `lat` and `lon`.
+- The index functions then operate on that polygon-average daily time series.
+- This means localized hot pockets can be diluted before threshold and spell
+  calculations are performed.
+
+#### Annual Mean Temperature: `tas_annual_mean`
+
+Output base column: `annual_tas_mean_C`
+
+Unit: `deg C`
+
+Formula:
+- Compute polygon daily mean `tas`.
+- Average across all days in the year.
+- Convert Kelvin to degrees Celsius.
+
+Interpretation:
+- Background annual heat load.
+- Higher values imply warmer overall climate conditions.
+
+#### Summer Max Temperature: `tasmax_summer_mean`
+
+Output base column: `summer_tasmax_mean_C`
+
+Unit: `deg C`
+
+Formula:
+- Select March, April, and May.
+- Compute polygon daily mean `tasmax`.
+- Average selected daily maximum temperatures.
+- Convert Kelvin to degrees Celsius.
+
+Interpretation:
+- Pre-monsoon / summer daytime heat burden.
+- Higher values imply hotter daytime conditions during the main hot season.
+
+#### Summer Mean Temperature: `tas_summer_mean`
+
+Output base column: `summer_tas_mean_C`
+
+Unit: `deg C`
+
+Formula:
+- Select March, April, and May.
+- Compute polygon daily mean `tas`.
+- Average selected daily mean temperatures.
+- Convert Kelvin to degrees Celsius.
+
+Interpretation:
+- Seasonal mean thermal load, including both day and night conditions.
+- Higher values imply hotter average summer conditions.
+
+#### Annual Maximum Temperature: `txx_annual_max`
+
+Output base column: `txx_annual_max_C`
+
+Unit: `deg C`
+
+Formula:
+- Compute polygon daily mean `tasmax`.
+- Return the maximum daily value in the year.
+- Convert Kelvin to degrees Celsius.
+
+Interpretation:
+- Hottest daytime extreme in the year.
+- Higher values imply greater acute extreme-heat hazard.
+
+#### Warmest Night: `tnx_annual_max`
+
+Output base column: `tnx_annual_max_C`
+
+Unit: `deg C`
+
+Formula:
+- Compute polygon daily mean `tasmin`.
+- Return the maximum daily minimum temperature in the year.
+- Convert Kelvin to degrees Celsius.
+
+Interpretation:
+- Warmest night of the year.
+- Higher values imply reduced night-time cooling and greater accumulated heat
+  burden.
+
+#### Hot Days: `txge30_hot_days`
+
+Output base column: `days_tx_ge_30C`
+
+Unit: `days`
+
+Formula:
+- Count days where polygon daily mean `tasmax >= 30 deg C`.
+
+Interpretation:
+- Annual frequency of hot days.
+- Higher values imply more frequent daytime heat exposure.
+
+#### Extreme Heat Days: `txge35_extreme_heat_days`
+
+Output base column: `days_tx_ge_35C`
+
+Unit: `days`
+
+Formula:
+- Count days where polygon daily mean `tasmax >= 35 deg C`.
+
+Interpretation:
+- Annual frequency of stronger heat days.
+- Higher values imply more frequent severe daytime heat exposure.
+
+#### Tropical Nights: `tasmin_tropical_nights_gt25`
+
+Output base column: `tropical_nights_gt_25C`
+
+Unit: `days`
+
+Formula:
+- Count nights where polygon daily mean `tasmin > 25 deg C`.
+
+Current configuration:
+- The bundle intentionally uses `TN > 25 deg C` for the Indian Heat Risk
+  context instead of the legacy tropical-night threshold of `TN > 20 deg C`.
+
+Interpretation:
+- Frequency of warm nights.
+- Higher values imply less night-time cooling and greater cumulative heat
+  stress potential.
+
+#### Hot Days Percentile: `tx90p_hot_days_pct`
+
+Output base column: `tx90p_pct`
+
+Unit: `%`
+
+Formula:
+- Use `tasmax`.
+- Compute day-of-year 90th percentile thresholds from the configured baseline
+  period using a 5-day moving window.
+- Drop February 29 and use a 365-day no-leap day-of-year basis.
+- Count the share of evaluation-year days meeting the threshold.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Quantile method: `nearest`.
+- Threshold comparison: inclusive `>=` because `exceed_ge=True`.
+
+Interpretation:
+- Percentage of days that are unusually hot relative to the local historical
+  calendar-day distribution.
+- Higher values imply more frequent relative hot extremes.
+
+#### Warm Nights Percentile: `tn90p_warm_nights_pct`
+
+Output base column: `tn90p_pct`
+
+Unit: `%`
+
+Formula:
+- Use `tasmin`.
+- Compute day-of-year 90th percentile thresholds from the configured baseline
+  period using a 5-day moving window.
+- Count the share of evaluation-year nights meeting the threshold.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Quantile method: `nearest`.
+- Threshold comparison: inclusive `>=` because `exceed_ge=True`.
+
+Interpretation:
+- Percentage of nights that are unusually warm relative to the local historical
+  calendar-day distribution.
+- Higher values imply more frequent relative night-time heat.
+
+#### Warm Spell Duration Index: `wsdi_warm_spell_days`
+
+Output base column: `wsdi_days`
+
+Unit: `days`
+
+Formula:
+- Use `tasmax`.
+- Compute day-of-year 90th percentile thresholds from the configured baseline
+  period using a 5-day moving window.
+- Count days that belong to warm spells of at least 6 consecutive days meeting
+  the threshold.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Quantile method: `nearest`.
+- Threshold comparison: inclusive `>=` because `exceed_ge=True`.
+- Minimum spell length: 6 days.
+
+Interpretation:
+- Persistence of anomalously hot daytime conditions.
+- Higher values imply more sustained warm-spell exposure.
+
+#### Heat Wave Frequency Index: `hwfi_tmean_90p`
+
+Output base column: `hwfi_days_in_spells`
+
+Unit: `days`
+
+Formula:
+- Use `tas`.
+- Compute day-of-year 90th percentile thresholds from the configured baseline
+  period using a 5-day moving window.
+- Count days belonging to heatwave spells of at least 5 consecutive days
+  meeting the threshold.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Quantile method: `nearest`.
+- Threshold comparison: inclusive `>=` because `exceed_ge=True`.
+- Minimum spell length: 5 days.
+
+Interpretation:
+- Persistent heatwave exposure using daily mean temperature.
+- Higher values imply more days inside sustained mean-temperature heatwave
+  spells.
+
+#### Heat Wave Frequency Events: `hwfi_events_tmean_90p`
+
+Output base column: `hwfi_events_count`
+
+Unit: `events`
+
+Formula:
+- Registry variable is currently `tasmax`.
+- Compute day-of-year 90th percentile thresholds from the configured baseline
+  period using a 5-day moving window.
+- Count distinct heatwave events of at least 5 consecutive days meeting the
+  threshold.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Quantile method: `nearest`.
+- Threshold comparison: inclusive `>=` because `exceed_ge=True`.
+- Minimum spell length: 5 days.
+
+Interpretation:
+- Number of distinct heatwave episodes.
+- Higher values imply more frequent heatwave events.
+
+Review note:
+- The slug says `tmean`, but the registry currently uses `tasmax`. This should
+  either be documented as intentional or corrected for name / variable
+  consistency.
+
+#### Heatwave Amplitude: `hwa_heatwave_amplitude`
+
+Output base column: `hwa_peak_temp_C`
+
+Unit: `deg C`
+
+Formula:
+- Use `tasmax`.
+- Compute day-of-year 90th percentile thresholds from the configured baseline
+  period using a 5-day moving window.
+- Identify heatwave spells of at least 5 consecutive days meeting the threshold.
+- For each spell, compute mean exceedance above the threshold.
+- Select the hottest spell by mean exceedance.
+- Return the peak daily maximum temperature inside that spell.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Quantile method: `nearest`.
+- Threshold comparison: inclusive `>=` because `exceed_ge=True`.
+- Minimum spell length: 5 days.
+
+Interpretation:
+- Intensity of the worst heatwave spell.
+- Higher values imply more severe peak heatwave conditions.
+
+### 1.3 Period and Ensemble Aggregation
+
+Per model and geography:
+1. Compute annual metric values.
+2. Aggregate annual values into configured periods by taking the mean across
+   available years.
+3. Historical baseline period: `1990-2010`.
+4. Future periods: `2020-2040`, `2040-2060`, `2060-2080`.
+
+Across models:
+- The master builder computes ensemble `mean`, `std`, `median`, `p05`, `p95`,
+  `n_models`, and `values_per_model`.
+- Dashboard views commonly use statistic `mean`, so they read the ensemble mean
+  columns.
+
+Example selected table column:
+- `annual_tas_mean_C__ssp585__2060-2080__mean`
+
+Baseline comparison column:
+- `annual_tas_mean_C__historical__1990-2010__mean`
+
+### 1.4 Normalization and Risk Interpretation
+
+For each component metric:
+- Raw values are normalized across the active comparison frame to a 0-100
+  higher-worse scale.
+- Since all Heat Risk metrics are currently higher-is-worse, the lowest finite
+  value receives the lowest normalized score and the highest finite value
+  receives the highest normalized score.
+- If all finite values are identical, all finite rows receive `50.0`.
+- Missing values remain missing for that component.
+
+Composite score:
+
+```text
+Heat Risk score =
+  weighted mean(normalized component metrics)
+```
+
+Missing-data behavior:
+- Metrics missing from the source frame are skipped.
+- For a row with some valid component metrics, weights are renormalized across
+  available metrics.
+- Rows with no valid component metrics receive `NaN`.
+
+Risk meaning:
+- Higher composite score means higher relative Heat Risk within the comparison
+  frame.
+- The score is a relative screening index, not an absolute physical probability
+  of heat damage.
+
+### 1.5 Rankings, Percentiles, and UI Presentation
+
+For dashboard rankings:
+- `Rank (value)` ranks the active metric or composite value.
+- Percentiles are calculated within the active geographic comparison scope.
+- For district views, the comparison scope is the selected state.
+- For block views, the comparison scope is the selected district when a district
+  scope is active.
+
+Risk classes:
+- Risk class is assigned from the percentile value.
+- Higher percentiles indicate higher relative risk for this bundle.
+
+Heat Risk vs Heat Stress:
+- Heat Risk is temperature-only and hazard-oriented.
+- Heat Stress includes humidity and wet-bulb physiology.
+- The two bundles should not be interpreted as identical even though they share
+  some heat-related inputs.
+
+### 1.6 Validation Checks and Open Methodology Comments
+
+1. Baseline consistency:
+   - Percentile and heatwave metrics currently use `(1981, 2010)`.
+   - Dashboard delta baselines use `1990-2010` historical period columns.
+   - This should be resolved consistently across bundles if the mismatch was
+     not intentional.
+
+2. Inclusive vs strict percentile thresholds:
+   - Current config uses inclusive `>=` for TX90p, TN90p, WSDI, HWFI, and HWA.
+   - ETCCDI convention is generally strict `>`.
+   - The numerical difference is likely small for continuous model temperature,
+     but the chosen convention should be deliberate and documented.
+
+3. Spatial aggregation:
+   - Current implementation computes polygon-average daily temperature first
+     and then evaluates thresholds and spells.
+   - Computing indices at grid-cell level first and then aggregating to
+     polygons would better preserve localized extremes.
+   - The difference may be meaningful for large or heterogeneous districts /
+     blocks, especially where elevation, urbanization, or coastal gradients are
+     strong.
+
+4. Metric naming / variable consistency:
+   - `hwfi_events_tmean_90p` currently uses `tasmax` even though the slug says
+     `tmean`.
+   - Confirm whether this is intentional. If intentional, document the label as
+     tasmax-based. If not, align the variable and regenerated outputs.
+
+5. Correlated components:
+   - The bundle combines background heat, absolute thresholds, relative
+     thresholds, warm nights, and heatwave persistence.
+   - These are correlated but not redundant; together they form a broad
+     heat-hazard screening score rather than an independent-factor causal model.
+
+6. Threshold provenance:
+   - The `TN > 25 deg C` tropical-night threshold is an India-context
+     substitution from the workbook-aligned bundle.
+   - This should remain documented because it differs from the classic
+     tropical-night `TN > 20 deg C` definition.
 
 ## 2. Thematic - Drought Risk
 
