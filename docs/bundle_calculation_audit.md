@@ -7,8 +7,9 @@ aggregation, normalization and risk interpretation, bundle score calculation,
 UI presentation, and validation checks / open methodology comments.
 
 Status:
-- Sections 1, 2, and 4 onward are placeholders until reviewed in chat.
-- Section 3 has been reviewed and should be treated as the first draft dossier.
+- Sections 1 through 7 have been reviewed in chat and should be treated as
+  first draft dossiers.
+- Sector-wise sections 8 onward are placeholders until reviewed in chat.
 
 ## Dashboard Bundle Order
 
@@ -2058,7 +2059,480 @@ Open methodology comments:
 
 ## 7. Thematic - Agriculture & Growing Conditions
 
-Pending review.
+### 7.1 Bundle Definition
+
+Dashboard selector label: `Thematic - Agriculture & Growing Conditions`
+
+Canonical bundle name: `Agriculture & Growing Conditions`
+
+Composite metric slug: `composite_agriculture_growing_conditions`
+
+Composite display label: `Composite Agriculture & Growing Conditions`
+
+Supported levels:
+- Admin district
+- Admin block
+
+Supported scenarios:
+- `ssp245`
+- `ssp585`
+
+The active Agriculture & Growing Conditions bundle uses nine metrics spanning
+phenology, heat burden, cold burden, rainfall / drought, and temperature
+variability. The configured weights sum to 1.0.
+
+This bundle is direction-sensitive because some metrics are hazards where
+higher is worse, while others are resource / suitability metrics where lower is
+worse.
+
+| Component group | Metric slug | Metric label | Weight | Expected direction |
+|---|---|---|---:|---|
+| Growing Season / Phenology | `gsl_growing_season` | Growing Season Length (GSL) | 0.2000 | Lower is worse |
+| Heat Burden | `tasmax_summer_mean` | Summer Max Temperature (MAM Mean) | 0.0667 | Higher is worse |
+| Heat Burden | `txge35_extreme_heat_days` | Extreme Heat Days (TX >= 35 deg C) | 0.0667 | Higher is worse |
+| Heat Burden | `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | 0.0667 | Higher is worse |
+| Cold Burden | `tasmin_winter_mean` | Winter Min Temperature (DJF Mean) | 0.1000 | Lower should be worse |
+| Cold Burden | `tnle10_cold_nights` | Cold Nights (TN <= 10 deg C) | 0.1000 | Higher is worse |
+| Water Availability / Drought | `spi3_drought_index` | Standardised Precipitation Index 3-month (SPI3) | 0.1000 | Lower is worse |
+| Water Availability / Drought | `prcptot_annual_total` | Total Wet-Day Precipitation (PRCPTOT) | 0.1000 | Lower is worse |
+| Temperature Variability / Suitability | `dtr_daily_temp_range` | Daily Temperature Range (DTR) | 0.2000 | Higher currently treated as worse |
+
+Implementation references:
+- Bundle catalog: `india_resilience_tool/config/dashboard_bundles.py`
+- Bundle weights: `india_resilience_tool/config/bundle_weights.py`
+- Metric registry: `india_resilience_tool/config/metrics_registry.py`
+- Temperature and precipitation compute functions:
+  `tools/pipeline/compute_indices_multiprocess.py`
+- Core score helpers: `india_resilience_tool/analysis/bundle_scores.py`
+
+### 7.2 Conceptual Interpretation
+
+This bundle is best interpreted as an agricultural growing-condition stress
+screening index.
+
+It is not a crop-yield model. It does not currently account for:
+- crop-specific calendars;
+- irrigation status;
+- soil type or soil moisture storage;
+- crop variety or phenological stage;
+- pest / disease pressure;
+- management practices;
+- flood or waterlogging impacts beyond the rainfall proxy selected here.
+
+The bundle combines:
+- length of the potential growing season;
+- high-temperature burden;
+- cold-night burden;
+- short-term meteorological drought;
+- annual rainfall availability;
+- diurnal temperature variability.
+
+Because these drivers can affect different crops differently, the composite is
+most appropriate for relative screening across geographies, not for estimating
+absolute crop loss.
+
+### 7.3 Metric-by-Metric Index Calculation
+
+Agriculture & Growing Conditions uses:
+- `tas`: daily mean near-surface air temperature;
+- `tasmax`: daily maximum near-surface air temperature;
+- `tasmin`: daily minimum near-surface air temperature;
+- `pr`: precipitation.
+
+Temperature unit handling:
+- Source temperature is expected in Kelvin.
+- Temperature outputs subtract `273.15` where stored as degrees Celsius.
+- DTR is a temperature difference, so the numeric difference is identical in K
+  and degrees Celsius.
+
+Precipitation unit handling:
+- Precipitation is converted to `mm/day` where needed.
+- PRCPTOT sums wet-day precipitation.
+- SPI uses monthly precipitation totals derived from daily precipitation.
+
+Current spatial aggregation:
+- For each geography polygon, the pipeline masks grid cells to the unit and
+  computes a daily spatial mean over `lat` and `lon`.
+- The index functions then operate on that polygon-average daily time series.
+- This can smooth localized heat, cold, and rainfall-deficit signals before
+  threshold, spell, and SPI calculations.
+
+#### Growing Season Length: `gsl_growing_season`
+
+Output base column: `gsl_days`
+
+Unit: `days`
+
+Formula:
+- Use daily mean temperature `tas`.
+- Drop February 29 to keep a 365-day no-leap basis.
+- Start of season: first occurrence of at least 6 consecutive days with
+  polygon-average `TM > 5 deg C`.
+- End of season: first occurrence after July 1 of at least 6 consecutive days
+  with polygon-average `TM < 5 deg C`.
+- Growing season length is the number of days between start and end.
+- If no end is found, the season continues to the end of the year.
+- If no start is found, output is `0`.
+
+Current direction:
+- Registry explicitly sets `rank_higher_is_worse=False`.
+
+Interpretation:
+- Shorter potential growing season increases agricultural suitability stress.
+- In many warm Indian locations, this metric may saturate at long values and
+  may contribute less differentiation than heat, drought, or DTR metrics.
+
+#### Summer Max Temperature: `tasmax_summer_mean`
+
+Output base column: `summer_tasmax_mean_C`
+
+Unit: `deg C`
+
+Formula:
+- Select March, April, and May.
+- Compute polygon daily mean `tasmax`.
+- Average selected daily maximum temperatures.
+- Convert Kelvin to degrees Celsius.
+
+Current direction:
+- Higher is worse.
+
+Interpretation:
+- Pre-monsoon / summer daytime heat burden relevant to crop heat stress.
+- Higher values imply stronger high-temperature stress potential.
+
+#### Extreme Heat Days: `txge35_extreme_heat_days`
+
+Output base column: `days_tx_ge_35C`
+
+Unit: `days`
+
+Formula:
+- Use daily maximum temperature `tasmax`.
+- Count days where polygon-average `TX >= 35 deg C`.
+
+Current direction:
+- Higher is worse.
+
+Interpretation:
+- Annual frequency of high-temperature days that can affect flowering, grain
+  filling, labor conditions, livestock, and irrigation demand.
+
+#### Warm Spell Duration Index: `wsdi_warm_spell_days`
+
+Output base column: `wsdi_days`
+
+Unit: `days`
+
+Formula:
+- Use daily maximum temperature `tasmax`.
+- Compute day-of-year 90th percentile thresholds from the configured baseline
+  period using a 5-day moving window.
+- Drop February 29 and use a 365-day no-leap basis.
+- Count days that belong to warm spells of at least 6 consecutive days meeting
+  the threshold.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Quantile method: `nearest`.
+- Threshold comparison: inclusive `>=` because `exceed_ge=True`.
+- Minimum spell length: 6 days.
+
+Current direction:
+- Higher is worse.
+
+Interpretation:
+- Persistent anomalous heat exposure.
+- More warm-spell days imply longer periods of crop heat stress and potentially
+  greater irrigation demand.
+
+#### Winter Minimum Temperature Mean: `tasmin_winter_mean`
+
+Output base column: `winter_tasmin_mean_C`
+
+Unit: `deg C`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Select months `[12, 1, 2]`.
+- Compute polygon daily mean Tmin.
+- Average selected daily minimum temperatures.
+- Convert Kelvin to degrees Celsius.
+
+Expected direction:
+- If the metric is intended as cold burden, lower should be worse.
+
+Implementation review note:
+- The inspected registry entry does not explicitly show
+  `rank_higher_is_worse=False`.
+- Since the registry default is higher-is-worse, this metric may currently be
+  inverted in composite scoring, rankings, percentiles, drivers, and heatmaps.
+- This is the same directionality risk identified in the Cold Risk bundle.
+
+Interpretation:
+- Background winter night-time cold condition.
+- Lower values imply greater cold-night stress potential for sensitive crops,
+  horticulture, livestock, and cold-wave exposure.
+
+#### Cold Nights: `tnle10_cold_nights`
+
+Output base column: `days_tn_le_10C`
+
+Unit: `days`
+
+Formula:
+- Use daily minimum temperature `tasmin`.
+- Count days/nights where polygon-average `TN <= 10 deg C`.
+
+Current direction:
+- Higher is worse.
+
+Interpretation:
+- Frequency of cold nights relevant to plains and central India.
+- Higher values imply more cold exposure days.
+
+#### SPI3 Drought Index: `spi3_drought_index`
+
+Output base column: `spi3_index`
+
+Unit: `index`
+
+Formula:
+- Convert daily precipitation to monthly precipitation totals.
+- Compute 3-month rolling precipitation accumulations.
+- Fit Gamma parameters per calendar month using the configured baseline period.
+- Transform monthly accumulated precipitation to a standard normal SPI3 value.
+- Annualize using the configured mean SPI aggregation for this index metric.
+
+Current configuration:
+- Baseline years: `(1981, 2010)`.
+- Scale: 3 months.
+
+Current direction:
+- Registry explicitly sets `rank_higher_is_worse=False`.
+
+Interpretation:
+- Short-term meteorological wetness / dryness condition.
+- Lower SPI3 values indicate drier conditions and higher agricultural drought
+  stress.
+- Positive SPI3 values indicate wetter-than-baseline conditions.
+
+#### Total Wet-Day Precipitation: `prcptot_annual_total`
+
+Output base column: `prcptot_mm`
+
+Unit: `mm`
+
+Formula:
+- Convert daily precipitation to `mm/day`.
+- Identify wet days where polygon-average precipitation is `>= 1 mm/day`.
+- Sum precipitation on those wet days over the year.
+
+Current direction:
+- Registry explicitly sets `rank_higher_is_worse=False`.
+
+Interpretation:
+- Annual wet-day rainfall availability proxy.
+- Lower totals imply greater water-availability stress in this bundle.
+
+Review note:
+- This metric is interpreted as water-availability stress only.
+- Very high rainfall can also harm agriculture through flooding,
+  waterlogging, disease, or delayed operations, but those effects are not
+  captured by the current lower-is-worse PRCPTOT direction.
+
+#### Daily Temperature Range: `dtr_daily_temp_range`
+
+Output base column: `dtr_mean_C`
+
+Unit: `deg C`
+
+Formula:
+- Use daily maximum temperature `tasmax` and daily minimum temperature `tasmin`.
+- Compute polygon daily mean `tasmax`.
+- Compute polygon daily mean `tasmin`.
+- Align the two daily time series.
+- Compute `tasmax - tasmin` for each day.
+- Average daily differences across the year.
+
+Current direction:
+- The inspected registry entry does not explicitly set
+  `rank_higher_is_worse=False`, so the default higher-is-worse direction likely
+  applies.
+
+Interpretation:
+- Mean diurnal temperature range.
+- Larger DTR can be interpreted as thermal variability / suitability stress,
+  but agronomic response is crop- and season-specific.
+
+Review note:
+- The higher-is-worse direction is defensible if the bundle treats high daily
+  thermal amplitude as a stressor.
+- The rationale should be documented because DTR is not universally harmful in
+  all cropping systems.
+
+### 7.4 Period and Ensemble Aggregation
+
+Per model and geography:
+1. Compute annual metric values.
+2. Aggregate annual values into configured periods by taking the mean across
+   available years.
+3. Historical baseline period: `1990-2010`.
+4. Future periods: `2020-2040`, `2040-2060`, `2060-2080`.
+
+Across models:
+- The master builder computes ensemble `mean`, `std`, `median`, `p05`, `p95`,
+  `n_models`, and `values_per_model`.
+- Dashboard views commonly use statistic `mean`, so they read ensemble mean
+  columns.
+
+Example selected columns:
+- `gsl_days__ssp585__2060-2080__mean`
+- `days_tx_ge_35C__ssp585__2060-2080__mean`
+- `spi3_index__ssp585__2060-2080__mean`
+- `prcptot_mm__ssp585__2060-2080__mean`
+
+Baseline comparison columns use historical `1990-2010` where available.
+
+### 7.5 Normalization and Risk Interpretation
+
+Agriculture & Growing Conditions is direction-sensitive.
+
+Expected direction handling:
+- Lower is worse:
+  - `gsl_growing_season`
+  - `tasmin_winter_mean` if used as cold burden
+  - `spi3_drought_index`
+  - `prcptot_annual_total`
+- Higher is worse:
+  - `tasmax_summer_mean`
+  - `txge35_extreme_heat_days`
+  - `wsdi_warm_spell_days`
+  - `tnle10_cold_nights`
+  - `dtr_daily_temp_range` if high DTR is accepted as a stressor
+
+Known explicit registry direction flags:
+- `gsl_growing_season`: `rank_higher_is_worse=False`
+- `spi3_drought_index`: `rank_higher_is_worse=False`
+- `prcptot_annual_total`: `rank_higher_is_worse=False`
+
+High-priority directionality review:
+- `tasmin_winter_mean` should likely set `rank_higher_is_worse=False`.
+- Without that flag, warmer winter Tmin could be scored as higher agricultural
+  cold burden, which would invert that component.
+- `dtr_daily_temp_range` should be explicitly accepted as higher-is-worse or
+  assigned a different direction / transformation.
+
+Composite score:
+
+```text
+Agriculture & Growing Conditions score =
+  0.20   * norm(gsl_growing_season)
++ 0.0667 * norm(tasmax_summer_mean)
++ 0.0667 * norm(txge35_extreme_heat_days)
++ 0.0667 * norm(wsdi_warm_spell_days)
++ 0.10   * norm(tasmin_winter_mean)
++ 0.10   * norm(tnle10_cold_nights)
++ 0.10   * norm(spi3_drought_index)
++ 0.10   * norm(prcptot_annual_total)
++ 0.20   * norm(dtr_daily_temp_range)
+```
+
+Missing-data behavior:
+- Metrics missing from the source frame are skipped.
+- For a row with some valid component metrics, weights are renormalized across
+  available metrics.
+- Rows with no valid component metrics receive `NaN`.
+
+Risk meaning:
+- Higher composite score means more adverse relative growing conditions within
+  the comparison frame.
+- The score is a screening index for combined growing-condition stress, not a
+  crop-specific loss estimate.
+
+### 7.6 Rankings, Percentiles, and UI Presentation
+
+For dashboard rankings:
+- `Rank (value)` ranks the active metric or composite value after applying the
+  metric's configured risk direction.
+- Percentiles are calculated within the active geographic comparison scope.
+- For district views, the comparison scope is the selected state.
+- For block views, the comparison scope is the selected district when a district
+  scope is active.
+
+For direct metric interpretation:
+- `gsl_growing_season`: lower raw values are worse.
+- `tasmax_summer_mean`, `txge35_extreme_heat_days`, `wsdi_warm_spell_days`,
+  and `tnle10_cold_nights`: higher raw values are worse.
+- `spi3_drought_index`: lower raw values are worse.
+- `prcptot_annual_total`: lower raw values are worse in the current
+  water-availability interpretation.
+- `dtr_daily_temp_range`: currently higher raw values are likely worse, pending
+  methodology confirmation.
+- `tasmin_winter_mean`: lower raw values should likely be worse, pending
+  directionality correction.
+
+Portfolio heatmap:
+- Displays percentiles.
+- Percentiles must be direction-aware to be meaningful for mixed-direction
+  metrics.
+- A high percentile should always mean higher growing-condition stress.
+
+### 7.7 Validation Checks and Open Methodology Comments
+
+Recommended validation checks:
+1. Directionality spot checks:
+   - Confirm `gsl_growing_season` ranks shorter seasons as higher risk.
+   - Confirm `spi3_drought_index` ranks lower SPI as higher risk.
+   - Confirm `prcptot_annual_total` ranks lower rainfall as higher risk.
+   - Confirm `tasmin_winter_mean` is corrected or explicitly documented.
+   - Confirm the selected DTR direction.
+2. Metric recomputation for one block:
+   - `gsl_days`
+   - `summer_tasmax_mean_C`
+   - `days_tx_ge_35C`
+   - `wsdi_days`
+   - `winter_tasmin_mean_C`
+   - `days_tn_le_10C`
+   - `spi3_index`
+   - `prcptot_mm`
+   - `dtr_mean_C`
+3. Composite recomputation:
+   - Pull all nine component columns for one geography.
+   - Normalize each component with the correct direction.
+   - Apply configured weights.
+   - Compare to `composite_agriculture_growing_conditions`.
+4. UI checks:
+   - Verify direct metric rank and percentile direction for lower-is-worse
+     metrics.
+   - Verify portfolio heatmap percentiles for mixed-direction metrics.
+   - Verify top-change views are interpreted carefully for lower-is-worse
+     metrics.
+
+Open methodology comments:
+- `tasmin_winter_mean` directionality is the highest-priority issue for this
+  bundle. If retained as a cold-burden metric, it should likely be flagged
+  `rank_higher_is_worse=False`.
+- DJF handling recurs. The current seasonal function selects months
+  `[12, 1, 2]` within each processed calendar year. This may not represent
+  cross-year meteorological DJF. If retained, documentation should describe it
+  as a calendar-year winter-month subset rather than a true DJF season.
+- Baseline consistency recurs. WSDI and SPI3 use `(1981, 2010)`, while
+  dashboard historical deltas use `1990-2010`. This should be consolidated if
+  the mismatch was not intentional.
+- Spatial aggregation should be reviewed. Grid-cell index calculation followed
+  by zonal aggregation may better preserve local agricultural stress signals,
+  especially for heat thresholds, cold nights, SPI, PRCPTOT, and GSL in large
+  or heterogeneous polygons.
+- The PRCPTOT direction assumes rainfall shortage is the relevant agricultural
+  stress. It does not capture excess rainfall, flood, waterlogging, or crop
+  disease risk from very wet conditions.
+- DTR direction and transformation should be confirmed. A simple higher-is-worse
+  DTR treatment may be reasonable as a thermal variability stress proxy, but
+  crop response is nonlinear and crop-specific.
+- The bundle should be labeled and documented as a broad screening index for
+  growing-condition stress, not a replacement for crop-specific agronomic or
+  yield modeling.
 
 ## 8. Sector-wise - Agricultural Risk
 
