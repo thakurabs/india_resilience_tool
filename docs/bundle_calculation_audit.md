@@ -11,6 +11,34 @@ Status:
   first draft dossiers.
 - Sector-wise sections 8 onward are placeholders until reviewed in chat.
 
+## Cross-Cutting Methodology Notes
+
+### Spatial Aggregation Recommendation
+
+Recommended future method for gridded climate-to-polygon aggregation:
+- Use area-weighted polygon overlap between each climate grid cell and the
+  target geography polygon.
+- Compute grid-cell overlap areas in an equal-area CRS, then use those
+  overlap areas as spatial weights.
+- For `aggregate_then_compute` semantics, first build the polygon daily time
+  series as an overlap-area-weighted mean and then compute thresholds,
+  spell lengths, annual maxima, seasonal totals, and other metrics.
+- For `compute_then_aggregate` semantics, first compute the metric at each
+  grid cell and then aggregate the resulting metric field using the same
+  overlap-area weights.
+
+Rationale:
+- Current boolean-mask approaches are all-or-nothing at polygon boundaries
+  and can over- or under-represent partial cells, especially for coarse
+  climate grids, small polygons, and comparisons across datasets with
+  different resolutions.
+- Area-weighted polygon overlap is more defensible for district/block and
+  hydro-unit summaries because each grid cell contributes in proportion to
+  the area that actually lies inside the geography.
+- Any migration from the current method should be treated as a methodology
+  change and accompanied by parity diagnostics against existing processed
+  metrics.
+
 ## Dashboard Bundle Order
 
 1. Thematic - Heat Risk
