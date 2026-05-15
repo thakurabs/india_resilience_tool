@@ -294,17 +294,11 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "compute": "tx90p_etccdi",
         "params": {
             "percentile": 90,
-            # Match ETCCDI reference baseline you validated against
             "baseline_years": (1981, 2010),
-            # ETCCDI-style moving window (5-day = +/-2 days around day-of-year)
             "window_days": 5,
-            # Quantile method matters for exact matching (esp. small samples)
-            "quantile_method": "nearest",
-            # ETCCDI convention is strictly "above" the percentile; set True only if you
-            # found the reference behaves like >= for your dataset (keep False by default)
-            "exceed_ge": True,
-            # Optional: if your final best match used smoothing on daily thresholds,
-            # set an integer window (e.g., 5). Otherwise omit or keep None.
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             # "smooth": 5,
         },
         "group": "temperature",
@@ -326,10 +320,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "percentile": 90,
             "baseline_years": (1981, 2010),
             "window_days": 5,
-            "quantile_method": "nearest",
-            # ETCCDI convention is ">" not ">="; keep False unless you intentionally chose otherwise
-            "exceed_ge": True,
-            # optional smoothing if needed later
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             # "smooth": 5,
         },
         "group": "temperature",
@@ -792,8 +785,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "percentile": 90,
             "window_days": 5,
-            "quantile_method": "nearest",
-            "exceed_ge": True,
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 6,
             "direction": "above",
@@ -863,8 +857,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "pct": 90,
             "window_days": 5,
-            "quantile_method": "nearest",
-            "exceed_ge": True,
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 5,
         },
@@ -905,8 +900,10 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "pct": 90,
             "window_days": 5,
-            "quantile_method": "nearest",
-            "exceed_ge": True,
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            # Slug name is historical; metric uses tasmax per IMD heatwave criteria.
+            "quantile_method": "linear",
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 5,
         },
@@ -952,8 +949,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "pct": 90,
             "window_days": 5,
-            "quantile_method": "nearest",
-            "exceed_ge": True,
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 5,
         },

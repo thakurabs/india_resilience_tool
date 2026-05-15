@@ -86,6 +86,16 @@ from paths import (
 )
 from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
+from india_resilience_tool.compute.heat_risk_gridfirst import (
+    DEFAULT_BASELINE_YEARS as HEAT_RISK_GRIDFIRST_BASELINE_YEARS,
+    HEAT_RISK_GRIDFIRST_SLUGS,
+    build_area_weights as build_heat_risk_area_weights,
+    compute_heat_risk_rows_for_metric,
+    coverage_from_weights as heat_risk_coverage_from_weights,
+    dataset_grid_spec as heat_risk_dataset_grid_spec,
+    read_spatial_weights_cache as read_heat_risk_spatial_weights_cache,
+    write_spatial_weights_cache as write_heat_risk_spatial_weights_cache,
+)
 from india_resilience_tool.utils.naming import hydro_fs_token
 from india_resilience_tool.utils.processed_io import (
     ensure_directory,
@@ -179,6 +189,16 @@ def metric_root(slug: str) -> Path:
     root = BASE_OUTPUT_ROOT / slug
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _heat_risk_internal_root() -> Path:
+    """Private cache root for Heat Risk v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "heat_risk"
+
+
+def _heat_risk_spatial_weights_path(level: AdminLevel, grid_id: str) -> Path:
+    """Return the private spatial-weight cache path for a level/grid pair."""
+    return BASE_OUTPUT_ROOT / "_internal" / "spatial_weights" / f"{level}__{grid_id}.parquet"
 
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
@@ -3767,6 +3787,170 @@ def _ensemble_output_count(
     return count
 
 
+def _write_metric_rows_outputs(
+    *,
+    rows: list[dict],
+    coverage_df: pd.DataFrame,
+    metric_root_path: Path,
+    state_name: str,
+    level: AdminLevel,
+    slug: str,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    value_col: str,
+    year_to_paths: dict[int, dict[str, Path]],
+) -> dict[str, int] | None:
+    """Write yearly and period metric rows using the pipeline's existing layout."""
+    if not rows:
+        return None
+
+    _append_coverage_failure_rows(
+        rows,
+        coverage_df,
+        sorted(year_to_paths.keys()),
+        level=level,
+        value_col=value_col,
+    )
+
+    df_yearly = pd.DataFrame(rows)
+    _validate_output_unit_fields(
+        df_yearly,
+        level=level,
+        slug=slug,
+        model=model,
+        scenario=scenario,
+        stage_label="yearly outputs",
+    )
+
+    available_years = set(df_yearly["year"].unique())
+    if level == "sub_basin":
+        group_cols = ["basin", "sub_basin"]
+    elif level == "basin":
+        group_cols = ["basin"]
+    elif level == "block":
+        group_cols = ["district", "block"]
+    else:
+        group_cols = ["district"]
+    period_frames = []
+
+    for period_name, (y0, y1) in scenario_conf["periods"].items():
+        avail = [y for y in available_years if y0 <= y <= y1]
+        n_req, n_avail = y1 - y0 + 1, len(avail)
+        if n_avail >= MIN_YEARS_ABSOLUTE and n_avail / n_req >= MIN_YEARS_REQUIRED_FRACTION:
+            try:
+                grp = df_yearly[df_yearly["year"].isin(avail)].groupby(
+                    [c for c in group_cols if c in df_yearly.columns]
+                ).agg({"value": "mean"}).reset_index()
+                grp["period"] = period_name
+                grp["years_used_count"] = n_avail
+                grp["years_requested"] = n_req
+                grp[value_col] = grp["value"]
+                period_frames.append(grp)
+            except Exception as e:
+                logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
+
+    df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
+    if not df_periods.empty:
+        _validate_output_unit_fields(
+            df_periods,
+            level=level,
+            slug=slug,
+            model=model,
+            scenario=scenario,
+            stage_label="period outputs",
+        )
+
+    level_folder = get_level_folder(level)
+    yearly_file_count = 0
+    period_file_count = 0
+    if level == "sub_basin":
+        for (basin, sub_basin), grp_df in df_yearly.groupby(["basin", "sub_basin"]):
+            basin_safe = _safe_component(basin)
+            sub_basin_safe = _safe_component(sub_basin)
+            out_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
+            ensure_directory(out_dir)
+            grp_df = grp_df.copy()
+            grp_df["model"] = model
+            grp_df["scenario"] = scenario
+            write_csv(grp_df, out_dir / f"{sub_basin_safe}_yearly.csv", index=False)
+            yearly_file_count += 1
+            if not df_periods.empty:
+                period_grp = df_periods.loc[
+                    (df_periods["basin"] == basin) & (df_periods["sub_basin"] == sub_basin)
+                ].copy()
+                if not period_grp.empty:
+                    period_grp["model"] = model
+                    period_grp["scenario"] = scenario
+                    write_csv(period_grp, out_dir / f"{sub_basin_safe}_periods.csv", index=False)
+                    period_file_count += 1
+    elif level == "basin":
+        for basin_name in df_yearly["basin"].unique():
+            basin_safe = _safe_component(basin_name)
+            out_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
+            ensure_directory(out_dir)
+            basin_df = df_yearly[df_yearly["basin"] == basin_name].copy()
+            basin_df["model"] = model
+            basin_df["scenario"] = scenario
+            write_csv(basin_df, out_dir / f"{basin_safe}_yearly.csv", index=False)
+            yearly_file_count += 1
+            if not df_periods.empty:
+                period_df = df_periods[df_periods["basin"] == basin_name].copy()
+                if not period_df.empty:
+                    period_df["model"] = model
+                    period_df["scenario"] = scenario
+                    write_csv(period_df, out_dir / f"{basin_safe}_periods.csv", index=False)
+                    period_file_count += 1
+    elif level == "block":
+        for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
+            district_safe = _safe_component(district)
+            block_safe = _safe_component(block)
+            out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
+            ensure_directory(out_dir)
+            grp_df = grp_df.copy()
+            grp_df["model"] = model
+            grp_df["scenario"] = scenario
+            write_csv(grp_df, out_dir / f"{block_safe}_yearly.csv", index=False)
+            yearly_file_count += 1
+            if not df_periods.empty:
+                period_grp = df_periods.loc[
+                    (df_periods["district"] == district) & (df_periods["block"] == block)
+                ].copy()
+                if not period_grp.empty:
+                    period_grp["model"] = model
+                    period_grp["scenario"] = scenario
+                    write_csv(period_grp, out_dir / f"{block_safe}_periods.csv", index=False)
+                    period_file_count += 1
+    else:
+        for dist_name in df_yearly["district"].unique():
+            dist_safe = _safe_component(dist_name)
+            out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
+            ensure_directory(out_dir)
+            dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
+            dist_df["model"] = model
+            dist_df["scenario"] = scenario
+            write_csv(dist_df, out_dir / f"{dist_safe}_yearly.csv", index=False)
+            yearly_file_count += 1
+            if not df_periods.empty:
+                period_df = df_periods[df_periods["district"] == dist_name].copy()
+                if not period_df.empty:
+                    period_df["model"] = model
+                    period_df["scenario"] = scenario
+                    write_csv(period_df, out_dir / f"{dist_safe}_periods.csv", index=False)
+                    period_file_count += 1
+
+    logging.debug(f"[{slug}] Wrote {len(df_yearly)} yearly rows, {len(df_periods)} period rows for {model}/{scenario}")
+    _write_coverage_qc(
+        metric_root_path,
+        state_name=state_name,
+        level=level,
+        model=model,
+        scenario=scenario,
+        coverage_df=coverage_df,
+    )
+    return {"yearly_file_count": yearly_file_count, "period_file_count": period_file_count}
+
+
 # -----------------------------------------------------------------------------
 # CORE PROCESSING FUNCTION (Generalized for district/block)
 # -----------------------------------------------------------------------------
@@ -3841,6 +4025,106 @@ def process_metric_for_model_scenario(
     if primary_var not in ds_sample:
         ds_sample.close()
         return
+
+    if slug in HEAT_RISK_GRIDFIRST_SLUGS:
+        try:
+            grid = heat_risk_dataset_grid_spec(ds_sample)
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights = read_heat_risk_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+            )
+            if weights is None:
+                logging.info(
+                    "[%s] Building Heat Risk v2 spatial weights for level=%s grid=%s",
+                    slug,
+                    level,
+                    grid.grid_id,
+                )
+                weights = build_heat_risk_area_weights(gdf, grid, level=level)
+                write_heat_risk_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                )
+            coverage_df = heat_risk_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(
+                coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+                .astype(str)
+                .tolist()
+            )
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Heat Risk v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            metric_for_grid = dict(metric)
+            grid_params = dict(metric.get("params") or {})
+            grid_params["baseline_years"] = HEAT_RISK_GRIDFIRST_BASELINE_YEARS
+            grid_params.setdefault("quantile_method", "linear")
+            grid_params.setdefault("exceed_ge", False)
+            metric_for_grid["params"] = grid_params
+
+            if metric_for_grid.get("compute") == "annual_max_temperature":
+                baseline_year_to_paths = year_to_paths
+            else:
+                baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                    metric=metric_for_grid,
+                    primary_var=primary_var,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=SCENARIOS,
+                    year_to_paths=year_to_paths,
+                )
+                if missing_baseline or not baseline_year_to_paths:
+                    logging.warning(f"[{slug}] Missing Heat Risk v2 historical baseline for {model}/{scenario}")
+                    return
+
+            rows = compute_heat_risk_rows_for_metric(
+                metric=metric_for_grid,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                baseline_year_to_paths=baseline_year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_heat_risk_internal_root(),
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Heat Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
 
     extent_excluded_df = pd.DataFrame()
     boundary_gdf = gdf

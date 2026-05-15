@@ -188,6 +188,14 @@ python -m tools.pipeline.build_proposal_bundles --help
 This offline builder computes the proposal climate-risk bundles for admin `district` and `block` units only. It writes persisted proposal bundle masters under `IRT_DATA_DIR/processed/<composite_slug>/<state>/`.
 The dashboard surfaces those sector-wise proposal composites through grouped labels like `Sector-wise - Health Risk`, including district and block views for `Life & Livelihood Loss Risk` when its persisted block proposal bundle master is present.
 
+Heat Risk v2 spatial-weight cache builder:
+
+```bash
+python -m tools.pipeline.build_spatial_weights --help
+```
+
+This optional offline builder writes private grid-first area-overlap caches under `IRT_DATA_DIR/processed/_internal/spatial_weights/`. The climate compute pipeline can build missing caches on demand; dashboard runtime does not import `exactextract`.
+
 Launch behavior:
 - the app now opens into a climate-hazard discovery landing surface by default
 - the landing search bar filters state and district suggestions as you type

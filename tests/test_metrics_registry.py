@@ -26,6 +26,7 @@ from india_resilience_tool.config.metrics_registry import (
     get_pipeline_bundles,
     validate_registry_against_pipeline,
 )
+from india_resilience_tool.compute.heat_risk_gridfirst import HEAT_RISK_GRIDFIRST_SLUGS
 
 
 def test_pipeline_metrics_present() -> None:
@@ -89,6 +90,23 @@ def test_tropical_nights_gt25_metric_is_registered_for_heat_risk() -> None:
     heat_risk_metrics = set(get_metrics_for_bundle("Heat Risk", spatial_family="admin", level="district"))
     assert "tasmin_tropical_nights_gt25" in heat_risk_metrics
     assert "tasmin_tropical_nights_gt20" not in heat_risk_metrics
+
+
+def test_heat_risk_warm_percentile_metrics_use_linear_quantile_and_strict_exceedance() -> None:
+    audited = {
+        "tx90p_hot_days_pct",
+        "tn90p_warm_nights_pct",
+        "wsdi_warm_spell_days",
+        "hwfi_tmean_90p",
+        "hwfi_events_tmean_90p",
+        "hwa_heatwave_amplitude",
+    }
+
+    assert audited < HEAT_RISK_GRIDFIRST_SLUGS
+    for slug in audited:
+        spec = METRICS_BY_SLUG[slug]
+        assert spec.params["quantile_method"] == "linear"
+        assert spec.params["exceed_ge"] is False
 
 
 def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:

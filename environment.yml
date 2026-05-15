@@ -16,6 +16,7 @@ dependencies:
   - rasterio
   - shapely
   - pyproj
+  - exactextract
 
   # Pipeline / analytics
   - scipy
