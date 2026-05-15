@@ -421,6 +421,32 @@ def render_metric_ribbon(
         return False, "disabled (select a metric first)"
 
     with col:
+        body_ct = st.container()
+        toggle_ct = st.container()
+
+    _ribbon_collapsed = bool(st.session_state.get("ribbon_collapsed", False))
+    if _ribbon_collapsed:
+        # Hide the ribbon body container (matched via the marker div below)
+        # without skipping the render — widgets keep their session_state
+        # values so ribbon_ctx stays valid downstream.
+        st.markdown(
+            "<style>"
+            # Hide the innermost stVerticalBlock that contains the ribbon body
+            # marker. The `:not(:has(... nested))` clause excludes outer
+            # vertical blocks (e.g. the left workspace column) which would
+            # also be ancestors and would hide the toggle button strip too.
+            "[data-testid='stVerticalBlock']:has(.irt-ribbon-body-marker)"
+            ":not(:has([data-testid='stVerticalBlock'] .irt-ribbon-body-marker))"
+            "{display:none !important;}"
+            "</style>",
+            unsafe_allow_html=True,
+        )
+
+    with body_ct:
+        st.markdown(
+            '<div class="irt-ribbon-body-marker"></div>',
+            unsafe_allow_html=True,
+        )
         row1 = st.columns([2.2, 3.0, 1.8])
         row2 = st.columns([1.8, 2.2, 1.4])
         row3 = st.columns([2.4, 1.2, 1.8])
@@ -982,6 +1008,30 @@ def render_metric_ribbon(
                 disabled=(metric_ready and map_mode_options == ["Absolute value"]),
                 help=map_mode_help,
             )
+
+    with toggle_ct:
+        _t_left, _t_mid, _t_right = st.columns([1, 0.25, 1])
+        with _t_mid:
+            if _ribbon_collapsed:
+                if st.button(
+                    "⌄",
+                    key="btn_ribbon_expand",
+                    help="Expand metric ribbon",
+                    use_container_width=True,
+                    type="secondary",
+                ):
+                    st.session_state["ribbon_collapsed"] = False
+                    st.rerun()
+            else:
+                if st.button(
+                    "⌃",
+                    key="btn_ribbon_collapse",
+                    help="Collapse metric ribbon",
+                    use_container_width=True,
+                    type="secondary",
+                ):
+                    st.session_state["ribbon_collapsed"] = True
+                    st.rerun()
 
     sel_metric = str(st.session_state.get("registry_metric", registry_metric) or "").strip()
     metric_col: Optional[str] = None

@@ -64,6 +64,7 @@ SESSION_DEFAULTS: dict[str, Any] = {
 
     # Main layout (right panel)
     "right_panel_collapsed": False,
+    "ribbon_collapsed": False,
     "active_hydro_boundary_overlay": None,
 
     # Administrative level (NEW)
