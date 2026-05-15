@@ -5,7 +5,6 @@ from __future__ import annotations
 import pandas as pd
 
 from india_resilience_tool.app.map_pipeline import (
-    _build_map_render_signature,
     _build_nonspatial_details_source_df,
     _filter_frame_by_selection_value,
     _stack_legend_blocks,
@@ -137,57 +136,6 @@ def test_filter_frame_by_selection_value_handles_case_and_alias_mismatch() -> No
         selected_value="upper godavari",
     )
     assert basin_out["basin_name"].tolist() == ["Upper Godavari"]
-
-
-def test_build_map_render_signature_ignores_overlay_and_river_context_changes() -> None:
-    base = _build_map_render_signature(
-        level="block",
-        selected_state="Telangana",
-        selected_district="Adilabad",
-        selected_block="All",
-        selected_basin="All",
-        selected_subbasin="All",
-        metric_col="tas__ssp245",
-        map_value_col="_delta_abs",
-        baseline_col="tas__baseline",
-        map_mode="Change from 1990-2010 baseline",
-        hover_enabled=True,
-        crosswalk_overlay={"level": "district", "feature_keys": ["Telangana::Adilabad"]},
-        overlay_cache_signature=(),
-    )
-    overlay_changed = _build_map_render_signature(
-        level="block",
-        selected_state="Telangana",
-        selected_district="Adilabad",
-        selected_block="All",
-        selected_basin="All",
-        selected_subbasin="All",
-        metric_col="tas__ssp245",
-        map_value_col="_delta_abs",
-        baseline_col="tas__baseline",
-        map_mode="Change from 1990-2010 baseline",
-        hover_enabled=True,
-        crosswalk_overlay={"level": "district", "feature_keys": ["Telangana::Nirmal"]},
-        overlay_cache_signature=(),
-    )
-    river_changed = _build_map_render_signature(
-        level="block",
-        selected_state="Telangana",
-        selected_district="Adilabad",
-        selected_block="All",
-        selected_basin="All",
-        selected_subbasin="All",
-        metric_col="tas__ssp245",
-        map_value_col="_delta_abs",
-        baseline_col="tas__baseline",
-        map_mode="Change from 1990-2010 baseline",
-        hover_enabled=True,
-        crosswalk_overlay={"level": "district", "feature_keys": ["Telangana::Adilabad"]},
-        overlay_cache_signature=(("river_network", True, 75, "/tmp/river.geojson", 1.0),),
-    )
-
-    assert base == overlay_changed
-    assert base != river_changed
 
 
 def test_stack_legend_blocks_keeps_both_legend_fragments() -> None:

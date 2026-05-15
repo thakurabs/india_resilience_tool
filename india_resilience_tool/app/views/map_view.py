@@ -1099,7 +1099,7 @@ def render_map_view(
                 width=map_width,
                 height=map_height,
                 returned_objects=["last_object_clicked", "last_clicked", "last_active_drawing"],
-                use_container_width=False,
+                use_container_width=True,
                 key=map_key,
             )
         _render_responsive_map_resizer(

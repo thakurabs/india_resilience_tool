@@ -61,7 +61,6 @@ def _common_kwargs(tmp_path: Path) -> dict:
         "normalize_state_fn": alias,
         "crosswalk_overlay": None,
         "overlay_layers": (),
-        "overlay_cache_signature": (),
         "hover_enabled": False,
     }
 
@@ -148,8 +147,6 @@ def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
         level="block",
         merged=merged,
         display_gdf=merged,
-        session_state={},
-        render_signature=("block", "render"),
         selected_state="Telangana",
         selected_district="Adilabad",
         selected_basin="All",
@@ -165,7 +162,7 @@ def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
     assert out["features"][0]["properties"]["block_name"] == "Adilabad Rural"
 
 
-def test_build_folium_map_for_selection_reuses_patched_featurecollection_cache(
+def test_build_folium_map_for_selection_rebuilds_every_call(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -209,13 +206,10 @@ def test_build_folium_map_for_selection_reuses_patched_featurecollection_cache(
             "fillColor": ["#ff0000"],
         }
     )
-    session_state: dict = {}
     kwargs = dict(
         level="district",
         merged=merged,
         display_gdf=merged,
-        session_state=session_state,
-        render_signature=("district", "render"),
         selected_state="Telangana",
         selected_district="All",
         selected_basin="All",
@@ -228,8 +222,10 @@ def test_build_folium_map_for_selection_reuses_patched_featurecollection_cache(
     first = build_folium_map_for_selection(**kwargs)
     second = build_folium_map_for_selection(**kwargs)
 
-    assert patch_calls["count"] == 1
-    assert base_map_calls["count"] == 1
+    # Caches were removed: every call patches the FC and rebuilds the base map
+    # from scratch. Output must still be identical to the cached-path contract.
+    assert patch_calls["count"] == 2
+    assert base_map_calls["count"] == 2
     assert first["features"][0]["properties"]["fillColor"] == "#ff0000"
     assert second["features"][0]["properties"]["fillColor"] == "#ff0000"
 
@@ -298,8 +294,6 @@ def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
         level="district",
         merged=merged,
         display_gdf=merged,
-        session_state={},
-        render_signature=("district", "render"),
         selected_state="Telangana",
         selected_district="All",
         selected_basin="All",
@@ -315,7 +309,7 @@ def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
     assert out["features"][0]["properties"]["subbasin_name"] == "Pranhita"
 
 
-def test_build_folium_map_for_selection_reuses_base_map_on_overlay_only_reruns(
+def test_build_folium_map_for_selection_composes_overlay_on_each_rerun(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -373,14 +367,11 @@ def test_build_folium_map_for_selection_reuses_base_map_on_overlay_only_reruns(
             "fillColor": ["#ff0000"],
         }
     )
-    session_state: dict = {}
     common_kwargs = _common_kwargs(tmp_path)
     kwargs = dict(
         level="district",
         merged=merged,
         display_gdf=merged,
-        session_state=session_state,
-        render_signature=("district", "render"),
         selected_state="Telangana",
         selected_district="All",
         selected_basin="All",
@@ -403,7 +394,9 @@ def test_build_folium_map_for_selection_reuses_base_map_on_overlay_only_reruns(
         }
     )
 
-    assert base_map_calls["count"] == 1
+    # Caches were removed: each call rebuilds the base map. The first call
+    # has no overlay; the second composes an overlay on top of a freshly built map.
+    assert base_map_calls["count"] == 2
     assert overlay_calls["count"] == 1
     assert first["overlays"] == []
     assert len(second["overlays"]) == 1

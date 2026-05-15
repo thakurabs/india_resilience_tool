@@ -189,39 +189,6 @@ def _filter_frame_by_selection_value(
     return frame[mask]
 
 
-def _build_map_render_signature(
-    *,
-    level: str,
-    selected_state: str,
-    selected_district: str,
-    selected_block: str,
-    selected_basin: str,
-    selected_subbasin: str,
-    metric_col: str,
-    map_value_col: str,
-    baseline_col: Optional[str],
-    map_mode: str,
-    hover_enabled: bool,
-    crosswalk_overlay: Optional[Mapping[str, Any]],
-    overlay_cache_signature: tuple[Any, ...],
-) -> tuple[Any, ...]:
-    """Return a stable render signature for patched FeatureCollection caching."""
-    return (
-        str(level or ""),
-        str(selected_state or ""),
-        str(selected_district or ""),
-        str(selected_block or ""),
-        str(selected_basin or ""),
-        str(selected_subbasin or ""),
-        str(metric_col or ""),
-        str(map_value_col or ""),
-        str(baseline_col or ""),
-        str(map_mode or ""),
-        bool(hover_enabled),
-        tuple(overlay_cache_signature),
-    )
-
-
 def _level_aware_merge(
     *,
     adm2: Any,
@@ -662,7 +629,7 @@ def build_map_and_rankings(
             selected_value=selected_subbasin,
         )
 
-    overlay_layers, overlay_messages, overlay_cache_sig = build_overlay_render_layers(
+    overlay_layers, overlay_messages, _overlay_cache_sig = build_overlay_render_layers(
         overlay_states=overlay_states,
         spatial_family=spatial_family,
         admin_level=level_norm,
@@ -676,27 +643,10 @@ def build_map_and_rankings(
         selected_district=selected_district,
     )
 
-    render_signature = _build_map_render_signature(
-        level=level_norm,
-        selected_state=selected_state,
-        selected_district=selected_district,
-        selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
-        metric_col=metric_col,
-        map_value_col=map_value_col,
-        baseline_col=baseline_col,
-        map_mode=map_mode,
-        hover_enabled=bool(hover_enabled),
-        crosswalk_overlay=crosswalk_overlay,
-        overlay_cache_signature=overlay_cache_sig,
-    )
     folium_map = build_folium_map_for_selection(
         level=level_norm,
         merged=merged,
         display_gdf=display_gdf,
-        session_state=st.session_state,
-        render_signature=render_signature,
         selected_state=selected_state,
         selected_district=selected_district,
         selected_basin=selected_basin,
@@ -722,7 +672,6 @@ def build_map_and_rankings(
         simplify_tolerance_adm3=simplify_tol_adm3,
         crosswalk_overlay=crosswalk_overlay,
         overlay_layers=overlay_layers,
-        overlay_cache_signature=overlay_cache_sig,
         perf_section=perf_section,
     )
 

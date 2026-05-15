@@ -13,8 +13,7 @@ Contract:
 
 from __future__ import annotations
 
-import hashlib
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Mapping, Sequence, Tuple
 
 import folium
 import pandas as pd
@@ -207,20 +206,6 @@ def clone_featurecollection_for_patch(fc: Mapping[str, Any]) -> dict[str, Any]:
         features_out.append(feature_out)
     out["features"] = features_out
     return out
-
-
-def props_map_signature(props_map: Mapping[str, Mapping[str, Any]]) -> str:
-    """Return a stable signature for a patched-properties payload."""
-    hasher = hashlib.sha1()
-    for feature_key in sorted(str(k) for k in props_map.keys()):
-        hasher.update(feature_key.encode("utf-8"))
-        props = props_map.get(feature_key) or {}
-        for prop_key, prop_value in sorted(props.items(), key=lambda item: str(item[0])):
-            hasher.update(str(prop_key).encode("utf-8"))
-            if hasattr(prop_value, "item"):
-                prop_value = prop_value.item()
-            hasher.update(repr(prop_value).encode("utf-8"))
-    return hasher.hexdigest()
 
 
 def _string_series(frame: pd.DataFrame, column: str) -> pd.Series:

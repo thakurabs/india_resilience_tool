@@ -10,7 +10,6 @@ from india_resilience_tool.viz.folium_featurecollection import (
     build_props_map_from_gdf,
     clone_featurecollection_for_patch,
     patch_fc_properties,
-    props_map_signature,
 )
 
 
@@ -60,7 +59,6 @@ def test_build_props_map_from_gdf_vectorizes_block_keys_and_patch_preserves_geom
     assert props_map[feature_key]["fillColor"] == "#ff0000"
     assert "tas_annual_mean" in value_cols
     assert "_tooltip_value" in text_cols
-    assert props_map_signature(props_map) == props_map_signature(props_map)
 
     geometry = {"type": "Polygon", "coordinates": (((0, 0), (1, 0), (1, 1), (0, 0)),)}
     fc = {
