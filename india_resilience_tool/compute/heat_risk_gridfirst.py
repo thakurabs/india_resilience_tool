@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -17,7 +19,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import xarray as xr
-from pyproj import Transformer
+from pyproj import Transformer, datadir
 from shapely.geometry import box
 from shapely.ops import transform as shapely_transform
 
@@ -38,6 +40,29 @@ HEAT_RISK_GRIDFIRST_SLUGS = frozenset(
 GRIDFIRST_METHOD_VERSION = "heat-risk-v2-gridfirst-1"
 DEFAULT_ANALYSIS_CRS = "EPSG:6933"
 DEFAULT_BASELINE_YEARS = (1990, 2010)
+
+
+def _configure_pyproj_data_dir() -> None:
+    """Point pyproj at conda's PROJ database when its bundled path is unusable."""
+    candidates = [
+        os.environ.get("PROJ_DATA"),
+        os.environ.get("PROJ_LIB"),
+    ]
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidates.append(str(Path(conda_prefix) / "Library" / "share" / "proj"))
+    candidates.append(str(Path(sys.prefix) / "Library" / "share" / "proj"))
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        proj_db = Path(candidate) / "proj.db"
+        if proj_db.exists():
+            datadir.set_data_dir(str(proj_db.parent))
+            return
+
+
+_configure_pyproj_data_dir()
 
 
 @dataclass(frozen=True)
