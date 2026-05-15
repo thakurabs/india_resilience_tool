@@ -1102,9 +1102,18 @@ def render_map_view(
                 use_container_width=True,
                 key=map_key,
             )
+        # When the ribbon is collapsed, lift the responsive-resizer cap so the
+        # map can actually grow into the freed vertical space (the JS clamps to
+        # `max_height`, otherwise the map stays at ~700px even with more room).
+        _resizer_max = (
+            RESPONSIVE_MAP_MAX_HEIGHT + 250
+            if bool(st.session_state.get("ribbon_collapsed", False))
+            else RESPONSIVE_MAP_MAX_HEIGHT
+        )
         _render_responsive_map_resizer(
             map_key=map_key,
             default_height=map_height,
+            max_height=_resizer_max,
         )
 
     if not isinstance(returned, dict):

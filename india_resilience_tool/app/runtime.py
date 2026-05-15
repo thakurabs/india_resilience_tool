@@ -742,8 +742,12 @@ def run_app() -> None:
         render_perf_panel_safe()
         st.stop()
 
-    # Build map + rankings artifacts
+    # Build map + rankings artifacts.
+    # When the ribbon is collapsed, the three-row ribbon (~250px) frees vertical
+    # space; grow the map to fill it so collapse actually expands the canvas.
     MAP_WIDTH, MAP_HEIGHT = 780, 560
+    if bool(st.session_state.get("ribbon_collapsed", False)):
+        MAP_HEIGHT += 250
     pending_zoom = st.session_state.pop("_pending_block_zoom", None)
 
     artifacts = build_map_and_rankings(
