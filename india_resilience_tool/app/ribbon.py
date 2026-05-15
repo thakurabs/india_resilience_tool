@@ -1009,29 +1009,32 @@ def render_metric_ribbon(
                 help=map_mode_help,
             )
 
+    def _toggle_ribbon_collapsed() -> None:
+        st.session_state["ribbon_collapsed"] = not bool(
+            st.session_state.get("ribbon_collapsed", False)
+        )
+
     with toggle_ct:
         _t_left, _t_mid, _t_right = st.columns([1, 0.25, 1])
         with _t_mid:
             if _ribbon_collapsed:
-                if st.button(
+                st.button(
                     "⌄",
                     key="btn_ribbon_expand",
                     help="Expand metric ribbon",
                     use_container_width=True,
                     type="secondary",
-                ):
-                    st.session_state["ribbon_collapsed"] = False
-                    st.rerun()
+                    on_click=_toggle_ribbon_collapsed,
+                )
             else:
-                if st.button(
+                st.button(
                     "⌃",
                     key="btn_ribbon_collapse",
                     help="Collapse metric ribbon",
                     use_container_width=True,
                     type="secondary",
-                ):
-                    st.session_state["ribbon_collapsed"] = True
-                    st.rerun()
+                    on_click=_toggle_ribbon_collapsed,
+                )
 
     sel_metric = str(st.session_state.get("registry_metric", registry_metric) or "").strip()
     metric_col: Optional[str] = None
