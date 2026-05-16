@@ -99,6 +99,29 @@ def test_tx90p_linear_quantile_and_strict_greater_than_under_ties() -> None:
     assert pct["D"] == pytest.approx(100.0 / 365.0)
 
 
+def test_doy_thresholds_keep_all_nan_cells_as_nan() -> None:
+    baseline_time = pd.date_range("1990-01-01", "1990-12-31", freq="D")
+    baseline_values = np.full((len(baseline_time), 1, 2), np.nan)
+    baseline_values[:, 0, 1] = 10.0
+    baseline = xr.DataArray(
+        baseline_values,
+        dims=("time", "lat", "lon"),
+        coords={"time": baseline_time, "lat": [0.5], "lon": [0.5, 1.5]},
+    )
+
+    threshold = compute_doy_thresholds(
+        baseline,
+        percentile=90,
+        window_days=5,
+        quantile_method="linear",
+    )
+
+    assert threshold.dims == ("doy", "lat", "lon")
+    assert threshold.shape == (365, 1, 2)
+    assert np.isnan(threshold.isel(lon=0)).all()
+    np.testing.assert_allclose(threshold.isel(lon=1).values, 10.0)
+
+
 def test_gridfirst_smoke_preserves_pipeline_output_contract(tmp_path: Path, monkeypatch) -> None:
     metric = {
         "slug": "txx_annual_max",

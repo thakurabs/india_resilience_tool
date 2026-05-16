@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -297,10 +298,32 @@ def _noleap_doy(da: xr.DataArray) -> xr.DataArray:
 
 
 def _quantile(da: xr.DataArray, q: float, *, dim: str, method: str) -> xr.DataArray:
+    """Return a scalar nanquantile while preserving non-reduced dimensions.
+
+    Some xarray/numpy combinations can mishandle all-NaN grid cells when
+    reducing a 3D time/lat/lon cube with a scalar quantile, expecting a
+    transient ``quantile`` dimension even though NumPy returns a 2D field.
+    This explicit path keeps Heat Risk thresholds shape-stable: valid cells
+    match ``skipna=True`` quantiles and all-NaN cells remain NaN.
+    """
+
+    if dim not in da.dims:
+        raise ValueError(f"Cannot compute quantile: dimension {dim!r} not present")
+
+    axis = da.get_axis_num(dim)
+    kwargs = {"method": method}
     try:
-        return da.quantile(q, dim=dim, method=method, skipna=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="All-NaN slice encountered", category=RuntimeWarning)
+            values = np.nanquantile(np.asarray(da.values, dtype=float), q, axis=axis, **kwargs)
     except TypeError:
-        return da.quantile(q, dim=dim, interpolation=method, skipna=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="All-NaN slice encountered", category=RuntimeWarning)
+            values = np.nanquantile(np.asarray(da.values, dtype=float), q, axis=axis, interpolation=method)
+
+    out_dims = tuple(name for name in da.dims if name != dim)
+    out_coords = {name: da.coords[name] for name in out_dims if name in da.coords}
+    return xr.DataArray(values, dims=out_dims, coords=out_coords, attrs=da.attrs)
 
 
 def compute_doy_thresholds(
