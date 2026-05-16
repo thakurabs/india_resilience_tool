@@ -196,6 +196,8 @@ python -m tools.pipeline.build_spatial_weights --help
 
 This optional offline builder writes private grid-first area-overlap caches under `IRT_DATA_DIR/processed/_internal/spatial_weights/`. The climate compute pipeline can build missing caches on demand; dashboard runtime does not import `exactextract`.
 
+Heat Risk v2 compute also persists private annual per-cell metric fields under `IRT_DATA_DIR/processed/_internal/heat_risk/grid_metrics/<metric>/<model>/<scenario>/<year>.nc` with JSON sidecars. These files are inspection and cache artifacts only; public dashboard CSV paths, slugs, units, and columns remain unchanged.
+
 Launch behavior:
 - the app now opens into a climate-hazard discovery landing surface by default
 - the landing search bar filters state and district suggestions as you type

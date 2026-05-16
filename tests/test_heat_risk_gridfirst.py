@@ -175,3 +175,79 @@ def test_gridfirst_smoke_preserves_pipeline_output_contract(tmp_path: Path, monk
     df = pd.read_csv(yearly)
     assert {"district", "year", "value", "txx_annual_max_C", "source_file", "model", "scenario"} <= set(df.columns)
     assert df.loc[0, "txx_annual_max_C"] == pytest.approx(31.85)
+
+
+def test_gridfirst_persists_and_reuses_annual_cell_metric_cache(tmp_path: Path, monkeypatch) -> None:
+    metric = {
+        "slug": "tx90p_hot_days_pct",
+        "var": "tasmax",
+        "value_col": "tx90p_pct",
+        "compute": "tx90p_etccdi",
+        "params": {
+            "baseline_years": (1990, 1990),
+            "percentile": 90,
+            "window_days": 1,
+            "quantile_method": "linear",
+            "exceed_ge": False,
+        },
+    }
+    baseline_time = pd.date_range("1990-01-01", "1990-12-31", freq="D")
+    eval_time = pd.date_range("2020-01-01", "2020-12-31", freq="D")
+    baseline_da = xr.DataArray(
+        np.full((len(baseline_time), 1, 1), 10.0),
+        dims=("time", "lat", "lon"),
+        coords={"time": baseline_time, "lat": [0.5], "lon": [0.5]},
+        name="tasmax",
+    )
+    eval_values = np.full((len(eval_time), 1, 1), 10.0)
+    eval_values[:36, 0, 0] = 11.0
+    eval_da = xr.DataArray(
+        eval_values,
+        dims=("time", "lat", "lon"),
+        coords={"time": eval_time, "lat": [0.5], "lon": [0.5]},
+        name="tasmax",
+    )
+    baseline_path = tmp_path / "1990.nc"
+    eval_path = tmp_path / "2020.nc"
+    baseline_da.to_dataset().to_netcdf(baseline_path)
+    eval_da.to_dataset().to_netcdf(eval_path)
+    weights = pd.DataFrame({"unit_key": ["D"], "cell_index": [0], "area_m2": [1.0]})
+    cache_root = tmp_path / "cache"
+
+    rows = compute_heat_risk_rows_for_metric(
+        metric=metric,
+        model="MODEL",
+        scenario="ssp585",
+        year_to_paths={2020: {"tasmax": eval_path}},
+        baseline_year_to_paths={1990: {"tasmax": baseline_path}},
+        weights=weights,
+        cache_root=cache_root,
+    )
+
+    grid_path = cache_root / "grid_metrics" / "tx90p_hot_days_pct" / "MODEL" / "ssp585" / "2020.nc"
+    assert grid_path.exists()
+    assert grid_path.with_suffix(".nc.json").exists()
+    with xr.open_dataset(grid_path) as ds:
+        cached = ds.load()
+    assert {"tx90p_pct", "exceed_days", "valid_days"} <= set(cached.data_vars)
+    assert float(cached["exceed_days"].isel(lat=0, lon=0)) == pytest.approx(36.0)
+    assert float(cached["valid_days"].isel(lat=0, lon=0)) == pytest.approx(365.0)
+    assert rows[0]["tx90p_pct"] == pytest.approx(100.0 * 36.0 / 365.0)
+
+    def _raise_if_recomputed(**_: object) -> xr.DataArray:
+        raise AssertionError("grid metric cache was not reused")
+
+    monkeypatch.setattr(
+        "india_resilience_tool.compute.heat_risk_gridfirst._metric_cell_values",
+        _raise_if_recomputed,
+    )
+    rows_from_cache = compute_heat_risk_rows_for_metric(
+        metric=metric,
+        model="MODEL",
+        scenario="ssp585",
+        year_to_paths={2020: {"tasmax": eval_path}},
+        baseline_year_to_paths={1990: {"tasmax": baseline_path}},
+        weights=weights,
+        cache_root=cache_root,
+    )
+    assert rows_from_cache[0]["tx90p_pct"] == pytest.approx(rows[0]["tx90p_pct"])
