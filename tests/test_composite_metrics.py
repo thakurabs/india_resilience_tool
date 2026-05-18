@@ -66,6 +66,61 @@ def test_compute_composite_master_frame_matches_current_district_weighted_method
     assert math.isnan(float(observed_scores["C"]))
 
 
+def test_drought_composite_uses_historical_anchor_for_multiple_future_periods(tmp_path) -> None:
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+
+    id_frame = pd.DataFrame(
+        {
+            "state": [state_name, state_name],
+            "district": ["A", "B"],
+            "district_key": ["a", "b"],
+        }
+    )
+    for slug in spec.component_metric_slugs:
+        df = id_frame.copy()
+        df[f"{slug}__historical__1990-2010__mean"] = [0.0, 10.0]
+        df[f"{slug}__ssp245__2040-2060__mean"] = [5.0, 10.0]
+        df[f"{slug}__ssp245__2060-2080__mean"] = [10.0, 15.0]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(spec, level="district", state_name=state_name, data_dir=tmp_path)
+    by_district = out.set_index("district")
+
+    assert by_district.loc["A", "composite_drought_risk__ssp245__2040-2060__mean"] == 50.0
+    assert by_district.loc["B", "composite_drought_risk__ssp245__2040-2060__mean"] == 100.0
+    assert by_district.loc["A", "composite_drought_risk__ssp245__2060-2080__mean"] == 100.0
+    assert by_district.loc["B", "composite_drought_risk__ssp245__2060-2080__mean"] == 100.0
+
+
+def test_drought_composite_requires_minimum_anchored_components(tmp_path) -> None:
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+
+    id_frame = pd.DataFrame(
+        {
+            "state": [state_name, state_name],
+            "district": ["A", "B"],
+            "district_key": ["a", "b"],
+        }
+    )
+    for i, slug in enumerate(spec.component_metric_slugs):
+        df = id_frame.copy()
+        df[f"{slug}__historical__1990-2010__mean"] = [0.0, 10.0]
+        df[f"{slug}__ssp585__2040-2060__mean"] = [5.0, None if i < 3 else 5.0]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(spec, level="district", state_name=state_name, data_dir=tmp_path)
+    by_district = out.set_index("district")
+
+    assert by_district.loc["A", "composite_drought_risk__ssp585__2040-2060__mean"] == 50.0
+    assert math.isnan(float(by_district.loc["B", "composite_drought_risk__ssp585__2040-2060__mean"]))
+
+
 def test_compute_composite_master_frame_uses_schema_intersection_for_available_pairs(tmp_path) -> None:
     state_name = "Telangana"
     filename = "master_metrics_by_block.csv"

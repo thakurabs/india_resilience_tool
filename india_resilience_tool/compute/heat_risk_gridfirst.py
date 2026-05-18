@@ -965,3 +965,23 @@ def compute_heat_risk_rows_for_metric(
                 row["scenario"] = scenario
             rows.append(row)
     return rows
+
+
+# Shared grid-first helpers are re-exported here for backward compatibility.
+# The legacy local definitions above are left in place to keep this refactor
+# small, but these assignments make Heat Risk and Drought Risk resolve the same
+# spatial/cache implementations at runtime.
+from india_resilience_tool.compute.gridfirst_spatial import (  # noqa: E402
+    DEFAULT_ANALYSIS_CRS,
+    GridSpec,
+    _configure_pyproj_data_dir,
+    _hash_paths,
+    build_area_weights,
+    coverage_from_weights,
+    dataset_grid_spec,
+    grid_metric_cache_path,
+    read_grid_metric_cache,
+    read_spatial_weights_cache,
+    write_grid_metric_cache,
+    write_spatial_weights_cache,
+)

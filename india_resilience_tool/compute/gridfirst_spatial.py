@@ -320,7 +320,11 @@ def read_grid_metric_cache(path: Path, *, expected_sidecar: Mapping[str, object]
 
 
 def write_grid_metric_cache(ds: xr.Dataset, path: Path, *, sidecar: Mapping[str, object]) -> None:
-    """Atomically write a grid-first metric field and invalidation sidecar."""
+    """Atomically write a grid-first metric field and invalidation sidecar.
+
+    The sidecar carries the NetCDF blob hash. Readers must validate that hash
+    so stale or torn blob/sidecar pairs are treated as cache misses.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = path.with_name(f".{path.name}.tmp")
@@ -329,5 +333,5 @@ def write_grid_metric_cache(ds: xr.Dataset, path: Path, *, sidecar: Mapping[str,
     final_sidecar = dict(sidecar)
     final_sidecar["cache_blob_sha256"] = _blob_sha256(tmp_path)
     tmp_sidecar.write_text(json.dumps(final_sidecar, indent=2, sort_keys=True), encoding="utf-8")
-    os.replace(tmp_path, path)
     os.replace(tmp_sidecar, path.with_suffix(path.suffix + ".json"))
+    os.replace(tmp_path, path)

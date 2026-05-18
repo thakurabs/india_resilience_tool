@@ -28,11 +28,13 @@ Calibration uses baseline years `(1981, 2010)`. The historical comparison period
 
 ## Processing
 
-Daily `pr` grids are converted to monthly totals with unit checks. Flux units such as `kg m-2 s-1`, `kg m**-2 s**-1`, and `kg/m2/s` are multiplied by `86400`; daily depth/rate units such as `mm/day`, `mm d-1`, `mm/d`, and `mm` are used as-is. Blank or unknown units raise `ValueError`. A monthly total is valid only when at least `ceil(0.90 * days_in_month)` daily values are finite.
+Daily `pr` grids are converted to monthly totals with unit checks. Flux units such as `kg m-2 s-1`, `kg m**-2 s**-1`, `kg/m2/s`, and `kg/m^2/s` are multiplied by `86400`; daily depth/rate units such as `mm/day`, `mm d-1`, `mm/d`, and `mm` are used as-is. Blank or unknown units raise `ValueError`. A monthly total is valid only when at least `ceil(0.90 * days_in_month)` daily values are finite.
 
-SPI is computed per grid cell, then annual count or spell metrics are derived per cell. Period rollups happen per cell before polygon aggregation. Polygon values drop NaN cells, renormalize weights over finite cells, and emit NaN when retained overlap weight is below `0.50`.
+Before SPI math, monthly baseline and scenario data are reindexed to a contiguous month-start axis. Missing calendar gaps, such as 2011-2014 between a 1981-2010 baseline and SSP scenario data, are filled with NaN so rolling SPI windows cannot silently bridge non-adjacent months. The contiguous series is trimmed to complete Jan-Dec years before calling `climate-indices`.
 
-Private diagnostics and caches live under `processed/_internal/drought_risk/`; no Drought GeoTIFF outputs are produced.
+SPI is computed per grid cell, then annual count or spell metrics are derived per cell. Period rollups happen per cell before polygon aggregation. Polygon values drop NaN cells, renormalize weights over finite cells, and emit NaN when retained overlap weight is below `0.50`. Period diagnostics use polygon-specific area-weighted retained cells rather than a global best-cell count.
+
+Private diagnostics and caches live under `processed/_internal/drought_risk/`; no Drought GeoTIFF outputs are produced. Annual and period grid caches include `input_file_hashes`, `grid_id`, distribution, `climate_indices_version`, and a NetCDF `cache_blob_sha256`; mismatches are cache misses.
 
 ## Worked Examples
 
@@ -44,7 +46,7 @@ Polygon NaN-cell retention: with weights `0.4, 0.4, 0.2` and values `6, NaN, 9`,
 
 Year-boundary truncation: a drought spell from October through the following September is split by calendar year. Year Y gets a max spell of 3 months, Year Y+1 gets 9 months, and period max is 9, not 12.
 
-Synthetic NaN probes for `climate-indices==2.2.0` are represented in tests by ensuring IRT does not coerce monthly precipitation NaNs to zero; cells that cannot be processed cleanly return all-NaN SPI.
+Synthetic NaN probes for `climate-indices==2.2.0` are covered by a hygiene test when the package is installed in the test environment. Environments without the package skip that probe, while the adapter and grid-cell paths still avoid IRT-side NaN-to-zero coercion.
 
 ## Pre-Landing Audits
 

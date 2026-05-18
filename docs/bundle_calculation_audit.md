@@ -575,10 +575,12 @@ For future scenarios:
   monthly precipitation series.
 
 Annual aggregation:
-- The three Drought Risk metrics use `annual_aggregation: count_events_lt`.
+- The three event-count Drought Risk metrics use `annual_aggregation: count_events_lt`.
+- The three duration Drought Risk metrics use `annual_aggregation: max_spell_lt`.
 - The threshold is `-1.0`.
 - A drought event is a contiguous run of monthly SPI values below `-1.0`.
-- The annual value is the number of contiguous drought-event runs in that year.
+- Event-count annual values are the number of contiguous drought-event runs in
+  that year; duration annual values are the longest within-year run in months.
 - A minimum valid-months check is applied; the default is 9 valid months per
   year.
 
@@ -652,11 +654,13 @@ Interpretation:
 ### 2.3 Period and Ensemble Aggregation
 
 Per model and geography:
-1. Compute annual drought-event counts.
-2. Aggregate annual values into configured periods by taking the mean across
-   available years.
-3. Historical baseline period: `1990-2010`.
-4. Future periods: `2020-2040`, `2040-2060`, `2060-2080`.
+1. Compute annual drought-event counts and maximum spell lengths.
+2. Aggregate event-count annual values into configured periods by taking the
+   mean across available years.
+3. Aggregate duration annual values into configured periods by taking the
+   maximum across available years.
+4. Historical baseline period: `1990-2010`.
+5. Future periods: `2020-2040`, `2040-2060`, `2060-2080`.
 
 Across models:
 - The master builder computes ensemble `mean`, `std`, `median`, `p05`, `p95`,
@@ -673,10 +677,10 @@ Baseline comparison column:
 ### 2.4 Normalization and Risk Interpretation
 
 For each component metric:
-- Raw event counts are normalized across the active comparison frame to a
-  0-100 higher-worse scale.
-- Since all Drought Risk metrics are event counts, higher event counts receive
-  higher normalized scores.
+- Raw component values are normalized to a 0-100 higher-worse scale using the
+  same-state, same-level historical `1990-2010` anchor cohort.
+- Higher event counts and longer maximum spells receive higher normalized
+  scores.
 - If all finite values are identical, all finite rows receive `50.0`.
 - Missing values remain missing for that component.
 
@@ -684,16 +688,19 @@ Composite score:
 
 ```text
 Drought Risk score =
-  0.20 * norm(spi3_count_events_lt_minus1)
-+ 0.30 * norm(spi6_count_events_lt_minus1)
-+ 0.50 * norm(spi12_count_events_lt_minus1)
+  0.08 * norm(spi3_count_events_lt_minus1)
++ 0.12 * norm(spi6_count_events_lt_minus1)
++ 0.20 * norm(spi12_count_events_lt_minus1)
++ 0.12 * norm(spi3_max_spell_lt_minus1)
++ 0.18 * norm(spi6_max_spell_lt_minus1)
++ 0.30 * norm(spi12_max_spell_lt_minus1)
 ```
 
 Missing-data behavior:
 - Metrics missing from the source frame are skipped.
 - For a row with some valid component metrics, weights are renormalized across
   available metrics.
-- Rows with no valid component metrics receive `NaN`.
+- Rows with fewer than 4 anchored component metrics receive `NaN`.
 
 Risk meaning:
 - Higher composite score means higher relative meteorological Drought Risk

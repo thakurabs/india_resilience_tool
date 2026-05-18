@@ -4194,8 +4194,13 @@ def process_metric_for_model_scenario(
                 logging.warning(f"[{slug}] Missing Drought Risk v2 historical baseline for {model}/{scenario}")
                 return
 
+            metric_for_drought = dict(metric)
+            drought_params = dict(metric.get("params") or {})
+            drought_params["grid_id"] = grid.grid_id
+            metric_for_drought["params"] = drought_params
+
             rows, period_rows = compute_drought_risk_rows_for_metric(
-                metric=metric,
+                metric=metric_for_drought,
                 model=model,
                 scenario=scenario,
                 scenario_conf=scenario_conf,

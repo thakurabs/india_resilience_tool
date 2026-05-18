@@ -15,11 +15,10 @@ import xarray as xr
 
 from india_resilience_tool.compute.gridfirst_spatial import (
     _hash_paths,
-    grid_metric_cache_path,
     read_grid_metric_cache,
     write_grid_metric_cache,
 )
-from india_resilience_tool.compute.heat_risk_gridfirst import concat_years, open_year_dataarray
+from india_resilience_tool.compute.heat_risk_gridfirst import concat_years
 from india_resilience_tool.compute.spi_adapter import Distribution, compute_spi_climate_indices
 
 
@@ -67,6 +66,35 @@ def daily_to_monthly_totals(da: xr.DataArray, *, min_daily_coverage: float = 0.9
         dims=("time",),
     )
     return totals.where(counts >= required)
+
+
+def _to_contiguous_monthly_index(monthly: xr.DataArray) -> xr.DataArray:
+    """Reindex monthly precipitation to a contiguous month-start time axis.
+
+    Baseline and scenario inputs are routinely non-contiguous in calendar time.
+    Without this reindex, climate-indices treats the concatenated array as if
+    months were adjacent, corrupting both calendar labels and rolling windows.
+    """
+    if monthly.sizes.get("time", 0) == 0:
+        return monthly
+    times = pd.DatetimeIndex(pd.to_datetime(monthly["time"].values)).to_period("M").to_timestamp(how="start")
+    monthly = monthly.assign_coords(time=times).sortby("time")
+    _, unique_idx = np.unique(monthly["time"].values, return_index=True)
+    monthly = monthly.isel(time=np.sort(unique_idx))
+    full_index = pd.date_range(monthly["time"].values.min(), monthly["time"].values.max(), freq="MS")
+    return monthly.reindex(time=full_index)
+
+
+def _trim_to_full_calendar_years(monthly: xr.DataArray) -> xr.DataArray:
+    """Trim a contiguous monthly series so climate-indices sees Jan-Dec years."""
+    if monthly.sizes.get("time", 0) == 0:
+        return monthly
+    times = pd.DatetimeIndex(monthly["time"].values)
+    start_year = int(times[0].year) + (1 if times[0].month != 1 else 0)
+    end_year = int(times[-1].year) - (1 if times[-1].month != 12 else 0)
+    if end_year < start_year:
+        return monthly.isel(time=slice(0, 0))
+    return monthly.sel(time=slice(f"{start_year}-01-01", f"{end_year}-12-01"))
 
 
 def _compute_spi_series(
@@ -118,9 +146,15 @@ def compute_spi_grid(
     min_baseline_years_per_calendar_month_fraction: float = 0.83,
 ) -> xr.DataArray:
     """Compute SPI per grid cell from a monthly precipitation cube."""
-    monthly = monthly_precip.sortby("time")
-    times = pd.DatetimeIndex(pd.to_datetime(monthly["time"].values)).to_period("M").to_timestamp()
-    monthly = monthly.assign_coords(time=times)
+    monthly = _trim_to_full_calendar_years(_to_contiguous_monthly_index(monthly_precip))
+    if monthly.sizes.get("time", 0) < int(scale_months):
+        return xr.DataArray(
+            np.empty((0,) + tuple(monthly_precip.shape[1:]), dtype=float),
+            coords={"time": [], "lat": monthly_precip["lat"], "lon": monthly_precip["lon"]},
+            dims=monthly_precip.dims,
+            name="spi",
+        )
+    times = pd.DatetimeIndex(monthly["time"].values)
     data_start_year = int(times[0].year)
     vals = np.asarray(monthly.values, dtype=float)
     out = np.full(vals.shape, np.nan, dtype=float)
@@ -238,6 +272,71 @@ def aggregate_grid_values_with_retention(
     return out
 
 
+def aggregate_grid_counts(
+    cell_counts: xr.DataArray,
+    weights: pd.DataFrame,
+    *,
+    min_polygon_cell_weight_fraction: float = 0.50,
+) -> dict[str, tuple[int | float, float]]:
+    """Area-weight finite per-cell year counts to polygon-specific count metadata."""
+    weighted = aggregate_grid_values_with_retention(
+        cell_counts,
+        weights,
+        min_polygon_cell_weight_fraction=min_polygon_cell_weight_fraction,
+    )
+    out: dict[str, tuple[int | float, float]] = {}
+    for unit, (value, retained) in weighted.items():
+        out[unit] = (int(math.floor(value)) if np.isfinite(value) else np.nan, retained)
+    return out
+
+
+def drought_grid_metric_cache_path(
+    cache_root: Path,
+    *,
+    slug: str,
+    model: str,
+    grid_id: str,
+    distribution: Distribution,
+    scenario: str,
+    year: int | str,
+) -> Path:
+    """Return a distribution/grid-aware Drought Risk grid-metric cache path."""
+    return (
+        Path(cache_root)
+        / "grid_metrics"
+        / slug
+        / model
+        / grid_id
+        / f"dist={distribution.value}"
+        / scenario
+        / f"{year}.nc"
+    )
+
+
+def drought_period_cache_path(
+    cache_root: Path,
+    *,
+    slug: str,
+    model: str,
+    grid_id: str,
+    distribution: Distribution,
+    scenario: str,
+    period: str,
+) -> Path:
+    """Return a distribution/grid-aware Drought Risk period grid cache path."""
+    return (
+        Path(cache_root)
+        / "grid_metrics"
+        / slug
+        / model
+        / grid_id
+        / f"dist={distribution.value}"
+        / scenario
+        / "periods"
+        / f"{period}.nc"
+    )
+
+
 def _add_unit_fields(row: dict[str, object], *, level: str, unit_key: str) -> None:
     if level == "block" and "||" in unit_key:
         row["district"], row["block"] = unit_key.split("||", 1)
@@ -269,6 +368,7 @@ def compute_drought_risk_rows_for_metric(
     baseline_years = tuple(int(v) for v in params.get("baseline_years", (1981, 2010)))
     distribution = Distribution(str(params.get("distribution", "gamma")))
     min_polygon_fraction = float(params.get("min_polygon_cell_weight_fraction", 0.50))
+    grid_id = str(params.get("grid_id") or "unknown-grid")
 
     years_needed = sorted(set(baseline_year_to_paths) | set(year_to_paths))
     da = concat_years({**baseline_year_to_paths, **year_to_paths}, "pr", years_needed)
@@ -287,6 +387,7 @@ def compute_drought_risk_rows_for_metric(
         min_months_per_year=int(params.get("min_months_per_year", 9)),
         min_event_months=int(params.get("min_event_months", 1)),
     )
+    input_file_hashes = _hash_paths([p for mapping in year_to_paths.values() for p in mapping.values()])
 
     if cache_root is not None:
         for year in annual_ds["year"].values:
@@ -298,12 +399,22 @@ def compute_drought_risk_rows_for_metric(
                 "climate_indices_version": climate_indices_version(),
                 "slug": slug,
                 "model": model,
+                "grid_id": grid_id,
+                "distribution": distribution.value,
                 "scenario": scenario,
                 "year": year_int,
-                "input_file_hashes": _hash_paths([p for mapping in year_to_paths.values() for p in mapping.values()]),
+                "input_file_hashes": input_file_hashes,
             }
-            path = grid_metric_cache_path(Path(cache_root), slug=slug, model=model, scenario=scenario, year=year_int)
-            existing = read_grid_metric_cache(path, expected_sidecar={k: v for k, v in sidecar.items() if k != "input_file_hashes"})
+            path = drought_grid_metric_cache_path(
+                Path(cache_root),
+                slug=slug,
+                model=model,
+                grid_id=grid_id,
+                distribution=distribution,
+                scenario=scenario,
+                year=year_int,
+            )
+            existing = read_grid_metric_cache(path, expected_sidecar=sidecar)
             if existing is None:
                 write_grid_metric_cache(annual_ds.sel(year=[year_int]), path, sidecar=sidecar)
 
@@ -323,24 +434,62 @@ def compute_drought_risk_rows_for_metric(
 
     period_rows: list[dict[str, object]] = []
     for period_name, period_years in dict(scenario_conf.get("periods") or {}).items():
-        period_ds = period_rollup_grid(
-            annual_ds["value"],
-            period_name=str(period_name),
-            years=tuple(period_years),
-            rollup=str(params.get("period_rollup", "period_mean")),
-            min_years_per_period_fraction=float(params.get("min_years_per_period_fraction", 0.75)),
-        )
+        rollup = str(params.get("period_rollup", "period_mean"))
+        min_period_fraction = float(params.get("min_years_per_period_fraction", 0.75))
+        period_sidecar = {
+            "methodology_version": DROUGHT_GRIDFIRST_METHOD_VERSION,
+            "climate_indices_version": climate_indices_version(),
+            "slug": slug,
+            "model": model,
+            "grid_id": grid_id,
+            "distribution": distribution.value,
+            "scenario": scenario,
+            "period": str(period_name),
+            "period_years": [int(period_years[0]), int(period_years[1])],
+            "rollup": rollup,
+            "min_years_per_period_fraction": min_period_fraction,
+            "input_file_hashes": input_file_hashes,
+        }
+        period_ds = None
+        period_path = None
+        if cache_root is not None:
+            period_path = drought_period_cache_path(
+                Path(cache_root),
+                slug=slug,
+                model=model,
+                grid_id=grid_id,
+                distribution=distribution,
+                scenario=scenario,
+                period=str(period_name),
+            )
+            period_ds = read_grid_metric_cache(period_path, expected_sidecar=period_sidecar)
+        if period_ds is None:
+            period_ds = period_rollup_grid(
+                annual_ds["value"],
+                period_name=str(period_name),
+                years=tuple(period_years),
+                rollup=rollup,
+                min_years_per_period_fraction=min_period_fraction,
+            )
+            if period_path is not None:
+                write_grid_metric_cache(period_ds, period_path, sidecar=period_sidecar)
         values = aggregate_grid_values_with_retention(
             period_ds["value"],
             weights,
             min_polygon_cell_weight_fraction=min_polygon_fraction,
         )
+        year_counts = aggregate_grid_counts(
+            period_ds["years_used_count"],
+            weights,
+            min_polygon_cell_weight_fraction=min_polygon_fraction,
+        )
         for unit_key, (value, retained) in values.items():
+            years_used, _count_retained = year_counts.get(unit_key, (np.nan, retained))
             row = {
                 "period": str(period_name),
                 "value": value,
                 value_col: value,
-                "years_used_count": int(np.nanmax(period_ds["years_used_count"].values)),
+                "years_used_count": years_used,
                 "years_requested": int(np.nanmax(period_ds["years_requested"].values)),
                 "retained_weight_fraction": retained,
             }
