@@ -198,6 +198,8 @@ This optional offline builder writes private grid-first area-overlap caches unde
 
 Heat Risk v2 compute also persists private annual per-cell metric fields under `IRT_DATA_DIR/processed/_internal/heat_risk/grid_metrics/<metric>/<model>/<scenario>/<year>.nc` with JSON sidecars. These files are inspection and cache artifacts only; public dashboard CSV paths, slugs, units, and columns remain unchanged.
 
+Drought Risk v2 uses `climate-indices==2.2.0` SPI on monthly precipitation totals computed from daily `pr` grids, then derives six grid-first event-count and max-spell metrics before district/block aggregation. Private Drought caches live under `IRT_DATA_DIR/processed/_internal/drought_risk/`; the public processed CSV and optimized bundle contracts remain unchanged.
+
 Launch behavior:
 - the app now opens into a climate-hazard discovery landing surface by default
 - the landing search bar filters state and district suggestions as you type

@@ -77,8 +77,11 @@ def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "spi6_max_spell_lt_minus1",
+        "spi12_max_spell_lt_minus1",
     ]
-    assert [entry.weight for entry in entries] == [0.20, 0.30, 0.50]
+    assert [entry.weight for entry in entries] == [0.08, 0.12, 0.20, 0.12, 0.18, 0.30]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
 

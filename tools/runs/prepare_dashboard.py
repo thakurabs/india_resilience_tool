@@ -1303,7 +1303,6 @@ def _build_climate_compute_steps(
             if getattr(args, "workers", None) is not None:
                 argv.extend(["--workers", str(args.workers)])
             _append_flag(argv, "--verbose", bool(getattr(args, "verbose", False)))
-            _append_flag(argv, "--spi-legacy", bool(getattr(args, "spi_legacy", False)))
             if getattr(args, "spi_distribution", None):
                 argv.extend(["--spi-distribution", str(args.spi_distribution)])
             _append_flag(argv, "--overwrite", bool(getattr(args, "overwrite", False)))
@@ -1979,7 +1978,11 @@ def _add_climate_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--scenarios", nargs="+", default=None, help="Restrict climate compute to scenarios.")
     parser.add_argument("--workers", type=int, default=None, help="Worker count to pass through to compute/master steps.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose compute output.")
-    parser.add_argument("--spi-legacy", action="store_true", help="Pass through the legacy SPI flag to climate compute.")
+    parser.add_argument(
+        "--spi-legacy",
+        action="store_true",
+        help="Accepted for compatibility but rejected because legacy SPI is non-conformant.",
+    )
     parser.add_argument(
         "--spi-distribution",
         choices=["gamma", "pearson"],
@@ -2099,6 +2102,12 @@ def build_cli() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_cli()
     args = parser.parse_args(argv)
+    if bool(getattr(args, "spi_legacy", False)):
+        print(
+            "Legacy SPI z-score is non-conformant with WMO SPI methodology; rerun without --spi-legacy.",
+            file=sys.stderr,
+        )
+        return 2
     if str(args.command) == "list":
         _print_available_commands()
         return 0

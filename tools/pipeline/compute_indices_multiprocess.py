@@ -42,7 +42,7 @@ Usage:
   python compute_indices_multiprocess.py --list-metrics         # List available metrics
   python compute_indices_multiprocess.py --list-models          # List discovered models
   python compute_indices_multiprocess.py --state Telangana      # Specific state
-  python compute_indices_multiprocess.py --spi-legacy           # Force legacy SPI (scipy-based)
+  python compute_indices_multiprocess.py --spi-legacy           # Rejected compatibility flag (exits 2)
   python compute_indices_multiprocess.py --spi-distribution pearson  # Use Pearson Type III for SPI
 
 SPI/SPEI Implementation:
@@ -53,8 +53,8 @@ SPI/SPEI Implementation:
   - Proper zero-inflation handling
   - Numba-accelerated performance
   
-  If climate-indices is not installed, or --spi-legacy is specified, the pipeline
-  falls back to the legacy scipy-based implementation.
+  Legacy scipy/z-score SPI is no longer accepted because it is non-conformant
+  with WMO SPI methodology.
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
@@ -95,6 +95,10 @@ from india_resilience_tool.compute.heat_risk_gridfirst import (
     dataset_grid_spec as heat_risk_dataset_grid_spec,
     read_spatial_weights_cache as read_heat_risk_spatial_weights_cache,
     write_spatial_weights_cache as write_heat_risk_spatial_weights_cache,
+)
+from india_resilience_tool.compute.drought_risk_gridfirst import (
+    DROUGHT_GRIDFIRST_SLUGS,
+    compute_drought_risk_rows_for_metric,
 )
 from india_resilience_tool.utils.naming import hydro_fs_token
 from india_resilience_tool.utils.processed_io import (
@@ -199,6 +203,11 @@ def _heat_risk_internal_root() -> Path:
 def _heat_risk_spatial_weights_path(level: AdminLevel, grid_id: str) -> Path:
     """Return the private spatial-weight cache path for a level/grid pair."""
     return BASE_OUTPUT_ROOT / "_internal" / "spatial_weights" / f"{level}__{grid_id}.parquet"
+
+
+def _drought_risk_internal_root() -> Path:
+    """Private cache root for Drought Risk v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "drought_risk"
 
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
@@ -3790,6 +3799,7 @@ def _ensemble_output_count(
 def _write_metric_rows_outputs(
     *,
     rows: list[dict],
+    period_rows: list[dict] | None = None,
     coverage_df: pd.DataFrame,
     metric_root_path: Path,
     state_name: str,
@@ -3832,25 +3842,26 @@ def _write_metric_rows_outputs(
         group_cols = ["district", "block"]
     else:
         group_cols = ["district"]
-    period_frames = []
-
-    for period_name, (y0, y1) in scenario_conf["periods"].items():
-        avail = [y for y in available_years if y0 <= y <= y1]
-        n_req, n_avail = y1 - y0 + 1, len(avail)
-        if n_avail >= MIN_YEARS_ABSOLUTE and n_avail / n_req >= MIN_YEARS_REQUIRED_FRACTION:
-            try:
-                grp = df_yearly[df_yearly["year"].isin(avail)].groupby(
-                    [c for c in group_cols if c in df_yearly.columns]
-                ).agg({"value": "mean"}).reset_index()
-                grp["period"] = period_name
-                grp["years_used_count"] = n_avail
-                grp["years_requested"] = n_req
-                grp[value_col] = grp["value"]
-                period_frames.append(grp)
-            except Exception as e:
-                logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
-
-    df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
+    if period_rows is None:
+        period_frames = []
+        for period_name, (y0, y1) in scenario_conf["periods"].items():
+            avail = [y for y in available_years if y0 <= y <= y1]
+            n_req, n_avail = y1 - y0 + 1, len(avail)
+            if n_avail >= MIN_YEARS_ABSOLUTE and n_avail / n_req >= MIN_YEARS_REQUIRED_FRACTION:
+                try:
+                    grp = df_yearly[df_yearly["year"].isin(avail)].groupby(
+                        [c for c in group_cols if c in df_yearly.columns]
+                    ).agg({"value": "mean"}).reset_index()
+                    grp["period"] = period_name
+                    grp["years_used_count"] = n_avail
+                    grp["years_requested"] = n_req
+                    grp[value_col] = grp["value"]
+                    period_frames.append(grp)
+                except Exception as e:
+                    logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
+        df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
+    else:
+        df_periods = pd.DataFrame(period_rows)
     if not df_periods.empty:
         _validate_output_unit_fields(
             df_periods,
@@ -4123,6 +4134,97 @@ def process_metric_for_model_scenario(
             except Exception:
                 pass
             logging.error(f"[{slug}] Heat Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    if slug in DROUGHT_GRIDFIRST_SLUGS:
+        try:
+            from india_resilience_tool.compute.gridfirst_spatial import (
+                build_area_weights as build_gridfirst_area_weights,
+                coverage_from_weights as gridfirst_coverage_from_weights,
+                dataset_grid_spec as gridfirst_dataset_grid_spec,
+                read_spatial_weights_cache as read_gridfirst_spatial_weights_cache,
+                write_spatial_weights_cache as write_gridfirst_spatial_weights_cache,
+            )
+
+            grid = gridfirst_dataset_grid_spec(ds_sample)
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights = read_gridfirst_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+            )
+            if weights is None:
+                logging.info("[%s] Building Drought Risk v2 spatial weights for level=%s grid=%s", slug, level, grid.grid_id)
+                weights = build_gridfirst_area_weights(gdf, grid, level=level)
+                write_gridfirst_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                )
+            coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"].astype(str).tolist())
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Drought Risk v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                metric=metric,
+                primary_var=primary_var,
+                model=model,
+                scenario=scenario,
+                scenario_conf=SCENARIOS,
+                year_to_paths=year_to_paths,
+            )
+            if missing_baseline or not baseline_year_to_paths:
+                logging.warning(f"[{slug}] Missing Drought Risk v2 historical baseline for {model}/{scenario}")
+                return
+
+            rows, period_rows = compute_drought_risk_rows_for_metric(
+                metric=metric,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                year_to_paths=year_to_paths,
+                baseline_year_to_paths=baseline_year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_drought_risk_internal_root(),
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                period_rows=period_rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Drought Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
             raise
 
@@ -6224,7 +6326,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--list-models", action="store_true",
                         help="List discovered models and exit")
     parser.add_argument("--spi-legacy", action="store_true",
-                        help="Force use of legacy SPI implementation (scipy-based) instead of climate-indices package")
+                        help="Accepted for compatibility but rejected because legacy SPI is non-conformant.")
     parser.add_argument("--spi-distribution", choices=["gamma", "pearson"], default="gamma",
                         help="Distribution for SPI fitting when using climate-indices package (default: gamma)")
     args = parser.parse_args(argv)
@@ -6235,8 +6337,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     SPI_DISTRIBUTION = args.spi_distribution
 
     if args.spi_legacy:
-        USE_CLIMATE_INDICES_PACKAGE = False
-        logging.info("SPI: Using legacy scipy-based implementation (--spi-legacy flag)")
+        print(
+            "Legacy SPI z-score is non-conformant with WMO SPI methodology; rerun without --spi-legacy.",
+            file=sys.stderr,
+        )
+        return 2
     elif CLIMATE_INDICES_AVAILABLE:
         logging.info("SPI: Using climate-indices package")
     else:

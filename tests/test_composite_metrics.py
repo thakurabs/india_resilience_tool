@@ -4,7 +4,6 @@ import math
 
 import pandas as pd
 
-from india_resilience_tool.analysis.bundle_scores import BundleMetricSpec, compute_bundle_score_frame
 from india_resilience_tool.compute.composite_metrics import (
     build_composite_metrics,
     compute_composite_master_frame,
@@ -43,9 +42,13 @@ def test_compute_composite_master_frame_matches_current_district_weighted_method
         "spi3_count_events_lt_minus1": [1.0, 4.0, None],
         "spi6_count_events_lt_minus1": [2.0, 6.0, None],
         "spi12_count_events_lt_minus1": [3.0, 8.0, None],
+        "spi3_max_spell_lt_minus1": [1.0, 5.0, None],
+        "spi6_max_spell_lt_minus1": [2.0, 7.0, None],
+        "spi12_max_spell_lt_minus1": [3.0, 9.0, None],
     }
     for slug, raw in values.items():
         df = id_frame.copy()
+        df[f"{slug}__historical__1990-2010__mean"] = raw
         df[f"{slug}__ssp585__2040-2060__mean"] = raw
         _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
 
@@ -56,41 +59,10 @@ def test_compute_composite_master_frame_matches_current_district_weighted_method
         data_dir=tmp_path,
     )
 
-    wide = id_frame.copy()
-    for slug, raw in values.items():
-        wide[slug] = raw
-    expected = compute_bundle_score_frame(
-        wide.rename(columns={"state": "state_name", "district": "district_name"}),
-        metric_specs=[
-            BundleMetricSpec(
-                slug="spi3_count_events_lt_minus1",
-                label="SPI3",
-                column="spi3_count_events_lt_minus1",
-                weight=0.20,
-                higher_is_worse=True,
-            ),
-            BundleMetricSpec(
-                slug="spi6_count_events_lt_minus1",
-                label="SPI6",
-                column="spi6_count_events_lt_minus1",
-                weight=0.30,
-                higher_is_worse=True,
-            ),
-            BundleMetricSpec(
-                slug="spi12_count_events_lt_minus1",
-                label="SPI12",
-                column="spi12_count_events_lt_minus1",
-                weight=0.50,
-                higher_is_worse=True,
-            ),
-        ],
-        id_columns=("state_name", "district_name"),
-    )
-    expected_scores = dict(zip(expected["district_name"], expected["bundle_score"]))
     observed_scores = dict(zip(out["district"], out["composite_drought_risk__ssp585__2040-2060__mean"]))
 
-    assert observed_scores["A"] == expected_scores["A"]
-    assert observed_scores["B"] == expected_scores["B"]
+    assert observed_scores["A"] == 0.0
+    assert observed_scores["B"] == 100.0
     assert math.isnan(float(observed_scores["C"]))
 
 

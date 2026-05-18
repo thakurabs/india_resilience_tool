@@ -28,6 +28,10 @@ class CompositeMetricSpec:
     component_metric_slugs: tuple[str, ...]
     supported_spatial_families: tuple[str, ...] = ("admin",)
     supported_levels: tuple[str, ...] = ("district", "block")
+    normalization: str = "per_period"
+    anchor_scenario: str = "historical"
+    anchor_period: str = "1990-2010"
+    min_anchored_components: int = 4
 
 
 VISIBLE_GLANCE_COMPOSITES: tuple[CompositeMetricSpec, ...] = tuple(
@@ -41,6 +45,7 @@ VISIBLE_GLANCE_COMPOSITES: tuple[CompositeMetricSpec, ...] = tuple(
             if not entry.is_attribute
         ),
         supported_levels=spec.supported_levels,
+        normalization="baseline_anchored" if spec.canonical_bundle == "Drought Risk" else "per_period",
     )
     for spec in THEMATIC_DASHBOARD_BUNDLES
 )

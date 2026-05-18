@@ -275,6 +275,8 @@ def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
 
 
 def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
+    from india_resilience_tool.compute.drought_risk_gridfirst import DROUGHT_GRIDFIRST_SLUGS
+
     assert "spi3_count_events_lt_minus1" in METRICS_BY_SLUG
     assert "spi6_count_events_lt_minus1" in METRICS_BY_SLUG
     assert "spi12_count_events_lt_minus1" in METRICS_BY_SLUG
@@ -296,7 +298,16 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "spi6_max_spell_lt_minus1",
+        "spi12_max_spell_lt_minus1",
     ]
+    for slug in drought_metrics[1:]:
+        params = METRICS_BY_SLUG[slug].params
+        assert int(params["min_event_months"]) > 0
+    for slug in ("spi3_max_spell_lt_minus1", "spi6_max_spell_lt_minus1", "spi12_max_spell_lt_minus1"):
+        assert METRICS_BY_SLUG[slug].params["period_rollup"] == "period_max"
+    assert set(drought_metrics[1:]) == set(DROUGHT_GRIDFIRST_SLUGS)
 
 
 def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
@@ -557,7 +568,12 @@ def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
 
 def test_population_exposure_domain_is_admin_only() -> None:
     admin_domains = get_domains_for_pillar("Exposure", spatial_family="admin", level="district")
-    assert admin_domains == ["Population Exposure", "Rural Facilities Exposure", "Built-up Area Exposure"]
+    assert admin_domains == [
+        "Population Exposure",
+        "Rural Facilities Exposure",
+        "Built-up Area Exposure",
+        "Agricultural LULC Exposure",
+    ]
     admin_metrics = set(get_metrics_for_bundle("Population Exposure", spatial_family="admin", level="block"))
     assert admin_metrics == {"population_total", "population_density"}
     rural_metrics = set(get_metrics_for_bundle("Rural Facilities Exposure", spatial_family="admin", level="block"))

@@ -524,16 +524,20 @@ Supported scenarios:
 - `ssp245`
 - `ssp585`
 
-The active Drought Risk bundle uses three Standardised Precipitation Index
-(SPI) drought-event metrics. The configured weights sum to 1.0. All component
-metrics are currently interpreted as higher-is-worse because they count drought
-events.
+The active Drought Risk bundle uses six Standardised Precipitation Index (SPI)
+metrics: three drought-event counts and three maximum drought-spell durations.
+The duration gap and grid-first spatial aggregation gap are addressed in Drought
+Risk v2. The configured weights sum to 1.0. All component metrics are
+interpreted as higher-is-worse.
 
 | Component group | Metric slug | Metric label | Weight |
 |---|---|---|---:|
-| Seasonal Drought | `spi3_count_events_lt_minus1` | SPI3: Count of drought events with SPI < -1 | 0.20 |
-| Meteorological Drought | `spi6_count_events_lt_minus1` | SPI6: Count of drought events with SPI < -1 | 0.30 |
-| Long-term Drought | `spi12_count_events_lt_minus1` | SPI12: Count of drought events with SPI < -1 | 0.50 |
+| Seasonal Drought | `spi3_count_events_lt_minus1` | SPI3: Count of drought events with SPI < -1 | 0.08 |
+| Meteorological Drought | `spi6_count_events_lt_minus1` | SPI6: Count of drought events with SPI < -1 | 0.12 |
+| Long-term Drought | `spi12_count_events_lt_minus1` | SPI12: Count of drought events with SPI < -1 | 0.20 |
+| Seasonal Drought | `spi3_max_spell_lt_minus1` | SPI3: Maximum drought spell length with SPI < -1 | 0.12 |
+| Meteorological Drought | `spi6_max_spell_lt_minus1` | SPI6: Maximum drought spell length with SPI < -1 | 0.18 |
+| Long-term Drought | `spi12_max_spell_lt_minus1` | SPI12: Maximum drought spell length with SPI < -1 | 0.30 |
 
 Implementation references:
 - Bundle catalog: `india_resilience_tool/config/dashboard_bundles.py`

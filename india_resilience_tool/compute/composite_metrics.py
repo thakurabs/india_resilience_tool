@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 import pandas as pd
+import numpy as np
 
 from india_resilience_tool.analysis.bundle_scores import BundleMetricSpec, compute_bundle_score_frame
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
@@ -35,7 +36,7 @@ ID_COLUMNS_BY_LEVEL = {
     "block": ("state", "district", "block", "block_key"),
 }
 SUPPORTED_SCENARIOS = ("ssp245", "ssp585", "snapshot")
-SUPPORTED_PERIODS = ("2020-2040", "2040-2060", "2060-2080", "Current")
+SUPPORTED_PERIODS = ("1990-2010", "2020-2040", "2040-2060", "2060-2080", "Current")
 SUPPORTED_STAT = "mean"
 
 
@@ -256,6 +257,64 @@ def _build_wide_component_frame(
     return merged if merged is not None else pd.DataFrame(columns=id_columns)
 
 
+def _normalize_with_anchor(values: pd.Series, anchor_values: pd.Series, *, higher_is_worse: bool) -> pd.Series:
+    numeric = pd.to_numeric(values, errors="coerce")
+    anchor = pd.to_numeric(anchor_values, errors="coerce")
+    finite_anchor = anchor[np.isfinite(anchor)]
+    out = pd.Series(np.nan, index=numeric.index, dtype=float)
+    if finite_anchor.empty:
+        return out
+    lo = float(finite_anchor.min())
+    hi = float(finite_anchor.max())
+    finite = numeric[np.isfinite(numeric)]
+    if finite.empty:
+        return out
+    if hi == lo:
+        out.loc[finite.index] = 50.0
+        return out
+    scaled = (finite - lo) / (hi - lo)
+    if not higher_is_worse:
+        scaled = 1.0 - scaled
+    out.loc[finite.index] = (scaled * 100.0).clip(0.0, 100.0)
+    return out
+
+
+def _compute_baseline_anchored_score_frame(
+    wide: pd.DataFrame,
+    *,
+    anchor_wide: pd.DataFrame,
+    metric_specs: list[BundleMetricSpec],
+    id_columns: list[str],
+    min_components: int,
+) -> pd.DataFrame:
+    out = wide.loc[:, [col for col in id_columns if col in wide.columns]].copy()
+    normalized_cols: list[str] = []
+    weights: list[float] = []
+    for spec in metric_specs:
+        if spec.slug not in wide.columns or spec.slug not in anchor_wide.columns:
+            continue
+        norm_col = f"{spec.slug}__landing_norm"
+        out[norm_col] = _normalize_with_anchor(
+            wide[spec.slug],
+            anchor_wide[spec.slug],
+            higher_is_worse=bool(spec.higher_is_worse),
+        )
+        normalized_cols.append(norm_col)
+        weights.append(float(spec.weight))
+    if not normalized_cols:
+        out["bundle_score"] = np.nan
+        out["available_metric_count"] = 0
+        return out
+    norm_frame = out[normalized_cols]
+    weight_series = pd.Series(weights, index=normalized_cols, dtype=float)
+    available_weights = norm_frame.notna().mul(weight_series, axis=1).sum(axis=1)
+    weighted_sum = norm_frame.mul(weight_series, axis=1).sum(axis=1, skipna=True)
+    out["available_metric_count"] = norm_frame.notna().sum(axis=1).astype(int)
+    out["bundle_score"] = weighted_sum.div(available_weights.where(available_weights > 0.0))
+    out.loc[out["available_metric_count"] < int(min_components), "bundle_score"] = np.nan
+    return out
+
+
 def compute_composite_master_frame(
     spec: CompositeMetricSpec,
     *,
@@ -291,13 +350,30 @@ def compute_composite_master_frame(
 
     output = next(iter(component_frames.values()))[id_columns].drop_duplicates().reset_index(drop=True)
     bundle_metric_specs = _bundle_metric_specs(spec)
+    anchor_wide = None
+    if getattr(spec, "normalization", "per_period") == "baseline_anchored":
+        anchor_wide = _build_wide_component_frame(
+            component_frames,
+            level=level_norm,
+            scenario=spec.anchor_scenario,
+            period=spec.anchor_period,
+        )
     for scenario, period in available_pairs:
         wide = _build_wide_component_frame(component_frames, level=level_norm, scenario=scenario, period=period)
-        score_frame = compute_bundle_score_frame(
-            wide,
-            metric_specs=bundle_metric_specs,
-            id_columns=id_columns,
-        )
+        if anchor_wide is not None:
+            score_frame = _compute_baseline_anchored_score_frame(
+                wide,
+                anchor_wide=anchor_wide,
+                metric_specs=bundle_metric_specs,
+                id_columns=id_columns,
+                min_components=spec.min_anchored_components,
+            )
+        else:
+            score_frame = compute_bundle_score_frame(
+                wide,
+                metric_specs=bundle_metric_specs,
+                id_columns=id_columns,
+            )
         score_column = f"{spec.composite_slug}__{scenario}__{period}__{SUPPORTED_STAT}"
         pair_frame = score_frame[id_columns + ["bundle_score"]].rename(columns={"bundle_score": score_column})
         output = output.merge(pair_frame, on=id_columns, how="left")

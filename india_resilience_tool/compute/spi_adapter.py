@@ -186,10 +186,6 @@ def compute_spi_climate_indices(
     if values.size % 12 != 0:
         raise ValueError("monthly_precip length must be a multiple of 12 (complete years)")
 
-    if np.isnan(values).any():
-        logger.warning("SPI monthly precipitation contains NaNs; coercing NaN→0 for computation.")
-        values = np.nan_to_num(values, nan=0.0)
-
     ci_dist = _get_ci_distribution(distribution)
 
     return ci_indices.spi(
@@ -218,7 +214,7 @@ def compute_spi_for_unit(
       - coerce time to month-start (supports cftime calendars)
       - require contiguous monthly series (no missing months)
       - trim to complete Jan..Dec years (len%12==0)
-      - coerce NaNs to 0 with a warning (treat as no rainfall)
+      - preserve NaNs and skip the unit if climate-indices cannot handle them
     """
     _check_climate_indices_available()
 
@@ -291,9 +287,6 @@ def compute_spi_for_unit(
     data_start_year = int(times_ms[0].year)
 
     values = combined.values.astype(np.float64)
-    if np.isnan(values).any():
-        logger.warning("SPI precipitation series contains NaNs; coercing NaN→0.")
-        values = np.nan_to_num(values, nan=0.0)
     if values.size < scale_months or values.size % 12 != 0:
         logger.warning(
             f"SPI requires complete years (len%12==0) and len>=scale. Got len={values.size}, scale={scale_months}. Skipping unit."

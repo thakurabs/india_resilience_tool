@@ -39,4 +39,4 @@ dependencies:
       - streamlit==1.51.0
       - streamlit-folium==0.25.3
       - folium==0.20.0
-      - climate-indices
+      - climate-indices==2.2.0
