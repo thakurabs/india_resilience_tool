@@ -19,6 +19,33 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Optional, TypeVar
 
+from pyproj import datadir
+
+
+def _configure_pyproj_data_dir() -> None:
+    """Point pyproj/GDAL at a usable PROJ database before GeoPandas imports."""
+    candidates = [
+        os.environ.get("PROJ_DATA"),
+        os.environ.get("PROJ_LIB"),
+    ]
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidates.append(str(Path(conda_prefix) / "Library" / "share" / "proj"))
+    candidates.append(str(Path(sys.prefix) / "Library" / "share" / "proj"))
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        proj_db = Path(candidate) / "proj.db"
+        if proj_db.exists():
+            os.environ.setdefault("PROJ_DATA", str(proj_db.parent))
+            os.environ.setdefault("PROJ_LIB", str(proj_db.parent))
+            datadir.set_data_dir(str(proj_db.parent))
+            return
+
+
+_configure_pyproj_data_dir()
+
 import geopandas as gpd
 import pandas as pd
 from tqdm.auto import tqdm
