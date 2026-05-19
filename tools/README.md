@@ -81,6 +81,8 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 |---|---|---|
 | `tools/diagnostics/spi_diagnostic.py` | Sanity checks for SPI outputs (distribution/mean/std) | `python -m tools.diagnostics.spi_diagnostic --help` |
 | `tools/diagnostics/debug_build_master.py` | Debug helper for master build issues | `python -m tools.diagnostics.debug_build_master --help` |
+| `tools/diagnostics/verify_states_geojson.py` | Verify `states_4326.geojson` is consistent with `districts_4326.geojson` | `python -m tools.diagnostics.verify_states_geojson` |
+| `tools/diagnostics/verify_districts_blocks_geojson.py` | Sanity + parity checks for `districts_4326.geojson` and `blocks_4326.geojson` | `python -m tools.diagnostics.verify_districts_blocks_geojson districts` / `... blocks --sample 50` |
 
 ## Geo / data acquisition / prep
 

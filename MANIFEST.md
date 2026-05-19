@@ -336,6 +336,8 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `debug_build_master.py` | Diagnose master-building issues |
 | `spi_diagnostic.py` | SPI output sanity checks and diagnostics |
+| `verify_states_geojson.py` | Verify `states_4326.geojson` is consistent with `districts_4326.geojson` |
+| `verify_districts_blocks_geojson.py` | Sanity + parity checks for `districts_4326.geojson` and `blocks_4326.geojson` |
 
 ### `tools/geodata/`
 
