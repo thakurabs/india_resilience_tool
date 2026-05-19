@@ -51,10 +51,10 @@ _configure_pyproj_data_dir()
 
 
 import geopandas as gpd  # noqa: E402  (must import after pyproj data-dir is set)
+import shapely  # noqa: E402
 from shapely.validation import make_valid  # noqa: E402
 
 from india_resilience_tool.data.adm2_loader import (  # noqa: E402
-    build_adm1_from_adm2,
     ensure_adm2_columns,
     ensure_epsg4326,
 )
@@ -63,21 +63,79 @@ from paths import DATA_DIR, DISTRICTS_PATH  # noqa: E402
 
 DEFAULT_OUT = DATA_DIR / "states_4326.geojson"
 
+# Snap-rounding tolerance for the per-state dissolve. 1e-6 degrees ~ 10 cm at the
+# equator — tight enough to preserve real boundary detail, loose enough to close
+# digitisation slivers that otherwise survive as long thin interior holes in the
+# merged state polygons. Pass --grid-size 0 to disable and reproduce the legacy
+# (no-snap) behaviour.
+DEFAULT_GRID_SIZE: float = 1e-6
 
-def prepare_states_geojson(districts_path: Path) -> gpd.GeoDataFrame:
+
+def _filter_disputed_rows(adm2: gpd.GeoDataFrame) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """Split rows tagged as DISPUTED (or with no state_name) from real districts.
+
+    The canonical districts file ships ~28 contested border slivers with
+    ``state_name``/``district_name`` set to null and ``REMARKS`` like
+    "DISPUTED (X & Y)". Keeping them would (a) create a phantom "None" state in
+    the dissolve and (b) overlap real districts. They are filtered by default.
+    """
+    state_null = adm2["state_name"].isna() | (
+        adm2["state_name"].astype(str).str.strip().str.lower().isin(
+            {"none", "nan", "null", "unknown", ""}
+        )
+    )
+    remarks_disputed = (
+        adm2["REMARKS"].astype(str).str.strip().str.upper().str.startswith("DISPUTED")
+        if "REMARKS" in adm2.columns
+        else False
+    )
+    drop_mask = state_null | remarks_disputed
+    return adm2.loc[~drop_mask].reset_index(drop=True), adm2.loc[drop_mask].reset_index(drop=True)
+
+
+def _dissolve_with_grid_snap(
+    adm2: gpd.GeoDataFrame, *, state_col: str, grid_size: float
+) -> gpd.GeoDataFrame:
+    """Per-state ``unary_union`` with snap-rounding to eliminate digitisation slivers."""
+    kwargs = {"grid_size": grid_size} if grid_size and grid_size > 0 else {}
+    records = []
+    for name, group in adm2.groupby(state_col, sort=True):
+        merged = shapely.unary_union(list(group.geometry.values), **kwargs)
+        records.append({state_col: name, "geometry": merged})
+    out = gpd.GeoDataFrame(records, geometry="geometry", crs=adm2.crs)
+    out["shapeName"] = out[state_col]
+    return out
+
+
+def prepare_states_geojson(
+    districts_path: Path,
+    *,
+    grid_size: float = DEFAULT_GRID_SIZE,
+    keep_disputed: bool = False,
+) -> gpd.GeoDataFrame:
     """Read ADM2 and dissolve to full-fidelity ADM1 state polygons.
 
     No simplification, no bbox crop. Invalid input geometries are repaired via
-    ``shapely.validation.make_valid`` before dissolve so slivers do not survive
-    into the merged state polygons.
+    ``shapely.validation.make_valid``, disputed-border slivers are filtered
+    (unless ``keep_disputed`` is set), and the dissolve uses
+    ``shapely.unary_union`` with ``grid_size`` snap-rounding so sub-millimetre
+    misalignments between adjacent districts collapse into single edges instead
+    of surviving as sliver-shaped interior holes in the merged state polygons.
     """
     adm2 = gpd.read_file(str(districts_path))
     adm2 = ensure_epsg4326(adm2)
     adm2 = ensure_adm2_columns(adm2)
 
+    if keep_disputed:
+        dropped = adm2.iloc[0:0]
+    else:
+        adm2, dropped = _filter_disputed_rows(adm2)
+    if len(dropped):
+        print(f"dropped {len(dropped)} disputed/orphan rows before dissolve")
+
     adm2["geometry"] = adm2.geometry.apply(make_valid)
 
-    adm1 = build_adm1_from_adm2(adm2, state_col="state_name")
+    adm1 = _dissolve_with_grid_snap(adm2, state_col="state_name", grid_size=grid_size)
 
     keep_cols = [c for c in ("state_name", "shapeName") if c in adm1.columns]
     return adm1[[*keep_cols, "geometry"]].reset_index(drop=True)
@@ -120,6 +178,25 @@ def build_cli() -> argparse.ArgumentParser:
         action="store_true",
         help="Compute and print summary without writing the output.",
     )
+    parser.add_argument(
+        "--grid-size",
+        type=float,
+        default=DEFAULT_GRID_SIZE,
+        help=(
+            "Snap-rounding tolerance (degrees) for the per-state dissolve. "
+            "Defaults to 1e-6 (~10 cm at the equator); pass 0 to disable and "
+            "reproduce the legacy no-snap behaviour."
+        ),
+    )
+    parser.add_argument(
+        "--keep-disputed",
+        action="store_true",
+        help=(
+            "Retain rows with null state_name or REMARKS starting with "
+            "'DISPUTED' (default: drop them, since they create a phantom "
+            "'None' state in the dissolved output)."
+        ),
+    )
     return parser
 
 
@@ -133,7 +210,11 @@ def main(argv: list[str] | None = None) -> int:
     if not districts_path.exists():
         raise FileNotFoundError(f"Source districts GeoJSON not found: {districts_path}")
 
-    gdf = prepare_states_geojson(districts_path)
+    gdf = prepare_states_geojson(
+        districts_path,
+        grid_size=float(args.grid_size),
+        keep_disputed=bool(args.keep_disputed),
+    )
 
     print("STATES GEOJSON (full fidelity)")
     print(f"source_districts: {districts_path}")
