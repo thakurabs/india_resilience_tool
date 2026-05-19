@@ -126,6 +126,23 @@ def prepare_states_geojson(
     adm2 = ensure_epsg4326(adm2)
     adm2 = ensure_adm2_columns(adm2)
 
+    # Reassign vendor's catch-all "GUJARAT and DNH & DD ISLANDS" row to GUJARAT.
+    # Investigation 2026-05-19 (see notebooks/inspect_states_geojson.ipynb):
+    # this row is a 93-part MultiPolygon of Gujarati offshore islands (Bet
+    # Dwarka, Khadir-Bela, Piram, Aliabet, etc.) tagged with STATE_LGD = 24
+    # (Gujarat's LGD code). DD&DNH already has its own Diu, Daman, and Dadra &
+    # Nagar Haveli districts, so no part of this bundle duplicates DD&DNH. Three
+    # of the 93 parts are sub-hectare slivers ~1.5 km from Diu (total area
+    # 0.006 km^2); they are kept with the rest under GUJARAT for rule
+    # simplicity, since the 300 m distance margin is well below cartographic
+    # precision.
+    _island_label = "GUJARAT and DNH & DD ISLANDS"
+    _island_mask = adm2["state_name"].eq(_island_label)
+    if _island_mask.any():
+        print(f"reassigning {int(_island_mask.sum())} '{_island_label}' row(s) to GUJARAT")
+        adm2.loc[_island_mask, "state_name"] = "GUJARAT"
+        adm2.loc[_island_mask, "district_name"] = "GUJARAT OFFSHORE ISLANDS"
+
     if keep_disputed:
         dropped = adm2.iloc[0:0]
     else:

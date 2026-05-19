@@ -53,6 +53,15 @@ def main() -> int:
     districts = ensure_epsg4326(districts)
     districts = ensure_adm2_columns(districts)
 
+    # Mirror the build script's relabel of the vendor's "GUJARAT and DNH & DD
+    # ISLANDS" catch-all row to GUJARAT so the two sides compare like-for-like.
+    island_mask = districts["state_name"].eq("GUJARAT and DNH & DD ISLANDS")
+    n_relabelled = int(island_mask.sum())
+    if n_relabelled:
+        print(f"relabelled {n_relabelled} 'GUJARAT and DNH & DD ISLANDS' row(s) to GUJARAT")
+        districts.loc[island_mask, "state_name"] = "GUJARAT"
+        districts.loc[island_mask, "district_name"] = "GUJARAT OFFSHORE ISLANDS"
+
     # Mirror the build script's default filter: drop rows with null state_name
     # and REMARKS starting with "DISPUTED" so the two sides compare like-for-like.
     state_null = districts["state_name"].isna() | (
