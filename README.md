@@ -164,6 +164,15 @@ conda activate irt
 ```
 
 `pip` / `venv` installs are not supported for this repo; the geospatial stack is expected to come from `conda-forge`.
+Keep Arrow/Parquet packages (`pyarrow`, `pyarrow-core`, `libarrow*`) installed by conda, not pip. Mixing pip `pyarrow` with conda GDAL/Arrow DLLs can break Streamlit components and Parquet reads on Windows.
+
+Recommended post-install smoke check:
+
+```bash
+python -c "from pyproj import CRS; print(CRS('EPSG:4326'))"
+python -c "import pyarrow as pa; import altair, jsonschema; print('pyarrow', pa.__version__, 'altair', altair.__version__)"
+python -c "from climate_indices import compute, indices; print('climate-indices OK')"
+```
 
 ### Run the dashboard
 

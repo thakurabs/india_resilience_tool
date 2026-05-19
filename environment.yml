@@ -20,8 +20,24 @@ dependencies:
 
   # Pipeline / analytics
   - scipy
-  - pyarrow
+  # Keep Arrow on conda-forge. Do not install/reinstall pyarrow with pip in
+  # this environment; mixed pip/conda Arrow DLLs can break Streamlit components.
+  - libarrow=21.0.0=*_cpu
+  - libarrow-acero=21.0.0=*_cpu
+  - libarrow-compute=21.0.0=*_cpu
+  - libarrow-dataset=21.0.0=*_cpu
+  - libarrow-substrait=21.0.0=*_cpu
+  - pyarrow-core=21.0.0=*_cpu
+  - pyarrow=21.0.0
   - openpyxl>=3.1
+
+  # Streamlit chart/component dependencies made explicit for dashboard startup
+  - altair>=5,<6
+  - jsonschema
+  - jsonschema-specifications
+  - referencing
+  - attrs
+  - rpds-py
 
   # Tools retained under tools/
   - boto3
