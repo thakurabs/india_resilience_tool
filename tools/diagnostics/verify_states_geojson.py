@@ -53,6 +53,24 @@ def main() -> int:
     districts = ensure_epsg4326(districts)
     districts = ensure_adm2_columns(districts)
 
+    # Mirror the build script's default filter: drop rows with null state_name
+    # and REMARKS starting with "DISPUTED" so the two sides compare like-for-like.
+    state_null = districts["state_name"].isna() | (
+        districts["state_name"].astype(str).str.strip().str.lower().isin(
+            {"none", "nan", "null", "unknown", ""}
+        )
+    )
+    remarks_disputed = (
+        districts["REMARKS"].astype(str).str.strip().str.upper().str.startswith("DISPUTED")
+        if "REMARKS" in districts.columns
+        else False
+    )
+    drop_mask = state_null | remarks_disputed
+    n_dropped = int(drop_mask.sum())
+    if n_dropped:
+        print(f"dropped {n_dropped} disputed/orphan district rows before parity checks")
+        districts = districts.loc[~drop_mask].reset_index(drop=True)
+
     print(f"states:    {len(states)} features, crs={states.crs}")
     print(f"districts: {len(districts)} features, crs={districts.crs}")
 
