@@ -20,6 +20,33 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+
+def _configure_pyproj_data_dir() -> None:
+    """Point pyproj at conda's PROJ database before dashboard geodata imports."""
+    from pyproj import datadir
+
+    candidates = [
+        os.environ.get("PROJ_DATA"),
+        os.environ.get("PROJ_LIB"),
+    ]
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidates.append(str(Path(conda_prefix) / "Library" / "share" / "proj"))
+    candidates.append(str(Path(sys.prefix) / "Library" / "share" / "proj"))
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        proj_db = Path(candidate) / "proj.db"
+        if proj_db.exists():
+            os.environ.setdefault("PROJ_DATA", str(proj_db.parent))
+            os.environ.setdefault("PROJ_LIB", str(proj_db.parent))
+            datadir.set_data_dir(str(proj_db.parent))
+            return
+
+
+_configure_pyproj_data_dir()
+
 from india_resilience_tool.app.runtime import run_app
 from india_resilience_tool.app.state import ensure_session_state
 
