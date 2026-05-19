@@ -230,6 +230,28 @@ def test_to_contiguous_monthly_index_nan_fills_gap_between_baseline_and_scenario
     assert bool(np.all(np.isnan(out.sel(time=slice("1992-01-01", "1995-12-01")).values[:, 0, 0])))
 
 
+def test_to_contiguous_monthly_index_accepts_cftime_like_values():
+    class NoLeapLike:
+        def __init__(self, year, month):
+            self.year = year
+            self.month = month
+
+    times = np.asarray(
+        [NoLeapLike(1990, 1), NoLeapLike(1990, 2), NoLeapLike(1990, 4)],
+        dtype=object,
+    )
+    da = xr.DataArray(
+        np.asarray([[[1.0]], [[2.0]], [[4.0]]]),
+        coords={"time": times, "lat": [0.0], "lon": [77.0]},
+        dims=("time", "lat", "lon"),
+    )
+
+    out = _to_contiguous_monthly_index(da)
+
+    assert np.array_equal(out["time"].values, pd.date_range("1990-01-01", "1990-04-01", freq="MS").values)
+    assert np.isnan(float(out.sel(time="1990-03-01").item()))
+
+
 def test_trim_to_full_calendar_years_drops_partial_jan_dec_edges():
     times = pd.date_range("1990-03-01", "1995-09-01", freq="MS")
     da = xr.DataArray(

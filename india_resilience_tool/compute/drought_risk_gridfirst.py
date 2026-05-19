@@ -77,7 +77,12 @@ def _to_contiguous_monthly_index(monthly: xr.DataArray) -> xr.DataArray:
     """
     if monthly.sizes.get("time", 0) == 0:
         return monthly
-    times = pd.DatetimeIndex(pd.to_datetime(monthly["time"].values)).to_period("M").to_timestamp(how="start")
+    try:
+        times = pd.DatetimeIndex(pd.to_datetime(monthly["time"].values)).to_period("M").to_timestamp(how="start")
+    except Exception:
+        times = pd.DatetimeIndex(
+            [pd.Timestamp(int(t.year), int(t.month), 1) for t in monthly["time"].values]
+        )
     monthly = monthly.assign_coords(time=times).sortby("time")
     _, unique_idx = np.unique(monthly["time"].values, return_index=True)
     monthly = monthly.isel(time=np.sort(unique_idx))
