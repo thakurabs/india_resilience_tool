@@ -11,6 +11,7 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Tuple, Union
@@ -23,6 +24,7 @@ from shapely.ops import transform
 
 PathLike = Union[str, Path]
 BBox = Tuple[float, float, float, float]  # (min_lon, min_lat, max_lon, max_lat)
+logger = logging.getLogger(__name__)
 
 
 def drop_z(geom: BaseGeometry) -> BaseGeometry:
@@ -58,10 +60,29 @@ def ensure_adm2_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         txt_cols = [c for c in out.columns if out[c].dtype == object and c != "geometry"]
         out["district_name"] = out[txt_cols[0]].astype(str).str.strip() if txt_cols else out.index.astype(str)
 
-    if "STATE_UT" in out.columns and "state_name" not in out.columns:
-        out["state_name"] = out["STATE_UT"].astype(str).str.strip()
-    elif "STATE_LGD" in out.columns and "state_name" not in out.columns:
-        out["state_name"] = out["STATE_LGD"].astype(str)
+    state_source_cols = (
+        "state_name",
+        "STATE_UT",
+        "STATE",
+        "ST_NM",
+        "state",
+        "adm1_name",
+        "shapeName_0",
+        "shapeGroup",
+        "STATE_LGD",
+    )
+    state_values = None
+    for col in state_source_cols:
+        if col not in out.columns:
+            continue
+        values = out[col].astype("string").str.strip()
+        valid = values.notna() & (values != "") & ~values.str.lower().isin({"<na>", "nan", "none", "unknown"})
+        if state_values is None:
+            state_values = values.where(valid)
+        else:
+            state_values = state_values.where(state_values.notna(), values.where(valid))
+    if state_values is not None:
+        out["state_name"] = state_values.fillna("Unknown").astype(str)
     if "state_name" not in out.columns:
         out["state_name"] = "Unknown"
 
@@ -254,7 +275,13 @@ def enrich_adm2_with_state_names(
     adm1_name_col: str = "shapeName",
 ) -> gpd.GeoDataFrame:
     """
-    Best-effort enrichment of ADM2 state_name via a single spatial join.
+    Best-effort enrichment of blank/Unknown ADM2 state names via point-in-state matching.
+
+    Existing source-derived state names are preserved. Only rows with missing,
+    blank, or ``Unknown`` values in ``state_col`` are spatially joined using each
+    district geometry's representative point, which is guaranteed to lie inside
+    the district polygon. If the spatial join fails, the source-derived state
+    names are returned and the failure is logged.
     """
     adm2 = adm2_gdf.copy()
     adm1 = adm1_gdf.copy()
@@ -262,7 +289,14 @@ def enrich_adm2_with_state_names(
     if state_col not in adm2.columns:
         adm2[state_col] = "Unknown"
 
-    pts = adm2.copy()
+    state_values = adm2[state_col].astype("string").str.strip()
+    missing = state_values.isna() | (state_values == "") | state_values.str.lower().isin(
+        {"<na>", "nan", "none", "unknown"}
+    )
+    if not bool(missing.any()):
+        return adm2
+
+    pts = adm2.loc[missing].copy()
     pts["geometry"] = pts.geometry.representative_point()
 
     try:
@@ -277,9 +311,25 @@ def enrich_adm2_with_state_names(
             for idx, val in mapping.items():
                 if pd.notna(val):
                     adm2.at[idx, state_col] = str(val).strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "ADM2 state-name spatial enrichment failed; preserving source-derived state names: %s",
+            exc,
+        )
+        return adm2
 
-    missing = adm2[state_col].isna() | (adm2[state_col].astype(str).str.strip() == "")
+    state_values = adm2[state_col].astype("string").str.strip()
+    missing = state_values.isna() | (state_values == "") | state_values.str.lower().isin(
+        {"<na>", "nan", "none", "unknown"}
+    )
     adm2.loc[missing, state_col] = "Unknown"
+    if bool(missing.any()):
+        count = int(missing.sum())
+        total = max(int(len(adm2)), 1)
+        logger.warning(
+            "ADM2 state-name enrichment left %d/%d rows (%.1f%%) as Unknown.",
+            count,
+            total,
+            count / total * 100.0,
+        )
     return adm2

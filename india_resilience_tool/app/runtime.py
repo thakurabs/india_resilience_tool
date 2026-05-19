@@ -176,7 +176,11 @@ def run_app() -> None:
             st.stop()
 
         with perf_section("cold: load adm2 [landing]"):
-            adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+            adm2 = load_local_adm2(
+                str(ADM2_GEOJSON),
+                tolerance=SIMPLIFY_TOL_ADM2,
+                cache_version="adm2_state_v2",
+            )
         if "__key" not in adm2.columns and "district_name" in adm2.columns:
             adm2["__key"] = adm2["district_name"].map(alias)
 
@@ -450,7 +454,11 @@ def run_app() -> None:
             )
             if _peeked_shard.exists():
                 with perf_section(f"cold: load adm2 [shard {_peeked_state}]"):
-                    adm2 = load_local_adm2(str(_peeked_shard), tolerance=SIMPLIFY_TOL_ADM2)
+                    adm2 = load_local_adm2(
+                        str(_peeked_shard),
+                        tolerance=SIMPLIFY_TOL_ADM2,
+                        cache_version="adm2_state_v2",
+                    )
                 if (
                     adm2 is not None
                     and "__key" not in adm2.columns
@@ -463,7 +471,11 @@ def run_app() -> None:
             "Run `python -m tools.geodata.build_adm1_geojson --overwrite` to fix."
         )
         with perf_section("cold: load adm2 [detail/fallback]"):
-            adm2 = load_local_adm2(str(ADM2_GEOJSON), tolerance=SIMPLIFY_TOL_ADM2)
+            adm2 = load_local_adm2(
+                str(ADM2_GEOJSON),
+                tolerance=SIMPLIFY_TOL_ADM2,
+                cache_version="adm2_state_v2",
+            )
         if "__key" not in adm2.columns and "district_name" in adm2.columns:
             adm2["__key"] = adm2["district_name"].map(alias)
         with perf_section("cold: build adm1 [detail/fallback]"):
@@ -539,6 +551,11 @@ def run_app() -> None:
     if "pending_selected_district" in st.session_state:
         st.session_state["selected_district"] = st.session_state.pop("pending_selected_district")
 
+    adm1_for_geography_controls = adm1
+    if adm2 is not None:
+        with perf_section("cold: build adm1 from loaded adm2 [sidebar]"):
+            adm1_for_geography_controls = build_adm1_from_adm2(adm2)
+
     geo_ctx = render_geography_and_analysis_focus(
         state_placeholder=state_placeholder,
         spatial_family=spatial_family,
@@ -547,7 +564,7 @@ def run_app() -> None:
         sel_placeholder=SEL_PLACEHOLDER,
         view_map=VIEW_MAP,
         view_rankings=VIEW_RANKINGS,
-        adm1=adm1,
+        adm1=adm1_for_geography_controls,
         adm2=adm2,
         adm3_geojson=ADM3_GEOJSON,
         basins_geojson=BASIN_GEOJSON,
@@ -656,7 +673,11 @@ def run_app() -> None:
             runtime_adm2_geojson = optimized_district_geojson
             if (include_map or details_need_geometry) and adm2 is None:
                 with perf_section(f"cold: load adm2 [shard {selected_state}]"):
-                    adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+                    adm2 = load_local_adm2(
+                        str(runtime_adm2_geojson),
+                        tolerance=SIMPLIFY_TOL_ADM2,
+                        cache_version="adm2_state_v2",
+                    )
                 if "__key" not in adm2.columns and "district_name" in adm2.columns:
                     adm2["__key"] = adm2["district_name"].map(alias)
         elif (include_map or details_need_geometry) and adm2 is None:
@@ -664,13 +685,21 @@ def run_app() -> None:
                 f"Optimized ADM2 shard not found for {selected_state}; loading the full ADM2 fallback."
             )
             with perf_section("cold: load adm2 [detail/fallback]"):
-                adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+                adm2 = load_local_adm2(
+                    str(runtime_adm2_geojson),
+                    tolerance=SIMPLIFY_TOL_ADM2,
+                    cache_version="adm2_state_v2",
+                )
             if "__key" not in adm2.columns and "district_name" in adm2.columns:
                 adm2["__key"] = adm2["district_name"].map(alias)
     elif (include_map or details_need_geometry) and adm2 is None:
         st.caption("Nationwide district geometry requires the full ADM2 fallback.")
         with perf_section("cold: load adm2 [detail/all fallback]"):
-            adm2 = load_local_adm2(str(runtime_adm2_geojson), tolerance=SIMPLIFY_TOL_ADM2)
+            adm2 = load_local_adm2(
+                str(runtime_adm2_geojson),
+                tolerance=SIMPLIFY_TOL_ADM2,
+                cache_version="adm2_state_v2",
+            )
         if "__key" not in adm2.columns and "district_name" in adm2.columns:
             adm2["__key"] = adm2["district_name"].map(alias)
 

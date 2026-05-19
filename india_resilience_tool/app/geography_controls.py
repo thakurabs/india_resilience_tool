@@ -18,6 +18,7 @@ import streamlit as st
 
 from india_resilience_tool.app.geo_cache import (
     load_admin_block_selector_index,
+    load_local_adm2,
     list_available_states_from_processed_root_cached,
     load_basin_selector_index,
     load_hydro_subbasin_selector_index,
@@ -33,7 +34,7 @@ from india_resilience_tool.config.variables import VARIABLES
 from india_resilience_tool.data.adm3_loader import (
     get_blocks_for_district as _get_blocks_for_district,
 )
-from india_resilience_tool.data.optimized_bundle import optimized_context_path
+from india_resilience_tool.data.optimized_bundle import optimized_context_path, optimized_geometry_path
 from india_resilience_tool.utils.naming import alias
 
 
@@ -87,6 +88,80 @@ def _supported_admin_states_for_selected_metric() -> list[str]:
     return [str(state).strip() for state in supported if str(state).strip()]
 
 
+def _empty_adm2_like(adm2: Any) -> Any:
+    """Return an empty district frame without dropping GeoDataFrame metadata."""
+    if adm2 is None:
+        return pd.DataFrame(columns=["district_name", "state_name"])
+    return adm2.iloc[0:0].copy()
+
+
+def _valid_state_name_mask(values: pd.Series) -> pd.Series:
+    """Return rows with a concrete, non-placeholder state name."""
+    text = values.astype("string").str.strip()
+    return text.notna() & (text != "") & ~text.str.lower().isin({"<na>", "nan", "none", "unknown"})
+
+
+def _resolve_selected_state_geometry(adm1: Any, selected_state: str) -> Any:
+    """Return the exact ADM1 geometry for ``selected_state``, or ``None``."""
+    if adm1 is None or getattr(adm1, "empty", True):
+        return None
+    selected_key = alias(selected_state)
+    for col in ("state_name", "shapeName"):
+        if col not in adm1.columns:
+            continue
+        mask = adm1[col].astype(str).map(alias) == selected_key
+        matches = adm1[mask]
+        if not matches.empty:
+            return matches.iloc[0].geometry
+    return None
+
+
+def _districts_for_selected_state(adm2: Any, adm1: Any, selected_state: str) -> Any:
+    """
+    Resolve district options for a state using exact state attribution first.
+
+    Blank/Unknown rows are supplemented with a representative-point test against
+    the selected full-fidelity state geometry. If exact attribution finds no
+    districts at all, the same representative-point test is allowed as a full
+    fallback so older artifacts still produce usable options. Substring state
+    matching is intentionally not used.
+    """
+    if adm2 is None or getattr(adm2, "empty", True):
+        return _empty_adm2_like(adm2)
+    if "district_name" not in adm2.columns or "state_name" not in adm2.columns:
+        return _empty_adm2_like(adm2)
+
+    selected_key = alias(selected_state)
+    state_values = adm2["state_name"].astype("string").str.strip()
+    valid_state = _valid_state_name_mask(adm2["state_name"])
+    exact = adm2[valid_state & (state_values.map(alias) == selected_key)].copy()
+
+    state_geom = _resolve_selected_state_geometry(adm1, selected_state)
+    if state_geom is None:
+        return exact if not exact.empty else _empty_adm2_like(adm2)
+
+    try:
+        point_mask = adm2.geometry.representative_point().within(state_geom.buffer(0.001))
+    except Exception:
+        return exact if not exact.empty else _empty_adm2_like(adm2)
+
+    if exact.empty:
+        return adm2[point_mask].copy()
+
+    supplement = adm2[(~valid_state) & point_mask].copy()
+    if supplement.empty:
+        return exact
+    return pd.concat([exact, supplement], axis=0).drop_duplicates(subset=["district_name"]).copy()
+
+
+def _load_state_adm2_shard_for_sidebar(*, selected_state: str, data_dir: Path) -> Any:
+    """Load an optimized district shard for sidebar options when full ADM2 is deferred."""
+    shard_path = optimized_geometry_path(level="district", state=selected_state, data_dir=data_dir)
+    if not shard_path.exists():
+        return None
+    return load_local_adm2(str(shard_path), cache_version="adm2_state_v2")
+
+
 def _build_admin_geography(
     *,
     analysis_ready: bool,
@@ -95,6 +170,7 @@ def _build_admin_geography(
     adm1: Any,
     adm2: Optional[Any],
     adm3_geojson: Path,
+    data_dir: Path,
     simplify_tol_adm3: float,
     admin_level: str,
 ) -> tuple[str, str, str, Any]:
@@ -139,45 +215,26 @@ def _build_admin_geography(
     if restricted_states:
         st.caption("This metric is currently available for Telangana only.")
 
-    if adm2 is None:
-        gdf_state_districts = pd.DataFrame(columns=["district_name", "state_name"])
+    adm2_for_options = adm2
+    if adm2_for_options is None and selected_state != "All":
+        adm2_for_options = _load_state_adm2_shard_for_sidebar(
+            selected_state=selected_state,
+            data_dir=data_dir,
+        )
+
+    if adm2_for_options is None:
+        gdf_state_districts = _empty_adm2_like(adm2_for_options)
     elif selected_state == "All":
-        gdf_state_districts = adm2.copy()
+        gdf_state_districts = adm2_for_options.copy()
     else:
-        sel_state_norm = selected_state.strip().lower()
-        state_row = adm1[
-            adm1["shapeName"].astype(str).str.strip().str.lower() == sel_state_norm
-        ]
-        if state_row.empty:
-            state_row = adm1[
-                adm1["shapeName"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
-                .str.contains(sel_state_norm, na=False)
-            ]
-
-        if not state_row.empty:
-            state_geom = state_row.iloc[0].geometry
-            try:
-                gdf_state_districts = adm2[
-                    adm2.geometry.within(state_geom.buffer(0.001))
-                ].copy()
-            except Exception:
-                gdf_state_districts = adm2[
-                    adm2.geometry.centroid.within(state_geom.buffer(0.001))
-                ].copy()
-        else:
-            gdf_state_districts = pd.DataFrame()
-
+        gdf_state_districts = _districts_for_selected_state(adm2_for_options, adm1, selected_state)
         if getattr(gdf_state_districts, "empty", True):
-            gdf_state_districts = adm2[
-                adm2["state_name"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
-                .str.contains(sel_state_norm, na=False)
-            ].copy()
+            shard_adm2 = _load_state_adm2_shard_for_sidebar(
+                selected_state=selected_state,
+                data_dir=data_dir,
+            )
+            if shard_adm2 is not None:
+                gdf_state_districts = _districts_for_selected_state(shard_adm2, adm1, selected_state)
 
     districts = ["All"] + sorted(
         gdf_state_districts["district_name"].astype(str).unique().tolist()
@@ -432,6 +489,7 @@ def render_geography_and_analysis_focus(
                     adm3_geojson=adm3_geojson,
                     simplify_tol_adm3=simplify_tol_adm3,
                     admin_level=admin_level,
+                    data_dir=data_dir,
                 )
 
             overlay_states = resolve_overlay_control_states(

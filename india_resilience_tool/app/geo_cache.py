@@ -128,7 +128,12 @@ def _ensure_adm3_identity_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 
 @st.cache_data
-def load_local_adm2(path: str, tolerance: float = SIMPLIFY_TOL_ADM2) -> gpd.GeoDataFrame:
+def load_local_adm2(
+    path: str,
+    tolerance: float = SIMPLIFY_TOL_ADM2,
+    cache_version: str = "adm2_state_v2",
+) -> gpd.GeoDataFrame:
+    _ = cache_version
     gdf = _load_local_adm2(
         path=path,
         tolerance=float(tolerance),
