@@ -21,17 +21,44 @@ Output contract:
 from __future__ import annotations
 
 import argparse
+import os
+import sys
 from pathlib import Path
 
-import geopandas as gpd
-from shapely.validation import make_valid
+from pyproj import datadir
 
-from india_resilience_tool.data.adm2_loader import (
+
+def _configure_pyproj_data_dir() -> None:
+    """Point pyproj at conda's PROJ database when its bundled path is unusable."""
+    candidates = [os.environ.get("PROJ_DATA"), os.environ.get("PROJ_LIB")]
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidates.append(str(Path(conda_prefix) / "Library" / "share" / "proj"))
+        candidates.append(str(Path(conda_prefix) / "share" / "proj"))
+    candidates.append(str(Path(sys.prefix) / "Library" / "share" / "proj"))
+    candidates.append(str(Path(sys.prefix) / "share" / "proj"))
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        proj_db = Path(candidate) / "proj.db"
+        if proj_db.exists():
+            datadir.set_data_dir(str(proj_db.parent))
+            return
+
+
+_configure_pyproj_data_dir()
+
+
+import geopandas as gpd  # noqa: E402  (must import after pyproj data-dir is set)
+from shapely.validation import make_valid  # noqa: E402
+
+from india_resilience_tool.data.adm2_loader import (  # noqa: E402
     build_adm1_from_adm2,
     ensure_adm2_columns,
     ensure_epsg4326,
 )
-from paths import DATA_DIR, DISTRICTS_PATH
+from paths import DATA_DIR, DISTRICTS_PATH  # noqa: E402
 
 
 DEFAULT_OUT = DATA_DIR / "states_4326.geojson"
