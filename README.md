@@ -209,6 +209,8 @@ Heat Risk v2 compute also persists private annual per-cell metric fields under `
 
 Drought Risk v2 uses `climate-indices==2.2.0` SPI on monthly precipitation totals computed from daily `pr` grids, then derives six grid-first event-count and max-spell metrics before district/block aggregation. Private Drought caches live under `IRT_DATA_DIR/processed/_internal/drought_risk/`; the public processed CSV and optimized bundle contracts remain unchanged.
 
+Extreme Rainfall | Flash Flood Risk v2 computes the active six-metric admin bundle on climate grid cells first for district/block outputs, then applies area-weighted polygon aggregation with retained-cell coverage guards. Hydro basin/sub-basin outputs remain on the legacy polygon-average path until explicitly migrated. Private annual grids and R95p thresholds live under `IRT_DATA_DIR/processed/_internal/extreme_rainfall/`; public slugs, CSV paths, metric columns, composite weights, and optimized artifacts remain unchanged.
+
 Launch behavior:
 - the app now opens into a climate-hazard discovery landing surface by default
 - the landing search bar filters state and district suggestions as you type

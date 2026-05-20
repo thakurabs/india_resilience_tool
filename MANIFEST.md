@@ -66,6 +66,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics <slug>` | Build sub-basin outputs |
 | `python -m tools.pipeline.build_spatial_weights --help` | Build private Heat Risk v2 grid-first spatial-weight caches under `processed/_internal/spatial_weights/`; annual grid-first metric fields are persisted by compute under `processed/_internal/heat_risk/grid_metrics/` |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics spi3_max_spell_lt_minus1` | Build a Drought Risk v2 grid-first duration metric; private annual/period NetCDF caches are persisted under `processed/_internal/drought_risk/grid_metrics/` |
+| `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics pr_max_1day_precip` | Build an Extreme Rainfall v2 admin grid-first metric; private annual grids and R95p thresholds are persisted under `processed/_internal/extreme_rainfall/` |
 | `python -m tools.subbasin_shp_explore --help` | Inspect/repair/export hydro boundaries |
 | `python -m tools.geodata.build_district_subbasin_crosswalk --overwrite` | Build district ↔ sub-basin crosswalk CSV |
 | `python -m tools.geodata.build_block_subbasin_crosswalk --overwrite` | Build block ↔ sub-basin crosswalk CSV |
@@ -240,6 +241,7 @@ Aqueduct methodology note:
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 | `gridfirst_spatial.py` | Shared grid-first spatial overlap and NetCDF/sidecar cache helpers used by Heat Risk v2 and Drought Risk v2 |
 | `drought_risk_gridfirst.py` | Drought Risk v2 grid-cell SPI, annual count/spell metrics, period rollups, NaN-aware polygon aggregation, and private cache helpers |
+| `extreme_rainfall_gridfirst.py` | Extreme Rainfall / Flash Flood v2 admin grid-first Rx1day, Rx5day, R20mm, R95p, R95pTOT, and CWD compute with private annual grid and threshold caches |
 
 #### `india_resilience_tool/compute/tests/`
 

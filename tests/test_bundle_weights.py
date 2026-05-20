@@ -114,6 +114,7 @@ def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
         "cwd_consecutive_wet_days",
     ]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    assert all("Flood Depth Index remains deferred" not in (entry.substitution_note or "") for entry in entries)
 
 
 def test_agriculture_bundle_weights_are_stable_and_sum_to_one() -> None:

@@ -806,9 +806,12 @@ Precipitation unit handling:
 - If source values are already in daily depth units, they are used directly.
 
 Current spatial aggregation:
-- For each geography polygon, the pipeline masks grid cells to the unit and
-  computes a daily spatial mean over `lat` and `lon`.
-- The index functions then operate on that polygon-average daily time series.
+- Admin district/block outputs use the Extreme Rainfall v2 grid-first path:
+  annual cell-level indices are computed first, then area-weighted to polygons
+  with a 50% retained finite-cell weight floor.
+- Hydro basin/sub-basin outputs remain on the legacy path: the pipeline masks
+  grid cells to the unit, computes a daily spatial mean over `lat` and `lon`,
+  and then operates on that polygon-average daily time series.
 
 #### Rx1day: `pr_max_1day_precip`
 
@@ -852,8 +855,9 @@ Formula:
 - Count days where polygon daily mean precipitation is greater than `20 mm/day`.
 
 Note:
-- The registry description says `>= 20mm`, while the current count helper uses
-  `> thresh_mm`. This is a methodology consistency item to resolve.
+- Admin v2 and the shared registry now use inclusive `>= 20 mm/day`, matching
+  the ETCCDI R20mm label. The separate `rain_gt_2p5mm` metric remains strict
+  `> 2.5 mm/day`.
 
 Interpretation:
 - Annual number of very heavy precipitation days.
@@ -867,14 +871,14 @@ Unit: `mm`
 
 Formula:
 - Consider wet days with precipitation `>= 1 mm/day`.
-- Compute the 95th percentile threshold from baseline wet days using nearest
-  quantile.
-- Sum precipitation on days meeting or exceeding that threshold.
+- For admin v2, compute the 95th percentile threshold from `1990-2010`
+  historical wet days using linear quantile.
+- Sum precipitation on days strictly greater than that threshold.
 
 Current configuration:
-- The registry config uses `baseline_years: (1981, 2010)`.
-- The dashboard historical delta baseline uses `1990-2010` historical period
-  columns.
+- The registry keeps the legacy `(1981, 2010)` / nearest / inclusive settings
+  for hydro compatibility.
+- The admin v2 compute module owns the `1990-2010` / linear / strict semantics.
 
 Interpretation:
 - Total rainfall contributed by very wet days.
@@ -888,14 +892,14 @@ Unit: `%`
 
 Formula:
 - Compute the same baseline wet-day 95th percentile threshold as R95p.
-- Sum precipitation on days meeting or exceeding the threshold.
+- Sum precipitation on days strictly greater than the threshold.
 - Divide by total wet-day precipitation.
 - Multiply by 100.
 
 Current configuration:
-- The registry config uses `baseline_years: (1981, 2010)`.
-- The dashboard historical delta baseline uses `1990-2010` historical period
-  columns.
+- The registry keeps the legacy `(1981, 2010)` / nearest / inclusive settings
+  for hydro compatibility.
+- The admin v2 compute module owns the `1990-2010` / linear / strict semantics.
 
 Interpretation:
 - Share of wet-day rainfall coming from very wet days.
@@ -1012,34 +1016,17 @@ Recommended validation checks:
    - Recompute min-max normalized scores.
    - Apply weights and compare to `composite_flood_extreme_rainfall_risk`.
 
-Open methodology comments:
-- Spatial aggregation method should be reviewed. The current method computes
-  indices from polygon-average daily rainfall. For extreme rainfall hazard,
-  grid-cell index calculation followed by zonal aggregation may better preserve
-  local extremes. The current method answers "what is the extreme of the
-  polygon-average rainfall time series"; the grid-first method answers "what is
-  the average local extreme inside this polygon." These are not equivalent, and
-  the current method will often smooth local extremes.
-- Expected impact of switching to grid-first aggregation is likely modest for
-  small blocks near climate-grid resolution, but could be material for larger
-  districts, heterogeneous terrain, and convective rainfall. Rx1day/Rx5day may
-  differ by several percent to tens of percent in some places; threshold and
-  spell metrics such as R20mm, R95p/R95pTOT, and CWD may be more sensitive near
-  thresholds or where wet-spell continuity varies spatially.
-- R20mm should be made inclusive (`>=20mm`) or the label should be changed.
-  Best practice for ETCCDI R20mm is generally `>=20mm`. Expected numerical
-  impact is probably small for floating model data after polygon averaging, but
-  implementation, label, and documentation should agree.
-- R95p/R95pTOT baseline years should be aligned to the project historical
-  baseline (`1990-2010`) unless a different climatological reference period is
-  intentionally adopted and documented. The current `(1981, 2010)` registry
-  setting appears unintentional relative to the dashboard delta baseline.
-- Flood-depth wording should be updated. Riverine Flood / JRC is now a separate
-  dashboard bundle, while this bundle covers climate-model extreme rainfall /
-  flash-flood pressure only. Any note saying "Flood Depth Index remains
-  deferred" should be replaced with clearer wording such as: "Riverine
-  flood-depth metrics are handled in the separate Riverine Flood bundle; this
-  bundle covers climate-model extreme rainfall / flash-flood pressure only."
+Methodology status:
+- Addressed for admin district/block: grid-first annual index calculation is
+  now used for all six active metrics in this bundle.
+- Addressed globally for R20mm: the threshold is inclusive `>=20 mm/day`.
+- Addressed for admin R95p/R95pTOT: v2 uses `1990-2010`, linear quantile, wet
+  days `>=1 mm/day`, and strict `>` threshold exceedance.
+- Preserved for hydro basin/sub-basin: legacy polygon-average-first
+  methodology and registry percentile settings remain until a hydro migration
+  is explicitly scoped.
+- Flood depth is not part of this bundle. Riverine/JRC flood depth is handled
+  by the separate Riverine Flood bundle.
 
 ## 4. Thematic - Riverine Flood
 

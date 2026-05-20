@@ -100,6 +100,17 @@ from india_resilience_tool.compute.drought_risk_gridfirst import (
     DROUGHT_GRIDFIRST_SLUGS,
     compute_drought_risk_rows_for_metric,
 )
+from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
+    EXTREME_RAINFALL_GRIDFIRST_SLUGS,
+    compute_extreme_rainfall_rows_for_metric,
+)
+from india_resilience_tool.compute.gridfirst_spatial import (
+    build_area_weights as build_gridfirst_area_weights,
+    coverage_from_weights as gridfirst_coverage_from_weights,
+    dataset_grid_spec as gridfirst_dataset_grid_spec,
+    read_spatial_weights_cache as read_gridfirst_spatial_weights_cache,
+    write_spatial_weights_cache as write_gridfirst_spatial_weights_cache,
+)
 from india_resilience_tool.utils.naming import hydro_fs_token
 from india_resilience_tool.utils.processed_io import (
     ensure_directory,
@@ -208,6 +219,11 @@ def _heat_risk_spatial_weights_path(level: AdminLevel, grid_id: str) -> Path:
 def _drought_risk_internal_root() -> Path:
     """Private cache root for Drought Risk v2 build artifacts."""
     return BASE_OUTPUT_ROOT / "_internal" / "drought_risk"
+
+
+def _extreme_rainfall_internal_root() -> Path:
+    """Private cache root for Extreme Rainfall v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "extreme_rainfall"
 
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
@@ -1691,8 +1707,10 @@ def growing_season_length(da, mask, thresh_k=278.15, min_spell_days=6):
 # -----------------------------------------------------------------------------
 # PRECIPITATION COMPUTE FUNCTIONS
 # -----------------------------------------------------------------------------
-def count_rainy_days(da, mask, thresh_mm=2.5):
-    return int((_get_district_daily_mean(pr_to_mm_per_day(da), mask) > thresh_mm).sum().item())
+def count_rainy_days(da, mask, thresh_mm=2.5, exceed_ge=False):
+    dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
+    flags = dm >= thresh_mm if exceed_ge else dm > thresh_mm
+    return int(flags.sum().item())
 
 def rx1day(da, mask):
     dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
@@ -4137,16 +4155,107 @@ def process_metric_for_model_scenario(
             logging.debug(traceback.format_exc())
             raise
 
+    if level in {"district", "block"} and slug in EXTREME_RAINFALL_GRIDFIRST_SLUGS:
+        try:
+            grid = gridfirst_dataset_grid_spec(ds_sample)
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights = read_gridfirst_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+            )
+            if weights is None:
+                logging.info(
+                    "[%s] Building Extreme Rainfall v2 spatial weights for level=%s grid=%s",
+                    slug,
+                    level,
+                    grid.grid_id,
+                )
+                weights = build_gridfirst_area_weights(gdf, grid, level=level)
+                write_gridfirst_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                )
+            coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(
+                coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+                .astype(str)
+                .tolist()
+            )
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Extreme Rainfall v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            baseline_year_to_paths: dict[int, dict[str, Path]]
+            if slug in {"r95p_very_wet_precip", "r95ptot_contribution_pct"}:
+                baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                    metric=metric,
+                    primary_var=primary_var,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=SCENARIOS,
+                    year_to_paths=year_to_paths,
+                )
+                if missing_baseline or not baseline_year_to_paths:
+                    logging.warning(f"[{slug}] Missing Extreme Rainfall v2 historical baseline for {model}/{scenario}")
+                    return
+            else:
+                baseline_year_to_paths = {}
+
+            metric_for_grid = dict(metric)
+            grid_params = dict(metric.get("params") or {})
+            grid_params["grid_id"] = grid.grid_id
+            metric_for_grid["params"] = grid_params
+
+            rows = compute_extreme_rainfall_rows_for_metric(
+                metric=metric_for_grid,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                baseline_year_to_paths=baseline_year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_extreme_rainfall_internal_root(),
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Extreme Rainfall v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
     if slug in DROUGHT_GRIDFIRST_SLUGS:
         try:
-            from india_resilience_tool.compute.gridfirst_spatial import (
-                build_area_weights as build_gridfirst_area_weights,
-                coverage_from_weights as gridfirst_coverage_from_weights,
-                dataset_grid_spec as gridfirst_dataset_grid_spec,
-                read_spatial_weights_cache as read_gridfirst_spatial_weights_cache,
-                write_spatial_weights_cache as write_gridfirst_spatial_weights_cache,
-            )
-
             grid = gridfirst_dataset_grid_spec(ds_sample)
             ds_sample.close()
             boundary_path = get_boundary_path(level)

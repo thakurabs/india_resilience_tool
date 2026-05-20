@@ -1338,7 +1338,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "r20mm_days",
         "units": "days",
         "compute": "count_rainy_days",
-        "params": {"thresh_mm": 20.0},
+        "params": {"thresh_mm": 20.0, "exceed_ge": True},
         "group": "rain",
         "description": (
             "Number of days with precipitation ≥ 20mm. Climdex R20mm index."

@@ -361,7 +361,7 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             metric_slug="pr_max_1day_precip",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
-            substitution_note="Flood Depth Index remains deferred; weights cover the active six-metric flood bundle only.",
+            substitution_note="Riverine/JRC flood depth is handled by the separate Riverine Flood bundle.",
             workbook_group="Peak Intensity",
         ),
         BundleWeightEntry(

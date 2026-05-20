@@ -26,6 +26,12 @@ from india_resilience_tool.config.metrics_registry import (
     get_pipeline_bundles,
     validate_registry_against_pipeline,
 )
+from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
+    EXTREME_RAINFALL_GRIDFIRST_SLUGS,
+    R95P_BASELINE_YEARS,
+    R95P_QUANTILE_METHOD,
+    R95P_STRICT_EXCEEDANCE,
+)
 from india_resilience_tool.compute.heat_risk_gridfirst import HEAT_RISK_GRIDFIRST_SLUGS
 
 
@@ -325,6 +331,28 @@ def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
         "r95ptot_contribution_pct",
         "cwd_consecutive_wet_days",
     ]
+    assert set(flood_metrics[1:]) == set(EXTREME_RAINFALL_GRIDFIRST_SLUGS)
+
+
+def test_extreme_rainfall_v2_keeps_registry_and_admin_semantics_explicit() -> None:
+    r20 = METRICS_BY_SLUG["r20mm_very_heavy_precip_days"]
+    rainy = METRICS_BY_SLUG["rain_gt_2p5mm"]
+    r95p = METRICS_BY_SLUG["r95p_very_wet_precip"]
+    r95ptot = METRICS_BY_SLUG["r95ptot_contribution_pct"]
+
+    assert r20.params["thresh_mm"] == 20.0
+    assert r20.params["exceed_ge"] is True
+    assert "exceed_ge" not in rainy.params
+    assert rainy.params["thresh_mm"] == 2.5
+    assert r95p.params["baseline_years"] == (1981, 2010)
+    assert r95p.params["quantile_method"] == "nearest"
+    assert r95p.params["exceed_ge"] is True
+    assert r95ptot.params["baseline_years"] == (1981, 2010)
+    assert r95ptot.params["quantile_method"] == "nearest"
+    assert r95ptot.params["exceed_ge"] is True
+    assert R95P_BASELINE_YEARS == (1990, 2010)
+    assert R95P_QUANTILE_METHOD == "linear"
+    assert R95P_STRICT_EXCEEDANCE is True
 
 
 def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_domains() -> None:

@@ -88,8 +88,8 @@ This section lists the metrics currently encoded in the dashboard registry and a
 | `pr_max_1day_precip` | Maximum 1-day Precipitation (Rx1day) | No fixed threshold in code; annual maximum 1-day precipitation |
 | `pr_max_5day_precip` | Maximum 5-day Precipitation (Rx5day) | No fixed threshold in code; annual maximum 5-day precipitation |
 | `r20mm_very_heavy_precip_days` | Very Heavy Precipitation Days (R20mm) | Count of days with precipitation `>= 20 mm` |
-| `r95p_very_wet_precip` | Very Wet Day Precipitation (R95p) | Total precipitation from days above the `95th` percentile of wet-day precipitation; baseline years `1981-2010`, wet-day threshold `>= 1 mm` |
-| `r95ptot_contribution_pct` | Very Wet Day Contribution (R95pTOT) | Percent contribution from days above the `95th` percentile of wet-day precipitation; baseline years `1981-2010`, wet-day threshold `>= 1 mm` |
+| `r95p_very_wet_precip` | Very Wet Day Precipitation (R95p) | Admin v2 uses grid-first thresholds from `1990-2010` historical wet days (`>= 1 mm`), linear quantile, and strict `>` exceedance; hydro remains on the legacy registry semantics (`1981-2010`, nearest, inclusive) until migrated |
+| `r95ptot_contribution_pct` | Very Wet Day Contribution (R95pTOT) | Admin v2 uses the same `1990-2010` / linear / strict R95p semantics before computing percent wet-day contribution; hydro remains on the legacy registry semantics until migrated |
 | `cwd_consecutive_wet_days` | Consecutive Wet Days (CWD) | Maximum spell length of consecutive wet days with precipitation `>= 1 mm` |
 
 ### 1.6 Rainfall Totals & Typical Wetness
