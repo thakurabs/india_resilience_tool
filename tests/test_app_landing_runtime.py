@@ -311,7 +311,6 @@ def test_landing_bundle_domains_exclude_jrc_flood_bundle(monkeypatch: pytest.Mon
         "Riverine Flood",
         "Heat Stress",
         "Cold Risk",
-        "Agriculture & Growing Conditions",
         "Agricultural Risk",
         "Health Risk",
         "Industrial Risk",

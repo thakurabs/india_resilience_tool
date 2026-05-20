@@ -191,13 +191,6 @@ def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> Non
         ),
         ("composite_heat_stress", "Composite Heat Stress", "Heat Stress", "scenario_period", ["ssp245", "ssp585"]),
         ("composite_cold_risk", "Composite Cold Risk", "Cold Risk", "scenario_period", ["ssp245", "ssp585"]),
-        (
-            "composite_agriculture_growing_conditions",
-            "Composite Agriculture & Growing Conditions",
-            "Agriculture & Growing Conditions",
-            "scenario_period",
-            ["ssp245", "ssp585"],
-        ),
     ]:
         cfg = VARIABLES[slug]
         assert cfg["label"] == label

@@ -65,11 +65,15 @@ This section lists the metrics currently encoded in the dashboard registry and a
 | `csdi_cold_spell_days` | Cold Spell Duration Index (CSDI) | Cold-spell days below the 10th percentile baseline; baseline years `1981-2010`, `5`-day window, minimum spell length `6` days |
 | `tnle10_consecutive_cold_nights` | Consecutive Cold Nights (TN <= 10°C) | Spell metric using nights with minimum temperature `<= 10°C` |
 
-### 1.4 Agriculture & Growing Conditions
+### 1.4 Retired Agriculture & Growing Conditions / Active Agricultural Risk
+
+`Agriculture & Growing Conditions` and `composite_agriculture_growing_conditions`
+are retired history. Active agriculture scoring is now
+`Sector-wise - Agricultural Risk` / `composite_agricultural_risk`.
 
 | Slug | Dashboard label | Threshold / rule currently used |
 |---|---|---|
-| `composite_agriculture_growing_conditions` | Composite Agriculture & Growing Conditions | No direct threshold; persisted weighted composite score for the bundle |
+| `composite_agriculture_growing_conditions` | Composite Agriculture & Growing Conditions | Retired; legacy artifacts are pruned only with the explicit retired-artifact prune flag |
 | `gsl_growing_season` | Growing Season Length (GSL) | Growing-season metric using threshold `5°C` (`278.15 K`) and minimum spell length `6` days |
 | `tasmax_summer_mean` | Summer Max Temperature (MAM Mean) | March-May seasonal mean |
 | `tasmin_winter_mean` | Winter Min Temperature (DJF Mean) | December-February seasonal mean |

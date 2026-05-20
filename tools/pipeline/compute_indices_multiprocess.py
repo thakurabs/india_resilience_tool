@@ -88,6 +88,7 @@ from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
 from india_resilience_tool.compute.heat_risk_gridfirst import (
     DEFAULT_BASELINE_YEARS as HEAT_RISK_GRIDFIRST_BASELINE_YEARS,
+    GRIDFIRST_BASELINE_THRESHOLD_COMPUTES as HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES,
     HEAT_RISK_GRIDFIRST_SLUGS,
     build_area_weights as build_heat_risk_area_weights,
     compute_heat_risk_rows_for_metric,
@@ -4108,7 +4109,7 @@ def process_metric_for_model_scenario(
             grid_params.setdefault("exceed_ge", False)
             metric_for_grid["params"] = grid_params
 
-            if metric_for_grid.get("compute") == "annual_max_temperature":
+            if metric_for_grid.get("compute") not in HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
                 baseline_year_to_paths = year_to_paths
             else:
                 baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(

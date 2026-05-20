@@ -69,32 +69,32 @@ def _write_district_yearly(
     df.to_csv(root / "district_yearly_ensemble_stats.csv", index=False)
 
 
-def test_compute_proposal_bundle_master_frame_scores_thresholds_and_baseline_change(
+def test_compute_agricultural_risk_uses_weighted_absolute_rule_scores(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     state_name = "Telangana"
     ids = pd.DataFrame(
         {
-            "state": [state_name, state_name],
-            "district": ["A", "B"],
-            "district_key": ["telangana|a", "telangana|b"],
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["telangana|a", "telangana|b", "telangana|c"],
         }
     )
     _patch_canonical_units(monkeypatch, district_df=ids)
     metric_values = {
-        "pr_max_1day_precip": [220.0, 180.0],
-        "pr_max_5day_precip": [320.0, 280.0],
-        "pr_consecutive_dry_days_lt1mm": [25.0, 15.0],
-        "txx_annual_max": [41.0, 39.0],
-        "r95p_very_wet_precip": [150.0, 110.0],
+        "txx_annual_max": [30.0, 10.0, 20.0],
+        "txge35_extreme_heat_days": [30.0, 10.0, 20.0],
+        "wsdi_warm_spell_days": [30.0, 10.0, 20.0],
+        "spi3_count_events_lt_minus1": [30.0, 10.0, 20.0],
+        "spi3_max_spell_lt_minus1": [30.0, 10.0, 20.0],
+        "pr_max_5day_precip": [30.0, 10.0, 20.0],
+        "tnle10_cold_nights": [30.0, 10.0, 20.0],
     }
     for slug, values in metric_values.items():
         df = ids.copy()
         metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
         df[f"{metric_base}__ssp245__2020-2040__mean"] = values
-        if slug == "r95p_very_wet_precip":
-            df[f"{metric_base}__historical__1995-2014__mean"] = [100.0, 100.0]
         _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
 
     out = compute_proposal_bundle_master_frame(
@@ -106,10 +106,60 @@ def test_compute_proposal_bundle_master_frame_scores_thresholds_and_baseline_cha
     )
 
     score_col = "composite_agricultural_risk__ssp245__2020-2040__mean"
+    available_count_col = "composite_agricultural_risk__ssp245__2020-2040__available_rule_count"
+    available_weight_col = "composite_agricultural_risk__ssp245__2020-2040__available_rule_weight_fraction"
     by_district = dict(zip(out["district"], out[score_col]))
-    assert by_district["A"] > by_district["B"]
-    assert 0.0 <= by_district["B"] <= 100.0
-    assert 0.0 <= by_district["A"] <= 100.0
+    assert by_district == {"A": 100.0, "B": 0.0, "C": 50.0}
+    assert out[available_count_col].tolist() == [7, 7, 7]
+    assert out[available_weight_col].tolist() == [1.0, 1.0, 1.0]
+
+
+def test_compute_agricultural_risk_applies_available_weight_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["telangana|a", "telangana|b", "telangana|c"],
+        }
+    )
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    metric_values = {
+        "txx_annual_max": [30.0, 10.0, 20.0],
+        "txge35_extreme_heat_days": [30.0, 10.0, 20.0],
+        "wsdi_warm_spell_days": [30.0, 10.0, 20.0],
+        "spi3_count_events_lt_minus1": [30.0, 10.0, 20.0],
+        "spi3_max_spell_lt_minus1": [30.0, 10.0, 20.0],
+        "pr_max_5day_precip": [float("nan"), 10.0, float("nan")],
+        "tnle10_cold_nights": [30.0, 10.0, float("nan")],
+    }
+    for slug, values in metric_values.items():
+        df = ids.copy()
+        metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df[f"{metric_base}__ssp245__2020-2040__mean"] = values
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
+
+    out = compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_agricultural_risk"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+    score_col = "composite_agricultural_risk__ssp245__2020-2040__mean"
+    available_count_col = "composite_agricultural_risk__ssp245__2020-2040__available_rule_count"
+    available_weight_col = "composite_agricultural_risk__ssp245__2020-2040__available_rule_weight_fraction"
+    by_district = {row["district"]: row for _, row in out.iterrows()}
+    assert by_district["A"][available_count_col] == 6
+    assert by_district["A"][available_weight_col] == pytest.approx(0.80)
+    assert pd.notna(by_district["A"][score_col])
+    assert by_district["C"][available_count_col] == 5
+    assert by_district["C"][available_weight_col] == pytest.approx(0.60)
+    assert pd.isna(by_district["C"][score_col])
 
 
 def test_compute_r95p_interannual_variability_master_frame_uses_cv_and_nan_for_insufficient_points(tmp_path: Path) -> None:

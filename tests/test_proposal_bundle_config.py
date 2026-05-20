@@ -14,6 +14,7 @@ from india_resilience_tool.config.proposal_bundles import (
     get_proposal_bundle_spec_by_slug,
     is_proposal_bundle_slug,
     proposal_available_rule_count_column,
+    proposal_available_rule_weight_fraction_column,
     proposal_bundle_mean_column,
     proposal_rule_score_column,
     validate_proposal_bundle_specs,
@@ -40,11 +41,13 @@ def test_proposal_bundle_labels_slugs_and_rule_order_are_exact() -> None:
             "Agricultural Risk",
             "composite_agricultural_risk",
             [
-                "rx1day_ge_200",
-                "rx5day_ge_300",
-                "cdd_ge_20",
-                "txx_ge_40",
-                "r95p_change_gt_20pct_vs_baseline",
+                "txx_peak_crop_heat",
+                "txge35_damaging_heat_days",
+                "wsdi_persistent_heat",
+                "spi3_drought_episodes",
+                "spi3_longest_drought_spell",
+                "rx5day_heavy_rainfall",
+                "tnle10_cold_nights",
             ],
         ),
         (
@@ -103,11 +106,13 @@ def test_proposal_bundle_rule_display_labels_are_exact() -> None:
     }
     assert observed == {
         "Agricultural Risk": {
-            "rx1day_ge_200": "1-day rainfall pressure",
-            "rx5day_ge_300": "5-day rainfall pressure",
-            "cdd_ge_20": "Dry-spell pressure",
-            "txx_ge_40": "Extreme daytime heat pressure",
-            "r95p_change_gt_20pct_vs_baseline": "Very wet precipitation change pressure",
+            "txx_peak_crop_heat": "Peak crop heat",
+            "txge35_damaging_heat_days": "Damaging heat days",
+            "wsdi_persistent_heat": "Persistent heat",
+            "spi3_drought_episodes": "Drought episodes",
+            "spi3_longest_drought_spell": "Longest drought spell",
+            "rx5day_heavy_rainfall": "5-day heavy rainfall",
+            "tnle10_cold_nights": "Cold nights",
         },
         "Health Risk": {
             "txx_ge_45": "Extreme daytime heat pressure",
@@ -173,6 +178,15 @@ def test_is_proposal_bundle_slug_matches_catalog() -> None:
 
 
 def test_get_proposal_bundle_source_metric_slugs_are_exact_and_deduplicated() -> None:
+    assert get_proposal_bundle_source_metric_slugs("composite_agricultural_risk") == (
+        "txx_annual_max",
+        "txge35_extreme_heat_days",
+        "wsdi_warm_spell_days",
+        "spi3_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "pr_max_5day_precip",
+        "tnle10_cold_nights",
+    )
     assert get_proposal_bundle_source_metric_slugs("composite_infrastructure_risk") == (
         "pr_max_1day_precip",
         "pr_max_5day_precip",
@@ -201,6 +215,20 @@ def test_proposal_persisted_column_helpers_are_exact() -> None:
         proposal_available_rule_count_column("composite_health_risk", "ssp585", "2040-2060")
         == "composite_health_risk__ssp585__2040-2060__available_rule_count"
     )
+    assert (
+        proposal_available_rule_weight_fraction_column("composite_health_risk", "ssp585", "2040-2060")
+        == "composite_health_risk__ssp585__2040-2060__available_rule_weight_fraction"
+    )
+
+
+def test_agricultural_risk_uses_explicit_normalized_rule_weights() -> None:
+    spec = get_proposal_bundle_spec_by_slug("composite_agricultural_risk")
+
+    assert spec is not None
+    assert spec.weight_mode == "explicit_normalized"
+    assert spec.min_available_rule_weight_fraction == 0.70
+    assert [rule.rule_weight for rule in spec.rules] == [0.10, 0.10, 0.10, 0.15, 0.15, 0.20, 0.20]
+    assert all(rule.absolute_weight == 1.0 and rule.change_weight == 0.0 and rule.impact_weight == 0.0 for rule in spec.rules)
 
 
 def test_sector_wise_dashboard_bundles_have_matching_proposal_specs() -> None:

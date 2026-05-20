@@ -2757,18 +2757,6 @@ DOMAINS: dict[str, list[str]] = {
         "csdi_cold_spell_days",
         "tnle10_consecutive_cold_nights",
     ],
-    "Agriculture & Growing Conditions": [
-        "composite_agriculture_growing_conditions",
-        "gsl_growing_season",
-        "tasmax_summer_mean",
-        "tasmin_winter_mean",
-        "dtr_daily_temp_range",
-        "txge35_extreme_heat_days",
-        "tnle10_cold_nights",
-        "wsdi_warm_spell_days",
-        "spi3_drought_index",
-        "prcptot_annual_total",
-    ],
     "Extreme Rainfall | Flash Flood Risk": [
         "composite_flood_extreme_rainfall_risk",
         # Peak intensity
@@ -2902,7 +2890,6 @@ DOMAIN_ORDER: list[str] = [
     "Extreme Rainfall | Flash Flood Risk",
     "Heat Stress",
     "Cold Risk",
-    "Agriculture & Growing Conditions",
     "Agricultural Risk",
     "Health Risk",
     "Industrial Risk",
@@ -2930,7 +2917,6 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
         "Extreme Rainfall | Flash Flood Risk",
         "Heat Stress",
         "Cold Risk",
-        "Agriculture & Growing Conditions",
         "Agricultural Risk",
         "Health Risk",
         "Industrial Risk",
@@ -2972,6 +2958,7 @@ DOMAIN_TO_PILLAR: dict[str, str] = {
 }
 
 LEGACY_DOMAIN_ALIASES: dict[str, str] = {
+    "Agriculture & Growing Conditions": "Agricultural Risk",
     "Water Risk": "Aqueduct Water Risk",
 }
 
@@ -3021,10 +3008,6 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
     "Cold Risk": (
         "Metrics related to cold extremes, frost, and cold spells. "
         "Includes frost days, icing days, and cold spell duration."
-    ),
-    "Agriculture & Growing Conditions": (
-        "Metrics relevant to crop suitability and growing season length. "
-        "Useful for non-disaster framing of climate impacts on agriculture."
     ),
     "Extreme Rainfall | Flash Flood Risk": (
         "Metrics related to extreme precipitation events and flood risk. "

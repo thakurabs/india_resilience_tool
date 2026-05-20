@@ -718,20 +718,22 @@ def test_build_processed_optimised_writes_proposal_bundle_admin_masters(tmp_path
         "state,district,district_key,"
         "composite_health_risk__ssp585__2040-2060__mean,"
         "composite_health_risk__ssp585__2040-2060__available_rule_count,"
+        "composite_health_risk__ssp585__2040-2060__available_rule_weight_fraction,"
         "txx_ge_45__ssp585__2040-2060__score,"
         "wsdi_ge_5__ssp585__2040-2060__score,"
         "debug_internal_counter\n"
-        "Telangana,Hanumakonda,telangana|hanumakonda,75.0,2,100.0,50.0,99\n",
+        "Telangana,Hanumakonda,telangana|hanumakonda,75.0,2,0.4,100.0,50.0,99\n",
         encoding="utf-8",
     )
     (legacy_root / "master_metrics_by_block.csv").write_text(
         "state,district,block,block_key,"
         "composite_health_risk__ssp585__2040-2060__mean,"
         "composite_health_risk__ssp585__2040-2060__available_rule_count,"
+        "composite_health_risk__ssp585__2040-2060__available_rule_weight_fraction,"
         "txx_ge_45__ssp585__2040-2060__score,"
         "wsdi_ge_5__ssp585__2040-2060__score,"
         "debug_internal_counter\n"
-        "Telangana,Hanumakonda,Atmakur,telangana|hanumakonda|atmakur,80.0,2,75.0,25.0,101\n",
+        "Telangana,Hanumakonda,Atmakur,telangana|hanumakonda|atmakur,80.0,2,0.4,75.0,25.0,101\n",
         encoding="utf-8",
     )
 
@@ -763,12 +765,18 @@ def test_build_processed_optimised_writes_proposal_bundle_admin_masters(tmp_path
     for df in (district_df, block_df):
         assert "composite_health_risk__ssp585__2040-2060__mean" in df.columns
         assert "composite_health_risk__ssp585__2040-2060__available_rule_count" in df.columns
+        assert "composite_health_risk__ssp585__2040-2060__available_rule_weight_fraction" in df.columns
         assert "txx_ge_45__ssp585__2040-2060__score" in df.columns
         assert "wsdi_ge_5__ssp585__2040-2060__score" in df.columns
         assert "debug_internal_counter" not in df.columns
 
     manifest = _read_manifest(tmp_path / "processed_optimised")
-    assert manifest["stats_contract"]["proposal_bundle"] == ["mean", "score", "available_rule_count"]
+    assert manifest["stats_contract"]["proposal_bundle"] == [
+        "mean",
+        "score",
+        "available_rule_count",
+        "available_rule_weight_fraction",
+    ]
 
 
 def test_build_processed_optimised_parallel_matches_serial_outputs(

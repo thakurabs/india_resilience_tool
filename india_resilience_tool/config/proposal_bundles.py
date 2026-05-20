@@ -16,6 +16,8 @@ from dataclasses import dataclass
 VALID_RULE_TYPES = {"blended", "trend"}
 VALID_DIRECTIONS = {"higher_worse", "lower_worse"}
 VALID_CHANGE_MODES = {"auto", "absolute_delta", "relative_pct"}
+VALID_WEIGHT_MODES = {"equal", "explicit_normalized"}
+EXPLICIT_WEIGHT_TOLERANCE = 1e-9
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,7 @@ class ProposalRuleSpec:
     impact_low: float | None = None
     impact_high: float | None = None
     change_mode: str = "auto"
+    rule_weight: float | None = None
     method_note: str = ""
 
 
@@ -51,6 +54,8 @@ class ProposalBundleSpec:
     composite_slug: str
     supported_levels: tuple[str, ...]
     rules: tuple[ProposalRuleSpec, ...]
+    weight_mode: str = "equal"
+    min_available_rule_weight_fraction: float = 0.0
 
 
 def _pressure_rule(
@@ -66,6 +71,7 @@ def _pressure_rule(
     change_mode: str = "auto",
     source_mode: str = "master",
     method_note: str = "",
+    rule_weight: float | None = None,
 ) -> ProposalRuleSpec:
     """Return a continuous sector-hazard-pressure rule specification."""
     return ProposalRuleSpec(
@@ -80,6 +86,29 @@ def _pressure_rule(
         impact_low=impact_low,
         impact_high=impact_high,
         change_mode=change_mode,
+        rule_weight=rule_weight,
+        method_note=method_note,
+    )
+
+
+def _absolute_pressure_rule(
+    rule_slug: str,
+    display_label: str,
+    metric_slug: str,
+    *,
+    rule_weight: float,
+    method_note: str = "",
+) -> ProposalRuleSpec:
+    """Return a pure absolute-pressure rule with an explicit bundle weight."""
+    return _pressure_rule(
+        rule_slug,
+        display_label,
+        metric_slug,
+        absolute_weight=1.0,
+        change_weight=0.0,
+        impact_weight=0.0,
+        change_mode="auto",
+        rule_weight=rule_weight,
         method_note=method_note,
     )
 
@@ -101,32 +130,54 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         bundle_label="Agricultural Risk",
         composite_slug="composite_agricultural_risk",
         supported_levels=("district", "block"),
+        weight_mode="explicit_normalized",
+        min_available_rule_weight_fraction=0.70,
         rules=(
-            _pressure_rule("rx1day_ge_200", "1-day rainfall pressure", "pr_max_1day_precip"),
-            _pressure_rule("rx5day_ge_300", "5-day rainfall pressure", "pr_max_5day_precip"),
-            _pressure_rule("cdd_ge_20", "Dry-spell pressure", "pr_consecutive_dry_days_lt1mm"),
-            _pressure_rule(
-                "txx_ge_40",
-                "Extreme daytime heat pressure",
+            _absolute_pressure_rule(
+                "txx_peak_crop_heat",
+                "Peak crop heat",
                 "txx_annual_max",
-                absolute_weight=0.40,
-                change_weight=0.30,
-                impact_weight=0.30,
-                impact_low=40.0,
-                impact_high=45.0,
-                change_mode="absolute_delta",
+                rule_weight=0.10,
                 method_note=(
-                    "Heat component combines future severity, warming from baseline, "
-                    "and a soft 40-45 degC impact band."
+                    "Pure current/future absolute-pressure score. The earlier TXx 40-45 degC "
+                    "impact band and baseline-change blend are intentionally retired."
                 ),
             ),
-            _pressure_rule(
-                "r95p_change_gt_20pct_vs_baseline",
-                "Very wet precipitation change pressure",
-                "r95p_very_wet_precip",
-                absolute_weight=0.30,
-                change_weight=0.70,
-                change_mode="relative_pct",
+            _absolute_pressure_rule(
+                "txge35_damaging_heat_days",
+                "Damaging heat days",
+                "txge35_extreme_heat_days",
+                rule_weight=0.10,
+            ),
+            _absolute_pressure_rule(
+                "wsdi_persistent_heat",
+                "Persistent heat",
+                "wsdi_warm_spell_days",
+                rule_weight=0.10,
+            ),
+            _absolute_pressure_rule(
+                "spi3_drought_episodes",
+                "Drought episodes",
+                "spi3_count_events_lt_minus1",
+                rule_weight=0.15,
+            ),
+            _absolute_pressure_rule(
+                "spi3_longest_drought_spell",
+                "Longest drought spell",
+                "spi3_max_spell_lt_minus1",
+                rule_weight=0.15,
+            ),
+            _absolute_pressure_rule(
+                "rx5day_heavy_rainfall",
+                "5-day heavy rainfall",
+                "pr_max_5day_precip",
+                rule_weight=0.20,
+            ),
+            _absolute_pressure_rule(
+                "tnle10_cold_nights",
+                "Cold nights",
+                "tnle10_cold_nights",
+                rule_weight=0.20,
             ),
         ),
     ),
@@ -401,6 +452,11 @@ def proposal_available_rule_count_column(composite_slug: str, scenario: str, per
     return f"{str(composite_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__available_rule_count"
 
 
+def proposal_available_rule_weight_fraction_column(composite_slug: str, scenario: str, period: str) -> str:
+    """Return the persisted available-rule-weight-fraction column name for one proposal bundle selection."""
+    return f"{str(composite_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__available_rule_weight_fraction"
+
+
 def _validate_weight(value: float, *, field_name: str, rule_slug: str, issues: list[str]) -> None:
     """Append a validation issue if a score-component weight is invalid."""
     if value < 0.0:
@@ -421,9 +477,17 @@ def validate_proposal_bundle_specs() -> list[str]:
         seen_composite_slugs.add(spec.composite_slug)
         if spec.supported_levels != ("district", "block"):
             issues.append(f"Proposal bundle {spec.composite_slug!r} must support exactly district/block.")
+        if spec.weight_mode not in VALID_WEIGHT_MODES:
+            issues.append(f"Proposal bundle {spec.composite_slug!r} has unsupported weight mode {spec.weight_mode!r}.")
+        if not (0.0 <= spec.min_available_rule_weight_fraction <= 1.0):
+            issues.append(
+                f"Proposal bundle {spec.composite_slug!r} has invalid minimum available weight fraction "
+                f"{spec.min_available_rule_weight_fraction!r}."
+            )
         if not spec.rules:
             issues.append(f"Proposal bundle {spec.composite_slug!r} has no rules.")
             continue
+        explicit_rule_weight_sum = 0.0
         seen_rule_slugs: set[str] = set()
         for rule in spec.rules:
             if rule.rule_slug in seen_rule_slugs:
@@ -451,6 +515,16 @@ def validate_proposal_bundle_specs() -> list[str]:
             )
             _validate_weight(rule.change_weight, field_name="change_weight", rule_slug=rule.rule_slug, issues=issues)
             _validate_weight(rule.impact_weight, field_name="impact_weight", rule_slug=rule.rule_slug, issues=issues)
+            if spec.weight_mode == "explicit_normalized":
+                if rule.rule_weight is None or rule.rule_weight <= 0.0 or rule.rule_weight > 1.0:
+                    issues.append(
+                        f"Proposal rule {rule.rule_slug!r} must declare 0 < rule_weight <= 1 "
+                        f"for explicit_normalized bundles."
+                    )
+                else:
+                    explicit_rule_weight_sum += float(rule.rule_weight)
+            elif rule.rule_weight is not None and rule.rule_weight <= 0.0:
+                issues.append(f"Proposal rule {rule.rule_slug!r} has non-positive rule_weight: {rule.rule_weight!r}")
             active_weight = rule.absolute_weight + rule.change_weight + rule.impact_weight
             if rule.rule_type == "blended" and active_weight <= 0.0:
                 issues.append(f"Proposal rule {rule.rule_slug!r} must have at least one active blended component.")
@@ -460,4 +534,9 @@ def validate_proposal_bundle_specs() -> list[str]:
                 issues.append(f"Proposal rule {rule.rule_slug!r} has impact_weight but incomplete impact thresholds.")
             if rule.impact_low is not None and rule.impact_high is not None and rule.impact_low == rule.impact_high:
                 issues.append(f"Proposal rule {rule.rule_slug!r} impact thresholds must differ.")
+        if spec.weight_mode == "explicit_normalized" and not abs(explicit_rule_weight_sum - 1.0) <= EXPLICIT_WEIGHT_TOLERANCE:
+            issues.append(
+                f"Proposal bundle {spec.composite_slug!r} explicit rule weights must sum to 1.0; "
+                f"got {explicit_rule_weight_sum!r}."
+            )
     return issues

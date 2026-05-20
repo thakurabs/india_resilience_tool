@@ -379,25 +379,27 @@ def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_dom
     assert "pr_2day_heavy_rainfall_events_ge150mm" not in flood_metrics
 
 
-def test_agriculture_bundle_membership_is_the_approved_nine_metric_mix() -> None:
+def test_agricultural_risk_bundle_membership_uses_final_seven_metric_mix_and_legacy_alias() -> None:
     agriculture_metrics = get_metrics_for_bundle(
-        "Agriculture & Growing Conditions",
+        "Agricultural Risk",
         spatial_family="admin",
         level="district",
     )
     assert agriculture_metrics == [
-        "composite_agriculture_growing_conditions",
-        "gsl_growing_season",
-        "tasmax_summer_mean",
-        "tasmin_winter_mean",
-        "dtr_daily_temp_range",
+        "composite_agricultural_risk",
+        "txx_annual_max",
         "txge35_extreme_heat_days",
-        "tnle10_cold_nights",
         "wsdi_warm_spell_days",
-        "spi3_drought_index",
-        "prcptot_annual_total",
+        "spi3_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "pr_max_5day_precip",
+        "tnle10_cold_nights",
     ]
-    assert METRICS_BY_SLUG["prcptot_annual_total"].rank_higher_is_worse is False
+    assert get_metrics_for_bundle(
+        "Agriculture & Growing Conditions",
+        spatial_family="admin",
+        level="district",
+    ) == agriculture_metrics
 
 
 def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hydro() -> None:
@@ -407,7 +409,6 @@ def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hy
         "Extreme Rainfall | Flash Flood Risk": "composite_flood_extreme_rainfall_risk",
         "Heat Stress": "composite_heat_stress",
         "Cold Risk": "composite_cold_risk",
-        "Agriculture & Growing Conditions": "composite_agriculture_growing_conditions",
     }
 
     for domain, slug in expected.items():
@@ -502,11 +503,15 @@ def test_sector_wise_reverse_membership_is_context_aware() -> None:
         level="district",
     )
     assert "Extreme Rainfall | Flash Flood Risk" in district_domains
-    assert "Agricultural Risk" in district_domains
     assert "Health Risk" in district_domains
     assert "Industrial Risk" in district_domains
     assert "Infrastructure Risk" in district_domains
     assert "Life & Livelihood Loss Risk" in district_domains
+    assert "Agricultural Risk" in get_domains_for_metric(
+        "pr_max_5day_precip",
+        spatial_family="admin",
+        level="district",
+    )
 
     block_domains = get_domains_for_metric(
         "pr_max_1day_precip",

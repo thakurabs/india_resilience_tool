@@ -344,7 +344,7 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
     assert "--overwrite" in plan[0].argv
     assert "--prune-scope" not in plan[0].argv
     assert "--full-rebuild" not in plan[0].argv
-    assert plan[0].argv.count("--metric") == 9
+    assert plan[0].argv.count("--metric") == 8
     assert "composite_heat_risk" in plan[0].argv
     assert "metric_a" in plan[0].argv
     assert "metric_b" in plan[0].argv

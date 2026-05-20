@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -38,6 +39,7 @@ ID_COLUMNS_BY_LEVEL = {
 SUPPORTED_SCENARIOS = ("ssp245", "ssp585", "snapshot")
 SUPPORTED_PERIODS = ("1990-2010", "2020-2040", "2040-2060", "2060-2080", "Current")
 SUPPORTED_STAT = "mean"
+RETIRED_COMPOSITE_SLUGS = frozenset({"composite_agriculture_growing_conditions"})
 
 
 def _normalize_level(level: str) -> str:
@@ -404,6 +406,22 @@ def _write_composite_master_frame(
     return target_path
 
 
+def _prune_retired_composite_artifacts(*, data_dir: Path, dry_run: bool, quiet: bool) -> list[Path]:
+    """Delete explicitly retired composite roots only when requested."""
+    pruned: list[Path] = []
+    for slug in sorted(RETIRED_COMPOSITE_SLUGS):
+        root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
+        if not root.exists():
+            continue
+        pruned.append(root)
+        if not quiet:
+            prefix = "[composite-prune-dry-run]" if dry_run else "[composite-prune]"
+            print(f"{prefix} retired root {root}")
+        if not dry_run:
+            shutil.rmtree(root)
+    return pruned
+
+
 def build_composite_metrics(
     *,
     levels: Sequence[str],
@@ -412,11 +430,14 @@ def build_composite_metrics(
     data_dir: Optional[Path] = None,
     overwrite: bool = False,
     dry_run: bool = False,
+    prune_retired: bool = False,
     quiet: bool = False,
 ) -> list[Path]:
     """Build persisted composite metric masters for visible Glance bundles."""
     if data_dir is None:
         data_dir = get_paths_config().data_dir
+
+    pruned = _prune_retired_composite_artifacts(data_dir=data_dir, dry_run=dry_run, quiet=quiet) if prune_retired else []
 
     requested_levels: list[str] = []
     for level in (levels or ("admin",)):
@@ -433,7 +454,7 @@ def build_composite_metrics(
     else:
         specs = list(VISIBLE_GLANCE_COMPOSITES)
 
-    written: list[Path] = []
+    written: list[Path] = list(pruned)
     for spec in specs:
         requested_states = [str(state).strip() for state in states or () if str(state).strip()]
         if not requested_states:
@@ -485,6 +506,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--overwrite", action="store_true", help="Rewrite existing composite outputs.")
     parser.add_argument("--dry-run", action="store_true", help="Print planned composite outputs without writing.")
+    parser.add_argument(
+        "--prune-retired",
+        action="store_true",
+        help="Delete retired composite processed roots such as composite_agriculture_growing_conditions. Honors --dry-run.",
+    )
     parser.add_argument("--quiet", action="store_true", help="Suppress per-file success logging.")
     return parser.parse_args(argv)
 
@@ -498,6 +524,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         composite_slugs=args.metric,
         overwrite=bool(args.overwrite),
         dry_run=bool(args.dry_run),
+        prune_retired=bool(args.prune_retired),
         quiet=bool(args.quiet),
     )
     return 0

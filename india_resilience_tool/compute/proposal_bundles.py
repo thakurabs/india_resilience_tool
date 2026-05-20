@@ -28,6 +28,7 @@ from india_resilience_tool.config.proposal_bundles import (
     ProposalBundleSpec,
     ProposalRuleSpec,
     proposal_available_rule_count_column,
+    proposal_available_rule_weight_fraction_column,
     proposal_bundle_mean_column,
     proposal_rule_score_column,
 )
@@ -468,6 +469,30 @@ def _weighted_component_score(component_scores: list[pd.Series], component_weigh
     return score.astype(float)
 
 
+def _rule_weights_for_bundle(bundle: ProposalBundleSpec) -> np.ndarray:
+    """Return bundle-level rule weights in rule order."""
+    if bundle.weight_mode == "explicit_normalized":
+        return np.asarray([float(rule.rule_weight) for rule in bundle.rules], dtype=float)
+    if not bundle.rules:
+        return np.asarray([], dtype=float)
+    return np.full(len(bundle.rules), 1.0 / float(len(bundle.rules)), dtype=float)
+
+
+def _weighted_bundle_score(
+    rule_scores: pd.DataFrame,
+    rule_weights: np.ndarray,
+) -> tuple[pd.Series, pd.Series]:
+    """Return row-wise available-weight fraction and normalized weighted score."""
+    if rule_scores.empty:
+        empty = pd.Series(np.nan, index=rule_scores.index, dtype=float)
+        return empty, empty
+    valid = rule_scores.notna()
+    weighted = rule_scores.multiply(rule_weights, axis=1).where(valid)
+    available_weight = valid.multiply(rule_weights, axis=1).sum(axis=1).astype(float)
+    score = weighted.sum(axis=1, skipna=True) / available_weight.replace(0.0, np.nan)
+    return available_weight.astype(float), score.astype(float)
+
+
 def _build_blended_rule(
     key_frame: pd.DataFrame,
     source_frame: pd.DataFrame,
@@ -831,6 +856,7 @@ def compute_proposal_bundle_master_frame(
 
     output = key_frame.copy()
     ordered_columns = list(_required_id_columns(level))
+    rule_weights = _rule_weights_for_bundle(bundle)
     for scenario in SUPPORTED_SCENARIOS:
         for period in SUPPORTED_PERIODS:
             rule_columns: list[str] = []
@@ -896,8 +922,15 @@ def compute_proposal_bundle_master_frame(
 
             bundle_score_column = proposal_bundle_mean_column(bundle.composite_slug, scenario, period)
             available_count_column = proposal_available_rule_count_column(bundle.composite_slug, scenario, period)
+            available_weight_column = proposal_available_rule_weight_fraction_column(bundle.composite_slug, scenario, period)
             output[available_count_column] = output[rule_columns].notna().sum(axis=1).astype(int)
-            output[bundle_score_column] = output[rule_columns].mean(axis=1, skipna=True)
+            available_weight_fraction, bundle_score = _weighted_bundle_score(output[rule_columns], rule_weights)
+            output[available_weight_column] = available_weight_fraction
+            output[bundle_score_column] = bundle_score
+            output.loc[
+                output[available_weight_column] < float(bundle.min_available_rule_weight_fraction),
+                bundle_score_column,
+            ] = np.nan
             output.loc[output[available_count_column] == 0, bundle_score_column] = np.nan
             _append_score_quality_warnings(
                 output[bundle_score_column],
@@ -908,7 +941,7 @@ def compute_proposal_bundle_master_frame(
                 column_name=bundle_score_column,
                 label="bundle",
             )
-            ordered_columns.extend([bundle_score_column, available_count_column])
+            ordered_columns.extend([bundle_score_column, available_count_column, available_weight_column])
 
     output = output.loc[:, ordered_columns]
     output = output.sort_values(_target_sort_columns(level), kind="stable").reset_index(drop=True)

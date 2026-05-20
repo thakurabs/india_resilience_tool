@@ -17,11 +17,20 @@ Each proposal-bundle rule is scored from `0` to `100`.
 - `100` means high relative sector hazard pressure for the selected state, level, scenario, and period.
 - Higher is always worse.
 - Missing or invalid data returns `NaN` for the affected component or rule.
-- Bundle means are computed from available rule scores and are set to `NaN` only when no rule is available for a unit.
+- Bundle means are computed from available rule scores. Most bundles use equal
+  rule weights and are set to `NaN` only when no rule is available for a unit.
+- `Agricultural Risk` uses explicit normalized rule weights and a 0.70 minimum
+  `available_rule_weight_fraction`; rows below that coverage gate are set to
+  `NaN`.
 
 ## Rule score components
 
 Each rule can combine three scientifically distinct components.
+
+`Agricultural Risk` is an intentional exception within v2: all seven retained
+rules are pure current/future absolute-pressure rules. Its older baseline-change
+and TXx impact-band components were retired when the former thematic agriculture
+bundle was absorbed into `Sector-wise - Agricultural Risk`.
 
 ### 1. Future absolute severity
 

@@ -7,9 +7,11 @@ aggregation, normalization and risk interpretation, bundle score calculation,
 UI presentation, and validation checks / open methodology comments.
 
 Status:
-- Sections 1 through 7 have been reviewed in chat and should be treated as
+- Sections 1 through 6 have been reviewed in chat and should be treated as
   first draft dossiers.
-- Sector-wise sections 8 onward are placeholders until reviewed in chat.
+- Section 7 is retained as retired history after absorption into Section 8.
+- Section 8 documents the active `Sector-wise - Agricultural Risk` methodology.
+- Sector-wise sections 9 onward are placeholders until reviewed in chat.
 
 ## Cross-Cutting Methodology Notes
 
@@ -47,7 +49,7 @@ Rationale:
 4. Thematic - Riverine Flood
 5. Thematic - Heat Stress
 6. Thematic - Cold Risk
-7. Thematic - Agriculture & Growing Conditions
+7. Retired / absorbed - Thematic - Agriculture & Growing Conditions
 8. Sector-wise - Agricultural Risk
 9. Sector-wise - Health Risk
 10. Sector-wise - Industrial Risk
@@ -2083,17 +2085,27 @@ Open methodology comments:
   are workbook-aligned, but should be documented with rationale for
   India/Telangana use.
 
-## 7. Thematic - Agriculture & Growing Conditions
+## 7. Retired / absorbed - Thematic Agriculture & Growing Conditions
 
-### 7.1 Bundle Definition
+This former thematic bundle has been retired as an active dashboard option and
+absorbed into the active `Sector-wise - Agricultural Risk` dossier in Section 8.
+The legacy canonical name `Agriculture & Growing Conditions` is retained only as
+a domain alias to `Agricultural Risk`, and the retired processed slug
+`composite_agriculture_growing_conditions` is pruned only when the explicit
+`--prune-retired` flag is used.
 
-Dashboard selector label: `Thematic - Agriculture & Growing Conditions`
+The historical notes below remain for audit traceability only. They no longer
+describe an active visible Glance bundle.
 
-Canonical bundle name: `Agriculture & Growing Conditions`
+### 7.1 Retired Bundle Definition
 
-Composite metric slug: `composite_agriculture_growing_conditions`
+Retired dashboard selector label: `Thematic - Agriculture & Growing Conditions`
 
-Composite display label: `Composite Agriculture & Growing Conditions`
+Retired canonical bundle name: `Agriculture & Growing Conditions`
+
+Retired composite metric slug: `composite_agriculture_growing_conditions`
+
+Retired composite display label: `Composite Agriculture & Growing Conditions`
 
 Supported levels:
 - Admin district
@@ -2103,7 +2115,7 @@ Supported scenarios:
 - `ssp245`
 - `ssp585`
 
-The active Agriculture & Growing Conditions bundle uses nine metrics spanning
+The retired Agriculture & Growing Conditions bundle used nine metrics spanning
 phenology, heat burden, cold burden, rainfall / drought, and temperature
 variability. The configured weights sum to 1.0.
 
@@ -2159,7 +2171,7 @@ absolute crop loss.
 
 ### 7.3 Metric-by-Metric Index Calculation
 
-Agriculture & Growing Conditions uses:
+Retired Agriculture & Growing Conditions used:
 - `tas`: daily mean near-surface air temperature;
 - `tasmax`: daily maximum near-surface air temperature;
 - `tasmin`: daily minimum near-surface air temperature;
@@ -2422,7 +2434,7 @@ Baseline comparison columns use historical `1990-2010` where available.
 
 ### 7.5 Normalization and Risk Interpretation
 
-Agriculture & Growing Conditions is direction-sensitive.
+Retired Agriculture & Growing Conditions was direction-sensitive.
 
 Expected direction handling:
 - Lower is worse:
@@ -2452,7 +2464,7 @@ High-priority directionality review:
 Composite score:
 
 ```text
-Agriculture & Growing Conditions score =
+Retired Agriculture & Growing Conditions score =
   0.20   * norm(gsl_growing_season)
 + 0.0667 * norm(tasmax_summer_mean)
 + 0.0667 * norm(txge35_extreme_heat_days)
@@ -2527,7 +2539,7 @@ Recommended validation checks:
    - Pull all nine component columns for one geography.
    - Normalize each component with the correct direction.
    - Apply configured weights.
-   - Compare to `composite_agriculture_growing_conditions`.
+   - Compare to retired `composite_agriculture_growing_conditions` artifacts.
 4. UI checks:
    - Verify direct metric rank and percentile direction for lower-is-worse
      metrics.
@@ -2562,7 +2574,121 @@ Open methodology comments:
 
 ## 8. Sector-wise - Agricultural Risk
 
-Pending review.
+### 8.1 Bundle Definition
+
+Dashboard selector label: `Sector-wise - Agricultural Risk`
+
+Canonical bundle name: `Agricultural Risk`
+
+Composite metric slug: `composite_agricultural_risk`
+
+Composite display label: `Composite Agricultural Risk`
+
+Supported levels:
+- Admin district
+- Admin block
+
+Supported scenarios:
+- `ssp245`
+- `ssp585`
+
+Agricultural Risk is now the survivor agriculture bundle. It is a pure
+current/future absolute-pressure composite: all retained rules are scored from
+the selected scenario and period only, using robust p10-p90 normalization within
+the state / level / scenario / period comparison frame. Higher scores always
+mean higher agricultural climate pressure.
+
+| Rule slug | Label | Source metric | Weight | Direction |
+|---|---|---|---:|---|
+| `txx_peak_crop_heat` | Peak crop heat | `txx_annual_max` | 0.10 | Higher is worse |
+| `txge35_damaging_heat_days` | Damaging heat days | `txge35_extreme_heat_days` | 0.10 | Higher is worse |
+| `wsdi_persistent_heat` | Persistent heat | `wsdi_warm_spell_days` | 0.10 | Higher is worse |
+| `spi3_drought_episodes` | Drought episodes | `spi3_count_events_lt_minus1` | 0.15 | Higher is worse |
+| `spi3_longest_drought_spell` | Longest drought spell | `spi3_max_spell_lt_minus1` | 0.15 | Higher is worse |
+| `rx5day_heavy_rainfall` | 5-day heavy rainfall | `pr_max_5day_precip` | 0.20 | Higher is worse |
+| `tnle10_cold_nights` | Cold nights | `tnle10_cold_nights` | 0.20 | Higher is worse |
+
+### 8.2 Methodology Change
+
+This is an intentional methodology change from the old proposal agriculture
+score. The earlier within-rule absolute/change/impact blends are removed for
+Agricultural Risk. The old TXx 40-45 deg C soft impact band and the R95p
+relative-change signal are retired from this score.
+
+The following metrics are intentionally dropped from the agriculture composite:
+- `dtr_daily_temp_range`: retired because the direction and crop response are
+  nonlinear and require crop-specific justification.
+- `prcptot_annual_total`: retired because lower-is-worse water-availability
+  framing does not capture harmful excess rainfall in this sector score.
+- `spi3_drought_index`: replaced by event-count and max-spell drought pressure
+  metrics so all retained rules are higher-is-worse.
+- `gsl_growing_season`: retired because broad growing-season length is less
+  directly comparable across irrigated/crop-calendar contexts.
+- `tasmin_winter_mean`: retired because cold burden is represented by explicit
+  cold-night threshold frequency.
+- `pr_max_1day_precip`: retired from this sector score in favor of 5-day heavy
+  rainfall pressure.
+- `r95p_very_wet_precip`: retired with the old relative-change rule.
+- `r95ptot_contribution_pct`: not retained because the final score uses direct
+  5-day heavy rainfall pressure rather than wet-precipitation contribution.
+
+### 8.3 Scoring
+
+Each rule is normalized independently:
+
+```text
+rule_score = clip((value - p10) / (p90 - p10), 0, 1) * 100
+```
+
+If p10 and p90 are equal, valid rows receive the flat score used by the proposal
+builder. Missing source values produce `NaN` for that rule.
+
+Composite score:
+
+```text
+Agricultural Risk =
+  0.10 * norm(txx_annual_max)
++ 0.10 * norm(txge35_extreme_heat_days)
++ 0.10 * norm(wsdi_warm_spell_days)
++ 0.15 * norm(spi3_count_events_lt_minus1)
++ 0.15 * norm(spi3_max_spell_lt_minus1)
++ 0.20 * norm(pr_max_5day_precip)
++ 0.20 * norm(tnle10_cold_nights)
+```
+
+The builder persists both `available_rule_count` and
+`available_rule_weight_fraction`. The minimum coverage gate is 0.70 by weight:
+missing only `rx5day_heavy_rainfall` leaves 0.80 and the score is allowed;
+missing both rainfall and cold leaves 0.60 and the score is set to `NaN`.
+
+### 8.4 Implementation Notes
+
+Implementation references:
+- Rule catalog: `india_resilience_tool/config/proposal_bundles.py`
+- Proposal builder: `india_resilience_tool/compute/proposal_bundles.py`
+- Dashboard catalog: `india_resilience_tool/config/dashboard_bundles.py`
+- Registry resolver: `india_resilience_tool/config/metrics_registry.py`
+- Grid-first heat support: `india_resilience_tool/compute/heat_risk_gridfirst.py`
+- Pipeline dispatch: `tools/pipeline/compute_indices_multiprocess.py`
+
+Agriculture source metrics must use grid-first district/block masters. Current
+grid-first paths cover TXx, TX >= 35 days, WSDI, SPI3 event/spell metrics,
+5-day rainfall, and TN <= 10 cold nights. No agriculture-only aggregation method
+is introduced.
+
+### 8.5 Validation Checks
+
+Recommended validation checks:
+1. Confirm `get_metrics_for_bundle("Agricultural Risk", admin/district)` returns
+   `composite_agricultural_risk` plus the seven source metrics in rule order.
+2. Recompute one district and one block manually from retained rule scores and
+   explicit weights.
+3. Verify that increasing any retained source metric increases its rule score
+   because all retained rules are higher-is-worse.
+4. Confirm the 0.70 available-weight gate by dropping only rainfall, then both
+   rainfall and cold.
+5. Compare old and new agriculture outputs and record major rank movers as a
+   methodology-change audit, not as a regression failure.
 
 ## 9. Sector-wise - Health Risk
 

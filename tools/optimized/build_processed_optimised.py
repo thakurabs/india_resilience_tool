@@ -71,6 +71,7 @@ from india_resilience_tool.config.paths import get_paths_config, resolve_process
 from india_resilience_tool.config.proposal_bundles import (
     get_proposal_bundle_spec_by_slug,
     proposal_available_rule_count_column,
+    proposal_available_rule_weight_fraction_column,
     proposal_rule_score_column,
 )
 from india_resilience_tool.config.variables import VARIABLES
@@ -429,6 +430,13 @@ def _proposal_retained_admin_master_cols(
             available_count_col = proposal_available_rule_count_column(bundle_spec.composite_slug, scenario, period)
             if available_count_col in available_cols:
                 keep_cols.append(available_count_col)
+            available_weight_col = proposal_available_rule_weight_fraction_column(
+                bundle_spec.composite_slug,
+                scenario,
+                period,
+            )
+            if available_weight_col in available_cols:
+                keep_cols.append(available_weight_col)
             for rule in bundle_spec.rules:
                 score_col = proposal_rule_score_column(rule.rule_slug, scenario, period)
                 if score_col in available_cols:
@@ -1375,7 +1383,7 @@ def _write_manifest(
         "summary_semantics": "bundle_inventory",
         "stats_contract": {
             "climate": ["mean", "median"],
-            "proposal_bundle": ["mean", "score", "available_rule_count"],
+            "proposal_bundle": ["mean", "score", "available_rule_count", "available_rule_weight_fraction"],
             "static_snapshot": ["mean"],
             "removed": ["std", "p05", "p95", "n_models", "values_per_model", "models"],
         },

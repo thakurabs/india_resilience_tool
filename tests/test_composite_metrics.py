@@ -7,6 +7,7 @@ import pandas as pd
 from india_resilience_tool.compute.composite_metrics import (
     build_composite_metrics,
     compute_composite_master_frame,
+    parse_args,
 )
 from india_resilience_tool.config.composite_metrics import get_composite_metric_for_bundle
 from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG
@@ -185,6 +186,66 @@ def test_build_composite_metrics_writes_legacy_csv_and_parquet(tmp_path) -> None
     assert target in written
     assert target.exists()
     assert target.with_suffix(".parquet").exists()
+
+
+def test_build_composite_metrics_rejects_retired_agriculture_slug_as_normal_target(tmp_path) -> None:
+    try:
+        build_composite_metrics(
+            levels=("district",),
+            states=("Telangana",),
+            composite_slugs=("composite_agriculture_growing_conditions",),
+            data_dir=tmp_path,
+            quiet=True,
+        )
+    except ValueError as exc:
+        assert "Unsupported composite metric selection" in str(exc)
+    else:
+        raise AssertionError("retired agriculture composite slug should be rejected")
+
+
+def test_build_composite_metrics_prune_retired_honors_dry_run(tmp_path) -> None:
+    retired_root = tmp_path / "processed" / "composite_agriculture_growing_conditions"
+    retired_root.mkdir(parents=True)
+    marker = retired_root / "marker.txt"
+    marker.write_text("legacy", encoding="utf-8")
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+    base = pd.DataFrame({"state": [state_name], "district": ["A"], "district_key": ["a"]})
+    for slug in spec.component_metric_slugs:
+        df = base.copy()
+        df[f"{slug}__ssp245__2020-2040__mean"] = [1.0]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    dry_run_paths = build_composite_metrics(
+        levels=("district",),
+        states=(state_name,),
+        composite_slugs=(spec.composite_slug,),
+        data_dir=tmp_path,
+        dry_run=True,
+        prune_retired=True,
+        quiet=True,
+    )
+    assert retired_root in dry_run_paths
+    assert marker.exists()
+
+    pruned_paths = build_composite_metrics(
+        levels=("district",),
+        states=(state_name,),
+        composite_slugs=(spec.composite_slug,),
+        data_dir=tmp_path,
+        dry_run=False,
+        prune_retired=True,
+        quiet=True,
+    )
+    assert retired_root in pruned_paths
+    assert not retired_root.exists()
+
+
+def test_composite_metrics_parse_args_accepts_prune_retired() -> None:
+    args = parse_args(["--prune-retired", "--dry-run"])
+    assert args.prune_retired is True
 
 
 def test_compute_composite_master_frame_uses_registry_periods_metric_col_for_component_columns(tmp_path) -> None:

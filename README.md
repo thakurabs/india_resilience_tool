@@ -18,8 +18,9 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - launches into an India state-level climate-hazard screening map
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
   - surfaces one grouped bundle list in Glance and Deep Dive with exact selector labels such as `Thematic - Heat Risk` and `Sector-wise - Health Risk`
-  - thematic bundles remain available for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, `Cold Risk`, and `Agriculture & Growing Conditions`
+  - thematic bundles remain available for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, and `Cold Risk`
   - sector-wise bundles are available for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
+  - `Agricultural Risk` is the survivor agriculture bundle; the former `Agriculture & Growing Conditions` thematic bundle is retired and treated as a legacy alias to `Agricultural Risk`
   - `Life & Livelihood Loss Risk` is available at district and block level when the persisted block proposal bundle master has been built
   - each visible Glance bundle now reads a persisted optimized Glance view model from disk; the dashboard no longer computes scores, ranks, bands, drivers, attributes, or distributions at runtime
   - `Deep Dive` from Glance opens the matching persisted composite metric such as `Composite Heat Stress`
@@ -196,6 +197,7 @@ python -m tools.pipeline.build_proposal_bundles --help
 
 This offline builder computes the proposal climate-risk bundles for admin `district` and `block` units only. It writes persisted proposal bundle masters under `IRT_DATA_DIR/processed/<composite_slug>/<state>/`.
 The dashboard surfaces those sector-wise proposal composites through grouped labels like `Sector-wise - Health Risk`, including district and block views for `Life & Livelihood Loss Risk` when its persisted block proposal bundle master is present.
+The `Sector-wise - Agricultural Risk` proposal bundle uses seven higher-is-worse absolute-pressure rules with explicit weights and persists `available_rule_count` plus `available_rule_weight_fraction`; rows below the 0.70 available-weight gate are scored as missing.
 
 Heat Risk v2 spatial-weight cache builder:
 

@@ -117,21 +117,8 @@ def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
     assert all("Flood Depth Index remains deferred" not in (entry.substitution_note or "") for entry in entries)
 
 
-def test_agriculture_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Agriculture & Growing Conditions")
-
-    assert [entry.metric_slug for entry in entries] == [
-        "gsl_growing_season",
-        "tasmax_summer_mean",
-        "txge35_extreme_heat_days",
-        "wsdi_warm_spell_days",
-        "tasmin_winter_mean",
-        "tnle10_cold_nights",
-        "spi3_drought_index",
-        "prcptot_annual_total",
-        "dtr_daily_temp_range",
-    ]
-    assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+def test_retired_agriculture_growing_conditions_has_no_active_bundle_weights() -> None:
+    assert get_bundle_weights("Agriculture & Growing Conditions") == ()
 
 
 def test_validate_bundle_weights_reports_no_issues() -> None:
@@ -146,5 +133,4 @@ def test_all_visible_glance_bundles_have_custom_weights_in_this_pass() -> None:
         "Drought Risk",
         "Riverine Flood",
         "Extreme Rainfall | Flash Flood Risk",
-        "Agriculture & Growing Conditions",
     }

@@ -87,16 +87,6 @@ DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
         show_in_landing=True,
     ),
     DashboardBundleSpec(
-        group_key="thematic",
-        group_label="Thematic",
-        canonical_bundle="Agriculture & Growing Conditions",
-        selector_label="Thematic - Agriculture & Growing Conditions",
-        composite_slug="composite_agriculture_growing_conditions",
-        composite_label="Composite Agriculture & Growing Conditions",
-        supported_levels=("district", "block"),
-        show_in_landing=True,
-    ),
-    DashboardBundleSpec(
         group_key="sector_wise",
         group_label="Sector-wise",
         canonical_bundle="Agricultural Risk",

@@ -86,16 +86,6 @@ def test_dashboard_bundle_catalog_is_exact() -> None:
             True,
         ),
         (
-            "thematic",
-            "Thematic",
-            "Agriculture & Growing Conditions",
-            "Thematic - Agriculture & Growing Conditions",
-            "composite_agriculture_growing_conditions",
-            "Composite Agriculture & Growing Conditions",
-            ("district", "block"),
-            True,
-        ),
-        (
             "sector_wise",
             "Sector-wise",
             "Agricultural Risk",
@@ -182,6 +172,7 @@ def test_dashboard_bundle_helpers_are_exact() -> None:
     assert validate_dashboard_bundle_specs() == []
     assert grouped_bundle_label("Extreme Rainfall | Flash Flood Risk") == "Thematic - Extreme Rainfall | Flash Flood Risk"
     assert composite_slug_for_bundle("Health Risk") == "composite_health_risk"
+    assert composite_slug_for_bundle("Agriculture & Growing Conditions") is None
 
 
 def test_thematic_visible_glance_subset_delegates_to_dashboard_catalog() -> None:

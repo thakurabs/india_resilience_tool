@@ -28,7 +28,9 @@ from shapely.ops import transform as shapely_transform
 HEAT_RISK_GRIDFIRST_SLUGS = frozenset(
     {
         "txx_annual_max",
+        "txge35_extreme_heat_days",
         "tnx_annual_max",
+        "tnle10_cold_nights",
         "tx90p_hot_days_pct",
         "tn90p_warm_nights_pct",
         "wsdi_warm_spell_days",
@@ -41,6 +43,15 @@ HEAT_RISK_GRIDFIRST_SLUGS = frozenset(
 GRIDFIRST_METHOD_VERSION = "heat-risk-v2-gridfirst-1"
 DEFAULT_ANALYSIS_CRS = "EPSG:6933"
 DEFAULT_BASELINE_YEARS = (1990, 2010)
+GRIDFIRST_BASELINE_THRESHOLD_COMPUTES = frozenset(
+    {
+        "tx90p_etccdi",
+        "warm_spell_duration_index",
+        "heatwave_frequency_percentile",
+        "heatwave_event_count_percentile",
+        "heatwave_amplitude",
+    }
+)
 
 
 def _configure_pyproj_data_dir() -> None:
@@ -783,6 +794,14 @@ def _metric_cell_values(
 
     if compute == "annual_max_temperature":
         return eval_da.max(dim="time", skipna=True) - 273.15
+    if compute in {"count_days_ge_threshold", "count_days_above_threshold"}:
+        thresh_k = float(params["thresh_k"])
+        comparator = eval_da >= thresh_k if compute == "count_days_ge_threshold" else eval_da > thresh_k
+        return comparator.where(eval_da.notnull()).sum(dim="time", skipna=True)
+    if compute in {"count_days_le_threshold", "count_days_below_threshold"}:
+        thresh_k = float(params["thresh_k"])
+        comparator = eval_da <= thresh_k if compute == "count_days_le_threshold" else eval_da < thresh_k
+        return comparator.where(eval_da.notnull()).sum(dim="time", skipna=True)
     if compute == "tx90p_etccdi":
         if threshold is None:
             raise ValueError("tx90p_etccdi requires threshold")
@@ -865,7 +884,7 @@ def compute_heat_risk_rows_for_metric(
 
     baseline_input_sig: str | None = None
     threshold: xr.DataArray | None = None
-    if compute != "annual_max_temperature":
+    if compute in GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
         baseline_years_available = [
             year for year in sorted(baseline_year_to_paths) if baseline_years[0] <= int(year) <= baseline_years[1]
         ]

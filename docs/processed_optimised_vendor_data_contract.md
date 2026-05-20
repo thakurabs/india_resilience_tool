@@ -93,8 +93,8 @@ Important details:
 
 - Climate metrics usually have `mean` and `median`.
 - Static snapshot metrics usually have only `mean`.
-- Proposal sector composites may include `mean`, rule-level `score`, and
-  `available_rule_count`.
+- Proposal sector composites may include `mean`, rule-level `score`,
+  `available_rule_count`, and `available_rule_weight_fraction`.
 - The optimized bundle intentionally removes heavy or duplicate runtime fields:
   `std`, `p05`, `p95`, `n_models`, `values_per_model`, and `models`.
 
@@ -815,7 +815,7 @@ patterns. The `Levels` column is based on actual master files on disk.
 | Groundwater Status & Availability | static_snapshot | district | - | - | `gw_extractable_resource_ham`, `gw_future_availability_ham`, `gw_stage_extraction_pct`, `gw_total_extraction_ham` |
 | Riverine Flood | static_snapshot | district, block | - | - | `composite_flood_jrc_depth`, `jrc_flood_depth_index_rp100`, `jrc_flood_depth_rp100`, `jrc_flood_extent_rp100` |
 | Unassigned JRC flood-depth return periods | static_snapshot | district, block | - | - | `jrc_flood_depth_rp10`, `jrc_flood_depth_rp50`, `jrc_flood_depth_rp500` |
-| Dashboard composites | scenario_period | district, block | - | - | `composite_agricultural_risk`, `composite_agriculture_growing_conditions`, `composite_asset_risk_hydropower`, `composite_asset_risk_thermal_power`, `composite_cold_risk`, `composite_drought_risk`, `composite_flood_extreme_rainfall_risk`, `composite_health_risk`, `composite_heat_risk`, `composite_heat_stress`, `composite_industrial_risk`, `composite_infrastructure_risk`, `composite_investment_financial_risk`, `composite_life_livelihood_loss_risk` |
+| Dashboard composites | scenario_period | district, block | - | - | `composite_agricultural_risk`, `composite_asset_risk_hydropower`, `composite_asset_risk_thermal_power`, `composite_cold_risk`, `composite_drought_risk`, `composite_flood_extreme_rainfall_risk`, `composite_health_risk`, `composite_heat_risk`, `composite_heat_stress`, `composite_industrial_risk`, `composite_infrastructure_risk`, `composite_investment_financial_risk`, `composite_life_livelihood_loss_risk` |
 | Hydropower helper | scenario_period | district, block | - | - | `r95p_interannual_variability` |
 | Cold Risk climate indicators | scenario_period | district, block, basin, sub_basin | district, block, basin, sub_basin | district | `csdi_cold_spell_days`, `tas_winter_mean`, `tasmin_winter_min`, `tn10p_cool_nights_pct`, `tnle10_consecutive_cold_nights`, `tnle5_severe_cold_nights`, `tnn_annual_min`, `tx10p_cool_days_pct`, `txle15_cold_days` |
 | Heat Risk climate indicators | scenario_period | district, block, basin, sub_basin | district, block, basin, sub_basin | district | `hwa_heatwave_amplitude`, `hwfi_events_tmean_90p`, `tas_annual_mean`, `tas_summer_mean`, `tasmin_tropical_nights_gt25`, `tx90p_hot_days_pct`, `txge30_hot_days`, `hwfi_tmean_90p` |
