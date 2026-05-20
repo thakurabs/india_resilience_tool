@@ -343,19 +343,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "compute": "tx90p_etccdi",
         "params": {
             "percentile": 10,
-            "baseline_years": (1981, 2010),
+            "baseline_years": (1990, 2010),
             "window_days": 5,
             "quantile_method": "nearest",
-            # For "below-percentile" indices, exceed_ge=True means inclusive (<= threshold)
-            "exceed_ge": True,
+            # For "below-percentile" indices, exceed_ge=False means strict (< threshold),
+            # which matches the ETCCDI canonical TX10p convention.
+            "exceed_ge": False,
             "direction": "below",
             # "smooth": 5,
         },
         "group": "temperature",
         "description": (
-            "Percentage of days when daily maximum temperature is below the 10th "
-            "percentile threshold computed per calendar day from the baseline period "
-            "using a moving window (ETCCDI TX10p)."
+            "Percentage of days when daily maximum temperature is strictly below the "
+            "10th percentile threshold computed per calendar day from the baseline period "
+            "(1990-2010) using a 5-day moving window (ETCCDI TX10p)."
         ),
     },
     {
@@ -368,19 +369,20 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "compute": "tx90p_etccdi",
         "params": {
             "percentile": 10,
-            "baseline_years": (1981, 2010),
+            "baseline_years": (1990, 2010),
             "window_days": 5,
             "quantile_method": "nearest",
-            # For "below-percentile" indices, exceed_ge=True means inclusive (<= threshold)
-            "exceed_ge": True,
+            # For "below-percentile" indices, exceed_ge=False means strict (< threshold),
+            # which matches the ETCCDI canonical TN10p convention.
+            "exceed_ge": False,
             "direction": "below",
             # "smooth": 5,
         },
         "group": "temperature",
         "description": (
-            "Percentage of days when daily minimum temperature is below the 10th "
-            "percentile threshold computed per calendar day from the baseline period "
-            "using a moving window (ETCCDI TN10p)."
+            "Percentage of days when daily minimum temperature is strictly below the "
+            "10th percentile threshold computed per calendar day from the baseline period "
+            "(1990-2010) using a 5-day moving window (ETCCDI TN10p)."
         ),
     },
     
@@ -1229,11 +1231,12 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "units": "days",
         "compute": "cold_spell_duration_index",
         "params": {
-            "baseline_years": (1981, 2010),
+            "baseline_years": (1990, 2010),
             "percentile": 10,
             "window_days": 5,
             "quantile_method": "nearest",
-            "exceed_ge": True,
+            # ETCCDI canonical CSDI uses strict TN < p10 (exceed_ge=False).
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 6,
             "direction": "below",
@@ -1241,7 +1244,8 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "group": "temperature",
         "description": (
             "Annual count of days contributing to cold spells, where a cold spell "
-            "is ≥6 consecutive days with TN < 10th percentile. Climdex CSDI."
+            "is ≥6 consecutive days with TN strictly below the 10th percentile threshold "
+            "computed per calendar day from the baseline period (1990-2010). Climdex CSDI."
         ),
     },
     {

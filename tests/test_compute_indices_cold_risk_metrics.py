@@ -289,6 +289,81 @@ def test_djf_cross_year_ssp_first_year_without_historical_fallback_is_nan(tmp_pa
     assert np.isnan(values[2015])
 
 
+# =============================================================================
+# TX10p / TN10p strict-< boundary behavior
+# CHG-0004 (audit issue D11) — exceed_ge=False must produce eva < threshold.
+# =============================================================================
+def _constant_daily_series(value_k: float, start: str, periods: int) -> xr.DataArray:
+    """Build a constant-value daily series with cftime no-leap-friendly coords."""
+    time = xr.date_range(start, periods=periods, freq="D", use_cftime=True)
+    return xr.DataArray(
+        np.full(periods, float(value_k), dtype=float),
+        coords={"time": time},
+        dims=("time",),
+    )
+
+
+def test_tx10p_etccdi_strict_excludes_boundary_days() -> None:
+    # Baseline: constant 280K across (1990, 2010). p10 threshold equals 280K on every doy.
+    # Eval year (2011): all days exactly equal to threshold.
+    # Strict-< must yield 0% of days; inclusive (<=) would yield ~100%.
+    baseline = _constant_daily_series(280.0, "1990-01-01", periods=21 * 365)
+    evaluation = _constant_daily_series(280.0, "2011-01-01", periods=365)
+    series = xr.concat([baseline, evaluation], dim="time")
+
+    strict = CMP._compute_tx90p_etccdi_yearly(
+        series=series,
+        baseline_years=(1990, 2010),
+        eval_years=[2011],
+        percentile=10,
+        window_days=5,
+        exceed_ge=False,
+        quantile_method="nearest",
+        direction="below",
+    )
+    inclusive = CMP._compute_tx90p_etccdi_yearly(
+        series=series,
+        baseline_years=(1990, 2010),
+        eval_years=[2011],
+        percentile=10,
+        window_days=5,
+        exceed_ge=True,
+        quantile_method="nearest",
+        direction="below",
+    )
+
+    assert strict[2011] == pytest.approx(0.0, abs=1e-9), (
+        "strict TX10p must exclude boundary-equal days"
+    )
+    assert inclusive[2011] > 50.0, (
+        "sanity: inclusive variant should include the boundary-equal days"
+    )
+
+
+def test_tx10p_etccdi_strict_includes_below_threshold_days() -> None:
+    # Half of eval days clearly below baseline, half above.
+    baseline = _constant_daily_series(280.0, "1990-01-01", periods=21 * 365)
+    # First 180 eval days are 5K colder; remaining 185 are 5K warmer.
+    eval_time = xr.date_range("2011-01-01", periods=365, freq="D", use_cftime=True)
+    eval_vals = np.where(np.arange(365) < 180, 275.0, 285.0)
+    evaluation = xr.DataArray(eval_vals, coords={"time": eval_time}, dims=("time",))
+    series = xr.concat([baseline, evaluation], dim="time")
+
+    strict = CMP._compute_tx90p_etccdi_yearly(
+        series=series,
+        baseline_years=(1990, 2010),
+        eval_years=[2011],
+        percentile=10,
+        window_days=5,
+        exceed_ge=False,
+        quantile_method="nearest",
+        direction="below",
+    )
+
+    # 180 strictly-below days out of 365 -> ~49.3%.
+    assert strict[2011] == pytest.approx(180.0 / 365.0 * 100.0, abs=1e-6)
+
+
 def test_djf_cross_year_helper_rejects_non_djf_months(tmp_path: Path) -> None:
     metric = {
         "slug": "tas_summer_mean",

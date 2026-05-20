@@ -77,6 +77,38 @@ def test_cold_count_and_spell_metrics_remain_higher_is_worse(slug: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Cold-percentile params: baseline (1990, 2010) and strict-< (exceed_ge=False).
+# CHG-0004 (audit issue D11) + CHG-0005 (audit issue C10, Cold-Risk-scoped).
+# ---------------------------------------------------------------------------
+COLD_PERCENTILE_SLUGS = (
+    "tx10p_cool_days_pct",
+    "tn10p_cool_nights_pct",
+    "csdi_cold_spell_days",
+)
+
+
+@pytest.mark.parametrize("slug", COLD_PERCENTILE_SLUGS)
+def test_cold_percentile_metric_uses_1990_2010_baseline(slug: str) -> None:
+    spec = METRICS_BY_SLUG[slug]
+    baseline = tuple((spec.params or {}).get("baseline_years", ()))
+    assert baseline == (1990, 2010), (
+        f"{slug}: baseline_years must be (1990, 2010), got {baseline}"
+    )
+
+
+@pytest.mark.parametrize("slug", COLD_PERCENTILE_SLUGS)
+def test_cold_percentile_metric_uses_strict_less_than(slug: str) -> None:
+    spec = METRICS_BY_SLUG[slug]
+    params = spec.params or {}
+    assert params.get("direction") == "below", (
+        f"{slug}: direction must remain 'below'"
+    )
+    assert params.get("exceed_ge") is False, (
+        f"{slug}: exceed_ge must be False (strict < threshold) per ETCCDI canon"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Registry -> dashboard VARIABLES propagation
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("slug", COLD_MAGNITUDE_SLUGS)
