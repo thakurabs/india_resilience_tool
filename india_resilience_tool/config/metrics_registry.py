@@ -271,6 +271,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Annual Minimum of Daily Minimum Temperature (TNn)",
         "slug": "tnn_annual_min",
+        "rank_higher_is_worse": False,
         "var": "tasmin",
         "value_col": "tnn_annual_min_C",
         "units": "°C",
@@ -1020,6 +1021,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Winter Mean Temperature (TM; DJF Mean)",
         "slug": "tas_winter_mean",
+        "rank_higher_is_worse": False,
         "var": "tas",
         "value_col": "winter_tas_mean_C",
         "units": "°C",
@@ -1047,6 +1049,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Winter Min Temperature (DJF Mean)",
         "slug": "tasmin_winter_mean",
+        "rank_higher_is_worse": False,
         "var": "tasmin",
         "value_col": "winter_tasmin_mean_C",
         "units": "°C",
@@ -1060,6 +1063,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Winter Minimum Tmin (DJF Min TN)",
         "slug": "tasmin_winter_min",
+        "rank_higher_is_worse": False,
         "var": "tasmin",
         "value_col": "winter_tasmin_min_C",
         "units": "°C",
