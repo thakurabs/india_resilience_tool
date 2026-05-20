@@ -79,3 +79,230 @@ def test_tnle5_is_monotonic_relative_to_tnle10(monkeypatch: pytest.MonkeyPatch) 
     assert le_5 == 2
     assert le_10 == 4
     assert le_5 <= le_10
+
+
+# =============================================================================
+# DJF cross-year helper tests (CHG-0003 / audit issue B7-B9)
+# =============================================================================
+LAT = 17.0
+LON = 78.0
+
+
+def _write_year_netcdf(
+    path: Path,
+    *,
+    varname: str,
+    year: int,
+    dec_value_k: float,
+    jan_feb_value_k: float,
+    other_value_k: float,
+) -> None:
+    """Write a one-year, one-cell daily NetCDF file used by DJF helper tests.
+
+    Days in December receive ``dec_value_k`` (Kelvin), days in January/February
+    receive ``jan_feb_value_k``, and all other days receive ``other_value_k``.
+    """
+    time = xr.date_range(f"{year}-01-01", f"{year}-12-31", freq="D", use_cftime=True)
+    values = np.full((time.size, 1, 1), float(other_value_k), dtype=float)
+    months = np.array([t.month for t in time])
+    values[months == 12, 0, 0] = float(dec_value_k)
+    values[(months == 1) | (months == 2), 0, 0] = float(jan_feb_value_k)
+
+    da = xr.DataArray(
+        values,
+        coords={"time": time, "lat": [LAT], "lon": [LON]},
+        dims=("time", "lat", "lon"),
+        name=varname,
+    )
+    da.to_netcdf(path)
+
+
+def _djf_metric(slug: str, value_col: str, *, var: str, compute: str) -> dict:
+    return {
+        "slug": slug,
+        "value_col": value_col,
+        "var": var,
+        "compute": compute,
+        "params": {"months": [12, 1, 2]},
+    }
+
+
+def _single_cell_mask() -> dict[str, xr.DataArray]:
+    mask = xr.DataArray(
+        np.array([[True]]),
+        coords={"lat": [LAT], "lon": [LON]},
+        dims=("lat", "lon"),
+    )
+    return {"TestDistrict": mask}
+
+
+def _rows_to_dict(rows: list[dict], value_col: str) -> dict[int, float]:
+    return {int(r["year"]): r[value_col] for r in rows}
+
+
+def test_djf_cross_year_mean_uses_prev_year_december(tmp_path: Path) -> None:
+    # year 2000 has Jan/Feb cold, Dec warm; year 2001 has Jan/Feb very cold, Dec mild.
+    # DJF(2001) should average Dec(2000)=+5°C, Jan-Feb(2001)=-20°C, NOT Dec(2001).
+    file_2000 = tmp_path / "2000.nc"
+    file_2001 = tmp_path / "2001.nc"
+    _write_year_netcdf(
+        file_2000, varname="tas", year=2000,
+        dec_value_k=5.0 + 273.15, jan_feb_value_k=-10.0 + 273.15, other_value_k=15.0 + 273.15,
+    )
+    _write_year_netcdf(
+        file_2001, varname="tas", year=2001,
+        dec_value_k=0.0 + 273.15, jan_feb_value_k=-20.0 + 273.15, other_value_k=15.0 + 273.15,
+    )
+
+    metric = _djf_metric("tas_winter_mean", "winter_tas_mean_C", var="tas", compute="seasonal_mean")
+    year_to_paths = {2000: {"tas": file_2000}, 2001: {"tas": file_2001}}
+
+    rows = CMP._compute_seasonal_mean_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model="TEST_MODEL",
+        scenario="historical",
+        year_to_paths=year_to_paths,
+        masks=_single_cell_mask(),
+        level="district",
+    )
+
+    values = _rows_to_dict(rows, "winter_tas_mean_C")
+    # year 2000 has no prev-year file -> NaN.
+    assert np.isnan(values[2000])
+    # year 2001: Dec(2000) = +5°C (31 days), Jan/Feb(2001) = -20°C (31+28 days).
+    # Weighted mean = (31 * 5 + 59 * -20) / 90 = (155 - 1180) / 90 = -11.388...
+    expected = (31 * 5.0 + 59 * -20.0) / (31 + 59)
+    assert values[2001] == pytest.approx(expected, abs=1e-6)
+
+
+def test_djf_cross_year_min_picks_coldest_across_window(tmp_path: Path) -> None:
+    file_2000 = tmp_path / "2000.nc"
+    file_2001 = tmp_path / "2001.nc"
+    _write_year_netcdf(
+        file_2000, varname="tasmin", year=2000,
+        dec_value_k=5.0 + 273.15, jan_feb_value_k=-3.0 + 273.15, other_value_k=15.0 + 273.15,
+    )
+    _write_year_netcdf(
+        file_2001, varname="tasmin", year=2001,
+        dec_value_k=2.0 + 273.15, jan_feb_value_k=-12.0 + 273.15, other_value_k=15.0 + 273.15,
+    )
+
+    metric = _djf_metric("tasmin_winter_min", "winter_tasmin_min_C", var="tasmin", compute="seasonal_min")
+    year_to_paths = {2000: {"tasmin": file_2000}, 2001: {"tasmin": file_2001}}
+
+    rows = CMP._compute_seasonal_min_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model="TEST_MODEL",
+        scenario="historical",
+        year_to_paths=year_to_paths,
+        masks=_single_cell_mask(),
+        level="district",
+    )
+
+    values = _rows_to_dict(rows, "winter_tasmin_min_C")
+    # DJF(2001) min spans Dec(2000)=+5, Jan/Feb(2001)=-12 -> coldest is -12.
+    assert values[2001] == pytest.approx(-12.0, abs=1e-6)
+    # year 2000 still NaN (no prev-year file).
+    assert np.isnan(values[2000])
+
+
+def test_djf_cross_year_first_year_without_history_is_nan(tmp_path: Path) -> None:
+    file_2001 = tmp_path / "2001.nc"
+    _write_year_netcdf(
+        file_2001, varname="tas", year=2001,
+        dec_value_k=0.0 + 273.15, jan_feb_value_k=-5.0 + 273.15, other_value_k=15.0 + 273.15,
+    )
+
+    metric = _djf_metric("tas_winter_mean", "winter_tas_mean_C", var="tas", compute="seasonal_mean")
+    year_to_paths = {2001: {"tas": file_2001}}
+
+    rows = CMP._compute_seasonal_mean_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model="TEST_MODEL",
+        scenario="historical",
+        year_to_paths=year_to_paths,
+        masks=_single_cell_mask(),
+        level="district",
+    )
+
+    values = _rows_to_dict(rows, "winter_tas_mean_C")
+    # No previous-year file at all, no historical fallback supplied -> NaN.
+    assert np.isnan(values[2001])
+
+
+def test_djf_cross_year_uses_historical_fallback_for_ssp_first_year(tmp_path: Path) -> None:
+    # Simulate the SSP boundary: historical archive holds 2014, SSP holds 2015+.
+    hist_2014 = tmp_path / "historical_2014.nc"
+    ssp_2015 = tmp_path / "ssp_2015.nc"
+    _write_year_netcdf(
+        hist_2014, varname="tas", year=2014,
+        dec_value_k=3.0 + 273.15, jan_feb_value_k=-7.0 + 273.15, other_value_k=15.0 + 273.15,
+    )
+    _write_year_netcdf(
+        ssp_2015, varname="tas", year=2015,
+        dec_value_k=4.0 + 273.15, jan_feb_value_k=-9.0 + 273.15, other_value_k=15.0 + 273.15,
+    )
+
+    metric = _djf_metric("tas_winter_mean", "winter_tas_mean_C", var="tas", compute="seasonal_mean")
+    ssp_year_to_paths = {2015: {"tas": ssp_2015}}
+    historical_year_to_paths = {2014: {"tas": hist_2014}}
+
+    rows = CMP._compute_seasonal_mean_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model="TEST_MODEL",
+        scenario="ssp245",
+        year_to_paths=ssp_year_to_paths,
+        masks=_single_cell_mask(),
+        level="district",
+        historical_year_to_paths=historical_year_to_paths,
+    )
+
+    values = _rows_to_dict(rows, "winter_tas_mean_C")
+    # DJF(2015) = Dec(2014)=+3 (31 days), Jan/Feb(2015)=-9 (59 days).
+    expected = (31 * 3.0 + 59 * -9.0) / (31 + 59)
+    assert values[2015] == pytest.approx(expected, abs=1e-6)
+
+
+def test_djf_cross_year_ssp_first_year_without_historical_fallback_is_nan(tmp_path: Path) -> None:
+    ssp_2015 = tmp_path / "ssp_2015.nc"
+    _write_year_netcdf(
+        ssp_2015, varname="tas", year=2015,
+        dec_value_k=4.0 + 273.15, jan_feb_value_k=-9.0 + 273.15, other_value_k=15.0 + 273.15,
+    )
+
+    metric = _djf_metric("tas_winter_mean", "winter_tas_mean_C", var="tas", compute="seasonal_mean")
+    ssp_year_to_paths = {2015: {"tas": ssp_2015}}
+
+    rows = CMP._compute_seasonal_mean_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model="TEST_MODEL",
+        scenario="ssp245",
+        year_to_paths=ssp_year_to_paths,
+        masks=_single_cell_mask(),
+        level="district",
+        historical_year_to_paths=None,
+    )
+
+    values = _rows_to_dict(rows, "winter_tas_mean_C")
+    # Regression guard: without the historical-fallback inventory wired in,
+    # the first SSP year must remain NaN. Catches accidental rewiring drops.
+    assert np.isnan(values[2015])
+
+
+def test_djf_cross_year_helper_rejects_non_djf_months(tmp_path: Path) -> None:
+    metric = {
+        "slug": "tas_summer_mean",
+        "value_col": "summer_tas_mean_C",
+        "var": "tas",
+        "compute": "seasonal_mean",
+        "params": {"months": [6, 7, 8]},
+    }
+    with pytest.raises(ValueError, match="non-DJF months"):
+        CMP._compute_seasonal_mean_djf_cross_year_rows_for_metric(
+            metric=metric,
+            model="TEST_MODEL",
+            scenario="historical",
+            year_to_paths={2000: {"tas": tmp_path / "ignored.nc"}},
+            masks=_single_cell_mask(),
+            level="district",
+        )

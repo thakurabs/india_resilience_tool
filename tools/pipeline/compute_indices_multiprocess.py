@@ -3284,29 +3284,49 @@ def _compute_precip_percentile_rows_for_metric(
     return rows
 
 
-def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
+def _compute_seasonal_djf_cross_year_rows_for_metric(
     metric: dict,
     model: str,
     scenario: str,
     year_to_paths: dict[int, dict[str, Path]],
     masks: dict[str, xr.DataArray],
     level: AdminLevel,
+    *,
+    reducer: str,
+    historical_year_to_paths: dict[int, dict[str, Path]] | None = None,
 ) -> list[dict]:
     """
-    Seasonal mean for DJF computed as:
+    Seasonal reduction for DJF computed as:
       Dec (year-1) + Jan/Feb (year)
 
     This avoids the common per-year-file pitfall where "DJF of year Y" is mistakenly
     computed as Dec(Y) + Jan(Y) + Feb(Y).
+
+    Args:
+        reducer: ``"mean"`` -> uses :func:`seasonal_mean`; ``"min"`` -> uses
+            :func:`seasonal_min`.
+        historical_year_to_paths: Optional fallback inventory used to resolve
+            ``Dec(year-1)`` when the previous year is not in
+            ``year_to_paths`` (typical for SSP first years where Dec belongs to
+            the historical scenario for the same model). When ``None`` (the
+            default, e.g. for the historical scenario itself), no fallback is
+            applied and the first available year remains NaN.
     """
     slug = metric["slug"]
     value_col = metric["value_col"]
     varname = metric.get("var")
     months = list((metric.get("params", {}) or {}).get("months", []))
 
-    # Guard: this helper is only for DJF
+    # Guard: this helper is only for DJF.
     if set(months) != {12, 1, 2}:
         raise ValueError(f"[{slug}] DJF cross-year helper called for non-DJF months={months}")
+
+    if reducer == "mean":
+        reduce_fn = seasonal_mean
+    elif reducer == "min":
+        reduce_fn = seasonal_min
+    else:
+        raise ValueError(f"[{slug}] DJF cross-year helper: unsupported reducer={reducer!r}")
 
     rows: list[dict] = []
     years = sorted(year_to_paths.keys())
@@ -3316,7 +3336,13 @@ def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
             cur_path = year_to_paths.get(year, {}).get(varname)
             prev_path = year_to_paths.get(year - 1, {}).get(varname)
 
-            # If we don't have the previous year, we can't form DJF correctly.
+            # If the previous year is missing in the current scenario inventory,
+            # try the supplied historical fallback. This lets SSP first years
+            # source Dec(year-1) from the historical archive for the same model.
+            if prev_path is None and historical_year_to_paths is not None:
+                prev_path = historical_year_to_paths.get(year - 1, {}).get(varname)
+
+            # If we still don't have both files, we can't form DJF correctly.
             if cur_path is None or prev_path is None:
                 v = np.nan
             else:
@@ -3326,11 +3352,11 @@ def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
                     da_prev = ds_prev[varname]
                     da_cur = ds_cur[varname]
 
-                    # Drop Feb 29 for consistency
+                    # Drop Feb 29 for consistency.
                     da_prev = _drop_feb29_time(da_prev)
                     da_cur = _drop_feb29_time(da_cur)
 
-                    # Select Dec(prev) and Jan-Feb(cur)
+                    # Select Dec(prev) and Jan-Feb(cur).
                     dec_prev = da_prev.sel(time=da_prev["time"].dt.month == 12)
                     jf_cur = da_cur.sel(time=da_cur["time"].dt.month.isin([1, 2]))
 
@@ -3338,7 +3364,7 @@ def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
                         v = np.nan
                     else:
                         da = xr.concat([dec_prev, jf_cur], dim="time")
-                        v = float(seasonal_mean(da, mask, months=[12, 1, 2]))
+                        v = float(reduce_fn(da, mask, months=[12, 1, 2]))
                 finally:
                     ds_prev.close()
                     ds_cur.close()
@@ -3348,6 +3374,52 @@ def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
             rows.append(row)
 
     return rows
+
+
+def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+    level: AdminLevel,
+    *,
+    historical_year_to_paths: dict[int, dict[str, Path]] | None = None,
+) -> list[dict]:
+    """DJF cross-year seasonal mean. See :func:`_compute_seasonal_djf_cross_year_rows_for_metric`."""
+    return _compute_seasonal_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model=model,
+        scenario=scenario,
+        year_to_paths=year_to_paths,
+        masks=masks,
+        level=level,
+        reducer="mean",
+        historical_year_to_paths=historical_year_to_paths,
+    )
+
+
+def _compute_seasonal_min_djf_cross_year_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+    level: AdminLevel,
+    *,
+    historical_year_to_paths: dict[int, dict[str, Path]] | None = None,
+) -> list[dict]:
+    """DJF cross-year seasonal min. See :func:`_compute_seasonal_djf_cross_year_rows_for_metric`."""
+    return _compute_seasonal_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model=model,
+        scenario=scenario,
+        year_to_paths=year_to_paths,
+        masks=masks,
+        level=level,
+        reducer="min",
+        historical_year_to_paths=historical_year_to_paths,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -4628,20 +4700,50 @@ def process_metric_for_model_scenario(
             raise
 
     # ------------------------------------------------------------------
-    # Special-case DJF seasonal mean (Dec from previous year + Jan/Feb current year)
+    # Special-case DJF seasonal mean/min (Dec from previous year + Jan/Feb current year).
+    # For SSP scenarios, the previous-year Dec lives in the historical archive for
+    # the same model; resolve that fallback once so the first SSP year is not NaN.
     # ------------------------------------------------------------------
-    elif metric.get("compute") == "seasonal_mean" and set((params or {}).get("months", [])) == {12, 1, 2}:
+    elif (
+        metric.get("compute") in {"seasonal_mean", "seasonal_min"}
+        and set((params or {}).get("months", [])) == {12, 1, 2}
+    ):
         try:
-            rows = _compute_seasonal_mean_djf_cross_year_rows_for_metric(
-                metric=metric,
-                model=model,
-                scenario=scenario,
-                year_to_paths=year_to_paths,
-                masks=masks,
-                level=level,
-            )
+            historical_year_to_paths: dict[int, dict[str, Path]] | None = None
+            if scenario != "historical":
+                varname = (metric.get("var") or "").strip()
+                hist_conf = SCENARIOS.get("historical")
+                if varname and hist_conf:
+                    hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], varname, model)
+                    if hist_dir.exists():
+                        valid_year_files, _ = validated_year_files_for_var(hist_dir, varname)
+                        if valid_year_files:
+                            historical_year_to_paths = {
+                                y: {varname: p} for y, p in valid_year_files.items()
+                            }
+
+            if metric.get("compute") == "seasonal_mean":
+                rows = _compute_seasonal_mean_djf_cross_year_rows_for_metric(
+                    metric=metric,
+                    model=model,
+                    scenario=scenario,
+                    year_to_paths=year_to_paths,
+                    masks=masks,
+                    level=level,
+                    historical_year_to_paths=historical_year_to_paths,
+                )
+            else:
+                rows = _compute_seasonal_min_djf_cross_year_rows_for_metric(
+                    metric=metric,
+                    model=model,
+                    scenario=scenario,
+                    year_to_paths=year_to_paths,
+                    masks=masks,
+                    level=level,
+                    historical_year_to_paths=historical_year_to_paths,
+                )
         except Exception as e:
-            logging.error(f"[{slug}] DJF seasonal mean computation failed for {model}/{scenario}: {e}")
+            logging.error(f"[{slug}] DJF cross-year computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
             raise
 
