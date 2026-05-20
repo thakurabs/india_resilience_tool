@@ -33,6 +33,7 @@ dependencies:
 
   # Streamlit chart/component dependencies made explicit for dashboard startup
   - altair>=5,<6
+  - plotly
   - jsonschema
   - jsonschema-specifications
   - referencing
