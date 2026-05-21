@@ -378,7 +378,12 @@ def render_state_summary_view(
                     f"{delta:+.2f}" if delta is not None else None,
                 )
             with c3:
-                st.markdown("**Position in India**")
+                from india_resilience_tool.app._ui_text import rank_phrasing as _phrase
+                _phr_state = _phrase(rank_higher_is_worse)
+                st.markdown(
+                    "**Position in India**",
+                    help=f"Rank 1 = {_phr_state.rank_1_meaning} value across states. {_phr_state.direction_summary}",
+                )
                 if rank_india is not None and n_india >= 2:
                     st.metric("", f"#{rank_india} / {n_india}")
                 else:
@@ -395,7 +400,12 @@ def render_state_summary_view(
                     else "N/A",
                 )
             with c2:
-                st.markdown("**Position in India**")
+                from india_resilience_tool.app._ui_text import rank_phrasing as _phrase
+                _phr_state = _phrase(rank_higher_is_worse)
+                st.markdown(
+                    "**Position in India**",
+                    help=f"Rank 1 = {_phr_state.rank_1_meaning} value across states. {_phr_state.direction_summary}",
+                )
                 if rank_india is not None and n_india >= 2:
                     st.metric("", f"#{rank_india} / {n_india}")
                 else:

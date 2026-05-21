@@ -21,6 +21,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Union
 import html
 import pandas as pd
 
+from india_resilience_tool.app._ui_text import rank_phrasing
 from india_resilience_tool.app.state import VIEW_RANKINGS
 from india_resilience_tool.data.crosswalks import CrosswalkContext, CrosswalkOverlap
 from india_resilience_tool.viz.formatting import (
@@ -336,17 +337,17 @@ def render_risk_summary(
                 st.markdown("**Position in district**")
                 if rank_in_district is not None and n_in_district is not None:
                     district_label = parent_district_name or "selected district"
-                    rank_1_meaning = "highest" if rank_higher_is_worse else "lowest"
+                    _phr = rank_phrasing(rank_higher_is_worse)
                     if percentile_district is not None:
                         help_text = (
-                            f"Percentile (higher = worse): {percentile_district:.0f}th\n"
+                            f"Percentile ({_phr.percentile_legend}): {percentile_district:.0f}th\n"
                             f"Computed among {n_in_district} blocks with available data in {district_label}. "
-                            f"Rank 1 = {rank_1_meaning} value."
+                            f"Rank 1 = {_phr.rank_1_meaning} value."
                         )
                     else:
                         help_text = (
                             f"Computed among {n_in_district} blocks with available data in {district_label}. "
-                            f"Rank 1 = {rank_1_meaning} value."
+                            f"Rank 1 = {_phr.rank_1_meaning} value."
                         )
 
                     st.markdown(
@@ -380,17 +381,17 @@ def render_risk_summary(
 
             if rank_in_state is not None and n_in_state is not None:
                 unit_word = "blocks" if is_block else "districts"
-                rank_1_meaning = "highest" if rank_higher_is_worse else "lowest"
+                _phr = rank_phrasing(rank_higher_is_worse)
                 if percentile_state is not None:
                     help_text = (
-                        f"Percentile (higher = worse): {percentile_state:.0f}th\n"
+                        f"Percentile ({_phr.percentile_legend}): {percentile_state:.0f}th\n"
                         f"Computed among {n_in_state} {unit_word} with available data in {state_to_show}. "
-                        f"Rank 1 = {rank_1_meaning} value."
+                        f"Rank 1 = {_phr.rank_1_meaning} value."
                     )
                 else:
                     help_text = (
                         f"Computed among {n_in_state} {unit_word} with available data in {state_to_show}. "
-                        f"Rank 1 = {rank_1_meaning} value."
+                        f"Rank 1 = {_phr.rank_1_meaning} value."
                     )
 
                 st.markdown(

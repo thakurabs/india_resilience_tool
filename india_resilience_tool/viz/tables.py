@@ -33,6 +33,7 @@ def build_rankings_table_df(
     state_col: str = "state_name",
     aspirational_col: str = "aspirational",
     extra_cols: Optional[list[str]] = None,
+    higher_is_worse: bool = True,
 ) -> Tuple[pd.DataFrame, bool]:
     """
     Build the district-level rankings table used by the dashboard.
@@ -97,22 +98,30 @@ def build_rankings_table_df(
     if table_df.empty:
         return pd.DataFrame(), has_baseline
 
-    # Rank by absolute value (1 = highest)
+    # Rank by absolute value: 1 = worst.
+    # When higher_is_worse=True (registry default), worst = highest → rank descending.
+    # When higher_is_worse=False (cold-magnitude metrics), worst = lowest → rank ascending.
+    rank_descending = bool(higher_is_worse)
     table_df["rank_value"] = (
-        table_df["value"].rank(ascending=False, method="min").astype(int)
+        table_df["value"].rank(ascending=not rank_descending, method="min").astype(int)
     )
 
-    # Percentile (0..100)
-    table_df["percentile_value"] = table_df["value"].rank(pct=True) * 100.0
+    # Percentile (0..100), direction-aware: higher percentile always means higher risk.
+    pct_ascending = table_df["value"].rank(pct=True) * 100.0
+    table_df["percentile_value"] = pct_ascending if higher_is_worse else (100.0 - pct_ascending)
 
     # Risk class
     table_df["risk_class"] = table_df["percentile_value"].apply(risk_class_from_percentile)
 
-    # Rank by increase if baseline present
+    # Rank by increase if baseline present.
+    # For "higher is worse" metrics, biggest positive delta = worst (descending).
+    # For "lower is worse" metrics, most negative delta = worst (ascending).
     if has_baseline and "delta_abs" in table_df.columns:
         if table_df["delta_abs"].notna().any():
             table_df["rank_delta"] = (
-                table_df["delta_abs"].rank(ascending=False, method="min").astype(int)
+                table_df["delta_abs"]
+                .rank(ascending=not rank_descending, method="min")
+                .astype(int)
             )
 
     # Carry aspirational flag if present

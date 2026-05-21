@@ -280,7 +280,8 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "group": "temperature",
         "description": (
             "The lowest daily minimum temperature recorded in the year (°C). "
-            "Indicates coldest night. Climdex index TNn."
+            "Indicates coldest night. Climdex index TNn. "
+            "Direction: lower values indicate higher cold risk."
         ),
     },
     
@@ -1031,8 +1032,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"months": [12, 1, 2]},
         "group": "temperature",
         "description": (
-            "Mean of daily mean temperature during winter (December–February). "
-            "This is the seasonal TM mean."
+            "Mean of daily mean temperature during winter using the meteorological "
+            "DJF window: December of the prior year combined with January–February of "
+            "the current year. Direction: lower values indicate higher cold risk."
         ),
     },
     # {
@@ -1059,7 +1061,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"months": [12, 1, 2]},
         "group": "temperature",
         "description": (
-            "Mean of daily minimum temperature during winter (December–February)."
+            "Mean of daily minimum temperature during winter using the meteorological "
+            "DJF window: December of the prior year combined with January–February of "
+            "the current year. Direction: lower values indicate higher cold risk."
         ),
     },
     {
@@ -1073,8 +1077,10 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"months": [12, 1, 2]},
         "group": "temperature",
         "description": (
-            "Minimum of daily minimum temperature during winter (December-February). "
-            "This captures the coldest winter night in the season."
+            "Minimum of daily minimum temperature during winter using the meteorological "
+            "DJF window: December of the prior year combined with January–February of "
+            "the current year. Captures the coldest winter night in the season. "
+            "Direction: lower values indicate higher cold risk."
         ),
     },
     {

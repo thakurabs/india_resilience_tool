@@ -341,6 +341,7 @@ def build_map_and_rankings(
             state_col="state_name",
             aspirational_col="aspirational",
             extra_cols=extra_rank_cols,
+            higher_is_worse=bool(varcfg.get("rank_higher_is_worse", True)),
         )
 
     if blocked_message:
