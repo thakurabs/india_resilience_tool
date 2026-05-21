@@ -59,6 +59,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.pipeline.build_glance_view_model --help` | Build persisted optimized Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal dashboard prep gets these through `build_processed_optimised` |
 | `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional `--prune-scope`, destructive `--full-rebuild`, `--dry-run`, exact pre-scan task counting, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
 | `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` filtering, and write `parity_report.json` |
+| `python -m tools.diagnostics.heat_stress_gridfirst_parity --help` | Compare legacy polygon-mean-first vs Heat Stress v2 grid-first CSV extracts for pilot diagnostics, including deltas, rank shifts, and top movers |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics <slug>` | Build district outputs |
@@ -241,6 +242,7 @@ Aqueduct methodology note:
 | `master_builder.py` | Build master CSVs, including hydro master enrichment and Parquet companions for runtime serving |
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 | `gridfirst_spatial.py` | Shared grid-first spatial overlap and NetCDF/sidecar cache helpers used by Heat Risk v2 and Drought Risk v2 |
+| `heat_stress_gridfirst.py` | Heat Stress v2 grid-first Twb and tropical-night metrics for admin district/block outputs, with private annual cell caches under `processed/_internal/heat_stress/grid_metrics/`; shared TN90p/WSDI remain in Heat Risk v2 |
 | `drought_risk_gridfirst.py` | Drought Risk v2 grid-cell SPI, annual count/spell metrics, period rollups, NaN-aware polygon aggregation, and private cache helpers |
 | `extreme_rainfall_gridfirst.py` | Extreme Rainfall / Flash Flood v2 admin grid-first Rx1day, Rx5day, R20mm, R95p, R95pTOT, and CWD compute with private annual grid and threshold caches |
 

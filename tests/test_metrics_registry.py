@@ -33,6 +33,7 @@ from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
     R95P_STRICT_EXCEEDANCE,
 )
 from india_resilience_tool.compute.heat_risk_gridfirst import HEAT_RISK_GRIDFIRST_SLUGS
+from india_resilience_tool.compute.heat_stress_gridfirst import HEAT_STRESS_GRIDFIRST_SLUGS
 
 
 def test_pipeline_metrics_present() -> None:
@@ -145,27 +146,20 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
+        "twb_days_ge_28",
         "twb_days_ge_30",
-        "wbd_le_3",
-        "wbd_gt3_le6",
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
-        "wbd_le_3_consecutive_days",
         "wsdi_warm_spell_days",
-        "twb_days_ge_28",
-        "wbgt_shade_stull_annual_mean",
-        "wbgt_shade_stull_days_ge_28",
-        "wbgt_shade_stull_days_ge_30",
-        "wbgt_shade_stull_days_ge_32",
-        "swbgt_empirical_annual_mean",
-        "swbgt_empirical_days_ge_28",
-        "swbgt_empirical_days_ge_30",
-        "swbgt_empirical_days_ge_32",
     ]
     assert "wbd_le_6" not in heat_stress_metrics
 
 
-def test_wbgt_metrics_registered_under_heat_stress() -> None:
+def test_heat_stress_gridfirst_slugs_do_not_overlap_heat_risk_gridfirst_slugs() -> None:
+    assert HEAT_STRESS_GRIDFIRST_SLUGS & HEAT_RISK_GRIDFIRST_SLUGS == set()
+
+
+def test_wbgt_and_swbgt_metrics_registered_but_not_under_heat_stress() -> None:
     expected = {
         "wbgt_shade_stull_annual_mean": (
             "Shaded WBGT (Annual Mean)",
@@ -213,7 +207,7 @@ def test_wbgt_metrics_registered_under_heat_stress() -> None:
 
     for slug, (label, compute, value_col) in expected.items():
         assert slug in METRICS_BY_SLUG
-        assert slug in heat_stress_metrics
+        assert slug not in heat_stress_metrics
 
         spec = METRICS_BY_SLUG[slug]
         assert spec.label == label
@@ -236,6 +230,14 @@ def test_wbgt_metrics_registered_under_heat_stress() -> None:
             assert "solar radiation" in spec.description.lower()
             assert "wind speed" in spec.description.lower()
             assert "black-globe temperature" in spec.description.lower()
+
+
+def test_wbd_legacy_metrics_registered_but_not_under_heat_stress() -> None:
+    legacy_slugs = {"wbd_le_3", "wbd_gt3_le6", "wbd_le_3_consecutive_days", "wbd_le_6"}
+    heat_stress_metrics = set(get_metrics_for_bundle("Heat Stress", spatial_family="admin", level="district"))
+
+    assert legacy_slugs <= set(METRICS_BY_SLUG)
+    assert legacy_slugs.isdisjoint(heat_stress_metrics)
 
 
 def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:

@@ -79,6 +79,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 
 | Script | Purpose | Run |
 |---|---|---|
+| `tools/diagnostics/heat_stress_gridfirst_parity.py` | Non-destructive comparison of legacy polygon-mean-first vs Heat Stress v2 grid-first CSV extracts, reporting per-metric deltas, rank shifts, and top movers | `python -m tools.diagnostics.heat_stress_gridfirst_parity --help` |
 | `tools/diagnostics/spi_diagnostic.py` | Sanity checks for SPI outputs (distribution/mean/std) | `python -m tools.diagnostics.spi_diagnostic --help` |
 | `tools/diagnostics/debug_build_master.py` | Debug helper for master build issues | `python -m tools.diagnostics.debug_build_master --help` |
 | `tools/diagnostics/verify_states_geojson.py` | Verify `states_4326.geojson` is consistent with `districts_4326.geojson` | `python -m tools.diagnostics.verify_states_geojson` |

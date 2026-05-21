@@ -39,14 +39,13 @@ This section lists the metrics currently encoded in the dashboard registry and a
 | `twb_annual_mean` | Wet-Bulb Temperature (Annual Mean) | No explicit threshold |
 | `twb_summer_mean` | Wet-Bulb Temperature (Summer Mean; MAM Mean) | March-May seasonal mean |
 | `twb_annual_max` | Wet-Bulb Temperature (Annual Max) | No explicit threshold |
-| `twb_days_ge_30` | Wet-Bulb Days (Twb ≥ 30°C) | Count of days with wet-bulb temperature `>= 30°C` |
-| `wbd_le_3` | Severe Humid-Heat Days (WBD ≤ 3°C) | Count of days with wet-bulb depression `<= 3°C` |
-| `wbd_gt3_le6` | Moderate Humid-Heat Days (3°C < WBD ≤ 6°C) | Count of days with wet-bulb depression `> 3°C` and `<= 6°C` |
-| `tasmin_tropical_nights_gt28` | Tropical Nights (TR, TN > 28°C) | Count of days with minimum temperature `> 28°C` |
-| `tn90p_warm_nights_pct` | Warm Nights (TN90p) | Percent of nights above the rolling 90th percentile baseline; baseline years `1981-2010`, `5`-day window |
-| `wbd_le_3_consecutive_days` | Consecutive Wet-Bulb Stress Days (WBD ≤ 3°C) | Spell metric using wet-bulb depression `<= 3°C`; minimum spell length `3` days |
-| `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | Warm-spell days above the 90th percentile baseline; baseline years `1981-2010`, `5`-day window, minimum spell length `6` days |
 | `twb_days_ge_28` | Heat Stress Days (Twb ≥ 28°C) | Count of days with wet-bulb temperature `>= 28°C` |
+| `twb_days_ge_30` | Wet-Bulb Days (Twb ≥ 30°C) | Count of days with wet-bulb temperature `>= 30°C` |
+| `tasmin_tropical_nights_gt28` | Tropical Nights (TR, TN > 28°C) | Count of days with minimum temperature `> 28°C` |
+| `tn90p_warm_nights_pct` | Warm Nights (TN90p) | Percent of nights above the rolling 90th percentile baseline; Heat Risk v2 shared baseline path |
+| `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | Warm-spell days above the 90th percentile baseline; Heat Risk v2 shared baseline path, minimum spell length `6` days |
+
+WBD, WBGT, and simplified WBGT slugs remain registered legacy diagnostics, but they are no longer Heat Stress domain members or `composite_heat_stress` scoring inputs.
 
 ### 1.3 Cold Risk
 

@@ -1373,244 +1373,79 @@ Supported scenarios:
 - `ssp245`
 - `ssp585`
 
-The active weighted composite uses 11 metrics.
+Heat Stress v2 drops WBD from the scored bundle because local diagnostics showed WBD-only metrics can identify humid/low-depression days that are not high Twb heat-stress days. WBD remains a registered legacy diagnostic metric but is no longer part of Heat Stress scoring or domain membership.
 
-| Component group | Metric slug | Metric label | Weight |
-|---|---|---|---:|
-| Background Heat Stress | `twb_annual_mean` | Wet-Bulb Temperature (Annual Mean) | 0.100 |
-| Background Heat Stress | `twb_summer_mean` | Wet-Bulb Temperature (Summer Mean; MAM Mean) | 0.100 |
-| Extreme Heat Stress | `twb_annual_max` | Wet-Bulb Temperature (Annual Max) | 0.125 |
-| Extreme Heat Stress | `twb_days_ge_30` | Wet-Bulb Days (Twb >= 30C) | 0.125 |
-| Humidity Constraint | `wbd_le_3` | Severe Humid-Heat Days (WBD <= 3C) | 0.075 |
-| Humidity Constraint | `wbd_gt3_le6` | Moderate Humid-Heat Days (3C < WBD <= 6C) | 0.075 |
-| Night-time Heat Stress | `tasmin_tropical_nights_gt28` | Tropical Nights (TR, TN > 28C) | 0.075 |
-| Night-time Heat Stress | `tn90p_warm_nights_pct` | Warm Nights (TN90p) | 0.075 |
-| Persistence / Duration | `wbd_le_3_consecutive_days` | Consecutive Wet-Bulb Stress Days (WBD <= 3C) | 0.0833 |
-| Persistence / Duration | `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | 0.0833 |
-| Persistence / Duration | `twb_days_ge_28` | Heat Stress Days (Twb >= 28C) | 0.0833 |
+All retained Heat Stress v2 inputs are computed grid-first and then area-weighted to district/block polygons. Twb is computed per grid cell/day before annual summaries or threshold counts.
+
+The bundle keeps the `composite_heat_stress` slug, so this is an in-place methodology update rather than a new dashboard product.
+
+The active weighted composite uses 8 scored metrics.
+
+| Component group | Group weight | Metric slug | Metric label | Code weight |
+|---|---:|---|---|---:|
+| Background humid heat | 0.20 | `twb_annual_mean` | Wet-Bulb Temperature (Annual Mean) | `0.20 / 2.0` |
+| Background humid heat | 0.20 | `twb_summer_mean` | Wet-Bulb Temperature (Summer Mean; MAM Mean) | `0.20 / 2.0` |
+| Extreme / threshold humid heat | 0.40 | `twb_annual_max` | Wet-Bulb Temperature (Annual Max) | `0.40 / 3.0` |
+| Extreme / threshold humid heat | 0.40 | `twb_days_ge_28` | Heat Stress Days (Twb >= 28C) | `0.40 / 3.0` |
+| Extreme / threshold humid heat | 0.40 | `twb_days_ge_30` | Wet-Bulb Days (Twb >= 30C) | `0.40 / 3.0` |
+| Night-time recovery stress | 0.20 | `tasmin_tropical_nights_gt28` | Tropical Nights (TR, TN > 28C) | `0.20 / 2.0` |
+| Night-time recovery stress | 0.20 | `tn90p_warm_nights_pct` | Warm Nights (TN90p) | `0.20 / 2.0` |
+| Persistence | 0.20 | `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | `0.20 / 1.0` |
 
 Implementation references:
 - Bundle catalog: `india_resilience_tool/config/dashboard_bundles.py`
 - Bundle weights: `india_resilience_tool/config/bundle_weights.py`
 - Metric registry: `india_resilience_tool/config/metrics_registry.py`
-- Wet-bulb compute functions: `tools/pipeline/compute_indices_multiprocess.py`
+- Heat Stress v2 grid-first compute: `india_resilience_tool/compute/heat_stress_gridfirst.py`
+- Shared Heat Risk v2 percentile compute for TN90p/WSDI: `india_resilience_tool/compute/heat_risk_gridfirst.py`
+- Pipeline dispatch and public CSV writer: `tools/pipeline/compute_indices_multiprocess.py`
 - Composite scoring: `india_resilience_tool/analysis/bundle_scores.py`
-
-Note:
-- The Heat Stress domain also exposes some WBGT-style screening metrics in the
-  registry, but those are not part of the current weighted
-  `composite_heat_stress` bundle unless included in `bundle_weights.py`.
 
 ### 5.2 Metric-by-Metric Index Calculation
 
 The bundle mixes:
 - wet-bulb temperature metrics derived from `tas` and `hurs`;
-- wet-bulb depression metrics derived from `tas - Twb`;
-- night-time minimum-temperature threshold/percentile metrics;
+- night-time minimum-temperature threshold and percentile metrics;
 - warm-spell persistence metrics from `tasmax`.
 
-Current spatial aggregation:
-- For each polygon, the pipeline first computes daily spatial mean `tas`,
-  `tasmax`, `tasmin`, and/or `hurs`.
-- Wet-bulb and wet-bulb depression metrics are then computed from these
-  polygon-average daily series.
+Grid-first spatial aggregation:
+- For the six Heat Stress-only metrics, the pipeline computes the annual cell field first and then applies polygon area-weighted means.
+- `twb_annual_mean`, `twb_summer_mean`, `twb_annual_max`, `twb_days_ge_28`, and `twb_days_ge_30` compute Stull Twb per grid cell/day before annual summaries or threshold counts.
+- `tasmin_tropical_nights_gt28` counts daily grid-cell `tasmin > 28C`; exactly `28.0C` is not counted, Feb 29 is dropped, and NaN days are non-events.
+- Day-count metrics remain fractional after polygon aggregation and are not rounded.
+- `twb_annual_max` is the area-weighted mean of per-cell annual maxima.
 
-#### Wet-Bulb Temperature Method
+Private cache artifacts:
+- Shared spatial weights: `processed/_internal/spatial_weights/`
+- Heat Stress annual cell fields: `processed/_internal/heat_stress/grid_metrics/<slug>/<model>/<grid_id>/<scenario>/<year>.nc`
+- Cache sidecars include method version, slug, model, scenario, year, grid id, sorted params, input file hashes, value column, and baseline metadata when relevant.
+- Cache reads ignore artifacts whose `method_version` differs from `heat-stress-v2-gridfirst-1`.
 
-Wet-bulb temperature is computed using the Stull (2011) approximation:
+Public CSV metadata for the six Heat Stress-only metrics:
+- `method_version = heat-stress-v2-gridfirst-1`
+- `aggregation_method = gridfirst_area_weighted_mean`
 
-```text
-Twb = f(Ta_C, RH_pct)
-```
+### 5.3 Baselines and Screening Caveats
 
-Inputs:
-- `tas`: near-surface air temperature, converted from K to C.
-- `hurs`: relative humidity, clipped to `0-100%`.
-- If humidity appears as a `0-1` fraction, it is multiplied by 100.
+TN90p and WSDI reuse Heat Risk v2 percentile-baseline machinery unchanged: baseline `1990-2010`, linear quantile, 5-day window, strict `>`, and WSDI minimum spell length `6`. Heat Stress does not duplicate that implementation.
 
-Interpretation:
-- Wet-bulb temperature combines heat and humidity.
-- Higher Twb means greater physiological heat stress because evaporative cooling
-  is less effective.
+Stull Twb is an approximation. It is suitable for climate-screening and relative prioritization, but it is not a full psychrometric wet-bulb calculation and should not be interpreted as an occupational WBGT standard.
 
-#### `twb_annual_mean`
-
-Unit: `C`
-
-Formula:
-- Compute daily polygon-average Twb.
-- Return annual mean Twb.
-
-Interpretation:
-- Background annual humid-heat burden.
-
-#### `twb_summer_mean`
-
-Unit: `C`
-
-Formula:
-- Compute daily polygon-average Twb.
-- Select March-April-May.
-- Return seasonal mean Twb.
-
-Interpretation:
-- Pre-monsoon / summer humid-heat burden.
-
-#### `twb_annual_max`
-
-Unit: `C`
-
-Formula:
-- Compute daily polygon-average Twb.
-- Return annual maximum Twb.
-
-Interpretation:
-- Peak annual humid-heat intensity.
-
-#### `twb_days_ge_30`
-
-Unit: `days`
-
-Formula:
-- Count days where daily polygon-average Twb is `>= 30C`.
-
-Interpretation:
-- Number of severe wet-bulb heat-stress days.
-
-#### `twb_days_ge_28`
-
-Unit: `days`
-
-Formula:
-- Count days where daily polygon-average Twb is `>= 28C`.
-
-Interpretation:
-- Number of broader heat-stress days. This is less extreme than the `>=30C`
-  threshold and contributes to persistence/duration weighting.
-
-#### Wet-Bulb Depression Metrics
-
-Wet-bulb depression is:
-
-```text
-WBD = Ta_C - Twb_C
-```
-
-Low WBD means the air is humid and near saturation, so sweat evaporation is
-constrained.
-
-#### `wbd_le_3`
-
-Unit: `days`
-
-Formula:
-- Compute daily WBD.
-- Count days where WBD is `<= 3C`.
-
-Interpretation:
-- Severe humidity-constrained heat-stress days.
-
-#### `wbd_gt3_le6`
-
-Unit: `days`
-
-Formula:
-- Compute daily WBD.
-- Count days where `3C < WBD <= 6C`.
-
-Interpretation:
-- Moderate humidity-constrained heat-stress days.
-
-#### `wbd_le_3_consecutive_days`
-
-Unit: `days`
-
-Formula:
-- Compute daily WBD.
-- Flag days where WBD is `<= 3C`.
-- Return the longest run meeting the configured minimum spell length of 3 days.
-
-Interpretation:
-- Persistence of severe humidity-constrained heat stress.
-
-#### `tasmin_tropical_nights_gt28`
-
-Unit: `days`
-
-Formula:
-- Use daily minimum temperature `tasmin`.
-- Count nights where `tasmin > 28C`.
-
-Interpretation:
-- Night-time heat stress and limited overnight recovery.
-
-#### `tn90p_warm_nights_pct`
-
-Unit: `%`
-
-Formula:
-- Use `tasmin`.
-- Compute ETCCDI-style day-of-year 90th percentile thresholds from baseline
-  years.
-- Baseline currently configured as `(1981, 2010)`.
-- Uses a 5-day moving window and nearest quantile.
-- Count/evaluate nights above the threshold as percentage of days.
-
-Interpretation:
-- Relative warm-night frequency compared with historical baseline night-time
-  climate.
-
-#### `wsdi_warm_spell_days`
-
-Unit: `days`
-
-Formula:
-- Use `tasmax`.
-- Compute ETCCDI-style day-of-year 90th percentile thresholds from baseline
-  years.
-- Baseline currently configured as `(1981, 2010)`.
-- Uses a 5-day moving window, nearest quantile, minimum spell length of 6 days.
-- Count days contributing to qualifying warm spells.
-
-Interpretation:
-- Persistence of daytime warm spells relative to historical local climate.
-
-### 5.3 Period and Ensemble Aggregation
-
-Per model and geography:
-1. Compute annual metric values.
-2. Aggregate annual values into configured periods by taking the mean across
-   available years.
-3. Historical baseline period: `1990-2010`.
-4. Future periods: `2020-2040`, `2040-2060`, `2060-2080`.
-
-Across models:
-- The master builder computes ensemble `mean`, `std`, `median`, `p05`, `p95`,
-  `n_models`, and `values_per_model`.
-- Dashboard statistic `mean` reads the ensemble mean period column.
-
-Example selected columns:
-- `twb_annual_mean_C__ssp585__2060-2080__mean`
-- `twb_days_ge_30_days__ssp585__2060-2080__mean`
-- `wbd_le_3_days__ssp585__2060-2080__mean`
-
-Baseline comparison columns use historical `1990-2010` where available.
+WBD, WBGT, and simplified WBGT metrics remain registered for backward compatibility and diagnostics, but they are not Heat Stress domain members and are not scored in `composite_heat_stress` v2.
 
 ### 5.4 Normalization and Risk Interpretation
 
-All current Heat Stress bundle components are treated as higher-is-worse:
+All retained Heat Stress v2 bundle components are treated as higher-is-worse:
 - Higher Twb is worse.
 - More Twb threshold days are worse.
-- More low-WBD days are worse.
 - More hot nights are worse.
 - More warm-spell days are worse.
 
 For individual metric deep-dive views:
 - `Index value` is the selected raw metric/statistic.
-- `Delta vs baseline` is selected value minus historical baseline.
+- `Delta vs baseline` is selected value minus historical baseline where available.
 - Percentile/risk class is computed over the active comparison set.
-- For block views, percentiles are state-scoped unless otherwise filtered by
-  the runtime path.
+- For block views, percentiles are state-scoped unless otherwise filtered by the runtime path.
 
 Risk class from percentile:
 - `>=80`: Very High
@@ -1622,10 +1457,8 @@ Risk class from percentile:
 ### 5.5 Bundle Score Calculation
 
 For composite scoring:
-1. Resolve each of the 11 component metric columns for the selected scenario and
-   period.
-2. Normalize each component across the available geography frame to a `0-100`
-   higher-is-worse scale.
+1. Resolve each of the 8 retained component metric columns for the selected scenario and period.
+2. Normalize each component across the available geography frame to a `0-100` higher-is-worse scale.
 3. Apply configured weights.
 4. Renormalize weights row-wise across available component metrics.
 5. Set score to `NaN` if no component is available.
@@ -1641,9 +1474,7 @@ bundle_score =
 Important distinction:
 - The composite is a relative normalized score.
 - It is not a physical heat-stress unit.
-- Because components are correlated, especially Twb metrics and WBD metrics, the
-  score should be interpreted as a screening index rather than an
-  independent-effects risk model.
+- Because components are correlated, especially the Twb metrics, the score should be interpreted as a screening index rather than an independent-effects risk model.
 
 ### 5.6 UI Presentation
 
@@ -1656,58 +1487,21 @@ Deep Dive metric view:
 Portfolio heatmap:
 - Displays percentiles, not raw values.
 - Colors are risk-class bins derived from percentile.
-- Percentiles are metric-specific, so a `90` for Twb annual max and a `90` for
-  tropical nights mean "high relative position" within each metric, not
-  equivalent physical magnitude.
+- Percentiles are metric-specific, so a `90` for Twb annual max and a `90` for tropical nights mean "high relative position" within each metric, not equivalent physical magnitude.
 
 Glance / bundle view:
 - Displays persisted `composite_heat_stress` bundle scores.
-- Component drivers may show the metrics contributing most strongly to the
-  score.
+- Component drivers may show the metrics contributing most strongly to the score.
 
-### 5.7 Validation Checks and Open Methodology Comments
+### 5.7 Validation Checklist
 
 Recommended validation checks:
-1. Pick one district/block and verify one wet-bulb metric:
-   - daily polygon-average `tas`
-   - daily polygon-average `hurs`
-   - Stull Twb
-   - annual mean/max or threshold-day count
-2. Verify WBD logic:
-   - `WBD = tas_C - Twb_C`
-   - `wbd_le_3` days
-   - `wbd_gt3_le6` days
-   - longest `wbd_le_3` spell
-3. Verify night-time heat metrics:
-   - `tasmin > 28C` count
-   - TN90p baseline threshold and percentage
-4. Verify composite:
-   - pull all 11 component columns for one geography;
-   - min-max normalize each component;
-   - apply weights;
-   - compare to `composite_heat_stress`.
-
-Open methodology comments:
-- Spatial aggregation should be reviewed. Current wet-bulb metrics compute
-  polygon-average `tas` and `hurs` first, then compute Twb. Since Twb is
-  nonlinear in temperature and humidity, grid-cell Twb followed by zonal
-  aggregation may better preserve local humid-heat conditions.
-- Stull wet-bulb is an approximation. It is useful for screening, but should be
-  documented as approximate and not equivalent to a full psychrometric wet-bulb
-  calculation.
-- TN90p and WSDI use `baseline_years: (1981, 2010)` while dashboard historical
-  deltas use `1990-2010`. As with R95p/R95pTOT, this should be aligned or
-  explicitly justified.
-- Registry comments say ETCCDI convention is strictly `>` for TN90p/WSDI, but
-  the current params set `exceed_ge=True`, making exceedance inclusive.
-  Numerical impact may be small, but method text and implementation should
-  agree.
-- The bundle contains potentially correlated components: Twb annual mean, Twb
-  summer mean, Twb annual max, Twb threshold days, WBD threshold days, and WBD
-  spell length are not independent. This is acceptable for a screening bundle if
-  intentional, but should be documented as a weighted hazard-pressure index.
-- Threshold choices need provenance: Twb `28C`, Twb `30C`, WBD `3C`, WBD `6C`,
-  and tropical nights `28C` should have a cited or approved basis.
+1. Recompute the six Heat Stress-only grid-first metrics for a pilot state and inspect yearly rows for `method_version` and `aggregation_method`.
+2. Verify one district/block Twb metric from source grids: per-cell daily `tas`, per-cell daily `hurs`, per-cell Stull Twb, annual cell summary, area-weighted polygon value.
+3. Verify `tasmin_tropical_nights_gt28`: strict `> 28C`, Feb 29 dropped, NaNs as non-events, fractional polygon result allowed after area weighting.
+4. Verify TN90p/WSDI are routed through Heat Risk v2 and use the documented `1990-2010` strict-exceedance baseline settings.
+5. Pull all 8 component columns for one geography, min-max normalize each component, apply weights, and compare to `composite_heat_stress`.
+6. Run `tools.diagnostics.heat_stress_gridfirst_parity` on pilot legacy/new extracts and review per-metric deltas, rank-shift summary, and top movers.
 
 ## 6. Thematic - Cold Risk
 

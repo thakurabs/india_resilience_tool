@@ -97,6 +97,11 @@ from india_resilience_tool.compute.heat_risk_gridfirst import (
     read_spatial_weights_cache as read_heat_risk_spatial_weights_cache,
     write_spatial_weights_cache as write_heat_risk_spatial_weights_cache,
 )
+from india_resilience_tool.compute.heat_stress_gridfirst import (
+    HEAT_STRESS_GRIDFIRST_SLUGS,
+    compute_heat_stress_rows_for_metric,
+    stull_twb_c,
+)
 from india_resilience_tool.compute.drought_risk_gridfirst import (
     DROUGHT_GRIDFIRST_SLUGS,
     compute_drought_risk_rows_for_metric,
@@ -220,6 +225,11 @@ def _heat_risk_spatial_weights_path(level: AdminLevel, grid_id: str) -> Path:
 def _drought_risk_internal_root() -> Path:
     """Private cache root for Drought Risk v2 build artifacts."""
     return BASE_OUTPUT_ROOT / "_internal" / "drought_risk"
+
+
+def _heat_stress_internal_root() -> Path:
+    """Private cache root for Heat Stress v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "heat_stress"
 
 
 def _extreme_rainfall_internal_root() -> Path:
@@ -931,15 +941,7 @@ def _wet_bulb_stull_c(t_c: xr.DataArray, rh_pct: xr.DataArray) -> xr.DataArray:
     Returns:
         Wet-bulb temperature in °C (time series).
     """
-    rh = rh_pct.clip(min=0.0, max=100.0)
-    # Stull (2011) approximation
-    return (
-        t_c * np.arctan(0.151977 * np.sqrt(rh + 8.313659))
-        + np.arctan(t_c + rh)
-        - np.arctan(rh - 1.676331)
-        + 0.00391838 * (rh ** 1.5) * np.arctan(0.023101 * rh)
-        - 4.686035
-    )
+    return stull_twb_c(t_c, rh_pct)
 
 
 def _wet_bulb_daily_mean_c(
@@ -3947,6 +3949,11 @@ def _write_metric_rows_outputs(
                     grp["years_used_count"] = n_avail
                     grp["years_requested"] = n_req
                     grp[value_col] = grp["value"]
+                    for meta_col in ("method_version", "aggregation_method"):
+                        if meta_col in df_yearly.columns:
+                            meta_values = df_yearly.loc[df_yearly["year"].isin(avail), meta_col].dropna().unique()
+                            if len(meta_values) == 1:
+                                grp[meta_col] = meta_values[0]
                     period_frames.append(grp)
                 except Exception as e:
                     logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
@@ -4225,6 +4232,88 @@ def process_metric_for_model_scenario(
             except Exception:
                 pass
             logging.error(f"[{slug}] Heat Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    if slug in HEAT_STRESS_GRIDFIRST_SLUGS:
+        try:
+            grid = gridfirst_dataset_grid_spec(ds_sample)
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights = read_gridfirst_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+            )
+            if weights is None:
+                logging.info(
+                    "[%s] Building Heat Stress v2 spatial weights for level=%s grid=%s",
+                    slug,
+                    level,
+                    grid.grid_id,
+                )
+                weights = build_gridfirst_area_weights(gdf, grid, level=level)
+                write_gridfirst_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                )
+            coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(
+                coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+                .astype(str)
+                .tolist()
+            )
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Heat Stress v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            metric_for_grid = dict(metric)
+            grid_params = dict(metric.get("params") or {})
+            grid_params["grid_id"] = grid.grid_id
+            metric_for_grid["params"] = grid_params
+
+            rows = compute_heat_stress_rows_for_metric(
+                metric=metric_for_grid,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_heat_stress_internal_root(),
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Heat Stress v2 grid-first computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
             raise
 

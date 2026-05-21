@@ -39,14 +39,21 @@ def test_heat_stress_bundle_weights_are_stable_and_sum_to_one() -> None:
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
+        "twb_days_ge_28",
         "twb_days_ge_30",
-        "wbd_le_3",
-        "wbd_gt3_le6",
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
-        "wbd_le_3_consecutive_days",
         "wsdi_warm_spell_days",
-        "twb_days_ge_28",
+    ]
+    assert [entry.weight for entry in entries] == [
+        0.20 / 2.0,
+        0.20 / 2.0,
+        0.40 / 3.0,
+        0.40 / 3.0,
+        0.40 / 3.0,
+        0.20 / 2.0,
+        0.20 / 2.0,
+        0.20 / 1.0,
     ]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
