@@ -110,6 +110,10 @@ from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
     EXTREME_RAINFALL_GRIDFIRST_SLUGS,
     compute_extreme_rainfall_rows_for_metric,
 )
+from india_resilience_tool.compute.cold_risk_gridfirst import (
+    COLD_RISK_GRIDFIRST_SLUGS,
+    compute_cold_risk_rows_for_metric,
+)
 from india_resilience_tool.compute.gridfirst_spatial import (
     build_area_weights as build_gridfirst_area_weights,
     coverage_from_weights as gridfirst_coverage_from_weights,
@@ -235,6 +239,11 @@ def _heat_stress_internal_root() -> Path:
 def _extreme_rainfall_internal_root() -> Path:
     """Private cache root for Extreme Rainfall v2 build artifacts."""
     return BASE_OUTPUT_ROOT / "_internal" / "extreme_rainfall"
+
+
+def _cold_risk_internal_root() -> Path:
+    """Private cache root for Cold Risk v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "cold_risk"
 
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
@@ -4232,6 +4241,123 @@ def process_metric_for_model_scenario(
             except Exception:
                 pass
             logging.error(f"[{slug}] Heat Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    if slug in COLD_RISK_GRIDFIRST_SLUGS:
+        try:
+            grid = gridfirst_dataset_grid_spec(ds_sample)
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights = read_gridfirst_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+            )
+            if weights is None:
+                logging.info(
+                    "[%s] Building Cold Risk v2 spatial weights for level=%s grid=%s",
+                    slug,
+                    level,
+                    grid.grid_id,
+                )
+                weights = build_gridfirst_area_weights(gdf, grid, level=level)
+                write_gridfirst_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                )
+            coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(
+                coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+                .astype(str)
+                .tolist()
+            )
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Cold Risk v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            metric_for_grid = dict(metric)
+
+            # Baseline year_to_paths (only needed for compute kinds that build
+            # per-cell DOY thresholds — TX10p, TN10p, CSDI).
+            from india_resilience_tool.compute.cold_risk_gridfirst import (
+                COLD_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES,
+                COLD_RISK_GRIDFIRST_DJF_COMPUTES,
+            )
+            compute_kind = metric_for_grid.get("compute")
+            if compute_kind in COLD_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
+                baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                    metric=metric_for_grid,
+                    primary_var=primary_var,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=SCENARIOS,
+                    year_to_paths=year_to_paths,
+                )
+                if missing_baseline or not baseline_year_to_paths:
+                    logging.warning(f"[{slug}] Missing Cold Risk v2 historical baseline for {model}/{scenario}")
+                    return
+            else:
+                baseline_year_to_paths = year_to_paths
+
+            # Historical fallback inventory for SSP first-year Dec (matches the
+            # Phase 2 polygon-mean dispatcher behavior at line ~4632).
+            historical_year_to_paths: dict[int, dict[str, Path]] | None = None
+            if compute_kind in COLD_RISK_GRIDFIRST_DJF_COMPUTES and scenario != "historical":
+                hist_conf = SCENARIOS.get("historical")
+                if hist_conf:
+                    hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
+                    if hist_dir.exists():
+                        valid_year_files, _ = validated_year_files_for_var(hist_dir, primary_var)
+                        if valid_year_files:
+                            historical_year_to_paths = {
+                                int(y): {primary_var: p} for y, p in valid_year_files.items()
+                            }
+
+            rows = compute_cold_risk_rows_for_metric(
+                metric=metric_for_grid,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                baseline_year_to_paths=baseline_year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_cold_risk_internal_root(),
+                historical_year_to_paths=historical_year_to_paths,
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Cold Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
             raise
 

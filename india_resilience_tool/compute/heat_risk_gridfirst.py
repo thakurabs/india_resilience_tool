@@ -167,19 +167,7 @@ def boundary_content_hash(boundary_path: Path) -> str:
     return h.hexdigest()
 
 
-def input_file_signature(paths: Sequence[Path]) -> str:
-    """Hash file paths, sizes, and mtimes for lightweight cache invalidation."""
-
-    h = hashlib.sha256()
-    for path in sorted(Path(p) for p in paths):
-        h.update(str(path).encode("utf-8"))
-        try:
-            stat = path.stat()
-            h.update(str(stat.st_size).encode("ascii"))
-            h.update(str(stat.st_mtime_ns).encode("ascii"))
-        except OSError:
-            h.update(b"missing")
-    return h.hexdigest()
+# `input_file_signature` moved to ``gridfirst_spatial``.
 
 
 def build_area_weights(
@@ -294,93 +282,14 @@ def read_spatial_weights_cache(
     return pd.read_parquet(path)
 
 
-def _drop_feb29(da: xr.DataArray) -> xr.DataArray:
-    if "time" not in da.coords:
-        return da
-    mask = ~((da["time"].dt.month == 2) & (da["time"].dt.day == 29))
-    return da.sel(time=da["time"][mask])
-
-
-def _noleap_doy(da: xr.DataArray) -> xr.DataArray:
-    doy = da["time"].dt.dayofyear
-    after_feb = da["time"].dt.month > 2
-    leap = da["time"].dt.is_leap_year
-    return xr.where(after_feb & leap, doy - 1, doy)
-
-
-def _quantile(da: xr.DataArray, q: float, *, dim: str, method: str) -> xr.DataArray:
-    """Return a scalar nanquantile while preserving non-reduced dimensions.
-
-    Some xarray/numpy combinations can mishandle all-NaN grid cells when
-    reducing a 3D time/lat/lon cube with a scalar quantile, expecting a
-    transient ``quantile`` dimension even though NumPy returns a 2D field.
-    This explicit path keeps Heat Risk thresholds shape-stable: valid cells
-    match ``skipna=True`` quantiles and all-NaN cells remain NaN.
-    """
-
-    if dim not in da.dims:
-        raise ValueError(f"Cannot compute quantile: dimension {dim!r} not present")
-
-    axis = da.get_axis_num(dim)
-    kwargs = {"method": method}
-    try:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="All-NaN slice encountered", category=RuntimeWarning)
-            values = np.nanquantile(np.asarray(da.values, dtype=float), q, axis=axis, **kwargs)
-    except TypeError:
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="All-NaN slice encountered", category=RuntimeWarning)
-            values = np.nanquantile(np.asarray(da.values, dtype=float), q, axis=axis, interpolation=method)
-
-    out_dims = tuple(name for name in da.dims if name != dim)
-    out_coords = {name: da.coords[name] for name in out_dims if name in da.coords}
-    return xr.DataArray(values, dims=out_dims, coords=out_coords, attrs=da.attrs)
-
-
-def compute_doy_thresholds(
-    baseline: xr.DataArray,
-    *,
-    percentile: int = 90,
-    window_days: int = 5,
-    quantile_method: str = "linear",
-    smooth: int | None = None,
-) -> xr.DataArray:
-    """Compute per-cell, per-day-of-year percentile thresholds."""
-
-    base = _drop_feb29(baseline)
-    if base.sizes.get("time", 0) == 0:
-        raise ValueError("Baseline series is empty after dropping Feb 29")
-    if window_days % 2 != 1:
-        raise ValueError("window_days must be odd")
-
-    doy = _noleap_doy(base)
-    half = window_days // 2
-    q = float(percentile) / 100.0
-    thresholds: list[xr.DataArray] = []
-    for day in range(1, 366):
-        window = np.arange(day - half, day + half + 1)
-        window = np.where(window < 1, window + 365, window)
-        window = np.where(window > 365, window - 365, window)
-        sample = base.where(doy.isin(window), drop=True)
-        thresholds.append(_quantile(sample, q, dim="time", method=quantile_method))
-
-    out = xr.concat(thresholds, dim="doy").assign_coords(doy=np.arange(1, 366))
-    if smooth is not None:
-        width = int(smooth)
-        if width > 1:
-            if width % 2 != 1:
-                raise ValueError("smooth must be odd")
-            pad = width // 2
-            padded = xr.concat([out.isel(doy=slice(-pad, None)), out, out.isel(doy=slice(0, pad))], dim="doy")
-            out = padded.rolling(doy=width, center=True, min_periods=1).mean().isel(doy=slice(pad, pad + 365))
-            out = out.assign_coords(doy=np.arange(1, 366))
-    return out
-
-
-def threshold_cache_path(cache_root: Path, *, model: str, var: str, baseline_label: str) -> Path:
-    """Return the private threshold-cache NetCDF path."""
-
-    return Path(cache_root) / "thresholds" / model / var / f"{baseline_label}.nc"
+# `_drop_feb29`, `_noleap_doy`, `_quantile`, `compute_doy_thresholds`,
+# `threshold_cache_path`, `read_threshold_cache`, `write_threshold_cache`,
+# `_run_lengths`, `aggregate_cell_values`, `aggregate_percent_days`,
+# `aggregate_daily_area_mean`, `open_year_dataarray`, `concat_years`,
+# `input_file_signature`, and the four `_cellwise_*` helpers were moved to
+# ``gridfirst_spatial`` so Cold Risk v2 can share them. They are re-exported
+# at the bottom of this module for back-compat with existing callers (Drought,
+# Extreme Rainfall, Heat Stress).
 
 
 def grid_metric_cache_path(cache_root: Path, *, slug: str, model: str, scenario: str, year: int) -> Path:
@@ -434,74 +343,7 @@ def _grid_metric_sidecar(
     }
 
 
-def read_threshold_cache(
-    path: Path,
-    *,
-    input_signature: str,
-    baseline_years: tuple[int, int],
-    percentile: int,
-    window_days: int,
-    quantile_method: str,
-) -> xr.DataArray | None:
-    """Read a cached threshold cube when its sidecar matches the inputs."""
-
-    path = Path(path)
-    sidecar_path = path.with_suffix(path.suffix + ".json")
-    if not path.exists() or not sidecar_path.exists():
-        return None
-    try:
-        sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-    expected = {
-        "method_version": GRIDFIRST_METHOD_VERSION,
-        "input_file_hash": input_signature,
-        "baseline_years": list(baseline_years),
-        "percentile": int(percentile),
-        "window_days": int(window_days),
-        "quantile_method": quantile_method,
-    }
-    for key, value in expected.items():
-        if sidecar.get(key) != value:
-            return None
-    ds = xr.open_dataset(path)
-    try:
-        if "threshold" in ds:
-            return ds["threshold"].load()
-        first = next(iter(ds.data_vars))
-        return ds[first].load()
-    finally:
-        ds.close()
-
-
-def write_threshold_cache(
-    threshold: xr.DataArray,
-    path: Path,
-    *,
-    input_signature: str,
-    baseline_years: tuple[int, int],
-    percentile: int,
-    window_days: int,
-    quantile_method: str,
-) -> None:
-    """Write a per-cell threshold cache and invalidation sidecar."""
-
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    threshold.to_dataset(name="threshold").to_netcdf(path)
-    sidecar = {
-        "method_version": GRIDFIRST_METHOD_VERSION,
-        "input_file_hash": input_signature,
-        "baseline_years": list(baseline_years),
-        "percentile": int(percentile),
-        "window_days": int(window_days),
-        "quantile_method": quantile_method,
-        "methodology_note": "Heat Risk v2 per-cell DOY percentile threshold cache",
-    }
-    path.with_suffix(path.suffix + ".json").write_text(
-        json.dumps(sidecar, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+# `read_threshold_cache` / `write_threshold_cache` moved to ``gridfirst_spatial``.
 
 
 def read_grid_metric_cache(path: Path, *, expected_sidecar: Mapping[str, object]) -> xr.Dataset | None:
@@ -542,208 +384,7 @@ def write_grid_metric_cache(
     )
 
 
-def _run_lengths(flags: np.ndarray, min_len: int) -> tuple[int, int, list[np.ndarray]]:
-    spells: list[np.ndarray] = []
-    total = 0
-    max_run = 0
-    start: int | None = None
-    for i, flag in enumerate(flags):
-        if flag and start is None:
-            start = i
-        if (not flag or i == flags.size - 1) and start is not None:
-            end = i + 1 if flag and i == flags.size - 1 else i
-            length = end - start
-            if length >= min_len:
-                idx = np.arange(start, end)
-                spells.append(idx)
-                total += int(length)
-                max_run = max(max_run, int(length))
-            start = None
-    return max_run, total, spells
-
-
-def _cellwise_percent_days(
-    da: xr.DataArray,
-    threshold: xr.DataArray,
-    *,
-    exceed_ge: bool,
-    direction: str = "above",
-) -> tuple[xr.DataArray, xr.DataArray]:
-    eva = _drop_feb29(da)
-    doy = _noleap_doy(eva)
-    thr = threshold.sel(doy=doy)
-    valid = eva.notnull()
-    if direction == "below":
-        flags = eva <= thr if exceed_ge else eva < thr
-    else:
-        flags = eva >= thr if exceed_ge else eva > thr
-    return flags.where(valid, False).sum(dim="time"), valid.sum(dim="time")
-
-
-def _cellwise_spell_days(
-    da: xr.DataArray,
-    threshold: xr.DataArray,
-    *,
-    min_spell_days: int,
-    exceed_ge: bool,
-) -> xr.DataArray:
-    eva = _drop_feb29(da)
-    doy = _noleap_doy(eva)
-    thr = threshold.sel(doy=doy)
-    flags = (eva >= thr if exceed_ge else eva > thr).fillna(False).values.astype(bool)
-    out = np.full(flags.shape[1:], np.nan, dtype=float)
-    for lat_i in range(flags.shape[1]):
-        for lon_i in range(flags.shape[2]):
-            series = flags[:, lat_i, lon_i]
-            valid = np.asarray(eva[:, lat_i, lon_i].notnull().values, dtype=bool)
-            if not valid.any():
-                continue
-            _max_run, total, _spells = _run_lengths(series & valid, min_spell_days)
-            out[lat_i, lon_i] = float(total)
-    return xr.DataArray(out, coords={"lat": da["lat"], "lon": da["lon"]}, dims=("lat", "lon"))
-
-
-def _cellwise_spell_events(
-    da: xr.DataArray,
-    threshold: xr.DataArray,
-    *,
-    min_spell_days: int,
-    exceed_ge: bool,
-) -> xr.DataArray:
-    eva = _drop_feb29(da)
-    doy = _noleap_doy(eva)
-    thr = threshold.sel(doy=doy)
-    flags = (eva >= thr if exceed_ge else eva > thr).fillna(False).values.astype(bool)
-    out = np.full(flags.shape[1:], np.nan, dtype=float)
-    for lat_i in range(flags.shape[1]):
-        for lon_i in range(flags.shape[2]):
-            valid = np.asarray(eva[:, lat_i, lon_i].notnull().values, dtype=bool)
-            if not valid.any():
-                continue
-            _max_run, _total, spells = _run_lengths(flags[:, lat_i, lon_i] & valid, min_spell_days)
-            out[lat_i, lon_i] = float(len(spells))
-    return xr.DataArray(out, coords={"lat": da["lat"], "lon": da["lon"]}, dims=("lat", "lon"))
-
-
-def _cellwise_heatwave_amplitude(
-    da: xr.DataArray,
-    threshold: xr.DataArray,
-    *,
-    min_spell_days: int,
-    exceed_ge: bool,
-) -> xr.DataArray:
-    eva = _drop_feb29(da)
-    doy = _noleap_doy(eva)
-    thr = threshold.sel(doy=doy)
-    flags = (eva >= thr if exceed_ge else eva > thr).fillna(False).values.astype(bool)
-    values = eva.values.astype(float)
-    out = np.full(flags.shape[1:], np.nan, dtype=float)
-    for lat_i in range(flags.shape[1]):
-        for lon_i in range(flags.shape[2]):
-            valid = np.isfinite(values[:, lat_i, lon_i])
-            if not valid.any():
-                continue
-            _max_run, _total, spells = _run_lengths(flags[:, lat_i, lon_i] & valid, min_spell_days)
-            if not spells:
-                continue
-            best_peak_k = np.nan
-            best_mean_exceed = -np.inf
-            for spell in spells:
-                event_vals = values[spell, lat_i, lon_i]
-                event_thr = thr.values[spell, lat_i, lon_i]
-                mean_exceed = float(np.nanmean(event_vals - event_thr))
-                if mean_exceed > best_mean_exceed:
-                    best_mean_exceed = mean_exceed
-                    best_peak_k = float(np.nanmax(event_vals))
-            out[lat_i, lon_i] = best_peak_k - 273.15 if np.isfinite(best_peak_k) else np.nan
-    return xr.DataArray(out, coords={"lat": da["lat"], "lon": da["lon"]}, dims=("lat", "lon"))
-
-
-def aggregate_cell_values(cell_values: xr.DataArray, weights: pd.DataFrame) -> dict[str, float]:
-    """Area-weight a per-cell field to each polygon unit."""
-
-    if weights.empty:
-        return {}
-    flat = np.asarray(cell_values.values, dtype=float).reshape(-1)
-    tmp = weights[["unit_key", "cell_index", "area_m2"]].copy()
-    tmp["cell_value"] = flat[tmp["cell_index"].to_numpy(dtype=int)]
-    tmp = tmp[np.isfinite(tmp["cell_value"])]
-    if tmp.empty:
-        return {str(unit): np.nan for unit in weights["unit_key"].unique()}
-    tmp["weighted"] = tmp["area_m2"].astype(float) * tmp["cell_value"].astype(float)
-    grouped = tmp.groupby("unit_key", sort=False).agg(weighted=("weighted", "sum"), area=("area_m2", "sum"))
-    return {str(k): float(v["weighted"] / v["area"]) if v["area"] > 0 else np.nan for k, v in grouped.iterrows()}
-
-
-def aggregate_percent_days(
-    exceed_days: xr.DataArray,
-    valid_days: xr.DataArray,
-    weights: pd.DataFrame,
-) -> dict[str, float]:
-    """Area-weight cellwise exceedance and valid-day counts into percentages."""
-
-    if weights.empty:
-        return {}
-    exceed_flat = np.asarray(exceed_days.values, dtype=float).reshape(-1)
-    valid_flat = np.asarray(valid_days.values, dtype=float).reshape(-1)
-    tmp = weights[["unit_key", "cell_index", "area_m2"]].copy()
-    idx = tmp["cell_index"].to_numpy(dtype=int)
-    tmp["exceed"] = exceed_flat[idx]
-    tmp["valid"] = valid_flat[idx]
-    tmp = tmp[np.isfinite(tmp["exceed"]) & np.isfinite(tmp["valid"]) & (tmp["valid"] > 0)]
-    if tmp.empty:
-        return {str(unit): np.nan for unit in weights["unit_key"].unique()}
-    tmp["weighted_exceed"] = tmp["area_m2"].astype(float) * tmp["exceed"].astype(float)
-    tmp["weighted_valid"] = tmp["area_m2"].astype(float) * tmp["valid"].astype(float)
-    grouped = tmp.groupby("unit_key", sort=False).agg(
-        weighted_exceed=("weighted_exceed", "sum"),
-        weighted_valid=("weighted_valid", "sum"),
-    )
-    return {
-        str(k): float(100.0 * v["weighted_exceed"] / v["weighted_valid"]) if v["weighted_valid"] > 0 else np.nan
-        for k, v in grouped.iterrows()
-    }
-
-
-def aggregate_daily_area_mean(da: xr.DataArray, weights: pd.DataFrame) -> dict[str, xr.DataArray]:
-    """Return daily area-mean series for each unit, useful for parity tests."""
-
-    out: dict[str, xr.DataArray] = {}
-    for unit, group in weights.groupby("unit_key", sort=False):
-        cell_indices = group["cell_index"].to_numpy(dtype=int)
-        area = group["area_m2"].to_numpy(dtype=float)
-        lat_size = da.sizes["lat"]
-        lon_size = da.sizes["lon"]
-        lat_idx = cell_indices // lon_size
-        lon_idx = cell_indices % lon_size
-        vals = da.values[:, lat_idx, lon_idx]
-        valid = np.isfinite(vals)
-        numer = np.nansum(vals * area[None, :], axis=1)
-        denom = np.sum(np.where(valid, area[None, :], 0.0), axis=1)
-        mean = np.divide(numer, denom, out=np.full(numer.shape, np.nan, dtype=float), where=denom > 0)
-        out[str(unit)] = xr.DataArray(mean, coords={"time": da["time"]}, dims=("time",))
-    return out
-
-
-def open_year_dataarray(path: Path, var: str) -> xr.DataArray:
-    """Load one yearly NetCDF variable as a normalized in-memory DataArray."""
-
-    ds = normalize_lat_lon(xr.open_dataset(path))
-    try:
-        if var not in ds:
-            raise KeyError(f"Variable '{var}' not found in {path}")
-        return ds[var].load()
-    finally:
-        ds.close()
-
-
-def concat_years(year_to_paths: Mapping[int, Mapping[str, Path]], var: str, years: Sequence[int]) -> xr.DataArray:
-    """Load and concatenate yearly files for one variable."""
-
-    arrays = [open_year_dataarray(year_to_paths[int(year)][var], var) for year in years if int(year) in year_to_paths]
-    if not arrays:
-        raise ValueError(f"No yearly files available for variable {var}")
-    return xr.concat(arrays, dim="time").sortby("time")
+# All cellwise/spatial primitives now live in ``gridfirst_spatial``.
 
 
 def coverage_from_weights(gdf: gpd.GeoDataFrame, weights: pd.DataFrame, *, level: str) -> pd.DataFrame:
@@ -987,20 +628,38 @@ def compute_heat_risk_rows_for_metric(
 
 
 # Shared grid-first helpers are re-exported here for backward compatibility.
-# The legacy local definitions above are left in place to keep this refactor
-# small, but these assignments make Heat Risk and Drought Risk resolve the same
-# spatial/cache implementations at runtime.
-from india_resilience_tool.compute.gridfirst_spatial import (  # noqa: E402
+# All cellwise compute, IO, and cache helpers now live in
+# ``gridfirst_spatial``. Heat Risk (this module), Drought Risk, Extreme
+# Rainfall, Heat Stress, and Cold Risk import them through here or directly.
+from india_resilience_tool.compute.gridfirst_spatial import (  # noqa: E402,F401
     DEFAULT_ANALYSIS_CRS,
     GridSpec,
+    _cellwise_heatwave_amplitude,
+    _cellwise_percent_days,
+    _cellwise_spell_days,
+    _cellwise_spell_events,
     _configure_pyproj_data_dir,
+    _drop_feb29,
     _hash_paths,
+    _noleap_doy,
+    _quantile,
+    _run_lengths,
+    aggregate_cell_values,
+    aggregate_daily_area_mean,
+    aggregate_percent_days,
     build_area_weights,
+    compute_doy_thresholds,
+    concat_years,
     coverage_from_weights,
     dataset_grid_spec,
     grid_metric_cache_path,
+    input_file_signature,
+    open_year_dataarray,
     read_grid_metric_cache,
     read_spatial_weights_cache,
+    read_threshold_cache,
+    threshold_cache_path,
     write_grid_metric_cache,
     write_spatial_weights_cache,
+    write_threshold_cache,
 )
