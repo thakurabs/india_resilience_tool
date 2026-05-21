@@ -327,7 +327,6 @@ def build_base_choropleth_map_with_geojson_layer(
         smooth_factor=1.5,
         zoom_on_click=False,
         bubblingMouseEvents=False,
-        pane=PANE_BASE_POLYGONS,
     ).add_to(m)
 
     return m
@@ -360,45 +359,15 @@ def add_reference_overlay_layer(
             "fillOpacity": 0.0,
         }
 
-    reference_tooltip = None
-    if reference_level_norm == "district":
-        reference_tooltip = folium.features.GeoJsonTooltip(
-            fields=["district_name", "state_name"],
-            aliases=["District", "State"],
-            localize=True,
-            sticky=True,
-        )
-    elif reference_level_norm == "block":
-        reference_tooltip = folium.features.GeoJsonTooltip(
-            fields=["block_name", "district_name", "state_name"],
-            aliases=["Block", "District", "State"],
-            localize=True,
-            sticky=True,
-        )
-    elif reference_level_norm == "basin":
-        reference_tooltip = folium.features.GeoJsonTooltip(
-            fields=["basin_name"],
-            aliases=["Basin"],
-            localize=True,
-            sticky=True,
-        )
-    elif reference_level_norm == "sub_basin":
-        reference_tooltip = folium.features.GeoJsonTooltip(
-            fields=["subbasin_name", "basin_name"],
-            aliases=["Sub-basin", "Basin"],
-            localize=True,
-            sticky=True,
-        )
-
     folium.GeoJson(
         data=dict(reference_fc),
         name=str(reference_layer_name or "Related units"),
         style_function=_reference_style,
-        tooltip=reference_tooltip,
         smooth_factor=1.5,
         zoom_on_click=False,
         bubblingMouseEvents=False,
         pane=PANE_CROSSWALK_OVERLAY,
+        interactive=False,
     ).add_to(m)
     return m
 
