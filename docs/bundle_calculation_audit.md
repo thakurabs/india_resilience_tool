@@ -2485,6 +2485,27 @@ Recommended validation checks:
 5. Compare old and new agriculture outputs and record major rank movers as a
    methodology-change audit, not as a regression failure.
 
+Validation status as of 2026-05-22:
+- Focused proposal/registry/dashboard tests passed:
+  `python -m pytest -q tests/test_proposal_bundle_config.py tests/test_proposal_bundle_builder.py tests/test_metrics_registry.py tests/test_dashboard_bundles.py`
+  returned `63 passed`.
+- Telangana pilot artifacts were refreshed with:
+  `python -m tools.pipeline.build_proposal_bundles --bundle composite_agricultural_risk --level admin --state Telangana --overwrite`
+- The proposal-bundle builder uses `--level admin` for district + block output;
+  it does not accept the climate-index pipeline's `--level both` selector.
+- The refresh wrote both admin masters:
+  `processed/composite_agricultural_risk/Telangana/master_metrics_by_district.csv`
+  and
+  `processed/composite_agricultural_risk/Telangana/master_metrics_by_block.csv`.
+- District sanity check: 33 rows, all 33 rows had non-null
+  `composite_agricultural_risk__ssp245__2020-2040__mean`, all rows had 7 of 7
+  rules available, and `available_rule_weight_fraction` was 1.0.
+- Block sanity check: 620 rows, all 620 rows had non-null
+  `composite_agricultural_risk__ssp245__2020-2040__mean`, all rows had 7 of 7
+  rules available, and `available_rule_weight_fraction` was 1.0.
+- Build-time geopandas geographic-CRS area warnings were observed from admin
+  geometry loaders; they did not block output generation.
+
 ## 9. Sector-wise - Health Risk
 
 Pending review.
