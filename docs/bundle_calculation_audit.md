@@ -7,10 +7,9 @@ aggregation, normalization and risk interpretation, bundle score calculation,
 UI presentation, and validation checks / open methodology comments.
 
 Status:
-- Sections 1 through 4 and Section 6 have been reviewed in chat and
-  remediated against the open methodology items noted at the time of review.
-- Section 5 (Heat Stress) is undergoing a v2 refresh; its dossier will be
-  updated after the refresh lands.
+- Sections 1 through 6 have been reviewed in chat and remediated against the
+  open methodology items noted at the time of review. Section 5 (Heat Stress)
+  was updated in-place to document the v2 grid-first bundle.
 - Section 7 is retained as retired history after absorption into Section 8.
 - Section 8 documents the active `Sector-wise - Agricultural Risk` methodology.
 - Sector-wise sections 9 onward are placeholders until reviewed in chat.
