@@ -7,8 +7,10 @@ aggregation, normalization and risk interpretation, bundle score calculation,
 UI presentation, and validation checks / open methodology comments.
 
 Status:
-- Sections 1 through 6 have been reviewed in chat and should be treated as
-  first draft dossiers.
+- Sections 1 through 4 and Section 6 have been reviewed in chat and
+  remediated against the open methodology items noted at the time of review.
+- Section 5 (Heat Stress) is undergoing a v2 refresh; its dossier will be
+  updated after the refresh lands.
 - Section 7 is retained as retired history after absorption into Section 8.
 - Section 8 documents the active `Sector-wise - Agricultural Risk` methodology.
 - Sector-wise sections 9 onward are placeholders until reviewed in chat.
@@ -1848,36 +1850,35 @@ Recommended validation checks:
    - apply weights;
    - compare to `composite_cold_risk`.
 
-Open methodology comments:
-- Directionality is the biggest issue for this bundle. Lower winter temperature
-  and lower Tmin metrics should be flagged `rank_higher_is_worse=False`;
-  otherwise the composite may invert part of the cold-risk signal.
-- DJF handling needs explicit review. The current seasonal functions select
-  months `[12, 1, 2]` within each processed year. That may not represent
-  meteorological winter as a cross-year season spanning December of one year and
-  January-February of the next. This affects `tas_winter_mean`,
-  `tasmin_winter_mean`, and `tasmin_winter_min`.
-- The right DJF convention should be chosen and documented:
-  - calendar-year DJF subset: Jan-Feb and Dec from the same calendar year;
-  - meteorological winter season: Dec of previous year plus Jan-Feb of current
-    winter year;
-  - water/climate-year convention if the input pipeline uses one.
-- If the current implementation is retained, UI/docs should avoid implying
-  cross-year meteorological DJF unless that is actually computed.
-- TN10p/TX10p/CSDI use `baseline_years: (1981, 2010)` while dashboard
-  historical deltas use `1990-2010`. This recurring baseline mismatch should be
-  consolidated and resolved across percentile metrics.
-- Registry descriptions for CSDI say cold spell uses `TN < 10th percentile`,
-  while the configured `exceed_ge=True` with `direction="below"` makes the
-  special-case workflow inclusive (`<= threshold`). This may be small numerically
-  but should be aligned with the intended ETCCDI convention.
-- Spatial aggregation should be reviewed. Current method computes indices from
-  polygon-average daily temperature. For local cold extremes, grid-cell index
-  calculation followed by zonal aggregation may better preserve localized cold
-  pockets, especially in heterogeneous terrain.
-- Threshold choices need provenance: `TN <= 10C`, `TN <= 5C`, and `TX <= 15C`
-  are workbook-aligned, but should be documented with rationale for
-  India/Telangana use.
+Resolved methodology items (previously open):
+- Directionality (resolved, 34efcea): the four cold-magnitude metrics
+  `tas_winter_mean`, `tasmin_winter_mean`, `tnn_annual_min`, and
+  `tasmin_winter_min` now carry `rank_higher_is_worse=False` in the registry,
+  with a regression test guarding the configuration.
+- DJF cross-year season (resolved, 30b889b + d307c6f): seasonal cold metrics
+  now use a meteorological-winter window spanning Dec of the prior year plus
+  Jan-Feb of the current winter year (`season_djf_cross_year`), with a
+  historical-December fallback for SSP first years. Applies to
+  `tas_winter_mean`, `tasmin_winter_mean`, and `tasmin_winter_min`.
+- Baseline harmonization (resolved, 4f1c9e8): TX10p, TN10p, and CSDI now use
+  the `1990-2010` baseline, matching dashboard historical deltas and removing
+  the prior 1981-2010 vs 1990-2010 mismatch.
+- ETCCDI strict-< convention (resolved, 4f1c9e8): TX10p, TN10p, and CSDI are
+  configured with `exceed_ge=False`, aligning the percentile workflow with the
+  strict `<` convention documented in the registry, with boundary tests.
+- Grid-first spatial aggregation (resolved, d307c6f): cold-risk indices are
+  computed per grid cell and then zonally aggregated, preserving localized
+  cold pockets in heterogeneous terrain rather than averaging daily fields to
+  polygons first.
+- Registry descriptions and UI/tooltip wording (resolved, 4c1c7c3 + d307c6f):
+  CSDI description and DJF tooltips now reflect the strict-< convention and
+  cross-year DJF semantics actually computed.
+- Threshold provenance (resolved, 4c1c7c3): registry descriptions document
+  `TN <= 10C`, `TN <= 5C`, and `TX <= 15C` with workbook alignment and
+  India/Telangana applicability notes.
+
+Remaining open items:
+- None at this time. Re-open if downstream review surfaces new concerns.
 
 ## 7. Retired / absorbed - Thematic Agriculture & Growing Conditions
 
