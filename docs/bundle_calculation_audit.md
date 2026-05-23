@@ -16,6 +16,17 @@ Status:
 
 ## Cross-Cutting Methodology Notes
 
+### Lens-Based Scoring (sectoral bundles)
+
+The sectoral bundles (Sections 8 onward) score each metric through up to three
+**lenses** — `absolute` (value vs peer cohort), `change` (anomaly vs the
+`1990-2010` baseline), and `impact` (position within a cited physical danger
+band). The framework, its scientific basis and references, the impact-band
+provenance policy, and the per-metric lens reasoning are defined in
+`docs/lens_scoring_methodology.md`. That document is the methodological
+source-of-truth for sectoral scoring; the dossiers below record what each bundle
+computes today and cross-reference it.
+
 ### Spatial Aggregation Recommendation
 
 Recommended future method for gridded climate-to-polygon aggregation:
@@ -2428,7 +2439,10 @@ The following metrics are intentionally dropped from the agriculture composite:
 
 ### 8.3 Scoring
 
-Each rule is normalized independently:
+In lens terms (see `docs/lens_scoring_methodology.md`), every Agricultural Risk
+rule uses the **absolute lens only** (`absolute_weight = 1.0`,
+`change_weight = 0.0`, `impact_weight = 0.0`) — a pure projected-level pressure
+score with no change or impact lens. Each rule is normalized independently:
 
 ```text
 rule_score = clip((value - p10) / (p90 - p10), 0, 1) * 100
@@ -2507,7 +2521,13 @@ Validation status as of 2026-05-22:
 
 ## 9. Sector-wise - Health Risk
 
-Pending review.
+The Health Risk lens methodology is documented in
+`docs/lens_scoring_methodology.md`, Section 6 (the worked template for the
+sectoral lens dossiers). It covers the per-metric lens decisions (TXx, WSDI,
+TNx, Rx1day, CWD), the impact-band provenance (IMD heatwave 40-45 deg C; IMD
+very-heavy-to-extremely-heavy rainfall 115.6-204.5 mm; expert night-time band),
+and the bundle assembly notes. The remaining bundle-dossier subsections (9.1
+onward, in the structure used by Sections 1-8) are pending review in chat.
 
 ## 10. Sector-wise - Industrial Risk
 

@@ -533,6 +533,7 @@ python -m pytest -q
 | `command_catalog.md` | Canonical operator-facing command catalog for dashboard prep workflows |
 | `dead_code_candidate_report.md` | Dead-code analysis notes |
 | `functionality_contract.md` | Product/functionality contract notes |
+| `lens_scoring_methodology.md` | Lens-based scoring framework (absolute/change/impact), scientific basis/references, impact-band provenance policy, score-decomposition schema, and per-metric sector lens dossiers |
 | `manual_smoke_test.md` | Manual smoke-test checklist |
 | `module_responsibility_map.md` | Historical module responsibility notes |
 | `proposal_bundle_methodology.md` | Methodology narrative for sector climate hazard pressure proposal bundles |
