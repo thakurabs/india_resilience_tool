@@ -311,7 +311,11 @@ inputs to the lenses their own provenance:
   guidelines*. Plains heatwave criteria: heatwave declared at Tmax >= 40 deg C;
   by the actual-temperature method, heatwave at Tmax >= 45 deg C and severe
   heatwave at Tmax >= 47 deg C; by the departure method, +4.5 to 6.4 deg C above
-  normal (heatwave) and > 6.4 deg C (severe).
+  normal (heatwave) and > 6.4 deg C (severe). IMD also defines a **warm night**
+  (departure-based): minimum temperature 4.5-6.4 deg C above normal (severe /
+  very warm night > 6.4 deg C), conditional on Tmax >= 40 deg C. This is an
+  anomaly criterion, not an absolute night-temperature band, and therefore
+  informs the change lens rather than the impact lens (see Section 6.3).
 - IMD daily rainfall classification (24-hour): heavy rainfall 64.5-115.5 mm;
   very heavy rainfall 115.6-204.4 mm; extremely heavy rainfall >= 204.5 mm.
 
@@ -464,7 +468,7 @@ reasoning and any band provenance.
 |---|:--:|:--:|:--:|---|
 | TXx — extreme daytime heat (`txx_annual_max`) | yes | yes | yes (40-45 deg C) | Acute heat mortality; IMD plains heatwave envelope |
 | WSDI — warm-spell persistence (`wsdi_warm_spell_days`) | yes | yes | no | Added mortality effect of heat duration; no defensible single day-count danger cut |
-| TNx — night-time heat (`tnx_annual_max`) | yes | yes | yes (28-32 deg C, expert) | Loss of overnight recovery; hot-night mortality; India tropical-night context |
+| TNx — night-time heat (`tnx_annual_max`) | yes | yes | no | Loss of overnight recovery; IMD warm-night standard is departure-based (change lens), so no absolute India band exists |
 | Rx1day — 1-day rainfall (`pr_max_1day_precip`) | yes | yes | yes (115.6-204.5 mm) | Flood injury + waterborne disease; IMD very-heavy to extremely-heavy band |
 | CWD — consecutive wet days (`cwd_consecutive_wet_days`) | yes | yes | no | Saturation / waterlogging / vector breeding; no authoritative day-count danger cut |
 
@@ -509,29 +513,32 @@ reasoning and any band provenance.
 
 ### 6.3 TNx — Night-time heat (`tnx_annual_max`)
 
-- **Lenses:** absolute (yes), change (yes), impact (yes, expert band).
+- **Lenses:** absolute (yes), change (yes), impact (no).
 - **absolute:** Keep. Districts with the hottest projected nights relative to
   peers. TNx is the annual maximum of daily minimum temperature (ETCCDI).
-- **change:** Keep. Warming nights vs the `1990-2010` baseline. Night-time
-  warming has a distinct, growing mortality burden because it removes the
-  overnight relief the body needs to recover from daytime heat. Mode:
-  `absolute_delta` (degrees).
-- **impact:** Keep, **expert-judgement band 28-32 deg C** (hybrid policy:
-  expert, India-context). Provenance/rationale: there is no single IMD "hot
-  night" Tmax-style standard, but (a) the IRT Heat Risk context already uses an
-  India-specific tropical-night threshold of TN > 25 deg C (vs the classic
-  20 deg C), reflecting Indian acclimatization; and (b) multi-country hot-night
-  mortality analyses report location-specific thresholds frequently above
-  20 deg C, with risk rising at the upper tail. A 28 deg C onset (well above the
-  India tropical-night floor, indicating little overnight relief) to a 32 deg C
-  severe regime is an expert band chosen for the Indian context. Source: expert
-  judgement informed by IMD tropical-night context and hot-night mortality
-  literature; date 2026. Flagged as revisable pending an India-specific
-  night-time dose-response standard.
-- **Why an expert band here but not for WSDI:** TNx is an **absolute temperature**
-  with a genuine physiological meaning at a given value (overnight recovery
-  fails as night temperature rises), so a value-anchored band is defensible.
-  WSDI is a relative day-count without such an absolute anchor.
+- **change:** Keep — this is the lens that carries India's published night-heat
+  standard. IMD defines a **warm night** as a daily minimum temperature
+  **4.5-6.4 deg C above normal** (severe / very warm night at > 6.4 deg C),
+  conditional on Tmax >= 40 deg C. That standard is **departure-based** (an
+  anomaly relative to the local normal), which maps to the change lens rather
+  than to an absolute band. Night-time warming has a distinct, growing mortality
+  burden because it removes the overnight relief the body needs to recover from
+  daytime heat. Mode: `absolute_delta` (degrees). Source: IMD warm-night criteria
+  (IMD *FAQ on Heat Wave* / Heat Wave Guidance); date 2024.
+- **impact:** Exclude. India's authoritative night-heat standard (the IMD warm
+  night) is **departure-based, not an absolute night-temperature danger band**,
+  so there is no published absolute Indian threshold to anchor an impact band for
+  TNx. Under the provenance policy (Section 4) we prefer a cited standard over an
+  invented expert band; because the only published Indian standard is a departure
+  criterion, its signal is captured by the **change** lens, and we omit the
+  impact lens rather than assert an unsupported absolute cut. (This supersedes the
+  earlier provisional 28-32 deg C expert band.)
+- **Why no impact lens here, unlike TXx:** TXx has a cited **absolute** national
+  band (IMD plains heatwave at 40 and 45 deg C); TNx does not — India's night
+  standard is expressed as a departure, so the night-warming signal lives in the
+  change lens. The absolute lens still scores the level of the hottest night
+  relative to peers, so TNx is covered by "hottest in the cohort" (absolute) plus
+  "warmer than its own normal" (change) without an unsupported absolute band.
 
 ### 6.4 Rx1day — One-day rainfall (`pr_max_1day_precip`)
 
@@ -568,9 +575,36 @@ reasoning and any band provenance.
 
 ### 6.6 Health Risk — bundle assembly notes
 
-- **Weights:** to be set as explicit per-rule weights summing to 1.0 (mirroring
-  the Agricultural Risk pattern), with the rule weights recorded in
-  `config/proposal_bundles.py` and reflected here once finalized.
+**Rule weights (explicit, sum to 1.0).** Weighting is an evidence-informed
+expert elicitation, not a derived constant; the recommended default reflects the
+relative climate-health burden in India and is recorded as a revisable
+assumption.
+
+| Cluster | Cluster weight | Rule | Rule weight | Why |
+|---|---:|---|---:|---|
+| Heat | 0.60 | TXx (acute daytime heat) | 0.30 | Acute heat is the dominant, best-evidenced climate-health mortality driver in India; aligns with the IMD heatwave definition |
+| Heat | 0.60 | TNx (night-time heat) | 0.18 | Independent, growing mortality burden from loss of overnight recovery; backed by the IMD warm-night standard |
+| Heat | 0.60 | WSDI (heat persistence) | 0.12 | Added duration effect on mortality; partly correlated with TXx, so weighted below it |
+| Rainfall | 0.40 | Rx1day (acute 1-day rainfall) | 0.25 | Strongest rainfall-flood injury and waterborne-outbreak association |
+| Rainfall | 0.40 | CWD (wet-spell persistence) | 0.15 | Saturation / waterlogging / vector breeding; persistence rather than acute intensity |
+
+Rationale and main lever:
+- The dominant judgment is the **heat-vs-rainfall split (0.60 / 0.40)**. India's
+  documented climate-health mortality burden is heat-dominated, which justifies a
+  heat majority; rainfall's health translation (injury, waterborne / vector
+  disease) is real but more strongly mediated by exposure and sanitation —
+  determinants this hazard-only score does not include — so it is weighted below
+  heat rather than equally.
+- Within heat, TXx > TNx > WSDI follows the strength of direct mortality evidence
+  and the correlation of WSDI with TXx.
+- Within rainfall, acute intensity (Rx1day) outweighs persistence (CWD).
+- These weights are revisable; a change is a methodology change and must be
+  recorded and tested.
+
+**Per-lens weights within each rule** (absolute / change / impact) are inherited
+from the rule definitions in `config/proposal_bundles.py` and shown per metric in
+Sections 6.1-6.5; they are documented there once finalized.
+
 - **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
   (Section 5.3).
 - **Source masters:** all five source metrics must resolve to grid-first
@@ -620,7 +654,8 @@ separately-tested methodology change with the science owner.
    adaptability threshold for young, healthy subjects (PSU HEAT Project)."
    *Journal of Applied Physiology* 132(2): 340-345.
 9. India Meteorological Department — *FAQ on Heat Wave* / Heat Wave Guidance;
-   NDMA — *Heat Wave guidelines* (plains heatwave criteria).
+   NDMA — *Heat Wave guidelines* (plains heatwave and departure-based warm-night
+   criteria).
 10. India Meteorological Department — daily rainfall classification (heavy /
     very heavy / extremely heavy).
 11. World Health Organization — *Floods* health-topic guidance; systematic
