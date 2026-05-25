@@ -2524,11 +2524,13 @@ Validation status as of 2026-05-22:
 The Health Risk lens methodology is documented in
 `docs/lens_scoring_methodology.md`, Section 6 (the worked template for the
 sectoral lens dossiers). It covers the per-metric lens decisions (TXx, WSDI,
-TNx, Rx1day, CWD), the impact-band provenance (IMD heatwave 40-45 deg C; IMD
-very-heavy-to-extremely-heavy rainfall 115.6-204.5 mm; TNx uses an IMD
-departure-based warm-night impact band of +4.5 to +6.4 deg C above the local
-1990-2010 normal), the recommended rule weights and their derivation, and the
-bundle assembly notes. The remaining bundle-dossier subsections (9.1
+TNx, Rx1day, CWD), the impact-band provenance — both external
+(IMD heatwave 40-45 deg C plains; IMD very-heavy-to-extremely-heavy rainfall
+115.6-204.5 mm) and self-derived via the Section 4 protocol (TNx night-heat
+28-32 deg C medium-confidence; WSDI 6-18 days/yr and CWD 7-15 days
+low-confidence) — the recommended rule weights and their derivation, and the
+bundle assembly notes. All impact bands are plains/national defaults; zone
+refinement is deferred (BL-0020). The remaining bundle-dossier subsections (9.1
 onward, in the structure used by Sections 1-8) are pending review in chat.
 
 ## 10. Sector-wise - Industrial Risk

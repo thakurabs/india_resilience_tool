@@ -83,8 +83,15 @@ rule.
 
 The absolute lens scores **where the projected value sits within its peer
 cohort**. The cohort is the set of geographies sharing the same
-`state x level x scenario x period`. Scoring uses a robust min-max rescaling
-between the cohort's 10th and 90th percentiles:
+`state x level x scenario x period`. Concretely, a **district** is scored
+against all other districts **in the same state**, and a **block** is scored
+against all other blocks **in the same state** — *not* against the blocks of its
+own district only. A state-wide block cohort is used deliberately: it keeps the
+p10/p90 bounds robust (a single district often has too few blocks for a stable
+distribution), keeps blocks comparable across districts, and leaves the
+"is this block locally dangerous?" question to the cohort-independent impact lens.
+Scoring uses a robust min-max rescaling between the cohort's 10th and 90th
+percentiles:
 
 ```text
 absolute_score = clip( (value - p10) / (p90 - p10), 0, 1 ) * 100
@@ -147,6 +154,22 @@ impact_score = clip( (value - band_low) / (band_high - band_low), 0, 1 ) * 100  
 of 0 or 100 here means something real ("below the harm threshold" / "in the
 severe regime"), independent of how peers are doing. This is also the only lens
 that is fully comparable across cohorts, periods, and states.
+
+**What each lens lets you compare.** Because two of the three lenses are
+cohort-relative, not every comparison of the composite is valid. The blended
+score is a *hybrid* of relative ranking (absolute, change) and absolute danger
+(impact), so users must read it accordingly:
+
+| Comparison | absolute | change | impact | Net interpretation |
+|---|:--:|:--:|:--:|---|
+| Units **within** one `state x level x scenario x period` | yes | yes | yes | fully comparable — a true ranking of units |
+| **Across periods** (e.g. 2020-40 vs 2060-80), same state | re-normalised each period | re-normalised | **yes (fixed band)** | only the impact component is comparable; a flat absolute trend means "same rank", not "no warming" |
+| **Across states** | each state normalised to itself | itto | **yes (fixed band)** | only the impact component is cross-state comparable |
+
+The practical consequence: the **impact lens is the only carrier of absolute
+escalation** over time and space (the District-B reason it exists, Section 2.6).
+This is why metrics where escalation matters should retain an impact lens
+wherever a defensible danger band can be sourced or derived (Section 4).
 
 ### 2.4 Combining lenses into a rule score
 
@@ -378,46 +401,78 @@ inputs to the lenses their own provenance:
 
 The impact lens is only as defensible as the band behind it. Policy:
 
-1. **Hybrid sourcing.** A band may be drawn from either:
-   - **External provenance** — an authoritative published standard or threshold
-     (e.g. IMD heatwave criteria, IMD rainfall categories, engineering design
-     codes, peer-reviewed dose-response thresholds); or
-   - **Expert judgement** — a threshold chosen by the methodology authors where
-     no single authoritative standard is appropriate.
-   Prefer external provenance where it exists and is appropriate to the Indian /
-   local context. Use expert judgement only where external standards are absent,
-   conflicting, or not transferable.
+1. **The impact lens scores danger, not unusualness.** A band marks proximity to
+   a physical, physiological, or operational *harm* regime. Emergence /
+   "how unusual vs history" is the job of the **change** lens; the impact lens
+   must not be built from a percentile or a standardized-anomaly-from-history
+   threshold, because that would duplicate the change lens and stops measuring
+   danger.
 
-2. **Every band is justified and cited.** Each impact band recorded in a
-   per-bundle dossier must state:
-   - the two cut points (`band_low`, `band_high`) and their units;
-   - the **source** (citation or "expert judgement") and a **date**;
-   - the **rationale** for why the band is appropriate for the sector and the
-     Indian context.
+2. **Sourcing, in preference order.** Every band is either:
+   - **External provenance** — an authoritative published danger threshold
+     (e.g. IMD heatwave criteria, IMD rainfall categories, NDMA/CWC/BIS codes,
+     peer-reviewed dose-response thresholds); preferred wherever it exists and is
+     appropriate to the Indian/local context; or
+   - **Self-derived** — a danger band the methodology authors construct via the
+     derivation protocol below, used **only** where no adequate external band
+     exists. We do **not** drop the impact lens merely because no ready-made
+     external band is published.
 
-3. **Local specificity over universal thresholds.** Because dose-response
+3. **Self-derived band derivation protocol.** A self-derived band must be a
+   transparent derivation, not a picked number. Record, in the dossier:
+   1. **Harm mechanism** — the physical/physiological/operational pathway by
+      which high (or low) values harm the sector receptor.
+   2. **Closest anchors** — the nearest external evidence (dose-response
+      inflections, analogous standards, related thresholds), cited.
+   3. **Cut points** — `band_low` = mechanistic onset of *material* harm;
+      `band_high` = severe / saturation regime; each justified from the anchors.
+   4. **Confidence rating** — high / medium / low, by how directly the anchors
+      support the cut points.
+   5. **Provenance** — author, date, assumptions, revisable flag.
+   Confidence feeds the weight: a low-confidence self-derived band is given a
+   **smaller within-rule impact weight** than a high-confidence external band, so
+   a weak band cannot drive the rule score.
+
+4. **Every band is justified and cited.** Each impact band records its two cut
+   points and units, its source (citation or "self-derived" + the protocol
+   fields above), a date, and the rationale for sector/India appropriateness.
+
+5. **Local specificity over universal thresholds.** Because dose-response
    relationships are climate- and population-specific (Gasparrini et al. 2015),
    prefer India-context thresholds (IMD/NDMA/CWC/BIS) over globally-transferred
    ones. Document any global threshold's applicability explicitly.
 
-4. **Bands are revisable.** Record bands as versioned, dated assumptions (the
+6. **Bands are revisable.** Record bands as versioned, dated assumptions (the
    35 deg C wet-bulb revision is the cautionary precedent). A band change is a
    methodology change and must be called out and tested.
 
-5. **No phantom thresholds.** A rule slug or label that names a number (e.g.
+7. **No phantom thresholds.** A rule slug or label that names a number (e.g.
    `..._ge_200`) must either implement that number as a real impact band with
    provenance, or be renamed. Labels must not imply thresholds the math does not
    apply.
 
-6. **Bands may be absolute or departure-based.** An impact band may be expressed
-   in absolute units (e.g. TXx 40-45 deg C) or as a **departure from a local
-   baseline** (e.g. the IMD warm-night standard, +4.5 to +6.4 deg C above each
-   geography's 1990-2010 normal; see Section 6.3). A departure band is still an
-   impact lens — a fixed, externally-cited threshold applied to a per-unit anomaly
-   — and remains distinct from the change lens, which normalizes anomalies
-   relative to the cohort rather than against a cited standard. Departure bands
-   require a per-unit band derived from each geography's baseline (equivalently,
-   thresholding the per-unit departure).
+8. **Bands are expressed in absolute physical units, applied to the value.** An
+   impact band thresholds the metric *value* (e.g. TXx 40-45 deg C), not a
+   departure from baseline. A departure-from-baseline construction was considered
+   for TNx (the IMD warm-night "+4.5 to +6.4 deg C above normal" criterion) and
+   **rejected**: that standard is defined only jointly with a same-day
+   Tmax >= 40 deg C co-condition and against a *daily climatological* normal, so
+   applying it to an annual-maximum night value against an annual-maximum baseline
+   would silently change what the threshold means. The lesson encoded here: a
+   borrowed standard may only be used in the construction its source defines.
+   Emergence-type signals belong to the change lens (point 1).
+
+9. **Geography-zone specificity (deferred).** Institutional danger standards are
+   physiography-specific — IMD's heatwave trigger is 40 / 37 / 30 deg C for
+   plains / coastal / hilly zones, with a physical basis (coastal humidity lowers
+   the dry-bulb danger threshold). The bands in this document are therefore
+   **plains / national defaults**, which is correct for the Telangana pilot
+   (plateau/plains, no coast, negligible hill terrain). Refining bands per zone
+   requires a per-geography zone label; no ready-made all-India
+   district -> {plains/coastal/hilly} classification matching IMD's taxonomy
+   exists off-the-shelf, so this is deferred (see `docs/BACKLOG.md` BL-0020;
+   candidate sources: ICAR/Planning-Commission agro-climatic regions, NBSS&LUP
+   agro-ecological zones, or a DEM + coastal-district classification).
 
 ---
 
@@ -506,11 +561,11 @@ reasoning and any band provenance.
 
 | Rule (metric) | absolute | change | impact (band) | Rationale summary |
 |---|:--:|:--:|:--:|---|
-| TXx — extreme daytime heat (`txx_annual_max`) | yes | yes | yes (40-45 deg C) | Acute heat mortality; IMD plains heatwave envelope |
-| WSDI — warm-spell persistence (`wsdi_warm_spell_days`) | yes | yes | no | Added mortality effect of heat duration; no defensible single day-count danger cut |
-| TNx — night-time heat (`tnx_annual_max`) | yes | yes | yes (departure) | Loss of overnight recovery; impact band = IMD warm-night +4.5 to +6.4 deg C above the local 1990-2010 normal |
-| Rx1day — 1-day rainfall (`pr_max_1day_precip`) | yes | yes | yes (115.6-204.5 mm) | Flood injury + waterborne disease; IMD very-heavy to extremely-heavy band |
-| CWD — consecutive wet days (`cwd_consecutive_wet_days`) | yes | yes | no | Saturation / waterlogging / vector breeding; no authoritative day-count danger cut |
+| TXx — extreme daytime heat (`txx_annual_max`) | yes | yes | yes — external, 40-45 deg C (plains) | Acute heat mortality; IMD plains heatwave envelope |
+| WSDI — warm-spell persistence (`wsdi_warm_spell_days`) | yes | yes | yes — self-derived (low conf), 6-18 days/yr | Added mortality effect of heat duration; heatwave-duration epidemiology |
+| TNx — night-time heat (`tnx_annual_max`) | yes | yes | yes — self-derived (med conf), 28-32 deg C | Loss of overnight recovery; India hot-night mortality inflection |
+| Rx1day — 1-day rainfall (`pr_max_1day_precip`) | yes | yes | yes — external, 115.6-204.5 mm | Flood injury + waterborne disease; IMD very-heavy to extremely-heavy band |
+| CWD — consecutive wet days (`cwd_consecutive_wet_days`) | yes | yes | yes — self-derived (low conf), 7-15 days | Saturation / waterlogging / vector breeding; prolonged-saturation pathway |
 
 ### 6.1 TXx — Extreme daytime heat (`txx_annual_max`)
 
@@ -521,14 +576,19 @@ reasoning and any band provenance.
   baseline. Health-relevant because populations adapt slowly; rapid warming
   raises mortality risk even where absolute levels are not yet the highest
   (the District B case, Section 2.6). Mode: `absolute_delta` (degrees).
-- **impact:** Keep. Band **40-45 deg C**, external provenance. IMD declares a
-  plains heatwave at Tmax >= 40 deg C and, by the actual-temperature method, a
-  heatwave at >= 45 deg C (severe at >= 47 deg C). The 40-45 band therefore maps
-  onset-of-concern to the heatwave-declaration floor and saturation to the
-  heatwave threshold. Source: IMD *FAQ on Heat Wave* / NDMA Heat Wave
-  guidelines; date 2024. Rationale: heat mortality rises steeply through this
-  range, and the band is the nationally-recognized Indian plains standard rather
-  than a transferred global value.
+- **impact:** Keep. Band **40-45 deg C**, external provenance, **high
+  confidence**. IMD declares a plains heatwave at Tmax >= 40 deg C and, by the
+  actual-temperature method, a heatwave at >= 45 deg C (severe at >= 47 deg C).
+  The 40-45 band therefore maps onset-of-concern to the heatwave-declaration
+  floor and saturation to the heatwave threshold. Source: IMD *FAQ on Heat Wave*
+  / NDMA Heat Wave guidelines; date 2024. Rationale: heat mortality rises steeply
+  through this range, and the band is the nationally-recognized Indian *plains*
+  standard rather than a transferred global value.
+  - **Zone caveat:** this is the **plains default**. IMD's coastal trigger is
+    37 deg C and hilly 30 deg C; zone-specific bands are deferred (Section 4.9,
+    BL-0020). Correct for the Telangana pilot.
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 (as in the
+  worked example, Section 2.6).
 - **Why not exclude any lens:** TXx is the metric where all three lenses are most
   defensible for health — relative prioritization, trajectory, and a cited
   national danger band.
@@ -544,12 +604,23 @@ reasoning and any band provenance.
   consecutive days that prevent overnight/physiological recovery (heatwave-
   mortality literature; effects emerge after ~2-4 consecutive days). Mode:
   `relative_pct` (proportional change in spell days).
-- **impact:** Exclude. WSDI is a relative-percentile-based **count of days**, not
-  an absolute physical quantity, and there is no authoritative single day-count
-  that marks a universal health danger threshold for warm-spell length. Imposing
-  one would be an unsupported expert band; per the no-phantom-thresholds policy
-  (Section 4.5) we omit the impact lens rather than invent a cut. The duration
-  signal is already carried, defensibly, by the absolute and change lenses.
+- **impact:** Keep, **self-derived band 6-18 days/yr, low confidence** (Section 4
+  protocol).
+  - **Mechanism:** consecutive hot days compound mortality because they prevent
+    overnight/physiological recovery.
+  - **Anchors:** the "added" duration effect on mortality appears after ~4
+    consecutive heatwave days (multi-country evidence) and escalates steeply
+    (Beijing CVD study: ~10% excess at day 4, ~51% at day 5 for Tmax > 35 deg C).
+  - **Cut points:** onset **6 days** — WSDI's own minimum qualifying spell (>= 6
+    consecutive days > day-of-year 90th percentile, Zhang et al. 2011), already
+    past the ~4-day added-effect threshold; saturation **18 days/yr** — a high
+    annual warm-spell burden (~three qualifying spells).
+  - **Confidence: low.** WSDI is a percentile-based *annual tally*, not a single
+    spell length, so the band is a pragmatic annual-burden proxy, not a physical
+    threshold. It is therefore given a **small within-rule impact weight** so it
+    cannot dominate the rule. The primary duration signal stays with the absolute
+    and change lenses.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15.
 
 ### 6.3 TNx — Night-time heat (`tnx_annual_max`)
 
@@ -560,42 +631,41 @@ reasoning and any band provenance.
   the cohort's anomalies (i.e. "warming faster than peers"). Night-time warming
   has a distinct, growing mortality burden because it removes the overnight relief
   the body needs to recover from daytime heat. Mode: `absolute_delta` (degrees).
-- **impact:** Keep, as a **departure band with external IMD provenance**. IMD
-  defines a **warm night** as a daily minimum temperature **+4.5 to +6.4 deg C
-  above the local normal** (severe / very warm night at > +6.4 deg C). We adopt
-  these thresholds as the impact band, using each geography's `1990-2010`
-  historical TNx as its "normal":
+- **impact:** Keep, **self-derived absolute band 28-32 deg C, medium
+  confidence** (Section 4 protocol). The band thresholds the night-temperature
+  *level* directly:
 
   ```text
-  departure    = TNx(future) - TNx(baseline 1990-2010)        # per geography
-  impact_score = clip( (departure - 4.5) / (6.4 - 4.5), 0, 1 ) * 100
+  impact_score = clip( (TNx - 28) / (32 - 28), 0, 1 ) * 100
   ```
 
-  This is a genuine impact lens — a fixed, cited threshold applied to a per-unit
-  quantity — and is distinct from the change lens, which normalizes the departure
-  *relative to the cohort* rather than against the IMD standard. Source: IMD warm-
-  night criteria (IMD *FAQ on Heat Wave* / Heat Wave Guidance); date 2024. This
-  restores a defensible, India-sourced impact band for TNx (it supersedes both the
-  earlier provisional 28-32 deg C absolute expert band and the interim decision to
-  drop the lens).
-  - **Caveat:** IMD's warm-night definition is conditional on Tmax >= 40 deg C on
-    the same day. Because TNx is an annual-maximum night value not joined to a
-    specific day's Tmax, that co-condition is **not enforced** here; we apply the
-    departure thresholds alone. Documented as a known simplification.
-  - **Implementation:** a departure band is not supported by the current
-    impact-threshold scorer (which thresholds the raw value against global
-    cut points). It requires a new rule option (e.g. `impact_on_departure=True`)
-    that feeds the per-unit departure `value - baseline(1990-2010)` to the
-    impact-threshold scorer with band `(4.5, 6.4)`. Builder change, pending
-    approval + tests.
-- **Per-lens weighting note (avoid double-counting the departure):** the TNx
-  change and impact lenses are both monotone functions of the same departure, so
-  they are more correlated than the TXx absolute/impact pair (which both act on
-  the level). To prevent the departure signal from being double-weighted, the
-  independent level signal (absolute lens) is given the largest within-rule share.
-  Recommended TNx within-rule lens weights: **absolute 0.50, change 0.25,
-  impact 0.25** (level 0.50 / departure 0.50). To be recorded in
-  `config/proposal_bundles.py`.
+  - **Mechanism:** warm nights remove the overnight cooling the body needs to
+    recover from daytime heat, sustaining cardiovascular strain and disrupting
+    sleep — a mortality burden *independent of* daytime heat.
+  - **Anchors:** an India case-crossover analysis finds that above a night
+    minimum of **~28 deg C**, each +1 deg C raises mortality **~9.8%** —
+    marginally *more* than the daytime per-degree effect (~9.6%) — giving a
+    defensible India-specific **onset = 28 deg C**. The tropical-night convention
+    (Tmin >= 20 deg C classic; the IRT Heat Risk already uses TN > 25 deg C as a
+    "warm night") confirms cooling-relief is lost well below 28 deg C, so taking
+    28 deg C as the *steep-harm* onset is conservative. **Saturation = 32 deg C**
+    (~+4 deg C above onset) sits near the upper envelope of observed Indian
+    warmest nights, where overnight recovery effectively fails.
+  - **Confidence: medium** — India-specific epidemiological anchor for the onset;
+    the saturation point is reasoned from the observed envelope.
+  - **Why not the departure band:** an earlier draft used the IMD warm-night
+    "+4.5 to +6.4 deg C above normal" departure criterion. It was **withdrawn**
+    (Section 4.8): IMD's warm night is defined only jointly with a same-day
+    Tmax >= 40 deg C co-condition and against a *daily climatological* normal,
+    neither of which holds for an annual-maximum TNx against an annual-maximum
+    baseline — so the borrowed threshold would not mean what IMD intends. With an
+    absolute-level band, TNx is now structurally like TXx (absolute and impact
+    both act on the level; change carries the departure).
+  - **Zone caveat:** plains/national default (Section 4.9, BL-0020).
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 (mirrors TXx,
+  since the band now acts on the level). This supersedes the earlier
+  0.50/0.25/0.25 split, which existed only to avoid double-counting the withdrawn
+  departure band.
 
 ### 6.4 Rx1day — One-day rainfall (`pr_max_1day_precip`)
 
@@ -611,10 +681,16 @@ reasoning and any band provenance.
   extremely-heavy threshold — the range over which flood injury, drowning, and
   waterborne / vector-borne disease outbreaks are most strongly associated with
   rainfall (WHO *Floods*; waterborne-disease reviews). Source: IMD daily
-  rainfall classification; date 2024.
+  rainfall classification, verified against the IMD *Heavy Rain Warning Services*
+  brochure (heavy 64.5-115.5; very heavy 115.6-204.4; extremely heavy
+  >= 204.5 mm); date 2024. **High confidence.**
+  - **Zone note:** IMD rainfall categories are **national, not
+    physiography-specific**, so no zone caveat applies (unlike the heat bands).
 - **Why not the "heavy" 64.5 mm floor:** the health-impact pathway (flooding,
   contamination) is most defensible at the very-heavy-and-above range; using the
   heavy-rain floor would over-trigger the impact lens for routine monsoon days.
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 (mirrors TXx;
+  change mode `relative_pct`, as precipitation change is multiplicative).
 
 ### 6.5 CWD — Consecutive wet days (`cwd_consecutive_wet_days`)
 
@@ -623,12 +699,20 @@ reasoning and any band provenance.
   peers (CWD, ETCCDI). Long wet spells drive ground saturation, waterlogging,
   and standing water that supports vector breeding.
 - **change:** Keep. Lengthening wet spells vs baseline. Mode: `relative_pct`.
-- **impact:** Exclude. As with WSDI, CWD is a **day-count** without an
-  authoritative absolute health-danger threshold; the relevant health pathway
-  (saturation, vector breeding) depends on local hydrology and drainage rather
-  than a universal spell length. We omit the impact lens rather than assert an
-  unsupported cut. The persistence signal is carried by the absolute and change
-  lenses.
+- **impact:** Keep, **self-derived band 7-15 days, low confidence** (Section 4
+  protocol).
+  - **Mechanism:** prolonged consecutive rain drives soil saturation,
+    waterlogging, and standing water -> flood injury plus mosquito breeding
+    habitat (vector-disease cases lag rainfall by ~4-6 weeks).
+  - **Cut points:** onset **7 days** — a continuous week sustains standing water
+    across a mosquito aquatic-development cycle (~7-10 days) and drives the onset
+    of waterlogging; saturation **15 days** — a fortnight-plus of continuous wet
+    days indicates a prolonged-saturation regime.
+  - **Confidence: low.** The health pathway depends heavily on local drainage and
+    hydrology — a genuine zone/hydrology refinement (Section 4.9, BL-0020) — so
+    the band is given a **small within-rule impact weight**. The persistence
+    signal is carried mainly by the absolute and change lenses.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15.
 
 ### 6.6 Health Risk — bundle assembly notes
 
@@ -640,7 +724,7 @@ assumption.
 | Cluster | Cluster weight | Rule | Rule weight | Why |
 |---|---:|---|---:|---|
 | Heat | 0.60 | TXx (acute daytime heat) | 0.30 | Acute heat is the dominant, best-evidenced climate-health mortality driver in India; aligns with the IMD heatwave definition |
-| Heat | 0.60 | TNx (night-time heat) | 0.18 | Independent, growing mortality burden from loss of overnight recovery; backed by the IMD warm-night standard |
+| Heat | 0.60 | TNx (night-time heat) | 0.18 | Independent, growing mortality burden from loss of overnight recovery; India hot-night mortality evidence (self-derived 28-32 deg C band) |
 | Heat | 0.60 | WSDI (heat persistence) | 0.12 | Added duration effect on mortality; partly correlated with TXx, so weighted below it |
 | Rainfall | 0.40 | Rx1day (acute 1-day rainfall) | 0.25 | Strongest rainfall-flood injury and waterborne-outbreak association |
 | Rainfall | 0.40 | CWD (wet-spell persistence) | 0.15 | Saturation / waterlogging / vector breeding; persistence rather than acute intensity |
@@ -682,10 +766,11 @@ These weights are revisable expert assumptions, not derived constants; any chang
 is a methodology change to be recorded and tested.
 
 **Per-lens weights within each rule** (absolute / change / impact) are recorded
-in `config/proposal_bundles.py` and shown per metric in Sections 6.1-6.5. Where
-two lenses act on the same underlying quantity (e.g. TNx change and impact both
-act on the departure, Section 6.3), the per-lens weights are set to avoid
-double-counting that quantity.
+in `config/proposal_bundles.py` and shown per metric in Sections 6.1-6.5. The
+high-confidence external-band metrics (TXx, Rx1day) and the medium-confidence
+TNx use a 0.40 / 0.25 / 0.35 split; the low-confidence self-derived bands (WSDI,
+CWD) use 0.45 / 0.40 / 0.15, deliberately giving the weak impact band a small
+share so it cannot dominate the rule (Section 4.3).
 
 - **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
   (Section 5.3).

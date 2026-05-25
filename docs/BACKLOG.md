@@ -109,6 +109,16 @@ Entry fields:
 - `Dependency / trigger`: start after the team decides whether partial state coverage should remain visible, be hidden, or be shown only with explicit coverage messaging.
 - `Done when`: the dashboard has a clear and tested policy for sector-wise proposal bundles with incomplete state coverage, including visibility rules and user-facing messaging for `State=All` views.
 
+### BL-0020 — Geography-zone-specific impact bands for lens scoring
+- `Area`: proposal bundles, methodology, geospatial
+- `Why deferred`: the lens impact bands (danger thresholds) are currently plains/national defaults, but institutional danger standards are physiography-specific (e.g. IMD heatwave trigger 40 / 37 / 30 deg C for plains / coastal / hilly). Refining bands per zone needs a per-geography zone label, and no single ready-made all-India district -> {plains/coastal/hilly} classification matching IMD's taxonomy exists off-the-shelf. Deferred to avoid stitching one mid-task; plains default is correct for the Telangana pilot anyway.
+- `Dependency / trigger`: start after the sectoral lens dossiers are complete and the team picks a zone source.
+- `Candidate zone sources` (evaluate later):
+  - ICAR / Planning-Commission **agro-climatic regions** (15) — promising, official.
+  - NBSS&LUP **agro-ecological zones** (20) — promising, finer physiographic basis.
+  - **DEM-derived** classification (elevation cutoff for hilly) + standard **coastal-district list** (Census / MoES-NCCR) + plains residual.
+- `Done when`: each district/block carries a defensible physiographic-zone label, the impact-band scorer looks up per-zone bands, and the per-metric dossiers record zone-specific bands (external where published, self-derived via the protocol otherwise) with the plains default retained as fallback.
+
 ## Later
 
 ### BL-0007 — Migrate processed-data storage to build/published/archive Parquet serving

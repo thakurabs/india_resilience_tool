@@ -185,6 +185,8 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         bundle_label="Health Risk",
         composite_slug="composite_health_risk",
         supported_levels=("district", "block"),
+        weight_mode="explicit_normalized",
+        min_available_rule_weight_fraction=0.70,
         rules=(
             _pressure_rule(
                 "txx_ge_45",
@@ -196,38 +198,79 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
                 impact_low=40.0,
                 impact_high=45.0,
                 change_mode="absolute_delta",
+                rule_weight=0.30,
+                method_note=(
+                    "Impact band 40-45 degC: IMD plains heatwave (declared >=40, severe >=45). "
+                    "External, high confidence. Plains/national default (zone refinement: BL-0020)."
+                ),
             ),
             _pressure_rule(
                 "wsdi_ge_5",
                 "Warm-spell duration pressure",
                 "wsdi_warm_spell_days",
-                absolute_weight=0.70,
-                change_weight=0.30,
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=6.0,
+                impact_high=18.0,
+                rule_weight=0.12,
+                method_note=(
+                    "Impact band 6-18 days/yr: self-derived, LOW confidence. Onset=6 (WSDI min "
+                    "qualifying spell, past the ~4-day added-mortality threshold); saturation=18 "
+                    "(high annual warm-spell burden). Small impact weight by design."
+                ),
             ),
             _pressure_rule(
                 "tnx_ge_30",
                 "Night-time heat pressure",
                 "tnx_annual_max",
                 absolute_weight=0.40,
-                change_weight=0.30,
-                impact_weight=0.30,
-                impact_low=30.0,
-                impact_high=35.0,
+                change_weight=0.25,
+                impact_weight=0.35,
+                impact_low=28.0,
+                impact_high=32.0,
                 change_mode="absolute_delta",
+                rule_weight=0.18,
+                method_note=(
+                    "Impact band 28-32 degC (absolute level): self-derived, MEDIUM confidence. "
+                    "Onset=28 (India hot-night mortality inflection ~+9.8%/degC); saturation=32 "
+                    "(upper envelope of Indian warmest nights). Supersedes the withdrawn IMD "
+                    "warm-night departure band. Plains/national default (BL-0020)."
+                ),
             ),
             _pressure_rule(
                 "rx1day_ge_200",
                 "1-day rainfall disruption pressure",
                 "pr_max_1day_precip",
-                absolute_weight=0.70,
-                change_weight=0.30,
+                absolute_weight=0.40,
+                change_weight=0.25,
+                impact_weight=0.35,
+                impact_low=115.6,
+                impact_high=204.5,
+                change_mode="relative_pct",
+                rule_weight=0.25,
+                method_note=(
+                    "Impact band 115.6-204.5 mm/day: IMD very-heavy (115.6-204.4) to "
+                    "extremely-heavy (>=204.5) rainfall. External, high confidence; national "
+                    "categories (zone-invariant)."
+                ),
             ),
             _pressure_rule(
                 "cwd_ge_5",
                 "Consecutive wet-day pressure",
                 "cwd_consecutive_wet_days",
-                absolute_weight=0.70,
-                change_weight=0.30,
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=7.0,
+                impact_high=15.0,
+                rule_weight=0.15,
+                method_note=(
+                    "Impact band 7-15 days: self-derived, LOW confidence. Onset=7 (week of "
+                    "standing water spans the mosquito aquatic cycle / waterlogging onset); "
+                    "saturation=15 (prolonged saturation). Local-hydrology dependent; small "
+                    "impact weight. Zone/hydrology refinement: BL-0020."
+                ),
             ),
         ),
     ),
