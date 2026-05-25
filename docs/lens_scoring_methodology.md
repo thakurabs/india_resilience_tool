@@ -226,6 +226,36 @@ three signals. Section 5 addresses this directly by **persisting and exposing th
 lens decomposition** so a user can see that District B's 47 = absolute 20 +
 change 100 + impact 40.
 
+### 2.7 Ensemble central estimate and model uncertainty
+
+Each metric is produced by a 20+ model ensemble. Two distinct choices arise
+before and during scoring.
+
+**Central estimate per geography.** Before any lens runs, the ensemble is reduced
+to one value per geography. We recommend the **ensemble median** rather than the
+mean: a single divergent model shifts the mean but barely moves the median, and
+multi-model median is standard practice in IPCC assessments. Note this is a
+different axis from the absolute lens's p10-p90 bounds: the median provides
+robustness to *ensemble* (model) outliers per geography, while the cohort p10-p90
+provides robustness to *spatial* outliers across geographies. Both are warranted.
+
+> Implementation status: the current builder reads the ensemble **mean**
+> (`SUPPORTED_STAT = "mean"`), as do the thematic scores and the dashboard
+> statistic selector. Migrating the score's central estimate to the **median** is
+> a tool-wide methodology change (to keep the score, the thematic bundles, and
+> the displayed statistic consistent) and is pending its own approval and tests.
+
+**Model uncertainty (spread).** The ensemble spread (`std`, `p05`, `p95`,
+`n_models`) is deliberately **not folded into** the 0-100 score. Collapsing a
+central estimate and an uncertainty range into a single number reduces
+interpretability without a clear analytical gain — a "70 with wide model
+disagreement" and a "70 with tight agreement" should not be forced to look
+identical or be merged into one shifted score. Instead, spread / model agreement
+is surfaced as a **separate confidence annotation** in the deep-dive (read from
+the existing source-master ensemble columns), mirroring the IPCC convention of
+reporting a central estimate alongside a separate confidence statement. This
+keeps the score legible and the uncertainty visible.
+
 ---
 
 ## 3. Scientific Basis and References
@@ -379,6 +409,16 @@ The impact lens is only as defensible as the band behind it. Policy:
    provenance, or be renamed. Labels must not imply thresholds the math does not
    apply.
 
+6. **Bands may be absolute or departure-based.** An impact band may be expressed
+   in absolute units (e.g. TXx 40-45 deg C) or as a **departure from a local
+   baseline** (e.g. the IMD warm-night standard, +4.5 to +6.4 deg C above each
+   geography's 1990-2010 normal; see Section 6.3). A departure band is still an
+   impact lens — a fixed, externally-cited threshold applied to a per-unit anomaly
+   — and remains distinct from the change lens, which normalizes anomalies
+   relative to the cohort rather than against a cited standard. Departure bands
+   require a per-unit band derived from each geography's baseline (equivalently,
+   thresholding the per-unit departure).
+
 ---
 
 ## 5. Score Decomposition and Persistence Schema
@@ -468,7 +508,7 @@ reasoning and any band provenance.
 |---|:--:|:--:|:--:|---|
 | TXx — extreme daytime heat (`txx_annual_max`) | yes | yes | yes (40-45 deg C) | Acute heat mortality; IMD plains heatwave envelope |
 | WSDI — warm-spell persistence (`wsdi_warm_spell_days`) | yes | yes | no | Added mortality effect of heat duration; no defensible single day-count danger cut |
-| TNx — night-time heat (`tnx_annual_max`) | yes | yes | no | Loss of overnight recovery; IMD warm-night standard is departure-based (change lens), so no absolute India band exists |
+| TNx — night-time heat (`tnx_annual_max`) | yes | yes | yes (departure) | Loss of overnight recovery; impact band = IMD warm-night +4.5 to +6.4 deg C above the local 1990-2010 normal |
 | Rx1day — 1-day rainfall (`pr_max_1day_precip`) | yes | yes | yes (115.6-204.5 mm) | Flood injury + waterborne disease; IMD very-heavy to extremely-heavy band |
 | CWD — consecutive wet days (`cwd_consecutive_wet_days`) | yes | yes | no | Saturation / waterlogging / vector breeding; no authoritative day-count danger cut |
 
@@ -513,32 +553,49 @@ reasoning and any band provenance.
 
 ### 6.3 TNx — Night-time heat (`tnx_annual_max`)
 
-- **Lenses:** absolute (yes), change (yes), impact (no).
+- **Lenses:** absolute (yes), change (yes), impact (yes — departure band).
 - **absolute:** Keep. Districts with the hottest projected nights relative to
   peers. TNx is the annual maximum of daily minimum temperature (ETCCDI).
-- **change:** Keep — this is the lens that carries India's published night-heat
-  standard. IMD defines a **warm night** as a daily minimum temperature
-  **4.5-6.4 deg C above normal** (severe / very warm night at > 6.4 deg C),
-  conditional on Tmax >= 40 deg C. That standard is **departure-based** (an
-  anomaly relative to the local normal), which maps to the change lens rather
-  than to an absolute band. Night-time warming has a distinct, growing mortality
-  burden because it removes the overnight relief the body needs to recover from
-  daytime heat. Mode: `absolute_delta` (degrees). Source: IMD warm-night criteria
-  (IMD *FAQ on Heat Wave* / Heat Wave Guidance); date 2024.
-- **impact:** Exclude. India's authoritative night-heat standard (the IMD warm
-  night) is **departure-based, not an absolute night-temperature danger band**,
-  so there is no published absolute Indian threshold to anchor an impact band for
-  TNx. Under the provenance policy (Section 4) we prefer a cited standard over an
-  invented expert band; because the only published Indian standard is a departure
-  criterion, its signal is captured by the **change** lens, and we omit the
-  impact lens rather than assert an unsupported absolute cut. (This supersedes the
-  earlier provisional 28-32 deg C expert band.)
-- **Why no impact lens here, unlike TXx:** TXx has a cited **absolute** national
-  band (IMD plains heatwave at 40 and 45 deg C); TNx does not — India's night
-  standard is expressed as a departure, so the night-warming signal lives in the
-  change lens. The absolute lens still scores the level of the hottest night
-  relative to peers, so TNx is covered by "hottest in the cohort" (absolute) plus
-  "warmer than its own normal" (change) without an unsupported absolute band.
+- **change:** Keep. Warming nights vs the `1990-2010` baseline, normalized across
+  the cohort's anomalies (i.e. "warming faster than peers"). Night-time warming
+  has a distinct, growing mortality burden because it removes the overnight relief
+  the body needs to recover from daytime heat. Mode: `absolute_delta` (degrees).
+- **impact:** Keep, as a **departure band with external IMD provenance**. IMD
+  defines a **warm night** as a daily minimum temperature **+4.5 to +6.4 deg C
+  above the local normal** (severe / very warm night at > +6.4 deg C). We adopt
+  these thresholds as the impact band, using each geography's `1990-2010`
+  historical TNx as its "normal":
+
+  ```text
+  departure    = TNx(future) - TNx(baseline 1990-2010)        # per geography
+  impact_score = clip( (departure - 4.5) / (6.4 - 4.5), 0, 1 ) * 100
+  ```
+
+  This is a genuine impact lens — a fixed, cited threshold applied to a per-unit
+  quantity — and is distinct from the change lens, which normalizes the departure
+  *relative to the cohort* rather than against the IMD standard. Source: IMD warm-
+  night criteria (IMD *FAQ on Heat Wave* / Heat Wave Guidance); date 2024. This
+  restores a defensible, India-sourced impact band for TNx (it supersedes both the
+  earlier provisional 28-32 deg C absolute expert band and the interim decision to
+  drop the lens).
+  - **Caveat:** IMD's warm-night definition is conditional on Tmax >= 40 deg C on
+    the same day. Because TNx is an annual-maximum night value not joined to a
+    specific day's Tmax, that co-condition is **not enforced** here; we apply the
+    departure thresholds alone. Documented as a known simplification.
+  - **Implementation:** a departure band is not supported by the current
+    impact-threshold scorer (which thresholds the raw value against global
+    cut points). It requires a new rule option (e.g. `impact_on_departure=True`)
+    that feeds the per-unit departure `value - baseline(1990-2010)` to the
+    impact-threshold scorer with band `(4.5, 6.4)`. Builder change, pending
+    approval + tests.
+- **Per-lens weighting note (avoid double-counting the departure):** the TNx
+  change and impact lenses are both monotone functions of the same departure, so
+  they are more correlated than the TXx absolute/impact pair (which both act on
+  the level). To prevent the departure signal from being double-weighted, the
+  independent level signal (absolute lens) is given the largest within-rule share.
+  Recommended TNx within-rule lens weights: **absolute 0.50, change 0.25,
+  impact 0.25** (level 0.50 / departure 0.50). To be recorded in
+  `config/proposal_bundles.py`.
 
 ### 6.4 Rx1day — One-day rainfall (`pr_max_1day_precip`)
 
@@ -588,22 +645,47 @@ assumption.
 | Rainfall | 0.40 | Rx1day (acute 1-day rainfall) | 0.25 | Strongest rainfall-flood injury and waterborne-outbreak association |
 | Rainfall | 0.40 | CWD (wet-spell persistence) | 0.15 | Saturation / waterlogging / vector breeding; persistence rather than acute intensity |
 
-Rationale and main lever:
-- The dominant judgment is the **heat-vs-rainfall split (0.60 / 0.40)**. India's
-  documented climate-health mortality burden is heat-dominated, which justifies a
-  heat majority; rainfall's health translation (injury, waterborne / vector
-  disease) is real but more strongly mediated by exposure and sanitation —
-  determinants this hazard-only score does not include — so it is weighted below
-  heat rather than equally.
-- Within heat, TXx > TNx > WSDI follows the strength of direct mortality evidence
-  and the correlation of WSDI with TXx.
-- Within rainfall, acute intensity (Rx1day) outweighs persistence (CWD).
-- These weights are revisable; a change is a methodology change and must be
-  recorded and tested.
+**How these weights were derived.** The weights are an expert elicitation
+structured in two stages, so the reasoning is auditable rather than ad hoc:
 
-**Per-lens weights within each rule** (absolute / change / impact) are inherited
-from the rule definitions in `config/proposal_bundles.py` and shown per metric in
-Sections 6.1-6.5; they are documented there once finalized.
+1. **Cluster split first (heat vs rainfall).** The bundle's five metrics fall
+   into two correlated hazard clusters — heat (TXx, TNx, WSDI) and rainfall
+   (Rx1day, CWD). We assign weight between clusters before splitting within them.
+   The heat cluster receives the majority (0.60) because:
+   - India's documented climate-attributable health burden is heat-dominated —
+     heatwave mortality is the largest and best-evidenced climate-health signal
+     nationally; and
+   - the rainfall -> health pathway (flood injury, waterborne / vector disease)
+     is real but more strongly mediated by **exposure and sanitation / drainage**
+     — determinants this hazard-only Phase-1 score does not model — so on hazard
+     alone it is weighted below heat rather than equally.
+   The 0.60 / 0.40 split is the single most consequential judgment and the main
+   lever for revision.
+
+2. **Within-cluster split by evidence strength and inter-metric correlation.**
+   - Heat: TXx (0.30) > TNx (0.18) > WSDI (0.12). TXx (acute daytime heat) has
+     the strongest direct mortality evidence and aligns with the IMD heatwave
+     definition. TNx (night-time heat) is an independent and growing burden (loss
+     of overnight recovery). WSDI (persistence) is an added duration effect and
+     is partly correlated with TXx, so it is weighted below both to avoid
+     over-counting the daytime-heat signal.
+   - Rainfall: Rx1day (0.25) > CWD (0.15). Acute single-day intensity has the
+     strongest association with flood injury and waterborne-disease outbreaks;
+     CWD (persistence / waterlogging) is a secondary, slower pathway.
+
+3. **Sanity checks.** Weights are positive, sum to 1.0, and no single rule
+   dominates (max 0.30). Correlated metrics within a cluster are deliberately not
+   given equal weight, so the composite is not driven by one over-represented
+   mechanism.
+
+These weights are revisable expert assumptions, not derived constants; any change
+is a methodology change to be recorded and tested.
+
+**Per-lens weights within each rule** (absolute / change / impact) are recorded
+in `config/proposal_bundles.py` and shown per metric in Sections 6.1-6.5. Where
+two lenses act on the same underlying quantity (e.g. TNx change and impact both
+act on the departure, Section 6.3), the per-lens weights are set to avoid
+double-counting that quantity.
 
 - **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
   (Section 5.3).
