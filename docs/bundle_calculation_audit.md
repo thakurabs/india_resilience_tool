@@ -2561,7 +2561,48 @@ review in chat.
 
 ## 11. Sector-wise - Investment / Financial Risk
 
-Pending review.
+The Investment / Financial Risk lens methodology is documented in
+`docs/lens_scoring_methodology.md`, Section 8. It records a **methodology
+change** — the bundle is reshaped from its previous trend-dominated design
+(four `_trend_rule` rules plus one phantom-slug blended rule on CDD) to the
+standard abs/chg/imp lens template — and explains why: TCFD / NGFS / RBI
+physical-risk frameworks use scenario-conditional state at a given horizon,
+not within-horizon linear trend; and within-horizon linear trends are
+vulnerable to internal climate variability (PDO / IPO / ENSO / NAO / IOD
+decadal modes), as recognized by IPCC AR6 detection-and-attribution practice
+(Hawkins & Sutton 2009; Frankignoul et al. 2017). The lens-based change lens
+(period-mean vs `1990-2010` baseline-mean) is what the industry frameworks
+call for and is structurally less sensitive to decadal noise.
+
+The dossier covers the per-metric lens decisions (Rx1day, Rx5day, R99p, CDD,
+HWFI) and the impact-band provenance — both external (IMD daily rainfall
+categories 115.6-204.5 mm) and self-derived via the Section 4 protocol (CDD
+30-90 days medium-confidence, anchored on IMD Agricultural Drought; Rx5day
+250-500 mm low-confidence; HWFI 5-15 days/yr low-confidence). **R99p drops
+the impact lens entirely** because it is a regime/concentration metric, not a
+danger threshold — the harm pathway runs through Rx1day, which carries the
+high-confidence IMD band. The dossier also records the recommended rule
+weights (Rx1day 0.25 / HWFI 0.25 / CDD 0.25 / Rx5day 0.15 / R99p 0.10, sum
+1.0, coverage gate 0.70) with the weight-derivation recipe (TCFD-recognized
+financial materiality x band confidence x structural independence) and the
+TCFD-aligned three-cluster split (Flood 0.50 / Heat 0.25 / Water stress 0.25).
+
+The `_trend_rule` machinery in `india_resilience_tool/compute/proposal_bundles.py`
+is preserved as code (for possible future use as a supplementary signal) but
+**deprecated as a primary scoring construct**; after the code reshape (CHG-0018
+follow-up), no bundle uses it. The dossier also records the slug renames
+required by Section 4.7 (`rx1day_positive_trend` -> `rx1day_disruption_pressure`,
+`rx5day_positive_trend` -> `rx5day_accumulated_pressure`,
+`r99p_positive_trend` -> `r99p_extreme_concentration`,
+`cdd_change_gt_20pct_vs_baseline` -> `cdd_water_stress_pressure`,
+`hwfi_positive_trend` -> `hwfi_heatwave_pressure`).
+
+All impact bands are plains/national defaults; zone refinement is deferred
+(BL-0020). SPI-12 long-term water-availability trajectory (BL-0024), coastal
+sea-level / cyclone exposure for coastal investments (BL-0025), and explicit
+return-period framing for design-event communication (BL-0026) are recorded
+as Phase-2 deferrals. The remaining bundle-dossier subsections (11.1 onward,
+in the structure used by Sections 1-8) are pending review in chat.
 
 ## 12. Sector-wise - Infrastructure Risk
 

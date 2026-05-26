@@ -15,7 +15,7 @@ Scope of this document:
   bundle. Health Risk (Section 6) is the worked template; the remaining sector
   bundles follow the same structure.
 - Extension of the lens machinery to the **thematic** bundles is deferred until
-  the sectoral bundles are complete (see Section 8).
+  the sectoral bundles are complete (see Section 9).
 
 Implementation references (current code):
 - Rule catalog: `india_resilience_tool/config/proposal_bundles.py`
@@ -1050,7 +1050,329 @@ impact band a small share so it cannot dominate the rule (Section 4.3).
 
 ---
 
-## 8. Thematic Bundles — Deferred Extension
+## 8. Investment / Financial Risk — Metric-by-Metric Lens Dossier
+
+Bundle: `Sector-wise - Investment / Financial Risk` | composite slug:
+`composite_investment_financial_risk` | levels: district, block | scenarios:
+`ssp245`, `ssp585`.
+
+Conceptual scope: climate hazards most directly tied to **the financial
+materiality of a fixed-location investment** — extreme rainfall (acute and
+accumulated flood disruption to leased assets, business interruption,
+supply-chain breaks), changing rainfall regime concentration (shifting
+return-period design assumptions), chronic heat persistence (labour-productivity
+loss, peak-power demand stress, equipment derating), and chronic water-supply
+stress (operational interruption for water-intensive sub-sectors). Per
+Section 1.2 this is hazard pressure, not full financial risk: it does not
+include asset-level exposure (where the capital sits), adaptive capacity
+(insurance, flood-proofing, on-site storage), or transition risk
+(policy / market / technology).
+
+**Methodology change recorded here.** This bundle is reshaped in this dossier
+from its previous **trend-dominated** design (four `_trend_rule` rules plus one
+phantom-slug blended rule on CDD) to the **standard abs/chg/imp lens template**
+already used by Health (Section 6) and Industrial (Section 7). The reshape is
+not stylistic — it brings the bundle into alignment with industry and
+scientific best practice for physical climate risk in financial portfolios:
+
+1. **Industry frameworks use scenario-conditional state at a horizon, not
+   within-horizon linear trend.** TCFD recommendations frame physical-risk
+   methods as "estimating the expected loss... **at a given time horizon and in
+   a given scenario**" (TCFD 2017). NGFS publishes scenario-conditional
+   projections at **2030 / 2050 / 2100** horizons (NGFS 2024). RBI's *Draft
+   Disclosure Framework on Climate-related Financial Risks* (Feb 2024)
+   directs Indian banks to assess physical risk "**across short, medium, and
+   long-term horizons**" under RCP / SSP scenarios. None of these frameworks
+   uses within-future-period linear trend as a primary scoring construct.
+   The lens-based **change lens** (compare future-period-mean to the
+   `1990-2010` baseline-mean) is precisely what TCFD / NGFS / RBI methodology
+   calls for.
+
+2. **Within-horizon linear trends are vulnerable to internal climate
+   variability.** IPCC AR6 trend-detection practice acknowledges that
+   "robustness and confidence levels depend on the ability of climate models
+   to adequately simulate internal climate variability, particularly on longer
+   multidecadal time scales. Sampling variability over short 30-year running
+   periods would be subject to strong influence from decadal climate
+   fluctuations where stochastic noise can obscure the impact of greenhouse
+   forcing." (Hawkins & Sutton 2009/2012; Frankignoul, Gastineau, Kwon 2017;
+   IPCC AR6 WG1 Chapter 1.) A 20-year linear slope through a 2020-2040 future
+   window can be driven by PDO / IPO / ENSO / NAO / IOD decadal modes rather
+   than the forced climate-change signal. The change-lens construction
+   (period-mean vs baseline-mean) averages over the period and is structurally
+   less sensitive to this decadal noise.
+
+3. **Trend rules lack baseline comparison, significance testing, and
+   effect-size thresholds.** They rank any positive slope above any negative
+   slope, regardless of absolute level, statistical significance, or
+   effect-size relevance. The lens framework's three components handle these
+   distinct questions — absolute (current/future level), change (emergence vs
+   baseline), and impact (proximity to a physical danger band) — explicitly
+   and separately.
+
+The `_trend_rule` machinery in `india_resilience_tool/compute/proposal_bundles.py`
+is **preserved as code** for possible future use as a supplementary signal but
+**deprecated as a primary scoring construct**. After this reshape, no bundle
+uses it.
+
+The table summarizes the lens decision per metric; each subsection gives the
+reasoning and any band provenance. Rule slugs marked "renamed from" reflect
+the CHG-0018 follow-up (the dossier presents the renamed slugs because they
+reflect the actual scoring math; the rename and code reshape are tracked as a
+separate data-contract change).
+
+| Rule (metric) | absolute | change | impact (band) | Rationale summary |
+|---|:--:|:--:|:--:|---|
+| Rx1day — 1-day rainfall (`pr_max_1day_precip`) | yes | yes | yes — external, 115.6-204.5 mm | IMD very-heavy / extremely-heavy categories; acute flood disruption to leased assets and business interruption |
+| Rx5day — 5-day rainfall (`pr_max_5day_precip`) | yes | yes | yes — self-derived (low conf), 250-500 mm | Multi-day basin-scale flood pressure; no external categorical band exists at 5-day scale |
+| R99p — extreme wet precipitation (`r99p_extreme_wet_precip`) | yes | yes | **no** (regime metric, not a danger threshold) | Rainfall regime concentration / return-period design shift; harm pathway runs through Rx1day |
+| CDD — consecutive dry days (`pr_consecutive_dry_days_lt1mm`) | yes | yes | yes — self-derived (med conf, IMD-anchored), 30-90 days | Chronic water-supply stress; IMD Agricultural Drought anchors onset |
+| HWFI — heatwave frequency index (`hwfi_tmean_90p`) | yes | yes | yes — self-derived (low conf), 5-15 days/yr | Chronic heat persistence; labour-productivity loss + peak-power demand stress |
+
+### 8.1 Rx1day — One-day rainfall (`pr_max_1day_precip`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes).
+- **absolute:** Keep. Districts facing the most intense projected single-day
+  rainfall relative to peers (Rx1day, ETCCDI). The acute disruption signal for
+  fixed-location investments — a single very-heavy day forces operational
+  shutdowns, inundates leased premises, breaks logistics, and triggers
+  business-interruption claims regardless of multi-day context.
+- **change:** Keep. Intensifying one-day extremes vs the `1990-2010` baseline.
+  Critical for financial valuation because investments are typically capitalized
+  against historical-norm design assumptions (drainage capacity, plinth height,
+  storm-water sizing, insurance pricing); a shifting acute regime alters the
+  expected-loss profile across the holding period. Mode: `relative_pct`
+  (precipitation change is conventionally multiplicative).
+- **impact:** Keep. Band **115.6-204.5 mm/day**, **external provenance, high
+  confidence** — IMD's daily rainfall classification (very heavy 115.6-204.4 mm
+  / extremely heavy >= 204.5 mm in 24 hours). Same band Health Risk (Section
+  6.4) and Industrial Risk (Section 7.1) use; the rainfall *value* triggering
+  urban / industrial drainage failure is sector-receptor-independent.
+  - Financial materiality: documented Indian single-day-extreme-event losses
+    run $1-5B per event (Mumbai 2005 ~$3B; Chennai 2015 ~$1.3B; Kerala 2018
+    ~$3.5B), with annual average ~$7.4B and projected ~6x growth to 2070
+    (Swiss Re *Billion-dollar Rain*; World Bank flood-cost reports).
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 (mirrors
+  Industrial Rx1day; high-confidence external band lets the impact lens carry
+  meaningful share without dominating).
+
+### 8.2 Rx5day — Five-day rainfall (`pr_max_5day_precip`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. Districts with the heaviest projected 5-day accumulated
+  rainfall relative to peers. Multi-day accumulated rainfall builds upstream
+  runoff, saturates catchments, and overwhelms regional drainage even when no
+  single day reaches the very-heavy IMD threshold — the basin-scale flood
+  pressure that single-day extreme misses. Relevant to large fixed-location
+  investments (manufacturing complexes, logistics hubs, real estate
+  portfolios) where supply-chain and regional-access disruption cost more
+  than on-site inundation.
+- **change:** Keep. Intensifying multi-day accumulations vs baseline. Mode:
+  `relative_pct`.
+- **impact:** Keep, **self-derived band 250-500 mm/5 days, low confidence**
+  (same band as Industrial Risk Section 7.2; same derivation rationale).
+  No external categorical band exists at 5-day scale — IMD publishes daily
+  categories only, CWC uses station-specific gauge danger levels, NDMA SOPs
+  reference IMD daily categories. Onset 250 mm anchored on five-IMD-heavy-day
+  cumulative (~322 mm) floor; saturation 500 mm anchored on observed
+  catastrophic-event 5-day cumulative (Kerala 2018, Mumbai 2005) and the
+  Chuphal et al. (2025) finding that major 2024 India flood events had 3-day
+  return periods >75-200 years.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 — small
+  within-rule impact weight because the band is self-derived and low confidence
+  (Section 4.3). Persistence signal is carried mainly by absolute and change.
+
+### 8.3 R99p — Extreme wet precipitation (`r99p_extreme_wet_precip`)
+
+- **Lenses:** absolute (yes), change (yes), **impact (no)**.
+- **What R99p is:** ETCCDI Extreme Wet Days — the annual sum of precipitation
+  on days where daily precipitation exceeded the **baseline 99th percentile**
+  of wet-day precipitation (Zhang et al. 2011). It is a **percentile-based
+  concentration / regime metric**, not a single-event danger metric. A high
+  R99p means a larger share of the year's rainfall is being delivered by the
+  rarest extreme events; a rising R99p signals **rainfall regime shifting
+  toward more concentrated extremes**.
+- **absolute:** Keep. Districts where the annual contribution from extreme
+  wet days is largest relative to peers — i.e., where rainfall is most
+  concentrated in the tail of the distribution. This matters for capitalized
+  fixed-asset investments because the design-event return period (drainage,
+  storm-water, structural water-load assumptions) is implicitly calibrated to
+  the historical distribution tail.
+- **change:** Keep. Intensifying R99p vs the `1990-2010` baseline is the
+  signal that **historical-norm design assumptions no longer hold** — the
+  rainfall regime is concentrating into the tail faster than facilities were
+  built for. Mode: `relative_pct`. For investor-relevant pathways, the *change*
+  in R99p is more important than the absolute level, so the within-rule change
+  weight is set above the absolute weight (0.60 vs 0.40 — the only rule in this
+  bundle where change exceeds absolute).
+- **impact:** **Dropped entirely** (`impact_weight=0`). R99p is mathematically a
+  concentration metric, not a danger threshold — no external band exists and
+  no defensible self-derived band can be constructed. The harm pathway from
+  R99p runs **through Rx1day** (single-day extremes drive flood injury and
+  drainage failure), which is already in this bundle with a high-confidence
+  IMD band. Setting an arbitrary R99p impact band would be inventing a number
+  to satisfy the framework rather than because it measures danger — that
+  violates Section 4 (the impact lens scores danger, not unusualness). Honest
+  call: keep R99p as an emergence/regime signal scored only by absolute and
+  change.
+- **Per-lens weights:** absolute 0.40 / change 0.60 / impact 0.00.
+
+### 8.4 CDD — Consecutive dry days (`pr_consecutive_dry_days_lt1mm`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — IMD-anchored).
+- **Same definition and band as Industrial Risk Section 7.3.** Source metric,
+  band (30-90 days, medium confidence), and derivation are identical because
+  the underlying climate hazard (prolonged dry spell) and its institutional
+  anchor (IMD Agricultural Drought = 4 consecutive Drought Weeks ≈ 28 days
+  rounded to 30) do not change by sector receptor.
+- **What changes for Investment / Financial:** the *harm pathway* is the
+  **financial valuation of water-dependent assets**, not industrial production
+  per se. Investments in water-intensive businesses (beverage manufacturing,
+  textile mills, semiconductor fabs, thermal power, paper mills, real-estate
+  portfolios with utility cost exposure) face revenue and operating-margin
+  compression during prolonged dry spells through forced derate, water-cost
+  inflation, and in extreme cases plant shutdown.
+- **Per-lens weights:** absolute 0.40 / change 0.30 / impact 0.30 — same as
+  Industrial Risk Section 7.3 (medium-confidence IMD-anchored band justifies a
+  larger within-rule impact weight than the low-confidence self-derived bands
+  in this bundle).
+
+### 8.5 HWFI — Heatwave frequency index (`hwfi_tmean_90p`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **What HWFI is:** Heat Wave Frequency Index — annual count of days
+  belonging to heatwave spells of at least **5 consecutive days** above the
+  baseline day-of-year 90th percentile of daily mean temperature `tas`. This
+  is a percentile-based **persistence** metric structurally analogous to WSDI
+  (Section 6.2 in Health) but computed on `tas` (daily mean) rather than
+  `tasmax` (daily max) and with a 5-day minimum spell rather than WSDI's 6-day
+  minimum.
+- **absolute:** Keep. Districts with the most heatwave-day burden relative to
+  peers. Relevant to investor risk because chronic heat-day exposure is the
+  pathway for labour-productivity loss (ILO 2019: India projected to lose
+  ~5.8% of total working hours by 2030, ~34M full-time jobs equivalent — the
+  largest national loss globally) and peak-power demand stress (India's
+  national peak demand reached a record **270.82 GW** on 21 May 2025 amid
+  heat-driven cooling load, straining grid infrastructure and pushing
+  operating costs across the economy).
+- **change:** Keep. Lengthening heatwave-day burdens vs the `1990-2010`
+  baseline shift the operating envelope for investments with labour-intensive
+  workflows (manufacturing, construction, agriculture-adjacent processing) and
+  for power-sector investments facing demand-side stress that scales with
+  heatwave persistence. The 2024 India heatwaves reportedly cost ~$194B in
+  potential income and ~247B labour-hours nationally — the financial
+  materiality of *intensifying* persistent heat is now empirically established.
+  Mode: `relative_pct` (proportional change in heatwave-day burden).
+- **impact:** Keep, **self-derived band 5-15 days/yr, low confidence**
+  (Section 4 protocol; analogous to WSDI Section 6.2).
+  - **Mechanism:** consecutive hot days compound investor-relevant impacts
+    because cooling-load, worker absenteeism, and equipment derating all scale
+    with heatwave persistence, not just peak-day temperature.
+  - **Cut points:** onset **5 days** — HWFI's own minimum qualifying spell
+    length, already past the ~4-day added-mortality threshold in epidemiology
+    (Beijing CVD study: ~10% excess at day 4, ~51% at day 5; the same duration
+    threshold likely applies to labour-productivity and grid-stress pathways
+    in India). Saturation **15 days/yr** — a high annual heatwave-day burden
+    indicating ~three qualifying spells per year, the regime where labour and
+    grid impacts compound into material financial consequence.
+  - **Confidence: low.** HWFI is a percentile-based annual tally, not a single
+    spell length, so the band is a pragmatic annual-burden proxy rather than a
+    physical threshold. Given the low confidence, the band is given a **small
+    within-rule impact weight** (0.15); the persistence signal is carried
+    mainly by absolute and change.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 (mirrors WSDI
+  in Health Risk Section 6.2).
+
+### 8.6 Investment / Financial Risk — bundle assembly notes
+
+**Rule weights (explicit, sum to 1.0).** Same elicitation recipe as Health and
+Industrial: **rule_weight reflects (TCFD-recognized financial materiality) x
+(band confidence) x (structural independence)**.
+
+| Cluster | Cluster weight | Rule | Rule weight | Why |
+|---|---:|---|---:|---|
+| Flood (acute + multi-day + regime) | 0.50 | Rx1day | 0.25 | High-confidence IMD band; well-documented major-event losses ($1-5B/event) to Indian financial portfolios; primary acute physical-risk category per TCFD |
+| Flood | 0.50 | Rx5day | 0.15 | Low-confidence self-derived band; structurally overlaps Rx1day's signal; basin-scale supply-chain pressure |
+| Flood | 0.50 | R99p | 0.10 | No impact band; regime-shift / design-assumption signal; smallest of the rainfall rules but captures a distinct concentration mechanism |
+| Heat (chronic operational) | 0.25 | HWFI | 0.25 | ILO ~5.8% working-hours loss by 2030; 2024 India ~$194B potential income / ~247B labour-hours lost; record 270.82 GW peak power demand — the most empirically-documented chronic financial pathway |
+| Water stress (chronic supply) | 0.25 | CDD | 0.25 | Medium-confidence IMD-anchored band; structurally independent slow-onset pathway affecting water-intensive sub-sectors |
+
+**How these weights were derived.** Same two-stage elicitation as Health and
+Industrial:
+
+1. **Cluster split first (flood vs heat vs water stress).** The bundle's five
+   metrics fall into three TCFD-aligned physical-risk clusters:
+   - **Flood 0.50** — the dominant acute physical-risk category for built-asset
+     financial portfolios per TCFD recommendations and Swiss Re / World Bank
+     loss accounting. Major Indian flood events impose $1-5B in industrial
+     and infrastructure losses per event with annual average ~$7.4B, projected
+     ~6x growth to 2070. Three structurally distinct sub-signals (acute
+     single-day, accumulated multi-day, regime concentration) justify
+     decomposition into three rules rather than a single rainfall rule.
+   - **Heat 0.25** — chronic operational pressure quantified by ILO
+     working-hours loss projections (~5.8% India by 2030, the largest national
+     loss globally), India's 2024 ~$194B / ~247B labour-hour empirical
+     experience, and the documented grid-stress at record peak-power demand
+     (270.82 GW). HWFI is the persistence signal most relevant to investor-
+     relevant productivity and demand pathways.
+   - **Water stress 0.25** — slow-onset chronic pathway structurally
+     independent of rainfall extremes; medium-confidence IMD-anchored band
+     (the strongest non-IMD-categorical anchor in the bundle); affects
+     water-intensive sub-sectors through a distinct mechanism.
+   The 0.50 / 0.25 / 0.25 split aligns with TCFD physical-risk taxonomy
+   (acute > chronic) and is the single most consequential judgment.
+
+2. **Within-cluster split by evidence strength and inter-metric correlation.**
+   - Flood: Rx1day (0.25) > Rx5day (0.15) > R99p (0.10). Rx1day has the
+     high-confidence IMD categorical band and the strongest direct acute
+     disruption association; Rx5day adds basin-scale pressure but its band is
+     self-derived and partially structurally redundant with Rx1day; R99p adds
+     a regime-shift signal with no impact band, so it receives the smallest
+     flood-cluster weight.
+   - Heat: HWFI alone (0.25). Only one heat rule in this bundle.
+   - Water stress: CDD alone (0.25). Only one water-stress rule.
+
+3. **Sanity checks.** Weights are positive, sum to 1.0, no single rule
+   dominates (max 0.25 each for Rx1day / HWFI / CDD). Low-confidence rules
+   (Rx5day, R99p, HWFI) carry within-cluster smaller weights or smaller
+   within-rule impact weights. Bands rated low or medium confidence carry
+   smaller within-rule impact weights (Section 4.3); the single
+   high-confidence band (Rx1day, IMD) carries the standard 0.35 impact weight.
+
+These weights are revisable expert assumptions, not derived constants; any
+change is a methodology change to be recorded and tested.
+
+**Per-lens weights within each rule** (absolute / change / impact) are recorded
+in `config/proposal_bundles.py` and shown per metric in Sections 8.1-8.5. The
+high-confidence external-band rule (Rx1day) uses **0.40 / 0.25 / 0.35**; the
+medium-confidence IMD-anchored CDD uses **0.40 / 0.30 / 0.30**; the
+low-confidence self-derived bands (Rx5day, HWFI) use **0.45 / 0.40 / 0.15**;
+the regime-metric R99p with no defensible impact band uses **0.40 / 0.60 /
+0.00** with change-weight elevated above absolute because the regime *shift*
+is the financial-risk signal.
+
+- **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
+  (Section 5.3) — matching Health, Industrial, and Agricultural.
+- **Source masters:** all five source metrics must resolve to grid-first
+  district/block masters (compute the index per grid cell, then area-weight to
+  the polygon), consistent with the spatial-aggregation recommendation in
+  `docs/bundle_calculation_audit.md`. Rx1day and CDD already route through
+  grid-first paths; Rx5day, R99p, and HWFI need verification.
+- **Phantom-slug and rule-type reshape (CHG-0018):** the dossier presents the
+  renamed slugs and reshaped rule types (trend -> blended). Migration is a
+  combined data-contract + methodology change tracked separately.
+- **`_trend_rule` machinery status:** code preserved in
+  `india_resilience_tool/compute/proposal_bundles.py` for possible future use
+  as a supplementary signal, but **deprecated as a primary scoring construct**.
+  After CHG-0018 lands, no bundle uses it.
+- **Deferred refinements:** SPI-12 long-term water-availability trajectory
+  (BL-0024); coastal sea-level / cyclone exposure for coastal investments
+  (BL-0025); explicit return-period framing for design-event communication
+  (BL-0026). All three are Phase-2 additions, not corrections.
+
+---
+
+## 9. Thematic Bundles — Deferred Extension
 
 The lens machinery is intended to extend to the thematic bundles (Heat Risk,
 Drought Risk, Extreme Rainfall, Riverine Flood, Heat Stress, Cold Risk), where
@@ -1068,7 +1390,7 @@ separately-tested methodology change with the science owner.
 
 ---
 
-## 9. References (consolidated)
+## 10. References (consolidated)
 
 1. OECD & Joint Research Centre (2008). *Handbook on Constructing Composite
    Indicators: Methodology and User Guide.* OECD Publishing, Paris.
@@ -1123,3 +1445,38 @@ separately-tested methodology change with the science owner.
     warning and danger gauge levels in consultation with state authorities);
     no universal mm-based 5-day rainfall categorical threshold is published,
     motivating the self-derived Industrial Risk Rx5day band in Section 7.2.
+18. Task Force on Climate-related Financial Disclosures (2017). *Final
+    Recommendations of the Task Force on Climate-related Financial
+    Disclosures.* (Physical-risk methodology: scenario-conditional state at a
+    given time horizon, not within-horizon linear trend. Anchors the lens
+    reshape in Section 8.)
+19. Network for Greening the Financial System (2024). *Guide to climate
+    scenario analysis for central banks and supervisors* (update). NGFS,
+    Paris. (Scenario-conditional projections at 2030 / 2050 / 2100 horizons;
+    no within-horizon trend-pressure mechanism.)
+20. Reserve Bank of India (2024). *Draft Disclosure Framework on
+    Climate-related Financial Risks, 2024.* (Indian banks to assess physical
+    risk across short / medium / long-term horizons under RCP scenarios;
+    aligns with TCFD / NGFS scenario-at-horizon framing rather than
+    within-horizon trend.)
+21. Hawkins E., Sutton R. (2009). "The potential to narrow uncertainty in
+    regional climate predictions." *Bulletin of the American Meteorological
+    Society* 90(8): 1095-1107. (Internal-variability vs forced-signal
+    decomposition; time-of-emergence framing — quantifies the multi-decadal
+    timescales over which forced change exceeds internal noise. Anchors the
+    "20-year linear trends vulnerable to decadal modes" argument in Section
+    8 intro.)
+22. IPCC AR6 WG1 (2021), Chapter 1 (*Framing, Context, Methods*) and Atlas;
+    Frankignoul C., Gastineau G., Kwon Y.-O. (2017) and related works on
+    decadal modes. (Sampling variability over 20-30-year periods can be
+    dominated by internal climate variability — PDO / IPO / ENSO / NAO / IOD
+    — rather than the forced signal, motivating period-mean comparisons over
+    within-period slope-fitting.)
+23. Swiss Re Institute — *Billion-dollar Rain* and reinsurance industry
+    loss accounting for Indian urban flood events. (Empirical anchor for the
+    flood-cluster financial-materiality weight in Section 8.6.)
+24. International Labour Organization (2024-2025) and Indian heatwave
+    economic-impact reporting: 2024 India heatwave estimated impact ~$194B
+    in potential income / ~247B labour-hours nationally; peak national power
+    demand record 270.82 GW on 21 May 2025. (Empirical anchors for HWFI
+    financial materiality in Section 8.5.)
