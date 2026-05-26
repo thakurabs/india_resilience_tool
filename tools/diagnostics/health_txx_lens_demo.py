@@ -22,6 +22,7 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -96,38 +97,65 @@ def _read_source_metadata(source_frame: pd.DataFrame) -> dict[str, str]:
 
 def _probe_yearly_provenance(
     *, metric_slug: str, state_name: str, data_dir: Path
-) -> tuple[Optional[Path], dict[str, str]]:
-    """Find one per-model yearly CSV under processed/<slug>/<state>/ and read its stamps.
+) -> tuple[Path, Optional[Path], dict[str, str], list[str]]:
+    """Find one per-model yearly CSV under the resolved processed root and read its stamps.
 
-    Returns ``(sample_path, {method_version, aggregation_method})``. Master files drop
-    those columns, so this is the canonical place to verify grid-first provenance.
-    Returns ``(None, {...: '<no yearly file found>'})`` if no candidate exists.
+    Master files drop those columns, so the yearly CSV is the canonical place to
+    verify grid-first provenance. Returns ``(state_root, sample_path, stamps,
+    diagnostics)``. ``state_root`` is always returned so the caller can show what
+    path was actually searched.
     """
     state_root = resolve_processed_root(metric_slug, data_dir=data_dir, mode="portfolio") / state_name
+    diagnostics: list[str] = []
+    diagnostics.append(f"resolved state root: {state_root}")
     if not state_root.exists():
-        return None, {
+        return state_root, None, {
             "method_version": "<state root missing>",
             "aggregation_method": "<state root missing>",
-        }
-    # Pattern: <DISTRICT>/<MODEL>/<scenario>/<file>_yearly.csv
+        }, diagnostics
+
+    # Children sample (helps the operator see the actual layout).
+    try:
+        child_names = sorted(p.name for p in state_root.iterdir())[:8]
+        diagnostics.append(f"state-root children sample: {child_names}")
+    except Exception as exc:
+        diagnostics.append(f"state-root iterdir failed: {exc!r}")
+
+    # Try the strict layout first: <DISTRICT>/<MODEL>/<scenario>/<file>_yearly.csv
     sample: Optional[Path] = None
     for candidate in state_root.glob(YEARLY_FILE_GLOB):
         if candidate.is_file():
             sample = candidate
             break
+
+    # Fallback: walk for any *_yearly*.csv anywhere under the state root.
     if sample is None:
-        return None, {
+        for candidate in state_root.rglob("*yearly*.csv"):
+            if candidate.is_file():
+                sample = candidate
+                diagnostics.append(f"fallback rglob hit: {candidate.relative_to(state_root)}")
+                break
+
+    # Last resort: any CSV at all (lets us see what kind of files live here).
+    if sample is None:
+        any_csv = next((p for p in state_root.rglob("*.csv") if p.is_file()), None)
+        if any_csv is not None:
+            diagnostics.append(f"no yearly CSV; nearest CSV: {any_csv.relative_to(state_root)}")
+        else:
+            diagnostics.append("no CSVs at all under state root")
+        return state_root, None, {
             "method_version": "<no yearly file found>",
             "aggregation_method": "<no yearly file found>",
-        }
+        }, diagnostics
+
     try:
         df = pd.read_csv(sample, nrows=2000)
     except Exception as exc:
-        return sample, {
+        return state_root, sample, {
             "method_version": f"<read failed: {exc!r}>",
             "aggregation_method": "<read failed>",
-        }
-    return sample, _read_source_metadata(df)
+        }, diagnostics
+    return state_root, sample, _read_source_metadata(df), diagnostics
 
 
 def _impact_position(value: float, low: float, high: float) -> str:
@@ -193,7 +221,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     master_meta = _read_source_metadata(source_frame)
-    yearly_sample, yearly_meta = _probe_yearly_provenance(
+    state_root, yearly_sample, yearly_meta, probe_diagnostics = _probe_yearly_provenance(
         metric_slug=rule.metric_slug, state_name=args.state, data_dir=data_dir
     )
     yearly_method_version = yearly_meta.get("method_version", "<missing>")
@@ -218,6 +246,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"  rule weight      : {rule.rule_weight:.3f}")
     print()
     print("Provenance (master_builder drops these columns; canonical source is yearly CSV):")
+    for note in probe_diagnostics:
+        print(f"  - {note}")
+    print(f"  IRT_PROCESSED_ROOT env: {os.getenv('IRT_PROCESSED_ROOT') or '<unset>'}")
     print(f"  yearly sample    : {yearly_sample or '<none found>'}")
     for col in ("method_version", "aggregation_method"):
         marker = ""
