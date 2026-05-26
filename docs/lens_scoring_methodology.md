@@ -15,7 +15,7 @@ Scope of this document:
   bundle. Health Risk (Section 6) is the worked template; the remaining sector
   bundles follow the same structure.
 - Extension of the lens machinery to the **thematic** bundles is deferred until
-  the sectoral bundles are complete (see Section 7).
+  the sectoral bundles are complete (see Section 8).
 
 Implementation references (current code):
 - Rule catalog: `india_resilience_tool/config/proposal_bundles.py`
@@ -781,7 +781,276 @@ share so it cannot dominate the rule (Section 4.3).
 
 ---
 
-## 7. Thematic Bundles — Deferred Extension
+## 7. Industrial Risk — Metric-by-Metric Lens Dossier
+
+Bundle: `Sector-wise - Industrial Risk` | composite slug:
+`composite_industrial_risk` | levels: district, block | scenarios: `ssp245`,
+`ssp585`.
+
+Conceptual scope: climate hazards most directly tied to **industrial operations
+and continuity** — extreme heat (worker productivity, equipment derating),
+extreme rainfall (factory inundation, transport and supply-chain disruption),
+and prolonged dry spells (cooling-water and process-water stress for
+water-intensive sectors). Per Section 1.2 this is hazard pressure, not full
+industrial risk: it does not include sector-specific exposure (where industrial
+assets sit), adaptive capacity (cooling-water reuse, on-site storage,
+flood-proofing), or vulnerability (insurance, supply-chain redundancy).
+
+The table summarizes the lens decision per metric; each subsection gives the
+reasoning and any band provenance. Rule slugs marked "renamed from" reflect the
+CHG-0015 rename of phantom slugs (Section 4.7); the dossier presents the
+renamed slugs because the bands and labels now reflect the actual scoring math.
+
+| Rule (metric) | absolute | change | impact (band) | Rationale summary |
+|---|:--:|:--:|:--:|---|
+| Rx1day — 1-day rainfall (`pr_max_1day_precip`) | yes | yes | yes — external, 115.6-204.5 mm | IMD very-heavy / extremely-heavy categories; factory inundation, transport disruption, power outages |
+| Rx5day — 5-day rainfall (`pr_max_5day_precip`) | yes | yes | yes — self-derived (low conf), 250-500 mm | Multi-day basin-scale flood pressure; no external categorical band exists at 5-day scale |
+| CDD — consecutive dry days (`pr_consecutive_dry_days_lt1mm`) | yes | yes | yes — self-derived (med conf, IMD-anchored), 30-90 days | Cooling- and process-water stress; IMD Agricultural Drought (4 Drought Weeks) anchors onset |
+| TXx — extreme daytime heat (`txx_annual_max`) | yes | yes | yes — external, 40-45 deg C (plains) | Worker productivity loss + equipment derating; IMD plains heatwave envelope |
+
+### 7.1 Rx1day — One-day rainfall (`pr_max_1day_precip`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes).
+- **absolute:** Keep. Districts facing the most intense projected single-day
+  rainfall relative to peers (Rx1day, ETCCDI). The acute disruption signal — a
+  single very-heavy day forces operational shutdowns, inundates factory floors,
+  and breaks road / rail logistics regardless of multi-day context.
+- **change:** Keep. Intensifying one-day extremes vs the `1990-2010` baseline
+  matter to industry because facilities are designed against historical norms
+  (drainage capacity, plinth height, storm-water sizing). Mode: `relative_pct`
+  (precipitation change is conventionally multiplicative).
+- **impact:** Keep. Band **115.6-204.5 mm/day**, **external provenance, high
+  confidence** — same band Health Risk uses (Section 6.4). IMD's daily rainfall
+  classification: very heavy 115.6-204.4 mm, extremely heavy >= 204.5 mm. The
+  industrial harm pathway (drainage failure, factory inundation, transport
+  paralysis, power-network outages) is most strongly associated with this range,
+  and the band is national / not physiography-specific.
+  - **Why the same band as Health Risk:** the hazard *value* threshold for
+    drainage failure does not change by sector receptor — it is set by the
+    rainfall intensity. Health and Industrial differ in *consequence* (flood
+    injury vs operational shutdown), not in the rainfall amount that triggers
+    failure of urban / industrial drainage.
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 (mirrors
+  TXx — high-confidence external band lets the impact lens carry meaningful
+  share without dominating).
+
+### 7.2 Rx5day — Five-day rainfall (`pr_max_5day_precip`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. Districts with the heaviest projected 5-day accumulated
+  rainfall relative to peers. Captures **basin-scale** flood pressure that a
+  single-day extreme can miss — sustained multi-day rainfall builds upstream
+  runoff, saturates catchments, and overwhelms regional drainage even when no
+  single day reaches the very-heavy IMD threshold.
+- **change:** Keep. Intensifying multi-day accumulations vs baseline. Mode:
+  `relative_pct`.
+- **impact:** Keep, **self-derived band 250-500 mm/5 days, low confidence**
+  (Section 4 protocol). **No external categorical band exists at 5-day scale**:
+  IMD publishes daily rainfall categories only, CWC uses station-specific gauge
+  danger levels (not universal mm thresholds), and NDMA SOPs reference IMD
+  daily categories. The band is therefore derived rather than borrowed.
+  - **Mechanism:** sustained multi-day rainfall produces saturation-driven
+    flooding, drainage backlog across the catchment, and regional supply-chain
+    paralysis distinct from the single-day acute signal.
+  - **Anchors:**
+    - Five consecutive IMD "heavy" days (>= 64.5 mm/day per IMD daily
+      classification) sum to **>= 322 mm** — onset of sustained heavy-rain
+      regime; **250 mm** is a conservative floor capturing the onset of plausible
+      drainage failure at plains scale.
+    - Observed Indian catastrophic-event 5-day cumulative magnitudes anchor the
+      saturation point: Kerala 2018 ~350-400 mm in 3 days regionally, Mumbai
+      2005 cumulative ~944 mm, and multi-day extreme precipitation events
+      causing major Indian floods during the 2024 monsoon had 3-day return
+      periods of **>75 to >200 years** (Chuphal et al. 2025) — confirming the
+      **500 mm / 5-day** regime is statistically extreme and operationally
+      catastrophic.
+  - **Cut points:** onset **250 mm** (plausible drainage-failure regime);
+    saturation **500 mm** (regional flood-event regime).
+  - **Confidence: low.** Anchored only on derivation (IMD daily category × 5)
+    and observed disaster magnitudes; no institutional categorical band exists
+    at 5-day scale. The 5-day signal partially overlaps Rx1day (high-1-day
+    events often dominate 5-day totals), so the rule's bundle weight is also
+    smaller than Rx1day's.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 — small
+  within-rule impact weight because the band is self-derived and low confidence
+  (Section 4.3). The persistence signal is carried mainly by absolute and
+  change.
+
+### 7.3 CDD — Consecutive dry days (`pr_consecutive_dry_days_lt1mm`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — IMD-anchored).
+- **absolute:** Keep. Districts with the longest projected dry spells relative
+  to peers (CDD, ETCCDI: maximum consecutive days with precipitation < 1 mm).
+  Long dry spells stress municipal and industrial water supply, with
+  water-intensive sub-sectors (textiles, beverages, paper, thermal-plant
+  cooling, semiconductors) facing operational interruption.
+- **change:** Keep. Lengthening dry spells vs baseline shift industrial water
+  planning beyond historical operating envelopes. Mode: `relative_pct`.
+- **impact:** Keep, **self-derived band 30-90 days, medium confidence**
+  (Section 4 protocol). The onset is anchored on an **operational Indian
+  institutional definition** (IMD Agricultural Drought) rather than a picked
+  number, which raises the confidence over a purely-reasoned band.
+  - **Mechanism:** prolonged dry-spell -> reservoir / groundwater drawdown ->
+    municipal water rationing -> curtailed industrial draws (cooling, process,
+    washing). Water-intensive industries experience this as forced derate or
+    shutdown.
+  - **Anchors:**
+    - IMD agromet practice defines a **Drought Week** as 7 days with rainfall
+      <= 50% of normal; **four consecutive Drought Weeks** between May and
+      October constitutes IMD **Agricultural Drought** — i.e. **~28 days of
+      dry-spell conditions** is the operational onset of drought in Indian
+      institutional practice.
+    - The Indian summer monsoon (JJAS) is ~120 days; a 90-day dry spell during
+      this window indicates monsoon failure and corresponds to SPI-12 severe
+      meteorological drought territory (McKee et al. 1993).
+  - **Cut points:** onset **30 days** (IMD Agricultural Drought, rounded from
+    28 to align with the existing slug threshold and operational rounding);
+    saturation **90 days** (¾-season dry regime; monsoon-failure / severe-
+    drought regime).
+  - **Confidence: medium.** IMD-anchored onset (operational institutional
+    definition) raises confidence above a purely self-derived band. Saturation
+    is reasoned from monsoon length and SPI severe-drought convention rather
+    than an institutional category.
+  - **Local mediation caveat:** actual industrial impact is heavily mediated by
+    local groundwater status, reservoir storage, and on-site water-reuse
+    infrastructure — Phase-1 hazard pressure does not model these. A real
+    industrial water-stress refinement would couple CDD with Aqueduct
+    base-water-stress or CGWB groundwater data (deferred).
+- **Per-lens weights:** absolute 0.40 / change 0.30 / impact 0.30 — the
+  medium-confidence IMD-anchored band justifies a larger within-rule impact
+  weight than the low-confidence Rx5day band, but still slightly below the
+  high-confidence external bands (TXx, Rx1day).
+
+### 7.4 TXx — Extreme daytime heat (`txx_annual_max`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes).
+- **absolute:** Keep. Same definition as in Health Risk (Section 6.1). Districts
+  facing the most extreme projected daytime heat relative to peers.
+- **change:** Keep. Warming daytime extremes vs the `1990-2010` baseline matter
+  to industry because facilities (HVAC, transformers, cooling towers, on-site
+  power) are sized against historical extremes. Mode: `absolute_delta` (degrees).
+- **impact:** Keep. Band **40-45 deg C**, **external provenance, high
+  confidence** — same IMD plains heatwave band as Health Risk (Section 6.1).
+  - **Industrial harm pathway:** daytime heat affects industry through two
+    distinct channels — **(i) worker productivity loss** (ILO 2019: India
+    projected to lose ~5.8% of total working hours by 2030, equivalent to ~34
+    million full-time jobs, the largest national loss globally) and
+    **(ii) equipment derating** (transformer / motor / HVAC efficiency declines,
+    grid stress, semiconductor and food-processing line shutdowns).
+  - **Why the IMD heatwave band rather than a WBGT band:** the IRT's TXx is a
+    dry-bulb temperature, and the IMD heatwave definition is the
+    nationally-recognized plains threshold for the dry-bulb regime. The
+    labor-productivity literature (Sahu et al. 2013; ILO 2019) is anchored on
+    **wet-bulb globe temperature (WBGT)**, which becomes adverse for outdoor
+    Indian workers above ~26 deg C WBGT — corresponding to lower dry-bulb
+    values when humidity is high, but higher dry-bulb values when air is dry.
+    The IMD 40-45 dry-bulb band is therefore a **coarser** proxy than a
+    WBGT-conditioned band would be: it under-triggers in humid coastal regions
+    and may slightly over-trigger in dry-arid regions. For Phase-1 (Telangana
+    plateau pilot, semi-arid climate), this is acceptable and the band is
+    consistent with the Health and (future) other sectoral bundles that use the
+    same dry-bulb TXx.
+  - **WBGT-conditioned rule:** a future industrial-heat refinement would add a
+    `twb_*` source metric (e.g. `twb_days_ge_28` already produced by the Heat
+    Stress v2 grid-first compute) as a separate rule, so labor-productivity
+    impact can be scored against the appropriate physiological band
+    (deferred — BL-0021, see Section 7.5).
+  - **Zone caveat:** plains/national default (Section 4.9, BL-0020).
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 — mirrors
+  Health Risk's TXx (high-confidence external band).
+
+### 7.5 Industrial Risk — bundle assembly notes
+
+**Rule weights (explicit, sum to 1.0).** Weighting is an evidence-informed
+expert elicitation, not a derived constant; the recommended default reflects
+the relative industrial-sector climate burden in India and is recorded as a
+revisable assumption.
+
+| Cluster | Cluster weight | Rule | Rule weight | Why |
+|---|---:|---|---:|---|
+| Heat | 0.40 | TXx (extreme heat operations) | 0.40 | Heat is the only *continuous* sector-wide pressure with a quantified India-specific dose-response (ILO ~5.8% working-hours loss by 2030; Sahu et al. ~5% productivity loss per deg C WBGT > 26); external high-confidence band |
+| Rainfall (acute) | 0.40 | Rx1day (1-day rainfall) | 0.25 | High-confidence IMD band; well-documented major-event losses ($1-5B per event: Mumbai 2005 ~$3B, Chennai 2015 ~$1.3B, Kerala 2018 ~$3.5B) |
+| Rainfall (multi-day) | 0.40 | Rx5day (5-day rainfall) | 0.15 | Low-confidence self-derived band; structurally overlaps Rx1day's signal; captures basin-scale pressure independent of single-day extreme |
+| Water stress | 0.20 | CDD (consecutive dry days) | 0.20 | Medium-confidence IMD-anchored band; affects water-intensive sub-sectors through a slow-onset pathway structurally independent of rainfall |
+
+**How these weights were derived.** Same two-stage elicitation as Health
+Risk's, with the recipe stated up front so the reasoning is auditable:
+**rule_weight reflects (continuous sector burden) x (band confidence) x
+(structural independence)**.
+
+1. **Cluster split first (heat vs rainfall vs water-stress).** The bundle's
+   four metrics fall into three hazard clusters — heat (TXx), rainfall (Rx1day,
+   Rx5day), and slow-onset water stress (CDD). Cluster weights:
+   - **Heat 0.40** — heat is the only continuous, sector-wide pressure with a
+     **quantified India-specific dose-response**: ILO (2019) projects ~5.8% of
+     India's total working hours lost to heat stress by 2030 (~34 million
+     jobs equivalent — the largest national loss globally); Sahu et al. (2013)
+     measured ~5% productivity loss per deg C of WBGT above ~26 deg C in southern
+     India outdoor workers. No other industrial hazard has comparably-anchored
+     continuous-pressure quantification, so heat receives the single largest
+     cluster weight and the single largest rule weight.
+   - **Rainfall 0.40** — major Indian flood events impose $1-5B in industrial
+     and infrastructure losses per event (Mumbai 2005, Chennai 2015, Kerala
+     2018) with an annual average around **$7.4B**, projected to grow ~6x by
+     2070. Rainfall pressure is *episodic* rather than continuous, but its
+     consequence magnitude justifies a cluster weight equal to heat.
+   - **Water stress 0.20** — CDD captures a slow-onset, sector-specific
+     pathway that is structurally independent of single- and multi-day rainfall
+     and matters distinctly to water-intensive industry. It receives less
+     weight than heat or rainfall because its impact is mediated by local
+     groundwater / reservoir storage / on-site water-reuse infrastructure that
+     this Phase-1 score does not model.
+   The 0.40 / 0.40 / 0.20 split is the single most consequential judgment and
+   the main lever for revision.
+
+2. **Within-cluster split by evidence strength and inter-metric correlation.**
+   - Heat: TXx alone (0.40). Only one heat rule in this bundle; WBGT-conditioned
+     refinement deferred (BL-0021).
+   - Rainfall: Rx1day (0.25) > Rx5day (0.15). Rx1day has a high-confidence IMD
+     categorical band and the strongest direct disruption association at the
+     acute scale; Rx5day's band is self-derived and partially structurally
+     redundant with Rx1day (5-day totals are often dominated by a single
+     extreme day), so it carries less weight.
+   - Water stress: CDD alone (0.20). Only one water-stress rule.
+
+3. **Sanity checks.** Weights are positive, sum to 1.0, no single rule
+   dominates (max 0.40 for TXx, justified by the only continuous-pressure
+   quantification in the bundle). Low-confidence rules (Rx5day) carry the
+   smallest weight. Bands rated low or medium confidence carry smaller
+   within-rule impact weights (Section 4.3); high-confidence bands (TXx,
+   Rx1day) carry the standard 0.35 impact weight.
+
+These weights are revisable expert assumptions, not derived constants; any
+change is a methodology change to be recorded and tested.
+
+**Per-lens weights within each rule** (absolute / change / impact) are recorded
+in `config/proposal_bundles.py` and shown per metric in Sections 7.1-7.4. The
+high-confidence external-band rules (TXx, Rx1day) use **0.40 / 0.25 / 0.35**;
+the medium-confidence IMD-anchored CDD uses **0.40 / 0.30 / 0.30** (slightly
+smaller impact weight than the external-band rules); the low-confidence
+self-derived Rx5day uses **0.45 / 0.40 / 0.15**, deliberately giving the weak
+impact band a small share so it cannot dominate the rule (Section 4.3).
+
+- **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
+  (Section 5.3) — matching Health and Agricultural.
+- **Source masters:** all four source metrics must resolve to grid-first
+  district/block masters (compute the index per grid cell, then area-weight to
+  the polygon), consistent with the spatial-aggregation recommendation in
+  `docs/bundle_calculation_audit.md`. TXx and Rx1day already route through
+  grid-first paths; Rx5day and CDD need verification (likely the same paths but
+  not confirmed for this bundle).
+- **Phantom-slug renames (CHG-0015):** the dossier presents the renamed slugs
+  (`rx1day_ge_200`, `rx5day_accumulated_pressure`, `cdd_water_stress_pressure`)
+  to satisfy Section 4.7 (no labels naming thresholds the math does not apply).
+  Migration is a data-contract change tracked separately.
+- **Deferred refinements:** WBGT-conditioned industrial-heat rule (BL-0021);
+  Aqueduct / CGWB groundwater coupling for CDD impact (BL-0022); JRC flood
+  depth ingestion for direct flood-pressure measurement rather than the
+  rainfall proxy (BL-0023). All three are Phase-2 additions, not corrections.
+
+---
+
+## 8. Thematic Bundles — Deferred Extension
 
 The lens machinery is intended to extend to the thematic bundles (Heat Risk,
 Drought Risk, Extreme Rainfall, Riverine Flood, Heat Stress, Cold Risk), where
@@ -799,7 +1068,7 @@ separately-tested methodology change with the science owner.
 
 ---
 
-## 8. References (consolidated)
+## 9. References (consolidated)
 
 1. OECD & Joint Research Centre (2008). *Handbook on Constructing Composite
    Indicators: Methodology and User Guide.* OECD Publishing, Paris.
@@ -827,3 +1096,30 @@ separately-tested methodology change with the science owner.
     very heavy / extremely heavy).
 11. World Health Organization — *Floods* health-topic guidance; systematic
     reviews of extreme water-related weather events and waterborne disease.
+12. International Labour Organization (2019). *Working on a warmer planet: The
+    impact of heat stress on labour productivity and decent work.* ILO, Geneva.
+    (~5.8% India working-hours loss by 2030, ~34M full-time jobs equivalent —
+    largest national loss globally.)
+13. Sahu S., Sett M., Kjellstrom T. (2013). "Heat exposure, cardiovascular
+    stress and productivity in rice harvesting workers in India: implications
+    for a climate change future." *Industrial Health* 51(4): 424-431.
+    (~5% productivity loss per deg C of WBGT above ~26 deg C, Southern India
+    outdoor workers.)
+14. Chuphal D.S. et al. (2025). "Multi-Day Extreme Precipitation Caused Major
+    Floods in India During Summer Monsoon of 2024." *Earth's Future* 13.
+    (3-day extreme precipitation return periods >75 to >200 years for the
+    three regions with the largest 2024 floods.)
+15. Swiss Re Institute. *Billion-dollar Rain: Why India can't afford to ignore
+    urban flood risk.* Swiss Re, Zurich.
+    (Mumbai 2005 ~USD 3B economic loss; Chennai 2015 ~USD 1.3B insured;
+    Kerala 2018 ~USD 3.5B recovery cost.)
+16. India Meteorological Department — agromet operational definitions:
+    **Dry Day** (rainfall < 2.5 mm or < 6.3 mm in IMD agromet studies);
+    **Drought Week** (7 days with rainfall <= 50% of long-period normal);
+    **Agricultural Drought** (4 consecutive Drought Weeks between May and
+    October, i.e. ~28 days). Anchors the CDD onset for Industrial Risk
+    Section 7.3.
+17. Central Water Commission — flood-forecasting framework (station-specific
+    warning and danger gauge levels in consultation with state authorities);
+    no universal mm-based 5-day rainfall categorical threshold is published,
+    motivating the self-derived Industrial Risk Rx5day band in Section 7.2.

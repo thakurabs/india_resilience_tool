@@ -2535,7 +2535,29 @@ onward, in the structure used by Sections 1-8) are pending review in chat.
 
 ## 10. Sector-wise - Industrial Risk
 
-Pending review.
+The Industrial Risk lens methodology is documented in
+`docs/lens_scoring_methodology.md`, Section 7. It covers the per-metric lens
+decisions (Rx1day, Rx5day, CDD, TXx), the impact-band provenance — both
+external (IMD daily rainfall categories 115.6-204.5 mm; IMD plains heatwave
+40-45 deg C) and self-derived via the Section 4 protocol (CDD 30-90 days
+medium-confidence, anchored on IMD Agricultural Drought = 4 consecutive
+Drought Weeks; Rx5day 250-500 mm low-confidence, anchored on derived IMD
+heavy-day cumulative + observed Indian catastrophic-event 5-day totals — no
+external categorical band exists at 5-day scale), the recommended rule weights
+(TXx 0.40 / Rx1day 0.25 / CDD 0.20 / Rx5day 0.15, sum 1.0, coverage gate 0.70)
+with the weight-derivation recipe (continuous sector burden x band confidence
+x structural independence), and the bundle assembly notes. The dossier also
+records the phantom-slug renames required by Section 4.7 (CHG-0015 follow-up:
+`rx1day_ge_150` -> `rx1day_ge_200`,
+`rx5day_ge_250` -> `rx5day_accumulated_pressure`,
+`cdd_ge_30` -> `cdd_water_stress_pressure`).
+
+All impact bands are plains/national defaults; zone refinement is deferred
+(BL-0020). The WBGT-conditioned industrial-heat refinement, Aqueduct / CGWB
+groundwater coupling for CDD, and JRC flood-depth ingestion are recorded as
+Phase-2 deferrals (BL-0021, BL-0022, BL-0023). The remaining bundle-dossier
+subsections (10.1 onward, in the structure used by Sections 1-8) are pending
+review in chat.
 
 ## 11. Sector-wise - Investment / Financial Risk
 
