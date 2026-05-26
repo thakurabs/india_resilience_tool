@@ -2606,7 +2606,50 @@ in the structure used by Sections 1-8) are pending review in chat.
 
 ## 12. Sector-wise - Infrastructure Risk
 
-Pending review.
+The Infrastructure Risk lens methodology is documented in
+`docs/lens_scoring_methodology.md`, Section 9. It records a **methodology
+change** — the bundle's two rainfall rules (Rx1day, Rx5day), currently
+configured as abs + chg only in `config/proposal_bundles.py`, gain an impact
+lens. Infrastructure is the asset class for which threshold-design failures
+are the dominant climate harm pathway (IRC SP-13 / IRC 5 cross-drainage and
+bridge return-period design; CPHEEO municipal storm-drainage design); for
+threshold-anchored damage the impact lens (danger band) is the most directly
+meaningful of the three, so suppressing it would understate exactly the
+infrastructure-specific consequence pathway. The impact bands themselves are
+reused from Health Risk and Industrial Risk (the IMD daily rainfall band for
+Rx1day; the Section-4 self-derived band for Rx5day) — no new band derivation
+is required.
+
+The dossier covers the per-metric lens decisions (Rx1day, Rx5day, TXx) and
+the impact-band provenance — both external (IMD daily rainfall categories
+115.6-204.5 mm; IMD plains heatwave 40-45 deg C) and self-derived via the
+Section 4 protocol (Rx5day 250-500 mm low-confidence, anchored on derived
+IMD heavy-day cumulative + observed Indian catastrophic-event 5-day totals,
+same derivation as Industrial Risk Section 7.2). It also records the
+recommended rule weights (Rx1day 0.45 / Rx5day 0.30 / TXx 0.25, sum 1.0,
+coverage gate 0.70) with the weight-derivation recipe (sector-specific
+loss-burden evidence x band confidence x structural independence) and the
+two-cluster split (Rainfall 0.75 / Heat 0.25). The rainfall-heavier tilt
+relative to Industrial Risk (0.75 vs 0.40) is justified by Infrastructure
+lacking an equivalent of Industrial's continuous ILO labor-productivity
+heat dose-response — heat impacts on infrastructure are episodic operational
+restrictions and accelerated thermal fatigue, not continuous worker-hour
+losses.
+
+The dossier records the phantom-slug renames required by Section 4.7
+(CHG-0020 follow-up: `rx5day_ge_400` -> `rx5day_accumulated_pressure`;
+`rx1day_ge_200` and `txx_ge_45` are kept because their numeric tokens
+align with impact-band edges, same call as Industrial / Health).
+
+All impact bands are plains/national defaults; zone refinement is deferred
+(BL-0020). JRC flood-depth ingestion (BL-0023, shared with Industrial),
+coastal sea-level / cyclone exposure for coastal infrastructure (BL-0025,
+shared with Investment/Financial), asset-level pavement / transformer
+thermal-fatigue rule (BL-0027), river discharge / bridge-scour rule (BL-0028),
+and antecedent-rainfall / soil-moisture landslide-pressure rule (BL-0029) are
+recorded as Phase-2 deferrals. The remaining bundle-dossier subsections
+(12.1 onward, in the structure used by Sections 1-8) are pending review in
+chat.
 
 ## 13. Sector-wise - Asset Risk (Thermal Power Plants)
 

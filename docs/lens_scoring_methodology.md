@@ -15,7 +15,7 @@ Scope of this document:
   bundle. Health Risk (Section 6) is the worked template; the remaining sector
   bundles follow the same structure.
 - Extension of the lens machinery to the **thematic** bundles is deferred until
-  the sectoral bundles are complete (see Section 9).
+  the sectoral bundles are complete (see Section 10).
 
 Implementation references (current code):
 - Rule catalog: `india_resilience_tool/config/proposal_bundles.py`
@@ -1372,7 +1372,284 @@ is the financial-risk signal.
 
 ---
 
-## 9. Thematic Bundles — Deferred Extension
+## 9. Infrastructure Risk — Metric-by-Metric Lens Dossier
+
+Bundle: `Sector-wise - Infrastructure Risk` | composite slug:
+`composite_infrastructure_risk` | levels: district, block | scenarios: `ssp245`,
+`ssp585`.
+
+Conceptual scope: climate hazards most directly tied to **fixed infrastructure
+assets and their service continuity** — extreme rainfall (urban drainage and
+culvert overwhelm, bridge scour, embankment overtopping, slope failure) and
+extreme heat (rail buckling, pavement softening, transformer derating,
+transmission-line conductor sag, bridge expansion-joint stress). Per Section 1.2
+this is hazard pressure, not full infrastructure risk: it does not include
+asset-specific exposure (where roads, bridges, lines, drains sit), adaptive
+capacity (design-margin headroom, retrofit, redundancy), or vulnerability
+(maintenance backlog, age, criticality).
+
+### 9.0 Methodology change recorded
+
+This dossier proposes a **methodology change** for the bundle as currently
+configured in `config/proposal_bundles.py`: **add an impact lens to Rx1day and
+Rx5day**, which are currently abs + chg only. Infrastructure is the asset class
+for which threshold-design failures are the dominant climate harm pathway —
+roads, bridges, urban drainage, embankments, rail, transmission lines,
+transformers, and slope-stability works all have explicit design return-period
+thresholds (IRC, CPHEEO, IS, IRS standards). For threshold-anchored damage the
+impact lens (danger band) is the most directly meaningful of the three;
+suppressing it would understate exactly the infrastructure-specific consequence
+pathway. The bands themselves are reused from Health Risk and Industrial Risk
+(the IMD daily rainfall categorical band for Rx1day; the Section-4 self-derived
+band for Rx5day) — no new band derivation is required.
+
+The table summarizes the lens decision per metric; each subsection gives the
+reasoning and band provenance. Rule slugs marked "renamed from" reflect the
+CHG-0019 rename of phantom slugs (Section 4.7); the dossier presents the
+renamed slugs because the bands and labels now reflect the actual scoring math.
+
+| Rule (metric) | absolute | change | impact (band) | Rationale summary |
+|---|:--:|:--:|:--:|---|
+| Rx1day — 1-day rainfall (`pr_max_1day_precip`) | yes | yes | yes — external, 115.6-204.5 mm | IMD very-heavy / extremely-heavy categories; urban drainage and culvert overwhelm at design-threshold scale |
+| Rx5day — 5-day rainfall (`pr_max_5day_precip`) | yes | yes | yes — self-derived (low conf), 250-500 mm | Multi-day saturation regime; slope failure, embankment overtopping, bridge scour; no external 5-day categorical band exists |
+| TXx — extreme daytime heat (`txx_annual_max`) | yes | yes | yes — external, 40-45 deg C (plains) | Rail buckling, pavement softening, transformer derating, conductor sag; IMD plains heatwave envelope |
+
+### 9.1 Rx1day — One-day rainfall (`pr_max_1day_precip`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — methodology change).
+- **absolute:** Keep. Districts facing the most intense projected single-day
+  rainfall relative to peers (Rx1day, ETCCDI). The acute disruption signal —
+  a single very-heavy day overwhelms urban drainage capacity, washes out
+  culverts, inundates underpasses, and breaks road / rail logistics.
+- **change:** Keep. Intensifying one-day extremes vs the `1990-2010` baseline
+  matter because infrastructure design (drainage capacity, culvert sizing,
+  storm-water mains, bridge waterway openings) is fixed against historical
+  norms; rising one-day extremes erode the design margin. Mode: `relative_pct`
+  (precipitation change is conventionally multiplicative).
+- **impact:** **Add.** Band **115.6-204.5 mm/day**, **external provenance,
+  high confidence** — same band Health Risk (Section 6.4) and Industrial Risk
+  (Section 7.1) use. IMD daily rainfall classification: very heavy 115.6-204.4
+  mm, extremely heavy >= 204.5 mm.
+  - **Mechanism for infrastructure:** the IMD daily categorical band corresponds
+    to the regime in which Indian municipal and rural drainage infrastructure
+    is overwhelmed. CPHEEO *Manual on Storm Water Drainage* design intensities
+    for Indian municipalities typically translate to roughly **100-150 mm/day
+    of design capacity** depending on city tier and duration assumption; IRC
+    SP-13 (small bridges and culverts) and IRC 5 (general features of design)
+    use 25-year return-period flood design for typical road cross-drainage
+    works. The IMD very-heavy threshold 115.6 mm is roughly at the upper end
+    of typical municipal drainage capacity; the IMD extremely-heavy threshold
+    204.5 mm corresponds to the regime where even metro drainage is overtopped.
+  - **Empirical anchors.** Major Indian flood events that overwhelmed urban
+    drainage and infrastructure: Mumbai 2005 (944 mm/24 h, drainage failure
+    citywide); Chennai 2015 (494 mm/24 h, IT corridor inundation); Hyderabad
+    2020 (~190-300 mm/24 h across stations, mass road / underpass flooding);
+    Bengaluru 2022 (multi-week recurrent flooding from sub-extreme but
+    repeated heavy days). These events sit at and above the IMD
+    extremely-heavy threshold.
+  - **Why the same band as Health and Industrial:** the hazard *value*
+    threshold for drainage overwhelm does not change by sector receptor — it
+    is set by the rainfall intensity. Infrastructure, Health, and Industrial
+    differ in *consequence* (asset damage vs flood injury vs operational
+    shutdown), not in the rainfall amount that triggers failure of
+    urban / industrial drainage.
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 (mirrors
+  Health and Industrial — high-confidence external band lets the impact lens
+  carry meaningful share without dominating).
+
+### 9.2 Rx5day — Five-day rainfall (`pr_max_5day_precip`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — methodology change,
+  self-derived band).
+- **absolute:** Keep. Districts with the heaviest projected 5-day accumulated
+  rainfall relative to peers. Captures **basin-scale and saturation-regime**
+  pressure that a single-day extreme can miss — sustained multi-day rainfall
+  builds upstream runoff, saturates catchments, raises antecedent soil
+  moisture, and overwhelms regional drainage even when no single day reaches
+  the IMD very-heavy threshold.
+- **change:** Keep. Intensifying multi-day accumulations vs baseline. Mode:
+  `relative_pct`.
+- **impact:** **Add, self-derived band 250-500 mm/5 days, low confidence**
+  (Section 4 protocol — same derivation as Industrial Risk Section 7.2). **No
+  external categorical band exists at 5-day scale**: IMD publishes daily
+  rainfall categories only, CWC uses station-specific gauge danger levels
+  (not universal mm thresholds), IRC and CPHEEO design uses return-period
+  flood discharge rather than mm thresholds, and NDMA SOPs reference IMD daily
+  categories. The band is therefore derived rather than borrowed.
+  - **Mechanism for infrastructure:** sustained multi-day rainfall produces
+    catchment saturation, raised antecedent soil moisture, slope failures
+    along cuttings and embankments, bridge-pier and bridge-abutment scour
+    from prolonged high discharges, and embankment overtopping along
+    flood-protection works. These pathways are **structurally distinct from
+    Rx1day** — slope failure and embankment scour are saturation-driven,
+    not single-storm-intensity-driven.
+  - **Anchors:**
+    - Five consecutive IMD "heavy" days (>= 64.5 mm/day per IMD daily
+      classification) sum to **>= 322 mm** — onset of sustained heavy-rain
+      regime; **250 mm** is a conservative floor capturing the onset of
+      plausible saturation-driven infrastructure failure.
+    - Observed Indian catastrophic-event 5-day cumulative magnitudes anchor
+      the saturation point: Kerala 2018 (cumulative ~350-400 mm over 3 days
+      regionally, with widespread slope failure, bridge washouts, and
+      reservoir overspill); Uttarakhand 2013 (multi-day pre-saturation
+      enabled the cloudburst event's downstream slope-failure damage);
+      Chuphal et al. 2025 attribute 2024 India major flood events to 3-day
+      return periods of **>75 to >200 years** — confirming the **500 mm /
+      5-day** regime is statistically extreme and operationally catastrophic.
+  - **Cut points:** onset **250 mm** (plausible saturation-driven
+    infrastructure failure regime); saturation **500 mm** (regional
+    flood-catastrophe regime).
+  - **Confidence: low.** Anchored only on derivation (IMD daily category × 5)
+    and observed disaster magnitudes; no institutional categorical band
+    exists at 5-day scale. The 5-day signal partially overlaps Rx1day (high
+    1-day events often dominate 5-day totals), so the rule's bundle weight is
+    also smaller than Rx1day's.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 — small
+  within-rule impact weight because the band is self-derived and low
+  confidence (Section 4.3). The persistence signal is carried mainly by
+  absolute and change.
+
+### 9.3 TXx — Extreme daytime heat (`txx_annual_max`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes).
+- **absolute:** Keep. Same definition as in Health (Section 6.1) and
+  Industrial (Section 7.4). Districts facing the most extreme projected
+  daytime heat relative to peers.
+- **change:** Keep. Warming daytime extremes vs the `1990-2010` baseline
+  matter to infrastructure because assets (rail, pavement, transformers,
+  transmission lines, bridge expansion joints) are sized against historical
+  extremes. Mode: `absolute_delta` (degrees).
+- **impact:** Keep. Band **40-45 deg C**, **external provenance, high
+  confidence** — same IMD plains heatwave band as Health (Section 6.1) and
+  Industrial (Section 7.4).
+  - **Infrastructure harm pathways through the same dry-bulb band:**
+    - **Rail buckling.** Indian Railways operational guidance restricts
+      train speeds when rail temperatures exceed approximately 65 deg C
+      (which corresponds to ambient ~45 deg C under typical solar loading).
+      Speed restrictions cascade into network-wide schedule disruption.
+    - **Pavement softening / rutting.** Bituminous pavement begins to soften
+      above ~50 deg C surface temperature; ambient ~45 deg C with direct
+      insolation produces such surface temperatures, accelerating rutting on
+      heavily-trafficked corridors.
+    - **Transformer derating and conductor sag.** IEEE / IEC transformer
+      thermal-life standards halve insulation life per +6-10 deg C above
+      design ambient; transmission conductors above ~45 deg C ambient sag
+      enough to violate statutory clearance, forcing partial-load operation
+      or local outages.
+    - **Bridge expansion-joint stress** from diurnal thermal cycling on the
+      largest-extreme days.
+  - **Why the IMD heatwave band rather than asset-specific thermal-fatigue
+    or WBGT bands:** the IRT's TXx is a dry-bulb annual maximum, and the
+    IMD heatwave definition is the nationally-recognized plains threshold
+    for that regime. Asset-specific thermal-fatigue indicators (diurnal
+    range, thermal-cycle counts) would require additional source metrics
+    and are deferred (BL-0027). For Phase-1, the IMD plains band is the
+    consistent, defensible band shared across Health, Industrial, and
+    Infrastructure bundles.
+  - **Zone caveat:** plains/national default (Section 4.9, BL-0020).
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 — mirrors
+  Health Risk's and Industrial Risk's TXx (high-confidence external band).
+
+### 9.4 Infrastructure Risk — bundle assembly notes
+
+**Rule weights (explicit, sum to 1.0).** Weighting is an evidence-informed
+expert elicitation, not a derived constant; the recommended default reflects
+the relative infrastructure-sector climate burden in India and is recorded as
+a revisable assumption.
+
+| Cluster | Cluster weight | Rule | Rule weight | Why |
+|---|---:|---|---:|---|
+| Rainfall (acute) | 0.75 | Rx1day (1-day rainfall) | 0.45 | High-confidence IMD band; direct urban-drainage / culvert / underpass failure pathway; major-event losses ($1-5B per event: Mumbai 2005 ~$3B, Chennai 2015 ~$1.3B, Kerala 2018 ~$3.5B; annual avg ~$7.4B mostly infrastructure) |
+| Rainfall (multi-day) | 0.75 | Rx5day (5-day rainfall) | 0.30 | Low-confidence self-derived band; partially overlaps Rx1day but captures the structurally distinct slope-failure / embankment-overtopping / bridge-scour pathway |
+| Heat | 0.25 | TXx (extreme heat) | 0.25 | High-confidence IMD plains heatwave band; rail-buckling speed restrictions, pavement rutting, transformer derating, conductor sag — real but episodic, smaller documented direct-loss magnitudes than flood events |
+
+**How these weights were derived.** Same two-stage elicitation as Health,
+Industrial, and Investment/Financial: **rule_weight reflects (sector-specific
+loss-burden evidence) x (band confidence) x (structural independence)**.
+
+1. **Cluster split first (rainfall vs heat).** The bundle's three metrics fall
+   into two hazard clusters — rainfall (Rx1day, Rx5day) and heat (TXx).
+   - **Rainfall 0.75** — Indian infrastructure losses are dominated by acute
+     flood events. Major-event direct losses: Mumbai 2005 ~$3B, Chennai 2015
+     ~$1.3B, Kerala 2018 ~$3.5B, Uttarakhand 2013 ~$1B+; annual average
+     flood losses ~$7.4B, projected to grow ~6x by 2070 (Swiss Re / World
+     Bank reinsurance loss accounting). The bulk of these reported figures
+     are **infrastructure damage and reconstruction**, not industrial
+     productivity. Rainfall pressure is therefore by far the largest
+     climate-driven loss category for Indian infrastructure.
+   - **Heat 0.25** — Heat affects rail, transmission, pavement, transformers.
+     Real but with smaller documented direct loss magnitudes than flood
+     events. Unlike Industrial Risk, Infrastructure does **not** carry the
+     continuous ILO labor-productivity dose-response (workers are not the
+     asset receptor); heat impacts here are episodic operational restrictions
+     and accelerated thermal fatigue.
+   - **Why higher rainfall share than Industrial Risk (0.75 vs 0.40):**
+     Industrial Risk's 0.40 rainfall share reflected that Industrial also
+     carries the ILO continuous heat-productivity pressure
+     (~5.8% working-hours loss by 2030, ~34M full-time jobs equivalent).
+     Infrastructure has no comparable continuous-heat dose-response, so its
+     cluster split naturally tilts further toward rainfall.
+   The 0.75 / 0.25 split is the single most consequential judgment and the
+   main lever for revision.
+
+2. **Within-cluster split by band confidence and structural independence.**
+   - Rainfall: Rx1day (0.45) > Rx5day (0.30). Rx1day has a high-confidence
+     IMD categorical band and the strongest direct disruption association at
+     the acute scale (urban drainage, culverts). Rx5day's band is
+     self-derived (low confidence) and partially overlaps Rx1day (multi-day
+     extremes are often dominated by a single day) but captures the
+     structurally distinct slope-stability / embankment-overtopping /
+     bridge-scour pathway, so it carries a non-trivial-but-smaller share.
+   - Heat: TXx alone (0.25). Only one heat rule; asset-specific
+     thermal-fatigue refinement deferred (BL-0027).
+
+3. **Sanity checks.** Weights are positive, sum to 1.0, no single rule
+   dominates (max 0.45 for Rx1day, justified by the dominant flood-loss
+   evidence). Low-confidence Rx5day (within-rule impact 0.15) carries the
+   smallest impact weight; high-confidence external-band rules (Rx1day, TXx)
+   carry the standard 0.35 within-rule impact weight.
+
+These weights are revisable expert assumptions, not derived constants; any
+change is a methodology change to be recorded and tested.
+
+**Per-lens weights within each rule** (absolute / change / impact) are
+recorded in `config/proposal_bundles.py` after the CHG-0020 reshape and shown
+per metric in Sections 9.1-9.3. The high-confidence external-band rules
+(TXx, Rx1day) use **0.40 / 0.25 / 0.35**; the low-confidence self-derived
+Rx5day uses **0.45 / 0.40 / 0.15**, deliberately giving the weak impact band
+a small share so it cannot dominate the rule (Section 4.3).
+
+- **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
+  (Section 5.3) — matching Health, Industrial, Investment/Financial, and
+  Agricultural.
+- **Source masters:** all three source metrics must resolve to grid-first
+  district/block masters (compute the index per grid cell, then area-weight
+  to the polygon), consistent with the spatial-aggregation recommendation in
+  `docs/bundle_calculation_audit.md`. TXx and Rx1day already route through
+  grid-first paths; Rx5day needs verification (likely the same path but not
+  confirmed for this bundle).
+- **Phantom-slug renames (CHG-0019):** the dossier presents the renamed slugs.
+  `rx1day_ge_200` is **kept** because "200" sits inside the proposed IMD band
+  (≈ IMD extremely-heavy >= 204.5 mm) — same call as Industrial Risk Section
+  7.1; `rx5day_ge_400` is **renamed to** `rx5day_accumulated_pressure`
+  because 400 mm is not the impact-band low or high (250-500 mm) — phantom
+  number, same rename pattern as Industrial; `txx_ge_45` is **kept** because
+  45 deg C is the upper edge of the impact band 40-45 deg C — same call as
+  Health and Industrial. Migration is a data-contract change tracked
+  separately under CHG-0020.
+- **Deferred refinements:** JRC global flood-depth ingestion for direct
+  flood-pressure measurement (BL-0023, shared with Industrial); coastal
+  sea-level / cyclone wind & storm-surge exposure for coastal infrastructure
+  (BL-0025, shared with Investment/Financial); asset-level pavement /
+  transformer thermal-fatigue rule using diurnal range and thermal-cycle
+  counts (BL-0027); river discharge / bridge-scour rule from CWC station
+  discharge or modeled streamflow (BL-0028); antecedent-rainfall /
+  soil-moisture index for slope-stability landslide pressure (BL-0029). All
+  five are Phase-2 additions, not Phase-1 corrections.
+
+---
+
+## 10. Thematic Bundles — Deferred Extension
 
 The lens machinery is intended to extend to the thematic bundles (Heat Risk,
 Drought Risk, Extreme Rainfall, Riverine Flood, Heat Stress, Cold Risk), where
@@ -1390,7 +1667,7 @@ separately-tested methodology change with the science owner.
 
 ---
 
-## 10. References (consolidated)
+## 11. References (consolidated)
 
 1. OECD & Joint Research Centre (2008). *Handbook on Constructing Composite
    Indicators: Methodology and User Guide.* OECD Publishing, Paris.
@@ -1480,3 +1757,22 @@ separately-tested methodology change with the science owner.
     in potential income / ~247B labour-hours nationally; peak national power
     demand record 270.82 GW on 21 May 2025. (Empirical anchors for HWFI
     financial materiality in Section 8.5.)
+25. Central Public Health and Environmental Engineering Organisation
+    (CPHEEO), Ministry of Housing and Urban Affairs — *Manual on Storm Water
+    Drainage Systems.* (Indian municipal storm-drainage design intensities;
+    typical municipal capacity ~100-150 mm/day depending on city tier and
+    duration assumption. Anchors the Infrastructure Risk Rx1day band
+    interpretation in Section 9.1.)
+26. Indian Roads Congress — *IRC SP-13: Guidelines for the Design of Small
+    Bridges and Culverts* and *IRC 5: Standard Specifications and Code of
+    Practice for Road Bridges, Section I — General Features of Design.*
+    (Indian road cross-drainage works are designed for 25-year return-period
+    floods; embankment and bridge waterway works follow higher return-period
+    criteria. Anchors the threshold-design rationale for Infrastructure
+    Risk Section 9.0.)
+27. Indian Railways — operational guidance on rail temperature and
+    heat-related speed restrictions; rail temperature typically exceeds
+    ambient by ~15-20 deg C under solar loading, with speed restrictions
+    triggered around 65 deg C rail temperature (≈ 45 deg C ambient).
+    (Empirical anchor for the rail-buckling pathway in Infrastructure Risk
+    Section 9.3.)
