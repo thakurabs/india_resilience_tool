@@ -44,7 +44,7 @@ from india_resilience_tool.compute.proposal_bundles import (
     _weighted_component_score,
 )
 from india_resilience_tool.config.metrics_registry import METRICS_BY_SLUG
-from india_resilience_tool.config.paths import get_paths_config
+from india_resilience_tool.config.paths import get_paths_config, resolve_processed_root
 from india_resilience_tool.config.proposal_bundles import (
     PROPOSAL_BUNDLES_BY_SLUG,
     ProposalRuleSpec,
@@ -59,6 +59,7 @@ from india_resilience_tool.data.master_columns import (
 BUNDLE_SLUG = "composite_health_risk"
 RULE_SLUG = "txx_ge_45"
 GRID_FIRST_VERSION_PREFIXES = ("heat-risk-v2-gridfirst",)
+YEARLY_FILE_GLOB = "*/*/*/*yearly*.csv"
 
 
 def _resolve_rule(rule_slug: str) -> ProposalRuleSpec:
@@ -91,6 +92,42 @@ def _read_source_metadata(source_frame: pd.DataFrame) -> dict[str, str]:
         else:
             meta[col] = "<column absent>"
     return meta
+
+
+def _probe_yearly_provenance(
+    *, metric_slug: str, state_name: str, data_dir: Path
+) -> tuple[Optional[Path], dict[str, str]]:
+    """Find one per-model yearly CSV under processed/<slug>/<state>/ and read its stamps.
+
+    Returns ``(sample_path, {method_version, aggregation_method})``. Master files drop
+    those columns, so this is the canonical place to verify grid-first provenance.
+    Returns ``(None, {...: '<no yearly file found>'})`` if no candidate exists.
+    """
+    state_root = resolve_processed_root(metric_slug, data_dir=data_dir, mode="portfolio") / state_name
+    if not state_root.exists():
+        return None, {
+            "method_version": "<state root missing>",
+            "aggregation_method": "<state root missing>",
+        }
+    # Pattern: <DISTRICT>/<MODEL>/<scenario>/<file>_yearly.csv
+    sample: Optional[Path] = None
+    for candidate in state_root.glob(YEARLY_FILE_GLOB):
+        if candidate.is_file():
+            sample = candidate
+            break
+    if sample is None:
+        return None, {
+            "method_version": "<no yearly file found>",
+            "aggregation_method": "<no yearly file found>",
+        }
+    try:
+        df = pd.read_csv(sample, nrows=2000)
+    except Exception as exc:
+        return sample, {
+            "method_version": f"<read failed: {exc!r}>",
+            "aggregation_method": "<read failed>",
+        }
+    return sample, _read_source_metadata(df)
 
 
 def _impact_position(value: float, low: float, high: float) -> str:
@@ -155,9 +192,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         preferred_period_tokens=BASELINE_TOKENS,
     )
 
-    source_meta = _read_source_metadata(source_frame)
-    method_version = source_meta.get("method_version", "<missing>")
-    grid_first = any(method_version.startswith(prefix) for prefix in GRID_FIRST_VERSION_PREFIXES)
+    master_meta = _read_source_metadata(source_frame)
+    yearly_sample, yearly_meta = _probe_yearly_provenance(
+        metric_slug=rule.metric_slug, state_name=args.state, data_dir=data_dir
+    )
+    yearly_method_version = yearly_meta.get("method_version", "<missing>")
+    grid_first = any(
+        yearly_method_version.startswith(prefix) for prefix in GRID_FIRST_VERSION_PREFIXES
+    )
 
     print("=" * 80)
     print(f"Health Risk TXx lens demo  ({BUNDLE_SLUG} / rule {RULE_SLUG})")
@@ -175,12 +217,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     print(f"  rule weight      : {rule.rule_weight:.3f}")
     print()
-    print("Source master metadata:")
-    for col, value in source_meta.items():
+    print("Provenance (master_builder drops these columns; canonical source is yearly CSV):")
+    print(f"  yearly sample    : {yearly_sample or '<none found>'}")
+    for col in ("method_version", "aggregation_method"):
         marker = ""
         if col == "method_version":
-            marker = "  [GRID-FIRST OK]" if grid_first else "  [NOT GRID-FIRST: verify aggregation]"
-        print(f"  {col:>20}: {value}{marker}")
+            marker = "  [GRID-FIRST OK]" if grid_first else "  [NOT GRID-FIRST or unverifiable]"
+        print(f"  yearly  {col:>17}: {yearly_meta.get(col, '<missing>')}{marker}")
+        print(f"  master  {col:>17}: {master_meta.get(col, '<missing>')}")
     print()
 
     # Recompute lens components using the same helpers the bundle builder uses.
@@ -300,10 +344,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not grid_first:
         print()
         print(
-            "WARNING: source method_version does not start with "
-            f"{GRID_FIRST_VERSION_PREFIXES!r}. The values above came from the "
-            "legacy polygon-average path. Rebuild the TXx master via the "
-            "grid-first pipeline before treating these scores as final."
+            "WARNING: could not confirm grid-first provenance. yearly method_version "
+            f"= {yearly_method_version!r}, expected prefix in {GRID_FIRST_VERSION_PREFIXES!r}. "
+            "If the yearly file was not found, the existing master may still be grid-first; "
+            "re-check by inspecting an actual yearly CSV under "
+            f"processed/{rule.metric_slug}/{args.state}/<DISTRICT>/<MODEL>/<scenario>/."
         )
         return 2
     return 0
