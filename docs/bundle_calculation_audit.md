@@ -2705,7 +2705,69 @@ bundle-dossier subsections (13.1 onward, in the structure used by Sections
 
 ## 14. Sector-wise - Asset Risk (Hydropower Plants)
 
-Pending review.
+The Asset Risk (Hydropower Plants) lens methodology is documented in
+`docs/lens_scoring_methodology.md`, Section 11. It records **three
+methodology changes** vs the bundle as currently configured in
+`config/proposal_bundles.py`: an impact lens is added to Rx5day (same
+self-derived 250-500 mm/5 day band as Industrial Section 7.2 and
+Infrastructure Section 9.2, low confidence); an impact lens is added to CDD
+(same IMD-Agricultural-Drought-anchored 30-90 day band as Industrial
+Section 7.3 and Thermal Section 10.1, medium confidence); and a change lens
+is added to R95p interannual variability (currently `chg=0`) to capture
+whether extreme-rainfall variability is rising vs baseline (IPCC AR6 WG1
+Chapter 8 documents intensifying Indian monsoon extreme-rainfall variability
+under warming). The dossier also makes an **honest no-impact-lens call for
+R95p interannual variability** (same rationale as Investment/Financial
+Section 8.3 for R99p and Thermal Section 10.3 for SPI-3): no institutional
+band exists on year-to-year sigma of an extreme-precip statistic, and a
+self-derived band would be triply derived (sigma of sums above a
+percentile).
+
+The dossier covers the per-metric lens decisions (Rx5day, CDD, R95p
+interannual variability) and the impact-band provenance — all self-derived
+via the Section 4 protocol; no external band is used. It also records the
+recommended rule weights (Rx5day 0.45 / CDD 0.35 / R95p-iv 0.20, sum 1.0,
+coverage gate 0.70) with the weight-derivation recipe (sector-specific
+loss-burden evidence x band confidence x structural independence) and the
+two-cluster split (Flood/storm 0.65 / Drought 0.35). The flood/storm tilt
+is justified by Indian hydropower asset-destruction evidence concentrated
+in extreme-rainfall / cloudburst / GLOF events: Uttarakhand 2013 (multi-GW
+losses, >$1B hydro asset damage); Chamoli 2021 (Rishiganga destroyed,
+Tapovan-Vishnugad damaged); Sikkim Teesta-III 2023 (1200 MW destroyed by
+South Lhonak GLOF, ~$1.2B asset loss). Drought-induced generation deficits
+(2015-16, 2018-19 monsoon failures, ~10-15 % peninsular hydro drop) are
+real but reversible — not asset-destruction — and justify the smaller
+drought cluster.
+
+The dossier flags the **largest methodology gap** in the bundle: Rx5day is
+a precipitation metric that partially proxies for cloudburst pathways but
+does not capture GLOF (glacial-lake-outburst) dynamics or moraine
+stability, both of which require glacier-mass-balance and lake-volume data.
+Sikkim Teesta-III 2023 was a GLOF event not directly attributable to
+Rx5day. This gap is recorded as BL-0034 (deferred, Phase-2).
+
+The dossier records the phantom-slug renames required by Section 4.7
+(CHG-0024 follow-up: `rx5day_ge_500` -> `rx5day_accumulated_pressure` —
+canonical slug shared with Industrial Section 7.2 and Infrastructure Section
+9.2; `cdd_ge_60` -> `cdd_water_stress_pressure` — canonical slug shared
+with Industrial Section 7.3 and Thermal Section 10.1;
+`r95p_interannual_variability_norm` -> `r95p_interannual_variability` —
+cosmetic cleanup of `_norm` suffix). The `r95p_interannual_variability`
+metric also uses `helper_master` source mode; **the computation pipeline
+provenance (grid-first vs polygon-first; sigma vs CV definition) must be
+confirmed before production adoption**, also tracked under CHG-0024.
+
+All impact bands are plains/national defaults; zone refinement is deferred
+(BL-0020). GLOF / glacier-mass-balance hazard rule for Himalayan
+hydropower (BL-0034 — new); catchment sediment-yield rule using
+extreme-rainfall accumulation x topography x erodibility (BL-0035 — new);
+SPI-6 / SPI-12 longer-window rainfall regime metric for hydropower
+seasonal-flow assessment (BL-0036 — new); modeled streamflow / catchment-
+hydrology rule for direct flow-regime assessment (BL-0037 — new; concept
+shared with Thermal BL-0031); JRC global flood-depth ingestion (BL-0023,
+shared with Industrial / Infrastructure). All five are Phase-2 additions,
+not Phase-1 corrections. The remaining bundle-dossier subsections (14.1
+onward, in the structure used by Sections 1-8) are pending review in chat.
 
 ## 15. Sector-wise - Life & Livelihood Loss Risk
 

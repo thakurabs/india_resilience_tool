@@ -15,7 +15,7 @@ Scope of this document:
   bundle. Health Risk (Section 6) is the worked template; the remaining sector
   bundles follow the same structure.
 - Extension of the lens machinery to the **thematic** bundles is deferred until
-  the sectoral bundles are complete (see Section 11).
+  the sectoral bundles are complete (see Section 12).
 
 Implementation references (current code):
 - Rule catalog: `india_resilience_tool/config/proposal_bundles.py`
@@ -1938,7 +1938,301 @@ uses **0.40 / 0.30 / 0.30**; the no-impact-lens regime metric SPI-3 uses
 
 ---
 
-## 11. Thematic Bundles — Deferred Extension
+## 11. Asset Risk (Hydropower Plants) — Metric-by-Metric Lens Dossier
+
+Bundle: `Sector-wise - Asset Risk (Hydropower Plants)` | composite slug:
+`composite_asset_risk_hydropower` | levels: district, block | scenarios:
+`ssp245`, `ssp585`.
+
+Conceptual scope: climate hazards most directly tied to **hydropower
+generation assets, their catchment hydrology, and their flow regime** —
+multi-day extreme rainfall (spillway demands, dam-safety operations,
+catchment sediment loading, cloudburst-driven asset destruction), prolonged
+dry spells (reservoir-inflow deficit, generation curtailment), and
+extreme-rainfall regime variability (operational predictability). Per
+Section 1.2 this is hazard pressure, not full hydro-asset risk: it does not
+include plant-specific exposure (Himalayan vs Western Ghats vs Peninsular
+siting, glacier-fed vs monsoon-fed), adaptive capacity (storage size,
+spillway over-capacity, dam-safety surveillance), or vulnerability (financial
+buffer, age of civil works, regulatory mandates).
+
+The Indian hydropower fleet (~52 GW large hydro) is heavily concentrated in
+the Himalayan belt (Indus, Ganga, Brahmaputra basins) and the Western Ghats
+plus Peninsular rivers (Krishna, Godavari, Cauvery). The dominant documented
+climate-loss events for Indian hydropower are **catastrophic extreme-rainfall
+/ cloudburst / GLOF events**: Uttarakhand 2013 (Vishnuprayag, Srinagar, and
+multiple Alaknanda plants damaged or destroyed; multi-GW affected; >$1B in
+hydro asset damage); Chamoli 2021 (Rishiganga 13.2 MW destroyed,
+Tapovan-Vishnugad 520 MW damaged); Sikkim Teesta-III 2023 (1200 MW
+destroyed by South Lhonak GLOF, ~$1.2B asset loss). Drought-induced
+generation deficits (2015-16, 2018-19 monsoon failures, ~10-15 % peninsular
+hydro drop) are real but reversible and not an asset-destruction pathway.
+
+### 11.0 Methodology change recorded
+
+This dossier proposes **three methodology changes** for the bundle as
+currently configured in `config/proposal_bundles.py`:
+
+1. **Add an impact lens to Rx5day.** Same self-derived 250-500 mm/5 day
+   band already adopted for Industrial Section 7.2 and Infrastructure
+   Section 9.2 — low confidence, no new derivation. Hydropower-relevant
+   mechanisms (storm spillway demands, dam-safety operations, sediment
+   loading, cloudburst-driven asset destruction) all activate in the same
+   multi-day saturation regime.
+2. **Add an impact lens to CDD.** Same IMD-Agricultural-Drought-anchored
+   30-90 day band already adopted for Industrial Section 7.3 and Thermal
+   Section 10.1 — medium confidence, derivation reuses an existing
+   institutional anchor.
+3. **Add a change lens to R95p interannual variability** (currently
+   `chg=0`). The chg signal captures whether extreme-rainfall variability is
+   *rising vs baseline*, which is documented as a climate-change response of
+   the Indian monsoon (IPCC AR6 WG1 Chapter 8). Caveat: small sample sizes
+   per period (~20 years) make variance-of-variability noisy — within-rule
+   weight on the chg lens is correspondingly modest (0.30), and the rule
+   itself carries only 0.20 bundle weight.
+
+The dossier also makes an **honest no-impact-lens call for R95p interannual
+variability** — same rationale as Investment/Financial Section 8.3 for R99p
+and Thermal Section 10.3 for SPI-3: regime / variability metrics have no
+defensible institutional band on year-to-year sigma of an extreme-precip
+statistic. Inventing a self-derived band would be triply derived (sigma of
+sums above a percentile). Drop the impact lens.
+
+The table summarizes the lens decision per metric; each subsection gives the
+reasoning and band provenance. Rule slugs marked "renamed from" reflect the
+CHG-0023 rename of phantom slugs (Section 4.7); the dossier presents the
+renamed slugs because the bands and labels now reflect the actual scoring
+math.
+
+| Rule (metric) | absolute | change | impact (band) | Rationale summary |
+|---|:--:|:--:|:--:|---|
+| Rx5day — 5-day rainfall (`pr_max_5day_precip`) | yes | yes | yes — self-derived (low conf), 250-500 mm | Spillway demands, sediment loading, cloudburst-driven asset destruction; no external 5-day categorical band exists |
+| CDD — consecutive dry days (`pr_consecutive_dry_days_lt1mm`) | yes | yes | yes — self-derived (med conf, IMD-anchored), 30-90 days | Drought-induced low-flow generation deficit; same IMD Agricultural Drought anchor as Industrial / Thermal |
+| R95p interannual variability (`r95p_interannual_variability`) | yes | yes | **no** — drop | Operational-predictability regime metric; no defensible institutional band on interannual sigma of an extreme-precip statistic |
+
+### 11.1 Rx5day — Five-day rainfall (`pr_max_5day_precip`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — methodology
+  change, self-derived band).
+- **absolute:** Keep. Districts with the heaviest projected 5-day
+  accumulated rainfall relative to peers. For hydropower the multi-day
+  signal is the **operationally relevant** scale: catchment-saturation runoff
+  drives reservoir inflow surges, spillway operations, and sediment
+  mobilization.
+- **change:** Keep. Intensifying multi-day accumulations vs the `1990-2010`
+  baseline shift hydropower operating envelopes beyond design assumptions.
+  Mode: `relative_pct`.
+- **impact:** **Add, self-derived band 250-500 mm/5 days, low confidence**
+  (Section 4 protocol — same derivation as Industrial Section 7.2 and
+  Infrastructure Section 9.2). No external categorical band exists at 5-day
+  scale.
+  - **Mechanism for hydropower assets:**
+    - **Spillway demands and dam-safety operations.** Sustained 5-day
+      rainfall events test reservoir flood-routing design and force
+      precautionary releases / dam-safety operations.
+    - **Catchment sediment loading.** Extreme multi-day rainfall mobilizes
+      catchment sediment that accumulates in reservoirs, reducing live
+      storage and accelerating turbine erosion.
+    - **Asset-destruction events.** The catastrophic Indian hydropower
+      losses concentrate in extreme-rainfall / cloudburst / GLOF events
+      (Uttarakhand 2013 multi-GW losses; Chamoli 2021 Rishiganga / Tapovan-
+      Vishnugad; Sikkim Teesta-III 2023 GLOF — 1200 MW destroyed).
+  - **Caveat on Rx5day as a proxy for asset destruction.** Rx5day is a
+    precipitation metric — it partially proxies for cloudburst pathways but
+    does **not** capture GLOF (glacial-lake-outburst) dynamics or moraine
+    stability, which require glacier-mass-balance and lake-volume data.
+    The largest methodology gap in this bundle and is flagged as a deferred
+    refinement (BL-0034).
+  - **Anchors:** identical to Industrial Section 7.2 — five consecutive IMD
+    "heavy" days (>= 64.5 mm/day) sum to >= 322 mm; observed Indian
+    catastrophic-event 5-day cumulative magnitudes (Kerala 2018 ~350-400 mm
+    over 3 days regionally; Chuphal et al. 2025 attributes 2024 India major
+    flood events to 3-day return periods >75-200 years).
+  - **Cut points:** onset **250 mm**, saturation **500 mm**.
+  - **Confidence: low.** No institutional 5-day categorical band exists.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 — mirrors
+  Industrial Section 7.2 and Infrastructure Section 9.2 (low-confidence
+  self-derived band).
+
+### 11.2 CDD — Consecutive dry days (`pr_consecutive_dry_days_lt1mm`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — methodology
+  change, IMD-anchored).
+- **absolute:** Keep. Districts with the longest projected continuous dry
+  spells relative to peers. Drought-induced low-flow pathway: prolonged
+  dry spell -> reduced precipitation -> reduced runoff -> reduced reservoir
+  inflow -> reduced generation.
+- **change:** Keep. Lengthening dry spells vs baseline shift hydropower
+  operating envelopes. Mode: `relative_pct`.
+- **impact:** **Add, self-derived band 30-90 days, medium confidence**
+  (Section 4 protocol — same derivation as Industrial Section 7.3 and
+  Thermal Section 10.1). IMD-anchored onset raises confidence above purely
+  self-derived bands.
+  - **Mechanism for hydropower:** prolonged dry-spell -> reduced runoff ->
+    reservoir-inflow deficit -> generation curtailment. Empirical anchors:
+    2015-16 and 2018-19 monsoon failures caused ~10-15 % peninsular hydro
+    generation drops. **Reversible** (returns when monsoon returns), not an
+    asset-destruction pathway, but operationally significant.
+  - **Anchors:** identical to Industrial Section 7.3 — IMD Agricultural
+    Drought (4 consecutive Drought Weeks ≈ 28 days, rounded to 30) anchors
+    onset; ¾-monsoon (90 day) saturation captures monsoon-failure / severe-
+    drought regime.
+  - **Cut points:** onset **30 days**, saturation **90 days**.
+  - **Confidence: medium.** IMD-anchored onset; reasoned saturation.
+  - **Local mediation caveat:** hydropower flow regime depends on
+    **cumulative seasonal rainfall** (more naturally a 6-month or 12-month
+    SPI signal) and **reservoir-storage characteristics**, not just acute
+    continuous dry spells. CDD is a partial proxy; a longer-window
+    rainfall-regime metric (SPI-6 / SPI-12) would be more directly aligned
+    with hydropower seasonal-flow assessment (deferred — BL-0036). Modeled
+    streamflow would be the ideal signal (deferred — BL-0037).
+- **Per-lens weights:** absolute 0.40 / change 0.30 / impact 0.30 — mirrors
+  Industrial Section 7.3 and Thermal Section 10.1 (medium-confidence
+  IMD-anchored band).
+
+### 11.3 R95p interannual variability (`r95p_interannual_variability`)
+
+- **Lenses:** absolute (yes), change (yes — methodology change), impact
+  (**no** — explicitly dropped).
+- **Source metric.** R95p (ETCCDI) is the annual sum of precipitation on
+  days exceeding the baseline 95th percentile. The "interannual variability"
+  derivative is the year-to-year variation of R95p across the period
+  (sigma or CV) — produced via the `helper_master` source mode, not the
+  standard grid-first ETCCDI pipeline. **Source-pipeline provenance must be
+  confirmed before production adoption** (CHG-0024 follow-up): grid-first
+  vs polygon-first computation; sigma vs CV definition.
+- **Why this metric matters for hydropower.** Operational predictability:
+  a hydropower facility designed against historical extreme-rainfall
+  variability faces operational risk when that variability widens —
+  spillway operations triggered more frequently, sediment events more
+  irregular, reservoir-management heuristics less reliable. IPCC AR6 WG1
+  Chapter 8 documents intensifying Indian monsoon extreme-rainfall
+  variability under warming.
+- **absolute:** Keep. Districts with the most-variable projected
+  extreme-rainfall regime relative to peers — peer-relative screening of
+  R95p interannual sigma.
+- **change:** **Add.** Whether interannual variability is rising vs
+  baseline. Caveat: small sample sizes per period (~20 years) make
+  variance-of-variability noisy; within-rule weight on chg is correspondingly
+  modest (0.30). Mode: `relative_pct`.
+- **impact:** **No — drop.** Honest no-band call. Same rationale as
+  Investment/Financial Section 8.3 (R99p) and Thermal Section 10.3 (SPI-3):
+  no institutional band exists on year-to-year sigma of an extreme-precip
+  statistic. Inventing a self-derived band would be triply derived
+  (sigma of sums above a percentile) and is dropped.
+- **Why this metric is included anyway:** captures the structurally
+  distinct **operational-predictability** signal that Rx5day (acute) and
+  CDD (drought) do not — a district could have moderate single-event
+  extremes but highly variable year-to-year R95p, indicating a less
+  predictable operating environment.
+- **Per-lens weights:** absolute 0.70 / change 0.30 / impact 0.00 — mirrors
+  Investment/Financial Section 8.3 (R99p) and Thermal Section 10.3 (SPI-3)
+  (no-impact-lens regime metric).
+
+### 11.4 Asset Risk (Hydropower Plants) — bundle assembly notes
+
+**Rule weights (explicit, sum to 1.0).** Weighting is an evidence-informed
+expert elicitation, not a derived constant; the recommended default reflects
+the relative hydropower-asset climate burden in India and is recorded as a
+revisable assumption.
+
+| Cluster | Cluster weight | Rule | Rule weight | Why |
+|---|---:|---|---:|---|
+| Flood / storm (acute) | 0.65 | Rx5day (5-day rainfall) | 0.45 | Low-confidence self-derived band but only rule with both impact lens *and* documented catastrophic-loss pathway (Uttarakhand 2013, Chamoli 2021, Sikkim Teesta-III 2023); partial proxy for GLOF (gap deferred to BL-0034) |
+| Flood / storm (regime) | 0.65 | R95p interannual variability | 0.20 | No impact band (regime / proxy metric); captures operational-predictability signal distinct from Rx5day acute; lower evidence base; smaller share |
+| Drought | 0.35 | CDD (consecutive dry days) | 0.35 | Medium-confidence IMD-anchored band; reversible generation-deficit pathway (2015-16, 2018-19 monsoon failures ~10-15 % peninsular hydro drop); not asset-destruction |
+
+**How these weights were derived.** Same two-stage elicitation as Health,
+Industrial, Investment/Financial, Infrastructure, and Thermal:
+**rule_weight reflects (sector-specific loss-burden evidence) x (band
+confidence) x (structural independence)**.
+
+1. **Cluster split first (flood/storm vs drought).**
+   - **Flood/storm 0.65** — the catastrophic loss-magnitude evidence for
+     Indian hydropower is concentrated in extreme-rainfall / cloudburst /
+     GLOF events. Uttarakhand 2013 (~$1B+ hydro asset damage, multi-GW
+     destroyed or damaged); Chamoli 2021 (~$200M direct hydro losses);
+     Sikkim Teesta-III 2023 (~$1.2B asset destruction). For an
+     **asset-risk** framing (not generation-deficit framing), the
+     flood/storm cluster dominates.
+   - **Drought 0.35** — monsoon-failure-induced flow deficits (2015-16,
+     2018-19) caused ~10-15 % peninsular hydro-generation drops. Real but
+     **reversible** (generation returns when monsoon returns); not an
+     asset-destruction pathway. Justifies a non-trivial-but-smaller cluster
+     weight than flood/storm.
+   - **Why flood/storm tilt is modest (0.65) and not higher.** Rx5day's
+     impact band is low-confidence and only partially proxies for the actual
+     asset-destruction pathway (Rx5day is a rainfall metric; GLOF and
+     moraine-stability are not captured). R95p interannual variability
+     captures operational predictability, not asset destruction. Until
+     GLOF / glacier-mass-balance enters the bundle (BL-0034), the
+     flood/storm cluster is necessarily understating the Himalayan-asset
+     risk and should not be pushed to 0.80+.
+
+2. **Within-cluster split by band confidence and structural independence.**
+   - Flood/storm: Rx5day (0.45) > R95p variability (0.20). Rx5day is the
+     primary acute-event proxy with a real (if low-confidence) impact band;
+     R95p interannual variability is a regime / operational-predictability
+     metric without an impact band, lower evidence base, smaller share.
+     Together 0.65.
+   - Drought: CDD alone (0.35). Only one drought rule; medium-confidence
+     IMD-anchored band. Longer-window seasonal-rainfall refinement deferred
+     (BL-0036); modeled-streamflow refinement deferred (BL-0037).
+
+3. **Sanity checks.** Positive, sum to 1.0. Rx5day at 0.45 carries the
+   largest weight — justified by it being the only rule with both an impact
+   band *and* a documented catastrophic-loss pathway in this bundle.
+   Low-evidence regime metric (R95p variability) carries the smallest share
+   (0.20). Bundle weight x within-rule impact weight: Rx5day 0.45 x 0.15
+   = 0.0675; CDD 0.35 x 0.30 = 0.105; R95p-iv 0.20 x 0 = 0. The
+   medium-confidence CDD band carries the largest **impact-component
+   contribution** — consistent with the protocol of letting higher-confidence
+   bands carry more impact weight (Section 4.3).
+
+These weights are revisable expert assumptions, not derived constants; any
+change is a methodology change to be recorded and tested.
+
+**Per-lens weights within each rule** (absolute / change / impact) are
+recorded in `config/proposal_bundles.py` after the CHG-0024 reshape and
+shown per metric in Sections 11.1-11.3. The medium-confidence IMD-anchored
+CDD uses **0.40 / 0.30 / 0.30**; the low-confidence self-derived Rx5day
+uses **0.45 / 0.40 / 0.15** (deliberately small impact weight so the weak
+band cannot dominate); the no-impact-lens regime metric R95p variability
+uses **0.70 / 0.30 / 0.00**.
+
+- **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
+  (Section 5.3) — matching Health, Industrial, Investment/Financial,
+  Infrastructure, Thermal, Agricultural.
+- **Source masters:** Rx5day and CDD must resolve to grid-first
+  district/block masters (paths shared with Industrial / Infrastructure /
+  Thermal — TXx and CDD grid-first verified for those bundles; CDD for
+  Hydropower path is the same source metric, not separately verified).
+  **R95p interannual variability uses `helper_master` source mode** —
+  computation pipeline provenance (grid-first vs polygon-first; sigma vs
+  CV definition) must be confirmed before production adoption (CHG-0024).
+- **Phantom-slug renames (CHG-0023):** the dossier presents the renamed
+  slugs. `rx5day_ge_500` is **renamed to** `rx5day_accumulated_pressure` —
+  same canonical slug Industrial Section 7.2 and Infrastructure Section 9.2
+  adopt; one canonical slug per source-metric + band combination across
+  bundles. `cdd_ge_60` is **renamed to** `cdd_water_stress_pressure` — same
+  canonical slug as Industrial / Thermal; "60" sits inside the band 30-90
+  days but in the middle, not at an edge. `r95p_interannual_variability_norm`
+  is **renamed to** `r95p_interannual_variability` (cosmetic cleanup —
+  the `_norm` suffix is residual). Migration is a data-contract change
+  tracked separately under CHG-0024.
+- **Deferred refinements:** **GLOF / glacier-mass-balance hazard rule for
+  Himalayan hydropower** (BL-0034 — new; the largest methodology gap in
+  this bundle); catchment sediment-yield rule (BL-0035 — new); SPI-6 /
+  SPI-12 longer-window rainfall regime metric for seasonal-flow
+  assessment (BL-0036 — new); modeled streamflow / catchment-hydrology
+  rule for direct flow-regime assessment (BL-0037 — new; concept shared
+  with Thermal BL-0031); JRC global flood-depth ingestion (BL-0023,
+  already on backlog, shared with Industrial / Infrastructure). All five
+  are Phase-2 additions, not Phase-1 corrections.
+
+---
+
+## 12. Thematic Bundles — Deferred Extension
 
 The lens machinery is intended to extend to the thematic bundles (Heat Risk,
 Drought Risk, Extreme Rainfall, Riverine Flood, Heat Stress, Cold Risk), where
@@ -1956,7 +2250,7 @@ separately-tested methodology change with the science owner.
 
 ---
 
-## 12. References (consolidated)
+## 13. References (consolidated)
 
 1. OECD & Joint Research Centre (2008). *Handbook on Constructing Composite
    Indicators: Methodology and User Guide.* OECD Publishing, Paris.
@@ -2084,3 +2378,23 @@ separately-tested methodology change with the science owner.
     tower and air-cooled condenser performance characterization. Anchors
     the heat-cluster mechanism in Asset Risk - Thermal Power Section
     10.2.)
+31. IPCC AR6 WG1 (2021), Chapter 8 — *Water Cycle Changes*. (Documents
+    intensifying Indian monsoon extreme-rainfall variability under warming.
+    Anchors the change-lens addition for R95p interannual variability in
+    Asset Risk - Hydropower Section 11.3.)
+32. Government of India / SDMA Uttarakhand — *Uttarakhand Disaster of
+    June 2013*; reports and assessments on hydropower asset damage:
+    Vishnuprayag, Srinagar, and multiple Alaknanda plants damaged or
+    destroyed; multi-GW affected; >$1B in hydro asset damage. (Empirical
+    anchor for the flood/storm cluster weight in Asset Risk - Hydropower
+    Section 11.4.)
+33. Government of India / Chamoli disaster assessments (2021):
+    Rishiganga (13.2 MW) destroyed and Tapovan-Vishnugad (520 MW)
+    damaged by Feb 2021 cloudburst-driven flash flood and debris flow.
+    (Empirical anchor for the flood/storm asset-destruction pathway in
+    Asset Risk - Hydropower Section 11.1.)
+34. ICIMOD / NRSC / Government of Sikkim assessments — *South Lhonak
+    GLOF, October 2023*. Teesta-III 1200 MW destroyed by glacial-lake-
+    outburst flood; ~$1.2B asset loss. (Empirical anchor for the
+    Himalayan asset-destruction pathway and the GLOF methodology gap
+    flagged in Asset Risk - Hydropower Section 11.1 and BL-0034.)
