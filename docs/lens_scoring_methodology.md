@@ -15,7 +15,7 @@ Scope of this document:
   bundle. Health Risk (Section 6) is the worked template; the remaining sector
   bundles follow the same structure.
 - Extension of the lens machinery to the **thematic** bundles is deferred until
-  the sectoral bundles are complete (see Section 10).
+  the sectoral bundles are complete (see Section 11).
 
 Implementation references (current code):
 - Rule catalog: `india_resilience_tool/config/proposal_bundles.py`
@@ -1649,7 +1649,296 @@ a small share so it cannot dominate the rule (Section 4.3).
 
 ---
 
-## 10. Thematic Bundles — Deferred Extension
+## 10. Asset Risk (Thermal Power Plants) — Metric-by-Metric Lens Dossier
+
+Bundle: `Sector-wise - Asset Risk (Thermal Power Plants)` | composite slug:
+`composite_asset_risk_thermal_power` | levels: district, block | scenarios:
+`ssp245`, `ssp585`.
+
+Conceptual scope: climate hazards most directly tied to **thermal-power
+generation assets and their cooling-water and ambient-air dependencies** —
+prolonged dry spells and cumulative rainfall deficits (cooling-water
+availability), and extreme ambient heat (Carnot efficiency loss, cooling-tower
+and air-cooled condenser derating, equipment thermal stress). Per Section 1.2
+this is hazard pressure, not full thermal-asset risk: it does not include
+plant-specific exposure (cooling technology mix, water-source type, age),
+adaptive capacity (dry/hybrid cooling retrofit, on-site storage, reuse), or
+vulnerability (PPA terms, financial buffer, regulatory mandates on minimum
+generation).
+
+The Indian thermal fleet (~205 GW coal + ~25 GW gas + ~7 GW nuclear) supplies
+the bulk of national electricity. Water stress is the **dominant** documented
+climate vulnerability: WRI 2018 *Parched Power* shows that ~90 % of India's
+thermal capacity uses freshwater cooling, ~40 % is sited in high-water-stress
+areas, 13 of 20 largest plants experienced at least one water-shortage
+shutdown between 2013-2016, and ~14 TWh of generation was lost in 2016 alone
+to water shortages. CEEW (2018, 2021) repeatedly identifies water availability
+as the #1 climate risk for the Indian thermal fleet.
+
+### 10.0 Methodology change recorded
+
+This dossier proposes **two methodology changes** for the bundle as currently
+configured in `config/proposal_bundles.py`:
+
+1. **Add an impact lens to CDD.** Same IMD-Agricultural-Drought-anchored
+   30-90 day band already adopted for Industrial Risk Section 7.3 — medium
+   confidence, derivation reuses an existing institutional anchor.
+2. **Add a change lens to SPI-3** (currently `chg=0`). The chg signal captures
+   whether dry-month frequency is *rising vs baseline*, which is what
+   physical-risk frameworks (TCFD scenario-at-horizon, Section 8) call for,
+   and is structurally distinct from SPI's own baseline-standardization
+   (SPI's gamma fit is fixed on the historical period; the chg lens measures
+   how often projections cross that historical-baseline-conditioned threshold
+   relative to baseline).
+
+The dossier also makes an **honest no-impact-lens call for SPI-3** — same
+rationale as Investment/Financial Risk Section 8.3 for R99p: SPI-3 dry-month
+frequency is a regime / proxy metric with no defensible institutional band on
+count-of-months/year. Inventing a self-derived band on a metric that is
+already a soft proxy for cooling-water unavailability would be doubly derived.
+The level + shift signal is the honest scientific reading.
+
+The table summarizes the lens decision per metric; each subsection gives the
+reasoning and band provenance. Rule slugs marked "renamed from" reflect the
+CHG-0021 rename of phantom slugs (Section 4.7); the dossier presents the
+renamed slugs because the bands and labels now reflect the actual scoring
+math.
+
+| Rule (metric) | absolute | change | impact (band) | Rationale summary |
+|---|:--:|:--:|:--:|---|
+| CDD — consecutive dry days (`pr_consecutive_dry_days_lt1mm`) | yes | yes | yes — self-derived (med conf, IMD-anchored), 30-90 days | Cooling-water unavailability; same IMD Agricultural Drought anchor as Industrial |
+| TXx — extreme daytime heat (`txx_annual_max`) | yes | yes | yes — external, 40-45 deg C (plains) | Carnot efficiency loss, cooling-tower / air-cooled condenser derating, equipment thermal stress; IMD plains heatwave envelope |
+| SPI-3 dry-month frequency (`spi3_count_months_lt_minus1`) | yes | yes | **no** — drop | Regime / cumulative-rainfall-deficit proxy for low-flow cooling-water availability; no defensible institutional band on count-of-months/year |
+
+### 10.1 CDD — Consecutive dry days (`pr_consecutive_dry_days_lt1mm`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — methodology change,
+  IMD-anchored).
+- **absolute:** Keep. Districts with the longest projected continuous dry
+  spells relative to peers (CDD, ETCCDI: maximum consecutive days with
+  precipitation < 1 mm). Direct cooling-water pathway: prolonged dry spell
+  -> reservoir / river drawdown -> curtailed plant cooling-water draws ->
+  forced derating or shutdown.
+- **change:** Keep. Lengthening dry spells vs the `1990-2010` baseline shift
+  thermal-plant water-availability planning beyond historical operating
+  envelopes. Mode: `relative_pct`.
+- **impact:** **Add, self-derived band 30-90 days, medium confidence**
+  (Section 4 protocol — same derivation as Industrial Risk Section 7.3). The
+  onset is anchored on an **operational Indian institutional definition**
+  (IMD Agricultural Drought) rather than a picked number, which raises
+  confidence over a purely-reasoned band.
+  - **Mechanism for thermal-asset cooling water:** prolonged dry-spell ->
+    reduced precipitation recharge -> reservoir / river drawdown ->
+    cooling-water intake curtailment -> forced derating or shutdown. Indian
+    plant evidence: WRI 2018 *Parched Power* documents 13 of 20 largest
+    plants with at least one water-shortage shutdown 2013-2016, ~14 TWh
+    generation lost in 2016 alone. Specific events: Farakka (West Bengal)
+    2016 Ganga low-flow shutdown; Raichur (Karnataka) multi-year shortfalls;
+    Parli (Maharashtra) 2013 and 2015 drought closures.
+  - **Anchors:** identical to Industrial Section 7.3 — IMD Agricultural
+    Drought (4 consecutive Drought Weeks ≈ 28 days, rounded to 30) anchors
+    the onset; ¾-monsoon (90 day) saturation captures monsoon-failure /
+    severe-drought regime.
+  - **Cut points:** onset **30 days**, saturation **90 days**.
+  - **Confidence: medium.** IMD-anchored onset; reasoned saturation; same as
+    Industrial Section 7.3.
+  - **Local mediation caveat:** actual thermal-plant cooling-water impact is
+    heavily mediated by reservoir storage, alternative water sources,
+    cooling technology (once-through vs recirculating tower vs dry/hybrid),
+    and on-site water reuse. Phase-1 hazard pressure does not model these.
+    A direct-streamflow / reservoir-storage refinement (CWC station discharge
+    or modeled hydrology) is deferred (BL-0031).
+- **Per-lens weights:** absolute 0.40 / change 0.30 / impact 0.30 — mirrors
+  Industrial Section 7.3 (medium-confidence IMD-anchored band).
+
+### 10.2 TXx — Extreme daytime heat (`txx_annual_max`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes).
+- **absolute:** Keep. Same definition as in Health (Section 6.1), Industrial
+  (Section 7.4), and Infrastructure (Section 9.3). Districts facing the most
+  extreme projected daytime heat relative to peers.
+- **change:** Keep. Warming daytime extremes vs the `1990-2010` baseline
+  matter to thermal assets because plant equipment (transformers, switchgear,
+  cooling-tower fill, condensers, lubricating oil systems) is sized against
+  historical extremes. Mode: `absolute_delta` (degrees).
+- **impact:** Keep. Band **40-45 deg C**, **external provenance, high
+  confidence** — same IMD plains heatwave band as Health, Industrial,
+  Infrastructure.
+  - **Thermal-asset harm pathways through the same dry-bulb band:**
+    - **Thermodynamic (Carnot) efficiency loss.** Higher condenser
+      temperatures reduce cycle efficiency; typical literature value
+      **≈ 0.4-0.6 % per deg C** ambient rise (gross effect; net effect
+      depends on cooling technology).
+    - **Cooling-tower performance degradation** at high wet-bulb
+      temperatures. The dominant Indian thermal cooling technology is
+      recirculating cooling towers; their approach temperature widens as
+      WBGT rises, lifting condenser temperatures and reducing output.
+    - **Air-cooled condenser performance degradation** above ~35-40 deg C
+      ambient — relevant for the small but growing Indian dry-cooled fleet.
+    - **Equipment derating** (transformers, switchgear, oil-cooled systems);
+      coal-handling and station-auxiliary stress; reduced reserve margin
+      coinciding with peak demand.
+  - **Why the IMD dry-bulb band rather than a WBGT-specific band:** the
+    IRT's TXx is a dry-bulb annual maximum, and the IMD heatwave definition
+    is the nationally-recognized plains threshold for that regime. A
+    cooling-tower-specific refinement would couple TXx with a `twb_*` source
+    metric (e.g. `twb_days_ge_28` already produced by the Heat Stress v2
+    grid-first compute) — deferred (BL-0030). For Phase-1, the IMD plains
+    band is the consistent, defensible band shared across Health, Industrial,
+    Infrastructure, and Asset-Thermal bundles.
+  - **Zone caveat:** plains/national default (Section 4.9, BL-0020).
+- **Per-lens weights:** absolute 0.40 / change 0.25 / impact 0.35 — mirrors
+  Health, Industrial, Infrastructure (high-confidence external band).
+
+### 10.3 SPI-3 dry-month frequency (`spi3_count_months_lt_minus1`)
+
+- **Lenses:** absolute (yes), change (yes — methodology change), impact
+  (**no** — explicitly dropped).
+- **Source metric:** count of months per year with the 3-month Standardized
+  Precipitation Index (SPI-3) below −1 (McKee et al. 1993 "moderately dry"
+  threshold). A regime-level low-flow proxy for cooling-water availability —
+  captures the **cumulative-rainfall-deficit regime** distinct from CDD's
+  acute continuous dry-spell signal. SPI-3 reflects accumulated 3-month
+  precipitation anomalies, which is the relevant timescale for reservoir /
+  river-flow recharge.
+- **absolute:** Keep. Districts with the highest projected count of SPI-3
+  dry months relative to peers — peer-relative screening of cumulative
+  rainfall-deficit regime.
+- **change:** **Add.** Shift in dry-month count vs baseline period. The chg
+  signal captures whether dry-month frequency is *rising vs baseline*, which
+  is what physical-risk frameworks (TCFD / NGFS scenario-at-horizon,
+  Section 8) call for. **Not structurally redundant** with SPI's own
+  baseline-standardization: SPI's gamma fit is fixed on the historical
+  reference period; the chg lens measures how often projections cross that
+  historical-baseline-conditioned threshold relative to the baseline-period
+  count. Mode: `relative_pct`.
+- **impact:** **No — drop.** Honest no-band call (same rationale as
+  Investment/Financial Section 8.3 for R99p). McKee 1993 standardizes the
+  per-month SPI threshold (−1 moderately dry, −1.5 severely dry, −2 extremely
+  dry) but does **not** categorize annual frequency of months below a
+  threshold. No institutional band exists on "count of SPI-3 < −1 months
+  per year". Inventing a self-derived band on this composite count of a
+  proxy index would be doubly derived (count-of-months *and* proxy use).
+  The level + shift signal is the honest scientific reading.
+  - **Why this metric is included anyway:** SPI-3 dry-month frequency
+    captures the structurally distinct **cumulative regime** signal that CDD
+    (acute continuous dry spell) does not — a district could have moderate
+    CDD but spend half the year in SPI-3 drought, indicating a chronic
+    cooling-water-availability problem. The two metrics together cover both
+    acute and cumulative water-stress regimes.
+  - **Local mediation caveat:** SPI-3 is a **precipitation proxy** for
+    low-flow cooling-water availability. Actual cooling-water availability
+    depends on river discharge, reservoir storage, upstream withdrawals, and
+    inter-basin transfers — none of which SPI-3 measures directly. A
+    streamflow-based refinement (CWC station discharge or modeled hydrology)
+    is deferred (BL-0031) and would supersede SPI-3 as the cooling-water
+    rule.
+- **Per-lens weights:** absolute 0.70 / change 0.30 / impact 0.00 — mirrors
+  Investment/Financial Section 8.3 (R99p, no-impact-lens regime metric).
+
+### 10.4 Asset Risk (Thermal Power Plants) — bundle assembly notes
+
+**Rule weights (explicit, sum to 1.0).** Weighting is an evidence-informed
+expert elicitation, not a derived constant; the recommended default reflects
+the relative thermal-asset climate burden in India and is recorded as a
+revisable assumption.
+
+| Cluster | Cluster weight | Rule | Rule weight | Why |
+|---|---:|---|---:|---|
+| Water stress (acute) | 0.65 | CDD (consecutive dry days) | 0.35 | Medium-confidence IMD-anchored band; direct cooling-water unavailability pathway (WRI 2018 Parched Power: 13 of 20 largest Indian plants had water-shortage shutdowns 2013-2016) |
+| Water stress (cumulative regime) | 0.65 | SPI-3 dry-month frequency | 0.30 | No impact band (regime / proxy metric); captures structurally distinct cumulative-deficit signal not covered by CDD; lower confidence so slightly lower weight |
+| Heat | 0.35 | TXx (extreme heat) | 0.35 | High-confidence IMD plains heatwave band; Carnot efficiency loss ~0.4-0.6 % per deg C plus cooling-tower / ACC derating during heatwaves; smaller documented direct-loss magnitudes than water-shortage shutdowns |
+
+**How these weights were derived.** Same two-stage elicitation as Health,
+Industrial, Investment/Financial, and Infrastructure: **rule_weight reflects
+(sector-specific loss-burden evidence) x (band confidence) x (structural
+independence)**.
+
+1. **Cluster split first (water stress vs heat).** The bundle's three metrics
+   fall into two hazard clusters — water stress (CDD, SPI-3) and heat (TXx).
+   - **Water stress 0.65** — by far the dominant documented climate
+     vulnerability of Indian thermal-power assets. WRI 2018 *Parched Power*:
+     13 of 20 largest plants had water-shortage shutdowns 2013-2016;
+     ~14 TWh lost in 2016 alone; 40 % of Indian thermal capacity in
+     high-water-stress areas. CEEW repeatedly identifies water availability
+     as the #1 climate risk for the Indian thermal fleet. No other
+     thermal-asset climate hazard has documented loss magnitudes of this
+     scale.
+   - **Heat 0.35** — direct Carnot-efficiency loss (~0.4-0.6 % per deg C) is
+     real but small per-degree; cooling-tower and air-cooled-condenser
+     derating during heatwaves can rise to several percent of output;
+     aggregated annual loss magnitudes are smaller and more recoverable
+     than the water-shutdown events.
+   - Why the water-stress tilt is even heavier than Infrastructure's flood
+     tilt (0.65 vs 0.75): the comparison is not apples-to-apples — for
+     Infrastructure, flood is the dominant pathway *and* the heat
+     contribution is small but distinct; for Thermal, water-stress is the
+     dominant pathway *and* the heat contribution is real and continuous via
+     Carnot, so heat retains a slightly larger share. The 0.65/0.35 split
+     reflects "dominant but not overwhelming".
+
+2. **Within-cluster split by band confidence and structural independence.**
+   - Water stress: CDD (0.35) > SPI-3 (0.30). CDD has the medium-confidence
+     IMD-anchored band (carrying an impact lens) and the more direct
+     continuous-dry-spell pathway. SPI-3 captures the structurally distinct
+     cumulative-regime signal but lacks an institutional impact band (proxy
+     metric), so it carries slightly less weight. Together 0.65 — matching
+     empirical evidence that the documented thermal-shutdown events are
+     water-driven.
+   - Heat: TXx alone (0.35). Only one heat rule; WBGT-conditioned
+     thermal-asset refinement deferred (BL-0030).
+
+3. **Sanity checks.** Weights are positive, sum to 1.0, no single rule
+   dominates (max 0.35 across three rules). Water-stress duo together is
+   0.65 (matching dominant empirical loss evidence). Lowest-confidence rule
+   (SPI-3 with no impact lens) carries the smallest share. Bands rated
+   medium confidence carry smaller within-rule impact weights than the
+   high-confidence external bands (Section 4.3).
+
+These weights are revisable expert assumptions, not derived constants; any
+change is a methodology change to be recorded and tested.
+
+**Per-lens weights within each rule** (absolute / change / impact) are
+recorded in `config/proposal_bundles.py` after the CHG-0022 reshape and shown
+per metric in Sections 10.1-10.3. The high-confidence external-band rule
+(TXx) uses **0.40 / 0.25 / 0.35**; the medium-confidence IMD-anchored CDD
+uses **0.40 / 0.30 / 0.30**; the no-impact-lens regime metric SPI-3 uses
+**0.70 / 0.30 / 0.00**.
+
+- **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
+  (Section 5.3) — matching Health, Industrial, Investment/Financial,
+  Infrastructure, Agricultural.
+- **Source masters:** all three source metrics must resolve to grid-first
+  district/block masters. TXx and CDD route through paths shared with
+  Industrial / Infrastructure (TXx grid-first confirmed; CDD same path, not
+  bundle-verified). SPI-3 path needs verification.
+- **Phantom-slug renames (CHG-0021):** the dossier presents the renamed
+  slugs. `cdd_ge_30` is **renamed to** `cdd_water_stress_pressure` — same
+  canonical slug Industrial Section 7.3 adopts, since the source metric +
+  band combination is identical (one canonical slug across bundles).
+  `txx_ge_45` is **kept** because 45 deg C is the upper edge of the impact
+  band 40-45 deg C — same call as Health / Industrial / Infrastructure.
+  `spi3_low_flow_proxy_norm` is **renamed to** `spi3_low_flow_proxy`
+  (cosmetic cleanup — the `_norm` suffix is residual; "proxy" already
+  conveys the construction). Migration is a data-contract change tracked
+  separately under CHG-0022.
+- **Deferred refinements:** WBGT-conditioned thermal-asset rule using
+  `twb_*` source metric to capture cooling-tower wet-bulb performance limit
+  (BL-0030 — new); direct streamflow / reservoir-storage rule using CWC
+  station discharge or modeled hydrology to supersede SPI-3 as a
+  cooling-water proxy (BL-0031 — new); river-water temperature rule for
+  once-through cooling at coastal / large-river plants (BL-0032 — new);
+  coastal sea-level / cyclone exposure for coastal thermal sites with
+  storm-surge inundation of coal stockyards and ash-handling (BL-0033 —
+  new). Aqueduct / CGWB groundwater coupling for CDD impact (BL-0022,
+  already on backlog, shared with Industrial). JRC global flood-depth
+  ingestion (BL-0023, already on backlog, shared with Industrial /
+  Infrastructure). All seven are Phase-2 additions, not Phase-1
+  corrections.
+
+---
+
+## 11. Thematic Bundles — Deferred Extension
 
 The lens machinery is intended to extend to the thematic bundles (Heat Risk,
 Drought Risk, Extreme Rainfall, Riverine Flood, Heat Stress, Cold Risk), where
@@ -1667,7 +1956,7 @@ separately-tested methodology change with the science owner.
 
 ---
 
-## 11. References (consolidated)
+## 12. References (consolidated)
 
 1. OECD & Joint Research Centre (2008). *Handbook on Constructing Composite
    Indicators: Methodology and User Guide.* OECD Publishing, Paris.
@@ -1776,3 +2065,22 @@ separately-tested methodology change with the science owner.
     triggered around 65 deg C rail temperature (≈ 45 deg C ambient).
     (Empirical anchor for the rail-buckling pathway in Infrastructure Risk
     Section 9.3.)
+28. Luo T., Krishnan D., Sen S. (2018). *Parched Power: Water Demands,
+    Risks, and Opportunities for India's Power Sector.* World Resources
+    Institute, Washington DC. (90 % of India's thermal capacity uses
+    freshwater cooling; 40 % sited in high-water-stress areas; 13 of 20
+    largest plants had at least one water-shortage shutdown 2013-2016;
+    ~14 TWh generation lost in 2016 alone. Empirical anchor for the
+    water-stress cluster weight in Asset Risk - Thermal Power Section 10.4.)
+29. Council on Energy, Environment and Water (CEEW) — climate-risk and
+    water-risk assessments for the Indian power sector (2018, 2021).
+    (Water availability repeatedly identified as the #1 climate risk for
+    the Indian thermal fleet. Anchors the cluster-split judgment in Asset
+    Risk - Thermal Power Section 10.4.)
+30. Maulbetsch J.S., DiFilippo M.N. (2006). *Cost and Value of Water Use
+    at Combined-Cycle Power Plants.* California Energy Commission
+    Publication CEC-500-2006-034. (Thermodynamic / Carnot efficiency loss
+    of order 0.4-0.6 % per deg C ambient rise for thermal cycles; cooling
+    tower and air-cooled condenser performance characterization. Anchors
+    the heat-cluster mechanism in Asset Risk - Thermal Power Section
+    10.2.)

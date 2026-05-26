@@ -2653,7 +2653,55 @@ chat.
 
 ## 13. Sector-wise - Asset Risk (Thermal Power Plants)
 
-Pending review.
+The Asset Risk (Thermal Power Plants) lens methodology is documented in
+`docs/lens_scoring_methodology.md`, Section 10. It records **two
+methodology changes** vs the bundle as currently configured in
+`config/proposal_bundles.py`: an impact lens is added to CDD (same
+IMD-Agricultural-Drought-anchored 30-90 day band already adopted for
+Industrial Risk Section 7.3, medium confidence), and a change lens is added
+to SPI-3 (currently `chg=0`) to capture whether dry-month frequency rises vs
+baseline — what TCFD / NGFS physical-risk frameworks call for. The dossier
+also makes an **honest no-impact-lens call for SPI-3** (same rationale as
+Investment/Financial Section 8.3 for R99p): SPI-3 dry-month frequency is a
+regime / proxy metric with no defensible institutional band on
+count-of-months/year, so a self-derived band would be doubly derived (count
+of months + proxy use) and is dropped.
+
+The dossier covers the per-metric lens decisions (CDD, TXx, SPI-3) and the
+impact-band provenance — external (IMD plains heatwave 40-45 deg C) and
+self-derived via the Section 4 protocol (CDD 30-90 days medium-confidence,
+anchored on IMD Agricultural Drought = 4 consecutive Drought Weeks). It
+also records the recommended rule weights (CDD 0.35 / SPI-3 0.30 / TXx 0.35,
+sum 1.0, coverage gate 0.70) with the weight-derivation recipe
+(sector-specific loss-burden evidence x band confidence x structural
+independence) and the two-cluster split (Water stress 0.65 / Heat 0.35).
+The water-stress-heavy tilt is justified by WRI 2018 *Parched Power* and
+CEEW evidence — 13 of 20 largest Indian thermal plants had water-shortage
+shutdowns 2013-2016, ~14 TWh of generation lost in 2016 alone, 40 % of
+Indian thermal capacity sited in high-water-stress areas.
+
+The dossier records the phantom-slug renames required by Section 4.7
+(CHG-0022 follow-up: `cdd_ge_30` -> `cdd_water_stress_pressure` — the same
+canonical slug Industrial Section 7.3 adopts, since the source metric + band
+combination is identical; `spi3_low_flow_proxy_norm` -> `spi3_low_flow_proxy`
+(cosmetic cleanup); `txx_ge_45` is kept because 45 deg C is the upper edge
+of the impact band 40-45 deg C, same call as Health / Industrial /
+Infrastructure).
+
+All impact bands are plains/national defaults; zone refinement is deferred
+(BL-0020). WBGT-conditioned thermal-asset rule using `twb_*` source metric
+to capture cooling-tower wet-bulb performance limit (BL-0030 — new); direct
+streamflow / reservoir-storage rule from CWC station discharge or modeled
+hydrology to supersede SPI-3 as a cooling-water proxy (BL-0031 — new);
+river-water temperature rule for once-through cooling at coastal / large-
+river plants (BL-0032 — new); coastal sea-level / cyclone exposure for
+coastal thermal sites including storm-surge inundation of coal stockyards
+and ash-handling (BL-0033 — new). Aqueduct / CGWB groundwater coupling for
+CDD impact (BL-0022, shared with Industrial) and JRC global flood-depth
+ingestion (BL-0023, shared with Industrial / Infrastructure) also apply.
+All deferrals are Phase-2 additions, not Phase-1 corrections. The remaining
+bundle-dossier subsections (13.1 onward, in the structure used by Sections
+1-8) are pending review in chat.
 
 ## 14. Sector-wise - Asset Risk (Hydropower Plants)
 
