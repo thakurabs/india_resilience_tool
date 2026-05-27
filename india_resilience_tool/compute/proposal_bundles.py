@@ -270,7 +270,7 @@ def _resolve_baseline_column(df: pd.DataFrame, metric_slug: str) -> Optional[str
 
 def _metric_column(frame: pd.DataFrame, metric_slug: str, scenario: str, period: str) -> Optional[str]:
     metric_base = METRICS_BY_SLUG[metric_slug].periods_metric_col or METRICS_BY_SLUG[metric_slug].value_col or metric_slug
-    return resolve_metric_column(frame, metric_base, scenario, period, SUPPORTED_STAT)
+    return resolve_metric_column(frame, metric_base, scenario, period, SUPPORTED_STAT, strict=True)
 
 
 def _coerce_numeric(series: pd.Series) -> pd.Series:
