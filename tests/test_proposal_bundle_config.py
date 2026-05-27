@@ -16,6 +16,9 @@ from india_resilience_tool.config.proposal_bundles import (
     proposal_available_rule_count_column,
     proposal_available_rule_weight_fraction_column,
     proposal_bundle_mean_column,
+    proposal_rule_abs_score_column,
+    proposal_rule_chg_score_column,
+    proposal_rule_imp_score_column,
     proposal_rule_score_column,
     validate_proposal_bundle_specs,
 )
@@ -207,6 +210,18 @@ def test_get_proposal_bundle_source_metric_slugs_returns_empty_tuple_for_unknown
 
 def test_proposal_persisted_column_helpers_are_exact() -> None:
     assert proposal_rule_score_column("txx_ge_45", "ssp585", "2040-2060") == "txx_ge_45__ssp585__2040-2060__score"
+    assert (
+        proposal_rule_abs_score_column("txx_ge_45", "ssp585", "2040-2060")
+        == "txx_ge_45__ssp585__2040-2060__abs_score"
+    )
+    assert (
+        proposal_rule_chg_score_column("txx_ge_45", "ssp585", "2040-2060")
+        == "txx_ge_45__ssp585__2040-2060__chg_score"
+    )
+    assert (
+        proposal_rule_imp_score_column("txx_ge_45", "ssp585", "2040-2060")
+        == "txx_ge_45__ssp585__2040-2060__imp_score"
+    )
     assert (
         proposal_bundle_mean_column("composite_health_risk", "ssp585", "2040-2060")
         == "composite_health_risk__ssp585__2040-2060__mean"

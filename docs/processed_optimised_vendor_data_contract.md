@@ -94,7 +94,11 @@ Important details:
 - Climate metrics usually have `mean` and `median`.
 - Static snapshot metrics usually have only `mean`.
 - Proposal sector composites may include `mean`, rule-level `score`,
-  `available_rule_count`, and `available_rule_weight_fraction`.
+  rule-level per-lens `abs_score` / `chg_score` / `imp_score` (only for the
+  lenses that are active on each rule; see
+  `docs/lens_scoring_methodology.md` §5.1), `available_rule_count`, and
+  `available_rule_weight_fraction`. Per-lens rule columns are part of the
+  optimized contract from artifact version 3 onward.
 - The optimized bundle intentionally removes heavy or duplicate runtime fields:
   `std`, `p05`, `p95`, `n_models`, `values_per_model`, and `models`.
 

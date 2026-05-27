@@ -485,6 +485,21 @@ def proposal_rule_score_column(rule_slug: str, scenario: str, period: str) -> st
     return f"{str(rule_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__score"
 
 
+def proposal_rule_abs_score_column(rule_slug: str, scenario: str, period: str) -> str:
+    """Return the persisted absolute-lens score-column name for one proposal rule selection."""
+    return f"{str(rule_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__abs_score"
+
+
+def proposal_rule_chg_score_column(rule_slug: str, scenario: str, period: str) -> str:
+    """Return the persisted change-lens score-column name for one proposal rule selection."""
+    return f"{str(rule_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__chg_score"
+
+
+def proposal_rule_imp_score_column(rule_slug: str, scenario: str, period: str) -> str:
+    """Return the persisted impact-lens score-column name for one proposal rule selection."""
+    return f"{str(rule_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__imp_score"
+
+
 def proposal_bundle_mean_column(composite_slug: str, scenario: str, period: str) -> str:
     """Return the persisted composite mean-column name for one proposal bundle selection."""
     return f"{str(composite_slug).strip()}__{str(scenario).strip()}__{str(period).strip()}__mean"

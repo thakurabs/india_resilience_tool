@@ -273,7 +273,7 @@ def test_optimized_context_copies_population_overlay_artifacts_and_manifest_vers
         "population/overlay/population_exposure_2025_overlay_meta.json",
         data_dir=tmp_path,
     ).read_text(encoding="utf-8") == '{"artifact": true}'
-    assert _read_manifest(tmp_path / "processed_optimised")["artifact_version"] == 2
+    assert _read_manifest(tmp_path / "processed_optimised")["artifact_version"] == 3
 
 
 def test_optimized_context_copies_built_up_overlay_artifacts(tmp_path: Path) -> None:
@@ -720,9 +720,12 @@ def test_build_processed_optimised_writes_proposal_bundle_admin_masters(tmp_path
         "composite_health_risk__ssp585__2040-2060__available_rule_count,"
         "composite_health_risk__ssp585__2040-2060__available_rule_weight_fraction,"
         "txx_ge_45__ssp585__2040-2060__score,"
+        "txx_ge_45__ssp585__2040-2060__abs_score,"
+        "txx_ge_45__ssp585__2040-2060__chg_score,"
+        "txx_ge_45__ssp585__2040-2060__imp_score,"
         "wsdi_ge_5__ssp585__2040-2060__score,"
         "debug_internal_counter\n"
-        "Telangana,Hanumakonda,telangana|hanumakonda,75.0,2,0.4,100.0,50.0,99\n",
+        "Telangana,Hanumakonda,telangana|hanumakonda,75.0,2,0.4,100.0,90.0,80.0,70.0,50.0,99\n",
         encoding="utf-8",
     )
     (legacy_root / "master_metrics_by_block.csv").write_text(
@@ -731,9 +734,12 @@ def test_build_processed_optimised_writes_proposal_bundle_admin_masters(tmp_path
         "composite_health_risk__ssp585__2040-2060__available_rule_count,"
         "composite_health_risk__ssp585__2040-2060__available_rule_weight_fraction,"
         "txx_ge_45__ssp585__2040-2060__score,"
+        "txx_ge_45__ssp585__2040-2060__abs_score,"
+        "txx_ge_45__ssp585__2040-2060__chg_score,"
+        "txx_ge_45__ssp585__2040-2060__imp_score,"
         "wsdi_ge_5__ssp585__2040-2060__score,"
         "debug_internal_counter\n"
-        "Telangana,Hanumakonda,Atmakur,telangana|hanumakonda|atmakur,80.0,2,0.4,75.0,25.0,101\n",
+        "Telangana,Hanumakonda,Atmakur,telangana|hanumakonda|atmakur,80.0,2,0.4,75.0,70.0,60.0,55.0,25.0,101\n",
         encoding="utf-8",
     )
 
@@ -767,6 +773,9 @@ def test_build_processed_optimised_writes_proposal_bundle_admin_masters(tmp_path
         assert "composite_health_risk__ssp585__2040-2060__available_rule_count" in df.columns
         assert "composite_health_risk__ssp585__2040-2060__available_rule_weight_fraction" in df.columns
         assert "txx_ge_45__ssp585__2040-2060__score" in df.columns
+        assert "txx_ge_45__ssp585__2040-2060__abs_score" in df.columns
+        assert "txx_ge_45__ssp585__2040-2060__chg_score" in df.columns
+        assert "txx_ge_45__ssp585__2040-2060__imp_score" in df.columns
         assert "wsdi_ge_5__ssp585__2040-2060__score" in df.columns
         assert "debug_internal_counter" not in df.columns
 
@@ -774,6 +783,9 @@ def test_build_processed_optimised_writes_proposal_bundle_admin_masters(tmp_path
     assert manifest["stats_contract"]["proposal_bundle"] == [
         "mean",
         "score",
+        "abs_score",
+        "chg_score",
+        "imp_score",
         "available_rule_count",
         "available_rule_weight_fraction",
     ]
@@ -1068,7 +1080,7 @@ def test_build_processed_optimised_overwrite_preserves_prior_level_outputs_and_r
 
     manifest = _read_manifest(tmp_path / "processed_optimised")
     summaries = {entry["slug"]: entry for entry in manifest["summaries"]}
-    assert manifest["artifact_version"] == 2
+    assert manifest["artifact_version"] == 3
     assert manifest["summary_semantics"] == "bundle_inventory"
     assert {"txx_annual_max", "tas_annual_mean"}.issubset(set(summaries))
     assert summaries["tas_annual_mean"]["has_masters"] is True

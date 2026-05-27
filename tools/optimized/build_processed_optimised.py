@@ -72,6 +72,9 @@ from india_resilience_tool.config.proposal_bundles import (
     get_proposal_bundle_spec_by_slug,
     proposal_available_rule_count_column,
     proposal_available_rule_weight_fraction_column,
+    proposal_rule_abs_score_column,
+    proposal_rule_chg_score_column,
+    proposal_rule_imp_score_column,
     proposal_rule_score_column,
 )
 from india_resilience_tool.config.variables import VARIABLES
@@ -159,7 +162,7 @@ LEVEL_SELECTIONS = {
 }
 
 YEARLY_PARALLEL_CHUNK_SIZE = 64
-MANIFEST_ARTIFACT_VERSION = 2
+MANIFEST_ARTIFACT_VERSION = 3
 PARITY_REPORT_FILENAME = "parity_report.json"
 T = TypeVar("T")
 
@@ -441,6 +444,14 @@ def _proposal_retained_admin_master_cols(
                 score_col = proposal_rule_score_column(rule.rule_slug, scenario, period)
                 if score_col in available_cols:
                     keep_cols.append(score_col)
+                for lens_col_builder in (
+                    proposal_rule_abs_score_column,
+                    proposal_rule_chg_score_column,
+                    proposal_rule_imp_score_column,
+                ):
+                    lens_col = lens_col_builder(rule.rule_slug, scenario, period)
+                    if lens_col in available_cols:
+                        keep_cols.append(lens_col)
     return keep_cols
 
 
@@ -1383,7 +1394,15 @@ def _write_manifest(
         "summary_semantics": "bundle_inventory",
         "stats_contract": {
             "climate": ["mean", "median"],
-            "proposal_bundle": ["mean", "score", "available_rule_count", "available_rule_weight_fraction"],
+            "proposal_bundle": [
+                "mean",
+                "score",
+                "abs_score",
+                "chg_score",
+                "imp_score",
+                "available_rule_count",
+                "available_rule_weight_fraction",
+            ],
             "static_snapshot": ["mean"],
             "removed": ["std", "p05", "p95", "n_models", "values_per_model", "models"],
         },

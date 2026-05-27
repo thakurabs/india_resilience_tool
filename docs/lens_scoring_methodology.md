@@ -490,13 +490,16 @@ guiding UX contract:
 
 ### 5.1 Persistence schema
 
-Persisted per `scenario x period` in the bundle master, for each rule:
+Persisted per `scenario x period` in the bundle master, for each rule. All
+column names follow the load-bearing four-token master schema
+`{metric_or_rule}__{scenario}__{period}__{stat}`; the lens marker is the
+**stat** token (last position):
 
 ```text
-{rule_slug}__{scenario}__{period}__score              # combined rule score (existing)
-{rule_slug}__absolute__{scenario}__{period}__score    # absolute-lens component (new)
-{rule_slug}__change__{scenario}__{period}__score       # change-lens component (new)
-{rule_slug}__impact__{scenario}__{period}__score       # impact-lens component (new)
+{rule_slug}__{scenario}__{period}__score        # combined rule score (existing)
+{rule_slug}__{scenario}__{period}__abs_score    # absolute-lens component
+{rule_slug}__{scenario}__{period}__chg_score    # change-lens component
+{rule_slug}__{scenario}__{period}__imp_score    # impact-lens component
 ```
 
 And per bundle (existing, retained):
@@ -508,14 +511,23 @@ And per bundle (existing, retained):
 ```
 
 Rules:
-- **Only active lenses are persisted.** For an absolute-only rule, the `absolute`
-  component equals the combined `__score`; the `change` and `impact` columns are
-  omitted (not written as empty), keeping the schema honest and the file size
-  proportional to the lenses actually used.
+- **Only active lenses are persisted (sparse policy).** A lens is "active" on
+  a rule iff its weight is `> 0` in the rule spec. Pure-absolute rules — both
+  blended rules with `absolute_weight=1.0` and the trend / SPI-proxy /
+  variability-proxy rule types — emit only `__score` and `__abs_score`; the
+  `chg_score` and `imp_score` columns are not written for those rules.
+- For an active lens that is unavailable on some rows (e.g., change lens with
+  a missing historical baseline column, or `relative_pct` change with a
+  zero per-row baseline), the lens column is still written but those rows
+  carry NaN. The blended `__score` renormalizes row-wise across the
+  available active lenses.
 - The combined `__score` column name is unchanged, so the schema extension is
   **backward-compatible** with existing readers and the composite roll-up.
-- The deep-dive UI reads the per-lens columns; the Glance view reads only the
-  composite mean.
+- The lens columns are part of the `processed_optimised/` contract from
+  optimized-artifact version 3 onward (see
+  `docs/processed_optimised_vendor_data_contract.md`). Today the Glance view
+  reads only `__score`; deep-dive rule diagnostics that consume the lens
+  columns are tracked in `docs/BACKLOG.md` (BL-0082).
 
 ### 5.2 Storage rationale
 

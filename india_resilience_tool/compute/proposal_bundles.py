@@ -30,6 +30,9 @@ from india_resilience_tool.config.proposal_bundles import (
     proposal_available_rule_count_column,
     proposal_available_rule_weight_fraction_column,
     proposal_bundle_mean_column,
+    proposal_rule_abs_score_column,
+    proposal_rule_chg_score_column,
+    proposal_rule_imp_score_column,
     proposal_rule_score_column,
 )
 from india_resilience_tool.data.master_columns import find_baseline_column_for_metric, resolve_metric_column
@@ -493,6 +496,29 @@ def _weighted_bundle_score(
     return available_weight.astype(float), score.astype(float)
 
 
+@dataclass(frozen=True)
+class BlendedRuleScores:
+    """Persisted score decomposition for one proposal rule selection.
+
+    ``blended`` is the weighted-mean rule score (the existing
+    ``{rule_slug}__{scenario}__{period}__score`` column).
+
+    ``components`` carries the per-lens component scores in [0, 100] for the
+    lenses that are active on this rule (i.e., the lens weight is > 0). Keys
+    are a subset of {"absolute", "change", "impact"}; only active lenses are
+    persisted. Pure-absolute rules (trend, SPI proxy, variability proxy) emit
+    only ``{"absolute": blended}``.
+    """
+
+    blended: pd.Series
+    components: dict[str, pd.Series]
+
+
+def _absolute_only_scores(blended_score: pd.Series) -> BlendedRuleScores:
+    """Return a BlendedRuleScores for a rule whose only active lens is the absolute lens."""
+    return BlendedRuleScores(blended=blended_score, components={"absolute": blended_score})
+
+
 def _build_blended_rule(
     key_frame: pd.DataFrame,
     source_frame: pd.DataFrame,
@@ -504,12 +530,14 @@ def _build_blended_rule(
     warnings: list[BuildWarning],
     bundle_slug: str,
     state_name: str,
-) -> pd.Series:
+) -> BlendedRuleScores:
     """Build a continuous sector climate hazard-pressure rule.
 
     Missing current or baseline data returns NaN for the affected component.
     The final rule score is the weighted mean of available components, allowing
-    partial but transparent results when one component is unavailable.
+    partial but transparent results when one component is unavailable. The
+    return value also carries the per-lens [0, 100] component scores for the
+    active lenses, so the orchestrator can persist them alongside the blend.
     """
     current_values = _series_for_rule(
         key_frame,
@@ -521,10 +549,13 @@ def _build_blended_rule(
     )
     component_scores: list[pd.Series] = []
     component_weights: list[float] = []
+    components: dict[str, pd.Series] = {}
 
     if rule.absolute_weight > 0.0:
-        component_scores.append(_score_by_reference_distribution(current_values, direction=rule.direction))
+        abs_score = _score_by_reference_distribution(current_values, direction=rule.direction)
+        component_scores.append(abs_score)
         component_weights.append(float(rule.absolute_weight))
+        components["absolute"] = abs_score
 
     if rule.change_weight > 0.0:
         baseline_values = _baseline_values_for_rule(
@@ -542,24 +573,28 @@ def _build_blended_rule(
             metric_slug=rule.metric_slug,
             change_mode=rule.change_mode,
         )
-        component_scores.append(_score_by_reference_distribution(changes, direction=rule.direction))
+        chg_score = _score_by_reference_distribution(changes, direction=rule.direction)
+        component_scores.append(chg_score)
         component_weights.append(float(rule.change_weight))
+        components["change"] = chg_score
 
     if rule.impact_weight > 0.0:
-        component_scores.append(
-            _score_impact_threshold(
-                current_values,
-                impact_low=rule.impact_low,
-                impact_high=rule.impact_high,
-                direction=rule.direction,
-            )
+        imp_score = _score_impact_threshold(
+            current_values,
+            impact_low=rule.impact_low,
+            impact_high=rule.impact_high,
+            direction=rule.direction,
         )
+        component_scores.append(imp_score)
         component_weights.append(float(rule.impact_weight))
+        components["impact"] = imp_score
 
     score = _weighted_component_score(component_scores, component_weights)
     if score.empty:
-        return pd.Series(np.nan, index=current_values.index, dtype=float)
-    return score.reindex(current_values.index).astype(float)
+        blended = pd.Series(np.nan, index=current_values.index, dtype=float)
+    else:
+        blended = score.reindex(current_values.index).astype(float)
+    return BlendedRuleScores(blended=blended, components=components)
 
 
 def _empty_varcfg() -> dict[str, tuple[str, ...]]:
@@ -758,16 +793,31 @@ def _write_helper_master_frame(
 
 
 def _build_variability_proxy_rule(
+    key_frame: pd.DataFrame,
     helper_frame: pd.DataFrame,
     *,
     level: str,
     scenario: str,
     period: str,
 ) -> pd.Series:
+    """Score the R95p variability helper against the canonical unit frame.
+
+    Aligns helper-frame rows to ``key_frame`` via the canonical key column
+    (``district_key`` or ``block_key``) before scoring. Row-order or
+    row-universe differences between the helper frame and the key frame are
+    therefore safe — the join, not row index, decides which helper value
+    belongs to which unit.
+    """
     metric_column = f"{HELPER_METRIC_SLUG}__{scenario}__{period}__{SUPPORTED_STAT}"
-    values = _coerce_numeric(helper_frame[metric_column]) if metric_column in helper_frame.columns else pd.Series(
-        np.nan, index=helper_frame.index, dtype=float
+    if metric_column not in helper_frame.columns:
+        return pd.Series(np.nan, index=key_frame.index, dtype=float)
+    key_col = _canonical_key_column(level)
+    aligned = key_frame.merge(
+        helper_frame.loc[:, [key_col, metric_column]],
+        on=key_col,
+        how="left",
     )
+    values = _coerce_numeric(aligned[metric_column])
     return _score_by_reference_distribution(values, direction="higher_worse")
 
 
@@ -821,6 +871,76 @@ def _target_sort_columns(level: str) -> list[str]:
     return ["state", "district", "district_key"] if level == "district" else ["state", "district", "block", "block_key"]
 
 
+def _dispatch_rule_scores(
+    *,
+    rule: ProposalRuleSpec,
+    key_frame: pd.DataFrame,
+    metric_frames: dict[str, pd.DataFrame],
+    helper_frame: Optional[pd.DataFrame],
+    level: str,
+    scenario: str,
+    period: str,
+    data_dir: Path,
+    warnings: list[BuildWarning],
+    bundle_slug: str,
+    state_name: str,
+) -> BlendedRuleScores:
+    """Return the blended-and-per-lens score decomposition for one rule selection.
+
+    Centralizes the rule_type / rule_slug dispatch so the orchestrator stays
+    free of special cases. Pure-absolute builders (trend, SPI proxy, variability
+    proxy) emit only the absolute lens; ``_build_blended_rule`` emits whichever
+    lenses are active on the rule.
+    """
+    if rule.rule_type == "blended":
+        if rule.rule_slug == "spi3_low_flow_proxy_norm":
+            blended = _build_spi_proxy_rule(
+                key_frame,
+                metric_frames["spi3_count_months_lt_minus1"],
+                level=level,
+                scenario=scenario,
+                period=period,
+            )
+            return _absolute_only_scores(blended)
+        if rule.rule_slug == "r95p_interannual_variability_norm":
+            if helper_frame is None:
+                raise TargetBuildError(
+                    "Hydropower bundle requires a precomputed R95p variability helper frame."
+                )
+            blended = _build_variability_proxy_rule(
+                key_frame,
+                helper_frame,
+                level=level,
+                scenario=scenario,
+                period=period,
+            )
+            return _absolute_only_scores(blended)
+        return _build_blended_rule(
+            key_frame,
+            metric_frames[rule.metric_slug],
+            level=level,
+            rule=rule,
+            scenario=scenario,
+            period=period,
+            warnings=warnings,
+            bundle_slug=bundle_slug,
+            state_name=state_name,
+        )
+    if rule.rule_type == "trend":
+        blended = _build_trend_rule(
+            key_frame,
+            level=level,
+            rule=rule,
+            scenario=scenario,
+            period=period,
+            data_dir=data_dir,
+            bundle_slug=bundle_slug,
+            state_name=state_name,
+        )
+        return _absolute_only_scores(blended)
+    raise TargetBuildError(f"Unsupported proposal rule implementation: {rule.rule_slug!r}")
+
+
 def compute_proposal_bundle_master_frame(
     bundle: ProposalBundleSpec,
     *,
@@ -857,59 +977,32 @@ def compute_proposal_bundle_master_frame(
     output = key_frame.copy()
     ordered_columns = list(_required_id_columns(level))
     rule_weights = _rule_weights_for_bundle(bundle)
+    lens_column_builders = {
+        "absolute": proposal_rule_abs_score_column,
+        "change": proposal_rule_chg_score_column,
+        "impact": proposal_rule_imp_score_column,
+    }
     for scenario in SUPPORTED_SCENARIOS:
         for period in SUPPORTED_PERIODS:
             rule_columns: list[str] = []
             for rule in bundle.rules:
+                scores = _dispatch_rule_scores(
+                    rule=rule,
+                    key_frame=key_frame,
+                    metric_frames=metric_frames,
+                    helper_frame=helper_frame,
+                    level=level,
+                    scenario=scenario,
+                    period=period,
+                    data_dir=data_dir,
+                    warnings=warnings,
+                    bundle_slug=bundle.composite_slug,
+                    state_name=state_name,
+                )
                 score_column = proposal_rule_score_column(rule.rule_slug, scenario, period)
-                if rule.rule_type == "blended":
-                    if rule.rule_slug == "spi3_low_flow_proxy_norm":
-                        score = _build_spi_proxy_rule(
-                            key_frame,
-                            metric_frames["spi3_count_months_lt_minus1"],
-                            level=level,
-                            scenario=scenario,
-                            period=period,
-                        )
-                    elif rule.rule_slug == "r95p_interannual_variability_norm":
-                        if helper_frame is None:
-                            raise TargetBuildError(
-                                "Hydropower bundle requires a precomputed R95p variability helper frame."
-                            )
-                        score = _build_variability_proxy_rule(
-                            helper_frame,
-                            level=level,
-                            scenario=scenario,
-                            period=period,
-                        )
-                    else:
-                        score = _build_blended_rule(
-                            key_frame,
-                            metric_frames[rule.metric_slug],
-                            level=level,
-                            rule=rule,
-                            scenario=scenario,
-                            period=period,
-                            warnings=warnings,
-                            bundle_slug=bundle.composite_slug,
-                            state_name=state_name,
-                        )
-                elif rule.rule_type == "trend":
-                    score = _build_trend_rule(
-                        key_frame,
-                        level=level,
-                        rule=rule,
-                        scenario=scenario,
-                        period=period,
-                        data_dir=data_dir,
-                        bundle_slug=bundle.composite_slug,
-                        state_name=state_name,
-                    )
-                else:
-                    raise TargetBuildError(f"Unsupported proposal rule implementation: {rule.rule_slug!r}")
-                output[score_column] = score
+                output[score_column] = scores.blended
                 _append_score_quality_warnings(
-                    score,
+                    scores.blended,
                     warnings=warnings,
                     bundle_slug=bundle.composite_slug,
                     level=level,
@@ -919,6 +1012,10 @@ def compute_proposal_bundle_master_frame(
                 )
                 rule_columns.append(score_column)
                 ordered_columns.append(score_column)
+                for lens_key, lens_series in scores.components.items():
+                    lens_column = lens_column_builders[lens_key](rule.rule_slug, scenario, period)
+                    output[lens_column] = lens_series
+                    ordered_columns.append(lens_column)
 
             bundle_score_column = proposal_bundle_mean_column(bundle.composite_slug, scenario, period)
             available_count_column = proposal_available_rule_count_column(bundle.composite_slug, scenario, period)
