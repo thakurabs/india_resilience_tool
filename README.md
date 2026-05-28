@@ -205,7 +205,7 @@ Heat Risk v2 spatial-weight cache builder:
 python -m tools.pipeline.build_spatial_weights --help
 ```
 
-This optional offline builder writes private grid-first area-overlap caches under `IRT_DATA_DIR/processed/_internal/spatial_weights/`. The climate compute pipeline can build missing caches on demand; dashboard runtime does not import `exactextract`.
+This optional offline builder writes private grid-first area-overlap caches under `IRT_DATA_DIR/processed/_internal/spatial_weights/`. The climate compute pipeline can build missing caches on demand; dashboard runtime does not import `exactextract`. The builder now resolves default sample NetCDF and boundary inputs from the effective `--data-dir`, skips valid existing caches, and requires `--overwrite` before replacing a stale cache.
 
 Heat Risk v2 compute also persists private annual per-cell metric fields under `IRT_DATA_DIR/processed/_internal/heat_risk/grid_metrics/<metric>/<model>/<scenario>/<year>.nc` with JSON sidecars. These files are inspection and cache artifacts only; public dashboard CSV paths, slugs, units, and columns remain unchanged.
 
@@ -302,7 +302,7 @@ For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when the
 
 By default, the builder now parallelizes yearly-model and yearly-ensemble stages using roughly `80%` of available logical CPUs. Use `--workers 1` to force serial execution, or pass an explicit worker count when you want tighter control.
 
-The optimized builder also supports level-filtered refreshes:
+The optimized builder also supports level-filtered refreshes and state-scoped admin refreshes:
 
 ```bash
 python -m tools.optimized.build_processed_optimised --overwrite --level hydro
@@ -310,14 +310,19 @@ python -m tools.optimized.build_processed_optimised --overwrite --prune-scope --
 python -m tools.optimized.build_processed_optimised --level hydro
 python -m tools.optimized.build_processed_optimised --level sub_basin --metric tas_annual_mean
 python -m tools.optimized.build_processed_optimised --metric tas_annual_mean --workers 4 --skip-geometry --skip-context --skip-audit
+python -m tools.optimized.build_processed_optimised --metric txx_annual_max --level district --state Telangana --overwrite --prune-scope
 ```
 
 Flag semantics:
 - default runs rewrite planned outputs in place and preserve unrelated bundle contents
 - `--overwrite` forces rewrite of the selected targets only
-- `--overwrite --prune-scope` removes stale files only inside the selected metric/level ownership roots before rewriting
+- `--overwrite --prune-scope` deletes only the exact selected output files before rewriting; unrelated files in the same directories are preserved
 - `--full-rebuild` is the destructive whole-bundle reset
 - `--dry-run` prints the resolved write/delete plan without mutating `processed_optimised/`
+- `--state <name>` scopes admin district/block work to the resolved legacy state roots while preserving the discovered root names in output paths
+- state-scoped runs leave shared-global admin artifacts such as `adm1.geojson`, `admin_block_index.parquet`, Glance outputs, `bundle_manifest.json`, and the global `parity_report.json` untouched by default
+- `--include-shared-admin-artifacts` opt-in rebuilds shared-global admin artifacts during a scoped run
+- state-scoped audit output is written only when `--report-path <path>` is supplied
 
 while dropping duplicate runtime fields such as:
 - `std`
@@ -357,13 +362,14 @@ Parity audit:
 python -m tools.optimized.audit_processed_optimised_parity
 ```
 
-This validates that every dashboard-visible optimized artifact expected from the legacy `processed/` tree is present under `processed_optimised/` and writes `parity_report.json` into the optimized bundle root.
+This validates that every dashboard-visible optimized artifact expected from the legacy `processed/` tree is present under `processed_optimised/` and writes `parity_report.json` into the optimized bundle root for unscoped runs.
 
 The parity audit also supports level-filtered checks:
 
 ```bash
 python -m tools.optimized.audit_processed_optimised_parity --level hydro
 python -m tools.optimized.audit_processed_optimised_parity --level sub_basin --metric tas_annual_mean
+python -m tools.optimized.audit_processed_optimised_parity --level district --state Telangana --report-path IRT_DATA_DIR/processed_optimised/parity_report__admin__Telangana.json
 ```
 
 ## Data setup
