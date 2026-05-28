@@ -60,11 +60,18 @@ Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
 """
 
-import os, glob, sys, time, argparse, logging, json, traceback, hashlib, shutil
+if __name__ == "__main__" and __import__("os").environ.get("_IRT_CMP_BOOTSTRAPPED") != "1":
+    raise SystemExit(
+        __import__("tools.pipeline.compute_indices_bootstrap", fromlist=["main"]).main(
+            __import__("sys").argv[1:]
+        )
+    )
+
+import os, glob, sys, time, logging, json, traceback, hashlib, shutil
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal, Optional, Sequence
-from dataclasses import dataclass
+from typing import Any, Literal, Mapping, Optional, Sequence
+from dataclasses import dataclass, field
 from functools import partial
 from multiprocessing import Pool, cpu_count
 
@@ -85,6 +92,12 @@ from paths import (
     SUBBASINS_PATH,
 )
 from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
+from india_resilience_tool.data.source_inventory import (
+    SourceInventoryShard,
+    combine_shard_signatures,
+    load_or_refresh_inventory_shard,
+    yearly_files_for_dir as inventory_yearly_files_for_dir,
+)
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
 from india_resilience_tool.compute.heat_risk_gridfirst import (
     DEFAULT_BASELINE_YEARS as HEAT_RISK_GRIDFIRST_BASELINE_YEARS,
@@ -131,6 +144,7 @@ from india_resilience_tool.utils.processed_io import (
     unlink_file,
     write_csv,
 )
+from tools.pipeline.compute_indices_cli_common import build_parser as build_compute_parser
 
 # -----------------------------------------------------------------------------
 # CLIMATE-INDICES PACKAGE INTEGRATION (SPI/SPEI)
@@ -178,6 +192,8 @@ MIN_YEARS_REQUIRED_FRACTION = 0.6
 MIN_YEARS_ABSOLUTE = 5
 METRICS = PIPELINE_METRICS_RAW
 DEFAULT_WORKERS = max(1, int(cpu_count() * 0.75))
+_inventory_writes_allowed = True
+_inventory_path_engines: dict[str, str] = {}
 
 def setup_logging(verbose: bool = False):
     import sys
@@ -1910,6 +1926,87 @@ PRECIP_PERCENTILE_COMPUTE_NAMES = {
     "percentile_precipitation_contribution",
 }
 
+
+def _metric_role_varnames(
+    *,
+    metric: Mapping[str, Any],
+    scenario: str,
+    level: AdminLevel,
+) -> dict[str, tuple[str, ...]]:
+    """Return source-variable roles consumed by one metric task."""
+    req_vars = tuple(required_vars_for_metric(metric))
+    primary_var = str(metric.get("var") or (req_vars[0] if req_vars else "")).strip()
+    compute_name = str(metric.get("compute") or "").strip()
+    params = dict(metric.get("params") or {})
+    roles: dict[str, tuple[str, ...]] = {}
+    if req_vars:
+        roles["eval"] = req_vars
+    if scenario == "historical":
+        return roles
+
+    months = {int(value) for value in params.get("months", []) if str(value).strip()}
+    if compute_name in SPI_COMPUTE_NAMES and primary_var:
+        roles["spi_calibration"] = (primary_var,)
+    if compute_name in TX90P_COMPUTE_NAMES and primary_var:
+        roles["baseline"] = (primary_var,)
+    if compute_name in HEATWAVE_BASELINE_COMPUTE_NAMES and primary_var:
+        roles["baseline"] = (primary_var,)
+    if compute_name in PRECIP_PERCENTILE_COMPUTE_NAMES and primary_var:
+        roles["baseline"] = (primary_var,)
+    if compute_name in {"seasonal_mean", "seasonal_min"} and months == {1, 2, 12} and primary_var:
+        roles["historical_prev_dec"] = (primary_var,)
+    if primary_var:
+        if metric.get("slug") in HEAT_RISK_GRIDFIRST_SLUGS and compute_name in HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
+            roles["baseline"] = (primary_var,)
+        if metric.get("slug") in DROUGHT_GRIDFIRST_SLUGS:
+            roles["baseline"] = (primary_var,)
+        if level in {"district", "block"} and metric.get("slug") in {"r95p_very_wet_precip", "r95ptot_contribution_pct"}:
+            roles["baseline"] = (primary_var,)
+    if metric.get("slug") in COLD_RISK_GRIDFIRST_SLUGS and primary_var:
+        from india_resilience_tool.compute.cold_risk_gridfirst import (
+            COLD_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES,
+            COLD_RISK_GRIDFIRST_DJF_COMPUTES,
+        )
+
+        if compute_name in COLD_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
+            roles["baseline"] = (primary_var,)
+        if compute_name in COLD_RISK_GRIDFIRST_DJF_COMPUTES:
+            roles["historical_prev_dec"] = (primary_var,)
+    return roles
+
+
+def _role_source_signatures(
+    *,
+    metric: Mapping[str, Any],
+    model: str,
+    scenario: str,
+    level: AdminLevel,
+    allow_write: bool,
+) -> dict[str, str]:
+    """Return deterministic source signatures for the roles a task uses."""
+    role_varnames = _metric_role_varnames(metric=metric, scenario=scenario, level=level)
+    signatures: dict[str, str] = {}
+    eval_signature = ""
+    for role_name, varnames in role_varnames.items():
+        scenario_name = "historical" if role_name != "eval" else scenario
+        shards = _resolve_role_var_shards(
+            scenario_name=scenario_name,
+            varnames=varnames,
+            model=model,
+            allow_write=allow_write,
+        )
+        if not shards:
+            continue
+        role_signature = _inventory_signature_for_role(role_name=role_name, shards=shards)
+        if role_name == "eval":
+            eval_signature = role_signature
+        signatures[role_name] = role_signature
+    if "spi_calibration" not in signatures and eval_signature and scenario != "historical" and str(metric.get("compute") or "") in SPI_COMPUTE_NAMES:
+        signatures["spi_calibration"] = eval_signature
+    if "baseline" not in signatures and eval_signature and scenario != "historical" and str(metric.get("compute") or "") in PRECIP_PERCENTILE_COMPUTE_NAMES:
+        signatures["baseline"] = eval_signature
+    return signatures
+
 def _require_scipy_stats():
     """Import scipy.stats only when SPI/SPEI is requested (keeps base pipeline lighter)."""
     try:
@@ -1943,7 +2040,7 @@ def _collect_monthly_totals_by_unit(
             continue
         ds = None
         try:
-            ds = normalize_lat_lon(xr.open_dataset(p))
+            ds = normalize_lat_lon(_open_inventory_dataset(p))
             if varname not in ds:
                 continue
             da = ds[varname]
@@ -2354,7 +2451,7 @@ def _collect_daily_mean_by_unit(
             continue
 
         time_coder = xr.coders.CFDatetimeCoder(use_cftime=True)
-        ds = xr.open_dataset(p, decode_times=time_coder)
+        ds = _open_inventory_dataset(p, decode_times=time_coder)
         ds = normalize_lat_lon(ds)
         if varname not in ds:
             continue
@@ -3357,8 +3454,8 @@ def _compute_seasonal_djf_cross_year_rows_for_metric(
             if cur_path is None or prev_path is None:
                 v = np.nan
             else:
-                ds_prev = normalize_lat_lon(xr.open_dataset(prev_path))
-                ds_cur = normalize_lat_lon(xr.open_dataset(cur_path))
+                ds_prev = normalize_lat_lon(_open_inventory_dataset(prev_path))
+                ds_cur = normalize_lat_lon(_open_inventory_dataset(cur_path))
                 try:
                     da_prev = ds_prev[varname]
                     da_cur = ds_cur[varname]
@@ -3436,12 +3533,13 @@ def _compute_seasonal_min_djf_cross_year_rows_for_metric(
 # -----------------------------------------------------------------------------
 # FILE I/O HELPERS
 # -----------------------------------------------------------------------------
+def _source_inventory_root() -> Path:
+    """Return the shared raw-source inventory cache root."""
+    return BASE_OUTPUT_ROOT / "_internal" / "source_inventory"
+
+
 def yearly_files_for_dir(dirpath: Path) -> dict:
-    out = {}
-    for f in glob.glob(str(dirpath / "*.nc")):
-        y = os.path.splitext(os.path.basename(f))[0]
-        if y.isdigit(): out[int(y)] = Path(f)
-    return dict(sorted(out.items()))
+    return inventory_yearly_files_for_dir(Path(dirpath))
 
 def var_data_dir(data_root: Path, scenario_subdir: str, varname: str, model: str) -> Path:
     parts = list(Path(scenario_subdir).parts)
@@ -3469,25 +3567,85 @@ def validated_year_files(data_dir: Path) -> tuple[dict, dict]:
 
 def validated_year_files_for_var(data_dir: Path, varname: str) -> tuple[dict, dict]:
     """Return yearly files that open successfully and contain the requested variable."""
-    valid, bad = validated_year_files(data_dir)
-    if not valid:
-        return valid, bad
+    scenario_name = Path(data_dir).parents[1].name
+    model_name = Path(data_dir).name
+    shard = load_or_refresh_inventory_shard(
+        _source_inventory_root(),
+        data_dir=Path(data_dir),
+        scenario=scenario_name,
+        varname=varname,
+        model=model_name,
+        allow_write=_inventory_writes_allowed,
+    )
+    for record in shard.valid_year_records().values():
+        if record.engine:
+            _inventory_path_engines[str(record.path.resolve())] = str(record.engine)
+    return shard.valid_year_files(), shard.invalid_year_details()
 
-    var_valid: dict[int, Path] = {}
-    var_bad: dict[int, dict[str, Any]] = dict(bad)
-    for year, path in valid.items():
-        try:
-            ds = normalize_lat_lon(xr.open_dataset(path))
-            try:
-                if varname in ds and getattr(ds[varname], "size", 0) > 0:
-                    var_valid[year] = path
-                else:
-                    var_bad[year] = {"path": path, "reason": f"missing_variable:{varname}"}
-            finally:
-                ds.close()
-        except Exception as exc:
-            var_bad[year] = {"path": path, "reason": f"variable_check_failed:{exc}"}
-    return dict(sorted(var_valid.items())), var_bad
+
+def _inventory_shard_for_var(
+    *,
+    scenario_name: str,
+    varname: str,
+    model: str,
+    data_dir: Path,
+    allow_write: bool,
+) -> SourceInventoryShard:
+    """Return one inventory shard for a scenario/var/model directory."""
+    shard = load_or_refresh_inventory_shard(
+        _source_inventory_root(),
+        data_dir=data_dir,
+        scenario=scenario_name,
+        varname=varname,
+        model=model,
+        allow_write=allow_write,
+    )
+    for record in shard.valid_year_records().values():
+        if record.engine:
+            _inventory_path_engines[str(record.path.resolve())] = str(record.engine)
+    return shard
+
+
+def _open_inventory_dataset(path: Path, **kwargs) -> xr.Dataset:
+    """Open a source dataset using the validated inventory backend when known."""
+    engine = _inventory_path_engines.get(str(Path(path).resolve()))
+    if engine:
+        return xr.open_dataset(path, engine=engine, **kwargs)
+    return xr.open_dataset(path, **kwargs)
+
+
+def _resolve_role_var_shards(
+    *,
+    scenario_name: str,
+    varnames: Sequence[str],
+    model: str,
+    allow_write: bool,
+) -> dict[str, SourceInventoryShard]:
+    """Return inventory shards keyed by variable for one logical source role."""
+    shards: dict[str, SourceInventoryShard] = {}
+    for varname in varnames:
+        data_dir = var_data_dir(DATA_ROOT, f"{scenario_name}/tas", varname, model)
+        if not data_dir.exists():
+            continue
+        shards[str(varname)] = _inventory_shard_for_var(
+            scenario_name=scenario_name,
+            varname=str(varname),
+            model=model,
+            data_dir=data_dir,
+            allow_write=allow_write,
+        )
+    return shards
+
+
+def _inventory_signature_for_role(
+    *,
+    role_name: str,
+    shards: Mapping[str, SourceInventoryShard],
+) -> str:
+    """Return one deterministic signature for a logical source role."""
+    return combine_shard_signatures(
+        {f"{role_name}:{varname}": shard for varname, shard in shards.items()}
+    )
 
 def discover_models(data_root: Path, scenarios: dict, variables: list = None) -> list:
     if variables is None: variables = ["tas", "tasmax", "tasmin", "pr"]
@@ -3501,7 +3659,17 @@ def discover_models(data_root: Path, scenarios: dict, variables: list = None) ->
                 if entry.is_dir(): models.add(entry.name)
     return sorted(models)
 
-MODELS = discover_models(DATA_ROOT, SCENARIOS)
+MODELS: list[str] = []
+_MODELS_DISCOVERED = False
+
+
+def _get_models() -> list[str]:
+    """Discover climate models lazily so CLI startup can log before discovery."""
+    global MODELS, _MODELS_DISCOVERED
+    if not _MODELS_DISCOVERED:
+        MODELS = discover_models(DATA_ROOT, SCENARIOS)
+        _MODELS_DISCOVERED = True
+    return MODELS
 
 def required_vars_for_metric(metric: dict) -> list[str]:
     """Return required CMIP variables for a metric dict (supports multi-var metrics)."""
@@ -3512,7 +3680,7 @@ def required_vars_for_metric(metric: dict) -> list[str]:
     return [str(v)] if v else []
 
 
-COMPUTE_MARKER_SCHEMA_VERSION = 3
+COMPUTE_MARKER_SCHEMA_VERSION = 4
 ENSEMBLE_MARKER_SCHEMA_VERSION = 3
 SKIP_REASON_MISSING_REQUIRED_VARS = "missing_required_vars"
 SKIP_REASON_NO_AVAILABLE_YEARS = "no_available_years"
@@ -3720,7 +3888,7 @@ def _cleanup_compute_outputs_for_overwrite(
     allowed_scenarios: Sequence[str] | None = None,
 ) -> None:
     """Remove selected compute outputs, coverage QC files, and markers before overwrite."""
-    models = set(_selected_values_or_all(allowed_models, MODELS))
+    models = set(_selected_values_or_all(allowed_models, _get_models()))
     scenarios = set(_selected_values_or_all(allowed_scenarios, tuple(SCENARIOS.keys())))
 
     level_root = metric_root(slug) / scope_name / get_level_folder(level)
@@ -4139,7 +4307,7 @@ def process_metric_for_model_scenario(
     if sample_path is None:
         sample_path = next(iter(year_to_paths[sample_year].values()))
 
-    ds_sample = normalize_lat_lon(xr.open_dataset(sample_path))
+    ds_sample = normalize_lat_lon(_open_inventory_dataset(sample_path))
     if primary_var not in ds_sample:
         ds_sample.close()
         return
@@ -4973,7 +5141,7 @@ def process_metric_for_model_scenario(
             try:
                 # Open each required variable once for this year.
                 for v, nc_path in paths_by_var.items():
-                    ds = normalize_lat_lon(xr.open_dataset(nc_path))
+                    ds = normalize_lat_lon(_open_inventory_dataset(nc_path))
                     if v not in ds:
                         raise KeyError(f"Variable '{v}' not found in {nc_path}")
                     ds_by_var[v] = ds
@@ -6038,6 +6206,7 @@ class ProcessingTask:
     required_vars: tuple[str, ...] = ()
     common_years_hash: str = ""
     scope_name: str = "Telangana"
+    source_signatures: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -6066,7 +6235,7 @@ def build_processing_task_plan(
         for i, m in enumerate(METRICS)
         if not metrics_filter or m["slug"] in metrics_filter
     ]
-    models_to_process = [m for m in MODELS if not models_filter or m in models_filter]
+    models_to_process = [m for m in _get_models() if not models_filter or m in models_filter]
     scenarios_to_process = {
         k: v for k, v in SCENARIOS.items() if not scenarios_filter or k in scenarios_filter
     }
@@ -6139,6 +6308,13 @@ def build_processing_task_plan(
                         required_vars=req_vars,
                         common_years_hash=_hash_common_years(sorted(common_years)),
                         scope_name=scope_name,
+                        source_signatures=_role_source_signatures(
+                            metric=metric,
+                            model=model,
+                            scenario=scenario,
+                            level=level,
+                            allow_write=True,
+                        ),
                     )
                 )
 
@@ -6215,6 +6391,14 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
         return MarkerValidationStatus(valid=False, reason="compute_marker_required_vars_mismatch")
     if str(payload.get("common_years_hash", "")).strip() != task.common_years_hash:
         return MarkerValidationStatus(valid=False, reason="compute_marker_common_years_mismatch")
+    if {
+        str(key): str(value)
+        for key, value in dict(payload.get("source_signatures") or {}).items()
+    } != {
+        str(key): str(value)
+        for key, value in dict(task.source_signatures or {}).items()
+    }:
+        return MarkerValidationStatus(valid=False, reason="compute_marker_source_signatures_mismatch")
     if str(payload.get("boundary_path", "")).strip() != boundary_path:
         return MarkerValidationStatus(valid=False, reason="compute_marker_boundary_path_mismatch")
     if int(payload.get("boundary_mtime_ns", -1)) != int(boundary_mtime_ns):
@@ -6344,6 +6528,7 @@ def _write_task_completion_marker(task: ProcessingTask, *, output_meta: Optional
         "scenario": task.scenario,
         "required_vars": list(task.required_vars),
         "common_years_hash": task.common_years_hash,
+        "source_signatures": dict(sorted((str(key), str(value)) for key, value in dict(task.source_signatures or {}).items())),
         "boundary_path": boundary_path,
         "boundary_mtime_ns": int(boundary_mtime_ns),
         "yearly_file_count": int(output_meta.get("yearly_file_count", 0)),
@@ -6398,6 +6583,50 @@ def _write_ensemble_completion_marker(
         payload,
     )
 
+
+def _set_inventory_write_mode(allowed: bool) -> None:
+    """Control whether inventory lookups may rebuild stale or missing shards."""
+    global _inventory_writes_allowed
+    _inventory_writes_allowed = bool(allowed)
+
+
+def _prewarm_inventory_for_tasks(tasks: Sequence[ProcessingTask]) -> None:
+    """Refresh all source-inventory shards needed by the runnable task set."""
+    requests: set[tuple[str, str, str]] = set()
+    for task in tasks:
+        metric = METRICS[task.metric_idx]
+        role_varnames = _metric_role_varnames(metric=metric, scenario=task.scenario, level=task.level)
+        for role_name, varnames in role_varnames.items():
+            scenario_name = task.scenario if role_name == "eval" else "historical"
+            for varname in varnames:
+                requests.add((scenario_name, str(varname), task.model))
+    if not requests:
+        return
+
+    _set_inventory_write_mode(True)
+    failures: list[str] = []
+    for scenario_name, varname, model in sorted(requests):
+        data_dir = var_data_dir(DATA_ROOT, f"{scenario_name}/tas", varname, model)
+        if not data_dir.exists():
+            continue
+        try:
+            _inventory_shard_for_var(
+                scenario_name=scenario_name,
+                varname=varname,
+                model=model,
+                data_dir=data_dir,
+                allow_write=True,
+            )
+        except Exception as exc:
+            failures.append(
+                f"scenario={scenario_name} var={varname} model={model}: {exc}"
+            )
+    if failures:
+        raise RuntimeError(
+            "Inventory prewarm failed for one or more source shards: "
+            + "; ".join(failures[:10])
+        )
+
 # Global worker state
 _worker_gdf = None
 _worker_level = "district"
@@ -6405,6 +6634,7 @@ _worker_state = "Telangana"
 
 def _worker_init(level: str = "district", state: str = "Telangana"):
     global _worker_gdf, _worker_level, _worker_state
+    _set_inventory_write_mode(False)
     _worker_level = level
     _worker_state = HYDRO_ROOT_NAME if level in {"basin", "sub_basin"} else state
     boundary_path = get_boundary_path(level)
@@ -6569,198 +6799,165 @@ def run_pipeline_parallel(
     """Run the pipeline with parallel processing."""
     setup_logging(verbose)
 
-    task_plan = build_processing_task_plan(
-        metrics_filter=metrics_filter,
-        models_filter=models_filter,
-        scenarios_filter=scenarios_filter,
-        level=level,
-        state=state,
-    )
-    metrics_to_process = [(i, m) for i, m in enumerate(METRICS) if m["slug"] in set(task_plan.selected_metrics)]
-    models_to_process = [m for m in MODELS if not models_filter or m in models_filter]
-    scenarios_to_process = {k: v for k, v in SCENARIOS.items() if not scenarios_filter or k in scenarios_filter}
-    tasks = list(task_plan.tasks)
-    effective_state = task_plan.scope_name
-    ensemble_models = _normalize_filter_values(models_filter)
-    ensemble_scenarios = _normalize_filter_values(scenarios_filter)
+    try:
+        task_plan = build_processing_task_plan(
+            metrics_filter=metrics_filter,
+            models_filter=models_filter,
+            scenarios_filter=scenarios_filter,
+            level=level,
+            state=state,
+        )
+        metrics_to_process = [(i, m) for i, m in enumerate(METRICS) if m["slug"] in set(task_plan.selected_metrics)]
+        models_to_process = [m for m in _get_models() if not models_filter or m in models_filter]
+        scenarios_to_process = {k: v for k, v in SCENARIOS.items() if not scenarios_filter or k in scenarios_filter}
+        tasks = list(task_plan.tasks)
+        effective_state = task_plan.scope_name
+        ensemble_models = _normalize_filter_values(models_filter)
+        ensemble_scenarios = _normalize_filter_values(scenarios_filter)
 
-    if overwrite:
-        for slug in sorted({task.slug for task in tasks}):
-            _cleanup_compute_outputs_for_overwrite(
-                slug=slug,
+        if overwrite:
+            for slug in sorted({task.slug for task in tasks}):
+                _cleanup_compute_outputs_for_overwrite(
+                    slug=slug,
+                    level=level,
+                    scope_name=effective_state,
+                    allowed_models=models_filter,
+                    allowed_scenarios=scenarios_filter,
+                )
+
+        if task_plan.skipped_counts_by_reason:
+            joined = ", ".join(f"{reason}={count}" for reason, count in sorted(task_plan.skipped_counts_by_reason.items()))
+            logging.info(f"Task builder skipped combinations ({joined})")
+
+        ensemble_needed_slugs: set[str] = set(task.slug for task in tasks) if not skip_existing else set()
+        if skip_existing:
+            runnable_tasks = list(tasks)
+            tasks = []
+            skipped_existing = 0
+            for task in runnable_tasks:
+                if task_completion_marker_valid(task):
+                    skipped_existing += 1
+                else:
+                    tasks.append(task)
+                    ensemble_needed_slugs.add(task.slug)
+            for slug in {task.slug for task in runnable_tasks}:
+                if slug not in {task.slug for task in tasks} and not ensemble_completion_marker_valid(
+                    slug=slug,
+                    level=level,
+                    scope_name=effective_state,
+                    allowed_models=ensemble_models,
+                    allowed_scenarios=ensemble_scenarios,
+                ):
+                    ensemble_needed_slugs.add(slug)
+            if skipped_existing:
+                logging.info(
+                    "Skipping %s runnable compute tasks because validated completion markers already exist",
+                    skipped_existing,
+                )
+
+        if level == "sub_basin":
+            level_display = "Sub-basin"
+        elif level == "basin":
+            level_display = "Basin"
+        else:
+            level_display = "Block" if level == "block" else "District"
+        level_folder = get_level_folder(level)
+        spi_impl = "climate-indices package" if USE_CLIMATE_INDICES_PACKAGE and CLIMATE_INDICES_AVAILABLE else "legacy (scipy)"
+
+        logging.info("=" * 60)
+        logging.info("India Resilience Tool - Climate Index Pipeline")
+        logging.info(f"Level: {level_display} (folder: {level_folder}/)")
+        logging.info(f"Output scope: {effective_state}")
+        logging.info(f"Metrics: {len(metrics_to_process)}, Models: {len(models_to_process)}, Scenarios: {len(scenarios_to_process)}")
+        logging.info(f"Runnable tasks: {len(task_plan.tasks)}, Tasks to execute: {len(tasks)}, Workers: {num_workers}")
+        logging.info(f"SPI/SPEI implementation: {spi_impl}")
+        logging.info("=" * 60)
+
+        if not tasks and not ensemble_needed_slugs:
+            logging.info("No compute or ensemble work is pending.")
+            return PipelineRunResult(
                 level=level,
                 scope_name=effective_state,
-                allowed_models=models_filter,
-                allowed_scenarios=scenarios_filter,
+                compute_failed_count=0,
+                ensemble_results=(),
             )
 
-    if task_plan.skipped_counts_by_reason:
-        joined = ", ".join(f"{reason}={count}" for reason, count in sorted(task_plan.skipped_counts_by_reason.items()))
-        logging.info(f"Task builder skipped combinations ({joined})")
+        if tasks:
+            logging.info("Prewarming source inventory shards...")
+            _prewarm_inventory_for_tasks(tasks)
+            _set_inventory_write_mode(False)
 
-    ensemble_needed_slugs: set[str] = set(task.slug for task in tasks) if not skip_existing else set()
-    if skip_existing:
-        runnable_tasks = list(tasks)
-        tasks = []
-        skipped_existing = 0
-        for task in runnable_tasks:
-            if task_completion_marker_valid(task):
-                skipped_existing += 1
+        start = time.time()
+        results = []
+        completed = 0
+        failed = 0
+
+        if num_workers == 1:
+            boundary_path = get_boundary_path(level)
+            gdf = load_boundaries(
+                boundary_path,
+                state_filter=None if level in {"basin", "sub_basin"} else state,
+                level=level,
+            )
+            logging.info(f"Loaded {len(gdf)} {level} boundaries for {effective_state}")
+
+            for task in tasks:
+                try:
+                    result = _execute_processing_task(task, gdf)
+                    result["status"] = "success"
+                    results.append(result)
+                except Exception as e:
+                    logging.error(f"Task failed for {task.slug}/{task.model}/{task.scenario}: {e}")
+                    logging.debug(traceback.format_exc())
+                    results.append({"status": "failed", "error": str(e)})
+                    failed += 1
+                completed += 1
+                if completed % 10 == 0:
+                    logging.info(f"Progress: {completed}/{len(tasks)} ({failed} failed)")
+        else:
+            init_fn = partial(_worker_init, level, state)
+            with Pool(num_workers, initializer=init_fn) as pool:
+                for r in pool.imap_unordered(_worker_process_task, tasks):
+                    results.append(r)
+                    completed += 1
+                    if r["status"] == "failed":
+                        failed += 1
+                    if completed % 10 == 0:
+                        logging.info(f"Progress: {completed}/{len(tasks)} ({failed} failed)")
+
+        logging.info(f"Computation: {time.time() - start:.1f}s, Success: {completed - failed}, Failed: {failed}")
+        logging.info("Building ensembles...")
+
+        ensemble_args = [
+            (slug, level, effective_state, ensemble_models, ensemble_scenarios)
+            for slug in sorted(ensemble_needed_slugs)
+        ]
+        ensemble_results: list[EnsembleJobResult] = []
+        if ensemble_args:
+            if num_workers == 1:
+                for args in ensemble_args:
+                    ensemble_results.append(_compute_ensembles_for_metric(args))
             else:
-                tasks.append(task)
-                ensemble_needed_slugs.add(task.slug)
-        for slug in {task.slug for task in runnable_tasks}:
-            if slug not in {task.slug for task in tasks} and not ensemble_completion_marker_valid(
-                slug=slug,
-                level=level,
-                scope_name=effective_state,
-                allowed_models=ensemble_models,
-                allowed_scenarios=ensemble_scenarios,
-            ):
-                ensemble_needed_slugs.add(slug)
-        if skipped_existing:
-            logging.info(
-                "Skipping %s runnable compute tasks because validated completion markers already exist",
-                skipped_existing,
-            )
+                with Pool(num_workers) as pool:
+                    ensemble_results = list(pool.imap_unordered(_compute_ensembles_for_metric, ensemble_args))
+        else:
+            logging.info("No ensemble work is pending.")
 
-    if level == "sub_basin":
-        level_display = "Sub-basin"
-    elif level == "basin":
-        level_display = "Basin"
-    else:
-        level_display = "Block" if level == "block" else "District"
-    level_folder = get_level_folder(level)
-    
-    # Determine SPI implementation info
-    spi_impl = "climate-indices package" if USE_CLIMATE_INDICES_PACKAGE and CLIMATE_INDICES_AVAILABLE else "legacy (scipy)"
-    
-    logging.info("=" * 60)
-    logging.info("India Resilience Tool - Climate Index Pipeline")
-    logging.info(f"Level: {level_display} (folder: {level_folder}/)")
-    logging.info(f"Output scope: {effective_state}")
-    logging.info(f"Metrics: {len(metrics_to_process)}, Models: {len(models_to_process)}, Scenarios: {len(scenarios_to_process)}")
-    logging.info(f"Runnable tasks: {len(task_plan.tasks)}, Tasks to execute: {len(tasks)}, Workers: {num_workers}")
-    logging.info(f"SPI/SPEI implementation: {spi_impl}")
-    logging.info("=" * 60)
-
-    if not tasks and not ensemble_needed_slugs:
-        logging.info("No compute or ensemble work is pending.")
+        logging.info(f"TOTAL: {time.time() - start:.1f}s")
         return PipelineRunResult(
             level=level,
             scope_name=effective_state,
-            compute_failed_count=0,
-            ensemble_results=(),
+            compute_failed_count=failed,
+            ensemble_results=tuple(ensemble_results),
         )
-
-    start = time.time()
-    results = []
-    completed = 0
-    failed = 0
-    
-    if num_workers == 1:
-        # Sequential mode
-        boundary_path = get_boundary_path(level)
-        gdf = load_boundaries(
-            boundary_path,
-            state_filter=None if level in {"basin", "sub_basin"} else state,
-            level=level,
-        )
-        logging.info(f"Loaded {len(gdf)} {level} boundaries for {effective_state}")
-
-        for task in tasks:
-            try:
-                result = _execute_processing_task(task, gdf)
-                result["status"] = "success"
-                results.append(result)
-            except Exception as e:
-                logging.error(f"Task failed for {task.slug}/{task.model}/{task.scenario}: {e}")
-                logging.debug(traceback.format_exc())
-                results.append({"status": "failed", "error": str(e)})
-                failed += 1
-            completed += 1
-            if completed % 10 == 0:
-                logging.info(f"Progress: {completed}/{len(tasks)} ({failed} failed)")
-    else:
-        # Parallel mode
-        init_fn = partial(_worker_init, level, state)
-        with Pool(num_workers, initializer=init_fn) as pool:
-            for r in pool.imap_unordered(_worker_process_task, tasks):
-                results.append(r)
-                completed += 1
-                if r["status"] == "failed":
-                    failed += 1
-                if completed % 10 == 0:
-                    logging.info(f"Progress: {completed}/{len(tasks)} ({failed} failed)")
-
-    logging.info(f"Computation: {time.time() - start:.1f}s, Success: {completed - failed}, Failed: {failed}")
-    logging.info("Building ensembles...")
-
-    ensemble_args = [
-        (slug, level, effective_state, ensemble_models, ensemble_scenarios)
-        for slug in sorted(ensemble_needed_slugs)
-    ]
-    ensemble_results: list[EnsembleJobResult] = []
-    if ensemble_args:
-        if num_workers == 1:
-            for args in ensemble_args:
-                ensemble_results.append(_compute_ensembles_for_metric(args))
-        else:
-            with Pool(num_workers) as pool:
-                ensemble_results = list(pool.imap_unordered(_compute_ensembles_for_metric, ensemble_args))
-    else:
-        logging.info("No ensemble work is pending.")
-
-    logging.info(f"TOTAL: {time.time() - start:.1f}s")
-    return PipelineRunResult(
-        level=level,
-        scope_name=effective_state,
-        compute_failed_count=failed,
-        ensemble_results=tuple(ensemble_results),
-    )
+    finally:
+        _set_inventory_write_mode(True)
 
 # -----------------------------------------------------------------------------
 # CLI
 # -----------------------------------------------------------------------------
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="IRT Climate Index Pipeline (Multiprocess)")
-    parser.add_argument("-w", "--workers", type=int, default=DEFAULT_WORKERS,
-                        help=f"Number of worker processes (default: {DEFAULT_WORKERS})")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Enable verbose/debug logging")
-    parser.add_argument(
-        "-l",
-        "--level",
-        choices=["district", "block", "basin", "sub_basin", "both"],
-        default="both",
-        help="Spatial level for aggregation (default: both = district + block)",
-    )
-    parser.add_argument("-s", "--state", default="Telangana",
-                        help="State to process (default: Telangana)")
-    parser.add_argument("--metrics", nargs="+",
-                        help="Filter to specific metric slugs")
-    parser.add_argument("--models", nargs="+",
-                        help="Filter to specific models")
-    parser.add_argument("--scenarios", nargs="+",
-                        help="Filter to specific scenarios")
-    parser.add_argument(
-        "--skip-existing",
-        action="store_true",
-        help="Skip compute tasks with validated completion markers and intact outputs.",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Delete the selected compute outputs and markers before rebuilding.",
-    )
-    parser.add_argument("--list-metrics", action="store_true",
-                        help="List available metrics and exit")
-    parser.add_argument("--list-models", action="store_true",
-                        help="List discovered models and exit")
-    parser.add_argument("--spi-legacy", action="store_true",
-                        help="Accepted for compatibility but rejected because legacy SPI is non-conformant.")
-    parser.add_argument("--spi-distribution", choices=["gamma", "pearson"], default="gamma",
-                        help="Distribution for SPI fitting when using climate-indices package (default: gamma)")
+    parser = build_compute_parser(default_workers=DEFAULT_WORKERS)
     args = parser.parse_args(argv)
     
     # Handle SPI implementation + distribution flags
@@ -6788,9 +6985,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     
     if args.list_models:
         print("Discovered models:")
-        for m in MODELS:
+        for m in _get_models():
             print(f"  {m}")
-        print(f"Total: {len(MODELS)}")
+        print(f"Total: {len(_get_models())}")
         return 0
     
     # Ensure our banners use the same log format as the pipeline itself

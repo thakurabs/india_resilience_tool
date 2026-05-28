@@ -31,36 +31,43 @@ from tools.optimized.build_processed_optimised import (
 )
 
 
-def _write_admin_legacy_metric_fixture(tmp_path: Path, *, slug: str = "txx_annual_max") -> None:
-    legacy_root = tmp_path / "processed" / slug / "Telangana"
+def _write_admin_legacy_metric_fixture(
+    tmp_path: Path,
+    *,
+    slug: str = "txx_annual_max",
+    state: str = "Telangana",
+    district: str = "Hanumakonda",
+    block: str = "Atmakur",
+) -> None:
+    legacy_root = tmp_path / "processed" / slug / state
     legacy_root.mkdir(parents=True)
     (legacy_root / "master_metrics_by_district.csv").write_text(
-        f"state,district,{slug}__ssp245__2030-2040__mean\nTelangana,Hanumakonda,1.0\n",
+        f"state,district,{slug}__ssp245__2030-2040__mean\n{state},{district},1.0\n",
         encoding="utf-8",
     )
     (legacy_root / "master_metrics_by_block.csv").write_text(
-        f"state,district,block,{slug}__ssp245__2030-2040__mean\nTelangana,Hanumakonda,Atmakur,2.0\n",
+        f"state,district,block,{slug}__ssp245__2030-2040__mean\n{state},{district},{block},2.0\n",
         encoding="utf-8",
     )
 
-    district_model_dir = legacy_root / "districts" / "Hanumakonda" / "ModelA" / "ssp245"
+    district_model_dir = legacy_root / "districts" / district / "ModelA" / "ssp245"
     district_model_dir.mkdir(parents=True)
-    (district_model_dir / "Hanumakonda_yearly.csv").write_text("year,value\n2030,1.0\n", encoding="utf-8")
+    (district_model_dir / f"{district}_yearly.csv").write_text("year,value\n2030,1.0\n", encoding="utf-8")
 
-    district_ensemble_dir = legacy_root / "districts" / "ensembles" / "Hanumakonda" / "ssp245"
+    district_ensemble_dir = legacy_root / "districts" / "ensembles" / district / "ssp245"
     district_ensemble_dir.mkdir(parents=True)
-    (district_ensemble_dir / "Hanumakonda_yearly_ensemble.csv").write_text(
+    (district_ensemble_dir / f"{district}_yearly_ensemble.csv").write_text(
         "year,ensemble_mean\n2030,1.5\n",
         encoding="utf-8",
     )
 
-    block_model_dir = legacy_root / "blocks" / "Hanumakonda" / "Atmakur" / "ModelA" / "ssp245"
+    block_model_dir = legacy_root / "blocks" / district / block / "ModelA" / "ssp245"
     block_model_dir.mkdir(parents=True)
-    (block_model_dir / "Atmakur_yearly.csv").write_text("year,value\n2030,2.0\n", encoding="utf-8")
+    (block_model_dir / f"{block}_yearly.csv").write_text("year,value\n2030,2.0\n", encoding="utf-8")
 
-    block_ensemble_dir = legacy_root / "blocks" / "ensembles" / "Hanumakonda" / "Atmakur" / "ssp245"
+    block_ensemble_dir = legacy_root / "blocks" / "ensembles" / district / block / "ssp245"
     block_ensemble_dir.mkdir(parents=True)
-    (block_ensemble_dir / "Atmakur_yearly_ensemble.csv").write_text(
+    (block_ensemble_dir / f"{block}_yearly_ensemble.csv").write_text(
         "year,ensemble_mean\n2030,2.5\n",
         encoding="utf-8",
     )
@@ -572,7 +579,7 @@ def test_build_progress_failure_summary_reports_remaining() -> None:
     summary = progress.failure_summary()
 
     assert "completed_tasks=1" in summary
-    assert "remaining_tasks=2" in summary
+    assert "remaining_tasks=1" in summary
     assert "current=m2" in summary
 
 
@@ -1154,7 +1161,7 @@ def test_build_processed_optimised_prune_scope_removes_selected_owned_roots_only
         run_audit=False,
     )
 
-    assert not stale_selected_block.exists()
+    assert stale_selected_block.exists()
     assert stale_selected_district.exists()
     assert stale_other_metric_block.exists()
     assert (
@@ -1167,6 +1174,62 @@ def test_build_processed_optimised_prune_scope_removes_selected_owned_roots_only
         / "block"
         / "state=Telangana.parquet"
     ).exists()
+
+
+def test_build_processed_optimised_state_scope_preserves_other_states_and_shared_globals(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path, state="Telangana", district="Hanumakonda", block="Atmakur")
+    _write_admin_legacy_metric_fixture(tmp_path, state="Karnataka", district="Bengaluru", block="Anekal")
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    bundle_root = tmp_path / "processed_optimised"
+    global_manifest = bundle_root / "bundle_manifest.json"
+    global_manifest.write_text('{"global": true}', encoding="utf-8")
+    global_parity = bundle_root / "parity_report.json"
+    global_parity.write_text('{"global": true}', encoding="utf-8")
+    adm1_path = bundle_root / "geometry" / "admin" / "adm1.geojson"
+    adm1_path.parent.mkdir(parents=True, exist_ok=True)
+    adm1_path.write_text("shared", encoding="utf-8")
+
+    telangana_master = (
+        bundle_root / "metrics" / "txx_annual_max" / "masters" / "admin" / "district" / "state=Telangana.parquet"
+    )
+    karnataka_master = (
+        bundle_root / "metrics" / "txx_annual_max" / "masters" / "admin" / "district" / "state=Karnataka.parquet"
+    )
+    assert telangana_master.exists()
+    assert karnataka_master.exists()
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        levels=["district"],
+        states=["telangana"],
+        overwrite=True,
+        prune_scope=True,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=True,
+    )
+
+    assert telangana_master.exists()
+    assert karnataka_master.exists()
+    assert global_manifest.read_text(encoding="utf-8") == '{"global": true}'
+    assert global_parity.read_text(encoding="utf-8") == '{"global": true}'
+    assert adm1_path.read_text(encoding="utf-8") == "shared"
 
 
 def test_build_processed_optimised_full_rebuild_dry_run_preserves_existing_bundle(
@@ -1328,3 +1391,95 @@ def test_build_execution_plan_and_audit_filter_to_sub_basin_level(
     )
 
     assert report["issue_count"] == 0
+
+
+def test_build_execution_plan_with_state_defaults_to_admin_only(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path, state="Telangana", district="Hanumakonda", block="Atmakur")
+    _write_hydro_legacy_metric_fixture(tmp_path)
+
+    plan = _build_execution_plan(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        states=["Telangana"],
+        include_geometry=False,
+        include_context=False,
+    )
+
+    assert {task.level for task in plan.master_tasks} <= {"district", "block"}
+    assert {job.level for job in plan.yearly_ensemble_jobs} <= {"district", "block"}
+
+
+def test_audit_processed_optimised_state_scope_does_not_write_global_report_by_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path, state="Telangana", district="Hanumakonda", block="Atmakur")
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    bundle_root = tmp_path / "processed_optimised"
+    global_report = bundle_root / "parity_report.json"
+    global_report.write_text('{"global": true}', encoding="utf-8")
+
+    report = audit_processed_optimised_parity(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        states=["Telangana"],
+        include_geometry=False,
+        include_context=False,
+        write_report=True,
+    )
+
+    assert report["issue_count"] == 0
+    assert global_report.read_text(encoding="utf-8") == '{"global": true}'
+
+
+def test_audit_processed_optimised_state_scope_writes_only_explicit_scoped_report(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path, state="Telangana", district="Hanumakonda", block="Atmakur")
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    bundle_root = tmp_path / "processed_optimised"
+    global_report = bundle_root / "parity_report.json"
+    global_report.write_text('{"global": true}', encoding="utf-8")
+    scoped_report = bundle_root / "parity_report__admin__Telangana.json"
+
+    report = audit_processed_optimised_parity(
+        data_dir=tmp_path,
+        metrics=["txx_annual_max"],
+        levels=["district"],
+        states=["Telangana"],
+        include_geometry=False,
+        include_context=False,
+        write_report=False,
+        report_path=scoped_report,
+    )
+
+    assert report["issue_count"] == 0
+    assert global_report.read_text(encoding="utf-8") == '{"global": true}'
+    assert scoped_report.exists()

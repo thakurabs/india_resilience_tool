@@ -13,6 +13,7 @@ from tools.optimized.build_processed_optimised import audit_processed_optimised_
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Audit processed_optimised parity against legacy processed inputs.")
     parser.add_argument("--metric", action="append", dest="metrics", help="One metric slug to include. Repeatable.")
+    parser.add_argument("--state", action="append", dest="states", help="One admin state to include. Repeatable.")
     parser.add_argument(
         "--level",
         action="append",
@@ -22,7 +23,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--skip-geometry", action="store_true", help="Skip optimized geometry validation.")
     parser.add_argument("--skip-context", action="store_true", help="Skip optimized context validation.")
+    parser.add_argument(
+        "--include-shared-admin-artifacts",
+        action="store_true",
+        help="With --state, also audit shared-global admin artifacts.",
+    )
     parser.add_argument("--no-report", action="store_true", help="Do not write parity_report.json.")
+    parser.add_argument(
+        "--report-path",
+        type=Path,
+        help="Explicit parity report output path. Scoped --state runs leave the global report untouched unless this is provided.",
+    )
     return parser
 
 
@@ -34,9 +45,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         data_dir=data_dir,
         metrics=args.metrics,
         levels=args.levels,
+        states=args.states,
         include_geometry=not bool(args.skip_geometry),
         include_context=not bool(args.skip_context),
-        write_report=not bool(args.no_report),
+        include_shared_admin_artifacts=bool(args.include_shared_admin_artifacts),
+        write_report=not bool(args.no_report) and args.report_path is None,
+        report_path=args.report_path.expanduser().resolve() if args.report_path else None,
     )
     print("PROCESSED OPTIMISED PARITY AUDIT")
     print(f"bundle_root: {report['bundle_root']}")

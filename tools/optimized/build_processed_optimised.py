@@ -101,7 +101,7 @@ from india_resilience_tool.data.optimized_bundle import (
     resolve_optimized_metric_root,
     resolve_optimized_bundle_root,
 )
-from india_resilience_tool.utils.naming import alias
+from india_resilience_tool.utils.naming import alias, normalize_name
 from india_resilience_tool.utils.processed_io import read_table, remove_tree, unlink_file
 
 
@@ -234,7 +234,7 @@ class BuildPlan:
             "context": len(self.context_tasks),
             "geometry": len(self.geometry_tasks),
             "glance": len(self.glance_slugs),
-            "manifest": 1,
+            "manifest": 1 if self.manifest_task.target_path is not None else 0,
         }
 
     @property
@@ -1115,13 +1115,23 @@ def _copy_context_artifacts(*, tasks: tuple[BuildTask, ...], progress: BuildProg
         _run_task(task, progress, _copy_one)
 
 
-def _geometry_tasks(*, data_dir: Path, selected_levels: set[str]) -> tuple[BuildTask, ...]:
+def _geometry_tasks(
+    *,
+    data_dir: Path,
+    selected_levels: set[str],
+    selected_admin_states: tuple[str, ...] = (),
+    include_shared_admin_artifacts: bool = True,
+) -> tuple[BuildTask, ...]:
     cfg = get_paths_config()
     tasks: list[BuildTask] = []
+    selected_admin_state_set = {str(state).strip() for state in selected_admin_states if str(state).strip()}
 
     if "district" in selected_levels:
         adm2 = ensure_adm2_columns(gpd.read_file(cfg.districts_path).to_crs(4326))
-        for state_name in sorted({str(v).strip() for v in adm2["state_name"].astype(str).tolist()}):
+        district_states = sorted({str(v).strip() for v in adm2["state_name"].astype(str).tolist()})
+        if selected_admin_state_set:
+            district_states = [state_name for state_name in district_states if state_name in selected_admin_state_set]
+        for state_name in district_states:
             tasks.append(
                 BuildTask(
                     stage="geometry",
@@ -1132,19 +1142,23 @@ def _geometry_tasks(*, data_dir: Path, selected_levels: set[str]) -> tuple[Build
                     target_path=optimized_geometry_path(level="district", state=state_name, data_dir=data_dir),
                 )
             )
-        tasks.append(
-            BuildTask(
-                stage="geometry",
-                label="adm1 state polygons",
-                level="adm1",
-                source_path=Path(cfg.districts_path),
-                target_path=optimized_adm1_path(data_dir=data_dir),
+        if include_shared_admin_artifacts:
+            tasks.append(
+                BuildTask(
+                    stage="geometry",
+                    label="adm1 state polygons",
+                    level="adm1",
+                    source_path=Path(cfg.districts_path),
+                    target_path=optimized_adm1_path(data_dir=data_dir),
+                )
             )
-        )
 
     if "block" in selected_levels:
         adm3 = ensure_adm3_columns(gpd.read_file(cfg.blocks_path).to_crs(4326))
-        for state_name in sorted({str(v).strip() for v in adm3["state_name"].astype(str).tolist()}):
+        block_states = sorted({str(v).strip() for v in adm3["state_name"].astype(str).tolist()})
+        if selected_admin_state_set:
+            block_states = [state_name for state_name in block_states if state_name in selected_admin_state_set]
+        for state_name in block_states:
             tasks.append(
                 BuildTask(
                     stage="geometry",
@@ -1184,15 +1198,16 @@ def _geometry_tasks(*, data_dir: Path, selected_levels: set[str]) -> tuple[Build
             )
 
     if "block" in selected_levels:
-        tasks.append(
-            BuildTask(
-                stage="geometry",
-                label="admin block index",
-                level="admin_block_index",
-                source_path=Path(cfg.blocks_path),
-                target_path=optimized_context_path("admin_block_index.parquet", data_dir=data_dir),
+        if include_shared_admin_artifacts:
+            tasks.append(
+                BuildTask(
+                    stage="geometry",
+                    label="admin block index",
+                    level="admin_block_index",
+                    source_path=Path(cfg.blocks_path),
+                    target_path=optimized_context_path("admin_block_index.parquet", data_dir=data_dir),
+                )
             )
-        )
 
     if "sub_basin" in selected_levels and sub is not None:
         tasks.append(
@@ -1446,6 +1461,55 @@ def _selected_levels(levels: Optional[list[str]]) -> tuple[str, ...]:
     return tuple(resolved or LEVEL_SELECTIONS["all"])
 
 
+def _effective_levels(levels: Optional[list[str]], *, states: Optional[list[str]]) -> Optional[list[str]]:
+    """Resolve the requested level filter, defaulting scoped state runs to admin."""
+    if states and not levels:
+        return ["admin"]
+    return levels
+
+
+def _normalized_state_key(value: str) -> str:
+    """Return the canonical comparison token for one admin state name."""
+    return alias(normalize_name(str(value or "").strip()))
+
+
+def _resolve_requested_state_names(
+    discovered_states: Iterable[str],
+    requested_states: Optional[list[str]],
+) -> tuple[str, ...]:
+    """Resolve user-requested states to discovered legacy state root names."""
+    discovered = [str(state).strip() for state in discovered_states if str(state).strip()]
+    if not requested_states:
+        return tuple(discovered)
+
+    normalized_map: dict[str, list[str]] = {}
+    for state in discovered:
+        normalized_map.setdefault(_normalized_state_key(state), []).append(state)
+
+    resolved: list[str] = []
+    for requested in requested_states:
+        token = _normalized_state_key(requested)
+        matches = sorted(normalized_map.get(token, []))
+        if not matches:
+            raise ValueError(
+                f"Requested state {requested!r} was not found in discovered legacy roots: {', '.join(sorted(discovered))}"
+            )
+        if len(matches) > 1:
+            raise ValueError(
+                f"Requested state {requested!r} is ambiguous across discovered legacy roots: {', '.join(matches)}"
+            )
+        if matches[0] not in resolved:
+            resolved.append(matches[0])
+    return tuple(resolved)
+
+
+def _state_scoped_admin_run(*, states: Optional[list[str]], levels: Optional[list[str]]) -> bool:
+    """Return True when the request is scoped to admin state-owned artifacts."""
+    if not states:
+        return False
+    return bool({"district", "block"} & set(_selected_levels(_effective_levels(levels, states=states))))
+
+
 def _admin_sources_for_glance_slug(slug: str, *, data_dir: Path) -> bool:
     """Return whether a dashboard composite has district master inputs for Glance."""
     optimized_root = resolve_optimized_metric_root(slug, data_dir=data_dir)
@@ -1472,14 +1536,17 @@ def _build_execution_plan(
     data_dir: Path,
     metrics: Optional[list[str]] = None,
     levels: Optional[list[str]] = None,
+    states: Optional[list[str]] = None,
     include_geometry: bool = True,
     include_context: bool = True,
+    include_shared_admin_artifacts: bool = True,
 ) -> BuildPlan:
     summaries_seed: list[MetricBundleSummary] = []
     master_tasks: list[BuildTask] = []
     yearly_model_jobs: list[YearlyModelsJob] = []
     yearly_ensemble_jobs: list[YearlyEnsembleJob] = []
-    selected_levels = set(_selected_levels(levels))
+    selected_levels = set(_selected_levels(_effective_levels(levels, states=states)))
+    selected_admin_state_names_union: set[str] = set()
 
     for slug in _selected_slugs(metrics):
         legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
@@ -1497,7 +1564,15 @@ def _build_execution_plan(
             )
         )
 
-        for state_root in _iter_state_dirs(legacy_root):
+        discovered_state_roots = tuple(_iter_state_dirs(legacy_root))
+        selected_state_names = _resolve_requested_state_names(
+            (state_root.name for state_root in discovered_state_roots),
+            states,
+        )
+        selected_admin_state_names_union.update(selected_state_names)
+        for state_root in discovered_state_roots:
+            if selected_state_names and state_root.name not in set(selected_state_names):
+                continue
             for level in ("district", "block"):
                 if level not in selected_levels:
                     continue
@@ -1680,7 +1755,8 @@ def _build_execution_plan(
                             )
 
     context_tasks: list[BuildTask] = []
-    if include_context:
+    scoped_admin_run = _state_scoped_admin_run(states=states, levels=levels)
+    if include_context and (not scoped_admin_run or include_shared_admin_artifacts):
         for src, dst in _context_map(data_dir=data_dir).items():
             if not src.exists():
                 continue
@@ -1694,12 +1770,17 @@ def _build_execution_plan(
             )
 
     geometry_tasks = (
-        _geometry_tasks(data_dir=data_dir, selected_levels=selected_levels)
+        _geometry_tasks(
+            data_dir=data_dir,
+            selected_levels=selected_levels,
+            selected_admin_states=tuple(sorted(selected_admin_state_names_union)),
+            include_shared_admin_artifacts=(not scoped_admin_run or include_shared_admin_artifacts),
+        )
         if include_geometry
         else tuple()
     )
     glance_slugs: tuple[str, ...] = ()
-    if include_context and "district" in selected_levels:
+    if include_context and "district" in selected_levels and (not scoped_admin_run or include_shared_admin_artifacts):
         selected_metric_set = {str(slug).strip() for slug in metrics or [] if str(slug).strip()}
         dashboard_specs = [
             spec
@@ -1715,7 +1796,7 @@ def _build_execution_plan(
     manifest_task = BuildTask(
         stage="manifest",
         label="bundle manifest",
-        target_path=bundle_manifest_path(data_dir=data_dir),
+        target_path=None if scoped_admin_run else bundle_manifest_path(data_dir=data_dir),
     )
 
     return BuildPlan(
@@ -1746,6 +1827,7 @@ def _validate_build_request(
     plan: BuildPlan,
     metrics: Optional[list[str]],
     levels: Optional[list[str]],
+    states: Optional[list[str]],
     overwrite: bool,
     prune_scope: bool,
     full_rebuild: bool,
@@ -1766,6 +1848,8 @@ def _validate_build_request(
         raise ValueError("--full-rebuild cannot be combined with --skip-geometry.")
     if full_rebuild and not include_context:
         raise ValueError("--full-rebuild cannot be combined with --skip-context.")
+    if full_rebuild and states:
+        raise ValueError("--full-rebuild cannot be combined with --state.")
 
     explicit_selection = bool(metrics) or bool(levels)
     metric_task_count = _metric_task_count(plan)
@@ -1796,81 +1880,34 @@ def _iter_unique_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
     return tuple(ordered)
 
 
-def _owned_scope_paths(
-    *,
-    data_dir: Path,
-    slugs: Iterable[str],
-    levels: Iterable[str],
-    include_geometry: bool,
-    include_context: bool,
-) -> tuple[Path, ...]:
-    bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
-    metrics_root = bundle_root / "metrics"
+def _state_owned_plan_paths(plan: BuildPlan) -> tuple[Path, ...]:
+    """Return exact state-owned target paths represented by the execution plan."""
     owned: list[Path] = []
-
-    for slug in slugs:
-        metric_root = metrics_root / slug
-        if "district" in levels:
-            owned.extend(
-                [
-                    metric_root / "masters" / "admin" / "district",
-                    metric_root / "yearly_models" / "admin" / "district",
-                    metric_root / "yearly_ensemble" / "admin" / "district",
-                ]
-            )
-        if "block" in levels:
-            owned.extend(
-                [
-                    metric_root / "masters" / "admin" / "block",
-                    metric_root / "yearly_models" / "admin" / "block",
-                    metric_root / "yearly_ensemble" / "admin" / "block",
-                ]
-            )
-        if "basin" in levels:
-            owned.extend(
-                [
-                    metric_root / "masters" / "hydro" / "basin",
-                    metric_root / "yearly_ensemble" / "hydro" / "basin",
-                ]
-            )
-        if "sub_basin" in levels:
-            owned.extend(
-                [
-                    metric_root / "masters" / "hydro" / "sub_basin",
-                    metric_root / "yearly_ensemble" / "hydro" / "sub_basin",
-                ]
-            )
-
-    if include_geometry:
-        geometry_root = bundle_root / "geometry"
-        if "district" in levels:
-            owned.append(geometry_root / "admin" / "district")
-        if "block" in levels:
-            owned.append(geometry_root / "admin" / "block")
-        if "basin" in levels:
-            owned.append(geometry_root / "hydro" / "basin.geojson")
-        if "sub_basin" in levels:
-            owned.append(geometry_root / "hydro" / "sub_basin")
-
-    if include_context:
-        if "block" in levels:
-            owned.append(optimized_context_path("admin_block_index.parquet", data_dir=data_dir))
-        if "sub_basin" in levels:
-            owned.append(optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir))
-        if "district" in levels:
-            for slug in slugs:
-                if get_dashboard_bundle_spec_by_slug(slug) is not None:
-                    owned.append(optimized_glance_root(slug, data_dir=data_dir))
-
+    for task in plan.master_tasks:
+        if task.target_path is not None:
+            owned.append(task.target_path)
+    for job in plan.yearly_model_jobs:
+        owned.append(job.models_path)
+    for job in plan.yearly_ensemble_jobs:
+        owned.append(job.target_path)
+    for task in plan.geometry_tasks:
+        if task.target_path is None:
+            continue
+        if task.level in {"district", "block", "basin", "sub_basin"}:
+            owned.append(task.target_path)
     return _iter_unique_paths(owned)
 
 
 def _delete_owned_paths(paths: Iterable[Path]) -> None:
     for path in paths:
-        if path.exists() and path.is_dir():
-            remove_tree(path)
-            continue
         unlink_file(path)
+        parent = path.parent
+        while parent.exists() and parent.is_dir() and parent != parent.parent:
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
 
 
 def _invalidate_bundle_metadata(*, data_dir: Path) -> None:
@@ -1907,7 +1944,13 @@ def _validate_full_rebuild_root(*, bundle_root: Path, data_dir: Path) -> None:
         raise ValueError(f"Refusing to delete custom root that does not look like an optimized bundle: {resolved_root}")
 
 
-def _collect_write_targets(*, plan: BuildPlan, data_dir: Path, run_audit: bool) -> tuple[Path, ...]:
+def _collect_write_targets(
+    *,
+    plan: BuildPlan,
+    data_dir: Path,
+    run_audit: bool,
+    report_path: Optional[Path] = None,
+) -> tuple[Path, ...]:
     targets: list[Path] = []
     for task in plan.master_tasks:
         if task.target_path is not None:
@@ -1933,8 +1976,8 @@ def _collect_write_targets(*, plan: BuildPlan, data_dir: Path, run_audit: bool) 
                 targets.append(result.output_root / filename)
     if plan.manifest_task.target_path is not None:
         targets.append(plan.manifest_task.target_path)
-    if run_audit:
-        targets.append(_parity_report_path(data_dir=data_dir))
+    if run_audit and report_path is not None:
+        targets.append(report_path)
     return _iter_unique_paths(targets)
 
 
@@ -1949,27 +1992,22 @@ def _print_dry_run(
     include_geometry: bool,
     include_context: bool,
     run_audit: bool,
+    report_path: Optional[Path],
     levels: Optional[list[str]],
 ) -> None:
-    selected_slugs = [seed.slug for seed in plan.summaries_seed]
-    selected_levels = _selected_levels(levels)
     print("PROCESSED OPTIMISED DRY RUN")
     print(f"data_dir: {Path(data_dir).resolve()}")
     print(f"bundle_root: {bundle_root}")
     if full_rebuild:
         print(f"full_rebuild_delete_root: {bundle_root}")
-    print(f"metadata_invalidated: {bundle_manifest_path(data_dir=data_dir)}")
-    print(f"metadata_invalidated: {_parity_report_path(data_dir=data_dir)}")
+    if plan.manifest_task.target_path is not None:
+        print(f"metadata_invalidated: {bundle_manifest_path(data_dir=data_dir)}")
+    if report_path is not None:
+        print(f"metadata_invalidated: {report_path}")
     if overwrite and prune_scope:
-        for path in _owned_scope_paths(
-            data_dir=data_dir,
-            slugs=selected_slugs,
-            levels=selected_levels,
-            include_geometry=include_geometry,
-            include_context=include_context,
-        ):
+        for path in _state_owned_plan_paths(plan):
             print(f"scope_prune: {path}")
-    for path in _collect_write_targets(plan=plan, data_dir=data_dir, run_audit=run_audit):
+    for path in _collect_write_targets(plan=plan, data_dir=data_dir, run_audit=run_audit, report_path=report_path):
         print(f"write_target: {path}")
 
 
@@ -2016,17 +2054,24 @@ def audit_processed_optimised_parity(
     data_dir: Path,
     metrics: Optional[list[str]] = None,
     levels: Optional[list[str]] = None,
+    states: Optional[list[str]] = None,
     include_geometry: bool = True,
     include_context: bool = True,
+    include_shared_admin_artifacts: bool = True,
     write_report: bool = True,
+    report_path: Optional[Path] = None,
 ) -> dict:
     """Validate that optimized artifacts exist for every dashboard-visible legacy source."""
+    effective_levels = _effective_levels(levels, states=states)
+    scoped_admin_run = _state_scoped_admin_run(states=states, levels=effective_levels)
     plan = _build_execution_plan(
         data_dir=data_dir,
         metrics=metrics,
-        levels=levels,
+        levels=effective_levels,
+        states=states,
         include_geometry=include_geometry,
         include_context=include_context,
+        include_shared_admin_artifacts=include_shared_admin_artifacts,
     )
     bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
     issues: list[dict[str, str | list[str]]] = []
@@ -2118,7 +2163,7 @@ def audit_processed_optimised_parity(
                 }
             )
 
-    if not plan.manifest_task.target_path or not plan.manifest_task.target_path.exists():
+    if plan.manifest_task.target_path is not None and not plan.manifest_task.target_path.exists():
         issues.append(
             {
                 "stage": "manifest",
@@ -2142,10 +2187,12 @@ def audit_processed_optimised_parity(
         "issues": issues,
     }
 
-    if write_report:
-        report_path = bundle_root / "parity_report.json"
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    report_target = report_path
+    if report_target is None and write_report and not scoped_admin_run:
+        report_target = bundle_root / "parity_report.json"
+    if report_target is not None:
+        report_target.parent.mkdir(parents=True, exist_ok=True)
+        report_target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
 
     return report
 
@@ -2155,6 +2202,7 @@ def build_processed_optimised_bundle(
     data_dir: Path,
     metrics: Optional[list[str]] = None,
     levels: Optional[list[str]] = None,
+    states: Optional[list[str]] = None,
     workers: Optional[int] = None,
     overwrite: bool = False,
     prune_scope: bool = False,
@@ -2162,24 +2210,31 @@ def build_processed_optimised_bundle(
     dry_run: bool = False,
     include_geometry: bool = True,
     include_context: bool = True,
+    include_shared_admin_artifacts: bool = True,
     show_progress: Optional[bool] = None,
     run_audit: bool = True,
+    report_path: Optional[Path] = None,
 ) -> list[MetricBundleSummary]:
     """
     Build the optimized runtime bundle from the current legacy processed tree.
     """
+    effective_levels = _effective_levels(levels, states=states)
+    scoped_admin_run = _state_scoped_admin_run(states=states, levels=effective_levels)
     plan = _build_execution_plan(
         data_dir=data_dir,
         metrics=metrics,
-        levels=levels,
+        levels=effective_levels,
+        states=states,
         include_geometry=include_geometry,
         include_context=include_context,
+        include_shared_admin_artifacts=include_shared_admin_artifacts,
     )
     _validate_build_request(
         data_dir=data_dir,
         plan=plan,
         metrics=metrics,
-        levels=levels,
+        levels=effective_levels,
+        states=states,
         overwrite=overwrite,
         prune_scope=prune_scope,
         full_rebuild=full_rebuild,
@@ -2215,25 +2270,20 @@ def build_processed_optimised_bundle(
             include_geometry=include_geometry,
             include_context=include_context,
             run_audit=run_audit,
-            levels=levels,
+            report_path=report_path,
+            levels=effective_levels,
         )
         return [MetricBundleSummary(**payload) for payload in summaries_map.values()]
 
     if full_rebuild:
         _validate_full_rebuild_root(bundle_root=bundle_root, data_dir=data_dir)
         remove_tree(bundle_root)
-    else:
+    elif not scoped_admin_run:
         _invalidate_bundle_metadata(data_dir=data_dir)
         if overwrite and prune_scope:
-            _delete_owned_paths(
-                _owned_scope_paths(
-                    data_dir=data_dir,
-                    slugs=[seed.slug for seed in plan.summaries_seed],
-                    levels=_selected_levels(levels),
-                    include_geometry=include_geometry,
-                    include_context=include_context,
-                )
-            )
+            _delete_owned_paths(_state_owned_plan_paths(plan))
+    elif overwrite and prune_scope:
+        _delete_owned_paths(_state_owned_plan_paths(plan))
 
     progress = BuildProgress(plan, enabled=_progress_enabled(show_progress))
     progress.print_plan_summary()
@@ -2365,25 +2415,29 @@ def build_processed_optimised_bundle(
             _write_geometry_bundle(data_dir=data_dir, tasks=plan.geometry_tasks, progress=progress)
 
         summaries = [MetricBundleSummary(**payload) for payload in summaries_map.values()]
-        _write_manifest(
-            data_dir=data_dir,
-            progress=progress,
-            task=plan.manifest_task,
-        )
+        if plan.manifest_task.target_path is not None:
+            _write_manifest(
+                data_dir=data_dir,
+                progress=progress,
+                task=plan.manifest_task,
+            )
         progress.close()
         if run_audit:
             parity = audit_processed_optimised_parity(
                 data_dir=data_dir,
                 metrics=metrics,
-                levels=levels,
+                levels=effective_levels,
+                states=states,
                 include_geometry=include_geometry,
                 include_context=include_context,
-                write_report=True,
+                include_shared_admin_artifacts=include_shared_admin_artifacts,
+                write_report=not scoped_admin_run and report_path is None,
+                report_path=report_path,
             )
             print(
                 "PARITY AUDIT "
                 f"(metrics={parity['metrics_considered']}, issues={parity['issue_count']}, "
-                f"report={resolve_optimized_bundle_root(data_dir=data_dir) / 'parity_report.json'})"
+                f"report={report_path or (resolve_optimized_bundle_root(data_dir=data_dir) / 'parity_report.json' if not scoped_admin_run else 'not-written')})"
             )
         return summaries
     except Exception:
@@ -2395,6 +2449,7 @@ def build_processed_optimised_bundle(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build the processed_optimised runtime bundle.")
     parser.add_argument("--metric", action="append", dest="metrics", help="One metric slug to include. Repeatable.")
+    parser.add_argument("--state", action="append", dest="states", help="One admin state to include. Repeatable.")
     parser.add_argument(
         "--level",
         action="append",
@@ -2424,7 +2479,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--skip-geometry", action="store_true", help="Skip optimized geometry generation.")
     parser.add_argument("--skip-context", action="store_true", help="Skip optimized context artifacts.")
+    parser.add_argument(
+        "--include-shared-admin-artifacts",
+        action="store_true",
+        help="With --state, also rebuild shared-global admin artifacts such as adm1, admin_block_index, and Glance.",
+    )
     parser.add_argument("--skip-audit", action="store_true", help="Skip the post-build parity audit.")
+    parser.add_argument(
+        "--report-path",
+        type=Path,
+        help="Explicit parity report output path. Scoped --state runs leave the global report untouched unless this is provided.",
+    )
     parser.add_argument(
         "--workers",
         type=int,
@@ -2442,6 +2507,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         data_dir=data_dir,
         metrics=args.metrics,
         levels=args.levels,
+        states=args.states,
         workers=args.workers,
         overwrite=bool(args.overwrite),
         prune_scope=bool(args.prune_scope),
@@ -2449,8 +2515,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         dry_run=bool(args.dry_run),
         include_geometry=not bool(args.skip_geometry),
         include_context=not bool(args.skip_context),
+        include_shared_admin_artifacts=bool(args.include_shared_admin_artifacts),
         show_progress=False if bool(args.no_progress) else None,
         run_audit=not bool(args.skip_audit),
+        report_path=args.report_path.expanduser().resolve() if args.report_path else None,
     )
 
     print("PROCESSED OPTIMISED BUNDLE")
