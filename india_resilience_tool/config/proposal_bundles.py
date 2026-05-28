@@ -278,10 +278,67 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         bundle_label="Industrial Risk",
         composite_slug="composite_industrial_risk",
         supported_levels=("district", "block"),
+        weight_mode="explicit_normalized",
+        min_available_rule_weight_fraction=0.70,
         rules=(
-            _pressure_rule("rx1day_ge_150", "1-day rainfall disruption pressure", "pr_max_1day_precip"),
-            _pressure_rule("rx5day_ge_250", "5-day rainfall disruption pressure", "pr_max_5day_precip"),
-            _pressure_rule("cdd_ge_30", "Dry-spell water-stress pressure", "pr_consecutive_dry_days_lt1mm"),
+            _pressure_rule(
+                "rx1day_ge_150",
+                "1-day rainfall disruption pressure",
+                "pr_max_1day_precip",
+                absolute_weight=0.40,
+                change_weight=0.25,
+                impact_weight=0.35,
+                impact_low=115.6,
+                impact_high=204.5,
+                change_mode="relative_pct",
+                rule_weight=0.25,
+                method_note=(
+                    "Impact band 115.6-204.5 mm/day: IMD daily rainfall categories "
+                    "(very heavy 115.6-204.4; extremely heavy >=204.5). External, high "
+                    "confidence; national / zone-invariant. Lens dossier section 7.1."
+                ),
+            ),
+            _pressure_rule(
+                "rx5day_ge_250",
+                "5-day rainfall disruption pressure",
+                "pr_max_5day_precip",
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=250.0,
+                impact_high=500.0,
+                change_mode="relative_pct",
+                rule_weight=0.15,
+                method_note=(
+                    "Impact band 250-500 mm/5 days: self-derived, LOW confidence. Onset=250 "
+                    "(plausible drainage-failure regime, derived from 5x IMD heavy-rain floor); "
+                    "saturation=500 (regional flood-event regime anchored on Kerala 2018 / "
+                    "Mumbai 2005 multi-day magnitudes). No external categorical band exists at "
+                    "5-day scale; small within-rule impact weight by design. Lens dossier "
+                    "section 7.2."
+                ),
+            ),
+            _pressure_rule(
+                "cdd_ge_30",
+                "Dry-spell water-stress pressure",
+                "pr_consecutive_dry_days_lt1mm",
+                absolute_weight=0.40,
+                change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=30.0,
+                impact_high=90.0,
+                change_mode="relative_pct",
+                rule_weight=0.20,
+                method_note=(
+                    "Impact band 30-90 days: self-derived, MEDIUM confidence (IMD-anchored "
+                    "onset). Onset=30 (IMD Agricultural Drought: four consecutive Drought "
+                    "Weeks ~28 days, rounded to slug threshold); saturation=90 (3/4 of JJAS "
+                    "monsoon length; SPI severe-drought territory). Local groundwater / "
+                    "reservoir refinement deferred (BL-0022). Lens dossier section 7.3. "
+                    "Source masters: grid-first via EXTREME_RAINFALL_GRIDFIRST_SLUGS "
+                    "(CHG-0029)."
+                ),
+            ),
             _pressure_rule(
                 "txx_ge_45",
                 "Extreme heat operations pressure",
@@ -292,6 +349,14 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
                 impact_low=40.0,
                 impact_high=45.0,
                 change_mode="absolute_delta",
+                rule_weight=0.40,
+                method_note=(
+                    "Impact band 40-45 degC: IMD plains heatwave (declared >=40, severe >=45). "
+                    "External, high confidence. Plains/national default (zone refinement: "
+                    "BL-0020). Same band Health Risk uses; consequence differs (worker "
+                    "productivity + equipment derating vs mortality). WBGT-conditioned "
+                    "refinement deferred (BL-0021). Lens dossier section 7.4."
+                ),
             ),
         ),
     ),

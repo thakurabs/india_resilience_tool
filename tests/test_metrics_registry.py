@@ -333,7 +333,7 @@ def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
         "r95ptot_contribution_pct",
         "cwd_consecutive_wet_days",
     ]
-    assert set(flood_metrics[1:]) == set(EXTREME_RAINFALL_GRIDFIRST_SLUGS)
+    assert set(flood_metrics[1:]).issubset(EXTREME_RAINFALL_GRIDFIRST_SLUGS)
 
 
 def test_extreme_rainfall_v2_keeps_registry_and_admin_semantics_explicit() -> None:

@@ -26,6 +26,21 @@ The active bundle remains the six existing metrics:
 | `r95ptot_contribution_pct` | R95p total as percent of wet-day precipitation |
 | `cwd_consecutive_wet_days` | Longest run of days with precipitation `>= 1 mm/day`; NaN breaks runs |
 
+### Co-located grid-first metrics
+
+The following metric shares the `extreme_rainfall_gridfirst.py` grid-first
+compute infrastructure but is not part of the Extreme Rainfall | Flash Flood
+Risk bundle:
+
+| Metric slug | v2 behavior | Consumed by |
+|---|---|---|
+| `pr_consecutive_dry_days_lt1mm` | Longest run of days with precipitation `< 1 mm/day`; NaN breaks runs (CHG-0029) | Sector-wise proposal bundles: Industrial Risk, Agricultural Risk, Asset Risk (Thermal Power), Asset Risk (Hydropower), Life & Livelihood Loss Risk, Investment / Financial Risk |
+
+CDD shares the same admin grid-first dispatch, the same 50% retained-cell-weight
+floor, the same 90% annual cell-coverage floor, and the same *Private Caches*
+layout as the bundle's wet-spell counterpart (CWD). Hydro remains on the legacy
+polygon-average-first path.
+
 ## Spatial Method
 
 The pipeline computes annual metric values on each climate grid cell first.

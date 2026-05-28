@@ -55,10 +55,10 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
 | `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, persisted visible-Glance composites, Aqueduct, population, groundwater, Telangana JRC flood depth, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
 | `python -m tools.pipeline.build_composite_metrics --help` | Build persisted district/block composite masters for active thematic dashboard bundles under the legacy `processed/` metric layout; use `--prune-retired --dry-run` to inspect retired composite cleanup |
-| `python -m tools.pipeline.build_proposal_bundles --help` | Build persisted admin district/block proposal climate-risk bundle masters under `processed/<proposal_composite_slug>/<state>/` and the helper `r95p_interannual_variability` masters; Agricultural Risk uses explicit seven-rule weights and an `available_rule_weight_fraction` coverage gate; each rule persists `{rule_slug}__{scenario}__{period}__{score,abs_score,chg_score,imp_score}` columns under the four-token master schema (only lenses with weight > 0 on a given rule are written; see `docs/lens_scoring_methodology.md` §5.1). Per-lens rule columns are part of the `processed_optimised/` contract from artifact version 3 onward |
+| `python -m tools.pipeline.build_proposal_bundles --help` | Build persisted admin district/block proposal climate-risk bundle masters under `processed/<proposal_composite_slug>/<state>/` and the helper `r95p_interannual_variability` masters; Agricultural Risk, Health Risk, and Industrial Risk (CHG-0028, lens dossier §7) use explicit rule weights and an `available_rule_weight_fraction` coverage gate (0.70); each rule persists `{rule_slug}__{scenario}__{period}__{score,abs_score,chg_score,imp_score}` columns under the four-token master schema (only lenses with weight > 0 on a given rule are written; see `docs/lens_scoring_methodology.md` §5.1). Per-lens rule columns are part of the `processed_optimised/` contract from artifact version 3 onward |
 | `python -m tools.pipeline.build_glance_view_model --help` | Build persisted optimized Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal dashboard prep gets these through `build_processed_optimised` |
-| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional `--prune-scope`, destructive `--full-rebuild`, `--dry-run`, exact pre-scan task counting, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
-| `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` filtering, and write `parity_report.json` |
+| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional exact-target `--prune-scope`, destructive `--full-rebuild`, optional admin `--state` scoping, opt-in shared-admin artifact rebuilds, optional scoped `--report-path`, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
+| `python -m tools.optimized.audit_processed_optimised_parity --help` | Audit `processed_optimised` against the dashboard-visible legacy processed contract, with optional `--level` and admin `--state` filtering, and write `parity_report.json` only for unscoped runs unless `--report-path` is supplied |
 | `python -m tools.diagnostics.heat_stress_gridfirst_parity --help` | Compare legacy polygon-mean-first vs Heat Stress v2 grid-first CSV extracts for pilot diagnostics, including deltas, rank shifts, and top movers |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
 | `python -m tools.pipeline.compute_indices_multiprocess --help` | Show compute-pipeline options |
@@ -66,7 +66,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.pipeline.compute_indices_multiprocess --level block --metrics <slug>` | Build block outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level basin --metrics <slug>` | Build basin outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics <slug>` | Build sub-basin outputs |
-| `python -m tools.pipeline.build_spatial_weights --help` | Build private Heat Risk v2 grid-first spatial-weight caches under `processed/_internal/spatial_weights/`; annual grid-first metric fields are persisted by compute under `processed/_internal/heat_risk/grid_metrics/` |
+| `python -m tools.pipeline.build_spatial_weights --help` | Build private Heat Risk v2 grid-first spatial-weight caches under `processed/_internal/spatial_weights/`; the builder resolves defaults from the effective `--data-dir`, skips valid existing caches, and requires `--overwrite` to replace stale ones |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics spi3_max_spell_lt_minus1` | Build a Drought Risk v2 grid-first duration metric; private annual/period NetCDF caches are persisted under `processed/_internal/drought_risk/grid_metrics/` |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics pr_max_1day_precip` | Build an Extreme Rainfall v2 admin grid-first metric; private annual grids and R95p thresholds are persisted under `processed/_internal/extreme_rainfall/` |
 | `python -m tools.subbasin_shp_explore --help` | Inspect/repair/export hydro boundaries |
@@ -244,7 +244,7 @@ Aqueduct methodology note:
 | `gridfirst_spatial.py` | Shared grid-first spatial overlap and NetCDF/sidecar cache helpers used by Heat Risk v2 and Drought Risk v2 |
 | `heat_stress_gridfirst.py` | Heat Stress v2 grid-first Twb and tropical-night metrics for admin district/block outputs, with private annual cell caches under `processed/_internal/heat_stress/grid_metrics/`; shared TN90p/WSDI remain in Heat Risk v2 |
 | `drought_risk_gridfirst.py` | Drought Risk v2 grid-cell SPI, annual count/spell metrics, period rollups, NaN-aware polygon aggregation, and private cache helpers |
-| `extreme_rainfall_gridfirst.py` | Extreme Rainfall / Flash Flood v2 admin grid-first Rx1day, Rx5day, R20mm, R95p, R95pTOT, and CWD compute with private annual grid and threshold caches |
+| `extreme_rainfall_gridfirst.py` | Extreme Rainfall / Flash Flood v2 admin grid-first Rx1day, Rx5day, R20mm, R95p, R95pTOT, CWD, and CDD (CHG-0029) compute with private annual grid and threshold caches |
 
 #### `india_resilience_tool/compute/tests/`
 
@@ -281,6 +281,7 @@ Aqueduct methodology note:
 | `master_columns.py` | Streamlit-free master column resolution helpers |
 | `master_loader.py` | Robust master-table loading, normalization, schema parsing, and Parquet-first runtime preference |
 | `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle, including optimized geometry, context, and Glance view-model paths |
+| `source_inventory.py` | Persistent raw NetCDF inventory shards for source discovery, validation, engine reuse, and marker-invalidating source signatures |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
 | `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |
 
@@ -390,7 +391,9 @@ Aqueduct methodology note:
 | `build_proposal_bundles.py` | CLI wrapper that writes persisted district/block proposal climate-risk bundle masters and the `r95p_interannual_variability` helper masters |
 | `build_master_metrics.py` | CLI wrapper around `compute.master_builder` |
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
-| `compute_indices_multiprocess.py` | Main multi-process compute pipeline for admin and hydro |
+| `compute_indices_cli_common.py` | Shared lightweight parser and banner helpers for the climate compute bootstrap/runtime split |
+| `compute_indices_bootstrap.py` | Thin bootstrap CLI that prints immediately, then imports the heavy climate compute runtime |
+| `compute_indices_multiprocess.py` | Main multi-process climate compute runtime for admin and hydro, now using source-inventory prewarm plus validated marker signatures |
 
 ### `tools/runs/`
 
@@ -721,5 +724,5 @@ For questions about the codebase:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin/hydro yearly parity outputs, hydro yearly fallback-from-models, selector-index artifacts, persisted geometry `area_m2`, optional level filtering, and a post-build parity audit |
-| `audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the legacy processed contract, with optional level filtering, and emit a parity report |
+| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin/hydro yearly parity outputs, hydro yearly fallback-from-models, selector-index artifacts, persisted geometry `area_m2`, optional level/state filtering, exact-target scoped prune, and a post-build parity audit |
+| `audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the legacy processed contract, with optional level/state filtering and optional scoped report output |

@@ -36,6 +36,7 @@ EXTREME_RAINFALL_GRIDFIRST_SLUGS = frozenset(
         "r95p_very_wet_precip",
         "r95ptot_contribution_pct",
         "cwd_consecutive_wet_days",
+        "pr_consecutive_dry_days_lt1mm",
     }
 )
 R95P_BASELINE_YEARS = (1990, 2010)
@@ -87,6 +88,23 @@ def _cwd(daily: xr.DataArray) -> xr.DataArray:
     return xr.DataArray(out, coords={"lat": daily["lat"], "lon": daily["lon"]}, dims=("lat", "lon"))
 
 
+def _cdd(daily: xr.DataArray) -> xr.DataArray:
+    values = np.asarray(daily.values, dtype=float)
+    out = np.zeros(values.shape[1:], dtype=float)
+    for lat_i in range(values.shape[1]):
+        for lon_i in range(values.shape[2]):
+            run = 0
+            best = 0
+            for value in values[:, lat_i, lon_i]:
+                if np.isfinite(value) and value < 1.0:
+                    run += 1
+                    best = max(best, run)
+                else:
+                    run = 0
+            out[lat_i, lon_i] = float(best)
+    return xr.DataArray(out, coords={"lat": daily["lat"], "lon": daily["lon"]}, dims=("lat", "lon"))
+
+
 def annual_extreme_rainfall_grid(
     daily: xr.DataArray,
     *,
@@ -104,6 +122,8 @@ def annual_extreme_rainfall_grid(
         value = (daily >= 20.0).where(daily.notnull(), False).sum(dim="time")
     elif slug == "cwd_consecutive_wet_days":
         value = _cwd(daily)
+    elif slug == "pr_consecutive_dry_days_lt1mm":
+        value = _cdd(daily)
     elif slug in {"r95p_very_wet_precip", "r95ptot_contribution_pct"}:
         if threshold is None:
             raise ValueError(f"{slug} requires baseline R95p threshold grid")

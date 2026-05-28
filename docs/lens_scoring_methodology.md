@@ -1045,12 +1045,14 @@ impact band a small share so it cannot dominate the rule (Section 4.3).
 
 - **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
   (Section 5.3) — matching Health and Agricultural.
-- **Source masters:** all four source metrics must resolve to grid-first
+- **Source masters:** all four source metrics resolve to grid-first
   district/block masters (compute the index per grid cell, then area-weight to
   the polygon), consistent with the spatial-aggregation recommendation in
-  `docs/bundle_calculation_audit.md`. TXx and Rx1day already route through
-  grid-first paths; Rx5day and CDD need verification (likely the same paths but
-  not confirmed for this bundle).
+  `docs/bundle_calculation_audit.md`. TXx routes through
+  `india_resilience_tool/compute/heat_risk_gridfirst.py`; Rx1day, Rx5day, and
+  CDD route through
+  `india_resilience_tool/compute/extreme_rainfall_gridfirst.py` (CDD via
+  `EXTREME_RAINFALL_GRIDFIRST_SLUGS` membership added in CHG-0029).
 - **Phantom-slug renames (CHG-0015):** the dossier presents the renamed slugs
   (`rx1day_ge_200`, `rx5day_accumulated_pressure`, `cdd_water_stress_pressure`)
   to satisfy Section 4.7 (no labels naming thresholds the math does not apply).

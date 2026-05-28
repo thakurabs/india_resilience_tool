@@ -246,6 +246,62 @@ def test_agricultural_risk_uses_explicit_normalized_rule_weights() -> None:
     assert all(rule.absolute_weight == 1.0 and rule.change_weight == 0.0 and rule.impact_weight == 0.0 for rule in spec.rules)
 
 
+def test_industrial_risk_matches_lens_dossier_section_7() -> None:
+    """Pin Industrial Risk to lens dossier section 7 (CHG-0028).
+
+    Locks weight mode, coverage gate, per-rule lens weights, impact bands,
+    change modes, and rule weights against docs/lens_scoring_methodology.md
+    sections 7.1-7.5. Drift in either direction (code vs dossier) fails here.
+    """
+    spec = get_proposal_bundle_spec_by_slug("composite_industrial_risk")
+
+    assert spec is not None
+    assert spec.weight_mode == "explicit_normalized"
+    assert spec.min_available_rule_weight_fraction == 0.70
+
+    rules_by_slug = {rule.rule_slug: rule for rule in spec.rules}
+    assert list(rules_by_slug.keys()) == ["rx1day_ge_150", "rx5day_ge_250", "cdd_ge_30", "txx_ge_45"]
+
+    # Per-rule (absolute, change, impact) weights, impact band, change mode, rule weight.
+    expected = {
+        "rx1day_ge_150": {
+            "lens_weights": (0.40, 0.25, 0.35),  # section 7.1 — IMD external, high confidence
+            "impact_band": (115.6, 204.5),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.25,
+        },
+        "rx5day_ge_250": {
+            "lens_weights": (0.45, 0.40, 0.15),  # section 7.2 — self-derived, low confidence
+            "impact_band": (250.0, 500.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.15,
+        },
+        "cdd_ge_30": {
+            "lens_weights": (0.40, 0.30, 0.30),  # section 7.3 — IMD-anchored, medium confidence
+            "impact_band": (30.0, 90.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.20,
+        },
+        "txx_ge_45": {
+            "lens_weights": (0.40, 0.25, 0.35),  # section 7.4 — IMD external, high confidence
+            "impact_band": (40.0, 45.0),
+            "change_mode": "absolute_delta",
+            "rule_weight": 0.40,
+        },
+    }
+
+    for slug, expected_fields in expected.items():
+        rule = rules_by_slug[slug]
+        observed_lens = (rule.absolute_weight, rule.change_weight, rule.impact_weight)
+        assert observed_lens == expected_fields["lens_weights"], slug
+        assert (rule.impact_low, rule.impact_high) == expected_fields["impact_band"], slug
+        assert rule.change_mode == expected_fields["change_mode"], slug
+        assert rule.rule_weight == expected_fields["rule_weight"], slug
+
+    # Rule weights must sum to 1.0 (validator enforces this on explicit_normalized bundles).
+    assert sum(rule.rule_weight for rule in spec.rules) == 1.0
+
+
 def test_sector_wise_dashboard_bundles_have_matching_proposal_specs() -> None:
     for spec in SECTOR_WISE_DASHBOARD_BUNDLES:
         proposal_spec = get_proposal_bundle_spec_by_slug(spec.composite_slug)

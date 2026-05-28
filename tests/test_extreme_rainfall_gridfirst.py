@@ -84,6 +84,55 @@ def test_cwd_nan_breaks_runs_all_dry_zero_and_coverage_fail_nan() -> None:
     assert np.isnan(float(annual_extreme_rainfall_grid(fail_da, slug="cwd_consecutive_wet_days")["value"].isel(lat=0, lon=0)))
 
 
+def test_cdd_nan_breaks_runs_all_wet_zero_and_coverage_fail_nan() -> None:
+    run_da = _daily(np.asarray([[[0.0]], [[0.0]], [[np.nan]], [[0.0]], [[0.0]], [[0.0]], [[5.0]], [[5.0]], [[5.0]], [[5.0]]]))
+    wet_da = _daily(np.full((10, 1, 1), 5.0))
+    fail_da = _daily(np.asarray([[[np.nan]], [[0.0]], [[0.0]], [[0.0]], [[0.0]]]))
+
+    assert float(annual_extreme_rainfall_grid(run_da, slug="pr_consecutive_dry_days_lt1mm")["value"].isel(lat=0, lon=0)) == 3.0
+    assert float(annual_extreme_rainfall_grid(wet_da, slug="pr_consecutive_dry_days_lt1mm")["value"].isel(lat=0, lon=0)) == 0.0
+    assert np.isnan(float(annual_extreme_rainfall_grid(fail_da, slug="pr_consecutive_dry_days_lt1mm")["value"].isel(lat=0, lon=0)))
+
+
+def test_cdd_grid_first_exceeds_legacy_polygon_average_for_out_of_phase_dry_spells() -> None:
+    # Two cells with 5-day dry runs staggered in time: cell A dry on days 1-5, cell B dry on days 6-10.
+    # Polygon-mean precipitation never has more than 1 consecutive day with mean < 1.0, so polygon-first CDD is short.
+    # Per-cell grid-first CDD is 5 at both cells; area-weighted to the polygon, grid-first is 5.
+    values = np.asarray(
+        [
+            [[0.0, 5.0]],
+            [[0.0, 5.0]],
+            [[0.0, 5.0]],
+            [[0.0, 5.0]],
+            [[0.0, 5.0]],
+            [[5.0, 0.0]],
+            [[5.0, 0.0]],
+            [[5.0, 0.0]],
+            [[5.0, 0.0]],
+            [[5.0, 0.0]],
+        ]
+    )
+    da = _daily(values)
+    weights = pd.DataFrame({"unit_key": ["D", "D"], "cell_index": [0, 1], "area_m2": [1.0, 1.0]})
+
+    grid_first = aggregate_grid_values_with_retention(
+        annual_extreme_rainfall_grid(da, slug="pr_consecutive_dry_days_lt1mm")["value"],
+        weights,
+    )["D"][0]
+    polygon_mean = da.mean(dim=("lat", "lon")).values
+    longest_polygon_first_dry = 0
+    run = 0
+    for v in polygon_mean:
+        if np.isfinite(v) and v < 1.0:
+            run += 1
+            longest_polygon_first_dry = max(longest_polygon_first_dry, run)
+        else:
+            run = 0
+
+    assert grid_first == pytest.approx(5.0)
+    assert grid_first > longest_polygon_first_dry
+
+
 def test_r95p_admin_v2_threshold_semantics_and_no_wet_baseline_cell() -> None:
     baseline_values = np.stack([[[float(day), 0.0]] for day in range(1, 21)], axis=0)
     threshold = compute_r95p_threshold_grid(_daily(baseline_values, start="1990-01-01"))["value"]
