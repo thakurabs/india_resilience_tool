@@ -2579,10 +2579,11 @@ review in chat.
 ## 11. Sector-wise - Investment / Financial Risk
 
 The Investment / Financial Risk lens methodology is documented in
-`docs/lens_scoring_methodology.md`, Section 8. It records a **methodology
-change** — the bundle is reshaped from its previous trend-dominated design
-(four `_trend_rule` rules plus one phantom-slug blended rule on CDD) to the
-standard abs/chg/imp lens template — and explains why: TCFD / NGFS / RBI
+`docs/lens_scoring_methodology.md`, Section 8. CHG-0033 aligns the active
+config with that methodology by reshaping the bundle from its previous
+trend-dominated design (four `_trend_rule` rules plus one phantom-slug
+blended rule on CDD) to the standard abs/chg/imp lens template. The rationale
+is unchanged: TCFD / NGFS / RBI
 physical-risk frameworks use scenario-conditional state at a given horizon,
 not within-horizon linear trend; and within-horizon linear trends are
 vulnerable to internal climate variability (PDO / IPO / ENSO / NAO / IOD
@@ -2606,8 +2607,8 @@ TCFD-aligned three-cluster split (Flood 0.50 / Heat 0.25 / Water stress 0.25).
 
 The `_trend_rule` machinery in `india_resilience_tool/compute/proposal_bundles.py`
 is preserved as code (for possible future use as a supplementary signal) but
-**deprecated as a primary scoring construct**; after the code reshape (CHG-0018
-follow-up), no bundle uses it. The dossier also records the slug renames
+**deprecated as a primary scoring construct**; after CHG-0033, no active
+bundle uses it. The dossier also records the slug renames
 required by Section 4.7 (`rx1day_positive_trend` -> `rx1day_disruption_pressure`,
 `rx5day_positive_trend` -> `rx5day_accumulated_pressure`,
 `r99p_positive_trend` -> `r99p_extreme_concentration`,

@@ -456,19 +456,105 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         bundle_label="Investment / Financial Risk",
         composite_slug="composite_investment_financial_risk",
         supported_levels=("district", "block"),
+        weight_mode="explicit_normalized",
+        min_available_rule_weight_fraction=0.70,
         rules=(
-            _trend_rule("rx1day_positive_trend", "1-day rainfall intensity trend pressure", "pr_max_1day_precip"),
-            _trend_rule("rx5day_positive_trend", "5-day rainfall intensity trend pressure", "pr_max_5day_precip"),
-            _trend_rule("r99p_positive_trend", "Extreme wet precipitation trend pressure", "r99p_extreme_wet_precip"),
+            _pressure_rule(
+                "rx1day_positive_trend",
+                "1-day rainfall disruption pressure",
+                "pr_max_1day_precip",
+                absolute_weight=0.40,
+                change_weight=0.25,
+                impact_weight=0.35,
+                impact_low=115.6,
+                impact_high=204.5,
+                change_mode="relative_pct",
+                rule_weight=0.25,
+                method_note=(
+                    "Impact band 115.6-204.5 mm/day: IMD daily rainfall categories "
+                    "(very heavy 115.6-204.4; extremely heavy >=204.5). External, high "
+                    "confidence; national / zone-invariant. Same physical band as Health "
+                    "section 6.4 and Industrial section 7.1. Lens dossier section 8.1."
+                ),
+            ),
+            _pressure_rule(
+                "rx5day_positive_trend",
+                "5-day rainfall accumulation pressure",
+                "pr_max_5day_precip",
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=250.0,
+                impact_high=500.0,
+                change_mode="relative_pct",
+                rule_weight=0.15,
+                method_note=(
+                    "Impact band 250-500 mm/5 days: self-derived, LOW confidence. "
+                    "Onset=250 (conservative drainage-failure regime anchored below five "
+                    "IMD heavy-rain days ~322 mm); saturation=500 (regional flood-event "
+                    "regime anchored on Kerala 2018 / Mumbai 2005 multi-day magnitudes "
+                    "and Chuphal et al. 2025). No external categorical band exists at "
+                    "5-day scale. Lens dossier section 8.2."
+                ),
+            ),
+            _pressure_rule(
+                "r99p_positive_trend",
+                "Extreme wet precipitation concentration pressure",
+                "r99p_extreme_wet_precip",
+                absolute_weight=0.40,
+                change_weight=0.60,
+                impact_weight=0.0,
+                change_mode="relative_pct",
+                rule_weight=0.10,
+                method_note=(
+                    "No impact band: R99p is a regime/concentration metric, not a direct "
+                    "danger threshold. Rule is scored by absolute+change only, with "
+                    "change weighted above absolute (0.60 vs 0.40) because emergence of "
+                    "tail concentration vs the historical baseline is the investor-"
+                    "relevant signal. Harm pathway runs through Rx1day rather than a "
+                    "standalone R99p threshold. Lens dossier section 8.3."
+                ),
+            ),
             _pressure_rule(
                 "cdd_change_gt_20pct_vs_baseline",
-                "Dry-spell change pressure",
+                "Dry-spell water-stress pressure",
                 "pr_consecutive_dry_days_lt1mm",
-                absolute_weight=0.30,
-                change_weight=0.70,
+                absolute_weight=0.40,
+                change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=30.0,
+                impact_high=90.0,
                 change_mode="relative_pct",
+                rule_weight=0.25,
+                method_note=(
+                    "Impact band 30-90 days: self-derived, MEDIUM confidence "
+                    "(IMD-anchored onset). Onset=30 (IMD Agricultural Drought: four "
+                    "consecutive Drought Weeks ~28 days, rounded to align with the "
+                    "legacy threshold); saturation=90 (3/4 of monsoon season; severe "
+                    "dry-spell regime). Chronic water-supply stress pathway for water-"
+                    "intensive assets. Lens dossier section 8.4. Source masters: "
+                    "grid-first via EXTREME_RAINFALL_GRIDFIRST_SLUGS (CHG-0029)."
+                ),
             ),
-            _trend_rule("hwfi_positive_trend", "Heatwave frequency trend pressure", "hwfi_tmean_90p"),
+            _pressure_rule(
+                "hwfi_positive_trend",
+                "Heatwave persistence pressure",
+                "hwfi_tmean_90p",
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=5.0,
+                impact_high=15.0,
+                change_mode="relative_pct",
+                rule_weight=0.25,
+                method_note=(
+                    "Impact band 5-15 days/yr: self-derived, LOW confidence. Onset=5 "
+                    "(HWFI minimum qualifying spell length); saturation=15 (high annual "
+                    "burden implying multiple qualifying spells and compounding "
+                    "productivity / peak-demand stress). Small impact weight by design. "
+                    "Lens dossier section 8.5."
+                ),
+            ),
         ),
     ),
     ProposalBundleSpec(

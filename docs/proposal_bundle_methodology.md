@@ -19,7 +19,8 @@ Each proposal-bundle rule is scored from `0` to `100`.
 - Missing or invalid data returns `NaN` for the affected component or rule.
 - Bundle means are computed from available rule scores. Most bundles use equal
   rule weights and are set to `NaN` only when no rule is available for a unit.
-- `Agricultural Risk`, `Health Risk`, and `Industrial Risk` use explicit
+- `Agricultural Risk`, `Health Risk`, `Industrial Risk`, and
+  `Investment / Financial Risk` use explicit
   normalized rule weights and a 0.70 minimum `available_rule_weight_fraction`;
   rows below that coverage gate are set to `NaN`.
 
@@ -27,12 +28,15 @@ Each proposal-bundle rule is scored from `0` to `100`.
 
 Each rule can combine three scientifically distinct components.
 
-Sectoral bundles (`Agricultural Risk`, `Health Risk`, `Industrial Risk`) use
-all three components in a lens-decomposed mix per
+Sectoral bundles (`Agricultural Risk`, `Health Risk`, `Industrial Risk`, and
+`Investment / Financial Risk`) use lens-decomposed scoring per
 `docs/lens_scoring_methodology.md`. Agricultural Risk reinstates the impact
 lens with a self-derived TXx 35-45 deg C agronomic band (§12.1) replacing
 the previously-retired 40-45 deg C IMD heatwave band, plus self-derived
-bands on the six other rules (§12.2-§12.7).
+bands on the six other rules (§12.2-§12.7). Investment / Financial Risk adds
+five dossier-§8 lens rules with explicit bundle weights; its R99p rule is the
+current exception that intentionally omits the impact component because no
+defensible danger band exists for that regime metric.
 
 ### 1. Future absolute severity
 
@@ -55,7 +59,7 @@ If no baseline column is available, the change component is returned as `NaN` an
 
 This component answers: **Is the metric approaching or crossing a sector-relevant impact band?**
 
-Impact thresholds are used only where the configuration declares a low/high impact band. The score ramps continuously from `0` at the lower concern threshold to `100` at the severe threshold. The current Phase-1 configuration uses soft heat bands for temperature metrics and avoids arbitrary hard thresholds for rainfall and spell metrics.
+Impact thresholds are used only where the configuration declares a low/high impact band. The score ramps continuously from `0` at the lower concern threshold to `100` at the severe threshold. The current Phase-1 configuration mixes external and self-derived bands across heat, rainfall, and spell metrics where a defensible onset/severe range exists; rules without a defensible danger band omit the impact component.
 
 ## Why binary thresholds were replaced
 
@@ -65,7 +69,7 @@ The v2 method replaces these binary rules with continuous pressure scores.
 
 ## Trend rules
 
-Trend rules use yearly series, not period means. For each unit, the builder estimates the selected period's yearly slope. Non-adverse slopes score `0`; adverse slope magnitudes are scored continuously against the relevant reference distribution.
+Legacy trend-rule machinery remains in `india_resilience_tool/compute/proposal_bundles.py` for compatibility and regression coverage, but no active proposal bundle currently uses it. Active sector bundles score future levels, change vs historical baseline, and where defensible impact-threshold pressure from period means rather than within-horizon yearly slopes.
 
 ## Quality diagnostics
 

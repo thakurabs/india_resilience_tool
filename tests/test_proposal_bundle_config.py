@@ -32,10 +32,9 @@ def test_proposal_bundle_specs_validate_cleanly() -> None:
 def test_proposal_rules_use_continuous_phase_one_pressure_schema() -> None:
     for spec in PROPOSAL_BUNDLES:
         for rule in spec.rules:
-            assert rule.rule_type in {"blended", "trend"}
+            assert rule.rule_type == "blended"
             assert rule.direction == "higher_worse"
-            if rule.rule_type == "blended":
-                assert rule.absolute_weight + rule.change_weight + rule.impact_weight > 0.0
+            assert rule.absolute_weight + rule.change_weight + rule.impact_weight > 0.0
 
 
 def test_proposal_bundle_labels_slugs_and_rule_order_are_exact() -> None:
@@ -131,11 +130,11 @@ def test_proposal_bundle_rule_display_labels_are_exact() -> None:
             "txx_ge_45": "Extreme heat operations pressure",
         },
         "Investment / Financial Risk": {
-            "rx1day_positive_trend": "1-day rainfall intensity trend pressure",
-            "rx5day_positive_trend": "5-day rainfall intensity trend pressure",
-            "r99p_positive_trend": "Extreme wet precipitation trend pressure",
-            "cdd_change_gt_20pct_vs_baseline": "Dry-spell change pressure",
-            "hwfi_positive_trend": "Heatwave frequency trend pressure",
+            "rx1day_positive_trend": "1-day rainfall disruption pressure",
+            "rx5day_positive_trend": "5-day rainfall accumulation pressure",
+            "r99p_positive_trend": "Extreme wet precipitation concentration pressure",
+            "cdd_change_gt_20pct_vs_baseline": "Dry-spell water-stress pressure",
+            "hwfi_positive_trend": "Heatwave persistence pressure",
         },
         "Infrastructure Risk": {
             "rx1day_ge_200": "1-day rainfall design pressure",
@@ -371,6 +370,81 @@ def test_industrial_risk_matches_lens_dossier_section_7() -> None:
 
     # Rule weights must sum to 1.0 (validator enforces this on explicit_normalized bundles).
     assert sum(rule.rule_weight for rule in spec.rules) == 1.0
+
+
+def test_investment_financial_risk_matches_lens_dossier_section_8() -> None:
+    """Pin Investment / Financial Risk to lens dossier section 8 (CHG-0033)."""
+    spec = get_proposal_bundle_spec_by_slug("composite_investment_financial_risk")
+
+    assert spec is not None
+    assert spec.weight_mode == "explicit_normalized"
+    assert spec.min_available_rule_weight_fraction == 0.70
+
+    rules_by_slug = {rule.rule_slug: rule for rule in spec.rules}
+    assert list(rules_by_slug.keys()) == [
+        "rx1day_positive_trend",
+        "rx5day_positive_trend",
+        "r99p_positive_trend",
+        "cdd_change_gt_20pct_vs_baseline",
+        "hwfi_positive_trend",
+    ]
+
+    expected = {
+        "rx1day_positive_trend": {
+            "lens_weights": (0.40, 0.25, 0.35),
+            "impact_band": (115.6, 204.5),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.25,
+        },
+        "rx5day_positive_trend": {
+            "lens_weights": (0.45, 0.40, 0.15),
+            "impact_band": (250.0, 500.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.15,
+        },
+        "r99p_positive_trend": {
+            "lens_weights": (0.40, 0.60, 0.0),
+            "impact_band": (None, None),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.10,
+        },
+        "cdd_change_gt_20pct_vs_baseline": {
+            "lens_weights": (0.40, 0.30, 0.30),
+            "impact_band": (30.0, 90.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.25,
+        },
+        "hwfi_positive_trend": {
+            "lens_weights": (0.45, 0.40, 0.15),
+            "impact_band": (5.0, 15.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.25,
+        },
+    }
+
+    for slug, expected_fields in expected.items():
+        rule = rules_by_slug[slug]
+        observed_lens = (rule.absolute_weight, rule.change_weight, rule.impact_weight)
+        assert observed_lens == expected_fields["lens_weights"], slug
+        assert (rule.impact_low, rule.impact_high) == expected_fields["impact_band"], slug
+        assert rule.change_mode == expected_fields["change_mode"], slug
+        assert rule.rule_weight == expected_fields["rule_weight"], slug
+
+    assert sum(rule.rule_weight for rule in spec.rules) == 1.0
+
+
+def test_explicit_weight_bundle_inventory_is_exact() -> None:
+    observed = {
+        spec.composite_slug
+        for spec in PROPOSAL_BUNDLES
+        if spec.weight_mode == "explicit_normalized"
+    }
+    assert observed == {
+        "composite_agricultural_risk",
+        "composite_health_risk",
+        "composite_industrial_risk",
+        "composite_investment_financial_risk",
+    }
 
 
 def test_sector_wise_dashboard_bundles_have_matching_proposal_specs() -> None:

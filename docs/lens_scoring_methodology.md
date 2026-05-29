@@ -1082,12 +1082,13 @@ include asset-level exposure (where the capital sits), adaptive capacity
 (insurance, flood-proofing, on-site storage), or transition risk
 (policy / market / technology).
 
-**Methodology change recorded here.** This bundle is reshaped in this dossier
-from its previous **trend-dominated** design (four `_trend_rule` rules plus one
-phantom-slug blended rule on CDD) to the **standard abs/chg/imp lens template**
-already used by Health (Section 6) and Industrial (Section 7). The reshape is
-not stylistic — it brings the bundle into alignment with industry and
-scientific best practice for physical climate risk in financial portfolios:
+**Methodology change recorded here.** CHG-0033 reshapes the active code for
+this bundle from its previous **trend-dominated** design (four `_trend_rule`
+rules plus one phantom-slug blended rule on CDD) to the **standard
+abs/chg/imp lens template** already used by Health (Section 6) and Industrial
+(Section 7). The reshape is not stylistic — it brings the bundle into
+alignment with industry and scientific best practice for physical climate risk
+in financial portfolios:
 
 1. **Industry frameworks use scenario-conditional state at a horizon, not
    within-horizon linear trend.** TCFD recommendations frame physical-risk
@@ -1126,8 +1127,8 @@ scientific best practice for physical climate risk in financial portfolios:
 
 The `_trend_rule` machinery in `india_resilience_tool/compute/proposal_bundles.py`
 is **preserved as code** for possible future use as a supplementary signal but
-**deprecated as a primary scoring construct**. After this reshape, no bundle
-uses it.
+**deprecated as a primary scoring construct**. After CHG-0033, no active
+bundle uses it.
 
 The table summarizes the lens decision per metric; each subsection gives the
 reasoning and any band provenance. Rule slugs marked "renamed from" reflect
@@ -1372,13 +1373,14 @@ is the financial-risk signal.
   the polygon), consistent with the spatial-aggregation recommendation in
   `docs/bundle_calculation_audit.md`. Rx1day and CDD already route through
   grid-first paths; Rx5day, R99p, and HWFI need verification.
-- **Phantom-slug and rule-type reshape (CHG-0018):** the dossier presents the
-  renamed slugs and reshaped rule types (trend -> blended). Migration is a
-  combined data-contract + methodology change tracked separately.
+- **Phantom-slug and rule-type reshape (CHG-0018):** the rule-type reshape
+  (trend -> blended) is now landed in active code. The dossier still presents
+  renamed slugs because they better describe the scoring math, but the slug
+  migration remains a separate data-contract change.
 - **`_trend_rule` machinery status:** code preserved in
   `india_resilience_tool/compute/proposal_bundles.py` for possible future use
   as a supplementary signal, but **deprecated as a primary scoring construct**.
-  After CHG-0018 lands, no bundle uses it.
+  After CHG-0033, no active bundle uses it.
 - **Deferred refinements:** SPI-12 long-term water-availability trajectory
   (BL-0024); coastal sea-level / cyclone exposure for coastal investments
   (BL-0025); explicit return-period framing for design-event communication

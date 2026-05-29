@@ -176,6 +176,57 @@ def _run_agricultural_risk(
     )
 
 
+def _seed_investment_risk_masters(
+    tmp_path: Path,
+    *,
+    ids: pd.DataFrame,
+    state_name: str,
+    target_period: str = "2020-2040",
+    target_scenario: str = "ssp245",
+    baseline_period: str = "1995-2014",
+    current_by_slug: dict[str, tuple[float, float, float]] | None = None,
+    baseline_by_slug: dict[str, tuple[float, float, float]] | None = None,
+) -> None:
+    current_defaults = {
+        "pr_max_1day_precip": (120.0, 80.0, 100.0),
+        "pr_max_5day_precip": (320.0, 180.0, 250.0),
+        "r99p_extreme_wet_precip": (400.0, 150.0, 250.0),
+        "pr_consecutive_dry_days_lt1mm": (60.0, 30.0, 45.0),
+        "hwfi_tmean_90p": (12.0, 6.0, 9.0),
+    }
+    baseline_defaults = {
+        "pr_max_1day_precip": (60.0, 50.0, 55.0),
+        "pr_max_5day_precip": (160.0, 140.0, 150.0),
+        "r99p_extreme_wet_precip": (200.0, 120.0, 160.0),
+        "pr_consecutive_dry_days_lt1mm": (30.0, 25.0, 30.0),
+        "hwfi_tmean_90p": (6.0, 5.0, 6.0),
+    }
+    if current_by_slug:
+        current_defaults.update(current_by_slug)
+    if baseline_by_slug:
+        baseline_defaults.update(baseline_by_slug)
+
+    for slug, values in current_defaults.items():
+        base = _metric_base(slug)
+        df = ids.copy()
+        df[f"{base}__{target_scenario}__{target_period}__mean"] = list(values)
+        df[f"{base}__historical__{baseline_period}__mean"] = list(baseline_defaults[slug])
+        _write_district_master(tmp_path, slug=slug, state_name=state_name, df=df)
+
+
+def _run_investment_risk(
+    tmp_path: Path,
+    state_name: str = "Telangana",
+) -> pd.DataFrame:
+    return compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_investment_financial_risk"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Test A — sparse persistence policy
 # ---------------------------------------------------------------------------
@@ -395,6 +446,50 @@ def test_trend_and_proxy_rules_persist_only_abs_score(
     pd.testing.assert_series_equal(
         out[abs_col].astype(float).reset_index(drop=True),
         out[score_col].astype(float).reset_index(drop=True),
+        check_names=False,
+    )
+
+
+def test_investment_r99p_persists_only_active_abs_and_chg_columns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _district_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_investment_risk_masters(tmp_path, ids=ids, state_name=state_name)
+
+    out = _run_investment_risk(tmp_path)
+
+    rule_slug = "r99p_positive_trend"
+    abs_col = proposal_rule_abs_score_column(rule_slug, "ssp245", "2020-2040")
+    chg_col = proposal_rule_chg_score_column(rule_slug, "ssp245", "2020-2040")
+    imp_col = proposal_rule_imp_score_column(rule_slug, "ssp245", "2020-2040")
+
+    assert abs_col in out.columns
+    assert chg_col in out.columns
+    assert imp_col not in out.columns
+
+
+def test_investment_r99p_score_equals_weighted_mean_of_abs_and_chg(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _district_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_investment_risk_masters(tmp_path, ids=ids, state_name=state_name)
+
+    out = _run_investment_risk(tmp_path)
+
+    rule_slug = "r99p_positive_trend"
+    abs_col = proposal_rule_abs_score_column(rule_slug, "ssp245", "2020-2040")
+    chg_col = proposal_rule_chg_score_column(rule_slug, "ssp245", "2020-2040")
+    score_col = proposal_rule_score_column(rule_slug, "ssp245", "2020-2040")
+    expected = (0.40 * out[abs_col].astype(float) + 0.60 * out[chg_col].astype(float)) / 1.0
+    pd.testing.assert_series_equal(
+        out[score_col].astype(float).reset_index(drop=True),
+        expected.reset_index(drop=True),
         check_names=False,
     )
 
