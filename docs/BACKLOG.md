@@ -119,6 +119,34 @@ Entry fields:
   - **DEM-derived** classification (elevation cutoff for hilly) + standard **coastal-district list** (Census / MoES-NCCR) + plains residual.
 - `Done when`: each district/block carries a defensible physiographic-zone label, the impact-band scorer looks up per-zone bands, and the per-metric dossiers record zone-specific bands (external where published, self-derived via the protocol otherwise) with the plains default retained as fallback.
 
+### BL-0021 — CHG-0032-RT: Agricultural Risk artifact rebuild on data-prod
+- `Area`: proposal bundles, ops, data pipeline
+- `Why deferred`: CHG-0032 (Agricultural Risk lens migration, code + config + docs + tests) was applied on the dev workstation and verified by `pytest -q` (37/37 on the three targeted test files). The artifact rebuild was attempted but cannot complete on this box: only `txx_annual_max` has the upstream per-state per-level intermediate CSVs in `processed/`, and three of the seven rule metrics (`spi3_count_events_lt_minus1`, `spi3_max_spell_lt_minus1`, `tnle10_cold_nights`) are absent from `processed_optimised/metrics/` as well. Rebuilding them locally would require running `tools.pipeline.compute_indices_multiprocess` from raw CMIP6 model outputs — multi-hour and outside CHG-0032 scope. The dashboard on the data-prod machine will continue to serve old single-lens Agricultural scores until this runs there.
+- `Dependency / trigger`: run on the environment that already has all seven rule metrics' intermediate per-model CSVs under `IRT_DATA_DIR/processed/<metric>/<state>/{districts,blocks}/`. Required metric slugs: `txx_annual_max`, `txge35_extreme_heat_days`, `wsdi_warm_spell_days`, `spi3_count_events_lt_minus1`, `spi3_max_spell_lt_minus1`, `pr_max_5day_precip`, `tnle10_cold_nights`. Confirm via `python -m tools.pipeline.build_master_metrics --list-metrics` before kicking off the build.
+- `Commands` (run from repo root, in order; all flags load-bearing):
+  ```bash
+  # Step 1 — build the seven upstream rule master CSVs (overwrite is default; no flag needed).
+  # Repeat per state if rebuilding more than Telangana; --level both covers district + block.
+  python -m tools.pipeline.build_master_metrics --level both --state Telangana --metrics txx_annual_max txge35_extreme_heat_days wsdi_warm_spell_days spi3_count_events_lt_minus1 spi3_max_spell_lt_minus1 pr_max_5day_precip tnle10_cold_nights
+
+  # Step 2 — aggregate the seven rule masters into the composite bundle master.
+  python -m tools.pipeline.build_proposal_bundles --bundle composite_agricultural_risk --level admin --overwrite
+
+  # Step 3 — convert legacy bundle masters into the optimized runtime parquet shards.
+  # --prune-scope deletes stale optimized files inside the agricultural-risk metric/level scope (destructive; requires --overwrite).
+  python -m tools.optimized.build_processed_optimised --metric composite_agricultural_risk --level admin --overwrite --prune-scope
+
+  # Verification — confirm lens-decomposed columns landed and parity is clean.
+  python -m tools.optimized.audit_processed_optimised_parity --metric composite_agricultural_risk
+  python -c "import pandas as pd; from pathlib import Path; import os; root = Path(os.environ.get('IRT_DATA_DIR','/data/irt'))/'processed'/'composite_agricultural_risk'/'Telangana'; csv = next(root.rglob('master_metrics_by_district.csv')); df = pd.read_csv(csv); print(sorted(c for c in df.columns if 'txx_peak_crop_heat' in c and any(s in c for s in ('abs_score','chg_score','imp_score'))))"
+  ```
+- `Done when`:
+  - All seven rule masters present in `processed/<metric>/<state>/master_metrics_by_{district,block}.csv` for every state in scope.
+  - `processed/composite_agricultural_risk/<state>/master_metrics_by_{district,block}.csv` present and includes `__abs_score`, `__chg_score`, `__imp_score` columns for every (rule, scenario, period) combination.
+  - `processed_optimised/metrics/composite_agricultural_risk/masters/admin/{district,block}/state=<state>.parquet` present.
+  - `audit_processed_optimised_parity --metric composite_agricultural_risk` reports `issues=0`.
+  - Manual dashboard check (Streamlit, Telangana, Sector-wise → Agricultural Risk): bundle ranks shift relative to pre-rebuild baseline (new weights and a live change lens guarantee numeric movement).
+
 ## Later
 
 ### BL-0007 — Migrate processed-data storage to build/published/archive Parquet serving
