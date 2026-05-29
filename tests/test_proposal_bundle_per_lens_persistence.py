@@ -483,10 +483,18 @@ def test_investment_r99p_score_equals_weighted_mean_of_abs_and_chg(
     out = _run_investment_risk(tmp_path)
 
     rule_slug = "r99p_positive_trend"
+    rule = next(
+        rule for rule in PROPOSAL_BUNDLES_BY_SLUG["composite_investment_financial_risk"].rules
+        if rule.rule_slug == rule_slug
+    )
     abs_col = proposal_rule_abs_score_column(rule_slug, "ssp245", "2020-2040")
     chg_col = proposal_rule_chg_score_column(rule_slug, "ssp245", "2020-2040")
     score_col = proposal_rule_score_column(rule_slug, "ssp245", "2020-2040")
-    expected = (0.40 * out[abs_col].astype(float) + 0.60 * out[chg_col].astype(float)) / 1.0
+    denominator = float(rule.absolute_weight) + float(rule.change_weight)
+    expected = (
+        float(rule.absolute_weight) * out[abs_col].astype(float)
+        + float(rule.change_weight) * out[chg_col].astype(float)
+    ) / denominator
     pd.testing.assert_series_equal(
         out[score_col].astype(float).reset_index(drop=True),
         expected.reset_index(drop=True),
