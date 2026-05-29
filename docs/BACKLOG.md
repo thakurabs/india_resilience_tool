@@ -147,6 +147,24 @@ Entry fields:
   - `audit_processed_optimised_parity --metric composite_agricultural_risk` reports `issues=0`.
   - Manual dashboard check (Streamlit, Telangana, Sector-wise → Agricultural Risk): bundle ranks shift relative to pre-rebuild baseline (new weights and a live change lens guarantee numeric movement).
 
+### BL-0022 — CHG-0035-RT: Thermal Power lens migration after SPI-3 baseline preflight
+- `Area`: proposal bundles, methodology, compute, docs, tests
+- `Why deferred`: CHG-0035 is currently `SUGGESTED` but blocked by its hard precondition. In the active data environment, `IRT_DATA_DIR` resolves to `/mnt/d/projects/irt_data`, but `processed/spi3_count_months_lt_minus1/` has no state-level legacy master CSVs, so the required read-only preflight could not verify that `_resolve_baseline_column()` finds a historical baseline for real SPI-3 district masters. Landing the Thermal Power change without that proof would make the planned SPI-3 change lens cosmetic in production.
+- `CHG Ledger`: `CHG-0035` — `india_resilience_tool/config/proposal_bundles.py`, `india_resilience_tool/compute/proposal_bundles.py`, `docs/lens_scoring_methodology.md`, `docs/bundle_calculation_audit.md`, `docs/proposal_bundle_methodology.md`, `docs/climate_risk_indicator_inventory.md`, `README.md`, `MANIFEST.md`, and the proposal-bundle test suites. Status: `SUGGESTED`, blocked pending SPI-3 baseline-column verification.
+- `Dependency / trigger`: resume only on an environment that has a real legacy SPI-3 master at `IRT_DATA_DIR/processed/spi3_count_months_lt_minus1/<state>/master_metrics_by_district.csv`. First verify `_resolve_baseline_column(frame, "spi3_count_months_lt_minus1")` returns a non-`None` historical column on that real frame; if it does not, stop and fix baseline availability or baseline-token support before applying CHG-0035.
+- `Plan`:
+  1. Run the blocking SPI-3 baseline preflight against a real district master CSV in the live data environment.
+  2. If the preflight passes, migrate `composite_asset_risk_thermal_power` to dossier §10 explicit weights in `india_resilience_tool/config/proposal_bundles.py` while preserving the current rule order, slugs, and user-visible labels.
+  3. Remove the Thermal SPI-3 absolute-only special case in `india_resilience_tool/compute/proposal_bundles.py` so `spi3_low_flow_proxy_norm` becomes a normal blended rule with absolute + change lenses and no impact lens; keep the Hydropower `r95p_interannual_variability_norm` helper special case unchanged.
+  4. Update the landed docs and inventory text to reflect the applied Thermal Power methodology and the migrated explicit-weight bundle count.
+  5. Extend the proposal-bundle config, builder, per-lens persistence, grid-first contract, and optimized-bundle tests, then run the targeted pytest suite or the documented fallback validation if `pytest` is unavailable.
+- `Done when`:
+  - The SPI-3 preflight proves a real `spi3_count_months_lt_minus1` district master exposes a resolvable historical baseline column.
+  - `composite_asset_risk_thermal_power` uses `weight_mode="explicit_normalized"` with a `0.70` minimum available rule-weight fraction and dossier-§10 rule weights/lens splits.
+  - `spi3_low_flow_proxy_norm` persists `__chg_score` columns, still omits `__imp_score`, and no longer uses the Thermal absolute-only dispatch path.
+  - Thermal Power docs and inventory text describe the landed explicit-weight methodology without changing current slugs or labels.
+  - The targeted proposal-bundle and `processed_optimised` compatibility tests pass in the real project environment.
+
 ## Later
 
 ### BL-0007 — Migrate processed-data storage to build/published/archive Parquet serving
