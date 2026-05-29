@@ -2796,4 +2796,55 @@ onward, in the structure used by Sections 1-8) are pending review in chat.
 
 ## 15. Sector-wise - Life & Livelihood Loss Risk
 
-Pending review.
+`composite_life_livelihood_loss_risk` is a lens-decomposed sectoral bundle
+per `docs/lens_scoring_methodology.md` §13 (CHG-0037). It scores acute
+climate-hazard pressure on mortality and outdoor / informal-sector
+livelihood disruption across 4 rules: Rx1day (acute flood mortality),
+Rx5day (prolonged inundation displacement), CDD (drought-driven
+livelihood loss), and WSDI (heat mortality and outdoor-worker exposure).
+Weight mode is `explicit_normalized` with a 0.70
+`available_rule_weight_fraction` coverage gate (matches Health, Industrial,
+Investment, Infrastructure, Agricultural).
+
+### Rule weights and lens decomposition
+
+| Rule slug | Metric | Lens (abs / chg / imp) | Impact band | Provenance | Conf | Change mode | Rule weight |
+|---|---|---:|---|---|---|---|---:|
+| `rx1day_ge_200` | `pr_max_1day_precip` | 0.40 / 0.25 / 0.35 | 115.6 - 204.5 mm/day | External (IMD heavy → extremely heavy) | HIGH | `relative_pct` | 0.30 |
+| `rx5day_livelihood_pressure` | `pr_max_5day_precip` | 0.40 / 0.30 / 0.30 | 250 - 500 mm/5d | Self-derived; reuses Industrial §7.2 | LOW | `relative_pct` | 0.25 |
+| `cdd_ge_40` | `pr_consecutive_dry_days_lt1mm` | 0.40 / 0.30 / 0.30 | 60 - 120 days | Self-derived; IMD agro-met + ICAR-CRIDA + NDMA anchored | MEDIUM | `relative_pct` | 0.20 |
+| `wsdi_ge_5` | `wsdi_warm_spell_days` | 0.40 / 0.30 / 0.30 | 6 - 18 days | Self-derived; IMD heatwave + Azhar 2014 + Mazdiyasni 2017 mortality anchored | MEDIUM | `relative_pct` | 0.25 |
+
+Rule weights sum to 1.00. Cluster split per dossier §13.5: Rainfall /
+Flood mortality 0.55 (Rx1day 0.30 + Rx5day 0.25), Heat mortality 0.25
+(WSDI), Drought / Livelihood loss 0.20 (CDD).
+
+### Methodology notes
+
+- **Rx1day (HIGH).** Reuses the IMD daily-rainfall categorical anchors
+  shared with Health §6.4, Industrial §7.1, Investment §8.1, and
+  Infrastructure §9.1. Any recalibration must update all five sections
+  together.
+- **Rx5day (LOW).** Same self-derived 250-500 mm/5d band as Industrial
+  §7.2, Investment §8.2, and Infrastructure §9.2. Carve-out from the
+  §4.4 LOW imp-weight default (0.15 → 0.30) because the same band is now
+  anchoring four sectoral bundles and is the most-tested self-derived band
+  in the dossier.
+- **CDD (MEDIUM).** Onset 60 days converges on IMD agro-met "prolonged
+  dry spell" (≥ 4-week trigger) and ICAR-CRIDA rainfed-kharif
+  critical-water-deficit threshold. Saturation 120 days aligns with NDMA
+  *Manual for Drought Management* seasonal-failure framing.
+- **WSDI (MEDIUM).** Onset 6 days = IMD 4-day heatwave declaration +
+  ~2-day acclimatization-loss tail. Saturation 18 days = midpoint of the
+  Indian heat-mortality plateau from Azhar et al. 2014 (Ahmedabad 2010)
+  and Mazdiyasni et al. 2017 (India-wide). This is the strongest
+  pathway-specific anchoring of any WSDI band in the dossier (cf. Health
+  §6.2 and Agricultural §12.3 which use the same numeric band with weaker
+  anchoring).
+
+### Slug-rename note
+
+`cdd_ge_40` (band 60-120, not ≥40) and `wsdi_ge_5` (band 6-18, not ≥5)
+are misleading post-migration. Renames are deferred to the CHG-0018 /
+CHG-0020 phantom-slug batch, following the same precedent set by
+Infrastructure Risk for `rx5day_ge_400`.

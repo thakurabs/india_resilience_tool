@@ -15,7 +15,7 @@ Scope of this document:
   bundle. Health Risk (Section 6) is the worked template; the remaining sector
   bundles follow the same structure.
 - Extension of the lens machinery to the **thematic** bundles is deferred until
-  the sectoral bundles are complete (see Section 13).
+  the sectoral bundles are complete (see Section 14).
 
 Implementation references (current code):
 - Rule catalog: `india_resilience_tool/config/proposal_bundles.py`
@@ -2628,7 +2628,234 @@ the weak impact bands a small share so they cannot dominate the rule
 
 ---
 
-## 13. Thematic Bundles — Deferred Extension
+## 13. Life & Livelihood Loss Risk — Metric-by-Metric Lens Dossier
+
+The Life & Livelihood Loss Risk bundle scores acute climate-hazard pressure
+on **mortality** (loss of life) and **outdoor / informal-sector livelihood
+disruption** (loss of livelihood). It is distinct from sectoral asset risks
+(Industrial, Infrastructure, Thermal Power, Hydropower) in that the impacted
+"asset" is the population itself — physiological tolerance limits, exposure
+during outdoor work, and the absence of an engineered buffer against the
+hazard.
+
+The bundle uses 4 rules — Rx1day (acute flood mortality), Rx5day (prolonged
+inundation displacement), CDD (drought-driven livelihood loss), WSDI (heat
+mortality and outdoor-worker exposure). All four are lens-decomposed
+(absolute + change + impact). Weight mode `explicit_normalized`; coverage
+gate `min_available_rule_weight_fraction=0.70` (same as Health, Industrial,
+Investment, Infrastructure, Agricultural).
+
+Per Section 4.4 the impact-band confidence ladder maps to impact-lens
+weights: HIGH external → 0.35; MEDIUM external/self-derived → 0.30;
+LOW self-derived → 0.15. Section 13.1 (Rx1day) is HIGH; Sections 13.3 (CDD)
+and 13.4 (WSDI) are MEDIUM with explicit IMD / ICAR / mortality-literature
+anchoring; Section 13.2 (Rx5day) remains LOW (reused Industrial 7.2 band
+without an independent India-context standard).
+
+### 13.1 Rx1day — One-day rainfall (`pr_max_1day_precip`)
+
+**Pathway.** Flash floods and short-duration extreme rainfall kill people
+directly through drowning, structural collapse of informal housing, and
+loss of life among outdoor workers caught without shelter; they also wipe
+out daily-wage livelihoods through asset destruction (handcarts, livestock,
+small shops, kuccha homes). Acute, hours-to-day onset.
+
+**Absolute lens (weight 0.40).** Higher rainfall intensity = higher
+mortality pressure. Standard min-max scaling within the scenario-period
+cohort.
+
+**Change lens (weight 0.25, `relative_pct`).** Forced upward shift in the
+1-day extreme distribution under warming raises the floor of expected
+flash-flood mortality even where the current peak is moderate.
+
+**Impact lens (weight 0.35; band 115.6 - 204.5 mm/day; External, HIGH).**
+Reuses the IMD daily-rainfall categorical anchors: 115.6 mm/day = onset of
+"heavy" rainfall; 204.5 mm/day = "extremely heavy" rainfall. These cut
+points are India's authoritative external standard for short-duration
+hazard categorization and are shared with Health Section 6.4, Industrial
+Section 7.1, Investment Section 8.1, and Infrastructure Section 9.1.
+
+**Per-lens weight summary.** 0.40 / 0.25 / 0.35 (HIGH external imp ceiling
+per Section 4.4).
+
+### 13.2 Rx5day — Five-day rainfall (`pr_max_5day_precip`)
+
+**Pathway.** Multi-day extreme rainfall drives sustained urban and rural
+inundation, displacement, and prolonged exposure of displaced populations to
+disease and exposure mortality. It also strands daily-wage workers from
+livelihood activity for days at a time (street vendors, construction
+labour, informal transport).
+
+**Absolute lens (weight 0.40).** Higher 5-day total = higher displacement /
+disease-environment pressure.
+
+**Change lens (weight 0.30, `relative_pct`).** Forced upward shift in
+multi-day extremes raises baseline displacement pressure across the
+scenario-period horizon.
+
+**Impact lens (weight 0.30; band 250 - 500 mm/5 days; Self-derived, LOW).**
+Onset 250 mm/5d carried over from Industrial Section 7.2 — five IMD
+"heavy-rain" days as a conservative lower envelope. Saturation 500 mm/5d =
+regional flood-catastrophe regime (Chuphal et al. 2025 multi-day extreme
+return periods >75-200 years for the 2024 India flood-of-record regions).
+Shared with Industrial Section 7.2, Investment Section 8.2, Infrastructure
+Section 9.2.
+
+**Per-lens weight summary.** 0.40 / 0.30 / 0.30 (LOW band would normally
+hold imp at 0.15 per Section 4.4; we apply the cross-bundle parity carve-out
+because the same band is anchoring 4 sectoral bundles and is the most-tested
+self-derived band in this dossier).
+
+### 13.3 CDD — Consecutive dry days (`pr_consecutive_dry_days_lt1mm`)
+
+**Pathway.** Sustained dryness during the monsoon and post-monsoon windows
+destroys rainfed-kharif livelihoods (smallholder cultivators in peninsular
+and central India), drives water-fetching burden onto women, and forces
+distress migration. Slower-onset than flood mortality, but with very long
+recovery times for affected households.
+
+**Absolute lens (weight 0.40).** Longer dry spell = higher livelihood-loss
+pressure.
+
+**Change lens (weight 0.30, `relative_pct`).** Forced lengthening of the
+longest dry spell directly extends the at-risk window for rainfed
+livelihoods.
+
+**Impact lens (weight 0.30; band 60 - 120 days; Self-derived, MEDIUM).**
+
+- **Onset = 60 days.** Convergent anchoring:
+  - IMD agro-met weekly advisories declare a "prolonged dry spell" at
+    ≥ 4 consecutive Drought Weeks (~28 days). A 60-day CDD necessarily
+    contains and exceeds this trigger.
+  - ICAR-CRIDA contingency plans identify ~60 days continuous dryness
+    during the monsoon window as the threshold beyond which rainfed kharif
+    systems (pulses, coarse cereals, cotton in peninsular India) hit
+    unrecoverable water-stress losses.
+- **Saturation = 120 days.** ~4 months continuous dryness = complete
+  kharif-to-early-rabi system failure, aligning with NDMA's *Manual for
+  Drought Management* (2016) seasonal-failure framing.
+- **Confidence = MEDIUM.** Both endpoints are derived from convergent
+  IMD + ICAR + NDMA evidence rather than a single agency categorical
+  standard. Self-derived label retained because no published Indian
+  document names "60-120 days CDD" verbatim, but the anchoring is much
+  stronger than the typical LOW-confidence self-derived case (cf.
+  Agricultural Section 12.4 SPI3 band).
+
+**Per-lens weight summary.** 0.40 / 0.30 / 0.30 (MEDIUM imp 0.30 per
+Section 4.4).
+
+### 13.4 WSDI — Warm-spell duration (`wsdi_warm_spell_days`)
+
+**Pathway.** Persistent heat causes direct heat-stroke mortality
+(disproportionately affecting outdoor workers, the elderly, and informal
+housing residents without cooling) and erodes outdoor-worker livelihoods
+(construction, agriculture, brick-kiln, street vending) through forced
+work-hour loss. This is the pathway most directly aligned with this
+bundle's "loss of life and livelihood" framing.
+
+**Absolute lens (weight 0.40).** Longer warm spell = higher mortality and
+outdoor-labour-loss pressure.
+
+**Change lens (weight 0.30, `relative_pct`).** Forced lengthening of warm
+spells under warming directly extends the at-risk window for heat
+mortality.
+
+**Impact lens (weight 0.30; band 6 - 18 days; Self-derived, MEDIUM).**
+
+- **Onset = 6 days.** IMD declares a heatwave when Tmax is ≥ 4.5 deg C
+  above normal for ≥ 4 consecutive days (plains) or ≥ 6.4 deg C above
+  normal for ≥ 2 days (severe). A persistent-heat duration of 6 days
+  combines the IMD 4-day declaration with a ~2-day acclimatization-loss
+  tail (the population's heat tolerance is degraded by extended consecutive
+  exposure, and excess-mortality signal becomes statistically detectable
+  around day 5-7 in observational studies; Azhar et al. 2014 PLOS ONE on
+  the Ahmedabad 2010 heatwave).
+- **Saturation = 18 days.** Heat-mortality literature plateau: Mazdiyasni
+  et al. 2017 (*Science Advances*) India-wide find heat-mortality response
+  saturates around 15-20 days of persistent extreme heat; 18 = midpoint of
+  this plateau.
+- **Confidence = MEDIUM.** The anchoring evidence is the exact pathway
+  being scored (Indian mortality response to persistent heat), not an
+  analogue from a different sector. Self-derived label retained because no
+  Indian agency publishes a WSDI day-count categorical standard directly;
+  HIGH would require an NDMA / IMD categorical "WSDI ≥ N days = catastrophic
+  heatwave" definition.
+
+**Per-lens weight summary.** 0.40 / 0.30 / 0.30 (MEDIUM imp 0.30 per
+Section 4.4).
+
+### 13.5 Life & Livelihood Loss Risk — bundle assembly notes
+
+**Rule weights (sum to 1.00):**
+
+| Rule | Rule weight | Cluster | Cluster weight |
+|---|---:|---|---:|
+| `rx1day_ge_200` | 0.30 | Rainfall / Flood mortality | 0.55 |
+| `rx5day_livelihood_pressure` | 0.25 | Rainfall / Flood mortality | (sub-cluster) |
+| `wsdi_ge_5` | 0.25 | Heat mortality | 0.25 |
+| `cdd_ge_40` | 0.20 | Drought / Livelihood loss | 0.20 |
+
+**Two-stage elicitation rationale:**
+
+1. **Cluster weights (Rainfall 0.55 / Heat 0.25 / Drought 0.20).** Anchored
+   on the relative acuity of the mortality pathway:
+   - **Rainfall / Flood mortality 0.55.** Flash flooding and prolonged
+     inundation are documented as India's largest single climate-related
+     mortality driver in absolute terms (NDMA event statistics; Swiss Re
+     Mumbai 2005 / Chennai 2015 / Kerala 2018 loss accounting). Acute
+     onset, low adaptive capacity for informal-housing residents.
+   - **Heat mortality 0.25.** Persistent-heat mortality is well-documented
+     for India (Azhar 2014; Mazdiyasni 2017; ILO 2019 outdoor-labour-loss
+     estimates) and has expanded its at-risk regions over the past two
+     decades, but absolute mortality counts remain materially below
+     flood-mortality counts at present.
+   - **Drought / Livelihood loss 0.20.** Slow-onset, with materially higher
+     adaptive capacity (state PDS, MGNREGA, distress migration as
+     adaptation). Affects livelihoods catastrophically but is rarely a
+     direct mortality pathway in present-day India.
+
+2. **Within-cluster splits.** In the rainfall cluster, the 0.30 / 0.25
+   split places Rx1day above Rx5day because acute flash-flood mortality
+   (Rx1day) is generally more lethal per event than prolonged-inundation
+   exposure (Rx5day, which is more displacement-/disease-mediated). Within
+   the single-rule heat cluster, WSDI carries the full 0.25 cluster
+   weight; within the single-rule drought cluster, CDD carries the full
+   0.20.
+
+**Cross-bundle reuse and parity.**
+
+- Rx1day band 115.6 - 204.5 mm/day is the same IMD external anchor used in
+  Health Section 6.4, Industrial Section 7.1, Investment Section 8.1,
+  Infrastructure Section 9.1, and now Life & Livelihood Section 13.1. Any
+  recalibration must change all five sections together.
+- Rx5day band 250 - 500 mm/5d is the same self-derived band as Industrial
+  Section 7.2, Investment Section 8.2, Infrastructure Section 9.2.
+- WSDI band 6 - 18 days is anchored to mortality literature here, whereas
+  Health Section 6.2 and Agricultural Section 12.3 use the same numeric
+  band with weaker pathway-specific anchoring. The Life & Livelihood
+  anchoring (Section 13.4) is the strongest of the three.
+
+**Slug-rename note.** `cdd_ge_40` and `wsdi_ge_5` are misleading
+post-migration (band 60-120 doesn't match `ge_40`; band 6-18 doesn't match
+`ge_5`). Rename deferred to the CHG-0018 / CHG-0020 phantom-slug batch,
+following the same precedent set in Infrastructure Section 9 (`rx5day_ge_400`
+retained pending the same batch).
+
+**Open extensions (out of scope for CHG-0037):**
+
+- A dedicated extreme-cold-mortality rule (TNn or TNle10 with mortality
+  anchoring) for northern wheat-belt cold-wave fatalities — currently only
+  represented indirectly via Agricultural Risk Section 12.7.
+- A short-duration outdoor-labour-loss rule (e.g. WBGT or TXge40 with
+  ILO 2019 hour-loss anchoring) to better resolve the livelihood-loss
+  component beyond the heat-mortality framing.
+- Geography-zone bands (BL-0020) — would primarily affect the WSDI onset
+  in northern plains (longer acclimatization) and the CDD saturation in
+  peninsular rainfed systems.
+
+---
+
+## 14. Thematic Bundles — Deferred Extension
 
 The lens machinery is intended to extend to the thematic bundles (Heat Risk,
 Drought Risk, Extreme Rainfall, Riverine Flood, Heat Stress, Cold Risk), where
@@ -2646,7 +2873,7 @@ separately-tested methodology change with the science owner.
 
 ---
 
-## 14. References (consolidated)
+## 15. References (consolidated)
 
 1. OECD & Joint Research Centre (2008). *Handbook on Constructing Composite
    Indicators: Methodology and User Guide.* OECD Publishing, Paris.

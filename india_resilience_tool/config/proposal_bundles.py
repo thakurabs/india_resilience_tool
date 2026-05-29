@@ -686,34 +686,82 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         bundle_label="Life & Livelihood Loss Risk",
         composite_slug="composite_life_livelihood_loss_risk",
         supported_levels=("district", "block"),
+        weight_mode="explicit_normalized",
+        min_available_rule_weight_fraction=0.70,
         rules=(
             _pressure_rule(
                 "rx1day_ge_200",
                 "1-day rainfall exposure pressure",
                 "pr_max_1day_precip",
-                absolute_weight=0.70,
-                change_weight=0.30,
+                absolute_weight=0.40,
+                change_weight=0.25,
+                impact_weight=0.35,
+                impact_low=115.6,
+                impact_high=204.5,
+                change_mode="relative_pct",
+                rule_weight=0.30,
+                method_note=(
+                    "Impact band 115.6-204.5 mm/day: IMD daily rainfall categories. "
+                    "External, high confidence; shared with Health section 6.4, "
+                    "Industrial section 7.1, Investment section 8.1, Infrastructure "
+                    "section 9.1. Lens dossier section 13.1."
+                ),
             ),
             _pressure_rule(
                 "rx5day_livelihood_pressure",
                 "5-day rainfall exposure pressure",
                 "pr_max_5day_precip",
-                absolute_weight=0.70,
+                absolute_weight=0.40,
                 change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=250.0,
+                impact_high=500.0,
+                change_mode="relative_pct",
+                rule_weight=0.25,
+                method_note=(
+                    "Impact band 250-500 mm/5 days: self-derived, LOW confidence. "
+                    "Shared with Industrial section 7.2, Investment section 8.2, "
+                    "Infrastructure section 9.2. Lens dossier section 13.2."
+                ),
             ),
             _pressure_rule(
                 "cdd_ge_40",
                 "Dry-spell livelihood pressure",
                 "pr_consecutive_dry_days_lt1mm",
-                absolute_weight=0.60,
-                change_weight=0.40,
+                absolute_weight=0.40,
+                change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=60.0,
+                impact_high=120.0,
+                change_mode="relative_pct",
+                rule_weight=0.20,
+                method_note=(
+                    "Impact band 60-120 days: self-derived, MEDIUM confidence. "
+                    "Onset=60 (IMD agro-met 4-week prolonged-dry-spell + ICAR-CRIDA "
+                    "rainfed-kharif critical-water-deficit threshold); saturation=120 "
+                    "(full kharif-to-early-rabi system failure; NDMA Manual for "
+                    "Drought Management seasonal-failure framing). Lens dossier "
+                    "section 13.3."
+                ),
             ),
             _pressure_rule(
                 "wsdi_ge_5",
                 "Warm-spell livelihood pressure",
                 "wsdi_warm_spell_days",
-                absolute_weight=0.70,
+                absolute_weight=0.40,
                 change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=6.0,
+                impact_high=18.0,
+                change_mode="relative_pct",
+                rule_weight=0.25,
+                method_note=(
+                    "Impact band 6-18 days: self-derived, MEDIUM confidence. "
+                    "Onset=6 (IMD 4-day heatwave declaration + ~2-day acclimatization "
+                    "tail); saturation=18 (heat-mortality plateau from Azhar et al. "
+                    "2014 Ahmedabad and Mazdiyasni et al. 2017 India-wide). Lens "
+                    "dossier section 13.4."
+                ),
             ),
         ),
     ),

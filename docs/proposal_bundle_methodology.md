@@ -29,7 +29,8 @@ Each proposal-bundle rule is scored from `0` to `100`.
 Each rule can combine three scientifically distinct components.
 
 Sectoral bundles (`Agricultural Risk`, `Health Risk`, `Industrial Risk`,
-`Investment / Financial Risk`, and `Infrastructure Risk`) use lens-decomposed scoring per
+`Investment / Financial Risk`, `Infrastructure Risk`, and
+`Life & Livelihood Loss Risk`) use lens-decomposed scoring per
 `docs/lens_scoring_methodology.md`. Agricultural Risk reinstates the impact
 lens with a self-derived TXx 35-45 deg C agronomic band (§12.1) replacing
 the previously-retired 40-45 deg C IMD heatwave band, plus self-derived
@@ -39,7 +40,12 @@ bands on the six other rules (§12.2-§12.7). Infrastructure Risk now follows
 data-contract rename is approved. Investment / Financial Risk adds five
 dossier-§8 lens rules with explicit bundle weights; its R99p rule is the
 current exception that intentionally omits the impact component because no
-defensible danger band exists for that regime metric.
+defensible danger band exists for that regime metric. Life & Livelihood
+Loss Risk follows §13 with HIGH-confidence Rx1day (IMD daily-rainfall
+categories) and MEDIUM-confidence CDD and WSDI bands anchored to IMD
+agro-met / ICAR-CRIDA / NDMA evidence and to Indian heat-mortality
+literature (Azhar 2014; Mazdiyasni 2017) respectively; the `cdd_ge_40` and
+`wsdi_ge_5` slugs are stable until the same later data-contract rename.
 
 ### 1. Future absolute severity
 

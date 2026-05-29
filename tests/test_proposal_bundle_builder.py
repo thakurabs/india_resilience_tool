@@ -659,11 +659,16 @@ def test_compute_proposal_bundle_master_frame_merges_block_metrics_by_canonical_
         "pr_consecutive_dry_days_lt1mm": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
         "wsdi_warm_spell_days": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
     }
+    # Input values pinned at impact-band midpoints so the impact lens scores
+    # 50.0 for every rule; combined with the 1-row absolute-lens midpoint of
+    # 50.0 and a NaN change lens (no baseline column), every rule score is
+    # 50.0 and the bundle mean is 50.0 regardless of rule weights.
+    # Bands per CHG-0037 dossier sections 13.1-13.4.
     values_by_slug = {
-        "pr_max_1day_precip": 220.0,
-        "pr_max_5day_precip": 240.0,
-        "pr_consecutive_dry_days_lt1mm": 20.0,
-        "wsdi_warm_spell_days": 7.0,
+        "pr_max_1day_precip": (115.6 + 204.5) / 2,
+        "pr_max_5day_precip": (250.0 + 500.0) / 2,
+        "pr_consecutive_dry_days_lt1mm": (60.0 + 120.0) / 2,
+        "wsdi_warm_spell_days": (6.0 + 18.0) / 2,
     }
 
     for slug, row in rows_by_slug.items():
@@ -716,11 +721,12 @@ def test_compute_proposal_bundle_master_frame_normalizes_stale_canonical_block_k
         "pr_consecutive_dry_days_lt1mm": {"state": state_name, "district": "ADILABAD", "block": "ADILABAD RURAL"},
         "wsdi_warm_spell_days": {"state": state_name, "district": "Adilabad", "block": "Adilabad Rural"},
     }
+    # Band midpoints: see twin test above for the rationale.
     values_by_slug = {
-        "pr_max_1day_precip": 220.0,
-        "pr_max_5day_precip": 240.0,
-        "pr_consecutive_dry_days_lt1mm": 20.0,
-        "wsdi_warm_spell_days": 7.0,
+        "pr_max_1day_precip": (115.6 + 204.5) / 2,
+        "pr_max_5day_precip": (250.0 + 500.0) / 2,
+        "pr_consecutive_dry_days_lt1mm": (60.0 + 120.0) / 2,
+        "wsdi_warm_spell_days": (6.0 + 18.0) / 2,
     }
 
     for slug, row in rows_by_slug.items():
