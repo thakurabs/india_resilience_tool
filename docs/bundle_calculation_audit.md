@@ -2397,28 +2397,35 @@ Supported scenarios:
 - `ssp245`
 - `ssp585`
 
-Agricultural Risk is now the survivor agriculture bundle. It is a pure
-current/future absolute-pressure composite: all retained rules are scored from
-the selected scenario and period only, using robust p10-p90 normalization within
-the state / level / scenario / period comparison frame. Higher scores always
-mean higher agricultural climate pressure.
+Agricultural Risk is the survivor agriculture bundle and (post-CHG-0032) a
+lens-decomposed composite per `docs/lens_scoring_methodology.md` §12. Every
+rule combines an absolute lens (p10-p90 scaling of the projected level),
+a change lens (vs the 1995-2014 historical baseline), and an impact lens
+(continuous band clipping against an agronomic threshold). Higher scores
+always mean higher agricultural climate pressure.
 
-| Rule slug | Label | Source metric | Weight | Direction |
-|---|---|---|---:|---|
-| `txx_peak_crop_heat` | Peak crop heat | `txx_annual_max` | 0.10 | Higher is worse |
-| `txge35_damaging_heat_days` | Damaging heat days | `txge35_extreme_heat_days` | 0.10 | Higher is worse |
-| `wsdi_persistent_heat` | Persistent heat | `wsdi_warm_spell_days` | 0.10 | Higher is worse |
-| `spi3_drought_episodes` | Drought episodes | `spi3_count_events_lt_minus1` | 0.15 | Higher is worse |
-| `spi3_longest_drought_spell` | Longest drought spell | `spi3_max_spell_lt_minus1` | 0.15 | Higher is worse |
-| `rx5day_heavy_rainfall` | 5-day heavy rainfall | `pr_max_5day_precip` | 0.20 | Higher is worse |
-| `tnle10_cold_nights` | Cold nights | `tnle10_cold_nights` | 0.20 | Higher is worse |
+| Rule slug | Label | Source metric | Lens (abs/chg/imp) | Impact band | Change mode | Rule weight | Direction |
+|---|---|---|---|---|---|---:|---|
+| `txx_peak_crop_heat` | Peak crop heat | `txx_annual_max` | 0.40 / 0.30 / 0.30 | 35-45 deg C | `absolute_delta` | 0.15 | Higher is worse |
+| `txge35_damaging_heat_days` | Damaging heat days | `txge35_extreme_heat_days` | 0.45 / 0.40 / 0.15 | 15-60 days | `relative_pct` | 0.10 | Higher is worse |
+| `wsdi_persistent_heat` | Persistent heat | `wsdi_warm_spell_days` | 0.45 / 0.40 / 0.15 | 6-18 days | `relative_pct` | 0.10 | Higher is worse |
+| `spi3_drought_episodes` | Drought episodes | `spi3_count_events_lt_minus1` | 0.45 / 0.40 / 0.15 | 3-12 events | `relative_pct` | 0.15 | Higher is worse |
+| `spi3_longest_drought_spell` | Longest drought spell | `spi3_max_spell_lt_minus1` | 0.45 / 0.40 / 0.15 | 3-12 months | `relative_pct` | 0.15 | Higher is worse |
+| `rx5day_heavy_rainfall` | 5-day heavy rainfall | `pr_max_5day_precip` | 0.45 / 0.40 / 0.15 | 250-500 mm | `relative_pct` | 0.20 | Higher is worse |
+| `tnle10_cold_nights` | Cold nights | `tnle10_cold_nights` | 0.45 / 0.40 / 0.15 | 10-30 days | `relative_pct` | 0.15 | Higher is worse |
 
 ### 8.2 Methodology Change
 
-This is an intentional methodology change from the old proposal agriculture
-score. The earlier within-rule absolute/change/impact blends are removed for
-Agricultural Risk. The old TXx 40-45 deg C soft impact band and the R95p
-relative-change signal are retired from this score.
+CHG-0032 reinstates the within-rule absolute/change/impact lens decomposition
+for Agricultural Risk, replacing the prior pure-absolute single-lens scoring
+(itself a CHG-pre-0028 carve-out). The retired TXx 40-45 deg C external IMD
+heatwave band is **not** reinstated; instead a self-derived 35-45 deg C
+agronomic band is introduced per `docs/lens_scoring_methodology.md` §12.1
+(rice/wheat reproductive-stage sterility onset at ~35 deg C; IMD plains
+severe-heatwave saturation at 45 deg C). The R95p relative-change signal
+remains retired. TXx and TNle10 rule weights are reshuffled by +/-0.05 to
+reflect the medium-confidence TXx band and the peninsular-default zone
+ceiling on TNle10 (§12.7). All other rule weights are held.
 
 The following metrics are intentionally dropped from the agriculture composite:
 - `dtr_daily_temp_range`: retired because the direction and crop response are
@@ -2439,35 +2446,45 @@ The following metrics are intentionally dropped from the agriculture composite:
 
 ### 8.3 Scoring
 
-In lens terms (see `docs/lens_scoring_methodology.md`), every Agricultural Risk
-rule uses the **absolute lens only** (`absolute_weight = 1.0`,
-`change_weight = 0.0`, `impact_weight = 0.0`) — a pure projected-level pressure
-score with no change or impact lens. Each rule is normalized independently:
+In lens terms (see `docs/lens_scoring_methodology.md`), every Agricultural
+Risk rule now uses all three lenses with rule-specific weights. Per-rule
+blending follows the standard schema:
 
 ```text
-rule_score = clip((value - p10) / (p90 - p10), 0, 1) * 100
+rule_score = (
+    absolute_weight * abs_score
+  + change_weight   * chg_score
+  + impact_weight   * imp_score
+) / (absolute_weight + change_weight + impact_weight)
 ```
 
-If p10 and p90 are equal, valid rows receive the flat score used by the proposal
-builder. Missing source values produce `NaN` for that rule.
+with row-wise renormalization across active lenses when a lens is NaN
+(missing baseline, zero baseline under `relative_pct`, etc.) per the
+sparse-Option-B persistence policy. Each lens is normalized independently:
+abs uses p10-p90 scaling on the projected level; chg uses p10-p90 scaling
+on the baseline-delta (mode `absolute_delta` for TXx; `relative_pct` for
+the six count- and mm-based metrics); imp uses continuous band clipping
+against the agronomic threshold (§12.1-§12.7).
 
-Composite score:
+Composite score (weighted sum of lens-blended rule scores with the rule
+weights in §8.1):
 
 ```text
 Agricultural Risk =
-  0.10 * norm(txx_annual_max)
-+ 0.10 * norm(txge35_extreme_heat_days)
-+ 0.10 * norm(wsdi_warm_spell_days)
-+ 0.15 * norm(spi3_count_events_lt_minus1)
-+ 0.15 * norm(spi3_max_spell_lt_minus1)
-+ 0.20 * norm(pr_max_5day_precip)
-+ 0.20 * norm(tnle10_cold_nights)
+  0.15 * rule(txx_peak_crop_heat)
++ 0.10 * rule(txge35_damaging_heat_days)
++ 0.10 * rule(wsdi_persistent_heat)
++ 0.15 * rule(spi3_drought_episodes)
++ 0.15 * rule(spi3_longest_drought_spell)
++ 0.20 * rule(rx5day_heavy_rainfall)
++ 0.15 * rule(tnle10_cold_nights)
 ```
 
 The builder persists both `available_rule_count` and
-`available_rule_weight_fraction`. The minimum coverage gate is 0.70 by weight:
-missing only `rx5day_heavy_rainfall` leaves 0.80 and the score is allowed;
-missing both rainfall and cold leaves 0.60 and the score is set to `NaN`.
+`available_rule_weight_fraction`. The minimum coverage gate is 0.70 by
+weight: missing only `rx5day_heavy_rainfall` leaves 0.80 and the score is
+allowed; missing both rainfall and cold leaves 0.65 and the score is set
+to `NaN`.
 
 ### 8.4 Implementation Notes
 

@@ -1862,7 +1862,11 @@ def standardised_precipitation_index(
     threshold=None,
     quantile_method="nearest",
     exceed_ge=True,
+    min_months_per_year=9,
+    min_event_months=1,
+    **_ignored_params,
 ):
+    _ = min_months_per_year, min_event_months, _ignored_params
     dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
     if dm.size == 0: return np.nan
     total = float(dm.sum().item())
@@ -1871,8 +1875,26 @@ def standardised_precipitation_index(
     mean_p, std_p = float(baseline_dm.mean().item()) * 365, float(baseline_dm.std().item()) * np.sqrt(365)
     return (total - mean_p) / std_p if std_p > 0 else 0.0
 
-def standardised_precipitation_evapotranspiration_index(da, mask, scale_months=3, baseline_years=(1985, 2014), annual_aggregation=None):
-    return standardised_precipitation_index(da, mask, scale_months, baseline_years, annual_aggregation=annual_aggregation)
+def standardised_precipitation_evapotranspiration_index(
+    da,
+    mask,
+    scale_months=3,
+    baseline_years=(1985, 2014),
+    annual_aggregation=None,
+    min_months_per_year=9,
+    min_event_months=1,
+    **_ignored_params,
+):
+    return standardised_precipitation_index(
+        da,
+        mask,
+        scale_months,
+        baseline_years,
+        annual_aggregation=annual_aggregation,
+        min_months_per_year=min_months_per_year,
+        min_event_months=min_event_months,
+        **_ignored_params,
+    )
 
 
 # --------------------------------------------------------------------------

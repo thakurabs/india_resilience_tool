@@ -2524,20 +2524,39 @@ def _render_glance_answer_export_panel(
             key="landing_glance_csv_download",
             use_container_width=True,
         )
-    with export_cols[1]:
-        st.download_button(
-            "Download answer pack",
-            data=build_glance_answer_pack_xlsx(
-                answer_text=answer_text,
-                export_frame=export_frame,
-                metadata=metadata,
-                driver_note=driver_note,
-            ),
-            file_name=xlsx_name,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="landing_glance_xlsx_download",
-            use_container_width=True,
+    answer_pack_bytes: bytes | None = None
+    answer_pack_unavailable = False
+    try:
+        answer_pack_bytes = build_glance_answer_pack_xlsx(
+            answer_text=answer_text,
+            export_frame=export_frame,
+            metadata=metadata,
+            driver_note=driver_note,
         )
+    except ModuleNotFoundError as exc:
+        if str(getattr(exc, "name", "")).strip() != "openpyxl":
+            raise
+        answer_pack_unavailable = True
+    with export_cols[1]:
+        if answer_pack_unavailable:
+            st.download_button(
+                "Download answer pack",
+                data=b"",
+                file_name=xlsx_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="landing_glance_xlsx_download",
+                use_container_width=True,
+                disabled=True,
+            )
+        else:
+            st.download_button(
+                "Download answer pack",
+                data=answer_pack_bytes or b"",
+                file_name=xlsx_name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="landing_glance_xlsx_download",
+                use_container_width=True,
+            )
 
 
 def _render_band_filter_status(applied_band: Optional[str], row_count: int, *, level_noun: str) -> None:

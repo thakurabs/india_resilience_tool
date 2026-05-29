@@ -65,7 +65,16 @@ def _load_optimized_yearly_table(
     try:
         return read_table(path, columns=columns, filters=filters)
     except Exception:
+        if not columns:
+            return pd.DataFrame()
+    try:
+        out = read_table(path, columns=None, filters=filters)
+    except Exception:
         return pd.DataFrame()
+    if out.empty or not columns:
+        return out
+    available_columns = [column for column in columns if column in out.columns]
+    return out.loc[:, available_columns].copy()
 
 
 def _filter_optimized_admin_yearly(

@@ -15,7 +15,7 @@ Scope of this document:
   bundle. Health Risk (Section 6) is the worked template; the remaining sector
   bundles follow the same structure.
 - Extension of the lens machinery to the **thematic** bundles is deferred until
-  the sectoral bundles are complete (see Section 12).
+  the sectoral bundles are complete (see Section 13).
 
 Implementation references (current code):
 - Rule catalog: `india_resilience_tool/config/proposal_bundles.py`
@@ -2246,7 +2246,384 @@ uses **0.70 / 0.30 / 0.00**.
 
 ---
 
-## 12. Thematic Bundles — Deferred Extension
+## 12. Agricultural Risk — Metric-by-Metric Lens Dossier
+
+Bundle: `Sector-wise - Agricultural Risk` | composite slug:
+`composite_agricultural_risk` | levels: district, block | scenarios: `ssp245`,
+`ssp585`.
+
+Conceptual scope: climate hazards most directly tied to **crop production
+risk in India** — peak heat damaging reproductive-stage crop physiology,
+accumulated damaging-heat exposure, persistent heatwaves, drought (frequency
+and longest spell), heavy multi-day rainfall (kharif waterlogging / standing
+crop flood damage), and cold-night chilling stress on tropical and
+sub-tropical crops. Per Section 1.2 this is hazard pressure, not full
+agricultural risk: it does not include sector-specific exposure (which crops
+sit where, by phenological calendar), adaptive capacity (irrigation
+infrastructure, varietal heat tolerance, crop insurance), or vulnerability
+(smallholder vs commercial, dryland vs irrigated, kharif vs rabi).
+
+This section closes the methodology gap left when the earlier
+single-lens-absolute scoring retired the TXx 40-45 deg C impact band without a
+replacement (`india_resilience_tool/config/proposal_bundles.py` previously
+carried that retirement notice). The current dossier reinstates the impact
+lens with a defensible agronomic band per Section 4 and brings the bundle
+into structural parity with Health Risk (Section 6) and Industrial Risk
+(Section 7).
+
+| Rule (metric) | absolute | change | impact (band) | Rationale summary |
+|---|:--:|:--:|:--:|---|
+| TXx — peak crop heat (`txx_annual_max`) | yes | yes | yes — self-derived (med conf), 35-45 deg C | Rice/wheat reproductive-stage heat sterility onset (~35 deg C); IMD plains heatwave saturation (45 deg C) |
+| TXge35 — damaging heat days (`txge35_extreme_heat_days`) | yes | yes | yes — self-derived (low conf), 15-60 days | Anthesis-window exposure onset; ~2-month catastrophic-season saturation |
+| WSDI — persistent heat (`wsdi_warm_spell_days`) | yes | yes | yes — self-derived (low conf), 6-18 days | Reuses Health Section 6.2 band; warm-spell persistence shortens grain-filling and stresses livestock-feed and pasture systems |
+| SPI3 drought episodes (`spi3_count_events_lt_minus1`) | yes | yes | yes — self-derived (low conf), 3-12 events | Above-natural-frequency onset; near-continuous-drought saturation |
+| SPI3 longest drought spell (`spi3_max_spell_lt_minus1`) | yes | yes | yes — self-derived (low conf), 3-12 months | Single SPI3-window onset; year-long drought saturation |
+| Rx5day — 5-day heavy rainfall (`pr_max_5day_precip`) | yes | yes | yes — self-derived (low conf), 250-500 mm | Reuses Industrial Section 7.2 band; kharif waterlogging / standing-crop flood damage |
+| TNle10 — cold nights (`tnle10_cold_nights`) | yes | yes | yes — self-derived (low conf, **peninsular default**), 10-30 days | Tropical-crop chilling-injury onset; severe-cold-stress saturation; zone caveat per Section 4.9 / BL-0020 |
+
+### 12.1 TXx — Peak crop heat (`txx_annual_max`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. Districts facing the most extreme projected daytime
+  heat relative to peers (TXx, ETCCDI). For crops, peak heat is the dominant
+  single-event pressure on reproductive-stage physiology — rice anthesis
+  spikelet sterility, wheat grain-filling truncation, mango/citrus flower
+  abscission.
+- **change:** Keep. Warming peak-heat extremes vs the `1990-2010` baseline
+  matter to agriculture because cropping calendars, varietal heat tolerance,
+  and irrigation scheduling are calibrated against historical extremes. Mode:
+  `absolute_delta` (degrees), matching Industrial Section 7.4 and Health
+  Section 6.1.
+- **impact:** Keep, **self-derived band 35-45 deg C, medium confidence**
+  (Section 4 protocol). The earlier 40-45 deg C band (an external IMD
+  heatwave band) was retired because **the human-heatwave threshold of
+  40 deg C is too high for agronomic onset**: rice and wheat reproductive-
+  stage damage begins well below the IMD plains-heatwave threshold.
+  - **Mechanism:** at temperatures above ~35 deg C during anthesis, rice
+    spikelet fertility drops sharply (Jagadish et al.); wheat suffers
+    accelerated senescence and grain-filling truncation above ~32-35 deg C
+    (Wahid et al.); horticultural crops (mango, banana, tomato) show pollen
+    sterility, flower abscission, and fruit cracking in the same range.
+    Above 45 deg C, plains agriculture is in catastrophic-failure regime for
+    standing kharif and late-rabi crops alike.
+  - **Anchors:**
+    - Crop physiology literature (Wheeler et al.; Vermeulen et al.; Wahid
+      et al. *Plant Physiology* review on heat tolerance; Jagadish et al. on
+      rice anthesis) places reproductive-stage heat sterility onset near
+      **32-35 deg C** for the dominant Indian staple crops (rice, wheat).
+      35 deg C is the conservative upper edge of this onset band.
+    - IMD plains heatwave definition (declared >= 40 deg C, severe
+      >= 45 deg C) anchors the **saturation** point: at 45 deg C the IMD
+      institutional severe-heatwave regime coincides with documented
+      catastrophic crop failure regimes.
+  - **Cut points:** onset **35 deg C** (agronomic reproductive-stage
+    sterility onset, conservative crop-physiology anchor); saturation
+    **45 deg C** (IMD severe-heatwave / documented crop-failure regime).
+  - **Confidence: medium.** Onset is derived from agronomic literature
+    rather than an IMD/ICAR categorical standard, so confidence is below the
+    high-confidence external IMD plains-heatwave band that Industrial
+    Section 7.4 and Health Section 6.1 use. The saturation is
+    institutionally anchored.
+  - **Why not reinstate the retired 40-45 deg C band:** the human-heatwave
+    onset (40 deg C) understates crop-onset damage by ~5 deg C; the
+    Phase-1 dossier deliberately accepts a slightly lower-confidence band
+    in exchange for a defensible agronomic onset.
+  - **Zone caveat:** plains/national default (Section 4.9, BL-0020). A
+    refinement using agro-climatic zones (ICAR/Planning Commission) or
+    agro-ecological zones (NBSS&LUP) is deferred.
+- **Per-lens weights:** absolute 0.40 / change 0.30 / impact 0.30. The
+  medium-confidence self-derived band justifies a within-rule impact weight
+  slightly below the 0.35 reserved for high-confidence external bands
+  (Industrial Section 7.4, Health Section 6.1) but above the 0.15 reserved
+  for low-confidence bands (Industrial Section 7.2 Rx5day).
+
+### 12.2 TXge35 — Damaging heat days (`txge35_extreme_heat_days`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. Annual count of days with TX >= 35 deg C — the
+  reproductive-stage agronomic damage threshold from Section 12.1.
+  Districts with the most damaging-heat days relative to peers.
+- **change:** Keep. More damaging-heat days vs baseline shift cropping
+  calendars and stress varietal heat tolerance. Mode: `relative_pct`,
+  matching Industrial Section 7.3 CDD (count metrics on days).
+- **impact:** Keep, **self-derived band 15-60 days, low confidence**
+  (Section 4 protocol).
+  - **Mechanism:** even a few damaging days during the reproductive window
+    (rice anthesis ~7 days; wheat anthesis 7-10 days) materially reduce
+    yield. Two months of damaging-heat days accumulates across both kharif
+    flowering and rabi grain-filling sensitive windows — a multi-season
+    catastrophic regime.
+  - **Anchors:**
+    - The slug threshold (>= 35 deg C) already aligns with the rice/wheat
+      reproductive-stage sterility onset from Section 12.1.
+    - **Onset 15 days** — captures a complete reproductive-stage exposure
+      window (one of rice anthesis ~7-10 days plus a typical wheat anthesis
+      ~7-10 days) of damaging heat per year.
+    - **Saturation 60 days** — approximately two months of damaging-heat
+      days; spans both kharif and rabi sensitive windows and indicates a
+      season-dominant heat regime.
+  - **Cut points:** onset **15 days**; saturation **60 days**.
+  - **Confidence: low.** Count-of-days thresholds for crop damage are not
+    externally codified — ICAR / IMD agromet publishes phenological-stage
+    advisories rather than annual-count categorical bands. The cut points
+    are constructed from reproductive-window physiology, not borrowed.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 — the
+  low-confidence self-derived band carries the smaller within-rule impact
+  weight reserved for low-confidence bands (Section 4.3). The persistence
+  signal is carried mainly by absolute and change.
+
+### 12.3 WSDI — Persistent heat (`wsdi_warm_spell_days`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. WSDI (ETCCDI: count of days in spells of >= 6
+  consecutive days with TX > 90th percentile of baseline) measures persistent
+  warm-spell exposure. Districts with the most persistent-heat days relative
+  to peers.
+- **change:** Keep. Lengthening warm spells vs baseline shorten grain-filling
+  windows, stress livestock-feed and pasture systems, and degrade soil
+  moisture. Mode: `relative_pct`.
+- **impact:** Keep, **self-derived band 6-18 days, low confidence**, **reuses
+  Health Section 6.2**.
+  - **Mechanism:** sustained warm spells truncate grain-filling, accelerate
+    crop senescence, increase evapotranspiration demand on irrigation
+    systems, and degrade fodder quality. The hazard *value* threshold for
+    persistent warm-spell exposure is set by the WSDI metric definition
+    itself, not by the receptor; the consequence differs (yield truncation /
+    fodder degradation vs cardiovascular mortality).
+  - **Anchors:** the WSDI metric's own minimum qualifying spell (>= 6
+    consecutive days) is the natural **onset** anchor; multiple WSDI spells
+    accumulating to ~18 days/year indicates a regime where persistent heat
+    dominates the growing season. Same anchors as Health Section 6.2.
+  - **Cut points:** onset **6 days** (WSDI minimum qualifying spell);
+    saturation **18 days** (multi-spell / season-dominant warm-spell regime).
+  - **Confidence: low.** WSDI is a percentile-based annual tally — the
+    physiological harm pathway is real but the count thresholds are not
+    externally codified for agriculture.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 — mirrors
+  Health Section 6.2 (low-confidence self-derived band).
+
+### 12.4 SPI3 drought episodes (`spi3_count_events_lt_minus1`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. Count of drought episodes with SPI-3 < -1 (McKee
+  moderate drought) over the period. Districts with the most frequent
+  moderate-drought episodes relative to peers.
+- **change:** Keep. Increasing drought-episode frequency vs baseline
+  indicates a shift in the agricultural drought regime. Mode: `relative_pct`.
+- **impact:** Keep, **self-derived band 3-12 events, low confidence**
+  (Section 4 protocol).
+  - **Mechanism:** repeated moderate-drought episodes deplete soil moisture
+    reserves, force borewell deepening, drive distress sales of livestock,
+    and erode smallholder coping capacity. Frequency of drought episodes is
+    a distinct burden from the longest single drought (Section 12.5).
+  - **Anchors:**
+    - The natural per-event baseline frequency of SPI < -1 is ~16% by
+      standard-normal definition; over a 20-year period that yields roughly
+      3-4 events as the **natural-frequency baseline**.
+    - **Onset 3 events** — approximately the natural baseline, above which
+      episode frequency departs from normal.
+    - **Saturation 12 events** — near-continuous-drought regime indicating
+      systemic agricultural-drought rather than episodic.
+  - **Cut points:** onset **3 events**; saturation **12 events**.
+  - **Confidence: low.** Drought-episode count categorical bands are not
+    externally codified; the cut points are derived from SPI statistics
+    rather than an institutional standard.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15.
+
+### 12.5 SPI3 longest drought spell (`spi3_max_spell_lt_minus1`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. Maximum consecutive months of SPI-3 < -1 over the
+  period. Districts with the longest single moderate-drought spell relative
+  to peers.
+- **change:** Keep. Lengthening longest-spell vs baseline indicates a shift
+  toward sustained agricultural drought. Mode: `relative_pct`.
+- **impact:** Keep, **self-derived band 3-12 months, low confidence**.
+  - **Mechanism:** sustained moderate-drought (vs episodic) collapses
+    reservoir refill, exhausts groundwater, and forces multi-season cropping
+    pattern changes — distinct from the episode-frequency burden in
+    Section 12.4.
+  - **Anchors:**
+    - **Onset 3 months** — one SPI3 window's worth of drought
+      (SPI-3 is a 3-month index), the minimum institutionally-recognizable
+      moderate-drought spell.
+    - **Saturation 12 months** — year-long sustained moderate drought,
+      indicating multi-season crop failure regime (one full kharif-rabi
+      cycle under drought stress).
+  - **Cut points:** onset **3 months**; saturation **12 months**.
+  - **Confidence: low.** Longest-spell categorical bands are not externally
+    codified; cut points are derived from SPI window length and
+    seasonal-cycle reasoning.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15.
+
+### 12.6 Rx5day — 5-day heavy rainfall (`pr_max_5day_precip`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. Heaviest 5-day accumulated rainfall over the period.
+  Captures kharif waterlogging, standing-crop flood damage, and basin-scale
+  agricultural flood pressure that a single-day extreme can miss.
+- **change:** Keep. Intensifying multi-day accumulations vs baseline. Mode:
+  `relative_pct`.
+- **impact:** Keep, **self-derived band 250-500 mm/5 days, low confidence**,
+  **reuses Industrial Section 7.2**.
+  - **Mechanism for agriculture:** sustained multi-day rainfall produces
+    standing-crop submergence (rice tolerance to complete submergence is
+    typically <= 1-2 weeks for non-Sub1 varieties), kharif waterlogging,
+    delayed harvest with quality loss, and topsoil erosion. The hazard
+    *value* threshold (5-day mm cumulative) is set by drainage and basin
+    hydrology, not by the receptor; the consequence differs (crop
+    submergence and quality loss vs factory inundation in Industrial
+    Section 7.2).
+  - **Anchors:** same as Industrial Section 7.2 — five consecutive IMD
+    "heavy" days (>= 64.5 mm/day each) sum to >= 322 mm; observed Indian
+    catastrophic-event 5-day cumulatives (Kerala 2018 ~350-400 mm in 3
+    days regionally; Mumbai 2005 cumulative ~944 mm) anchor the
+    saturation regime.
+  - **Cut points:** onset **250 mm** (plausible kharif-waterlogging /
+    drainage-failure regime); saturation **500 mm** (regional flood-event
+    / submerged-crop-loss regime).
+  - **Confidence: low.** No external categorical 5-day-rainfall band exists
+    in IMD / CWC / ICAR; the band is borrowed from Industrial Section 7.2
+    with the same low-confidence rating.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 — mirrors
+  Industrial Section 7.2 (low-confidence self-derived band).
+
+### 12.7 TNle10 — Cold nights (`tnle10_cold_nights`)
+
+- **Lenses:** absolute (yes), change (yes), impact (yes — self-derived).
+- **absolute:** Keep. Annual count of cold nights with TN <= 10 deg C.
+  Districts with the most cold-night exposure relative to peers.
+- **change:** Keep. Mode: `relative_pct`.
+- **impact:** Keep, **self-derived band 10-30 days, low confidence**,
+  **peninsular default**.
+  - **Mechanism:** tropical and sub-tropical crops (rice cold-spell at
+    seedling stage, sugarcane, banana, mango, cotton, vegetables) suffer
+    chilling injury at TN below ~10-15 deg C — defoliation, fruit drop,
+    flowering arrest, slow growth recovery. The hazard direction is
+    cold-side: more cold-night days = more chilling-stress exposure.
+  - **Anchors:**
+    - Crop chilling-injury literature places onset of chilling stress for
+      tropical crops at sustained TN below ~10-12 deg C; ~10 nights/year
+      of TN <= 10 deg C is the threshold at which peninsular/coastal
+      production zones enter materially-stressed regimes for sensitive
+      horticulture (mango, banana, papaya).
+    - ~30 nights/year (~1 month) of cold-night exposure aligns with
+      regimes that have driven historical reports of severe cold-wave
+      losses in southern and eastern India.
+  - **Cut points:** onset **10 days**; saturation **30 days**.
+  - **Confidence: low.** Crop chilling-injury count bands are not
+    externally codified for India.
+  - **Zone caveat (important):** the band assumes the *peninsular/southern*
+    crop mix. In the northern wheat belt, cold nights during the rabi
+    season are **beneficial** (vernalization). A general all-India
+    application of this band under-represents the wheat-belt benefit and
+    over-applies the chilling-injury cost. **Plains/peninsular default**
+    per Section 4.9 / BL-0020; per-zone refinement deferred until an
+    operational agro-climatic-zone label is wired in.
+- **Per-lens weights:** absolute 0.45 / change 0.40 / impact 0.15 — the
+  zone-applicability ceiling reinforces the small within-rule impact weight
+  reserved for low-confidence bands.
+
+### 12.8 Agricultural Risk — bundle assembly notes
+
+**Rule weights (explicit, sum to 1.0).** Weighting is an evidence-informed
+expert elicitation, not a derived constant; the recommended default reflects
+the relative agricultural-sector climate burden in India and is recorded as
+a revisable assumption.
+
+| Cluster | Cluster weight | Rule | Rule weight | Why |
+|---|---:|---|---:|---|
+| Heat | 0.35 | TXx (peak crop heat) | 0.15 | Strongest agronomic-physiology anchor (reproductive-stage sterility); medium-confidence self-derived band |
+| Heat | 0.35 | TXge35 (damaging heat days) | 0.10 | Accumulated reproductive-window exposure; low-confidence band |
+| Heat | 0.35 | WSDI (persistent heat) | 0.10 | Grain-filling truncation / fodder degradation; low-confidence band; partly correlated with TXx |
+| Drought | 0.30 | SPI3 episodes | 0.15 | Frequency burden; low-confidence band |
+| Drought | 0.30 | SPI3 longest spell | 0.15 | Intensity burden; low-confidence band; correlated with episodes |
+| Rainfall | 0.20 | Rx5day | 0.20 | Kharif waterlogging / standing-crop flood damage; low-confidence band |
+| Cold | 0.15 | TNle10 | 0.15 | Peninsular default; zone caveat per BL-0020 limits cluster ceiling |
+
+**How these weights were derived.** Two-stage elicitation, same recipe as
+Health Section 6.6 and Industrial Section 7.5, so reasoning is auditable:
+**rule_weight reflects (continuous sector burden) x (band confidence) x
+(structural independence)**.
+
+1. **Cluster split first (heat vs drought vs rainfall vs cold).** The
+   bundle's seven metrics fall into four hazard clusters:
+   - **Heat 0.35** — three rules covering peak (TXx), accumulated damaging
+     days (TXge35), and persistence (WSDI). Heat is the dominant
+     reproductive-stage pressure across the dominant Indian staples
+     (rice, wheat) and horticulture; the literature anchoring is the
+     strongest in the bundle.
+   - **Drought 0.30** — two SPI3 rules covering frequency and intensity of
+     moderate drought. SPI is the most widely-used institutional drought
+     indicator (NDMA Manual; IMD agromet). The cluster is large because
+     drought is a season-defining agricultural pressure; equal to rather
+     than larger than the heat cluster only because the two SPI rules are
+     partly correlated, capping the cluster contribution.
+   - **Rainfall 0.20** — single Rx5day rule. Standing-crop flood / kharif
+     waterlogging is materially distinct from drought and heat but anchored
+     by a low-confidence band, so cluster weight is set below heat and
+     drought.
+   - **Cold 0.15** — single TNle10 rule. Zone-dependent applicability
+     (peninsular default; wheat-belt benefit) caps cluster ceiling per
+     BL-0020.
+   The 0.35 / 0.30 / 0.20 / 0.15 split is the single most consequential
+   judgment and the main lever for revision.
+
+2. **Within-cluster split by evidence strength and inter-metric correlation.**
+   - Heat: TXx 0.15 > TXge35 0.10 = WSDI 0.10. TXx anchors on the
+     strongest agronomic-physiology onset (medium-confidence band, the
+     only one in this bundle); TXge35 and WSDI carry low-confidence
+     self-derived bands and are partly correlated with TXx, so they are
+     weighted below it to avoid over-counting the daytime-heat signal.
+   - Drought: SPI3 longest spell 0.15 = SPI3 episodes 0.15. Equal-weighted;
+     one captures frequency, the other intensity; correlated but
+     structurally distinct.
+   - Rainfall: Rx5day 0.20. Single rule; cluster weight = rule weight.
+   - Cold: TNle10 0.15. Single rule; cluster weight = rule weight.
+
+3. **Sanity checks.** Weights are positive, sum to 1.0, no single rule
+   dominates (max 0.20 for Rx5day). Low-confidence rules (TXge35, WSDI,
+   SPI3 x 2, Rx5day, TNle10) all carry the smallest within-rule impact
+   weight (0.15). The single medium-confidence rule (TXx) carries the
+   moderate within-rule impact weight (0.30).
+
+These weights are revisable expert assumptions, not derived constants; any
+change is a methodology change to be recorded and tested.
+
+**Per-lens weights within each rule** (absolute / change / impact) are
+recorded in `config/proposal_bundles.py` and shown per metric in
+Sections 12.1-12.7. The medium-confidence self-derived band (TXx) uses
+**0.40 / 0.30 / 0.30**; the low-confidence self-derived bands (TXge35, WSDI,
+SPI3 x 2, Rx5day, TNle10) all use **0.45 / 0.40 / 0.15**, deliberately giving
+the weak impact bands a small share so they cannot dominate the rule
+(Section 4.3).
+
+- **Coverage gate:** the standard **0.70 available-rule-weight gate**
+  (Section 5.3) — matching Health, Industrial, and the prior Agricultural
+  configuration.
+- **Source masters:** the seven source metrics resolve to grid-first or
+  registry-driven district/block masters consistent with the
+  spatial-aggregation recommendation in `docs/bundle_calculation_audit.md`.
+  TXx routes through `india_resilience_tool/compute/heat_risk_gridfirst.py`;
+  Rx5day routes through `india_resilience_tool/compute/extreme_rainfall_gridfirst.py`;
+  SPI3 metrics route through the SPI adapter (`compute/spi_adapter.py`);
+  TXge35, WSDI, and TNle10 route through the standard climate-indices
+  pipeline.
+- **Per-lens persistence:** the builder already emits `__abs_score`,
+  `__chg_score`, `__imp_score` columns for active lenses
+  (`india_resilience_tool/compute/proposal_bundles.py:554` and `:980`);
+  after this migration, every Agricultural rule emits all three lens
+  columns.
+- **Deferred refinements (Phase-2):** zone-specific impact bands
+  (BL-0020) — most consequential for TNle10 (peninsular vs wheat-belt) and
+  meaningful for TXx (plains vs coastal); WBGT-conditioned heat rule
+  (BL-0021); Aqueduct / CGWB groundwater coupling for drought impact
+  (BL-0022); the retired TXx 40-45 deg C external-band alternative
+  recorded above for audit.
+
+---
+
+## 13. Thematic Bundles — Deferred Extension
 
 The lens machinery is intended to extend to the thematic bundles (Heat Risk,
 Drought Risk, Extreme Rainfall, Riverine Flood, Heat Stress, Cold Risk), where
@@ -2264,7 +2641,7 @@ separately-tested methodology change with the science owner.
 
 ---
 
-## 13. References (consolidated)
+## 14. References (consolidated)
 
 1. OECD & Joint Research Centre (2008). *Handbook on Constructing Composite
    Indicators: Methodology and User Guide.* OECD Publishing, Paris.

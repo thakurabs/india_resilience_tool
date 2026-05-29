@@ -19,18 +19,20 @@ Each proposal-bundle rule is scored from `0` to `100`.
 - Missing or invalid data returns `NaN` for the affected component or rule.
 - Bundle means are computed from available rule scores. Most bundles use equal
   rule weights and are set to `NaN` only when no rule is available for a unit.
-- `Agricultural Risk` uses explicit normalized rule weights and a 0.70 minimum
-  `available_rule_weight_fraction`; rows below that coverage gate are set to
-  `NaN`.
+- `Agricultural Risk`, `Health Risk`, and `Industrial Risk` use explicit
+  normalized rule weights and a 0.70 minimum `available_rule_weight_fraction`;
+  rows below that coverage gate are set to `NaN`.
 
 ## Rule score components
 
 Each rule can combine three scientifically distinct components.
 
-`Agricultural Risk` is an intentional exception within v2: all seven retained
-rules are pure current/future absolute-pressure rules. Its older baseline-change
-and TXx impact-band components were retired when the former thematic agriculture
-bundle was absorbed into `Sector-wise - Agricultural Risk`.
+Sectoral bundles (`Agricultural Risk`, `Health Risk`, `Industrial Risk`) use
+all three components in a lens-decomposed mix per
+`docs/lens_scoring_methodology.md`. Agricultural Risk reinstates the impact
+lens with a self-derived TXx 35-45 deg C agronomic band (§12.1) replacing
+the previously-retired 40-45 deg C IMD heatwave band, plus self-derived
+bands on the six other rules (§12.2-§12.7).
 
 ### 1. Future absolute severity
 

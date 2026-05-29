@@ -236,14 +236,85 @@ def test_proposal_persisted_column_helpers_are_exact() -> None:
     )
 
 
-def test_agricultural_risk_uses_explicit_normalized_rule_weights() -> None:
+def test_agricultural_risk_matches_lens_dossier_section_12() -> None:
+    """Pin Agricultural Risk to lens dossier section 12 (CHG-0032).
+
+    Locks weight mode, coverage gate, per-rule lens weights, impact bands,
+    change modes, and rule weights against docs/lens_scoring_methodology.md
+    sections 12.1-12.8. Drift in either direction (code vs dossier) fails here.
+    """
     spec = get_proposal_bundle_spec_by_slug("composite_agricultural_risk")
 
     assert spec is not None
     assert spec.weight_mode == "explicit_normalized"
     assert spec.min_available_rule_weight_fraction == 0.70
-    assert [rule.rule_weight for rule in spec.rules] == [0.10, 0.10, 0.10, 0.15, 0.15, 0.20, 0.20]
-    assert all(rule.absolute_weight == 1.0 and rule.change_weight == 0.0 and rule.impact_weight == 0.0 for rule in spec.rules)
+
+    rules_by_slug = {rule.rule_slug: rule for rule in spec.rules}
+    assert list(rules_by_slug.keys()) == [
+        "txx_peak_crop_heat",
+        "txge35_damaging_heat_days",
+        "wsdi_persistent_heat",
+        "spi3_drought_episodes",
+        "spi3_longest_drought_spell",
+        "rx5day_heavy_rainfall",
+        "tnle10_cold_nights",
+    ]
+
+    expected = {
+        "txx_peak_crop_heat": {
+            "lens_weights": (0.40, 0.30, 0.30),  # 12.1 — self-derived, medium confidence
+            "impact_band": (35.0, 45.0),
+            "change_mode": "absolute_delta",
+            "rule_weight": 0.15,
+        },
+        "txge35_damaging_heat_days": {
+            "lens_weights": (0.45, 0.40, 0.15),  # 12.2 — self-derived, low confidence
+            "impact_band": (15.0, 60.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.10,
+        },
+        "wsdi_persistent_heat": {
+            "lens_weights": (0.45, 0.40, 0.15),  # 12.3 — reuses Health 6.2; low confidence
+            "impact_band": (6.0, 18.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.10,
+        },
+        "spi3_drought_episodes": {
+            "lens_weights": (0.45, 0.40, 0.15),  # 12.4 — self-derived, low confidence
+            "impact_band": (3.0, 12.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.15,
+        },
+        "spi3_longest_drought_spell": {
+            "lens_weights": (0.45, 0.40, 0.15),  # 12.5 — self-derived, low confidence
+            "impact_band": (3.0, 12.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.15,
+        },
+        "rx5day_heavy_rainfall": {
+            "lens_weights": (0.45, 0.40, 0.15),  # 12.6 — reuses Industrial 7.2; low confidence
+            "impact_band": (250.0, 500.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.20,
+        },
+        "tnle10_cold_nights": {
+            "lens_weights": (0.45, 0.40, 0.15),  # 12.7 — peninsular default; low confidence
+            "impact_band": (10.0, 30.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.15,
+        },
+    }
+
+    for slug, expected_fields in expected.items():
+        rule = rules_by_slug[slug]
+        observed_lens = (rule.absolute_weight, rule.change_weight, rule.impact_weight)
+        assert observed_lens == expected_fields["lens_weights"], slug
+        assert (rule.impact_low, rule.impact_high) == expected_fields["impact_band"], slug
+        assert rule.change_mode == expected_fields["change_mode"], slug
+        assert rule.rule_weight == expected_fields["rule_weight"], slug
+
+    # Rule weights must sum to 1.0 (validator enforces this on explicit_normalized bundles).
+    assert sum(rule.rule_weight for rule in spec.rules) == 1.0
 
 
 def test_industrial_risk_matches_lens_dossier_section_7() -> None:

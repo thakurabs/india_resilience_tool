@@ -558,14 +558,15 @@ class TestTierGHIJPrecipitation:
         """
         Make percentile unambiguous:
         95 wet days at 1mm, 5 wet days at 100mm (all wet).
-        95th percentile of wet days ~ 1mm. Strict '>' selects only 100mm days.
-        Expected R95p = 5 * 100 = 500mm.
+        With the default inclusive threshold (`exceed_ge=True`), the 95th
+        percentile resolves to 1mm and both 1mm and 100mm days are counted.
+        Expected R95p = 95 * 1 + 5 * 100 = 595mm.
         """
         low = self._pr_kgm2s(1.0)
         high = self._pr_kgm2s(100.0)
         data, mask = make_step_series(values=[low, high], days_per_value=[95, 5], units="kg m-2 s-1")
         r95p = CMP.percentile_precipitation_total(data, mask, percentile=95)
-        assert abs(r95p - 500.0) < TOL_PRECIP
+        assert abs(r95p - 595.0) < TOL_PRECIP
 
     def test_sdii_exact(self) -> None:
         """

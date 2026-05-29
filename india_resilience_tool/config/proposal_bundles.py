@@ -133,51 +133,143 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         weight_mode="explicit_normalized",
         min_available_rule_weight_fraction=0.70,
         rules=(
-            _absolute_pressure_rule(
+            _pressure_rule(
                 "txx_peak_crop_heat",
                 "Peak crop heat",
                 "txx_annual_max",
-                rule_weight=0.10,
+                absolute_weight=0.40,
+                change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=35.0,
+                impact_high=45.0,
+                change_mode="absolute_delta",
+                rule_weight=0.15,
                 method_note=(
-                    "Pure current/future absolute-pressure score. The earlier TXx 40-45 degC "
-                    "impact band and baseline-change blend are intentionally retired."
+                    "Impact band 35-45 degC: self-derived, MEDIUM confidence. Onset=35 "
+                    "(rice/wheat reproductive-stage heat-sterility threshold; Jagadish; "
+                    "Wahid et al.); saturation=45 (IMD plains severe-heatwave / documented "
+                    "crop-failure regime). Replaces retired 40-45 degC band (human-heatwave "
+                    "onset under-triggers agronomic harm by ~5 degC). Lens dossier section "
+                    "12.1. Zone refinement deferred (BL-0020)."
                 ),
             ),
-            _absolute_pressure_rule(
+            _pressure_rule(
                 "txge35_damaging_heat_days",
                 "Damaging heat days",
                 "txge35_extreme_heat_days",
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=15.0,
+                impact_high=60.0,
+                change_mode="relative_pct",
                 rule_weight=0.10,
+                method_note=(
+                    "Impact band 15-60 days: self-derived, LOW confidence. Onset=15 "
+                    "(complete rice/wheat anthesis-window exposure ~7-10 days + "
+                    "second-window exposure); saturation=60 (~2 months damaging heat, "
+                    "season-dominant regime spanning kharif and rabi sensitive windows). "
+                    "Small within-rule impact weight by design. Lens dossier section 12.2."
+                ),
             ),
-            _absolute_pressure_rule(
+            _pressure_rule(
                 "wsdi_persistent_heat",
                 "Persistent heat",
                 "wsdi_warm_spell_days",
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=6.0,
+                impact_high=18.0,
+                change_mode="relative_pct",
                 rule_weight=0.10,
+                method_note=(
+                    "Impact band 6-18 days: self-derived, LOW confidence. Reuses Health "
+                    "Risk WSDI band (Section 6.2): onset=6 (WSDI minimum qualifying spell "
+                    ">=6 consecutive days); saturation=18 (multi-spell / season-dominant "
+                    "warm-spell regime). Same band, different consequence (grain-filling "
+                    "truncation and fodder degradation vs cardiovascular mortality). "
+                    "Lens dossier section 12.3."
+                ),
             ),
-            _absolute_pressure_rule(
+            _pressure_rule(
                 "spi3_drought_episodes",
                 "Drought episodes",
                 "spi3_count_events_lt_minus1",
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=3.0,
+                impact_high=12.0,
+                change_mode="relative_pct",
                 rule_weight=0.15,
+                method_note=(
+                    "Impact band 3-12 events: self-derived, LOW confidence. Onset=3 "
+                    "(natural per-period SPI<-1 baseline frequency over a 20-year window "
+                    "is ~3-4 events by standard-normal definition); saturation=12 "
+                    "(near-continuous-drought regime). Lens dossier section 12.4."
+                ),
             ),
-            _absolute_pressure_rule(
+            _pressure_rule(
                 "spi3_longest_drought_spell",
                 "Longest drought spell",
                 "spi3_max_spell_lt_minus1",
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=3.0,
+                impact_high=12.0,
+                change_mode="relative_pct",
                 rule_weight=0.15,
+                method_note=(
+                    "Impact band 3-12 months: self-derived, LOW confidence. Onset=3 "
+                    "(one SPI-3 window; minimum institutionally-recognizable moderate-"
+                    "drought spell); saturation=12 (year-long sustained moderate "
+                    "drought, full kharif-rabi cycle under drought stress). Lens "
+                    "dossier section 12.5."
+                ),
             ),
-            _absolute_pressure_rule(
+            _pressure_rule(
                 "rx5day_heavy_rainfall",
                 "5-day heavy rainfall",
                 "pr_max_5day_precip",
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=250.0,
+                impact_high=500.0,
+                change_mode="relative_pct",
                 rule_weight=0.20,
+                method_note=(
+                    "Impact band 250-500 mm/5 days: self-derived, LOW confidence. "
+                    "Reuses Industrial Risk Rx5day band (Section 7.2): onset=250 "
+                    "(plausible kharif-waterlogging / drainage-failure regime, "
+                    "derived from 5x IMD heavy-rain floor); saturation=500 (regional "
+                    "flood-event / submerged-crop-loss regime anchored on Kerala 2018 / "
+                    "Mumbai 2005). Lens dossier section 12.6."
+                ),
             ),
-            _absolute_pressure_rule(
+            _pressure_rule(
                 "tnle10_cold_nights",
                 "Cold nights",
                 "tnle10_cold_nights",
-                rule_weight=0.20,
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=10.0,
+                impact_high=30.0,
+                change_mode="relative_pct",
+                rule_weight=0.15,
+                method_note=(
+                    "Impact band 10-30 days: self-derived, LOW confidence, PENINSULAR "
+                    "DEFAULT. Onset=10 (tropical/sub-tropical crop chilling-injury "
+                    "exposure threshold for sensitive horticulture: mango, banana, "
+                    "papaya, sugarcane); saturation=30 (~1 month sustained cold-night "
+                    "exposure, severe chilling-stress regime). Zone caveat per Section "
+                    "4.9 / BL-0020: the band over-applies in the northern wheat belt, "
+                    "where cold nights are beneficial (vernalization). Lens dossier "
+                    "section 12.7."
+                ),
             ),
         ),
     ),

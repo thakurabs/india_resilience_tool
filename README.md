@@ -197,7 +197,7 @@ python -m tools.pipeline.build_proposal_bundles --help
 
 This offline builder computes the proposal climate-risk bundles for admin `district` and `block` units only. It writes persisted proposal bundle masters under `IRT_DATA_DIR/processed/<composite_slug>/<state>/`.
 The dashboard surfaces those sector-wise proposal composites through grouped labels like `Sector-wise - Health Risk`, including district and block views for `Life & Livelihood Loss Risk` when its persisted block proposal bundle master is present.
-The `Sector-wise - Agricultural Risk` proposal bundle uses seven higher-is-worse absolute-pressure rules with explicit weights and persists `available_rule_count` plus `available_rule_weight_fraction`; rows below the 0.70 available-weight gate are scored as missing.
+The `Sector-wise - Agricultural Risk` proposal bundle uses seven lens-decomposed rules (absolute + change + impact) with explicit weights and self-derived impact bands per `docs/lens_scoring_methodology.md` §12; it persists `available_rule_count` plus `available_rule_weight_fraction` and rows below the 0.70 available-weight gate are scored as missing.
 
 Heat Risk v2 spatial-weight cache builder:
 

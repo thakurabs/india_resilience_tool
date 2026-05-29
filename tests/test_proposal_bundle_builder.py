@@ -69,10 +69,16 @@ def _write_district_yearly(
     df.to_csv(root / "district_yearly_ensemble_stats.csv", index=False)
 
 
-def test_compute_agricultural_risk_uses_weighted_absolute_rule_scores(
+def test_compute_agricultural_risk_uses_weighted_lens_rule_scores(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Post-CHG-0032: every Agricultural Risk rule is lens-decomposed
+    (absolute + change + impact). With a uniform baseline of 5.0, the abs and
+    chg lenses both produce the same p10-p90 ordering [A=100, B=0, C=50] for
+    every rule; impact lens varies by per-metric impact band. The composite
+    is the weighted mean of the seven lens-blended rule scores.
+    """
     state_name = "Telangana"
     ids = pd.DataFrame(
         {
@@ -91,10 +97,12 @@ def test_compute_agricultural_risk_uses_weighted_absolute_rule_scores(
         "pr_max_5day_precip": [30.0, 10.0, 20.0],
         "tnle10_cold_nights": [30.0, 10.0, 20.0],
     }
+    baseline_values = [5.0, 5.0, 5.0]
     for slug, values in metric_values.items():
         df = ids.copy()
         metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
         df[f"{metric_base}__ssp245__2020-2040__mean"] = values
+        df[f"{metric_base}__historical__1995-2014__mean"] = baseline_values
         _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
 
     out = compute_proposal_bundle_master_frame(
@@ -109,7 +117,25 @@ def test_compute_agricultural_risk_uses_weighted_absolute_rule_scores(
     available_count_col = "composite_agricultural_risk__ssp245__2020-2040__available_rule_count"
     available_weight_col = "composite_agricultural_risk__ssp245__2020-2040__available_rule_weight_fraction"
     by_district = dict(zip(out["district"], out[score_col]))
-    assert by_district == {"A": 100.0, "B": 0.0, "C": 50.0}
+
+    # Hand-computed expected composite values; full derivation in
+    # docs/lens_scoring_methodology.md section 12 and the bundle config:
+    #   abs and chg lenses both yield [A=100, B=0, C=50] for every rule
+    #   under inputs [30,10,20] vs uniform baseline [5,5,5].
+    #   impact lens per rule (band-clipped (value - low) / (high - low) * 100):
+    #     TXx 35-45 on [30,10,20]                -> [0, 0, 0]
+    #     TXge35 15-60 on [30,10,20]             -> [33.33, 0, 11.11]
+    #     WSDI 6-18 on [30,10,20]                -> [100, 33.33, 100]
+    #     SPI3 episodes 3-12 on [30,10,20]       -> [100, 77.78, 100]
+    #     SPI3 longest 3-12 on [30,10,20]        -> [100, 77.78, 100]
+    #     Rx5day 250-500 on [30,10,20]           -> [0, 0, 0]
+    #     TNle10 10-30 on [30,10,20]             -> [100, 0, 50]
+    #   blended per-rule, then weighted sum with rule weights
+    #   (TXx 0.15, TXge35 0.10, WSDI 0.10, SPI3-ep 0.15, SPI3-ls 0.15,
+    #    Rx5day 0.20, TNle10 0.15) -> {A: 91.5, B: 4.0, C: 48.6667}.
+    assert by_district["A"] == pytest.approx(91.5, abs=1e-2)
+    assert by_district["B"] == pytest.approx(4.0, abs=1e-2)
+    assert by_district["C"] == pytest.approx(48.6667, abs=1e-2)
     assert out[available_count_col].tolist() == [7, 7, 7]
     assert out[available_weight_col].tolist() == [1.0, 1.0, 1.0]
 
@@ -158,7 +184,10 @@ def test_compute_agricultural_risk_applies_available_weight_gate(
     assert by_district["A"][available_weight_col] == pytest.approx(0.80)
     assert pd.notna(by_district["A"][score_col])
     assert by_district["C"][available_count_col] == 5
-    assert by_district["C"][available_weight_col] == pytest.approx(0.60)
+    # Post-CHG-0032: TNle10 rule weight is 0.15 (was 0.20). District C is
+    # missing both Rx5day (0.20) and TNle10 (0.15) -> 1.0 - 0.35 = 0.65,
+    # still below the 0.70 coverage gate, so composite remains NaN.
+    assert by_district["C"][available_weight_col] == pytest.approx(0.65)
     assert pd.isna(by_district["C"][score_col])
 
 

@@ -302,28 +302,30 @@ def _resolve_admin_master_source(
             None,
         )
 
+    selected_state_norm = str(selected_state or "All").strip() or "All"
     optimized_sources = optimized_master_sources_from_metric_root(
         processed_root,
         level=level,
-        selected_state=selected_state,
+        selected_state=selected_state_norm,
     )
-    if _master_source_exists(optimized_sources):
+    if selected_state_norm != "All" and _master_source_exists(optimized_sources):
         return processed_root, optimized_sources, None
 
     legacy_root = resolve_legacy_processed_root(variable_slug, data_dir=data_dir, mode="portfolio")
     legacy_sources = _resolve_external_admin_master_sources(
         legacy_root,
         level=level,
-        selected_state=selected_state,
+        selected_state=selected_state_norm,
     )
-    if str(selected_state or "All").strip() == "All":
+    if selected_state_norm == "All":
         optimized_states = set(list_optimized_states_for_metric_root(processed_root, level=level))
         legacy_states = set(_admin_source_states(legacy_sources, optimized=False))
+        optimized_ready = _master_source_exists(optimized_sources)
+        if optimized_ready and (not legacy_states or optimized_states == legacy_states):
+            return processed_root, optimized_sources, legacy_root if legacy_states else None
         if legacy_states:
-            if optimized_states == legacy_states and _master_source_exists(optimized_sources):
-                return processed_root, optimized_sources, legacy_root
             return legacy_root, legacy_sources, legacy_root
-        if _master_source_exists(optimized_sources):
+        if optimized_ready:
             return processed_root, optimized_sources, legacy_root
         return processed_root, optimized_sources, legacy_root
 

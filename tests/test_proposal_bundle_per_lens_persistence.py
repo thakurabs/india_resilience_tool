@@ -136,7 +136,9 @@ def _seed_agricultural_risk_masters(
     state_name: str,
     target_period: str = "2020-2040",
     target_scenario: str = "ssp245",
+    baseline_period: str = "1995-2014",
     values: tuple[float, float, float] = (30.0, 10.0, 20.0),
+    baseline_values: tuple[float, float, float] = (5.0, 5.0, 5.0),
 ) -> None:
     bundle = PROPOSAL_BUNDLES_BY_SLUG["composite_agricultural_risk"]
     for rule in bundle.rules:
@@ -144,6 +146,7 @@ def _seed_agricultural_risk_masters(
         base = _metric_base(slug)
         df = ids.copy()
         df[f"{base}__{target_scenario}__{target_period}__mean"] = list(values)
+        df[f"{base}__historical__{baseline_period}__mean"] = list(baseline_values)
         _write_district_master(tmp_path, slug=slug, state_name=state_name, df=df)
 
 
@@ -197,13 +200,21 @@ def test_blended_rule_persists_active_lens_columns_only(
     ):
         assert lens_col in out.columns, f"missing active-lens column {lens_col!r}"
 
-    # Agricultural Risk's pure-absolute rule must NOT emit chg/imp lens columns.
+    # Post-CHG-0032: every Agricultural Risk rule is three-lens-active and
+    # must emit __abs_score, __chg_score, __imp_score columns. (Negative
+    # sparse-policy case is now covered by test_trend_and_proxy_rules_
+    # persist_only_abs_score on the Asset Thermal Power proxy rule.)
     _seed_agricultural_risk_masters(tmp_path, ids=ids, state_name=state_name)
     ag_out = _run_agricultural_risk(tmp_path)
-    abs_only_rule = PROPOSAL_BUNDLES_BY_SLUG["composite_agricultural_risk"].rules[0]
-    assert proposal_rule_abs_score_column(abs_only_rule.rule_slug, "ssp245", "2020-2040") in ag_out.columns
-    assert proposal_rule_chg_score_column(abs_only_rule.rule_slug, "ssp245", "2020-2040") not in ag_out.columns
-    assert proposal_rule_imp_score_column(abs_only_rule.rule_slug, "ssp245", "2020-2040") not in ag_out.columns
+    for rule in PROPOSAL_BUNDLES_BY_SLUG["composite_agricultural_risk"].rules:
+        for lens_col in (
+            proposal_rule_abs_score_column(rule.rule_slug, "ssp245", "2020-2040"),
+            proposal_rule_chg_score_column(rule.rule_slug, "ssp245", "2020-2040"),
+            proposal_rule_imp_score_column(rule.rule_slug, "ssp245", "2020-2040"),
+        ):
+            assert lens_col in ag_out.columns, (
+                f"missing Agricultural lens column {lens_col!r}"
+            )
 
 
 # ---------------------------------------------------------------------------
