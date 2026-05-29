@@ -188,10 +188,9 @@ This is a consolidated list of indicators that appear in the document's `Sector-
 | Proposed indicator | Threshold / rule prescribed in the document | Context in the document |
 |---|---|---|
 | Rx1day | `>= 150 mm` | Health Risk; Industrial Risk |
-| Rx1day | `>= 200 mm` | Agricultural Risk; Health Risk; Infrastructure Risk; Life & Livelihood Loss Risk |
+| Rx1day | `>= 200 mm` | Agricultural Risk; Health Risk; Life & Livelihood Loss Risk |
 | Rx5day | `>= 250 mm` | Industrial Risk |
-| Rx5day | `>= 300 mm` | Agricultural Risk; Infrastructure Risk; Asset Risk (Hydropower Plants) |
-| Rx5day | `>= 400 mm` | Infrastructure Risk |
+| Rx5day | `>= 300 mm` | Agricultural Risk; Asset Risk (Hydropower Plants) |
 | Rx5day | `>= 500 mm` | Asset Risk (Hydropower Plants) |
 | CDD | `>= 20 days` | Agricultural Risk |
 | CDD | `>= 30 days` | Industrial Risk; Asset Risk (Thermal Power Plants) |
@@ -199,14 +198,17 @@ This is a consolidated list of indicators that appear in the document's `Sector-
 | CDD | `>= 60 days` | Asset Risk (Hydropower Plants) |
 | CDD | Lens-decomposed pressure, impact band `30-90 days` | Investment / Financial Risk |
 | TXx | `>= 40°C` in plains | Agricultural Risk |
-| TXx | `>= 45°C` | Health Risk; Industrial Risk; Infrastructure Risk; Asset Risk (Thermal Power Plants) |
+| TXx | `>= 45°C` | Health Risk; Industrial Risk; Asset Risk (Thermal Power Plants) |
 | R95p change | `> 20% from baseline` | Agricultural Risk |
 | TNx | `>= 30°C` | Health Risk |
 | CWD | `>= 5 days` | Health Risk |
 | Rx1day | Lens-decomposed pressure, impact band `115.6-204.5 mm/day` | Investment / Financial Risk |
+| Rx1day | Lens-decomposed pressure, impact band `115.6-204.5 mm/day` | Infrastructure Risk |
 | Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` | Investment / Financial Risk |
+| Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` | Infrastructure Risk |
 | R99p | Lens-decomposed emergence / concentration signal, no impact band | Investment / Financial Risk |
 | HWFI | Lens-decomposed pressure, impact band `5-15 days/yr` | Investment / Financial Risk |
+| TXx | Lens-decomposed pressure, impact band `40-45°C` | Infrastructure Risk |
 | Hourly rainfall | `>= 50 mm/hr` | Infrastructure Risk |
 | River flow reduction linked to drought indices | No numeric threshold given | Asset Risk (Thermal Power Plants) |
 | R95p variability | No numeric threshold given | Asset Risk (Hydropower Plants) |
@@ -259,10 +261,10 @@ This is a consolidated list of indicators that appear in the document's `Sector-
 
 | Proposed metric | Threshold / rule prescribed in the document |
 |---|---|
-| Rx1day | `>= 200 mm` |
-| Rx5day | `>= 400 mm` |
+| Rx1day | Lens-decomposed pressure, impact band `115.6-204.5 mm/day` |
+| Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` |
 | Hourly rainfall | `>= 50 mm/hr` |
-| TXx | `>= 45°C` |
+| TXx | Lens-decomposed pressure, impact band `40-45°C` |
 
 #### Asset Risk (Thermal Power Plants)
 

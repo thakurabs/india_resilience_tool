@@ -19,8 +19,8 @@ Each proposal-bundle rule is scored from `0` to `100`.
 - Missing or invalid data returns `NaN` for the affected component or rule.
 - Bundle means are computed from available rule scores. Most bundles use equal
   rule weights and are set to `NaN` only when no rule is available for a unit.
-- `Agricultural Risk`, `Health Risk`, `Industrial Risk`, and
-  `Investment / Financial Risk` use explicit
+- `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`,
+  and `Infrastructure Risk` use explicit
   normalized rule weights and a 0.70 minimum `available_rule_weight_fraction`;
   rows below that coverage gate are set to `NaN`.
 
@@ -28,13 +28,16 @@ Each proposal-bundle rule is scored from `0` to `100`.
 
 Each rule can combine three scientifically distinct components.
 
-Sectoral bundles (`Agricultural Risk`, `Health Risk`, `Industrial Risk`, and
-`Investment / Financial Risk`) use lens-decomposed scoring per
+Sectoral bundles (`Agricultural Risk`, `Health Risk`, `Industrial Risk`,
+`Investment / Financial Risk`, and `Infrastructure Risk`) use lens-decomposed scoring per
 `docs/lens_scoring_methodology.md`. Agricultural Risk reinstates the impact
 lens with a self-derived TXx 35-45 deg C agronomic band (§12.1) replacing
 the previously-retired 40-45 deg C IMD heatwave band, plus self-derived
-bands on the six other rules (§12.2-§12.7). Investment / Financial Risk adds
-five dossier-§8 lens rules with explicit bundle weights; its R99p rule is the
+bands on the six other rules (§12.2-§12.7). Infrastructure Risk now follows
+§9 with explicit rule weights across `rx1day_ge_200`, `rx5day_ge_400`, and
+`txx_ge_45`, keeping the `rx5day_ge_400` slug stable until a separate
+data-contract rename is approved. Investment / Financial Risk adds five
+dossier-§8 lens rules with explicit bundle weights; its R99p rule is the
 current exception that intentionally omits the impact component because no
 defensible danger band exists for that regime metric.
 

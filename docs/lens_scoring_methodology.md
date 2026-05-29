@@ -1406,18 +1406,22 @@ capacity (design-margin headroom, retrofit, redundancy), or vulnerability
 
 ### 9.0 Methodology change recorded
 
-This dossier proposes a **methodology change** for the bundle as currently
-configured in `config/proposal_bundles.py`: **add an impact lens to Rx1day and
-Rx5day**, which are currently abs + chg only. Infrastructure is the asset class
+This dossier records the landed **CHG-0034** migration in
+`config/proposal_bundles.py`. Infrastructure is now the fifth
+`explicit_normalized` sector bundle, with a 0.70
+`min_available_rule_weight_fraction` gate and three lens-decomposed rules:
+Rx1day, Rx5day, and TXx. The core change versus the legacy Infrastructure
+config is that **both rainfall rules now carry an impact lens** in addition to
+absolute and change pressure, while TXx is rebalanced to the standard
+high-confidence 0.40 / 0.25 / 0.35 split. Infrastructure is the asset class
 for which threshold-design failures are the dominant climate harm pathway —
 roads, bridges, urban drainage, embankments, rail, transmission lines,
 transformers, and slope-stability works all have explicit design return-period
 thresholds (IRC, CPHEEO, IS, IRS standards). For threshold-anchored damage the
-impact lens (danger band) is the most directly meaningful of the three;
-suppressing it would understate exactly the infrastructure-specific consequence
-pathway. The bands themselves are reused from Health Risk and Industrial Risk
-(the IMD daily rainfall categorical band for Rx1day; the Section-4 self-derived
-band for Rx5day) — no new band derivation is required.
+impact lens (danger band) is the most directly meaningful of the three. The
+bands themselves are reused from Health Risk and Industrial Risk (the IMD daily
+rainfall categorical band for Rx1day; the Section-4 self-derived band for
+Rx5day) — no new band derivation is required.
 
 The table summarizes the lens decision per metric; each subsection gives the
 reasoning and band provenance. Rule slugs marked "renamed from" reflect the
@@ -1635,24 +1639,23 @@ per metric in Sections 9.1-9.3. The high-confidence external-band rules
 Rx5day uses **0.45 / 0.40 / 0.15**, deliberately giving the weak impact band
 a small share so it cannot dominate the rule (Section 4.3).
 
-- **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
-  (Section 5.3) — matching Health, Industrial, Investment/Financial, and
-  Agricultural.
+- **Coverage gate:** the code now uses the standard 0.70
+  available-rule-weight gate (Section 5.3), matching Health, Industrial,
+  Investment/Financial, and Agricultural.
 - **Source masters:** all three source metrics must resolve to grid-first
   district/block masters (compute the index per grid cell, then area-weight
   to the polygon), consistent with the spatial-aggregation recommendation in
   `docs/bundle_calculation_audit.md`. TXx and Rx1day already route through
-  grid-first paths; Rx5day needs verification (likely the same path but not
-  confirmed for this bundle).
-- **Phantom-slug renames (CHG-0019):** the dossier presents the renamed slugs.
-  `rx1day_ge_200` is **kept** because "200" sits inside the proposed IMD band
-  (≈ IMD extremely-heavy >= 204.5 mm) — same call as Industrial Risk Section
-  7.1; `rx5day_ge_400` is **renamed to** `rx5day_accumulated_pressure`
-  because 400 mm is not the impact-band low or high (250-500 mm) — phantom
-  number, same rename pattern as Industrial; `txx_ge_45` is **kept** because
-  45 deg C is the upper edge of the impact band 40-45 deg C — same call as
-  Health and Industrial. Migration is a data-contract change tracked
-  separately under CHG-0020.
+  grid-first paths; **Rx5day grid-first provenance remains a follow-on
+  verification item** and is not resolved by CHG-0034.
+- **Phantom-slug renames (CHG-0019):** CHG-0034 keeps the current rule slugs
+  for contract stability. `rx1day_ge_200` is **kept** because "200" sits
+  inside the IMD band (≈ IMD extremely-heavy >= 204.5 mm) — same call as
+  Industrial Risk Section 7.1; `rx5day_ge_400` **remains in code for now**
+  even though the active impact band is 250-500 mm/5 days, and the proposed
+  rename to `rx5day_accumulated_pressure` stays deferred to a separate
+  data-contract change; `txx_ge_45` is **kept** because 45 deg C is the upper
+  edge of the impact band 40-45 deg C — same call as Health and Industrial.
 - **Deferred refinements:** JRC global flood-depth ingestion for direct
   flood-pressure measurement (BL-0023, shared with Industrial); coastal
   sea-level / cyclone wind & storm-surge exposure for coastal infrastructure

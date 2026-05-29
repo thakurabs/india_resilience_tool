@@ -433,6 +433,49 @@ def test_investment_financial_risk_matches_lens_dossier_section_8() -> None:
     assert sum(rule.rule_weight for rule in spec.rules) == 1.0
 
 
+def test_infrastructure_risk_matches_lens_dossier_section_9() -> None:
+    """Pin Infrastructure Risk to lens dossier section 9 (CHG-0034)."""
+    spec = get_proposal_bundle_spec_by_slug("composite_infrastructure_risk")
+
+    assert spec is not None
+    assert spec.weight_mode == "explicit_normalized"
+    assert spec.min_available_rule_weight_fraction == 0.70
+
+    rules_by_slug = {rule.rule_slug: rule for rule in spec.rules}
+    assert list(rules_by_slug.keys()) == ["rx1day_ge_200", "rx5day_ge_400", "txx_ge_45"]
+
+    expected = {
+        "rx1day_ge_200": {
+            "lens_weights": (0.40, 0.25, 0.35),
+            "impact_band": (115.6, 204.5),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.45,
+        },
+        "rx5day_ge_400": {
+            "lens_weights": (0.45, 0.40, 0.15),
+            "impact_band": (250.0, 500.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.30,
+        },
+        "txx_ge_45": {
+            "lens_weights": (0.40, 0.25, 0.35),
+            "impact_band": (40.0, 45.0),
+            "change_mode": "absolute_delta",
+            "rule_weight": 0.25,
+        },
+    }
+
+    for slug, expected_fields in expected.items():
+        rule = rules_by_slug[slug]
+        observed_lens = (rule.absolute_weight, rule.change_weight, rule.impact_weight)
+        assert observed_lens == expected_fields["lens_weights"], slug
+        assert (rule.impact_low, rule.impact_high) == expected_fields["impact_band"], slug
+        assert rule.change_mode == expected_fields["change_mode"], slug
+        assert rule.rule_weight == expected_fields["rule_weight"], slug
+
+    assert sum(rule.rule_weight for rule in spec.rules) == 1.0
+
+
 def test_explicit_weight_bundle_inventory_is_exact() -> None:
     observed = {
         spec.composite_slug
@@ -443,6 +486,7 @@ def test_explicit_weight_bundle_inventory_is_exact() -> None:
         "composite_agricultural_risk",
         "composite_health_risk",
         "composite_industrial_risk",
+        "composite_infrastructure_risk",
         "composite_investment_financial_risk",
     }
 

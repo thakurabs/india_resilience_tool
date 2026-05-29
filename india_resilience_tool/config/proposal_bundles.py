@@ -561,31 +561,63 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         bundle_label="Infrastructure Risk",
         composite_slug="composite_infrastructure_risk",
         supported_levels=("district", "block"),
+        weight_mode="explicit_normalized",
+        min_available_rule_weight_fraction=0.70,
         rules=(
             _pressure_rule(
                 "rx1day_ge_200",
                 "1-day rainfall design pressure",
                 "pr_max_1day_precip",
-                absolute_weight=0.70,
-                change_weight=0.30,
+                absolute_weight=0.40,
+                change_weight=0.25,
+                impact_weight=0.35,
+                impact_low=115.6,
+                impact_high=204.5,
+                change_mode="relative_pct",
+                rule_weight=0.45,
+                method_note=(
+                    "Impact band 115.6-204.5 mm/day: IMD daily rainfall categories. "
+                    "External, high confidence; shared with Health section 6.4, "
+                    "Industrial section 7.1, Investment section 8.1. Lens dossier "
+                    "section 9.1."
+                ),
             ),
             _pressure_rule(
                 "rx5day_ge_400",
                 "5-day rainfall design pressure",
                 "pr_max_5day_precip",
-                absolute_weight=0.70,
-                change_weight=0.30,
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=250.0,
+                impact_high=500.0,
+                change_mode="relative_pct",
+                rule_weight=0.30,
+                method_note=(
+                    "Impact band 250-500 mm/5 days: self-derived, LOW confidence. "
+                    "Onset=250 (five IMD heavy-rain days ~=322 mm conservative floor); "
+                    "saturation=500 (regional flood-catastrophe regime; Chuphal et al. "
+                    "2025). Shared with Industrial section 7.2 and Investment section "
+                    "8.2. Lens dossier section 9.2."
+                ),
             ),
             _pressure_rule(
                 "txx_ge_45",
                 "Extreme heat asset pressure",
                 "txx_annual_max",
-                absolute_weight=0.45,
+                absolute_weight=0.40,
                 change_weight=0.25,
-                impact_weight=0.30,
+                impact_weight=0.35,
                 impact_low=40.0,
                 impact_high=45.0,
                 change_mode="absolute_delta",
+                rule_weight=0.25,
+                method_note=(
+                    "Impact band 40-45 degC: IMD plains heatwave. External, high "
+                    "confidence; shared with Health section 6.1 and Industrial section "
+                    "7.4. Zone caveat per section 4.9 / BL-0020. Lens dossier section "
+                    "9.3."
+                ),
             ),
         ),
     ),

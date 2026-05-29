@@ -214,12 +214,59 @@ def _seed_investment_risk_masters(
         _write_district_master(tmp_path, slug=slug, state_name=state_name, df=df)
 
 
+def _seed_infrastructure_risk_masters(
+    tmp_path: Path,
+    *,
+    ids: pd.DataFrame,
+    state_name: str,
+    target_period: str = "2020-2040",
+    target_scenario: str = "ssp245",
+    baseline_period: str = "1995-2014",
+    current_by_slug: dict[str, tuple[float, float, float]] | None = None,
+    baseline_by_slug: dict[str, tuple[float, float, float]] | None = None,
+) -> None:
+    current_defaults = {
+        "pr_max_1day_precip": (180.0, 120.0, 150.0),
+        "pr_max_5day_precip": (420.0, 260.0, 340.0),
+        "txx_annual_max": (46.0, 42.0, 44.0),
+    }
+    baseline_defaults = {
+        "pr_max_1day_precip": (100.0, 80.0, 90.0),
+        "pr_max_5day_precip": (280.0, 220.0, 240.0),
+        "txx_annual_max": (43.0, 41.0, 42.0),
+    }
+    if current_by_slug:
+        current_defaults.update(current_by_slug)
+    if baseline_by_slug:
+        baseline_defaults.update(baseline_by_slug)
+
+    for slug, values in current_defaults.items():
+        base = _metric_base(slug)
+        df = ids.copy()
+        df[f"{base}__{target_scenario}__{target_period}__mean"] = list(values)
+        df[f"{base}__historical__{baseline_period}__mean"] = list(baseline_defaults[slug])
+        _write_district_master(tmp_path, slug=slug, state_name=state_name, df=df)
+
+
 def _run_investment_risk(
     tmp_path: Path,
     state_name: str = "Telangana",
 ) -> pd.DataFrame:
     return compute_proposal_bundle_master_frame(
         PROPOSAL_BUNDLES_BY_SLUG["composite_investment_financial_risk"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+
+def _run_infrastructure_risk(
+    tmp_path: Path,
+    state_name: str = "Telangana",
+) -> pd.DataFrame:
+    return compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_infrastructure_risk"],
         level="district",
         state_name=state_name,
         data_dir=tmp_path,
@@ -265,6 +312,18 @@ def test_blended_rule_persists_active_lens_columns_only(
         ):
             assert lens_col in ag_out.columns, (
                 f"missing Agricultural lens column {lens_col!r}"
+            )
+
+    _seed_infrastructure_risk_masters(tmp_path, ids=ids, state_name=state_name)
+    infra_out = _run_infrastructure_risk(tmp_path)
+    for rule_slug in ("rx1day_ge_200", "rx5day_ge_400"):
+        for lens_col in (
+            proposal_rule_abs_score_column(rule_slug, "ssp245", "2020-2040"),
+            proposal_rule_chg_score_column(rule_slug, "ssp245", "2020-2040"),
+            proposal_rule_imp_score_column(rule_slug, "ssp245", "2020-2040"),
+        ):
+            assert lens_col in infra_out.columns, (
+                f"missing Infrastructure lens column {lens_col!r}"
             )
 
 
@@ -495,6 +554,39 @@ def test_investment_r99p_score_equals_weighted_mean_of_abs_and_chg(
         float(rule.absolute_weight) * out[abs_col].astype(float)
         + float(rule.change_weight) * out[chg_col].astype(float)
     ) / denominator
+    pd.testing.assert_series_equal(
+        out[score_col].astype(float).reset_index(drop=True),
+        expected.reset_index(drop=True),
+        check_names=False,
+    )
+
+
+def test_infrastructure_rx1day_score_equals_weighted_mean_of_abs_chg_and_imp_from_spec(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _district_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_infrastructure_risk_masters(tmp_path, ids=ids, state_name=state_name)
+
+    out = _run_infrastructure_risk(tmp_path)
+
+    rule_slug = "rx1day_ge_200"
+    rule = next(
+        rule for rule in PROPOSAL_BUNDLES_BY_SLUG["composite_infrastructure_risk"].rules
+        if rule.rule_slug == rule_slug
+    )
+    abs_col = proposal_rule_abs_score_column(rule_slug, "ssp245", "2020-2040")
+    chg_col = proposal_rule_chg_score_column(rule_slug, "ssp245", "2020-2040")
+    imp_col = proposal_rule_imp_score_column(rule_slug, "ssp245", "2020-2040")
+    score_col = proposal_rule_score_column(rule_slug, "ssp245", "2020-2040")
+    denom = float(rule.absolute_weight) + float(rule.change_weight) + float(rule.impact_weight)
+    expected = (
+        float(rule.absolute_weight) * out[abs_col].astype(float)
+        + float(rule.change_weight) * out[chg_col].astype(float)
+        + float(rule.impact_weight) * out[imp_col].astype(float)
+    ) / denom
     pd.testing.assert_series_equal(
         out[score_col].astype(float).reset_index(drop=True),
         expected.reset_index(drop=True),

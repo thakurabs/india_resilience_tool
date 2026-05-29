@@ -111,6 +111,40 @@ def _seed_investment_metric_masters(
         _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
 
 
+def _seed_infrastructure_metric_masters(
+    tmp_path: Path,
+    *,
+    ids: pd.DataFrame,
+    state_name: str,
+    target_period: str = "2020-2040",
+    target_scenario: str = "ssp245",
+    baseline_period: str = "1995-2014",
+    current_by_slug: dict[str, list[float]] | None = None,
+    baseline_by_slug: dict[str, list[float]] | None = None,
+) -> None:
+    current_defaults = {
+        "pr_max_1day_precip": [180.0, 120.0, 150.0],
+        "pr_max_5day_precip": [420.0, 260.0, 340.0],
+        "txx_annual_max": [46.0, 42.0, 44.0],
+    }
+    baseline_defaults = {
+        "pr_max_1day_precip": [100.0, 80.0, 90.0],
+        "pr_max_5day_precip": [280.0, 220.0, 240.0],
+        "txx_annual_max": [43.0, 41.0, 42.0],
+    }
+    if current_by_slug:
+        current_defaults.update(current_by_slug)
+    if baseline_by_slug:
+        baseline_defaults.update(baseline_by_slug)
+
+    for slug, values in current_defaults.items():
+        df = ids.copy()
+        metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df[f"{metric_base}__{target_scenario}__{target_period}__mean"] = values
+        df[f"{metric_base}__historical__{baseline_period}__mean"] = baseline_defaults[slug]
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
+
+
 def test_compute_agricultural_risk_uses_weighted_lens_rule_scores(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -311,6 +345,37 @@ def test_compute_investment_risk_builds_without_yearly_series(
     ]
 
 
+def test_compute_infrastructure_risk_builds_without_yearly_series(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["telangana|a", "telangana|b", "telangana|c"],
+        }
+    )
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_infrastructure_metric_masters(tmp_path, ids=ids, state_name=state_name)
+
+    written, warnings, failures = build_proposal_bundles(
+        levels=("district",),
+        bundle_slugs=("composite_infrastructure_risk",),
+        data_dir=tmp_path,
+        dry_run=False,
+        overwrite=True,
+        quiet=True,
+    )
+
+    assert failures == []
+    assert warnings == []
+    assert written == [
+        tmp_path / "processed" / "composite_infrastructure_risk" / state_name / "master_metrics_by_district.csv"
+    ]
+
+
 def test_compute_investment_risk_applies_available_weight_gate_pass_case(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -341,6 +406,41 @@ def test_compute_investment_risk_applies_available_weight_gate_pass_case(
 
     score_col = "composite_investment_financial_risk__ssp245__2020-2040__mean"
     available_weight_col = "composite_investment_financial_risk__ssp245__2020-2040__available_rule_weight_fraction"
+    row_a = out.loc[out["district"] == "A"].iloc[0]
+    assert row_a[available_weight_col] == pytest.approx(0.75)
+    assert pd.notna(row_a[score_col])
+
+
+def test_compute_infrastructure_risk_applies_available_weight_gate_pass_case(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["telangana|a", "telangana|b", "telangana|c"],
+        }
+    )
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_infrastructure_metric_masters(
+        tmp_path,
+        ids=ids,
+        state_name=state_name,
+        current_by_slug={"txx_annual_max": [float("nan"), 42.0, 44.0]},
+    )
+
+    out = compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_infrastructure_risk"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+    score_col = "composite_infrastructure_risk__ssp245__2020-2040__mean"
+    available_weight_col = "composite_infrastructure_risk__ssp245__2020-2040__available_rule_weight_fraction"
     row_a = out.loc[out["district"] == "A"].iloc[0]
     assert row_a[available_weight_col] == pytest.approx(0.75)
     assert pd.notna(row_a[score_col])
@@ -381,6 +481,41 @@ def test_compute_investment_risk_applies_available_weight_gate_fail_case(
     available_weight_col = "composite_investment_financial_risk__ssp245__2020-2040__available_rule_weight_fraction"
     row_a = out.loc[out["district"] == "A"].iloc[0]
     assert row_a[available_weight_col] == pytest.approx(0.50)
+    assert pd.isna(row_a[score_col])
+
+
+def test_compute_infrastructure_risk_applies_available_weight_gate_fail_case(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["telangana|a", "telangana|b", "telangana|c"],
+        }
+    )
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_infrastructure_metric_masters(
+        tmp_path,
+        ids=ids,
+        state_name=state_name,
+        current_by_slug={"pr_max_1day_precip": [float("nan"), 120.0, 150.0]},
+    )
+
+    out = compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_infrastructure_risk"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+    score_col = "composite_infrastructure_risk__ssp245__2020-2040__mean"
+    available_weight_col = "composite_infrastructure_risk__ssp245__2020-2040__available_rule_weight_fraction"
+    row_a = out.loc[out["district"] == "A"].iloc[0]
+    assert row_a[available_weight_col] == pytest.approx(0.55)
     assert pd.isna(row_a[score_col])
 
 
