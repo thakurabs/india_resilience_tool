@@ -190,12 +190,12 @@ This is a consolidated list of indicators that appear in the document's `Sector-
 | Rx1day | `>= 150 mm` | Health Risk; Industrial Risk |
 | Rx1day | `>= 200 mm` | Agricultural Risk; Health Risk; Life & Livelihood Loss Risk |
 | Rx5day | `>= 250 mm` | Industrial Risk |
-| Rx5day | `>= 300 mm` | Agricultural Risk; Asset Risk (Hydropower Plants) |
-| Rx5day | `>= 500 mm` | Asset Risk (Hydropower Plants) |
+| Rx5day | `>= 300 mm` | Agricultural Risk |
+| Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` | Asset Risk (Hydropower Plants) |
 | CDD | `>= 20 days` | Agricultural Risk |
 | CDD | `>= 30 days` | Industrial Risk; Asset Risk (Thermal Power Plants) |
 | CDD | `>= 40 days` | Life & Livelihood Loss Risk |
-| CDD | `>= 60 days` | Asset Risk (Hydropower Plants) |
+| CDD | Lens-decomposed pressure, impact band `30-90 days` | Asset Risk (Hydropower Plants) |
 | CDD | Lens-decomposed pressure, impact band `30-90 days` | Investment / Financial Risk |
 | TXx | `>= 40°C` in plains | Agricultural Risk |
 | TXx | `>= 45°C` | Health Risk; Industrial Risk; Asset Risk (Thermal Power Plants) |
@@ -211,7 +211,7 @@ This is a consolidated list of indicators that appear in the document's `Sector-
 | TXx | Lens-decomposed pressure, impact band `40-45°C` | Infrastructure Risk |
 | Hourly rainfall | `>= 50 mm/hr` | Infrastructure Risk |
 | River flow reduction linked to drought indices | No numeric threshold given | Asset Risk (Thermal Power Plants) |
-| R95p variability | No numeric threshold given | Asset Risk (Hydropower Plants) |
+| R95p interannual variability | Lens-decomposed pressure (absolute + change), no impact band | Asset Risk (Hydropower Plants) |
 | Multi-day heavy rainfall | `>= 2 consecutive days >= 150 mm` | Life & Livelihood Loss Risk |
 | Heatwave duration | `>= 5 consecutive days >= 40°C` | Health Risk |
 | Heatwave duration | `>= 5 days` | Life & Livelihood Loss Risk |
@@ -276,11 +276,16 @@ This is a consolidated list of indicators that appear in the document's `Sector-
 
 #### Asset Risk (Hydropower Plants)
 
-| Proposed metric | Threshold / rule prescribed in the document |
+Landed config (CHG-0036, lens dossier §11) — the proposal-document
+thresholds (`Rx5day >= 500 mm`, `CDD >= 60 days`) are superseded by
+lens-decomposed pressure with self-derived impact bands; legacy slugs are
+retained pending the deferred CHG-0024 renames.
+
+| Implemented rule (slug) | Lens decomposition |
 |---|---|
-| Rx5day | `>= 500 mm` |
-| CDD | `>= 60 days` |
-| R95p variability | No numeric threshold given |
+| Rx5day (`rx5day_ge_500`) | Lens-decomposed pressure, impact band `250-500 mm/5 days` |
+| CDD (`cdd_ge_60`) | Lens-decomposed pressure, impact band `30-90 days` |
+| R95p interannual variability (`r95p_interannual_variability_norm`) | Lens-decomposed pressure (absolute + change), no impact band |
 
 #### Life & Livelihood Loss Risk
 

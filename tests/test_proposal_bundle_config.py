@@ -530,6 +530,61 @@ def test_life_livelihood_loss_risk_matches_lens_dossier_section_13() -> None:
     assert sum(rule.rule_weight for rule in spec.rules) == 1.0
 
 
+def test_asset_risk_hydropower_matches_lens_dossier_section_11() -> None:
+    """Pin Asset Risk (Hydropower Plants) to lens dossier section 11 (CHG-0036).
+
+    Locks weight mode, coverage gate, per-rule lens weights, impact bands,
+    change modes, and rule weights. Code slugs, labels, and rule order are
+    preserved (Section 11 rename recommendations remain deferred under
+    CHG-0024). Drift in either direction (code vs dossier) fails here.
+    """
+    spec = get_proposal_bundle_spec_by_slug("composite_asset_risk_hydropower")
+
+    assert spec is not None
+    assert spec.weight_mode == "explicit_normalized"
+    assert spec.min_available_rule_weight_fraction == 0.70
+
+    rules_by_slug = {rule.rule_slug: rule for rule in spec.rules}
+    assert list(rules_by_slug.keys()) == [
+        "rx5day_ge_500",
+        "cdd_ge_60",
+        "r95p_interannual_variability_norm",
+    ]
+
+    expected = {
+        "rx5day_ge_500": {
+            "lens_weights": (0.45, 0.40, 0.15),  # 11.1 — flood/storm operations pressure
+            "impact_band": (250.0, 500.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.45,
+        },
+        "cdd_ge_60": {
+            "lens_weights": (0.40, 0.30, 0.30),  # 11.2 — dry-spell / low-flow pressure
+            "impact_band": (30.0, 90.0),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.35,
+        },
+        "r95p_interannual_variability_norm": {
+            "lens_weights": (0.70, 0.30, 0.0),  # 11.3 — variability regime, no impact band
+            "impact_band": (None, None),
+            "change_mode": "relative_pct",
+            "rule_weight": 0.20,
+        },
+    }
+
+    for slug, expected_fields in expected.items():
+        rule = rules_by_slug[slug]
+        observed_lens = (rule.absolute_weight, rule.change_weight, rule.impact_weight)
+        assert observed_lens == expected_fields["lens_weights"], slug
+        assert (rule.impact_low, rule.impact_high) == expected_fields["impact_band"], slug
+        assert rule.change_mode == expected_fields["change_mode"], slug
+        assert rule.rule_weight == expected_fields["rule_weight"], slug
+
+    # Flood/storm cluster 0.65 (rx5day 0.45 + r95p variability 0.20) + drought
+    # cluster 0.35 (cdd 0.35) = 1.0. Validator also enforces this sum.
+    assert sum(rule.rule_weight for rule in spec.rules) == 1.0
+
+
 def test_explicit_weight_bundle_inventory_is_exact() -> None:
     observed = {
         spec.composite_slug
@@ -542,6 +597,7 @@ def test_explicit_weight_bundle_inventory_is_exact() -> None:
         "composite_industrial_risk",
         "composite_infrastructure_risk",
         "composite_investment_financial_risk",
+        "composite_asset_risk_hydropower",
         "composite_life_livelihood_loss_risk",
     }
 

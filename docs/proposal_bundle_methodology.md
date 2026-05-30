@@ -20,16 +20,20 @@ Each proposal-bundle rule is scored from `0` to `100`.
 - Bundle means are computed from available rule scores. Most bundles use equal
   rule weights and are set to `NaN` only when no rule is available for a unit.
 - `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`,
-  and `Infrastructure Risk` use explicit
+  `Infrastructure Risk`, `Asset Risk (Hydropower Plants)`, and
+  `Life & Livelihood Loss Risk` use explicit
   normalized rule weights and a 0.70 minimum `available_rule_weight_fraction`;
-  rows below that coverage gate are set to `NaN`.
+  rows below that coverage gate are set to `NaN`. This is 7 of the 8
+  sector-wise bundles; only `Asset Risk (Thermal Power Plants)` remains on the
+  older equal-weight path.
 
 ## Rule score components
 
 Each rule can combine three scientifically distinct components.
 
 Sectoral bundles (`Agricultural Risk`, `Health Risk`, `Industrial Risk`,
-`Investment / Financial Risk`, `Infrastructure Risk`, and
+`Investment / Financial Risk`, `Infrastructure Risk`,
+`Asset Risk (Hydropower Plants)`, and
 `Life & Livelihood Loss Risk`) use lens-decomposed scoring per
 `docs/lens_scoring_methodology.md`. Agricultural Risk reinstates the impact
 lens with a self-derived TXx 35-45 deg C agronomic band (§12.1) replacing
@@ -46,6 +50,17 @@ categories) and MEDIUM-confidence CDD and WSDI bands anchored to IMD
 agro-met / ICAR-CRIDA / NDMA evidence and to Indian heat-mortality
 literature (Azhar 2014; Mazdiyasni 2017) respectively; the `cdd_ge_40` and
 `wsdi_ge_5` slugs are stable until the same later data-contract rename.
+Asset Risk (Hydropower Plants) follows §11 (CHG-0036) with a flood/storm
+cluster of `rx5day_ge_500` (lens 0.45/0.40/0.15, band 250-500 mm/5 days,
+weight 0.45) and the helper-derived `r95p_interannual_variability_norm`
+regime rule (lens 0.70/0.30/0.00, no impact band, absolute-dominant, weight
+0.20), plus the drought-cluster `cdd_ge_60` (lens 0.40/0.30/0.30, band 30-90
+days, weight 0.35). The `r95p_interannual_variability` helper now emits a
+historical baseline column (epoch mirrored from the Rx5day/CDD source
+masters) so its change lens is operational rather than cosmetic. The code
+slugs (`rx5day_ge_500`, `cdd_ge_60`, `r95p_interannual_variability_norm`) and
+the helper grid-first / CV-vs-sigma provenance caveat remain deferred under
+CHG-0024.
 
 ### 1. Future absolute severity
 

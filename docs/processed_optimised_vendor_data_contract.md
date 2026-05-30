@@ -98,7 +98,12 @@ Important details:
   lenses that are active on each rule; see
   `docs/lens_scoring_methodology.md` §5.1), `available_rule_count`, and
   `available_rule_weight_fraction`. Per-lens rule columns are part of the
-  optimized contract from artifact version 3 onward.
+  optimized contract from artifact version 3 onward. This active-lens-only
+  shape is additive and generic across all explicit-weight sector bundles,
+  including `Asset Risk (Hydropower Plants)` (CHG-0036): its helper-derived
+  `r95p_interannual_variability_norm` rule emits `abs_score` + `chg_score`
+  (no `imp_score`), while its `rx5day_ge_500` and `cdd_ge_60` rules emit all
+  three lens columns.
 - The optimized bundle intentionally removes heavy or duplicate runtime fields:
   `std`, `p05`, `p95`, `n_models`, `values_per_model`, and `models`.
 
