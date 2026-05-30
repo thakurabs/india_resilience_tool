@@ -605,17 +605,31 @@ def _build_hydropower_helper_frame(
     target_scenario: str = "ssp245",
     target_period: str = "2020-2040",
     values: tuple[float, float, float] = (0.40, 0.10, 0.25),
+    baseline_token: str = "1995-2014",
+    historical_values: tuple[float, float, float] = (0.20, 0.20, 0.20),
+    include_future: bool = True,
+    include_historical: bool = True,
 ) -> pd.DataFrame:
-    """Build a synthetic R95p interannual-variability helper frame."""
+    """Build a synthetic R95p interannual-variability helper frame.
+
+    Post-CHG-0036 the helper rule is a blended absolute+change rule, so the
+    helper frame carries both the future ``__{scenario}__{period}__mean``
+    columns and a single hyphenated ``__historical__{token}__mean`` baseline
+    column. ``include_future`` / ``include_historical`` let tests drop either
+    side to exercise the coverage gate and silent-degradation guards.
+    """
     out = ids.copy()
-    out[f"r95p_interannual_variability__{target_scenario}__{target_period}__mean"] = list(values)
-    # Hydropower bundle iterates all (scenario, period); seed all combinations
-    # so the bundle compute does not raise on missing columns.
-    for scen in ("ssp245", "ssp585"):
-        for per in ("2020-2040", "2040-2060", "2060-2080"):
-            col = f"r95p_interannual_variability__{scen}__{per}__mean"
-            if col not in out.columns:
-                out[col] = list(values)
+    if include_future:
+        out[f"r95p_interannual_variability__{target_scenario}__{target_period}__mean"] = list(values)
+        # Hydropower bundle iterates all (scenario, period); seed all
+        # combinations so the bundle compute does not raise on missing columns.
+        for scen in ("ssp245", "ssp585"):
+            for per in ("2020-2040", "2040-2060", "2060-2080"):
+                col = f"r95p_interannual_variability__{scen}__{per}__mean"
+                if col not in out.columns:
+                    out[col] = list(values)
+    if include_historical:
+        out[f"r95p_interannual_variability__historical__{baseline_token}__mean"] = list(historical_values)
     return out
 
 
@@ -675,6 +689,134 @@ def test_variability_proxy_aligns_to_canonical_key_under_shuffled_helper_rows(
         "Variability proxy must align by canonical key, not row order. "
         f"canonical: {canonical_by_key}; shuffled: {shuffled_by_key}"
     )
+
+
+def test_hydropower_rules_persist_expected_active_lens_columns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CHG-0036: Hydropower Rx5day/CDD are three-lens-active (abs+chg+imp);
+    the R95p helper rule is absolute+change only (no impact lens)."""
+    state_name = "Telangana"
+    ids = _district_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_hydropower_metric_masters(tmp_path, ids=ids, state_name=state_name)
+
+    helper = _build_hydropower_helper_frame(ids)
+    out = compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_asset_risk_hydropower"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+        helper_frame=helper,
+    )
+
+    for rule_slug in ("rx5day_ge_500", "cdd_ge_60"):
+        for lens_col in (
+            proposal_rule_abs_score_column(rule_slug, "ssp245", "2020-2040"),
+            proposal_rule_chg_score_column(rule_slug, "ssp245", "2020-2040"),
+            proposal_rule_imp_score_column(rule_slug, "ssp245", "2020-2040"),
+        ):
+            assert lens_col in out.columns, f"missing Hydropower lens column {lens_col!r}"
+
+    r95p = "r95p_interannual_variability_norm"
+    assert proposal_rule_abs_score_column(r95p, "ssp245", "2020-2040") in out.columns
+    assert proposal_rule_chg_score_column(r95p, "ssp245", "2020-2040") in out.columns
+    assert proposal_rule_imp_score_column(r95p, "ssp245", "2020-2040") not in out.columns
+
+
+def test_hydropower_r95p_score_equals_weighted_mean_of_abs_and_chg(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The blended R95p helper rule uses both helper future (absolute) and
+    helper historical (change) values: score = (abs_w*abs + chg_w*chg) /
+    (abs_w + chg_w), since the impact lens is inactive (weight 0)."""
+    state_name = "Telangana"
+    ids = _district_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_hydropower_metric_masters(tmp_path, ids=ids, state_name=state_name)
+
+    # Future and historical helper values chosen with spread so the abs and
+    # change reference distributions are non-flat and finite for every row.
+    helper = _build_hydropower_helper_frame(
+        ids,
+        values=(0.40, 0.10, 0.25),
+        historical_values=(0.20, 0.30, 0.10),
+    )
+    out = compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_asset_risk_hydropower"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+        helper_frame=helper,
+    )
+
+    rule = next(
+        rule
+        for rule in PROPOSAL_BUNDLES_BY_SLUG["composite_asset_risk_hydropower"].rules
+        if rule.rule_slug == "r95p_interannual_variability_norm"
+    )
+    abs_col = proposal_rule_abs_score_column(rule.rule_slug, "ssp245", "2020-2040")
+    chg_col = proposal_rule_chg_score_column(rule.rule_slug, "ssp245", "2020-2040")
+    score_col = proposal_rule_score_column(rule.rule_slug, "ssp245", "2020-2040")
+
+    assert out[chg_col].notna().any()
+    denominator = float(rule.absolute_weight) + float(rule.change_weight)
+    expected = (
+        float(rule.absolute_weight) * out[abs_col].astype(float)
+        + float(rule.change_weight) * out[chg_col].astype(float)
+    ) / denominator
+    pd.testing.assert_series_equal(
+        out[score_col].astype(float).reset_index(drop=True),
+        expected.reset_index(drop=True),
+        check_names=False,
+    )
+
+
+def test_hydropower_r95p_change_lens_nan_when_helper_historical_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Silent-degradation guard: with the helper future column present but the
+    helper historical column absent, the R95p change lens is all-NaN while the
+    rule still scores via the absolute lens and the bundle is retained."""
+    state_name = "Telangana"
+    ids = _district_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_hydropower_metric_masters(tmp_path, ids=ids, state_name=state_name)
+
+    helper = _build_hydropower_helper_frame(ids, include_historical=False)
+    out = compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_asset_risk_hydropower"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+        helper_frame=helper,
+    )
+
+    r95p = "r95p_interannual_variability_norm"
+    chg_col = proposal_rule_chg_score_column(r95p, "ssp245", "2020-2040")
+    abs_col = proposal_rule_abs_score_column(r95p, "ssp245", "2020-2040")
+    score_col = proposal_rule_score_column(r95p, "ssp245", "2020-2040")
+    bundle_col = proposal_bundle_mean_column(
+        "composite_asset_risk_hydropower", "ssp245", "2020-2040"
+    )
+
+    assert chg_col in out.columns
+    assert out[chg_col].isna().all()
+    # Rule still scores on the absolute lens; bundle is retained (r95p only
+    # contributes 0.20, so available weight stays >= 0.70 regardless).
+    assert out[score_col].notna().any()
+    pd.testing.assert_series_equal(
+        out[score_col].astype(float).reset_index(drop=True),
+        out[abs_col].astype(float).reset_index(drop=True),
+        check_names=False,
+    )
+    assert out[bundle_col].notna().any()
 
 
 # ---------------------------------------------------------------------------

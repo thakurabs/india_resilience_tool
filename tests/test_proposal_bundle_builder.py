@@ -267,6 +267,47 @@ def test_compute_agricultural_risk_applies_available_weight_gate(
     assert pd.isna(by_district["C"][score_col])
 
 
+def _seed_hydropower_baseline_source_masters(
+    tmp_path: Path,
+    *,
+    ids: pd.DataFrame,
+    state_name: str,
+    baseline_token: str = "1995-2014",
+) -> None:
+    """Seed the Rx5day/CDD source masters with a shared historical baseline.
+
+    CHG-0036 resolves the R95p helper baseline epoch from the Rx5day and CDD
+    source masters (they must agree on the historical period token), so the
+    helper builder needs both masters present with a resolvable
+    ``__historical__{token}__mean`` column.
+    """
+    n = len(ids)
+    for slug in ("pr_max_5day_precip", "pr_consecutive_dry_days_lt1mm"):
+        base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df = ids.copy()
+        df[f"{base}__ssp245__2020-2040__mean"] = [10.0] * n
+        df[f"{base}__historical__{baseline_token}__mean"] = [5.0] * n
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
+
+
+def _write_r95p_yearly_with_historical(
+    tmp_path: Path,
+    *,
+    state_name: str,
+    district_name: str,
+    future_rows: list[dict[str, object]],
+    historical_rows: list[dict[str, object]],
+) -> None:
+    _write_district_yearly(
+        tmp_path,
+        slug="r95p_very_wet_precip",
+        state_name=state_name,
+        district_name=district_name,
+        scenario="ignored",
+        rows=future_rows + historical_rows,
+    )
+
+
 def test_compute_r95p_interannual_variability_master_frame_uses_cv_and_nan_for_insufficient_points(tmp_path: Path) -> None:
     state_name = "Telangana"
     ids = pd.DataFrame(
@@ -277,28 +318,32 @@ def test_compute_r95p_interannual_variability_master_frame_uses_cv_and_nan_for_i
         }
     )
     _write_master(tmp_path, slug="r95p_very_wet_precip", state_name=state_name, level="district", df=ids)
-    _write_district_yearly(
+    _seed_hydropower_baseline_source_masters(tmp_path, ids=ids, state_name=state_name)
+    _write_r95p_yearly_with_historical(
         tmp_path,
-        slug="r95p_very_wet_precip",
         state_name=state_name,
         district_name="A",
-        scenario="ssp245",
-        rows=[
+        future_rows=[
             {"year": 2020, "mean": 10.0, "scenario": "ssp245"},
             {"year": 2021, "mean": 20.0, "scenario": "ssp245"},
             {"year": 2020, "mean": 10.0, "scenario": "ssp585"},
             {"year": 2021, "mean": 20.0, "scenario": "ssp585"},
         ],
+        historical_rows=[
+            {"year": 1995, "mean": 8.0, "scenario": "historical"},
+            {"year": 1996, "mean": 12.0, "scenario": "historical"},
+        ],
     )
-    _write_district_yearly(
+    _write_r95p_yearly_with_historical(
         tmp_path,
-        slug="r95p_very_wet_precip",
         state_name=state_name,
         district_name="B",
-        scenario="ssp245",
-        rows=[
+        future_rows=[
             {"year": 2020, "mean": 5.0, "scenario": "ssp245"},
             {"year": 2020, "mean": 5.0, "scenario": "ssp585"},
+        ],
+        historical_rows=[
+            {"year": 1995, "mean": 5.0, "scenario": "historical"},
         ],
     )
 
@@ -312,6 +357,261 @@ def test_compute_r95p_interannual_variability_master_frame_uses_cv_and_nan_for_i
     values = dict(zip(out["district"], out[col]))
     assert round(float(values["A"]), 6) == round((5.0 / 15.0), 6)
     assert pd.isna(values["B"])
+
+
+def test_compute_r95p_helper_emits_resolvable_hyphenated_historical_baseline(tmp_path: Path) -> None:
+    """CHG-0036: the helper frame carries one hyphenated historical baseline
+    column whose value is the CV over the chosen baseline window, and which is
+    resolvable by the proposal-bundle baseline resolver."""
+    state_name = "Telangana"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name],
+            "district": ["A"],
+            "district_key": ["telangana|a"],
+        }
+    )
+    _write_master(tmp_path, slug="r95p_very_wet_precip", state_name=state_name, level="district", df=ids)
+    _seed_hydropower_baseline_source_masters(tmp_path, ids=ids, state_name=state_name)
+    _write_r95p_yearly_with_historical(
+        tmp_path,
+        state_name=state_name,
+        district_name="A",
+        future_rows=[
+            {"year": 2020, "mean": 10.0, "scenario": "ssp245"},
+            {"year": 2021, "mean": 20.0, "scenario": "ssp245"},
+            {"year": 2020, "mean": 10.0, "scenario": "ssp585"},
+            {"year": 2021, "mean": 20.0, "scenario": "ssp585"},
+        ],
+        historical_rows=[
+            {"year": 1995, "mean": 10.0, "scenario": "historical"},
+            {"year": 1996, "mean": 20.0, "scenario": "historical"},
+        ],
+    )
+
+    out = compute_r95p_interannual_variability_master_frame(
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+    )
+
+    hist_col = "r95p_interannual_variability__historical__1995-2014__mean"
+    assert hist_col in out.columns
+    # CV over historical window [10, 20]: std(ddof=0)=5, mean=15 -> 5/15.
+    assert round(float(out[hist_col].iloc[0]), 6) == round((5.0 / 15.0), 6)
+    # The resolver used by the blended change lens must find this column.
+    assert proposal_bundle_module._resolve_baseline_column(out, "r95p_interannual_variability") == hist_col
+
+
+def test_compute_r95p_helper_raises_when_source_baseline_tokens_disagree(tmp_path: Path) -> None:
+    """CHG-0036 fail-fast: if Rx5day and CDD resolve to different historical
+    baseline tokens, the helper builder refuses to emit a cosmetic change lens."""
+    state_name = "Telangana"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name],
+            "district": ["A"],
+            "district_key": ["telangana|a"],
+        }
+    )
+    _write_master(tmp_path, slug="r95p_very_wet_precip", state_name=state_name, level="district", df=ids)
+    rx_base = METRICS_BY_SLUG["pr_max_5day_precip"].periods_metric_col or METRICS_BY_SLUG["pr_max_5day_precip"].value_col
+    cdd_base = (
+        METRICS_BY_SLUG["pr_consecutive_dry_days_lt1mm"].periods_metric_col
+        or METRICS_BY_SLUG["pr_consecutive_dry_days_lt1mm"].value_col
+    )
+    rx_df = ids.copy()
+    rx_df[f"{rx_base}__historical__1995-2014__mean"] = [5.0]
+    _write_master(tmp_path, slug="pr_max_5day_precip", state_name=state_name, level="district", df=rx_df)
+    cdd_df = ids.copy()
+    cdd_df[f"{cdd_base}__historical__1985-2014__mean"] = [5.0]
+    _write_master(tmp_path, slug="pr_consecutive_dry_days_lt1mm", state_name=state_name, level="district", df=cdd_df)
+
+    with pytest.raises(TargetBuildError, match="baseline token mismatch"):
+        compute_r95p_interannual_variability_master_frame(
+            level="district",
+            state_name=state_name,
+            data_dir=tmp_path,
+        )
+
+
+def _hydropower_ids(state_name: str = "Telangana") -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["telangana|a", "telangana|b", "telangana|c"],
+        }
+    )
+
+
+def _seed_hydropower_bundle_masters(
+    tmp_path: Path,
+    *,
+    ids: pd.DataFrame,
+    state_name: str,
+    rx5day_future: list[float] | None = None,
+    cdd_future: list[float] | None = None,
+    baseline_period: str = "1995-2014",
+) -> None:
+    futures = {
+        "pr_max_5day_precip": rx5day_future if rx5day_future is not None else [420.0, 300.0, 360.0],
+        "pr_consecutive_dry_days_lt1mm": cdd_future if cdd_future is not None else [70.0, 45.0, 55.0],
+    }
+    baselines = {
+        "pr_max_5day_precip": [280.0, 240.0, 260.0],
+        "pr_consecutive_dry_days_lt1mm": [40.0, 30.0, 35.0],
+    }
+    for slug, values in futures.items():
+        base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df = ids.copy()
+        df[f"{base}__ssp245__2020-2040__mean"] = values
+        df[f"{base}__historical__{baseline_period}__mean"] = baselines[slug]
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
+
+
+def _hydropower_helper_frame(
+    ids: pd.DataFrame,
+    *,
+    include_future: bool = True,
+    include_historical: bool = True,
+    future: list[float] | None = None,
+    historical: list[float] | None = None,
+    baseline_token: str = "1995-2014",
+) -> pd.DataFrame:
+    out = ids.copy()
+    fut = future if future is not None else [0.40, 0.10, 0.25]
+    hist = historical if historical is not None else [0.20, 0.30, 0.10]
+    if include_future:
+        for scen in ("ssp245", "ssp585"):
+            for per in ("2020-2040", "2040-2060", "2060-2080"):
+                out[f"r95p_interannual_variability__{scen}__{per}__mean"] = fut
+    if include_historical:
+        out[f"r95p_interannual_variability__historical__{baseline_token}__mean"] = hist
+    return out
+
+
+def _run_hydropower(tmp_path: Path, helper_frame: pd.DataFrame, state_name: str = "Telangana") -> pd.DataFrame:
+    return compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_asset_risk_hydropower"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+        helper_frame=helper_frame,
+    )
+
+
+def test_compute_hydropower_success_path_blends_helper_future_and_historical(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _hydropower_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_hydropower_bundle_masters(tmp_path, ids=ids, state_name=state_name)
+
+    out = _run_hydropower(tmp_path, _hydropower_helper_frame(ids))
+
+    chg_col = "r95p_interannual_variability_norm__ssp245__2020-2040__chg_score"
+    bundle_col = "composite_asset_risk_hydropower__ssp245__2020-2040__mean"
+    weight_col = "composite_asset_risk_hydropower__ssp245__2020-2040__available_rule_weight_fraction"
+    assert out[chg_col].notna().any()
+    assert out[bundle_col].notna().any()
+    assert out[weight_col].tolist() == pytest.approx([1.0, 1.0, 1.0])
+
+
+def test_compute_hydropower_missing_helper_future_drops_rule_but_retains_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _hydropower_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_hydropower_bundle_masters(tmp_path, ids=ids, state_name=state_name)
+
+    helper = _hydropower_helper_frame(ids, include_future=False)
+    out = _run_hydropower(tmp_path, helper)
+
+    score_col = "r95p_interannual_variability_norm__ssp245__2020-2040__score"
+    bundle_col = "composite_asset_risk_hydropower__ssp245__2020-2040__mean"
+    weight_col = "composite_asset_risk_hydropower__ssp245__2020-2040__available_rule_weight_fraction"
+    # R95p rule fully NaN (no future helper data), so available weight is the
+    # remaining Rx5day 0.45 + CDD 0.35 = 0.80 >= 0.70 -> bundle retained.
+    assert out[score_col].isna().all()
+    assert out[weight_col].tolist() == pytest.approx([0.80, 0.80, 0.80])
+    assert out[bundle_col].notna().any()
+
+
+def test_compute_hydropower_missing_cdd_drops_bundle_below_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _hydropower_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_hydropower_bundle_masters(
+        tmp_path,
+        ids=ids,
+        state_name=state_name,
+        cdd_future=[float("nan"), float("nan"), float("nan")],
+    )
+
+    out = _run_hydropower(tmp_path, _hydropower_helper_frame(ids))
+
+    bundle_col = "composite_asset_risk_hydropower__ssp245__2020-2040__mean"
+    weight_col = "composite_asset_risk_hydropower__ssp245__2020-2040__available_rule_weight_fraction"
+    # Losing CDD (0.35) leaves Rx5day 0.45 + R95p 0.20 = 0.65 < 0.70 -> NaN.
+    assert out[weight_col].tolist() == pytest.approx([0.65, 0.65, 0.65])
+    assert out[bundle_col].isna().all()
+
+
+def test_compute_hydropower_missing_rx5day_drops_bundle_below_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _hydropower_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_hydropower_bundle_masters(
+        tmp_path,
+        ids=ids,
+        state_name=state_name,
+        rx5day_future=[float("nan"), float("nan"), float("nan")],
+    )
+
+    out = _run_hydropower(tmp_path, _hydropower_helper_frame(ids))
+
+    bundle_col = "composite_asset_risk_hydropower__ssp245__2020-2040__mean"
+    weight_col = "composite_asset_risk_hydropower__ssp245__2020-2040__available_rule_weight_fraction"
+    # Losing Rx5day (0.45) leaves CDD 0.35 + R95p 0.20 = 0.55 < 0.70 -> NaN.
+    assert out[weight_col].tolist() == pytest.approx([0.55, 0.55, 0.55])
+    assert out[bundle_col].isna().all()
+
+
+def test_compute_hydropower_near_zero_historical_baseline_yields_nan_not_inf(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """relative_pct change with an effectively-zero historical baseline must
+    produce a NaN change score (not inf); the blended rule then renormalizes
+    over the absolute lens for that row."""
+    state_name = "Telangana"
+    ids = _hydropower_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_hydropower_bundle_masters(tmp_path, ids=ids, state_name=state_name)
+
+    helper = _hydropower_helper_frame(ids, historical=[0.0, 0.30, 0.10])
+    out = _run_hydropower(tmp_path, helper)
+
+    chg_col = "r95p_interannual_variability_norm__ssp245__2020-2040__chg_score"
+    abs_col = "r95p_interannual_variability_norm__ssp245__2020-2040__abs_score"
+    score_col = "r95p_interannual_variability_norm__ssp245__2020-2040__score"
+    a_mask = out["district"] == "A"
+    assert pd.isna(out.loc[a_mask, chg_col].iloc[0])
+    # District A renormalizes onto the absolute lens alone (finite, not inf).
+    assert pd.notna(out.loc[a_mask, score_col].iloc[0])
+    assert out.loc[a_mask, score_col].iloc[0] == pytest.approx(out.loc[a_mask, abs_col].iloc[0])
 
 
 def test_compute_investment_risk_builds_without_yearly_series(

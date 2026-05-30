@@ -63,8 +63,13 @@ PERIOD_YEAR_WINDOWS = {
     "2060-2080": (2060, 2080),
 }
 BASELINE_TOKENS = ("1995-2014", "1995_2014", "1985-2014")
+BASELINE_YEAR_WINDOWS = {
+    "1995-2014": (1995, 2014),
+    "1985-2014": (1985, 2014),
+}
 HELPER_METRIC_SLUG = "r95p_interannual_variability"
 HELPER_SOURCE_METRIC_SLUG = "r95p_very_wet_precip"
+HELPER_BASELINE_SOURCE_METRIC_SLUGS = ("pr_max_5day_precip", "pr_consecutive_dry_days_lt1mm")
 
 
 @dataclass(frozen=True)
@@ -632,8 +637,13 @@ def _load_legacy_yearly_series(
     )
 
 
-def _prepare_period_yearly(df: pd.DataFrame, *, period: str) -> pd.DataFrame:
-    start_year, end_year = PERIOD_YEAR_WINDOWS[period]
+def _prepare_yearly_window(df: pd.DataFrame, *, start_year: int, end_year: int) -> pd.DataFrame:
+    """Return the yearly mean series filtered to an inclusive ``[start, end]`` window.
+
+    Shared slicing/grouping for both future periods and historical baseline
+    windows so the same logic does not flow through the future-only
+    ``PERIOD_YEAR_WINDOWS`` map for historical baselines.
+    """
     out = df.copy()
     out["year"] = pd.to_numeric(out.get("year"), errors="coerce")
     out["mean"] = pd.to_numeric(out.get("mean"), errors="coerce")
@@ -644,6 +654,11 @@ def _prepare_period_yearly(df: pd.DataFrame, *, period: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["year", "mean"])
     out = out.groupby("year", as_index=False)["mean"].mean().sort_values("year").reset_index(drop=True)
     return out
+
+
+def _prepare_period_yearly(df: pd.DataFrame, *, period: str) -> pd.DataFrame:
+    start_year, end_year = PERIOD_YEAR_WINDOWS[period]
+    return _prepare_yearly_window(df, start_year=start_year, end_year=end_year)
 
 
 def _row_labels(row: pd.Series, *, level: str) -> str:
@@ -725,8 +740,10 @@ def _build_spi_proxy_rule(
     return _score_by_reference_distribution(values, direction="higher_worse")
 
 
-def _compute_r95p_interannual_variability_from_yearly(yearly: pd.DataFrame, *, period: str) -> float:
-    prepared = _prepare_period_yearly(yearly, period=period)
+def _compute_r95p_interannual_variability_from_yearly(
+    yearly: pd.DataFrame, *, start_year: int, end_year: int
+) -> float:
+    prepared = _prepare_yearly_window(yearly, start_year=start_year, end_year=end_year)
     if len(prepared) < 2:
         return float("nan")
     mean_value = float(prepared["mean"].mean())
@@ -734,6 +751,41 @@ def _compute_r95p_interannual_variability_from_yearly(yearly: pd.DataFrame, *, p
     if abs(mean_value) < 1e-6:
         return std_value
     return std_value / abs(mean_value)
+
+
+def _resolve_hydropower_baseline_token(*, level: str, state_name: str, data_dir: Path) -> str:
+    """Return the shared historical baseline token for the Hydropower helper.
+
+    The R95p variability helper must use the same historical epoch as the
+    Rx5day and CDD source masters so all three Hydropower change lenses are
+    comparable. Both source masters must resolve a historical baseline column,
+    agree on the period token, and that token must be a supported baseline
+    window. Raises ``TargetBuildError`` otherwise so a cosmetic change lens is
+    never landed.
+    """
+    tokens: dict[str, str] = {}
+    for metric_slug in HELPER_BASELINE_SOURCE_METRIC_SLUGS:
+        frame = _load_metric_master(metric_slug, level=level, state_name=state_name, data_dir=data_dir)
+        baseline_column = _resolve_baseline_column(frame, metric_slug)
+        if not baseline_column:
+            raise TargetBuildError(
+                f"Hydropower helper baseline token resolution failed: no historical baseline "
+                f"column for metric={metric_slug!r}, level={level!r}, state={state_name!r}."
+            )
+        tokens[metric_slug] = str(baseline_column).split("__")[-2].replace("_", "-")
+    distinct = set(tokens.values())
+    if len(distinct) != 1:
+        raise TargetBuildError(
+            f"Hydropower helper baseline token mismatch across source masters for "
+            f"level={level!r}, state={state_name!r}: {tokens}."
+        )
+    token = distinct.pop()
+    if token not in BASELINE_YEAR_WINDOWS:
+        raise TargetBuildError(
+            f"Hydropower helper baseline token {token!r} is not a supported baseline window "
+            f"{tuple(BASELINE_YEAR_WINDOWS)} for level={level!r}, state={state_name!r}."
+        )
+    return token
 
 
 def compute_r95p_interannual_variability_master_frame(
@@ -748,8 +800,13 @@ def compute_r95p_interannual_variability_master_frame(
     source_frame = _load_metric_master(HELPER_SOURCE_METRIC_SLUG, level=level, state_name=state_name, data_dir=data_dir)
     id_columns = list(_required_id_columns(level))
     output = source_frame.loc[:, id_columns].drop_duplicates().reset_index(drop=True)
+
+    baseline_token = _resolve_hydropower_baseline_token(level=level, state_name=state_name, data_dir=data_dir)
+    hist_start, hist_end = BASELINE_YEAR_WINDOWS[baseline_token]
+
     for scenario in SUPPORTED_SCENARIOS:
         for period in SUPPORTED_PERIODS:
+            start_year, end_year = PERIOD_YEAR_WINDOWS[period]
             values: list[float] = []
             for _, row in output.iterrows():
                 yearly = _load_legacy_yearly_series(
@@ -766,8 +823,40 @@ def compute_r95p_interannual_variability_master_frame(
                         f"Missing mandatory yearly ensemble series for helper metric={HELPER_SOURCE_METRIC_SLUG!r}, "
                         f"level={level!r}, state={state_name!r}, unit={_row_labels(row, level=level)!r}."
                     )
-                values.append(_compute_r95p_interannual_variability_from_yearly(yearly, period=period))
+                values.append(
+                    _compute_r95p_interannual_variability_from_yearly(
+                        yearly, start_year=start_year, end_year=end_year
+                    )
+                )
             output[f"{HELPER_METRIC_SLUG}__{scenario}__{period}__{SUPPORTED_STAT}"] = values
+
+    hist_values: list[float] = []
+    for _, row in output.iterrows():
+        yearly = _load_legacy_yearly_series(
+            metric_slug=HELPER_SOURCE_METRIC_SLUG,
+            level=level,
+            state_name=str(row["state"]),
+            district_name=str(row["district"]),
+            block_name=str(row["block"]) if level == "block" and "block" in row else None,
+            scenario="historical",
+            data_dir=data_dir,
+        )
+        if yearly.empty:
+            raise TargetBuildError(
+                f"Missing mandatory historical yearly ensemble series for helper metric="
+                f"{HELPER_SOURCE_METRIC_SLUG!r}, level={level!r}, state={state_name!r}, "
+                f"unit={_row_labels(row, level=level)!r}."
+            )
+        hist_values.append(
+            _compute_r95p_interannual_variability_from_yearly(yearly, start_year=hist_start, end_year=hist_end)
+        )
+    output[f"{HELPER_METRIC_SLUG}__historical__{baseline_token}__{SUPPORTED_STAT}"] = hist_values
+
+    if not _resolve_baseline_column(output, HELPER_METRIC_SLUG):
+        raise TargetBuildError(
+            f"Hydropower helper frame is missing a resolvable historical baseline column for "
+            f"level={level!r}, state={state_name!r}; expected token {baseline_token!r}."
+        )
     return output
 
 
@@ -790,35 +879,6 @@ def _write_helper_master_frame(
     df.to_csv(target_path, index=False)
     df.to_parquet(target_path.with_suffix(".parquet"), index=False)
     return target_path
-
-
-def _build_variability_proxy_rule(
-    key_frame: pd.DataFrame,
-    helper_frame: pd.DataFrame,
-    *,
-    level: str,
-    scenario: str,
-    period: str,
-) -> pd.Series:
-    """Score the R95p variability helper against the canonical unit frame.
-
-    Aligns helper-frame rows to ``key_frame`` via the canonical key column
-    (``district_key`` or ``block_key``) before scoring. Row-order or
-    row-universe differences between the helper frame and the key frame are
-    therefore safe — the join, not row index, decides which helper value
-    belongs to which unit.
-    """
-    metric_column = f"{HELPER_METRIC_SLUG}__{scenario}__{period}__{SUPPORTED_STAT}"
-    if metric_column not in helper_frame.columns:
-        return pd.Series(np.nan, index=key_frame.index, dtype=float)
-    key_col = _canonical_key_column(level)
-    aligned = key_frame.merge(
-        helper_frame.loc[:, [key_col, metric_column]],
-        on=key_col,
-        how="left",
-    )
-    values = _coerce_numeric(aligned[metric_column])
-    return _score_by_reference_distribution(values, direction="higher_worse")
 
 
 def _append_score_quality_warnings(
@@ -902,19 +962,22 @@ def _dispatch_rule_scores(
                 period=period,
             )
             return _absolute_only_scores(blended)
-        if rule.rule_slug == "r95p_interannual_variability_norm":
+        if rule.metric_slug == HELPER_METRIC_SLUG:
             if helper_frame is None:
                 raise TargetBuildError(
                     "Hydropower bundle requires a precomputed R95p variability helper frame."
                 )
-            blended = _build_variability_proxy_rule(
+            return _build_blended_rule(
                 key_frame,
                 helper_frame,
                 level=level,
+                rule=rule,
                 scenario=scenario,
                 period=period,
+                warnings=warnings,
+                bundle_slug=bundle_slug,
+                state_name=state_name,
             )
-            return _absolute_only_scores(blended)
         return _build_blended_rule(
             key_frame,
             metric_frames[rule.metric_slug],

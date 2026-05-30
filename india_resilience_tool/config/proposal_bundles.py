@@ -657,28 +657,78 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         bundle_label="Asset Risk (Hydropower Plants)",
         composite_slug="composite_asset_risk_hydropower",
         supported_levels=("district", "block"),
+        weight_mode="explicit_normalized",
+        min_available_rule_weight_fraction=0.70,
         rules=(
             _pressure_rule(
                 "rx5day_ge_500",
                 "5-day rainfall operations pressure",
                 "pr_max_5day_precip",
-                absolute_weight=0.50,
-                change_weight=0.50,
+                absolute_weight=0.45,
+                change_weight=0.40,
+                impact_weight=0.15,
+                impact_low=250.0,
+                impact_high=500.0,
+                change_mode="relative_pct",
+                rule_weight=0.45,
+                method_note=(
+                    "Impact band 250-500 mm/5 days: self-derived, LOW confidence. "
+                    "Onset=250 (drainage / spillway-management regime, five IMD "
+                    "heavy-rain days conservative floor); saturation=500 (regional "
+                    "flood-event regime anchored on Kerala 2018 / Mumbai 2005). "
+                    "Shared with Industrial section 7.2, Investment section 8.2, "
+                    "Infrastructure section 9.2. Lens dossier section 11.1. Rename "
+                    "to rx5day_accumulated_pressure deferred (CHG-0024)."
+                ),
             ),
             _pressure_rule(
                 "cdd_ge_60",
                 "Dry-spell flow pressure",
                 "pr_consecutive_dry_days_lt1mm",
-                absolute_weight=0.50,
-                change_weight=0.50,
+                absolute_weight=0.40,
+                change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=30.0,
+                impact_high=90.0,
+                change_mode="relative_pct",
+                rule_weight=0.35,
+                method_note=(
+                    "Impact band 30-90 days: self-derived, MEDIUM confidence "
+                    "(IMD-anchored onset). Onset=30 (IMD Agricultural Drought: four "
+                    "consecutive Drought Weeks ~28 days, rounded to align with the "
+                    "legacy threshold); saturation=90 (3/4 of JJAS monsoon length; "
+                    "SPI severe-drought territory). Reservoir-inflow / low-flow "
+                    "pathway for hydropower generation. Shared with Industrial "
+                    "section 7.3. Lens dossier section 11.2. Source masters: "
+                    "grid-first via EXTREME_RAINFALL_GRIDFIRST_SLUGS (CHG-0029). "
+                    "Rename to cdd_water_stress_pressure deferred (CHG-0024)."
+                ),
             ),
             _pressure_rule(
                 "r95p_interannual_variability_norm",
                 "Very wet precipitation variability pressure",
                 "r95p_interannual_variability",
-                absolute_weight=1.0,
-                change_weight=0.0,
+                absolute_weight=0.70,
+                change_weight=0.30,
+                impact_weight=0.0,
+                change_mode="relative_pct",
+                rule_weight=0.20,
                 source_mode="helper_master",
+                method_note=(
+                    "No impact band: interannual variability is a regime metric, "
+                    "not a direct danger threshold. Scored absolute+change only, "
+                    "absolute-dominant (0.70 vs 0.30) because the level of "
+                    "interannual very-wet-precipitation variability is the inflow-"
+                    "predictability signal for hydropower scheduling; change vs the "
+                    "historical baseline supplies the emergence component. Helper "
+                    "metric derived from yearly r95p_very_wet_precip as the "
+                    "coefficient of variation over each window; the historical "
+                    "baseline mirrors the Rx5day/CDD source-master baseline epoch. "
+                    "Lens dossier section 11.3. Helper provenance caveat (open under "
+                    "CHG-0024): grid-first vs polygon-first unresolved; CV vs sigma "
+                    "definition unresolved. Rename to r95p_interannual_variability "
+                    "deferred (CHG-0024)."
+                ),
             ),
         ),
     ),

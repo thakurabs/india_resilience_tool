@@ -2731,9 +2731,10 @@ bundle-dossier subsections (13.1 onward, in the structure used by Sections
 ## 14. Sector-wise - Asset Risk (Hydropower Plants)
 
 The Asset Risk (Hydropower Plants) lens methodology is documented in
-`docs/lens_scoring_methodology.md`, Section 11. It records **three
-methodology changes** vs the bundle as currently configured in
-`config/proposal_bundles.py`: an impact lens is added to Rx5day (same
+`docs/lens_scoring_methodology.md`, Section 11. As landed in CHG-0036 the
+bundle is on the explicit-weight lens model; the **three methodology
+changes** now in `config/proposal_bundles.py` are: an impact lens added to
+Rx5day (same
 self-derived 250-500 mm/5 day band as Industrial Section 7.2 and
 Infrastructure Section 9.2, low confidence); an impact lens is added to CDD
 (same IMD-Agricultural-Drought-anchored 30-90 day band as Industrial
@@ -2778,9 +2779,12 @@ canonical slug shared with Industrial Section 7.2 and Infrastructure Section
 with Industrial Section 7.3 and Thermal Section 10.1;
 `r95p_interannual_variability_norm` -> `r95p_interannual_variability` —
 cosmetic cleanup of `_norm` suffix). The `r95p_interannual_variability`
-metric also uses `helper_master` source mode; **the computation pipeline
-provenance (grid-first vs polygon-first; sigma vs CV definition) must be
-confirmed before production adoption**, also tracked under CHG-0024.
+metric also uses `helper_master` source mode; as landed in CHG-0036 the
+helper emits a hyphenated `__historical__{token}__mean` baseline column
+(epoch mirrored from the Rx5day/CDD source masters) so the R95p change lens
+is operational. **The helper computation provenance (grid-first vs
+polygon-first; sigma vs CV definition) must still be confirmed before
+production adoption**, also tracked under CHG-0024.
 
 All impact bands are plains/national defaults; zone refinement is deferred
 (BL-0020). GLOF / glacier-mass-balance hazard rule for Himalayan
