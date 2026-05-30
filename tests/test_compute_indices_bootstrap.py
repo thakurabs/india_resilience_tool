@@ -47,3 +47,28 @@ def test_discover_models_lightweight_uses_data_root(monkeypatch, tmp_path: Path)
     models = cli_common.discover_models_lightweight()
 
     assert models == ["ModelA"]
+
+
+def test_cleanup_policy_accepts_block_preserve() -> None:
+    args = cli_common.parse_args(["--level", "block", "--yearly-cleanup-policy", "preserve"])
+
+    assert args.yearly_cleanup_policy == "preserve"
+    assert cli_common.effective_yearly_cleanup_policy(args.level, args.yearly_cleanup_policy) == "preserve"
+
+
+def test_cleanup_policy_rejects_delete_for_district() -> None:
+    try:
+        cli_common.parse_args(["--level", "district", "--yearly-cleanup-policy", "delete_after_ensemble"])
+    except SystemExit as exc:
+        assert exc.code == 2
+    else:
+        raise AssertionError("expected parser rejection")
+
+
+def test_default_cleanup_policy_for_both_keeps_legacy_semantics() -> None:
+    args = cli_common.parse_args(["--level", "both"])
+
+    assert cli_common.effective_yearly_cleanup_policies(args.level, args.yearly_cleanup_policy) == {
+        "district": "preserve",
+        "block": "delete_after_ensemble",
+    }

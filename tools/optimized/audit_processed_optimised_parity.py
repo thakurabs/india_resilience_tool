@@ -34,6 +34,16 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Explicit parity report output path. Scoped --state runs leave the global report untouched unless this is provided.",
     )
+    parser.add_argument(
+        "--require-block-yearly-models",
+        action="store_true",
+        help="Require block yearly_models Parquet whenever selected block yearly_ensemble Parquet exists.",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit non-zero when error-severity audit issues are present.",
+    )
     return parser
 
 
@@ -51,6 +61,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         include_shared_admin_artifacts=bool(args.include_shared_admin_artifacts),
         write_report=not bool(args.no_report) and args.report_path is None,
         report_path=args.report_path.expanduser().resolve() if args.report_path else None,
+        require_block_yearly_models=bool(args.require_block_yearly_models),
     )
     print("PROCESSED OPTIMISED PARITY AUDIT")
     print(f"bundle_root: {report['bundle_root']}")
@@ -60,8 +71,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         for issue in report["issues"][:50]:
             print(
                 f"- {issue['stage']} | {issue['slug']} | {issue['level']} | {issue['target']} | "
+                f"severity={issue.get('severity', 'error')} | "
                 f"missing={','.join(issue.get('missing_columns') or [])}"
             )
+        if bool(args.strict) and any(issue.get("severity", "error") == "error" for issue in report["issues"]):
+            return 1
         return 1
     return 0
 

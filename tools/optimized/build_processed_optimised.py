@@ -2049,6 +2049,42 @@ def _table_has_required_columns(path: Path, required_columns: set[str]) -> tuple
     return not missing, missing
 
 
+
+def _issue(
+    *,
+    stage: str,
+    slug: str,
+    level: str,
+    target: Path | str,
+    missing_columns: list[str] | None = None,
+    severity: str = "error",
+    reason: str = "",
+) -> dict[str, str | list[str]]:
+    """Build one parity issue payload with a stable severity field."""
+    payload: dict[str, str | list[str]] = {
+        "stage": stage,
+        "slug": slug,
+        "level": level,
+        "target": str(target),
+        "missing_columns": missing_columns or [],
+        "severity": severity,
+    }
+    if reason:
+        payload["reason"] = reason
+    return payload
+
+
+def _state_names_for_block_yearly_model_audit(
+    *,
+    data_dir: Path,
+    slug: str,
+    requested_states: Optional[list[str]],
+) -> tuple[str, ...]:
+    if requested_states:
+        return tuple(str(state).strip() for state in requested_states if str(state).strip())
+    level_dir = resolve_optimized_metric_root(slug, data_dir=data_dir) / "yearly_ensemble" / "admin" / "block"
+    return tuple(sorted(path.stem.removeprefix("state=") for path in level_dir.glob("state=*.parquet")))
+
 def audit_processed_optimised_parity(
     *,
     data_dir: Path,
@@ -2060,6 +2096,7 @@ def audit_processed_optimised_parity(
     include_shared_admin_artifacts: bool = True,
     write_report: bool = True,
     report_path: Optional[Path] = None,
+    require_block_yearly_models: bool = False,
 ) -> dict:
     """Validate that optimized artifacts exist for every dashboard-visible legacy source."""
     effective_levels = _effective_levels(levels, states=states)
@@ -2173,6 +2210,41 @@ def audit_processed_optimised_parity(
                 "missing_columns": [],
             }
         )
+
+
+    if require_block_yearly_models and "block" in set(_selected_levels(effective_levels)):
+        for slug in _selected_slugs(metrics):
+            for state_name in _state_names_for_block_yearly_model_audit(
+                data_dir=data_dir,
+                slug=slug,
+                requested_states=states,
+            ):
+                ensemble_path = optimized_yearly_ensemble_path(
+                    slug,
+                    level="block",
+                    state=state_name,
+                    data_dir=data_dir,
+                )
+                models_path = optimized_yearly_models_path(
+                    slug,
+                    level="block",
+                    state=state_name,
+                    data_dir=data_dir,
+                )
+                if ensemble_path.exists() and not models_path.exists():
+                    issues.append(
+                        _issue(
+                            stage="yearly-models",
+                            slug=slug,
+                            level="block",
+                            target=models_path,
+                            severity="error",
+                            reason="block_yearly_ensemble_without_yearly_models",
+                        )
+                    )
+
+    for issue in issues:
+        issue.setdefault("severity", "error")
 
     report = {
         "bundle_root": str(bundle_root),
@@ -2433,6 +2505,7 @@ def build_processed_optimised_bundle(
                 include_shared_admin_artifacts=include_shared_admin_artifacts,
                 write_report=not scoped_admin_run and report_path is None,
                 report_path=report_path,
+                require_block_yearly_models=False,
             )
             print(
                 "PARITY AUDIT "

@@ -85,6 +85,27 @@ python -m tools.runs.prepare_dashboard climate-hazards --skip-optimised
 python -m tools.runs.prepare_dashboard climate-hazards --audit-only
 ```
 
+### Recover Telangana block model-member yearly artifacts
+
+Preflight disk headroom before running full-state block recovery because yearly-cleanup-policy preserve retains per-model yearly CSVs under IRT_DATA_DIR/processed/. Start with a one-metric pilot:
+
+python -m tools.pipeline.compute_indices_multiprocess --state Telangana --level block --overwrite --yearly-cleanup-policy preserve --metrics tas_annual_mean
+python -m tools.optimized.build_processed_optimised --state Telangana --level block --overwrite --prune-scope --skip-geometry --skip-context --metric tas_annual_mean
+
+Generate full-run metric flags from optimized yearly artifacts:
+
+python -m tools.diagnostics.list_optimized_yearly_metrics --state Telangana --level block --format args
+
+After compute succeeds, rebuild optimized block artifacts with the same repeated metric flags, then run strict parity:
+
+python -m tools.optimized.audit_processed_optimised_parity --state Telangana --level block --require-block-yearly-models --strict --report-path D:/projects/irt_data/processed_optimised/parity_report_telangana_block_yearly_models.json
+
+Cleanup policy contract:
+- default: block uses delete_after_ensemble; district, basin, and sub-basin use preserve
+- preserve: all levels keep per-model yearly CSVs
+- delete_after_ensemble: valid only with level block
+- compute marker schema version 5 and ensemble marker schema version 4 invalidate older cleanup-policy-blind markers
+
 ### Build population exposure masters
 
 ```bash

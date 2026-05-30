@@ -33,6 +33,7 @@ def _task(*, level: str = "block") -> CMP.ProcessingTask:
         common_years_hash="abc123",
         scope_name="Telangana",
         source_signatures={"eval": "sig-eval"},
+        yearly_cleanup_policy=CMP._compute_marker_yearly_cleanup_policy(level),
     )
 
 
@@ -98,7 +99,7 @@ def test_block_compute_marker_still_requires_matching_period_counts(monkeypatch)
     assert status.reason == "compute_marker_output_count_mismatch"
 
 
-def test_district_compute_marker_still_requires_exact_yearly_counts(monkeypatch) -> None:
+def test_district_compute_marker_reports_missing_preserved_yearly_files(monkeypatch) -> None:
     task = _task(level="district")
     monkeypatch.setattr(
         CMP,
@@ -126,7 +127,7 @@ def test_district_compute_marker_still_requires_exact_yearly_counts(monkeypatch)
     status = CMP.task_completion_marker_status(task)
 
     assert status.valid is False
-    assert status.reason == "compute_marker_output_count_mismatch"
+    assert status.reason == "yearly_files_missing_under_preserve_policy"
 
 
 def test_compute_marker_rejects_source_signature_drift(monkeypatch) -> None:
@@ -158,3 +159,97 @@ def test_compute_marker_rejects_source_signature_drift(monkeypatch) -> None:
 
     assert status.valid is False
     assert status.reason == "compute_marker_source_signatures_mismatch"
+
+
+def test_compute_marker_rejects_old_schema_even_with_matching_outputs(monkeypatch) -> None:
+    task = _task(level="block")
+    monkeypatch.setattr(
+        CMP,
+        "_load_marker_json",
+        lambda _path: {
+            "schema_version": CMP.COMPUTE_MARKER_SCHEMA_VERSION - 1,
+            "slug": task.slug,
+            "level": task.level,
+            "scope": task.scope_name,
+            "model": task.model,
+            "scenario": task.scenario,
+            "required_vars": list(task.required_vars),
+            "common_years_hash": task.common_years_hash,
+            "source_signatures": dict(task.source_signatures),
+            "boundary_path": "/tmp/boundary.geojson",
+            "boundary_mtime_ns": 123,
+            "yearly_file_count": 620,
+            "period_file_count": 620,
+            "yearly_cleanup_policy": task.yearly_cleanup_policy,
+        },
+    )
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda _level, _state: ("/tmp/boundary.geojson", 123))
+    monkeypatch.setattr(CMP, "_task_output_file_counts", lambda **_kwargs: (620, 620))
+
+    status = CMP.task_completion_marker_status(task)
+
+    assert status.valid is False
+    assert status.reason == "compute_marker_schema_mismatch"
+
+
+def test_compute_marker_rejects_policy_mismatch(monkeypatch) -> None:
+    task = _task(level="block")
+    monkeypatch.setattr(
+        CMP,
+        "_load_marker_json",
+        lambda _path: {
+            "schema_version": CMP.COMPUTE_MARKER_SCHEMA_VERSION,
+            "slug": task.slug,
+            "level": task.level,
+            "scope": task.scope_name,
+            "model": task.model,
+            "scenario": task.scenario,
+            "required_vars": list(task.required_vars),
+            "common_years_hash": task.common_years_hash,
+            "source_signatures": dict(task.source_signatures),
+            "boundary_path": "/tmp/boundary.geojson",
+            "boundary_mtime_ns": 123,
+            "yearly_file_count": 620,
+            "period_file_count": 620,
+            "yearly_cleanup_policy": "preserve",
+        },
+    )
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda _level, _state: ("/tmp/boundary.geojson", 123))
+    monkeypatch.setattr(CMP, "_task_output_file_counts", lambda **_kwargs: (620, 620))
+
+    status = CMP.task_completion_marker_status(task)
+
+    assert status.valid is False
+    assert status.reason == "yearly_cleanup_policy_mismatch"
+
+
+def test_preserve_compute_marker_reports_missing_yearly_files(monkeypatch) -> None:
+    task = _task(level="block")
+    task.yearly_cleanup_policy = "preserve"
+    monkeypatch.setattr(
+        CMP,
+        "_load_marker_json",
+        lambda _path: {
+            "schema_version": CMP.COMPUTE_MARKER_SCHEMA_VERSION,
+            "slug": task.slug,
+            "level": task.level,
+            "scope": task.scope_name,
+            "model": task.model,
+            "scenario": task.scenario,
+            "required_vars": list(task.required_vars),
+            "common_years_hash": task.common_years_hash,
+            "source_signatures": dict(task.source_signatures),
+            "boundary_path": "/tmp/boundary.geojson",
+            "boundary_mtime_ns": 123,
+            "yearly_file_count": 620,
+            "period_file_count": 620,
+            "yearly_cleanup_policy": "preserve",
+        },
+    )
+    monkeypatch.setattr(CMP, "_boundary_signature", lambda _level, _state: ("/tmp/boundary.geojson", 123))
+    monkeypatch.setattr(CMP, "_task_output_file_counts", lambda **_kwargs: (0, 620))
+
+    status = CMP.task_completion_marker_status(task)
+
+    assert status.valid is False
+    assert status.reason == "yearly_files_missing_under_preserve_policy"

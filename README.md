@@ -302,6 +302,21 @@ For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when the
 
 By default, the builder now parallelizes yearly-model and yearly-ensemble stages using roughly `80%` of available logical CPUs. Use `--workers 1` to force serial execution, or pass an explicit worker count when you want tighter control.
 
+Block yearly model-member recovery:
+- climate compute markers use schema version 5; ensemble markers use schema version 4
+- yearly-cleanup-policy default keeps legacy behavior: block per-model yearly CSVs are deleted after ensemble generation, while district, basin, and sub-basin yearly CSVs are preserved
+- yearly-cleanup-policy preserve keeps block per-model yearly CSVs so optimized yearly_models/admin/block can be rebuilt for model-member trend traces
+- yearly-cleanup-policy delete_after_ensemble is accepted only with level block
+- preserving block yearly CSVs can require substantial disk space; run a one-metric pilot before a full state recovery
+
+Telangana block recovery pilot:
+python -m tools.pipeline.compute_indices_multiprocess --state Telangana --level block --overwrite --yearly-cleanup-policy preserve --metrics tas_annual_mean
+python -m tools.optimized.build_processed_optimised --state Telangana --level block --overwrite --prune-scope --skip-geometry --skip-context --metric tas_annual_mean
+
+For a full Telangana block recovery, list optimized yearly metrics and pass the emitted flags to compute and optimized rebuild commands:
+python -m tools.diagnostics.list_optimized_yearly_metrics --state Telangana --level block --format args
+python -m tools.optimized.audit_processed_optimised_parity --state Telangana --level block --require-block-yearly-models --strict --report-path D:/projects/irt_data/processed_optimised/parity_report_telangana_block_yearly_models.json
+
 The optimized builder also supports level-filtered refreshes and state-scoped admin refreshes:
 
 ```bash

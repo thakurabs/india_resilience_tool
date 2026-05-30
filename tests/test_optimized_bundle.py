@@ -17,6 +17,7 @@ from india_resilience_tool.data.optimized_bundle import (
     optimized_geometry_path,
     optimized_master_sources_from_metric_root,
 )
+from tools.diagnostics.list_optimized_yearly_metrics import list_metrics as list_optimized_yearly_metrics
 from tools.optimized.build_processed_optimised import (
     BuildPlan,
     BuildProgress,
@@ -1483,3 +1484,64 @@ def test_audit_processed_optimised_state_scope_writes_only_explicit_scoped_repor
     assert report["issue_count"] == 0
     assert global_report.read_text(encoding="utf-8") == '{"global": true}'
     assert scoped_report.exists()
+
+
+def test_list_optimized_yearly_metrics_reports_state_block_metrics(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path, slug="tas_annual_mean")
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    assert list_optimized_yearly_metrics(data_dir=tmp_path, level="block", state="Telangana") == ["tas_annual_mean"]
+
+
+def test_strict_audit_requires_block_yearly_models_when_ensemble_exists(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+    _write_admin_legacy_metric_fixture(tmp_path, slug="tas_annual_mean")
+
+    build_processed_optimised_bundle(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+
+    models_path = (
+        tmp_path
+        / "processed_optimised"
+        / "metrics"
+        / "tas_annual_mean"
+        / "yearly_models"
+        / "admin"
+        / "block"
+        / "state=Telangana.parquet"
+    )
+    models_path.unlink()
+
+    report = audit_processed_optimised_parity(
+        data_dir=tmp_path,
+        metrics=["tas_annual_mean"],
+        levels=["block"],
+        states=["Telangana"],
+        include_geometry=False,
+        include_context=False,
+        write_report=False,
+        require_block_yearly_models=True,
+    )
+
+    assert any(
+        issue.get("severity") == "error"
+        and issue.get("reason") == "block_yearly_ensemble_without_yearly_models"
+        for issue in report["issues"]
+    )

@@ -15,6 +15,7 @@ LIGHTWEIGHT_SCENARIOS = {
     "ssp245": {"subdir": "ssp245/tas"},
     "ssp585": {"subdir": "ssp585/tas"},
 }
+YEARLY_CLEANUP_POLICIES = ("default", "preserve", "delete_after_ensemble")
 
 
 def default_workers_75pct() -> int:
@@ -46,6 +47,16 @@ def build_parser(*, default_workers: Optional[int] = None) -> argparse.ArgumentP
     parser.add_argument("--models", nargs="+", help="Filter to specific models")
     parser.add_argument("--scenarios", nargs="+", help="Filter to specific scenarios")
     parser.add_argument(
+        "--yearly-cleanup-policy",
+        choices=YEARLY_CLEANUP_POLICIES,
+        default="default",
+        help=(
+            "Per-model yearly CSV cleanup policy. default preserves district/basin/sub-basin "
+            "yearly CSVs and deletes block yearly CSVs after ensembles; preserve keeps yearly "
+            "CSVs for all levels; delete_after_ensemble is valid only for block runs."
+        ),
+    )
+    parser.add_argument(
         "--skip-existing",
         action="store_true",
         help="Skip compute tasks with validated completion markers and intact outputs.",
@@ -71,9 +82,54 @@ def build_parser(*, default_workers: Optional[int] = None) -> argparse.ArgumentP
     return parser
 
 
+def levels_for_cli_value(level: str) -> tuple[str, ...]:
+    """Return concrete compute levels represented by one CLI --level value."""
+    return ("district", "block") if str(level).strip() == "both" else (str(level).strip(),)
+
+
+def effective_yearly_cleanup_policy(level: str, requested: str = "default") -> str:
+    """Resolve the yearly cleanup policy for one concrete compute level."""
+    requested_norm = str(requested or "default").strip()
+    level_norm = str(level).strip()
+    if requested_norm == "default":
+        return "delete_after_ensemble" if level_norm == "block" else "preserve"
+    return requested_norm
+
+
+def effective_yearly_cleanup_policies(level: str, requested: str = "default") -> dict[str, str]:
+    """Return effective cleanup policies keyed by concrete level for a CLI request."""
+    return {
+        concrete_level: effective_yearly_cleanup_policy(concrete_level, requested)
+        for concrete_level in levels_for_cli_value(level)
+    }
+
+
+def validate_yearly_cleanup_policy_args(
+    args: argparse.Namespace,
+    *,
+    parser: argparse.ArgumentParser,
+) -> None:
+    """Reject cleanup-policy combinations that cannot be honored safely."""
+    requested = str(getattr(args, "yearly_cleanup_policy", "default") or "default").strip()
+    levels = levels_for_cli_value(str(getattr(args, "level", "")).strip())
+    if requested == "delete_after_ensemble" and any(level != "block" for level in levels):
+        parser.error("--yearly-cleanup-policy delete_after_ensemble is valid only with --level block")
+
+
 def parse_args(argv: Optional[Sequence[str]] = None, *, default_workers: Optional[int] = None) -> argparse.Namespace:
     """Parse CLI args using the shared parser."""
-    return build_parser(default_workers=default_workers).parse_args(argv)
+    parser = build_parser(default_workers=default_workers)
+    args = parser.parse_args(argv)
+    validate_yearly_cleanup_policy_args(args, parser=parser)
+    return args
+
+
+def format_effective_yearly_cleanup_policy(args: argparse.Namespace) -> str:
+    """Return a compact display string for the effective cleanup policy."""
+    policies = effective_yearly_cleanup_policies(args.level, args.yearly_cleanup_policy)
+    if len(policies) == 1:
+        return next(iter(policies.values()))
+    return ",".join(f"{level}:{policy}" for level, policy in policies.items())
 
 
 def emit_startup_banner(args: argparse.Namespace, *, stream) -> None:
@@ -88,6 +144,8 @@ def emit_startup_banner(args: argparse.Namespace, *, stream) -> None:
     stream.write(f"  models={models}\n")
     stream.write(f"  scenarios={scenarios}\n")
     stream.write(f"  workers={args.workers}\n")
+    stream.write(f"  yearly_cleanup_policy_raw={args.yearly_cleanup_policy}\n")
+    stream.write(f"  yearly_cleanup_policy_effective={format_effective_yearly_cleanup_policy(args)}\n")
     stream.write(f"  skip_existing={bool(args.skip_existing)} overwrite={bool(args.overwrite)}\n")
     stream.write("  source_inventory_cache=enabled\n")
     stream.flush()

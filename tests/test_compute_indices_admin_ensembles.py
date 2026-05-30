@@ -197,3 +197,23 @@ def test_compute_block_ensembles_respect_model_and_scenario_filters(tmp_path: Pa
     assert stats.written_count == 1
     assert (ensembles_root / "ADILABAD" / "BLOCK_A" / "historical" / "BLOCK_A_yearly_ensemble.csv").exists()
     assert not (ensembles_root / "ADILABAD" / "BLOCK_A" / "ssp245" / "BLOCK_A_yearly_ensemble.csv").exists()
+
+
+def test_compute_block_ensembles_preserve_keeps_valid_contributing_yearly_inputs(tmp_path: Path) -> None:
+    level_root = tmp_path / "Telangana" / "blocks"
+    ensembles_root = level_root / "ensembles"
+    first_model_path = level_root / "ADILABAD" / "BLOCK_A" / "ModelA" / "historical" / "BLOCK_A_yearly.csv"
+    second_model_path = level_root / "ADILABAD" / "BLOCK_A" / "ModelB" / "historical" / "BLOCK_A_yearly.csv"
+    invalid_model_path = level_root / "ADILABAD" / "BLOCK_A" / "ModelC" / "historical" / "BLOCK_A_yearly.csv"
+    _write_yearly_csv(first_model_path, rows=[{"year": 2000, "value": 1.0}])
+    _write_yearly_csv(second_model_path, rows=[{"year": 2000, "value": 3.0}])
+    _write_yearly_csv(invalid_model_path, rows=[{"district": "ADILABAD", "block": "BLOCK_A"}])
+
+    stats = CMP._compute_block_ensembles(level_root, ensembles_root, yearly_cleanup_policy="preserve")
+
+    assert stats.expected_output_count == 1
+    assert stats.written_count == 1
+    assert stats.failure_count == 0
+    assert first_model_path.exists()
+    assert second_model_path.exists()
+    assert invalid_model_path.exists()

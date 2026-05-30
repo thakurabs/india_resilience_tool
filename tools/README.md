@@ -448,3 +448,21 @@ Aqueduct methodology note:
 | Script | Purpose | Run |
 |---|---|---|
 | `tools/legacy/DONOTUSE_ArtparkGenerateReport.py` | Historical one-off report script (kept for reproducibility) | `python tools/legacy/DONOTUSE_ArtparkGenerateReport.py` |
+
+## Telangana Block Yearly Model Recovery
+
+Use explicit preserve cleanup when rebuilding block climate metrics that must feed dashboard model-member traces.
+
+python -m tools.pipeline.compute_indices_multiprocess --state Telangana --level block --overwrite --yearly-cleanup-policy preserve --metrics tas_annual_mean
+python -m tools.optimized.build_processed_optimised --state Telangana --level block --overwrite --prune-scope --skip-geometry --skip-context --metric tas_annual_mean
+
+Generate repeated metric flags from the optimized yearly inventory:
+python -m tools.diagnostics.list_optimized_yearly_metrics --state Telangana --level block --format args
+
+Run the strict state-scoped parity audit after rebuilding:
+python -m tools.optimized.audit_processed_optimised_parity --state Telangana --level block --require-block-yearly-models --strict --report-path D:/projects/irt_data/processed_optimised/parity_report_telangana_block_yearly_models.json
+
+Notes:
+- compute marker schema version is 5 and ensemble marker schema version is 4
+- default cleanup deletes block yearly CSVs after ensembles but preserves district, basin, and sub-basin yearly CSVs
+- preserve keeps block per-model yearly CSVs; budget disk before full-state runs
