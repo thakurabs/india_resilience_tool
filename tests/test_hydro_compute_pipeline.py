@@ -9,6 +9,7 @@ import pytest
 import xarray as xr
 from shapely.geometry import Polygon
 
+from india_resilience_tool.data.source_inventory import InventoryYearRecord, SourceInventoryShard
 from india_resilience_tool.compute.spi_adapter import Distribution, SPIResult
 import india_resilience_tool.compute.spi_adapter as spi_adapter
 from india_resilience_tool.utils.naming import hydro_fs_token
@@ -287,18 +288,32 @@ def test_build_processing_task_plan_tracks_metric_specific_unrunnable_reasons(
         path = tmp_path / f"{varname}_{model}"
         if varname == "tas":
             path.mkdir(parents=True, exist_ok=True)
+            (path / "2030.nc").write_text("ignored", encoding="utf-8")
         return path
 
     monkeypatch.setattr(CMP, "var_data_dir", _fake_var_data_dir)
     monkeypatch.setattr(
         CMP,
-        "yearly_files_for_dir",
-        lambda path: {2030: path / "2030.nc"} if path.exists() else {},
-    )
-    monkeypatch.setattr(
-        CMP,
-        "validated_year_files_for_var",
-        lambda path, _varname: ({2030: path / "2030.nc"}, {}) if path.exists() else ({}, {}),
+        "load_or_refresh_inventory_shard",
+        lambda _cache_root, *, data_dir, scenario, varname, model, allow_write, engines=(): SourceInventoryShard(
+            schema_version=1,
+            scenario=scenario,
+            varname=varname,
+            model=model,
+            records=(
+                InventoryYearRecord(
+                    year=2030,
+                    path=data_dir / "2030.nc",
+                    size=10,
+                    mtime_ns=1,
+                    engine="netcdf4",
+                    open_status=True,
+                    validation_reason="ok",
+                    var_present=True,
+                ),
+            ),
+            source_signature=f"{scenario}:{varname}:{model}",
+        ),
     )
 
     plan = CMP.build_processing_task_plan(

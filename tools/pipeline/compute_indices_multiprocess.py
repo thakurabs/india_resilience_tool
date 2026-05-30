@@ -144,7 +144,11 @@ from india_resilience_tool.utils.processed_io import (
     unlink_file,
     write_csv,
 )
-from tools.pipeline.compute_indices_cli_common import build_parser as build_compute_parser
+from tools.pipeline.compute_indices_cli_common import (
+    build_parser as build_compute_parser,
+    effective_yearly_cleanup_policy,
+    validate_yearly_cleanup_policy_args,
+)
 
 # -----------------------------------------------------------------------------
 # CLIMATE-INDICES PACKAGE INTEGRATION (SPI/SPEI)
@@ -3702,8 +3706,8 @@ def required_vars_for_metric(metric: dict) -> list[str]:
     return [str(v)] if v else []
 
 
-COMPUTE_MARKER_SCHEMA_VERSION = 4
-ENSEMBLE_MARKER_SCHEMA_VERSION = 3
+COMPUTE_MARKER_SCHEMA_VERSION = 5
+ENSEMBLE_MARKER_SCHEMA_VERSION = 4
 SKIP_REASON_MISSING_REQUIRED_VARS = "missing_required_vars"
 SKIP_REASON_NO_AVAILABLE_YEARS = "no_available_years"
 SKIP_REASON_NO_COMMON_YEARS = "no_common_years"
@@ -4023,8 +4027,8 @@ def _task_output_file_counts(
 
 
 def _compute_marker_yearly_cleanup_policy(level: AdminLevel) -> str:
-    """Return the yearly-output retention policy encoded in compute markers."""
-    return "delete_after_ensemble" if level == "block" else "preserve"
+    """Return the default yearly-output retention policy encoded in compute markers."""
+    return effective_yearly_cleanup_policy(level, "default")
 
 
 def _ensemble_output_count(
@@ -4034,6 +4038,7 @@ def _ensemble_output_count(
     scope_name: str,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> int:
     """Count ensemble yearly CSVs for one metric/level scope and filter slice."""
     ensembles_root = metric_root(slug) / scope_name / get_level_folder(level) / "ensembles"
@@ -5494,6 +5499,7 @@ def compute_ensembles_generic(
     slug: str | None = None,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> EnsembleBuildStats:
     """Compute ensemble statistics across models."""
     root = Path(output_root)
@@ -5534,6 +5540,7 @@ def compute_ensembles_generic(
             slug=slug,
             allowed_models=allowed_models,
             allowed_scenarios=allowed_scenarios,
+            yearly_cleanup_policy=yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level),
         )
     else:
         return _compute_district_ensembles(
@@ -5551,6 +5558,7 @@ def _compute_district_ensembles(
     slug: str | None = None,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> EnsembleBuildStats:
     """Compute ensembles for district-level data."""
     stats = EnsembleBuildStats()
@@ -5665,6 +5673,7 @@ def _compute_block_ensembles(
     slug: str | None = None,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str = "delete_after_ensemble",
 ) -> EnsembleBuildStats:
     """Compute ensembles for block-level data."""
     stats = EnsembleBuildStats()
@@ -5692,6 +5701,7 @@ def _compute_block_ensembles(
             
             for scenario in scenarios:
                 model_yearly = []
+                retained_inputs: list[Path] = []
                 expected_output = False
                 for m in model_dirs:
                     ycsv = m / scenario / f"{block}_yearly.csv"
@@ -5719,6 +5729,7 @@ def _compute_block_ensembles(
                             )
                             continue
                         model_yearly.append(cleaned)
+                        retained_inputs.append(ycsv)
                     except Exception as e:
                         message = (
                             f"district={district} block={block} model={m.name} "
@@ -5792,20 +5803,31 @@ def _compute_block_ensembles(
                     )
                     continue
 
-                # After successfully writing ensemble outputs, delete per-model yearly CSVs
                 out_csv = out_dir / f"{block}_yearly_ensemble.csv"
                 if path_exists(out_csv):
-                    for m in model_dirs:
-                        ycsv = m / scenario / f"{block}_yearly.csv"
-                        if path_exists(ycsv):
-                            try:
-                                unlink_file(ycsv)
-                            except Exception as e:
-                                logging.debug(
-                                    "Could not delete per-model block yearly CSV: %s (%s)",
-                                    ycsv,
-                                    e,
-                                )
+                    if yearly_cleanup_policy == "delete_after_ensemble":
+                        for m in model_dirs:
+                            ycsv = m / scenario / f"{block}_yearly.csv"
+                            if path_exists(ycsv):
+                                try:
+                                    unlink_file(ycsv)
+                                except Exception as e:
+                                    logging.debug(
+                                        "Could not delete per-model block yearly CSV: %s (%s)",
+                                        ycsv,
+                                        e,
+                                    )
+                    elif yearly_cleanup_policy == "preserve":
+                        missing_retained = [path for path in retained_inputs if not path_exists(path)]
+                        if missing_retained:
+                            message = (
+                                f"district={district} block={block} scenario={scenario}: "
+                                f"preserve policy lost retained yearly inputs: {len(missing_retained)}"
+                            )
+                            stats = _merge_ensemble_stats(
+                                stats,
+                                EnsembleBuildStats(failure_count=1, errors=(message,)),
+                            )
     return stats
 
 
@@ -5890,6 +5912,7 @@ def _compute_basin_ensembles(
     slug: str | None = None,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> EnsembleBuildStats:
     """Compute ensembles for basin-level data."""
     stats = EnsembleBuildStats()
@@ -6033,6 +6056,7 @@ def _compute_sub_basin_ensembles(
     slug: str | None = None,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> EnsembleBuildStats:
     """Compute ensembles for sub-basin-level data."""
     stats = EnsembleBuildStats()
@@ -6072,6 +6096,7 @@ def _compute_sub_basin_ensembles(
 
             for scenario in scenarios:
                 model_yearly = []
+                retained_inputs: list[Path] = []
                 expected_output = False
                 for m in model_dirs:
                     ycsv = m / scenario / f"{sub_basin}_yearly.csv"
@@ -6229,6 +6254,7 @@ class ProcessingTask:
     common_years_hash: str = ""
     scope_name: str = "Telangana"
     source_signatures: dict[str, str] = field(default_factory=dict)
+    yearly_cleanup_policy: str = "delete_after_ensemble"
 
 
 @dataclass(frozen=True)
@@ -6243,6 +6269,17 @@ class ProcessingTaskPlan:
     skipped_reasons_by_metric: dict[str, tuple[str, ...]]
 
 
+@dataclass(frozen=True)
+class SourceAvailability:
+    """Planner-local source inventory state for one model/scenario/variable."""
+
+    data_dir_exists: bool
+    raw_years: set[int]
+    valid_year_files: dict[int, Path]
+    invalid_year_files: dict[int, dict[str, Any]]
+    valid_years: set[int]
+
+
 def build_processing_task_plan(
     *,
     metrics_filter: Sequence[str] | None = None,
@@ -6250,6 +6287,7 @@ def build_processing_task_plan(
     scenarios_filter: Sequence[str] | None = None,
     level: AdminLevel = "district",
     state: str = "Telangana",
+    yearly_cleanup_policy: str = "delete_after_ensemble",
 ) -> ProcessingTaskPlan:
     """Return the exact runnable compute task universe for one level/scope."""
     metrics_to_process = [
@@ -6267,20 +6305,132 @@ def build_processing_task_plan(
     for _, metric in metrics_to_process:
         metric_root(metric["slug"])
 
-    years_cache: dict[tuple[str, str, str], set[int]] = {}
+    planning_started_at = time.perf_counter()
+    shard_cache: dict[tuple[str, str, str], SourceInventoryShard] = {}
+    availability_cache: dict[tuple[str, str, str], SourceAvailability] = {}
+    signature_cache: dict[tuple[str, str, str, tuple[str, ...]], str] = {}
+    source_availability_cache_hits = 0
+    signature_cache_hits = 0
     tasks: list[ProcessingTask] = []
     skipped_counts: dict[str, int] = defaultdict(int)
     skipped_reasons_by_metric: dict[str, set[str]] = defaultdict(set)
 
-    def _years_for(model_name: str, scenario_name: str, sconf: dict, varname: str) -> set[int]:
-        key = (model_name, scenario_name, varname)
-        if key in years_cache:
-            return years_cache[key]
-        d = var_data_dir(DATA_ROOT, sconf["subdir"], varname, model_name)
-        valid_year_files, _bad_year_files = validated_year_files_for_var(d, varname) if d.exists() else ({}, {})
-        yrs = set(valid_year_files.keys())
-        years_cache[key] = yrs
-        return yrs
+    def _shard_for(
+        *,
+        model_name: str,
+        scenario_name: str,
+        scenario_subdir: str,
+        varname: str,
+    ) -> SourceInventoryShard | None:
+        key = (scenario_name, varname, model_name)
+        if key in shard_cache:
+            return shard_cache[key]
+        data_dir = var_data_dir(DATA_ROOT, scenario_subdir, varname, model_name)
+        if not data_dir.exists():
+            return None
+        shard = _inventory_shard_for_var(
+            scenario_name=scenario_name,
+            varname=varname,
+            model=model_name,
+            data_dir=data_dir,
+            allow_write=True,
+        )
+        shard_cache[key] = shard
+        return shard
+
+    def _availability_for(
+        model_name: str,
+        scenario_name: str,
+        sconf: Mapping[str, Any],
+        varname: str,
+    ) -> SourceAvailability:
+        nonlocal source_availability_cache_hits
+        key = (scenario_name, varname, model_name)
+        cached = availability_cache.get(key)
+        if cached is not None:
+            source_availability_cache_hits += 1
+            return cached
+        data_dir = var_data_dir(DATA_ROOT, str(sconf["subdir"]), varname, model_name)
+        shard = _shard_for(
+            model_name=model_name,
+            scenario_name=scenario_name,
+            scenario_subdir=str(sconf["subdir"]),
+            varname=varname,
+        )
+        if shard is None:
+            availability = SourceAvailability(
+                data_dir_exists=data_dir.exists(),
+                raw_years=set(),
+                valid_year_files={},
+                invalid_year_files={},
+                valid_years=set(),
+            )
+        else:
+            valid_year_files = shard.valid_year_files()
+            availability = SourceAvailability(
+                data_dir_exists=True,
+                raw_years={int(record.year) for record in shard.records},
+                valid_year_files=valid_year_files,
+                invalid_year_files=shard.invalid_year_details(),
+                valid_years=set(valid_year_files),
+            )
+        availability_cache[key] = availability
+        return availability
+
+    def _role_signature(
+        *,
+        role_name: str,
+        scenario_name: str,
+        varnames: tuple[str, ...],
+        model_name: str,
+    ) -> str:
+        nonlocal signature_cache_hits
+        key = (role_name, scenario_name, model_name, varnames)
+        cached = signature_cache.get(key)
+        if cached is not None:
+            signature_cache_hits += 1
+            return cached
+        shards: dict[str, SourceInventoryShard] = {}
+        for varname in varnames:
+            shard = _shard_for(
+                model_name=model_name,
+                scenario_name=scenario_name,
+                scenario_subdir=f"{scenario_name}/tas",
+                varname=varname,
+            )
+            if shard is not None:
+                shards[varname] = shard
+        signature = _inventory_signature_for_role(role_name=role_name, shards=shards) if shards else ""
+        signature_cache[key] = signature
+        return signature
+
+    def _planner_role_source_signatures(
+        *,
+        metric: Mapping[str, Any],
+        model_name: str,
+        scenario_name: str,
+    ) -> dict[str, str]:
+        role_varnames = _metric_role_varnames(metric=metric, scenario=scenario_name, level=level)
+        signatures: dict[str, str] = {}
+        eval_signature = ""
+        for role_name, varnames in role_varnames.items():
+            resolved_scenario = "historical" if role_name != "eval" else scenario_name
+            role_signature = _role_signature(
+                role_name=role_name,
+                scenario_name=resolved_scenario,
+                varnames=tuple(str(varname) for varname in varnames),
+                model_name=model_name,
+            )
+            if not role_signature:
+                continue
+            if role_name == "eval":
+                eval_signature = role_signature
+            signatures[role_name] = role_signature
+        if "spi_calibration" not in signatures and eval_signature and scenario_name != "historical" and str(metric.get("compute") or "") in SPI_COMPUTE_NAMES:
+            signatures["spi_calibration"] = eval_signature
+        if "baseline" not in signatures and eval_signature and scenario_name != "historical" and str(metric.get("compute") or "") in PRECIP_PERCENTILE_COMPUTE_NAMES:
+            signatures["baseline"] = eval_signature
+        return signatures
 
     for model in models_to_process:
         for scenario, sconf in scenarios_to_process.items():
@@ -6295,15 +6445,10 @@ def build_processing_task_plan(
                 year_sets = []
                 source_invalid = False
                 for v in req_vars:
-                    d = var_data_dir(DATA_ROOT, sconf["subdir"], v, model)
-                    if not d.exists():
-                        year_sets.append(set())
-                        continue
-                    raw_years = yearly_files_for_dir(d)
-                    valid_year_files, _bad_year_files = validated_year_files_for_var(d, v)
-                    if raw_years and not valid_year_files:
+                    availability = _availability_for(model, scenario, sconf, v)
+                    if availability.raw_years and not availability.valid_year_files:
                         source_invalid = True
-                    year_sets.append(set(valid_year_files.keys()))
+                    year_sets.append(availability.valid_years)
                 if any(len(years) == 0 for years in year_sets):
                     reason = SKIP_REASON_INVALID_SOURCE_FILES if source_invalid else SKIP_REASON_NO_AVAILABLE_YEARS
                     skipped_counts[reason] += 1
@@ -6330,13 +6475,12 @@ def build_processing_task_plan(
                         required_vars=req_vars,
                         common_years_hash=_hash_common_years(sorted(common_years)),
                         scope_name=scope_name,
-                        source_signatures=_role_source_signatures(
+                        source_signatures=_planner_role_source_signatures(
                             metric=metric,
-                            model=model,
-                            scenario=scenario,
-                            level=level,
-                            allow_write=True,
+                            model_name=model,
+                            scenario_name=scenario,
                         ),
+                        yearly_cleanup_policy=yearly_cleanup_policy,
                     )
                 )
 
@@ -6348,6 +6492,20 @@ def build_processing_task_plan(
 
     for task in tasks:
         task.total_tasks = len(tasks)
+
+    planning_elapsed = time.perf_counter() - planning_started_at
+    logging.info(
+        "Task planning inventory cache: unique_source_availability_keys=%d "
+        "source_availability_cache_hits=%d signature_cache_hits=%d",
+        len(availability_cache),
+        source_availability_cache_hits,
+        signature_cache_hits,
+    )
+    logging.info(
+        "Task planning complete: tasks_built=%d elapsed_seconds=%.3f",
+        len(tasks),
+        planning_elapsed,
+    )
 
     return ProcessingTaskPlan(
         level=level,
@@ -6428,9 +6586,9 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
 
     yearly_expected = int(payload.get("yearly_file_count", -1))
     periods_expected = int(payload.get("period_file_count", -1))
-    yearly_cleanup_policy = str(
-        payload.get("yearly_cleanup_policy", _compute_marker_yearly_cleanup_policy(task.level))
-    ).strip()
+    yearly_cleanup_policy = str(payload.get("yearly_cleanup_policy", "")).strip()
+    if yearly_cleanup_policy != str(task.yearly_cleanup_policy).strip():
+        return MarkerValidationStatus(valid=False, reason="yearly_cleanup_policy_mismatch")
     yearly_actual, periods_actual = _task_output_file_counts(
         slug=task.slug,
         level=task.level,
@@ -6441,15 +6599,18 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
     yearly_counts_valid = yearly_actual == yearly_expected
     if (
         task.level == "block"
-        and yearly_cleanup_policy == "delete_after_ensemble"
+        and task.yearly_cleanup_policy == "delete_after_ensemble"
         and yearly_actual == 0
         and yearly_expected >= 0
     ):
         yearly_counts_valid = True
     if not yearly_counts_valid or periods_actual != periods_expected:
+        reason = "compute_marker_output_count_mismatch"
+        if task.yearly_cleanup_policy == "preserve" and yearly_actual != yearly_expected:
+            reason = "yearly_files_missing_under_preserve_policy"
         return MarkerValidationStatus(
             valid=False,
-            reason="compute_marker_output_count_mismatch",
+            reason=reason,
             detail=(
                 f"expected(yearly={yearly_expected}, periods={periods_expected}) "
                 f"actual(yearly={yearly_actual}, periods={periods_actual})"
@@ -6471,6 +6632,7 @@ def ensemble_completion_marker_status(
     scope_name: str,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> MarkerValidationStatus:
     """Return validator status for one ensemble marker."""
     marker_path = _filter_aware_ensemble_marker_path(
@@ -6502,6 +6664,9 @@ def ensemble_completion_marker_status(
         allowed_scenarios=allowed_scenarios,
     ):
         return MarkerValidationStatus(valid=False, reason="ensemble_marker_filter_scope_mismatch")
+    expected_cleanup_policy = yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level)
+    if str(payload.get("yearly_cleanup_policy", "")).strip() != str(expected_cleanup_policy).strip():
+        return MarkerValidationStatus(valid=False, reason="yearly_cleanup_policy_mismatch")
 
     expected = int(payload.get("expected_output_count", -1))
     actual = _ensemble_output_count(
@@ -6527,6 +6692,7 @@ def ensemble_completion_marker_valid(
     scope_name: str,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> bool:
     """Return True when one ensemble marker can safely skip rebuild."""
     return ensemble_completion_marker_status(
@@ -6535,6 +6701,7 @@ def ensemble_completion_marker_valid(
         scope_name=scope_name,
         allowed_models=allowed_models,
         allowed_scenarios=allowed_scenarios,
+        yearly_cleanup_policy=yearly_cleanup_policy,
     ).valid
 
 
@@ -6555,7 +6722,7 @@ def _write_task_completion_marker(task: ProcessingTask, *, output_meta: Optional
         "boundary_mtime_ns": int(boundary_mtime_ns),
         "yearly_file_count": int(output_meta.get("yearly_file_count", 0)),
         "period_file_count": int(output_meta.get("period_file_count", 0)),
-        "yearly_cleanup_policy": _compute_marker_yearly_cleanup_policy(task.level),
+        "yearly_cleanup_policy": task.yearly_cleanup_policy,
         "completed_at": time.time(),
     }
     _write_marker_json(
@@ -6578,6 +6745,7 @@ def _write_ensemble_completion_marker(
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
     expected_output_count: int,
+    yearly_cleanup_policy: str | None = None,
 ) -> None:
     boundary_path, boundary_mtime_ns = _boundary_signature(level, scope_name)
     payload = {
@@ -6592,6 +6760,7 @@ def _write_ensemble_completion_marker(
             allowed_scenarios=allowed_scenarios,
         ),
         "expected_output_count": int(expected_output_count),
+        "yearly_cleanup_policy": yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level),
         "completed_at": time.time(),
     }
     _write_marker_json(
@@ -6702,9 +6871,13 @@ def _worker_process_task(task: ProcessingTask) -> dict:
     return result
 
 def _compute_ensembles_for_metric(
-    args: tuple[str, AdminLevel, str, tuple[str, ...] | None, tuple[str, ...] | None]
+    args: tuple[str, AdminLevel, str, tuple[str, ...] | None, tuple[str, ...] | None, str] | tuple[str, AdminLevel, str, tuple[str, ...] | None, tuple[str, ...] | None]
 ) -> EnsembleJobResult:
-    slug, level, state, allowed_models, allowed_scenarios = args
+    if len(args) == 5:
+        slug, level, state, allowed_models, allowed_scenarios = args
+        yearly_cleanup_policy = _compute_marker_yearly_cleanup_policy(level)
+    else:
+        slug, level, state, allowed_models, allowed_scenarios, yearly_cleanup_policy = args
     try:
         stats = compute_ensembles_generic(
             metric_root(slug),
@@ -6713,6 +6886,7 @@ def _compute_ensembles_for_metric(
             slug=slug,
             allowed_models=allowed_models,
             allowed_scenarios=allowed_scenarios,
+            yearly_cleanup_policy=yearly_cleanup_policy,
         )
     except Exception as e:
         summary = f"{state}/{level}/{slug}: expected=0, wrote=0, failures=1, first_error={e}"
@@ -6767,6 +6941,7 @@ def _compute_ensembles_for_metric(
             allowed_models=allowed_models,
             allowed_scenarios=allowed_scenarios,
             expected_output_count=stats.expected_output_count,
+            yearly_cleanup_policy=yearly_cleanup_policy,
         )
     except Exception as e:
         summary = (
@@ -6817,17 +6992,20 @@ def run_pipeline_parallel(
     state: str = "Telangana",
     skip_existing: bool = False,
     overwrite: bool = False,
+    yearly_cleanup_policy: str | None = None,
 ) -> PipelineRunResult:
     """Run the pipeline with parallel processing."""
     setup_logging(verbose)
 
     try:
+        effective_cleanup_policy = yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level)
         task_plan = build_processing_task_plan(
             metrics_filter=metrics_filter,
             models_filter=models_filter,
             scenarios_filter=scenarios_filter,
             level=level,
             state=state,
+            yearly_cleanup_policy=effective_cleanup_policy,
         )
         metrics_to_process = [(i, m) for i, m in enumerate(METRICS) if m["slug"] in set(task_plan.selected_metrics)]
         models_to_process = [m for m in _get_models() if not models_filter or m in models_filter]
@@ -6863,12 +7041,17 @@ def run_pipeline_parallel(
                     tasks.append(task)
                     ensemble_needed_slugs.add(task.slug)
             for slug in {task.slug for task in runnable_tasks}:
+                ensemble_marker_kwargs: dict[str, Any] = {
+                    "slug": slug,
+                    "level": level,
+                    "scope_name": effective_state,
+                    "allowed_models": ensemble_models,
+                    "allowed_scenarios": ensemble_scenarios,
+                }
+                if effective_cleanup_policy != _compute_marker_yearly_cleanup_policy(level):
+                    ensemble_marker_kwargs["yearly_cleanup_policy"] = effective_cleanup_policy
                 if slug not in {task.slug for task in tasks} and not ensemble_completion_marker_valid(
-                    slug=slug,
-                    level=level,
-                    scope_name=effective_state,
-                    allowed_models=ensemble_models,
-                    allowed_scenarios=ensemble_scenarios,
+                    **ensemble_marker_kwargs,
                 ):
                     ensemble_needed_slugs.add(slug)
             if skipped_existing:
@@ -6893,6 +7076,7 @@ def run_pipeline_parallel(
         logging.info(f"Metrics: {len(metrics_to_process)}, Models: {len(models_to_process)}, Scenarios: {len(scenarios_to_process)}")
         logging.info(f"Runnable tasks: {len(task_plan.tasks)}, Tasks to execute: {len(tasks)}, Workers: {num_workers}")
         logging.info(f"SPI/SPEI implementation: {spi_impl}")
+        logging.info(f"Yearly cleanup policy: {effective_cleanup_policy}")
         logging.info("=" * 60)
 
         if not tasks and not ensemble_needed_slugs:
@@ -6951,7 +7135,7 @@ def run_pipeline_parallel(
         logging.info("Building ensembles...")
 
         ensemble_args = [
-            (slug, level, effective_state, ensemble_models, ensemble_scenarios)
+            (slug, level, effective_state, ensemble_models, ensemble_scenarios, effective_cleanup_policy)
             for slug in sorted(ensemble_needed_slugs)
         ]
         ensemble_results: list[EnsembleJobResult] = []
@@ -6981,6 +7165,7 @@ def run_pipeline_parallel(
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_compute_parser(default_workers=DEFAULT_WORKERS)
     args = parser.parse_args(argv)
+    validate_yearly_cleanup_policy_args(args, parser=parser)
     
     # Handle SPI implementation + distribution flags
     global USE_CLIMATE_INDICES_PACKAGE
@@ -7016,6 +7201,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     setup_logging(args.verbose)
 
     levels_to_run = ["district", "block"] if args.level == "both" else [args.level]
+    cleanup_policies_by_level = {
+        lvl: effective_yearly_cleanup_policy(lvl, args.yearly_cleanup_policy)
+        for lvl in levels_to_run
+    }
     total_runs = len(levels_to_run)
     run_results: list[PipelineRunResult] = []
 
@@ -7035,6 +7224,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 state=args.state,
                 skip_existing=bool(args.skip_existing),
                 overwrite=bool(args.overwrite),
+                yearly_cleanup_policy=cleanup_policies_by_level[lvl],
             )
         )
 
