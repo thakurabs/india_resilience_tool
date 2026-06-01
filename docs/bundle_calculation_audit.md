@@ -1450,7 +1450,9 @@ TN90p and WSDI reuse Heat Risk v2 percentile-baseline machinery unchanged: basel
 
 Stull Twb is an approximation. It is suitable for climate-screening and relative prioritization, but it is not a full psychrometric wet-bulb calculation and should not be interpreted as an occupational WBGT standard.
 
-WBD, WBGT, and simplified WBGT metrics remain registered for backward compatibility and diagnostics, but they are not Heat Stress domain members and are not scored in `composite_heat_stress` v2.
+WBD legacy metrics remain registered for backward compatibility only; they are not Heat Stress domain members and are not scored.
+
+Shaded WBGT and Outdoor sWBGT (8 slugs: annual mean plus ≥28/30/32°C threshold days for each formulation) are **diagnostics visible under the Heat Stress domain** but are intentionally **not scored** in `composite_heat_stress` v2. They are derivatives of inputs already in the composite — Shaded WBGT = 0.7·Twb_stull + 0.3·tas; Outdoor sWBGT = 0.567·tas + 0.393·e + 3.94 — so scoring them alongside `twb_*` would double-count humid-heat signal through correlated regressors. They are surfaced for inspection against ISO 7243-style occupational thresholds (28/30/32°C ≈ light/moderate/heavy work bands) without altering bundle weighting. Note that these slugs are not part of `HEAT_STRESS_GRIDFIRST_SLUGS` and therefore use the legacy admin-first compute path, not the v2 grid-first cache.
 
 ### 5.4 Normalization and Risk Interpretation
 

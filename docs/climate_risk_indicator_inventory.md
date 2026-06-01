@@ -45,7 +45,7 @@ This section lists the metrics currently encoded in the dashboard registry and a
 | `tn90p_warm_nights_pct` | Warm Nights (TN90p) | Percent of nights above the rolling 90th percentile baseline; Heat Risk v2 shared baseline path |
 | `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | Warm-spell days above the 90th percentile baseline; Heat Risk v2 shared baseline path, minimum spell length `6` days |
 
-WBD, WBGT, and simplified WBGT slugs remain registered legacy diagnostics, but they are no longer Heat Stress domain members or `composite_heat_stress` scoring inputs.
+WBD legacy slugs remain registered for backward compatibility and are not Heat Stress domain members. WBGT and simplified WBGT slugs (8 total: Shaded WBGT and Outdoor sWBGT, each with annual mean and ≥28/30/32°C threshold-day counts) are listed under the Heat Stress domain as **diagnostics only** — visible for inspection, not scored in `composite_heat_stress` (which would double-count Twb-based humid-heat signal). These slugs use the legacy admin-first compute path, not the v2 grid-first cache.
 
 ### 1.3 Cold Risk
 

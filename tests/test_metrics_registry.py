@@ -152,6 +152,14 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
         "wsdi_warm_spell_days",
+        "wbgt_shade_stull_annual_mean",
+        "wbgt_shade_stull_days_ge_28",
+        "wbgt_shade_stull_days_ge_30",
+        "wbgt_shade_stull_days_ge_32",
+        "swbgt_empirical_annual_mean",
+        "swbgt_empirical_days_ge_28",
+        "swbgt_empirical_days_ge_30",
+        "swbgt_empirical_days_ge_32",
     ]
     assert "wbd_le_6" not in heat_stress_metrics
 
@@ -160,7 +168,7 @@ def test_heat_stress_gridfirst_slugs_do_not_overlap_heat_risk_gridfirst_slugs() 
     assert HEAT_STRESS_GRIDFIRST_SLUGS & HEAT_RISK_GRIDFIRST_SLUGS == set()
 
 
-def test_wbgt_and_swbgt_metrics_registered_but_not_under_heat_stress() -> None:
+def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
     expected = {
         "wbgt_shade_stull_annual_mean": (
             "Shaded WBGT (Annual Mean)",
@@ -208,7 +216,9 @@ def test_wbgt_and_swbgt_metrics_registered_but_not_under_heat_stress() -> None:
 
     for slug, (label, compute, value_col) in expected.items():
         assert slug in METRICS_BY_SLUG
-        assert slug not in heat_stress_metrics
+        # Diagnostics: visible under Heat Stress domain. NOT scored in
+        # composite_heat_stress (asserted below via bundle_weights).
+        assert slug in heat_stress_metrics
 
         spec = METRICS_BY_SLUG[slug]
         assert spec.label == label
@@ -231,6 +241,15 @@ def test_wbgt_and_swbgt_metrics_registered_but_not_under_heat_stress() -> None:
             assert "solar radiation" in spec.description.lower()
             assert "wind speed" in spec.description.lower()
             assert "black-globe temperature" in spec.description.lower()
+
+    from india_resilience_tool.config.bundle_weights import LANDING_BUNDLE_WEIGHTS
+
+    scored_slugs = {entry.metric_slug for entry in LANDING_BUNDLE_WEIGHTS["Heat Stress"]}
+    for slug in expected:
+        assert slug not in scored_slugs, (
+            f"{slug} is a Heat Stress diagnostic and must not be a scored input "
+            "in composite_heat_stress (would double-count Twb-based humid-heat signal)."
+        )
 
 
 def test_wbd_legacy_metrics_registered_but_not_under_heat_stress() -> None:

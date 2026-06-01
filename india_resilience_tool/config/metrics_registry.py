@@ -2747,6 +2747,19 @@ DOMAINS: dict[str, list[str]] = {
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
         "wsdi_warm_spell_days",
+        # WBGT/SWBGT diagnostics: visible under Heat Stress for inspection,
+        # NOT scored in composite_heat_stress (bundle_weights.py unchanged).
+        # Shaded WBGT = 0.7*Twb_stull + 0.3*tas; Outdoor sWBGT uses tas +
+        # vapour pressure. Both are derivatives of inputs already in the
+        # composite, so scoring them would double-count humid-heat signal.
+        "wbgt_shade_stull_annual_mean",
+        "wbgt_shade_stull_days_ge_28",
+        "wbgt_shade_stull_days_ge_30",
+        "wbgt_shade_stull_days_ge_32",
+        "swbgt_empirical_annual_mean",
+        "swbgt_empirical_days_ge_28",
+        "swbgt_empirical_days_ge_30",
+        "swbgt_empirical_days_ge_32",
     ],
     "Cold Risk": [
         "composite_cold_risk",
