@@ -134,11 +134,14 @@ Temperature unit handling:
   degrees Celsius.
 
 Current spatial aggregation:
-- For each geography polygon, the pipeline masks grid cells to the unit and
-  computes a daily spatial mean over `lat` and `lon`.
-- The index functions then operate on that polygon-average daily time series.
-- This means localized hot pockets can be diluted before threshold and spell
-  calculations are performed.
+- Admin `district` and `block` now compute these five metrics grid-first:
+  annual or seasonal cell summaries are computed before area-weighted polygon
+  aggregation.
+- Hydro `basin` and `sub_basin` retain the legacy polygon-average-first path
+  for these five metrics in CHG-0038.
+- The older polygon-average-first method can dilute localized hot pockets
+  before threshold and spell calculations; that is why the admin path was
+  migrated.
 
 #### Annual Mean Temperature: `tas_annual_mean`
 
@@ -147,8 +150,8 @@ Output base column: `annual_tas_mean_C`
 Unit: `deg C`
 
 Formula:
-- Compute polygon daily mean `tas`.
-- Average across all days in the year.
+- Compute the annual mean `tas` for each climate grid cell.
+- Area-weight finite cell means to the target admin polygon.
 - Convert Kelvin to degrees Celsius.
 
 Interpretation:
@@ -163,8 +166,9 @@ Unit: `deg C`
 
 Formula:
 - Select March, April, and May.
-- Compute polygon daily mean `tasmax`.
-- Average selected daily maximum temperatures.
+- Compute the seasonal mean `tasmax` for each climate grid cell using the
+  month filter inside the cellwise path.
+- Area-weight finite cell means to the target admin polygon.
 - Convert Kelvin to degrees Celsius.
 
 Interpretation:
@@ -179,8 +183,9 @@ Unit: `deg C`
 
 Formula:
 - Select March, April, and May.
-- Compute polygon daily mean `tas`.
-- Average selected daily mean temperatures.
+- Compute the seasonal mean `tas` for each climate grid cell using the month
+  filter inside the cellwise path.
+- Area-weight finite cell means to the target admin polygon.
 - Convert Kelvin to degrees Celsius.
 
 Interpretation:
@@ -225,7 +230,8 @@ Output base column: `days_tx_ge_30C`
 Unit: `days`
 
 Formula:
-- Count days where polygon daily mean `tasmax >= 30 deg C`.
+- Count cell-days where `tasmax >= 30 deg C`.
+- Area-weight finite cell counts to the target admin polygon.
 
 Interpretation:
 - Annual frequency of hot days.
@@ -251,7 +257,8 @@ Output base column: `tropical_nights_gt_25C`
 Unit: `days`
 
 Formula:
-- Count nights where polygon daily mean `tasmin > 25 deg C`.
+- Count cell-days where `tasmin > 25 deg C`.
+- Area-weight finite cell counts to the target admin polygon.
 
 Current configuration:
 - The bundle intentionally uses `TN > 25 deg C` for the Indian Heat Risk

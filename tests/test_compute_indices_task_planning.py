@@ -80,6 +80,31 @@ def _configure_planner(
     monkeypatch.setattr(CMP, "var_data_dir", _fake_var_data_dir)
 
 
+def test_metric_role_varnames_uses_level_aware_percentile_and_drought_baselines() -> None:
+    rainfall_metric = {
+        "slug": "r99p_extreme_wet_precip",
+        "var": "pr",
+        "compute": "percentile_precipitation_total",
+        "params": {"percentile": 99},
+    }
+    drought_metric = {
+        "slug": "spi3_count_months_lt_minus1",
+        "var": "pr",
+        "compute": "standardised_precipitation_index",
+        "params": {"annual_aggregation": "count_months_lt"},
+    }
+
+    district_rainfall_roles = CMP._metric_role_varnames(metric=rainfall_metric, scenario="ssp585", level="district")
+    basin_rainfall_roles = CMP._metric_role_varnames(metric=rainfall_metric, scenario="ssp585", level="basin")
+    district_drought_roles = CMP._metric_role_varnames(metric=drought_metric, scenario="ssp585", level="district")
+    basin_drought_roles = CMP._metric_role_varnames(metric=drought_metric, scenario="ssp585", level="basin")
+
+    assert district_rainfall_roles["baseline"] == ("pr",)
+    assert "baseline" not in basin_rainfall_roles
+    assert district_drought_roles["baseline"] == ("pr",)
+    assert "baseline" not in basin_drought_roles
+
+
 def test_build_processing_task_plan_reuses_source_inventory_per_unique_key(
     tmp_path: Path,
     monkeypatch,

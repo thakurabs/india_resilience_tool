@@ -68,8 +68,10 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.pipeline.compute_indices_multiprocess --level basin --metrics <slug>` | Build basin outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics <slug>` | Build sub-basin outputs |
 | `python -m tools.pipeline.build_spatial_weights --help` | Build private Heat Risk v2 grid-first spatial-weight caches under `processed/_internal/spatial_weights/`; the builder resolves defaults from the effective `--data-dir`, skips valid existing caches, and requires `--overwrite` to replace stale ones |
-| `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics spi3_max_spell_lt_minus1` | Build a Drought Risk v2 grid-first duration metric; private annual/period NetCDF caches are persisted under `processed/_internal/drought_risk/grid_metrics/` |
-| `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics pr_max_1day_precip` | Build an Extreme Rainfall v2 admin grid-first metric; private annual grids and R95p thresholds are persisted under `processed/_internal/extreme_rainfall/` |
+| `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics spi3_max_spell_lt_minus1` | Build a Drought Risk v2 grid-first admin metric; the active bundle's six event/spell slugs and `spi3_count_months_lt_minus1` now use admin district/block grid-first paths, while hydro remains legacy |
+| `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics pr_max_1day_precip` | Build an Extreme Rainfall v2 admin grid-first metric; private annual grids plus `p95` / `p99` percentile thresholds are persisted under `processed/_internal/extreme_rainfall/` |
+
+CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variability` remain unchanged and out of scope.
 | `python -m tools.subbasin_shp_explore --help` | Inspect/repair/export hydro boundaries |
 | `python -m tools.geodata.build_district_subbasin_crosswalk --overwrite` | Build district ↔ sub-basin crosswalk CSV |
 | `python -m tools.geodata.build_block_subbasin_crosswalk --overwrite` | Build block ↔ sub-basin crosswalk CSV |

@@ -102,11 +102,11 @@ from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
 from india_resilience_tool.compute.heat_risk_gridfirst import (
     DEFAULT_BASELINE_YEARS as HEAT_RISK_GRIDFIRST_BASELINE_YEARS,
     GRIDFIRST_BASELINE_THRESHOLD_COMPUTES as HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES,
-    HEAT_RISK_GRIDFIRST_SLUGS,
     build_area_weights as build_heat_risk_area_weights,
     compute_heat_risk_rows_for_metric,
     coverage_from_weights as heat_risk_coverage_from_weights,
     dataset_grid_spec as heat_risk_dataset_grid_spec,
+    is_heat_risk_gridfirst,
     read_spatial_weights_cache as read_heat_risk_spatial_weights_cache,
     write_spatial_weights_cache as write_heat_risk_spatial_weights_cache,
 )
@@ -116,12 +116,12 @@ from india_resilience_tool.compute.heat_stress_gridfirst import (
     stull_twb_c,
 )
 from india_resilience_tool.compute.drought_risk_gridfirst import (
-    DROUGHT_GRIDFIRST_SLUGS,
     compute_drought_risk_rows_for_metric,
+    is_drought_gridfirst,
 )
 from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
-    EXTREME_RAINFALL_GRIDFIRST_SLUGS,
     compute_extreme_rainfall_rows_for_metric,
+    is_extreme_rainfall_gridfirst,
 )
 from india_resilience_tool.compute.cold_risk_gridfirst import (
     COLD_RISK_GRIDFIRST_SLUGS,
@@ -2094,11 +2094,15 @@ def _metric_role_varnames(
     if compute_name in {"seasonal_mean", "seasonal_min"} and months == {1, 2, 12} and primary_var:
         roles["historical_prev_dec"] = (primary_var,)
     if primary_var:
-        if metric.get("slug") in HEAT_RISK_GRIDFIRST_SLUGS and compute_name in HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
+        if is_heat_risk_gridfirst(str(metric.get("slug") or ""), level) and compute_name in HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
             roles["baseline"] = (primary_var,)
-        if metric.get("slug") in DROUGHT_GRIDFIRST_SLUGS:
+        if is_drought_gridfirst(str(metric.get("slug") or ""), level):
             roles["baseline"] = (primary_var,)
-        if level in {"district", "block"} and metric.get("slug") in {"r95p_very_wet_precip", "r95ptot_contribution_pct"}:
+        if is_extreme_rainfall_gridfirst(str(metric.get("slug") or ""), level) and metric.get("slug") in {
+            "r95p_very_wet_precip",
+            "r99p_extreme_wet_precip",
+            "r95ptot_contribution_pct",
+        }:
             roles["baseline"] = (primary_var,)
     if metric.get("slug") in COLD_RISK_GRIDFIRST_SLUGS and primary_var:
         from india_resilience_tool.compute.cold_risk_gridfirst import (
@@ -4451,7 +4455,7 @@ def process_metric_for_model_scenario(
         ds_sample.close()
         return
 
-    if slug in HEAT_RISK_GRIDFIRST_SLUGS:
+    if is_heat_risk_gridfirst(slug, level):
         try:
             grid = heat_risk_dataset_grid_spec(ds_sample)
             ds_sample.close()
@@ -4750,7 +4754,7 @@ def process_metric_for_model_scenario(
             logging.debug(traceback.format_exc())
             raise
 
-    if level in {"district", "block"} and slug in EXTREME_RAINFALL_GRIDFIRST_SLUGS:
+    if is_extreme_rainfall_gridfirst(slug, level):
         try:
             grid = gridfirst_dataset_grid_spec(ds_sample)
             ds_sample.close()
@@ -4797,7 +4801,7 @@ def process_metric_for_model_scenario(
                 return
 
             baseline_year_to_paths: dict[int, dict[str, Path]]
-            if slug in {"r95p_very_wet_precip", "r95ptot_contribution_pct"}:
+            if slug in {"r95p_very_wet_precip", "r99p_extreme_wet_precip", "r95ptot_contribution_pct"}:
                 baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
                     metric=metric,
                     primary_var=primary_var,
@@ -4849,7 +4853,7 @@ def process_metric_for_model_scenario(
             logging.debug(traceback.format_exc())
             raise
 
-    if slug in DROUGHT_GRIDFIRST_SLUGS:
+    if is_drought_gridfirst(slug, level):
         try:
             grid = gridfirst_dataset_grid_spec(ds_sample)
             ds_sample.close()

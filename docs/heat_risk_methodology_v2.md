@@ -10,6 +10,11 @@ This methodology is delivered by the lean Heat Risk v2 plan and is intentionally
 
 Applies to Heat Risk metric slugs in `india_resilience_tool/config/metrics_registry.py`:
 
+- `tas_annual_mean`
+- `tasmax_summer_mean`
+- `tas_summer_mean`
+- `txge30_hot_days`
+- `tasmin_tropical_nights_gt25`
 - TX90p hot-days percentage
 - TN90p warm-nights percentage
 - WSDI warm-spell duration indicator
@@ -41,9 +46,9 @@ v2: per-cell weights are `area(polygon ∩ cell)` in an equal-area projection (E
 
 Aggregation rules per metric semantic bucket:
 
-- **Mean-style** (areal mean of a per-cell quantity): `aggregated = sum(w_i * x_i) / sum(w_i)` over cells with valid data.
+- **Mean-style** (areal mean of a per-cell quantity): `aggregated = sum(w_i * x_i) / sum(w_i)` over cells with valid data. This now covers `tas_annual_mean`, `tasmax_summer_mean`, `tas_summer_mean`, `txx_annual_max`, and `tnx_annual_max`.
 - **Percent-of-days** (TX90p, TN90p): `aggregated = 100 * sum_i(w_i * exceed_days_i) / sum_i(w_i * valid_days_i)`. Denominator is the area-weighted count of *valid* days, not nominal days. Cells with missing days reduce both numerator and denominator proportionally.
-- **Count-spell** (WSDI, HWFI-days): area-weighted mean of per-cell annual counts.
+- **Count-style** (`txge30_hot_days`, `tasmin_tropical_nights_gt25`, WSDI, HWFI-days): area-weighted mean of per-cell annual counts.
 - **Areal extreme** (TXx, TNx, HWA, HWFI-events): area-weighted mean of per-cell annual extremes. See §6 for the naming caveat.
 
 ### 2.3 Quantile method — linear

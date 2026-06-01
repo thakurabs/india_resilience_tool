@@ -34,6 +34,7 @@ EXTREME_RAINFALL_GRIDFIRST_SLUGS = frozenset(
         "pr_max_5day_precip",
         "r20mm_very_heavy_precip_days",
         "r95p_very_wet_precip",
+        "r99p_extreme_wet_precip",
         "r95ptot_contribution_pct",
         "cwd_consecutive_wet_days",
         "pr_consecutive_dry_days_lt1mm",
@@ -46,6 +47,14 @@ R95P_QUANTILE_METHOD = "linear"
 R95P_STRICT_EXCEEDANCE = True
 MIN_DAILY_COVERAGE_FRACTION = 0.90
 MIN_POLYGON_CELL_WEIGHT_FRACTION = 0.50
+
+
+def is_extreme_rainfall_gridfirst(slug: str, level: str) -> bool:
+    """Return whether an Extreme Rainfall slug should use admin-only grid-first dispatch."""
+
+    slug_norm = str(slug or "").strip()
+    level_norm = str(level or "").strip().lower()
+    return level_norm in {"district", "block"} and slug_norm in EXTREME_RAINFALL_GRIDFIRST_SLUGS
 
 
 def _drop_feb29(da: xr.DataArray) -> xr.DataArray:
@@ -124,14 +133,14 @@ def annual_extreme_rainfall_grid(
         value = _cwd(daily)
     elif slug == "pr_consecutive_dry_days_lt1mm":
         value = _cdd(daily)
-    elif slug in {"r95p_very_wet_precip", "r95ptot_contribution_pct"}:
+    elif slug in {"r95p_very_wet_precip", "r99p_extreme_wet_precip", "r95ptot_contribution_pct"}:
         if threshold is None:
-            raise ValueError(f"{slug} requires baseline R95p threshold grid")
+            raise ValueError(f"{slug} requires baseline percentile threshold grid")
         exceed = daily > threshold
         r95p = daily.where(exceed & daily.notnull()).sum(dim="time", skipna=True)
         wet_total = daily.where((daily >= R95P_WET_DAY_MM) & daily.notnull()).sum(dim="time", skipna=True)
         wet_days = ((daily >= R95P_WET_DAY_MM) & daily.notnull()).sum(dim="time")
-        if slug == "r95p_very_wet_precip":
+        if slug in {"r95p_very_wet_precip", "r99p_extreme_wet_precip"}:
             value = r95p
         else:
             value = xr.where(wet_days > 0, 100.0 * r95p / wet_total, 0.0)
@@ -159,6 +168,12 @@ def compute_r95p_threshold_grid(
     return xr.Dataset({"value": threshold})
 
 
+def percentile_threshold_cache_path(cache_root: Path, *, model: str, grid_id: str, percentile: int) -> Path:
+    """Return the percentile-threshold cache path for the locked admin v2 baseline."""
+
+    return Path(cache_root) / "thresholds" / model / grid_id / "baseline=1990-2010" / f"p{int(percentile)}.nc"
+
+
 def extreme_rainfall_grid_metric_cache_path(
     cache_root: Path,
     *,
@@ -174,7 +189,7 @@ def extreme_rainfall_grid_metric_cache_path(
 
 def r95p_threshold_cache_path(cache_root: Path, *, model: str, grid_id: str) -> Path:
     """Return the R95p threshold cache path for the locked admin v2 baseline."""
-    return Path(cache_root) / "thresholds" / model / grid_id / "baseline=1990-2010" / "p95.nc"
+    return percentile_threshold_cache_path(cache_root, model=model, grid_id=grid_id, percentile=95)
 
 
 def _add_unit_fields(row: dict[str, object], *, level: str, unit_key: str) -> None:
@@ -198,6 +213,7 @@ def _threshold_grid(
     grid_id: str,
     baseline_year_to_paths: Mapping[int, Mapping[str, Path]],
     var: str,
+    percentile: int,
     cache_root: Path | None,
 ) -> xr.Dataset:
     baseline_years = [
@@ -208,23 +224,33 @@ def _threshold_grid(
     input_hashes = _hash_paths(_flatten_paths(baseline_year_to_paths, baseline_years, var))
     sidecar = {
         "method_version": EXTREME_RAINFALL_GRIDFIRST_METHOD_VERSION,
-        "artifact_type": "r95p-threshold",
+        "artifact_type": "percentile-threshold",
         "model": model,
         "scenario": "historical",
         "grid_id": grid_id,
         "baseline_years": [R95P_BASELINE_YEARS[0], R95P_BASELINE_YEARS[1]],
         "wet_day_mm": R95P_WET_DAY_MM,
         "quantile_method": R95P_QUANTILE_METHOD,
-        "percentile": R95P_PERCENTILE,
+        "percentile": int(percentile),
+        "strict_exceedance": R95P_STRICT_EXCEEDANCE,
         "input_file_hashes": input_hashes,
     }
-    cache_path = r95p_threshold_cache_path(Path(cache_root), model=model, grid_id=grid_id) if cache_root is not None else None
+    cache_path = (
+        percentile_threshold_cache_path(Path(cache_root), model=model, grid_id=grid_id, percentile=percentile)
+        if cache_root is not None
+        else None
+    )
     if cache_path is not None:
         cached = read_grid_metric_cache(cache_path, expected_sidecar=sidecar)
         if cached is not None:
             return cached
     baseline_da = concat_years(baseline_year_to_paths, var, baseline_years)
-    ds = compute_r95p_threshold_grid(baseline_da)
+    ds = compute_r95p_threshold_grid(
+        baseline_da,
+        wet_day_mm=R95P_WET_DAY_MM,
+        percentile=percentile,
+        quantile_method=R95P_QUANTILE_METHOD,
+    )
     if cache_path is not None:
         write_grid_metric_cache(ds, cache_path, sidecar=sidecar)
     return ds
@@ -253,18 +279,21 @@ def compute_extreme_rainfall_rows_for_metric(
         raise ValueError(f"Unsupported Extreme Rainfall grid-first slug: {slug}")
     var = str(metric.get("var") or "pr")
     value_col = str(metric.get("value_col") or "value")
-    grid_id = str(dict(metric.get("params") or {}).get("grid_id") or "unknown-grid")
-    needs_threshold = slug in {"r95p_very_wet_precip", "r95ptot_contribution_pct"}
+    params = dict(metric.get("params") or {})
+    grid_id = str(params.get("grid_id") or "unknown-grid")
+    percentile = int(params.get("percentile", 95))
+    needs_threshold = slug in {"r95p_very_wet_precip", "r99p_extreme_wet_precip", "r95ptot_contribution_pct"}
     threshold_ds = None
     baseline_hashes: dict[str, str] | None = None
     if needs_threshold:
         if not baseline_year_to_paths:
-            raise ValueError("R95p/R95pTOT admin v2 requires non-empty historical baseline paths")
+            raise ValueError("Percentile precipitation admin v2 requires non-empty historical baseline paths")
         threshold_ds = _threshold_grid(
             model=model,
             grid_id=grid_id,
             baseline_year_to_paths=baseline_year_to_paths,
             var=var,
+            percentile=percentile,
             cache_root=cache_root,
         )
         baseline_years = [
@@ -283,6 +312,11 @@ def compute_extreme_rainfall_rows_for_metric(
             "scenario": scenario,
             "year": int(year),
             "grid_id": grid_id,
+            "percentile": percentile,
+            "baseline_years": [R95P_BASELINE_YEARS[0], R95P_BASELINE_YEARS[1]],
+            "wet_day_mm": R95P_WET_DAY_MM,
+            "quantile_method": R95P_QUANTILE_METHOD,
+            "strict_exceedance": R95P_STRICT_EXCEEDANCE,
             "eval_input_hash": eval_hashes,
         }
         if baseline_hashes is not None:
