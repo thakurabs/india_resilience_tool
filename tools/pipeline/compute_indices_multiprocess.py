@@ -67,7 +67,7 @@ if __name__ == "__main__" and __import__("os").environ.get("_IRT_CMP_BOOTSTRAPPE
         )
     )
 
-import os, glob, sys, time, logging, json, traceback, hashlib, shutil
+import os, glob, sys, time, logging, json, traceback, hashlib, shutil, threading
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence
@@ -209,6 +209,118 @@ def setup_logging(verbose: bool = False):
         stream=sys.stdout,
         force=True,   # critical: overwrites any pre-existing handlers
     )
+
+
+class PeriodicProgressLogger:
+    """Emit lightweight stage progress with both milestone and heartbeat logs."""
+
+    def __init__(
+        self,
+        *,
+        total: int,
+        prefix: str,
+        report_every: int | None = None,
+        heartbeat_seconds: float = 30.0,
+    ) -> None:
+        self.total = max(0, int(total))
+        self.prefix = str(prefix)
+        self.report_every = max(1, int(report_every or self._default_report_every(self.total)))
+        self.heartbeat_seconds = max(1.0, float(heartbeat_seconds))
+        self.completed = 0
+        self.failed = 0
+        self.start_time = time.time()
+        self.last_log_time = self.start_time
+        self._last_logged_snapshot: tuple[int, int] | None = None
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
+
+    @staticmethod
+    def _default_report_every(total: int) -> int:
+        if total <= 0:
+            return 1
+        return max(10, min(50, total // 100 or 10))
+
+    def start(self) -> None:
+        if self.total <= 0:
+            return
+        logging.info(
+            "%s started: total=%d report_every=%d heartbeat_seconds=%.0f",
+            self.prefix,
+            self.total,
+            self.report_every,
+            self.heartbeat_seconds,
+        )
+        self._heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name=f"{self.prefix.lower().replace(' ', '_')}_progress",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+
+    def update(self, *, completed_increment: int = 1, failed_increment: int = 0) -> None:
+        with self._lock:
+            self.completed += int(completed_increment)
+            self.failed += int(failed_increment)
+            should_log = (
+                self.completed == 1
+                or self.completed == self.total
+                or self.completed % self.report_every == 0
+            )
+            if should_log:
+                self._emit_progress_log_locked(reason="milestone")
+
+    def finish(self) -> None:
+        self._stop_event.set()
+        if self._heartbeat_thread is not None:
+            self._heartbeat_thread.join(timeout=max(1.0, self.heartbeat_seconds))
+        if self.total > 0:
+            with self._lock:
+                self._emit_progress_log_locked(reason="final", force=True)
+
+    def _heartbeat_loop(self) -> None:
+        while not self._stop_event.wait(self.heartbeat_seconds):
+            with self._lock:
+                if self.completed >= self.total:
+                    return
+                self._emit_progress_log_locked(reason="heartbeat")
+
+    def _emit_progress_log_locked(self, *, reason: str, force: bool = False) -> None:
+        now = time.time()
+        snapshot = (self.completed, self.failed)
+        if force and self.completed == self.total and self._last_logged_snapshot == snapshot:
+            return
+        if not force and (now - self.last_log_time) < 1.0 and self.completed < self.total:
+            return
+
+        elapsed = max(0.0, now - self.start_time)
+        percent = (100.0 * self.completed / self.total) if self.total else 100.0
+        if self.completed > 0 and elapsed > 0:
+            rate = self.completed / elapsed
+            eta_seconds = max(0.0, (self.total - self.completed) / rate) if rate > 0 else None
+            rate_text = f"{rate:.2f}/s"
+            eta_text = f"{eta_seconds:.0f}s" if eta_seconds is not None else "n/a"
+            waiting_text = "no"
+        else:
+            rate_text = "n/a"
+            eta_text = "n/a"
+            waiting_text = "yes"
+
+        logging.info(
+            "%s progress [%s]: %d/%d (%.1f%%) failed=%d elapsed=%.1fs rate=%s eta=%s waiting_for_first_completion=%s",
+            self.prefix,
+            reason,
+            self.completed,
+            self.total,
+            percent,
+            self.failed,
+            elapsed,
+            rate_text,
+            eta_text,
+            waiting_text,
+        )
+        self.last_log_time = now
+        self._last_logged_snapshot = snapshot
 
 # -----------------------------------------------------------------------------
 # BASIC HELPERS
@@ -7097,6 +7209,7 @@ def run_pipeline_parallel(
         results = []
         completed = 0
         failed = 0
+        compute_progress = PeriodicProgressLogger(total=len(tasks), prefix="Compute", heartbeat_seconds=30.0)
 
         if num_workers == 1:
             boundary_path = get_boundary_path(level)
@@ -7107,6 +7220,7 @@ def run_pipeline_parallel(
             )
             logging.info(f"Loaded {len(gdf)} {level} boundaries for {effective_state}")
 
+            compute_progress.start()
             for task in tasks:
                 try:
                     result = _execute_processing_task(task, gdf)
@@ -7118,18 +7232,19 @@ def run_pipeline_parallel(
                     results.append({"status": "failed", "error": str(e)})
                     failed += 1
                 completed += 1
-                if completed % 10 == 0:
-                    logging.info(f"Progress: {completed}/{len(tasks)} ({failed} failed)")
+                compute_progress.update(failed_increment=1 if results[-1]["status"] == "failed" else 0)
         else:
             init_fn = partial(_worker_init, level, state)
+            compute_progress.start()
             with Pool(num_workers, initializer=init_fn) as pool:
                 for r in pool.imap_unordered(_worker_process_task, tasks):
                     results.append(r)
                     completed += 1
                     if r["status"] == "failed":
                         failed += 1
-                    if completed % 10 == 0:
-                        logging.info(f"Progress: {completed}/{len(tasks)} ({failed} failed)")
+                    compute_progress.update(failed_increment=1 if r["status"] == "failed" else 0)
+
+        compute_progress.finish()
 
         logging.info(f"Computation: {time.time() - start:.1f}s, Success: {completed - failed}, Failed: {failed}")
         logging.info("Building ensembles...")
@@ -7139,13 +7254,21 @@ def run_pipeline_parallel(
             for slug in sorted(ensemble_needed_slugs)
         ]
         ensemble_results: list[EnsembleJobResult] = []
+        ensemble_progress = PeriodicProgressLogger(total=len(ensemble_args), prefix="Ensembles", heartbeat_seconds=30.0)
         if ensemble_args:
             if num_workers == 1:
+                ensemble_progress.start()
                 for args in ensemble_args:
-                    ensemble_results.append(_compute_ensembles_for_metric(args))
+                    job_result = _compute_ensembles_for_metric(args)
+                    ensemble_results.append(job_result)
+                    ensemble_progress.update(failed_increment=1 if job_result.status == "failed" else 0)
             else:
+                ensemble_progress.start()
                 with Pool(num_workers) as pool:
-                    ensemble_results = list(pool.imap_unordered(_compute_ensembles_for_metric, ensemble_args))
+                    for job_result in pool.imap_unordered(_compute_ensembles_for_metric, ensemble_args):
+                        ensemble_results.append(job_result)
+                        ensemble_progress.update(failed_increment=1 if job_result.status == "failed" else 0)
+            ensemble_progress.finish()
         else:
             logging.info("No ensemble work is pending.")
 
