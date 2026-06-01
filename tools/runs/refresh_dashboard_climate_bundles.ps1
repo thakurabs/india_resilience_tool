@@ -16,6 +16,9 @@ powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bu
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level block -PlanOnly
+
+.EXAMPLE
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all -LogRoot D:/projects/irt_data/processed_optimised/logs/dashboard_climate_refresh
 #>
 
 [CmdletBinding()]
@@ -33,6 +36,8 @@ param(
     [string]$YearlyCleanupPolicy = "preserve",
 
     [string]$ReportRoot = "",
+
+    [string]$LogRoot = "",
 
     [switch]$PlanOnly,
 
@@ -107,6 +112,25 @@ function Resolve-PythonCommand {
 
 $Python = Resolve-PythonCommand -RequestedPython $Python
 
+function Format-CommandForDisplay {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Executable,
+
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    $parts = @($Executable) + $Arguments
+    return ($parts | ForEach-Object {
+        $part = [string]$_
+        if ($part -match '[\s"]') {
+            return '"' + ($part -replace '"', '\"') + '"'
+        }
+        return $part
+    }) -join ' '
+}
+
 function Invoke-NativeChecked {
     param(
         [Parameter(Mandatory = $true)]
@@ -118,15 +142,36 @@ function Invoke-NativeChecked {
 
     Write-Host ""
     Write-Host "==> $Label"
-    Write-Host "$Python $($Arguments -join ' ')"
+    $commandLine = Format-CommandForDisplay -Executable $Python -Arguments $Arguments
+    Write-Host $commandLine
 
     if ($PlanOnly) {
         return
     }
 
-    & $Python @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "$Label failed with exit code $LASTEXITCODE."
+    $script:StepIndex += 1
+    $logToken = Get-SafePathToken -Value $Label
+    $logPath = Join-Path $script:RunLogRoot ("{0:00}_{1}.log" -f $script:StepIndex, $logToken)
+    Write-Host "log: $logPath"
+
+    @(
+        "timestamp_start=$((Get-Date).ToString('o'))"
+        "label=$Label"
+        "command=$commandLine"
+        ""
+    ) | Set-Content -Encoding UTF8 -Path $logPath
+
+    & $Python @Arguments 2>&1 | Tee-Object -FilePath $logPath -Append
+    $exitCode = $LASTEXITCODE
+
+    @(
+        ""
+        "timestamp_end=$((Get-Date).ToString('o'))"
+        "exit_code=$exitCode"
+    ) | Add-Content -Encoding UTF8 -Path $logPath
+
+    if ($exitCode -ne 0) {
+        throw "$Label failed with exit code $exitCode. See log: $logPath"
     }
 }
 
@@ -192,6 +237,10 @@ if (-not $ReportRoot) {
     $ReportRoot = [string]$scope.optimized_output_root
 }
 
+if (-not $LogRoot) {
+    $LogRoot = Join-Path $ReportRoot "logs/dashboard_climate_refresh"
+}
+
 if ($Level -contains "all") {
     $levelsToRun = @("district", "block")
 } else {
@@ -199,6 +248,13 @@ if ($Level -contains "all") {
 }
 
 $stateToken = Get-SafePathToken -Value $State
+$runToken = Get-Date -Format "yyyyMMdd_HHmmss"
+$script:RunLogRoot = Join-Path (Join-Path $LogRoot $stateToken) $runToken
+$script:StepIndex = 0
+
+if (-not $PlanOnly) {
+    New-Item -ItemType Directory -Path $script:RunLogRoot -Force | Out-Null
+}
 
 Write-Host "Dashboard climate bundle refresh"
 Write-Host "  state: $State"
@@ -209,6 +265,7 @@ Write-Host "  thematic_composites: $($thematicComposites.Count)"
 Write-Host "  sector_composites: $($sectorComposites.Count)"
 Write-Host "  optimized_metric_roots: $($optimizedMetrics.Count)"
 Write-Host "  report_root: $ReportRoot"
+Write-Host "  log_root: $script:RunLogRoot"
 Write-Host "  plan_only: $PlanOnly"
 
 foreach ($levelName in $levelsToRun) {

@@ -96,6 +96,11 @@ sector-wise bundle definitions.
 powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all
 ```
 
+Each executed stage streams to the terminal and writes stdout/stderr to a
+separate log under
+`processed_optimised/logs/dashboard_climate_refresh/<state>/<timestamp>/` by
+default. Use `-LogRoot <path>` to place the logs elsewhere.
+
 Preview the resolved source metrics, thematic composites, sector-wise composites,
 and commands without executing the expensive stages:
 

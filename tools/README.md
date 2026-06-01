@@ -53,6 +53,10 @@ Targeted dashboard climate refresh for active thematic + sector-wise admin bundl
 powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all
 ```
 
+Each executed stage writes an auditable stdout/stderr log under
+`processed_optimised/logs/dashboard_climate_refresh/<state>/<timestamp>/` by
+default; pass `-LogRoot <path>` to store logs elsewhere.
+
 By default the runner is non-destructive and dashboard-oriented:
 - climate runs default to `--level all`
 - climate runs resolve live metrics per requested level
