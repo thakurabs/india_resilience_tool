@@ -31,8 +31,9 @@ from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
     R95P_BASELINE_YEARS,
     R95P_QUANTILE_METHOD,
     R95P_STRICT_EXCEEDANCE,
+    is_extreme_rainfall_gridfirst,
 )
-from india_resilience_tool.compute.heat_risk_gridfirst import HEAT_RISK_GRIDFIRST_SLUGS
+from india_resilience_tool.compute.heat_risk_gridfirst import HEAT_RISK_GRIDFIRST_SLUGS, is_heat_risk_gridfirst
 from india_resilience_tool.compute.heat_stress_gridfirst import HEAT_STRESS_GRIDFIRST_SLUGS
 
 
@@ -283,7 +284,7 @@ def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
 
 
 def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
-    from india_resilience_tool.compute.drought_risk_gridfirst import DROUGHT_GRIDFIRST_SLUGS
+    from india_resilience_tool.compute.drought_risk_gridfirst import DROUGHT_GRIDFIRST_SLUGS, is_drought_gridfirst
 
     assert "spi3_count_events_lt_minus1" in METRICS_BY_SLUG
     assert "spi6_count_events_lt_minus1" in METRICS_BY_SLUG
@@ -316,6 +317,8 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
     for slug in ("spi3_max_spell_lt_minus1", "spi6_max_spell_lt_minus1", "spi12_max_spell_lt_minus1"):
         assert METRICS_BY_SLUG[slug].params["period_rollup"] == "period_max"
     assert set(drought_metrics[1:]) == set(DROUGHT_GRIDFIRST_SLUGS)
+    assert is_drought_gridfirst("spi3_count_events_lt_minus1", "district") is True
+    assert is_drought_gridfirst("spi3_count_events_lt_minus1", "basin") is False
 
 
 def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
@@ -368,6 +371,9 @@ def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_dom
     assert r99p.params["percentile"] == 99
     assert r99p.params["quantile_method"] == "nearest"
     assert r99p.params["exceed_ge"] is True
+    assert "r99p_extreme_wet_precip" in EXTREME_RAINFALL_GRIDFIRST_SLUGS
+    assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "district") is True
+    assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "basin") is False
     assert heavy_rain.compute == "consecutive_heavy_rainfall_events"
     assert heavy_rain.params["daily_thresh_mm"] == 150.0
     assert heavy_rain.params["min_event_days"] == 2
@@ -379,6 +385,24 @@ def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_dom
     )
     assert "r99p_extreme_wet_precip" not in flood_metrics
     assert "pr_2day_heavy_rainfall_events_ge150mm" not in flood_metrics
+
+
+def test_heat_risk_admin_only_gridfirst_metrics_keep_hydro_legacy_dispatch() -> None:
+    assert is_heat_risk_gridfirst("txx_annual_max", "basin") is True
+    assert is_heat_risk_gridfirst("tas_annual_mean", "district") is True
+    assert is_heat_risk_gridfirst("tas_annual_mean", "basin") is False
+    assert is_heat_risk_gridfirst("tas_summer_mean", "sub_basin") is False
+
+
+def test_spi3_count_months_metric_has_explicit_gridfirst_period_and_coverage_params() -> None:
+    spec = METRICS_BY_SLUG["spi3_count_months_lt_minus1"]
+
+    assert spec.params["annual_aggregation"] == "count_months_lt"
+    assert spec.params["min_months_per_year"] == 9
+    assert spec.params["period_rollup"] == "period_mean"
+    assert spec.params["min_years_per_period_fraction"] == 0.75
+    assert spec.params["min_baseline_years_per_calendar_month_fraction"] == 0.83
+    assert spec.params["min_polygon_cell_weight_fraction"] == 0.50
 
 
 def test_agricultural_risk_bundle_membership_uses_final_seven_metric_mix_and_legacy_alias() -> None:

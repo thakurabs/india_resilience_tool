@@ -35,6 +35,7 @@ Risk bundle:
 | Metric slug | v2 behavior | Consumed by |
 |---|---|---|
 | `pr_consecutive_dry_days_lt1mm` | Longest run of days with precipitation `< 1 mm/day`; NaN breaks runs (CHG-0029) | Sector-wise proposal bundles: Industrial Risk, Agricultural Risk, Asset Risk (Thermal Power), Asset Risk (Hydropower), Life & Livelihood Loss Risk, Investment / Financial Risk |
+| `r99p_extreme_wet_precip` | Annual total precipitation on days strictly greater than the baseline cell `p99` wet-day threshold (CHG-0038) | Sector-wise proposal bundle: Investment / Financial Risk |
 
 CDD shares the same admin grid-first dispatch, the same 50% retained-cell-weight
 floor, the same 90% annual cell-coverage floor, and the same *Private Caches*
@@ -61,19 +62,20 @@ For CWD, coverage-passed all-dry years emit `0`. For R95pTOT,
 coverage-passed years with no wet-day denominator emit `0`; coverage or
 baseline retention failures emit `NaN`.
 
-## R95p And R95pTOT
+## Admin Percentile Rainfall Contract
 
 Admin v2 uses an internal percentile contract:
 
 - baseline years: `1990-2010`
 - wet day: `>= 1 mm/day`
-- percentile: `95`
+- percentile: metric-specific (`95` for `r95p_very_wet_precip` / `r95ptot_contribution_pct`, `99` for `r99p_extreme_wet_precip`)
 - quantile method: `linear`
 - exceedance operator: strict `>`
 
 These settings are implemented inside
 `india_resilience_tool/compute/extreme_rainfall_gridfirst.py`. The registry
-keeps the legacy R95p/R95pTOT params so hydro outputs do not change silently.
+keeps the legacy percentile-metric params so hydro outputs do not change
+silently.
 
 ## Private Caches
 
@@ -83,10 +85,11 @@ Annual grid metrics are cached under:
 processed/_internal/extreme_rainfall/grid_metrics/<slug>/<model>/<grid_id>/<scenario>/<year>.nc
 ```
 
-R95p thresholds are cached under:
+Percentile thresholds are cached under:
 
 ```text
 processed/_internal/extreme_rainfall/thresholds/<model>/<grid_id>/baseline=1990-2010/p95.nc
+processed/_internal/extreme_rainfall/thresholds/<model>/<grid_id>/baseline=1990-2010/p99.nc
 ```
 
 Each cache has a JSON sidecar with method version, grid id, input hashes, and
@@ -96,9 +99,12 @@ misses.
 ## Not In This Version
 
 - basin and sub-basin migration to grid-first
-- R99p
 - two-day heavy rainfall events
 - sector-specific thresholded rainfall indicators
 - JRC flood depth inside this bundle
+
+`r99p_extreme_wet_precip` is now handled by the same admin-only grid-first
+percentile path but remains proposal-only and is still out of the thematic
+Flood & Extreme Rainfall bundle.
 
 JRC flood-depth metrics are handled by the separate `Riverine Flood` bundle.

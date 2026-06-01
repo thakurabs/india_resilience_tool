@@ -12,6 +12,7 @@ from india_resilience_tool.compute.drought_risk_gridfirst import (
     aggregate_grid_values_with_retention,
     annual_spi_metric_grid,
     compute_spi_grid,
+    is_drought_gridfirst,
     period_rollup_grid,
 )
 from india_resilience_tool.compute.gridfirst_spatial import read_grid_metric_cache, write_grid_metric_cache
@@ -134,6 +135,47 @@ def test_strict_threshold_equal_minus_one_does_not_count():
     )["value"]
 
     assert float(annual.sel(year=2000).item()) == 1.0
+
+
+def test_count_months_lt_counts_total_months_not_events_or_max_spell() -> None:
+    spi = _spi([-2.0, -2.0, 0.0, -2.0, 0.0, -2.0, -2.0, -2.0, 0.0, 0.0, 0.0, 0.0])
+
+    count_months = annual_spi_metric_grid(
+        spi,
+        annual_aggregation="count_months_lt",
+        threshold=-1.0,
+        min_months_per_year=9,
+        min_event_months=1,
+    )["value"]
+    count_events = annual_spi_metric_grid(
+        spi,
+        annual_aggregation="count_events_lt",
+        threshold=-1.0,
+        min_months_per_year=9,
+        min_event_months=1,
+    )["value"]
+    max_spell = annual_spi_metric_grid(
+        spi,
+        annual_aggregation="max_spell_lt",
+        threshold=-1.0,
+        min_months_per_year=9,
+        min_event_months=1,
+    )["value"]
+
+    assert float(count_months.sel(year=2000).item()) == 5.0
+    assert float(count_events.sel(year=2000).item()) == 3.0
+    assert float(max_spell.sel(year=2000).item()) == 3.0
+    assert float(count_months.sel(year=2000).item()) != float(count_events.sel(year=2000).item())
+    assert float(count_months.sel(year=2000).item()) != float(max_spell.sel(year=2000).item())
+
+
+def test_drought_gridfirst_helper_keeps_spi3_month_count_admin_only() -> None:
+    assert is_drought_gridfirst("spi3_count_events_lt_minus1", "district") is True
+    assert is_drought_gridfirst("spi3_count_events_lt_minus1", "basin") is False
+    assert is_drought_gridfirst("spi3_count_months_lt_minus1", "district") is True
+    assert is_drought_gridfirst("spi3_count_months_lt_minus1", "block") is True
+    assert is_drought_gridfirst("spi3_count_months_lt_minus1", "basin") is False
+    assert is_drought_gridfirst("spi3_count_months_lt_minus1", "sub_basin") is False
 
 
 def test_nan_breaks_drought_event_runs():

@@ -20,6 +20,8 @@ from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
     compute_extreme_rainfall_rows_for_metric,
     compute_r95p_threshold_grid,
     extreme_rainfall_grid_metric_cache_path,
+    is_extreme_rainfall_gridfirst,
+    percentile_threshold_cache_path,
     r95p_threshold_cache_path,
 )
 from india_resilience_tool.compute.gridfirst_spatial import read_grid_metric_cache, write_grid_metric_cache
@@ -171,6 +173,21 @@ def test_r95ptot_distinguishes_no_wet_days_zero_from_coverage_fail_nan() -> None
     assert np.isnan(float(fail_value.isel(lat=0, lon=0)))
 
 
+def test_r99p_admin_v2_threshold_semantics() -> None:
+    baseline_values = np.stack([[[float(day)]] for day in range(1, 21)], axis=0)
+    threshold = compute_r95p_threshold_grid(
+        _daily(baseline_values, start="1990-01-01"),
+        percentile=99,
+        quantile_method="linear",
+    )["value"]
+    eval_da = _daily(np.asarray([[[19.81]], [[20.0]]]))
+
+    ds = annual_extreme_rainfall_grid(eval_da, slug="r99p_extreme_wet_precip", threshold=threshold)
+
+    assert float(threshold.isel(lat=0, lon=0)) == pytest.approx(19.81)
+    assert float(ds["value"].isel(lat=0, lon=0)) == pytest.approx(20.0)
+
+
 def test_extreme_rainfall_cache_invalidation(tmp_path: Path) -> None:
     cache_root = tmp_path / "cache"
     base_path = _write_pr(tmp_path / "base.nc", np.asarray([[[1.0]], [[20.0]]]), start="1990-01-01")
@@ -223,6 +240,46 @@ def test_extreme_rainfall_cache_invalidation(tmp_path: Path) -> None:
     write_grid_metric_cache(xr.Dataset({"value": xr.DataArray([[1.0]], dims=("lat", "lon"))}), torn_path, sidecar={"method_version": "x"})
     torn_path.with_suffix(".nc.json").unlink()
     assert read_grid_metric_cache(torn_path, expected_sidecar={"method_version": "x"}) is None
+
+
+def test_percentile_threshold_cache_paths_and_sidecars_distinguish_p95_vs_p99(tmp_path: Path) -> None:
+    cache_root = tmp_path / "cache"
+    base_path = _write_pr(tmp_path / "base.nc", np.asarray([[[1.0]], [[20.0]]]), start="1990-01-01")
+    eval_path = _write_pr(tmp_path / "eval.nc", np.asarray([[[25.0]], [[30.0]]]))
+    weights = pd.DataFrame({"unit_key": ["D"], "cell_index": [0], "area_m2": [1.0]})
+
+    compute_extreme_rainfall_rows_for_metric(
+        metric={"slug": "r95p_very_wet_precip", "var": "pr", "value_col": "r95p_mm", "params": {"grid_id": "g1", "percentile": 95}},
+        model="MODEL",
+        scenario="historical",
+        year_to_paths={2020: {"pr": eval_path}},
+        baseline_year_to_paths={1990: {"pr": base_path}},
+        weights=weights,
+        cache_root=cache_root,
+    )
+    compute_extreme_rainfall_rows_for_metric(
+        metric={"slug": "r99p_extreme_wet_precip", "var": "pr", "value_col": "r99p_mm", "params": {"grid_id": "g1", "percentile": 99}},
+        model="MODEL",
+        scenario="historical",
+        year_to_paths={2020: {"pr": eval_path}},
+        baseline_year_to_paths={1990: {"pr": base_path}},
+        weights=weights,
+        cache_root=cache_root,
+    )
+
+    p95_path = r95p_threshold_cache_path(cache_root, model="MODEL", grid_id="g1")
+    p99_path = percentile_threshold_cache_path(cache_root, model="MODEL", grid_id="g1", percentile=99)
+    assert p95_path.name == "p95.nc"
+    assert p99_path.name == "p99.nc"
+    assert p95_path.exists()
+    assert p99_path.exists()
+
+    p95_sidecar = json.loads(p95_path.with_suffix(".nc.json").read_text(encoding="utf-8"))
+    p99_sidecar = json.loads(p99_path.with_suffix(".nc.json").read_text(encoding="utf-8"))
+    assert p95_sidecar["percentile"] == 95
+    assert p99_sidecar["percentile"] == 99
+    assert p95_sidecar["strict_exceedance"] is True
+    assert p99_sidecar["strict_exceedance"] is True
 
 
 def test_legacy_count_rainy_days_supports_inclusive_r20_and_strict_rainy_days() -> None:
@@ -278,6 +335,62 @@ def test_pipeline_dispatches_admin_extreme_rainfall_to_gridfirst(tmp_path: Path,
     assert result == {"ok": 1}
     assert called["compute"]["level"] == "district"
     assert called["compute"]["baseline_year_to_paths"] == {}
+
+
+def test_extreme_rainfall_gridfirst_helper_keeps_r99p_admin_only() -> None:
+    assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "district") is True
+    assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "block") is True
+    assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "basin") is False
+    assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "sub_basin") is False
+
+
+def test_pipeline_dispatches_admin_r99p_to_gridfirst(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sample_path = _write_pr(tmp_path / "2020.nc", np.asarray([[[10.0]], [[20.0]]]))
+    metric = {
+        "slug": "r99p_extreme_wet_precip",
+        "var": "pr",
+        "value_col": "r99p_mm",
+        "compute": "percentile_precipitation_total",
+        "params": {"percentile": 99},
+    }
+    gdf = gpd.GeoDataFrame({"district_name": ["D"]}, geometry=[box(0, 0, 1, 1)], crs="EPSG:4326")
+    called: dict[str, object] = {}
+
+    monkeypatch.setattr(CMP, "var_data_dir", lambda *_args, **_kwargs: tmp_path)
+    monkeypatch.setattr(CMP, "validated_year_files_for_var", lambda *_args, **_kwargs: ({2020: sample_path}, {}))
+    monkeypatch.setattr(CMP, "read_gridfirst_spatial_weights_cache", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        CMP,
+        "build_gridfirst_area_weights",
+        lambda *_args, **_kwargs: pd.DataFrame({"unit_key": ["D"], "cell_index": [0], "area_m2": [1.0]}),
+    )
+    monkeypatch.setattr(CMP, "write_gridfirst_spatial_weights_cache", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        CMP,
+        "gridfirst_coverage_from_weights",
+        lambda *_args, **_kwargs: pd.DataFrame({"unit_key": ["D"], "coverage_ok": [True], "district": ["D"]}),
+    )
+    monkeypatch.setattr(CMP, "_write_metric_rows_outputs", lambda **_kwargs: {"ok": 1})
+
+    def fake_compute(**kwargs):
+        called["compute"] = kwargs
+        return [{"district": "D", "year": 2020, "value": 20.0, "r99p_mm": 20.0}]
+
+    monkeypatch.setattr(CMP, "compute_extreme_rainfall_rows_for_metric", fake_compute)
+
+    result = CMP.process_metric_for_model_scenario(
+        metric,
+        "MODEL",
+        "historical",
+        {"subdir": "historical/tas", "periods": {"2020-2020": (2020, 2020)}},
+        gdf,
+        level="district",
+        state_name="State",
+    )
+
+    assert result == {"ok": 1}
+    assert called["compute"]["level"] == "district"
+    assert called["compute"]["baseline_year_to_paths"] == {2020: {"pr": sample_path}}
 
 
 def test_pipeline_keeps_hydro_extreme_rainfall_on_legacy_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

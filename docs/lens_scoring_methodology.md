@@ -1207,6 +1207,12 @@ separate data-contract change).
   R99p means a larger share of the year's rainfall is being delivered by the
   rarest extreme events; a rising R99p signals **rainfall regime shifting
   toward more concentrated extremes**.
+- **IRT source-path lock for CHG-0038:** admin district/block source masters
+  now come from the same grid-first percentile-rainfall pipeline used for
+  admin R95p, with an explicit locked methodology of baseline `1990-2010`,
+  wet-day threshold `>= 1 mm/day`, `linear` quantile interpolation, and
+  strict `>` exceedance. Hydro remains on the legacy polygon-average-first
+  percentile path and is out of scope here.
 - **absolute:** Keep. Districts where the annual contribution from extreme
   wet days is largest relative to peers — i.e., where rainfall is most
   concentrated in the tail of the distribution. This matters for capitalized
@@ -1831,6 +1837,13 @@ math.
   reference period; the chg lens measures how often projections cross that
   historical-baseline-conditioned threshold relative to the baseline-period
   count. Mode: `relative_pct`.
+- **IRT source-path lock for CHG-0038:** admin district/block source masters
+  now come from the Drought v2 grid-first SPI pipeline with explicit annual
+  aggregation `count_months_lt`, `min_months_per_year=9`,
+  `period_rollup="period_mean"`, `min_years_per_period_fraction=0.75`,
+  `min_baseline_years_per_calendar_month_fraction=0.83`, and
+  `min_polygon_cell_weight_fraction=0.50`. Hydro remains legacy and out of
+  scope.
 - **impact:** **No — drop.** Honest no-band call (same rationale as
   Investment/Financial Section 8.3 for R99p). McKee 1993 standardizes the
   per-month SPI threshold (−1 moderately dry, −1.5 severely dry, −2 extremely

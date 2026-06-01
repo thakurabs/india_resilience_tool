@@ -19,6 +19,7 @@ from india_resilience_tool.compute.heat_risk_gridfirst import (
     build_area_weights,
     compute_doy_thresholds,
     compute_heat_risk_rows_for_metric,
+    is_heat_risk_gridfirst,
 )
 from tools.pipeline import compute_indices_multiprocess as CMP
 
@@ -254,17 +255,89 @@ def test_gridfirst_persists_and_reuses_annual_cell_metric_cache(tmp_path: Path, 
     assert rows_from_cache[0]["tx90p_pct"] == pytest.approx(rows[0]["tx90p_pct"])
 
 
-def test_gridfirst_threshold_day_metrics_cover_txge35_and_tnle10_without_baseline(tmp_path: Path) -> None:
-    assert {"txge35_extreme_heat_days", "tnle10_cold_nights"} <= HEAT_RISK_GRIDFIRST_SLUGS
+def test_heat_risk_gridfirst_helper_keeps_new_admin_only_metrics_off_hydro() -> None:
+    assert is_heat_risk_gridfirst("txx_annual_max", "district") is True
+    assert is_heat_risk_gridfirst("txx_annual_max", "basin") is True
+    assert is_heat_risk_gridfirst("tas_annual_mean", "district") is True
+    assert is_heat_risk_gridfirst("tas_annual_mean", "block") is True
+    assert is_heat_risk_gridfirst("tas_annual_mean", "basin") is False
+    assert is_heat_risk_gridfirst("tas_annual_mean", "sub_basin") is False
+
+
+def test_gridfirst_mean_metrics_cover_admin_annual_and_seasonal_mean_and_month_sensitive_cache(tmp_path: Path) -> None:
+    time = pd.to_datetime(["2020-01-15", "2020-03-15", "2020-04-15", "2020-05-15"])
+    tas = xr.DataArray(
+        np.asarray([[[290.0]], [[300.0]], [[302.0]], [[304.0]]]),
+        dims=("time", "lat", "lon"),
+        coords={"time": time, "lat": [0.5], "lon": [0.5]},
+        name="tas",
+    )
+    tas_path = tmp_path / "tas_2020.nc"
+    tas.to_dataset().to_netcdf(tas_path)
+    weights = pd.DataFrame({"unit_key": ["D"], "cell_index": [0], "area_m2": [1.0]})
+    cache_root = tmp_path / "cache"
+
+    annual_rows = compute_heat_risk_rows_for_metric(
+        metric={
+            "slug": "tas_annual_mean",
+            "var": "tas",
+            "value_col": "annual_tas_mean_C",
+            "compute": "annual_mean",
+            "params": {},
+        },
+        model="MODEL",
+        scenario="ssp585",
+        year_to_paths={2020: {"tas": tas_path}},
+        baseline_year_to_paths={},
+        weights=weights,
+        cache_root=cache_root,
+    )
+    seasonal_rows = compute_heat_risk_rows_for_metric(
+        metric={
+            "slug": "tas_summer_mean",
+            "var": "tas",
+            "value_col": "summer_tas_mean_C",
+            "compute": "seasonal_mean",
+            "params": {"months": [3, 4, 5]},
+        },
+        model="MODEL",
+        scenario="ssp585",
+        year_to_paths={2020: {"tas": tas_path}},
+        baseline_year_to_paths={},
+        weights=weights,
+        cache_root=cache_root,
+    )
+    shifted_rows = compute_heat_risk_rows_for_metric(
+        metric={
+            "slug": "tas_summer_mean",
+            "var": "tas",
+            "value_col": "summer_tas_mean_C",
+            "compute": "seasonal_mean",
+            "params": {"months": [4, 5]},
+        },
+        model="MODEL",
+        scenario="ssp585",
+        year_to_paths={2020: {"tas": tas_path}},
+        baseline_year_to_paths={},
+        weights=weights,
+        cache_root=cache_root,
+    )
+
+    assert annual_rows[0]["annual_tas_mean_C"] == pytest.approx(299.0 - 273.15)
+    assert seasonal_rows[0]["summer_tas_mean_C"] == pytest.approx(302.0 - 273.15)
+    assert shifted_rows[0]["summer_tas_mean_C"] == pytest.approx(303.0 - 273.15)
+
+
+def test_gridfirst_threshold_day_metrics_cover_txge30_and_tropical_nights_gt25_without_baseline(tmp_path: Path) -> None:
     eval_time = pd.date_range("2020-01-01", periods=4, freq="D")
     tasmax = xr.DataArray(
-        np.asarray([[[309.0]], [[308.15]], [[307.0]], [[np.nan]]]),
+        np.asarray([[[304.0]], [[303.15]], [[302.0]], [[np.nan]]]),
         dims=("time", "lat", "lon"),
         coords={"time": eval_time, "lat": [0.5], "lon": [0.5]},
         name="tasmax",
     )
     tasmin = xr.DataArray(
-        np.asarray([[[283.15]], [[282.0]], [[284.0]], [[np.nan]]]),
+        np.asarray([[[299.0]], [[298.15]], [[297.0]], [[np.nan]]]),
         dims=("time", "lat", "lon"),
         coords={"time": eval_time, "lat": [0.5], "lon": [0.5]},
         name="tasmin",
@@ -277,11 +350,11 @@ def test_gridfirst_threshold_day_metrics_cover_txge35_and_tnle10_without_baselin
 
     tx_rows = compute_heat_risk_rows_for_metric(
         metric={
-            "slug": "txge35_extreme_heat_days",
+            "slug": "txge30_hot_days",
             "var": "tasmax",
-            "value_col": "days_tx_ge_35C",
+            "value_col": "days_tx_ge_30C",
             "compute": "count_days_ge_threshold",
-            "params": {"thresh_k": 35.0 + 273.15},
+            "params": {"thresh_k": 30.0 + 273.15},
         },
         model="MODEL",
         scenario="ssp585",
@@ -292,11 +365,11 @@ def test_gridfirst_threshold_day_metrics_cover_txge35_and_tnle10_without_baselin
     )
     tn_rows = compute_heat_risk_rows_for_metric(
         metric={
-            "slug": "tnle10_cold_nights",
+            "slug": "tasmin_tropical_nights_gt25",
             "var": "tasmin",
-            "value_col": "days_tn_le_10C",
-            "compute": "count_days_le_threshold",
-            "params": {"thresh_k": 10.0 + 273.15},
+            "value_col": "tropical_nights_gt_25C",
+            "compute": "count_days_above_threshold",
+            "params": {"thresh_k": 25.0 + 273.15},
         },
         model="MODEL",
         scenario="ssp585",
@@ -306,5 +379,5 @@ def test_gridfirst_threshold_day_metrics_cover_txge35_and_tnle10_without_baselin
         cache_root=tmp_path / "cache",
     )
 
-    assert tx_rows[0]["days_tx_ge_35C"] == pytest.approx(2.0)
-    assert tn_rows[0]["days_tn_le_10C"] == pytest.approx(2.0)
+    assert tx_rows[0]["days_tx_ge_30C"] == pytest.approx(2.0)
+    assert tn_rows[0]["tropical_nights_gt_25C"] == pytest.approx(2.0)

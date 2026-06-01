@@ -1,6 +1,6 @@
 # Drought Risk Methodology v2
 
-Drought Risk v2 uses grid-first Standardized Precipitation Index (SPI) metrics. The canonical SPI implementation is `climate-indices==2.2.0`; the legacy z-score SPI path is non-conformant with WMO SPI methodology and is rejected by the pipeline.
+Drought Risk v2 uses grid-first Standardized Precipitation Index (SPI) metrics for admin `district` and `block` outputs. Hydro `basin` and `sub_basin` outputs remain on the legacy path in this phase. The canonical SPI implementation is `climate-indices==2.2.0`; the legacy z-score SPI path is non-conformant with WMO SPI methodology and is rejected by the pipeline.
 
 ## Metric Set
 
@@ -33,6 +33,8 @@ Daily `pr` grids are converted to monthly totals with unit checks. Flux units su
 Before SPI math, monthly baseline and scenario data are reindexed to a contiguous month-start axis. Missing calendar gaps, such as 2011-2014 between a 1981-2010 baseline and SSP scenario data, are filled with NaN so rolling SPI windows cannot silently bridge non-adjacent months. The contiguous series is trimmed to complete Jan-Dec years before calling `climate-indices`.
 
 SPI is computed per grid cell, then annual count or spell metrics are derived per cell. Period rollups happen per cell before polygon aggregation. Polygon values drop NaN cells, renormalize weights over finite cells, and emit NaN when retained overlap weight is below `0.50`. Period diagnostics use polygon-specific area-weighted retained cells rather than a global best-cell count.
+
+For `spi3_count_months_lt_minus1`, annual aggregation is the total count of qualifying months in each calendar year (`int(flags.sum())`) rather than event-count or longest-spell behavior. Its registry contract is explicit in this phase: `min_months_per_year=9`, `period_rollup="period_mean"`, `min_years_per_period_fraction=0.75`, `min_baseline_years_per_calendar_month_fraction=0.83`, and `min_polygon_cell_weight_fraction=0.50`.
 
 Private diagnostics and caches live under `processed/_internal/drought_risk/`; no Drought GeoTIFF outputs are produced. Annual and period grid caches include `input_file_hashes`, `grid_id`, distribution, `climate_indices_version`, and a NetCDF `cache_blob_sha256`; mismatches are cache misses.
 

@@ -39,6 +39,15 @@ HEAT_RISK_GRIDFIRST_SLUGS = frozenset(
         "hwa_heatwave_amplitude",
     }
 )
+HEAT_RISK_GRIDFIRST_ADMIN_ONLY_SLUGS = frozenset(
+    {
+        "tas_annual_mean",
+        "tasmax_summer_mean",
+        "tas_summer_mean",
+        "txge30_hot_days",
+        "tasmin_tropical_nights_gt25",
+    }
+)
 
 GRIDFIRST_METHOD_VERSION = "heat-risk-v2-gridfirst-1"
 DEFAULT_ANALYSIS_CRS = "EPSG:6933"
@@ -52,6 +61,16 @@ GRIDFIRST_BASELINE_THRESHOLD_COMPUTES = frozenset(
         "heatwave_amplitude",
     }
 )
+
+
+def is_heat_risk_gridfirst(slug: str, level: str) -> bool:
+    """Return whether a Heat Risk slug should use grid-first for the requested level."""
+
+    slug_norm = str(slug or "").strip()
+    level_norm = str(level or "").strip().lower()
+    if slug_norm in HEAT_RISK_GRIDFIRST_SLUGS:
+        return True
+    return level_norm in {"district", "block"} and slug_norm in HEAT_RISK_GRIDFIRST_ADMIN_ONLY_SLUGS
 
 
 def _configure_pyproj_data_dir() -> None:
@@ -432,9 +451,17 @@ def _metric_cell_values(
     params = dict(metric.get("params") or {})
     exceed_ge = bool(params.get("exceed_ge", False))
     min_spell_days = int(params.get("min_spell_days", 5))
+    months = tuple(int(month) for month in params.get("months", ()) if str(month).strip())
 
     if compute == "annual_max_temperature":
         return eval_da.max(dim="time", skipna=True) - 273.15
+    if compute == "annual_mean":
+        return eval_da.mean(dim="time", skipna=True) - 273.15
+    if compute == "seasonal_mean":
+        if not months:
+            raise ValueError("seasonal_mean requires metric params['months']")
+        seasonal = eval_da.where(eval_da["time"].dt.month.isin(months), drop=True)
+        return seasonal.mean(dim="time", skipna=True) - 273.15
     if compute in {"count_days_ge_threshold", "count_days_above_threshold"}:
         thresh_k = float(params["thresh_k"])
         comparator = eval_da >= thresh_k if compute == "count_days_ge_threshold" else eval_da > thresh_k

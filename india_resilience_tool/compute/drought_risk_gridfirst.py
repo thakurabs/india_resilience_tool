@@ -33,6 +33,17 @@ DROUGHT_GRIDFIRST_SLUGS = frozenset(
         "spi12_max_spell_lt_minus1",
     }
 )
+DROUGHT_GRIDFIRST_ADMIN_ONLY_SLUGS = frozenset({"spi3_count_months_lt_minus1"})
+
+
+def is_drought_gridfirst(slug: str, level: str) -> bool:
+    """Return whether a Drought Risk slug should use admin-only grid-first dispatch."""
+
+    slug_norm = str(slug or "").strip()
+    level_norm = str(level or "").strip().lower()
+    return level_norm in {"district", "block"} and (
+        slug_norm in DROUGHT_GRIDFIRST_SLUGS or slug_norm in DROUGHT_GRIDFIRST_ADMIN_ONLY_SLUGS
+    )
 
 
 def climate_indices_version() -> str:
@@ -222,7 +233,14 @@ def annual_spi_metric_grid(
                     continue
                 flags = valid[:, lat_i, lon_i] & (values[:, lat_i, lon_i] < float(threshold))
                 count, max_run = _run_count_and_max(flags, min_event_months=int(min_event_months))
-                out[lat_i, lon_i] = float(count if annual_aggregation == "count_events_lt" else max_run)
+                if annual_aggregation == "count_events_lt":
+                    out[lat_i, lon_i] = float(count)
+                elif annual_aggregation == "max_spell_lt":
+                    out[lat_i, lon_i] = float(max_run)
+                elif annual_aggregation == "count_months_lt":
+                    out[lat_i, lon_i] = float(int(flags.sum()))
+                else:
+                    raise ValueError(f"Unsupported Drought Risk annual aggregation: {annual_aggregation}")
         years.append(int(year))
         arrays.append(out)
     data = np.stack(arrays, axis=0) if arrays else np.empty((0,) + tuple(spi.shape[1:]), dtype=float)
