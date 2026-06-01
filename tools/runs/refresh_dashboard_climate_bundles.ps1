@@ -27,7 +27,7 @@ param(
 
     [int]$Workers = 36,
 
-    [string]$Python = "python",
+    [string]$Python = "",
 
     [ValidateSet("default", "preserve", "delete_after_ensemble")]
     [string]$YearlyCleanupPolicy = "preserve",
@@ -52,6 +52,60 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Resolve-PythonCommand {
+    param([string]$RequestedPython)
+
+    function Test-PythonHasGeoPandas {
+        param([string]$Candidate)
+
+        if (-not $Candidate -or -not $Candidate.Trim()) {
+            return $false
+        }
+
+        try {
+            $null = & $Candidate -c "import geopandas" 2>$null
+            return $LASTEXITCODE -eq 0
+        } catch {
+            return $false
+        }
+    }
+
+    if ($RequestedPython -and $RequestedPython.Trim()) {
+        return $RequestedPython
+    }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+
+    if ($env:CONDA_PREFIX) {
+        $condaPython = Join-Path $env:CONDA_PREFIX "python.exe"
+        if (Test-Path $condaPython) {
+            $candidates.Add($condaPython)
+        }
+
+        $posixCondaPython = Join-Path $env:CONDA_PREFIX "bin/python"
+        if (Test-Path $posixCondaPython) {
+            $candidates.Add($posixCondaPython)
+        }
+    }
+
+    $knownWindowsIrtPython = Join-Path $env:USERPROFILE "AppData\Local\miniconda3\envs\irt\python.exe"
+    if (Test-Path $knownWindowsIrtPython) {
+        $candidates.Add($knownWindowsIrtPython)
+    }
+
+    $candidates.Add("python")
+
+    foreach ($candidate in $candidates) {
+        if (Test-PythonHasGeoPandas -Candidate $candidate) {
+            return $candidate
+        }
+    }
+
+    return $candidates[0]
+}
+
+$Python = Resolve-PythonCommand -RequestedPython $Python
 
 function Invoke-NativeChecked {
     param(
@@ -149,6 +203,7 @@ $stateToken = Get-SafePathToken -Value $State
 Write-Host "Dashboard climate bundle refresh"
 Write-Host "  state: $State"
 Write-Host "  levels: $($levelsToRun -join ', ')"
+Write-Host "  python: $Python"
 Write-Host "  source_metrics: $($sourceMetrics.Count)"
 Write-Host "  thematic_composites: $($thematicComposites.Count)"
 Write-Host "  sector_composites: $($sectorComposites.Count)"
