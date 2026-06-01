@@ -47,6 +47,12 @@ python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Flo
 python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 ```
 
+Targeted dashboard climate refresh for active thematic + sector-wise admin bundles:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all
+```
+
 By default the runner is non-destructive and dashboard-oriented:
 - climate runs default to `--level all`
 - climate runs resolve live metrics per requested level
@@ -74,6 +80,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/pipeline/build_proposal_bundles.py` | Build persisted district/block proposal climate-risk bundle masters plus the `r95p_interannual_variability` helper masters under `processed/<slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}`; the dashboard surfaces these as grouped `Sector-wise - ...` bundles, including district and block views for `Life & Livelihood Loss Risk` when its persisted block proposal bundle master is present | `python -m tools.pipeline.build_proposal_bundles --help` |
 | `tools/pipeline/build_glance_view_model.py` | Build persisted Glance view-model Parquet artifacts for landing runtime under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal operators get this through `tools.optimized.build_processed_optimised` | `python -m tools.pipeline.build_glance_view_model --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
+| `tools/runs/refresh_dashboard_climate_bundles.ps1` | Windows/PowerShell operator script that computes only active thematic and sector-wise dashboard climate source metrics for district and/or block, then rebuilds masters, composites, proposal bundles, `processed_optimised`, and strict parity reports | `powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all` |
 
 ## Diagnostics
 

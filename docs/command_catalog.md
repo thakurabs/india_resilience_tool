@@ -85,6 +85,39 @@ python -m tools.runs.prepare_dashboard climate-hazards --skip-optimised
 python -m tools.runs.prepare_dashboard climate-hazards --audit-only
 ```
 
+### Refresh dashboard climate bundles only
+
+Use this PowerShell wrapper when the goal is to refresh active admin dashboard
+climate bundles from raw NEX inputs through `processed_optimised`, without
+recomputing legacy diagnostics that are no longer used by thematic or
+sector-wise bundle definitions.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all
+```
+
+Preview the resolved source metrics, thematic composites, sector-wise composites,
+and commands without executing the expensive stages:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all -PlanOnly
+```
+
+Common variants:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level district
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level block -Workers 36
+```
+
+The script orchestrates, per requested admin level:
+- `tools.pipeline.compute_indices_multiprocess` for active dashboard source metrics only
+- `tools.pipeline.build_master_metrics`
+- `tools.pipeline.build_composite_metrics` for active thematic composites, excluding Riverine Flood because it comes from the JRC workflow
+- `tools.pipeline.build_proposal_bundles` for active sector-wise composites
+- `tools.optimized.build_processed_optimised`
+- `tools.optimized.audit_processed_optimised_parity`
+
 ### Recover Telangana block model-member yearly artifacts
 
 Preflight disk headroom before running full-state block recovery because yearly-cleanup-policy preserve retains per-model yearly CSVs under IRT_DATA_DIR/processed/. Start with a one-metric pilot:
