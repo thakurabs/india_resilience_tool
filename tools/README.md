@@ -57,6 +57,30 @@ Each executed stage writes an auditable stdout/stderr log under
 `processed_optimised/logs/dashboard_climate_refresh/<state>/<timestamp>/` by
 default; pass `-LogRoot <path>` to store logs elsewhere.
 
+Scoping and recompute control:
+- `-Bundle "<canonical name>" [-Bundle "<another>"]` limits the whole run
+  (compute → masters → composites/proposals → optimized → audit) to the source
+  metrics and composites of the named dashboard bundle(s) from
+  `india_resilience_tool/config/dashboard_bundles.py`. Names are
+  case/whitespace-insensitive; unknown names fail fast and list the valid set.
+  `Riverine Flood` is rejected (use the JRC flood-depth workflow instead).
+- Compute is incremental by default: it passes `--skip-existing`, so an unchanged
+  re-run recomputes nothing. Use `-Overwrite` to force a full recompute of the
+  in-scope metrics, or `-OverwriteMetrics slug1 slug2` to force just a subset
+  (the two are mutually exclusive; every slug must be in scope).
+- Masters are rebuilt freshness-aware: the runner probes each in-scope metric's
+  compute completion markers and only rebuilds masters that are missing, stale, or
+  force-overwritten; fresh masters are skipped (`--skip-existing`). If a metric has
+  no markers, or when `-SkipCompute` is used (the on-disk source may have changed
+  without a fresh marker), it additionally checks raw `*_periods.csv` mtimes.
+- Bundle-scoped runs write a distinct, scope-tagged parity report
+  (`..._dashboard_climate_bundle_<names>.json`) so they cannot overwrite the
+  full-scope report; full-scope runs keep the `..._dashboard_climate.json` name.
+- `-Workers` is opt-in. When omitted, compute and master builders pick their own
+  machine-aware defaults; pass `-Workers N` (N ≥ 1) to override.
+- The single `processed_optimised` build runs with `--skip-audit`; parity is
+  verified once by the dedicated strict audit stage (no longer audited twice).
+
 By default the runner is non-destructive and dashboard-oriented:
 - climate runs default to `--level all`
 - climate runs resolve live metrics per requested level
@@ -84,7 +108,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/pipeline/build_proposal_bundles.py` | Build persisted district/block proposal climate-risk bundle masters plus the `r95p_interannual_variability` helper masters under `processed/<slug>/<state>/master_metrics_by_{district,block}.{csv,parquet}`; the dashboard surfaces these as grouped `Sector-wise - ...` bundles, including district and block views for `Life & Livelihood Loss Risk` when its persisted block proposal bundle master is present | `python -m tools.pipeline.build_proposal_bundles --help` |
 | `tools/pipeline/build_glance_view_model.py` | Build persisted Glance view-model Parquet artifacts for landing runtime under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal operators get this through `tools.optimized.build_processed_optimised` | `python -m tools.pipeline.build_glance_view_model --help` |
 | `tools/pipeline/build_all_csv.ps1` | Windows helper to run common builds | `powershell -File tools/pipeline/build_all_csv.ps1` |
-| `tools/runs/refresh_dashboard_climate_bundles.ps1` | Windows/PowerShell operator script that computes only active thematic and sector-wise dashboard climate source metrics for district and/or block, then rebuilds masters, composites, proposal bundles, `processed_optimised`, and strict parity reports | `powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all` |
+| `tools/runs/refresh_dashboard_climate_bundles.ps1` | Windows/PowerShell operator script that computes only active thematic and sector-wise dashboard climate source metrics for district and/or block, then rebuilds masters, composites, proposal bundles, `processed_optimised`, and strict parity reports. Supports `-Bundle` scoping to named dashboard bundles, incremental `--skip-existing` compute by default with opt-in `-Overwrite`/`-OverwriteMetrics`, freshness-aware (marker-driven) master rebuilds, opt-in `-Workers`, and a single (non-duplicated) strict parity audit | `powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all` / `... -Bundle "Heat Stress" -PlanOnly` |
 
 ## Diagnostics
 
