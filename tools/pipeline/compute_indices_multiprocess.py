@@ -1181,6 +1181,8 @@ def _wbgt_shade_stull_daily_mean_c(
     hurs_da: xr.DataArray,
     mask: xr.DataArray,
 ) -> xr.DataArray | None:
+    # Superseded by heat_stress_gridfirst v2.1 grid-first path for the 4 WBGT_shade
+    # slugs (CHG-0012). Retained for legacy admin-first fallback only.
     """
     Return district-mean daily shaded/no-solar WBGT approximation in °C.
 
@@ -1223,6 +1225,8 @@ def _swbgt_empirical_daily_mean_c(
     hurs_da: xr.DataArray,
     mask: xr.DataArray,
 ) -> xr.DataArray | None:
+    # Superseded by heat_stress_gridfirst v2.1 grid-first path for the 4 SWBGT
+    # slugs (CHG-0012). Retained for legacy admin-first fallback only.
     """
     Return district-mean daily simplified empirical WBGT proxy in °C.
 

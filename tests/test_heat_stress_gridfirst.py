@@ -17,6 +17,8 @@ from india_resilience_tool.compute.heat_stress_gridfirst import (
     compute_heat_stress_rows_for_metric,
     heat_stress_grid_metric_cache_path,
     stull_twb_c,
+    swbgt_empirical_cell_c,
+    wbgt_shade_stull_cell_c,
 )
 from tools.pipeline import compute_indices_multiprocess as CMP
 
@@ -223,3 +225,138 @@ def test_shared_heat_risk_slugs_are_not_heat_stress_gridfirst() -> None:
     assert "tn90p_warm_nights_pct" not in HEAT_STRESS_GRIDFIRST_SLUGS
     assert "wsdi_warm_spell_days" not in HEAT_STRESS_GRIDFIRST_SLUGS
     assert "wbd_le_3" not in HEAT_STRESS_GRIDFIRST_SLUGS
+
+
+def test_wbgt_and_swbgt_slugs_are_heat_stress_gridfirst() -> None:
+    expected = {
+        "wbgt_shade_stull_annual_mean",
+        "wbgt_shade_stull_days_ge_28",
+        "wbgt_shade_stull_days_ge_30",
+        "wbgt_shade_stull_days_ge_32",
+        "swbgt_empirical_annual_mean",
+        "swbgt_empirical_days_ge_28",
+        "swbgt_empirical_days_ge_30",
+        "swbgt_empirical_days_ge_32",
+    }
+    assert expected <= HEAT_STRESS_GRIDFIRST_SLUGS
+
+
+def test_wbgt_shade_and_swbgt_cell_helpers_propagate_nan() -> None:
+    tas_c = xr.DataArray([30.0, np.nan, 25.0], dims=("time",))
+    rh = xr.DataArray([70.0, 70.0, np.nan], dims=("time",))
+
+    wbgt = wbgt_shade_stull_cell_c(tas_c, rh)
+    swbgt = swbgt_empirical_cell_c(tas_c, rh)
+
+    assert np.isfinite(float(wbgt.isel(time=0).item()))
+    assert np.isnan(float(wbgt.isel(time=1).item()))
+    assert np.isnan(float(wbgt.isel(time=2).item()))
+    assert np.isfinite(float(swbgt.isel(time=0).item()))
+    assert np.isnan(float(swbgt.isel(time=1).item()))
+    assert np.isnan(float(swbgt.isel(time=2).item()))
+
+
+def test_wbgt_shade_threshold_gridfirst_count_exceeds_polygon_mean_first(tmp_path: Path) -> None:
+    # Two cells, equal area: one hot+humid (above the 28 deg WBGT threshold every day),
+    # one cool+dry (well below). Grid-first count averages the per-cell exceedances
+    # (-> ~0.5 of the days). Admin-first would average tas and hurs first, then apply
+    # the WBGT formula and threshold -> Stull Twb of the polygon mean stays well below
+    # 28 deg, so the threshold is exceeded on ~0 days. The grid-first result must be
+    # strictly larger; this guards the CHG-0012 methodology change.
+    days = 30
+    time = pd.date_range("2020-06-01", periods=days, freq="D")
+    tas_c = np.zeros((days, 1, 2))
+    rh = np.zeros((days, 1, 2))
+    tas_c[:, 0, 0] = 35.0  # hot
+    tas_c[:, 0, 1] = 18.0  # cool
+    rh[:, 0, 0] = 95.0     # humid
+    rh[:, 0, 1] = 20.0     # dry
+    tas = _write_da(tmp_path / "tas.nc", "tas", tas_c + 273.15, time)
+    hurs = _write_da(tmp_path / "hurs.nc", "hurs", rh, time)
+    weights = pd.DataFrame(
+        {"unit_key": ["D", "D"], "cell_index": [0, 1], "area_m2": [1.0, 1.0]}
+    )
+
+    rows = compute_heat_stress_rows_for_metric(
+        metric={
+            "slug": "wbgt_shade_stull_days_ge_28",
+            "var": "tas",
+            "vars": ["tas", "hurs"],
+            "value_col": "wbgt_shade_stull_days_ge_28_days",
+            "compute": "wbgt_shade_stull_days_ge_threshold",
+            "params": {"thresh_c": 28.0},
+        },
+        model="MODEL",
+        scenario="ssp585",
+        year_to_paths={2020: {"tas": tas, "hurs": hurs}},
+        weights=weights,
+    )
+
+    grid_first_days = rows[0]["wbgt_shade_stull_days_ge_28_days"]
+    polygon_tas_c = xr.DataArray([26.5], dims=("time",))  # mean of 35 and 18
+    polygon_rh = xr.DataArray([57.5], dims=("time",))     # mean of 95 and 20
+    polygon_wbgt = wbgt_shade_stull_cell_c(polygon_tas_c, polygon_rh).item()
+    admin_first_days = float(polygon_wbgt >= 28.0) * days
+
+    assert grid_first_days > admin_first_days
+    assert grid_first_days == pytest.approx(days / 2.0, abs=0.5)
+
+
+def test_pipeline_dispatches_wbgt_metric_to_gridfirst(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    tas_path = _write_da(tmp_path / "tas.nc", "tas", np.asarray([[[303.15]]]), pd.date_range("2020-01-01", periods=1))
+    hurs_path = _write_da(tmp_path / "hurs.nc", "hurs", np.asarray([[[60.0]]]), pd.date_range("2020-01-01", periods=1))
+    metric = {
+        "slug": "wbgt_shade_stull_days_ge_30",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbgt_shade_stull_days_ge_30_days",
+        "compute": "wbgt_shade_stull_days_ge_threshold",
+        "params": {"thresh_c": 30.0},
+    }
+    gdf = gpd.GeoDataFrame({"district_name": ["D"]}, geometry=[box(0, 0, 1, 1)], crs="EPSG:4326")
+    called: dict[str, object] = {}
+
+    monkeypatch.setattr(CMP, "var_data_dir", lambda *_args, **_kwargs: tmp_path)
+    monkeypatch.setattr(
+        CMP,
+        "validated_year_files_for_var",
+        lambda _dir, var: ({2020: tas_path if var == "tas" else hurs_path}, {}),
+    )
+    monkeypatch.setattr(CMP, "read_gridfirst_spatial_weights_cache", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        CMP,
+        "build_gridfirst_area_weights",
+        lambda *_args, **_kwargs: pd.DataFrame({"unit_key": ["D"], "cell_index": [0], "area_m2": [1.0]}),
+    )
+    monkeypatch.setattr(CMP, "write_gridfirst_spatial_weights_cache", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        CMP,
+        "gridfirst_coverage_from_weights",
+        lambda *_args, **_kwargs: pd.DataFrame({"unit_key": ["D"], "coverage_ok": [True], "district": ["D"]}),
+    )
+
+    def fake_writer(**kwargs):
+        called["write"] = kwargs
+        return {"ok": 1}
+
+    monkeypatch.setattr(CMP, "_write_metric_rows_outputs", fake_writer)
+
+    def fake_compute(**kwargs):
+        called["compute"] = kwargs
+        return [{"district": "D", "year": 2020, "value": 1.0, "wbgt_shade_stull_days_ge_30_days": 1.0}]
+
+    monkeypatch.setattr(CMP, "compute_heat_stress_rows_for_metric", fake_compute)
+
+    result = CMP.process_metric_for_model_scenario(
+        metric,
+        "MODEL",
+        "ssp585",
+        {"subdir": "ssp585", "periods": {"2020-2020": (2020, 2020)}},
+        gdf,
+        level="district",
+        state_name="State",
+    )
+
+    assert result == {"ok": 1}
+    assert called["compute"]["metric"]["slug"] == "wbgt_shade_stull_days_ge_30"
+    assert called["compute"]["level"] == "district"

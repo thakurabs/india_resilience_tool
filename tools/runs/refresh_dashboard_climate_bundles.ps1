@@ -186,6 +186,7 @@ from india_resilience_tool.config.paths import get_paths_config
 from tools.pipeline import compute_indices_multiprocess as CMP
 from india_resilience_tool.config.dashboard_bundles import THEMATIC_DASHBOARD_BUNDLES, SECTOR_WISE_DASHBOARD_BUNDLES
 from india_resilience_tool.config.bundle_weights import get_bundle_weights
+from india_resilience_tool.config.metrics_registry import DOMAINS
 from india_resilience_tool.config.proposal_bundles import get_proposal_bundle_source_metric_slugs
 
 compute_slugs = {m["slug"] for m in CMP.METRICS}
@@ -199,19 +200,33 @@ thematic_composites = [
 sector_composites = [spec.composite_slug for spec in SECTOR_WISE_DASHBOARD_BUNDLES]
 
 wanted = set()
+scored_by_bundle = {}
 for spec in THEMATIC_DASHBOARD_BUNDLES:
     if spec.canonical_bundle == "Riverine Flood":
         continue
-    for entry in get_bundle_weights(spec.canonical_bundle):
+    entries = list(get_bundle_weights(spec.canonical_bundle))
+    scored_by_bundle[spec.canonical_bundle] = {entry.metric_slug for entry in entries}
+    for entry in entries:
         wanted.add(entry.metric_slug)
 
 for spec in SECTOR_WISE_DASHBOARD_BUNDLES:
     for slug in get_proposal_bundle_source_metric_slugs(spec.composite_slug):
         wanted.add(slug)
 
+# CHG-0012: include Heat Stress diagnostic slugs that appear under the domain
+# but are not scored in composite_heat_stress (WBGT/SWBGT). They are now
+# grid-first and must be refreshed alongside scored Heat Stress inputs.
+heat_stress_domain = set(DOMAINS.get("Heat Stress", []))
+heat_stress_scored = scored_by_bundle.get("Heat Stress", set())
+diagnostic_slugs = sorted(
+    (heat_stress_domain - heat_stress_scored - {"composite_heat_stress"}) & compute_slugs
+)
+wanted.update(diagnostic_slugs)
+
 cfg = get_paths_config()
 print(json.dumps({
     "source_metrics": sorted(wanted & compute_slugs),
+    "diagnostic_slugs": diagnostic_slugs,
     "thematic_composites": thematic_composites,
     "sector_composites": sector_composites,
     "optimized_output_root": str(cfg.optimized_output_root),
@@ -225,6 +240,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $scope = $scopeJson | ConvertFrom-Json
 $sourceMetrics = @($scope.source_metrics)
+$diagnosticSlugs = @($scope.diagnostic_slugs)
 $thematicComposites = @($scope.thematic_composites)
 $sectorComposites = @($scope.sector_composites)
 $optimizedMetrics = @($sourceMetrics + $thematicComposites + $sectorComposites | Sort-Object -Unique)
@@ -261,6 +277,7 @@ Write-Host "  state: $State"
 Write-Host "  levels: $($levelsToRun -join ', ')"
 Write-Host "  python: $Python"
 Write-Host "  source_metrics: $($sourceMetrics.Count)"
+Write-Host "  diagnostic_slugs: $($diagnosticSlugs.Count)"
 Write-Host "  thematic_composites: $($thematicComposites.Count)"
 Write-Host "  sector_composites: $($sectorComposites.Count)"
 Write-Host "  optimized_metric_roots: $($optimizedMetrics.Count)"

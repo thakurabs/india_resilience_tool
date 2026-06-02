@@ -26,7 +26,7 @@ from india_resilience_tool.compute.gridfirst_spatial import (
 from india_resilience_tool.compute.heat_risk_gridfirst import aggregate_cell_values
 
 
-HEAT_STRESS_GRIDFIRST_METHOD_VERSION = "heat-stress-v2-gridfirst-1"
+HEAT_STRESS_GRIDFIRST_METHOD_VERSION = "heat-stress-v2-gridfirst-2"
 HEAT_STRESS_GRIDFIRST_SLUGS = frozenset(
     {
         "twb_annual_mean",
@@ -35,7 +35,23 @@ HEAT_STRESS_GRIDFIRST_SLUGS = frozenset(
         "twb_days_ge_28",
         "twb_days_ge_30",
         "tasmin_tropical_nights_gt28",
+        # Heat Stress diagnostics (CHG-0012): grid-first WBGT/SWBGT.
+        # Visible under Heat Stress, NOT scored in composite_heat_stress.
+        "wbgt_shade_stull_annual_mean",
+        "wbgt_shade_stull_days_ge_28",
+        "wbgt_shade_stull_days_ge_30",
+        "wbgt_shade_stull_days_ge_32",
+        "swbgt_empirical_annual_mean",
+        "swbgt_empirical_days_ge_28",
+        "swbgt_empirical_days_ge_30",
+        "swbgt_empirical_days_ge_32",
     }
+)
+WBGT_SHADE_DAY_COUNT_SLUGS = frozenset(
+    {"wbgt_shade_stull_days_ge_28", "wbgt_shade_stull_days_ge_30", "wbgt_shade_stull_days_ge_32"}
+)
+SWBGT_EMPIRICAL_DAY_COUNT_SLUGS = frozenset(
+    {"swbgt_empirical_days_ge_28", "swbgt_empirical_days_ge_30", "swbgt_empirical_days_ge_32"}
 )
 HEAT_STRESS_AGGREGATION_METHOD = "gridfirst_area_weighted_mean"
 
@@ -62,6 +78,44 @@ def stull_twb_c(tas_c: xr.DataArray | np.ndarray | float, hurs: xr.DataArray | n
         + 0.00391838 * (rh**1.5) * np.arctan(0.023101 * rh)
         - 4.686035
     )
+
+
+def wbgt_shade_stull_cell_c(
+    tas_c: xr.DataArray | np.ndarray | float,
+    hurs: xr.DataArray | np.ndarray | float,
+):
+    """Shaded WBGT (Stull form) per cell, in deg C.
+
+    WBGT_shade = 0.7 * Twb_stull(tas_c, hurs) + 0.3 * tas_c.
+    Operates element-wise; NaN inputs propagate as NaN.
+    """
+
+    twb_c = stull_twb_c(tas_c, hurs)
+    return 0.7 * twb_c + 0.3 * tas_c
+
+
+def swbgt_empirical_cell_c(
+    tas_c: xr.DataArray | np.ndarray | float,
+    hurs: xr.DataArray | np.ndarray | float,
+):
+    """Simplified outdoor sWBGT (ACSM/BoM form) per cell, in deg C.
+
+    sWBGT = 0.567 * tas_c + 0.393 * e + 3.94, where e is actual vapour
+    pressure in hPa computed via the Magnus form on tas_c with RH normalised
+    to [0, 100]. NaN inputs propagate as NaN.
+    """
+
+    rh = hurs
+    try:
+        rh_values = np.asarray(rh, dtype=float)
+        if rh_values.size and np.nanmax(rh_values) <= 1.5:
+            rh = rh * 100.0
+    except (TypeError, ValueError, FloatingPointError):
+        pass
+    rh = np.clip(rh, 0.0, 100.0) if not isinstance(rh, xr.DataArray) else rh.clip(min=0.0, max=100.0)
+    es_hpa = 6.112 * np.exp((17.62 * tas_c) / (243.12 + tas_c))
+    e_hpa = es_hpa * (rh / 100.0)
+    return 0.567 * tas_c + 0.393 * e_hpa + 3.94
 
 
 def heat_stress_grid_metric_cache_path(
@@ -132,6 +186,23 @@ def _cell_values_for_metric(metric: Mapping[str, object], year_to_paths: Mapping
     if slug in {"twb_days_ge_28", "twb_days_ge_30"}:
         threshold = float(params.get("thresh_c", 28.0 if slug == "twb_days_ge_28" else 30.0))
         return (twb >= threshold).fillna(False).sum(dim="time").astype(float)
+
+    if slug.startswith("wbgt_shade_stull") or slug.startswith("swbgt_empirical"):
+        tas_k = _drop_feb29(_concat_year_var(year_to_paths, "tas", [year]))
+        hurs = _drop_feb29(_concat_year_var(year_to_paths, "hurs", [year]))
+        tas_c = tas_k - 273.15
+        if slug.startswith("wbgt_shade_stull"):
+            field = wbgt_shade_stull_cell_c(tas_c, hurs)
+        else:
+            field = swbgt_empirical_cell_c(tas_c, hurs)
+        if slug in {"wbgt_shade_stull_annual_mean", "swbgt_empirical_annual_mean"}:
+            return field.mean(dim="time", skipna=True)
+        if slug in WBGT_SHADE_DAY_COUNT_SLUGS or slug in SWBGT_EMPIRICAL_DAY_COUNT_SLUGS:
+            if "thresh_c" not in params:
+                raise ValueError(f"{slug} requires metric params['thresh_c']")
+            threshold = float(params["thresh_c"])
+            return (field >= threshold).fillna(False).sum(dim="time").astype(float)
+
     raise ValueError(f"Unsupported Heat Stress grid-first slug: {slug}")
 
 
@@ -168,7 +239,11 @@ def _grid_sidecar(
         "params": _jsonable(dict(metric.get("params") or {})),
         "input_file_hashes": _hash_paths(input_paths),
         "baseline": None,
-        "methodology_note": "Heat Stress v2 annual per-cell metric field before polygon aggregation",
+        "methodology_note": (
+            "Heat Stress v2 annual per-cell metric field before polygon aggregation; "
+            "covers Twb, Shaded WBGT, and Outdoor sWBGT cell fields under method version "
+            "heat-stress-v2-gridfirst-2."
+        ),
     }
 
 

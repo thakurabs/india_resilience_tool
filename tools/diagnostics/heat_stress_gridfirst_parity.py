@@ -21,6 +21,15 @@ DEFAULT_METRICS = (
     "twb_days_ge_28",
     "twb_days_ge_30",
     "tasmin_tropical_nights_gt28",
+    # CHG-0012: WBGT/SWBGT diagnostics promoted to grid-first under v2.1.
+    "wbgt_shade_stull_annual_mean",
+    "wbgt_shade_stull_days_ge_28",
+    "wbgt_shade_stull_days_ge_30",
+    "wbgt_shade_stull_days_ge_32",
+    "swbgt_empirical_annual_mean",
+    "swbgt_empirical_days_ge_28",
+    "swbgt_empirical_days_ge_30",
+    "swbgt_empirical_days_ge_32",
 )
 
 

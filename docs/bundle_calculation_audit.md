@@ -1438,10 +1438,10 @@ Private cache artifacts:
 - Shared spatial weights: `processed/_internal/spatial_weights/`
 - Heat Stress annual cell fields: `processed/_internal/heat_stress/grid_metrics/<slug>/<model>/<grid_id>/<scenario>/<year>.nc`
 - Cache sidecars include method version, slug, model, scenario, year, grid id, sorted params, input file hashes, value column, and baseline metadata when relevant.
-- Cache reads ignore artifacts whose `method_version` differs from `heat-stress-v2-gridfirst-1`.
+- Cache reads ignore artifacts whose `method_version` differs from `heat-stress-v2-gridfirst-2` (bumped from `-1` under CHG-0012 to widen the grid-first family to 8 additional WBGT/SWBGT diagnostic slugs).
 
-Public CSV metadata for the six Heat Stress-only metrics:
-- `method_version = heat-stress-v2-gridfirst-1`
+Public CSV metadata for the Heat Stress grid-first slugs (Twb family plus the WBGT/SWBGT diagnostics):
+- `method_version = heat-stress-v2-gridfirst-2`
 - `aggregation_method = gridfirst_area_weighted_mean`
 
 ### 5.3 Baselines and Screening Caveats
@@ -1452,7 +1452,9 @@ Stull Twb is an approximation. It is suitable for climate-screening and relative
 
 WBD legacy metrics remain registered for backward compatibility only; they are not Heat Stress domain members and are not scored.
 
-Shaded WBGT and Outdoor sWBGT (8 slugs: annual mean plus ≥28/30/32°C threshold days for each formulation) are **diagnostics visible under the Heat Stress domain** but are intentionally **not scored** in `composite_heat_stress` v2. They are derivatives of inputs already in the composite — Shaded WBGT = 0.7·Twb_stull + 0.3·tas; Outdoor sWBGT = 0.567·tas + 0.393·e + 3.94 — so scoring them alongside `twb_*` would double-count humid-heat signal through correlated regressors. They are surfaced for inspection against ISO 7243-style occupational thresholds (28/30/32°C ≈ light/moderate/heavy work bands) without altering bundle weighting. Note that these slugs are not part of `HEAT_STRESS_GRIDFIRST_SLUGS` and therefore use the legacy admin-first compute path, not the v2 grid-first cache.
+Shaded WBGT and Outdoor sWBGT (8 slugs: annual mean plus ≥28/30/32°C threshold days for each formulation) are **diagnostics visible under the Heat Stress domain** but are intentionally **not scored** in `composite_heat_stress` v2. They are derivatives of inputs already in the composite — Shaded WBGT = 0.7·Twb_stull + 0.3·tas; Outdoor sWBGT = 0.567·tas + 0.393·e + 3.94 — so scoring them alongside `twb_*` would double-count humid-heat signal through correlated regressors. They are surfaced for inspection against ISO 7243-style occupational thresholds (28/30/32°C ≈ light/moderate/heavy work bands) without altering bundle weighting.
+
+Under CHG-0012 the 8 WBGT/SWBGT slugs are now members of `HEAT_STRESS_GRIDFIRST_SLUGS` and are computed grid-first (the per-cell WBGT/sWBGT field is built before polygon aggregation) under method version `heat-stress-v2-gridfirst-2`. The cache bump from `-1` to `-2` invalidates all prior Heat Stress grid-first artifacts (including the Twb family) and forces a clean recompute on the next pipeline run; the recompute is the user-approved consequence of widening the grid-first family. Aggregation, NaN handling, Feb-29 dropping, and fractional day counts behave identically to the existing Twb family. The legacy admin-first compute functions for WBGT/SWBGT in `tools/pipeline/compute_indices_multiprocess.py` are retained but no longer reached for these slugs.
 
 ### 5.4 Normalization and Risk Interpretation
 
