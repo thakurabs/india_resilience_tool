@@ -59,7 +59,12 @@ param(
 
     [switch]$IncludeGeometry,
 
-    [switch]$IncludeContext
+    [switch]$IncludeContext,
+
+    # CHG-0046: per-bundle fail isolation publishes nothing by default when any
+    # selected bundle fails (never produce a mixed-generation runtime). Opt in to
+    # publish the succeeded subset and emit a *_partial_run.json manifest.
+    [switch]$AllowPartialPublish
 )
 
 $ErrorActionPreference = "Stop"
@@ -304,12 +309,55 @@ if any(spec.canonical_bundle == "Heat Stress" for spec in selected_thematic):
     )
     wanted.update(diagnostic_slugs)
 
+# CHG-0044 (C2): emit a per-bundle breakdown in addition to the flat union keys.
+# Each bundle entry carries its own compute/master/composite scope so the runner can
+# loop bundle-by-bundle with fail isolation, then run a single union optimized+audit
+# pass over the bundles that succeeded. Bundles are emitted in DASHBOARD_BUNDLES
+# (catalog) order so the report scope token is deterministic. Heat Stress diagnostic
+# slugs (WBGT/SWBGT) are folded into the Heat Stress bundle's source_metrics so they
+# are computed/mastered with that bundle, never globally.
+sel_thematic_ids = {id(s) for s in selected_thematic}
+sel_sector_ids = {id(s) for s in selected_sector}
+bundles = []
+for spec in DASHBOARD_BUNDLES:
+    if spec.canonical_bundle == "Riverine Flood":
+        continue
+    if id(spec) in sel_thematic_ids:
+        diags = list(diagnostic_slugs) if spec.canonical_bundle == "Heat Stress" else []
+        srcs = sorted(
+            (scored_by_bundle.get(spec.canonical_bundle, set()) | set(diags)) & compute_slugs
+        )
+        bundles.append({
+            "canonical": spec.canonical_bundle,
+            "family": "thematic",
+            "composite_slug": spec.composite_slug,
+            "source_metrics": srcs,
+            "diagnostic_slugs": diags,
+        })
+    elif id(spec) in sel_sector_ids:
+        srcs = sorted(
+            set(get_proposal_bundle_source_metric_slugs(spec.composite_slug)) & compute_slugs
+        )
+        bundles.append({
+            "canonical": spec.canonical_bundle,
+            "family": "sector",
+            "composite_slug": spec.composite_slug,
+            "source_metrics": srcs,
+            "diagnostic_slugs": [],
+        })
+
 cfg = get_paths_config()
 print(json.dumps({
     "source_metrics": sorted(wanted & compute_slugs),
     "diagnostic_slugs": diagnostic_slugs,
     "thematic_composites": thematic_composites,
     "sector_composites": sector_composites,
+    # CHG-0052: emit the per-bundle breakdown as a dedicated top-level JSON-array
+    # *string* (not a nested array-of-objects). PowerShell re-parses this string with
+    # ConvertFrom-Json, which is robust to the Windows PowerShell single-element-array
+    # collapse that turned a nested `bundles` property into $null for one-bundle runs.
+    "bundles_json": json.dumps(bundles),
+    "base_output_root": str(cfg.base_output_root),
     "optimized_output_root": str(cfg.optimized_output_root),
 }))
 '@
@@ -348,8 +396,14 @@ $freshnessCode = @'
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from india_resilience_tool.config.paths import get_paths_config
+
+# CHG-0048 (W2): optional per-slug timing for the freshness probe. stdout MUST stay
+# JSON-only (Get-StaleMasterSlugs parses it with ConvertFrom-Json), so timings are
+# attached as a "timings" field inside the JSON payload -- never printed as free text.
+timing_enabled = str(os.environ.get("IRT_FRESHNESS_TIMING", "")).strip() in {"1", "true", "yes"}
 
 state = os.environ.get("IRT_FRESHNESS_STATE", "")
 level = os.environ.get("IRT_FRESHNESS_LEVEL", "district")
@@ -414,28 +468,42 @@ def _has_periods_newer_than(slug, threshold):
 
 
 stale = []
+timings = {} if timing_enabled else None
 for slug in slugs:
+    t0 = time.perf_counter() if timing_enabled else 0.0
     master_path = base / slug / state / master_filename
     if not master_path.exists():
         stale.append(slug)
+        if timing_enabled:
+            timings[slug] = round(time.perf_counter() - t0, 6)
         continue
     try:
         master_mtime = master_path.stat().st_mtime
     except Exception:  # noqa: BLE001
         stale.append(slug)
+        if timing_enabled:
+            timings[slug] = round(time.perf_counter() - t0, 6)
         continue
     threshold = master_mtime + 1.0
     newest_marker = _newest_marker_mtime(slug)
     if newest_marker > 0.0 and newest_marker > threshold:
         stale.append(slug)
+        if timing_enabled:
+            timings[slug] = round(time.perf_counter() - t0, 6)
         continue
     # Periods fallback: catch source changes with no fresh marker. Always applied when
     # the slug has no in-scope markers; also applied for every slug when the caller
     # requests it (e.g. -SkipCompute, where markers may not reflect the on-disk source).
     if (periods_fallback or newest_marker == 0.0) and _has_periods_newer_than(slug, threshold):
         stale.append(slug)
+    if timing_enabled:
+        timings[slug] = round(time.perf_counter() - t0, 6)
 
-print(json.dumps({"stale": sorted(stale)}))
+payload = {"stale": sorted(stale)}
+if timing_enabled:
+    # Sorted slowest-first so the dominant slugs are obvious in -SkipCompute runs.
+    payload["timings"] = dict(sorted(timings.items(), key=lambda kv: kv[1], reverse=True))
+print(json.dumps(payload))
 '@
 
 function Get-StaleMasterSlugs {
@@ -473,11 +541,90 @@ function Get-StaleMasterSlugs {
     }
 }
 
+# CHG-0044 (C2): deterministic, compact report scope token built from composite slugs
+# in catalog order plus a short stable hash of that ordered set. Used for any subset or
+# partial-success run so it can never silently overwrite a clean full-scope report.
+function Get-ScopeToken {
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$CompositeSlugs)
+    $ordered = @($CompositeSlugs)
+    if ($ordered.Count -eq 0) { return "none" }
+    $joined = ($ordered -join ",")
+    $sha = [System.Security.Cryptography.SHA1]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($joined)
+        $hash = -join ($sha.ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") })
+    } finally {
+        $sha.Dispose()
+    }
+    $hash8 = $hash.Substring(0, 8)
+    $short = ($ordered | ForEach-Object { ($_ -replace '^composite_', '') }) -join "+"
+    $safe = Get-SafePathToken -Value $short
+    if ($safe.Length -gt 48) { $safe = $safe.Substring(0, 48) }
+    return "${safe}_${hash8}"
+}
+
+# CHG-0045 (W1.f): on a per-bundle failure, master writes are non-atomic
+# (master_builder.py:1159-1164) and Phase-1 freshness treats a master newer than its
+# markers as fresh. Delete the master CSV/parquet + the four state_*_<level>.csv summary
+# siblings for the tainted slugs so a half-written master can never be reused -- the
+# probe then reports the slug stale and a later bundle force-rebuilds it.
+function Remove-TaintedMasterOutputs {
+    param(
+        [Parameter(Mandatory = $true)][string]$BaseOutputRoot,
+        [Parameter(Mandatory = $true)][string]$StateName,
+        [Parameter(Mandatory = $true)][string]$LevelName,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Slugs
+    )
+    $masterCsv = if ($LevelName -eq "block") { "master_metrics_by_block.csv" } else { "master_metrics_by_district.csv" }
+    $masterParquet = $masterCsv -replace '\.csv$', '.parquet'
+    foreach ($slug in $Slugs) {
+        $stateDir = Join-Path (Join-Path $BaseOutputRoot $slug) $StateName
+        $targets = @(
+            (Join-Path $stateDir $masterCsv),
+            (Join-Path $stateDir $masterParquet),
+            (Join-Path $stateDir "state_model_averages_${LevelName}.csv"),
+            (Join-Path $stateDir "state_ensemble_stats_${LevelName}.csv"),
+            (Join-Path $stateDir "state_yearly_model_averages_${LevelName}.csv"),
+            (Join-Path $stateDir "state_yearly_ensemble_stats_${LevelName}.csv")
+        )
+        foreach ($t in $targets) {
+            if (Test-Path -LiteralPath $t) {
+                if ($PlanOnly) {
+                    Write-Host "    [plan] would delete tainted master output: $t"
+                } else {
+                    Remove-Item -LiteralPath $t -Force -ErrorAction SilentlyContinue
+                    Write-Host "    deleted tainted master output: $t"
+                }
+            }
+        }
+    }
+}
+
 $scope = $scopeJson | ConvertFrom-Json
 $sourceMetrics = @($scope.source_metrics)
 $diagnosticSlugs = @($scope.diagnostic_slugs)
 $thematicComposites = @($scope.thematic_composites)
 $sectorComposites = @($scope.sector_composites)
+# CHG-0052: re-parse the dedicated bundles JSON-array string and normalize to a clean
+# array of bundle objects. Re-parsing a top-level array string (rather than reading a
+# nested `bundles` property) avoids the Windows PowerShell single-element-array collapse
+# that previously surfaced one-bundle runs as a single $null iteration. Validate each
+# entry's shape so a malformed resolver payload fails loudly instead of as a null-index.
+$bundles = @()
+foreach ($b in @([string]$scope.bundles_json | ConvertFrom-Json)) {
+    if ($null -eq $b) { continue }
+    # A missing 'canonical' deserializes to $null -> [string]$null = '' -> -not '' = $true.
+    # (Avoid $b.PSObject.Properties['name'] here: that string indexer returns $null in
+    # Windows PowerShell even when the property exists, which mis-fired this guard.)
+    if (-not [string]$b.canonical) {
+        throw "Resolver emitted a malformed bundle entry (missing 'canonical'): $($b | ConvertTo-Json -Compress -Depth 5)"
+    }
+    $bundles += $b
+}
+if ($bundles.Count -eq 0) {
+    throw "Resolver returned no usable bundles for the selected scope."
+}
+$baseOutputRoot = [string]$scope.base_output_root
 $optimizedMetrics = @($sourceMetrics + $thematicComposites + $sectorComposites | Sort-Object -Unique)
 
 if ($sourceMetrics.Count -eq 0) {
@@ -515,15 +662,13 @@ if ($Level -contains "all") {
 
 $stateToken = Get-SafePathToken -Value $State
 
-# CHG-C10: keep full-scope parity reports at their established name, but give
-# -Bundle runs a distinct, scope-tagged report so a bundle refresh cannot silently
-# overwrite the full dashboard parity report (or a different bundle subset's).
-if ($Bundle.Count -gt 0) {
-    $bundleToken = Get-SafePathToken -Value (($Bundle | Sort-Object -Unique) -join "+")
-    $reportScopeSuffix = "_bundle_${bundleToken}"
-} else {
-    $reportScopeSuffix = ""
-}
+# CHG-0044 (C2): report naming is now decided per level, after the per-bundle loop, from
+# the set of bundles that actually published (see Get-ScopeToken). Full-scope all-success
+# runs keep the established name; any subset/partial run gets a tokenized name.
+
+# Per-level outcomes for the end-of-run summary + non-zero exit on any bundle failure.
+$runOutcomes = @()
+$anyFailure = $false
 
 $runToken = Get-Date -Format "yyyyMMdd_HHmmss"
 $script:RunLogRoot = Join-Path (Join-Path $LogRoot $stateToken) $runToken
@@ -542,6 +687,8 @@ Write-Host "  diagnostic_slugs: $($diagnosticSlugs.Count)"
 Write-Host "  thematic_composites: $($thematicComposites.Count)"
 Write-Host "  sector_composites: $($sectorComposites.Count)"
 Write-Host "  optimized_metric_roots: $($optimizedMetrics.Count)"
+Write-Host "  bundles: $($bundles.Count)"
+Write-Host "  allow_partial_publish: $AllowPartialPublish"
 Write-Host "  report_root: $ReportRoot"
 Write-Host "  log_root: $script:RunLogRoot"
 Write-Host "  plan_only: $PlanOnly"
@@ -552,168 +699,318 @@ foreach ($levelName in $levelsToRun) {
     Write-Host "LEVEL: $($levelName.ToUpperInvariant())"
     Write-Host "##############################################################################"
 
-    if (-not $SkipCompute) {
-        $computeBase = @(
-            "-m", "tools.pipeline.compute_indices_multiprocess",
-            "--state", $State,
-            "--level", $levelName,
-            "--yearly-cleanup-policy", $YearlyCleanupPolicy
-        )
-        if ($workersSupplied) {
-            $computeBase += @("--workers", [string]$Workers)
-        }
-
-        if ($Overwrite) {
-            # Force a full recompute of the in-scope set: --overwrite deletes first,
-            # then --skip-existing no-ops on whatever remains.
-            $computeArgs = $computeBase + @("--skip-existing", "--overwrite", "--metrics") + $sourceMetrics
-            Invoke-NativeChecked -Label "Compute source climate metrics (overwrite) ($levelName)" -Arguments $computeArgs
-        }
-        elseif ($OverwriteMetrics.Count -gt 0) {
-            # Pass 1: forced recompute of the requested subset only.
-            $forceArgs = $computeBase + @("--overwrite", "--metrics") + $OverwriteMetrics
-            Invoke-NativeChecked -Label "Compute forced-overwrite subset ($levelName)" -Arguments $forceArgs
-            # Pass 2: skip-existing fills in the rest of the in-scope set.
-            $skipArgs = $computeBase + @("--skip-existing", "--metrics") + $sourceMetrics
-            Invoke-NativeChecked -Label "Compute remaining source metrics (skip-existing) ($levelName)" -Arguments $skipArgs
-        }
-        else {
-            # Default: incremental compute via completion markers.
-            $computeArgs = $computeBase + @("--skip-existing", "--metrics") + $sourceMetrics
-            Invoke-NativeChecked -Label "Compute source climate metrics (skip-existing) ($levelName)" -Arguments $computeArgs
-        }
+    # CHG-0047 (W1.h): build the per-level slug-state cache ONCE. Each bundle subsets it
+    # instead of re-invoking the freshness probe. Keys: slug -> { Stale, Forced, Tainted,
+    # Done }. Done is set on bundle success so shared slugs are computed/mastered exactly
+    # once; Tainted is set on bundle failure (CHG-0045) to force a later rebuild.
+    $forcedAll = @()
+    if ($Overwrite) {
+        $forcedAll = @($sourceMetrics)
+    }
+    elseif ($OverwriteMetrics.Count -gt 0) {
+        $forcedAll = @($OverwriteMetrics)
     }
 
+    # CHG-C5: -SkipCompute means the on-disk source may have changed without a fresh
+    # marker this run, so verify master freshness against raw *_periods.csv too.
+    $staleSlugs = @()
     if (-not $SkipMaster) {
-        # CHG-C5: build_master_metrics --skip-existing short-circuits on whole-master
-        # existence, not per-slug freshness, so a recomputed metric can leave a stale
-        # master. Split the in-scope set into: force-rebuild (stale OR overwrite-forced)
-        # and fresh (cheap --skip-existing no-op).
-        # -SkipCompute means the on-disk source may have changed without a fresh marker
-        # this run, so verify master freshness against raw *_periods.csv too.
         $staleSlugs = @(Get-StaleMasterSlugs -StateName $State -LevelName $levelName -Slugs $sourceMetrics -PeriodsFallback:$SkipCompute)
-
-        $forcedSlugs = @()
-        if ($Overwrite) {
-            $forcedSlugs = @($sourceMetrics)
-        }
-        elseif ($OverwriteMetrics.Count -gt 0) {
-            $forcedSlugs = @($OverwriteMetrics)
-        }
-
-        $rebuildSet = @(@($staleSlugs + $forcedSlugs) | Sort-Object -Unique | Where-Object { $sourceMetrics -contains $_ })
-        $freshSet = @($sourceMetrics | Where-Object { $rebuildSet -notcontains $_ })
-
-        Write-Host "  master rebuild (stale/forced): $($rebuildSet.Count); fresh skip-existing: $($freshSet.Count)"
-
-        $masterBase = @(
-            "-m", "tools.pipeline.build_master_metrics",
-            "--state", $State,
-            "--level", $levelName
-        )
-        if ($workersSupplied) {
-            $masterBase += @("--workers", [string]$Workers)
-        }
-
-        if ($rebuildSet.Count -gt 0) {
-            $rebuildArgs = $masterBase + @("--metrics") + $rebuildSet
-            Invoke-NativeChecked -Label "Rebuild stale/forced source metric masters ($levelName)" -Arguments $rebuildArgs
-        }
-        if ($freshSet.Count -gt 0) {
-            $freshArgs = $masterBase + @("--skip-existing", "--metrics") + $freshSet
-            Invoke-NativeChecked -Label "Skip-existing source metric masters ($levelName)" -Arguments $freshArgs
-        }
     }
 
-    if (-not $SkipBundles) {
-        # CHG-C8: an empty --metric / --bundle filter means "build everything" to the
-        # underlying builders, which would silently undo -Bundle scoping. Only invoke
-        # each builder when its family actually has in-scope composites.
-        if ($thematicComposites.Count -gt 0) {
-            $thematicArgs = @()
-            foreach ($slug in $thematicComposites) {
-                $thematicArgs += @("--metric", [string]$slug)
+    $slugState = @{}
+    foreach ($slug in $sourceMetrics) {
+        $slugState[$slug] = [pscustomobject]@{
+            Stale   = ($staleSlugs -contains $slug)
+            Forced  = ($forcedAll -contains $slug)
+            Tainted = $false
+            Done    = $false
+        }
+    }
+    Write-Host "  slug-state: stale=$($staleSlugs.Count) forced=$($forcedAll.Count) of $($sourceMetrics.Count) in-scope source metrics"
+
+    $succeeded = @()   # bundle objects that completed compute->master->composite
+    $failed = @()      # [pscustomobject]@{ bundle; error }
+
+    # CHG-0044 (C2): iterate bundle-by-bundle with fail isolation. The hybrid recompute /
+    # freshness / worker logic is reused from Phase 1, just parameterized by the current
+    # bundle's metric list (subset of $slugState) instead of the global union.
+    # NOTE: the loop variable must NOT be $bundle -- that collides case-insensitively with
+    # the [string[]]$Bundle parameter, whose type constraint would coerce each PSCustomObject
+    # to a string array (blanking .canonical/.source_metrics). Use $bundleSpec.
+    foreach ($bundleSpec in $bundles) {
+        $bname = [string]$bundleSpec.canonical
+        $bsources = @($bundleSpec.source_metrics)
+        Write-Host ""
+        Write-Host "------------------------------------------------------------------------------"
+        Write-Host "BUNDLE: $bname [$($bundleSpec.family)] -> $($bundleSpec.composite_slug) ($levelName)"
+        Write-Host "------------------------------------------------------------------------------"
+
+        try {
+            if (-not $SkipCompute) {
+                $toCompute = @($bsources | Where-Object { -not $slugState[$_].Done })
+                if ($toCompute.Count -gt 0) {
+                    $computeBase = @(
+                        "-m", "tools.pipeline.compute_indices_multiprocess",
+                        "--state", $State,
+                        "--level", $levelName,
+                        "--yearly-cleanup-policy", $YearlyCleanupPolicy
+                    )
+                    if ($workersSupplied) {
+                        $computeBase += @("--workers", [string]$Workers)
+                    }
+
+                    $forcedHere = @($toCompute | Where-Object { $slugState[$_].Forced })
+                    if ($forcedHere.Count -gt 0 -and $Overwrite) {
+                        # Force a full recompute of this bundle's set: --overwrite deletes
+                        # first, then --skip-existing no-ops on whatever remains.
+                        $computeArgs = $computeBase + @("--skip-existing", "--overwrite", "--metrics") + $toCompute
+                        Invoke-NativeChecked -Label "Compute [$bname] (overwrite) ($levelName)" -Arguments $computeArgs
+                    }
+                    elseif ($forcedHere.Count -gt 0) {
+                        # Pass 1: forced recompute of the requested subset within this bundle.
+                        $forceArgs = $computeBase + @("--overwrite", "--metrics") + $forcedHere
+                        Invoke-NativeChecked -Label "Compute [$bname] forced-overwrite subset ($levelName)" -Arguments $forceArgs
+                        # Pass 2: skip-existing fills in the rest of this bundle's set.
+                        $skipArgs = $computeBase + @("--skip-existing", "--metrics") + $toCompute
+                        Invoke-NativeChecked -Label "Compute [$bname] remaining (skip-existing) ($levelName)" -Arguments $skipArgs
+                    }
+                    else {
+                        # Default: incremental compute via completion markers.
+                        $computeArgs = $computeBase + @("--skip-existing", "--metrics") + $toCompute
+                        Invoke-NativeChecked -Label "Compute [$bname] (skip-existing) ($levelName)" -Arguments $computeArgs
+                    }
+                }
             }
-            $compositeArgs = @(
-                "-m", "tools.pipeline.build_composite_metrics",
-                "--state", $State,
-                "--level", $levelName,
-                "--overwrite"
-            ) + $thematicArgs
-            Invoke-NativeChecked -Label "Build thematic composite masters ($levelName)" -Arguments $compositeArgs
-        }
-        else {
-            Write-Host ""
-            Write-Host "==> No thematic bundles in scope; skipping thematic composite build ($levelName)"
-        }
 
-        if ($sectorComposites.Count -gt 0) {
-            $sectorArgs = @()
-            foreach ($slug in $sectorComposites) {
-                $sectorArgs += @("--bundle", [string]$slug)
+            if (-not $SkipMaster) {
+                # CHG-C5: build_master_metrics --skip-existing short-circuits on whole-master
+                # existence, not per-slug freshness, so a recomputed metric can leave a stale
+                # master. Rebuild stale|forced|tainted slugs; skip-existing the rest. Slugs an
+                # earlier bundle already built (Done) are skipped entirely.
+                $pending = @($bsources | Where-Object { -not $slugState[$_].Done })
+                $rebuildSet = @($pending | Where-Object { $slugState[$_].Stale -or $slugState[$_].Forced -or $slugState[$_].Tainted })
+                $freshSet = @($pending | Where-Object { $rebuildSet -notcontains $_ })
+
+                Write-Host "  [$bname] master rebuild (stale/forced/tainted): $($rebuildSet.Count); fresh skip-existing: $($freshSet.Count)"
+
+                $masterBase = @(
+                    "-m", "tools.pipeline.build_master_metrics",
+                    "--state", $State,
+                    "--level", $levelName
+                )
+                if ($workersSupplied) {
+                    $masterBase += @("--workers", [string]$Workers)
+                }
+
+                if ($rebuildSet.Count -gt 0) {
+                    $rebuildArgs = $masterBase + @("--metrics") + $rebuildSet
+                    Invoke-NativeChecked -Label "Rebuild masters [$bname] ($levelName)" -Arguments $rebuildArgs
+                }
+                if ($freshSet.Count -gt 0) {
+                    $freshArgs = $masterBase + @("--skip-existing", "--metrics") + $freshSet
+                    Invoke-NativeChecked -Label "Skip-existing masters [$bname] ($levelName)" -Arguments $freshArgs
+                }
             }
-            $proposalArgs = @(
-                "-m", "tools.pipeline.build_proposal_bundles",
-                "--state", $State,
-                "--level", $levelName,
-                "--overwrite"
-            ) + $sectorArgs
-            Invoke-NativeChecked -Label "Build sector-wise proposal bundle masters ($levelName)" -Arguments $proposalArgs
+
+            if (-not $SkipBundles) {
+                if ($bundleSpec.family -eq "thematic") {
+                    $compositeArgs = @(
+                        "-m", "tools.pipeline.build_composite_metrics",
+                        "--state", $State,
+                        "--level", $levelName,
+                        "--overwrite",
+                        "--metric", [string]$bundleSpec.composite_slug
+                    )
+                    Invoke-NativeChecked -Label "Build thematic composite [$bname] ($levelName)" -Arguments $compositeArgs
+                }
+                else {
+                    $proposalArgs = @(
+                        "-m", "tools.pipeline.build_proposal_bundles",
+                        "--state", $State,
+                        "--level", $levelName,
+                        "--overwrite",
+                        "--bundle", [string]$bundleSpec.composite_slug
+                    )
+                    Invoke-NativeChecked -Label "Build sector proposal [$bname] ($levelName)" -Arguments $proposalArgs
+                }
+            }
+
+            # Mark this bundle's slugs done so shared slugs are not reprocessed by a later
+            # bundle (single-pass shared work via the per-level cache). CHG-0053: also
+            # CLEAR taint here -- if an earlier failed bundle tainted a shared slug and this
+            # bundle has now successfully recomputed/remastered it, the slug is valid again
+            # and must be eligible for the (partial) publish set, not permanently excluded.
+            foreach ($slug in $bsources) {
+                $slugState[$slug].Done = $true
+                $slugState[$slug].Tainted = $false
+            }
+            $succeeded += $bundleSpec
         }
-        else {
+        catch {
+            $msg = "$($_.Exception.Message)"
             Write-Host ""
-            Write-Host "==> No sector bundles in scope; skipping sector proposal build ($levelName)"
+            Write-Host "==> BUNDLE FAILED: $bname ($levelName) -- $msg"
+            # CHG-0045 (W1.f): taint this bundle's not-yet-done slugs and delete any
+            # half-written master outputs so a later bundle force-rebuilds them rather than
+            # reusing a partial master that the freshness probe would treat as fresh.
+            $taint = @($bsources | Where-Object { -not $slugState[$_].Done })
+            foreach ($slug in $taint) {
+                $slugState[$slug].Tainted = $true
+                $slugState[$slug].Stale = $true
+            }
+            if ($taint.Count -gt 0) {
+                Write-Host "  tainting $($taint.Count) slug(s); cleaning half-written master outputs"
+                Remove-TaintedMasterOutputs -BaseOutputRoot $baseOutputRoot -StateName $State -LevelName $levelName -Slugs $taint
+            }
+            $failed += [pscustomobject]@{ bundle = $bname; error = $msg }
+            $anyFailure = $true
         }
     }
 
-    $optimizedArgs = @()
-    foreach ($slug in $optimizedMetrics) {
-        $optimizedArgs += @("--metric", [string]$slug)
+    # CHG-0046 (W1.g): single union optimized+audit pass over the bundles that succeeded.
+    # Default policy never produces a mixed-generation runtime: if any bundle failed and
+    # -AllowPartialPublish was not supplied, skip optimized+audit entirely for this level.
+    $publishedComposites = @($succeeded | ForEach-Object { [string]$_.composite_slug })
+    $publishedSources = @()
+    foreach ($b in $succeeded) { $publishedSources += @($b.source_metrics) }
+    $publishedSources = @($publishedSources | Sort-Object -Unique | Where-Object { -not $slugState[$_].Tainted })
+    $publishSet = @($publishedSources + $publishedComposites | Sort-Object -Unique)
+
+    $levelHadFailure = ($failed.Count -gt 0)
+    $publish = $true
+    $publishReason = ""
+    if ($levelHadFailure -and -not $AllowPartialPublish) {
+        $publish = $false
+        $publishReason = "optimized+audit skipped (bundle failure; -AllowPartialPublish not set); runtime left at last-good state"
+    }
+    elseif ($succeeded.Count -eq 0) {
+        $publish = $false
+        $publishReason = "optimized+audit skipped (no bundle succeeded)"
+    }
+    elseif ($publishSet.Count -eq 0) {
+        $publish = $false
+        $publishReason = "optimized+audit skipped (empty publish set)"
     }
 
-    $reportPath = Join-Path $ReportRoot "parity_report_${stateToken}_${levelName}_dashboard_climate${reportScopeSuffix}.json"
-
-    if (-not $SkipOptimized) {
-        $buildArgs = @(
-            "-m", "tools.optimized.build_processed_optimised",
-            "--state", $State,
-            "--level", $levelName
-        ) + $optimizedArgs + @(
-            "--overwrite",
-            "--prune-scope",
-            "--skip-audit",
-            "--report-path", $reportPath
-        )
-
-        if (-not $IncludeGeometry) {
-            $buildArgs += "--skip-geometry"
-        }
-        if (-not $IncludeContext) {
-            $buildArgs += "--skip-context"
-        }
-
-        Invoke-NativeChecked -Label "Build processed_optimised dashboard climate artifacts ($levelName)" -Arguments $buildArgs
+    # CHG-0044 (W1.d): full-scope all-success keeps the established report name; any subset
+    # or partial run gets a deterministic tokenized name so it cannot overwrite a clean one.
+    if ($Bundle.Count -eq 0 -and -not $levelHadFailure) {
+        $scopeToken = ""
+        $reportPath = Join-Path $ReportRoot "parity_report_${stateToken}_${levelName}_dashboard_climate.json"
+    }
+    else {
+        $scopeToken = Get-ScopeToken -CompositeSlugs $publishedComposites
+        $reportPath = Join-Path $ReportRoot "parity_report_${stateToken}_${levelName}_dashboard_climate_scope-${scopeToken}.json"
     }
 
-    if (-not $SkipAudit) {
-        $auditArgs = @(
-            "-m", "tools.optimized.audit_processed_optimised_parity",
-            "--state", $State,
-            "--level", $levelName
-        ) + $optimizedArgs + @(
-            "--strict",
-            "--report-path", $reportPath
-        )
-
-        if ($levelName -eq "block") {
-            $auditArgs += "--require-block-yearly-models"
+    if (-not $publish) {
+        Write-Host ""
+        Write-Host "==> $publishReason ($levelName)"
+    }
+    else {
+        $optimizedArgs = @()
+        foreach ($slug in $publishSet) {
+            $optimizedArgs += @("--metric", [string]$slug)
         }
 
-        Invoke-NativeChecked -Label "Audit processed_optimised dashboard climate artifacts ($levelName)" -Arguments $auditArgs
+        if (-not $SkipOptimized) {
+            $buildArgs = @(
+                "-m", "tools.optimized.build_processed_optimised",
+                "--state", $State,
+                "--level", $levelName
+            ) + $optimizedArgs + @(
+                "--overwrite",
+                "--prune-scope",
+                "--skip-audit",
+                "--report-path", $reportPath
+            )
+
+            if (-not $IncludeGeometry) {
+                $buildArgs += "--skip-geometry"
+            }
+            if (-not $IncludeContext) {
+                $buildArgs += "--skip-context"
+            }
+
+            Invoke-NativeChecked -Label "Build processed_optimised dashboard climate artifacts ($levelName)" -Arguments $buildArgs
+        }
+
+        if (-not $SkipAudit) {
+            $auditArgs = @(
+                "-m", "tools.optimized.audit_processed_optimised_parity",
+                "--state", $State,
+                "--level", $levelName
+            ) + $optimizedArgs + @(
+                "--strict",
+                "--report-path", $reportPath
+            )
+
+            if ($levelName -eq "block") {
+                $auditArgs += "--require-block-yearly-models"
+            }
+
+            Invoke-NativeChecked -Label "Audit processed_optimised dashboard climate artifacts ($levelName)" -Arguments $auditArgs
+        }
+
+        # CHG-0046: when publishing a partial subset, write a manifest beside the report so
+        # downstream ops can detect the mixed/partial state.
+        if ($levelHadFailure -and $AllowPartialPublish) {
+            $taintedSlugs = @($slugState.Keys | Where-Object { $slugState[$_].Tainted } | Sort-Object)
+            $manifestPath = Join-Path $ReportRoot "parity_report_${stateToken}_${levelName}_dashboard_climate_scope-${scopeToken}_partial_run.json"
+            $manifest = [ordered]@{
+                state             = $State
+                level             = $levelName
+                partial           = $true
+                succeeded_bundles = @($succeeded | ForEach-Object { [string]$_.canonical })
+                failed_bundles    = @($failed)
+                tainted_slugs     = $taintedSlugs
+                published_metrics = $publishSet
+                report_path       = $reportPath
+                timestamp         = (Get-Date).ToString('o')
+            }
+            if ($PlanOnly) {
+                Write-Host "    [plan] would write partial-run manifest: $manifestPath"
+            }
+            else {
+                $manifest | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -Path $manifestPath
+                Write-Host "    wrote partial-run manifest: $manifestPath"
+            }
+        }
+    }
+
+    $runOutcomes += [pscustomobject]@{
+        level     = $levelName
+        succeeded = @($succeeded | ForEach-Object { [string]$_.canonical })
+        failed    = @($failed)
+        published = $publish
+        reason    = $publishReason
+    }
+}
+
+Write-Host ""
+Write-Host "=============================================================================="
+Write-Host "RUN SUMMARY"
+Write-Host "=============================================================================="
+foreach ($o in $runOutcomes) {
+    Write-Host ""
+    Write-Host "LEVEL $($o.level): $($o.succeeded.Count) bundle(s) ok, $($o.failed.Count) failed; optimized/audit published: $($o.published)"
+    if (-not $o.published -and $o.reason) {
+        Write-Host "  $($o.reason)"
+    }
+    foreach ($f in $o.failed) {
+        $firstLine = (($f.error -split "`n")[0]).Trim()
+        Write-Host "  FAILED: $($f.bundle) -- $firstLine"
     }
 }
 
 Write-Host ""
 Write-Host "Dashboard climate source metrics selected: $($sourceMetrics.Count)"
 Write-Host "Optimized dashboard metrics/composites selected: $($optimizedMetrics.Count)"
+
+if ($anyFailure) {
+    Write-Host "Refresh completed WITH FAILURES (one or more bundles failed)."
+    exit 1
+}
+
 Write-Host "Refresh complete."
