@@ -175,8 +175,17 @@ function Invoke-NativeChecked {
         ""
     ) | Set-Content -Encoding UTF8 -Path $logPath
 
-    & $Python @Arguments 2>&1 | Tee-Object -FilePath $logPath -Append
-    $exitCode = $LASTEXITCODE
+    # Some pipeline entrypoints intentionally emit bootstrap/status text on stderr.
+    # Treat the native process exit code as the failure signal here so informative
+    # stderr lines do not become terminating PowerShell errors under Stop mode.
+    $prevErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & $Python @Arguments 2>&1 | Tee-Object -FilePath $logPath -Append
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevErrorActionPreference
+    }
 
     @(
         ""
