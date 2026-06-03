@@ -121,9 +121,54 @@ parity report it writes (`parity_report_*_block_dashboard_climate*.json`).
 
 ---
 
+## Part C — freshness-probe periods-scan workers (W2 / CHG-0055)
+
+The master-freshness `*_periods.csv` fallback (CHG-0055) walks periods trees with
+`os.scandir` + per-slug early-exit across a bounded thread pool, tunable via
+`IRT_FRESHNESS_WORKERS` (default `min(32, cpu*2)`). Measured on Telangana,
+`-Level block -SkipCompute` (`IRT_FRESHNESS_TIMING=1`), full 54-slug scope:
+
+| Variant | Workers | Periods WALL | Per-slug work sum | Notes |
+|---------|---------|--------------|-------------------|-------|
+| serial `rglob` (pre-CHG-0055) | 1 | ~4,140 s (~69 min) | ~4,140 s | one slug alone 1,344 s |
+| parallel `scandir` | 32 | **941.9 s (~15.7 min)** | 30,112 s | ~4.4× faster wall |
+
+Key finding: the probe is **disk-bound**, not CPU-bound. With 32 concurrent
+walkers each per-slug `stat`/`scandir` inflates ~6× (work sum 30k s vs 4.1k s
+serial) from seek contention + per-file AV scanning, yet the aggregate wall still
+drops 4.4×. The single heaviest slug's tree is correctly split across workers
+(8,163 s of work completes within a 941 s wall), so the single-slug floor is gone.
+
+**Open tuning (do before changing the default):** sweep `IRT_FRESHNESS_WORKERS`
+∈ {8, 16, 24, 32} on the same block scope and record Periods WALL. Because the
+bottleneck is the disk, fewer workers may match or beat 32 with far less thrash.
+
+```powershell
+$env:IRT_FRESHNESS_TIMING=1
+foreach ($w in 8,16,24,32) {
+  $env:IRT_FRESHNESS_WORKERS=$w
+  Write-Host "=== workers=$w ==="
+  .\tools\runs\refresh_dashboard_climate_bundles.ps1 -State Telangana -Level block -SkipCompute -SkipOptimized -SkipAudit -PlanOnly |
+    Select-String "PERIODS WALL"
+}
+$env:IRT_FRESHNESS_WORKERS=$null; $env:IRT_FRESHNESS_TIMING=$null
+```
+
+| Workers | Periods WALL | Notes |
+|---------|--------------|-------|
+| 8       |              |       |
+| 16      |              |       |
+| 24      |              |       |
+| 32 (default) | 941.9 s | baseline above |
+
+**Recommendation (fill after the sweep):** _____. Change the `min(32, cpu*2)`
+default only with these numbers + user sign-off (separate CHG).
+
+---
+
 ## Output of this workstream
 
-- This table, filled in, committed here.
+- These tables, filled in, committed here.
 - A one-paragraph recommendation for each knob.
 - No default change in the script unless the numbers justify it **and** the user
   signs off — that is a separate CHG.

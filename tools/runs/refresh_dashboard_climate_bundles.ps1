@@ -396,7 +396,9 @@ $freshnessCode = @'
 import json
 import os
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from india_resilience_tool.config.paths import get_paths_config
 
@@ -453,56 +455,167 @@ def _newest_marker_mtime(slug):
     return newest
 
 
-def _has_periods_newer_than(slug, threshold):
-    """Return True as soon as any in-level *_periods.csv is newer than threshold."""
+# CHG-0055 (W2): the periods fallback is the freshness probe's hot spot. When nothing
+# is newer than the master it must visit every *_periods.csv in the slug's tree (no
+# early exit), and at block level those trees are huge -- a single slug measured at
+# ~22 min, the full 54-slug block probe at ~69 min. Two fixes, both behaviour-preserving
+# (the set of slugs reported stale is identical to the old rglob walk):
+#   1. Split each slug's periods tree into independent walk units (one per immediate
+#      subdirectory, recursive, plus one shallow unit for files directly under the root)
+#      and process all units across a bounded thread pool. This load-balances one giant
+#      tree across workers instead of letting the heaviest slug floor the wall time.
+#   2. Walk with os.scandir + name.endswith (no per-entry Path/fnmatch alloc) and
+#      early-exit the moment any newer file is found for a slug (stop_event), matching
+#      the original "return True on first newer" semantics. Symlinked dirs are not
+#      followed (periods trees contain none; avoids walk cycles).
+def _periods_walk_units(slug):
+    """Walk units covering ALL *_periods.csv under the slug's periods root.
+
+    Returns a list of (kind, path): ("tree", subdir) walked recursively for each
+    immediate subdirectory, plus ("shallow", root) for files directly under the root.
+    Together these cover exactly the files pathlib rglob("*_periods.csv") would yield.
+    """
     periods_root = base / slug / state / periods_dir
     if not periods_root.exists():
-        return False
-    for f in periods_root.rglob("*_periods.csv"):
+        return []
+    units = []
+    try:
+        with os.scandir(periods_root) as it:
+            for e in it:
+                try:
+                    if e.is_dir(follow_symlinks=False):
+                        units.append(("tree", e.path))
+                except OSError:
+                    continue
+    except OSError:
+        return [("tree", str(periods_root))]
+    units.append(("shallow", str(periods_root)))
+    return units
+
+
+def _unit_has_newer(kind, path, threshold, stop_event):
+    """True if any *_periods.csv in this unit is newer than threshold (early-exit)."""
+    if kind == "shallow":
         try:
-            if f.stat().st_mtime > threshold:
-                return True
-        except Exception:  # noqa: BLE001
-            pass
+            with os.scandir(path) as it:
+                for e in it:
+                    if stop_event.is_set():
+                        return False
+                    try:
+                        if e.name.endswith("_periods.csv") and e.is_file(follow_symlinks=False):
+                            if e.stat(follow_symlinks=False).st_mtime > threshold:
+                                return True
+                    except OSError:
+                        continue
+        except OSError:
+            return False
+        return False
+    stack = [path]
+    while stack:
+        if stop_event.is_set():
+            return False
+        d = stack.pop()
+        try:
+            with os.scandir(d) as it:
+                for e in it:
+                    if stop_event.is_set():
+                        return False
+                    try:
+                        if e.is_dir(follow_symlinks=False):
+                            stack.append(e.path)
+                        elif e.name.endswith("_periods.csv"):
+                            if e.stat(follow_symlinks=False).st_mtime > threshold:
+                                return True
+                    except OSError:
+                        continue
+        except OSError:
+            continue
     return False
 
 
+# Phase 1 (cheap, serial): master existence + markers decide which slugs still need the
+# periods fallback walk. This mirrors the original per-slug logic exactly.
 stale = []
-timings = {} if timing_enabled else None
+need_periods = []  # (slug, threshold)
+phase1_t0 = time.perf_counter() if timing_enabled else 0.0
 for slug in slugs:
-    t0 = time.perf_counter() if timing_enabled else 0.0
     master_path = base / slug / state / master_filename
     if not master_path.exists():
         stale.append(slug)
-        if timing_enabled:
-            timings[slug] = round(time.perf_counter() - t0, 6)
         continue
     try:
         master_mtime = master_path.stat().st_mtime
     except Exception:  # noqa: BLE001
         stale.append(slug)
-        if timing_enabled:
-            timings[slug] = round(time.perf_counter() - t0, 6)
         continue
     threshold = master_mtime + 1.0
     newest_marker = _newest_marker_mtime(slug)
     if newest_marker > 0.0 and newest_marker > threshold:
         stale.append(slug)
-        if timing_enabled:
-            timings[slug] = round(time.perf_counter() - t0, 6)
         continue
     # Periods fallback: catch source changes with no fresh marker. Always applied when
     # the slug has no in-scope markers; also applied for every slug when the caller
     # requests it (e.g. -SkipCompute, where markers may not reflect the on-disk source).
-    if (periods_fallback or newest_marker == 0.0) and _has_periods_newer_than(slug, threshold):
-        stale.append(slug)
-    if timing_enabled:
-        timings[slug] = round(time.perf_counter() - t0, 6)
+    if periods_fallback or newest_marker == 0.0:
+        need_periods.append((slug, threshold))
+phase1_seconds = (time.perf_counter() - phase1_t0) if timing_enabled else 0.0
 
-payload = {"stale": sorted(stale)}
+# Phase 2 (parallel): walk the periods trees across a bounded thread pool. I/O-bound
+# stat/scandir release the GIL, so threads are effective. Per-slug stop events give the
+# same first-newer early-exit the serial walk had.
+workers = 0
+try:
+    workers = int(str(os.environ.get("IRT_FRESHNESS_WORKERS", "")).strip() or "0")
+except ValueError:
+    workers = 0
+if workers <= 0:
+    workers = min(32, (os.cpu_count() or 8) * 2)
+
+per_slug_seconds = {} if timing_enabled else None
+periods_wall = 0.0
+if need_periods:
+    stop_events = {slug: threading.Event() for slug, _ in need_periods}
+    found = set()
+    found_lock = threading.Lock()
+    time_lock = threading.Lock()
+    work_units = []
+    for slug, threshold in need_periods:
+        for kind, path in _periods_walk_units(slug):
+            work_units.append((slug, kind, path, threshold))
+
+    def _run(unit):
+        slug, kind, path, threshold = unit
+        t = time.perf_counter() if timing_enabled else 0.0
+        try:
+            hit = _unit_has_newer(kind, path, threshold, stop_events[slug])
+        finally:
+            if timing_enabled:
+                dt = time.perf_counter() - t
+                with time_lock:
+                    per_slug_seconds[slug] = per_slug_seconds.get(slug, 0.0) + dt
+        if hit:
+            stop_events[slug].set()
+            with found_lock:
+                found.add(slug)
+
+    wall_t0 = time.perf_counter()
+    if work_units:
+        with ThreadPoolExecutor(max_workers=min(workers, len(work_units))) as ex:
+            list(ex.map(_run, work_units))
+    periods_wall = time.perf_counter() - wall_t0
+    stale.extend(found)
+
+payload = {"stale": sorted(set(stale))}
 if timing_enabled:
-    # Sorted slowest-first so the dominant slugs are obvious in -SkipCompute runs.
-    payload["timings"] = dict(sorted(timings.items(), key=lambda kv: kv[1], reverse=True))
+    per_slug = per_slug_seconds or {}
+    payload["timings"] = {k: round(v, 6) for k, v in sorted(per_slug.items(), key=lambda kv: kv[1], reverse=True)}
+    payload["timing_meta"] = {
+        "periods_wall_seconds": round(periods_wall, 4),
+        "periods_work_seconds": round(sum(per_slug.values()), 4),
+        "phase1_seconds": round(phase1_seconds, 4),
+        "workers": workers,
+        "slugs_walked": len(need_periods),
+    }
 print(json.dumps(payload))
 '@
 
@@ -532,6 +645,25 @@ function Get-StaleMasterSlugs {
             throw "Failed to evaluate master freshness for $LevelName."
         }
         $parsed = $out | ConvertFrom-Json
+        # CHG-0048 (W2): surface per-slug probe timings when IRT_FRESHNESS_TIMING is set
+        # (the probe attaches them inside the JSON payload, slowest-first). This is the
+        # measurement hook for deciding whether the periods-scan fallback needs optimizing.
+        if ($null -ne $parsed.timings) {
+            $total = 0.0
+            $rows = @($parsed.timings.PSObject.Properties)
+            Write-Host ("  [freshness timing] {0}: {1} slug(s), periods_fallback={2}" -f $LevelName, $Slugs.Count, [bool]$PeriodsFallback)
+            foreach ($p in $rows) {
+                $secs = [double]$p.Value
+                $total += $secs
+                Write-Host ("    {0,10:N4}s  {1}" -f $secs, $p.Name)
+            }
+            Write-Host ("    {0,10:N4}s  per-slug work (sum across {1} walked slugs)" -f $total, $rows.Count)
+            if ($null -ne $parsed.timing_meta) {
+                $m = $parsed.timing_meta
+                Write-Host ("    {0,10:N4}s  PERIODS WALL (parallel, {1} workers)" -f [double]$m.periods_wall_seconds, [int]$m.workers)
+                Write-Host ("    {0,10:N4}s  phase1 (markers/master)" -f [double]$m.phase1_seconds)
+            }
+        }
         return @($parsed.stale)
     } finally {
         if ($null -eq $prevState) { Remove-Item Env:\IRT_FRESHNESS_STATE -ErrorAction SilentlyContinue } else { $env:IRT_FRESHNESS_STATE = $prevState }
