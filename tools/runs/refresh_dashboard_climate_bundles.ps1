@@ -76,7 +76,7 @@ param(
     # publish the succeeded subset and emit a *_partial_run.json manifest.
     [switch]$AllowPartialPublish,
 
-    # CHG-0057: per-task compute failures (e.g. truncated/missing input years) are
+    # CHG-0059: per-task compute failures (e.g. truncated/missing input years) are
     # surfaced as warnings + a *_compute_failures.json sidecar by default and do NOT
     # block publish. Opt in to escalate any bundle with compute failures to a bundle
     # failure (taint + skip publish + non-zero exit) for strict/CI use.
@@ -175,7 +175,7 @@ function Invoke-NativeChecked {
         [string[]]$Arguments
     )
 
-    # CHG-0057: reset before any early return so a later (Plan/native) call can never
+    # CHG-0059: reset before any early return so a later (Plan/native) call can never
     # inherit stale state; reassigned only once this call actually runs.
     $script:LastStepLogPath = $null
     $script:LastStepOutput = $null
@@ -208,7 +208,7 @@ function Invoke-NativeChecked {
     $prevErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
-        # CHG-0057: chain a second Tee to capture the merged output in-memory for parsing,
+        # CHG-0059: chain a second Tee to capture the merged output in-memory for parsing,
         # without disturbing the existing live console stream or the per-step log file. The
         # log file is mixed-encoding (UTF-8 header + Tee's UTF-16 body), so we parse the
         # captured objects, not the file.
@@ -235,7 +235,7 @@ function Get-SafePathToken {
     return ($Value -replace '[^A-Za-z0-9_.-]', '_')
 }
 
-# CHG-0057: parse the per-task compute-failure count from captured compute output.
+# CHG-0059: parse the per-task compute-failure count from captured compute output.
 # The compute CLI emits exactly one stable summary line per single-level run
 # (compute_indices_multiprocess.py:7257): "Computation: <s>s, Success: <n>, Failed: <n>".
 # We parse the in-memory captured objects (not the per-step log file, which is
@@ -257,7 +257,7 @@ function Get-ComputeFailureCount {
     return $total
 }
 
-# CHG-0057: wrap Invoke-NativeChecked for compute calls so every compute step's log path and
+# CHG-0059: wrap Invoke-NativeChecked for compute calls so every compute step's log path and
 # parsed failure count are recorded, even when the call throws (ensemble hard-fail). The
 # record is appended in the finally so the original failure still propagates afterward.
 function Invoke-ComputeChecked {
@@ -939,7 +939,7 @@ foreach ($levelName in $levelsToRun) {
 
     $succeeded = @()   # bundle objects that completed compute->master->composite
     $failed = @()      # [pscustomobject]@{ bundle; error }
-    # CHG-0057: per-level compute-failure records, appended before any -FailOnComputeError
+    # CHG-0059: per-level compute-failure records, appended before any -FailOnComputeError
     # throw so they survive the per-bundle catch and feed the summary + sidecar.
     $computeWarnings = @()  # [pscustomobject]@{ bundle; failed_total; steps }
 
@@ -957,7 +957,7 @@ foreach ($levelName in $levelsToRun) {
         Write-Host "BUNDLE: $bname [$($bundleSpec.family)] -> $($bundleSpec.composite_slug) ($levelName)"
         Write-Host "------------------------------------------------------------------------------"
 
-        # CHG-0057: per-compute-step records for this bundle ({ label; log; failed }).
+        # CHG-0059: per-compute-step records for this bundle ({ label; log; failed }).
         $computeSteps = @()
 
         try {
@@ -997,7 +997,7 @@ foreach ($levelName in $levelsToRun) {
                 }
             }
 
-            # CHG-0057: surface per-task compute failures (the compute CLI exits 0 on task
+            # CHG-0059: surface per-task compute failures (the compute CLI exits 0 on task
             # failures; only ensemble failures hard-fail). Default: warn + record, keep
             # publishing. -FailOnComputeError: escalate to a bundle failure via the catch.
             $bundleComputeFailed = [int](($computeSteps | Measure-Object -Property failed -Sum).Sum)
@@ -1209,7 +1209,7 @@ foreach ($levelName in $levelsToRun) {
         }
     }
 
-    # CHG-0057: write the compute-failure sidecar OUTSIDE the publish/non-publish branch
+    # CHG-0059: write the compute-failure sidecar OUTSIDE the publish/non-publish branch
     # (the path is derived from the finalized $reportPath, so it matches the full / scoped
     # / partial report name) so it is emitted on both the warn-and-publish path and the
     # -FailOnComputeError path where publishing is skipped.
@@ -1256,7 +1256,7 @@ foreach ($o in $runOutcomes) {
         $firstLine = (($f.error -split "`n")[0]).Trim()
         Write-Host "  FAILED: $($f.bundle) -- $firstLine"
     }
-    # CHG-0057: surface per-task compute failures (warn-path; these do not set exit 1).
+    # CHG-0059: surface per-task compute failures (warn-path; these do not set exit 1).
     if ($o.compute_warnings.Count -gt 0) {
         Write-Host "  COMPUTE WARNINGS:"
         foreach ($w in $o.compute_warnings) {
