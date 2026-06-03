@@ -176,8 +176,9 @@ function Invoke-NativeChecked {
     )
 
     # CHG-0057: reset before any early return so a later (Plan/native) call can never
-    # inherit a stale path; reassigned only once this call's $logPath is created.
+    # inherit stale state; reassigned only once this call actually runs.
     $script:LastStepLogPath = $null
+    $script:LastStepOutput = $null
 
     Write-Host ""
     Write-Host "==> $Label"
@@ -207,8 +208,13 @@ function Invoke-NativeChecked {
     $prevErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
-        & $Python @Arguments 2>&1 | Tee-Object -FilePath $logPath -Append
+        # CHG-0057: chain a second Tee to capture the merged output in-memory for parsing,
+        # without disturbing the existing live console stream or the per-step log file. The
+        # log file is mixed-encoding (UTF-8 header + Tee's UTF-16 body), so we parse the
+        # captured objects, not the file.
+        & $Python @Arguments 2>&1 | Tee-Object -FilePath $logPath -Append | Tee-Object -Variable captured
         $exitCode = $LASTEXITCODE
+        $script:LastStepOutput = $captured
     } finally {
         $ErrorActionPreference = $prevErrorActionPreference
     }
@@ -229,18 +235,21 @@ function Get-SafePathToken {
     return ($Value -replace '[^A-Za-z0-9_.-]', '_')
 }
 
-# CHG-0057: parse the per-task compute-failure count from a compute step log.
+# CHG-0057: parse the per-task compute-failure count from captured compute output.
 # The compute CLI emits exactly one stable summary line per single-level run
 # (compute_indices_multiprocess.py:7257): "Computation: <s>s, Success: <n>, Failed: <n>".
-# This anchors on that line and sums across matches; it does NOT collide with the
-# progress logger ("... failed=<n> ...") or the ensemble hard-fail summary.
+# We parse the in-memory captured objects (not the per-step log file, which is
+# mixed-encoding) so the count is robust to file encoding. Anchors on that line and sums
+# across matches; does NOT collide with the progress logger ("... failed=<n> ...") or the
+# ensemble hard-fail summary. Stderr lines arrive as ErrorRecords; their string form still
+# contains the summary text, so Select-String over the objects matches correctly.
 function Get-ComputeFailureCount {
-    param([string]$LogPath)
-    if ([string]::IsNullOrWhiteSpace($LogPath) -or -not (Test-Path -LiteralPath $LogPath)) {
+    param([object[]]$OutputLines)
+    if ($null -eq $OutputLines -or $OutputLines.Count -eq 0) {
         return 0
     }
     $total = 0
-    foreach ($m in (Select-String -LiteralPath $LogPath -Pattern 'Computation:.*?,\s*Failed:\s*(\d+)' -AllMatches)) {
+    foreach ($m in ($OutputLines | Select-String -Pattern 'Computation:.*?,\s*Failed:\s*(\d+)' -AllMatches)) {
         foreach ($match in $m.Matches) {
             $total += [int]$match.Groups[1].Value
         }
@@ -248,7 +257,7 @@ function Get-ComputeFailureCount {
     return $total
 }
 
-# CHG-0057: wrap Invoke-NativeChecked for compute calls so every compute step's log and
+# CHG-0057: wrap Invoke-NativeChecked for compute calls so every compute step's log path and
 # parsed failure count are recorded, even when the call throws (ensemble hard-fail). The
 # record is appended in the finally so the original failure still propagates afterward.
 function Invoke-ComputeChecked {
@@ -262,11 +271,10 @@ function Invoke-ComputeChecked {
     }
     finally {
         if (-not $PlanOnly) {
-            $log = $script:LastStepLogPath
             $Steps.Value += [pscustomobject]@{
                 label  = $Label
-                log    = $log
-                failed = (Get-ComputeFailureCount -LogPath $log)
+                log    = $script:LastStepLogPath
+                failed = (Get-ComputeFailureCount -OutputLines $script:LastStepOutput)
             }
         }
     }
