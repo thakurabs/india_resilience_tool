@@ -115,6 +115,17 @@ powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bu
 powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level block -Workers 36
 ```
 
+Per-task compute failures (e.g. metrics whose input years are truncated/missing)
+are surfaced as warnings, a `COMPUTE WARNINGS` block in the run summary, and a
+`*_compute_failures.json` sidecar beside the parity report — they do not block
+publishing by default. Add `-FailOnComputeError` to escalate any bundle that had
+compute-task failures to a bundle failure (taint + skip publish + non-zero exit),
+for strict/CI use (ensemble failures always hard-fail regardless):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level district -Bundle "Drought Risk" -FailOnComputeError
+```
+
 The script orchestrates, per requested admin level:
 - `tools.pipeline.compute_indices_multiprocess` for active dashboard source metrics only
 - `tools.pipeline.build_master_metrics`

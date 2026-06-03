@@ -11,8 +11,18 @@ strict parity reports.
 Riverine Flood is excluded because it is sourced from the JRC flood-depth
 workflow, not the NEX climate compute pipeline.
 
+.PARAMETER FailOnComputeError
+By default, per-task compute failures (e.g. metrics whose input years are
+truncated/missing) are surfaced as warnings plus a *_compute_failures.json sidecar
+and do not block publishing. Pass -FailOnComputeError to escalate any bundle that
+had compute-task failures to a bundle failure (taint + skip publish + non-zero
+exit), for strict/CI use. Ensemble failures always hard-fail regardless.
+
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all
+
+.EXAMPLE
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level district -Bundle "Drought Risk" -FailOnComputeError
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level block -PlanOnly
@@ -64,7 +74,13 @@ param(
     # CHG-0046: per-bundle fail isolation publishes nothing by default when any
     # selected bundle fails (never produce a mixed-generation runtime). Opt in to
     # publish the succeeded subset and emit a *_partial_run.json manifest.
-    [switch]$AllowPartialPublish
+    [switch]$AllowPartialPublish,
+
+    # CHG-0057: per-task compute failures (e.g. truncated/missing input years) are
+    # surfaced as warnings + a *_compute_failures.json sidecar by default and do NOT
+    # block publish. Opt in to escalate any bundle with compute failures to a bundle
+    # failure (taint + skip publish + non-zero exit) for strict/CI use.
+    [switch]$FailOnComputeError
 )
 
 $ErrorActionPreference = "Stop"
@@ -159,6 +175,10 @@ function Invoke-NativeChecked {
         [string[]]$Arguments
     )
 
+    # CHG-0057: reset before any early return so a later (Plan/native) call can never
+    # inherit a stale path; reassigned only once this call's $logPath is created.
+    $script:LastStepLogPath = $null
+
     Write-Host ""
     Write-Host "==> $Label"
     $commandLine = Format-CommandForDisplay -Executable $Python -Arguments $Arguments
@@ -171,6 +191,7 @@ function Invoke-NativeChecked {
     $script:StepIndex += 1
     $logToken = Get-SafePathToken -Value $Label
     $logPath = Join-Path $script:RunLogRoot ("{0:00}_{1}.log" -f $script:StepIndex, $logToken)
+    $script:LastStepLogPath = $logPath
     Write-Host "log: $logPath"
 
     @(
@@ -206,6 +227,49 @@ function Invoke-NativeChecked {
 function Get-SafePathToken {
     param([Parameter(Mandatory = $true)][string]$Value)
     return ($Value -replace '[^A-Za-z0-9_.-]', '_')
+}
+
+# CHG-0057: parse the per-task compute-failure count from a compute step log.
+# The compute CLI emits exactly one stable summary line per single-level run
+# (compute_indices_multiprocess.py:7257): "Computation: <s>s, Success: <n>, Failed: <n>".
+# This anchors on that line and sums across matches; it does NOT collide with the
+# progress logger ("... failed=<n> ...") or the ensemble hard-fail summary.
+function Get-ComputeFailureCount {
+    param([string]$LogPath)
+    if ([string]::IsNullOrWhiteSpace($LogPath) -or -not (Test-Path -LiteralPath $LogPath)) {
+        return 0
+    }
+    $total = 0
+    foreach ($m in (Select-String -LiteralPath $LogPath -Pattern 'Computation:.*?,\s*Failed:\s*(\d+)' -AllMatches)) {
+        foreach ($match in $m.Matches) {
+            $total += [int]$match.Groups[1].Value
+        }
+    }
+    return $total
+}
+
+# CHG-0057: wrap Invoke-NativeChecked for compute calls so every compute step's log and
+# parsed failure count are recorded, even when the call throws (ensemble hard-fail). The
+# record is appended in the finally so the original failure still propagates afterward.
+function Invoke-ComputeChecked {
+    param(
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][ref]$Steps
+    )
+    try {
+        Invoke-NativeChecked -Label $Label -Arguments $Arguments
+    }
+    finally {
+        if (-not $PlanOnly) {
+            $log = $script:LastStepLogPath
+            $Steps.Value += [pscustomobject]@{
+                label  = $Label
+                log    = $log
+                failed = (Get-ComputeFailureCount -LogPath $log)
+            }
+        }
+    }
 }
 
 $scopeCode = @'
@@ -821,9 +885,13 @@ Write-Host "  sector_composites: $($sectorComposites.Count)"
 Write-Host "  optimized_metric_roots: $($optimizedMetrics.Count)"
 Write-Host "  bundles: $($bundles.Count)"
 Write-Host "  allow_partial_publish: $AllowPartialPublish"
+Write-Host "  fail_on_compute_error: $FailOnComputeError"
 Write-Host "  report_root: $ReportRoot"
 Write-Host "  log_root: $script:RunLogRoot"
 Write-Host "  plan_only: $PlanOnly"
+if ($PlanOnly) {
+    Write-Host "  [plan] compute-failure surfacing active (warn + *_compute_failures.json sidecar); fail_on_compute_error=$FailOnComputeError"
+}
 
 foreach ($levelName in $levelsToRun) {
     Write-Host ""
@@ -863,6 +931,9 @@ foreach ($levelName in $levelsToRun) {
 
     $succeeded = @()   # bundle objects that completed compute->master->composite
     $failed = @()      # [pscustomobject]@{ bundle; error }
+    # CHG-0057: per-level compute-failure records, appended before any -FailOnComputeError
+    # throw so they survive the per-bundle catch and feed the summary + sidecar.
+    $computeWarnings = @()  # [pscustomobject]@{ bundle; failed_total; steps }
 
     # CHG-0044 (C2): iterate bundle-by-bundle with fail isolation. The hybrid recompute /
     # freshness / worker logic is reused from Phase 1, just parameterized by the current
@@ -877,6 +948,9 @@ foreach ($levelName in $levelsToRun) {
         Write-Host "------------------------------------------------------------------------------"
         Write-Host "BUNDLE: $bname [$($bundleSpec.family)] -> $($bundleSpec.composite_slug) ($levelName)"
         Write-Host "------------------------------------------------------------------------------"
+
+        # CHG-0057: per-compute-step records for this bundle ({ label; log; failed }).
+        $computeSteps = @()
 
         try {
             if (-not $SkipCompute) {
@@ -897,21 +971,37 @@ foreach ($levelName in $levelsToRun) {
                         # Force a full recompute of this bundle's set: --overwrite deletes
                         # first, then --skip-existing no-ops on whatever remains.
                         $computeArgs = $computeBase + @("--skip-existing", "--overwrite", "--metrics") + $toCompute
-                        Invoke-NativeChecked -Label "Compute [$bname] (overwrite) ($levelName)" -Arguments $computeArgs
+                        Invoke-ComputeChecked -Label "Compute [$bname] (overwrite) ($levelName)" -Arguments $computeArgs -Steps ([ref]$computeSteps)
                     }
                     elseif ($forcedHere.Count -gt 0) {
                         # Pass 1: forced recompute of the requested subset within this bundle.
                         $forceArgs = $computeBase + @("--overwrite", "--metrics") + $forcedHere
-                        Invoke-NativeChecked -Label "Compute [$bname] forced-overwrite subset ($levelName)" -Arguments $forceArgs
+                        Invoke-ComputeChecked -Label "Compute [$bname] forced-overwrite subset ($levelName)" -Arguments $forceArgs -Steps ([ref]$computeSteps)
                         # Pass 2: skip-existing fills in the rest of this bundle's set.
                         $skipArgs = $computeBase + @("--skip-existing", "--metrics") + $toCompute
-                        Invoke-NativeChecked -Label "Compute [$bname] remaining (skip-existing) ($levelName)" -Arguments $skipArgs
+                        Invoke-ComputeChecked -Label "Compute [$bname] remaining (skip-existing) ($levelName)" -Arguments $skipArgs -Steps ([ref]$computeSteps)
                     }
                     else {
                         # Default: incremental compute via completion markers.
                         $computeArgs = $computeBase + @("--skip-existing", "--metrics") + $toCompute
-                        Invoke-NativeChecked -Label "Compute [$bname] (skip-existing) ($levelName)" -Arguments $computeArgs
+                        Invoke-ComputeChecked -Label "Compute [$bname] (skip-existing) ($levelName)" -Arguments $computeArgs -Steps ([ref]$computeSteps)
                     }
+                }
+            }
+
+            # CHG-0057: surface per-task compute failures (the compute CLI exits 0 on task
+            # failures; only ensemble failures hard-fail). Default: warn + record, keep
+            # publishing. -FailOnComputeError: escalate to a bundle failure via the catch.
+            $bundleComputeFailed = [int](($computeSteps | Measure-Object -Property failed -Sum).Sum)
+            if ($bundleComputeFailed -gt 0) {
+                Write-Host "  WARNING: Compute [$bname] ($levelName) reported $bundleComputeFailed failed task(s); see step logs."
+                $computeWarnings += [pscustomobject]@{
+                    bundle       = $bname
+                    failed_total = $bundleComputeFailed
+                    steps        = @($computeSteps)
+                }
+                if ($FailOnComputeError) {
+                    throw "Compute failures ($bundleComputeFailed) in bundle '$bname'; -FailOnComputeError is set"
                 }
             }
 
@@ -1111,12 +1201,36 @@ foreach ($levelName in $levelsToRun) {
         }
     }
 
+    # CHG-0057: write the compute-failure sidecar OUTSIDE the publish/non-publish branch
+    # (the path is derived from the finalized $reportPath, so it matches the full / scoped
+    # / partial report name) so it is emitted on both the warn-and-publish path and the
+    # -FailOnComputeError path where publishing is skipped.
+    if ($computeWarnings.Count -gt 0) {
+        $computeFailPath = $reportPath -replace '\.json$', '_compute_failures.json'
+        $computeFailReport = [ordered]@{
+            state                  = $State
+            level                  = $levelName
+            fail_on_compute_error  = [bool]$FailOnComputeError
+            report_path            = $reportPath
+            timestamp              = (Get-Date).ToString('o')
+            bundles                = @($computeWarnings)
+        }
+        if ($PlanOnly) {
+            Write-Host "    [plan] would write compute-failure sidecar: $computeFailPath"
+        }
+        else {
+            $computeFailReport | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 -Path $computeFailPath
+            Write-Host "    wrote compute-failure sidecar: $computeFailPath"
+        }
+    }
+
     $runOutcomes += [pscustomobject]@{
-        level     = $levelName
-        succeeded = @($succeeded | ForEach-Object { [string]$_.canonical })
-        failed    = @($failed)
-        published = $publish
-        reason    = $publishReason
+        level            = $levelName
+        succeeded        = @($succeeded | ForEach-Object { [string]$_.canonical })
+        failed           = @($failed)
+        published        = $publish
+        reason           = $publishReason
+        compute_warnings = @($computeWarnings)
     }
 }
 
@@ -1133,6 +1247,13 @@ foreach ($o in $runOutcomes) {
     foreach ($f in $o.failed) {
         $firstLine = (($f.error -split "`n")[0]).Trim()
         Write-Host "  FAILED: $($f.bundle) -- $firstLine"
+    }
+    # CHG-0057: surface per-task compute failures (warn-path; these do not set exit 1).
+    if ($o.compute_warnings.Count -gt 0) {
+        Write-Host "  COMPUTE WARNINGS:"
+        foreach ($w in $o.compute_warnings) {
+            Write-Host "    $($w.bundle): $($w.failed_total) failed task(s)"
+        }
     }
 }
 
