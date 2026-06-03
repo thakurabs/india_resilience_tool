@@ -24,6 +24,9 @@ from india_resilience_tool.config.proposal_bundles import (
     PROPOSAL_BUNDLES_BY_SLUG,
     ProposalBundleSpec,
     ProposalRuleSpec,
+    proposal_rule_abs_score_column,
+    proposal_rule_chg_score_column,
+    proposal_rule_score_column,
 )
 
 
@@ -142,6 +145,43 @@ def _seed_infrastructure_metric_masters(
         metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
         df[f"{metric_base}__{target_scenario}__{target_period}__mean"] = values
         df[f"{metric_base}__historical__{baseline_period}__mean"] = baseline_defaults[slug]
+        _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
+
+
+def _seed_thermal_metric_masters(
+    tmp_path: Path,
+    *,
+    ids: pd.DataFrame,
+    state_name: str,
+    target_period: str = "2020-2040",
+    target_scenario: str = "ssp245",
+    baseline_period: str = "1995-2014",
+    current_by_slug: dict[str, list[float]] | None = None,
+    baseline_by_slug: dict[str, list[float]] | None = None,
+    include_baseline_by_slug: dict[str, bool] | None = None,
+) -> None:
+    current_defaults = {
+        "pr_consecutive_dry_days_lt1mm": [70.0, 40.0, 55.0],
+        "txx_annual_max": [46.0, 42.0, 44.0],
+        "spi3_count_months_lt_minus1": [6.0, 2.0, 4.0],
+    }
+    baseline_defaults = {
+        "pr_consecutive_dry_days_lt1mm": [35.0, 30.0, 32.0],
+        "txx_annual_max": [43.0, 41.0, 42.0],
+        "spi3_count_months_lt_minus1": [2.0, 3.0, 1.0],
+    }
+    if current_by_slug:
+        current_defaults.update(current_by_slug)
+    if baseline_by_slug:
+        baseline_defaults.update(baseline_by_slug)
+    include_baseline_by_slug = include_baseline_by_slug or {}
+
+    for slug, values in current_defaults.items():
+        metric_base = METRICS_BY_SLUG[slug].periods_metric_col or METRICS_BY_SLUG[slug].value_col or slug
+        df = ids.copy()
+        df[f"{metric_base}__{target_scenario}__{target_period}__mean"] = values
+        if include_baseline_by_slug.get(slug, True):
+            df[f"{metric_base}__historical__{baseline_period}__mean"] = baseline_defaults[slug]
         _write_master(tmp_path, slug=slug, state_name=state_name, level="district", df=df)
 
 
@@ -817,6 +857,135 @@ def test_compute_infrastructure_risk_applies_available_weight_gate_fail_case(
     row_a = out.loc[out["district"] == "A"].iloc[0]
     assert row_a[available_weight_col] == pytest.approx(0.55)
     assert pd.isna(row_a[score_col])
+
+
+def _thermal_ids(state_name: str = "Telangana") -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["telangana|a", "telangana|b", "telangana|c"],
+        }
+    )
+
+
+def _run_thermal(tmp_path: Path, state_name: str = "Telangana") -> pd.DataFrame:
+    return compute_proposal_bundle_master_frame(
+        PROPOSAL_BUNDLES_BY_SLUG["composite_asset_risk_thermal_power"],
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+
+@pytest.mark.parametrize(
+    ("missing_slug", "expected_weight", "publishes"),
+    [
+        (None, 1.00, True),
+        ("spi3_count_months_lt_minus1", 0.70, True),
+        ("txx_annual_max", 0.65, False),
+        ("pr_consecutive_dry_days_lt1mm", 0.65, False),
+    ],
+)
+def test_compute_thermal_risk_applies_available_weight_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    missing_slug: str | None,
+    expected_weight: float,
+    publishes: bool,
+) -> None:
+    state_name = "Telangana"
+    ids = _thermal_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    current_overrides = {}
+    if missing_slug is not None:
+        current_overrides[missing_slug] = [float("nan"), float("nan"), float("nan")]
+    _seed_thermal_metric_masters(
+        tmp_path,
+        ids=ids,
+        state_name=state_name,
+        current_by_slug=current_overrides,
+    )
+
+    out = _run_thermal(tmp_path, state_name)
+
+    score_col = "composite_asset_risk_thermal_power__ssp245__2020-2040__mean"
+    weight_col = "composite_asset_risk_thermal_power__ssp245__2020-2040__available_rule_weight_fraction"
+    assert out[weight_col].tolist() == pytest.approx([expected_weight, expected_weight, expected_weight])
+    if publishes:
+        assert out[score_col].notna().any()
+    else:
+        assert out[score_col].isna().all()
+
+
+def test_compute_thermal_spi_change_lens_is_finite_and_weighted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _thermal_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_thermal_metric_masters(tmp_path, ids=ids, state_name=state_name)
+
+    out = _run_thermal(tmp_path, state_name)
+
+    rule = next(
+        rule
+        for rule in PROPOSAL_BUNDLES_BY_SLUG["composite_asset_risk_thermal_power"].rules
+        if rule.rule_slug == "spi3_low_flow_proxy_norm"
+    )
+    abs_col = proposal_rule_abs_score_column(rule.rule_slug, "ssp245", "2020-2040")
+    chg_col = proposal_rule_chg_score_column(rule.rule_slug, "ssp245", "2020-2040")
+    score_col = proposal_rule_score_column(rule.rule_slug, "ssp245", "2020-2040")
+    assert chg_col in out.columns
+    assert out[chg_col].notna().all()
+
+    denominator = float(rule.absolute_weight) + float(rule.change_weight)
+    expected = (
+        float(rule.absolute_weight) * out[abs_col].astype(float)
+        + float(rule.change_weight) * out[chg_col].astype(float)
+    ) / denominator
+    pd.testing.assert_series_equal(
+        out[score_col].astype(float).reset_index(drop=True),
+        expected.reset_index(drop=True),
+        check_names=False,
+    )
+
+
+def test_compute_thermal_spi_missing_historical_baseline_renormalizes_to_absolute(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_name = "Telangana"
+    ids = _thermal_ids(state_name)
+    _patch_canonical_units(monkeypatch, district_df=ids)
+    _seed_thermal_metric_masters(
+        tmp_path,
+        ids=ids,
+        state_name=state_name,
+        include_baseline_by_slug={"spi3_count_months_lt_minus1": False},
+    )
+
+    out = _run_thermal(tmp_path, state_name)
+
+    rule_slug = "spi3_low_flow_proxy_norm"
+    abs_col = proposal_rule_abs_score_column(rule_slug, "ssp245", "2020-2040")
+    chg_col = proposal_rule_chg_score_column(rule_slug, "ssp245", "2020-2040")
+    score_col = proposal_rule_score_column(rule_slug, "ssp245", "2020-2040")
+    bundle_col = "composite_asset_risk_thermal_power__ssp245__2020-2040__mean"
+    weight_col = "composite_asset_risk_thermal_power__ssp245__2020-2040__available_rule_weight_fraction"
+
+    assert chg_col in out.columns
+    assert out[chg_col].isna().all()
+    assert out[score_col].notna().any()
+    pd.testing.assert_series_equal(
+        out[score_col].astype(float).reset_index(drop=True),
+        out[abs_col].astype(float).reset_index(drop=True),
+        check_names=False,
+    )
+    assert out[weight_col].tolist() == pytest.approx([1.0, 1.0, 1.0])
+    assert out[bundle_col].notna().any()
 
 
 def test_synthetic_trend_rule_still_requires_yearly_series(

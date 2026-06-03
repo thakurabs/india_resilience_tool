@@ -511,8 +511,9 @@ class BlendedRuleScores:
     ``components`` carries the per-lens component scores in [0, 100] for the
     lenses that are active on this rule (i.e., the lens weight is > 0). Keys
     are a subset of {"absolute", "change", "impact"}; only active lenses are
-    persisted. Pure-absolute rules (trend, SPI proxy, variability proxy) emit
-    only ``{"absolute": blended}``.
+    persisted. Rules whose config activates only the absolute lens emit only
+    ``{"absolute": blended}``; rules with absolute+change and no impact lens
+    emit the two active lens columns.
     """
 
     blended: pd.Series
@@ -718,26 +719,6 @@ def _build_trend_rule(
         score.loc[finite.index] = 0.0
         return score
     return _score_by_reference_distribution(slope_values, direction="higher_worse")
-
-
-def _build_spi_proxy_rule(
-    key_frame: pd.DataFrame,
-    source_frame: pd.DataFrame,
-    *,
-    level: str,
-    scenario: str,
-    period: str,
-) -> pd.Series:
-    """Build a continuous low-flow drought proxy score from SPI month counts."""
-    values = _series_for_rule(
-        key_frame,
-        source_frame,
-        level=level,
-        metric_slug="spi3_count_months_lt_minus1",
-        scenario=scenario,
-        period=period,
-    )
-    return _score_by_reference_distribution(values, direction="higher_worse")
 
 
 def _compute_r95p_interannual_variability_from_yearly(
@@ -947,21 +928,11 @@ def _dispatch_rule_scores(
 ) -> BlendedRuleScores:
     """Return the blended-and-per-lens score decomposition for one rule selection.
 
-    Centralizes the rule_type / rule_slug dispatch so the orchestrator stays
-    free of special cases. Pure-absolute builders (trend, SPI proxy, variability
-    proxy) emit only the absolute lens; ``_build_blended_rule`` emits whichever
-    lenses are active on the rule.
+    Centralizes the rule_type / helper dispatch so the orchestrator stays
+    free of special cases. Trend builders emit only the absolute lens;
+    ``_build_blended_rule`` emits whichever lenses are active on the rule.
     """
     if rule.rule_type == "blended":
-        if rule.rule_slug == "spi3_low_flow_proxy_norm":
-            blended = _build_spi_proxy_rule(
-                key_frame,
-                metric_frames["spi3_count_months_lt_minus1"],
-                level=level,
-                scenario=scenario,
-                period=period,
-            )
-            return _absolute_only_scores(blended)
         if rule.metric_slug == HELPER_METRIC_SLUG:
             if helper_frame is None:
                 raise TargetBuildError(

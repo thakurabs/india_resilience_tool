@@ -625,31 +625,70 @@ PROPOSAL_BUNDLES: tuple[ProposalBundleSpec, ...] = (
         bundle_label="Asset Risk (Thermal Power Plants)",
         composite_slug="composite_asset_risk_thermal_power",
         supported_levels=("district", "block"),
+        weight_mode="explicit_normalized",
+        min_available_rule_weight_fraction=0.70,
         rules=(
             _pressure_rule(
                 "cdd_ge_30",
                 "Dry-spell cooling-water pressure",
                 "pr_consecutive_dry_days_lt1mm",
-                absolute_weight=0.50,
-                change_weight=0.50,
+                absolute_weight=0.40,
+                change_weight=0.30,
+                impact_weight=0.30,
+                impact_low=30.0,
+                impact_high=90.0,
+                change_mode="relative_pct",
+                rule_weight=0.35,
+                method_note=(
+                    "Impact band 30-90 days: IMD-anchored, MEDIUM confidence. "
+                    "Reuses the Industrial section 7.3 cooling/process-water "
+                    "dry-spell band for thermal cooling-water availability: onset "
+                    "30 days (IMD Agricultural Drought four-Drought-Week regime) "
+                    "and saturation 90 days (monsoon-failure / severe-drought "
+                    "regime). Lens dossier section 10.1; streamflow/reservoir "
+                    "refinement deferred."
+                ),
             ),
             _pressure_rule(
                 "txx_ge_45",
                 "Extreme heat cooling-efficiency pressure",
                 "txx_annual_max",
-                absolute_weight=0.45,
+                absolute_weight=0.40,
                 change_weight=0.25,
-                impact_weight=0.30,
+                impact_weight=0.35,
                 impact_low=40.0,
                 impact_high=45.0,
                 change_mode="absolute_delta",
+                rule_weight=0.35,
+                method_note=(
+                    "Impact band 40-45 degC: IMD plains heatwave. External, high "
+                    "confidence; used for thermal-asset Carnot-efficiency loss, "
+                    "cooling-tower / air-cooled-condenser derating, and equipment "
+                    "thermal stress. Shared with Health section 6.1, Industrial "
+                    "section 7.4, and Infrastructure section 9.3. Zone caveat per "
+                    "section 4.9 / BL-0020. Lens dossier section 10.2."
+                ),
             ),
             _pressure_rule(
                 "spi3_low_flow_proxy_norm",
                 "Low-flow drought proxy pressure",
                 "spi3_count_months_lt_minus1",
-                absolute_weight=1.0,
-                change_weight=0.0,
+                absolute_weight=0.70,
+                change_weight=0.30,
+                impact_weight=0.0,
+                change_mode="relative_pct",
+                rule_weight=0.30,
+                method_note=(
+                    "SPI-3 dry-month frequency is a low-flow cooling-water proxy "
+                    "and cumulative rainfall-deficit regime signal. It uses an "
+                    "active change lens for dry-month frequency shifts vs the "
+                    "available historical baseline, but no impact lens because no "
+                    "defensible institutional band exists for annual counts of "
+                    "SPI-3 < -1 months. The change lens is operational while still "
+                    "reading the existing legacy baseline epoch until broader "
+                    "baseline reconciliation lands. Lens dossier section 10.3; "
+                    "streamflow/reservoir refinement deferred."
+                ),
             ),
         ),
     ),

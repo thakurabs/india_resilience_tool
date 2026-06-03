@@ -17,15 +17,16 @@ Each proposal-bundle rule is scored from `0` to `100`.
 - `100` means high relative sector hazard pressure for the selected state, level, scenario, and period.
 - Higher is always worse.
 - Missing or invalid data returns `NaN` for the affected component or rule.
-- Bundle means are computed from available rule scores. Most bundles use equal
-  rule weights and are set to `NaN` only when no rule is available for a unit.
+- Bundle means are computed from available rule scores. Legacy equal-weight
+  fallback remains available in code, but all active sector-wise proposal
+  bundles now use explicit normalized rule weights.
 - `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`,
-  `Infrastructure Risk`, `Asset Risk (Hydropower Plants)`, and
+  `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`,
+  `Asset Risk (Hydropower Plants)`, and
   `Life & Livelihood Loss Risk` use explicit
   normalized rule weights and a 0.70 minimum `available_rule_weight_fraction`;
-  rows below that coverage gate are set to `NaN`. This is 7 of the 8
-  sector-wise bundles; only `Asset Risk (Thermal Power Plants)` remains on the
-  older equal-weight path.
+  rows below that coverage gate are set to `NaN`. This covers all 8
+  sector-wise bundles.
 
 ## Rule score components
 
@@ -33,6 +34,7 @@ Each rule can combine three scientifically distinct components.
 
 Sectoral bundles (`Agricultural Risk`, `Health Risk`, `Industrial Risk`,
 `Investment / Financial Risk`, `Infrastructure Risk`,
+`Asset Risk (Thermal Power Plants)`,
 `Asset Risk (Hydropower Plants)`, and
 `Life & Livelihood Loss Risk`) use lens-decomposed scoring per
 `docs/lens_scoring_methodology.md`. Agricultural Risk reinstates the impact
@@ -50,6 +52,14 @@ categories) and MEDIUM-confidence CDD and WSDI bands anchored to IMD
 agro-met / ICAR-CRIDA / NDMA evidence and to Indian heat-mortality
 literature (Azhar 2014; Mazdiyasni 2017) respectively; the `cdd_ge_40` and
 `wsdi_ge_5` slugs are stable until the same later data-contract rename.
+Asset Risk (Thermal Power Plants) follows §10 (CHG-0057/0058) with CDD
+cooling-water pressure (`cdd_ge_30`, lens 0.40/0.30/0.30, band 30-90 days,
+weight 0.35), TXx cooling-efficiency pressure (`txx_ge_45`, lens
+0.40/0.25/0.35, band 40-45 deg C, weight 0.35), and SPI-3 low-flow proxy
+pressure (`spi3_low_flow_proxy_norm`, lens 0.70/0.30/0.00, no impact band,
+weight 0.30). Its SPI change lens is operational against the currently
+available historical baseline column; public slugs remain stable until the
+separate data-contract rename track lands.
 Asset Risk (Hydropower Plants) follows §11 (CHG-0036) with a flood/storm
 cluster of `rx5day_ge_500` (lens 0.45/0.40/0.15, band 250-500 mm/5 days,
 weight 0.45) and the helper-derived `r95p_interannual_variability_norm`

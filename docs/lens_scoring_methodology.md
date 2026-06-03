@@ -512,10 +512,11 @@ And per bundle (existing, retained):
 
 Rules:
 - **Only active lenses are persisted (sparse policy).** A lens is "active" on
-  a rule iff its weight is `> 0` in the rule spec. Pure-absolute rules — both
-  blended rules with `absolute_weight=1.0` and the trend / SPI-proxy /
-  variability-proxy rule types — emit only `__score` and `__abs_score`; the
-  `chg_score` and `imp_score` columns are not written for those rules.
+  a rule iff its weight is `> 0` in the rule spec. Rules configured with only
+  `absolute_weight > 0` emit only `__score` and `__abs_score`; rules configured
+  with absolute+change and no impact lens, such as Thermal
+  `spi3_low_flow_proxy_norm`, emit `__score`, `__abs_score`, and
+  `__chg_score`, but no `__imp_score`.
 - For an active lens that is unavailable on some rows (e.g., change lens with
   a missing historical baseline column, or `relative_pct` change with a
   zero per-row baseline), the lens column is still written but those rows
@@ -1700,21 +1701,25 @@ shutdown between 2013-2016, and ~14 TWh of generation was lost in 2016 alone
 to water shortages. CEEW (2018, 2021) repeatedly identifies water availability
 as the #1 climate risk for the Indian thermal fleet.
 
-### 10.0 Methodology change recorded
+### 10.0 Methodology change implemented (CHG-0057/0058)
 
-This dossier proposes **two methodology changes** for the bundle as currently
-configured in `config/proposal_bundles.py`:
+CHG-0057 and CHG-0058 implement this dossier in
+`config/proposal_bundles.py` and `compute/proposal_bundles.py`:
 
-1. **Add an impact lens to CDD.** Same IMD-Agricultural-Drought-anchored
-   30-90 day band already adopted for Industrial Risk Section 7.3 — medium
-   confidence, derivation reuses an existing institutional anchor.
-2. **Add a change lens to SPI-3** (currently `chg=0`). The chg signal captures
-   whether dry-month frequency is *rising vs baseline*, which is what
-   physical-risk frameworks (TCFD scenario-at-horizon, Section 8) call for,
-   and is structurally distinct from SPI's own baseline-standardization
-   (SPI's gamma fit is fixed on the historical period; the chg lens measures
-   how often projections cross that historical-baseline-conditioned threshold
-   relative to baseline).
+1. **CDD now carries an impact lens.** It uses the same
+   IMD-Agricultural-Drought-anchored 30-90 day band adopted for Industrial
+   Risk Section 7.3 — medium confidence, with derivation reusing an existing
+   institutional anchor.
+2. **SPI-3 now carries an operational change lens.** The builder no longer
+   routes `spi3_low_flow_proxy_norm` through an absolute-only special case.
+   The chg signal captures whether dry-month frequency is *rising vs
+   baseline*, which is what physical-risk frameworks (TCFD
+   scenario-at-horizon, Section 8) call for, and is structurally distinct from
+   SPI's own baseline-standardization (SPI's gamma fit is fixed on the
+   historical period; the chg lens measures how often projections cross that
+   historical-baseline-conditioned threshold relative to baseline). The lens
+   remains tied to the currently available legacy historical baseline column
+   until the broader baseline reconciliation lands.
 
 The dossier also makes an **honest no-impact-lens call for SPI-3** — same
 rationale as Investment/Financial Risk Section 8.3 for R99p: SPI-3 dry-month
@@ -1724,10 +1729,11 @@ already a soft proxy for cooling-water unavailability would be doubly derived.
 The level + shift signal is the honest scientific reading.
 
 The table summarizes the lens decision per metric; each subsection gives the
-reasoning and band provenance. Rule slugs marked "renamed from" reflect the
-CHG-0021 rename of phantom slugs (Section 4.7); the dossier presents the
-renamed slugs because the bands and labels now reflect the actual scoring
-math.
+reasoning and band provenance. Shipped config preserves the current public
+slugs (`cdd_ge_30`, `txx_ge_45`, `spi3_low_flow_proxy_norm`) so existing
+processed paths, dashboards, and optimized artifacts remain stable. Cosmetic
+or semantic slug renames remain deferred under the phantom-slug /
+data-contract rename track.
 
 | Rule (metric) | absolute | change | impact (band) | Rationale summary |
 |---|:--:|:--:|:--:|---|
@@ -1744,9 +1750,9 @@ math.
   precipitation < 1 mm). Direct cooling-water pathway: prolonged dry spell
   -> reservoir / river drawdown -> curtailed plant cooling-water draws ->
   forced derating or shutdown.
-- **change:** Keep. Lengthening dry spells vs the `1990-2010` baseline shift
-  thermal-plant water-availability planning beyond historical operating
-  envelopes. Mode: `relative_pct`.
+- **change:** Keep. Lengthening dry spells vs the available historical
+  baseline shift thermal-plant water-availability planning beyond historical
+  operating envelopes. Mode: `relative_pct`.
 - **impact:** **Add, self-derived band 30-90 days, medium confidence**
   (Section 4 protocol — same derivation as Industrial Risk Section 7.3). The
   onset is anchored on an **operational Indian institutional definition**
@@ -1782,10 +1788,10 @@ math.
 - **absolute:** Keep. Same definition as in Health (Section 6.1), Industrial
   (Section 7.4), and Infrastructure (Section 9.3). Districts facing the most
   extreme projected daytime heat relative to peers.
-- **change:** Keep. Warming daytime extremes vs the `1990-2010` baseline
-  matter to thermal assets because plant equipment (transformers, switchgear,
-  cooling-tower fill, condensers, lubricating oil systems) is sized against
-  historical extremes. Mode: `absolute_delta` (degrees).
+- **change:** Keep. Warming daytime extremes vs the available historical
+  baseline matter to thermal assets because plant equipment (transformers,
+  switchgear, cooling-tower fill, condensers, lubricating oil systems) is sized
+  against historical extremes. Mode: `absolute_delta` (degrees).
 - **impact:** Keep. Band **40-45 deg C**, **external provenance, high
   confidence** — same IMD plains heatwave band as Health, Industrial,
   Infrastructure.
@@ -1829,21 +1835,28 @@ math.
 - **absolute:** Keep. Districts with the highest projected count of SPI-3
   dry months relative to peers — peer-relative screening of cumulative
   rainfall-deficit regime.
-- **change:** **Add.** Shift in dry-month count vs baseline period. The chg
+- **change:** Keep. Shift in dry-month count vs baseline period. The chg
   signal captures whether dry-month frequency is *rising vs baseline*, which
   is what physical-risk frameworks (TCFD / NGFS scenario-at-horizon,
   Section 8) call for. **Not structurally redundant** with SPI's own
   baseline-standardization: SPI's gamma fit is fixed on the historical
   reference period; the chg lens measures how often projections cross that
   historical-baseline-conditioned threshold relative to the baseline-period
-  count. Mode: `relative_pct`.
-- **IRT source-path lock for CHG-0038:** admin district/block source masters
-  now come from the Drought v2 grid-first SPI pipeline with explicit annual
+  count. Mode: `relative_pct`. `relative_pct` is retained for cross-bundle
+  consistency with precipitation/count-like regime metrics (for example the
+  Investment / Financial R99p regime rule and Hydropower variability helper),
+  but it can amplify low-baseline districts; the builder handles zero or
+  effectively-zero baselines as `NaN` and renormalizes the rule over the
+  available active lenses.
+- **IRT source-path status:** admin district/block source masters come from
+  the Drought v2 grid-first SPI pipeline with explicit annual
   aggregation `count_months_lt`, `min_months_per_year=9`,
   `period_rollup="period_mean"`, `min_years_per_period_fraction=0.75`,
   `min_baseline_years_per_calendar_month_fraction=0.83`, and
-  `min_polygon_cell_weight_fraction=0.50`. Hydro remains legacy and out of
-  scope.
+  `min_polygon_cell_weight_fraction=0.50`. The Thermal bundle uses the
+  persisted admin district/block source masters and the baseline column they
+  expose today; broader baseline-epoch reconciliation is deferred. Hydro
+  remains legacy and out of scope.
 - **impact:** **No — drop.** Honest no-band call (same rationale as
   Investment/Financial Section 8.3 for R99p). McKee 1993 standardizes the
   per-month SPI threshold (−1 moderately dry, −1.5 severely dry, −2 extremely
@@ -1940,20 +1953,17 @@ uses **0.40 / 0.30 / 0.30**; the no-impact-lens regime metric SPI-3 uses
 - **Coverage gate:** adopt the standard 0.70 available-rule-weight gate
   (Section 5.3) — matching Health, Industrial, Investment/Financial,
   Infrastructure, Agricultural.
-- **Source masters:** all three source metrics must resolve to grid-first
+- **Source masters:** all three source metrics resolve from persisted admin
   district/block masters. TXx and CDD route through paths shared with
-  Industrial / Infrastructure (TXx grid-first confirmed; CDD same path, not
-  bundle-verified). SPI-3 path needs verification.
-- **Phantom-slug renames (CHG-0021):** the dossier presents the renamed
-  slugs. `cdd_ge_30` is **renamed to** `cdd_water_stress_pressure` — same
-  canonical slug Industrial Section 7.3 adopts, since the source metric +
-  band combination is identical (one canonical slug across bundles).
-  `txx_ge_45` is **kept** because 45 deg C is the upper edge of the impact
-  band 40-45 deg C — same call as Health / Industrial / Infrastructure.
-  `spi3_low_flow_proxy_norm` is **renamed to** `spi3_low_flow_proxy`
-  (cosmetic cleanup — the `_norm` suffix is residual; "proxy" already
-  conveys the construction). Migration is a data-contract change tracked
-  separately under CHG-0022.
+  Industrial / Infrastructure; SPI-3 routes through the Drought v2
+  grid-first admin source masters described in Section 10.3. The SPI change
+  lens is active when the source master exposes a historical baseline column
+  and degrades with the standard missing-baseline warning/NaN behavior when
+  it does not.
+- **Public slug stability:** shipped config keeps `cdd_ge_30`, `txx_ge_45`,
+  and `spi3_low_flow_proxy_norm`. Recommended renames remain deferred under
+  the phantom-slug / data-contract rename track; they are not part of
+  CHG-0057/0058.
 - **Deferred refinements:** WBGT-conditioned thermal-asset rule using
   `twb_*` source metric to capture cooling-tower wet-bulb performance limit
   (BL-0030 — new); direct streamflow / reservoir-storage rule using CWC

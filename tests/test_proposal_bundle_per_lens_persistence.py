@@ -3,8 +3,8 @@
 Locks the CHG-0027 contract:
 
 A. Blended rules persist columns only for the lenses that are active on the
-   rule (sparse Option B). Pure-absolute rules persist ``__score`` and
-   ``__abs_score`` only.
+   rule (sparse Option B). Rules with only the absolute lens persist
+   ``__score`` and ``__abs_score`` only.
 B. The persisted blended score equals the weighted mean of the persisted
    active-lens columns row-wise.
 C. When the change lens is active but the historical baseline column is
@@ -13,8 +13,7 @@ C. When the change lens is active but the historical baseline column is
 D. When change_mode='relative_pct' and the per-row baseline is zero,
    ``__chg_score`` is NaN on those rows and the blended score for those
    rows renormalizes over the remaining active lenses.
-E. Trend rules and proxy rules persist only ``__score`` and ``__abs_score``;
-   ``__abs_score`` equals ``__score`` row-wise.
+E. Asset Thermal SPI persists absolute+change active lenses and omits impact.
 F. The R95p variability helper-frame alignment is canonical-key based —
    shuffling helper-frame rows must not change per-district scores.
 G. Pre/post regression: Health Risk ``txx_ge_45`` blended decomposition on
@@ -461,16 +460,15 @@ def test_lens_renormalization_when_relative_pct_baseline_is_zero_for_some_rows(
 
 
 # ---------------------------------------------------------------------------
-# Test E — trend and proxy rules persist only abs_score
+# Test E — Thermal SPI persists active abs+chg lenses only
 # ---------------------------------------------------------------------------
 
 
-def test_trend_and_proxy_rules_persist_only_abs_score(
+def test_asset_thermal_rules_persist_expected_active_lens_columns(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Asset Thermal Power's spi3_low_flow_proxy_norm is a pure-absolute proxy
-    rule; it must persist __score and __abs_score only."""
+    """Asset Thermal CDD/TXx are three-lens rules; SPI is abs+chg only."""
     state_name = "Telangana"
     ids = _district_ids(state_name)
     _patch_canonical_units(monkeypatch, district_df=ids)
@@ -500,13 +498,33 @@ def test_trend_and_proxy_rules_persist_only_abs_score(
 
     assert score_col in out.columns
     assert abs_col in out.columns
-    assert chg_col not in out.columns
+    assert chg_col in out.columns
     assert imp_col not in out.columns
+    assert out[chg_col].notna().all()
+
+    rule = next(
+        rule
+        for rule in PROPOSAL_BUNDLES_BY_SLUG["composite_asset_risk_thermal_power"].rules
+        if rule.rule_slug == proxy_slug
+    )
+    denominator = float(rule.absolute_weight) + float(rule.change_weight)
+    expected = (
+        float(rule.absolute_weight) * out[abs_col].astype(float)
+        + float(rule.change_weight) * out[chg_col].astype(float)
+    ) / denominator
     pd.testing.assert_series_equal(
-        out[abs_col].astype(float).reset_index(drop=True),
         out[score_col].astype(float).reset_index(drop=True),
+        expected.reset_index(drop=True),
         check_names=False,
     )
+
+    for rule_slug in ("cdd_ge_30", "txx_ge_45"):
+        for lens_col in (
+            proposal_rule_abs_score_column(rule_slug, "ssp245", "2020-2040"),
+            proposal_rule_chg_score_column(rule_slug, "ssp245", "2020-2040"),
+            proposal_rule_imp_score_column(rule_slug, "ssp245", "2020-2040"),
+        ):
+            assert lens_col in out.columns, f"missing Thermal lens column {lens_col!r}"
 
 
 def test_investment_r99p_persists_only_active_abs_and_chg_columns(
