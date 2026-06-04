@@ -66,8 +66,9 @@ weight 0.45) and the helper-derived `r95p_interannual_variability_norm`
 regime rule (lens 0.70/0.30/0.00, no impact band, absolute-dominant, weight
 0.20), plus the drought-cluster `cdd_ge_60` (lens 0.40/0.30/0.30, band 30-90
 days, weight 0.35). The `r95p_interannual_variability` helper now emits a
-historical baseline column (epoch mirrored from the Rx5day/CDD source
-masters) so its change lens is operational rather than cosmetic. The code
+canonical `r95p_interannual_variability__historical__1990-2010__mean`
+baseline column, with legacy Rx5day/CDD source-master epochs tolerated only as
+fallback, so its change lens is operational rather than cosmetic. The code
 slugs (`rx5day_ge_500`, `cdd_ge_60`, `r95p_interannual_variability_norm`) and
 the helper grid-first / CV-vs-sigma provenance caveat remain deferred under
 CHG-0024.

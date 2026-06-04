@@ -312,11 +312,11 @@ def _seed_hydropower_baseline_source_masters(
     *,
     ids: pd.DataFrame,
     state_name: str,
-    baseline_token: str = "1995-2014",
+    baseline_token: str = "1990-2010",
 ) -> None:
     """Seed the Rx5day/CDD source masters with a shared historical baseline.
 
-    CHG-0036 resolves the R95p helper baseline epoch from the Rx5day and CDD
+    CHG-0059 resolves the R95p helper baseline epoch from the Rx5day and CDD
     source masters (they must agree on the historical period token), so the
     helper builder needs both masters present with a resolvable
     ``__historical__{token}__mean`` column.
@@ -399,8 +399,8 @@ def test_compute_r95p_interannual_variability_master_frame_uses_cv_and_nan_for_i
     assert pd.isna(values["B"])
 
 
-def test_compute_r95p_helper_emits_resolvable_hyphenated_historical_baseline(tmp_path: Path) -> None:
-    """CHG-0036: the helper frame carries one hyphenated historical baseline
+def test_compute_r95p_helper_emits_resolvable_canonical_historical_baseline(tmp_path: Path) -> None:
+    """CHG-0059: the helper frame carries one hyphenated historical baseline
     column whose value is the CV over the chosen baseline window, and which is
     resolvable by the proposal-bundle baseline resolver."""
     state_name = "Telangana"
@@ -435,12 +435,93 @@ def test_compute_r95p_helper_emits_resolvable_hyphenated_historical_baseline(tmp
         data_dir=tmp_path,
     )
 
-    hist_col = "r95p_interannual_variability__historical__1995-2014__mean"
+    hist_col = "r95p_interannual_variability__historical__1990-2010__mean"
     assert hist_col in out.columns
     # CV over historical window [10, 20]: std(ddof=0)=5, mean=15 -> 5/15.
     assert round(float(out[hist_col].iloc[0]), 6) == round((5.0 / 15.0), 6)
     # The resolver used by the blended change lens must find this column.
     assert proposal_bundle_module._resolve_baseline_column(out, "r95p_interannual_variability") == hist_col
+
+
+def test_compute_r95p_helper_keeps_legacy_historical_baseline_fallback(tmp_path: Path) -> None:
+    """Legacy Hydropower source epochs remain tolerated when 1990-2010 is absent."""
+    state_name = "Telangana"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name],
+            "district": ["A"],
+            "district_key": ["telangana|a"],
+        }
+    )
+    _write_master(tmp_path, slug="r95p_very_wet_precip", state_name=state_name, level="district", df=ids)
+    _seed_hydropower_baseline_source_masters(
+        tmp_path,
+        ids=ids,
+        state_name=state_name,
+        baseline_token="1995-2014",
+    )
+    _write_r95p_yearly_with_historical(
+        tmp_path,
+        state_name=state_name,
+        district_name="A",
+        future_rows=[
+            {"year": 2020, "mean": 10.0, "scenario": "ssp245"},
+            {"year": 2021, "mean": 20.0, "scenario": "ssp245"},
+            {"year": 2020, "mean": 10.0, "scenario": "ssp585"},
+            {"year": 2021, "mean": 20.0, "scenario": "ssp585"},
+        ],
+        historical_rows=[
+            {"year": 1995, "mean": 10.0, "scenario": "historical"},
+            {"year": 1996, "mean": 20.0, "scenario": "historical"},
+        ],
+    )
+
+    out = compute_r95p_interannual_variability_master_frame(
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+    )
+
+    hist_col = "r95p_interannual_variability__historical__1995-2014__mean"
+    assert hist_col in out.columns
+    assert proposal_bundle_module._resolve_baseline_column(out, "r95p_interannual_variability") == hist_col
+
+
+def test_compute_r95p_helper_raises_when_historical_window_has_no_finite_values(tmp_path: Path) -> None:
+    state_name = "Telangana"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name],
+            "district": ["A"],
+            "district_key": ["telangana|a"],
+        }
+    )
+    _write_master(tmp_path, slug="r95p_very_wet_precip", state_name=state_name, level="district", df=ids)
+    _seed_hydropower_baseline_source_masters(tmp_path, ids=ids, state_name=state_name)
+    _write_r95p_yearly_with_historical(
+        tmp_path,
+        state_name=state_name,
+        district_name="A",
+        future_rows=[
+            {"year": 2020, "mean": 10.0, "scenario": "ssp245"},
+            {"year": 2021, "mean": 20.0, "scenario": "ssp245"},
+            {"year": 2020, "mean": 10.0, "scenario": "ssp585"},
+            {"year": 2021, "mean": 20.0, "scenario": "ssp585"},
+        ],
+        historical_rows=[
+            {"year": 1990, "mean": 10.0, "scenario": "historical"},
+        ],
+    )
+
+    with pytest.raises(
+        TargetBuildError,
+        match="r95p_very_wet_precip.*level='district'.*state='Telangana'.*window='1990-2010'",
+    ):
+        compute_r95p_interannual_variability_master_frame(
+            level="district",
+            state_name=state_name,
+            data_dir=tmp_path,
+        )
 
 
 def test_compute_r95p_helper_raises_when_source_baseline_tokens_disagree(tmp_path: Path) -> None:
@@ -492,7 +573,7 @@ def _seed_hydropower_bundle_masters(
     state_name: str,
     rx5day_future: list[float] | None = None,
     cdd_future: list[float] | None = None,
-    baseline_period: str = "1995-2014",
+    baseline_period: str = "1990-2010",
 ) -> None:
     futures = {
         "pr_max_5day_precip": rx5day_future if rx5day_future is not None else [420.0, 300.0, 360.0],
@@ -517,7 +598,7 @@ def _hydropower_helper_frame(
     include_historical: bool = True,
     future: list[float] | None = None,
     historical: list[float] | None = None,
-    baseline_token: str = "1995-2014",
+    baseline_token: str = "1990-2010",
 ) -> pd.DataFrame:
     out = ids.copy()
     fut = future if future is not None else [0.40, 0.10, 0.25]

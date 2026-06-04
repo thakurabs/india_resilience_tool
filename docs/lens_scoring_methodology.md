@@ -2251,14 +2251,16 @@ uses **0.70 / 0.30 / 0.00**.
   Thermal — TXx and CDD grid-first verified for those bundles; CDD for
   Hydropower path is the same source metric, not separately verified).
   **R95p interannual variability uses `helper_master` source mode.** As
-  landed in CHG-0036 the helper builder emits the future variability columns
-  plus one hyphenated historical baseline column
-  (`r95p_interannual_variability__historical__{token}__mean`) whose epoch is
-  mirrored from the Rx5day/CDD source masters (resolved to a shared token, one
-  of 1995-2014 or 1985-2014), so the change lens is operational rather than
-  cosmetic. The helper computation provenance (grid-first vs polygon-first;
-  sigma vs CV definition) still must be confirmed before production adoption
-  (CHG-0024).
+  updated in CHG-0059, the helper builder emits the future variability columns
+  plus one hyphenated historical baseline column. The canonical helper baseline
+  is `r95p_interannual_variability__historical__1990-2010__mean`; source
+  masters must resolve Rx5day and CDD to the same historical token, with
+  `1995-2014`, `1995_2014`, and `1985-2014` retained only as deprecated
+  fallback epochs when `1990-2010` is absent. The builder fails if the resolved
+  historical window yields no finite helper values, so the change lens is
+  operational rather than cosmetic. The helper computation provenance
+  (grid-first vs polygon-first; sigma vs CV definition) still must be confirmed
+  before production adoption (CHG-0024).
 - **Phantom-slug renames (CHG-0023):** the dossier presents the renamed
   slugs. `rx5day_ge_500` is **renamed to** `rx5day_accumulated_pressure` —
   same canonical slug Industrial Section 7.2 and Infrastructure Section 9.2

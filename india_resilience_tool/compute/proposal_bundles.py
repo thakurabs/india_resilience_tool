@@ -62,8 +62,9 @@ PERIOD_YEAR_WINDOWS = {
     "2040-2060": (2040, 2060),
     "2060-2080": (2060, 2080),
 }
-BASELINE_TOKENS = ("1995-2014", "1995_2014", "1985-2014")
+BASELINE_TOKENS = ("1990-2010", "1995-2014", "1995_2014", "1985-2014")
 BASELINE_YEAR_WINDOWS = {
+    "1990-2010": (1990, 2010),
     "1995-2014": (1995, 2014),
     "1985-2014": (1985, 2014),
 }
@@ -830,6 +831,12 @@ def compute_r95p_interannual_variability_master_frame(
             )
         hist_values.append(
             _compute_r95p_interannual_variability_from_yearly(yearly, start_year=hist_start, end_year=hist_end)
+        )
+    hist_window = f"{hist_start}-{hist_end}"
+    if not np.isfinite(pd.Series(hist_values, dtype=float)).any():
+        raise TargetBuildError(
+            f"Hydropower helper historical values for metric={HELPER_SOURCE_METRIC_SLUG!r}, "
+            f"level={level!r}, state={state_name!r}, window={hist_window!r} contain no finite values."
         )
     output[f"{HELPER_METRIC_SLUG}__historical__{baseline_token}__{SUPPORTED_STAT}"] = hist_values
 
