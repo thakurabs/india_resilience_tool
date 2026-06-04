@@ -67,7 +67,21 @@ def test_compute_composite_master_frame_matches_current_district_weighted_method
     assert math.isnan(float(observed_scores["C"]))
 
 
-def test_drought_composite_uses_historical_anchor_for_multiple_future_periods(tmp_path) -> None:
+def test_drought_risk_composite_spec_uses_per_period_normalization() -> None:
+    """CHG-0061: Drought Risk uses per-period cohort normalization like the other
+    thematic bundles. Guards against regressing to the baseline-anchored mode,
+    which floored end-century scores to 0 when the projected SPI drought field
+    fell entirely below the 1990-2010 inter-district baseline envelope."""
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+    assert spec.normalization == "per_period"
+
+
+def test_drought_composite_per_period_keeps_spatial_spread_when_future_below_history(tmp_path) -> None:
+    """Regression for the uniform-map bug: when every projected component value sits
+    far below the historical baseline (the real end-century SSP5-8.5 case), per-period
+    normalization must still produce a graded 0-100 spatial score rather than collapsing
+    every district to 0 (the retired baseline-anchored floor)."""
     state_name = "Telangana"
     filename = "master_metrics_by_district.csv"
     spec = get_composite_metric_for_bundle("Drought Risk")
@@ -75,51 +89,30 @@ def test_drought_composite_uses_historical_anchor_for_multiple_future_periods(tm
 
     id_frame = pd.DataFrame(
         {
-            "state": [state_name, state_name],
-            "district": ["A", "B"],
-            "district_key": ["a", "b"],
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["a", "b", "c"],
         }
     )
+    # Future values lie entirely below the historical envelope (80-100): under the
+    # retired baseline-anchored mode all three clip to 0; under per-period they
+    # spread across the cohort min-max to 0 / 50 / 100.
     for slug in spec.component_metric_slugs:
         df = id_frame.copy()
-        df[f"{slug}__historical__1990-2010__mean"] = [0.0, 10.0]
-        df[f"{slug}__ssp245__2040-2060__mean"] = [5.0, 10.0]
-        df[f"{slug}__ssp245__2060-2080__mean"] = [10.0, 15.0]
+        df[f"{slug}__historical__1990-2010__mean"] = [80.0, 90.0, 100.0]
+        df[f"{slug}__ssp585__2060-2080__mean"] = [3.0, 5.0, 7.0]
         _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
 
     out = compute_composite_master_frame(spec, level="district", state_name=state_name, data_dir=tmp_path)
     by_district = out.set_index("district")
+    col = "composite_drought_risk__ssp585__2060-2080__mean"
 
-    assert by_district.loc["A", "composite_drought_risk__ssp245__2040-2060__mean"] == 50.0
-    assert by_district.loc["B", "composite_drought_risk__ssp245__2040-2060__mean"] == 100.0
-    assert by_district.loc["A", "composite_drought_risk__ssp245__2060-2080__mean"] == 100.0
-    assert by_district.loc["B", "composite_drought_risk__ssp245__2060-2080__mean"] == 100.0
-
-
-def test_drought_composite_requires_minimum_anchored_components(tmp_path) -> None:
-    state_name = "Telangana"
-    filename = "master_metrics_by_district.csv"
-    spec = get_composite_metric_for_bundle("Drought Risk")
-    assert spec is not None
-
-    id_frame = pd.DataFrame(
-        {
-            "state": [state_name, state_name],
-            "district": ["A", "B"],
-            "district_key": ["a", "b"],
-        }
-    )
-    for i, slug in enumerate(spec.component_metric_slugs):
-        df = id_frame.copy()
-        df[f"{slug}__historical__1990-2010__mean"] = [0.0, 10.0]
-        df[f"{slug}__ssp585__2040-2060__mean"] = [5.0, None if i < 3 else 5.0]
-        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
-
-    out = compute_composite_master_frame(spec, level="district", state_name=state_name, data_dir=tmp_path)
-    by_district = out.set_index("district")
-
-    assert by_district.loc["A", "composite_drought_risk__ssp585__2040-2060__mean"] == 50.0
-    assert math.isnan(float(by_district.loc["B", "composite_drought_risk__ssp585__2040-2060__mean"]))
+    assert by_district.loc["A", col] == 0.0
+    assert by_district.loc["B", col] == 50.0
+    assert by_district.loc["C", col] == 100.0
+    # Core guard: the score is not a degenerate single value across the state.
+    assert out[col].nunique(dropna=True) == 3
+    assert float(out[col].max()) > 0.0
 
 
 def test_compute_composite_master_frame_uses_schema_intersection_for_available_pairs(tmp_path) -> None:

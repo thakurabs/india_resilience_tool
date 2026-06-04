@@ -13,7 +13,7 @@ Drought Risk v2 uses grid-first Standardized Precipitation Index (SPI) metrics f
 | `spi6_max_spell_lt_minus1` | 0.18 | longest within-year SPI6 run `< -1.0` | `period_max` |
 | `spi12_max_spell_lt_minus1` | 0.30 | longest within-year SPI12 run `< -1.0` | `period_max` |
 
-Calibration uses baseline years `(1981, 2010)`. The historical comparison period for anchored Drought composite normalization is `1990-2010`.
+Calibration uses baseline years `(1981, 2010)`. The Drought composite score uses per-period cohort min-max normalization (CHG-0061), consistent with the other thematic bundles. The earlier `1990-2010` baseline-anchored composite normalization was retired: projected end-century SPI drought frequency falls entirely below the historical inter-district envelope, which floored the anchored score to 0 across the state. (`1990-2010` remains the tool-wide historical reference period for change-from-baseline views.)
 
 ## Floors
 
@@ -24,7 +24,7 @@ Calibration uses baseline years `(1981, 2010)`. The historical comparison period
 | `min_baseline_years_per_calendar_month_fraction` | 0.83 |
 | `min_years_per_period_fraction` | 0.75 |
 | `min_polygon_cell_weight_fraction` | 0.50 |
-| `min_anchored_components` | 4 |
+| `min_anchored_components` | retired (CHG-0061; per-period normalization) |
 
 ## Processing
 

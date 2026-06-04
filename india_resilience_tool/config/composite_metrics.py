@@ -45,7 +45,7 @@ VISIBLE_GLANCE_COMPOSITES: tuple[CompositeMetricSpec, ...] = tuple(
             if not entry.is_attribute
         ),
         supported_levels=spec.supported_levels,
-        normalization="baseline_anchored" if spec.canonical_bundle == "Drought Risk" else "per_period",
+        normalization="per_period",
     )
     for spec in THEMATIC_DASHBOARD_BUNDLES
 )
