@@ -41,6 +41,7 @@ from india_resilience_tool.app.overlays import (
     build_overlay_render_layers,
 )
 from india_resilience_tool.app.map_layer_runtime import build_folium_map_for_selection
+from india_resilience_tool.data.admin_coverage import CoverageDiagnostics
 from india_resilience_tool.data.master_columns import find_baseline_column_for_stat
 from india_resilience_tool.data.merge import (
     get_or_build_merged_for_index_cached as _get_or_build_merged_for_index_cached,
@@ -77,6 +78,29 @@ class MapArtifacts:
     rank_scope_label: str
     overlay_messages: tuple[str, ...]
     blocked_message: Optional[str]
+
+
+def _boundary_signature(
+    boundary_df: pd.DataFrame,
+    *,
+    boundary_path: Path,
+    simplify_tolerance: Optional[float],
+) -> tuple[str, Optional[float], Optional[float], int]:
+    """Return the explicit boundary signature used to invalidate merged-cache entries."""
+    try:
+        resolved_path = str(boundary_path.resolve())
+    except Exception:
+        resolved_path = str(boundary_path)
+    try:
+        boundary_mtime = float(boundary_path.stat().st_mtime)
+    except Exception:
+        boundary_mtime = None
+    return (
+        resolved_path,
+        boundary_mtime,
+        None if simplify_tolerance is None else float(simplify_tolerance),
+        int(len(boundary_df)),
+    )
 
 
 def _build_legend_title(varcfg: Mapping[str, Any]) -> str:
@@ -197,23 +221,104 @@ def _level_aware_merge(
     variable_slug: str,
     master_csv_path: Path,
     level: str,
+    adm2_geojson_path: Path,
+    adm3_geojson_path: Path,
+    basin_geojson_path: Path,
+    subbasin_geojson_path: Path,
+    simplify_tol_adm2: float,
+    simplify_tol_adm3: float,
 ) -> Any:
     level_norm = str(level or "district").strip().lower()
     boundary_gdf = adm3 if level_norm in {"block", "basin", "sub_basin"} else adm2
     if boundary_gdf is None:
         raise ValueError(f"Boundary GeoDataFrame is required for level={level_norm!r}")
 
+    if level_norm == "district":
+        boundary_sig = _boundary_signature(
+            boundary_gdf,
+            boundary_path=adm2_geojson_path,
+            simplify_tolerance=simplify_tol_adm2,
+        )
+    elif level_norm == "block":
+        boundary_sig = _boundary_signature(
+            boundary_gdf,
+            boundary_path=adm3_geojson_path,
+            simplify_tolerance=simplify_tol_adm3,
+        )
+    elif level_norm == "basin":
+        boundary_sig = _boundary_signature(
+            boundary_gdf,
+            boundary_path=basin_geojson_path,
+            simplify_tolerance=None,
+        )
+    else:
+        boundary_sig = _boundary_signature(
+            boundary_gdf,
+            boundary_path=subbasin_geojson_path,
+            simplify_tolerance=None,
+        )
+
     return _get_or_build_merged_for_index_cached(
         boundary_gdf,
         df,
         slug=variable_slug,
         master_path=master_csv_path,
+        boundary_signature=boundary_sig,
         session_state=st.session_state,
         alias_fn=alias,
         adm2_state_col="state_name",
         master_state_col="state",
         level=level_norm,
     )
+
+
+def _summarize_coverage_buckets(diagnostics: CoverageDiagnostics, *, level: str) -> list[str]:
+    """Return short bucket summaries for coverage diagnostics messaging."""
+    level_label = "features" if str(level).strip().lower() in {"basin", "sub_basin"} else str(level).strip().lower() + "s"
+    parts: list[str] = []
+    if diagnostics.missing_master_row_keys:
+        parts.append(f"{len(diagnostics.missing_master_row_keys)} {level_label} without master rows")
+    if diagnostics.null_value_keys:
+        parts.append(f"{len(diagnostics.null_value_keys)} {level_label} with null rendered values")
+    if diagnostics.broken_join_keys:
+        parts.append(f"{len(diagnostics.broken_join_keys)} {level_label} with non-null values that failed to join")
+    return parts
+
+
+def evaluate_coverage_policy(
+    *,
+    adm_level: str,
+    spatial_family: str,
+    selected_state: str,
+    diagnostics: Optional[CoverageDiagnostics],
+) -> tuple[tuple[str, ...], Optional[str]]:
+    """Return overlay warnings and an optional blocking error for render coverage issues."""
+    if diagnostics is None:
+        return (), None
+
+    family_norm = str(spatial_family or "admin").strip().lower()
+    level_norm = str(adm_level or "district").strip().lower()
+    if family_norm != "admin" or level_norm not in {"district", "block"}:
+        return (), None
+
+    bucket_parts = _summarize_coverage_buckets(diagnostics, level=level_norm)
+    if not bucket_parts:
+        return (), None
+
+    summary = (
+        f"Render coverage matched {diagnostics.matched_feature_keys}/{diagnostics.total_feature_keys} "
+        f"{level_norm} features ({diagnostics.coverage_pct:.1f}%). "
+        + "; ".join(bucket_parts)
+        + "."
+    )
+
+    if level_norm == "district" and selected_state == "All" and diagnostics.broken_join_keys:
+        return (), (
+            "Nationwide district map blocked because at least one district has a non-null rendered value "
+            f"but failed the geometry join. {summary}"
+        )
+
+    return (summary,), None
 
 
 def build_map_and_rankings(
@@ -381,6 +486,12 @@ def build_map_and_rankings(
                     variable_slug=variable_slug,
                     master_csv_path=master_csv_path,
                     level=level_norm,
+                    adm2_geojson_path=adm2_geojson_path,
+                    adm3_geojson_path=adm3_geojson_path,
+                    basin_geojson_path=basin_geojson_path,
+                    subbasin_geojson_path=subbasin_geojson_path,
+                    simplify_tol_adm2=simplify_tol_adm2,
+                    simplify_tol_adm3=simplify_tol_adm3,
                 )
     else:
         merged = ranking_source
@@ -644,8 +755,9 @@ def build_map_and_rankings(
         selected_district=selected_district,
     )
 
-    folium_map = build_folium_map_for_selection(
+    map_build = build_folium_map_for_selection(
         level=level_norm,
+        master_df=df,
         merged=merged,
         display_gdf=display_gdf,
         selected_state=selected_state,
@@ -675,6 +787,17 @@ def build_map_and_rankings(
         overlay_layers=overlay_layers,
         perf_section=perf_section,
     )
+    coverage_messages, coverage_block = evaluate_coverage_policy(
+        adm_level=level_norm,
+        spatial_family=spatial_family,
+        selected_state=selected_state,
+        diagnostics=map_build.coverage_diagnostics,
+    )
+    if coverage_block:
+        st.error(coverage_block)
+        render_perf_panel_safe()
+        st.stop()
+    overlay_messages = tuple(overlay_messages) + tuple(coverage_messages)
 
     if use_fixed_class_scale:
         legend_block_html = build_vertical_categorical_legend_block_html(
@@ -742,7 +865,7 @@ def build_map_and_rankings(
         merged=merged,
         table_df=table_df,
         has_baseline=bool(has_baseline),
-        folium_map=folium_map,
+        folium_map=map_build.folium_map,
         legend_block_html=legend_block_html,
         baseline_col=baseline_col,
         map_mode=map_mode,

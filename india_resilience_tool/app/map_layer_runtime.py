@@ -11,6 +11,7 @@ map object for the current selection by:
 from __future__ import annotations
 
 from contextlib import nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -18,6 +19,7 @@ from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_BASIN_RENDER,
     SIMPLIFY_TOL_SUBBASIN_RENDER,
 )
+from india_resilience_tool.data.admin_coverage import CoverageDiagnostics, compute_coverage_diagnostics
 
 
 def _empty_fc() -> dict[str, Any]:
@@ -34,9 +36,18 @@ def _union_featurecollections(collections: Sequence[Optional[Mapping[str, Any]]]
     return {"type": "FeatureCollection", "features": features}
 
 
+@dataclass(frozen=True)
+class MapBuildResult:
+    """Built map object plus authoritative render-time coverage diagnostics."""
+
+    folium_map: Any
+    coverage_diagnostics: Optional[CoverageDiagnostics]
+
+
 def build_folium_map_for_selection(
     *,
     level: str,
+    master_df: Optional[Any],
     merged: Any,
     display_gdf: Any,
     selected_state: str,
@@ -66,7 +77,7 @@ def build_folium_map_for_selection(
     crosswalk_overlay: Optional[Mapping[str, Any]] = None,
     overlay_layers: tuple[Any, ...] = (),
     perf_section: Optional[Callable[[str], Any]] = None,
-) -> Any:
+) -> MapBuildResult:
     from india_resilience_tool.app.geo_cache import (
         build_adm2_geojson_by_state,
         build_adm3_geojson_by_district,
@@ -183,6 +194,18 @@ def build_folium_map_for_selection(
             metric_col=metric_col,
             map_value_col=map_value_col,
         )
+
+    coverage_diagnostics = compute_coverage_diagnostics(
+        feature_collection=base_fc,
+        level=level_norm,
+        alias_fn=alias_fn,
+        feature_key_col=feature_key_col,
+        props_map=props_map,
+        master_df=master_df if getattr(master_df, "empty", False) is False else prop_gdf,
+        map_value_col=map_value_col,
+        metric_col=metric_col,
+        baseline_col=baseline_col,
+    )
 
     # Build the patched FC fresh every render. The previous session-state cache
     # was net negative: its SHA-1 prop-signature key cost more than the patch step
@@ -371,4 +394,7 @@ def build_folium_map_for_selection(
                 m,
                 overlay_layers=tuple(overlay_layers),
             )
-    return m
+    return MapBuildResult(
+        folium_map=m,
+        coverage_diagnostics=coverage_diagnostics,
+    )

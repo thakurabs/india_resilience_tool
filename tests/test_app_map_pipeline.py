@@ -10,7 +10,9 @@ from india_resilience_tool.app.map_pipeline import (
     _stack_legend_blocks,
     blocked_drilldown_message,
     details_require_geometry,
+    evaluate_coverage_policy,
 )
+from india_resilience_tool.data.admin_coverage import CoverageDiagnostics
 from india_resilience_tool.app.overlays import RP100_FLOOD_DEPTH_BINS
 from india_resilience_tool.viz.colors import build_rp100_flood_depth_legend_html
 
@@ -152,3 +154,91 @@ def test_rp100_overlay_legend_uses_responsive_map_height() -> None:
     html = build_rp100_flood_depth_legend_html(bins=RP100_FLOOD_DEPTH_BINS, map_height=560)
 
     assert "height: 419px" in html
+
+
+def test_evaluate_coverage_policy_warns_for_legitimate_partial_nationwide_district_coverage() -> None:
+    diagnostics = CoverageDiagnostics(
+        total_feature_keys=3,
+        matched_feature_keys=1,
+        missing_master_row_keys=("odisha|cuttack", "punjab|amritsar"),
+        null_value_keys=(),
+        broken_join_keys=(),
+        coverage_pct=33.333333,
+    )
+
+    warnings, block = evaluate_coverage_policy(
+        adm_level="district",
+        spatial_family="admin",
+        selected_state="All",
+        diagnostics=diagnostics,
+    )
+
+    assert block is None
+    assert len(warnings) == 1
+    assert "without master rows" in warnings[0]
+
+
+def test_evaluate_coverage_policy_warns_for_null_values_without_blocking() -> None:
+    diagnostics = CoverageDiagnostics(
+        total_feature_keys=2,
+        matched_feature_keys=2,
+        missing_master_row_keys=(),
+        null_value_keys=("odisha|cuttack",),
+        broken_join_keys=(),
+        coverage_pct=100.0,
+    )
+
+    warnings, block = evaluate_coverage_policy(
+        adm_level="district",
+        spatial_family="admin",
+        selected_state="All",
+        diagnostics=diagnostics,
+    )
+
+    assert block is None
+    assert len(warnings) == 1
+    assert "null rendered values" in warnings[0]
+
+
+def test_evaluate_coverage_policy_blocks_nationwide_district_broken_joins() -> None:
+    diagnostics = CoverageDiagnostics(
+        total_feature_keys=2,
+        matched_feature_keys=1,
+        missing_master_row_keys=(),
+        null_value_keys=(),
+        broken_join_keys=("telangana|adilabad",),
+        coverage_pct=50.0,
+    )
+
+    warnings, block = evaluate_coverage_policy(
+        adm_level="district",
+        spatial_family="admin",
+        selected_state="All",
+        diagnostics=diagnostics,
+    )
+
+    assert warnings == ()
+    assert block is not None
+    assert "blocked" in block.lower()
+
+
+def test_evaluate_coverage_policy_warns_for_block_level_broken_joins() -> None:
+    diagnostics = CoverageDiagnostics(
+        total_feature_keys=2,
+        matched_feature_keys=1,
+        missing_master_row_keys=(),
+        null_value_keys=(),
+        broken_join_keys=("telangana|adilabad|adilabad rural",),
+        coverage_pct=50.0,
+    )
+
+    warnings, block = evaluate_coverage_policy(
+        adm_level="block",
+        spatial_family="admin",
+        selected_state="All",
+        diagnostics=diagnostics,
+    )
+
+    assert block is None
+    assert len(warnings) == 1
+    assert "failed to join" in warnings[0]

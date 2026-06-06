@@ -230,6 +230,67 @@ def test_resolve_admin_master_source_for_all_falls_back_to_legacy_when_optimized
     assert legacy_checked == legacy_root.resolve()
 
 
+def test_resolve_admin_master_source_for_all_prefers_optimized_when_loaded_content_is_fuller(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    slug = "composite_life_livelihood_loss_risk"
+    optimized_root = tmp_path / "processed_optimised" / "metrics" / slug
+    optimized_district_root = optimized_root / "masters" / "admin" / "district"
+    optimized_district_root.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "state": ["Telangana"],
+            "district": ["A"],
+            "district_key": ["telangana|a"],
+            "composite_life_livelihood_loss_risk__ssp245__2020-2040__mean": [1.0],
+        }
+    ).to_parquet(optimized_district_root / "state=Telangana.parquet", index=False)
+    pd.DataFrame(
+        {
+            "state": ["Odisha"],
+            "district": ["B"],
+            "district_key": ["odisha|b"],
+            "composite_life_livelihood_loss_risk__ssp245__2020-2040__mean": [2.0],
+        }
+    ).to_parquet(optimized_district_root / "state=Odisha.parquet", index=False)
+
+    legacy_root = tmp_path / "processed" / slug
+    telangana_root = legacy_root / "Telangana"
+    telangana_root.mkdir(parents=True)
+    (telangana_root / "master_metrics_by_district.csv").write_text(
+        "state,district,district_key,composite_life_livelihood_loss_risk__ssp245__2020-2040__mean\n"
+        "Telangana,A,telangana|a,1.0\n",
+        encoding="utf-8",
+    )
+    odisha_root = legacy_root / "Odisha"
+    odisha_root.mkdir(parents=True)
+    (odisha_root / "master_metrics_by_district.csv").write_text(
+        "state,district,district_key,composite_life_livelihood_loss_risk__ssp245__2020-2040__mean\n"
+        "Odisha,B,odisha|b,\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("IRT_PROCESSED_ROOT", raising=False)
+    monkeypatch.delenv("IRT_PROCESSED_OPTIMISED_ROOT", raising=False)
+
+    resolved_root, master_paths, legacy_checked = _resolve_admin_master_source(
+        optimized_root,
+        variable_slug=slug,
+        level="district",
+        selected_state="All",
+        data_dir=tmp_path,
+        optimized_intent=True,
+    )
+
+    assert resolved_root == optimized_root.resolve()
+    assert master_paths == (
+        (optimized_district_root / "state=Odisha.parquet").resolve(),
+        (optimized_district_root / "state=Telangana.parquet").resolve(),
+    )
+    assert legacy_checked == legacy_root.resolve()
+
+
 def test_hydro_master_contract_ready_accepts_optimized_parquet(tmp_path: Path) -> None:
     master_path = tmp_path / "metrics" / "tas_annual_mean" / "masters" / "hydro" / "basin" / "master.parquet"
     master_path.parent.mkdir(parents=True)

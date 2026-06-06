@@ -8,6 +8,7 @@ preserving widget keys and session_state contracts.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -35,13 +36,20 @@ from india_resilience_tool.config.variables import (
     get_pillars,
 )
 from india_resilience_tool.data.master_loader import resolve_preferred_master_path
+from india_resilience_tool.data.admin_coverage import (
+    AdminMasterSourceAudit,
+    audit_admin_master_source,
+)
+from india_resilience_tool.data.master_loader import load_master_csvs, master_source_signature
 from india_resilience_tool.data.optimized_bundle import (
     is_optimized_metric_root,
     list_optimized_states_for_metric_root,
     optimized_master_path_from_metric_root,
     optimized_master_sources_from_metric_root,
+    resolve_optimized_bundle_root,
 )
 from india_resilience_tool.utils.processed_io import read_table
+from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.charts import (
     PERIOD_ORDER,
     canonical_period_label,
@@ -245,6 +253,72 @@ def _admin_source_states(master_sources: tuple[Path, ...], *, optimized: bool) -
     return tuple(states)
 
 
+@lru_cache(maxsize=8)
+def _expected_admin_geometry_states(level: str, data_dir_str: str) -> tuple[str, ...]:
+    """Return the expected nationwide admin geometry state universe for one level."""
+    level_norm = str(level or "district").strip().lower()
+    optimized_geometry_dir = resolve_optimized_bundle_root(data_dir=Path(data_dir_str)) / "geometry" / "admin" / level_norm
+    if optimized_geometry_dir.exists():
+        states = [
+            path.stem.split("=", 1)[1].strip()
+            for path in sorted(optimized_geometry_dir.glob("state=*.geojson"))
+            if path.stem.startswith("state=")
+        ]
+        if states:
+            return tuple(sorted({alias(state_name) for state_name in states if str(state_name).strip()}))
+
+    boundary_name = "blocks_4326.geojson" if level_norm == "block" else "districts_4326.geojson"
+    boundary_path = Path(data_dir_str) / boundary_name
+    if not boundary_path.exists():
+        return ()
+
+    import geopandas as gpd
+
+    gdf = gpd.read_file(boundary_path)
+    for column in ("state_name", "state", "adm1_name", "shapeName_0", "shapeGroup"):
+        if column not in gdf.columns:
+            continue
+        states = gdf[column].dropna().astype(str).str.strip().tolist()
+        return tuple(sorted({alias(state_name) for state_name in states if alias(state_name)}))
+    return ()
+
+
+@lru_cache(maxsize=32)
+def _audit_admin_master_sources_cached(
+    source_signature: tuple[tuple[str, Optional[float]], ...],
+    *,
+    source_paths: tuple[str, ...],
+    level: str,
+    variable_slug: str,
+) -> AdminMasterSourceAudit:
+    """Audit one admin source family using actual loaded master content."""
+    _ = source_signature
+    master_df = load_master_csvs(tuple(Path(path) for path in source_paths))
+    return audit_admin_master_source(
+        master_df,
+        level=level,
+        alias_fn=alias,
+        variable_slug=variable_slug,
+    )
+
+
+def _admin_audit_score(
+    audit: AdminMasterSourceAudit,
+    *,
+    expected_state_keys: tuple[str, ...],
+) -> tuple[int, int, int, int]:
+    """Return a stable completeness score for admin source-family selection."""
+    expected = set(expected_state_keys)
+    present_overlap = len(expected.intersection(audit.distinct_state_keys)) if expected else len(audit.distinct_state_keys)
+    valued_overlap = len(expected.intersection(audit.valued_state_keys)) if expected else len(audit.valued_state_keys)
+    return (
+        valued_overlap,
+        present_overlap,
+        -audit.malformed_identity_row_count,
+        -len(audit.duplicate_identity_keys),
+    )
+
+
 def _resolve_hydro_master_source(
     processed_root: Path,
     *,
@@ -318,12 +392,34 @@ def _resolve_admin_master_source(
         selected_state=selected_state_norm,
     )
     if selected_state_norm == "All":
-        optimized_states = set(list_optimized_states_for_metric_root(processed_root, level=level))
-        legacy_states = set(_admin_source_states(legacy_sources, optimized=False))
         optimized_ready = _master_source_exists(optimized_sources)
-        if optimized_ready and (not legacy_states or optimized_states == legacy_states):
-            return processed_root, optimized_sources, legacy_root if legacy_states else None
-        if legacy_states:
+        legacy_ready = _master_source_exists(legacy_sources)
+        if optimized_ready and not legacy_ready:
+            return processed_root, optimized_sources, legacy_root
+        if legacy_ready and not optimized_ready:
+            return legacy_root, legacy_sources, legacy_root
+        if optimized_ready and legacy_ready:
+            optimized_states = set(list_optimized_states_for_metric_root(processed_root, level=level))
+            legacy_states = set(_admin_source_states(legacy_sources, optimized=False))
+            expected_state_keys = _expected_admin_geometry_states(level, str(data_dir))
+            optimized_audit = _audit_admin_master_sources_cached(
+                master_source_signature(optimized_sources),
+                source_paths=tuple(str(path) for path in optimized_sources),
+                level=level,
+                variable_slug=variable_slug,
+            )
+            legacy_audit = _audit_admin_master_sources_cached(
+                master_source_signature(legacy_sources),
+                source_paths=tuple(str(path) for path in legacy_sources),
+                level=level,
+                variable_slug=variable_slug,
+            )
+            optimized_score = _admin_audit_score(optimized_audit, expected_state_keys=expected_state_keys)
+            legacy_score = _admin_audit_score(legacy_audit, expected_state_keys=expected_state_keys)
+            if optimized_states == legacy_states and optimized_score >= legacy_score:
+                return processed_root, optimized_sources, legacy_root
+            if optimized_score >= legacy_score:
+                return processed_root, optimized_sources, legacy_root
             return legacy_root, legacy_sources, legacy_root
         if optimized_ready:
             return processed_root, optimized_sources, legacy_root

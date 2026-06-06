@@ -145,6 +145,7 @@ def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
 
     out = build_folium_map_for_selection(
         level="block",
+        master_df=merged,
         merged=merged,
         display_gdf=merged,
         selected_state="Telangana",
@@ -158,8 +159,8 @@ def test_build_folium_map_for_selection_uses_district_scoped_block_shard(
 
     assert calls["district"] == 1
     assert calls["state"] == 0
-    assert len(out["features"]) == 1
-    assert out["features"][0]["properties"]["block_name"] == "Adilabad Rural"
+    assert len(out.folium_map["features"]) == 1
+    assert out.folium_map["features"][0]["properties"]["block_name"] == "Adilabad Rural"
 
 
 def test_build_folium_map_for_selection_rebuilds_every_call(
@@ -208,6 +209,7 @@ def test_build_folium_map_for_selection_rebuilds_every_call(
     )
     kwargs = dict(
         level="district",
+        master_df=merged,
         merged=merged,
         display_gdf=merged,
         selected_state="Telangana",
@@ -226,8 +228,10 @@ def test_build_folium_map_for_selection_rebuilds_every_call(
     # from scratch. Output must still be identical to the cached-path contract.
     assert patch_calls["count"] == 2
     assert base_map_calls["count"] == 2
-    assert first["features"][0]["properties"]["fillColor"] == "#ff0000"
-    assert second["features"][0]["properties"]["fillColor"] == "#ff0000"
+    assert first.folium_map["features"][0]["properties"]["fillColor"] == "#ff0000"
+    assert second.folium_map["features"][0]["properties"]["fillColor"] == "#ff0000"
+    assert first.coverage_diagnostics is not None
+    assert first.coverage_diagnostics.matched_feature_keys == 1
 
 
 def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
@@ -292,6 +296,7 @@ def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
 
     out = build_folium_map_for_selection(
         level="district",
+        master_df=merged,
         merged=merged,
         display_gdf=merged,
         selected_state="Telangana",
@@ -305,8 +310,8 @@ def test_build_folium_map_for_selection_uses_scoped_subbasin_overlay_shards(
 
     assert calls["scoped"] == 1
     assert calls["all"] == 0
-    assert len(out["features"]) == 1
-    assert out["features"][0]["properties"]["subbasin_name"] == "Pranhita"
+    assert len(out.folium_map["features"]) == 1
+    assert out.folium_map["features"][0]["properties"]["subbasin_name"] == "Pranhita"
 
 
 def test_build_folium_map_for_selection_composes_overlay_on_each_rerun(
@@ -370,6 +375,7 @@ def test_build_folium_map_for_selection_composes_overlay_on_each_rerun(
     common_kwargs = _common_kwargs(tmp_path)
     kwargs = dict(
         level="district",
+        master_df=merged,
         merged=merged,
         display_gdf=merged,
         selected_state="Telangana",
@@ -398,5 +404,5 @@ def test_build_folium_map_for_selection_composes_overlay_on_each_rerun(
     # has no overlay; the second composes an overlay on top of a freshly built map.
     assert base_map_calls["count"] == 2
     assert overlay_calls["count"] == 1
-    assert first["overlays"] == []
-    assert len(second["overlays"]) == 1
+    assert first.folium_map["overlays"] == []
+    assert len(second.folium_map["overlays"]) == 1

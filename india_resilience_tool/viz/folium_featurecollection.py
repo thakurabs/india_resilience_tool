@@ -18,6 +18,11 @@ from typing import Any, Callable, Mapping, Sequence, Tuple
 import folium
 import pandas as pd
 
+from india_resilience_tool.data.admin_coverage import (
+    build_feature_key_from_properties,
+    build_feature_key_series,
+)
+
 
 def ensure_geojson_by_state_has_all(geojson_by_state: Mapping[str, dict]) -> dict[str, dict]:
     """
@@ -208,13 +213,6 @@ def clone_featurecollection_for_patch(fc: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _string_series(frame: pd.DataFrame, column: str) -> pd.Series:
-    """Return a string series with nulls normalized to empty strings."""
-    if column not in frame.columns:
-        return pd.Series("", index=frame.index, dtype="object")
-    return frame[column].where(frame[column].notna(), "").astype(str)
-
-
 def build_props_map_from_gdf(
     prop_gdf: pd.DataFrame,
     *,
@@ -240,20 +238,11 @@ def build_props_map_from_gdf(
     if level_norm == "sub_basin" and "subbasin_name" not in prop_work.columns and "subbasin" in prop_work.columns:
         prop_work["subbasin_name"] = prop_work["subbasin"]
 
-    if feature_key_col not in prop_work.columns:
-        if is_block_level:
-            state_key = _string_series(prop_work, "state_name").map(alias_fn)
-            district_key = _string_series(prop_work, "district_name").map(alias_fn)
-            block_key = _string_series(prop_work, "block_name").map(alias_fn)
-            prop_work[feature_key_col] = state_key.str.cat(district_key, sep="|").str.cat(block_key, sep="|")
-        elif level_norm == "sub_basin":
-            prop_work[feature_key_col] = _string_series(prop_work, "subbasin_id").map(alias_fn)
-        elif level_norm == "basin":
-            prop_work[feature_key_col] = _string_series(prop_work, "basin_id").map(alias_fn)
-        else:
-            state_key = _string_series(prop_work, "state_name").map(alias_fn)
-            district_key = _string_series(prop_work, "district_name").map(alias_fn)
-            prop_work[feature_key_col] = state_key.str.cat(district_key, sep="|")
+    prop_work[feature_key_col] = build_feature_key_series(
+        prop_work,
+        level=level_norm,
+        alias_fn=alias_fn,
+    )
 
     value_cols: list[str] = []
     for c in (
@@ -363,54 +352,14 @@ def patch_fc_properties(
 
         k = props.get(feature_key_col)
         if not isinstance(k, str) or not k:
-            if is_block_level:
-                props["block_name"] = (
-                    props.get("block_name")
-                    or props.get("block")
-                    or props.get("adm3_name")
-                    or props.get("name")
-                )
-                props["district_name"] = (
-                    props.get("district_name")
-                    or props.get("district")
-                    or props.get("adm2_name")
-                    or props.get("shapeName_2")
-                    or props.get("shapeName_1")
-                )
-                props["state_name"] = (
-                    props.get("state_name")
-                    or props.get("state")
-                    or props.get("adm1_name")
-                    or props.get("shapeName_0")
-                    or props.get("shapeGroup")
-                )
-                k = (
-                    f"{alias_fn(props.get('state_name', ''))}|"
-                    f"{alias_fn(props.get('district_name', ''))}|"
-                    f"{alias_fn(props.get('block_name', ''))}"
-                )
-            elif str(level).strip().lower() == "sub_basin":
-                props["subbasin_name"] = props.get("subbasin_name") or props.get("name")
-                props["subbasin_id"] = props.get("subbasin_id")
-                props["basin_name"] = props.get("basin_name")
-                props["basin_id"] = props.get("basin_id")
-                k = alias_fn(props.get("subbasin_id", ""))
-            elif str(level).strip().lower() == "basin":
-                props["basin_name"] = props.get("basin_name") or props.get("name")
-                props["basin_id"] = props.get("basin_id")
-                k = alias_fn(props.get("basin_id", ""))
-            else:
-                props["district_name"] = props.get("district_name") or props.get("district")
-                props["state_name"] = (
-                    props.get("state_name")
-                    or props.get("state")
-                    or props.get("adm1_name")
-                    or props.get("shapeName_0")
-                    or props.get("shapeGroup")
-                )
-                k = f"{alias_fn(props.get('state_name', ''))}|{alias_fn(props.get('district_name', ''))}"
-
-            props[feature_key_col] = k
+            k = build_feature_key_from_properties(
+                props,
+                level=level,
+                alias_fn=alias_fn,
+                feature_key_col=feature_key_col,
+            )
+            if k:
+                props[feature_key_col] = k
 
         upd = props_map.get(str(k))
         if upd:

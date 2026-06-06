@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
+from india_resilience_tool.data.admin_coverage import compute_coverage_diagnostics
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.folium_featurecollection import (
     build_geojson_tooltip,
@@ -139,3 +141,92 @@ def test_build_geojson_tooltip_keeps_percentile_risk_class_for_standard_metrics(
 
     assert tooltip.fields == ["district_name", "state_name", "_tooltip_value", "_risk_class", "_tooltip_rank"]
     assert tooltip.aliases == ["District", "State", "Value", "Risk class", "Rank in state"]
+
+
+def test_compute_coverage_diagnostics_uses_actual_props_map_hit_rate() -> None:
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"state_name": "Telangana", "district_name": "Adilabad", "__key": "telangana|adilabad"},
+                "geometry": None,
+            },
+            {
+                "type": "Feature",
+                "properties": {"state_name": "Odisha", "district_name": "Cuttack", "__key": "odisha|cuttack"},
+                "geometry": None,
+            },
+            {
+                "type": "Feature",
+                "properties": {"state_name": "Punjab", "district_name": "Amritsar", "__key": "punjab|amritsar"},
+                "geometry": None,
+            },
+        ],
+    }
+    props_map = {
+        "telangana|adilabad": {"fillColor": "#ff0000"},
+    }
+    master_df = pd.DataFrame(
+        {
+            "state": ["Telangana", "Odisha"],
+            "district": ["Adilabad", "Cuttack"],
+            "tas_annual_mean": [28.26, pd.NA],
+        }
+    )
+
+    diagnostics = compute_coverage_diagnostics(
+        feature_collection=feature_collection,
+        level="district",
+        alias_fn=alias,
+        feature_key_col="__key",
+        props_map=props_map,
+        master_df=master_df,
+        map_value_col="tas_annual_mean",
+        metric_col="tas_annual_mean",
+        baseline_col=None,
+    )
+
+    assert diagnostics.total_feature_keys == 3
+    assert diagnostics.matched_feature_keys == 1
+    assert diagnostics.coverage_pct == pytest.approx(100.0 / 3.0)
+    assert diagnostics.missing_master_row_keys == ("punjab|amritsar",)
+    assert diagnostics.null_value_keys == ("odisha|cuttack",)
+    assert diagnostics.broken_join_keys == ()
+
+
+def test_compute_coverage_diagnostics_flags_broken_joins_from_master_value_keys() -> None:
+    feature_collection = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {"state_name": "Telangana", "district_name": "Adilabad", "__key": "telangana|adilabad"},
+                "geometry": None,
+            }
+        ],
+    }
+    master_df = pd.DataFrame(
+        {
+            "state": ["Telangana"],
+            "district": ["Adilabad"],
+            "tas_annual_mean": [28.26],
+        }
+    )
+
+    diagnostics = compute_coverage_diagnostics(
+        feature_collection=feature_collection,
+        level="district",
+        alias_fn=alias,
+        feature_key_col="__key",
+        props_map={},
+        master_df=master_df,
+        map_value_col="tas_annual_mean",
+        metric_col="tas_annual_mean",
+        baseline_col=None,
+    )
+
+    assert diagnostics.matched_feature_keys == 0
+    assert diagnostics.missing_master_row_keys == ()
+    assert diagnostics.null_value_keys == ()
+    assert diagnostics.broken_join_keys == ("telangana|adilabad",)

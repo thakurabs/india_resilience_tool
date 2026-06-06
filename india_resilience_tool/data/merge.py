@@ -247,6 +247,7 @@ def get_or_build_merged_for_index_cached(
     *,
     slug: str,
     master_path: MasterSourceLike,
+    boundary_signature: tuple[str, Optional[float], Optional[float], int],
     session_state: MutableMapping,
     alias_fn: Callable[[str], str],
     level: AdminLevel = "district",
@@ -257,7 +258,7 @@ def get_or_build_merged_for_index_cached(
     Cache merged result by master mtime in session_state["_merged_cache"][cache_key].
 
     Contract:
-      - Cache key is (slug, level, master_mtime)
+      - Cache key is (slug, level, master paths, boundary signature)
       - Stored under session_state["_merged_cache"]
       - Restricts boundaries to states present in master (if columns exist)
       - Deterministic join using alias-normalized keys
@@ -269,6 +270,7 @@ def get_or_build_merged_for_index_cached(
         master_df: Master metrics DataFrame
         slug: Index slug for cache key
         master_path: Path to master CSV (for mtime checking)
+        boundary_signature: Explicit boundary path/mtime/tolerance/row-count signature
         session_state: Streamlit session state or dict-like
         alias_fn: Normalization function for names
         level: "district" or "block"
@@ -281,10 +283,14 @@ def get_or_build_merged_for_index_cached(
     merged_cache = session_state.setdefault("_merged_cache", {})
 
     source_signature = master_source_signature(master_path)
-    cache_key = (slug, level, tuple(path for path, _ in source_signature))
+    cache_key = (slug, level, tuple(path for path, _ in source_signature), boundary_signature)
     cache_entry = merged_cache.get(cache_key)
 
-    if cache_entry is not None and cache_entry.get("source_signature") == source_signature:
+    if (
+        cache_entry is not None
+        and cache_entry.get("source_signature") == source_signature
+        and cache_entry.get("boundary_signature") == boundary_signature
+    ):
         return cache_entry["gdf"]
 
     master_c = master_df
@@ -329,7 +335,11 @@ def get_or_build_merged_for_index_cached(
             master_state_col=master_state_col,
         )
 
-    merged_cache[cache_key] = {"source_signature": source_signature, "gdf": merged}
+    merged_cache[cache_key] = {
+        "source_signature": source_signature,
+        "boundary_signature": boundary_signature,
+        "gdf": merged,
+    }
     return merged
 
 
