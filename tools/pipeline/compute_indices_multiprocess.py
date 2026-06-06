@@ -128,10 +128,12 @@ from india_resilience_tool.compute.cold_risk_gridfirst import (
     compute_cold_risk_rows_for_metric,
 )
 from india_resilience_tool.compute.gridfirst_spatial import (
+    bbox_to_index_range,
     build_area_weights as build_gridfirst_area_weights,
     coverage_from_weights as gridfirst_coverage_from_weights,
     dataset_grid_spec as gridfirst_dataset_grid_spec,
     read_spatial_weights_cache as read_gridfirst_spatial_weights_cache,
+    subset_grid_by_index,
     write_spatial_weights_cache as write_gridfirst_spatial_weights_cache,
 )
 from india_resilience_tool.utils.naming import hydro_fs_token
@@ -353,9 +355,24 @@ def _heat_risk_internal_root() -> Path:
     return BASE_OUTPUT_ROOT / "_internal" / "heat_risk"
 
 
-def _heat_risk_spatial_weights_path(level: AdminLevel, grid_id: str) -> Path:
-    """Return the private spatial-weight cache path for a level/grid pair."""
-    return BASE_OUTPUT_ROOT / "_internal" / "spatial_weights" / f"{level}__{grid_id}.parquet"
+def _state_token(state_name: str | None) -> str:
+    """Filesystem-safe token for a state name used in cache filenames."""
+    cleaned = "".join(ch if ch.isalnum() else "-" for ch in str(state_name or "").strip())
+    cleaned = "-".join(part for part in cleaned.split("-") if part)
+    return cleaned.lower() or "all"
+
+
+def _heat_risk_spatial_weights_path(
+    level: AdminLevel, grid_id: str, state: str | None = None
+) -> Path:
+    """Return the private spatial-weight cache path for a level/grid/state triple.
+
+    The state token keeps per-state weight caches distinct even when the grid is
+    shared (full-India grid → identical ``grid_id`` and boundary hash across
+    states), preventing one state from reading another's cached weights.
+    """
+    name = f"{level}__{_state_token(state)}__{grid_id}.parquet"
+    return BASE_OUTPUT_ROOT / "_internal" / "spatial_weights" / name
 
 
 def _drought_risk_internal_root() -> Path:
@@ -4459,17 +4476,35 @@ def process_metric_for_model_scenario(
         ds_sample.close()
         return
 
+    # Bounding-box subset of the climate grid (per-state memory fix). The
+    # kill-switch is read once here so the GridSpec and the data loads derive
+    # from a single source of truth; per-family forwarding to the loaders is
+    # currently drought-only (Phase 1). When disabled or unavailable,
+    # grid_index_range is None (exact full-grid behavior).
+    bbox_enabled = str(os.environ.get("IRT_GRIDFIRST_BBOX", "1")).strip().lower() not in {"0", "false", "no", "off"}
+    grid_index_range: tuple[int, int, int, int] | None = None
+    if bbox_enabled and not gdf.empty:
+        try:
+            minx, miny, maxx, maxy = (float(v) for v in gdf.total_bounds)
+            sample_lat = np.asarray(ds_sample["lat"].values, dtype=float)
+            sample_lon = np.asarray(ds_sample["lon"].values, dtype=float)
+            grid_index_range = bbox_to_index_range(sample_lat, sample_lon, (minx, miny, maxx, maxy))
+        except Exception as e:
+            logging.warning(f"[{slug}] grid bbox subset disabled (falling back to full grid): {e}")
+            grid_index_range = None
+
     if is_heat_risk_gridfirst(slug, level):
         try:
             grid = heat_risk_dataset_grid_spec(ds_sample)
             ds_sample.close()
             boundary_path = get_boundary_path(level)
-            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
             weights = read_heat_risk_spatial_weights_cache(
                 weights_path,
                 grid=grid,
                 level=level,
                 boundary_path=boundary_path,
+                state=state_name,
             )
             if weights is None:
                 logging.info(
@@ -4485,6 +4520,7 @@ def process_metric_for_model_scenario(
                     grid=grid,
                     level=level,
                     boundary_path=boundary_path,
+                    state=state_name,
                 )
             coverage_df = heat_risk_coverage_from_weights(gdf, weights, level=level)
             valid_units = set(
@@ -4564,12 +4600,13 @@ def process_metric_for_model_scenario(
             grid = gridfirst_dataset_grid_spec(ds_sample)
             ds_sample.close()
             boundary_path = get_boundary_path(level)
-            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
             weights = read_gridfirst_spatial_weights_cache(
                 weights_path,
                 grid=grid,
                 level=level,
                 boundary_path=boundary_path,
+                state=state_name,
             )
             if weights is None:
                 logging.info(
@@ -4585,6 +4622,7 @@ def process_metric_for_model_scenario(
                     grid=grid,
                     level=level,
                     boundary_path=boundary_path,
+                    state=state_name,
                 )
             coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
             valid_units = set(
@@ -4681,12 +4719,13 @@ def process_metric_for_model_scenario(
             grid = gridfirst_dataset_grid_spec(ds_sample)
             ds_sample.close()
             boundary_path = get_boundary_path(level)
-            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
             weights = read_gridfirst_spatial_weights_cache(
                 weights_path,
                 grid=grid,
                 level=level,
                 boundary_path=boundary_path,
+                state=state_name,
             )
             if weights is None:
                 logging.info(
@@ -4702,6 +4741,7 @@ def process_metric_for_model_scenario(
                     grid=grid,
                     level=level,
                     boundary_path=boundary_path,
+                    state=state_name,
                 )
             coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
             valid_units = set(
@@ -4763,12 +4803,13 @@ def process_metric_for_model_scenario(
             grid = gridfirst_dataset_grid_spec(ds_sample)
             ds_sample.close()
             boundary_path = get_boundary_path(level)
-            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
             weights = read_gridfirst_spatial_weights_cache(
                 weights_path,
                 grid=grid,
                 level=level,
                 boundary_path=boundary_path,
+                state=state_name,
             )
             if weights is None:
                 logging.info(
@@ -4784,6 +4825,7 @@ def process_metric_for_model_scenario(
                     grid=grid,
                     level=level,
                     boundary_path=boundary_path,
+                    state=state_name,
                 )
             coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
             valid_units = set(
@@ -4859,15 +4901,16 @@ def process_metric_for_model_scenario(
 
     if is_drought_gridfirst(slug, level):
         try:
-            grid = gridfirst_dataset_grid_spec(ds_sample)
+            grid = gridfirst_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
             ds_sample.close()
             boundary_path = get_boundary_path(level)
-            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
             weights = read_gridfirst_spatial_weights_cache(
                 weights_path,
                 grid=grid,
                 level=level,
                 boundary_path=boundary_path,
+                state=state_name,
             )
             if weights is None:
                 logging.info("[%s] Building Drought Risk v2 spatial weights for level=%s grid=%s", slug, level, grid.grid_id)
@@ -4878,6 +4921,7 @@ def process_metric_for_model_scenario(
                     grid=grid,
                     level=level,
                     boundary_path=boundary_path,
+                    state=state_name,
                 )
             coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
             valid_units = set(coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"].astype(str).tolist())
@@ -4921,6 +4965,8 @@ def process_metric_for_model_scenario(
                 weights=weights,
                 level=level,
                 cache_root=_drought_risk_internal_root(),
+                index_range=grid_index_range,
+                grid=grid,
             )
             return _write_metric_rows_outputs(
                 rows=rows,

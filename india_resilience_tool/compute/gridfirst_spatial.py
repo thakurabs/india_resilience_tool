@@ -95,6 +95,136 @@ def dataset_grid_spec(ds: xr.Dataset) -> GridSpec:
     )
 
 
+def _axis_index_range(
+    coord: Sequence[float],
+    lo: float,
+    hi: float,
+    *,
+    buffer_cells: float,
+) -> tuple[int, int]:
+    """Return a half-open positional ``[start, stop)`` range covering ``[lo, hi]``.
+
+    Direction-agnostic: works whether ``coord`` is ascending or descending. The
+    buffer is taken from the actual grid spacing (``buffer_cells`` cells, each
+    side), so a cell whose center sits up to ~half a cell outside the bounds —
+    but whose footprint still overlaps the polygon and would receive nonzero
+    area weight — is retained. Raises on a non-monotonic coordinate or when the
+    buffered bounds select zero cells.
+    """
+    vals = np.asarray(coord, dtype=float)
+    if vals.size == 0:
+        raise ValueError("Grid coordinate is empty")
+    if vals.size == 1:
+        return 0, 1
+    diffs = np.diff(vals)
+    if not (np.all(diffs > 0) or np.all(diffs < 0)):
+        raise ValueError("Grid coordinate is not monotonic; cannot compute bbox subset")
+    spacing = abs(float(vals[1] - vals[0]))
+    buf = spacing * float(buffer_cells)
+    mask = (vals >= (float(lo) - buf)) & (vals <= (float(hi) + buf))
+    idx = np.nonzero(mask)[0]
+    if idx.size == 0:
+        raise ValueError(
+            f"Bounding box [{lo}, {hi}] selects zero grid cells "
+            f"(coord range [{float(vals.min())}, {float(vals.max())}], buffer {buf})"
+        )
+    return int(idx.min()), int(idx.max()) + 1
+
+
+def bbox_to_index_range(
+    sample_lat: Sequence[float],
+    sample_lon: Sequence[float],
+    bbox: tuple[float, float, float, float],
+    *,
+    buffer_cells: float = 2.0,
+) -> tuple[int, int, int, int]:
+    """Map an EPSG:4326 bbox to positional ``(lat0, lat1, lon0, lon1)`` indices.
+
+    ``bbox`` is ``(minx, miny, maxx, maxy)`` (lon=x, lat=y), e.g. a GeoDataFrame's
+    ``total_bounds``. The returned half-open ranges are intended for
+    ``.isel(lat=slice(lat0, lat1), lon=slice(lon0, lon1))`` and are computed
+    once from the sample grid, then reused for every yearly data file so the
+    GridSpec and the loaded data array share an identical positional slice.
+    """
+    minx, miny, maxx, maxy = (float(v) for v in bbox)
+    lat0, lat1 = _axis_index_range(sample_lat, miny, maxy, buffer_cells=buffer_cells)
+    lon0, lon1 = _axis_index_range(sample_lon, minx, maxx, buffer_cells=buffer_cells)
+    return (lat0, lat1, lon0, lon1)
+
+
+def subset_grid_by_index(obj, index_range: tuple[int, int, int, int] | None):
+    """Apply a positional lat/lon subset to a Dataset or DataArray.
+
+    ``index_range`` is ``(lat0, lat1, lon0, lon1)`` as produced by
+    :func:`bbox_to_index_range`. ``None`` returns ``obj`` unchanged. Assumes
+    :func:`normalize_lat_lon` has already run (``lat``/``lon`` dims present).
+    """
+    if index_range is None:
+        return obj
+    lat0, lat1, lon0, lon1 = index_range
+    return obj.isel(lat=slice(lat0, lat1), lon=slice(lon0, lon1))
+
+
+def _assert_grid_alignment(
+    cell_values: xr.DataArray,
+    weights: pd.DataFrame,
+    *,
+    grid: "GridSpec | None" = None,
+) -> None:
+    """Belt-and-braces check that ``cell_values`` matches the weights' grid.
+
+    Spatial weights store ``cell_index = lat_index * len(lon) + lon_index``
+    relative to the GridSpec they were built from; aggregation flattens
+    ``cell_values`` (C-order) and indexes by ``cell_index``. If a loaded data
+    array's grid differs from that GridSpec (e.g. a bbox subset desynced from
+    the GridSpec, or a heterogeneous yearly file), the flat indices silently
+    address the wrong cells. This guard turns that into a clear, early error.
+
+    The shape/cell_index invariant is always checked. When ``grid`` is supplied,
+    the loaded coordinates are additionally compared to the GridSpec within
+    tolerance (catches sub-cell coordinate drift at identical shape).
+    """
+    if weights.empty:
+        return
+    arr = np.asarray(cell_values.values)
+    if arr.ndim < 2:
+        raise ValueError("cell field must be at least 2D (lat, lon) for area-weight aggregation")
+    lat_count, lon_count = int(arr.shape[-2]), int(arr.shape[-1])
+    total = lat_count * lon_count
+    ci = weights["cell_index"].to_numpy(dtype=int)
+    if ci.size and (int(ci.max()) >= total or int(ci.min()) < 0):
+        raise ValueError(
+            "Spatial-weight cell_index out of range for the loaded grid "
+            f"(grid shape {(lat_count, lon_count)}, total {total}); subset/grid mismatch"
+        )
+    if {"lat_index", "lon_index"} <= set(weights.columns):
+        li = weights["lat_index"].to_numpy(dtype=int)
+        lj = weights["lon_index"].to_numpy(dtype=int)
+        if li.size and (int(li.max()) >= lat_count or int(lj.max()) >= lon_count):
+            raise ValueError(
+                "Spatial weights reference cells outside the loaded grid "
+                f"(grid shape {(lat_count, lon_count)}); subset/grid mismatch"
+            )
+        if not np.array_equal(ci, li * lon_count + lj):
+            raise ValueError(
+                "Spatial-weight cell_index does not match the loaded grid shape "
+                f"{(lat_count, lon_count)}; subset/grid mismatch"
+            )
+    if grid is not None:
+        if (lat_count, lon_count) != grid.shape:
+            raise ValueError(
+                f"Loaded grid shape {(lat_count, lon_count)} != GridSpec {grid.shape}"
+            )
+        coords = getattr(cell_values, "coords", {})
+        if "lat" in coords and "lon" in coords:
+            lat_loaded = np.asarray(cell_values["lat"].values, dtype=float)
+            lon_loaded = np.asarray(cell_values["lon"].values, dtype=float)
+            if not np.allclose(lat_loaded, np.asarray(grid.lat, dtype=float), atol=1e-6) or not np.allclose(
+                lon_loaded, np.asarray(grid.lon, dtype=float), atol=1e-6
+            ):
+                raise ValueError("Loaded grid coordinates differ from GridSpec beyond tolerance")
+
+
 def _coord_edges(values: Sequence[float]) -> np.ndarray:
     vals = np.asarray(values, dtype=float)
     if vals.size == 0:
@@ -243,8 +373,14 @@ def write_spatial_weights_cache(
     level: str,
     boundary_path: Path | None = None,
     analysis_crs: str = DEFAULT_ANALYSIS_CRS,
+    state: str | None = None,
 ) -> None:
-    """Write spatial weights and a JSON sidecar for cache validation."""
+    """Write spatial weights and a JSON sidecar for cache validation.
+
+    ``state`` is recorded so per-state weight caches never alias one another,
+    even when the grid is shared (full-India grid → identical ``grid_id`` and
+    boundary hash across states). Readers must match it.
+    """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     weights.to_parquet(output_path, index=False)
@@ -252,6 +388,7 @@ def write_spatial_weights_cache(
         "method_version": GRIDFIRST_SPATIAL_METHOD_VERSION,
         "grid_id": grid.grid_id,
         "level": level,
+        "state": state,
         "crs_epsg": int(str(analysis_crs).split(":")[-1]),
         "boundary_file_hash": boundary_content_hash(boundary_path) if boundary_path else None,
     }
@@ -265,6 +402,7 @@ def read_spatial_weights_cache(
     level: str,
     boundary_path: Path | None = None,
     analysis_crs: str = DEFAULT_ANALYSIS_CRS,
+    state: str | None = None,
 ) -> pd.DataFrame | None:
     """Read a spatial-weight cache when its sidecar matches the requested grid."""
     path = Path(path)
@@ -278,6 +416,8 @@ def read_spatial_weights_cache(
     if sidecar.get("method_version") != GRIDFIRST_SPATIAL_METHOD_VERSION:
         return None
     if sidecar.get("grid_id") != grid.grid_id or sidecar.get("level") != level:
+        return None
+    if sidecar.get("state") != state:
         return None
     if int(sidecar.get("crs_epsg", -1)) != int(str(analysis_crs).split(":")[-1]):
         return None
@@ -467,9 +607,23 @@ def input_file_signature(paths: Sequence[Path]) -> str:
     return h.hexdigest()
 
 
-def threshold_cache_path(cache_root: Path, *, model: str, var: str, baseline_label: str) -> Path:
-    """Return the per-cell DOY threshold cache NetCDF path."""
-    return Path(cache_root) / "thresholds" / model / var / f"{baseline_label}.nc"
+def threshold_cache_path(
+    cache_root: Path,
+    *,
+    model: str,
+    var: str,
+    baseline_label: str,
+    grid_id: str | None = None,
+) -> Path:
+    """Return the per-cell DOY threshold cache NetCDF path.
+
+    When ``grid_id`` is provided the full grid id is appended to the filename so
+    caches built on different grids (e.g. a per-state bbox subset vs the full
+    India grid) coexist rather than clobber one another. ``None`` preserves the
+    legacy path for back-compatibility.
+    """
+    name = f"{baseline_label}.nc" if grid_id is None else f"{baseline_label}__grid={grid_id}.nc"
+    return Path(cache_root) / "thresholds" / model / var / name
 
 
 def read_threshold_cache(
@@ -480,6 +634,7 @@ def read_threshold_cache(
     percentile: int,
     window_days: int,
     quantile_method: str,
+    grid_id: str | None = None,
 ) -> xr.DataArray | None:
     """Read a cached threshold cube when its sidecar matches the inputs."""
     path = Path(path)
@@ -496,6 +651,7 @@ def read_threshold_cache(
         "percentile": int(percentile),
         "window_days": int(window_days),
         "quantile_method": quantile_method,
+        "grid_id": grid_id,
     }
     for key, value in expected.items():
         if sidecar.get(key) != value:
@@ -519,6 +675,7 @@ def write_threshold_cache(
     percentile: int,
     window_days: int,
     quantile_method: str,
+    grid_id: str | None = None,
 ) -> None:
     """Write a per-cell threshold cache and invalidation sidecar."""
     path = Path(path)
@@ -531,34 +688,64 @@ def write_threshold_cache(
         "percentile": int(percentile),
         "window_days": int(window_days),
         "quantile_method": quantile_method,
+        "grid_id": grid_id,
         "methodology_note": "Per-cell DOY percentile threshold cache",
     }
     path.with_suffix(path.suffix + ".json").write_text(json.dumps(sidecar, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def open_year_dataarray(path: Path, var: str) -> xr.DataArray:
-    """Load one yearly NetCDF variable as a normalized in-memory DataArray."""
+def open_year_dataarray(
+    path: Path,
+    var: str,
+    *,
+    index_range: tuple[int, int, int, int] | None = None,
+) -> xr.DataArray:
+    """Load one yearly NetCDF variable as a normalized in-memory DataArray.
+
+    When ``index_range`` is given the lat/lon slice is applied lazily (before
+    ``.load()``) so only the bounding-box subset is read into RAM.
+    """
     ds = normalize_lat_lon(xr.open_dataset(path))
     try:
         if var not in ds:
             raise KeyError(f"Variable '{var}' not found in {path}")
-        return ds[var].load()
+        return subset_grid_by_index(ds[var], index_range).load()
     finally:
         ds.close()
 
 
-def concat_years(year_to_paths: Mapping[int, Mapping[str, Path]], var: str, years: Sequence[int]) -> xr.DataArray:
-    """Load and concatenate yearly files for one variable, sorted by time."""
-    arrays = [open_year_dataarray(year_to_paths[int(y)][var], var) for y in years if int(y) in year_to_paths]
+def concat_years(
+    year_to_paths: Mapping[int, Mapping[str, Path]],
+    var: str,
+    years: Sequence[int],
+    *,
+    index_range: tuple[int, int, int, int] | None = None,
+) -> xr.DataArray:
+    """Load and concatenate yearly files for one variable, sorted by time.
+
+    ``index_range`` is forwarded to :func:`open_year_dataarray` so every yearly
+    file is read with the identical positional lat/lon slice.
+    """
+    arrays = [
+        open_year_dataarray(year_to_paths[int(y)][var], var, index_range=index_range)
+        for y in years
+        if int(y) in year_to_paths
+    ]
     if not arrays:
         raise ValueError(f"No yearly files available for variable {var}")
     return xr.concat(arrays, dim="time").sortby("time")
 
 
-def aggregate_cell_values(cell_values: xr.DataArray, weights: pd.DataFrame) -> dict[str, float]:
+def aggregate_cell_values(
+    cell_values: xr.DataArray,
+    weights: pd.DataFrame,
+    *,
+    grid: "GridSpec | None" = None,
+) -> dict[str, float]:
     """Area-weight a per-cell field to each polygon unit."""
     if weights.empty:
         return {}
+    _assert_grid_alignment(cell_values, weights, grid=grid)
     flat = np.asarray(cell_values.values, dtype=float).reshape(-1)
     tmp = weights[["unit_key", "cell_index", "area_m2"]].copy()
     tmp["cell_value"] = flat[tmp["cell_index"].to_numpy(dtype=int)]
@@ -574,10 +761,13 @@ def aggregate_percent_days(
     exceed_days: xr.DataArray,
     valid_days: xr.DataArray,
     weights: pd.DataFrame,
+    *,
+    grid: "GridSpec | None" = None,
 ) -> dict[str, float]:
     """Area-weight cellwise exceedance and valid-day counts into percentages."""
     if weights.empty:
         return {}
+    _assert_grid_alignment(exceed_days, weights, grid=grid)
     exceed_flat = np.asarray(exceed_days.values, dtype=float).reshape(-1)
     valid_flat = np.asarray(valid_days.values, dtype=float).reshape(-1)
     tmp = weights[["unit_key", "cell_index", "area_m2"]].copy()

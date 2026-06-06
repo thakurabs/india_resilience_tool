@@ -14,6 +14,8 @@ import pandas as pd
 import xarray as xr
 
 from india_resilience_tool.compute.gridfirst_spatial import (
+    GridSpec,
+    _assert_grid_alignment,
     _hash_paths,
     read_grid_metric_cache,
     write_grid_metric_cache,
@@ -275,10 +277,12 @@ def aggregate_grid_values_with_retention(
     weights: pd.DataFrame,
     *,
     min_polygon_cell_weight_fraction: float = 0.50,
+    grid: GridSpec | None = None,
 ) -> dict[str, tuple[float, float]]:
     """Area-weight cells to polygons, dropping NaNs and enforcing retained-weight floor."""
     if weights.empty:
         return {}
+    _assert_grid_alignment(cell_values, weights, grid=grid)
     flat = np.asarray(cell_values.values, dtype=float).reshape(-1)
     tmp = weights[["unit_key", "cell_index", "area_m2"]].copy()
     tmp["cell_value"] = flat[tmp["cell_index"].to_numpy(dtype=int)]
@@ -300,12 +304,14 @@ def aggregate_grid_counts(
     weights: pd.DataFrame,
     *,
     min_polygon_cell_weight_fraction: float = 0.50,
+    grid: GridSpec | None = None,
 ) -> dict[str, tuple[int | float, float]]:
     """Area-weight finite per-cell year counts to polygon-specific count metadata."""
     weighted = aggregate_grid_values_with_retention(
         cell_counts,
         weights,
         min_polygon_cell_weight_fraction=min_polygon_cell_weight_fraction,
+        grid=grid,
     )
     out: dict[str, tuple[int | float, float]] = {}
     for unit, (value, retained) in weighted.items():
@@ -382,8 +388,16 @@ def compute_drought_risk_rows_for_metric(
     weights: pd.DataFrame,
     level: str = "district",
     cache_root: Path | None = None,
+    index_range: tuple[int, int, int, int] | None = None,
+    grid: GridSpec | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    """Compute yearly and pre-rolled period rows for a Drought Risk v2 metric."""
+    """Compute yearly and pre-rolled period rows for a Drought Risk v2 metric.
+
+    ``index_range`` (lat0, lat1, lon0, lon1) restricts the precipitation load to
+    a bounding-box subset of the grid; ``grid`` is the matching subset
+    :class:`GridSpec` used to validate cell/weight alignment. Both default to the
+    full-grid behavior when ``None``.
+    """
     params = dict(metric.get("params") or {})
     slug = str(metric.get("slug") or "")
     value_col = str(metric.get("value_col") or "value")
@@ -394,7 +408,7 @@ def compute_drought_risk_rows_for_metric(
     grid_id = str(params.get("grid_id") or "unknown-grid")
 
     years_needed = sorted(set(baseline_year_to_paths) | set(year_to_paths))
-    da = concat_years({**baseline_year_to_paths, **year_to_paths}, "pr", years_needed)
+    da = concat_years({**baseline_year_to_paths, **year_to_paths}, "pr", years_needed, index_range=index_range)
     monthly = daily_to_monthly_totals(da)
     spi = compute_spi_grid(
         monthly,
@@ -449,6 +463,7 @@ def compute_drought_risk_rows_for_metric(
             annual_ds["value"].sel(year=year),
             weights,
             min_polygon_cell_weight_fraction=min_polygon_fraction,
+            grid=grid,
         )
         for unit_key, (value, retained) in values.items():
             row = {"year": int(year), "value": value, value_col: value, "retained_weight_fraction": retained}
@@ -500,11 +515,13 @@ def compute_drought_risk_rows_for_metric(
             period_ds["value"],
             weights,
             min_polygon_cell_weight_fraction=min_polygon_fraction,
+            grid=grid,
         )
         year_counts = aggregate_grid_counts(
             period_ds["years_used_count"],
             weights,
             min_polygon_cell_weight_fraction=min_polygon_fraction,
+            grid=grid,
         )
         for unit_key, (value, retained) in values.items():
             years_used, _count_retained = year_counts.get(unit_key, (np.nan, retained))
