@@ -181,3 +181,280 @@ def test_threshold_cache_grid_id_invalidation(tmp_path: Path):
     assert gs.read_threshold_cache(path, grid_id="zzz999", **kw) is None
     hit = gs.read_threshold_cache(path, grid_id="abc123", **kw)
     assert hit is not None and hit.shape == (3, 2, 2)
+
+
+# --- Phase 2: shared-hardening guards (H1-H4) --------------------------------
+
+def test_grid_metric_cache_path_grid_id_segment(tmp_path: Path):
+    # H1: a grid_id segment isolates per-grid annual caches; None is legacy.
+    legacy = gs.grid_metric_cache_path(tmp_path, slug="s", model="m", scenario="ssp245", year=2050)
+    keyed = gs.grid_metric_cache_path(tmp_path, slug="s", model="m", scenario="ssp245", year=2050, grid_id="abc123")
+    other = gs.grid_metric_cache_path(tmp_path, slug="s", model="m", scenario="ssp245", year=2050, grid_id="def456")
+    assert legacy != keyed and keyed != other
+    assert "abc123" in str(keyed) and "abc123" not in str(legacy)
+
+
+def test_threshold_cache_path_full_signature(tmp_path: Path):
+    # H2: percentile/window/method/smooth/grid_id all distinguish the path so
+    # two metrics sharing model/var/baseline never race on one file.
+    base = dict(cache_root=tmp_path, model="m", var="tasmax", baseline_label="1990-2010")
+    p_a = gs.threshold_cache_path(**base, grid_id="g1", percentile=90, window_days=5, quantile_method="linear")
+    p_b = gs.threshold_cache_path(**base, grid_id="g1", percentile=10, window_days=5, quantile_method="linear")
+    p_c = gs.threshold_cache_path(**base, grid_id="g1", percentile=90, window_days=15, quantile_method="linear")
+    p_d = gs.threshold_cache_path(**base, grid_id="g1", percentile=90, window_days=5, quantile_method="nearest")
+    p_e = gs.threshold_cache_path(**base, grid_id="g2", percentile=90, window_days=5, quantile_method="linear")
+    p_f = gs.threshold_cache_path(**base, grid_id="g1", percentile=90, window_days=5, quantile_method="linear", smooth=31)
+    assert len({p_a, p_b, p_c, p_d, p_e, p_f}) == 6
+
+
+def test_threshold_cache_atomic_roundtrip_with_smooth(tmp_path: Path):
+    threshold = xr.DataArray(
+        np.ones((3, 2, 2)),
+        dims=("doy", "lat", "lon"),
+        coords={"doy": [1, 2, 3], "lat": [11.0, 12.0], "lon": [78.0, 79.0]},
+    )
+    path = gs.threshold_cache_path(
+        tmp_path, model="m", var="tasmax", baseline_label="1990-2010",
+        grid_id="g1", percentile=90, window_days=5, quantile_method="linear", smooth=31,
+    )
+    kw = dict(input_signature="sig", baseline_years=(1990, 2010), percentile=90, window_days=5, quantile_method="linear")
+    gs.write_threshold_cache(threshold, path, grid_id="g1", smooth=31, **kw)
+    # No stale temp files left behind by the atomic write.
+    assert not list(path.parent.glob("*.tmp"))
+    hit = gs.read_threshold_cache(path, grid_id="g1", **kw)
+    assert hit is not None and hit.shape == (3, 2, 2)
+
+
+def test_assert_grid_matches_passes_and_raises():
+    grid = gs.GridSpec(lat=(11.0, 12.0, 13.0), lon=(78.0, 79.0))
+    ok = xr.DataArray(np.ones((3, 2)), dims=("lat", "lon"), coords={"lat": [11.0, 12.0, 13.0], "lon": [78.0, 79.0]})
+    gs.assert_grid_matches(ok, grid, name="ok")  # no raise
+    gs.assert_grid_matches(ok, None)  # None grid is a no-op
+
+    shape_bad = xr.DataArray(np.ones((2, 2)), dims=("lat", "lon"), coords={"lat": [11.0, 12.0], "lon": [78.0, 79.0]})
+    with pytest.raises(ValueError, match="shape"):
+        gs.assert_grid_matches(shape_bad, grid, name="shape")
+
+    drift = xr.DataArray(np.ones((3, 2)), dims=("lat", "lon"), coords={"lat": [11.001, 12.0, 13.0], "lon": [78.0, 79.0]})
+    with pytest.raises(ValueError, match="differ"):
+        gs.assert_grid_matches(drift, grid, name="drift")
+
+    no_coords = xr.DataArray(np.ones((3, 2)), dims=("lat", "lon"))
+    with pytest.raises(ValueError, match="missing lat/lon"):
+        gs.assert_grid_matches(no_coords, grid, name="nocoords")
+
+
+def test_to_lat_lon_field_transposes_and_rejects_extra_dim():
+    grid = gs.GridSpec(lat=(11.0, 12.0, 13.0), lon=(78.0, 79.0, 80.0))
+    weights = gs.build_area_weights(_small_district(), grid, level="district")
+    # A (lon, lat) field must aggregate identically to (lat, lon): the helper
+    # transposes before the C-order flatten so cell_index stays valid.
+    values = (np.arange(9.0).reshape(3, 3) + 1.0)
+    canonical = xr.DataArray(values, dims=("lat", "lon"), coords={"lat": [11.0, 12.0, 13.0], "lon": [78.0, 79.0, 80.0]})
+    transposed = canonical.transpose("lon", "lat")
+    a = gs.aggregate_cell_values(canonical, weights, grid=grid)
+    b = gs.aggregate_cell_values(transposed, weights, grid=grid)
+    assert set(a) == set(b)
+    for k in a:
+        assert a[k] == pytest.approx(b[k], rel=1e-9, abs=1e-9)
+
+    extra = xr.DataArray(
+        np.ones((2, 3, 3)),
+        dims=("time", "lat", "lon"),
+        coords={"time": [0, 1], "lat": [11.0, 12.0, 13.0], "lon": [78.0, 79.0, 80.0]},
+    )
+    with pytest.raises(ValueError, match="non-singleton"):
+        gs.aggregate_cell_values(extra, weights, grid=grid)
+
+
+def test_aggregate_percent_days_validates_denominator_grid():
+    grid = gs.GridSpec(lat=(11.0, 12.0, 13.0), lon=(78.0, 79.0, 80.0))
+    weights = gs.build_area_weights(_small_district(), grid, level="district")
+    exceed = xr.DataArray(
+        np.ones((3, 3)), dims=("lat", "lon"), coords={"lat": [11.0, 12.0, 13.0], "lon": [78.0, 79.0, 80.0]}
+    )
+    # valid_days on a coordinate-drifted grid must raise rather than silently
+    # divide exceed-days of one cell by valid-days of another.
+    valid_drift = xr.DataArray(
+        np.full((3, 3), 10.0), dims=("lat", "lon"), coords={"lat": [11.0, 12.0, 13.5], "lon": [78.0, 79.0, 80.0]}
+    )
+    with pytest.raises(ValueError):
+        gs.aggregate_percent_days(exceed, valid_drift, weights, grid=grid)
+
+
+# --- Phase 2: per-family bbox-subset identity (forwarding guard) -------------
+# Each family's compute fn must produce identical per-unit values whether it
+# loads the full grid (index_range=None) or only the bbox subset. This is the
+# headline guarantee for the memory fix extended to heat/cold/extreme/heat-stress.
+
+from india_resilience_tool.compute import cold_risk_gridfirst as _cr  # noqa: E402
+from india_resilience_tool.compute import extreme_rainfall_gridfirst as _er  # noqa: E402
+from india_resilience_tool.compute import heat_risk_gridfirst as _hr  # noqa: E402
+from india_resilience_tool.compute import heat_stress_gridfirst as _hs  # noqa: E402
+
+_GRID_LAT = [10.0, 11.0, 12.0, 13.0, 14.0]
+_GRID_LON = [77.0, 78.0, 79.0, 80.0, 81.0]
+
+
+def _mk_year(path: Path, var: str, year: int, *, ndays: int = 60, kind: str = "temp") -> Path:
+    times = pd.date_range(f"{year}-01-01", periods=ndays, freq="D")
+    rng = np.random.default_rng(abs(hash((var, int(year)))) % (2**31))
+    if kind == "humidity":
+        data = np.clip(60.0 + rng.normal(0.0, 15.0, size=(ndays, 5, 5)), 0.0, 100.0)
+    elif kind == "precip":  # kg m-2 s-1, a few wet days
+        data = np.abs(rng.normal(0.0, 3e-5, size=(ndays, 5, 5)))
+    else:  # temperature in Kelvin
+        data = 300.0 + rng.normal(0.0, 6.0, size=(ndays, 5, 5))
+    da = xr.DataArray(
+        data, dims=("time", "lat", "lon"), coords={"time": times, "lat": _GRID_LAT, "lon": _GRID_LON}, name=var
+    )
+    if kind == "precip":
+        da.attrs["units"] = "kg m-2 s-1"
+    da.to_dataset(name=var).to_netcdf(path)
+    return path
+
+
+def _subset_grid():
+    gdf = _small_district()
+    idx = gs.bbox_to_index_range(_GRID_LAT, _GRID_LON, tuple(gdf.total_bounds), buffer_cells=1)
+    assert idx == (1, 4, 1, 4)  # genuine subset
+    sub_lat = _GRID_LAT[idx[0]:idx[1]]
+    sub_lon = _GRID_LON[idx[2]:idx[3]]
+    return gdf, idx, sub_lat, sub_lon
+
+
+def _rows_to_dict(rows: list[dict]) -> dict[str, float]:
+    return {str(r["district"]): r["value"] for r in rows}
+
+
+def _assert_same_units(full: dict, subset: dict) -> None:
+    assert full and set(full) == set(subset)
+    for unit, val in full.items():
+        if np.isnan(val):
+            assert np.isnan(subset[unit])
+        else:
+            assert subset[unit] == pytest.approx(val, rel=1e-9, abs=1e-9)
+
+
+def test_heat_count_metric_subset_identity(tmp_path: Path):
+    p = _mk_year(tmp_path / "tasmax_2050.nc", "tasmax", 2050)
+    y2p = {2050: {"tasmax": p}}
+    metric = {
+        "slug": "txge35_extreme_heat_days", "var": "tasmax", "value_col": "value",
+        "compute": "count_days_ge_threshold", "params": {"thresh_k": 301.0},
+    }
+    gdf, idx, sub_lat, sub_lon = _subset_grid()
+    g_full = gs.GridSpec(lat=tuple(_GRID_LAT), lon=tuple(_GRID_LON))
+    g_sub = gs.GridSpec(lat=tuple(sub_lat), lon=tuple(sub_lon))
+    full = _rows_to_dict(_hr.compute_heat_risk_rows_for_metric(
+        metric=metric, model="M", scenario="ssp245", year_to_paths=y2p,
+        baseline_year_to_paths=y2p, weights=gs.build_area_weights(gdf, g_full, level="district"),
+        level="district", index_range=None, grid=g_full,
+    ))
+    subset = _rows_to_dict(_hr.compute_heat_risk_rows_for_metric(
+        metric=metric, model="M", scenario="ssp245", year_to_paths=y2p,
+        baseline_year_to_paths=y2p, weights=gs.build_area_weights(gdf, g_sub, level="district"),
+        level="district", index_range=idx, grid=g_sub,
+    ))
+    _assert_same_units(full, subset)
+
+
+def test_heat_tx90p_threshold_subset_identity(tmp_path: Path):
+    base = {y: {"tasmax": _mk_year(tmp_path / f"tasmax_{y}.nc", "tasmax", y)} for y in (2048, 2049)}
+    evalp = {2050: {"tasmax": _mk_year(tmp_path / "tasmax_2050.nc", "tasmax", 2050)}}
+    metric = {
+        "slug": "tx90p_hot_days_pct", "var": "tasmax", "value_col": "value", "compute": "tx90p_etccdi",
+        "params": {"percentile": 90, "window_days": 5, "quantile_method": "linear",
+                   "exceed_ge": False, "direction": "above", "baseline_years": (2048, 2049)},
+    }
+    gdf, idx, sub_lat, sub_lon = _subset_grid()
+    g_full = gs.GridSpec(lat=tuple(_GRID_LAT), lon=tuple(_GRID_LON))
+    g_sub = gs.GridSpec(lat=tuple(sub_lat), lon=tuple(sub_lon))
+    full = _rows_to_dict(_hr.compute_heat_risk_rows_for_metric(
+        metric=metric, model="M", scenario="ssp245", year_to_paths=evalp, baseline_year_to_paths=base,
+        weights=gs.build_area_weights(gdf, g_full, level="district"), level="district", index_range=None, grid=g_full,
+    ))
+    subset = _rows_to_dict(_hr.compute_heat_risk_rows_for_metric(
+        metric=metric, model="M", scenario="ssp245", year_to_paths=evalp, baseline_year_to_paths=base,
+        weights=gs.build_area_weights(gdf, g_sub, level="district"), level="district", index_range=idx, grid=g_sub,
+    ))
+    _assert_same_units(full, subset)
+
+
+def test_cold_annual_min_subset_identity(tmp_path: Path):
+    p = _mk_year(tmp_path / "tasmin_2050.nc", "tasmin", 2050)
+    y2p = {2050: {"tasmin": p}}
+    metric = {
+        "slug": "tnn_annual_min", "var": "tasmin", "value_col": "value",
+        "compute": "annual_min_temperature", "params": {},
+    }
+    gdf, idx, sub_lat, sub_lon = _subset_grid()
+    g_full = gs.GridSpec(lat=tuple(_GRID_LAT), lon=tuple(_GRID_LON))
+    g_sub = gs.GridSpec(lat=tuple(sub_lat), lon=tuple(sub_lon))
+    full = _rows_to_dict(_cr.compute_cold_risk_rows_for_metric(
+        metric=metric, model="M", scenario="ssp245", year_to_paths=y2p, baseline_year_to_paths=y2p,
+        weights=gs.build_area_weights(gdf, g_full, level="district"), level="district", index_range=None, grid=g_full,
+    ))
+    subset = _rows_to_dict(_cr.compute_cold_risk_rows_for_metric(
+        metric=metric, model="M", scenario="ssp245", year_to_paths=y2p, baseline_year_to_paths=y2p,
+        weights=gs.build_area_weights(gdf, g_sub, level="district"), level="district", index_range=idx, grid=g_sub,
+    ))
+    _assert_same_units(full, subset)
+
+
+def test_extreme_pr_max_subset_identity(tmp_path: Path):
+    p = _mk_year(tmp_path / "pr_2050.nc", "pr", 2050, kind="precip")
+    y2p = {2050: {"pr": p}}
+    metric = {"slug": "pr_max_1day_precip", "var": "pr", "value_col": "value", "params": {}}
+    gdf, idx, sub_lat, sub_lon = _subset_grid()
+    g_full = gs.GridSpec(lat=tuple(_GRID_LAT), lon=tuple(_GRID_LON))
+    g_sub = gs.GridSpec(lat=tuple(sub_lat), lon=tuple(sub_lon))
+    full = _rows_to_dict(_er.compute_extreme_rainfall_rows_for_metric(
+        metric={**metric, "params": {"grid_id": g_full.grid_id}}, model="M", scenario="ssp245",
+        year_to_paths=y2p, baseline_year_to_paths={}, weights=gs.build_area_weights(gdf, g_full, level="district"),
+        level="district", index_range=None, grid=g_full,
+    ))
+    subset = _rows_to_dict(_er.compute_extreme_rainfall_rows_for_metric(
+        metric={**metric, "params": {"grid_id": g_sub.grid_id}}, model="M", scenario="ssp245",
+        year_to_paths=y2p, baseline_year_to_paths={}, weights=gs.build_area_weights(gdf, g_sub, level="district"),
+        level="district", index_range=idx, grid=g_sub,
+    ))
+    _assert_same_units(full, subset)
+
+
+def test_heat_stress_twb_multivar_subset_identity(tmp_path: Path):
+    tas = _mk_year(tmp_path / "tas_2050.nc", "tas", 2050)
+    hurs = _mk_year(tmp_path / "hurs_2050.nc", "hurs", 2050, kind="humidity")
+    y2p = {2050: {"tas": tas, "hurs": hurs}}
+    metric = {"slug": "twb_annual_mean", "var": "tas", "value_col": "value", "params": {}}
+    gdf, idx, sub_lat, sub_lon = _subset_grid()
+    g_full = gs.GridSpec(lat=tuple(_GRID_LAT), lon=tuple(_GRID_LON))
+    g_sub = gs.GridSpec(lat=tuple(sub_lat), lon=tuple(sub_lon))
+    full = _rows_to_dict(_hs.compute_heat_stress_rows_for_metric(
+        metric=metric, model="M", scenario="ssp245", year_to_paths=y2p,
+        weights=gs.build_area_weights(gdf, g_full, level="district"), level="district", index_range=None, grid=g_full,
+    ))
+    subset = _rows_to_dict(_hs.compute_heat_stress_rows_for_metric(
+        metric=metric, model="M", scenario="ssp245", year_to_paths=y2p,
+        weights=gs.build_area_weights(gdf, g_sub, level="district"), level="district", index_range=idx, grid=g_sub,
+    ))
+    _assert_same_units(full, subset)
+
+
+def test_failure_before_write_leaves_no_cache(tmp_path: Path):
+    # H3: a coord-drifted eval file must raise *and* not persist an annual cache.
+    p = _mk_year(tmp_path / "tas_2050.nc", "tas", 2050)
+    hurs = _mk_year(tmp_path / "hurs_2050.nc", "hurs", 2050, kind="humidity")
+    y2p = {2050: {"tas": p, "hurs": hurs}}
+    metric = {"slug": "twb_annual_mean", "var": "tas", "value_col": "value", "params": {"grid_id": "g1"}}
+    gdf, idx, sub_lat, sub_lon = _subset_grid()
+    # Mismatched GridSpec: claim a different latitude than the file actually has.
+    wrong = gs.GridSpec(lat=(sub_lat[0] + 0.5, *sub_lat[1:]), lon=tuple(sub_lon))
+    cache_root = tmp_path / "cache"
+    with pytest.raises(ValueError):
+        _hs.compute_heat_stress_rows_for_metric(
+            metric=metric, model="M", scenario="ssp245", year_to_paths=y2p,
+            weights=gs.build_area_weights(gdf, wrong, level="district"),
+            level="district", cache_root=cache_root, index_range=idx, grid=wrong,
+        )
+    assert not list(cache_root.rglob("*.nc"))

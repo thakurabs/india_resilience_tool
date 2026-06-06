@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import sys
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -165,6 +166,57 @@ def subset_grid_by_index(obj, index_range: tuple[int, int, int, int] | None):
     return obj.isel(lat=slice(lat0, lat1), lon=slice(lon0, lon1))
 
 
+def assert_grid_matches(obj: "xr.DataArray | xr.Dataset", grid: "GridSpec | None", *, name: str = "") -> None:
+    """Validate that ``obj`` carries exactly ``grid``'s lat/lon coordinates.
+
+    Independent of any spatial weights: this is the load/cache-read/threshold
+    boundary guard. It requires named ``lat``/``lon`` coordinates (no positional
+    assumption) and compares them to the GridSpec within tolerance, so a bbox
+    subset that desynced from the GridSpec — or a heterogeneous yearly file with
+    a different coordinate order — is caught before it is aggregated or written
+    to a cache. ``grid=None`` is a no-op (full-grid / un-validated path).
+    """
+    if grid is None:
+        return
+    label = name or getattr(obj, "name", None) or "grid object"
+    coords = getattr(obj, "coords", {})
+    if "lat" not in coords or "lon" not in coords:
+        raise ValueError(f"{label}: missing lat/lon coordinates for grid validation")
+    lat_loaded = np.asarray(obj["lat"].values, dtype=float)
+    lon_loaded = np.asarray(obj["lon"].values, dtype=float)
+    if lat_loaded.shape != (len(grid.lat),) or lon_loaded.shape != (len(grid.lon),):
+        raise ValueError(
+            f"{label}: loaded grid shape {(lat_loaded.size, lon_loaded.size)} "
+            f"!= GridSpec {grid.shape}; subset/grid mismatch"
+        )
+    if not np.allclose(lat_loaded, np.asarray(grid.lat, dtype=float), atol=1e-6) or not np.allclose(
+        lon_loaded, np.asarray(grid.lon, dtype=float), atol=1e-6
+    ):
+        raise ValueError(f"{label}: loaded grid coordinates differ from GridSpec beyond tolerance")
+
+
+def _to_lat_lon_field(cell_values: xr.DataArray) -> xr.DataArray:
+    """Return ``cell_values`` ordered as ``(lat, lon)`` for C-order flattening.
+
+    When named ``lat``/``lon`` dims are present they are moved to the trailing
+    positions and any *singleton* extra dims are dropped. A non-singleton extra
+    dim (e.g. a leftover ``time``) is a programming error for a per-cell field
+    and raises rather than silently mis-indexing the flat ``cell_index``.
+    """
+    dims = getattr(cell_values, "dims", ())
+    if "lat" in dims and "lon" in dims:
+        extra = [d for d in dims if d not in ("lat", "lon") and int(cell_values.sizes[d]) != 1]
+        if extra:
+            raise ValueError(
+                f"per-cell field has unexpected non-singleton dims {extra}; expected (lat, lon)"
+            )
+        squeeze_dims = [d for d in dims if d not in ("lat", "lon")]
+        if squeeze_dims:
+            cell_values = cell_values.squeeze(squeeze_dims, drop=True)
+        cell_values = cell_values.transpose("lat", "lon")
+    return cell_values
+
+
 def _assert_grid_alignment(
     cell_values: xr.DataArray,
     weights: pd.DataFrame,
@@ -186,6 +238,12 @@ def _assert_grid_alignment(
     """
     if weights.empty:
         return
+    dims = getattr(cell_values, "dims", ())
+    if dims and ("lat" in dims or "lon" in dims):
+        if not ("lat" in dims and "lon" in dims):
+            raise ValueError("cell field must carry both lat and lon dims for area-weight aggregation")
+        if tuple(dims[-2:]) != ("lat", "lon"):
+            raise ValueError("cell field dims must end with (lat, lon); transpose before aggregation")
     arr = np.asarray(cell_values.values)
     if arr.ndim < 2:
         raise ValueError("cell field must be at least 2D (lat, lon) for area-weight aggregation")
@@ -383,7 +441,6 @@ def write_spatial_weights_cache(
     """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    weights.to_parquet(output_path, index=False)
     sidecar = {
         "method_version": GRIDFIRST_SPATIAL_METHOD_VERSION,
         "grid_id": grid.grid_id,
@@ -392,7 +449,21 @@ def write_spatial_weights_cache(
         "crs_epsg": int(str(analysis_crs).split(":")[-1]),
         "boundary_file_hash": boundary_content_hash(boundary_path) if boundary_path else None,
     }
-    output_path.with_suffix(output_path.suffix + ".json").write_text(json.dumps(sidecar, indent=2, sort_keys=True), encoding="utf-8")
+    token = f"{os.getpid()}.{uuid.uuid4().hex}"
+    tmp_path = output_path.with_name(f".{output_path.name}.{token}.tmp")
+    tmp_sidecar = output_path.with_name(f".{output_path.name}.{token}.json.tmp")
+    sidecar_path = output_path.with_suffix(output_path.suffix + ".json")
+    try:
+        weights.to_parquet(tmp_path, index=False)
+        tmp_sidecar.write_text(json.dumps(sidecar, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp_sidecar, sidecar_path)
+        os.replace(tmp_path, output_path)
+    finally:
+        for leftover in (tmp_path, tmp_sidecar):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
 
 
 def read_spatial_weights_cache(
@@ -426,9 +497,27 @@ def read_spatial_weights_cache(
     return pd.read_parquet(path)
 
 
-def grid_metric_cache_path(cache_root: Path, *, slug: str, model: str, scenario: str, year: int | str) -> Path:
-    """Return the private grid-first metric NetCDF path."""
-    return Path(cache_root) / "grid_metrics" / slug / model / scenario / f"{year}.nc"
+def grid_metric_cache_path(
+    cache_root: Path,
+    *,
+    slug: str,
+    model: str,
+    scenario: str,
+    year: int | str,
+    grid_id: str | None = None,
+) -> Path:
+    """Return the private grid-first metric NetCDF path.
+
+    When ``grid_id`` is given it is inserted as a path segment
+    (``grid_metrics/<slug>/<model>/<grid_id>/<scenario>/<year>.nc``) so caches
+    built on different grids — a per-state bbox subset vs the full India grid,
+    or two concurrent state runs — never overwrite or race one another.
+    ``None`` preserves the legacy grid-agnostic path for back-compatibility.
+    """
+    base = Path(cache_root) / "grid_metrics" / slug / model
+    if grid_id is not None:
+        base = base / grid_id
+    return base / scenario / f"{year}.nc"
 
 
 def _blob_sha256(path: Path) -> str:
@@ -467,14 +556,22 @@ def write_grid_metric_cache(ds: xr.Dataset, path: Path, *, sidecar: Mapping[str,
     """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.tmp")
-    tmp_sidecar = path.with_suffix(path.suffix + ".json.tmp")
-    ds.to_netcdf(tmp_path)
-    final_sidecar = dict(sidecar)
-    final_sidecar["cache_blob_sha256"] = _blob_sha256(tmp_path)
-    tmp_sidecar.write_text(json.dumps(final_sidecar, indent=2, sort_keys=True), encoding="utf-8")
-    os.replace(tmp_sidecar, path.with_suffix(path.suffix + ".json"))
-    os.replace(tmp_path, path)
+    token = f"{os.getpid()}.{uuid.uuid4().hex}"
+    tmp_path = path.with_name(f".{path.name}.{token}.tmp")
+    tmp_sidecar = path.with_name(f".{path.name}.{token}.json.tmp")
+    try:
+        ds.to_netcdf(tmp_path)
+        final_sidecar = dict(sidecar)
+        final_sidecar["cache_blob_sha256"] = _blob_sha256(tmp_path)
+        tmp_sidecar.write_text(json.dumps(final_sidecar, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp_sidecar, path.with_suffix(path.suffix + ".json"))
+        os.replace(tmp_path, path)
+    finally:
+        for leftover in (tmp_path, tmp_sidecar):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
 
 
 # =============================================================================
@@ -614,16 +711,35 @@ def threshold_cache_path(
     var: str,
     baseline_label: str,
     grid_id: str | None = None,
+    percentile: int | None = None,
+    window_days: int | None = None,
+    quantile_method: str | None = None,
+    smooth: int | None = None,
 ) -> Path:
     """Return the per-cell DOY threshold cache NetCDF path.
 
-    When ``grid_id`` is provided the full grid id is appended to the filename so
-    caches built on different grids (e.g. a per-state bbox subset vs the full
-    India grid) coexist rather than clobber one another. ``None`` preserves the
-    legacy path for back-compatibility.
+    The filename carries the **full threshold signature** — ``grid_id`` plus the
+    percentile / window / quantile-method / smooth settings when supplied — so
+    two metrics that share model/var/baseline but differ in any of those (or run
+    on different grids) write to distinct paths instead of racing or clobbering a
+    shared file under concurrent workers. Each component is optional and omitted
+    from the name when ``None``, preserving the legacy path for back-compat.
     """
-    name = f"{baseline_label}.nc" if grid_id is None else f"{baseline_label}__grid={grid_id}.nc"
-    return Path(cache_root) / "thresholds" / model / var / name
+    name = baseline_label
+    if grid_id is not None:
+        name += f"__grid={grid_id}"
+    sig_parts: list[str] = []
+    if percentile is not None:
+        sig_parts.append(f"p{int(percentile)}")
+    if window_days is not None:
+        sig_parts.append(f"w{int(window_days)}")
+    if quantile_method is not None:
+        sig_parts.append(str(quantile_method))
+    if smooth is not None:
+        sig_parts.append(f"s{int(smooth)}")
+    if sig_parts:
+        name += "__" + "_".join(sig_parts)
+    return Path(cache_root) / "thresholds" / model / var / f"{name}.nc"
 
 
 def read_threshold_cache(
@@ -676,11 +792,16 @@ def write_threshold_cache(
     window_days: int,
     quantile_method: str,
     grid_id: str | None = None,
+    smooth: int | None = None,
 ) -> None:
-    """Write a per-cell threshold cache and invalidation sidecar."""
+    """Write a per-cell threshold cache and invalidation sidecar.
+
+    NetCDF and sidecar are written to unique temp names (PID + uuid4) and
+    atomically ``os.replace``-d into place, so concurrent workers building the
+    same threshold never read a torn blob/sidecar pair.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    threshold.to_dataset(name="threshold").to_netcdf(path)
     sidecar = {
         "method_version": GRIDFIRST_SPATIAL_METHOD_VERSION,
         "input_file_hash": input_signature,
@@ -689,9 +810,24 @@ def write_threshold_cache(
         "window_days": int(window_days),
         "quantile_method": quantile_method,
         "grid_id": grid_id,
+        "smooth": int(smooth) if smooth is not None else None,
         "methodology_note": "Per-cell DOY percentile threshold cache",
     }
-    path.with_suffix(path.suffix + ".json").write_text(json.dumps(sidecar, indent=2, sort_keys=True), encoding="utf-8")
+    token = f"{os.getpid()}.{uuid.uuid4().hex}"
+    tmp_path = path.with_name(f".{path.name}.{token}.tmp")
+    tmp_sidecar = path.with_name(f".{path.name}.{token}.json.tmp")
+    sidecar_path = path.with_suffix(path.suffix + ".json")
+    try:
+        threshold.to_dataset(name="threshold").to_netcdf(tmp_path)
+        tmp_sidecar.write_text(json.dumps(sidecar, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp_sidecar, sidecar_path)
+        os.replace(tmp_path, path)
+    finally:
+        for leftover in (tmp_path, tmp_sidecar):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
 
 
 def open_year_dataarray(
@@ -745,6 +881,7 @@ def aggregate_cell_values(
     """Area-weight a per-cell field to each polygon unit."""
     if weights.empty:
         return {}
+    cell_values = _to_lat_lon_field(cell_values)
     _assert_grid_alignment(cell_values, weights, grid=grid)
     flat = np.asarray(cell_values.values, dtype=float).reshape(-1)
     tmp = weights[["unit_key", "cell_index", "area_m2"]].copy()
@@ -767,7 +904,23 @@ def aggregate_percent_days(
     """Area-weight cellwise exceedance and valid-day counts into percentages."""
     if weights.empty:
         return {}
+    exceed_days = _to_lat_lon_field(exceed_days)
+    valid_days = _to_lat_lon_field(valid_days)
+    # Validate both numerator and denominator against the weights' grid, and
+    # confirm they share lat/lon so the flat cell_index addresses the same cell
+    # in each (a mismatch would divide exceed-days of one cell by valid-days of
+    # another).
     _assert_grid_alignment(exceed_days, weights, grid=grid)
+    _assert_grid_alignment(valid_days, weights, grid=grid)
+    e_coords = getattr(exceed_days, "coords", {})
+    v_coords = getattr(valid_days, "coords", {})
+    if {"lat", "lon"} <= set(e_coords) and {"lat", "lon"} <= set(v_coords):
+        if not np.array_equal(
+            np.asarray(exceed_days["lat"].values, dtype=float), np.asarray(valid_days["lat"].values, dtype=float)
+        ) or not np.array_equal(
+            np.asarray(exceed_days["lon"].values, dtype=float), np.asarray(valid_days["lon"].values, dtype=float)
+        ):
+            raise ValueError("exceed_days and valid_days are on different grids; cannot area-weight percent days")
     exceed_flat = np.asarray(exceed_days.values, dtype=float).reshape(-1)
     valid_flat = np.asarray(valid_days.values, dtype=float).reshape(-1)
     tmp = weights[["unit_key", "cell_index", "area_m2"]].copy()

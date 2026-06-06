@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import sys
+import uuid
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -257,7 +258,6 @@ def write_spatial_weights_cache(
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    weights.to_parquet(output_path, index=False)
     sidecar = {
         "method_version": GRIDFIRST_METHOD_VERSION,
         "grid_id": grid.grid_id,
@@ -265,10 +265,21 @@ def write_spatial_weights_cache(
         "crs_epsg": int(str(analysis_crs).split(":")[-1]),
         "boundary_file_hash": boundary_content_hash(boundary_path) if boundary_path else None,
     }
-    output_path.with_suffix(output_path.suffix + ".json").write_text(
-        json.dumps(sidecar, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
+    token = f"{os.getpid()}.{uuid.uuid4().hex}"
+    tmp_path = output_path.with_name(f".{output_path.name}.{token}.tmp")
+    tmp_sidecar = output_path.with_name(f".{output_path.name}.{token}.json.tmp")
+    sidecar_path = output_path.with_suffix(output_path.suffix + ".json")
+    try:
+        weights.to_parquet(tmp_path, index=False)
+        tmp_sidecar.write_text(json.dumps(sidecar, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp_sidecar, sidecar_path)
+        os.replace(tmp_path, output_path)
+    finally:
+        for leftover in (tmp_path, tmp_sidecar):
+            try:
+                leftover.unlink()
+            except OSError:
+                pass
 
 
 def read_spatial_weights_cache(
@@ -340,6 +351,7 @@ def _grid_metric_sidecar(
     window_days: int,
     quantile_method: str,
     value_col: str,
+    grid_id: str | None = None,
 ) -> dict[str, object]:
     return {
         "method_version": GRIDFIRST_METHOD_VERSION,
@@ -358,6 +370,7 @@ def _grid_metric_sidecar(
         "percentile": int(percentile),
         "window_days": int(window_days),
         "quantile_method": quantile_method,
+        "grid_id": grid_id,
         "methodology_note": "Heat Risk v2 annual per-cell metric field before polygon aggregation",
     }
 
@@ -514,10 +527,12 @@ def _grid_metric_dataset(
     return xr.Dataset({value_col: cell_payload.rename(value_col)})
 
 
-def _aggregate_grid_metric_dataset(ds: xr.Dataset, *, value_col: str, weights: pd.DataFrame) -> dict[str, float]:
+def _aggregate_grid_metric_dataset(
+    ds: xr.Dataset, *, value_col: str, weights: pd.DataFrame, grid: "GridSpec | None" = None
+) -> dict[str, float]:
     if "exceed_days" in ds and "valid_days" in ds:
-        return aggregate_percent_days(ds["exceed_days"], ds["valid_days"], weights)
-    return aggregate_cell_values(ds[value_col], weights)
+        return aggregate_percent_days(ds["exceed_days"], ds["valid_days"], weights, grid=grid)
+    return aggregate_cell_values(ds[value_col], weights, grid=grid)
 
 
 def compute_heat_risk_rows_for_metric(
@@ -530,13 +545,22 @@ def compute_heat_risk_rows_for_metric(
     weights: pd.DataFrame,
     level: str = "district",
     cache_root: Path | None = None,
+    index_range: tuple[int, int, int, int] | None = None,
+    grid: "GridSpec | None" = None,
 ) -> list[dict[str, object]]:
     """Compute yearly Heat Risk rows from per-cell indicators and area weights.
 
     Unknown registry params are ignored intentionally: this entrypoint consumes
     only baseline/percentile/window/operator/spell settings relevant to v2.
+
+    ``index_range`` is the positional ``(lat0, lat1, lon0, lon1)`` bbox subset
+    (per-state memory fix); it is forwarded to every yearly load so only the
+    subset is read into RAM. ``grid`` is the matching subset ``GridSpec``; when
+    supplied its ``grid_id`` keys the threshold and annual caches and its
+    coordinates gate aggregation. Both ``None`` reproduce the full-grid path.
     """
 
+    grid_id = grid.grid_id if grid is not None else None
     var = str(metric.get("var") or "")
     if not var:
         raise ValueError(f"Metric {metric.get('slug')} has no variable")
@@ -556,7 +580,8 @@ def compute_heat_risk_rows_for_metric(
         baseline_years_available = [
             year for year in sorted(baseline_year_to_paths) if baseline_years[0] <= int(year) <= baseline_years[1]
         ]
-        baseline_da = concat_years(baseline_year_to_paths, var, baseline_years_available)
+        baseline_da = concat_years(baseline_year_to_paths, var, baseline_years_available, index_range=index_range)
+        assert_grid_matches(baseline_da, grid, name=f"{metric.get('slug')} baseline")
         baseline_input_sig = input_file_signature([baseline_year_to_paths[year][var] for year in baseline_years_available])
         cache_path: Path | None = None
         if cache_root is not None:
@@ -565,6 +590,11 @@ def compute_heat_risk_rows_for_metric(
                 model=model,
                 var=var,
                 baseline_label=f"{baseline_years[0]}-{baseline_years[1]}",
+                grid_id=grid_id,
+                percentile=percentile,
+                window_days=window_days,
+                quantile_method=quantile_method,
+                smooth=smooth_int,
             )
             threshold = read_threshold_cache(
                 cache_path,
@@ -573,6 +603,7 @@ def compute_heat_risk_rows_for_metric(
                 percentile=percentile,
                 window_days=window_days,
                 quantile_method=quantile_method,
+                grid_id=grid_id,
             )
         if threshold is None:
             threshold = compute_doy_thresholds(
@@ -582,6 +613,7 @@ def compute_heat_risk_rows_for_metric(
                 quantile_method=quantile_method,
                 smooth=smooth_int,
             )
+            assert_grid_matches(threshold, grid, name=f"{metric.get('slug')} threshold")
             if cache_path is not None:
                 write_threshold_cache(
                     threshold,
@@ -591,6 +623,8 @@ def compute_heat_risk_rows_for_metric(
                     percentile=percentile,
                     window_days=window_days,
                     quantile_method=quantile_method,
+                    grid_id=grid_id,
+                    smooth=smooth_int,
                 )
 
     rows: list[dict[str, object]] = []
@@ -606,6 +640,7 @@ def compute_heat_risk_rows_for_metric(
                 model=model,
                 scenario=scenario,
                 year=int(year),
+                grid_id=grid_id,
             )
             grid_sidecar = _grid_metric_sidecar(
                 metric=metric,
@@ -619,15 +654,17 @@ def compute_heat_risk_rows_for_metric(
                 window_days=window_days,
                 quantile_method=quantile_method,
                 value_col=value_col,
+                grid_id=grid_id,
             )
             grid_ds = read_grid_metric_cache(grid_cache_path, expected_sidecar=grid_sidecar)
         if grid_ds is None:
-            eval_da = concat_years(year_to_paths, var, [year])
+            eval_da = concat_years(year_to_paths, var, [year], index_range=index_range)
+            assert_grid_matches(eval_da, grid, name=f"{metric.get('slug')} eval {year}")
             cell_payload = _metric_cell_values(metric=metric, eval_da=eval_da, threshold=threshold)
             grid_ds = _grid_metric_dataset(cell_payload, value_col=value_col)
             if grid_cache_path is not None and grid_sidecar is not None:
                 write_grid_metric_cache(grid_ds, grid_cache_path, sidecar=grid_sidecar)
-        values = _aggregate_grid_metric_dataset(grid_ds, value_col=value_col, weights=weights)
+        values = _aggregate_grid_metric_dataset(grid_ds, value_col=value_col, weights=weights, grid=grid)
         source_file = str(year_to_paths[int(year)][var])
         for unit_key, value in values.items():
             row: dict[str, object] = {
@@ -674,6 +711,7 @@ from india_resilience_tool.compute.gridfirst_spatial import (  # noqa: E402,F401
     aggregate_cell_values,
     aggregate_daily_area_mean,
     aggregate_percent_days,
+    assert_grid_matches,
     build_area_weights,
     compute_doy_thresholds,
     concat_years,

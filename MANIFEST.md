@@ -108,7 +108,8 @@ CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variabi
 | `IRT_PROCESSED_ROOT` | `IRT_DATA_DIR/processed/{metric}` | Optional processed-root override |
 | `IRT_PROCESSED_OPTIMISED_ROOT` | `IRT_DATA_DIR/processed_optimised` | Optional optimized runtime-bundle override |
 | `IRT_DEBUG` | `0` | Enable debug/perf output |
-| `IRT_GRIDFIRST_BBOX` | `1` (on) | Grid-first compute reads only the requested state's bounding-box slice of the climate grid before loading it into RAM (per-state memory fix). Set `0`/`false` to revert to the exact full-grid behavior. Currently wired for the Drought Risk v2 path; other grid-first families remain full-grid until Phase 2. |
+| `IRT_GRIDFIRST_BBOX` | `1` (on) | Grid-first compute reads only the requested state's bounding-box slice of the climate grid before loading it into RAM (per-state memory fix). Set `0`/`false` to revert to the exact full-grid behavior. Wired for **all** grid-first families: Drought Risk, Heat Risk, Cold Risk, Heat Stress, and Extreme Rainfall \| Flash Flood Risk. At hydro levels (`basin`/`sub_basin`) the boundary spans all-India, so the subset ≈ full grid and gives **no** memory relief for the level-agnostic heat/cold/heat-stress slugs — keep `-Workers` low there. |
+| `IRT_GRIDFIRST_BBOX_STRICT` | `0` (off) | When on, a failure to derive the bbox subset (e.g. missing boundary CRS) raises instead of silently falling back to the full grid. Use for acceptance runs so a green run cannot have quietly skipped the memory fix. No effect when `IRT_GRIDFIRST_BBOX=0`. |
 
 ## Top-level repo map
 

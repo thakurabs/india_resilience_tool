@@ -17,6 +17,7 @@ from india_resilience_tool.compute.drought_risk_gridfirst import (
 from india_resilience_tool.compute.gridfirst_spatial import (
     GridSpec,
     _hash_paths,
+    assert_grid_matches,
     coverage_from_weights,
     dataset_grid_spec,
     read_grid_metric_cache,
@@ -215,6 +216,8 @@ def _threshold_grid(
     var: str,
     percentile: int,
     cache_root: Path | None,
+    index_range: tuple[int, int, int, int] | None = None,
+    grid: GridSpec | None = None,
 ) -> xr.Dataset:
     baseline_years = [
         year for year in sorted(baseline_year_to_paths) if R95P_BASELINE_YEARS[0] <= int(year) <= R95P_BASELINE_YEARS[1]
@@ -244,7 +247,8 @@ def _threshold_grid(
         cached = read_grid_metric_cache(cache_path, expected_sidecar=sidecar)
         if cached is not None:
             return cached
-    baseline_da = concat_years(baseline_year_to_paths, var, baseline_years)
+    baseline_da = concat_years(baseline_year_to_paths, var, baseline_years, index_range=index_range)
+    assert_grid_matches(baseline_da, grid, name="extreme-rainfall baseline")
     ds = compute_r95p_threshold_grid(
         baseline_da,
         wet_day_mm=R95P_WET_DAY_MM,
@@ -266,6 +270,8 @@ def compute_extreme_rainfall_rows_for_metric(
     weights: pd.DataFrame,
     level: str = "district",
     cache_root: Path | None = None,
+    index_range: tuple[int, int, int, int] | None = None,
+    grid: GridSpec | None = None,
 ) -> list[dict[str, object]]:
     """Compute yearly admin v2 Extreme Rainfall rows.
 
@@ -273,6 +279,13 @@ def compute_extreme_rainfall_rows_for_metric(
     ignores R95p/R95pTOT registry baseline, quantile, and exceedance params:
     admin v2 locks those semantics to 1990-2010, linear quantile, wet days
     >=1 mm/day, and strict exceedance. Hydro continues to use the legacy path.
+
+    ``index_range`` is the positional ``(lat0, lat1, lon0, lon1)`` bbox subset
+    (per-state memory fix) forwarded to every yearly load — baseline and eval.
+    ``grid`` is the matching subset ``GridSpec`` used to validate loaded fields
+    and gate aggregation; its ``grid_id`` should also be reflected in
+    ``params['grid_id']`` so the grid-keyed caches stay isolated. Both ``None``
+    reproduce the full-grid path.
     """
     slug = str(metric.get("slug") or "")
     if slug not in EXTREME_RAINFALL_GRIDFIRST_SLUGS:
@@ -295,6 +308,8 @@ def compute_extreme_rainfall_rows_for_metric(
             var=var,
             percentile=percentile,
             cache_root=cache_root,
+            index_range=index_range,
+            grid=grid,
         )
         baseline_years = [
             year for year in sorted(baseline_year_to_paths) if R95P_BASELINE_YEARS[0] <= int(year) <= R95P_BASELINE_YEARS[1]
@@ -335,7 +350,8 @@ def compute_extreme_rainfall_rows_for_metric(
         )
         ds = read_grid_metric_cache(cache_path, expected_sidecar=sidecar) if cache_path is not None else None
         if ds is None:
-            da = concat_years(year_to_paths, var, [int(year)])
+            da = concat_years(year_to_paths, var, [int(year)], index_range=index_range)
+            assert_grid_matches(da, grid, name=f"[{slug}] eval {year}")
             ds = annual_extreme_rainfall_grid(
                 da,
                 slug=slug,
@@ -347,6 +363,7 @@ def compute_extreme_rainfall_rows_for_metric(
             ds["value"],
             weights,
             min_polygon_cell_weight_fraction=MIN_POLYGON_CELL_WEIGHT_FRACTION,
+            grid=grid,
         )
         for unit_key, (value, retained) in values.items():
             row = {

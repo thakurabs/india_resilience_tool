@@ -36,6 +36,7 @@ from india_resilience_tool.compute.gridfirst_spatial import (
     _cellwise_spell_days,
     aggregate_cell_values,
     aggregate_percent_days,
+    assert_grid_matches,
     compute_doy_thresholds,
     concat_years,
     grid_metric_cache_path,
@@ -115,6 +116,7 @@ def _grid_metric_sidecar(
     window_days: int | None,
     quantile_method: str | None,
     value_col: str,
+    grid_id: str | None = None,
 ) -> dict[str, object]:
     return {
         "method_version": GRIDFIRST_METHOD_VERSION,
@@ -134,6 +136,7 @@ def _grid_metric_sidecar(
         "percentile": int(percentile) if percentile is not None else None,
         "window_days": int(window_days) if window_days is not None else None,
         "quantile_method": quantile_method,
+        "grid_id": grid_id,
         "methodology_note": "Cold Risk v2 annual per-cell metric field before polygon aggregation",
     }
 
@@ -227,10 +230,12 @@ def _wrap_cell_payload(
     return xr.Dataset({value_col: payload.rename(value_col)})
 
 
-def _aggregate_cell_dataset(ds: xr.Dataset, *, value_col: str, weights: pd.DataFrame) -> dict[str, float]:
+def _aggregate_cell_dataset(
+    ds: xr.Dataset, *, value_col: str, weights: pd.DataFrame, grid: "GridSpec | None" = None
+) -> dict[str, float]:
     if "exceed_days" in ds and "valid_days" in ds:
-        return aggregate_percent_days(ds["exceed_days"], ds["valid_days"], weights)
-    return aggregate_cell_values(ds[value_col], weights)
+        return aggregate_percent_days(ds["exceed_days"], ds["valid_days"], weights, grid=grid)
+    return aggregate_cell_values(ds[value_col], weights, grid=grid)
 
 
 def _resolve_prev_year_da(
@@ -239,6 +244,7 @@ def _resolve_prev_year_da(
     year: int,
     year_to_paths: Mapping[int, Mapping[str, Path]],
     historical_year_to_paths: Mapping[int, Mapping[str, Path]] | None,
+    index_range: tuple[int, int, int, int] | None = None,
 ) -> tuple[xr.DataArray | None, Path | None]:
     """Resolve the ``Dec(year-1)`` DataArray, falling back to history for SSP first years."""
     prev_path: Path | None = year_to_paths.get(year - 1, {}).get(var)
@@ -246,7 +252,7 @@ def _resolve_prev_year_da(
         prev_path = historical_year_to_paths.get(year - 1, {}).get(var)
     if prev_path is None:
         return None, None
-    return open_year_dataarray(prev_path, var), prev_path
+    return open_year_dataarray(prev_path, var, index_range=index_range), prev_path
 
 
 def compute_cold_risk_rows_for_metric(
@@ -260,6 +266,8 @@ def compute_cold_risk_rows_for_metric(
     level: str = "district",
     cache_root: Path | None = None,
     historical_year_to_paths: Mapping[int, Mapping[str, Path]] | None = None,
+    index_range: tuple[int, int, int, int] | None = None,
+    grid: "GridSpec | None" = None,
 ) -> list[dict[str, object]]:
     """Compute yearly Cold Risk rows from per-cell indicators and area weights.
 
@@ -267,11 +275,20 @@ def compute_cold_risk_rows_for_metric(
         historical_year_to_paths: Optional historical-scenario inventory for the
             same model. Used to source ``Dec(year-1)`` for the first SSP year
             (matches the polygon-mean dispatcher behavior shipped in Phase 2).
+        index_range: Positional ``(lat0, lat1, lon0, lon1)`` bbox subset (the
+            per-state memory fix), forwarded to every yearly load — current,
+            baseline, and the cross-year ``Dec(year-1)`` — so only the subset is
+            read into RAM.
+        grid: Matching subset ``GridSpec``. When supplied its ``grid_id`` keys
+            the threshold and annual caches and its coordinates gate
+            aggregation. ``index_range``/``grid`` both ``None`` reproduce the
+            exact full-grid behavior.
 
     Unknown registry params are ignored intentionally; only baseline /
     percentile / window / direction / exceed_ge / threshold settings relevant
     to v2 Cold Risk are consumed.
     """
+    grid_id = grid.grid_id if grid is not None else None
     slug = str(metric.get("slug") or "")
     if slug and slug not in COLD_RISK_GRIDFIRST_SLUGS:
         raise ValueError(f"Cold Risk grid-first invoked for unsupported slug: {slug!r}")
@@ -306,7 +323,8 @@ def compute_cold_risk_rows_for_metric(
             raise ValueError(
                 f"[{slug}] No baseline yearly files inside {baseline_years_tuple} for model={model}"
             )
-        baseline_da = concat_years(baseline_year_to_paths, var, baseline_years_available)
+        baseline_da = concat_years(baseline_year_to_paths, var, baseline_years_available, index_range=index_range)
+        assert_grid_matches(baseline_da, grid, name=f"[{slug}] baseline")
         baseline_input_sig = input_file_signature(
             [baseline_year_to_paths[y][var] for y in baseline_years_available]
         )
@@ -317,6 +335,11 @@ def compute_cold_risk_rows_for_metric(
                 model=model,
                 var=var,
                 baseline_label=f"{baseline_years_tuple[0]}-{baseline_years_tuple[1]}",
+                grid_id=grid_id,
+                percentile=percentile,
+                window_days=window_days,
+                quantile_method=quantile_method,
+                smooth=smooth_int,
             )
             threshold = read_threshold_cache(
                 cache_path,
@@ -325,6 +348,7 @@ def compute_cold_risk_rows_for_metric(
                 percentile=percentile,
                 window_days=window_days,
                 quantile_method=quantile_method,
+                grid_id=grid_id,
             )
         if threshold is None:
             threshold = compute_doy_thresholds(
@@ -334,6 +358,7 @@ def compute_cold_risk_rows_for_metric(
                 quantile_method=quantile_method,
                 smooth=smooth_int,
             )
+            assert_grid_matches(threshold, grid, name=f"[{slug}] threshold")
             if cache_path is not None:
                 write_threshold_cache(
                     threshold,
@@ -343,6 +368,8 @@ def compute_cold_risk_rows_for_metric(
                     percentile=percentile,
                     window_days=window_days,
                     quantile_method=quantile_method,
+                    grid_id=grid_id,
+                    smooth=smooth_int,
                 )
 
     rows: list[dict[str, object]] = []
@@ -359,7 +386,10 @@ def compute_cold_risk_rows_for_metric(
                 year=year,
                 year_to_paths=year_to_paths,
                 historical_year_to_paths=historical_year_to_paths,
+                index_range=index_range,
             )
+            if prev_da is not None:
+                assert_grid_matches(prev_da, grid, name=f"[{slug}] prev-year {year - 1}")
             if prev_path is not None:
                 prev_input_sig = input_file_signature([prev_path])
 
@@ -368,7 +398,7 @@ def compute_cold_risk_rows_for_metric(
         grid_sidecar: dict[str, object] | None = None
         if cache_root is not None:
             grid_cache_path = grid_metric_cache_path(
-                Path(cache_root), slug=slug, model=model, scenario=scenario, year=year,
+                Path(cache_root), slug=slug, model=model, scenario=scenario, year=year, grid_id=grid_id,
             )
             grid_sidecar = _grid_metric_sidecar(
                 metric=metric,
@@ -383,10 +413,12 @@ def compute_cold_risk_rows_for_metric(
                 window_days=window_days,
                 quantile_method=quantile_method,
                 value_col=value_col,
+                grid_id=grid_id,
             )
             grid_ds = read_grid_metric_cache(grid_cache_path, expected_sidecar=grid_sidecar)
         if grid_ds is None:
-            eval_da = open_year_dataarray(cur_path, var)
+            eval_da = open_year_dataarray(cur_path, var, index_range=index_range)
+            assert_grid_matches(eval_da, grid, name=f"[{slug}] eval {year}")
             cell_payload = _cold_risk_cell_values(
                 metric=metric,
                 eval_da=eval_da,
@@ -397,7 +429,7 @@ def compute_cold_risk_rows_for_metric(
             if grid_cache_path is not None and grid_sidecar is not None:
                 write_grid_metric_cache(grid_ds, grid_cache_path, sidecar=grid_sidecar)
 
-        values = _aggregate_cell_dataset(grid_ds, value_col=value_col, weights=weights)
+        values = _aggregate_cell_dataset(grid_ds, value_col=value_col, weights=weights, grid=grid)
         source_file = str(cur_path)
         for unit_key, value in values.items():
             row: dict[str, object] = {

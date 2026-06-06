@@ -4478,24 +4478,52 @@ def process_metric_for_model_scenario(
 
     # Bounding-box subset of the climate grid (per-state memory fix). The
     # kill-switch is read once here so the GridSpec and the data loads derive
-    # from a single source of truth; per-family forwarding to the loaders is
-    # currently drought-only (Phase 1). When disabled or unavailable,
-    # grid_index_range is None (exact full-grid behavior).
+    # from a single source of truth, then forwarded to every grid-first family
+    # (drought, heat, cold, heat stress, extreme rainfall). When disabled or
+    # unavailable, grid_index_range is None (exact full-grid behavior).
+    #
+    # IRT_GRIDFIRST_BBOX=0 disables the subset. IRT_GRIDFIRST_BBOX_STRICT=1
+    # turns a subset-derivation failure into a hard error instead of a silent
+    # full-grid fallback (used for acceptance runs so a green run cannot have
+    # quietly skipped the memory fix).
     bbox_enabled = str(os.environ.get("IRT_GRIDFIRST_BBOX", "1")).strip().lower() not in {"0", "false", "no", "off"}
+    bbox_strict = str(os.environ.get("IRT_GRIDFIRST_BBOX_STRICT", "0")).strip().lower() in {"1", "true", "yes", "on"}
     grid_index_range: tuple[int, int, int, int] | None = None
     if bbox_enabled and not gdf.empty:
         try:
-            minx, miny, maxx, maxy = (float(v) for v in gdf.total_bounds)
+            # total_bounds is only meaningful in EPSG:4326 for the lat/lon grid
+            # mapping; reproject explicitly and fail loudly on a missing CRS
+            # rather than assuming the boundary is already 4326.
+            if gdf.crs is None:
+                raise ValueError("boundary GeoDataFrame has no CRS; cannot derive an EPSG:4326 bbox")
+            bbox_gdf = gdf.to_crs("EPSG:4326")
+            minx, miny, maxx, maxy = (float(v) for v in bbox_gdf.total_bounds)
             sample_lat = np.asarray(ds_sample["lat"].values, dtype=float)
             sample_lon = np.asarray(ds_sample["lon"].values, dtype=float)
             grid_index_range = bbox_to_index_range(sample_lat, sample_lon, (minx, miny, maxx, maxy))
+            lat0, lat1, lon0, lon1 = grid_index_range
+            full_cells = int(sample_lat.size) * int(sample_lon.size)
+            subset_cells = (lat1 - lat0) * (lon1 - lon0)
+            retained_pct = (100.0 * subset_cells / full_cells) if full_cells else 0.0
+            logging.info(
+                "[%s] grid bbox subset: full=%dx%d subset=%dx%d (%.1f%% of cells retained)",
+                slug,
+                int(sample_lat.size),
+                int(sample_lon.size),
+                lat1 - lat0,
+                lon1 - lon0,
+                retained_pct,
+            )
         except Exception as e:
+            if bbox_strict:
+                logging.error(f"[{slug}] grid bbox subset failed and IRT_GRIDFIRST_BBOX_STRICT is set: {e}")
+                raise
             logging.warning(f"[{slug}] grid bbox subset disabled (falling back to full grid): {e}")
             grid_index_range = None
 
     if is_heat_risk_gridfirst(slug, level):
         try:
-            grid = heat_risk_dataset_grid_spec(ds_sample)
+            grid = heat_risk_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
             ds_sample.close()
             boundary_path = get_boundary_path(level)
             weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
@@ -4546,6 +4574,7 @@ def process_metric_for_model_scenario(
             grid_params["baseline_years"] = HEAT_RISK_GRIDFIRST_BASELINE_YEARS
             grid_params.setdefault("quantile_method", "linear")
             grid_params.setdefault("exceed_ge", False)
+            grid_params["grid_id"] = grid.grid_id
             metric_for_grid["params"] = grid_params
 
             if metric_for_grid.get("compute") not in HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
@@ -4572,6 +4601,8 @@ def process_metric_for_model_scenario(
                 weights=weights,
                 level=level,
                 cache_root=_heat_risk_internal_root(),
+                index_range=grid_index_range,
+                grid=grid,
             )
             return _write_metric_rows_outputs(
                 rows=rows,
@@ -4597,7 +4628,7 @@ def process_metric_for_model_scenario(
 
     if slug in COLD_RISK_GRIDFIRST_SLUGS:
         try:
-            grid = gridfirst_dataset_grid_spec(ds_sample)
+            grid = gridfirst_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
             ds_sample.close()
             boundary_path = get_boundary_path(level)
             weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
@@ -4644,6 +4675,9 @@ def process_metric_for_model_scenario(
                 return
 
             metric_for_grid = dict(metric)
+            grid_params = dict(metric.get("params") or {})
+            grid_params["grid_id"] = grid.grid_id
+            metric_for_grid["params"] = grid_params
 
             # Baseline year_to_paths (only needed for compute kinds that build
             # per-cell DOY thresholds — TX10p, TN10p, CSDI).
@@ -4691,6 +4725,8 @@ def process_metric_for_model_scenario(
                 level=level,
                 cache_root=_cold_risk_internal_root(),
                 historical_year_to_paths=historical_year_to_paths,
+                index_range=grid_index_range,
+                grid=grid,
             )
             return _write_metric_rows_outputs(
                 rows=rows,
@@ -4716,7 +4752,7 @@ def process_metric_for_model_scenario(
 
     if slug in HEAT_STRESS_GRIDFIRST_SLUGS:
         try:
-            grid = gridfirst_dataset_grid_spec(ds_sample)
+            grid = gridfirst_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
             ds_sample.close()
             boundary_path = get_boundary_path(level)
             weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
@@ -4775,6 +4811,8 @@ def process_metric_for_model_scenario(
                 weights=weights,
                 level=level,
                 cache_root=_heat_stress_internal_root(),
+                index_range=grid_index_range,
+                grid=grid,
             )
             return _write_metric_rows_outputs(
                 rows=rows,
@@ -4800,7 +4838,7 @@ def process_metric_for_model_scenario(
 
     if is_extreme_rainfall_gridfirst(slug, level):
         try:
-            grid = gridfirst_dataset_grid_spec(ds_sample)
+            grid = gridfirst_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
             ds_sample.close()
             boundary_path = get_boundary_path(level)
             weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
@@ -4876,6 +4914,8 @@ def process_metric_for_model_scenario(
                 weights=weights,
                 level=level,
                 cache_root=_extreme_rainfall_internal_root(),
+                index_range=grid_index_range,
+                grid=grid,
             )
             return _write_metric_rows_outputs(
                 rows=rows,

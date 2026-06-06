@@ -18,9 +18,11 @@ import xarray as xr
 
 from india_resilience_tool.compute.gridfirst_spatial import (
     _hash_paths,
+    assert_grid_matches,
     grid_metric_cache_path as _shared_grid_metric_cache_path,
     normalize_lat_lon,
     read_grid_metric_cache,
+    subset_grid_by_index,
     write_grid_metric_cache,
 )
 from india_resilience_tool.compute.heat_risk_gridfirst import aggregate_cell_values
@@ -139,38 +141,68 @@ def _drop_feb29(da: xr.DataArray) -> xr.DataArray:
     return da.sel(time=da["time"][mask])
 
 
-def _open_year_dataarray(path: Path, var: str) -> xr.DataArray:
+def _open_year_dataarray(
+    path: Path, var: str, *, index_range: tuple[int, int, int, int] | None = None
+) -> xr.DataArray:
     ds = normalize_lat_lon(xr.open_dataset(path))
     try:
         if var not in ds:
             raise KeyError(f"Variable {var!r} not found in {path}")
-        return ds[var].load()
+        return subset_grid_by_index(ds[var], index_range).load()
     finally:
         ds.close()
 
 
-def _concat_year_var(year_to_paths: Mapping[int, Mapping[str, Path]], var: str, years: Sequence[int]) -> xr.DataArray:
-    arrays = [_open_year_dataarray(year_to_paths[int(year)][var], var) for year in years if int(year) in year_to_paths]
+def _concat_year_var(
+    year_to_paths: Mapping[int, Mapping[str, Path]],
+    var: str,
+    years: Sequence[int],
+    *,
+    index_range: tuple[int, int, int, int] | None = None,
+) -> xr.DataArray:
+    arrays = [
+        _open_year_dataarray(year_to_paths[int(year)][var], var, index_range=index_range)
+        for year in years
+        if int(year) in year_to_paths
+    ]
     if not arrays:
         raise ValueError(f"No yearly files available for variable {var}")
     return xr.concat(arrays, dim="time").sortby("time")
 
 
-def _twb_daily_for_year(year_to_paths: Mapping[int, Mapping[str, Path]], year: int) -> xr.DataArray:
-    tas_k = _drop_feb29(_concat_year_var(year_to_paths, "tas", [year]))
-    hurs = _drop_feb29(_concat_year_var(year_to_paths, "hurs", [year]))
+def _twb_daily_for_year(
+    year_to_paths: Mapping[int, Mapping[str, Path]],
+    year: int,
+    *,
+    index_range: tuple[int, int, int, int] | None = None,
+) -> xr.DataArray:
+    tas_k = _drop_feb29(_concat_year_var(year_to_paths, "tas", [year], index_range=index_range))
+    hurs = _drop_feb29(_concat_year_var(year_to_paths, "hurs", [year], index_range=index_range))
     return stull_twb_c(tas_k - 273.15, hurs)
 
 
-def _cell_values_for_metric(metric: Mapping[str, object], year_to_paths: Mapping[int, Mapping[str, Path]], year: int) -> xr.DataArray:
+def _cell_values_for_metric(
+    metric: Mapping[str, object],
+    year_to_paths: Mapping[int, Mapping[str, Path]],
+    year: int,
+    *,
+    index_range: tuple[int, int, int, int] | None = None,
+    grid: "GridSpec | None" = None,
+) -> xr.DataArray:
     slug = str(metric.get("slug") or "")
     params = dict(metric.get("params") or {})
 
     if slug == "tasmin_tropical_nights_gt28":
-        tasmin_c = _drop_feb29(_concat_year_var(year_to_paths, "tasmin", [year])) - 273.15
+        tasmin_raw = _concat_year_var(year_to_paths, "tasmin", [year], index_range=index_range)
+        assert_grid_matches(tasmin_raw, grid, name=f"[{slug}] tasmin {year}")
+        tasmin_c = _drop_feb29(tasmin_raw) - 273.15
         return (tasmin_c > 28.0).fillna(False).sum(dim="time").astype(float)
 
-    twb = _twb_daily_for_year(year_to_paths, year)
+    twb = _twb_daily_for_year(year_to_paths, year, index_range=index_range)
+    # twb is tas+hurs combined; a coord mismatch between the two subset
+    # variables would have realigned to a smaller intersection grid, so this one
+    # check guards both inputs at once.
+    assert_grid_matches(twb, grid, name=f"[{slug}] twb {year}")
     if slug == "twb_annual_mean":
         return twb.mean(dim="time", skipna=True)
     if slug == "twb_annual_max":
@@ -188,8 +220,12 @@ def _cell_values_for_metric(metric: Mapping[str, object], year_to_paths: Mapping
         return (twb >= threshold).fillna(False).sum(dim="time").astype(float)
 
     if slug.startswith("wbgt_shade_stull") or slug.startswith("swbgt_empirical"):
-        tas_k = _drop_feb29(_concat_year_var(year_to_paths, "tas", [year]))
-        hurs = _drop_feb29(_concat_year_var(year_to_paths, "hurs", [year]))
+        tas_raw = _concat_year_var(year_to_paths, "tas", [year], index_range=index_range)
+        hurs_raw = _concat_year_var(year_to_paths, "hurs", [year], index_range=index_range)
+        assert_grid_matches(tas_raw, grid, name=f"[{slug}] tas {year}")
+        assert_grid_matches(hurs_raw, grid, name=f"[{slug}] hurs {year}")
+        tas_k = _drop_feb29(tas_raw)
+        hurs = _drop_feb29(hurs_raw)
         tas_c = tas_k - 273.15
         if slug.startswith("wbgt_shade_stull"):
             field = wbgt_shade_stull_cell_c(tas_c, hurs)
@@ -267,11 +303,20 @@ def compute_heat_stress_rows_for_metric(
     weights: pd.DataFrame,
     level: str = "district",
     cache_root: Path | None = None,
+    index_range: tuple[int, int, int, int] | None = None,
+    grid: "GridSpec | None" = None,
 ) -> list[dict[str, object]]:
     """Compute yearly Heat Stress v2 rows from per-cell indicators.
 
     Unknown registry params are ignored except where a metric explicitly
     requires them, such as ``twb_summer_mean`` requiring ``months``.
+
+    ``index_range`` is the positional ``(lat0, lat1, lon0, lon1)`` bbox subset
+    (per-state memory fix) forwarded to every variable load (tas, hurs, tasmin).
+    ``grid`` is the matching subset ``GridSpec``; each loaded variable is
+    validated against it and it gates aggregation. The grid-keyed cache path
+    already isolates grids via ``params['grid_id']``. Both ``None`` reproduce
+    the full-grid path.
     """
 
     slug = str(metric.get("slug") or "")
@@ -305,12 +350,14 @@ def compute_heat_stress_rows_for_metric(
             )
             grid_ds = read_grid_metric_cache(cache_path, expected_sidecar=sidecar)
         if grid_ds is None:
-            cell_values = _cell_values_for_metric(metric, year_to_paths, int(year))
+            cell_values = _cell_values_for_metric(
+                metric, year_to_paths, int(year), index_range=index_range, grid=grid
+            )
             grid_ds = xr.Dataset({value_col: cell_values.rename(value_col)})
             if cache_path is not None:
                 write_grid_metric_cache(grid_ds, cache_path, sidecar=sidecar)
 
-        values = aggregate_cell_values(grid_ds[value_col], weights)
+        values = aggregate_cell_values(grid_ds[value_col], weights, grid=grid)
         for unit_key, value in values.items():
             row: dict[str, object] = {
                 "year": int(year),
