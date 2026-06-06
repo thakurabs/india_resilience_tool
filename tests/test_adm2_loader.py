@@ -6,6 +6,7 @@ from shapely.geometry import Polygon
 from india_resilience_tool.data.adm2_loader import (
     enrich_adm2_with_state_names,
     ensure_adm2_columns,
+    ensure_key_column,
 )
 
 
@@ -81,3 +82,29 @@ def test_enrich_adm2_with_state_names_logs_residual_unknowns(caplog) -> None:
 
     assert out.loc[0, "state_name"] == "Unknown"
     assert "left 1/1 rows" in caplog.text
+
+
+def test_ensure_key_column_uses_state_and_district() -> None:
+    adm2 = gpd.GeoDataFrame(
+        {
+            "district_name": ["Raigarh", "Raigarh"],
+            "state_name": ["Chhattisgarh", "Maharashtra"],
+        },
+        geometry=[
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+            Polygon([(2, 0), (3, 0), (3, 1), (2, 1)]),
+        ],
+        crs="EPSG:4326",
+    )
+
+    keyed = ensure_key_column(
+        adm2,
+        state_col="state_name",
+        district_col="district_name",
+        alias_fn=lambda s: str(s).strip().lower(),
+    )
+
+    assert keyed["__key"].tolist() == [
+        "chhattisgarh|raigarh",
+        "maharashtra|raigarh",
+    ]

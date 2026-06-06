@@ -35,7 +35,7 @@ def _district_feature(*, district_name: str = "Adilabad", state_name: str = "Tel
         "properties": {
             "district_name": district_name,
             "state_name": state_name,
-            "__key": alias(district_name),
+            "__key": f"{alias(state_name)}|{alias(district_name)}",
         },
         "geometry": {"type": "Polygon", "coordinates": (((0, 0), (1, 0), (1, 1), (0, 0)),)},
     }

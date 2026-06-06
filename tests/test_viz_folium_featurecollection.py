@@ -89,6 +89,32 @@ def test_build_props_map_from_gdf_vectorizes_block_keys_and_patch_preserves_geom
     assert fc["features"][0]["properties"].get("fillColor") is None
 
 
+def test_build_props_map_from_gdf_uses_state_aware_district_keys() -> None:
+    prop_df = pd.DataFrame(
+        {
+            "state_name": ["Chhattisgarh", "Maharashtra"],
+            "district_name": ["Raigarh", "Raigarh"],
+            "tas_annual_mean": [30.0, 20.0],
+            "fillColor": ["#aa0000", "#00aa00"],
+            "_tooltip_value": ["30.0", "20.0"],
+        }
+    )
+
+    props_map, _value_cols, _text_cols = build_props_map_from_gdf(
+        prop_df,
+        level="district",
+        alias_fn=alias,
+        feature_key_col="__key",
+        metric_col="tas_annual_mean",
+        map_value_col="tas_annual_mean",
+    )
+
+    assert "chhattisgarh|raigarh" in props_map
+    assert "maharashtra|raigarh" in props_map
+    assert props_map["chhattisgarh|raigarh"]["state_name"] == "Chhattisgarh"
+    assert props_map["maharashtra|raigarh"]["state_name"] == "Maharashtra"
+
+
 def test_build_geojson_tooltip_omits_percentile_risk_class_for_jrc_flood_severity() -> None:
     tooltip = build_geojson_tooltip(
         level="block",

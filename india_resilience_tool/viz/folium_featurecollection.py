@@ -251,7 +251,9 @@ def build_props_map_from_gdf(
         elif level_norm == "basin":
             prop_work[feature_key_col] = _string_series(prop_work, "basin_id").map(alias_fn)
         else:
-            prop_work[feature_key_col] = _string_series(prop_work, "district_name").map(alias_fn)
+            state_key = _string_series(prop_work, "state_name").map(alias_fn)
+            district_key = _string_series(prop_work, "district_name").map(alias_fn)
+            prop_work[feature_key_col] = state_key.str.cat(district_key, sep="|")
 
     value_cols: list[str] = []
     for c in (
@@ -398,7 +400,15 @@ def patch_fc_properties(
                 props["basin_id"] = props.get("basin_id")
                 k = alias_fn(props.get("basin_id", ""))
             else:
-                k = alias_fn(props.get("district_name", ""))
+                props["district_name"] = props.get("district_name") or props.get("district")
+                props["state_name"] = (
+                    props.get("state_name")
+                    or props.get("state")
+                    or props.get("adm1_name")
+                    or props.get("shapeName_0")
+                    or props.get("shapeGroup")
+                )
+                k = f"{alias_fn(props.get('state_name', ''))}|{alias_fn(props.get('district_name', ''))}"
 
             props[feature_key_col] = k
 

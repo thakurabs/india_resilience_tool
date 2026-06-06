@@ -121,13 +121,15 @@ def merge_adm2_with_master(
     master_df: pd.DataFrame,
     *,
     alias_fn: Callable[[str], str],
+    adm2_state_col: str = "state_name",
     adm2_district_col: str = "district_name",
+    master_state_col: str = "state",
     master_district_col: str = "district",
     key_col: str = "__key",
     suffixes: tuple[str, str] = ("", "_csv"),
 ) -> pd.DataFrame:
     """
-    Deterministic left merge for districts using alias-normalized join keys.
+    Deterministic left merge for districts using state-aware alias-normalized join keys.
 
     Notes:
       - Does not mutate inputs.
@@ -137,8 +139,16 @@ def merge_adm2_with_master(
     dfc = master_df.copy()
 
     if key_col not in adm2c.columns:
-        adm2c[key_col] = adm2c[adm2_district_col].astype(str).map(alias_fn)
-    dfc[key_col] = dfc[master_district_col].astype(str).map(alias_fn)
+        adm2c[key_col] = (
+            adm2c[adm2_state_col].astype(str).map(alias_fn)
+            + "|"
+            + adm2c[adm2_district_col].astype(str).map(alias_fn)
+        )
+    dfc[key_col] = (
+        dfc[master_state_col].astype(str).map(alias_fn)
+        + "|"
+        + dfc[master_district_col].astype(str).map(alias_fn)
+    )
 
     merged = adm2c.merge(dfc, on=key_col, how="left", suffixes=suffixes).drop(columns=[key_col])
     return merged
@@ -311,7 +321,13 @@ def get_or_build_merged_for_index_cached(
     elif level == "block":
         merged = merge_adm3_with_master(boundary_c, master_c, alias_fn=alias_fn)
     else:
-        merged = merge_adm2_with_master(boundary_c, master_c, alias_fn=alias_fn)
+        merged = merge_adm2_with_master(
+            boundary_c,
+            master_c,
+            alias_fn=alias_fn,
+            adm2_state_col=adm2_state_col,
+            master_state_col=master_state_col,
+        )
 
     merged_cache[cache_key] = {"source_signature": source_signature, "gdf": merged}
     return merged

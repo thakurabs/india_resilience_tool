@@ -152,16 +152,23 @@ def load_local_adm2(
 def ensure_key_column(
     gdf: gpd.GeoDataFrame,
     *,
+    state_col: str = "state_name",
     district_col: str,
     alias_fn: Callable[[str], str],
     key_col: str = "__key",
 ) -> gpd.GeoDataFrame:
     """
-    Ensure a deterministic join key column exists.
+    Ensure a deterministic district join key column exists.
+
+    Key format: ``"{normalized_state}|{normalized_district}"``.
+    District names are not globally unique across India, so state-aware keys are
+    required for correct boundary/master joins and map property patching.
     """
     out = gdf.copy()
     if key_col not in out.columns:
-        out[key_col] = out[district_col].astype(str).map(alias_fn)
+        state_norm = out[state_col].astype(str).map(alias_fn)
+        district_norm = out[district_col].astype(str).map(alias_fn)
+        out[key_col] = state_norm.str.cat(district_norm, sep="|")
     return out
 
 

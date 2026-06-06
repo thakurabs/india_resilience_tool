@@ -216,3 +216,36 @@ def test_merge_ignores_nullable_master_states(tmp_path: Path) -> None:
     assert merged.shape[0] == 1
     assert merged["district_name"].tolist() == ["Alpha"]
     assert float(merged["m"].iloc[0]) == 1.0
+
+
+def test_district_merge_distinguishes_same_district_name_across_states(tmp_path: Path) -> None:
+    adm2 = pd.DataFrame(
+        {
+            "district_name": ["Raigarh", "Raigarh"],
+            "state_name": ["Chhattisgarh", "Maharashtra"],
+        }
+    )
+    master = pd.DataFrame(
+        {
+            "district": ["Raigarh", "Raigarh"],
+            "state": ["Chhattisgarh", "Maharashtra"],
+            "m": [11.0, 22.0],
+        }
+    )
+
+    master_path = tmp_path / "master.csv"
+    master_path.write_text("x\n1\n")
+
+    merged = get_or_build_merged_for_index_cached(
+        adm2,
+        master,
+        slug="demo",
+        master_path=master_path,
+        session_state={},
+        alias_fn=_alias,
+        adm2_state_col="state_name",
+        master_state_col="state",
+    )
+
+    by_state = merged.set_index("state_name")["m"].to_dict()
+    assert by_state == {"Chhattisgarh": 11.0, "Maharashtra": 22.0}
