@@ -1290,7 +1290,13 @@ def build_jrc_flood_depth_plan(
     ) or (str(getattr(args, "state", "") or "").strip().casefold() not in ("", "telangana"))
 
     if bool(args.overwrite) or scope.runtime_needed or explicit_builder_input or not include_runtime:
-        if include_blocks_geojson:
+        # CHG-0065: the JRC builder only *reads* the canonical blocks GeoJSON.
+        # Rebuilding it here would regenerate pipeline-wide boundaries (and trip
+        # its no-overwrite QA guard), so schedule blocks-geojson only when the
+        # canonical file is genuinely missing, or when --overwrite is explicit.
+        from india_resilience_tool.config.paths import get_paths_config
+        blocks_for_build = getattr(args, "blocks_path", None) or str(get_paths_config().blocks_path)
+        if include_blocks_geojson and (bool(args.overwrite) or not Path(blocks_for_build).exists()):
             plan.extend(build_blocks_geojson_plan(args))
         argv = _py_module_cmd("tools.geodata.build_jrc_flood_depth_admin_masters")
         argv.extend(_build_jrc_builder_args(args))
@@ -2071,9 +2077,9 @@ def build_cli() -> argparse.ArgumentParser:
         "jrc-flood-depth",
         help=(
             "Prepare the JRC flood-depth dashboard bundle for --state (default Telangana). "
-            "Caveat: this plan includes the blocks-geojson step; without --overwrite it fails "
-            "if canonical blocks QA already exists, and WITH --overwrite it rebuilds the "
-            "pipeline-wide canonical blocks GeoJSON as a side-effect (see tools/README.md)."
+            "Note: blocks-geojson is rebuilt only when the canonical blocks file is missing "
+            "or --overwrite is passed; with --overwrite it regenerates the pipeline-wide "
+            "canonical blocks GeoJSON as a side-effect (see tools/README.md)."
         ),
     )
     _add_common_runner_flags(p_jrc, include_runtime_controls=True)

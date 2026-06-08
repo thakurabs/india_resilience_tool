@@ -1333,6 +1333,36 @@ def test_jrc_explicit_state_forces_builder_and_publishes_full_set_when_audit_cle
     assert "--overwrite" not in build_step.argv
 
 
+def test_jrc_skips_blocks_geojson_when_canonical_blocks_exist(tmp_path) -> None:
+    # CHG-0065: a no-overwrite run with an existing canonical blocks file must NOT
+    # schedule blocks-geojson (the JRC builder only reads it).
+    blocks = tmp_path / "blocks_4326.geojson"
+    blocks.write_text("{}", encoding="utf-8")
+    args = _jrc_standalone_args(overwrite=False, blocks_path=str(blocks))
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp10"],
+        pending_metrics=["jrc_flood_depth_rp10"],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    labels = [s.label for s in plan]
+    assert "blocks-geojson" not in labels
+    assert labels[0] == "jrc-flood-depth-admin-masters"
+
+
+def test_jrc_builds_blocks_geojson_when_canonical_blocks_missing(tmp_path) -> None:
+    # CHG-0065: if the canonical blocks file is absent, it must still be built first.
+    missing = tmp_path / "does_not_exist" / "blocks_4326.geojson"
+    args = _jrc_standalone_args(overwrite=False, blocks_path=str(missing))
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp10"],
+        pending_metrics=["jrc_flood_depth_rp10"],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    assert [s.label for s in plan][0] == "blocks-geojson"
+
+
 def test_dashboard_package_maps_jrc_state_and_overlay_dir(monkeypatch) -> None:
     # Guards the synthetic-namespace dict-update: --jrc-state / --jrc-overlay-dir
     # must reach the builder without colliding with the package-level --state.
