@@ -9,6 +9,9 @@ per-unit values bit-for-bit (within fp tolerance).
 
 from __future__ import annotations
 
+import errno
+import os
+import threading
 from pathlib import Path
 
 import geopandas as gpd
@@ -458,3 +461,112 @@ def test_failure_before_write_leaves_no_cache(tmp_path: Path):
             level="district", cache_root=cache_root, index_range=idx, grid=wrong,
         )
     assert not list(cache_root.rglob("*.nc"))
+
+
+# --- _atomic_replace: Windows sharing-violation retry/accept (CHG-0062) -------
+
+def _sharing_error(msg: str = "sharing violation") -> OSError:
+    """An OSError that looks like a Windows ERROR_ACCESS_DENIED to the helper."""
+    err = OSError(errno.EACCES, msg)
+    err.winerror = 5  # ERROR_ACCESS_DENIED (set explicitly so it is testable on Linux)
+    return err
+
+
+def test_atomic_replace_retries_then_succeeds(tmp_path: Path, monkeypatch):
+    src = tmp_path / "src.bin"
+    dst = tmp_path / "dst.bin"
+    src.write_bytes(b"payload")
+    real_replace = os.replace
+    calls = {"n": 0}
+
+    def flaky(a, b):
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            raise _sharing_error()
+        return real_replace(a, b)
+
+    monkeypatch.setattr(gs.os, "replace", flaky)
+    moved = gs._atomic_replace(src, dst, accept_existing=True, base_delay=0.0, max_delay=0.0)
+    assert moved is True
+    assert calls["n"] == 4
+    assert dst.read_bytes() == b"payload"
+    assert not src.exists()
+
+
+def test_atomic_replace_accepts_identical_existing(tmp_path: Path, monkeypatch):
+    src = tmp_path / "src.bin"
+    dst = tmp_path / "dst.bin"
+    src.write_bytes(b"payload")
+    dst.write_bytes(b"payload")  # concurrent winner published byte-identical content
+
+    monkeypatch.setattr(gs.os, "replace", lambda a, b: (_ for _ in ()).throw(_sharing_error()))
+    moved = gs._atomic_replace(src, dst, accept_existing=True, retries=3, base_delay=0.0, max_delay=0.0)
+    assert moved is False  # accepted the existing equivalent payload
+    assert dst.read_bytes() == b"payload"
+
+
+def test_atomic_replace_rejects_differing_existing(tmp_path: Path, monkeypatch):
+    src = tmp_path / "src.bin"
+    dst = tmp_path / "dst.bin"
+    src.write_bytes(b"ours")
+    dst.write_bytes(b"theirs-different")  # exists but content differs -> must raise
+
+    monkeypatch.setattr(gs.os, "replace", lambda a, b: (_ for _ in ()).throw(_sharing_error()))
+    with pytest.raises(OSError):
+        gs._atomic_replace(src, dst, accept_existing=True, retries=3, base_delay=0.0, max_delay=0.0)
+
+
+def test_atomic_replace_raises_on_non_sharing_error(tmp_path: Path, monkeypatch):
+    src = tmp_path / "src.bin"
+    dst = tmp_path / "dst.bin"
+    src.write_bytes(b"payload")
+    calls = {"n": 0}
+
+    def boom(a, b):
+        calls["n"] += 1
+        raise OSError(errno.ENOSPC, "no space")  # no winerror -> not a sharing race
+
+    monkeypatch.setattr(gs.os, "replace", boom)
+    with pytest.raises(OSError):
+        gs._atomic_replace(src, dst, accept_existing=True, base_delay=0.0, max_delay=0.0)
+    assert calls["n"] == 1  # immediate raise, no retry
+
+
+def test_atomic_replace_sidecar_lands_or_raises(tmp_path: Path, monkeypatch):
+    # accept_existing=False (the sidecar path): never silently accept a stale dst.
+    src = tmp_path / "src.json"
+    dst = tmp_path / "dst.json"
+    src.write_text("{}")
+
+    monkeypatch.setattr(gs.os, "replace", lambda a, b: (_ for _ in ()).throw(_sharing_error()))
+    with pytest.raises(OSError):
+        gs._atomic_replace(src, dst, retries=3, base_delay=0.0, max_delay=0.0)
+
+
+def test_concurrent_grid_metric_writes_smoke(tmp_path: Path):
+    # Extra coverage: many threads publishing the same cache path must not raise,
+    # and the final cache must read back valid.
+    path = tmp_path / "grid_metrics" / "slug" / "M" / "g1" / "ssp245" / "2050.nc"
+    sidecar = {"method_version": gs.GRIDFIRST_SPATIAL_METHOD_VERSION, "grid_id": "g1"}
+    ds = xr.Dataset(
+        {"value": (("lat", "lon"), np.arange(4.0).reshape(2, 2))},
+        coords={"lat": [10.0, 11.0], "lon": [77.0, 78.0]},
+    )
+    errors: list[BaseException] = []
+
+    def worker():
+        try:
+            gs.write_grid_metric_cache(ds.copy(deep=True), path, sidecar=sidecar)
+        except BaseException as exc:  # noqa: BLE001 - surface any escape
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, errors
+    out = gs.read_grid_metric_cache(path, expected_sidecar=sidecar)
+    assert out is not None
+    np.testing.assert_array_equal(out["value"].values, ds["value"].values)

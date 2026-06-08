@@ -7,10 +7,13 @@ compatibility while Drought Risk v2 imports them directly.
 
 from __future__ import annotations
 
+import filecmp
 import hashlib
 import json
 import os
+import random
 import sys
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -423,6 +426,63 @@ def coverage_from_weights(gdf: gpd.GeoDataFrame, weights: pd.DataFrame, *, level
     return pd.DataFrame(rows)
 
 
+_WINDOWS_SHARING_WINERRORS = (5, 32)  # ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION
+
+
+def _is_sharing_violation(err: OSError) -> bool:
+    """True only for Windows file-sharing violations we may retry/tolerate."""
+    return getattr(err, "winerror", None) in _WINDOWS_SHARING_WINERRORS
+
+
+def _files_equal(a: Path, b: Path) -> bool:
+    """Byte-exact comparison; False on any read error (treat as not-equal)."""
+    try:
+        return filecmp.cmp(os.fspath(a), os.fspath(b), shallow=False)
+    except OSError:
+        return False
+
+
+def _atomic_replace(
+    src: Path,
+    dst: Path,
+    *,
+    accept_existing: bool = False,
+    retries: int = 10,
+    base_delay: float = 0.05,
+    max_delay: float = 0.5,
+) -> bool:
+    """Atomically move ``src`` onto ``dst``, tolerating Windows sharing races.
+
+    Retries **only** Windows sharing violations (winerror 5/32) -- e.g. the source
+    temp briefly held open by HDF5 after ``to_netcdf``, or ``dst`` open by a
+    concurrent reader -- with exponential backoff + jitter. Any other ``OSError``
+    re-raises immediately so genuine filesystem errors are never masked.
+
+    Returns ``True`` if ``src`` was moved into place. Returns ``False`` only when
+    ``accept_existing`` is set, retries are exhausted on a sharing violation, and
+    ``dst`` already exists with **byte-identical** content (a concurrent writer
+    published an equivalent payload). Otherwise re-raises the last error.
+    """
+    src = Path(src)
+    dst = Path(dst)
+    last_err: OSError | None = None
+    for attempt in range(retries):
+        try:
+            os.replace(src, dst)
+            return True
+        except FileNotFoundError:
+            raise  # source vanished -- real error, not a sharing race
+        except OSError as err:
+            if not _is_sharing_violation(err):
+                raise
+            last_err = err
+            time.sleep(min(base_delay * (2 ** attempt), max_delay) + random.random() * base_delay)
+    if accept_existing and dst.exists() and _files_equal(src, dst):
+        return False
+    assert last_err is not None
+    raise last_err
+
+
 def write_spatial_weights_cache(
     weights: pd.DataFrame,
     *,
@@ -456,8 +516,8 @@ def write_spatial_weights_cache(
     try:
         weights.to_parquet(tmp_path, index=False)
         tmp_sidecar.write_text(json.dumps(sidecar, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp_sidecar, sidecar_path)
-        os.replace(tmp_path, output_path)
+        if _atomic_replace(tmp_path, output_path, accept_existing=True):
+            _atomic_replace(tmp_sidecar, sidecar_path)
     finally:
         for leftover in (tmp_path, tmp_sidecar):
             try:
@@ -564,8 +624,8 @@ def write_grid_metric_cache(ds: xr.Dataset, path: Path, *, sidecar: Mapping[str,
         final_sidecar = dict(sidecar)
         final_sidecar["cache_blob_sha256"] = _blob_sha256(tmp_path)
         tmp_sidecar.write_text(json.dumps(final_sidecar, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp_sidecar, path.with_suffix(path.suffix + ".json"))
-        os.replace(tmp_path, path)
+        if _atomic_replace(tmp_path, path, accept_existing=True):
+            _atomic_replace(tmp_sidecar, path.with_suffix(path.suffix + ".json"))
     finally:
         for leftover in (tmp_path, tmp_sidecar):
             try:
@@ -820,8 +880,8 @@ def write_threshold_cache(
     try:
         threshold.to_dataset(name="threshold").to_netcdf(tmp_path)
         tmp_sidecar.write_text(json.dumps(sidecar, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(tmp_sidecar, sidecar_path)
-        os.replace(tmp_path, path)
+        if _atomic_replace(tmp_path, path, accept_existing=True):
+            _atomic_replace(tmp_sidecar, sidecar_path)
     finally:
         for leftover in (tmp_path, tmp_sidecar):
             try:
