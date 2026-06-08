@@ -626,7 +626,7 @@ Preview first:
 python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 ```
 
-Optional JRC flood-depth pilot:
+Optional JRC flood-depth prep:
 
 ```bash
 python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
@@ -635,6 +635,12 @@ python -m tools.runs.prepare_dashboard dashboard-package --include-jrc-flood-dep
 
 For JRC flood-depth prep, runner `--overwrite` refreshes the selected state's JRC masters and QA outputs but does not wipe unrelated
 `processed_optimised` metric artifacts.
+
+For the full dashboard-ready Riverine Flood bundle for one state, including district and block composite publish:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra -JrcDir D:/projects/irt_data/Floodlayers_JRC
+```
 
 ### Build population exposure masters
 
@@ -710,6 +716,20 @@ and uses total-polygon-area semantics, with raster-supported area retained in QA
 index now combines RP-100 depth and RP-100 extent through the fixed 5x5 severity matrix, and the `run_summary.csv`
 records that provenance with a `derived_severity_matrix` row. Rebuild the JRC masters and optimized outputs after
 pulling this change because older persisted `jrc_flood_depth_index_rp100` outputs are methodologically incompatible.
+
+### Refresh the full Riverine Flood bundle for one state
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra -JrcDir D:/projects/irt_data/Floodlayers_JRC
+```
+
+This script runs the full admin Riverine Flood workflow for the selected state:
+1. `prepare_dashboard jrc-flood-depth` to build state-scoped JRC masters
+2. `build_composite_metrics` for `composite_flood_jrc_depth` at `district` and `block`
+3. `build_processed_optimised` scoped to the selected state and Riverine Flood metrics
+4. `audit_processed_optimised_parity` scoped to the selected state and Riverine Flood metrics
+
+Use `-PlanOnly` to print the exact commands without running them.
 
 ### Rebuild the canonical block boundaries
 

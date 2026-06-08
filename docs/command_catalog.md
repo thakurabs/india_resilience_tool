@@ -284,10 +284,10 @@ This bundle writes district-only masters for:
 - `gw_extractable_resource_ham`
 - `gw_total_extraction_ham`
 
-### Build Telangana JRC flood-depth masters
+### Build JRC flood-depth masters for one state
 
 ```bash
-python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.runs.prepare_dashboard jrc-flood-depth --state Telangana --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
 ```
 
 This bundle runs:
@@ -297,7 +297,7 @@ This bundle runs:
 4. `processed-optimised-audit`
 
 Notes:
-- Telangana-only pilot coverage
+- state-scoped coverage for the selected `--state`
 - fixed snapshot selectors: `snapshot`, `Current`, `mean`
 - the JRC workflow now also writes the derived `jrc_flood_depth_index_rp100` Flood Severity Index masters exposed only under `Bio-physical Hazards -> Flood Inundation Depth (JRC)` in this pass
 - the same RP-100 workflow also writes `jrc_flood_extent_rp100`, stored as a `0-1` fraction and displayed as a percent
@@ -308,6 +308,20 @@ Notes:
 - runner `--overwrite` refreshes JRC masters and QA outputs without wiping unrelated `processed_optimised` artifacts
 - zero values inside raster extent are treated as dry cells for this JRC raster family
 - `dashboard-package --include-jrc-flood-depth` also requires `--jrc-source-dir` and `--jrc-assume-units m` unless `--audit-only` is set
+
+### Refresh the full Riverine Flood bundle for one state
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra -JrcDir D:/projects/irt_data/Floodlayers_JRC
+```
+
+This script runs:
+1. `python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> --source-dir <JRC_DIR> --assume-units m [--overwrite]`
+2. `python -m tools.pipeline.build_composite_metrics --metric composite_flood_jrc_depth --state <STATE> --level district --level block [--overwrite]`
+3. `python -m tools.optimized.build_processed_optimised --state <STATE> --level district --level block --metric composite_flood_jrc_depth --metric jrc_flood_depth_index_rp100 --metric jrc_flood_extent_rp100 --metric jrc_flood_depth_rp100 --skip-audit`
+4. `python -m tools.optimized.audit_processed_optimised_parity --state <STATE> --level district --level block --metric composite_flood_jrc_depth --metric jrc_flood_depth_index_rp100 --metric jrc_flood_extent_rp100 --metric jrc_flood_depth_rp100`
+
+Use `-PlanOnly` to print the exact commands without running them.
 
 ### Prepare the dashboard package end to end
 
