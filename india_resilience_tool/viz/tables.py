@@ -117,12 +117,12 @@ def build_rankings_table_df(
     # For "higher is worse" metrics, biggest positive delta = worst (descending).
     # For "lower is worse" metrics, most negative delta = worst (ascending).
     if has_baseline and "delta_abs" in table_df.columns:
-        if table_df["delta_abs"].notna().any():
-            table_df["rank_delta"] = (
-                table_df["delta_abs"]
-                .rank(ascending=not rank_descending, method="min")
-                .astype(int)
-            )
+        delta_rank = table_df["delta_abs"].rank(
+            ascending=not rank_descending,
+            method="min",
+        )
+        if delta_rank.notna().any():
+            table_df["rank_delta"] = delta_rank.astype("Int64")
 
     # Carry aspirational flag if present
     if aspirational_col in ranking_df.columns:
