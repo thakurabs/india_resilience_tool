@@ -2067,7 +2067,15 @@ def build_cli() -> argparse.ArgumentParser:
     _add_common_runner_flags(p_groundwater, include_runtime_controls=True)
     _add_groundwater_flags(p_groundwater)
 
-    p_jrc = subparsers.add_parser("jrc-flood-depth", help="Prepare the Telangana JRC flood-depth dashboard bundle.")
+    p_jrc = subparsers.add_parser(
+        "jrc-flood-depth",
+        help=(
+            "Prepare the JRC flood-depth dashboard bundle for --state (default Telangana). "
+            "Caveat: this plan includes the blocks-geojson step; without --overwrite it fails "
+            "if canonical blocks QA already exists, and WITH --overwrite it rebuilds the "
+            "pipeline-wide canonical blocks GeoJSON as a side-effect (see tools/README.md)."
+        ),
+    )
     _add_common_runner_flags(p_jrc, include_runtime_controls=True)
     _add_jrc_flags(p_jrc, prefixed=False)
 

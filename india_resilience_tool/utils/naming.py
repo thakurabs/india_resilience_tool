@@ -28,6 +28,16 @@ NAME_ALIASES: dict[str, str] = {
     "b r ambedkar bhupalpally": "jayashankar bhupalpalli",
     "bhadradri kothagudem": "bhadradri kothagudem",
     "jogulamba gadwal": "jogulamba gadwal",
+    # Maharashtra: canonical block-boundary spellings -> district-boundary
+    # (census) spellings, so block<->district joins reconcile. Keys/values are in
+    # normalize_name form (lowercase, spaces preserved); aliasing runs before
+    # compaction. Join keys are state-prefixed, so these cannot collide cross-state.
+    "ahamadnagar": "ahmednagar",
+    "amaravati": "amravati",
+    "bid": "beed",
+    "mumbai city": "mumbai",
+    "sub urban mumbai": "mumbai suburban",
+    "raygad": "raigarh",
 }
 
 

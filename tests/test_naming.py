@@ -22,3 +22,23 @@ def test_alias_applies_default_aliases() -> None:
 
 def test_normalize_compact_removes_spaces() -> None:
     assert normalize_compact("Sanga Reddy") == "sangareddy"
+
+
+def test_maharashtra_block_and_district_spellings_reconcile() -> None:
+    # CHG-0066: block-boundary vs district-boundary spellings for 6 Maharashtra
+    # districts must compact to the same key so block<->district joins succeed.
+    pairs = [
+        ("Ahamadnagar", "AHMEDNAGAR"),
+        ("Amaravati", "AMRAVATI"),
+        ("Bid", "BEED"),
+        ("Mumbai City", "MUMBAI"),
+        ("Sub Urban Mumbai", "MUMBAI SUBURBAN"),
+        ("Raygad", "RAIGARH"),
+    ]
+    for block_name, district_name in pairs:
+        assert normalize_compact(block_name) == normalize_compact(district_name), (
+            f"{block_name!r} did not reconcile with {district_name!r}"
+        )
+
+    # Distinct Mumbai districts must NOT collapse into each other.
+    assert normalize_compact("Mumbai City") != normalize_compact("Sub Urban Mumbai")
