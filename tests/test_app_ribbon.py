@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -11,6 +12,7 @@ from india_resilience_tool.app.ribbon import (
     _resolve_admin_master_source,
     _resolve_external_admin_master_sources,
     _resolve_hydro_master_source,
+    _selected_state_for_admin_master_loading,
 )
 
 
@@ -356,3 +358,22 @@ def test_domain_options_for_non_dashboard_context_preserve_existing_registry_ord
     )
 
     assert options == ["Population Exposure", "Aqueduct Water Risk"]
+
+
+def test_selected_state_for_admin_master_loading_clamps_to_supported_metric_states(monkeypatch) -> None:
+    import india_resilience_tool.app.ribbon as ribbon
+
+    monkeypatch.setattr(
+        ribbon,
+        "st",
+        SimpleNamespace(
+            session_state={
+                "selected_var": "restricted_metric",
+                "selected_state": "Maharashtra",
+                "pending_selected_state": "Maharashtra",
+            }
+        ),
+    )
+    monkeypatch.setitem(ribbon.VARIABLES, "restricted_metric", {"supported_admin_states": ["Telangana"]})
+
+    assert _selected_state_for_admin_master_loading() == "Telangana"

@@ -2407,7 +2407,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "class_labels": SEVERITY_CLASS_LABELS,
         "class_display_mode": "label_with_score",
         "description": (
-            "Telangana-only ordinal severity class derived from RP-100 JRC flood depth "
+            "Ordinal severity class derived from RP-100 JRC flood depth "
             "and RP-100 flood extent using a fixed 5x5 depth-by-extent scoring matrix. "
             "Depth uses flooded-cell p95 block depth and flooded-area-weighted district "
             "depth; extent uses the share of total polygon area covered by positive "
@@ -2423,14 +2423,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2444,7 +2443,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "display_units": "%",
         "display_scale": 100.0,
         "description": (
-            "Telangana-only JRC RP-100 flood extent, defined as the share of total polygon "
+            "JRC RP-100 flood extent, defined as the share of total polygon "
             "area covered by positive modeled flood depth. Block and district values are "
             "both based on total polygon area, while raster-supported area is retained as QA."
         ),
@@ -2457,14 +2456,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2476,7 +2474,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "periods_metric_col": "jrc_flood_depth_rp10",
         "units": "m",
         "description": (
-            "Telangana-only JRC flood-depth snapshot for the 10-year return period. "
+            "JRC flood-depth snapshot for the 10-year return period. "
             "Block values use flooded-cell p95 depth and district values use flooded-area-"
             "weighted means of child block flooded-cell p95 depth. This is an externally "
             "sourced inundation layer, not a climate scenario projection."
@@ -2490,14 +2488,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2509,7 +2506,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "periods_metric_col": "jrc_flood_depth_rp50",
         "units": "m",
         "description": (
-            "Telangana-only JRC flood-depth snapshot for the 50-year return period. "
+            "JRC flood-depth snapshot for the 50-year return period. "
             "Block values use flooded-cell p95 depth and district values use flooded-area-"
             "weighted means of child block flooded-cell p95 depth. This is an externally "
             "sourced inundation layer, not a climate scenario projection."
@@ -2523,14 +2520,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2542,7 +2538,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "periods_metric_col": "jrc_flood_depth_rp100",
         "units": "m",
         "description": (
-            "Telangana-only JRC flood-depth snapshot for the 100-year return period. "
+            "JRC flood-depth snapshot for the 100-year return period. "
             "Block values use flooded-cell p95 depth and district values use flooded-area-"
             "weighted means of child block flooded-cell p95 depth. This is an externally "
             "sourced inundation layer, not a climate scenario projection."
@@ -2556,14 +2552,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2575,7 +2570,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "periods_metric_col": "jrc_flood_depth_rp500",
         "units": "m",
         "description": (
-            "Telangana-only JRC flood-depth snapshot for the 500-year return period. "
+            "JRC flood-depth snapshot for the 500-year return period. "
             "Block values use flooded-cell p95 depth and district values use flooded-area-"
             "weighted means of child block flooded-cell p95 depth. This is an externally "
             "sourced inundation layer, not a climate scenario projection."
@@ -2589,14 +2584,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -3018,9 +3012,10 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "future groundwater availability."
     ),
     "Riverine Flood": (
-        "Telangana-only JRC flood snapshot domain covering RP-100 Flood Extent "
-        "and RP-100 Flood Depth. Flood extent uses total polygon area; depth uses "
-        "flooded-cell p95 block depth and flooded-area-weighted district rollups."
+        "JRC flood snapshot domain covering RP-100 Flood Extent and RP-100 Flood Depth. "
+        "Flood extent uses total polygon area; depth uses flooded-cell p95 block depth "
+        "and flooded-area-weighted district rollups. State availability depends on which "
+        "state-scoped JRC masters have been built and published."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "

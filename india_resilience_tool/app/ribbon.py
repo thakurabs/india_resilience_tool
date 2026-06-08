@@ -151,12 +151,28 @@ def _metric_rebuild_command(varcfg: Optional[dict], *, level: str) -> Optional[s
 
 
 def _selected_state_for_admin_master_loading() -> str:
-    """Return the best available admin-state selection for master loading."""
+    """Return the best available admin-state selection for master loading.
+
+    If a metric declares restricted admin-state support, clamp the pending/current
+    state before resolving master sources. This avoids loading a stale state
+    shard that the sidebar will replace later in the same rerun.
+    """
     pending = st.session_state.get("pending_selected_state")
     if pending not in (None, ""):
-        return str(pending).strip() or "All"
-    selected = st.session_state.get("selected_state", "All")
-    return str(selected).strip() or "All"
+        candidate = str(pending).strip() or "All"
+    else:
+        selected = st.session_state.get("selected_state", "All")
+        candidate = str(selected).strip() or "All"
+
+    slug = str(st.session_state.get("selected_var", "") or "").strip()
+    supported_states = [
+        str(state).strip()
+        for state in ((VARIABLES.get(slug) or {}).get("supported_admin_states") or ())
+        if str(state).strip()
+    ]
+    if supported_states and candidate not in supported_states:
+        return supported_states[0]
+    return candidate
 
 
 def _domain_display_label(domain: str) -> str:

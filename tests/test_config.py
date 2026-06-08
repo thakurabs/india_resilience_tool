@@ -133,8 +133,8 @@ def test_groundwater_metrics_are_exposed_as_static_district_layers() -> None:
         assert "Bio-physical Hazards" in cfg["pillars"]
 
 
-def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
-    """JRC metrics should appear as static Telangana-only admin layers."""
+def test_jrc_metrics_are_exposed_as_static_admin_layers() -> None:
+    """JRC metrics should appear as static admin layers without hard-coded state gating."""
     from india_resilience_tool.config.variables import VARIABLES
 
     for slug, label in [
@@ -155,7 +155,7 @@ def test_jrc_metrics_are_exposed_as_static_telangana_admin_layers() -> None:
         assert cfg["supports_yearly_trend"] is False
         assert cfg["supports_baseline_comparison"] is False
         assert cfg["supports_scenario_comparison"] is False
-        assert cfg["supported_admin_states"] == ["Telangana"]
+        assert cfg["supported_admin_states"] == []
         if slug == "jrc_flood_extent_rp100":
             assert cfg["units"] == "fraction"
             assert cfg["display_units"] == "%"

@@ -77,7 +77,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - optional `Reference overlays` sidebar section across admin and hydro views can display the display-only agricultural LULC raster overlay
   - the dashboard runtime reads only exported LULC overlay PNG/metadata artifacts, not the raw TIFF
 - JRC flood-depth onboarding:
-  - Telangana-only district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)`
+  - state-scoped district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)` for any state whose JRC masters have been built and published
   - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
   - derived `RP-100 Flood Extent` persisted from the RP-100 depth layer as the share of total polygon area covered by positive depth
   - `RP-10 Flood Depth`, `RP-50 Flood Depth`, `RP-100 Flood Depth`, `RP-500 Flood Depth`
@@ -615,7 +615,7 @@ python -m tools.runs.prepare_dashboard climate-hazards --level hydro --audit-onl
 python -m tools.runs.prepare_dashboard dashboard-package
 ```
 
-This bundle includes climate hazards, Aqueduct, population exposure, groundwater prep, and optional Telangana JRC flood-depth prep,
+This bundle includes climate hazards, Aqueduct, population exposure, groundwater prep, and optional JRC flood-depth prep,
 and now refreshes `processed_optimised` plus the final audit as part of the same run.
 When block-level products are part of the run, the runner now refreshes the canonical
 `IRT_DATA_DIR/blocks_4326.geojson` first.
@@ -633,7 +633,7 @@ python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Flo
 python -m tools.runs.prepare_dashboard dashboard-package --include-jrc-flood-depth --jrc-source-dir /path/to/Floodlayers_JRC --jrc-assume-units m --overwrite
 ```
 
-For the JRC pilot, runner `--overwrite` refreshes the Telangana JRC masters and QA outputs but does not wipe unrelated
+For JRC flood-depth prep, runner `--overwrite` refreshes the selected state's JRC masters and QA outputs but does not wipe unrelated
 `processed_optimised` metric artifacts.
 
 ### Build population exposure masters
@@ -681,14 +681,14 @@ district GeoJSON through an explicit alias workflow, and writes:
 - `processed/gw_extractable_resource_ham/{state}/master_metrics_by_district.csv`
 - `processed/gw_total_extraction_ham/{state}/master_metrics_by_district.csv`
 
-### Build Telangana JRC flood-depth masters
+### Build JRC flood-depth masters for one state
 
 ```bash
-python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
-python -m tools.geodata.build_jrc_flood_depth_admin_masters --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.runs.prepare_dashboard jrc-flood-depth --state Telangana --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.geodata.build_jrc_flood_depth_admin_masters --state Telangana --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
 ```
 
-This builds Telangana-only district and block snapshot masters for:
+This builds district and block snapshot masters for the selected state. For example, `--state Telangana` writes:
 - `processed/jrc_flood_depth_index_rp100/Telangana/master_metrics_by_district.csv`
 - `processed/jrc_flood_depth_index_rp100/Telangana/master_metrics_by_block.csv`
 - `processed/jrc_flood_extent_rp100/Telangana/master_metrics_by_district.csv`
