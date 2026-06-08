@@ -25,7 +25,7 @@ BUILT_UP_AREA_LABEL = "Built-up area exposure"
 LULC_AGRI_LABEL = "Agricultural LULC exposure"
 RIVER_LABEL = "River network"
 FLOOD_UNAVAILABLE_CAPTION = (
-    "Available for Telangana and All-state admin views when the RP-100 overlay artifact is present."
+    "Available for district and block admin views when the RP-100 overlay artifact is present."
 )
 POPULATION_UNAVAILABLE_CAPTION = (
     "Available across all map levels when the population exposure overlay artifact is present."
@@ -960,16 +960,13 @@ def resolve_overlay_control_states(
     ensure_overlay_session_state(session_state)
     family = str(spatial_family or "").strip().lower()
     level = str(admin_level or "").strip().lower()
-    selected_state_norm = str(selected_state or "All").strip()
     selected_basin_norm = str(selected_basin or "All").strip()
 
     flood_visible = family == "admin" and level in {"district", "block"}
     flood_png, _flood_meta, flood_reason = discover_rp100_overlay_artifact(data_dir=data_dir)
-    flood_available = (
-        flood_visible
-        and flood_png is not None
-        and selected_state_norm in {"All", "Telangana"}
-    )
+    # The RP-100 overlay is pan-India (raster-derived, state-independent), so it is
+    # available for any admin state at district/block level once the artifact exists.
+    flood_available = flood_visible and flood_png is not None
 
     pop_visible = True
     pop_png, _pop_meta, pop_reason = discover_population_exposure_overlay_artifact(data_dir=data_dir)

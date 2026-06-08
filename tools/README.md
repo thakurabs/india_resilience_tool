@@ -40,7 +40,7 @@ python -m tools.runs.prepare_dashboard aqueduct
 ```
 
 ```bash
-python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --plan-only
+python -m tools.runs.prepare_dashboard jrc-flood-depth --state Maharashtra --source-dir /path/to/Floodlayers_JRC --assume-units m --plan-only
 ```
 
 ```bash
@@ -143,7 +143,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/geodata/build_population_admin_masters.py` | Build district and block population exposure masters (`population_total`, `population_density`) and the display-only population overlay PNG/metadata from the 2025 raster | `python -m tools.geodata.build_population_admin_masters --help` |
 | `tools/geodata/build_lulc_admin_masters.py` | Build district and block agricultural LULC exposure masters (`lulc_agri_area_km2`, `lulc_agri_share_pct`) and the display-only binary agricultural LULC overlay PNG/metadata from `LULC_2_Agri.tif` | `python -m tools.geodata.build_lulc_admin_masters --help` |
 | `tools/geodata/build_groundwater_district_masters.py` | Build district groundwater assessment masters from the 2024-2025 GEC workbook with district-alias QA outputs | `python -m tools.geodata.build_groundwater_district_masters --help` |
-| `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build Telangana district/block JRC flood-depth masters using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 flood-index, flood-extent masters, RP-100 display overlay artifacts, and stable QA CSVs | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
+| `tools/geodata/build_jrc_flood_depth_admin_masters.py` | Build per-state (`--state`, default Telangana) district/block JRC flood-depth masters using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 flood-index, flood-extent masters, RP-100 display overlay artifacts (pan-India, shared), and state-scoped QA CSVs | `python -m tools.geodata.build_jrc_flood_depth_admin_masters --help` |
 | `tools/optimized/build_processed_optimised.py` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree plus canonical geometry/context files, including persisted Glance view models, exact pre-scan task counting, deterministic parallel yearly processing, level filtering, nested terminal progress bars, and a post-build parity audit | `python -m tools.optimized.build_processed_optimised --help` |
 | `tools/optimized/audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the dashboard-visible legacy processed contract, with optional level filtering, and emit `parity_report.json` | `python -m tools.optimized.audit_processed_optimised_parity --help` |
 | `tools/geodata/validate_aqueduct_workflow.py` | Validate the Aqueduct cleanup, crosswalk, coverage, sensitivity, and master-value workflow and write per-metric validation bundles under `IRT_DATA_DIR/aqueduct/validation/{metric_slug}/` | `python -m tools.geodata.validate_aqueduct_workflow --help` |

@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Build Telangana district and block JRC flood-depth masters.
+Build district and block JRC flood-depth masters for a selected state.
 
 This tool aggregates four fixed return-period flood-depth rasters from JRC onto
-canonical Telangana admin polygons. Block values use the p95 flooded-cell depth
-within each polygon, while district values use a flooded-area-weighted mean of
-child block p95 depths with QA outputs. The RP-100 pass also emits derived
-flood-severity-index and flood-extent products with dedicated QA.
+canonical admin polygons for the state given by ``--state`` (default Telangana).
+Block values use the p95 flooded-cell depth within each polygon, while district
+values use a flooded-area-weighted mean of child block p95 depths with QA
+outputs. The RP-100 pass also emits derived flood-severity-index and
+flood-extent products with dedicated QA. The RP-100 display overlay is pan-India
+(raster-derived, state-independent) and is written to a shared location.
 """
 
 from __future__ import annotations
@@ -144,7 +146,7 @@ def _quantile_linear(values: np.ndarray, q: float) -> float:
 
 @dataclass(frozen=True)
 class AdminJoinValidation:
-    """Preflight district/block alignment diagnostics for Telangana boundaries."""
+    """Preflight district/block alignment diagnostics for the selected state's boundaries."""
 
     qa_df: pd.DataFrame
     missing_in_blocks: int
@@ -152,8 +154,8 @@ class AdminJoinValidation:
     duplicate_within_source: int
 
 
-def _default_qa_dir() -> Path:
-    return get_paths_config().data_dir / "jrc_flood_depth" / "qa"
+def _default_qa_dir(state: str) -> Path:
+    return get_paths_config().data_dir / "jrc_flood_depth" / state / "qa"
 
 
 def _default_overlay_dir() -> Path:
@@ -291,6 +293,14 @@ def export_rp100_depth_overlay(
     """Export the canonical RP-100 display-only overlay PNG and metadata JSON."""
     png_path, meta_path = _rp100_overlay_paths(overlay_dir=overlay_dir)
     if not overwrite:
+        if png_path.exists() and meta_path.exists():
+            # Pan-India overlay already published (e.g. by a prior state's run);
+            # it is raster-derived and state-independent, so reuse it as-is.
+            try:
+                metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001 - tolerate unreadable sidecar
+                metadata = {}
+            return {"png_path": png_path, "meta_path": meta_path, "metadata": metadata, "skipped": True}
         existing = [path for path in (png_path, meta_path) if path.exists()]
         if existing:
             raise FileExistsError(
@@ -360,23 +370,24 @@ def export_rp100_depth_overlay(
     return {"png_path": png_path, "meta_path": meta_path, "metadata": metadata}
 
 
-def _load_telangana_admin(
+def _load_state_admin(
     *,
+    state: str,
     districts_path: Path,
     blocks_path: Path,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     districts = load_district_boundaries(districts_path)
     blocks = load_block_boundaries(blocks_path)
     districts = districts.loc[
-        districts["state_name"].astype(str).str.strip().str.casefold() == TARGET_STATE.casefold()
+        districts["state_name"].astype(str).str.strip().str.casefold() == state.casefold()
     ].copy()
     blocks = blocks.loc[
-        blocks["state_name"].astype(str).str.strip().str.casefold() == TARGET_STATE.casefold()
+        blocks["state_name"].astype(str).str.strip().str.casefold() == state.casefold()
     ].copy()
     if districts.empty:
-        raise ValueError(f"No Telangana district rows found in {districts_path}")
+        raise ValueError(f"No {state} district rows found in {districts_path}")
     if blocks.empty:
-        raise ValueError(f"No Telangana block rows found in {blocks_path}")
+        raise ValueError(f"No {state} block rows found in {blocks_path}")
     return districts.reset_index(drop=True), blocks.reset_index(drop=True)
 
 
@@ -469,7 +480,7 @@ def _raise_admin_join_error(validation: AdminJoinValidation, *, qa_path: Path) -
         .to_dict(orient="records")
     )
     raise ValueError(
-        "Telangana district/block boundary alignment failed before raster aggregation: "
+        "District/block boundary alignment failed before raster aggregation: "
         f"missing_in_blocks={validation.missing_in_blocks}, "
         f"missing_in_districts={validation.missing_in_districts}, "
         f"duplicate_within_source={validation.duplicate_within_source}. "
@@ -548,6 +559,7 @@ def _build_block_frames(
     block_gdf: gpd.GeoDataFrame,
     dataset: rasterio.io.DatasetReader,
     metric_slug: str,
+    state: str = TARGET_STATE,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     col = _derived_metric_column(metric_slug)
     block_raster = block_gdf.to_crs(dataset.crs).copy()
@@ -581,7 +593,7 @@ def _build_block_frames(
 
         master_rows.append(
             {
-                "state": TARGET_STATE,
+                "state": state,
                 "district": src_row.district_name,
                 "block": src_row.block_name,
                 "block_key": src_row.block_key,
@@ -591,7 +603,7 @@ def _build_block_frames(
         )
         qa_rows.append(
             {
-                "state": TARGET_STATE,
+                "state": state,
                 "district": src_row.district_name,
                 "block": src_row.block_name,
                 "block_key": src_row.block_key,
@@ -625,6 +637,7 @@ def _build_district_frames(
     block_qa_df: pd.DataFrame,
     dataset: rasterio.io.DatasetReader,
     metric_slug: str,
+    state: str = TARGET_STATE,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     col = _derived_metric_column(metric_slug)
     district_raster = district_gdf.to_crs(dataset.crs).copy()
@@ -637,7 +650,7 @@ def _build_district_frames(
     )
     block_join_keys = pd.Series(
         [
-            _district_join_key(TARGET_STATE, district_name)
+            _district_join_key(state, district_name)
             for district_name in block_master_df["district"]
         ],
         index=block_master_df.index,
@@ -653,7 +666,7 @@ def _build_district_frames(
         ].copy()
         if district_blocks.empty:
             raise ValueError(
-                f"District {src_row.district_name!r} has no Telangana child blocks after normalized matching."
+                f"District {src_row.district_name!r} has no {state} child blocks after normalized matching."
             )
         district_blocks = district_blocks.merge(
             block_qa_df[
@@ -765,7 +778,7 @@ def _build_district_frames(
 
         master_rows.append(
             {
-                "state": TARGET_STATE,
+                "state": state,
                 "district": src_row.district_name,
                 "district_key": src_row.district_key,
                 "district_area_km2": district_area_km2,
@@ -774,7 +787,7 @@ def _build_district_frames(
         )
         qa_rows.append(
             {
-                "state": TARGET_STATE,
+                "state": state,
                 "district": src_row.district_name,
                 "district_key": src_row.district_key,
                 "district_area_km2": district_area_km2,
@@ -1093,6 +1106,7 @@ def _build_derived_index_outputs(
 def _build_derived_extent_outputs(
     *,
     raw_output: dict[str, pd.DataFrame],
+    state: str = TARGET_STATE,
 ) -> dict[str, pd.DataFrame]:
     """Build the persisted RP100 flood-extent masters and QA frames."""
     derived_col = _derived_metric_column(DERIVED_EXTENT_METRIC_SLUG)
@@ -1119,7 +1133,7 @@ def _build_derived_extent_outputs(
         ],
     ].copy()
     block_qa["district_join_key"] = block_qa["district"].map(
-        lambda value: _district_join_key(TARGET_STATE, value)
+        lambda value: _district_join_key(state, value)
     )
     block_qa["has_raster_overlap"] = block_qa["total_in_polygon_cell_count"].gt(0)
     block_qa["has_valid_support"] = block_qa["valid_in_polygon_cell_count"].gt(0)
@@ -1137,7 +1151,7 @@ def _build_derived_extent_outputs(
         ["district", "district_key", "district_area_km2"],
     ].copy()
     district_lookup["district_join_key"] = district_lookup["district"].map(
-        lambda value: _district_join_key(TARGET_STATE, value)
+        lambda value: _district_join_key(state, value)
     )
     district_qa_rows: list[dict[str, object]] = []
     for district_row in district_lookup.itertuples(index=False):
@@ -1175,7 +1189,7 @@ def _build_derived_extent_outputs(
 
         district_qa_rows.append(
             {
-                "state": TARGET_STATE,
+                "state": state,
                 "district": district_row.district,
                 "district_key": district_row.district_key,
                 "district_area_km2": district_area_km2,
@@ -1226,9 +1240,9 @@ def _write_master(df: pd.DataFrame, path: Path, *, overwrite: bool) -> None:
     df.to_parquet(parquet_path, index=False)
 
 
-def _expected_output_paths(*, metric_slug: str, qa_dir: Path) -> list[Path]:
+def _expected_output_paths(*, metric_slug: str, qa_dir: Path, state: str = TARGET_STATE) -> list[Path]:
     processed_root = resolve_processed_root(metric_slug, data_dir=get_paths_config().data_dir, mode="portfolio")
-    state_root = processed_root / TARGET_STATE
+    state_root = processed_root / state
     district_csv = state_root / get_master_csv_filename("district")
     block_csv = state_root / get_master_csv_filename("block")
     return [
@@ -1251,10 +1265,12 @@ def build_jrc_flood_depth_outputs(
     overwrite: bool,
     dry_run: bool,
     overlay_dir: Optional[Path] = None,
+    state: str = TARGET_STATE,
 ) -> dict[str, object]:
-    """Build Telangana block and district masters plus QA for the four JRC rasters."""
+    """Build block and district masters plus QA for the four JRC rasters (one state)."""
     contract = _validate_raster_contract(source_dir, assume_units=assume_units)
-    district_gdf, block_gdf = _load_telangana_admin(
+    district_gdf, block_gdf = _load_state_admin(
+        state=state,
         districts_path=districts_path,
         blocks_path=blocks_path,
     )
@@ -1263,11 +1279,13 @@ def build_jrc_flood_depth_outputs(
 
     all_target_paths: list[Path] = []
     for metric_slug in ALL_OUTPUT_METRIC_SLUGS:
-        all_target_paths.extend(_expected_output_paths(metric_slug=metric_slug, qa_dir=qa_dir))
+        all_target_paths.extend(_expected_output_paths(metric_slug=metric_slug, qa_dir=qa_dir, state=state))
     all_target_paths.append(qa_dir / "admin_boundary_join_qa.csv")
     all_target_paths.append(qa_dir / "run_summary.csv")
+    # The RP-100 overlay is pan-India (raster-derived, state-independent) and is
+    # handled idempotently by export_rp100_depth_overlay, so it is deliberately
+    # excluded from this per-state pre-existence guard.
     resolved_overlay_dir = overlay_dir or _default_overlay_dir()
-    all_target_paths.extend(_rp100_overlay_paths(overlay_dir=resolved_overlay_dir))
     if not overwrite:
         existing = [path for path in all_target_paths if path.exists()]
         if existing:
@@ -1295,6 +1313,7 @@ def build_jrc_flood_depth_outputs(
                 block_gdf=block_gdf,
                 dataset=dataset,
                 metric_slug=metric_slug,
+                state=state,
             )
             district_master_df, district_qa_df = _build_district_frames(
                 district_gdf=district_gdf,
@@ -1302,6 +1321,7 @@ def build_jrc_flood_depth_outputs(
                 block_qa_df=block_qa_df,
                 dataset=dataset,
                 metric_slug=metric_slug,
+                state=state,
             )
 
         outputs[metric_slug] = {
@@ -1342,7 +1362,7 @@ def build_jrc_flood_depth_outputs(
 
         if not dry_run:
             processed_root = resolve_processed_root(metric_slug, data_dir=get_paths_config().data_dir, mode="portfolio")
-            state_root = processed_root / TARGET_STATE
+            state_root = processed_root / state
             _write_master(
                 district_master_df,
                 state_root / get_master_csv_filename("district"),
@@ -1356,7 +1376,7 @@ def build_jrc_flood_depth_outputs(
             _write_csv(block_qa_df, qa_dir / f"{metric_slug}_block_qa.csv", overwrite=overwrite)
             _write_csv(district_qa_df, qa_dir / f"{metric_slug}_district_qa.csv", overwrite=overwrite)
 
-    derived_extent_output = _build_derived_extent_outputs(raw_output=outputs[DERIVED_EXTENT_SOURCE_METRIC_SLUG])
+    derived_extent_output = _build_derived_extent_outputs(raw_output=outputs[DERIVED_EXTENT_SOURCE_METRIC_SLUG], state=state)
     derived_outputs = {
         DERIVED_EXTENT_METRIC_SLUG: derived_extent_output,
         DERIVED_INDEX_METRIC_SLUG: _build_derived_index_outputs(
@@ -1440,7 +1460,7 @@ def build_jrc_flood_depth_outputs(
                 data_dir=get_paths_config().data_dir,
                 mode="portfolio",
             )
-            state_root = processed_root / TARGET_STATE
+            state_root = processed_root / state
             _write_master(
                 derived_district_master_df,
                 state_root / get_master_csv_filename("district"),
@@ -1480,16 +1500,30 @@ def build_jrc_flood_depth_outputs(
 def build_cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Build Telangana block and district JRC flood-depth masters for RP-10, RP-50, RP-100, "
-            "and RP-500, plus the derived RP-100 flood-depth-index and flood-extent outputs."
+            "Build block and district JRC flood-depth masters (for the state given by --state) "
+            "for RP-10, RP-50, RP-100, and RP-500, plus the derived RP-100 flood-depth-index and "
+            "flood-extent outputs."
         )
     )
     parser.add_argument("--source-dir", required=True, help="Directory containing the required JRC flood-depth rasters.")
     parser.add_argument("--assume-units", choices=[ASSUME_UNITS], required=True, help="Attest the raster depth units.")
+    parser.add_argument(
+        "--state",
+        default=TARGET_STATE,
+        help="Admin state to clip JRC rasters to; matches boundary state_name (default: Telangana).",
+    )
     parser.add_argument("--districts-path", default=str(get_paths_config().districts_path))
     parser.add_argument("--blocks-path", default=str(get_paths_config().blocks_path))
-    parser.add_argument("--qa-dir", default=str(_default_qa_dir()))
-    parser.add_argument("--overlay-dir", default=str(_default_overlay_dir()))
+    parser.add_argument(
+        "--qa-dir",
+        default=None,
+        help="QA output directory (default: <data_dir>/jrc_flood_depth/<state>/qa).",
+    )
+    parser.add_argument(
+        "--overlay-dir",
+        default=None,
+        help="RP-100 overlay output directory (default: shared <data_dir>/jrc_flood_depth/overlay).",
+    )
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--dry-run", action="store_true", help="Validate inputs and compute summaries without writing files.")
     return parser
@@ -1498,15 +1532,27 @@ def build_cli() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> int:
     parser = build_cli()
     args = parser.parse_args(argv)
+    state = str(args.state)
+    qa_dir = (
+        Path(args.qa_dir).expanduser().resolve()
+        if args.qa_dir
+        else _default_qa_dir(state).resolve()
+    )
+    overlay_dir = (
+        Path(args.overlay_dir).expanduser().resolve()
+        if args.overlay_dir
+        else _default_overlay_dir().resolve()
+    )
     outputs = build_jrc_flood_depth_outputs(
         source_dir=Path(args.source_dir).expanduser().resolve(),
         districts_path=Path(args.districts_path).expanduser().resolve(),
         blocks_path=Path(args.blocks_path).expanduser().resolve(),
-        qa_dir=Path(args.qa_dir).expanduser().resolve(),
-        overlay_dir=Path(args.overlay_dir).expanduser().resolve(),
+        qa_dir=qa_dir,
+        overlay_dir=overlay_dir,
         assume_units=str(args.assume_units),
         overwrite=bool(args.overwrite),
         dry_run=bool(args.dry_run),
+        state=state,
     )
     run_summary_df = outputs["run_summary_df"]
     contract: RasterContract = outputs["contract"]
@@ -1516,10 +1562,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     print(f"raster_shape: {contract.raster_shape}")
     print(f"metrics: {', '.join(sorted(slug for slug in outputs if slug in ALL_OUTPUT_METRIC_SLUGS))}")
     print(f"run_summary_rows: {int(run_summary_df.shape[0])}")
+    print(f"state: {state}")
     if bool(args.dry_run):
         print("dry_run: True")
     else:
-        print(f"qa_dir: {Path(args.qa_dir).expanduser().resolve()}")
+        print(f"qa_dir: {qa_dir}")
         overlay = outputs.get("rp100_overlay", {})
         if isinstance(overlay, dict):
             print(f"rp100_overlay_png: {overlay.get('png_path')}")

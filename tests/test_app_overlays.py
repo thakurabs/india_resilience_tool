@@ -205,7 +205,9 @@ def test_overlay_session_state_defaults_clamps_and_migrates_legacy_river_key() -
     assert ss["overlay_lulc_agri_current_raster_opacity_pct"] == 55
 
 
-def test_flood_visibility_availability_and_forced_off_for_non_telangana(tmp_path: Path) -> None:
+def test_flood_overlay_available_for_any_admin_state_when_artifact_exists(tmp_path: Path) -> None:
+    # The RP-100 overlay is pan-India; it must be available for any admin state at
+    # district/block level once the artifact is present (not gated to Telangana).
     _write_valid_pair(tmp_path / "jrc_flood_depth" / "overlay")
     ss = {"overlay_rp100_flood_depth_raster_enabled": True}
     states = resolve_overlay_control_states(
@@ -219,9 +221,9 @@ def test_flood_visibility_availability_and_forced_off_for_non_telangana(tmp_path
     )
     flood = states[RP100_FLOOD_OVERLAY_ID]
     assert flood.visible is True
-    assert flood.available is False
-    assert flood.active is False
-    assert ss["overlay_rp100_flood_depth_raster_enabled"] is False
+    assert flood.available is True
+    assert flood.active is True
+    assert ss["overlay_rp100_flood_depth_raster_enabled"] is True
 
 
 def test_river_visibility_requires_hydro_selected_basin(tmp_path: Path) -> None:

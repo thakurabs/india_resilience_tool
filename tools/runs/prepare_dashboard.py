@@ -961,18 +961,22 @@ def _build_aqueduct_metric_args(args: argparse.Namespace) -> list[str]:
 
 def _add_jrc_flags(parser: argparse.ArgumentParser, *, prefixed: bool = False) -> None:
     if prefixed:
-        parser.add_argument("--include-jrc-flood-depth", action="store_true", help="Include the Telangana JRC flood-depth pilot bundle.")
+        parser.add_argument("--include-jrc-flood-depth", action="store_true", help="Include the JRC flood-depth bundle.")
+        parser.add_argument("--jrc-state", default=None, help="Admin state for JRC flood-depth masters (default: Telangana).")
         parser.add_argument("--jrc-source-dir", default=None, help="Directory containing the required JRC flood-depth rasters.")
         parser.add_argument("--jrc-assume-units", default=None, help="Attested JRC flood-depth units; must be 'm' when provided.")
         parser.add_argument("--jrc-districts-path", default=None, help="Optional override path to canonical district boundaries.")
         parser.add_argument("--jrc-blocks-path", default=None, help="Optional override path to canonical block boundaries.")
         parser.add_argument("--jrc-qa-dir", default=None, help="Optional override directory for JRC QA outputs.")
+        parser.add_argument("--jrc-overlay-dir", default=None, help="Optional override directory for the shared RP-100 overlay.")
         return
+    parser.add_argument("--state", default="Telangana", help="Admin state for JRC flood-depth masters (default: Telangana).")
     parser.add_argument("--source-dir", default=None, help="Directory containing the required JRC flood-depth rasters.")
     parser.add_argument("--assume-units", default=None, help="Attested JRC flood-depth units; must be 'm'.")
     parser.add_argument("--districts-path", default=None, help="Optional override path to canonical district boundaries.")
     parser.add_argument("--blocks-path", default=None, help="Optional override path to canonical block boundaries.")
     parser.add_argument("--qa-dir", default=None, help="Optional override directory for JRC QA outputs.")
+    parser.add_argument("--overlay-dir", default=None, help="Optional override directory for the shared RP-100 overlay.")
 
 
 def _validate_jrc_inputs(
@@ -1003,11 +1007,15 @@ def _build_jrc_builder_args(
     prefixed: bool = False,
 ) -> list[str]:
     argv: list[str] = []
+    state_attr = "jrc_state" if prefixed else "state"
     source_dir_attr = "jrc_source_dir" if prefixed else "source_dir"
     assume_units_attr = "jrc_assume_units" if prefixed else "assume_units"
     districts_attr = "jrc_districts_path" if prefixed else "districts_path"
     blocks_attr = "jrc_blocks_path" if prefixed else "blocks_path"
     qa_attr = "jrc_qa_dir" if prefixed else "qa_dir"
+    overlay_attr = "jrc_overlay_dir" if prefixed else "overlay_dir"
+    if getattr(args, state_attr, None):
+        argv.extend(["--state", str(getattr(args, state_attr))])
     if getattr(args, source_dir_attr, None):
         argv.extend(["--source-dir", str(getattr(args, source_dir_attr))])
     if getattr(args, assume_units_attr, None):
@@ -1018,6 +1026,8 @@ def _build_jrc_builder_args(
         argv.extend(["--blocks-path", str(getattr(args, blocks_attr))])
     if getattr(args, qa_attr, None):
         argv.extend(["--qa-dir", str(getattr(args, qa_attr))])
+    if getattr(args, overlay_attr, None):
+        argv.extend(["--overlay-dir", str(getattr(args, overlay_attr))])
     return argv
 
 
@@ -1260,21 +1270,40 @@ def build_jrc_flood_depth_plan(
     include_runtime: bool = True,
     runtime_scope: Optional[BundleRuntimeScope] = None,
 ) -> list[PlannedCommand]:
-    """Build the Telangana JRC flood-depth admin prep plan."""
+    """Build the JRC flood-depth admin prep plan for the selected state."""
     require_source = not bool(getattr(args, "audit_only", False))
     _validate_jrc_inputs(args, require_source=require_source)
     scope = runtime_scope or _resolve_runtime_scope("jrc-flood-depth", args, levels=("district", "block"))
     plan: list[PlannedCommand] = []
-    if not bool(getattr(args, "audit_only", False)) and (
-        bool(args.overwrite) or scope.runtime_needed or not include_runtime
-    ):
+    if bool(getattr(args, "audit_only", False)):
+        return [] if bool(getattr(args, "skip_audit", False)) else [_build_audit_step(args, scope.selected_metrics)]
+
+    # A non-default --state, an explicit source/QA/overlay/boundary override, or
+    # --overwrite means the operator is requesting a (re)build for a specific
+    # state. In that case the parity audit (computed pre-build, often against the
+    # Telangana pilot) may report nothing pending, so we must force both the
+    # builder *and* a same-run optimized publish + audit over the full JRC metric
+    # set -- otherwise new state masters would be built but never published.
+    explicit_builder_input = any(
+        getattr(args, attr, None)
+        for attr in ("source_dir", "qa_dir", "overlay_dir", "districts_path", "blocks_path")
+    ) or (str(getattr(args, "state", "") or "").strip().casefold() not in ("", "telangana"))
+
+    if bool(args.overwrite) or scope.runtime_needed or explicit_builder_input or not include_runtime:
         if include_blocks_geojson:
             plan.extend(build_blocks_geojson_plan(args))
         argv = _py_module_cmd("tools.geodata.build_jrc_flood_depth_admin_masters")
         argv.extend(_build_jrc_builder_args(args))
         _append_flag(argv, "--overwrite", bool(args.overwrite))
         plan.append(PlannedCommand(label="jrc-flood-depth-admin-masters", argv=argv))
-    if include_runtime:
+        # Publish the full JRC metric set (not the pre-build pending subset), so a
+        # newly built state is always reflected in the optimized runtime + audit.
+        publish_metrics = scope.selected_metrics
+        if include_runtime and not bool(getattr(args, "skip_optimised", False)):
+            plan.append(_build_optimised_step(args, publish_metrics, overwrite=False))
+        if include_runtime and not bool(getattr(args, "skip_audit", False)):
+            plan.append(_build_audit_step(args, publish_metrics))
+    elif include_runtime:
         plan.extend(_build_runtime_plan(args, scope=scope, overwrite_optimised=False))
     return plan
 
@@ -1593,16 +1622,24 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
         else []
     )
     groundwater_plan = build_groundwater_plan(args, include_runtime=False, runtime_scope=groundwater_scope)
+    # vars(args) already carries `state` (the climate admin state, possibly a
+    # comma-list), so the JRC overrides must be applied via dict-update to avoid a
+    # duplicate-keyword TypeError. JRC takes a single state; fall back to Telangana
+    # (the historical pilot) when --jrc-state is not given, rather than reusing the
+    # climate --state.
+    jrc_ns_kwargs = dict(vars(args))
+    jrc_ns_kwargs.update(
+        state=getattr(args, "jrc_state", None) or "Telangana",
+        source_dir=getattr(args, "jrc_source_dir", None),
+        assume_units=getattr(args, "jrc_assume_units", None),
+        districts_path=getattr(args, "jrc_districts_path", None),
+        blocks_path=getattr(args, "jrc_blocks_path", None),
+        qa_dir=getattr(args, "jrc_qa_dir", None),
+        overlay_dir=getattr(args, "jrc_overlay_dir", None),
+    )
     jrc_plan = (
         build_jrc_flood_depth_plan(
-            argparse.Namespace(
-                **vars(args),
-                source_dir=getattr(args, "jrc_source_dir", None),
-                assume_units=getattr(args, "jrc_assume_units", None),
-                districts_path=getattr(args, "jrc_districts_path", None),
-                blocks_path=getattr(args, "jrc_blocks_path", None),
-                qa_dir=getattr(args, "jrc_qa_dir", None),
-            ),
+            argparse.Namespace(**jrc_ns_kwargs),
             include_blocks_geojson=False,
             include_runtime=False,
             runtime_scope=jrc_scope,

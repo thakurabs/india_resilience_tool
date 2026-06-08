@@ -1265,3 +1265,129 @@ def test_validate_bundle_with_pytest_uses_default_targets() -> None:
     assert plan[-1].label == "pytest-validation"
     for test_path in DEFAULT_VALIDATION_TESTS:
         assert test_path in plan[-1].argv
+
+
+# --- CHG-0064: JRC state parameterization + same-run publish ------------------
+
+def _jrc_standalone_args(**overrides) -> argparse.Namespace:
+    base = dict(
+        overwrite=False,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        state="Maharashtra",
+        source_dir="/tmp/jrc",
+        assume_units="m",
+        districts_path=None,
+        blocks_path=None,
+        qa_dir=None,
+        overlay_dir=None,
+        dry_run=False,
+        plan_only=False,
+    )
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+def test_jrc_state_is_forwarded_to_builder() -> None:
+    args = _jrc_standalone_args(overlay_dir="/tmp/ov")
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp10"],
+        pending_metrics=["jrc_flood_depth_rp10"],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, include_blocks_geojson=False, runtime_scope=scope)
+    builder = next(s for s in plan if s.label == "jrc-flood-depth-admin-masters")
+    argv = builder.argv
+    assert "--state" in argv and argv[argv.index("--state") + 1] == "Maharashtra"
+    assert "--overlay-dir" in argv and argv[argv.index("--overlay-dir") + 1] == "/tmp/ov"
+
+
+def test_jrc_explicit_state_forces_builder_and_publishes_full_set_when_audit_clean() -> None:
+    # Pre-build audit is clean (Telangana already published) -> pending empty ->
+    # runtime_needed False. A non-default --state must still force the builder AND
+    # publish the FULL JRC metric set in the same run (regression guard for the
+    # "_select_metrics_for_execution would return []" trap).
+    args = _jrc_standalone_args()
+    selected = [
+        "jrc_flood_depth_rp10",
+        "jrc_flood_depth_rp50",
+        "jrc_flood_depth_rp100",
+        "jrc_flood_depth_rp500",
+        "jrc_flood_extent_rp100",
+    ]
+    scope = BundleRuntimeScope(selected_metrics=selected, pending_metrics=[], has_global_issues=False)
+    assert scope.runtime_needed is False
+    plan = build_jrc_flood_depth_plan(args, include_blocks_geojson=False, runtime_scope=scope)
+    labels = [s.label for s in plan]
+    assert labels == [
+        "jrc-flood-depth-admin-masters",
+        "processed-optimised-build",
+        "processed-optimised-audit",
+    ]
+    build_step = plan[labels.index("processed-optimised-build")]
+    assert build_step.argv.count("--metric") == len(selected)
+    for slug in selected:
+        assert slug in build_step.argv
+    # The optimised step must not force --overwrite here (overwrite=False).
+    assert "--overwrite" not in build_step.argv
+
+
+def test_dashboard_package_maps_jrc_state_and_overlay_dir(monkeypatch) -> None:
+    # Guards the synthetic-namespace dict-update: --jrc-state / --jrc-overlay-dir
+    # must reach the builder without colliding with the package-level --state.
+    parser = build_cli()
+    args = parser.parse_args(
+        [
+            "dashboard-package",
+            "--level",
+            "admin",
+            "--overwrite",
+            "--include-jrc-flood-depth",
+            "--jrc-source-dir",
+            "/tmp/jrc",
+            "--jrc-assume-units",
+            "m",
+            "--jrc-state",
+            "Maharashtra",
+            "--jrc-overlay-dir",
+            "/tmp/ov",
+        ]
+    )
+    scope_map = {
+        "aqueduct": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "population-exposure": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "built-up-area": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "lulc": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "groundwater": BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+        "jrc-flood-depth": BundleRuntimeScope(
+            selected_metrics=["jrc_flood_depth_rp10"],
+            pending_metrics=["jrc_flood_depth_rp10"],
+            has_global_issues=False,
+        ),
+    }
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
+        lambda *_a, **_k: _climate_scope(levels=["district"], pending_by_level={"district": []}),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_composite_runtime_scope",
+        lambda **_k: BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_proposal_runtime_scope",
+        lambda **_k: BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False),
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_runtime_scope",
+        lambda bundle, *_a, **_k: scope_map[bundle],
+    )
+    monkeypatch.setattr(
+        "tools.runs.prepare_dashboard._resolve_bundle_metrics",
+        lambda bundle, _a: ["jrc_flood_depth_rp10"] if bundle == "dashboard-package" else [],
+    )
+    plan = build_dashboard_package_plan(args)  # must not raise (dict-update fix)
+    builder = next(s for s in plan if s.label == "jrc-flood-depth-admin-masters")
+    argv = builder.argv
+    assert argv[argv.index("--state") + 1] == "Maharashtra"
+    assert argv[argv.index("--overlay-dir") + 1] == "/tmp/ov"

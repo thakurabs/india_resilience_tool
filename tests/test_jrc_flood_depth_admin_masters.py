@@ -20,6 +20,7 @@ from tools.geodata.build_jrc_flood_depth_admin_masters import (
     _build_district_frames,
     _classify_depth_index,
     _classify_extent_index,
+    _default_qa_dir,
     _lookup_severity_index,
     build_jrc_flood_depth_outputs,
     export_rp100_depth_overlay,
@@ -206,6 +207,7 @@ def _build(
     write_full_valid_mask: bool = False,
     invalid_mask_coords: set[tuple[int, int]] | None = None,
     data: np.ndarray | None = None,
+    state: str = "Telangana",
 ):
     data_dir = tmp_path / "irt_data"
     monkeypatch.setenv("IRT_DATA_DIR", str(data_dir))
@@ -227,6 +229,7 @@ def _build(
         assume_units="m",
         overwrite=overwrite,
         dry_run=False,
+        state=state,
     )
 
 
@@ -944,3 +947,98 @@ def test_invalid_depth_and_extent_inputs_raise() -> None:
         _classify_extent_index(1.01)
     with pytest.raises(ValueError, match="expects classes 1..5"):
         _lookup_severity_index(6, 1)
+
+
+# --- CHG-0064: state parameterization -----------------------------------------
+
+def _write_two_state_boundaries(tmp_path: Path) -> tuple[Path, Path]:
+    """Maharashtra rows over the raster extent, plus a Telangana decoy that the
+    --state filter must drop before any join validation/aggregation runs."""
+    districts = gpd.GeoDataFrame(
+        {
+            "state_name": ["Maharashtra", "Maharashtra", "Telangana"],
+            "district_name": ["Pune", "Nagpur", "Hyderabad"],
+            "geometry": [box(0, 2, 4, 4), box(10, 10, 12, 12), box(0, 2, 4, 4)],
+        },
+        crs="EPSG:4326",
+    )
+    blocks = gpd.GeoDataFrame(
+        {
+            "state_name": ["Maharashtra", "Maharashtra", "Maharashtra", "Telangana"],
+            "district_name": ["Pune", "Pune", "Nagpur", "Hyderabad"],
+            "block_name": ["North", "South", "Outside", "Decoy"],
+            "geometry": [box(0, 2, 2, 4), box(2, 2, 4, 4), box(10, 10, 12, 12), box(0, 2, 2, 4)],
+        },
+        crs="EPSG:4326",
+    )
+    districts_path = tmp_path / "districts_4326.geojson"
+    blocks_path = tmp_path / "blocks_4326.geojson"
+    districts.to_file(districts_path, driver="GeoJSON")
+    blocks.to_file(blocks_path, driver="GeoJSON")
+    return districts_path, blocks_path
+
+
+def test_jrc_builder_targets_selected_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outputs = _build(
+        tmp_path,
+        monkeypatch,
+        overwrite=True,
+        boundaries_writer=_write_two_state_boundaries,
+        state="Maharashtra",
+    )
+    rp10 = outputs["jrc_flood_depth_rp10"]
+    block_master = rp10["block_master_df"]
+    district_master = rp10["district_master_df"]
+
+    # Every emitted row carries the requested state; the Telangana decoy is gone.
+    assert set(block_master["state"]) == {"Maharashtra"}
+    assert set(district_master["state"]) == {"Maharashtra"}
+    assert set(district_master["district"]) <= {"Pune", "Nagpur"}
+
+    # Masters are written under the state-scoped processed root, not Telangana.
+    data_dir = tmp_path / "irt_data"
+    written = list(data_dir.rglob("master_metrics_by_district.csv"))
+    assert written, "expected at least one district master to be written"
+    assert all("Maharashtra" in str(p) for p in written)
+    assert not list(data_dir.rglob("*Telangana*master_metrics_by_district.csv"))
+
+
+def test_jrc_default_state_back_compat_is_telangana(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Omitting state keeps the historical Telangana behavior.
+    outputs = _build(tmp_path, monkeypatch, overwrite=True)
+    assert set(outputs["jrc_flood_depth_rp10"]["block_master_df"]["state"]) == {"Telangana"}
+
+
+def test_default_qa_dir_is_state_scoped() -> None:
+    tg = _default_qa_dir("Telangana")
+    mh = _default_qa_dir("Maharashtra")
+    assert tg != mh
+    assert tg.parts[-2] == "Telangana" and tg.parts[-1] == "qa"
+    assert mh.parts[-2] == "Maharashtra" and mh.parts[-1] == "qa"
+
+
+def test_overlay_reused_across_states_without_overwrite(tmp_path: Path) -> None:
+    # The pan-India overlay is reused (skipped, not re-raised) when it already
+    # exists and --overwrite is not set, so a second state's run does not fail.
+    from tools.geodata.build_jrc_flood_depth_admin_masters import _rp100_overlay_paths
+
+    overlay_dir = tmp_path / "overlay"
+    overlay_dir.mkdir(parents=True, exist_ok=True)
+    png_path, meta_path = _rp100_overlay_paths(overlay_dir=overlay_dir)
+    png_path.write_bytes(b"existing-png")
+    meta_path.write_text(json.dumps({"sentinel": True}), encoding="utf-8")
+
+    result = export_rp100_depth_overlay(
+        raster_path=tmp_path / "does_not_matter.tif",  # not opened on the skip path
+        overlay_dir=overlay_dir,
+        overwrite=False,
+        dry_run=False,
+    )
+    assert result.get("skipped") is True
+    assert png_path.read_bytes() == b"existing-png"  # untouched
