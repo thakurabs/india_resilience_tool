@@ -79,7 +79,8 @@ CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variabi
 | `python -m tools.geodata.build_block_subbasin_crosswalk --overwrite` | Build block ↔ sub-basin crosswalk CSV |
 | `python -m tools.geodata.build_district_basin_crosswalk --overwrite` | Build district ↔ basin crosswalk CSV |
 | `python -m tools.geodata.build_block_basin_crosswalk --overwrite` | Build block ↔ basin crosswalk CSV |
-| `python -m tools.geodata.build_blocks_geojson --overwrite` | Rebuild the canonical block GeoJSON and block-label QA outputs |
+| `python -m tools.geodata.build_admin_boundaries_from_lgd --overwrite` | **Single-source admin builder**: derive `blocks_4326.geojson`, `districts_4326.geojson`, and `states_4326.geojson` from one bharatlas `LGD_Blocks` shapefile so all three nest exactly (`--dry-run` for roster/QA only) |
+| `python -m tools.geodata.build_blocks_geojson --overwrite` | _(Superseded)_ Rebuild only the canonical block GeoJSON and block-label QA outputs from the legacy `Block_GH_WUP` source |
 | `python -m tools.geodata.build_adm1_geojson --overwrite` | Build the compact optimized ADM1 state-polygons artifact for fast dashboard boot |
 | `python -m tools.geodata.build_states_geojson --overwrite` | Build full-fidelity `states_4326.geojson` by dissolving district boundaries (shareable, not used at runtime) |
 | `python -m tools.geodata.prepare_aqueduct_baseline --help` | Build the canonical clean Aqueduct baseline artifact and India-only future geometry subset from future geometry + baseline CSV |
@@ -358,7 +359,8 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `build_district_subbasin_crosswalk.py` | Shared polygon crosswalk builders plus the district ↔ sub-basin CLI |
-| `build_blocks_geojson.py` | Rebuild the canonical `blocks_4326.geojson` with canonical block identity columns and label QA |
+| `build_admin_boundaries_from_lgd.py` | **Single source of truth** for the admin hierarchy: derive `blocks_4326.geojson`, `districts_4326.geojson`, and `states_4326.geojson` from one bharatlas `LGD_Blocks` shapefile (districts = dissolve of blocks by name; states = dissolve of districts) so all three nest exactly; Title-Case canonical state names, ADM3-loader-identical label repair, `.bak-<timestamp>` backups on `--overwrite` |
+| `build_blocks_geojson.py` | _(Superseded by `build_admin_boundaries_from_lgd.py`)_ Rebuild only the canonical `blocks_4326.geojson` from the legacy `Block_GH_WUP` source with canonical block identity columns and label QA |
 | `build_adm1_geojson.py` | Build `processed_optimised/geometry/admin/adm1.geojson` from canonical district boundaries for ADM1-first dashboard boot |
 | `build_states_geojson.py` | Build full-fidelity `states_4326.geojson` by dissolving `districts_4326.geojson` (unsimplified shareable companion; not used at runtime) |
 | `build_block_subbasin_crosswalk.py` | Build canonical block ↔ sub-basin crosswalk CSV |
@@ -571,10 +573,13 @@ python -m pytest -q
 
 ### Boundary inputs expected under `IRT_DATA_DIR`
 
+All three admin-boundary GeoJSONs below are derived together from one bharatlas `LGD_Blocks` shapefile via `tools.geodata.build_admin_boundaries_from_lgd`, so districts nest inside states and blocks nest inside districts by construction (no aliases or crosswalks needed to reconcile them).
+
 | Artifact | Purpose |
 |----------|---------|
-| `districts_4326.geojson` | ADM2 district boundaries |
-| `blocks_4326.geojson` | ADM3 block boundaries |
+| `states_4326.geojson` | ADM1 state/UT boundaries (dissolve of districts) |
+| `districts_4326.geojson` | ADM2 district boundaries (dissolve of blocks by name) |
+| `blocks_4326.geojson` | ADM3 block boundaries (atomic source layer) |
 | `basins.geojson` | Canonical basin boundaries |
 | `subbasins.geojson` | Canonical sub-basin boundaries |
 | `district_subbasin_crosswalk.csv` | District ↔ sub-basin overlap registry |

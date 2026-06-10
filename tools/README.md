@@ -148,7 +148,8 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 |---|---|---|
 | `tools/geodata/convert_blocks_shp_to_geojson.py` | Convert block boundaries shapefile → GeoJSON | `python -m tools.geodata.convert_blocks_shp_to_geojson --help` |
 | `tools/geodata/inspect_block_shapefile.py` | Inspect boundary shapefile/GeoJSON structure | `python -m tools.geodata.inspect_block_shapefile --help` |
-| `tools/geodata/build_blocks_geojson.py` | Rebuild the canonical `blocks_4326.geojson` from the source block shapefile with label QA | `python -m tools.geodata.build_blocks_geojson --help` |
+| `tools/geodata/build_admin_boundaries_from_lgd.py` | **Single source of truth** for the admin hierarchy: derive `blocks_4326.geojson`, `districts_4326.geojson`, and `states_4326.geojson` from one bharatlas `LGD_Blocks` shapefile so all three nest exactly by construction (districts = dissolve of blocks by name; states = dissolve of districts). Canonical Title-Case state names; ADM3-loader-identical district/block label repair. Backs up existing outputs to `.bak-<timestamp>` on `--overwrite` | `python -m tools.geodata.build_admin_boundaries_from_lgd --help` |
+| `tools/geodata/build_blocks_geojson.py` | _(Superseded by `build_admin_boundaries_from_lgd.py`)_ Rebuild only `blocks_4326.geojson` from the legacy `Block_GH_WUP` source block shapefile with label QA | `python -m tools.geodata.build_blocks_geojson --help` |
 | `tools/geodata/build_adm1_geojson.py` | Build the compact optimized ADM1 state-polygons artifact for fast dashboard boot | `python -m tools.geodata.build_adm1_geojson --help` |
 | `tools/geodata/build_states_geojson.py` | Build full-fidelity `states_4326.geojson` by dissolving `districts_4326.geojson` (unsimplified, shareable companion to district boundaries; not used at runtime) | `python -m tools.geodata.build_states_geojson --help` |
 | `tools/geodata/build_district_subbasin_crosswalk.py` | Build the canonical district ↔ sub-basin crosswalk CSV from district and sub-basin GeoJSONs | `python -m tools.geodata.build_district_subbasin_crosswalk --help` |
@@ -434,7 +435,28 @@ Windows tip: if HDF5 writes get flaky under parallelism, fall back to `--workers
 - leaves the global `parity_report.json` untouched on scoped runs unless `--report-path` is supplied
 - exits non-zero when parity gaps remain
 
+`tools/geodata/build_admin_boundaries_from_lgd.py` notes:
+- source shapefile (resolved from the first existing of):
+  - `IRT_DATA_DIR/LGD_Blocks/LGD_Blocks.shp`
+  - `IRT_DATA_DIR/_tmp_lgd_blocks/LGD_Blocks.shp`
+  - `IRT_DATA_DIR/LGD_Blocks.shp`
+  - override with `--source`
+- canonical outputs (all three derived from the same atomic block layer so they nest exactly):
+  - `IRT_DATA_DIR/blocks_4326.geojson` — atomic blocks (one row per block)
+  - `IRT_DATA_DIR/districts_4326.geojson` — dissolve of blocks by `(state_name, district_name)`
+  - `IRT_DATA_DIR/states_4326.geojson` — dissolve of districts by `state_name`
+- design contract:
+  - district identity keyed on **name**, not `dist_lgd` (preserves 2023 splits that still share a parent LGD code; the modal LGD code is kept only as a reference attribute)
+  - state names canonicalized to Title-Case via an exhaustive map; an unmapped source state is a **hard error**
+  - district/block labels run through the same `repair_adm3_identity_columns` the ADM3 loader applies at runtime, so the district file and block-derived district references match exactly at load time
+  - redundant trailing `" District"` suffix stripped (e.g. `Lakshadweep District` → `Lakshadweep`)
+  - fails the build on the same suspicious admin-label characters the block loader rejects
+- safety: refuses to clobber without `--overwrite`; on overwrite, backs up each existing output to `<file>.bak-<timestamp>` unless `--no-backup`
+- `--dry-run` prints the full per-state district/block roster + hierarchy QA (and `--qa-out` writes the per-state table to CSV) without writing any GeoJSON
+- current roster: 7,134 blocks · 783 districts · 36 states/UTs (Arunachal Pradesh fully present)
+
 `tools/geodata/build_blocks_geojson.py` notes:
+- **superseded** by `build_admin_boundaries_from_lgd.py`, which now produces `blocks_4326.geojson` (along with the matching districts/states) from the bharatlas `LGD_Blocks` source; this legacy builder rebuilds only the block layer from the older `Block_GH_WUP` shapefile and is retained for reference
 - source shapefile:
   - `IRT_DATA_DIR/Block_GH_WUP_POP R2025A _GHS_WUP/Block_GH_WUP_POP R2025A _GHS_WUP.shp`
 - canonical output:
