@@ -1979,110 +1979,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
 # treat them like first-class metrics.
 DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
     {
-        "name": "Aqueduct Water Stress",
-        "slug": "aq_water_stress",
-        "label": "Aqueduct Water Stress",
-        "group": "water",
-        "value_col": "aq_water_stress",
-        "periods_metric_col": "aq_water_stress",
-        "units": "index",
-        "description": (
-            "Aqueduct 4.0 annual water stress transferred from HydroSHEDS Level 6 "
-            "onto Survey of India basin and sub-basin units using area-weighted overlap."
-        ),
-        "source_type": "external",
-        "supports_yearly_trend": False,
-        "selection_mode": "scenario_period",
-        "supported_statistics": ("mean",),
-        "supports_baseline_comparison": True,
-        "supports_scenario_comparison": True,
-        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
-        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
-        "supported_scenarios": ("historical", "bau", "opt", "pes"),
-        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
-        "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "block", "basin", "sub_basin"),
-        "rank_higher_is_worse": True,
-    },
-    {
-        "name": "Aqueduct Interannual Variability",
-        "slug": "aq_interannual_variability",
-        "label": "Aqueduct Interannual Variability",
-        "group": "water",
-        "value_col": "aq_interannual_variability",
-        "periods_metric_col": "aq_interannual_variability",
-        "units": "index",
-        "description": (
-            "Aqueduct 4.0 interannual variability transferred from HydroSHEDS Level 6 "
-            "onto Survey of India basin and sub-basin units using area-weighted overlap."
-        ),
-        "source_type": "external",
-        "supports_yearly_trend": False,
-        "selection_mode": "scenario_period",
-        "supported_statistics": ("mean",),
-        "supports_baseline_comparison": True,
-        "supports_scenario_comparison": True,
-        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
-        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
-        "supported_scenarios": ("historical", "bau", "opt", "pes"),
-        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
-        "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "block", "basin", "sub_basin"),
-        "rank_higher_is_worse": True,
-    },
-    {
-        "name": "Aqueduct Seasonal Variability",
-        "slug": "aq_seasonal_variability",
-        "label": "Aqueduct Seasonal Variability",
-        "group": "water",
-        "value_col": "aq_seasonal_variability",
-        "periods_metric_col": "aq_seasonal_variability",
-        "units": "index",
-        "description": (
-            "Aqueduct 4.0 seasonal variability transferred from HydroSHEDS Level 6 "
-            "onto Survey of India basin and sub-basin units using area-weighted overlap."
-        ),
-        "source_type": "external",
-        "supports_yearly_trend": False,
-        "selection_mode": "scenario_period",
-        "supported_statistics": ("mean",),
-        "supports_baseline_comparison": True,
-        "supports_scenario_comparison": True,
-        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
-        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
-        "supported_scenarios": ("historical", "bau", "opt", "pes"),
-        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
-        "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "block", "basin", "sub_basin"),
-        "rank_higher_is_worse": True,
-    },
-    {
-        "name": "Aqueduct Water Depletion",
-        "slug": "aq_water_depletion",
-        "label": "Aqueduct Water Depletion",
-        "group": "water",
-        "value_col": "aq_water_depletion",
-        "periods_metric_col": "aq_water_depletion",
-        "units": "index",
-        "description": (
-            "Aqueduct 4.0 water depletion transferred from HydroSHEDS Level 6 "
-            "onto Survey of India basin and sub-basin units using area-weighted overlap."
-        ),
-        "source_type": "external",
-        "supports_yearly_trend": False,
-        "selection_mode": "scenario_period",
-        "supported_statistics": ("mean",),
-        "supports_baseline_comparison": True,
-        "supports_scenario_comparison": True,
-        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
-        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
-        "supported_scenarios": ("historical", "bau", "opt", "pes"),
-        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
-        "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "block", "basin", "sub_basin"),
-        "rank_higher_is_worse": True,
-    },
-    {
         "name": "Total Population",
         "slug": "population_total",
         "label": "Total Population",
@@ -2878,12 +2774,6 @@ DOMAINS: dict[str, list[str]] = {
         "lulc_agri_area_km2",
         "lulc_agri_share_pct",
     ],
-    "Aqueduct Water Risk": [
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
-    ],
     "Groundwater Status & Availability": [
         "gw_stage_extraction_pct",
         "gw_future_availability_ham",
@@ -2920,7 +2810,6 @@ DOMAIN_ORDER: list[str] = [
     "Rural Facilities Exposure",
     "Built-up Area Exposure",
     "Agricultural LULC Exposure",
-    "Aqueduct Water Risk",
     "Groundwater Status & Availability",
     "Riverine Flood",
 ]
@@ -2974,7 +2863,6 @@ DOMAIN_TO_PILLAR: dict[str, str] = {
 
 LEGACY_DOMAIN_ALIASES: dict[str, str] = {
     "Agriculture & Growing Conditions": "Agricultural Risk",
-    "Water Risk": "Aqueduct Water Risk",
 }
 
 # Defaults for single-focus mode
@@ -2983,10 +2871,6 @@ DEFAULT_DOMAIN: str = "Heat Risk"
 
 # Domain descriptions for UI tooltips/help text
 DOMAIN_DESCRIPTIONS: dict[str, str] = {
-    "Aqueduct Water Risk": (
-        "Hydrologic water-risk metrics derived from Aqueduct and displayed on "
-        "admin and hydro units through audited overlap transfer workflows."
-    ),
     "Population Exposure": (
         "Static population exposure layers derived from the 2025 population raster "
         "and aggregated onto canonical district and block units."

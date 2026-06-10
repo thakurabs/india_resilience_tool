@@ -477,10 +477,6 @@ def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hy
 def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
     pipeline_bundles = get_pipeline_bundles()
     dashboard_only = {
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp10",
@@ -594,32 +590,6 @@ def test_get_pipeline_bundles_remains_static_for_sector_wise_domains() -> None:
     assert "Life & Livelihood Loss Risk" not in pipeline_bundles
 
 
-def test_aqueduct_metric_is_context_limited_to_supported_views() -> None:
-    admin_district_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="admin", level="district"))
-    admin_block_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="admin", level="block"))
-    assert "Aqueduct Water Risk" in get_bundles(spatial_family="hydro", level="basin")
-    hydro_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="hydro", level="sub_basin"))
-    assert "Aqueduct Water Risk" in get_bundles(spatial_family="admin", level="district")
-    assert {
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
-    }.issubset(hydro_metrics)
-    assert {
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
-    }.issubset(admin_district_metrics)
-    assert {
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
-    }.issubset(admin_block_metrics)
-
-
 def test_taxonomy_exposes_climate_and_biophysical_pillars() -> None:
     pillars = get_pillars(spatial_family="admin", level="district")
     assert "Climate Hazards" in pillars
@@ -628,12 +598,11 @@ def test_taxonomy_exposes_climate_and_biophysical_pillars() -> None:
     assert get_default_pillar(spatial_family="admin", level="district") == "Climate Hazards"
 
 
-def test_aqueduct_domain_is_unassigned_from_pillars() -> None:
+def test_biophysical_pillar_has_no_hydro_basin_domains() -> None:
+    # Groundwater and Riverine Flood are admin-only, so the Bio-physical pillar
+    # exposes no domains in the hydro/basin context.
     domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="hydro", level="basin")
     assert domains == []
-    assert get_pillar_for_domain("Aqueduct Water Risk") == ""
-    assert get_pillar_for_domain("Water Risk") == ""
-    assert "Aqueduct" in get_domain_description("Aqueduct Water Risk")
 
 
 def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
@@ -715,3 +684,31 @@ def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None
     assert extent_spec.units == "fraction"
     assert extent_spec.display_units == "%"
     assert extent_spec.display_scale == 100.0
+
+
+def test_aqueduct_metrics_and_domain_are_fully_retired() -> None:
+    """Aqueduct was dropped; no aq_* slug or 'Aqueduct' domain may survive.
+
+    Regression guard for CHG-0072/0073: removal must be complete across slugs,
+    bundles, domain order/descriptions, and legacy aliases so the dashboard never
+    surfaces a dangling Aqueduct selector or maps to a missing domain.
+    """
+    from india_resilience_tool.config import metrics_registry as mr
+
+    # No Aqueduct metric slugs remain.
+    assert not [slug for slug in METRICS_BY_SLUG if slug.startswith("aq_")]
+
+    # No Aqueduct domain remains anywhere it is enumerated.
+    assert "Aqueduct Water Risk" not in get_bundles()
+    assert "Aqueduct Water Risk" not in mr.DOMAIN_ORDER
+    assert "Aqueduct Water Risk" not in mr.DOMAIN_DESCRIPTIONS
+    assert "Aqueduct Water Risk" not in mr.DOMAIN_TO_PILLAR
+    assert "Aqueduct Water Risk" not in mr.LEGACY_DOMAIN_ALIASES.values()
+
+    # The orphaned Aqueduct-only scenarios are gone from display/help maps.
+    from india_resilience_tool.config import constants as cst
+
+    for scenario in ("bau", "opt", "pes"):
+        assert scenario not in cst.SCENARIO_DISPLAY
+        assert scenario not in cst.SCENARIO_UI_LABEL
+        assert scenario not in cst.SCENARIO_HELP_MD

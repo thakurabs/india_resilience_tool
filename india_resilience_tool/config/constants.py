@@ -57,9 +57,6 @@ SCENARIO_DISPLAY: dict[str, str] = {
     "ssp245": "SSP2-4.5",
     "ssp585": "SSP5-8.5",
     "historical": "Historical",
-    "bau": "Business-as-usual",
-    "opt": "Optimistic",
-    "pes": "Pessimistic",
     "snapshot": "Snapshot",
 }
 
@@ -68,9 +65,6 @@ SCENARIO_UI_LABEL: dict[str, str] = {
     "ssp245": "Middle-of-the-road (SSP2-4.5)",
     "ssp585": "Fossil-fuelled development (SSP5-8.5)",
     "historical": "Historical",
-    "bau": "Business-as-usual",
-    "opt": "Optimistic",
-    "pes": "Pessimistic",
     "snapshot": "Snapshot",
 }
 
@@ -87,18 +81,6 @@ SCENARIO_HELP_MD: dict[str, str] = {
         "Often used to stress-test under higher emissions."
     ),
     "historical": "Historical\nReference historical period used for comparison (period depends on the dataset).",
-    "bau": (
-        "Business-as-usual\n"
-        "Aqueduct future pathway representing continued current trajectories without major additional intervention."
-    ),
-    "opt": (
-        "Optimistic\n"
-        "Aqueduct future pathway representing stronger mitigation and adaptation outcomes."
-    ),
-    "pes": (
-        "Pessimistic\n"
-        "Aqueduct future pathway representing weaker mitigation and higher water-risk pressure."
-    ),
     "snapshot": (
         "Snapshot\n"
         "A fixed, non-climate scenario data snapshot. Use this for static layers such as population exposure."

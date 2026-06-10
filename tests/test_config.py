@@ -56,23 +56,11 @@ def test_config_helper_functions() -> None:
     assert len(temp_indices) > 0
 
 
-def test_aqueduct_metrics_are_exposed_to_dashboard_variables() -> None:
-    """Aqueduct metrics should be available through the dashboard variable registry."""
+def test_aqueduct_metrics_are_fully_removed_from_dashboard_variables() -> None:
+    """Aqueduct was retired; no aq_* slug may remain in the variable registry."""
     from india_resilience_tool.config.variables import VARIABLES
 
-    for slug, label in [
-        ("aq_water_stress", "Aqueduct Water Stress"),
-        ("aq_interannual_variability", "Aqueduct Interannual Variability"),
-        ("aq_seasonal_variability", "Aqueduct Seasonal Variability"),
-        ("aq_water_depletion", "Aqueduct Water Depletion"),
-    ]:
-        cfg = VARIABLES[slug]
-        assert cfg["label"] == label
-        assert cfg["source_type"] == "external"
-        assert cfg["supports_yearly_trend"] is False
-        assert cfg["supported_scenarios"] == ["historical", "bau", "opt", "pes"]
-        assert cfg["supported_levels"] == ["district", "block", "basin", "sub_basin"]
-        assert "Aqueduct Water Risk" in cfg["domains"]
+    assert not [slug for slug in VARIABLES if str(slug).startswith("aq_")]
 
 
 def test_population_metrics_are_exposed_as_static_admin_layers() -> None:
