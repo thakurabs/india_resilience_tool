@@ -32,6 +32,44 @@ cd D:\projects\india_resilience_tool
 
 ---
 
+## 0b. Environment for agentic / WSL execution (READ IF NOT IN NATIVE POWERSHELL)
+
+This runbook was written for a native Windows **PowerShell** operator. If you are an
+automation agent running in **WSL bash**, apply these universal transforms to
+**every** command below. (Native PowerShell operators can skip this section and use
+the commands as written.)
+
+1. **Python interpreter — there is no `conda activate` in WSL bash.** Invoke the
+   `irt` env Python by absolute path, and always pass the `-X utf8` flag (see #2):
+   `/mnt/c/Users/22015611/AppData/Local/miniconda3/envs/irt/python.exe`
+   So `python -m tools.foo ...` becomes
+   `/mnt/c/Users/22015611/AppData/Local/miniconda3/envs/irt/python.exe -X utf8 -m tools.foo ...`
+
+2. **UTF-8 console is required (`-X utf8`).** Several scripts `print()` Unicode
+   (e.g. `↔`) that the Windows cp1252 console cannot encode, raising
+   `UnicodeEncodeError: 'charmap' codec can't encode character`. Pass the
+   **`-X utf8`** interpreter flag on every direct Python call — it is process-scoped
+   with no data/logic impact. Bash-side `PYTHONIOENCODING=`/`PYTHONUTF8=` exports do
+   **not** propagate into Windows `.exe` processes, so do not rely on them; use
+   `-X utf8`.
+
+3. **Stage 2 PowerShell script is the exception.** `-X utf8` cannot reach the
+   `.ps1`'s child Python processes. Set the encoding inside PowerShell instead, and
+   run it in the **background** (it is long):
+   ```
+   powershell.exe -ExecutionPolicy Bypass -Command "$env:PYTHONUTF8=1; & 'tools/runs/refresh_dashboard_climate_bundles.ps1' -State Telangana -Level all -Overwrite"
+   ```
+
+4. **Data paths.** `IRT_DATA_DIR` = `D:\projects\irt_data` (Windows) =
+   `/mnt/d/projects/irt_data` (WSL). Commands that take `--data-dir` keep the Windows
+   form `D:\projects\irt_data`; filesystem inspection from bash uses
+   `/mnt/d/projects/irt_data`.
+
+5. **Long stages / timeouts.** Stage 2 exceeds a 10-minute command timeout — run it
+   in the background and poll. Do not let a timeout trigger a retry.
+
+---
+
 ## 🚫 HARD RULES — never run these (they destroy the new boundaries)
 
 The new boundary files are the **source of truth** and must never be regenerated
@@ -104,6 +142,17 @@ is not clobbered):
 python -m tools.pipeline.build_admin_exposure_summary --data-dir D:\projects\irt_data
 ```
 
+> **Note (CHG-0079, applied 2026-06-10):** pre-LGD orphaned state-master directories
+> under the exposure slugs (old spellings of renamed states, e.g.
+> `DADRA & NAGAR HAVELI & DAMAN & DIU`, `CHHATISGARH`, `Lakshadweep-UT`,
+> `UTTARPRADESH`) were quarantined to `processed/_stale_prelgd_bak/` so this
+> builder's duplicate-`admin_key` guard passes. If it ever fails again with
+> `ValueError: Duplicate admin_key per level`, the cause is the same — a
+> `--overwrite` rebuild left old-named state dirs alongside the new canonical ones.
+> Fix: quarantine any state dir under the affected slug whose master files were
+> **not** written by the current run (compare file mtimes; check both the district
+> and block masters), then re-run this step.
+
 Audit the exposure metrics:
 
 ```powershell
@@ -132,6 +181,16 @@ Rebuild groundwater district masters:
 ```powershell
 python -m tools.geodata.build_groundwater_district_masters --overwrite
 ```
+
+> **Caveat (rollout, not Telangana):** groundwater state-master dirs are named from
+> the builder's `canonical_state` mapping, which still uses pre-LGD spellings for a
+> few renamed states (`chhatisgarh`, `jammu and kashmir`, `andaman and nicobar
+> islands`, `lakshadweep ut`). The `--overwrite` rebuild overwrites these in place
+> (no new orphan, so this stage does not crash), and **Telangana is unaffected**
+> (`telangana` aliases identically). But the gw layer for those states may not join
+> cleanly to the renamed boundaries — flag for the pan-India rollout. The hydro
+> summary itself is safe: it reads `processed_optimised/context/*_basin.parquet`
+> crosswalk parquets, not per-state gw dirs.
 
 Rebuild the optimized bundle for groundwater (this regenerates the
 `context/*_basin.parquet` / `context/*_subbasin.parquet` files from the fresh
