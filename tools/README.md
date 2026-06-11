@@ -141,6 +141,7 @@ For the full command catalog, see [`../docs/command_catalog.md`](../docs/command
 | `tools/diagnostics/debug_build_master.py` | Debug helper for master build issues | `python -m tools.diagnostics.debug_build_master --help` |
 | `tools/diagnostics/verify_states_geojson.py` | Verify `states_4326.geojson` is consistent with `districts_4326.geojson` | `python -m tools.diagnostics.verify_states_geojson` |
 | `tools/diagnostics/verify_districts_blocks_geojson.py` | Sanity + parity checks for `districts_4326.geojson` and `blocks_4326.geojson` | `python -m tools.diagnostics.verify_districts_blocks_geojson districts` / `... blocks --sample 50` |
+| `tools/diagnostics/verify_admin_join_consistency.py` | Cross-level join consistency for all three boundary layers: (1) naming — block→district→state mapping + `state_lgd_code`↔`state_name` agreement; (2) geometry — per-unit IoU/residual of children-dissolve vs parent polygon (EPSG:6933). Optional `--figures-dir` renders example district/state nesting maps, an area-parity scatter, and an IoU-band chart. Reads `{states,districts,blocks}_4326.geojson` from `--geojson-dir` (default: IRT data dir); only writes figures. Exit 1 if any unit's IoU < `--min-iou` (default 0.999). | `python -m tools.diagnostics.verify_admin_join_consistency --help` |
 
 ## Geo / data acquisition / prep
 

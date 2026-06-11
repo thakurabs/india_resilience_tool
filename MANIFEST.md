@@ -352,6 +352,7 @@ Aqueduct methodology note:
 | `spi_diagnostic.py` | SPI output sanity checks and diagnostics |
 | `verify_states_geojson.py` | Verify `states_4326.geojson` is consistent with `districts_4326.geojson` |
 | `verify_districts_blocks_geojson.py` | Sanity + parity checks for `districts_4326.geojson` and `blocks_4326.geojson` |
+| `verify_admin_join_consistency.py` | Cross-level join consistency for all three boundary layers (naming + per-unit dissolve IoU/residual); optional `--figures-dir` renders nesting maps, area-parity scatter, IoU-band chart |
 
 ### `tools/geodata/`
 
