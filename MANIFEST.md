@@ -516,6 +516,7 @@ python -m pytest -q
 - `test_compute_indices_synthetic.py`
 - `test_compute_indices_synthetic_comprehensive.py`
 - `test_hydro_compute_pipeline.py`
+- `test_roster_gate.py` — canonical-roster gate at the `build_processed_optimised` master-publish chokepoint (`IRT_ROSTER_GATE` strict/warn/off)
 - `test_legacy_dashboard_map_portfolio_wiring.py`
 - `test_legacy_dashboard_portfolio_panel_call.py`
 - `test_legacy_dashboard_state_profile_files.py`

@@ -13,6 +13,7 @@ import os
 import json
 import shutil
 import sys
+import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
@@ -469,6 +470,113 @@ def _admin_keys(df: pd.DataFrame, *, level: str) -> pd.DataFrame:
         .str.cat(out["block"].astype(str).map(alias), sep="|")
     )
     return out
+
+
+class CanonicalRosterError(RuntimeError):
+    """Raised when published masters carry district/block keys absent from the current canonical boundary roster."""
+
+
+@lru_cache(maxsize=None)
+def _canonical_admin_keys(level: str, source_path: str) -> frozenset:
+    """Return the alias-normalized admin keys for ``level`` from the live boundary source.
+
+    District keys: ``alias(state_name)|alias(district_name)``.
+    Block keys:    ``alias(state_name)|alias(district_name)|alias(block_name)``.
+    Loads the full national boundary layer once (cached per (level, source_path)); the
+    build process is short-lived, so this read happens at most twice per run.
+    """
+    gdf = gpd.read_file(source_path)
+    if level == "district":
+        gdf = ensure_adm2_columns(gdf)
+        keys = (
+            gdf["state_name"].astype(str).map(alias)
+            .str.cat(gdf["district_name"].astype(str).map(alias), sep="|")
+        )
+    else:
+        gdf = ensure_adm3_columns(gdf)
+        keys = (
+            gdf["state_name"].astype(str).map(alias)
+            .str.cat(gdf["district_name"].astype(str).map(alias), sep="|")
+            .str.cat(gdf["block_name"].astype(str).map(alias), sep="|")
+        )
+    return frozenset(str(k) for k in keys.tolist())
+
+
+def _roster_gate_mode() -> str:
+    """Resolve the gate mode from ``IRT_ROSTER_GATE``.
+
+    Default ``warn`` during the boundary-migration transition; the intended end-state
+    is ``strict`` (flip the default in a follow-up once the roster audit is 100% clean).
+    Unknown values fall back to ``strict`` (fail-safe) with a warning.
+    """
+    mode = os.environ.get("IRT_ROSTER_GATE", "warn").strip().lower()
+    if mode not in {"strict", "warn", "off"}:
+        warnings.warn(f"Unknown IRT_ROSTER_GATE={mode!r}; falling back to 'strict'.", stacklevel=2)
+        return "strict"
+    return mode
+
+
+def _roster_offender_summary(slug: str, level: str, n_rows: int, offenders: list) -> str:
+    shown = ", ".join(sorted(offenders)[:12]) + (" …" if len(offenders) > 12 else "")
+    return (
+        f"[roster-gate] {slug} ({level}): {n_rows} row(s) across {len(offenders)} admin "
+        f"unit(s) absent from the current canonical boundary roster — likely stale/renamed "
+        f"names: {shown}"
+    )
+
+
+def _check_canonical_roster(out: pd.DataFrame, *, slug: str, level: str):
+    """Validate a master's admin rows against the live canonical boundary roster.
+
+    Returns ``(frame_to_write_or_None, offenders)`` and never raises:
+      * ``off`` / hydro level / no offenders -> ``(out, [])``.
+      * ``warn`` -> ``(out_without_offenders, offenders)``: caller writes the cleaned
+        frame and logs. NOTE: this only *annotates* — a renamed unit's sole row is
+        dropped, so it stays blank on the map. ``warn`` does not heal.
+      * ``strict`` -> ``(None, offenders)``: caller skips writing this master (leaving the
+        last-good copy untouched); the run raises once, after the loop, with the full list.
+    """
+    mode = _roster_gate_mode()
+    if mode == "off" or level not in {"district", "block"}:
+        return out, []
+    key_col = "district_key" if level == "district" else "block_key"
+    if key_col not in out.columns:
+        return out, []
+    cfg = get_paths_config()
+    source = str(cfg.districts_path if level == "district" else cfg.blocks_path)
+    canonical = _canonical_admin_keys(level, source)
+    mask_bad = ~out[key_col].astype(str).isin(canonical)
+    if not mask_bad.any():
+        return out, []
+    id_cols = [c for c in ("state", "district", "block") if c in out.columns]
+    offenders = (
+        out.loc[mask_bad, id_cols].drop_duplicates().astype(str).agg(" | ".join, axis=1).tolist()
+    )
+    if mode == "warn":
+        warnings.warn(
+            _roster_offender_summary(slug, level, int(mask_bad.sum()), offenders)
+            + " — dropping rows (IRT_ROSTER_GATE=warn); these units stay blank, not healed.",
+            stacklevel=2,
+        )
+        return out.loc[~mask_bad].copy(), offenders
+    return None, offenders
+
+
+def _roster_violations_report(violations: dict) -> str:
+    lines = [
+        "Canonical-roster gate (IRT_ROSTER_GATE=strict) blocked the publish.",
+        f"{len(violations)} master(s) carried admin units absent from the current boundary "
+        f"roster; their stale copies were left untouched and NOT republished:",
+    ]
+    for slug in sorted(violations):
+        units = sorted(set(violations[slug]))
+        shown = ", ".join(units[:12]) + (" …" if len(units) > 12 else "")
+        lines.append(f"  - {slug}: {len(units)} unit(s) -> {shown}")
+    lines.append(
+        "Rebuild these masters on the current boundaries, or set IRT_ROSTER_GATE=warn to "
+        "publish the clean bundles and drop the stale rows."
+    )
+    return "\n".join(lines)
 
 
 def _select_master_columns(
@@ -2362,6 +2470,7 @@ def build_processed_optimised_bundle(
     resolved_workers = resolve_build_workers(workers)
 
     try:
+        roster_violations: dict = {}
         for task in plan.master_tasks:
             slug = task.slug or ""
             varcfg = VARIABLES.get(slug, {})
@@ -2378,7 +2487,12 @@ def build_processed_optimised_bundle(
                 out = _select_master_columns(df, slug=slug, level=str(task.level), supported_stats=supported_stats)
                 if out.empty:
                     return
-                _write_parquet(out, target)
+                frame, offenders = _check_canonical_roster(out, slug=slug, level=str(task.level))
+                if offenders:
+                    roster_violations.setdefault(slug, []).extend(offenders)
+                if frame is None or frame.empty:
+                    return
+                _write_parquet(frame, target)
                 summaries_map[slug]["wrote_masters"] = True
 
             _run_task(task, progress, _write_master)
@@ -2512,6 +2626,8 @@ def build_processed_optimised_bundle(
                 f"(metrics={parity['metrics_considered']}, issues={parity['issue_count']}, "
                 f"report={report_path or (resolve_optimized_bundle_root(data_dir=data_dir) / 'parity_report.json' if not scoped_admin_run else 'not-written')})"
             )
+        if roster_violations and _roster_gate_mode() == "strict":
+            raise CanonicalRosterError(_roster_violations_report(roster_violations))
         return summaries
     except Exception:
         progress.close()

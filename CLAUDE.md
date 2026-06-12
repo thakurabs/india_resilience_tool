@@ -222,6 +222,7 @@ python -m tools.optimized.audit_processed_optimised_parity
 | `IRT_PROCESSED_ROOT` | `IRT_DATA_DIR/processed/{metric}` | Optional processed-root override |
 | `IRT_PROCESSED_OPTIMISED_ROOT` | `IRT_DATA_DIR/processed_optimised` | Optional optimized runtime-bundle override |
 | `IRT_DEBUG` | `0` | Enable debug/perf output |
+| `IRT_ROSTER_GATE` | `warn` | Canonical-roster gate at master publish in `build_processed_optimised`: `warn` (drop stale/renamed admin rows + log) / `strict` (skip stale master + fail the run after publishing the clean bundles) / `off`. Intended end-state is `strict` once the boundary-migration roster audit is clean. |
 
 ## 12. Do not touch (without explicit discussion)
 
