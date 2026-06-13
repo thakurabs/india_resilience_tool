@@ -107,13 +107,14 @@ powershell.exe -NoProfile -Command "& 'C:\Users\22015611\AppData\Local\miniconda
 files under `D:\projects\irt_data\processed*` open (Windows-side — ask the human to close if unsure).
 Report what you can determine. *Why: a Windows handle blocks/half-completes the rename.*
 
-**0.2 Disk space + footprint:**
+**0.2 Disk space:**
 ```bash
 df -h /mnt/d | tail -1
-du -sh /mnt/d/projects/irt_data/processed /mnt/d/projects/irt_data/processed_optimised 2>/dev/null
 ```
-**Success check:** free space comfortably exceeds the current `processed` size (need ~2× headroom —
-you will hold both `_bak` trees plus the freshly recomputed tree). Report the numbers.
+**Success check:** confirm free space is present. (`/mnt/d` has ample headroom — multiple TB free —
+so this is a trivial confirmation, not a constraint. Do **not** run `du` on the `processed` trees:
+over the WSL→Windows `drvfs` boundary a recursive stat of the hundreds-of-thousands of small files
+takes many minutes and tells you nothing actionable here.) Report the `df` line.
 
 🛑 **GATE 0 — POST -1, 0.1, 0.2 output and WAIT for `APPROVED: APPLY`** (authorizes the Step 1 rename).
 
