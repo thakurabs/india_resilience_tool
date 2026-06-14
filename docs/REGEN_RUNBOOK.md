@@ -120,26 +120,27 @@ takes many minutes and tells you nothing actionable here.) Report the `df` line.
 
 ---
 
-## STEP 1 — Backup-and-clear (rename only; reversible) — 🛑 gated by GATE 0
+## STEP 1 — Backup-and-clear (rename only; reversible) — ✅ COMPLETED this session
 
-> **Scope: moves ONLY the two output trees.** It does NOT touch the LGD boundaries
+> **✅ ALREADY DONE — VERIFY ONLY, DO NOT run `mv`.** Both output trees were already renamed to
+> `*_bak` this session (`processed/` → `processed_bak/`, `processed_optimised/` →
+> `processed_optimised_bak/`). Running the `mv` again would fail (`No such file or directory`,
+> targets already exist) and trip GOLDEN RULE 4. Run the verify check below, confirm the expected
+> state, and proceed straight to STEP 2.
+
+> **Scope (for the record): moved ONLY the two output trees.** It did NOT touch the LGD boundaries
 > (`blocks/districts/states_4326.geojson`, `LGD_Blocks/`), raw climate (`r1i1p1f1*/`, `era5/`,
 > `imd/`), `basins.geojson`/`subbasins.geojson`, JRC rasters, or exposure rasters — the regen reads
-> those as inputs. Renames are instant and reversible (not copies/deletes).
+> those as inputs. Renames were instant and reversible (not copies/deletes).
 
-```bash
-mv /mnt/d/projects/irt_data/processed           /mnt/d/projects/irt_data/processed_bak
-mv /mnt/d/projects/irt_data/processed_optimised /mnt/d/projects/irt_data/processed_optimised_bak
-```
-**Success check:**
+**Verify-only (do NOT run `mv`):**
 ```bash
 ls -d /mnt/d/projects/irt_data/processed_bak /mnt/d/projects/irt_data/processed_optimised_bak
 ls -d /mnt/d/projects/irt_data/processed /mnt/d/projects/irt_data/processed_optimised 2>&1
 ```
 Expect: the `_bak` dirs exist; `processed`/`processed_optimised` report "No such file or directory."
-
-**If `mv` fails ("Device or resource busy" / permission) → 🛑 STOP** (a Windows process holds it open).
-Do not retry.
+If instead `processed/` or `processed_optimised/` still exist (STEP 1 not yet done on this machine) →
+🛑 STOP and report; do not improvise the rename (a Windows handle may block it — see session notes).
 
 > **Rollback (if a later run goes wrong)** — two-step so the new tree doesn't collide with `_bak`:
 > ```bash
@@ -317,10 +318,16 @@ Report exit code and any "missing"/"stale" counts.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Set-Location 'D:\projects\india_resilience_tool'; & 'C:\Users\22015611\AppData\Local\miniconda3\envs\irt\python.exe' -X utf8 -m tools.diagnostics.verify_admin_join_consistency"
 ```
 
-**7.4 Compute-failure sidecar sweep (bash):**
+**7.4 Compute-failure sidecar sweep (Windows-native — scoped to the new output trees):**
 ```bash
-find /mnt/d/projects/irt_data /mnt/d/projects/india_resilience_tool/tools/runs \( -name '*_compute_failures.json' -o -name '*_partial_run.json' \) -printf '%p  %s bytes\n' 2>/dev/null
+powershell.exe -NoProfile -Command "Get-ChildItem -Path 'D:\projects\irt_data\processed','D:\projects\irt_data\processed_optimised','D:\projects\india_resilience_tool\tools\runs' -Recurse -File -Include '*_compute_failures.json','*_partial_run.json' -ErrorAction SilentlyContinue | ForEach-Object { '{0}  {1} bytes' -f \$_.FullName, \$_.Length }"
 ```
+> **Do NOT** use a WSL `find /mnt/d/projects/irt_data …` here: over the `drvfs` boundary it
+> recursively stats the entire data root — the huge raw `r1i1p1f1/` tree **and** both
+> `processed_bak/` + `processed_optimised_bak/` archives — and stalls for many minutes (the same
+> trap as `du`). The scoped Windows-native scan above hits only the freshly built output trees +
+> run logs, runs natively on D: (no drvfs penalty), and excludes the stale `_bak` sidecars.
+
 Report every file found and its size. Any non-empty file = report it prominently (it is the GAP-7
 "map renders but trend blanks" class).
 
