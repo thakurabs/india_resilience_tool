@@ -13,6 +13,7 @@ import os
 import json
 import shutil
 import sys
+import time
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -256,6 +257,12 @@ class BuildProgress:
         self._overall_bar: Optional[tqdm] = None
         self._stage_bar: Optional[tqdm] = None
         self._stage_name: Optional[str] = None
+        # Per-stage wall-clock accounting (independent of progress-bar enablement).
+        # Stages run serially, so each stage owns the interval between its first
+        # touch and the next stage's first touch; close() seals the final stage.
+        self._stage_elapsed: dict[str, float] = {stage: 0.0 for stage in self._stage_totals}
+        self._timing_stage: Optional[str] = None
+        self._timing_start: Optional[float] = None
 
         if self._enabled:
             self._overall_bar = tqdm(
@@ -295,8 +302,25 @@ class BuildProgress:
         if self._stage_bar is not None:
             self._stage_bar.set_postfix_str(label)
 
+    def _touch_stage_timer(self, stage: str) -> None:
+        """Attribute wall-clock to the stage we are leaving and arm the new stage.
+
+        Runs regardless of progress-bar enablement so timing is available under a
+        profiler that disables bars. Idempotent within a stage.
+        """
+        if stage == self._timing_stage:
+            return
+        now = time.perf_counter()
+        if self._timing_stage is not None and self._timing_start is not None:
+            self._stage_elapsed[self._timing_stage] = (
+                self._stage_elapsed.get(self._timing_stage, 0.0) + (now - self._timing_start)
+            )
+        self._timing_stage = stage
+        self._timing_start = now
+
     def start_task(self, task: BuildTask) -> None:
         self._current_task = task
+        self._touch_stage_timer(task.stage)
         self._ensure_stage(stage=task.stage, label=task.label)
 
     def finish_task(self, task: BuildTask, *, count: int = 1) -> None:
@@ -314,6 +338,7 @@ class BuildProgress:
         if count <= 0:
             return
         self._current_task = BuildTask(stage=stage, label=label)
+        self._touch_stage_timer(stage)
         self._ensure_stage(stage=stage, label=label)
         self._stage_completed[stage] += count
         self._completed_total += count
@@ -338,13 +363,36 @@ class BuildProgress:
             f"remaining_tasks={remaining}, current={current})"
         )
 
+    def _seal_stage_timer(self) -> None:
+        """Fold the currently-open stage interval into its accumulator (idempotent)."""
+        if self._timing_stage is not None and self._timing_start is not None:
+            now = time.perf_counter()
+            self._stage_elapsed[self._timing_stage] = (
+                self._stage_elapsed.get(self._timing_stage, 0.0) + (now - self._timing_start)
+            )
+        self._timing_start = None
+
+    def print_stage_timing(self) -> None:
+        """Emit the per-stage wall-clock split of the build (audit is timed separately)."""
+        total = sum(self._stage_elapsed.values())
+        if total <= 0:
+            return
+        parts = [
+            f"{stage}={self._stage_elapsed.get(stage, 0.0):.1f}s "
+            f"({(self._stage_elapsed.get(stage, 0.0) / total * 100.0):.1f}%)"
+            for stage in self._stage_totals
+        ]
+        print(f"STAGE TIMING total={total:.1f}s " + ", ".join(parts))
+
     def close(self) -> None:
+        self._seal_stage_timer()
         if self._stage_bar is not None:
             self._stage_bar.close()
             self._stage_bar = None
         if self._overall_bar is not None:
             self._overall_bar.close()
             self._overall_bar = None
+        self.print_stage_timing()
 
 
 def _run_task(task: BuildTask, progress: BuildProgress, action) -> None:
