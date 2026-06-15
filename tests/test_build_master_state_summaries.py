@@ -66,14 +66,18 @@ def test_build_master_metrics_writes_level_specific_state_files(tmp_path: Path, 
     state_root = root / "Telangana"
     state_root.mkdir(parents=True)
 
-    all_rows = [
-        {"state": "Telangana", "district": "D1", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0},
-    ]
-    yearly_rows = [
-        {"state": "Telangana", "district": "D1", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0},
-    ]
+    all_df = pd.DataFrame(
+        [
+            {"state": "Telangana", "district": "D1", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0},
+        ]
+    )
+    yearly_df = pd.DataFrame(
+        [
+            {"state": "Telangana", "district": "D1", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0},
+        ]
+    )
 
-    monkeypatch.setattr(bmm, "_collect_district_data", lambda *args, **kwargs: (all_rows, yearly_rows))
+    monkeypatch.setattr(bmm, "_collect_district_data", lambda *args, **kwargs: (all_df, yearly_df))
     monkeypatch.setattr(bmm, "_build_wide_master", lambda *args, **kwargs: pd.DataFrame([{"state": "Telangana", "district": "D1"}]))
 
     outp = state_root / "master_metrics_by_district.csv"
@@ -98,14 +102,18 @@ def test_build_master_metrics_writes_level_specific_state_files_block(tmp_path: 
     state_root = root / "Telangana"
     state_root.mkdir(parents=True)
 
-    all_rows = [
-        {"state": "Telangana", "district": "D1", "block": "B1", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0},
-    ]
-    yearly_rows = [
-        {"state": "Telangana", "district": "D1", "block": "B1", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0},
-    ]
+    all_df = pd.DataFrame(
+        [
+            {"state": "Telangana", "district": "D1", "block": "B1", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0},
+        ]
+    )
+    yearly_df = pd.DataFrame(
+        [
+            {"state": "Telangana", "district": "D1", "block": "B1", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0},
+        ]
+    )
 
-    monkeypatch.setattr(bmm, "_collect_block_data", lambda *args, **kwargs: (all_rows, yearly_rows))
+    monkeypatch.setattr(bmm, "_collect_block_data", lambda *args, **kwargs: (all_df, yearly_df))
     monkeypatch.setattr(bmm, "_build_wide_master", lambda *args, **kwargs: pd.DataFrame([{"state": "Telangana", "district": "D1", "block": "B1"}]))
 
     outp = state_root / "master_metrics_by_block.csv"
@@ -187,17 +195,21 @@ def test_build_master_metrics_hydro_uses_hydro_root_without_state(
     hydro_root.mkdir(parents=True)
 
     calls: dict[str, object] = {}
-    all_rows = [
-        {"state": "hydro", "basin": "Godavari Basin", "basin_id": "GOD", "basin_name": "Godavari Basin", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0},
-    ]
-    yearly_rows = [
-        {"state": "hydro", "basin": "Godavari Basin", "basin_id": "GOD", "basin_name": "Godavari Basin", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0},
-    ]
+    all_df = pd.DataFrame(
+        [
+            {"state": "hydro", "basin": "Godavari Basin", "basin_id": "GOD", "basin_name": "Godavari Basin", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0},
+        ]
+    )
+    yearly_df = pd.DataFrame(
+        [
+            {"state": "hydro", "basin": "Godavari Basin", "basin_id": "GOD", "basin_name": "Godavari Basin", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0},
+        ]
+    )
 
     def _collect(state_root: Path, state: str, metric_col_candidates, verbose: bool = True):
         calls["state_root"] = state_root
         calls["state"] = state
-        return all_rows, yearly_rows
+        return all_df, yearly_df
 
     monkeypatch.setattr(bmm, "_collect_basin_data", _collect)
     monkeypatch.setattr(
@@ -231,8 +243,8 @@ def test_build_master_metrics_hydro_ignores_state_argument(
 
     def _collect(*args, **kwargs):
         return (
-            [{"state": "hydro", "basin": "Godavari Basin", "basin_id": "GOD", "basin_name": "Godavari Basin", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0}],
-            [{"state": "hydro", "basin": "Godavari Basin", "basin_id": "GOD", "basin_name": "Godavari Basin", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0}],
+            pd.DataFrame([{"state": "hydro", "basin": "Godavari Basin", "basin_id": "GOD", "basin_name": "Godavari Basin", "scenario": "historical", "period": "1990-2010", "model": "m1", "value": 1.0}]),
+            pd.DataFrame([{"state": "hydro", "basin": "Godavari Basin", "basin_id": "GOD", "basin_name": "Godavari Basin", "scenario": "historical", "year": 2000, "model": "m1", "value": 1.0}]),
         )
 
     monkeypatch.setattr(bmm, "_collect_basin_data", _collect)
