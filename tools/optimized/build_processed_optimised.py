@@ -9,13 +9,14 @@ This tool is intentionally non-destructive: it reads from the current
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import json
 import shutil
 import sys
 import time
 import warnings
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -423,6 +424,31 @@ def resolve_build_workers(workers: Optional[int]) -> int:
     return resolved
 
 
+def _yearly_executor_kind() -> str:
+    """Resolve the executor backend for the yearly-loader chunk pool.
+
+    ``'process'`` (default) preserves today's ``ProcessPoolExecutor`` behavior;
+    ``'thread'`` (opt-in via ``IRT_YEARLY_EXECUTOR=thread``) uses a thread pool —
+    safe because the yearly workers read CSVs only (no geospatial/pyproj calls)
+    and pay no spawn/pickle tax. Unknown values fall back to ``'process'``.
+    """
+    kind = os.environ.get("IRT_YEARLY_EXECUTOR", "process").strip().lower()
+    return kind if kind in {"process", "thread"} else "process"
+
+
+def _yearly_chunk_size(n_items: int, worker_count: int, kind: str) -> int:
+    """Chunk size for the yearly-loader parallel branch.
+
+    Processes want few large chunks (spawn is costly) -> keep the fixed default.
+    Threads want many small chunks (cheap fan-out) -> split per worker so small
+    single-state jobs actually parallelize. Note this yields ~``ceil(n/workers)``
+    chunks, not ``worker_count`` chunks; callers must not assume the latter.
+    """
+    if kind == "thread" and worker_count > 1:
+        return max(1, math.ceil(n_items / worker_count))
+    return YEARLY_PARALLEL_CHUNK_SIZE
+
+
 def _chunk_tuple(items: tuple[T, ...], *, chunk_size: int) -> tuple[tuple[T, ...], ...]:
     """Split a tuple into stable, contiguous chunks."""
     if chunk_size <= 0:
@@ -789,6 +815,36 @@ def _load_legacy_admin_yearly_models_chunk(
     return chunk_index, pd.concat(rows, ignore_index=True, sort=False)
 
 
+def _run_chunks_serial(
+    *,
+    progress: BuildProgress,
+    stage: str,
+    label_prefix: str,
+    chunks: tuple[tuple[str, ...], ...],
+    worker_fn,
+    worker_kwargs: dict[str, object],
+) -> list[tuple[int, pd.DataFrame]]:
+    """Run chunk workers in-process, mirroring the parallel path exactly.
+
+    Used when ``max_workers <= 1`` so a single-chunk job does not pay the cost of
+    spawning a one-worker process pool (pure overhead on Windows). Reproduces all
+    parallel-path invariants: per-chunk ``advance_stage``, deterministic
+    chunk-ordered output via the post-sort, and unswallowed worker exceptions
+    (matching ``future.result()`` semantics).
+    """
+    results: list[tuple[int, pd.DataFrame]] = []
+    for chunk_index, chunk in enumerate(chunks):
+        chunk_result = worker_fn(chunk_index, chunk, **worker_kwargs)
+        progress.advance_stage(
+            stage=stage,
+            label=f"{label_prefix} | chunk {chunk_index + 1}/{len(chunks)}",
+            count=len(chunk),
+        )
+        results.append(chunk_result)
+    results.sort(key=lambda item: item[0])
+    return results
+
+
 def _execute_parallel_chunks(
     *,
     progress: BuildProgress,
@@ -798,14 +854,31 @@ def _execute_parallel_chunks(
     worker_count: int,
     worker_fn,
     worker_kwargs: dict[str, object],
+    kind: str = "process",
 ) -> list[tuple[int, pd.DataFrame]]:
-    """Execute chunked worker tasks and preserve deterministic chunk ordering."""
+    """Execute chunked worker tasks and preserve deterministic chunk ordering.
+
+    ``kind`` selects the parallel backend (``'process'`` or ``'thread'``) and is
+    resolved once by the caller; this function never re-reads the environment.
+    A ``max_workers <= 1`` plan runs serially in-process (no pool spawn).
+    """
     if not chunks:
         return []
 
     max_workers = max(1, min(int(worker_count), len(chunks)))
+    if max_workers <= 1:
+        return _run_chunks_serial(
+            progress=progress,
+            stage=stage,
+            label_prefix=label_prefix,
+            chunks=chunks,
+            worker_fn=worker_fn,
+            worker_kwargs=worker_kwargs,
+        )
+
+    executor_cls = ThreadPoolExecutor if kind == "thread" else ProcessPoolExecutor
     results: list[tuple[int, pd.DataFrame]] = []
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with executor_cls(max_workers=max_workers) as executor:
         future_map = {
             executor.submit(worker_fn, chunk_index, chunk, **worker_kwargs): (chunk_index, len(chunk))
             for chunk_index, chunk in enumerate(chunks)
@@ -866,7 +939,11 @@ def _load_legacy_admin_yearly_models(
         level=level,
     )
     progress.start_task(parallel_task)
-    path_chunks = _chunk_tuple(tuple(str(path) for path in csv_paths), chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
+    kind = _yearly_executor_kind()
+    path_strings = tuple(str(path) for path in csv_paths)
+    path_chunks = _chunk_tuple(
+        path_strings, chunk_size=_yearly_chunk_size(len(path_strings), workers, kind)
+    )
     chunk_results = _execute_parallel_chunks(
         progress=progress,
         stage="yearly-models",
@@ -875,6 +952,7 @@ def _load_legacy_admin_yearly_models(
         worker_count=workers,
         worker_fn=_load_legacy_admin_yearly_models_chunk,
         worker_kwargs={"state_name": state_name, "level": level},
+        kind=kind,
     )
     rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
     if not rows:
@@ -927,7 +1005,8 @@ def _load_legacy_hydro_yearly_models(
         return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
 
     progress.start_task(BuildTask(stage="yearly-ensemble", label=f"{label_prefix} | parallel hydro model reads"))
-    source_chunks = _chunk_tuple(sources, chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
+    kind = _yearly_executor_kind()
+    source_chunks = _chunk_tuple(sources, chunk_size=_yearly_chunk_size(len(sources), workers, kind))
     chunk_results = _execute_parallel_chunks(
         progress=progress,
         stage="yearly-ensemble",
@@ -940,6 +1019,7 @@ def _load_legacy_hydro_yearly_models(
             "basin_map": basin_map,
             "subbasin_map": subbasin_map,
         },
+        kind=kind,
     )
     rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
     if not rows:
@@ -1194,7 +1274,8 @@ def _load_legacy_yearly_ensemble(
         return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
 
     progress.start_task(BuildTask(stage="yearly-ensemble", label=f"{label_prefix} | parallel ensemble reads"))
-    source_chunks = _chunk_tuple(sources, chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
+    kind = _yearly_executor_kind()
+    source_chunks = _chunk_tuple(sources, chunk_size=_yearly_chunk_size(len(sources), workers, kind))
     chunk_results = _execute_parallel_chunks(
         progress=progress,
         stage="yearly-ensemble",
@@ -1208,6 +1289,7 @@ def _load_legacy_yearly_ensemble(
             "basin_map": basin_lookup,
             "subbasin_map": subbasin_lookup,
         },
+        kind=kind,
     )
     rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
     if not rows:

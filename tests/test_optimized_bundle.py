@@ -19,11 +19,17 @@ from india_resilience_tool.data.optimized_bundle import (
 )
 from tools.diagnostics.list_optimized_yearly_metrics import list_metrics as list_optimized_yearly_metrics
 from tools.optimized.build_processed_optimised import (
+    YEARLY_PARALLEL_CHUNK_SIZE,
     BuildPlan,
     BuildProgress,
     BuildTask,
     _build_execution_plan,
+    _chunk_tuple,
     _copy_context_artifacts,
+    _execute_parallel_chunks,
+    _load_legacy_admin_yearly_models,
+    _yearly_chunk_size,
+    _yearly_executor_kind,
     audit_processed_optimised_parity,
     build_processed_optimised_bundle,
     default_build_workers_80pct,
@@ -839,6 +845,210 @@ def test_build_processed_optimised_parallel_matches_serial_outputs(
     assert serial_tables.keys() == parallel_tables.keys()
     for name in sorted(serial_tables):
         assert_frame_equal(serial_tables[name], parallel_tables[name], check_like=False)
+
+    # Thread executor (opt-in) must produce byte-identical bundle output.
+    thread_root = tmp_path / "thread"
+    _write_admin_legacy_metric_fixture(thread_root)
+    _write_hydro_legacy_metric_fixture(thread_root)
+    _write_geometry_fixture(thread_root)
+    monkeypatch.setenv("IRT_DATA_DIR", str(thread_root))
+    monkeypatch.setenv("IRT_YEARLY_EXECUTOR", "thread")
+    build_processed_optimised_bundle(
+        data_dir=thread_root,
+        metrics=["txx_annual_max"],
+        workers=2,
+        overwrite=False,
+        include_geometry=False,
+        include_context=False,
+        show_progress=False,
+        run_audit=False,
+    )
+    thread_tables = _read_output_tables(thread_root / "processed_optimised", slug="txx_annual_max")
+    for name in sorted(serial_tables):
+        assert_frame_equal(serial_tables[name], thread_tables[name], check_like=False)
+
+
+# --- Yearly-loader executor: chunk-plan, fan-out, and serial-branch unit tests ---
+
+
+class _SpyProgress:
+    """Minimal progress stub recording per-chunk advance_stage calls."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, int]] = []
+
+    def advance_stage(self, *, stage: str, label: str, count: int) -> None:
+        self.calls.append((stage, label, count))
+
+    def start_task(self, task) -> None:  # pragma: no cover - unused by these paths
+        pass
+
+
+def _scale_chunk(chunk_index: int, chunk: tuple[int, ...], *, factor: int):
+    return chunk_index, pd.DataFrame({"v": [x * factor for x in chunk]})
+
+
+def _boom_worker(chunk_index: int, chunk: tuple[int, ...], **_kwargs):
+    raise ValueError("boom")
+
+
+def test_yearly_chunk_size_selects_per_kind() -> None:
+    # process keeps the fixed (large) chunk regardless of worker count
+    assert _yearly_chunk_size(33, 28, "process") == YEARLY_PARALLEL_CHUNK_SIZE
+    # thread with >1 worker splits per worker (ceil)
+    assert _yearly_chunk_size(33, 28, "thread") == 2  # ceil(33/28)
+    assert _yearly_chunk_size(10, 4, "thread") == 3  # ceil(10/4)
+    # thread with a single worker falls back to the fixed chunk (serial anyway)
+    assert _yearly_chunk_size(33, 1, "thread") == YEARLY_PARALLEL_CHUNK_SIZE
+
+
+def test_yearly_executor_kind_reads_env(monkeypatch) -> None:
+    monkeypatch.delenv("IRT_YEARLY_EXECUTOR", raising=False)
+    assert _yearly_executor_kind() == "process"
+    monkeypatch.setenv("IRT_YEARLY_EXECUTOR", "thread")
+    assert _yearly_executor_kind() == "thread"
+    monkeypatch.setenv("IRT_YEARLY_EXECUTOR", "THREAD")
+    assert _yearly_executor_kind() == "thread"
+    monkeypatch.setenv("IRT_YEARLY_EXECUTOR", "garbage")
+    assert _yearly_executor_kind() == "process"
+
+
+def test_execute_parallel_chunks_thread_preserves_chunk_order() -> None:
+    chunks = ((1, 2), (3,), (4, 5), (6,))
+    progress = _SpyProgress()
+    results = _execute_parallel_chunks(
+        progress=progress,
+        stage="yearly-models",
+        label_prefix="t",
+        chunks=chunks,
+        worker_count=4,
+        worker_fn=_scale_chunk,
+        worker_kwargs={"factor": 10},
+        kind="thread",
+    )
+    assert [idx for idx, _ in results] == [0, 1, 2, 3]
+    assert results[2][1]["v"].tolist() == [40, 50]
+    assert len(progress.calls) == len(chunks)
+
+
+def test_execute_parallel_chunks_serial_branch_runs_in_process() -> None:
+    chunks = ((1,), (2,), (3,))
+    progress = _SpyProgress()
+    # worker_count=1 forces max_workers<=1 -> serial in-process, no pool spawn
+    results = _execute_parallel_chunks(
+        progress=progress,
+        stage="yearly-models",
+        label_prefix="t",
+        chunks=chunks,
+        worker_count=1,
+        worker_fn=_scale_chunk,
+        worker_kwargs={"factor": 2},
+        kind="process",
+    )
+    assert [idx for idx, _ in results] == [0, 1, 2]
+    assert results[0][1]["v"].tolist() == [2]
+    assert len(progress.calls) == len(chunks)
+
+
+def test_execute_parallel_chunks_serial_branch_propagates_exception() -> None:
+    with pytest.raises(ValueError, match="boom"):
+        _execute_parallel_chunks(
+            progress=_SpyProgress(),
+            stage="yearly-models",
+            label_prefix="t",
+            chunks=((1,),),
+            worker_count=1,
+            worker_fn=_boom_worker,
+            worker_kwargs={},
+            kind="process",
+        )
+
+
+def test_execute_parallel_chunks_thread_branch_propagates_exception() -> None:
+    with pytest.raises(ValueError, match="boom"):
+        _execute_parallel_chunks(
+            progress=_SpyProgress(),
+            stage="yearly-models",
+            label_prefix="t",
+            chunks=((1,), (2,), (3,)),
+            worker_count=4,
+            worker_fn=_boom_worker,
+            worker_kwargs={},
+            kind="thread",
+        )
+
+
+def _write_district_yearly_models(
+    root: Path,
+    *,
+    slug: str,
+    state: str,
+    district: str,
+    models: list[str],
+    scenario: str = "ssp245",
+) -> tuple[Path, ...]:
+    base = root / "processed" / slug / state / "districts" / district
+    paths: list[Path] = []
+    for i, model in enumerate(models):
+        model_dir = base / model / scenario
+        model_dir.mkdir(parents=True)
+        path = model_dir / f"{district}_yearly.csv"
+        path.write_text(f"year,value\n2030,{float(i)}\n2031,{float(i) + 0.5}\n", encoding="utf-8")
+        paths.append(path)
+    return tuple(paths)
+
+
+def _empty_progress() -> BuildProgress:
+    plan = BuildPlan(
+        summaries_seed=(),
+        master_tasks=(),
+        yearly_model_jobs=(),
+        yearly_ensemble_jobs=(),
+        context_tasks=(),
+        geometry_tasks=(),
+        manifest_task=BuildTask(stage="manifest", label="manifest"),
+    )
+    return BuildProgress(plan, enabled=False)
+
+
+def test_load_admin_yearly_models_thread_matches_serial(tmp_path: Path, monkeypatch) -> None:
+    paths = _write_district_yearly_models(
+        tmp_path,
+        slug="txx_annual_max",
+        state="Telangana",
+        district="Hanumakonda",
+        models=["ModelA", "ModelB", "ModelC"],
+    )
+    # Guard G6: the thread arm must genuinely fan out (>1 chunk), else the
+    # ThreadPoolExecutor is never exercised and the parity check is vacuous.
+    chunk_size = _yearly_chunk_size(len(paths), 4, "thread")
+    assert len(_chunk_tuple(tuple(str(p) for p in paths), chunk_size=chunk_size)) > 1
+
+    monkeypatch.delenv("IRT_YEARLY_EXECUTOR", raising=False)
+    serial = _load_legacy_admin_yearly_models(
+        slug="txx_annual_max",
+        state_name="Telangana",
+        level="district",
+        csv_paths=paths,
+        progress=_empty_progress(),
+        workers=1,
+    )
+
+    monkeypatch.setenv("IRT_YEARLY_EXECUTOR", "thread")
+    threaded = _load_legacy_admin_yearly_models(
+        slug="txx_annual_max",
+        state_name="Telangana",
+        level="district",
+        csv_paths=paths,
+        progress=_empty_progress(),
+        workers=4,
+    )
+
+    sort_cols = ["model", "year"]
+    assert_frame_equal(
+        serial.sort_values(sort_cols).reset_index(drop=True),
+        threaded.sort_values(sort_cols).reset_index(drop=True),
+    )
 
 
 def test_build_execution_plan_adds_hydro_yearly_fallback_from_model_files(
