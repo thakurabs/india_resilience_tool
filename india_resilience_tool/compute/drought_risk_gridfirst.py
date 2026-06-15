@@ -145,6 +145,8 @@ def _baseline_coverage_ok(
     baseline_years: tuple[int, int],
     min_fraction: float,
 ) -> bool:
+    # Scalar oracle for _baseline_coverage_grid; kept for the parity test and
+    # for profile_drought_realdata.py. compute_spi_grid uses the grid version.
     years = np.arange(int(baseline_years[0]), int(baseline_years[1]) + 1)
     required = int(math.ceil(float(min_fraction) * len(years)))
     s = pd.Series(np.isfinite(values), index=times)
@@ -153,6 +155,34 @@ def _baseline_coverage_ok(
         if int(s.loc[mask].sum()) < required:
             return False
     return True
+
+
+def _baseline_coverage_grid(
+    vals: np.ndarray,
+    times: pd.DatetimeIndex,
+    *,
+    baseline_years: tuple[int, int],
+    min_fraction: float,
+) -> np.ndarray:
+    """Vectorized per-cell baseline-coverage gate; element-wise identical to ``_baseline_coverage_ok``.
+
+    ``vals`` MUST be ``(time, lat, lon)`` (same contract as ``compute_spi_grid``'s loop).
+    The baseline calendar-month masks depend only on ``times`` (invariant across cells), so
+    they are computed once and finite counts reduced over all cells per month. Reduces one
+    month-slice at a time to avoid materializing a full ``(time, lat, lon)`` boolean cube
+    (matters at pan-India grid sizes). Parity guarded by
+    ``test_baseline_coverage_grid_matches_scalar_oracle``.
+    """
+    b0, b1 = int(baseline_years[0]), int(baseline_years[1])
+    required = int(math.ceil(float(min_fraction) * (b1 - b0 + 1)))
+    year = times.year.to_numpy()
+    month = times.month.to_numpy()
+    in_baseline = (year >= b0) & (year <= b1)
+    ok = np.ones(vals.shape[1:], dtype=bool)
+    for m in range(1, 13):
+        tmask = in_baseline & (month == m)
+        ok &= np.isfinite(vals[tmask]).sum(axis=0) >= required
+    return ok
 
 
 def compute_spi_grid(
@@ -176,18 +206,19 @@ def compute_spi_grid(
     data_start_year = int(times[0].year)
     vals = np.asarray(monthly.values, dtype=float)
     out = np.full(vals.shape, np.nan, dtype=float)
+    # See _baseline_coverage_ok (scalar oracle kept for parity test + diagnostics).
+    coverage_ok = _baseline_coverage_grid(
+        vals,
+        times,
+        baseline_years=baseline_years,
+        min_fraction=min_baseline_years_per_calendar_month_fraction,
+    )
     for lat_i in range(vals.shape[1]):
         for lon_i in range(vals.shape[2]):
-            series = vals[:, lat_i, lon_i]
-            if not _baseline_coverage_ok(
-                series,
-                times,
-                baseline_years=baseline_years,
-                min_fraction=min_baseline_years_per_calendar_month_fraction,
-            ):
+            if not coverage_ok[lat_i, lon_i]:
                 continue
             out[:, lat_i, lon_i] = _compute_spi_series(
-                series,
+                vals[:, lat_i, lon_i],
                 data_start_year=data_start_year,
                 baseline_years=baseline_years,
                 scale_months=scale_months,

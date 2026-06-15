@@ -6,6 +6,8 @@ import pytest
 import xarray as xr
 
 from india_resilience_tool.compute.drought_risk_gridfirst import (
+    _baseline_coverage_grid,
+    _baseline_coverage_ok,
     _to_contiguous_monthly_index,
     _trim_to_full_calendar_years,
     aggregate_grid_counts,
@@ -162,7 +164,7 @@ def test_count_months_lt_counts_total_months_not_events_or_max_spell() -> None:
         min_event_months=1,
     )["value"]
 
-    assert float(count_months.sel(year=2000).item()) == 5.0
+    assert float(count_months.sel(year=2000).item()) == 6.0
     assert float(count_events.sel(year=2000).item()) == 3.0
     assert float(max_spell.sel(year=2000).item()) == 3.0
     assert float(count_months.sel(year=2000).item()) != float(count_events.sel(year=2000).item())
@@ -336,6 +338,69 @@ def test_compute_spi_grid_passes_nan_filled_array_to_climate_indices():
     assert bool(np.all(series[:24] == 50.0))
     assert bool(np.all(np.isnan(series[24:72])))
     assert bool(np.all(series[72:] == 50.0))
+
+
+def test_baseline_coverage_grid_matches_scalar_oracle():
+    """Vectorized gate must be element-wise identical to the per-cell scalar oracle.
+
+    Baseline (2000-2009) over min_fraction 0.83 => required = ceil(0.83 * 10) = 9
+    finite values per calendar month inside the window. Cells are engineered to
+    exercise the inversion (any-month-fails => cell fails), >= vs > at threshold,
+    inclusive [b0, b1] bounds, and the in-baseline masking.
+    """
+    baseline_years = (2000, 2009)
+    min_fraction = 0.83  # required == 9
+    times = pd.date_range("1998-01-01", "2011-12-01", freq="MS")  # full calendar years
+    year = times.year.to_numpy()
+    month = times.month.to_numpy()
+    in_base = (year >= baseline_years[0]) & (year <= baseline_years[1])
+
+    def _exactly_at_threshold():  # drop exactly one occurrence per month -> 9 remain (pass)
+        m = np.ones(len(times), dtype=bool)
+        for mo in range(1, 13):
+            idx = np.where(in_base & (month == mo))[0]
+            m[idx[0]] = False
+        return m
+
+    def _one_below_single_month():  # month 6 drops to 8 (fail), others full
+        m = np.ones(len(times), dtype=bool)
+        idx = np.where(in_base & (month == 6))[0]
+        m[idx[0]] = False
+        m[idx[1]] = False
+        return m
+
+    cells = [
+        ("fully_finite", np.ones(len(times), dtype=bool), True),
+        ("all_nan", np.zeros(len(times), dtype=bool), False),
+        ("exactly_at_threshold", _exactly_at_threshold(), True),
+        ("one_below_single_month", _one_below_single_month(), False),
+        ("finite_only_outside_baseline", ~in_base, False),
+        ("boundary_b0_included_2000_2008", (year >= 2000) & (year <= 2008), True),  # 9 yrs, incl b0
+        ("boundary_b1_included_2001_2009", (year >= 2001) & (year <= 2009), True),  # 9 yrs, incl b1
+        ("inner_8_years_2001_2008", (year >= 2001) & (year <= 2008), False),  # 8 yrs (fail)
+    ]
+
+    vals = np.full((len(times), len(cells), 1), np.nan, dtype=float)
+    for c, (_name, mask, _expected) in enumerate(cells):
+        vals[mask, c, 0] = 100.0
+
+    grid = _baseline_coverage_grid(
+        vals, times, baseline_years=baseline_years, min_fraction=min_fraction
+    )
+    oracle = np.array(
+        [
+            [
+                _baseline_coverage_ok(
+                    vals[:, c, 0], times, baseline_years=baseline_years, min_fraction=min_fraction
+                )
+            ]
+            for c in range(len(cells))
+        ]
+    )
+    expected = np.array([[exp] for _name, _mask, exp in cells])
+
+    assert np.array_equal(grid, oracle), "grid gate diverged from scalar oracle"
+    assert np.array_equal(grid, expected), "grid gate diverged from hand-computed expectation"
 
 
 def test_grid_metric_cache_invalidates_when_input_file_hash_changes(tmp_path):
