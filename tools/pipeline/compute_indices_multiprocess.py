@@ -7341,6 +7341,29 @@ def run_pipeline_parallel(
         compute_progress.finish()
 
         logging.info(f"Computation: {time.time() - start:.1f}s, Success: {completed - failed}, Failed: {failed}")
+
+        # CHG-0112: per-slug compute-duration rollup (read-only diagnostic).
+        # Sizes a metric family's share of the compute stage for Amdahl gating.
+        # Durations are per-task wall summed across parallel workers, so the
+        # TOTAL overcounts vs stage wall -- but the *share* is what we want.
+        # Only the multi-worker path records slug/duration, so this no-ops
+        # cleanly under --num-workers 1.
+        by_slug: dict[str, float] = {}
+        for r in results:
+            slug_r, dur_r = r.get("slug"), r.get("duration")
+            if slug_r is None or dur_r is None:
+                continue
+            by_slug[slug_r] = by_slug.get(slug_r, 0.0) + float(dur_r)
+        if by_slug:
+            total_task_s = sum(by_slug.values())
+            drought_s = sum(s for k, s in by_slug.items() if str(k).startswith(("spi3_", "spi6_", "spi12_")))
+            logging.info(
+                "[compute-rollup] total_task_seconds=%.1f drought(spi*)_task_seconds=%.1f drought_share_of_compute=%.1f%%",
+                total_task_s, drought_s, 100.0 * drought_s / total_task_s if total_task_s else 0.0,
+            )
+            for slug_r, secs in sorted(by_slug.items(), key=lambda kv: kv[1], reverse=True)[:15]:
+                logging.info("  [compute-rollup] %-34s %8.1fs (%4.1f%%)", slug_r, secs, 100.0 * secs / total_task_s)
+
         logging.info("Building ensembles...")
 
         ensemble_args = [
