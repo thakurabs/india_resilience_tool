@@ -25,6 +25,7 @@ from india_resilience_tool.compute.spi_adapter import Distribution, compute_spi_
 
 
 DROUGHT_GRIDFIRST_METHOD_VERSION = "drought-risk-v2-gridfirst-1"
+DROUGHT_MONTHLY_CUBE_METHOD_VERSION = "drought-monthly-cube-1"
 DROUGHT_GRIDFIRST_SLUGS = frozenset(
     {
         "spi3_count_events_lt_minus1",
@@ -397,6 +398,105 @@ def drought_period_cache_path(
     )
 
 
+def drought_monthly_cube_cache_path(
+    cache_root: Path,
+    *,
+    model: str,
+    scenario: str,
+    grid_id: str,
+    years_needed: Sequence[int],
+) -> Path:
+    """Return the monthly-precip-cube cache path, keyed on (model, scenario, grid_id, year-span).
+
+    The cube is independent of slug, distribution, scale_months, and baseline-window *values*, but
+    its content depends on ``years_needed`` so the resolved span is folded into the path. Divergent
+    year windows therefore get separate files instead of mutually overwriting one path.
+    """
+    ys = [int(y) for y in years_needed]
+    span = f"{min(ys)}-{max(ys)}" if ys else "empty"
+    return Path(cache_root) / "monthly_cube" / model / grid_id / scenario / span / "pr_monthly.nc"
+
+
+def load_or_build_monthly_cube(
+    *,
+    model: str,
+    scenario: str,
+    grid_id: str,
+    index_range: tuple[int, int, int, int] | None,
+    baseline_year_to_paths: Mapping[int, Mapping[str, Path]],
+    year_to_paths: Mapping[int, Mapping[str, Path]],
+    years_needed: Sequence[int],
+    min_daily_coverage: float = 0.90,
+    cache_root: Path | None = None,
+) -> xr.DataArray:
+    """Load+resample the monthly precip cube (the ``concat_years``+``daily_to_monthly_totals``
+    product), memoized on disk.
+
+    Returns the exact pre-trim ``daily_to_monthly_totals`` output so it is a drop-in for the inline
+    ``monthly`` in :func:`compute_drought_risk_rows_for_metric`; ``compute_spi_grid`` still does its
+    own trim/contiguity downstream. ``cache_root=None`` computes without caching (preserves the
+    full-grid default behavior).
+
+    Invariant: the precip source is ``{**baseline_year_to_paths, **year_to_paths}`` — scenario
+    deliberately wins on any overlap year. Do NOT reorder; a reorder would silently change the cube
+    on overlap years.
+    """
+
+    def _build() -> xr.DataArray:
+        da = concat_years(
+            {**baseline_year_to_paths, **year_to_paths},
+            "pr",
+            list(years_needed),
+            index_range=index_range,
+        )
+        return daily_to_monthly_totals(da, min_daily_coverage=min_daily_coverage)
+
+    if cache_root is None:
+        return _build()
+
+    # Cube depends on BOTH baseline and scenario daily files -> hash the UNION (NOT the scenario-only
+    # input_file_hashes used by the per-year/period caches). Baseline files now invalidate the cube.
+    cube_input_file_hashes = _hash_paths(
+        [
+            p
+            for mapping in {**baseline_year_to_paths, **year_to_paths}.values()
+            for p in mapping.values()
+        ]
+    )
+    sidecar = {
+        "cube_method_version": DROUGHT_MONTHLY_CUBE_METHOD_VERSION,
+        "model": model,
+        "scenario": scenario,
+        "grid_id": grid_id,
+        # index_range is applied INSIDE concat_years AFTER _hash_paths runs, so the spatial subset is
+        # invisible to the file-content hash. Encode it so two subsets sharing a grid_id cannot
+        # cross-serve.
+        "index_range": list(index_range) if index_range is not None else None,
+        "min_daily_coverage": float(min_daily_coverage),
+        "years_needed": [int(y) for y in years_needed],
+        "input_file_hashes": cube_input_file_hashes,
+    }
+    path = drought_monthly_cube_cache_path(
+        Path(cache_root),
+        model=model,
+        scenario=scenario,
+        grid_id=grid_id,
+        years_needed=years_needed,
+    )
+    existing = read_grid_metric_cache(path, expected_sidecar=sidecar)
+    if existing is not None:
+        # Rename back to "pr" so the warm path is name-identical to the cold/_build() path
+        # (daily_to_monthly_totals preserves the "pr" source name); the Dataset wrapper var name
+        # ("pr_monthly") is a storage detail and must not leak into the returned array.
+        return existing["pr_monthly"].rename("pr")
+    monthly = _build()
+    write_grid_metric_cache(monthly.to_dataset(name="pr_monthly"), path, sidecar=sidecar)
+    # Read-after-write so the cold writer and all warm readers consume byte-identical (round-tripped)
+    # bytes -> SPI inputs are determinism-invariant to race order.
+    served = read_grid_metric_cache(path, expected_sidecar=sidecar)
+    return served["pr_monthly"].rename("pr") if served is not None else monthly
+
+
 def _add_unit_fields(row: dict[str, object], *, level: str, unit_key: str) -> None:
     if level == "block" and "||" in unit_key:
         row["district"], row["block"] = unit_key.split("||", 1)
@@ -439,8 +539,17 @@ def compute_drought_risk_rows_for_metric(
     grid_id = str(params.get("grid_id") or "unknown-grid")
 
     years_needed = sorted(set(baseline_year_to_paths) | set(year_to_paths))
-    da = concat_years({**baseline_year_to_paths, **year_to_paths}, "pr", years_needed, index_range=index_range)
-    monthly = daily_to_monthly_totals(da)
+    monthly = load_or_build_monthly_cube(
+        model=model,
+        scenario=scenario,
+        grid_id=grid_id,
+        index_range=index_range,
+        baseline_year_to_paths=baseline_year_to_paths,
+        year_to_paths=year_to_paths,
+        years_needed=years_needed,
+        min_daily_coverage=float(params.get("min_daily_coverage", 0.90)),
+        cache_root=cache_root,
+    )
     spi = compute_spi_grid(
         monthly,
         baseline_years=baseline_years,

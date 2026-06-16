@@ -251,7 +251,7 @@ Aqueduct methodology note:
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 | `gridfirst_spatial.py` | Shared grid-first spatial overlap and NetCDF/sidecar cache helpers used by Heat Risk v2 and Drought Risk v2 |
 | `heat_stress_gridfirst.py` | Heat Stress v2 grid-first Twb and tropical-night metrics for admin district/block outputs, with private annual cell caches under `processed/_internal/heat_stress/grid_metrics/`; shared TN90p/WSDI remain in Heat Risk v2 |
-| `drought_risk_gridfirst.py` | Drought Risk v2 grid-cell SPI, annual count/spell metrics, period rollups, NaN-aware polygon aggregation, and private cache helpers |
+| `drought_risk_gridfirst.py` | Drought Risk v2 grid-cell SPI, annual count/spell metrics, period rollups, NaN-aware polygon aggregation, and private cache helpers. Includes `load_or_build_monthly_cube` (CHG-0108): a per-`(model, scenario, grid_id, year-span)` monthly-precip-cube disk cache under `processed/_internal/<drought-root>/monthly_cube/<model>/<grid_id>/<scenario>/<min>-<max>/pr_monthly.nc`, keyed by `DROUGHT_MONTHLY_CUBE_METHOD_VERSION` + a union (baseline∪scenario) input-file hash + `index_range`; it memoizes the shared `concat_years`+`daily_to_monthly_totals` load that all SPI scale slugs of a unit otherwise rebuild redundantly |
 | `extreme_rainfall_gridfirst.py` | Extreme Rainfall / Flash Flood v2 admin grid-first Rx1day, Rx5day, R20mm, R95p, R95pTOT, CWD, and CDD (CHG-0029) compute with private annual grid and threshold caches |
 
 #### `india_resilience_tool/compute/tests/`
