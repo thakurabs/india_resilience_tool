@@ -477,59 +477,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "using the Stull (2011) approximation."
     ),
 },
-{
-    "name": "Severe Humid-Heat Days (WBD ≤ 3°C)",
-    "slug": "wbd_le_3",
-    "var": "tas",
-    "vars": ["tas", "hurs"],
-    "value_col": "wbd_le_3_days",
-    "units": "days",
-    "compute": "wet_bulb_depression_days_le_threshold_stull",
-    "params": {"thresh_c": 3.0},
-    "group": "temperature",
-    "description": (
-        "Number of days per year where wet-bulb depression (tas − Twb) is ≤ 3°C, "
-        "derived from tas and hurs using the Stull (2011) approximation. Low depression "
-        "indicates very humid conditions and reduced evaporative cooling, increasing heat stress."
-    ),
-},
-{
-    "name": "Humid-Heat Days (WBD ≤ 6°C)",
-    "slug": "wbd_le_6",
-    "var": "tas",
-    "vars": ["tas", "hurs"],
-    "value_col": "wbd_le_6_days",
-    "units": "days",
-    "compute": "wet_bulb_depression_days_le_threshold_stull",
-    "params": {"thresh_c": 6.0},
-    "group": "temperature",
-    "description": (
-        "Number of days per year where wet-bulb depression (tas − Twb) is ≤ 6°C, "
-        "derived from tas and hurs using the Stull (2011) approximation. Low depression "
-        "indicates humid conditions and reduced evaporative cooling."
-    ),
-},
-{
-    "name": "Moderate Humid-Heat Days (3°C < WBD ≤ 6°C)",
-    "slug": "wbd_gt3_le6",
-    "var": "tas",
-    "vars": ["tas", "hurs"],
-    "value_col": "wbd_gt_3_le_6_days",
-    "units": "days",
-    "compute": "wet_bulb_depression_days_range_stull",
-    "params": {
-        "lower_c": 3.0,
-        "upper_c": 6.0,
-        "lower_inclusive": False,
-        "upper_inclusive": True,
-    },
-    "group": "temperature",
-    "description": (
-        "Number of days per year where wet-bulb depression (tas - Twb) falls in the "
-        "moderate humid-heat range 3°C < WBD <= 6°C, derived from tas and hurs using "
-        "the Stull (2011) approximation."
-    ),
-},
     {
         "name": "Hot Days (TX ≥ 30°C)",
         "slug": "txge30_hot_days",
@@ -556,20 +503,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Number of days when daily maximum temperature is at or above 35°C. "
             "Climdex index TXge35. Critical for heat stress."
-        ),
-    },
-    {
-        "name": "Tropical Nights (TR, TN > 20°C)",
-        "slug": "tasmin_tropical_nights_gt20",
-        "var": "tasmin",
-        "value_col": "tropical_nights_gt_20C",
-        "units": "days",
-        "compute": "count_days_above_threshold",
-        "params": {"thresh_k": 20.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of nights when daily minimum temperature exceeds 20°C. "
-            "Climdex index TR."
         ),
     },
     {
@@ -615,23 +548,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "and hurs using the Stull (2011) approximation."
         ),
     },
-    {
-        "name": "Consecutive Wet-Bulb Stress Days (WBD ≤ 3°C)",
-        "slug": "wbd_le_3_consecutive_days",
-        "var": "tas",
-        "vars": ["tas", "hurs"],
-        "value_col": "wbd_le_3_consecutive_days",
-        "units": "days",
-        "compute": "wet_bulb_depression_longest_run_le_threshold_stull",
-        "params": {"thresh_c": 3.0, "min_spell_days": 3},
-        "group": "temperature",
-        "description": (
-            "Maximum length of a humid-heat spell where wet-bulb depression (tas - Twb) "
-            "stays <= 3°C for at least 3 consecutive days, derived from tas and hurs using "
-            "the Stull (2011) approximation."
-        ),
-    },
-    
     {
         "name": "Shaded WBGT (Annual Mean)",
         "slug": "wbgt_shade_stull_annual_mean",
@@ -1083,54 +999,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Direction: lower values indicate higher cold risk."
         ),
     },
-    {
-        "name": "Daily Temperature Range (DTR)",
-        "slug": "dtr_daily_temp_range",
-        "var": "tasmax",  # Primary var (also requires tasmin)
-        "vars": ["tasmax", "tasmin"],
-        "value_col": "dtr_mean_C",
-        "units": "°C",
-        "compute": "daily_temperature_range",
-        "params": {},
-        "group": "temperature",
-        "description": (
-            "Mean difference between daily maximum and minimum temperature. "
-            "Climdex DTR index."
-        ),
-    },
-    {
-        "name": "Extreme Temperature Range (ETR)",
-        "slug": "etr_extreme_temp_range",
-        "var": "tasmax",  # Primary var (also requires tasmin)
-        "vars": ["tasmax", "tasmin"],
-        "value_col": "etr_range_C",
-        "units": "°C",
-        "compute": "extreme_temperature_range",
-        "params": {},
-        "group": "temperature",
-        "description": (
-            "Difference between highest TX and lowest TN in the year. "
-            "Climdex ETR index."
-        ),
-    },
-    
     # =========================================================================
     # 2. COLD RISK INDICES
     # =========================================================================
-    {
-        "name": "Frost Days (FD, TN < 0°C)",
-        "slug": "fd_frost_days",
-        "var": "tasmin",
-        "value_col": "frost_days",
-        "units": "days",
-        "compute": "count_days_below_threshold",
-        "params": {"thresh_k": 0.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of days when daily minimum temperature is below 0°C. "
-            "Climdex FD index. Critical for agriculture."
-        ),
-    },
     # {
     #     "name": "Icing Days (ID, TX < 0°C)",
     #     "slug": "id_icing_days",
@@ -1145,20 +1016,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #         "Climdex ID index. Indicates severe cold."
     #     ),
     # },
-    {
-        "name": "Cold Nights (TN < 2°C)",
-        "slug": "tnlt2_cold_nights",
-        "var": "tasmin",
-        "value_col": "days_tn_lt_2C",
-        "units": "days",
-        "compute": "count_days_below_threshold",
-        "params": {"thresh_k": 2.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of days when daily minimum temperature is below 2°C. "
-            "Climdex TNlt2 index."
-        ),
-    },
     {
         "name": "Cold Nights (TN <= 10°C)",
         "slug": "tnle10_cold_nights",
@@ -1254,22 +1111,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "computed per calendar day from the baseline period (1990-2010). Climdex CSDI."
         ),
     },
-    {
-        "name": "Growing Season Length (GSL)",
-        "slug": "gsl_growing_season",
-        "rank_higher_is_worse": False,
-        "var": "tas",
-        "value_col": "gsl_days",
-        "units": "days",
-        "compute": "growing_season_length",
-        "params": {"thresh_k": 5.0 + 273.15, "min_spell_days": 6},
-        "group": "temperature",
-        "description": (
-            "Number of days between first span of ≥6 days with TM > 5°C and "
-            "first span after July 1 of ≥6 days with TM < 5°C. Climdex GSL."
-        ),
-    },
-    
     # =========================================================================
     # 3. PRECIPITATION / FLOOD-RELATED INDICES
     # =========================================================================
@@ -1303,35 +1144,8 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Climdex Rx5day index."
         ),
     },
-    {
-        "name": "Heavy Rainfall Events (>= 2 consecutive days >= 150mm)",
-        "slug": "pr_2day_heavy_rainfall_events_ge150mm",
-        "var": "pr",
-        "value_col": "heavy_rainfall_events_2day_ge_150mm",
-        "units": "events",
-        "compute": "consecutive_heavy_rainfall_events",
-        "params": {"daily_thresh_mm": 150.0, "min_event_days": 2},
-        "group": "rain",
-        "description": (
-            "Annual count of heavy-rainfall events defined as runs of at least two "
-            "consecutive days with precipitation >= 150mm/day."
-        ),
-    },
-    
+
     # --- Precipitation Threshold Indices ---
-    {
-        "name": "Rainy Days (PR > 2.5mm)",
-        "slug": "rain_gt_2p5mm",
-        "var": "pr",
-        "value_col": "days_rain_gt_2p5mm",
-        "units": "days",
-        "compute": "count_rainy_days",
-        "params": {"thresh_mm": 2.5},
-        "group": "rain",
-        "description": (
-            "Number of days with precipitation exceeding 2.5mm."
-        ),
-    },
     # {
     #     "name": "Heavy Precipitation Days (R10mm)",
     #     "slug": "pr_heavy_precip_days_gt10mm",
@@ -1452,36 +1266,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #         "Climdex R99pTOT = 100 × R99p / PRCPTOT."
     #     ),
     # },
-    
-    # --- Precipitation Intensity & Totals ---
-    {
-        "name": "Simple Daily Intensity Index (SDII)",
-        "slug": "pr_simple_daily_intensity",
-        "var": "pr",
-        "value_col": "simple_daily_intensity_mm_per_day",
-        "units": "mm/day",
-        "compute": "simple_daily_intensity_index",
-        "params": {"wet_day_thresh_mm": 1.0},
-        "group": "rain",
-        "description": (
-            "Mean precipitation on wet days (days with ≥ 1mm). Climdex SDII index."
-        ),
-    },
-    {
-        "name": "Total Wet-Day Precipitation (PRCPTOT)",
-        "slug": "prcptot_annual_total",
-        "rank_higher_is_worse": False,
-        "var": "pr",
-        "value_col": "prcptot_mm",
-        "units": "mm",
-        "compute": "total_wet_day_precipitation",
-        "params": {"wet_thresh_mm": 1.0},
-        "group": "rain",
-        "description": (
-            "Total precipitation from all wet days (≥ 1mm) in the year. "
-            "Climdex PRCPTOT index."
-        ),
-    },
     
     # --- Wet/Dry Spell Indices ---
     {
@@ -1676,38 +1460,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "group": "rain",
         "description": "Annual count of months with SPI3 below -2 (severe meteorological drought persistence).",
     },
-    {
-        "name": "SPI3: Count of months with SPI > +1 (moderately wet)",
-        "slug": "spi3_count_months_gt_plus1",
-        "var": "pr",
-        "value_col": "spi3_months_gt_plus1",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 3,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 1.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI3 above +1 (wet persistence).",
-    },
-    {
-        "name": "SPI3: Count of months with SPI > +2 (severely wet)",
-        "slug": "spi3_count_months_gt_plus2",
-        "var": "pr",
-        "value_col": "spi3_months_gt_plus2",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 3,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 2.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI3 above +2 (extremely wet persistence).",
-    },
 
     # SPI6 counts
     {
@@ -1788,38 +1540,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "group": "rain",
         "description": "Annual count of months with SPI6 below -2 (severe meteorological drought persistence).",
     },
-    {
-        "name": "SPI6: Count of months with SPI > +1 (moderately wet)",
-        "slug": "spi6_count_months_gt_plus1",
-        "var": "pr",
-        "value_col": "spi6_months_gt_plus1",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 6,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 1.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI6 above +1 (wet persistence).",
-    },
-    {
-        "name": "SPI6: Count of months with SPI > +2 (severely wet)",
-        "slug": "spi6_count_months_gt_plus2",
-        "var": "pr",
-        "value_col": "spi6_months_gt_plus2",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 6,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 2.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI6 above +2 (extremely wet persistence).",
-    },
 
     # SPI12 counts
     {
@@ -1899,38 +1619,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         },
         "group": "rain",
         "description": "Annual count of months with SPI12 below -2 (severe long-term drought persistence).",
-    },
-    {
-        "name": "SPI12: Count of months with SPI > +1 (moderately wet)",
-        "slug": "spi12_count_months_gt_plus1",
-        "var": "pr",
-        "value_col": "spi12_months_gt_plus1",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 12,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 1.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI12 above +1 (wet persistence).",
-    },
-    {
-        "name": "SPI12: Count of months with SPI > +2 (severely wet)",
-        "slug": "spi12_count_months_gt_plus2",
-        "var": "pr",
-        "value_col": "spi12_months_gt_plus2",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 12,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 2.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI12 above +2 (extremely wet persistence).",
     },
     # {
     #     "name": "Standardised Precip-Evapotranspiration Index 3-month (SPEI3)",
@@ -2687,12 +2375,6 @@ DOMAINS: dict[str, list[str]] = {
         "cwd_consecutive_wet_days",
         # "pr_5day_precip_events_gt50mm",
     ],
-    "Rainfall Totals & Typical Wetness": [
-        # Annual totals and intensity
-        "prcptot_annual_total",
-        "pr_simple_daily_intensity",
-        "rain_gt_2p5mm",
-    ],
     "Drought Risk": [
         "composite_drought_risk",
         "spi3_count_events_lt_minus1",
@@ -2744,11 +2426,6 @@ DOMAINS: dict[str, list[str]] = {
         # "spei3_drought_index",
         # "spei6_drought_index",
         # "spei12_drought_index",
-    ],
-    "Temperature Variability": [
-        # Daily and annual variability
-        "dtr_daily_temp_range",
-        "etr_extreme_temp_range",
     ],
     "Population Exposure": [
         "population_total",
@@ -2803,9 +2480,7 @@ DOMAIN_ORDER: list[str] = [
     "Asset Risk (Thermal Power Plants)",
     "Asset Risk (Hydropower Plants)",
     "Life & Livelihood Loss Risk",
-    "Rainfall Totals & Typical Wetness",
     "Drought Risk (Advanced)",
-    "Temperature Variability",
     "Population Exposure",
     "Rural Facilities Exposure",
     "Built-up Area Exposure",
@@ -2829,9 +2504,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
         "Asset Risk (Thermal Power Plants)",
         "Asset Risk (Hydropower Plants)",
         "Life & Livelihood Loss Risk",
-        "Rainfall Totals & Typical Wetness",
         "Drought Risk (Advanced)",
-        "Temperature Variability",
     ],
     "Bio-physical Hazards": [
         "Groundwater Status & Availability",
@@ -2913,10 +2586,6 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "Metrics related to extreme precipitation events and flood risk. "
         "Includes peak intensity, heavy rain frequency, and wet spell persistence."
     ),
-    "Rainfall Totals & Typical Wetness": (
-        "Metrics for overall water availability and typical rainfall patterns. "
-        "Distinct from flood extremes; useful for water resource planning."
-    ),
     "Drought Risk": (
         "Metrics related to dry spells and drought conditions. "
         "Includes SPI and SPEI indices at multiple timescales."
@@ -2952,10 +2621,6 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
     "Life & Livelihood Loss Risk": (
         "Persisted sector-wise climate-risk composite for life and livelihood loss exposure. "
         "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
-    ),
-    "Temperature Variability": (
-        "Metrics for daily and annual temperature variability. "
-        "Useful for understanding climate stability and interpreting heat stress."
     ),
 }
 

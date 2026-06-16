@@ -75,19 +75,6 @@ def test_validate_registry_against_pipeline_reports_duplicates_but_no_mismatch()
     assert not any("periods_metric_col" in s and "value_col" in s for s in issues)
 
 
-def test_wbd_metrics_registered() -> None:
-    assert "wbd_le_3" in METRICS_BY_SLUG
-    assert "wbd_le_6" in METRICS_BY_SLUG
-
-    severe = METRICS_BY_SLUG["wbd_le_3"]
-    humid = METRICS_BY_SLUG["wbd_le_6"]
-
-    assert severe.compute == "wet_bulb_depression_days_le_threshold_stull"
-    assert humid.compute == "wet_bulb_depression_days_le_threshold_stull"
-    assert severe.value_col == "wbd_le_3_days"
-    assert humid.value_col == "wbd_le_6_days"
-
-
 def test_tropical_nights_gt25_metric_is_registered_for_heat_risk() -> None:
     assert "tasmin_tropical_nights_gt25" in METRICS_BY_SLUG
 
@@ -120,24 +107,15 @@ def test_heat_risk_warm_percentile_metrics_use_linear_quantile_and_strict_exceed
 def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
     assert "twb_summer_mean" in METRICS_BY_SLUG
     assert "tasmin_tropical_nights_gt28" in METRICS_BY_SLUG
-    assert "wbd_gt3_le6" in METRICS_BY_SLUG
-    assert "wbd_le_3_consecutive_days" in METRICS_BY_SLUG
     assert "twb_days_ge_28" in METRICS_BY_SLUG
 
     summer = METRICS_BY_SLUG["twb_summer_mean"]
     tropical_nights = METRICS_BY_SLUG["tasmin_tropical_nights_gt28"]
-    moderate = METRICS_BY_SLUG["wbd_gt3_le6"]
-    consecutive = METRICS_BY_SLUG["wbd_le_3_consecutive_days"]
     threshold = METRICS_BY_SLUG["twb_days_ge_28"]
 
     assert summer.compute == "wet_bulb_seasonal_mean_stull"
     assert summer.params["months"] == [3, 4, 5]
     assert tropical_nights.params["thresh_k"] == 28.0 + 273.15
-    assert moderate.compute == "wet_bulb_depression_days_range_stull"
-    assert moderate.params["lower_c"] == 3.0
-    assert moderate.params["upper_c"] == 6.0
-    assert consecutive.compute == "wet_bulb_depression_longest_run_le_threshold_stull"
-    assert consecutive.params["min_spell_days"] == 3
     assert threshold.compute == "wet_bulb_days_ge_threshold_stull"
     assert threshold.params["thresh_c"] == 28.0
 
@@ -252,14 +230,6 @@ def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
         )
 
 
-def test_wbd_legacy_metrics_registered_but_not_under_heat_stress() -> None:
-    legacy_slugs = {"wbd_le_3", "wbd_gt3_le6", "wbd_le_3_consecutive_days", "wbd_le_6"}
-    heat_stress_metrics = set(get_metrics_for_bundle("Heat Stress", spatial_family="admin", level="district"))
-
-    assert legacy_slugs <= set(METRICS_BY_SLUG)
-    assert legacy_slugs.isdisjoint(heat_stress_metrics)
-
-
 def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
     assert "tasmin_winter_min" in METRICS_BY_SLUG
     assert "tnle10_cold_nights" in METRICS_BY_SLUG
@@ -360,14 +330,11 @@ def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
 
 def test_extreme_rainfall_v2_keeps_registry_and_admin_semantics_explicit() -> None:
     r20 = METRICS_BY_SLUG["r20mm_very_heavy_precip_days"]
-    rainy = METRICS_BY_SLUG["rain_gt_2p5mm"]
     r95p = METRICS_BY_SLUG["r95p_very_wet_precip"]
     r95ptot = METRICS_BY_SLUG["r95ptot_contribution_pct"]
 
     assert r20.params["thresh_mm"] == 20.0
     assert r20.params["exceed_ge"] is True
-    assert "exceed_ge" not in rainy.params
-    assert rainy.params["thresh_mm"] == 2.5
     assert r95p.params["baseline_years"] == (1981, 2010)
     assert r95p.params["quantile_method"] == "nearest"
     assert r95p.params["exceed_ge"] is True
@@ -381,10 +348,8 @@ def test_extreme_rainfall_v2_keeps_registry_and_admin_semantics_explicit() -> No
 
 def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_domains() -> None:
     assert "r99p_extreme_wet_precip" in METRICS_BY_SLUG
-    assert "pr_2day_heavy_rainfall_events_ge150mm" in METRICS_BY_SLUG
 
     r99p = METRICS_BY_SLUG["r99p_extreme_wet_precip"]
-    heavy_rain = METRICS_BY_SLUG["pr_2day_heavy_rainfall_events_ge150mm"]
 
     assert r99p.compute == "percentile_precipitation_total"
     assert r99p.params["percentile"] == 99
@@ -393,9 +358,6 @@ def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_dom
     assert "r99p_extreme_wet_precip" in EXTREME_RAINFALL_GRIDFIRST_SLUGS
     assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "district") is True
     assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "basin") is False
-    assert heavy_rain.compute == "consecutive_heavy_rainfall_events"
-    assert heavy_rain.params["daily_thresh_mm"] == 150.0
-    assert heavy_rain.params["min_event_days"] == 2
 
     flood_metrics = get_metrics_for_bundle(
         "Extreme Rainfall | Flash Flood Risk",
@@ -403,7 +365,6 @@ def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_dom
         level="district",
     )
     assert "r99p_extreme_wet_precip" not in flood_metrics
-    assert "pr_2day_heavy_rainfall_events_ge150mm" not in flood_metrics
 
 
 def test_heat_risk_admin_only_gridfirst_metrics_keep_hydro_legacy_dispatch() -> None:
