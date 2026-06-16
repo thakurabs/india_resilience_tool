@@ -7076,6 +7076,90 @@ def _worker_process_task(task: ProcessingTask) -> dict:
     result["duration"] = time.time() - start
     return result
 
+
+def partition_drought_reps(
+    tasks: Sequence[ProcessingTask], level: str
+) -> tuple[list[ProcessingTask], list[ProcessingTask]]:
+    """Split *tasks* into ``(reps, remainder)`` for the Option C (CHG-0113) cube pre-warm.
+
+    Selects exactly one representative grid-first drought task per cube group so a single serial
+    pre-pass cold-builds the shared monthly cube (``load_or_build_monthly_cube``) that every other
+    drought fork of the same group then warm-hits.
+
+    The cube key is morally ``(model, scenario, grid_id, year-span)``, but ``grid_id``/``span`` are not
+    carried on :class:`ProcessingTask`. They are 1:1 with ``(model, scenario)`` today -- all grid-first
+    drought slugs route through the same dispatch with the same grid_id/index_range (guarded by the
+    ``test_drought_slugs_share_baseline_years`` registry invariant) -- so we group by
+    ``(model, scenario)`` and assert that 1:1 mapping in the partition unit test.
+
+    Invariant: ``set(reps) | set(remainder) == set(tasks)``, ``reps`` and ``remainder`` are disjoint,
+    and there is exactly one rep per ``(model, scenario)`` drought group. Non-drought tasks all land in
+    ``remainder``.
+
+    Degrade-not-corrupt: a rep only *pre-warms* the cube. Because ``index_range`` lives in the cube
+    sidecar (CHG-0108 G1), any drift between a rep's cube key and a fork's can at worst cause a cold
+    miss (today's behavior), never a wrong-serve.
+    """
+    reps: list[ProcessingTask] = []
+    remainder: list[ProcessingTask] = []
+    seen_groups: set[tuple[str, str]] = set()
+    for task in tasks:
+        if not is_drought_gridfirst(task.slug, level):
+            remainder.append(task)
+            continue
+        group = (task.model, task.scenario)
+        if group in seen_groups:
+            remainder.append(task)
+        else:
+            seen_groups.add(group)
+            reps.append(task)
+    return reps, remainder
+
+
+def _run_rep_prepass(
+    reps: Sequence[ProcessingTask],
+    gdf: gpd.GeoDataFrame,
+    *,
+    progress: "PeriodicProgressLogger",
+    results: list,
+) -> tuple[int, int]:
+    """Serially run the Option C (CHG-0113) cube pre-warm reps in the parent process.
+
+    Each rep is wrapped exactly like :func:`_worker_process_task` so its ``slug``/``duration`` survive
+    into the CHG-0112 ``[compute-rollup]`` and the ``completed``/``failed`` accounting stays
+    parity-correct with a no-pre-pass run (G-C1, G-C3). A failed rep is recorded once, is NOT retried
+    (it is removed from the forked remainder), and the run still forks the remainder -- those forks
+    merely cold-build the cube (degrade, not corrupt).
+
+    Returns ``(completed, failed)`` increments for the caller to fold into its running totals.
+    """
+    completed = 0
+    failed = 0
+    for rep in reps:
+        start = time.time()
+        result = {
+            "task_id": rep.task_id,
+            "slug": rep.slug,
+            "model": rep.model,
+            "scenario": rep.scenario,
+            "status": "success",
+            "error": None,
+        }
+        try:
+            result.update(_execute_processing_task(rep, gdf))
+        except Exception as e:
+            logging.error(f"Pre-warm rep failed for {rep.slug}/{rep.model}/{rep.scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            result["status"] = "failed"
+            result["error"] = str(e)
+            failed += 1
+        result["duration"] = time.time() - start
+        results.append(result)
+        completed += 1
+        progress.update(failed_increment=1 if result["status"] == "failed" else 0)
+    return completed, failed
+
+
 def _compute_ensembles_for_metric(
     args: tuple[str, AdminLevel, str, tuple[str, ...] | None, tuple[str, ...] | None, str] | tuple[str, AdminLevel, str, tuple[str, ...] | None, tuple[str, ...] | None]
 ) -> EnsembleJobResult:
@@ -7329,9 +7413,35 @@ def run_pipeline_parallel(
                 compute_progress.update(failed_increment=1 if results[-1]["status"] == "failed" else 0)
         else:
             init_fn = partial(_worker_init, level, state)
+            # CHG-0113 (Option C): serially pre-warm the shared drought monthly cube in the parent so
+            # the concurrent forks warm-hit instead of all cold-missing the same cube at once. Gated on
+            # the multi-worker path only -- the num_workers == 1 branch above already self-warms because
+            # it runs tasks sequentially in the parent. Partition FIRST so the single compute_progress
+            # (total=len(tasks)) is updated across both phases with no double/under-count (G-C2).
+            reps, remainder = partition_drought_reps(tasks, level)
             compute_progress.start()
+            if reps:
+                # G-C5: a NEW parent-side boundary load -- the worker pool loads gdf per-worker via
+                # init_fn, not in the parent. Small and unavoidable for Approach B; dwarfed by the cube
+                # rebuild it removes. Reps are drawn from `tasks` (the to-execute set), so on a resumed
+                # run only groups that still have drought forks get a rep -- the warming work matches the
+                # forks that need it (G-C6 resume: degrade-not-corrupt by construction).
+                prewarm_gdf = load_boundaries(
+                    get_boundary_path(level),
+                    state_filter=None if level in {"basin", "sub_basin"} else state,
+                    level=level,
+                )
+                logging.info(
+                    "Pre-warming drought monthly cube: %d representative task(s) of %d total",
+                    len(reps), len(tasks),
+                )
+                rep_completed, rep_failed = _run_rep_prepass(
+                    reps, prewarm_gdf, progress=compute_progress, results=results
+                )
+                completed += rep_completed
+                failed += rep_failed
             with Pool(num_workers, initializer=init_fn) as pool:
-                for r in pool.imap_unordered(_worker_process_task, tasks):
+                for r in pool.imap_unordered(_worker_process_task, remainder):
                     results.append(r)
                     completed += 1
                     if r["status"] == "failed":

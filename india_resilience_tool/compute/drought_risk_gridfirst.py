@@ -5,7 +5,9 @@ from __future__ import annotations
 import calendar
 import importlib.metadata
 import json
+import logging
 import math
+import os
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -484,6 +486,18 @@ def load_or_build_monthly_cube(
         years_needed=years_needed,
     )
     existing = read_grid_metric_cache(path, expected_sidecar=sidecar)
+    # CHG-0114: IRT_DEBUG-gated hit/miss signal so "1 cold write + N warm hits per group" is
+    # grep-countable, not inferred. No methodology effect.
+    if os.environ.get("IRT_DEBUG", "0") != "0":
+        ys = [int(y) for y in years_needed]
+        logging.debug(
+            "[cube] %s model=%s scen=%s grid=%s span=%s",
+            "HIT" if existing is not None else "MISS-build",
+            model,
+            scenario,
+            grid_id,
+            f"{min(ys)}-{max(ys)}" if ys else "empty",
+        )
     if existing is not None:
         # Rename back to "pr" so the warm path is name-identical to the cold/_build() path
         # (daily_to_monthly_totals preserves the "pr" source name); the Dataset wrapper var name

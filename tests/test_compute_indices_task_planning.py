@@ -360,3 +360,83 @@ def test_build_processing_task_plan_populates_inventory_engines_from_cached_shar
     )
 
     assert CMP._inventory_path_engines[str(year_path.resolve())] == "h5netcdf"
+
+
+# --- CHG-0113 (Option C) partition_drought_reps invariants (G-C7) -----------------------------
+
+
+def _task(slug: str, *, model: str, scenario: str, task_id: int) -> "CMP.ProcessingTask":
+    """Minimal ProcessingTask for partition tests (only slug/model/scenario are read)."""
+    return CMP.ProcessingTask(
+        metric_idx=0,
+        slug=slug,
+        model=model,
+        scenario=scenario,
+        scenario_conf={},
+        task_id=task_id,
+        total_tasks=0,
+    )
+
+
+def test_partition_drought_reps_invariants() -> None:
+    drought_slugs = [
+        "spi3_count_events_lt_minus1",
+        "spi6_count_events_lt_minus1",
+        "spi12_max_spell_lt_minus1",
+        "spi3_count_months_lt_minus1",  # admin-only grid-first slug
+    ]
+    non_drought_slugs = ["tas_mean", "spi3_count_events_lt_minus1_block_only_lookalike", "hwd"]
+
+    tasks: list[CMP.ProcessingTask] = []
+    tid = 0
+    groups = [("ModelA", "ssp245"), ("ModelA", "ssp585"), ("ModelB", "ssp245")]
+    # Every (model, scenario) group gets the full set of drought slugs -> only ONE should become a rep.
+    for model, scenario in groups:
+        for slug in drought_slugs:
+            tasks.append(_task(slug, model=model, scenario=scenario, task_id=tid))
+            tid += 1
+    # Non-drought tasks spread across the same and other groups -> always remainder.
+    for slug in non_drought_slugs:
+        tasks.append(_task(slug, model="ModelA", scenario="ssp245", task_id=tid))
+        tid += 1
+
+    reps, remainder = CMP.partition_drought_reps(tasks, level="district")
+
+    # No loss, no duplication: union == tasks, disjoint by identity.
+    assert set(map(id, reps)) | set(map(id, remainder)) == set(map(id, tasks))
+    assert set(map(id, reps)).isdisjoint(set(map(id, remainder)))
+    assert len(reps) + len(remainder) == len(tasks)
+
+    # Exactly one rep per (model, scenario) drought group.
+    rep_groups = [(t.model, t.scenario) for t in reps]
+    assert sorted(rep_groups) == sorted(groups)
+    assert len(rep_groups) == len(set(rep_groups))
+
+    # Every rep is a grid-first drought slug (the cube route); 1:1 group<->cube-key assumption holds.
+    assert all(CMP.is_drought_gridfirst(t.slug, "district") for t in reps)
+
+    # Non-drought tasks all land in remainder.
+    assert all(not CMP.is_drought_gridfirst(t.slug, "district") for t in remainder if t.slug in non_drought_slugs)
+    for slug in non_drought_slugs:
+        assert any(t.slug == slug for t in remainder)
+
+
+def test_partition_drought_reps_no_drought_is_noop() -> None:
+    tasks = [
+        _task("tas_mean", model="ModelA", scenario="ssp245", task_id=0),
+        _task("hwd", model="ModelA", scenario="ssp585", task_id=1),
+    ]
+    reps, remainder = CMP.partition_drought_reps(tasks, level="district")
+    assert reps == []
+    assert remainder == tasks
+
+
+def test_partition_drought_reps_block_level_also_grid_first() -> None:
+    # is_drought_gridfirst covers {"district", "block"}; a block-level drought task is still a rep.
+    tasks = [
+        _task("spi6_count_events_lt_minus1", model="ModelA", scenario="ssp245", task_id=0),
+        _task("spi6_count_events_lt_minus1", model="ModelA", scenario="ssp245", task_id=1),
+    ]
+    reps, remainder = CMP.partition_drought_reps(tasks, level="block")
+    assert len(reps) == 1
+    assert len(remainder) == 1
