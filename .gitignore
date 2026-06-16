@@ -78,3 +78,20 @@ processed/
 # --------------------------------
 mouse_nudge.py
 /wip_agent/
+
+# --------------------------------
+# Local tooling / editor state (never commit)
+# --------------------------------
+.claude/
+.codex
+.npmrc
+node_modules/
+*.docx
+
+# --------------------------------
+# Acceptance/diagnostic scratch outputs (regenerated on demand)
+# --------------------------------
+_accept_*.ps1
+accept_*.csv
+thematic_bundle_audit.csv
+thematic_bundle_audit.json
