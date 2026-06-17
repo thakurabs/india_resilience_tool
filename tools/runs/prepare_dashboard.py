@@ -448,19 +448,36 @@ def _build_composite_master_steps(
     levels: Sequence[str],
     admin_states: Sequence[str],
     scope: BundleRuntimeScope,
+    metrics: Optional[Sequence[str]] = None,
+    force_overwrite: bool = False,
 ) -> list[PlannedCommand]:
+    """Build composite-master steps for the requested levels.
+
+    By default the metric list is derived from ``scope`` (pending-aware). Callers may
+    pass an explicit ``metrics`` override to force-build a specific set regardless of
+    the scope's pending state (e.g. the JRC plan must rebuild the Riverine Flood
+    composite from its just-built component masters even when the pre-build audit
+    reported nothing pending). ``force_overwrite`` always emits ``--overwrite`` for
+    that set; otherwise it follows ``args.overwrite``.
+    """
     plan: list[PlannedCommand] = []
-    if not scope.selected_metrics:
+    if metrics is None and not scope.selected_metrics:
         return plan
-    metrics = _select_metrics_for_execution(scope) or scope.selected_metrics
+    resolved = (
+        list(metrics)
+        if metrics is not None
+        else (_select_metrics_for_execution(scope) or scope.selected_metrics)
+    )
+    if not resolved:
+        return plan
     for level in levels:
         if level not in {"district", "block"}:
             continue
         argv = _py_module_cmd("tools.pipeline.build_composite_metrics")
         argv.extend(["--level", level])
         _append_repeat(argv, "--state", admin_states)
-        _append_repeat(argv, "--metric", metrics)
-        _append_flag(argv, "--overwrite", bool(getattr(args, "overwrite", False)))
+        _append_repeat(argv, "--metric", resolved)
+        _append_flag(argv, "--overwrite", force_overwrite or bool(getattr(args, "overwrite", False)))
         if not bool(getattr(args, "verbose", False)):
             argv.append("--quiet")
         plan.append(PlannedCommand(label=f"composite-masters:{level}", argv=argv))
@@ -1304,6 +1321,27 @@ def build_jrc_flood_depth_plan(
         argv.extend(_build_jrc_builder_args(args))
         _append_flag(argv, "--overwrite", bool(args.overwrite))
         plan.append(PlannedCommand(label="jrc-flood-depth-admin-masters", argv=argv))
+        # Build the Riverine Flood composite master(s) from the JRC metric masters built
+        # immediately above, BEFORE the optimized publish + audit. The composite has no
+        # compute stage of its own; without this the optimized build packages and the audit
+        # checks a stale/empty composite_flood_jrc_depth master and the run fails. Emitted
+        # within this build branch independent of include_runtime so the merged
+        # dashboard-package runtime pass also consumes a valid composite master. Forced
+        # overwrite: derived data must always track its just-built component masters.
+        from india_resilience_tool.config.composite_metrics import is_composite_metric
+
+        composite_slugs = [m for m in scope.selected_metrics if is_composite_metric(m)]
+        if composite_slugs:
+            plan.extend(
+                _build_composite_master_steps(
+                    args,
+                    levels=("district", "block"),
+                    admin_states=_resolve_admin_states(getattr(args, "state", None)),
+                    scope=scope,
+                    metrics=composite_slugs,
+                    force_overwrite=True,
+                )
+            )
         # Publish the full JRC metric set (not the pre-build pending subset), so a
         # newly built state is always reflected in the optimized runtime + audit.
         publish_metrics = scope.selected_metrics

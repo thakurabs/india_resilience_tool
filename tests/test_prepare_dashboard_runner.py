@@ -151,6 +151,10 @@ def test_climate_hazards_bundle_expands_admin_levels_and_adds_runtime_steps() ->
     assert plan[6].argv[-1] == "--quiet"
     assert plan[7].argv[-1] == "--quiet"
     assert plan[8].argv.count("--level") == 2
+    # Backward-compat guard: the climate composite step passes neither the metrics
+    # override nor force_overwrite, so no "--overwrite" must leak in (overwrite=False here).
+    assert "--overwrite" not in plan[6].argv
+    assert "--overwrite" not in plan[7].argv
 
 
 def test_climate_hazards_audit_only_only_runs_audit() -> None:
@@ -700,6 +704,57 @@ def test_jrc_bundle_builds_expected_steps_and_never_forwards_builder_dry_run() -
     assert "--overwrite" in plan[1].argv
     assert plan[1].argv.count("--dry-run") == 0
     assert "--overwrite" not in plan[2].argv
+
+
+def test_jrc_bundle_builds_composite_master_before_optimised_audit() -> None:
+    # Regression guard: the JRC plan must build the Riverine Flood composite master
+    # from the freshly built JRC metric masters BEFORE the optimized publish + audit.
+    # Without this the optimized build packages and the audit checks a stale/empty
+    # composite_flood_jrc_depth master and the run fails.
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        source_dir="/tmp/jrc",
+        assume_units="m",
+        districts_path=None,
+        blocks_path=None,
+        qa_dir=None,
+        state=None,
+        verbose=False,
+        dry_run=True,
+        plan_only=False,
+    )
+    selected = [
+        "composite_flood_jrc_depth",
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
+        "jrc_flood_depth_rp100",
+    ]
+    scope = BundleRuntimeScope(
+        selected_metrics=selected,
+        pending_metrics=selected,
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    labels = [step.label for step in plan]
+    # Order is the contract being protected (positional, not presence-based).
+    assert (
+        labels.index("jrc-flood-depth-admin-masters")
+        < labels.index("composite-masters:district")
+        < labels.index("composite-masters:block")
+        < labels.index("processed-optimised-build")
+        < labels.index("processed-optimised-audit")
+    )
+    composite_district = plan[labels.index("composite-masters:district")]
+    assert "--metric" in composite_district.argv
+    assert "composite_flood_jrc_depth" in composite_district.argv
+    # force_overwrite=True: derived composite always rebuilt from just-built masters.
+    assert "--overwrite" in composite_district.argv
+    # Raw JRC metric slugs must never be passed to build_composite_metrics.
+    for raw in ("jrc_flood_depth_index_rp100", "jrc_flood_extent_rp100", "jrc_flood_depth_rp100"):
+        assert raw not in composite_district.argv
 
 
 def test_jrc_bundle_metric_resolution_includes_derived_index_slug() -> None:
