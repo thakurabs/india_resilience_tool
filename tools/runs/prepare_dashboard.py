@@ -232,6 +232,19 @@ def _append_repeat(argv: list[str], flag: str, values: Sequence[str] | None) -> 
         argv.extend([flag, value])
 
 
+def _append_repeat_literal(argv: list[str], flag: str, values: Sequence[str] | None) -> None:
+    """Append ``flag VALUE`` per item WITHOUT comma-splitting.
+
+    For already-resolved names that may legitimately contain commas — e.g. the UT
+    ``Dadra, Nagar Haveli, Daman & Diu`` — unlike :func:`_append_repeat`, which re-splits
+    each value on ``,`` and would fracture such a name into phantom states.
+    """
+    if not values:
+        return
+    for value in _dedupe_keep_order([str(v).strip() for v in values if str(v).strip()]):
+        argv.extend([flag, value])
+
+
 def _resolve_levels(level: str) -> list[str]:
     try:
         return list(LEVEL_GROUPS[level])
@@ -475,7 +488,7 @@ def _build_composite_master_steps(
             continue
         argv = _py_module_cmd("tools.pipeline.build_composite_metrics")
         argv.extend(["--level", level])
-        _append_repeat(argv, "--state", admin_states)
+        _append_repeat_literal(argv, "--state", admin_states)
         _append_repeat(argv, "--metric", resolved)
         _append_flag(argv, "--overwrite", force_overwrite or bool(getattr(args, "overwrite", False)))
         if not bool(getattr(args, "verbose", False)):
@@ -1332,11 +1345,18 @@ def build_jrc_flood_depth_plan(
 
         composite_slugs = [m for m in scope.selected_metrics if is_composite_metric(m)]
         if composite_slugs:
+            # The JRC subcommand's --state is a single canonical name that may itself
+            # contain commas (the UT "Dadra, Nagar Haveli, Daman & Diu"). Pass it whole;
+            # _append_repeat_literal emits it without the CSV comma-splitting that would
+            # otherwise fracture it into phantom states with no source masters (failing
+            # the parity audit). (… or "").strip() or DEFAULT_ADMIN_STATE reproduces the
+            # old empty->[DEFAULT_ADMIN_STATE] fallback.
+            jrc_state = (getattr(args, "state", None) or "").strip() or DEFAULT_ADMIN_STATE
             plan.extend(
                 _build_composite_master_steps(
                     args,
                     levels=("district", "block"),
-                    admin_states=_resolve_admin_states(getattr(args, "state", None)),
+                    admin_states=[jrc_state],
                     scope=scope,
                     metrics=composite_slugs,
                     force_overwrite=True,

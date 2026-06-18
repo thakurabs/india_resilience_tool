@@ -721,7 +721,8 @@ def test_jrc_bundle_builds_composite_master_before_optimised_audit() -> None:
         districts_path=None,
         blocks_path=None,
         qa_dir=None,
-        state=None,
+        # The JRC subcommand's --state is a single string (not an argparse nargs list).
+        state="Telangana",
         verbose=False,
         dry_run=True,
         plan_only=False,
@@ -752,9 +753,66 @@ def test_jrc_bundle_builds_composite_master_before_optimised_audit() -> None:
     assert "composite_flood_jrc_depth" in composite_district.argv
     # force_overwrite=True: derived composite always rebuilt from just-built masters.
     assert "--overwrite" in composite_district.argv
+    # Regression guard: a string --state must pass through whole, never char-split
+    # (--state Telangana, not --state T --state e ...).
+    state_idx = [i for i, tok in enumerate(composite_district.argv) if tok == "--state"]
+    assert len(state_idx) == 1
+    assert composite_district.argv[state_idx[0] + 1] == "Telangana"
     # Raw JRC metric slugs must never be passed to build_composite_metrics.
     for raw in ("jrc_flood_depth_index_rp100", "jrc_flood_extent_rp100", "jrc_flood_depth_rp100"):
         assert raw not in composite_district.argv
+
+
+def test_jrc_bundle_composite_keeps_comma_named_ut_whole() -> None:
+    # Regression guard (CHG-0115): the UT "Dadra, Nagar Haveli, Daman & Diu" is the
+    # only Indian state/UT whose canonical name contains commas. The JRC composite
+    # step must pass it WHOLE to build_composite_metrics; the prior _append_repeat /
+    # _resolve_admin_states CSV split fractured it into three phantom states ("Dadra",
+    # "Nagar Haveli", "Daman & Diu") with no source masters, yielding empty composite
+    # parquets that failed the parity audit. Red/green: 3 --state tokens before, 1 after.
+    ut = "Dadra, Nagar Haveli, Daman & Diu"
+    args = argparse.Namespace(
+        overwrite=True,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        source_dir="/tmp/jrc",
+        assume_units="m",
+        districts_path=None,
+        blocks_path=None,
+        qa_dir=None,
+        state=ut,
+        verbose=False,
+        dry_run=True,
+        plan_only=False,
+    )
+    selected = [
+        "composite_flood_jrc_depth",
+        "jrc_flood_depth_index_rp100",
+        "jrc_flood_extent_rp100",
+        "jrc_flood_depth_rp100",
+    ]
+    scope = BundleRuntimeScope(
+        selected_metrics=selected,
+        pending_metrics=selected,
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, runtime_scope=scope)
+    labels = [step.label for step in plan]
+
+    # Both composite steps must carry exactly one --state token, the whole UT name.
+    for label in ("composite-masters:district", "composite-masters:block"):
+        argv = plan[labels.index(label)].argv
+        state_idx = [i for i, tok in enumerate(argv) if tok == "--state"]
+        assert len(state_idx) == 1, f"{label} fractured --state: {argv}"
+        assert argv[state_idx[0] + 1] == ut
+
+    # Writer/reader name parity pin: the admin-masters builder that writes the source
+    # masters must key off the SAME whole name the composite reader will look up.
+    builder = plan[labels.index("jrc-flood-depth-admin-masters")].argv
+    builder_state_idx = [i for i, tok in enumerate(builder) if tok == "--state"]
+    assert len(builder_state_idx) == 1
+    assert builder[builder_state_idx[0] + 1] == ut
 
 
 def test_jrc_bundle_metric_resolution_includes_derived_index_slug() -> None:
