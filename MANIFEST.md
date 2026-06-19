@@ -298,7 +298,7 @@ Aqueduct methodology note:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `naming.py` | Name normalization, aliasing, and join-key helpers |
+| `naming.py` | Name normalization, aliasing, and join-key helpers. Folder/file tokens (`safe_fs_component`/`hydro_fs_token`) strip Windows-illegal trailing dots/spaces so processed dir components are Win32-traversable (a trailing `.` makes `pathlib.glob` raise `WinError 3`). |
 | `processed_io.py` | Lightweight Parquet/CSV I/O helpers for processed outputs |
 
 ### `india_resilience_tool/viz/`

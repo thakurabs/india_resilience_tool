@@ -105,10 +105,17 @@ def safe_fs_component(s: str) -> str:
     """
     Return the legacy filesystem-safe token used by processed output folders.
 
-    This preserves the historical hydro/admin folder convention of replacing
-    spaces and slashes with underscores without changing case.
+    Replaces spaces and slashes with underscores (case preserved), then strips any
+    Windows-illegal trailing dots/spaces so the component is traversable on Win32
+    (a trailing '.' makes ``pathlib.glob``'s scandir raise ``WinError 3``). Only
+    trailing '.'/' ' are removed; interior dots and trailing underscores are kept,
+    so every token that does not already end in a dot/space is byte-identical to
+    before. A degenerate all-dot/space input falls back to "_" (never a
+    dot-terminated token).
     """
-    return str(s).strip().replace(" ", "_").replace("/", "_")
+    token = str(s).strip().replace(" ", "_").replace("/", "_")
+    cleaned = token.rstrip(" .")
+    return cleaned if cleaned else "_"
 
 
 def hydro_fs_token(s: str, *, max_length: int = 48) -> str:
