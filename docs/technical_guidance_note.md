@@ -1,0 +1,481 @@
+# India Resilience Tool — Technical Guidance Note
+## Climate Risk Methodology: Data, Metrics, and Bundle Construction
+
+**Status:** DRAFT — structure agreed, sections pending  
+**Scope:** Data sources → downscaling → grid-first compute → individual metrics → thematic and sectoral bundle construction → composite score output  
+**Out of scope:** Exposure layers, vulnerability, adaptive capacity, dashboard UI/UX, pipeline tooling  
+**Primary audience:** Technical peers (climate scientists, GIS specialists) and policy/planning stakeholders  
+**Tone:** Technically rigorous throughout; mathematical derivations included with plain-language explanations alongside
+
+---
+
+> **Working convention for this document:**
+> - Each section carries a `<!-- WRITING GUIDE -->` block summarising what to cover, what sources to draw from, and key constraints. Remove the guide block when the section is finalized.
+> - Do not defend design choices — state them explicitly and move on.
+> - Mathematical notation uses standard LaTeX-style inline math where rendered.
+> - Tables are preferred over prose for metric lists, weights, and parameter values.
+> - Cross-references between sections are marked `(→ §N.M)`.
+
+---
+
+## 1. Introduction and Framing
+
+<!-- WRITING GUIDE
+PURPOSE: Orient both technical and policy readers. Establish why a subnational climate risk index for India is necessary and what gap this tool fills relative to global products.
+
+COVER:
+- India's climate risk context: scale, diversity of hazards (heat, drought, extreme rainfall, cold, riverine flood), and the governance challenge of subnational planning under climate uncertainty.
+- What is missing from existing global tools (e.g. Aqueduct, ND-GAIN): coarser spatial resolution, limited multi-hazard thematic and sectoral decomposition, limited India-specific downscaled projections.
+- What this tool provides: district- and block-level multi-hazard risk scores derived from CMIP6 projections for two SSP scenarios and multiple future periods.
+- Scope of this note: covers data provenance, downscaling context, post-processing compute, metric definitions, and bundle/composite construction. Does NOT cover the web dashboard, exposure layers (population, LULC, built-up area), groundwater context, or adaptive capacity.
+
+CONSTRAINTS:
+- Do not defend choices. State them: "We use NASA-NEX GDDP-CMIP6 at 0.25° resolution. We compute at district and block administrative levels. We cover SSP2-4.5 and SSP5-8.5."
+- Keep framing brief (~0.5–1 page). The bulk of the document is methods.
+- Do not make normative claims about hazard severity or policy prescriptions.
+
+CROSS-REFERENCES: Forward-reference §2 (data), §4 (compute), §6–7 (bundles).
+-->
+
+---
+
+## 2. Climate Data Sources
+
+### 2.1 CMIP6: Model Ensemble and Scenarios
+
+The Coupled Model Intercomparison Project Phase 6 (CMIP6) is the sixth generation of coordinated climate model experiments, providing the primary basis for the IPCC Sixth Assessment Report (AR6) future climate projections. IRT draws on CMIP6 outputs from 24 general circulation models (GCMs), using the variant label **r1i1p1f1** — denoting the first realisation (r1), initialisation method (i1), physics configuration (p1), and forcing (f1) — for all models and scenarios.
+
+**Scenarios**
+
+Two Shared Socioeconomic Pathways (SSPs) are used:
+
+| Scenario | Label | Description |
+|----------|-------|-------------|
+| SSP2-4.5 | Middle-of-the-road | Social, economic, and technological trends evolve without dramatic departure from historical patterns; radiative forcing stabilises at approximately 4.5 W m⁻² by 2100. |
+| SSP5-8.5 | Fossil-fuelled development | Rapid economic growth driven largely by fossil fuels; radiative forcing reaches approximately 8.5 W m⁻² by 2100. |
+
+**GCM ensemble**
+
+| # | Model | Modelling Centre | Country |
+|---|-------|-----------------|---------|
+| 1 | ACCESS-CM2 | CSIRO / Bureau of Meteorology (BOM) | Australia |
+| 2 | ACCESS-ESM1-5 | CSIRO | Australia |
+| 3 | BCC-CSM2-MR | Beijing Climate Center (BCC), China Meteorological Administration | China |
+| 4 | CMCC-CM2-SR5 | Centro Euro-Mediterraneo sui Cambiamenti Climatici (CMCC) | Italy |
+| 5 | CMCC-ESM2 | CMCC | Italy |
+| 6 | CanESM5 | Canadian Centre for Climate Modelling and Analysis (CCCma) | Canada |
+| 7 | EC-Earth3 | EC-Earth Consortium | Europe |
+| 8 | EC-Earth3-Veg-LR | EC-Earth Consortium | Europe |
+| 9 | GFDL-CM4 | NOAA Geophysical Fluid Dynamics Laboratory (GFDL) | USA |
+| 10 | GFDL-ESM4 | NOAA GFDL | USA |
+| 11 | IITM-ESM | Indian Institute of Tropical Meteorology (IITM) | India |
+| 12 | INM-CM4-8 | Institute of Numerical Mathematics (INM), Russian Academy of Sciences | Russia |
+| 13 | INM-CM5-0 | INM, Russian Academy of Sciences | Russia |
+| 14 | IPSL-CM6A-LR | Institut Pierre-Simon Laplace (IPSL) | France |
+| 15 | KACE-1-0-G | National Institute of Meteorological Sciences / Korea Meteorological Administration (NIMS-KMA) | South Korea |
+| 16 | KIOST-ESM | Korea Institute of Ocean Science and Technology (KIOST) | South Korea |
+| 17 | MIROC6 | JAMSTEC / AORI / NIES / R-CCS | Japan |
+| 18 | MPI-ESM1-2-HR | Max Planck Institute for Meteorology (MPI-M) | Germany |
+| 19 | MPI-ESM1-2-LR | MPI-M | Germany |
+| 20 | MRI-ESM2-0 | Meteorological Research Institute (MRI) | Japan |
+| 21 | NESM3 | Nanjing University of Information Science and Technology (NUIST) | China |
+| 22 | NorESM2-LM | Norwegian Climate Centre (NCC) | Norway |
+| 23 | NorESM2-MM | NCC | Norway |
+| 24 | TaiESM1 | Research Center for Environmental Changes (RCEC), Academia Sinica | Taiwan |
+
+### 2.2 Temporal Coverage and Analysis Periods
+
+**Raw data temporal span**
+
+| Scenario | Period |
+|----------|--------|
+| Historical | 1951–2014 |
+| SSP2-4.5 | 2015–2100 |
+| SSP5-8.5 | 2015–2100 |
+
+Historical and projection files are contiguous across models: each model contributes one annual NetCDF file per variable per year spanning 1951–2100 across the historical and SSP runs.
+
+**Analysis periods**
+
+IRT aggregates individual-year climate indices into the following multi-year windows:
+
+| Label | Period | Role |
+|-------|--------|------|
+| Historical baseline | 1990–2010 | Reference for per-period normalisation (→ §6.2) |
+| Near-term | 2021–2040 | Near-term projection |
+| Mid-century | 2041–2060 | Mid-century projection |
+| End-century | 2061–2080 | End-of-century projection |
+
+The composite anchor period (1990–2010) straddles the historical–projection boundary: years 1990–2014 are drawn from the historical run and 2015 onward from the SSP runs. The handling of this splice is described in §4.3.
+
+### 2.3 NASA-NEX GDDP-CMIP6: The Downscaled Product
+
+IRT uses the **NASA Earth Exchange Global Daily Downscaled Projections, CMIP6** (NEX-GDDP-CMIP6) as its primary climate input. All spatial disaggregation and bias correction was applied by NASA prior to data release. The downscaling method is described in §3.
+
+The following variables were obtained from the NEX-GDDP-CMIP6 product:
+
+| Variable | CF Standard Name | Description | Native Units |
+|----------|-----------------|-------------|-------------|
+| `tas` | air_temperature | Daily mean near-surface air temperature | K |
+| `tasmin` | air_temperature | Daily minimum near-surface air temperature | K |
+| `tasmax` | air_temperature | Daily maximum near-surface air temperature | K |
+| `pr` | precipitation_flux | Daily total precipitation | kg m⁻² s⁻¹ |
+| `huss` | specific_humidity | Near-surface specific humidity | kg kg⁻¹ |
+| `hurs` | relative_humidity | Near-surface relative humidity | % |
+
+Temperature variables are converted from kelvin to degrees Celsius (°C) and precipitation is converted from kg m⁻² s⁻¹ to mm day⁻¹ (× 86400) during pre-processing (→ §4.1).
+
+**Spatial resolution and domain:** NEX-GDDP-CMIP6 is provided at **0.25° × 0.25°** horizontal resolution (~25 km at the equator). All data are clipped to the India domain: **68.0°E–97.5°E, 5.0°N–45.0°N**.
+
+**Citation:** Thrasher, B., Wang, W., Michaelis, A., Melton, F., Lee, T., and Nemani, R. (2022). NASA Global Daily Downscaled Projections, CMIP6. *Scientific Data*, 9, 262. https://doi.org/10.1038/s41597-022-01393-4
+
+### 2.4 JRC Global Flood Data
+
+Riverine flood metrics (→ §5.5) are derived from the **CEMS-GloFAS Global River Flood Hazard Maps** (Version 2.1), a product of the Copernicus Emergency Management Service (CEMS) published by the European Commission Joint Research Centre. IRT uses the **RP-100** (1-in-100-year return period) raster layers: flood depth (metres) and flood extent (binary inundation mask).
+
+Because this is a static, observationally-derived snapshot product rather than a future climate projection, the Riverine Flood bundle carries a "Snapshot" scenario label in the tool and is not available under SSP2-4.5 or SSP5-8.5 (→ §6.1).
+
+**Citation:** European Commission, Joint Research Centre. (2026). CEMS-GloFAS Global River Flood Hazard Maps Version 2.1. Copernicus Emergency Management Service (CEMS). https://data.jrc.ec.europa.eu
+
+---
+
+## 3. Downscaling: What It Is and How NASA-NEX Applies It
+
+### 3.1 What Statistical Downscaling Means
+
+GCMs are designed to simulate the large-scale dynamics of the climate system — atmospheric circulation, ocean–atmosphere coupling, and radiative transfer — at a global scale. Their native grid spacing is typically 100–300 km, meaning a single model grid cell covers an area comparable to a large Indian state. At this resolution, GCMs cannot resolve the terrain-driven heterogeneity, coastal gradients, or local land–surface feedbacks that determine temperature and rainfall patterns at the district or block level.
+
+**Downscaling** is the process of translating GCM output from its native coarse resolution to a finer spatial scale more appropriate for regional and local analysis. Two broad approaches exist:
+
+- **Dynamic downscaling** nests a higher-resolution regional climate model (RCM) within the GCM domain, simulating regional atmospheric dynamics explicitly. It is computationally intensive and not available at the pan-India, 24-model scale required here.
+- **Statistical downscaling** uses the statistical relationship between coarse-resolution GCM output and observed fine-resolution climatology to correct and spatially disaggregate GCM fields. It is tractable across large multi-model ensembles.
+
+NASA-NEX GDDP-CMIP6 applies a statistical downscaling approach. IRT uses the NASA-NEX product as published online.
+
+### 3.2 The BCSD Method in NASA-NEX GDDP
+
+The NASA-NEX GDDP-CMIP6 product employs **Bias Correction and Spatial Disaggregation (BCSD)** (Wood et al. 2002; Maurer et al. 2010), a two-step statistical procedure:
+
+**Step 1 — Bias correction**
+
+For each GCM, each variable, and each calendar month, the empirical cumulative distribution function (CDF) of the model's monthly-mean output is mapped to match the empirical CDF of a reference observational climatology over the historical period. This quantile mapping adjusts systematic biases in both the mean and the distribution tails while preserving the model's interannual variability and long-term trend signal. The reference climatology used by NASA-NEX is the Global Meteorological Forcing Dataset (GMFD; Sheffield et al. 2006), as described in Thrasher et al. (2022).
+
+Formally, let $F_{\text{obs}}$ and $F_{\text{mod}}$ denote the empirical CDFs of the observed and modelled monthly distributions over the bias-correction reference period. The bias-corrected value $x'$ for a raw model value $x$ is:
+
+$$x' = F_{\text{obs}}^{-1}\!\bigl(F_{\text{mod}}(x)\bigr)$$
+
+This transfer function is derived on the coarse GCM grid and then applied to all years, including future projections (where the model's distribution shift due to climate change is preserved relative to the corrected historical distribution).
+
+**Step 2 — Spatial disaggregation**
+
+Bias-corrected monthly anomalies at the coarse GCM resolution are spatially interpolated to the target 0.25° × 0.25° grid using bilinear interpolation. Daily sub-monthly variability is disaggregated by preserving the daily anomaly patterns from the bias-corrected monthly fields.
+
+**What BCSD corrects and what it does not**
+
+BCSD corrects the marginal distribution of temperature and precipitation at the monthly scale. It does not alter the GCM's large-scale atmospheric dynamics, synoptic circulation patterns, or temporal sequencing. Biases in monsoon onset timing, intraseasonal oscillations, or the frequency of extreme daily events are only partially addressed by the monthly-scale distribution-matching step; residual dynamical biases remain (→ §3.4).
+
+### 3.3 Grid Resolution and Spatial Domain
+
+The NEX-GDDP-CMIP6 product is provided at **0.25° × 0.25°** horizontal resolution, corresponding to approximately 25 km at the equator and ~27 km at 25°N (typical central India latitude). IRT clips the global product to the India domain — **68.0°E–97.5°E, 5.0°N–45.0°N** — yielding a domain of 119 × 160 grid cells.
+
+**Resolution implications at district vs block level**
+
+India has approximately 800 districts (mean area ~4,000 km²) and roughly 6,600 sub-district blocks (mean area ~450–600 km²). At 0.25° resolution (~625 km² per cell):
+
+- A typical district contains **4–20** 0.25° cells, providing adequate spatial sampling for area-weighted aggregation.
+- A typical block may contain **fewer than 4** cells, and smaller blocks in densely sub-divided states may fall within a single cell. Block-level composites therefore carry higher spatial uncertainty than district-level composites, and cross-block variation in small block groups may partly reflect grid-cell boundaries rather than true sub-district heterogeneity.
+
+Spatial aggregation from the 0.25° grid to administrative units is described in §4.2.
+
+### 3.4 Provenance and Reproducibility Notes
+
+**Dataset access and version**
+
+NEX-GDDP-CMIP6 is publicly available via the NASA Center for Climate Simulation (https://www.nccs.nasa.gov/services/data-collections/land-based-products/nex-gddp-cmip6). The IRT pipeline ingests the product as released (all 24 GCMs, variant r1i1p1f1, both SSPs). The authoritative dataset description and processing documentation is:
+
+> Thrasher, B., Wang, W., Michaelis, A., Melton, F., Lee, T., and Nemani, R. (2022). NASA Global Daily Downscaled Projections, CMIP6. *Scientific Data*, 9, 262. https://doi.org/10.1038/s41597-022-01393-4
+
+> Wood, A. W., Maurer, E. P., Kumar, A., and Lettenmaier, D. P. (2002). Long-range experimental hydrologic forecasting for the eastern United States. *Journal of Geophysical Research: Atmospheres*, 107(D20), 4429. https://doi.org/10.1029/2001JD000659
+
+> Sheffield, J., Goteti, G., and Wood, E. F. (2006). Development of a 50-year high-resolution global dataset of meteorological forcings for land surface modeling. *Journal of Climate*, 19(13), 3088–3111.
+
+**Internal validation: Telangana domain**
+
+As part of dataset QA, a validation analysis was conducted comparing NEX-GDDP-CMIP6 historical daily output against ERA5 reanalysis and IMD gridded observations over the Telangana domain for the period 1980–1985, using polygon-overlap area weighting for spatial aggregation. Results should be interpreted in the context of this limited spatial and temporal sample; they are illustrative of the dataset's bias characteristics rather than a full pan-India evaluation.
+
+*Temperature*: The 24-model ensemble reproduces ERA5 mean near-surface temperature over Telangana with good fidelity. The ERA5 domain-mean daily temperature is 27.3°C; most individual GCMs fall within ±0.5°C of this value (model range approximately 26.8–28.0°C), with tight clustering in normalised standard deviation and spatial correlation visible in the Taylor diagram.
+
+*Precipitation*: Area-mean daily precipitation for ERA5 (2.47 mm day⁻¹) and IMD (2.65 mm day⁻¹) agree closely at the seasonal mean scale. Spatial correlations between district-level precipitation metrics and ERA5 for the best-performing models range from 0.81 to 0.90, indicating moderate spatial skill at district resolution. However, the ensemble systematically underestimates peak daily rainfall intensities: the IMD Rx1day (mean annual maximum 1-day rainfall) for Adilabad district is approximately 77 mm day⁻¹, while the 24 CMIP6 models range from approximately 33 to 55 mm day⁻¹ — a consistent dry bias in extreme events that persists after BCSD. This arises because BCSD applies monthly-scale quantile mapping and then bilinear spatial disaggregation to 0.25°; neither step alters the GCM's underlying atmospheric dynamics. The convective processes that generate intense short-duration rainfall events are parameterised at each GCM's native grid spacing — ranging from approximately 70 km (EC-Earth3, the finest in the ensemble) to 310 km (CanESM5, the coarsest), with most models at 100–200 km — at which mesoscale convective systems responsible for high-intensity daily rainfall in the Indian region cannot be explicitly resolved. The BCSD spatial disaggregation resamples these coarse fields to the 0.25° output grid but adds no new sub-grid meteorological information. The extreme-rainfall underestimation is therefore a structural limitation of the GCM ensemble, not a downscaling artefact. Users interpreting the Extreme Rainfall | Flash Flood bundle (→ §5.2) should note that absolute metric values likely understate observed extreme rainfall intensities.
+
+*Comparative context*: Jain et al. (2019) evaluated the NEX-GDDP (CMIP5-era) product against IMD gridded observations over the Indian subcontinent for the summer monsoon season (1975–2005), benchmarking it against multi-model means from 28 raw CMIP5 models and 10 CORDEX regional models. NEX-GDDP surpassed both CMIP5 and CORDEX in reproducing seasonal mean temperature and precipitation patterns (spatial pattern correlation ~0.8; RMSE ~4.25°C for temperature and ~2.48 mm day⁻¹ for precipitation), inter-annual variability, and annual cycle characteristics. Crucially, the simulation of extremes was found to be more realistic in NEX-GDDP relative to raw CMIP5 and CORDEX output, with reduced inter-model spread — supporting the use of the NEX-GDDP product for climate change impact assessment. Although these findings pertain to the CMIP5-era version of NEX-GDDP, the BCSD methodology is common to both the CMIP5 and CMIP6 versions; the results are therefore informative about the relative improvement that the downscaling procedure confers over raw GCM output.
+
+> Jain, S., Salunke, P., Mishra, S. K., Sahany, S., and Choudhary, N. (2019). Advantage of NEX-GDDP over CMIP5 and CORDEX data: Indian Summer Monsoon. *Atmospheric Research*, 228, 152–160. https://doi.org/10.1016/j.atmosres.2019.05.026
+
+> **[FIGURES TO INSERT]** The following validation figures from the notebook analysis will be incorporated here to provide visual evidence of the bias characterisation. Source notebooks: `notebooks/era5_vs_cmip_clean_tel_1980_1985.ipynb` and `notebooks/rainfall_metrics_imd_cmip6_tel_box_1980_1985.ipynb`.
+> 1. Taylor diagram — near-surface temperature (tas) vs ERA5, Telangana 1980–1985
+> 2. Taylor diagram — daily precipitation (pr) vs ERA5, Telangana 1980–1985
+> 3. Taylor diagram — daily precipitation (pr) vs IMD, Telangana 1980–1985
+> 4. nRMSE heatmap — precipitation metrics vs ERA5 and vs IMD across 24 models
+> 5. Rx1day comparison bar chart — IMD vs 24 CMIP6 models, Adilabad district 1980–1985
+
+**Known limitations relevant to India**
+
+Three classes of systematic limitation are relevant to users interpreting IRT outputs:
+
+1. **Monsoon dynamics.** The Indian Summer Monsoon (ISM) is driven by complex land–sea thermal gradients, orographic lifting, and large-scale teleconnections (ENSO, IOD). Most CMIP6 GCMs simulate the broad seasonal cycle of ISM precipitation but exhibit systematic biases in onset date, spatial distribution of the monsoon core and break phases, and sub-seasonal variability. BCSD corrects the monthly distribution but preserves the GCM's underlying dynamical representation of monsoon structure.
+
+2. **Himalayan terrain.** The 0.25° grid (~25 km) cannot resolve the elevation gradients of the Hindu Kush–Himalayan arc, where elevations change by 3,000–5,000 m over tens of kilometres. Temperature and precipitation are subject to large interpolation errors at high altitudes; outputs for Himalayan districts and blocks in Uttarakhand, Himachal Pradesh, Jammu & Kashmir, Sikkim, and Arunachal Pradesh should be interpreted with particular caution.
+
+3. **Coastal resolution.** At 0.25° resolution, coastal grid cells blend land and ocean surface conditions. This can introduce artefacts in temperature and humidity fields for coastal and island districts (including the Kerala coast, Tamil Nadu coast, Lakshadweep, and Andaman & Nicobar Islands).
+
+---
+
+## 4. Grid-First Compute and Post-Processing
+
+<!-- WRITING GUIDE
+PURPOSE: Explain the computational architecture — why we operate on the full grid before aggregating to admin units, and what happens at each processing stage.
+
+SUBSECTION BREAKDOWN:
+
+### 4.1 Architecture: Why Grid-First
+- Define "grid-first": all climate index calculations are performed at the native 0.25° grid resolution before any spatial aggregation to administrative boundaries.
+- Rationale: avoids information loss from premature averaging; preserves within-district spatial variability; allows future re-aggregation to any boundary set without recomputing indices.
+- Contrast with "admin-first" approaches where daily GCM values are averaged over admin boundaries before computing indices (explain why this is methodologically incorrect for non-linear indices such as exceedance counts and SPI).
+
+### 4.2 Spatial Aggregation to District and Block
+- After grid-first index computation, results are aggregated from the 0.25° grid to district and block boundaries using area-weighted zonal statistics.
+- Describe the spatial join and weighting method (pixel centroid-in-polygon, or fractional area overlap — confirm from codebase and state explicitly).
+- Note that the canonical administrative boundary set used is the LGD (Local Government Directory) boundary dataset (state which version/year).
+- Two output levels: district (ADM2) and block (ADM3). State how block-level results relate to district-level (not simple averaging — blocks are individually computed from the grid).
+
+### 4.3 Period Aggregation and Ensemble Handling
+- For each metric, describe the temporal aggregation chain:
+  1. Daily values → annual index values (metric-specific; see §5 for definitions)
+  2. Annual values → period mean (across years within the period window, e.g. 2021–2040)
+  3. Period means → ensemble mean across the 24 GCMs
+- State whether ensemble spread (e.g. inter-model standard deviation) is computed and retained. If not, note that the tool currently reports ensemble means only.
+- Clarify the anchor scenario: the per-period composite normalization (→ §6.2) uses the ensemble-mean historical period (1990–2010) as its reference. Confirm whether this uses the "historical" scenario run or a splice of historical + early SSP years, and state it explicitly.
+
+CONSTRAINTS:
+- Describe what actually happens in the codebase, not an idealized version. If there are known approximations (e.g. centroid-in-polygon rather than fractional overlap), name them.
+- Do not include pipeline code or tool invocation commands — this is a methods note, not a user guide.
+- Keep math light here; the heavy index math goes in §5.
+-->
+
+---
+
+## 5. Individual Metric Definitions
+
+<!-- WRITING GUIDE
+PURPOSE: Define every metric that feeds into a bundle. For each metric: the variable(s) it is derived from, the mathematical definition, the units, and which bundle(s) it belongs to. This is the most table-dense section.
+
+GENERAL FORMAT PER SUBSECTION:
+- Brief narrative framing (1–3 sentences on why this class of metrics matters for the hazard)
+- A definition table with columns: Metric Slug | Label | Variable(s) | Definition | Units | Bundle(s)
+- Mathematical derivations for non-trivial indices (thresholds, percentile-based, SPI)
+- Parameter values stated explicitly (e.g. thresholds in °C, accumulation windows in months)
+
+SUBSECTION BREAKDOWN:
+
+### 5.1 Temperature Metrics
+Covers metrics feeding Heat Risk, Heat Stress, and Cold Risk bundles.
+Key metric families:
+- Mean temperature: tas_annual_mean, tas_summer_mean, tasmax_summer_mean
+- Absolute extremes: txx_annual_max (TXx), tnn_annual_min (TNn), tnx_annual_max
+- Threshold-based frequency: txge30_hot_days, txge35_extreme_heat_days, tasmin_tropical_nights_gt25, tasmin_tropical_nights_gt28, tnle10_cold_nights, tnle5_severe_cold_nights, txle15_cold_days
+- Percentile-based: tn90p_warm_nights_pct, tx90p_hot_days_pct, tx10p_cool_days_pct, tn10p_cool_nights_pct
+- Heatwave / spell metrics: hwa_heatwave_amplitude, hwfi_tmean_90p, hwfi_events_tmean_90p, wsdi_warm_spell_days, csdi_cold_spell_days, tnle10_consecutive_cold_nights
+- Wet-bulb temperature (see §5.4 for derivation): twb_annual_mean, twb_summer_mean, twb_annual_max, twb_days_ge_28, twb_days_ge_30
+
+Note: summer season is defined as [months — confirm from codebase: likely April–June or March–June for India].
+Note: percentile baselines (e.g. 90th percentile thresholds for WSDI, TN90p) are computed relative to the historical reference period — state the period and method explicitly.
+
+### 5.2 Precipitation and Extreme Rainfall Metrics
+Covers metrics feeding Extreme Rainfall | Flash Flood Risk bundle.
+Key metrics:
+- Peak intensity: pr_max_1day_precip (Rx1day), pr_max_5day_precip (Rx5day)
+- Frequency: r20mm_very_heavy_precip_days (R20mm)
+- Percentile contribution: r95p_very_wet_precip (R95p), r95ptot_contribution_pct (R95pTOT)
+- Persistence: cwd_consecutive_wet_days (CWD)
+
+Many of these are standard ETCCDI/Climdex indices — reference the Climdex/ETCCDI definitions formally and note any parameter choices that deviate from the standard definition.
+
+### 5.3 Drought Indices (SPI)
+This is the most mathematically intensive subsection.
+Cover:
+- What SPI is: the Standardised Precipitation Index (McKee et al. 1993). Cite formally.
+- The gamma distribution fit and probability integral transformation to the standard normal.
+- Timescales used: SPI-3, SPI-6, SPI-12 (3-, 6-, and 12-month accumulation windows).
+- Interpretation: SPI < −1 = moderate drought onset.
+- Metrics derived:
+  - spi3/6/12_count_events_lt_minus1: number of years in the period with at least one SPI < −1 event
+  - spi3/6/12_max_spell_lt_minus1: longest consecutive-month drought spell (SPI < −1) within a year, averaged over the period
+- State the baseline period for the gamma fit (confirm from codebase; typically the historical period).
+- Note: SPEI is computed in the codebase but is not currently included in shipped bundles — mention briefly and exclude from further detail.
+
+### 5.4 Wet-Bulb Temperature and Humid Heat Metrics
+Cover:
+- Why wet-bulb temperature (TWb) matters: captures combined heat-humidity stress that dry-bulb temperature alone misses.
+- Derivation of TWb from tas, hurs (or huss): state the formula used (likely the Stull 2011 or Davies-Jones approximation — confirm from codebase compute module).
+- Metrics: twb_annual_mean, twb_summer_mean, twb_annual_max, twb_days_ge_28, twb_days_ge_30.
+- Thresholds: 28°C and 30°C TWb — note what these represent physiologically (cite relevant literature, e.g. Raymond et al. 2020).
+
+### 5.5 Riverine Flood Metrics (JRC)
+Cover:
+- Source: JRC Global Flood Maps RP-100 product (→ §2.4).
+- Three metrics:
+  - jrc_flood_depth_rp100: p95 flood depth at block level; area-weighted mean at district level (confirm aggregation method from codebase)
+  - jrc_flood_extent_rp100: total flooded area within admin unit (km² or % of area — confirm units)
+  - jrc_flood_depth_index_rp100: composite severity index combining depth and extent (describe the depth × extent classification matrix if present in codebase)
+- These are static snapshot metrics (no SSP scenario dimension).
+
+CONSTRAINTS:
+- Every metric in bundle_weights.py must appear in this section. Cross-check against the bundle weights tables before finalizing.
+- Use the metric slug as the canonical identifier in all tables.
+- For ETCCDI standard indices (TXx, TN90p, Rx5day, CWD, WSDI, CSDI, etc.), reference the ETCCDI definition and note any deviations from it.
+- For non-standard / IRT-custom indices (hwfi, twb-derived), provide full derivations.
+-->
+
+---
+
+## 6. Thematic Bundle Construction
+
+<!-- WRITING GUIDE
+PURPOSE: Explain how individual metrics are grouped into thematic bundles and how a single composite score is derived for each bundle.
+
+SUBSECTION BREAKDOWN:
+
+### 6.1 Bundle Taxonomy and Grouping Rationale
+- List the 6 thematic bundles and the hazard dimension each captures:
+  1. Heat Risk — thermal extremes and background heat
+  2. Heat Stress — humid heat stress (wet-bulb-based)
+  3. Cold Risk — cold extremes and cold spells
+  4. Drought Risk — meteorological drought across multiple timescales
+  5. Extreme Rainfall | Flash Flood Risk — extreme precipitation and wet-spell persistence
+  6. Riverine Flood — static JRC RP-100 inundation severity
+- For each bundle, note the metric families included (referring back to §5 subsections).
+- Briefly explain the grouping logic: metrics within a bundle capture different dimensions of the same hazard; the composite aggregates these dimensions into a single score.
+
+### 6.2 Normalization: Per-Period Anchoring
+- Explain the normalization approach:
+  - For each metric and each future period (e.g. 2041–2060 under SSP5-8.5), the ensemble-mean value is expressed relative to the historical anchor period (1990–2010 ensemble mean under the historical scenario).
+  - This converts absolute metric values to change signals — "how much worse is this future period relative to the historical baseline?"
+  - State the formula: normalized_score = f(value_period, value_anchor) — derive and write out explicitly. Confirm from composite_metrics.py / build_composite_metrics whether it is a ratio, a percentile rank across space, or a scaled delta.
+- Anchor scenario: 1990–2010 historical ensemble mean (→ §4.3).
+- Note: the Riverine Flood bundle (JRC) does not use per-period normalization because it is a static snapshot. State how it is scored differently.
+
+### 6.3 Weighted Composite Methodology
+- State the composite formula explicitly with math:
+  Composite_score = Σ (w_i × normalized_score_i) for all metrics i in bundle
+  where w_i are the pre-defined bundle weights and Σ w_i = 1.
+- Confirm that scores are clamped or clipped to [0, 100] or similar range — state the range.
+- Note the min_anchored_components constraint: a composite is only computed if at least 4 component metrics have valid (non-NaN) anchor values. Explain why (to prevent composites from sparse metric sets from being misleading).
+
+### 6.4 Bundle-by-Bundle Metric Weights
+- For each of the 6 thematic bundles, provide a table:
+  Metric Slug | Label | Weight Group | Weight
+- Weight groups (from bundle_weights.py workbook_group field) should be shown as section headers within the table to communicate the internal structure.
+- Weights should sum to 1.0 per bundle — verify and note this.
+- Source note: weights are drawn from the approved Bundles_comp_Score.xlsx workbook.
+
+CONSTRAINTS:
+- The normalization formula must be confirmed from the actual codebase (build_composite_metrics or equivalent) — do not guess. Mark as [TO CONFIRM FROM CODE] if uncertain.
+- Do not conflate thematic bundle composites with sectoral bundle composites (§7). They use different scoring frameworks.
+- Riverine Flood is an edge case: weight=1.0 on a single severity index metric; describe separately.
+-->
+
+---
+
+## 7. Sectoral Bundle Construction
+
+<!-- WRITING GUIDE
+PURPOSE: Explain the distinct "proposal bundle" (sector hazard-pressure) framework used for the 8 sectoral bundles, which is methodologically different from the thematic weighted average.
+
+SUBSECTION BREAKDOWN:
+
+### 7.1 Sector Hazard-Pressure Framework
+- The 8 sectoral bundles are:
+  1. Agricultural Risk
+  2. Health Risk
+  3. Industrial Risk
+  4. Investment / Financial Risk
+  5. Infrastructure Risk
+  6. Asset Risk (Thermal Power Plants)
+  7. Asset Risk (Hydropower Plants)
+  8. Life & Livelihood Loss Risk
+- Clarify the key conceptual difference from thematic bundles: sectoral bundles do not directly composite climate metrics — they score each sector's exposure to a curated set of climate hazard pressures, where each hazard is evaluated through a "rule" that combines current magnitude, projected change, and known impact thresholds.
+- Important caveat: these are Phase-1 sector climate hazard-pressure scores. They do not yet include exposure, vulnerability, or adaptive capacity components.
+
+### 7.2 The Blended Rule: Absolute Pressure + Change + Impact Band
+- Each sectoral bundle is composed of N rules. Each rule is tied to one source metric.
+- A rule score has three components:
+  1. Absolute pressure score (S_abs): how high is the metric value in absolute terms?
+  2. Change score (S_change): how much does the metric change relative to the historical baseline? Change can be expressed as absolute delta (absolute_delta) or relative percent change (relative_pct), depending on the metric.
+  3. Impact band score (S_impact): does the metric value fall within a known harm-onset–to–saturation range? The impact band [impact_low, impact_high] maps linearly from 0 (at impact_low) to 1 (at impact_high).
+- The blended rule score for rule r:
+  S_r = absolute_weight × S_abs + change_weight × S_change + impact_weight × S_impact
+  where absolute_weight + change_weight + impact_weight = 1 per rule.
+- Write out the full mathematical definitions of S_abs, S_change, S_impact. Confirm the normalization method for S_abs and S_change from proposal_bundles.py and the build logic.
+- Component scores are [0, 1]; the rule score S_r is [0, 1]; the bundle composite is scaled to [0, 100].
+
+### 7.3 Impact Bands — Derivation and Confidence
+- Impact bands define the metric value range within which damage or harm is expected to occur.
+- impact_low = onset threshold (harm begins); impact_high = saturation threshold (harm is near-complete or dominant).
+- The linear interpolation within the band: S_impact = clip((value − impact_low) / (impact_high − impact_low), 0, 1).
+- Confidence grades: impact bands are internally graded HIGH / MEDIUM / LOW based on literature support. Briefly describe what each grade means.
+  - HIGH: based on a published threshold with strong evidence (e.g. IMD heatwave declaration criterion).
+  - MEDIUM: derived from a combination of literature and expert judgement.
+  - LOW: self-derived from first principles or indirect evidence; used with a small impact weight by design.
+- [DECISION PENDING: whether to publish the per-band confidence grades in this note. Leave a placeholder table if not yet decided.]
+
+### 7.4 Bundle-by-Bundle Rule Tables and Weights
+- For each of the 8 sectoral bundles, provide:
+  - Table: Rule Slug | Display Label | Source Metric | Rule Weight | Absolute / Change / Impact Weights | Impact Band [Low, High] | Change Mode | Confidence
+  - Narrative paragraph: 2–4 sentences on the scientific rationale for the hazard selection for that sector.
+- Weight mode: all current sectoral bundles use explicit_normalized weights (rule_weight values sum to 1.0 per bundle).
+- Note the min_available_rule_weight_fraction = 0.70 floor: a sectoral composite is only computed if at least 70% of the total rule weight has valid source data. State why.
+
+CONSTRAINTS:
+- S_abs, S_change, S_impact derivations must be confirmed from the codebase (proposal_bundle_builder or equivalent). Mark [TO CONFIRM FROM CODE] where uncertain.
+- The "blended" rule type and "trend" rule type both exist in the codebase. The trend rule is not currently used in shipped bundles — mention briefly, exclude from detailed derivation.
+- This section will be long. Use consistent table formatting and keep the per-bundle narrative tight (2–4 sentences maximum per bundle).
+-->
+
+---
+
+## 8. Composite Score and Output
+
+<!-- WRITING GUIDE
+PURPOSE: Describe what the final composite score is, how it is produced, what range it takes, and how it varies by scenario, period, and spatial level.
+
+SUBSECTION BREAKDOWN:
+
+### 8.1 Composite Derivation
+- The composite score is the final output of the bundle construction process (§6.3 for thematic, §7.2 for sectoral).
+- It is a single number per (admin unit × scenario × period) tuple, on a [0, 100] scale, where higher values indicate greater hazard pressure.
+- For thematic bundles: it is the weighted sum of per-period normalized component metric scores (→ §6.3).
+- For sectoral bundles: it is the weighted sum of blended rule scores (→ §7.2).
+- State clearly: the composite score is NOT a probability, NOT an annualized loss estimate, and NOT a risk score in the technical sense (it does not include exposure, vulnerability, or adaptive capacity). It is a multi-metric hazard-pressure index.
+
+### 8.2 Scenario and Period Handling
+- Composite scores are computed independently for each (scenario, period) combination.
+- Available combinations: Historical (1995–2014, 1979–2019) · SSP2-4.5 (2021–2040, 2041–2060, 2061–2080, 2081–2100) · SSP5-8.5 (same future periods).
+- Exception: Riverine Flood carries only the "Snapshot" scenario (no future projections).
+- The tool allows users to select any valid (scenario, period) pair; the composite is reloaded from pre-computed persisted master files.
+- Note: composite scores across different (scenario, period) pairs are comparable because they share a common normalization anchor (1990–2010 historical). Explain the implication: a score of 70 in 2041–2060 SSP5-8.5 is directly comparable to 55 in 2041–2060 SSP2-4.5.
+
+### 8.3 District vs Block Resolution Behaviour
+- Both district (ADM2) and block (ADM3) level composites are independently computed from the grid-first index pipeline — blocks are not aggregated from districts.
+- Note any resolution-specific limitations: block-level scores have fewer 0.25° cells contributing per unit than districts, which may increase spatial variability and sensitivity to grid-cell artefacts near administrative boundaries.
+- State the supported levels for each bundle (both thematic and sectoral bundles support district and block).
+
+CONSTRAINTS:
+- Be explicit that this is a hazard index, not a full risk score. Do not use "risk" loosely.
+- Do not describe the dashboard UI or how scores are displayed — this is a methods note.
+- If there are known score distribution characteristics (e.g. typical range, skewness across India), these can be noted briefly, but are not required.
+-->
+
+---
+
+*Document last updated: 2026-06-22*  
+*Maintained by: Abu Bakar Siddiqui Thakur*
