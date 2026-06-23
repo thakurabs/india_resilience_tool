@@ -106,7 +106,7 @@ IRT aggregates individual-year climate indices into the following multi-year win
 | Mid-century | 2041–2060 | Mid-century projection |
 | End-century | 2061–2080 | End-of-century projection |
 
-The composite anchor period (1990–2010) straddles the historical–projection boundary: years 1990–2014 are drawn from the historical run and 2015 onward from the SSP runs. The handling of this splice is described in §4.3.
+The anchor period (1990–2010) falls entirely within the historical simulation run (1951–2014); no splicing of historical and SSP files is required (→ §4.3).
 
 ### 2.3 NASA-NEX GDDP-CMIP6: The Downscaled Product
 
@@ -314,75 +314,121 @@ This per-period spatial normalization means that a score of, say, 70 for a given
 
 ## 5. Individual Metric Definitions
 
-<!-- WRITING GUIDE
-PURPOSE: Define every metric that feeds into a bundle. For each metric: the variable(s) it is derived from, the mathematical definition, the units, and which bundle(s) it belongs to. This is the most table-dense section.
+The five subsections below correspond to distinct data sources and hazard families. Derivations are given for IRT-specific and non-standard indices; for canonical ETCCDI indices, the definition is cited and only IRT-specific parameter choices are noted. A complete metric reference table — slug, label, variable(s), definition, units, baseline period, and bundle memberships — is given in Appendix A.
 
-GENERAL FORMAT PER SUBSECTION:
-- Brief narrative framing (1–3 sentences on why this class of metrics matters for the hazard)
-- A definition table with columns: Metric Slug | Label | Variable(s) | Definition | Units | Bundle(s)
-- Mathematical derivations for non-trivial indices (thresholds, percentile-based, SPI)
-- Parameter values stated explicitly (e.g. thresholds in °C, accumulation windows in months)
+### 5.1 Temperature and Heat Metrics
 
-SUBSECTION BREAKDOWN:
+Sustained temperature extremes drive three of the six thematic bundles: Heat Risk (daytime and nocturnal extremes, heatwave characteristics), Heat Stress (humid heat; addressed separately in §5.4), and Cold Risk (winter cold extremes and cold-spell persistence). All temperature metrics are derived from daily mean (`tas`), maximum (`tasmax`), or minimum (`tasmin`) temperature, each converted from Kelvin to Celsius before index calculation.
 
-### 5.1 Temperature Metrics
-Covers metrics feeding Heat Risk, Heat Stress, and Cold Risk bundles.
-Key metric families:
-- Mean temperature: tas_annual_mean, tas_summer_mean, tasmax_summer_mean
-- Absolute extremes: txx_annual_max (TXx), tnn_annual_min (TNn), tnx_annual_max
-- Threshold-based frequency: txge30_hot_days, txge35_extreme_heat_days, tasmin_tropical_nights_gt25, tasmin_tropical_nights_gt28, tnle10_cold_nights, tnle5_severe_cold_nights, txle15_cold_days
-- Percentile-based: tn90p_warm_nights_pct, tx90p_hot_days_pct, tx10p_cool_days_pct, tn10p_cool_nights_pct
-- Heatwave / spell metrics: hwa_heatwave_amplitude, hwfi_tmean_90p, hwfi_events_tmean_90p, wsdi_warm_spell_days, csdi_cold_spell_days, tnle10_consecutive_cold_nights
-- Wet-bulb temperature (see §5.4 for derivation): twb_annual_mean, twb_summer_mean, twb_annual_max, twb_days_ge_28, twb_days_ge_30
+Metrics are organised in five groups across the three bundles:
 
-Note: summer season is defined as [months — confirm from codebase: likely April–June or March–June for India].
-Note: percentile baselines (e.g. 90th percentile thresholds for WSDI, TN90p) are computed relative to the historical reference period — state the period and method explicitly.
+- **Background means.** Annual and seasonal mean temperature. Summer is defined as **March–May (MAM)**; winter as **December–January–February (DJF)**.
+- **Absolute extremes.** TXx (annual maximum of tasmax), TNx (warmest night of tasmin), TNn (coldest night of tasmin), and DJF minimum of tasmin — standard ETCCDI indices (Zhang et al. 2011) recording the most extreme individual day of the year.
+- **Threshold-frequency indices.** Counts of days crossing fixed thresholds. Hot-day thresholds (TX ≥ 30°C, TX ≥ 35°C) follow IMD operational criteria; tropical-night thresholds (TN > 25°C for Heat Risk; TN > 28°C for Heat Stress) are India-adapted. Cold thresholds (TN ≤ 10°C, TN ≤ 5°C, TX ≤ 15°C) are calibrated to the cold-season climate of the Indian plains.
+- **Percentile-relative indices.** TX90p, TN90p, TX10p, TN10p express the fraction of days exceeding or falling below a locally calibrated day-of-year (DOY) percentile threshold. These capture relative shifts in the local temperature distribution regardless of absolute temperature level.
+- **Heatwave and cold-spell characteristics.** WSDI (warm spell days), CSDI (cold spell days), hwfi (heatwave spell days), hwfi_events (heatwave event count), hwa (heatwave amplitude), and tnle10_consecutive (longest consecutive cold-night run).
+
+**DOY percentile threshold framework**
+
+All percentile-relative and spell metrics share a common threshold derivation aligned with the ETCCDI TX90p method (Zhang et al. 2011). For each grid cell and calendar day $d = 1, \ldots, 365$ (February 29 excluded), all baseline-period daily values falling within a symmetric ±2-day window centred on $d$ are pooled. For a 30-year baseline this yields approximately 150 values per day-of-year. The $p$-th percentile of this pooled set is the threshold $\tau_d$:
+
+$$\tau_d = \text{quantile}_p\!\bigl(\{x_{y,d'} : y \in [y_1, y_2],\; |d' - d| \leq 2\}\bigr)$$
+
+where $d'$ is measured on the 365-day no-leap calendar and $[y_1, y_2]$ is the baseline period. During evaluation, day $t$ with value $x_t$ is classified as an exceedance when $x_t > \tau_{d(t)}$ (strict greater-than throughout). The threshold vector $\tau_d$ is computed once per (model, variable, baseline configuration) and applied unchanged to all evaluation years including SSP projections.
+
+Baseline periods and percentiles differ between warm and cold index families:
+
+| Index family | Percentile | Baseline period |
+|---|---|---|
+| TX90p, TN90p, WSDI, hwfi, hwa | 90th | 1981–2010 |
+| TX10p, TN10p, CSDI | 10th | 1990–2010 |
+
+**Heatwave amplitude (hwa)**
+
+`hwa_heatwave_amplitude` is an IRT-specific index. For each year and grid cell, the DOY-90th-percentile framework (baseline 1981–2010, applied to tasmax, minimum spell length 5 consecutive days) identifies all heatwave spells $s$ within the year. For each spell, the mean daily exceedance above the per-day threshold is:
+
+$$\bar{\epsilon}_s = \frac{1}{|s|} \sum_{t \in s} \bigl(x_t - \tau_{d(t)}\bigr)$$
+
+The spell with the largest mean exceedance $\bar{\epsilon}_{s^*}$ is selected as the "worst" heatwave of the year. The amplitude is the peak daily maximum temperature within that spell:
+
+$$\text{hwa} = \max_{t \in s^*}\, x_t \quad ({}^\circ\text{C})$$
+
+This captures both the persistence and the intensity of the strongest annual heatwave event as a single value in absolute Celsius — not an anomaly relative to a threshold.
+
+> Zhang, X., Alexander, L., Hegerl, G. C., Jones, P., Klein Tank, A., Peterson, T. C., Trewin, B., and Zwiers, F. W. (2011). Indices for monitoring changes in extremes based on daily temperature and precipitation data. *WIREs Climate Change*, 2(6), 851–870. https://doi.org/10.1002/wcc.147
 
 ### 5.2 Precipitation and Extreme Rainfall Metrics
-Covers metrics feeding Extreme Rainfall | Flash Flood Risk bundle.
-Key metrics:
-- Peak intensity: pr_max_1day_precip (Rx1day), pr_max_5day_precip (Rx5day)
-- Frequency: r20mm_very_heavy_precip_days (R20mm)
-- Percentile contribution: r95p_very_wet_precip (R95p), r95ptot_contribution_pct (R95pTOT)
-- Persistence: cwd_consecutive_wet_days (CWD)
 
-Many of these are standard ETCCDI/Climdex indices — reference the Climdex/ETCCDI definitions formally and note any parameter choices that deviate from the standard definition.
+All six Extreme Rainfall | Flash Flood Risk bundle metrics are derived from the daily precipitation variable `pr` (converted from kg m⁻² s⁻¹ to mm day⁻¹). Four are canonical ETCCDI indices with no IRT-specific departures: **Rx1day** (annual maximum 1-day total), **Rx5day** (annual maximum 5-day running total), **R20mm** (count of days with precipitation ≥ 20 mm), and **CWD** (maximum consecutive wet days, where a wet day is any day with precipitation ≥ 1 mm). See Appendix A for parameter details.
+
+The two percentile-based indices require a baseline:
+
+**R95p** is the annual total precipitation contributed by very wet days — days whose daily precipitation exceeds the 95th percentile of the wet-day precipitation distribution in the baseline period 1981–2010. Wet days are defined as days with precipitation ≥ 1 mm. The 95th-percentile threshold is a single per-cell scalar computed from pooling all wet-day values across the full baseline (not DOY-specific). For each evaluation year, precipitation is accumulated over all days that exceed this threshold.
+
+**R95pTOT** expresses the fraction of annual wet-day precipitation contributed by very wet days:
+
+$$\text{R95pTOT} = \frac{\text{R95p}}{\text{PRCPTOT}} \times 100 \quad (\%)$$
+
+where PRCPTOT is the annual total precipitation on wet days (≥ 1 mm). Both indices use baseline period 1981–2010.
 
 ### 5.3 Drought Indices (SPI)
-This is the most mathematically intensive subsection.
-Cover:
-- What SPI is: the Standardised Precipitation Index (McKee et al. 1993). Cite formally.
-- The gamma distribution fit and probability integral transformation to the standard normal.
-- Timescales used: SPI-3, SPI-6, SPI-12 (3-, 6-, and 12-month accumulation windows).
-- Interpretation: SPI < −1 = moderate drought onset.
-- Metrics derived:
-  - spi3/6/12_count_events_lt_minus1: number of years in the period with at least one SPI < −1 event
-  - spi3/6/12_max_spell_lt_minus1: longest consecutive-month drought spell (SPI < −1) within a year, averaged over the period
-- State the baseline period for the gamma fit (confirm from codebase; typically the historical period).
-- Note: SPEI is computed in the codebase but is not currently included in shipped bundles — mention briefly and exclude from further detail.
+
+The Drought Risk bundle uses the **Standardised Precipitation Index** (SPI; McKee et al. 1993), a dimensionless probabilistic drought index that expresses accumulated monthly precipitation as a standard-normal departure from the long-term fitted distribution. IRT computes SPI at three accumulation timescales — SPI-3 (seasonal), SPI-6 (meteorological), and SPI-12 (long-term) — all on the 0.25° grid before spatial aggregation. Longer timescales carry higher bundle weight, reflecting the greater agricultural and hydrological impact of sustained multi-month drought.
+
+**Derivation**
+
+Monthly precipitation totals are accumulated over rolling $k$-month windows (where $k = 3$, $6$, or $12$). The resulting monthly series for each cell is fitted to a two-parameter **Gamma distribution** over the calibration period 1981–2010 using the Method of Moments estimator:
+
+$$f(x;\, \alpha, \beta) = \frac{x^{\alpha-1}\, e^{-x/\beta}}{\beta^\alpha\, \Gamma(\alpha)}, \quad x > 0$$
+
+Zero-precipitation months occur with probability $q = P(x = 0)$, estimated as the fraction of zero months in the baseline. The Gamma fit applies to positive-precipitation months only. The mixed cumulative distribution function is:
+
+$$H(x) = q + (1 - q)\, G(x;\, \alpha, \beta)$$
+
+SPI is obtained by mapping this CDF through the standard normal quantile function:
+
+$$\text{SPI} = \Phi^{-1}\!\bigl(H(x)\bigr)$$
+
+The Gamma parameters ($\alpha$, $\beta$, $q$) are estimated once from the 1981–2010 historical run and applied unchanged to SSP future data, preserving cross-period comparability of SPI values. The implementation uses the open-source `climate-indices` package (Monocongo 2021) with Method of Moments fitting.
+
+**Bundle metrics**
+
+The monthly SPI series is not used directly in composites. Two annual aggregation statistics are derived per cell, per year:
+
+- **Count of drought events** (`spi{k}_count_events_lt_minus1`): number of contiguous episodes per year during which SPI remains continuously below −1, averaged over the 20-year analysis period. SPI < −1 corresponds to the 15.9th percentile of the standard normal — conditions that occur in approximately one year in six under the baseline climatology.
+- **Maximum drought spell** (`spi{k}_max_spell_lt_minus1`): longest consecutive-month period per year during which SPI is continuously below −1, expressed as the period maximum over the 20-year window (not the mean).
+
+These per-cell annual metric fields are then area-weighted and aggregated to administrative units following the procedure in §4.2.
+
+SPEI (Standardised Precipitation–Evapotranspiration Index) was evaluated but is not included in the current shipped bundles.
+
+> McKee, T. B., Doesken, N. J., and Kleist, J. (1993). The relationship of drought frequency and duration to time scales. *Proceedings of the 8th Conference on Applied Climatology*, 17–22 January, Anaheim, California. American Meteorological Society, 179–183.
 
 ### 5.4 Wet-Bulb Temperature and Humid Heat Metrics
-Cover:
-- Why wet-bulb temperature (TWb) matters: captures combined heat-humidity stress that dry-bulb temperature alone misses.
-- Derivation of TWb from tas, hurs (or huss): state the formula used (likely the Stull 2011 or Davies-Jones approximation — confirm from codebase compute module).
-- Metrics: twb_annual_mean, twb_summer_mean, twb_annual_max, twb_days_ge_28, twb_days_ge_30.
-- Thresholds: 28°C and 30°C TWb — note what these represent physiologically (cite relevant literature, e.g. Raymond et al. 2020).
+
+The body's primary cooling mechanism under heat stress is evaporative sweat loss; at high humidity this mechanism is impaired, generating physiological strain at air temperatures well below those dangerous in dry conditions. Wet-bulb temperature ($T_{wb}$) integrates both air temperature and ambient humidity into a quantity directly proportional to the ambient evaporative cooling capacity. Raymond et al. (2020) demonstrated that wet-bulb temperatures above 35°C are incompatible with sustained human activity even for acclimatised individuals; IRT uses working thresholds of 28°C and 30°C, corresponding to severe and very severe occupational heat stress relevant to India's outdoor labour conditions.
+
+**Stull (2011) approximation**
+
+$T_{wb}$ is computed from daily near-surface air temperature ($T$ in °C, from `tas`) and near-surface relative humidity ($RH$ in %, from `hurs`) using the empirical approximation of Stull (2011):
+
+$$T_{wb} = T \cdot \arctan\!\bigl(0.151977\,\sqrt{RH + 8.313659}\,\bigr) + \arctan(T + RH) - \arctan(RH - 1.676331) + 0.00391838 \cdot RH^{1.5} \cdot \arctan(0.023101\,RH) - 4.686035$$
+
+This approximation has a mean absolute error of 0.28°C relative to the psychrometric wet-bulb for the range $0°\text{C} \leq T \leq 50°\text{C}$, $5\% \leq RH \leq 99\%$, covering the full range of tropical and subtropical conditions in India. $T_{wb}$ is computed day-by-day from the daily `tas` and `hurs` fields before spatial aggregation, consistent with the grid-first architecture (→ §4.1). The summer season for `twb_summer_mean` is March–May (MAM), consistent with the summer temperature means in §5.1.
+
+> Stull, R. (2011). Wet-bulb temperature from relative humidity and air temperature. *Journal of Applied Meteorology and Climatology*, 50(11), 2267–2269. https://doi.org/10.1175/JAMC-D-11-0143.1
+
+> Raymond, C., Matthews, T., and Horton, R. M. (2020). The emergence of heat and humidity too severe for human tolerance. *Science Advances*, 6(19), eaaw1838. https://doi.org/10.1126/sciadv.aaw1838
 
 ### 5.5 Riverine Flood Metrics (JRC)
-Cover:
-- Source: JRC Global Flood Maps RP-100 product (→ §2.4).
-- Three metrics:
-  - jrc_flood_depth_rp100: p95 flood depth at block level; area-weighted mean at district level (confirm aggregation method from codebase)
-  - jrc_flood_extent_rp100: total flooded area within admin unit (km² or % of area — confirm units)
-  - jrc_flood_depth_index_rp100: composite severity index combining depth and extent (describe the depth × extent classification matrix if present in codebase)
-- These are static snapshot metrics (no SSP scenario dimension).
 
-CONSTRAINTS:
-- Every metric in bundle_weights.py must appear in this section. Cross-check against the bundle weights tables before finalizing.
-- Use the metric slug as the canonical identifier in all tables.
-- For ETCCDI standard indices (TXx, TN90p, Rx5day, CWD, WSDI, CSDI, etc.), reference the ETCCDI definition and note any deviations from it.
-- For non-standard / IRT-custom indices (hwfi, twb-derived), provide full derivations.
--->
+Riverine flood metrics are derived from the CEMS-GloFAS RP-100 raster layers (→ §2.4) and are static snapshots with no SSP scenario dimension. All three metrics are computed directly on the raster and then aggregated to administrative polygons; they do not pass through the 0.25° climate grid.
+
+**jrc_flood_depth_rp100** — Mean peak flood depth. At block level: the 95th percentile of positive flooded-cell depth values within the polygon, capturing the severe tail of the inundation depth distribution. At district level: the flooded-area-weighted mean of constituent block p95 values. Units: metres.
+
+**jrc_flood_extent_rp100** — Share of the polygon's total area covered by positive modelled flood depth, displayed as a percentage. Units: fraction (shown as %).
+
+**jrc_flood_depth_index_rp100** — Composite severity class (ordinal 1–5, Very Low to Extreme) derived by jointly binning flood depth and extent into a 5×5 scoring matrix, where each (depth bin, extent bin) combination maps to a severity class. This index alone carries a non-zero bundle weight (1.0); `jrc_flood_depth_rp100` and `jrc_flood_extent_rp100` are retained as inline display attributes (weight = 0.0).
 
 ---
 
@@ -525,5 +571,92 @@ CONSTRAINTS:
 
 ---
 
-*Document last updated: 2026-06-22*  
+---
+
+## Appendix A: Complete Metric Reference
+
+The table below lists every metric that appears in a thematic bundle weight entry in `bundle_weights.py`. Metrics shared across bundles appear once with all bundles noted. Columns: **Slug** (canonical pipeline identifier), **Label** (display name), **Variable(s)** (NEX-GDDP-CMIP6 input or external source), **Definition** (how the annual value is computed), **Units**, **Baseline** (period for percentile/distribution fitting, where applicable), **Bundle(s)**.
+
+Abbreviations: DOY = day-of-year percentile threshold; MAM = March–May; DJF = December–January–February; MoM = Method of Moments.
+
+### A.1 Heat Risk and Heat Stress
+
+| Slug | Label | Variable(s) | Definition | Units | Baseline | Bundle(s) |
+|---|---|---|---|---|---|---|
+| `tas_annual_mean` | Annual mean temperature | tas | Arithmetic mean of daily mean temperature | °C | — | Heat Risk |
+| `tasmax_summer_mean` | Summer (MAM) max temp | tasmax | Mean of daily max temperature in months [3,4,5] | °C | — | Heat Risk |
+| `tas_summer_mean` | Summer (MAM) mean temp | tas | Mean of daily mean temperature in months [3,4,5] | °C | — | Heat Risk |
+| `txx_annual_max` | Annual max daily max temp (TXx) | tasmax | Annual maximum of daily maximum temperature | °C | — | Heat Risk |
+| `tnx_annual_max` | Warmest night (TNx) | tasmin | Annual maximum of daily minimum temperature | °C | — | Heat Risk |
+| `hwa_heatwave_amplitude` | Heatwave amplitude | tasmax | Peak daily max temp within the heatwave spell with highest mean exceedance above DOY 90th-pct threshold; min 5 consecutive exceedance days | °C | 1981–2010 | Heat Risk |
+| `txge30_hot_days` | Hot days (TX ≥ 30°C) | tasmax | Count of days where tasmax ≥ 30°C | days | — | Heat Risk |
+| `txge35_extreme_heat_days` | Extreme heat days (TX ≥ 35°C) | tasmax | Count of days where tasmax ≥ 35°C | days | — | Heat Risk |
+| `tasmin_tropical_nights_gt25` | Tropical nights (TN > 25°C) | tasmin | Count of days where tasmin > 25°C | days | — | Heat Risk |
+| `hwfi_tmean_90p` | Heatwave spell days | tas | Total days inside spells of ≥ 5 consecutive days where tas > DOY 90th-pct threshold | days | 1981–2010 | Heat Risk |
+| `hwfi_events_tmean_90p` | Heatwave event count | tasmax | Count of distinct spells of ≥ 5 consecutive days where tasmax > DOY 90th-pct threshold | events | 1981–2010 | Heat Risk |
+| `wsdi_warm_spell_days` | Warm spell days (WSDI) | tasmax | Count of days inside warm spells of ≥ 6 consecutive days where tasmax > DOY 90th-pct threshold | days | 1981–2010 | Heat Risk, Heat Stress |
+| `tx90p_hot_days_pct` | Hot days % (TX90p) | tasmax | Fraction of days where tasmax > DOY 90th-pct threshold; 5-day window | % | 1981–2010 | Heat Risk |
+| `tn90p_warm_nights_pct` | Warm nights % (TN90p) | tasmin | Fraction of days where tasmin > DOY 90th-pct threshold; 5-day window | % | 1981–2010 | Heat Risk, Heat Stress |
+| `twb_annual_mean` | Annual mean wet-bulb temp | tas, hurs | Annual mean of daily Twb (Stull 2011) | °C | — | Heat Stress |
+| `twb_summer_mean` | Summer (MAM) mean wet-bulb | tas, hurs | Mean of daily Twb (Stull 2011) in months [3,4,5] | °C | — | Heat Stress |
+| `twb_annual_max` | Annual max wet-bulb temp | tas, hurs | Annual maximum of daily Twb (Stull 2011) | °C | — | Heat Stress |
+| `twb_days_ge_28` | Heat stress days (Twb ≥ 28°C) | tas, hurs | Count of days where Twb (Stull 2011) ≥ 28°C | days | — | Heat Stress |
+| `twb_days_ge_30` | Severe heat stress days (Twb ≥ 30°C) | tas, hurs | Count of days where Twb (Stull 2011) ≥ 30°C | days | — | Heat Stress |
+| `tasmin_tropical_nights_gt28` | Tropical nights (TN > 28°C) | tasmin | Count of days where tasmin > 28°C | days | — | Heat Stress |
+
+### A.2 Cold Risk
+
+| Slug | Label | Variable(s) | Definition | Units | Baseline | Bundle(s) |
+|---|---|---|---|---|---|---|
+| `tas_winter_mean` | Winter (DJF) mean temp | tas | Mean of daily mean temperature in months [12,1,2] | °C | — | Cold Risk |
+| `tasmin_winter_mean` | Winter (DJF) mean min temp | tasmin | Mean of daily minimum temperature in months [12,1,2] | °C | — | Cold Risk |
+| `tnn_annual_min` | Coldest night (TNn) | tasmin | Annual minimum of daily minimum temperature | °C | — | Cold Risk |
+| `tasmin_winter_min` | Winter (DJF) min of min temp | tasmin | Minimum of daily minimum temperature in months [12,1,2] | °C | — | Cold Risk |
+| `tnle10_cold_nights` | Cold nights (TN ≤ 10°C) | tasmin | Count of days where tasmin ≤ 10°C | days | — | Cold Risk |
+| `tnle5_severe_cold_nights` | Severe cold nights (TN ≤ 5°C) | tasmin | Count of days where tasmin ≤ 5°C | days | — | Cold Risk |
+| `txle15_cold_days` | Cold days (TX ≤ 15°C) | tasmax | Count of days where tasmax ≤ 15°C | days | — | Cold Risk |
+| `tx10p_cool_days_pct` | Cool days % (TX10p) | tasmax | Fraction of days where tasmax < DOY 10th-pct threshold; 5-day window | % | 1990–2010 | Cold Risk |
+| `tn10p_cool_nights_pct` | Cool nights % (TN10p) | tasmin | Fraction of days where tasmin < DOY 10th-pct threshold; 5-day window | % | 1990–2010 | Cold Risk |
+| `csdi_cold_spell_days` | Cold spell days (CSDI) | tasmin | Count of days inside cold spells of ≥ 6 consecutive days where tasmin < DOY 10th-pct threshold | days | 1990–2010 | Cold Risk |
+| `tnle10_consecutive_cold_nights` | Longest cold-night run (TN ≤ 10°C) | tasmin | Maximum consecutive run of days where tasmin ≤ 10°C | days | — | Cold Risk |
+
+### A.3 Drought Risk
+
+All SPI metrics use Gamma distribution fitted by MoM over the calibration period 1981–2010. Event/spell metrics apply the SPI < −1 threshold (moderate drought onset).
+
+| Slug | Label | Scale | Definition | Units | Period rollup | Bundle(s) |
+|---|---|---|---|---|---|---|
+| `spi3_count_events_lt_minus1` | SPI-3 drought events | 3 months | Mean annual count of contiguous SPI episodes below −1 | events/yr | Period mean | Drought Risk |
+| `spi6_count_events_lt_minus1` | SPI-6 drought events | 6 months | As above at 6-month scale | events/yr | Period mean | Drought Risk |
+| `spi12_count_events_lt_minus1` | SPI-12 drought events | 12 months | As above at 12-month scale | events/yr | Period mean | Drought Risk |
+| `spi3_max_spell_lt_minus1` | SPI-3 max drought spell | 3 months | Period maximum of within-year longest SPI episode below −1 | months | Period max | Drought Risk |
+| `spi6_max_spell_lt_minus1` | SPI-6 max drought spell | 6 months | As above at 6-month scale | months | Period max | Drought Risk |
+| `spi12_max_spell_lt_minus1` | SPI-12 max drought spell | 12 months | As above at 12-month scale | months | Period max | Drought Risk |
+
+### A.4 Extreme Rainfall | Flash Flood Risk
+
+All metrics derived from `pr` (mm day⁻¹). ETCCDI standard: Zhang et al. (2011).
+
+| Slug | Label | Definition | Units | Baseline | Bundle(s) |
+|---|---|---|---|---|---|
+| `pr_max_1day_precip` | Max 1-day precipitation (Rx1day) | Annual maximum of daily precipitation total | mm | — | Extreme Rainfall |
+| `pr_max_5day_precip` | Max 5-day precipitation (Rx5day) | Annual maximum of consecutive 5-day precipitation total | mm | — | Extreme Rainfall |
+| `r20mm_very_heavy_precip_days` | Very heavy rain days (R20mm) | Count of days where precipitation ≥ 20 mm | days | — | Extreme Rainfall |
+| `r95p_very_wet_precip` | Very wet day total (R95p) | Annual total precipitation on days exceeding p95 of baseline wet-day distribution (wet day ≥ 1 mm) | mm | 1981–2010 | Extreme Rainfall |
+| `r95ptot_contribution_pct` | Very wet day fraction (R95pTOT) | R95p as a fraction of annual wet-day total × 100 | % | 1981–2010 | Extreme Rainfall |
+| `cwd_consecutive_wet_days` | Consecutive wet days (CWD) | Maximum consecutive days with precipitation ≥ 1 mm | days | — | Extreme Rainfall |
+
+### A.5 Riverine Flood
+
+Source: CEMS-GloFAS Global River Flood Hazard Maps Version 2.1 (RP-100 layers). Static snapshot; no SSP scenario dimension.
+
+| Slug | Label | Definition | Units | Role |
+|---|---|---|---|---|
+| `jrc_flood_depth_index_rp100` | Flood severity index | 5×5 depth-by-extent scoring matrix; ordinal class 1–5 (Very Low to Extreme) | severity class | Scored (weight 1.0) |
+| `jrc_flood_depth_rp100` | RP-100 flood depth | Block: p95 of positive flooded-cell depths within polygon. District: flooded-area-weighted mean of block p95 values | m | Display attribute |
+| `jrc_flood_extent_rp100` | RP-100 flood extent | Share of polygon area with positive modelled flood depth | fraction (%) | Display attribute |
+
+---
+
+*Document last updated: 2026-06-23*  
 *Maintained by: Abu Bakar Siddiqui Thakur*
