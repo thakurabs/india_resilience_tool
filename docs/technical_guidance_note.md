@@ -180,7 +180,7 @@ The NEX-GDDP-CMIP6 product is provided at **0.25° × 0.25°** horizontal resolu
 
 **Resolution implications at district vs block level**
 
-India has approximately 800 districts (mean area ~4,000 km²) and roughly 6,600 sub-district blocks (mean area ~450–600 km²). At 0.25° resolution (~625 km² per cell):
+India has 784 districts (mean area ~4,171 km²) and 7,137 sub-district blocks (mean area ~458 km²). At 0.25° resolution (~625 km² per cell):
 
 - A typical district contains **4–20** 0.25° cells, providing adequate spatial sampling for area-weighted aggregation.
 - A typical block may contain **fewer than 4** cells, and smaller blocks in densely sub-divided states may fall within a single cell. Block-level composites therefore carry higher spatial uncertainty than district-level composites, and cross-block variation in small block groups may partly reflect grid-cell boundaries rather than true sub-district heterogeneity.
@@ -232,35 +232,83 @@ Three classes of systematic limitation are relevant to users interpreting IRT ou
 
 ## 4. Grid-First Compute and Post-Processing
 
-<!-- WRITING GUIDE
-PURPOSE: Explain the computational architecture — why we operate on the full grid before aggregating to admin units, and what happens at each processing stage.
-
-SUBSECTION BREAKDOWN:
-
 ### 4.1 Architecture: Why Grid-First
-- Define "grid-first": all climate index calculations are performed at the native 0.25° grid resolution before any spatial aggregation to administrative boundaries.
-- Rationale: avoids information loss from premature averaging; preserves within-district spatial variability; allows future re-aggregation to any boundary set without recomputing indices.
-- Contrast with "admin-first" approaches where daily GCM values are averaged over admin boundaries before computing indices (explain why this is methodologically incorrect for non-linear indices such as exceedance counts and SPI).
+
+All climate index computations in IRT are performed at the native 0.25° grid resolution before any aggregation to administrative boundaries. This "grid-first" design reflects a deliberate methodological choice rooted in the structure of the indices being computed.
+
+An alternative — the "admin-first" approach — would average the raw daily GCM values over each administrative unit before computing indices. This is appropriate for linear statistics such as mean temperature, but introduces bias for any non-linear index. Consider a district that straddles a dense urban area and a river valley: one 0.25° cell (the city) records five consecutive days at 36–38°C, while an adjacent cell (the valley) records those same days at 28–30°C. The admin-first approach averages the two cells first, producing a district-mean of 32–34°C — below the 35°C threshold on every day — and consequently reports **zero** extreme-heat days for the district. The grid-first approach computes five hot days for the city cell and zero for the valley cell, then takes the area-weighted mean: 2.5 hot days for the district. The admin-first result is not merely less precise — it completely erases a genuine multi-day extreme heat event that affected half the district. The distortion compounds further for non-linear indices: spell-length metrics, percentile-exceedance fractions, and the SPI gamma transform all produce systematically biased outputs when applied to pre-averaged spatial means.
+
+Operating grid-first also preserves within-unit spatial heterogeneity through the final aggregation step and allows the per-cell index fields to be re-aggregated to any future boundary revision without repeating the (computationally intensive) index computation.
+
+The pipeline accordingly computes each annual climate index as a per-cell 2D field on the 0.25° grid, one year at a time, for each GCM and scenario. These annual index fields are then area-weighted and averaged to the administrative boundary set as described in §4.2.
 
 ### 4.2 Spatial Aggregation to District and Block
-- After grid-first index computation, results are aggregated from the 0.25° grid to district and block boundaries using area-weighted zonal statistics.
-- Describe the spatial join and weighting method (pixel centroid-in-polygon, or fractional area overlap — confirm from codebase and state explicitly).
-- Note that the canonical administrative boundary set used is the LGD (Local Government Directory) boundary dataset (state which version/year).
-- Two output levels: district (ADM2) and block (ADM3). State how block-level results relate to district-level (not simple averaging — blocks are individually computed from the grid).
+
+**Aggregation method**
+
+Spatial aggregation from the 0.25° grid to administrative polygons uses **fractional area overlap**: for each (polygon, cell) pair, the area of intersection between the cell tile and the polygon is computed, and the resulting intersection area is used as the weight in a weighted average.
+
+Formally, let $v_j$ denote the index value at grid cell $j$, and let $a_{ij}$ denote the intersection area (in m²) between administrative unit $i$ and cell $j$. The aggregated value for unit $i$ is:
+
+$$\bar{v}_i = \frac{\sum_j a_{ij}\, v_j}{\sum_j a_{ij}}$$
+
+where the sum runs over all cells $j$ that intersect unit $i$. Cells with no intersection or with missing ($\text{NaN}$) index values are excluded from both numerator and denominator.
+
+Grid cell tile boundaries are defined as midpoints between adjacent cell centres: a cell at latitude $\phi$ and longitude $\lambda$ occupies the tile $[\phi - \delta/2,\, \phi + \delta/2] \times [\lambda - \delta/2,\, \lambda + \delta/2]$ where $\delta = 0.25°$. Both the administrative boundary polygons (stored in EPSG:4326, the universal geographic coordinate standard) and these grid cell tile boxes are reprojected to the **EPSG:6933 Equal-Area Cylindrical** projected coordinate reference system before any intersection or area calculation is performed. This reprojection is necessary because a 0.25° × 0.25° angular tile covers a larger physical area near the equator than near the Himalayas; computing intersection weights in degree-space would therefore over-represent equatorial cells. In EPSG:6933 the intersection areas are in m² and are geometrically correct across all latitudes.
+
+This approach — sometimes called rasterize-to-polygon area weighting or exact polygon-cell intersection — is more accurate than centroid-in-polygon methods for small or irregularly shaped units, where a cell centroid may fall outside the polygon even though a substantial fraction of the cell area overlaps it.
+
+**Administrative boundary set**
+
+The canonical boundary set is the **LGD (Local Government Directory)** boundary dataset at two levels:
+
+- **District (ADM2):** 784 units, India-wide
+- **Block / sub-district (ADM3):** 7,137 units, India-wide
+
+District-level and block-level composite scores are both computed directly from the 0.25° grid: district scores are not derived by aggregating block scores, nor are block scores disaggregated from district scores. Concretely: the 784 district polygons are intersected with the 0.25° grid to produce a district-level lookup table recording, for each (district, cell) pair, the fraction of the cell area that falls within that district. Separately, the 7,137 block polygons are intersected with the same grid to produce an equivalent block-level lookup. When a climate index field is computed on the grid, it is aggregated to district values using the district lookup and to block values using the block lookup — two independent aggregation passes over the same underlying grid field. As a result, a district's composite score is not necessarily equal to the area-weighted average of its constituent blocks' composite scores — the two values are independently derived from the same underlying grid and will generally differ slightly due to the difference in polygon geometry at each level.
 
 ### 4.3 Period Aggregation and Ensemble Handling
-- For each metric, describe the temporal aggregation chain:
-  1. Daily values → annual index values (metric-specific; see §5 for definitions)
-  2. Annual values → period mean (across years within the period window, e.g. 2021–2040)
-  3. Period means → ensemble mean across the 24 GCMs
-- State whether ensemble spread (e.g. inter-model standard deviation) is computed and retained. If not, note that the tool currently reports ensemble means only.
-- Clarify the anchor scenario: the per-period composite normalization (→ §6.2) uses the ensemble-mean historical period (1990–2010) as its reference. Confirm whether this uses the "historical" scenario run or a splice of historical + early SSP years, and state it explicitly.
 
-CONSTRAINTS:
-- Describe what actually happens in the codebase, not an idealized version. If there are known approximations (e.g. centroid-in-polygon rather than fractional overlap), name them.
-- Do not include pipeline code or tool invocation commands — this is a methods note, not a user guide.
-- Keep math light here; the heavy index math goes in §5.
--->
+**Temporal aggregation chain**
+
+For each metric, each GCM, and each scenario, the pipeline applies a three-stage temporal aggregation:
+
+1. **Daily → annual index.** For each calendar year $y$, the daily gridded data for that year (and, for some metrics, the preceding year) are reduced to a single annual index value per cell. The specific reduction depends on the metric family — annual mean, exceedance count, peak intensity, SPI transform, and so on — and is defined metric by metric in §5. The output is a per-cell annual index field.
+
+2. **Annual → period mean.** For each analysis period (e.g. 2020–2040), the per-cell annual index values for all years within that period are averaged to produce a single per-cell period-mean field. The averaging is an unweighted arithmetic mean over years.
+
+3. **Period mean → ensemble mean.** For each (scenario, period) combination, the 24 per-model period means are averaged to produce the ensemble-mean field. In addition to the ensemble mean, the pipeline retains ensemble spread statistics — standard deviation, median, and 5th and 95th percentile across models. The composite and bundle scores described in §6 and §7 use the **ensemble mean** only; ensemble spread is retained for diagnostic and uncertainty-characterisation purposes but is not surfaced in the current composite outputs.
+
+This three-stage chain is designed to separate climate signal from noise at two distinct scales. Averaging annual index values over a 20-year window (stage 2) filters out interannual variability driven by modes such as ENSO and the Indian Ocean Dipole, isolating the underlying forced climate change signal rather than the characteristics of any particular sequence of years. Santer et al. (2011) demonstrate that signal-to-noise ratios in atmospheric temperature trends are below 1 at 10-year timescales but exceed 3.9 at 32-year trends, and that at least 17 years of data are required to reliably distinguish the forced climate change signal from internal variability noise. Hawkins and Sutton (2012) formalise this as the *time of emergence* — the point at which the forced signal rises detectably above the background noise of natural variability — which multi-decadal period averaging is designed to approach. Averaging across 24 GCMs (stage 3) reduces sensitivity to the structural biases of any individual model; Tebaldi and Knutti (2007) provide the foundational treatment of this argument, showing that multi-model ensemble means systematically outperform individual model projections because model-specific errors arising from different structural choices are partially uncorrelated across the ensemble and therefore partially cancel in the mean. The two operations are applied in sequence — time-averaging first, then ensemble-averaging — so that each model's period mean contributes equally to the ensemble average regardless of its interannual variance.
+
+> Santer, B. D., Mears, C., Doutriaux, C., Caldwell, P., Gleckler, P. J., Wigley, T. M. L., Solomon, S., Gillett, N. P., Ivanova, D., Karl, T. R., Lanzante, J. R., Meehl, G. A., Stott, P. A., Taylor, K. E., Thorne, P. W., McCarthy, M. P., and Wehner, M. F. (2011). Separating signal and noise in atmospheric temperature changes: The importance of timescale. *Journal of Geophysical Research: Atmospheres*, 116, D22105. https://doi.org/10.1029/2011JD016263
+
+> Hawkins, E. and Sutton, R. (2012). Time of emergence of climate signals. *Geophysical Research Letters*, 39, L01702. https://doi.org/10.1029/2011GL050087
+
+> Tebaldi, C. and Knutti, R. (2007). The use of the multi-model ensemble in probabilistic climate projections. *Philosophical Transactions of the Royal Society A*, 365, 2053–2075. https://doi.org/10.1098/rsta.2007.2076
+
+**Analysis periods**
+
+| Scenario | Period |
+|----------|--------|
+| Historical | 1990–2010 |
+| SSP2-4.5 and SSP5-8.5 | 2021–2040 |
+| SSP2-4.5 and SSP5-8.5 | 2041–2060 |
+| SSP2-4.5 and SSP5-8.5 | 2061–2080 |
+
+**Historical scenario: no splice required**
+
+The historical anchor period (1990–2010) falls entirely within the historical simulation run (1951–2014). No splicing of historical and SSP files is required for the anchor period. SSP projection files begin in 2015 and are used exclusively for the 2021–2040, 2041–2060, and 2061–2080 windows.
+
+**Composite normalization (per-period spatial ranking)**
+
+For each (scenario, period) combination, the ensemble-mean metric values across all administrative units are normalised onto a [0, 100] scale using the **spatial minimum and maximum** of that same (scenario, period) slice. Let $v_i$ be the ensemble-mean value for unit $i$, and let $v_{\min}$ and $v_{\max}$ be the minimum and maximum of $v_i$ across all units with finite values in that slice. The normalised score is:
+
+$$S_i = \operatorname{clip}\!\left(\frac{v_i - v_{\min}}{v_{\max} - v_{\min}},\; 0,\; 1\right) \times 100$$
+
+For metrics where a lower value indicates greater hazard (i.e. `higher_is_worse = False` in the registry), the score is inverted: $S_i = (1 - \text{scaled}) \times 100$ before clipping. If all units share an identical value ($v_{\max} = v_{\min}$), all receive a score of 50.
+
+This per-period spatial normalization means that a score of, say, 70 for a given unit in the 2040–2060 SSP5-8.5 period indicates that this unit sits at the 70th percentile of the national distribution in that period — not that it is 70% above its own historical baseline. Scores are not directly comparable across different metrics or bundles unless the normalization ranges are understood. The weighted bundle composite (→ §6.3) aggregates these per-metric scores into a single bundle-level value on the same [0, 100] scale.
 
 ---
 
