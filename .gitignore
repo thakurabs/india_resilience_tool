@@ -95,3 +95,8 @@ _accept_*.ps1
 accept_*.csv
 thematic_bundle_audit.csv
 thematic_bundle_audit.json
+
+# --------------------------------
+# graphify knowledge graph (local-only; rebuild with `/graphify . --update`)
+# --------------------------------
+graphify-out/

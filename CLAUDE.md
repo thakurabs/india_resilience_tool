@@ -213,6 +213,18 @@ python -m tools.optimized.build_processed_optimised
 python -m tools.optimized.audit_processed_optimised_parity
 ```
 
+### Knowledge graph (graphify)
+
+A persistent code/doc knowledge graph lives in `graphify-out/` (git-ignored, local-only).
+
+- **Query (read-only — run freely):** ask a natural-language question about the
+  codebase, or run `graphify query "<question>"` / `graphify path "A" "B"` /
+  `graphify explain "<node>"`. These reuse `graphify-out/graph.json`; no rebuild.
+- **Rebuild (writes files + spends tokens — treat as `APPROVED: APPLY`):**
+  `/graphify . --update` (incremental) re-extracts only changed files.
+  Full `/graphify .` rebuilds from scratch.
+- The graph persists across sessions; nothing needs to run at startup.
+
 ## 11. Key environment variables
 
 | Variable | Default | Purpose |
