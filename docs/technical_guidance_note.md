@@ -623,13 +623,23 @@ The eight sectoral bundles and their composite slugs:
 | Asset Risk (Hydropower Plants) | `composite_asset_risk_hydropower` | 3 |
 | Life & Livelihood Loss Risk | `composite_life_livelihood_loss_risk` | 4 |
 
-Every bundle is an **ordered set of rules**; each rule binds exactly one source metric (§5) to a scoring recipe and an explicit *rule weight*. All eight bundles use `explicit_normalized` weighting, so their rule weights sum to 1.0 (§7.4). All are computed at both district and block level, for scenarios **SSP2-4.5** and **SSP5-8.5**, over the future periods **2020–2040, 2040–2060, 2060–2080**; the historical 1990–2010 window enters only as the change-lens baseline, not as a published period.
+Every bundle is an **ordered set of rules**; each rule binds exactly one source metric (§5) to a scoring recipe and an explicit *rule weight*. All eight bundles use `explicit_normalized` weighting, so their rule weights sum to 1.0 (§7.5). All are computed at both district and block level, for scenarios **SSP2-4.5** and **SSP5-8.5**, over the future periods **2020–2040, 2040–2060, 2060–2080**; the historical 1990–2010 window enters only as the change-lens baseline, not as a published period.
 
 A rule's selection encodes a deliberate sector judgement — that a given hazard *matters to that sector* — so the same metric can appear in several bundles under different rule weights and different impact bands, reflecting the sector-specific consequence rather than a single universal harm.
 
 ### 7.2 The Blended Rule: Absolute Pressure + Change + Impact Band
 
 A rule produces up to three **lens scores**, each on a 0–100 *higher-is-worse* scale, which are then weighted into a single rule score. The lens weights ($\omega_{\text{abs}}, \omega_{\text{chg}}, \omega_{\text{imp}}$) are declared per rule and sum to 1.0; a lens with weight 0 is simply not evaluated. Throughout, all shipped rules are *higher-worse* (the `lower_worse` direction is supported but unused in the current catalog).
+
+The three lenses are not an arbitrary decomposition: each answers a different, complementary question about the same metric, and each draws on an established methodological tradition. The lens framework is a structured combination of these traditions rather than a novel scoring invention.
+
+| Lens | Question it answers | Anchored to | Methodological tradition |
+|---|---|---|---|
+| **Absolute** | How extreme is the projected value relative to its peers? | the peer cohort's spatial distribution (relative) | composite-indicator normalization (OECD/JRC *Handbook on Constructing Composite Indicators*, 2008) |
+| **Change** | How much worse is the projected value than its own history? | the 1990–2010 baseline (anomaly) | delta / change-factor method (Anandhi et al. 2011) |
+| **Impact** | How far into a physically dangerous range is the value? | a fixed, externally justified threshold band (absolute) | threshold / dose–response impact functions (Gasparrini et al. 2015) |
+
+The **cohort** for the two relative lenses is one `state × level × scenario × period` group: a district is scored against the other districts *of its state*, and a block against the other blocks *of its state* — not only the blocks of its own district, since a single district rarely holds enough blocks for stable deciles. The impact lens needs no cohort; it reads each value against a fixed band.
 
 **Absolute lens — $S_{\text{abs}}$.** The current-period metric value is scaled across the geography set $G$ (the districts, or blocks, of one state) by a **robust p10–p90 rescaling**, not the full min–max of §6. With $q_{10}, q_{90}$ the 10th and 90th percentiles of the finite values over $G$:
 
@@ -647,7 +657,7 @@ In `auto` mode the absolute delta is used for temperature-like slugs (`tas*`, `t
 
 $$S_{\text{imp},i} = \operatorname{clip}\!\left(\frac{v_i - a}{b - a},\; 0,\; 1\right)\times 100$$
 
-A value at or below onset scores 0; at or above saturation, 100. The lens is evaluated only when the rule declares a band; regime/proxy metrics with no defensible threshold omit it (impact weight 0). The bands, their provenance, and their confidence grading are the subject of §7.3.
+A value at or below onset scores 0; at or above saturation, 100. The lens is evaluated only when the rule declares a band; regime/proxy metrics with no defensible threshold omit it (impact weight 0). The bands, their provenance, and their confidence grading are the subject of §7.4.
 
 **Rule score.** The lens scores present for a rule are combined as a renormalized weighted mean over the lenses actually available (i.e. non-NaN), exactly mirroring the per-row renormalization of §6.3:
 
@@ -663,7 +673,28 @@ where $f_b$ is the **available-rule-weight fraction** (the share of total rule w
 
 > A second rule type — **`trend`**, scoring an adverse yearly slope within the future window — exists and is validated in the codebase, but **no shipped bundle uses it**; every current rule is of the blended type above. It is noted here only for completeness and is excluded from the per-bundle tables.
 
-### 7.3 The Impact Lens: Bands, Provenance, and Confidence
+**Inputs and two standing caveats.** Each metric is reduced to one value per geography from a 20+ model ensemble using the **ensemble mean** (the tool-wide `mean` statistic, consistent with the thematic scores and the displayed statistic). The multi-model **median** is the methodologically preferred central estimate — robust to a single divergent model, per IPCC practice — but adopting it is a tool-wide change pending its own approval and tests. Separately, the change lens is only as trustworthy as its baseline: it must read the reconciled **1990–2010** historical window, the same period used for the displayed historical-delta columns. The residual code-gap in which some indices still calibrate on 1981–2010 (§5.1) applies to the change lens too; it is flagged here, not silent. Ensemble spread (std, p05/p95, model count) is deliberately **not** folded into the 0–100 score — it is surfaced separately as a confidence annotation, so a "70 with wide model disagreement" and a "70 with tight agreement" remain distinguishable.
+
+### 7.3 Reading the Score: What Each Lens Lets You Compare
+
+Because two of the three lenses are cohort-relative and only the impact lens is absolute, the blended score is a **hybrid** of relative ranking and absolute danger, and not every comparison of it is valid. The absolute lens carries a specific structural blind spot: since its cohort is rebuilt for each scenario–period, a *uniform* escalation — every unit in a state warming by the same amount between two periods — shifts $q_{10}$ and $q_{90}$ together and leaves the normalized scores unchanged. The absolute lens can rank places against one another; it cannot, on its own, show that the future is worse than the present. The change and impact lenses fill that gap, and the **impact lens is the only carrier of absolute escalation** across periods and across states.
+
+| Comparison | Absolute | Change | Impact | Net interpretation |
+|---|:--:|:--:|:--:|---|
+| Units **within** one `state × level × scenario × period` | ✓ | ✓ | ✓ | fully comparable — a true ranking of units |
+| **Across periods**, same state | re-normalized each period | re-normalized | ✓ (fixed band) | only the impact component is comparable; a flat absolute trend means "same rank", not "no warming" |
+| **Across states** | each state normalized to itself | each to itself | ✓ (fixed band) | only the impact component is cross-state comparable |
+
+**Worked example — why the blend beats pure-absolute ranking.** Two districts in one state, scenario `ssp585`, period `2060–2080`, metric **TXx** (annual-maximum daytime temperature), scored through the Health Risk TXx rule (lens weights 0.40 / 0.25 / 0.35, impact band 40–45 °C). Suppose across this cohort projected TXx spans $q_{10}=41$ °C to $q_{90}=46$ °C, and the warming anomaly versus 1990–2010 spans $q_{10}=+1.0$ °C to $q_{90}=+3.5$ °C:
+
+| District | TXx 2060–80 | Anomaly | $S_{\text{abs}}$ | $S_{\text{chg}}$ | $S_{\text{imp}}$ | **Blended** | Pure-absolute |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| **A** — already hot | 45.5 °C | +1.5 °C | 90 | 20 | 100 | **76** | 90 |
+| **B** — fast-warming | 42.0 °C | +3.5 °C | 20 | 100 | 40 | **47** | 20 |
+
+District A is the established heat hazard — hottest among its peers and past the 45 °C severe threshold — and is correctly rated high by either method. District B is the case pure-absolute ranking *hides*: it looks unremarkable relative to peers ($S_{\text{abs}}=20$), but it is warming faster than any of them ($S_{\text{chg}}=100$) and has just crossed the 40 °C heatwave-declaration floor ($S_{\text{imp}}=40$). The blend lifts it to 47 — a mid-range hazard warranting attention — whereas pure-absolute scoring leaves it at 20, mislabelling a fast-warming, newly dangerous district as low priority. The blend thus preserves three decision-relevant signals — current severity, trajectory, and absolute danger-threshold crossing — that a relative ranking alone discards. The cost is interpretability: one number now mixes three signals, which is precisely why the per-lens decomposition is persisted with every rule (§7.2) — a user can read District B's 47 back as $S_{\text{abs}}$ 20 / $S_{\text{chg}}$ 100 / $S_{\text{imp}}$ 40.
+
+### 7.4 The Impact Lens: Bands, Provenance, and Confidence
 
 The impact lens is what distinguishes the sectoral framework from a purely relative ranking: it injects an **absolute, externally meaningful** reading of harm. Where the absolute and change lenses only say *how a unit compares to its neighbours*, the impact lens says *how close the unit is to a recognised danger threshold*, on a fixed scale that does not move with the spatial distribution. Each band is a pair $[a,b]$ — onset $a$ (harm begins) and saturation $b$ (harm is near-complete or sector-dominant) — and the linear interpolation of §7.2 converts the raw value into a 0–100 harm-proximity score.
 
@@ -675,9 +706,11 @@ Bands are graded by the strength of their evidentiary support:
 
 **Provenance, by tier.** The catalog leans on a small number of **externally anchored, high-confidence** bands that recur across sectors and carry the heaviest impact weight: extreme daytime heat (TXx, IMD plains heatwave **40–45 °C**) and one-day rainfall (Rx1day, IMD very-heavy-to-extremely-heavy **115.6–204.5 mm**). These appear in Health, Industrial, Infrastructure, Asset, and Life-&-Livelihood bundles, each time with the same physical band but a sector-specific consequence. The remaining bands are **self-derived**: a MEDIUM tier where an institutional onset can be borrowed — multi-week dry spells (CDD, IMD Agricultural-Drought-anchored **30–90** / **60–120 days**), crop reproductive heat (TXx **35–45 °C**), warmest-night stress (TNx **28–32 °C**) — and a LOW tier for indices with no institutional category at all: multi-day rainfall (Rx5day **250–500 mm**, anchored on Kerala 2018 / Mumbai 2005), warm spells (WSDI **6–18 days**), damaging-heat-day counts (**15–60 days**), SPI drought episode/spell counts (**3–12**), peninsular chilling nights (**10–30 days**), consecutive wet days (**7–15 days**), and heatwave-frequency days (**5–15 days**). Finally, three **regime/proxy metrics carry no impact lens** — R99p extreme-wet concentration, the SPI-3 low-flow cooling proxy, and R95p interannual variability — because no defensible danger threshold exists for them; they are scored on absolute and change only.
 
+**Provenance discipline.** Five principles govern how a band may be admitted: (1) a band scores *danger, not unusualness* — emergence-versus-history is the change lens's job, so an impact band may never be built from a percentile or a standardized anomaly, which would duplicate the change lens; (2) external institutional thresholds are preferred, and a self-derived band is admitted only where none exists, through a documented protocol (harm mechanism → nearest external anchors → cut points → confidence → dated provenance); (3) confidence sets the impact weight, so a low-confidence band cannot drive a rule; (4) a borrowed standard may be used *only* in the construction its source defines — the IMD warm-night "+4.5 to +6.4 °C above normal" departure criterion was **rejected** for TNx because it is defined jointly with a same-day Tmax ≥ 40 °C co-condition against a *daily climatological* normal, neither of which holds for an annual-maximum value, so TNx instead uses an absolute 28–32 °C level band; (5) **no phantom thresholds** — a slug naming a number (e.g. `..._ge_45`) must implement that number as a real band with provenance or be renamed. Every band is versioned, dated, and revisable; the downward revision of the once-canonical 35 °C wet-bulb survivability limit is the cautionary precedent, and any band change is itself a methodology change.
+
 The full onset/saturation derivation, source, zone caveat, and confidence grade for every distinct band are catalogued in **Appendix B**, deduplicated across the bundles that share them.
 
-### 7.4 Bundle-by-Bundle Rule Tables and Weights
+### 7.5 Bundle-by-Bundle Rule Tables and Weights
 
 Two weight layers govern a sectoral score: the **lens split** *within* each rule (§7.2) and the **rule weight** *within* each bundle. The lens splits are not arbitrary per rule — they fall into a handful of recurring **archetypes** tied to band provenance:
 
