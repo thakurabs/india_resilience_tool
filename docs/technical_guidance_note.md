@@ -818,37 +818,46 @@ Captures the direct human-exposure hazards: extreme one- and five-day rainfall (
 
 ## 8. Composite Score and Output
 
-<!-- WRITING GUIDE
-PURPOSE: Describe what the final composite score is, how it is produced, what range it takes, and how it varies by scenario, period, and spatial level.
-
-SUBSECTION BREAKDOWN:
+The **composite score** is the published output of every bundle, thematic and sectoral alike: one 0–100 *higher-is-worse* number per admin unit, scenario, and period. The two construction engines of §6 and §7 differ internally but emit the same object, so a dashboard or export treats all bundle scores uniformly. This section states what that number is, what it is not, and how to read it across the scenario, period, and spatial-level dimensions.
 
 ### 8.1 Composite Derivation
-- The composite score is the final output of the bundle construction process (§6.3 for thematic, §7.2 for sectoral).
-- It is a single number per (admin unit × scenario × period) tuple, on a [0, 100] scale, where higher values indicate greater hazard pressure.
-- For thematic bundles: it is the weighted sum of per-period normalized component metric scores (→ §6.3).
-- For sectoral bundles: it is the weighted sum of blended rule scores (→ §7.2).
-- State clearly: the composite score is NOT a probability, NOT an annualized loss estimate, and NOT a risk score in the technical sense (it does not include exposure, vulnerability, or adaptive capacity). It is a multi-metric hazard-pressure index.
+
+For a given admin unit, scenario, and period the composite is produced by whichever engine owns the bundle:
+
+- **Thematic bundles (§6.3):** a per-row-renormalized weighted mean of the bundle's component metric scores, each metric first normalized by **per-period spatial min–max** ($p_0$–$p_{100}$) across the state's units (§6.2). The only completeness gate is "≥ 1 component present."
+- **Sectoral bundles (§7.2):** a per-row-renormalized weighted mean of the bundle's **blended rule scores**, where each rule is itself a weighted mean of up to three lenses — absolute (robust $p_{10}$–$p_{90}$), change-vs-baseline, and a fixed-band impact lens. A composite is published only if its rules cover ≥ 70 % of total rule weight.
+
+Both engines bound the result in [0, 100] by construction (the renormalization makes the weights sum to 1 over the present components), so no separate clipping is applied, and both persist the count of contributing components alongside the score. For interpretation the 0–100 range is banded into three tiers — **low (0–33.3), moderate (33.3–66.6), high (66.6–100)** — used consistently wherever the score is classified.
+
+**What the composite is not.** The score is a **multi-metric hazard-pressure index**, not a risk estimate. It is *not* a probability, *not* an annualized expected loss, and *not* a risk score in the IPCC AR6 sense, because it models the **hazard** determinant only — exposure (population, assets, cropped area in the hazard's path) and vulnerability / adaptive capacity are deliberately out of scope in this compute path (§7.1). A bundle labelled "Health Risk" or "Agricultural Risk" should therefore be read as *"climate hazard pressure relevant to that sector,"* not as realised risk. It is also, in part, a **relative** index: the thematic composite and the sectoral absolute/change lenses rank a unit against its cohort rather than against an absolute physical scale (§8.2).
 
 ### 8.2 Scenario and Period Handling
-- Composite scores are computed independently for each (scenario, period) combination.
-- Available combinations: Historical (1995–2014, 1979–2019) · SSP2-4.5 (2021–2040, 2041–2060, 2061–2080, 2081–2100) · SSP5-8.5 (same future periods).
-- Exception: Riverine Flood carries only the "Snapshot" scenario (no future projections).
-- The tool allows users to select any valid (scenario, period) pair; the composite is reloaded from pre-computed persisted master files.
-- Note: composite scores across different (scenario, period) pairs are comparable because they share a common normalization anchor (1990–2010 historical). Explain the implication: a score of 70 in 2041–2060 SSP5-8.5 is directly comparable to 55 in 2041–2060 SSP2-4.5.
+
+Composites are computed **independently for each `(scenario, period)` combination** and persisted to master files that the tool reloads on selection; no scores are recomputed at view time. The published combinations differ between the two engines:
+
+| Engine | Scenarios | Periods |
+|---|---|---|
+| **Thematic** (§6) | SSP2-4.5, SSP5-8.5, plus **Snapshot** (the static Riverine bundle) | `1990-2010` (historical), `Current`, `2020-2040`, `2040-2060`, `2060-2080` |
+| **Sectoral** (§7) | SSP2-4.5, SSP5-8.5 | `2020-2040`, `2040-2060`, `2060-2080` |
+
+The sectoral engine does **not** publish a historical or `Current` period: the 1990–2010 window enters sectoral scores only as the change-lens *baseline* (§7.2), never as an output column. The **Riverine Flood** bundle is the lone static case — a single `Snapshot` with no scenario or future-period dimension (§5.5/§6.2).
+
+**Comparability — read carefully.** Because both engines normalize *within* a cohort, composite scores are **not** directly comparable across periods or states on an absolute scale, despite sharing the 0–100 range:
+
+- **Thematic** composites are re-normalized on each period's own spatial min–max. A unit scoring 70 in `2040-2060` and 70 in `2060-2080` is "near the top of its state's spread *in each of those periods*" — it is **not** a statement that the hazard is unchanged between them, nor that the two 70s denote the same physical magnitude. Only the *within-period* ranking of units is strictly valid.
+- **Sectoral** composites blend relative lenses (absolute, change) with the absolute impact lens, so only the **impact component** carries genuine cross-period and cross-state meaning; the blended number mixes ranking and danger and must be read with the lens decomposition (§7.3) when comparing across periods or states.
+- A true cross-period change signal for the thematic bundles would require the **baseline-anchored** normalization that exists but is dormant (§6.2); it is noted here as the intended future path, not a current property.
+
+This corrects an earlier framing that treated all `(scenario, period)` scores as sharing a common 1990–2010 normalization anchor and therefore "directly comparable." They do not, and they are not — within-period ranking (both engines) and the impact lens (sectoral) are the comparisons the methodology actually supports.
 
 ### 8.3 District vs Block Resolution Behaviour
-- Both district (ADM2) and block (ADM3) level composites are independently computed from the grid-first index pipeline — blocks are not aggregated from districts.
-- Note any resolution-specific limitations: block-level scores have fewer 0.25° cells contributing per unit than districts, which may increase spatial variability and sensitivity to grid-cell artefacts near administrative boundaries.
-- State the supported levels for each bundle (both thematic and sectoral bundles support district and block).
 
-CONSTRAINTS:
-- Be explicit that this is a hazard index, not a full risk score. Do not use "risk" loosely.
-- Do not describe the dashboard UI or how scores are displayed — this is a methods note.
-- If there are known score distribution characteristics (e.g. typical range, skewness across India), these can be noted briefly, but are not required.
--->
+Both district (ADM2) and block (ADM3) composites are computed **independently from the grid-first index pipeline** — block scores are *not* aggregated down from district scores, nor districts up from blocks; each level area-weights the 0.25° grid to its own polygons (§4.2). All bundles, thematic and sectoral, support both levels.
 
----
+Two resolution effects follow:
+
+- **Grid coverage.** A district overlaps many 0.25° cells; a small block may overlap only one or two. Block-level scores therefore inherit more spatial variability and are more sensitive to individual grid-cell values and to fractional-overlap artefacts near administrative boundaries. This is a property of the ~25 km native grid, not a defect of the aggregation.
+- **Cohort separation.** The normalization cohort (per-period for thematic, the absolute/change lens cohort for sectoral) is the set of units *at that level within the state* (§6.2/§7.2). District scores and block scores are thus normalized against **different cohorts**: a district scoring 80 and a block scoring 80 are not on the same scale, and the two levels should not be cross-compared unit-to-unit. Each level is internally consistent; they are parallel views, not a single nested hierarchy of scores.
 
 ---
 
