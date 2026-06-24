@@ -34,9 +34,30 @@ def build_rankings_table_df(
     aspirational_col: str = "aspirational",
     extra_cols: Optional[list[str]] = None,
     higher_is_worse: bool = True,
+    bundle_score_col: Optional[str] = None,
 ) -> Tuple[pd.DataFrame, bool]:
     """
     Build the district-level rankings table used by the dashboard.
+
+    The ``risk_class`` label is normally assigned from the metric's ordinal
+    percentile (``value.rank(pct=True)``), which forces an even quintile spread
+    even when metric values are tightly clustered (Method A). When
+    ``bundle_score_col`` names a column of 0-100 bundle composite scores
+    (already higher-worse, non-ordinal), the label is instead assigned by
+    classifying those composite scores directly (Method B), so a near-flat
+    cohort no longer sweeps the full Very High -> Very Low range.
+
+    ``percentile_value`` is always computed and returned as the true ordinal
+    percentile (a displayed column) regardless of which label source is used.
+
+    Method-B engagement is **table-wide and self-defensive**: if any surviving
+    ``bundle_score`` value is NaN, the entire table falls back to the ordinal
+    label source, so the methodology is never mixed per row.
+
+    Args:
+        bundle_score_col: Optional name of a column on ``merged_df`` holding the
+            0-100 bundle composite score. When present and fully populated for
+            the surviving rows, it becomes the ``risk_class`` source (Method B).
 
     Returns:
         (table_df, has_baseline)
@@ -78,6 +99,15 @@ def build_rankings_table_df(
     value_series = pd.to_numeric(ranking_df[metric_col], errors="coerce")
     table_df["value"] = value_series
 
+    # Optional bundle composite score (Method B label source). Added aligned by
+    # index alongside `value` and BEFORE the NaN-value dropna below, so it rides
+    # through the same row filtering and stays index-aligned with the rest of
+    # the table.
+    if bundle_score_col and bundle_score_col in ranking_df.columns:
+        table_df["bundle_score"] = pd.to_numeric(
+            ranking_df.loc[:, bundle_score_col], errors="coerce"
+        )
+
     # Baseline & changes
     has_baseline = bool(baseline_col) and (baseline_col in ranking_df.columns)
     if has_baseline:
@@ -107,11 +137,20 @@ def build_rankings_table_df(
     )
 
     # Percentile (0..100), direction-aware: higher percentile always means higher risk.
+    # Always computed: it is the true ordinal and a displayed ("Percentile") column,
+    # independent of which source drives the risk_class label below.
     pct_ascending = table_df["value"].rank(pct=True) * 100.0
     table_df["percentile_value"] = pct_ascending if higher_is_worse else (100.0 - pct_ascending)
 
-    # Risk class
-    table_df["risk_class"] = table_df["percentile_value"].apply(risk_class_from_percentile)
+    # Risk class. Method B (bundle composite 0-100, already higher-worse so no
+    # direction flip) when a fully-populated bundle_score is present for every
+    # surviving row; otherwise Method A (ordinal percentile). The all-or-nothing
+    # guard keeps the methodology uniform table-wide.
+    use_bundle = (
+        "bundle_score" in table_df.columns and table_df["bundle_score"].notna().all()
+    )
+    label_source = table_df["bundle_score"] if use_bundle else table_df["percentile_value"]
+    table_df["risk_class"] = label_source.apply(risk_class_from_percentile)
 
     # Rank by increase if baseline present.
     # For "higher is worse" metrics, biggest positive delta = worst (descending).

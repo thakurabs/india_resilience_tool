@@ -826,6 +826,8 @@ def run_app() -> None:
         river_basin_reconciliation_path=RIVER_BASIN_RECONCILIATION_CSV,
         river_subbasin_diagnostics_path=RIVER_SUBBASIN_DIAGNOSTICS_CSV,
         data_dir=DATA_DIR,
+        selected_bundle=str(st.session_state.get("selected_bundle") or "").strip() or None,
+        load_master_and_schema_fn=_load_master_and_schema,
         simplify_tol_adm2=SIMPLIFY_TOL_ADM2,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
         map_height=MAP_HEIGHT,

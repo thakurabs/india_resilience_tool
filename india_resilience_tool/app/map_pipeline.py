@@ -15,8 +15,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import re
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -57,7 +58,13 @@ from india_resilience_tool.viz.colors import (
 )
 from india_resilience_tool.viz.tables import build_rankings_table_df as _build_rankings_table_df
 from india_resilience_tool.viz.charts import period_display_label
-from india_resilience_tool.config.dashboard_bundles import is_dashboard_bundle_slug
+from india_resilience_tool.config.dashboard_bundles import (
+    composite_slug_for_bundle,
+    get_dashboard_bundle_spec,
+    is_dashboard_bundle_slug,
+)
+from india_resilience_tool.config.paths import resolve_processed_optimised_root
+from india_resilience_tool.data.optimized_bundle import is_optimized_metric_root
 
 
 FLOOD_SEVERITY_METRIC_SLUG = "jrc_flood_depth_index_rp100"
@@ -321,6 +328,242 @@ def evaluate_coverage_policy(
     return (summary,), None
 
 
+MasterSourceLike = Union[Path, Sequence[Path]]
+
+
+def _bundle_debug(message: str) -> None:
+    """Emit a bundle-score diagnostic line when IRT_DEBUG is enabled."""
+    if bool(int(os.getenv("IRT_DEBUG", "0") or "0")):
+        print(f"[bundle_score] {message}")
+
+
+def _resolve_composite_master_source(
+    composite_slug: str,
+    *,
+    level: str,
+    selected_state: str,
+    spatial_family: str,
+    data_dir: Path,
+) -> MasterSourceLike:
+    """
+    Resolve the composite master source for ``composite_slug`` through the SAME
+    optimized-root machinery the dashboard uses for the metric ``df``.
+
+    Reuses the admin/hydro master-source resolvers from the ribbon module so the
+    composite is loaded from the identical bundle layout (optimized-first with
+    legacy fallback), rather than a separately-guessed path. The ribbon import is
+    performed lazily to keep this module's import graph light.
+
+    Returns a single ``Path`` (hydro) or a tuple of per-state shard ``Path``s
+    (admin), suitable to pass straight to the injected master loader.
+    """
+    from india_resilience_tool.app.ribbon import (
+        _resolve_admin_master_source,
+        _resolve_hydro_master_source,
+    )
+
+    root = resolve_processed_optimised_root(composite_slug, data_dir=data_dir)
+    if str(spatial_family or "admin").strip().lower() == "hydro":
+        _, source_path, _ = _resolve_hydro_master_source(
+            root,
+            variable_slug=composite_slug,
+            level=level,
+            data_dir=data_dir,
+        )
+        return source_path
+
+    optimized_intent = is_optimized_metric_root(root)
+    _, source_tuple, _ = _resolve_admin_master_source(
+        root,
+        variable_slug=composite_slug,
+        level=level,
+        selected_state=selected_state,
+        data_dir=data_dir,
+        optimized_intent=optimized_intent,
+    )
+    return source_tuple
+
+
+def _bundle_join_columns(level_norm: str) -> Optional[list[tuple[str, str, bool]]]:
+    """
+    Return the (ranking_col, composite_col, is_name) join keys for a level.
+
+    Admin levels join on normalized name columns (the only shared admin key
+    across metric and composite masters); hydro levels join on stable IDs.
+    Returns None for unsupported levels.
+    """
+    if level_norm == "district":
+        return [("state_name", "state", True), ("district_name", "district", True)]
+    if level_norm == "block":
+        return [
+            ("state_name", "state", True),
+            ("district_name", "district", True),
+            ("block_name", "block", True),
+        ]
+    if level_norm == "basin":
+        return [("basin_id", "basin_id", False)]
+    if level_norm == "sub_basin":
+        return [("subbasin_id", "subbasin_id", False)]
+    return None
+
+
+def _bundle_join_key_series(
+    frame: pd.DataFrame,
+    join_cols: list[tuple[str, str, bool]],
+    *,
+    side: str,
+    normalize_fn: Callable[[str], str],
+) -> pd.Series:
+    """Build a composite join-key Series (name parts aliased, id parts stripped)."""
+    parts: list[pd.Series] = []
+    for rank_col, comp_col, is_name in join_cols:
+        col = rank_col if side == "rank" else comp_col
+        series = frame[col].astype(str).str.strip()
+        if is_name:
+            series = series.map(normalize_fn)
+        parts.append(series)
+    key = parts[0].astype(str)
+    for extra in parts[1:]:
+        key = key.str.cat(extra.astype(str), sep="||")
+    return key
+
+
+def _resolve_bundle_score_column(
+    *,
+    ranking_source: pd.DataFrame,
+    selected_bundle: Optional[str],
+    variable_slug: str,
+    metric_col: str,
+    level: str,
+    selected_state: str,
+    spatial_family: str,
+    data_dir: Path,
+    load_master_and_schema_fn: Callable[..., tuple],
+    resolve_composite_source_fn: Callable[..., MasterSourceLike],
+    normalize_fn: Callable[[str], str] = alias,
+) -> tuple[pd.DataFrame, Optional[str]]:
+    """
+    Resolve a per-unit bundle composite (0-100) score column for Method-B labels.
+
+    PURE / Streamlit-free: performs no ``st.*`` calls. Both the master loader and
+    the composite-source resolver are injected so this can be unit-tested with
+    fakes (no disk, no ribbon).
+
+    Returns ``(frame, bundle_score_col)`` where ``bundle_score_col`` is:
+      - ``metric_col`` when the current metric is itself a dashboard composite
+        (the value already IS a 0-100 score; no load/merge);
+      - ``"bundle_score"`` after merging the bundle composite onto the frame;
+      - ``None`` to signal Method-A fallback (non-bundle, unsupported
+        level/scenario, malformed metric_col, missing column, or missing join
+        key). When ``None``, the original ``ranking_source`` is returned unchanged.
+    """
+    level_norm = str(level or "district").strip().lower()
+
+    # (0) Non-bundle selection -> Method A.
+    bundle_name = str(selected_bundle or "").strip()
+    if not bundle_name:
+        return ranking_source, None
+    composite_slug = composite_slug_for_bundle(bundle_name)
+    if not composite_slug:
+        return ranking_source, None
+    spec = get_dashboard_bundle_spec(bundle_name)
+    if spec is None:
+        return ranking_source, None
+
+    # (1) Level gate (cheap; no parse yet).
+    if level_norm not in {str(v).strip().lower() for v in spec.supported_levels}:
+        return ranking_source, None
+
+    # (2) Metric is itself a composite -> classify its own value, no load.
+    if is_dashboard_bundle_slug(variable_slug):
+        return ranking_source, metric_col
+
+    # (3) Defensive metric_col parse + scenario gate (after parse).
+    parts = str(metric_col).split("__")
+    if len(parts) != 4:
+        return ranking_source, None
+    scenario, period = parts[1], parts[2]
+    if scenario not in spec.supported_scenarios:
+        return ranking_source, None
+
+    # (4) Resolve composite source via the same optimized-root machinery.
+    try:
+        composite_source = resolve_composite_source_fn(
+            composite_slug,
+            level=level_norm,
+            selected_state=selected_state,
+            spatial_family=spatial_family,
+            data_dir=data_dir,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        _bundle_debug(f"composite source resolution failed for {composite_slug}: {exc}")
+        return ranking_source, None
+
+    # (5) Load composite master (injected loader concatenates shards).
+    try:
+        loaded = load_master_and_schema_fn(composite_source, composite_slug)
+        comp_df = loaded[0] if isinstance(loaded, (tuple, list)) else loaded
+    except Exception as exc:  # pragma: no cover - defensive
+        _bundle_debug(f"composite master load failed for {composite_slug}: {exc}")
+        return ranking_source, None
+    if comp_df is None or comp_df.empty:
+        _bundle_debug(f"composite master empty for {composite_slug}")
+        return ranking_source, None
+
+    # (6) Dynamic stat-column resolution (prefer __mean, else any matching stat).
+    prefix = f"{composite_slug}__{scenario}__{period}__"
+    candidates = [c for c in comp_df.columns if str(c).startswith(prefix)]
+    if not candidates:
+        _bundle_debug(
+            f"composite column absent for prefix {prefix!r} in {composite_slug}"
+        )
+        return ranking_source, None
+    composite_col = next(
+        (c for c in candidates if str(c).endswith("__mean")), candidates[0]
+    )
+
+    # (7) Merge composite score onto the frame by real, shared join keys.
+    join_cols = _bundle_join_columns(level_norm)
+    if join_cols is None:
+        return ranking_source, None
+    for rank_col, comp_col, _is_name in join_cols:
+        if rank_col not in ranking_source.columns or comp_col not in comp_df.columns:
+            _bundle_debug(
+                f"join key missing ({rank_col!r}/{comp_col!r}) for {composite_slug}"
+            )
+            return ranking_source, None
+
+    rank_key = _bundle_join_key_series(
+        ranking_source, join_cols, side="rank", normalize_fn=normalize_fn
+    )
+    comp_key = _bundle_join_key_series(
+        comp_df, join_cols, side="comp", normalize_fn=normalize_fn
+    )
+    mapping = pd.Series(
+        pd.to_numeric(comp_df[composite_col], errors="coerce").values, index=comp_key
+    )
+    mapping = mapping[~mapping.index.duplicated(keep="first")]
+
+    out = ranking_source.drop(columns=["bundle_score"], errors="ignore").copy()  # N1
+    out["bundle_score"] = rank_key.map(mapping)
+
+    n_rows = len(out)
+    n_matched = int(out["bundle_score"].notna().sum())
+    if n_matched == 0:
+        # Most likely cause: composite vs metric masters on different admin-name
+        # vintages (LGD boundary rename). Surface loudly so it is not a silent
+        # Method-A fallback.
+        _bundle_debug(
+            f"WARNING 0/{n_rows} {level_norm} units matched composite "
+            f"{composite_slug} ({scenario}/{period}); falling back to Method A"
+        )
+        return ranking_source, None
+    _bundle_debug(
+        f"matched {n_matched}/{n_rows} {level_norm} units for composite {composite_slug}"
+    )
+    return out, "bundle_score"
+
+
 def build_map_and_rankings(
     *,
     adm_level: str,
@@ -360,6 +603,8 @@ def build_map_and_rankings(
     river_basin_reconciliation_path: Path,
     river_subbasin_diagnostics_path: Path,
     data_dir: Path,
+    selected_bundle: Optional[str] = None,
+    load_master_and_schema_fn: Optional[Callable[..., tuple]] = None,
     simplify_tol_adm2: float,
     simplify_tol_adm3: float,
     map_height: int,
@@ -421,6 +666,25 @@ def build_map_and_rankings(
         spatial_family=spatial_family,
     )
 
+    # Optional Method-B risk label: classify the risk class by the bundle
+    # composite (0-100) score rather than the metric's ordinal percentile.
+    # Falls back to Method A (bundle_score_col=None) whenever a composite cannot
+    # be resolved/matched. Requires the injected master loader.
+    bundle_score_col: Optional[str] = None
+    if load_master_and_schema_fn is not None:
+        ranking_source, bundle_score_col = _resolve_bundle_score_column(
+            ranking_source=ranking_source,
+            selected_bundle=selected_bundle,
+            variable_slug=variable_slug,
+            metric_col=metric_col,
+            level=level_norm,
+            selected_state=selected_state,
+            spatial_family=spatial_family,
+            data_dir=data_dir,
+            load_master_and_schema_fn=load_master_and_schema_fn,
+            resolve_composite_source_fn=_resolve_composite_master_source,
+        )
+
     # -------------------------
     # Build ranking table
     # -------------------------
@@ -447,6 +711,7 @@ def build_map_and_rankings(
             aspirational_col="aspirational",
             extra_cols=extra_rank_cols,
             higher_is_worse=bool(varcfg.get("rank_higher_is_worse", True)),
+            bundle_score_col=bundle_score_col,
         )
 
     if blocked_message:
