@@ -1,7 +1,7 @@
 # India Resilience Tool — Technical Guidance Note
 ## Climate Risk Methodology: Data, Metrics, and Bundle Construction
 
-**Status:** DRAFT — structure agreed, sections pending  
+**Status:** DRAFT — all sections drafted; figures (§3.4) and final review pending  
 **Scope:** Data sources → downscaling → grid-first compute → individual metrics → thematic and sectoral bundle construction → composite score output  
 **Out of scope:** Exposure layers, vulnerability, adaptive capacity, dashboard UI/UX, pipeline tooling  
 **Primary audience:** Technical peers (climate scientists, GIS specialists) and policy/planning stakeholders  
@@ -9,33 +9,51 @@
 
 ---
 
-> **Working convention for this document:**
-> - Each section carries a `<!-- WRITING GUIDE -->` block summarising what to cover, what sources to draw from, and key constraints. Remove the guide block when the section is finalized.
-> - Do not defend design choices — state them explicitly and move on.
-> - Mathematical notation uses standard LaTeX-style inline math where rendered.
+> **Notation and conventions:**
+> - Mathematical notation uses standard LaTeX-style inline and display math where rendered.
 > - Tables are preferred over prose for metric lists, weights, and parameter values.
-> - Cross-references between sections are marked `(→ §N.M)`.
+> - Cross-references between sections are marked `(→ §N.M)` or `(§N.M)`.
 
 ---
 
 ## 1. Introduction and Framing
 
-<!-- WRITING GUIDE
-PURPOSE: Orient both technical and policy readers. Establish why a subnational climate risk index for India is necessary and what gap this tool fills relative to global products.
+Climate adaptation in India is planned and financed at the subnational level — by states, districts, and increasingly by blocks — yet the climate-projection products that usually inform those decisions are global, spatially coarse, and aggregated across hazards. The India Resilience Tool (IRT) is built to close that resolution-and-specificity gap: it turns downscaled CMIP6 projections into district- and block-level, multi-hazard climate **hazard-pressure** scores that a planner can read at the administrative unit they actually govern. This note documents the methodology end to end — data provenance, downscaling, grid-first computation, individual climate-index definitions, and the assembly of those indices into thematic and sectoral bundles and a single composite score.
 
-COVER:
-- India's climate risk context: scale, diversity of hazards (heat, drought, extreme rainfall, cold, riverine flood), and the governance challenge of subnational planning under climate uncertainty.
-- What is missing from existing global tools (e.g. Aqueduct, ND-GAIN): coarser spatial resolution, limited multi-hazard thematic and sectoral decomposition, limited India-specific downscaled projections.
-- What this tool provides: district- and block-level multi-hazard risk scores derived from CMIP6 projections for two SSP scenarios and multiple future periods.
-- Scope of this note: covers data provenance, downscaling context, post-processing compute, metric definitions, and bundle/composite construction. Does NOT cover the web dashboard, exposure layers (population, LULC, built-up area), groundwater context, or adaptive capacity.
+### 1.1 The subnational climate-planning problem
 
-CONSTRAINTS:
-- Do not defend choices. State them: "We use NASA-NEX GDDP-CMIP6 at 0.25° resolution. We compute at district and block administrative levels. We cover SSP2-4.5 and SSP5-8.5."
-- Keep framing brief (~0.5–1 page). The bulk of the document is methods.
-- Do not make normative claims about hazard severity or policy prescriptions.
+India spans a subcontinent of climatic regimes — the arid northwest, the monsoon core, the Himalayan north, the peninsular plateau, and long eastern and western coastlines. A single national figure, or a value read off a coarse global grid, therefore tells a district little about the hazard it specifically faces. The relevant hazards are also multiple and co-occurring: extreme daytime and night-time heat, humid heat, meteorological drought, extreme rainfall and flash flooding, winter cold, and riverine flooding, each with its own seasonality and geography. Adaptation decisions against these hazards are made for multi-decade horizons under genuine scenario and model uncertainty, which means planners need projections that are (a) resolved to the administrative units they manage, (b) available for more than one emissions future, and (c) available for more than one time horizon. IRT is organised around exactly those three needs.
 
-CROSS-REFERENCES: Forward-reference §2 (data), §4 (compute), §6–7 (bundles).
--->
+### 1.2 What the tool provides
+
+The tool's design choices, stated plainly:
+
+- **Spatial resolution.** Scores are produced at **district (ADM2)** and **block (ADM3)** level, computed *grid-first* from a 0.25° (~25 km) downscaled grid and then area-aggregated to administrative polygons (→ §3, §4).
+- **Climate inputs.** Projections come from **NASA-NEX GDDP-CMIP6**, a statistically downscaled, bias-corrected product over a multi-model CMIP6 ensemble (→ §2.1, §2.3).
+- **Scenarios and horizons.** Two emissions pathways — **SSP2-4.5** and **SSP5-8.5** — across multiple future periods (2020–2040 through 2060–2080), measured against a **1990–2010** historical baseline (→ §2.2).
+- **Hazards and indices.** A library of standard (ETCCDI, SPI) and India-context climate indices spanning heat, humid heat, cold, drought, and extreme rainfall, plus a static riverine-flood layer from global flood-hazard data (→ §5).
+- **Aggregation.** Indices are normalized and combined into **six thematic hazard bundles** and **eight sectoral hazard-pressure bundles**, each emitting a single 0–100 *higher-is-worse* composite (→ §6, §7, §8).
+
+Existing global climate-risk indices operate at coarser spatial resolution and with less India-specific downscaling and hazard decomposition; IRT's contribution is to work at the administrative resolution at which Indian adaptation is actually planned, using India-context indices and thresholds.
+
+### 1.3 Scope of this note and how to read it
+
+**In scope:** data provenance (§2), the downscaling context (§3), grid-first computation and spatial/temporal aggregation (§4), individual metric definitions (§5), thematic bundle construction (§6), sectoral bundle construction (§7), and the composite output (§8), with a complete metric reference and impact-band catalogue in the appendices.
+
+**Out of scope:** the web dashboard and its UI/UX; **exposure** layers (population, land use, built-up area); groundwater and other hydrological-context layers; and **vulnerability / adaptive-capacity** components. Because exposure and vulnerability are excluded, the scores in this note are climate **hazard-pressure** indices, not full risk scores in the IPCC sense — the word "Risk" in a bundle name denotes *hazard pressure relevant to that sector*, and the full caveat is set out in §7.1 and §8.1.
+
+**Section roadmap:**
+
+| Section | What it covers |
+|---|---|
+| §2 Climate Data Sources | CMIP6 ensemble and scenarios, temporal coverage, the NASA-NEX downscaled product, and the JRC flood data |
+| §3 Downscaling | What statistical downscaling is, the BCSD method NASA-NEX uses, grid resolution, and reproducibility |
+| §4 Grid-First Compute | Why indices are computed per grid cell first, then area-aggregated to districts/blocks, with period and ensemble handling |
+| §5 Metric Definitions | Definition, units, baseline, and derivation of each temperature, precipitation, drought, humid-heat, and flood index |
+| §6 Thematic Bundles | The six hazard-family bundles: per-period normalization and fixed-weight compositing |
+| §7 Sectoral Bundles | The eight sector hazard-pressure bundles: the lens-based blended-rule framework and impact bands |
+| §8 Composite Score and Output | What the 0–100 composite is and is not, and how to read it across scenario, period, and spatial level |
+| Appendix A / B | Complete metric reference; sectoral impact-band derivations |
 
 ---
 
