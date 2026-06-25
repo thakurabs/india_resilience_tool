@@ -120,11 +120,15 @@ IRT aggregates individual-year climate indices into the following multi-year win
 | Label | Period | Role |
 |-------|--------|------|
 | Historical baseline | 1990–2010 | Reference for per-period normalisation (→ §6.2) |
-| Near-term | 2021–2040 | Near-term projection |
-| Mid-century | 2041–2060 | Mid-century projection |
-| End-century | 2061–2080 | End-of-century projection |
+| Near-term | 2020–2040 | Near-term projection |
+| Mid-century | 2040–2060 | Mid-century projection |
+| End-century | 2060–2080 | End-of-century projection |
+
+Each future window is an inclusive 21-year mean (e.g. 2020–2040 covers the years 2020 through 2040). The endpoint years 2040 and 2060 are each shared by two adjacent windows, so the windows abut rather than leaving gaps between them.
 
 The anchor period (1990–2010) falls entirely within the historical simulation run (1951–2014); no splicing of historical and SSP files is required (→ §4.3).
+
+A fifth period label, **`Current`**, is reserved for static present-day layers that have no climate-projection time dimension — in this note, the **Riverine Flood severity index** (→ §2.4, §5.5). It is paired with the **Snapshot** scenario rather than an SSP pathway, represents a single externally modelled present-day state rather than a multi-year climate average, and carries no averaging window.
 
 ### 2.3 NASA-NEX GDDP-CMIP6: The Downscaled Product
 
@@ -297,7 +301,7 @@ For each metric, each GCM, and each scenario, the pipeline applies a three-stage
 
 3. **Period mean → ensemble mean.** For each (scenario, period) combination, the 24 per-model period means are averaged to produce the ensemble-mean field. In addition to the ensemble mean, the pipeline retains ensemble spread statistics — standard deviation, median, and 5th and 95th percentile across models. The composite and bundle scores described in §6 and §7 use the **ensemble mean** only; ensemble spread is retained for diagnostic and uncertainty-characterisation purposes but is not surfaced in the current composite outputs.
 
-This three-stage chain is designed to separate climate signal from noise at two distinct scales. Averaging annual index values over a 20-year window (stage 2) filters out interannual variability driven by modes such as ENSO and the Indian Ocean Dipole, isolating the underlying forced climate change signal rather than the characteristics of any particular sequence of years. Santer et al. (2011) demonstrate that signal-to-noise ratios in atmospheric temperature trends are below 1 at 10-year timescales but exceed 3.9 at 32-year trends, and that at least 17 years of data are required to reliably distinguish the forced climate change signal from internal variability noise. Hawkins and Sutton (2012) formalise this as the *time of emergence* — the point at which the forced signal rises detectably above the background noise of natural variability — which multi-decadal period averaging is designed to approach. Averaging across 24 GCMs (stage 3) reduces sensitivity to the structural biases of any individual model; Tebaldi and Knutti (2007) provide the foundational treatment of this argument, showing that multi-model ensemble means systematically outperform individual model projections because model-specific errors arising from different structural choices are partially uncorrelated across the ensemble and therefore partially cancel in the mean. The two operations are applied in sequence — time-averaging first, then ensemble-averaging — so that each model's period mean contributes equally to the ensemble average regardless of its interannual variance.
+This three-stage chain is designed to separate climate signal from noise at two distinct scales. Averaging annual index values over each multi-decadal window (stage 2) filters out interannual variability driven by modes such as ENSO and the Indian Ocean Dipole, isolating the underlying forced climate change signal rather than the characteristics of any particular sequence of years. Santer et al. (2011) demonstrate that signal-to-noise ratios in atmospheric temperature trends are below 1 at 10-year timescales but exceed 3.9 at 32-year trends, and that at least 17 years of data are required to reliably distinguish the forced climate change signal from internal variability noise. Hawkins and Sutton (2012) formalise this as the *time of emergence* — the point at which the forced signal rises detectably above the background noise of natural variability — which multi-decadal period averaging is designed to approach. Averaging across 24 GCMs (stage 3) reduces sensitivity to the structural biases of any individual model; Tebaldi and Knutti (2007) provide the foundational treatment of this argument, showing that multi-model ensemble means systematically outperform individual model projections because model-specific errors arising from different structural choices are partially uncorrelated across the ensemble and therefore partially cancel in the mean. The two operations are applied in sequence — time-averaging first, then ensemble-averaging — so that each model's period mean contributes equally to the ensemble average regardless of its interannual variance.
 
 > Santer, B. D., Mears, C., Doutriaux, C., Caldwell, P., Gleckler, P. J., Wigley, T. M. L., Solomon, S., Gillett, N. P., Ivanova, D., Karl, T. R., Lanzante, J. R., Meehl, G. A., Stott, P. A., Taylor, K. E., Thorne, P. W., McCarthy, M. P., and Wehner, M. F. (2011). Separating signal and noise in atmospheric temperature changes: The importance of timescale. *Journal of Geophysical Research: Atmospheres*, 116, D22105. https://doi.org/10.1029/2011JD016263
 
@@ -310,13 +314,15 @@ This three-stage chain is designed to separate climate signal from noise at two 
 | Scenario | Period |
 |----------|--------|
 | Historical | 1990–2010 |
-| SSP2-4.5 and SSP5-8.5 | 2021–2040 |
-| SSP2-4.5 and SSP5-8.5 | 2041–2060 |
-| SSP2-4.5 and SSP5-8.5 | 2061–2080 |
+| SSP2-4.5 and SSP5-8.5 | 2020–2040 |
+| SSP2-4.5 and SSP5-8.5 | 2040–2060 |
+| SSP2-4.5 and SSP5-8.5 | 2060–2080 |
+
+Each future window is an inclusive 21-year mean (e.g. 2020–2040 covers 2020 through 2040), with the endpoint years 2040 and 2060 each shared by two adjacent windows (→ §2.2).
 
 **Historical scenario: no splice required**
 
-The historical anchor period (1990–2010) falls entirely within the historical simulation run (1951–2014). No splicing of historical and SSP files is required for the anchor period. SSP projection files begin in 2015 and are used exclusively for the 2021–2040, 2041–2060, and 2061–2080 windows.
+The historical anchor period (1990–2010) falls entirely within the historical simulation run (1951–2014). No splicing of historical and SSP files is required for the anchor period. SSP projection files begin in 2015 and are used exclusively for the 2020–2040, 2040–2060, and 2060–2080 windows.
 
 **Composite normalization (per-period spatial ranking)**
 
@@ -324,7 +330,7 @@ For each (scenario, period) combination, the ensemble-mean metric values across 
 
 $$S_i = \operatorname{clip}\!\left(\frac{v_i - v_{\min}}{v_{\max} - v_{\min}},\; 0,\; 1\right) \times 100$$
 
-For metrics where a lower value indicates greater hazard (i.e. `higher_is_worse = False` in the registry), the score is inverted: $S_i = (1 - \text{scaled}) \times 100$ before clipping. If all units share an identical value ($v_{\max} = v_{\min}$), all receive a score of 50.
+For metrics where a lower value indicates greater hazard, the score is inverted: $S_i = (1 - \text{scaled}) \times 100$ before clipping. If all units share an identical value ($v_{\max} = v_{\min}$), all receive a score of 50.
 
 This per-period spatial normalization means that a score of, say, 70 for a given unit in the 2040–2060 SSP5-8.5 period indicates that this unit sits at the 70th percentile of the national distribution in that period — not that it is 70% above its own historical baseline. Scores are not directly comparable across different metrics or bundles unless the normalization ranges are understood. The weighted bundle composite (→ §6.3) aggregates these per-metric scores into a single bundle-level value on the same [0, 100] scale.
 
@@ -375,7 +381,7 @@ By construction this is ≈ 10% under the baseline climate; a warming year pushe
 
 **Heatwave amplitude (hwa)**
 
-`hwa_heatwave_amplitude` is an IRT-specific index. For each year and grid cell, the DOY-90th-percentile framework (baseline 1990–2010, applied to tasmax, minimum spell length 5 consecutive days) identifies all heatwave spells $s$ within the year. For each spell, the mean daily exceedance above the per-day threshold is:
+Heatwave amplitude is an IRT-specific index. For each year and grid cell, the DOY-90th-percentile framework (baseline 1990–2010, applied to tasmax, minimum spell length 5 consecutive days) identifies all heatwave spells $s$ within the year. For each spell, the mean daily exceedance above the per-day threshold is:
 
 $$\bar{\epsilon}_s = \frac{1}{|s|} \sum_{t \in s} \bigl(x_t - \tau_{d(t)}\bigr)$$
 
@@ -426,7 +432,7 @@ The Gamma parameters ($\alpha$, $\beta$, $q$) are estimated once from the 1990�
 The monthly SPI series is not used directly in composites. Two annual aggregation statistics are derived per cell, per year:
 
 - **Count of drought events** (`spi{k}_count_events_lt_minus1`): number of contiguous episodes per year during which SPI remains continuously below −1, averaged over the 20-year analysis period. SPI < −1 corresponds to the 15.9th percentile of the standard normal — conditions that occur in approximately one year in six under the baseline climatology.
-- **Maximum drought spell** (`spi{k}_max_spell_lt_minus1`): longest consecutive-month period per year during which SPI is continuously below −1, expressed as the period maximum over the 20-year window (not the mean).
+- **Maximum drought spell** (`spi{k}_max_spell_lt_minus1`): longest consecutive-month period per year during which SPI is continuously below −1, expressed as the period maximum over the analysis window (not the mean).
 
 These per-cell annual metric fields are then area-weighted and aggregated to administrative units following the procedure in §4.2.
 
@@ -443,7 +449,7 @@ $T_{wb}$ is computed from daily near-surface air temperature ($T$ in °C, from `
 
 $$T_{wb} = T \cdot \arctan\!\bigl(0.151977\,\sqrt{RH + 8.313659}\,\bigr) + \arctan(T + RH) - \arctan(RH - 1.676331) + 0.00391838 \cdot RH^{1.5} \cdot \arctan(0.023101\,RH) - 4.686035$$
 
-This approximation has a mean absolute error of 0.28°C relative to the psychrometric wet-bulb for the range $0°\text{C} \leq T \leq 50°\text{C}$, $5\% \leq RH \leq 99\%$, covering the full range of tropical and subtropical conditions in India. $T_{wb}$ is computed day-by-day from the daily `tas` and `hurs` fields before spatial aggregation, consistent with the grid-first architecture (→ §4.1). The summer season for `twb_summer_mean` is March–May (MAM), consistent with the summer temperature means in §5.1.
+This approximation has a mean absolute error of 0.28°C relative to the psychrometric wet-bulb for the range $0°\text{C} \leq T \leq 50°\text{C}$, $5\% \leq RH \leq 99\%$, covering the full range of tropical and subtropical conditions in India. $T_{wb}$ is computed day-by-day from the daily `tas` and `hurs` fields before spatial aggregation, consistent with the grid-first architecture (→ §4.1). The summer season for the summer-mean wet-bulb metric is March–May (MAM), consistent with the summer temperature means in §5.1.
 
 > Stull, R. (2011). Wet-bulb temperature from relative humidity and air temperature. *Journal of Applied Meteorology and Climatology*, 50(11), 2267–2269. https://doi.org/10.1175/JAMC-D-11-0143.1
 
@@ -472,8 +478,7 @@ The severity class is read from the matrix (rows = extent class, columns = depth
 | **4** | 3 | 4 | 4 | 5 | 5 |
 | **5** | 4 | 5 | 5 | 5 | 5 |
 
-Severity is scored at **block** level. District severity is the **flooded-area-weighted mean of constituent block severity classes** (and is therefore generally non-integer), computed bottom-up because directly classifying district-scale depth and extent collapses most districts to the lowest classes — district polygons are far larger than the block scale at which the bins were calibrated. 
-<!-- This index alone carries a non-zero bundle weight (1.0); `jrc_flood_depth_rp100` and `jrc_flood_extent_rp100` are retained as inline display attributes (weight = 0.0). -->
+Severity is scored at **block** level. District severity is the **flooded-area-weighted mean of constituent block severity classes** (and is therefore generally non-integer), computed bottom-up because directly classifying district-scale depth and extent collapses most districts to the lowest classes — district polygons are far larger than the block scale at which the bins were calibrated.
 
 ---
 
@@ -485,14 +490,14 @@ Each of the six hazard families defined in §5 is condensed into a single compos
 
 The six thematic bundles and the hazard dimension each captures:
 
-| Bundle | Hazard dimension | Component metric families (§5) | Composite slug |
-|---|---|---|---|
-| Heat Risk | Daytime/nocturnal thermal extremes and background heat | Background means, absolute & percentile extremes, threshold-frequency, heatwave characteristics (§5.1) | `composite_heat_risk` |
-| Heat Stress | Humid-heat physiological stress | Wet-bulb means/extremes (§5.4) + shared dry-heat persistence WSDI, TN90p (§5.1) | `composite_heat_stress` |
-| Cold Risk | Winter cold extremes and cold-spell persistence | Background cold, absolute extremes, cold-day thresholds, percentile-relative cold, cold-spell characteristics (§5.1) | `composite_cold_risk` |
-| Drought Risk | Meteorological drought across timescales | SPI-3/6/12 event counts and maximum spell lengths (§5.3) | `composite_drought_risk` |
-| Extreme Rainfall \| Flash Flood Risk | Extreme precipitation and wet-spell persistence | Peak intensity, heavy-rain frequency, very-wet contribution, wet-spell persistence (§5.2) | `composite_flood_extreme_rainfall_risk` |
-| Riverine Flood | Static RP-100 inundation severity | JRC flood severity index (§5.5) | `composite_flood_jrc_depth` |
+| Bundle | Hazard dimension | Component metric families (§5) |
+|---|---|---|
+| Heat Risk | Daytime/nocturnal thermal extremes and background heat | Background means, absolute & percentile extremes, threshold-frequency, heatwave characteristics (§5.1) |
+| Heat Stress | Humid-heat physiological stress | Wet-bulb means/extremes (§5.4) + shared dry-heat persistence WSDI, TN90p (§5.1) |
+| Cold Risk | Winter cold extremes and cold-spell persistence | Background cold, absolute extremes, cold-day thresholds, percentile-relative cold, cold-spell characteristics (§5.1) |
+| Drought Risk | Meteorological drought across timescales | SPI-3/6/12 event counts and maximum spell lengths (§5.3) |
+| Extreme Rainfall \| Flash Flood Risk | Extreme precipitation and wet-spell persistence | Peak intensity, heavy-rain frequency, very-wet contribution, wet-spell persistence (§5.2) |
+| Riverine Flood | Static RP-100 inundation severity | JRC flood severity index (§5.5) |
 
 The grouping logic is consistent across bundles: the members of a bundle measure **complementary facets of one hazard** — magnitude (e.g. TXx), frequency (e.g. hot-day counts), persistence (e.g. WSDI), and percentile-relative shift (e.g. TX90p) — rather than redundant restatements of the same signal. Compositing these facets dampens the idiosyncratic noise of any single index and yields a more stable hazard ranking. **Riverine Flood is the structural exception**: it carries a single scored metric (the JRC severity index, weight 1.0), so its "composite" is a pass-through of that one index; the two companion JRC fields (depth, extent) are retained as display attributes at weight 0 (§6.4).
 
@@ -506,13 +511,13 @@ $$v_{\min} = \min_{i\in G} v_i, \qquad v_{\max} = \max_{i\in G} v_i$$
 
 $$S_i = \operatorname{clip}\!\left(\frac{v_i - v_{\min}}{v_{\max} - v_{\min}},\; 0,\; 1\right)\times 100$$
 
-For metrics whose registry directionality is *lower-is-worse* (e.g. winter-temperature means, where colder is the hazard), the numerator is replaced by $v_{\max}-v_i$ so that the worst tail still maps to 100. Two degenerate cases are handled explicitly: if every geography shares one finite value ($v_{\max}=v_{\min}$), all rows receive **50**; if no finite value exists, the score is NaN.
+For metrics whose directionality is *lower-is-worse* (e.g. winter-temperature means, where colder is the hazard), the numerator is replaced by $v_{\max}-v_i$ so that the worst tail still maps to 100. Two degenerate cases are handled explicitly: if every geography shares one finite value ($v_{\max}=v_{\min}$), all rows receive **50**; if no finite value exists, the score is NaN.
 
 Three consequences follow from normalizing **per period**:
 
 - A bundle score is **relative, not absolute**. A district scoring 90 is among the most exposed *of its state's districts for that scenario and period* — it is not a physical magnitude, and it is **not** a change-versus-history signal.
 - Because each scenario–period is rescaled on its own min/max, scores are comparable *within* a period across space; absolute score differences *between* periods reflect the shifting spatial spread, not only the change in the underlying hazard.
-- The 1990–2010 anchor period plays **no role** in this normalization. A baseline-anchored variant — scaling every period against the fixed 1990–2010 historical range to produce a true change signal — exists in the codebase but is **not** used by any shipped thematic bundle. It is a dormant capability, noted here only to avoid confusion with the change-based sectoral rules of §7.
+- The 1990–2010 anchor period plays **no role** in this normalization. A baseline-anchored variant — scaling every period against the fixed 1990–2010 historical range to produce a true change signal — exists as a dormant capability but is **not** used by any shipped thematic bundle. It is a dormant capability, noted here only to avoid confusion with the change-based sectoral rules of §7.
 
 The **Riverine Flood** bundle is a static snapshot: the JRC RP-100 severity index has no scenario or future-period dimension, so it is normalized once over the geography set on the same min–max scale (higher severity → worse), with no period anchoring.
 
@@ -524,9 +529,9 @@ $$\text{Composite}_g = \frac{\sum_{m \in A_g} w_m\, S_{g,m}}{\sum_{m \in A_g} w_
 
 where $A_g$ is the set of component metrics with a valid (non-NaN) normalized score for geography $g$, and $w_m$ are the fixed bundle weights (§6.4). Because each $S_{g,m}\in[0,100]$ and the weights are renormalized to sum to 1 over $A_g$, the composite is itself bounded in $[0,100]$ — no separate clipping is required. The count of contributing metrics ($\lvert A_g\rvert$) is persisted alongside each score for transparency.
 
-Per-row renormalization means a geography missing one metric is scored on its remaining metrics rather than being penalized or dropped. The only completeness gate for the shipped per-period bundles is that **at least one** component must be present: a row with every component missing yields NaN. (The stricter "≥ 4 anchored components" floor referenced in some internal configuration applies *only* to the dormant baseline-anchored mode of §6.2 and is inactive for the shipped composites.)
+Per-row renormalization means a geography missing one metric is scored on its remaining metrics rather than being penalized or dropped. The only completeness gate for the shipped per-period bundles is that **at least one** component must be present: a row with every component missing yields NaN. (The stricter "≥ 4 anchored components" floor applies *only* to the dormant baseline-anchored mode of §6.2 and is inactive for the shipped composites.)
 
-Weights are drawn from the approved `Bundles_comp_Score.xlsx` workbook and sum to 1.0 per bundle. They are organised into **weight groups** that gather related facets together; within a group the weight is, in most bundles, split equally across members, so the group subtotal encodes the relative emphasis placed on that facet of the hazard.
+Weights are drawn from the approved bundle-weight schedule and sum to 1.0 per bundle. They are organised into **weight groups** that gather related facets together; within a group the weight is, in most bundles, split equally across members, so the group subtotal encodes the relative emphasis placed on that facet of the hazard.
 
 ### 6.4 Bundle-by-Bundle Metric Weights
 
@@ -536,85 +541,85 @@ $$w_m = (\text{group weight}) \times (\text{share of group})$$
 
 In every bundle except Drought Risk the group is split *equally* among its members, so the share is simply $1/n$ for a group of $n$ metrics (e.g. each of the three metrics in Heat Risk's 0.200 "Mean & Background Heat" group takes a $1/3$ share → $0.200 \times \tfrac13 = 0.0667$). Drought Risk is the one exception, with an unequal $2/5$–$3/5$ split inside each timescale (below). Every bundle's final weights sum to 1.000.
 
-#### Heat Risk (`composite_heat_risk`)
+#### Heat Risk
 
-| Weight group | Metric | Slug | Share of group | Weight |
-|---|---|---|---|---|
-| **Mean & Background Heat (0.200)** | Annual Mean Temperature (TM) | `tas_annual_mean` | 1/3 | 0.0667 |
-| | Summer Max Temperature (MAM) | `tasmax_summer_mean` | 1/3 | 0.0667 |
-| | Summer Mean Temperature (MAM) | `tas_summer_mean` | 1/3 | 0.0667 |
-| **Extremes (0.250)** | Annual Maximum Temperature (TXx) | `txx_annual_max` | 1/3 | 0.0833 |
-| | Warm Nights (TN90p) | `tn90p_warm_nights_pct` | 1/3 | 0.0833 |
-| | Heatwave Amplitude | `hwa_heatwave_amplitude` | 1/3 | 0.0833 |
-| **Threshold-based Frequency (0.200)** | Hot Days (TX ≥ 30°C) | `txge30_hot_days` | 1/3 | 0.0667 |
-| | Extreme Heat Days (TX ≥ 35°C) | `txge35_extreme_heat_days` | 1/3 | 0.0667 |
-| | Tropical Nights (TN > 25°C) | `tasmin_tropical_nights_gt25` | 1/3 | 0.0667 |
-| **Percentile Extremes (0.150)** | Heat Wave Frequency Index (days) | `hwfi_tmean_90p` | 1/2 | 0.0750 |
-| | Heat Wave Frequency (events) | `hwfi_events_tmean_90p` | 1/2 | 0.0750 |
-| **Heatwave Characteristics (0.200)** | Warm Spell Duration Index (WSDI) | `wsdi_warm_spell_days` | 1/3 | 0.0667 |
-| | Warmest Night (TNx) | `tnx_annual_max` | 1/3 | 0.0667 |
-| | Hot Days (TX90p) | `tx90p_hot_days_pct` | 1/3 | 0.0667 |
+| Weight group | Metric | Share of group | Weight |
+|---|---|---|---|
+| **Mean & Background Heat (0.200)** | Annual Mean Temperature (TM) | 1/3 | 0.0667 |
+| | Summer Max Temperature (MAM) | 1/3 | 0.0667 |
+| | Summer Mean Temperature (MAM) | 1/3 | 0.0667 |
+| **Extremes (0.250)** | Annual Maximum Temperature (TXx) | 1/3 | 0.0833 |
+| | Warm Nights (TN90p) | 1/3 | 0.0833 |
+| | Heatwave Amplitude | 1/3 | 0.0833 |
+| **Threshold-based Frequency (0.200)** | Hot Days (TX ≥ 30°C) | 1/3 | 0.0667 |
+| | Extreme Heat Days (TX ≥ 35°C) | 1/3 | 0.0667 |
+| | Tropical Nights (TN > 25°C) | 1/3 | 0.0667 |
+| **Percentile Extremes (0.150)** | Heat Wave Frequency Index (days) | 1/2 | 0.0750 |
+| | Heat Wave Frequency (events) | 1/2 | 0.0750 |
+| **Heatwave Characteristics (0.200)** | Warm Spell Duration Index (WSDI) | 1/3 | 0.0667 |
+| | Warmest Night (TNx) | 1/3 | 0.0667 |
+| | Hot Days (TX90p) | 1/3 | 0.0667 |
 
-#### Heat Stress (`composite_heat_stress`)
+#### Heat Stress
 
-| Weight group | Metric | Slug | Share of group | Weight |
-|---|---|---|---|---|
-| **Background humid heat (0.200)** | Wet-Bulb Temperature (Annual Mean) | `twb_annual_mean` | 1/2 | 0.1000 |
-| | Wet-Bulb Temperature (Summer Mean, MAM) | `twb_summer_mean` | 1/2 | 0.1000 |
-| **Extreme / threshold humid heat (0.400)** | Wet-Bulb Temperature (Annual Max) | `twb_annual_max` | 1/3 | 0.1333 |
-| | Heat Stress Days (Twb ≥ 28°C) | `twb_days_ge_28` | 1/3 | 0.1333 |
-| | Wet-Bulb Days (Twb ≥ 30°C) | `twb_days_ge_30` | 1/3 | 0.1333 |
-| **Night-time recovery stress (0.200)** | Tropical Nights (TN > 28°C) | `tasmin_tropical_nights_gt28` | 1/2 | 0.1000 |
-| | Warm Nights (TN90p) | `tn90p_warm_nights_pct` | 1/2 | 0.1000 |
-| **Persistence (0.200)** | Warm Spell Duration Index (WSDI) | `wsdi_warm_spell_days` | 1/1 | 0.2000 |
+| Weight group | Metric | Share of group | Weight |
+|---|---|---|---|
+| **Background humid heat (0.200)** | Wet-Bulb Temperature (Annual Mean) | 1/2 | 0.1000 |
+| | Wet-Bulb Temperature (Summer Mean, MAM) | 1/2 | 0.1000 |
+| **Extreme / threshold humid heat (0.400)** | Wet-Bulb Temperature (Annual Max) | 1/3 | 0.1333 |
+| | Heat Stress Days (Twb ≥ 28°C) | 1/3 | 0.1333 |
+| | Wet-Bulb Days (Twb ≥ 30°C) | 1/3 | 0.1333 |
+| **Night-time recovery stress (0.200)** | Tropical Nights (TN > 28°C) | 1/2 | 0.1000 |
+| | Warm Nights (TN90p) | 1/2 | 0.1000 |
+| **Persistence (0.200)** | Warm Spell Duration Index (WSDI) | 1/1 | 0.2000 |
 
-#### Cold Risk (`composite_cold_risk`)
+#### Cold Risk
 
-| Weight group | Metric | Slug | Share of group | Weight |
-|---|---|---|---|---|
-| **Background Cold (0.200)** | Winter Mean Temperature (DJF) | `tas_winter_mean` | 1/2 | 0.1000 |
-| | Winter Min Temperature (DJF) | `tasmin_winter_mean` | 1/2 | 0.1000 |
-| **Absolute Extremes (0.200)** | Annual Minimum of Tmin (TNn) | `tnn_annual_min` | 1/2 | 0.1000 |
-| | Winter Minimum Tmin (DJF) | `tasmin_winter_min` | 1/2 | 0.1000 |
-| **Threshold-based Cold Days (0.250)** | Cold Nights (TN ≤ 10°C) | `tnle10_cold_nights` | 1/3 | 0.0833 |
-| | Severe Cold Nights (TN ≤ 5°C) | `tnle5_severe_cold_nights` | 1/3 | 0.0833 |
-| | Cold Days (TX ≤ 15°C) | `txle15_cold_days` | 1/3 | 0.0833 |
-| **Relative Cold (0.150)** | Cool Days (TX10p) | `tx10p_cool_days_pct` | 1/2 | 0.0750 |
-| | Cool Nights (TN10p) | `tn10p_cool_nights_pct` | 1/2 | 0.0750 |
-| **Cold Spell Characteristics (0.200)** | Cold Spell Duration Index (CSDI) | `csdi_cold_spell_days` | 1/2 | 0.1000 |
-| | Consecutive Cold Nights (TN ≤ 10°C) | `tnle10_consecutive_cold_nights` | 1/2 | 0.1000 |
+| Weight group | Metric | Share of group | Weight |
+|---|---|---|---|
+| **Background Cold (0.200)** | Winter Mean Temperature (DJF) | 1/2 | 0.1000 |
+| | Winter Min Temperature (DJF) | 1/2 | 0.1000 |
+| **Absolute Extremes (0.200)** | Annual Minimum of Tmin (TNn) | 1/2 | 0.1000 |
+| | Winter Minimum Tmin (DJF) | 1/2 | 0.1000 |
+| **Threshold-based Cold Days (0.250)** | Cold Nights (TN ≤ 10°C) | 1/3 | 0.0833 |
+| | Severe Cold Nights (TN ≤ 5°C) | 1/3 | 0.0833 |
+| | Cold Days (TX ≤ 15°C) | 1/3 | 0.0833 |
+| **Relative Cold (0.150)** | Cool Days (TX10p) | 1/2 | 0.0750 |
+| | Cool Nights (TN10p) | 1/2 | 0.0750 |
+| **Cold Spell Characteristics (0.200)** | Cold Spell Duration Index (CSDI) | 1/2 | 0.1000 |
+| | Consecutive Cold Nights (TN ≤ 10°C) | 1/2 | 0.1000 |
 
-#### Drought Risk (`composite_drought_risk`)
+#### Drought Risk
 
 Drought Risk is the only bundle with an unequal within-group split: inside each SPI timescale the maximum-spell metric takes a **3/5** share and the event count **2/5**, so duration outweighs frequency. The group weights themselves rise with accumulation window (SPI-12 > SPI-6 > SPI-3), reflecting the greater impact of sustained, long-accumulation drought.
 
-| Weight group | Metric | Slug | Share of group | Weight |
-|---|---|---|---|---|
-| **Seasonal Drought — SPI-3 (0.200)** | SPI-3 drought event count (SPI < −1) | `spi3_count_events_lt_minus1` | 2/5 | 0.0800 |
-| | SPI-3 maximum drought spell | `spi3_max_spell_lt_minus1` | 3/5 | 0.1200 |
-| **Meteorological Drought — SPI-6 (0.300)** | SPI-6 drought event count (SPI < −1) | `spi6_count_events_lt_minus1` | 2/5 | 0.1200 |
-| | SPI-6 maximum drought spell | `spi6_max_spell_lt_minus1` | 3/5 | 0.1800 |
-| **Long-term Drought — SPI-12 (0.500)** | SPI-12 drought event count (SPI < −1) | `spi12_count_events_lt_minus1` | 2/5 | 0.2000 |
-| | SPI-12 maximum drought spell | `spi12_max_spell_lt_minus1` | 3/5 | 0.3000 |
+| Weight group | Metric | Share of group | Weight |
+|---|---|---|---|
+| **Seasonal Drought — SPI-3 (0.200)** | SPI-3 drought event count (SPI < −1) | 2/5 | 0.0800 |
+| | SPI-3 maximum drought spell | 3/5 | 0.1200 |
+| **Meteorological Drought — SPI-6 (0.300)** | SPI-6 drought event count (SPI < −1) | 2/5 | 0.1200 |
+| | SPI-6 maximum drought spell | 3/5 | 0.1800 |
+| **Long-term Drought — SPI-12 (0.500)** | SPI-12 drought event count (SPI < −1) | 2/5 | 0.2000 |
+| | SPI-12 maximum drought spell | 3/5 | 0.3000 |
 
-#### Extreme Rainfall | Flash Flood Risk (`composite_flood_extreme_rainfall_risk`)
+#### Extreme Rainfall | Flash Flood Risk
 
-| Weight group | Metric | Slug | Share of group | Weight |
-|---|---|---|---|---|
-| **Peak Intensity (0.250)** | Maximum 1-day Precipitation (Rx1day) | `pr_max_1day_precip` | 1/2 | 0.1250 |
-| | Maximum 5-day Precipitation (Rx5day) | `pr_max_5day_precip` | 1/2 | 0.1250 |
-| **Heavy Rain Frequency (0.250)** | Very Heavy Precipitation Days (R20mm) | `r20mm_very_heavy_precip_days` | 1/1 | 0.2500 |
-| **Very Wet Contribution (0.250)** | Very Wet Day Precipitation (R95p) | `r95p_very_wet_precip` | 1/2 | 0.1250 |
-| | Very Wet Day Contribution (R95pTOT) | `r95ptot_contribution_pct` | 1/2 | 0.1250 |
-| **Wet-spell Persistence (0.250)** | Consecutive Wet Days (CWD) | `cwd_consecutive_wet_days` | 1/1 | 0.2500 |
+| Weight group | Metric | Share of group | Weight |
+|---|---|---|---|
+| **Peak Intensity (0.250)** | Maximum 1-day Precipitation (Rx1day) | 1/2 | 0.1250 |
+| | Maximum 5-day Precipitation (Rx5day) | 1/2 | 0.1250 |
+| **Heavy Rain Frequency (0.250)** | Very Heavy Precipitation Days (R20mm) | 1/1 | 0.2500 |
+| **Very Wet Contribution (0.250)** | Very Wet Day Precipitation (R95p) | 1/2 | 0.1250 |
+| | Very Wet Day Contribution (R95pTOT) | 1/2 | 0.1250 |
+| **Wet-spell Persistence (0.250)** | Consecutive Wet Days (CWD) | 1/1 | 0.2500 |
 
-#### Riverine Flood (`composite_flood_jrc_depth`)
+#### Riverine Flood
 
-| Weight group | Metric | Slug | Share of group | Weight |
-|---|---|---|---|---|
-| **Inundation Severity (1.000)** | Flood Severity Index (RP-100) | `jrc_flood_depth_index_rp100` | 1/1 | 1.0000 |
-| **Inundation Depth** (display attribute) | RP-100 Flood Depth | `jrc_flood_depth_rp100` | — | 0.0000 |
-| **Inundation Extent** (display attribute) | RP-100 Flood Extent | `jrc_flood_extent_rp100` | — | 0.0000 |
+| Weight group | Metric | Share of group | Weight |
+|---|---|---|---|
+| **Inundation Severity (1.000)** | Flood Severity Index (RP-100) | 1/1 | 1.0000 |
+| **Inundation Depth** (display attribute) | RP-100 Flood Depth | — | 0.0000 |
+| **Inundation Extent** (display attribute) | RP-100 Flood Extent | — | 0.0000 |
 
 The Riverine Flood composite is fully determined by the single JRC severity index (§5.5); the depth and extent fields are carried at weight 0 for display and drill-down only and do not affect the score.
 
@@ -628,26 +633,26 @@ The eight **sectoral bundles** answer a different question from the thematic bun
 
 ### 7.1 Sector Hazard-Pressure Framework
 
-The eight sectoral bundles and their composite slugs:
+The eight sectoral bundles and their rule counts:
 
-| Bundle | Composite slug | Rules |
-|---|---|---|
-| Agricultural Risk | `composite_agricultural_risk` | 7 |
-| Health Risk | `composite_health_risk` | 5 |
-| Industrial Risk | `composite_industrial_risk` | 4 |
-| Investment / Financial Risk | `composite_investment_financial_risk` | 5 |
-| Infrastructure Risk | `composite_infrastructure_risk` | 3 |
-| Asset Risk (Thermal Power Plants) | `composite_asset_risk_thermal_power` | 3 |
-| Asset Risk (Hydropower Plants) | `composite_asset_risk_hydropower` | 3 |
-| Life & Livelihood Loss Risk | `composite_life_livelihood_loss_risk` | 4 |
+| Bundle | Rules |
+|---|---|
+| Agricultural Risk | 7 |
+| Health Risk | 5 |
+| Industrial Risk | 4 |
+| Investment / Financial Risk | 5 |
+| Infrastructure Risk | 3 |
+| Asset Risk (Thermal Power Plants) | 3 |
+| Asset Risk (Hydropower Plants) | 3 |
+| Life & Livelihood Loss Risk | 4 |
 
-Every bundle is an **ordered set of rules**; each rule binds exactly one source metric (§5) to a scoring recipe and an explicit *rule weight*. All eight bundles use `explicit_normalized` weighting, so their rule weights sum to 1.0 (§7.5). All are computed at both district and block level, for scenarios **SSP2-4.5** and **SSP5-8.5**, over the future periods **2020–2040, 2040–2060, 2060–2080**; the historical 1990–2010 window enters only as the change-lens baseline, not as a published period.
+Every bundle is an **ordered set of rules**; each rule binds exactly one source metric (§5) to a scoring recipe and an explicit *rule weight*. All eight bundles use explicit, normalized rule weights that sum to 1.0 (§7.5). All are computed at both district and block level, for scenarios **SSP2-4.5** and **SSP5-8.5**, over the future periods **2020–2040, 2040–2060, 2060–2080**; the historical 1990–2010 window enters only as the change-lens baseline, not as a published period.
 
 A rule's selection encodes a deliberate sector judgement — that a given hazard *matters to that sector* — so the same metric can appear in several bundles under different rule weights and different impact bands, reflecting the sector-specific consequence rather than a single universal harm.
 
 ### 7.2 The Blended Rule: Absolute Pressure + Change + Impact Band
 
-A rule produces up to three **lens scores**, each on a 0–100 *higher-is-worse* scale, which are then weighted into a single rule score. The lens weights ($\omega_{\text{abs}}, \omega_{\text{chg}}, \omega_{\text{imp}}$) are declared per rule and sum to 1.0; a lens with weight 0 is simply not evaluated. Throughout, all shipped rules are *higher-worse* (the `lower_worse` direction is supported but unused in the current catalog).
+A rule produces up to three **lens scores**, each on a 0–100 *higher-is-worse* scale, which are then weighted into a single rule score. The lens weights ($\omega_{\text{abs}}, \omega_{\text{chg}}, \omega_{\text{imp}}$) are declared per rule and sum to 1.0; a lens with weight 0 is simply not evaluated. Throughout, all shipped rules are *higher-worse* (the lower-is-worse direction is supported but unused in the current catalog).
 
 The three lenses are not an arbitrary decomposition: each answers a different, complementary question about the same metric, and each draws on an established methodological tradition. The lens framework is a structured combination of these traditions rather than a novel scoring invention.
 
@@ -669,7 +674,7 @@ Clipping at the deciles damps the influence of single-cell outliers on the spati
 
 $$\Delta_i = \begin{cases} v_i^{\text{fut}} - v_i^{\text{base}} & \text{absolute\_delta (temperature-like metrics)}\\[4pt] \dfrac{v_i^{\text{fut}} - v_i^{\text{base}}}{\lvert v_i^{\text{base}}\rvert}\times 100 & \text{relative\_pct (counts, rainfall, spells)} \end{cases}$$
 
-In `auto` mode the absolute delta is used for temperature-like slugs (`tas*`, `tx*`, `tn*`, heat/temperature metrics) and relative percent otherwise. Relative-percent change guards against tiny denominators ($\lvert v^{\text{base}}\rvert < 10^{-6}\Rightarrow$ NaN) so a near-zero baseline cannot explode the score. Because $S_{\text{chg}}$ is itself a spatial p10–p90 rank of the change, it measures *where a unit sits in the distribution of projected change* — not an absolute warming or wetting magnitude. A missing baseline column drops this lens to NaN (with a build warning) and the rule is scored on its remaining lenses.
+The mode is selected automatically: the absolute delta is used for temperature-like metrics (the daily-mean, daily-maximum, and daily-minimum temperature families and other heat indices) and relative percent otherwise. Relative-percent change guards against tiny denominators ($\lvert v^{\text{base}}\rvert < 10^{-6}\Rightarrow$ NaN) so a near-zero baseline cannot explode the score. Because $S_{\text{chg}}$ is itself a spatial p10–p90 rank of the change, it measures *where a unit sits in the distribution of projected change* — not an absolute warming or wetting magnitude. A missing baseline column drops this lens to NaN (with a build warning) and the rule is scored on its remaining lenses.
 
 **Impact lens — $S_{\text{imp}}$.** This is the only **absolute, non-spatial** lens: it maps the raw metric value onto a fixed physical harm band $[a, b]$ — $a$ the onset of concern, $b$ the saturation/severe threshold — independent of how other geographies score:
 
@@ -689,9 +694,9 @@ $$\text{Composite}_b = \frac{\sum_{r\in R_b} W_r\, S_r}{\sum_{r\in R_b} W_r}, \q
 
 where $f_b$ is the **available-rule-weight fraction** (the share of total rule weight that resolved to a valid score). A composite is published only if $f_b \ge 0.70$ **and** at least one rule is present; otherwise it is set to NaN. The 0.70 floor prevents a sector score from being asserted when nearly a third of its weighted evidence base is missing — a stricter posture than the thematic "≥ 1 component" gate of §6.3, appropriate because sectoral rules are fewer and individually more consequential. Both $f_b$ and the available-rule count are persisted with every composite.
 
-> A second rule type — **`trend`**, scoring an adverse yearly slope within the future window — exists and is validated in the codebase, but **no shipped bundle uses it**; every current rule is of the blended type above. It is noted here only for completeness and is excluded from the per-bundle tables.
+> A second rule type — a **trend** rule, scoring an adverse yearly slope within the future window — is specified but unused, and **no shipped bundle uses it**; every current rule is of the blended type above. It is noted here only for completeness and is excluded from the per-bundle tables.
 
-**Inputs and two standing caveats.** Each metric is reduced to one value per geography from a 20+ model ensemble using the **ensemble mean** (the tool-wide `mean` statistic, consistent with the thematic scores and the displayed statistic). The multi-model **median** is the methodologically preferred central estimate — robust to a single divergent model, per IPCC practice — but adopting it is a tool-wide change pending its own approval and tests. Separately, the change lens is only as trustworthy as its baseline: it must read the reconciled **1990–2010** historical window, the same period used for the displayed historical-delta columns. The residual code-gap in which some indices still calibrate on 1981–2010 (§5.1) applies to the change lens too; it is flagged here, not silent. Ensemble spread (std, p05/p95, model count) is deliberately **not** folded into the 0–100 score — it is surfaced separately as a confidence annotation, so a "70 with wide model disagreement" and a "70 with tight agreement" remain distinguishable.
+**Inputs and two standing caveats.** Each metric is reduced to one value per geography from the 24-model ensemble using the **ensemble mean** (the same ensemble-mean statistic used for the thematic scores and the displayed statistic). The multi-model **median** is the methodologically preferred central estimate — robust to a single divergent model, per IPCC practice — but adopting it is a tool-wide change pending its own approval and tests. Separately, the change lens is only as trustworthy as its baseline: it must read the reconciled **1990–2010** historical window, the same period used for the displayed historical-delta columns. The residual code-gap in which some indices still calibrate on 1981–2010 (§5.1) applies to the change lens too; it is flagged here, not silent. Ensemble spread (std, p05/p95, model count) is deliberately **not** folded into the 0–100 score — it is surfaced separately as a confidence annotation, so a "70 with wide model disagreement" and a "70 with tight agreement" remain distinguishable.
 
 ### 7.3 Reading the Score: What Each Lens Lets You Compare
 
@@ -703,7 +708,7 @@ Because two of the three lenses are cohort-relative and only the impact lens is 
 | **Across periods**, same state | re-normalized each period | re-normalized | ✓ (fixed band) | only the impact component is comparable; a flat absolute trend means "same rank", not "no warming" |
 | **Across states** | each state normalized to itself | each to itself | ✓ (fixed band) | only the impact component is cross-state comparable |
 
-**Worked example — why the blend beats pure-absolute ranking.** Two districts in one state, scenario `ssp585`, period `2060–2080`, metric **TXx** (annual-maximum daytime temperature), scored through the Health Risk TXx rule (lens weights 0.40 / 0.25 / 0.35, impact band 40–45 °C). Suppose across this cohort projected TXx spans $q_{10}=41$ °C to $q_{90}=46$ °C, and the warming anomaly versus 1990–2010 spans $q_{10}=+1.0$ °C to $q_{90}=+3.5$ °C:
+**Worked example — why the blend beats pure-absolute ranking.** Two districts in one state, scenario SSP5-8.5, period 2060–2080, metric **TXx** (annual-maximum daytime temperature), scored through the Health Risk TXx rule (lens weights 0.40 / 0.25 / 0.35, impact band 40–45 °C). Suppose across this cohort projected TXx spans $q_{10}=41$ °C to $q_{90}=46$ °C, and the warming anomaly versus 1990–2010 spans $q_{10}=+1.0$ °C to $q_{90}=+3.5$ °C:
 
 | District | TXx 2060–80 | Anomaly | $S_{\text{abs}}$ | $S_{\text{chg}}$ | $S_{\text{imp}}$ | **Blended** | Pure-absolute |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -742,95 +747,95 @@ Two weight layers govern a sectoral score: the **lens split** *within* each rule
 
 The per-bundle tables below give each rule's source metric, its **rule weight** (summing to 1.0 per bundle), its lens archetype, and its impact band (or "—" where no band applies). Band derivations are in Appendix B.
 
-#### Agricultural Risk (`composite_agricultural_risk`)
+#### Agricultural Risk
 
 Selects the agronomic stressors of a kharif–rabi cropping system: reproductive-stage heat, damaging heat-day and warm-spell burden, short-window (SPI-3) drought episodes and their longest spell, kharif-waterlogging rainfall, and — peninsular default — horticultural chilling nights. The heaviest weights sit on 5-day rainfall (0.20) and the two drought rules (0.15 each), reflecting the dominance of water extremes in rainfed agriculture.
 
 | Rule | Source metric | Rule weight | Lens archetype | Impact band |
 |---|---|---|---|---|
-| Peak crop heat | `txx_annual_max` | 0.15 | 0.40 / 0.30 / 0.30 | 35–45 °C |
-| Damaging heat days | `txge35_extreme_heat_days` | 0.10 | 0.45 / 0.40 / 0.15 | 15–60 days |
-| Persistent heat | `wsdi_warm_spell_days` | 0.10 | 0.45 / 0.40 / 0.15 | 6–18 days |
-| Drought episodes | `spi3_count_events_lt_minus1` | 0.15 | 0.45 / 0.40 / 0.15 | 3–12 events |
-| Longest drought spell | `spi3_max_spell_lt_minus1` | 0.15 | 0.45 / 0.40 / 0.15 | 3–12 months |
-| 5-day heavy rainfall | `pr_max_5day_precip` | 0.20 | 0.45 / 0.40 / 0.15 | 250–500 mm |
-| Cold nights | `tnle10_cold_nights` | 0.15 | 0.45 / 0.40 / 0.15 | 10–30 days |
+| Peak crop heat | Annual max temperature (TXx) | 0.15 | 0.40 / 0.30 / 0.30 | 35–45 °C |
+| Damaging heat days | Extreme heat days (TX ≥ 35 °C) | 0.10 | 0.45 / 0.40 / 0.15 | 15–60 days |
+| Persistent heat | Warm spell duration (WSDI) | 0.10 | 0.45 / 0.40 / 0.15 | 6–18 days |
+| Drought episodes | SPI-3 drought events | 0.15 | 0.45 / 0.40 / 0.15 | 3–12 events |
+| Longest drought spell | SPI-3 max drought spell | 0.15 | 0.45 / 0.40 / 0.15 | 3–12 months |
+| 5-day heavy rainfall | Max 5-day precipitation (Rx5day) | 0.20 | 0.45 / 0.40 / 0.15 | 250–500 mm |
+| Cold nights | Cold nights (TN ≤ 10 °C) | 0.15 | 0.45 / 0.40 / 0.15 | 10–30 days |
 
-#### Health Risk (`composite_health_risk`)
+#### Health Risk
 
 Targets the climatic drivers of heat mortality and waterborne/vector disruption: extreme daytime heat (the dominant rule at 0.30, on the HIGH-confidence IMD band), night-time heat that denies physiological recovery, warm-spell duration, and the rainfall/standing-water pathway for disease and disruption.
 
 | Rule | Source metric | Rule weight | Lens archetype | Impact band |
 |---|---|---|---|---|
-| Extreme daytime heat pressure | `txx_annual_max` | 0.30 | 0.40 / 0.25 / 0.35 | 40–45 °C |
-| Warm-spell duration pressure | `wsdi_warm_spell_days` | 0.12 | 0.45 / 0.40 / 0.15 | 6–18 days |
-| Night-time heat pressure | `tnx_annual_max` | 0.18 | 0.40 / 0.25 / 0.35 | 28–32 °C |
-| 1-day rainfall disruption pressure | `pr_max_1day_precip` | 0.25 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
-| Consecutive wet-day pressure | `cwd_consecutive_wet_days` | 0.15 | 0.45 / 0.40 / 0.15 | 7–15 days |
+| Extreme daytime heat pressure | Annual max temperature (TXx) | 0.30 | 0.40 / 0.25 / 0.35 | 40–45 °C |
+| Warm-spell duration pressure | Warm spell duration (WSDI) | 0.12 | 0.45 / 0.40 / 0.15 | 6–18 days |
+| Night-time heat pressure | Warmest night (TNx) | 0.18 | 0.40 / 0.25 / 0.35 | 28–32 °C |
+| 1-day rainfall disruption pressure | Max 1-day precipitation (Rx1day) | 0.25 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
+| Consecutive wet-day pressure | Consecutive wet days (CWD) | 0.15 | 0.45 / 0.40 / 0.15 | 7–15 days |
 
-#### Industrial Risk (`composite_industrial_risk`)
+#### Industrial Risk
 
 Scores process-disruption and water/heat-derating pressures on industry: extreme operational heat (the dominant rule at 0.40), one- and five-day rainfall disruption, and prolonged dry spells stressing process-water supply.
 
 | Rule | Source metric | Rule weight | Lens archetype | Impact band |
 |---|---|---|---|---|
-| 1-day rainfall disruption pressure | `pr_max_1day_precip` | 0.25 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
-| 5-day rainfall disruption pressure | `pr_max_5day_precip` | 0.15 | 0.45 / 0.40 / 0.15 | 250–500 mm |
-| Dry-spell water-stress pressure | `pr_consecutive_dry_days_lt1mm` | 0.20 | 0.40 / 0.30 / 0.30 | 30–90 days |
-| Extreme heat operations pressure | `txx_annual_max` | 0.40 | 0.40 / 0.25 / 0.35 | 40–45 °C |
+| 1-day rainfall disruption pressure | Max 1-day precipitation (Rx1day) | 0.25 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
+| 5-day rainfall disruption pressure | Max 5-day precipitation (Rx5day) | 0.15 | 0.45 / 0.40 / 0.15 | 250–500 mm |
+| Dry-spell water-stress pressure | Consecutive dry days (CDD) | 0.20 | 0.40 / 0.30 / 0.30 | 30–90 days |
+| Extreme heat operations pressure | Annual max temperature (TXx) | 0.40 | 0.40 / 0.25 / 0.35 | 40–45 °C |
 
-#### Investment / Financial Risk (`composite_investment_financial_risk`)
+#### Investment / Financial Risk
 
 Emphasises *emergence vs the historical baseline* — the signal an investor cares about. It pairs the rainfall-disruption rules with two change-weighted regime metrics: extreme-wet concentration (R99p, change-dominant) and heatwave persistence (HWFI), plus chronic dry-spell water stress for water-intensive assets.
 
 | Rule | Source metric | Rule weight | Lens archetype | Impact band |
 |---|---|---|---|---|
-| 1-day rainfall disruption pressure | `pr_max_1day_precip` | 0.25 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
-| 5-day rainfall accumulation pressure | `pr_max_5day_precip` | 0.15 | 0.45 / 0.40 / 0.15 | 250–500 mm |
-| Extreme wet precipitation concentration | `r99p_extreme_wet_precip` | 0.10 | 0.40 / 0.60 / 0.00 | — |
-| Dry-spell water-stress pressure | `pr_consecutive_dry_days_lt1mm` | 0.25 | 0.40 / 0.30 / 0.30 | 30–90 days |
-| Heatwave persistence pressure | `hwfi_tmean_90p` | 0.25 | 0.45 / 0.40 / 0.15 | 5–15 days |
+| 1-day rainfall disruption pressure | Max 1-day precipitation (Rx1day) | 0.25 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
+| 5-day rainfall accumulation pressure | Max 5-day precipitation (Rx5day) | 0.15 | 0.45 / 0.40 / 0.15 | 250–500 mm |
+| Extreme wet precipitation concentration | Extremely wet-day precip (R99p) | 0.10 | 0.40 / 0.60 / 0.00 | — |
+| Dry-spell water-stress pressure | Consecutive dry days (CDD) | 0.25 | 0.40 / 0.30 / 0.30 | 30–90 days |
+| Heatwave persistence pressure | Heatwave spell days (HWFI) | 0.25 | 0.45 / 0.40 / 0.15 | 5–15 days |
 
-#### Infrastructure Risk (`composite_infrastructure_risk`)
+#### Infrastructure Risk
 
 A compact three-rule design centred on rainfall design loads: one-day design rainfall dominates (0.45), followed by five-day accumulation (0.30) and extreme-heat asset stress (0.25).
 
 | Rule | Source metric | Rule weight | Lens archetype | Impact band |
 |---|---|---|---|---|
-| 1-day rainfall design pressure | `pr_max_1day_precip` | 0.45 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
-| 5-day rainfall design pressure | `pr_max_5day_precip` | 0.30 | 0.45 / 0.40 / 0.15 | 250–500 mm |
-| Extreme heat asset pressure | `txx_annual_max` | 0.25 | 0.40 / 0.25 / 0.35 | 40–45 °C |
+| 1-day rainfall design pressure | Max 1-day precipitation (Rx1day) | 0.45 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
+| 5-day rainfall design pressure | Max 5-day precipitation (Rx5day) | 0.30 | 0.45 / 0.40 / 0.15 | 250–500 mm |
+| Extreme heat asset pressure | Annual max temperature (TXx) | 0.25 | 0.40 / 0.25 / 0.35 | 40–45 °C |
 
-#### Asset Risk — Thermal Power Plants (`composite_asset_risk_thermal_power`)
+#### Asset Risk — Thermal Power Plants
 
 Targets the two climate vulnerabilities of thermal generation: cooling-water availability (dry-spell CDD and an SPI-3 low-flow proxy) and cooling-efficiency loss under extreme heat, weighted roughly evenly (0.35 / 0.35 / 0.30).
 
 | Rule | Source metric | Rule weight | Lens archetype | Impact band |
 |---|---|---|---|---|
-| Dry-spell cooling-water pressure | `pr_consecutive_dry_days_lt1mm` | 0.35 | 0.40 / 0.30 / 0.30 | 30–90 days |
-| Extreme heat cooling-efficiency pressure | `txx_annual_max` | 0.35 | 0.40 / 0.25 / 0.35 | 40–45 °C |
-| Low-flow drought proxy pressure | `spi3_count_months_lt_minus1` | 0.30 | 0.70 / 0.30 / 0.00 | — |
+| Dry-spell cooling-water pressure | Consecutive dry days (CDD) | 0.35 | 0.40 / 0.30 / 0.30 | 30–90 days |
+| Extreme heat cooling-efficiency pressure | Annual max temperature (TXx) | 0.35 | 0.40 / 0.25 / 0.35 | 40–45 °C |
+| Low-flow drought proxy pressure | SPI-3 moderate-drought months | 0.30 | 0.70 / 0.30 / 0.00 | — |
 
-#### Asset Risk — Hydropower Plants (`composite_asset_risk_hydropower`)
+#### Asset Risk — Hydropower Plants
 
 Scores inflow-driven generation risk: heavy 5-day rainfall stressing spillway/operations (dominant at 0.45), prolonged dry spells cutting reservoir inflow, and the inflow-predictability signal from R95p **interannual variability** — a helper metric (the coefficient of variation of yearly very-wet precipitation, §7.2/Appendix A) sharing the Rx5day/CDD baseline epoch.
 
 | Rule | Source metric | Rule weight | Lens archetype | Impact band |
 |---|---|---|---|---|
-| 5-day rainfall operations pressure | `pr_max_5day_precip` | 0.45 | 0.45 / 0.40 / 0.15 | 250–500 mm |
-| Dry-spell flow pressure | `pr_consecutive_dry_days_lt1mm` | 0.35 | 0.40 / 0.30 / 0.30 | 30–90 days |
-| Very wet precipitation variability pressure | `r95p_interannual_variability` | 0.20 | 0.70 / 0.30 / 0.00 | — |
+| 5-day rainfall operations pressure | Max 5-day precipitation (Rx5day) | 0.45 | 0.45 / 0.40 / 0.15 | 250–500 mm |
+| Dry-spell flow pressure | Consecutive dry days (CDD) | 0.35 | 0.40 / 0.30 / 0.30 | 30–90 days |
+| Very wet precipitation variability pressure | R95p inter-annual variability (CV) | 0.20 | 0.70 / 0.30 / 0.00 | — |
 
-#### Life & Livelihood Loss Risk (`composite_life_livelihood_loss_risk`)
+#### Life & Livelihood Loss Risk
 
 Captures the direct human-exposure hazards: extreme one- and five-day rainfall (flood exposure), prolonged dry spells driving livelihood/crop failure, and warm-spell heat mortality. One-day rainfall carries the largest weight (0.30).
 
 | Rule | Source metric | Rule weight | Lens archetype | Impact band |
 |---|---|---|---|---|
-| 1-day rainfall exposure pressure | `pr_max_1day_precip` | 0.30 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
-| 5-day rainfall exposure pressure | `pr_max_5day_precip` | 0.25 | 0.40 / 0.30 / 0.30 | 250–500 mm |
-| Dry-spell livelihood pressure | `pr_consecutive_dry_days_lt1mm` | 0.20 | 0.40 / 0.30 / 0.30 | 60–120 days |
-| Warm-spell livelihood pressure | `wsdi_warm_spell_days` | 0.25 | 0.40 / 0.30 / 0.30 | 6–18 days |
+| 1-day rainfall exposure pressure | Max 1-day precipitation (Rx1day) | 0.30 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
+| 5-day rainfall exposure pressure | Max 5-day precipitation (Rx5day) | 0.25 | 0.40 / 0.30 / 0.30 | 250–500 mm |
+| Dry-spell livelihood pressure | Consecutive dry days (CDD) | 0.20 | 0.40 / 0.30 / 0.30 | 60–120 days |
+| Warm-spell livelihood pressure | Warm spell duration (WSDI) | 0.25 | 0.40 / 0.30 / 0.30 | 6–18 days |
 
 ---
 
@@ -858,7 +863,7 @@ Composites are computed **independently for each `(scenario, period)` combinatio
 | **Thematic** (§6) | SSP2-4.5, SSP5-8.5, plus **Snapshot** (the static Riverine bundle) | `1990-2010` (historical), `Current`, `2020-2040`, `2040-2060`, `2060-2080` |
 | **Sectoral** (§7) | SSP2-4.5, SSP5-8.5 | `2020-2040`, `2040-2060`, `2060-2080` |
 
-The sectoral engine does **not** publish a historical or `Current` period: the 1990–2010 window enters sectoral scores only as the change-lens *baseline* (§7.2), never as an output column. The **Riverine Flood** bundle is the lone static case — a single `Snapshot` with no scenario or future-period dimension (§5.5/§6.2).
+The sectoral engine does **not** publish a historical or `Current` period: the 1990–2010 window enters sectoral scores only as the change-lens *baseline* (§7.2), never as an output column. The **Riverine Flood** bundle is the lone static case — a single `Snapshot` published under the `Current` period label (§2.2), with no scenario or future-period dimension (§5.5/§6.2).
 
 **Comparability — read carefully.** Because both engines normalize *within* a cohort, composite scores are **not** directly comparable across periods or states on an absolute scale, despite sharing the 0–100 range:
 
@@ -881,86 +886,97 @@ Two resolution effects follow:
 
 ## Appendix A: Complete Metric Reference
 
-The table below lists every metric that appears in a thematic bundle weight entry in `bundle_weights.py`. Metrics shared across bundles appear once with all bundles noted. Columns: **Slug** (canonical pipeline identifier), **Label** (display name), **Variable(s)** (NEX-GDDP-CMIP6 input or external source), **Definition** (how the annual value is computed), **Units**, **Baseline** (period for percentile/distribution fitting, where applicable), **Bundle(s)**.
+The tables below list every metric that feeds a bundle. Sections A.1–A.5 cover the metrics that appear in a thematic bundle weight entry; **A.6** adds the source metrics used only by the sectoral bundles (§7). Metrics shared across bundles appear once with all bundles noted. Columns: **Slug** (canonical pipeline identifier), **Label** (display name), **Variable(s)** (NEX-GDDP-CMIP6 input or external source), **Definition** (how the annual value is computed), **Units**, **Baseline** (period for percentile/distribution fitting, where applicable), **Bundle(s)**.
 
 Abbreviations: DOY = day-of-year percentile threshold; MAM = March–May; DJF = December–January–February; MoM = Method of Moments.
 
 ### A.1 Heat Risk and Heat Stress
 
-| Slug | Label | Variable(s) | Definition | Units | Baseline | Bundle(s) |
-|---|---|---|---|---|---|---|
-| `tas_annual_mean` | Annual mean temperature | tas | Arithmetic mean of daily mean temperature | °C | — | Heat Risk |
-| `tasmax_summer_mean` | Summer (MAM) max temp | tasmax | Mean of daily max temperature in months [3,4,5] | °C | — | Heat Risk |
-| `tas_summer_mean` | Summer (MAM) mean temp | tas | Mean of daily mean temperature in months [3,4,5] | °C | — | Heat Risk |
-| `txx_annual_max` | Annual max daily max temp (TXx) | tasmax | Annual maximum of daily maximum temperature | °C | — | Heat Risk |
-| `tnx_annual_max` | Warmest night (TNx) | tasmin | Annual maximum of daily minimum temperature | °C | — | Heat Risk |
-| `hwa_heatwave_amplitude` | Heatwave amplitude | tasmax | Peak daily max temp within the heatwave spell with highest mean exceedance above DOY 90th-pct threshold; min 5 consecutive exceedance days | °C | 1990–2010 | Heat Risk |
-| `txge30_hot_days` | Hot days (TX ≥ 30°C) | tasmax | Count of days where tasmax ≥ 30°C | days | — | Heat Risk |
-| `txge35_extreme_heat_days` | Extreme heat days (TX ≥ 35°C) | tasmax | Count of days where tasmax ≥ 35°C | days | — | Heat Risk |
-| `tasmin_tropical_nights_gt25` | Tropical nights (TN > 25°C) | tasmin | Count of days where tasmin > 25°C | days | — | Heat Risk |
-| `hwfi_tmean_90p` | Heatwave spell days | tas | Total days inside spells of ≥ 5 consecutive days where tas > DOY 90th-pct threshold | days | 1990–2010 | Heat Risk |
-| `hwfi_events_tmean_90p` | Heatwave event count | tasmax | Count of distinct spells of ≥ 5 consecutive days where tasmax > DOY 90th-pct threshold | events | 1990–2010 | Heat Risk |
-| `wsdi_warm_spell_days` | Warm spell days (WSDI) | tasmax | Count of days inside warm spells of ≥ 6 consecutive days where tasmax > DOY 90th-pct threshold | days | 1990–2010 | Heat Risk, Heat Stress |
-| `tx90p_hot_days_pct` | Hot days % (TX90p) | tasmax | Fraction of days where tasmax > DOY 90th-pct threshold; 5-day window | % | 1990–2010 | Heat Risk |
-| `tn90p_warm_nights_pct` | Warm nights % (TN90p) | tasmin | Fraction of days where tasmin > DOY 90th-pct threshold; 5-day window | % | 1990–2010 | Heat Risk, Heat Stress |
-| `twb_annual_mean` | Annual mean wet-bulb temp | tas, hurs | Annual mean of daily Twb (Stull 2011) | °C | — | Heat Stress |
-| `twb_summer_mean` | Summer (MAM) mean wet-bulb | tas, hurs | Mean of daily Twb (Stull 2011) in months [3,4,5] | °C | — | Heat Stress |
-| `twb_annual_max` | Annual max wet-bulb temp | tas, hurs | Annual maximum of daily Twb (Stull 2011) | °C | — | Heat Stress |
-| `twb_days_ge_28` | Heat stress days (Twb ≥ 28°C) | tas, hurs | Count of days where Twb (Stull 2011) ≥ 28°C | days | — | Heat Stress |
-| `twb_days_ge_30` | Severe heat stress days (Twb ≥ 30°C) | tas, hurs | Count of days where Twb (Stull 2011) ≥ 30°C | days | — | Heat Stress |
-| `tasmin_tropical_nights_gt28` | Tropical nights (TN > 28°C) | tasmin | Count of days where tasmin > 28°C | days | — | Heat Stress |
+| Label | Variable(s) | Definition | Units | Baseline | Bundle(s) |
+|---|---|---|---|---|---|
+| Annual mean temperature | tas | Arithmetic mean of daily mean temperature | °C | — | Heat Risk |
+| Summer (MAM) max temp | tasmax | Mean of daily max temperature in months [3,4,5] | °C | — | Heat Risk |
+| Summer (MAM) mean temp | tas | Mean of daily mean temperature in months [3,4,5] | °C | — | Heat Risk |
+| Annual max daily max temp (TXx) | tasmax | Annual maximum of daily maximum temperature | °C | — | Heat Risk |
+| Warmest night (TNx) | tasmin | Annual maximum of daily minimum temperature | °C | — | Heat Risk |
+| Heatwave amplitude | tasmax | Peak daily max temp within the heatwave spell with highest mean exceedance above DOY 90th-pct threshold; min 5 consecutive exceedance days | °C | 1990–2010 | Heat Risk |
+| Hot days (TX ≥ 30°C) | tasmax | Count of days where tasmax ≥ 30°C | days | — | Heat Risk |
+| Extreme heat days (TX ≥ 35°C) | tasmax | Count of days where tasmax ≥ 35°C | days | — | Heat Risk |
+| Tropical nights (TN > 25°C) | tasmin | Count of days where tasmin > 25°C | days | — | Heat Risk |
+| Heatwave spell days | tas | Total days inside spells of ≥ 5 consecutive days where tas > DOY 90th-pct threshold | days | 1990–2010 | Heat Risk |
+| Heatwave event count | tasmax | Count of distinct spells of ≥ 5 consecutive days where tasmax > DOY 90th-pct threshold | events | 1990–2010 | Heat Risk |
+| Warm spell days (WSDI) | tasmax | Count of days inside warm spells of ≥ 6 consecutive days where tasmax > DOY 90th-pct threshold | days | 1990–2010 | Heat Risk, Heat Stress |
+| Hot days % (TX90p) | tasmax | Fraction of days where tasmax > DOY 90th-pct threshold; 5-day window | % | 1990–2010 | Heat Risk |
+| Warm nights % (TN90p) | tasmin | Fraction of days where tasmin > DOY 90th-pct threshold; 5-day window | % | 1990–2010 | Heat Risk, Heat Stress |
+| Annual mean wet-bulb temp | tas, hurs | Annual mean of daily Twb (Stull 2011) | °C | — | Heat Stress |
+| Summer (MAM) mean wet-bulb | tas, hurs | Mean of daily Twb (Stull 2011) in months [3,4,5] | °C | — | Heat Stress |
+| Annual max wet-bulb temp | tas, hurs | Annual maximum of daily Twb (Stull 2011) | °C | — | Heat Stress |
+| Heat stress days (Twb ≥ 28°C) | tas, hurs | Count of days where Twb (Stull 2011) ≥ 28°C | days | — | Heat Stress |
+| Severe heat stress days (Twb ≥ 30°C) | tas, hurs | Count of days where Twb (Stull 2011) ≥ 30°C | days | — | Heat Stress |
+| Tropical nights (TN > 28°C) | tasmin | Count of days where tasmin > 28°C | days | — | Heat Stress |
 
 ### A.2 Cold Risk
 
-| Slug | Label | Variable(s) | Definition | Units | Baseline | Bundle(s) |
-|---|---|---|---|---|---|---|
-| `tas_winter_mean` | Winter (DJF) mean temp | tas | Mean of daily mean temperature in months [12,1,2] | °C | — | Cold Risk |
-| `tasmin_winter_mean` | Winter (DJF) mean min temp | tasmin | Mean of daily minimum temperature in months [12,1,2] | °C | — | Cold Risk |
-| `tnn_annual_min` | Coldest night (TNn) | tasmin | Annual minimum of daily minimum temperature | °C | — | Cold Risk |
-| `tasmin_winter_min` | Winter (DJF) min of min temp | tasmin | Minimum of daily minimum temperature in months [12,1,2] | °C | — | Cold Risk |
-| `tnle10_cold_nights` | Cold nights (TN ≤ 10°C) | tasmin | Count of days where tasmin ≤ 10°C | days | — | Cold Risk |
-| `tnle5_severe_cold_nights` | Severe cold nights (TN ≤ 5°C) | tasmin | Count of days where tasmin ≤ 5°C | days | — | Cold Risk |
-| `txle15_cold_days` | Cold days (TX ≤ 15°C) | tasmax | Count of days where tasmax ≤ 15°C | days | — | Cold Risk |
-| `tx10p_cool_days_pct` | Cool days % (TX10p) | tasmax | Fraction of days where tasmax < DOY 10th-pct threshold; 5-day window | % | 1990–2010 | Cold Risk |
-| `tn10p_cool_nights_pct` | Cool nights % (TN10p) | tasmin | Fraction of days where tasmin < DOY 10th-pct threshold; 5-day window | % | 1990–2010 | Cold Risk |
-| `csdi_cold_spell_days` | Cold spell days (CSDI) | tasmin | Count of days inside cold spells of ≥ 6 consecutive days where tasmin < DOY 10th-pct threshold | days | 1990–2010 | Cold Risk |
-| `tnle10_consecutive_cold_nights` | Longest cold-night run (TN ≤ 10°C) | tasmin | Maximum consecutive run of days where tasmin ≤ 10°C | days | — | Cold Risk |
+| Label | Variable(s) | Definition | Units | Baseline | Bundle(s) |
+|---|---|---|---|---|---|
+| Winter (DJF) mean temp | tas | Mean of daily mean temperature in months [12,1,2] | °C | — | Cold Risk |
+| Winter (DJF) mean min temp | tasmin | Mean of daily minimum temperature in months [12,1,2] | °C | — | Cold Risk |
+| Coldest night (TNn) | tasmin | Annual minimum of daily minimum temperature | °C | — | Cold Risk |
+| Winter (DJF) min of min temp | tasmin | Minimum of daily minimum temperature in months [12,1,2] | °C | — | Cold Risk |
+| Cold nights (TN ≤ 10°C) | tasmin | Count of days where tasmin ≤ 10°C | days | — | Cold Risk |
+| Severe cold nights (TN ≤ 5°C) | tasmin | Count of days where tasmin ≤ 5°C | days | — | Cold Risk |
+| Cold days (TX ≤ 15°C) | tasmax | Count of days where tasmax ≤ 15°C | days | — | Cold Risk |
+| Cool days % (TX10p) | tasmax | Fraction of days where tasmax < DOY 10th-pct threshold; 5-day window | % | 1990–2010 | Cold Risk |
+| Cool nights % (TN10p) | tasmin | Fraction of days where tasmin < DOY 10th-pct threshold; 5-day window | % | 1990–2010 | Cold Risk |
+| Cold spell days (CSDI) | tasmin | Count of days inside cold spells of ≥ 6 consecutive days where tasmin < DOY 10th-pct threshold | days | 1990–2010 | Cold Risk |
+| Longest cold-night run (TN ≤ 10°C) | tasmin | Maximum consecutive run of days where tasmin ≤ 10°C | days | — | Cold Risk |
 
 ### A.3 Drought Risk
 
 All SPI metrics use Gamma distribution fitted by MoM over the calibration period 1990–2010. Event/spell metrics apply the SPI < −1 threshold (moderate drought onset).
 
-| Slug | Label | Scale | Definition | Units | Period rollup | Bundle(s) |
-|---|---|---|---|---|---|---|
-| `spi3_count_events_lt_minus1` | SPI-3 drought events | 3 months | Mean annual count of contiguous SPI episodes below −1 | events/yr | Period mean | Drought Risk |
-| `spi6_count_events_lt_minus1` | SPI-6 drought events | 6 months | As above at 6-month scale | events/yr | Period mean | Drought Risk |
-| `spi12_count_events_lt_minus1` | SPI-12 drought events | 12 months | As above at 12-month scale | events/yr | Period mean | Drought Risk |
-| `spi3_max_spell_lt_minus1` | SPI-3 max drought spell | 3 months | Period maximum of within-year longest SPI episode below −1 | months | Period max | Drought Risk |
-| `spi6_max_spell_lt_minus1` | SPI-6 max drought spell | 6 months | As above at 6-month scale | months | Period max | Drought Risk |
-| `spi12_max_spell_lt_minus1` | SPI-12 max drought spell | 12 months | As above at 12-month scale | months | Period max | Drought Risk |
+| Label | Scale | Definition | Units | Period rollup | Bundle(s) |
+|---|---|---|---|---|---|
+| SPI-3 drought events | 3 months | Mean annual count of contiguous SPI episodes below −1 | events/yr | Period mean | Drought Risk |
+| SPI-6 drought events | 6 months | As above at 6-month scale | events/yr | Period mean | Drought Risk |
+| SPI-12 drought events | 12 months | As above at 12-month scale | events/yr | Period mean | Drought Risk |
+| SPI-3 max drought spell | 3 months | Period maximum of within-year longest SPI episode below −1 | months | Period max | Drought Risk |
+| SPI-6 max drought spell | 6 months | As above at 6-month scale | months | Period max | Drought Risk |
+| SPI-12 max drought spell | 12 months | As above at 12-month scale | months | Period max | Drought Risk |
 
 ### A.4 Extreme Rainfall | Flash Flood Risk
 
 All metrics derived from `pr` (mm day⁻¹). ETCCDI standard: Zhang et al. (2011).
 
-| Slug | Label | Definition | Units | Baseline | Bundle(s) |
-|---|---|---|---|---|---|
-| `pr_max_1day_precip` | Max 1-day precipitation (Rx1day) | Annual maximum of daily precipitation total | mm | — | Extreme Rainfall |
-| `pr_max_5day_precip` | Max 5-day precipitation (Rx5day) | Annual maximum of consecutive 5-day precipitation total | mm | — | Extreme Rainfall |
-| `r20mm_very_heavy_precip_days` | Very heavy rain days (R20mm) | Count of days where precipitation ≥ 20 mm | days | — | Extreme Rainfall |
-| `r95p_very_wet_precip` | Very wet day total (R95p) | Annual total precipitation on days exceeding p95 of baseline wet-day distribution (wet day ≥ 1 mm) | mm | 1990–2010 | Extreme Rainfall |
-| `r95ptot_contribution_pct` | Very wet day fraction (R95pTOT) | R95p as a fraction of annual wet-day total × 100 | % | 1990–2010 | Extreme Rainfall |
-| `cwd_consecutive_wet_days` | Consecutive wet days (CWD) | Maximum consecutive days with precipitation ≥ 1 mm | days | — | Extreme Rainfall |
+| Label | Definition | Units | Baseline | Bundle(s) |
+|---|---|---|---|---|
+| Max 1-day precipitation (Rx1day) | Annual maximum of daily precipitation total | mm | — | Extreme Rainfall |
+| Max 5-day precipitation (Rx5day) | Annual maximum of consecutive 5-day precipitation total | mm | — | Extreme Rainfall |
+| Very heavy rain days (R20mm) | Count of days where precipitation ≥ 20 mm | days | — | Extreme Rainfall |
+| Very wet day total (R95p) | Annual total precipitation on days exceeding p95 of baseline wet-day distribution (wet day ≥ 1 mm) | mm | 1990–2010 | Extreme Rainfall |
+| Very wet day fraction (R95pTOT) | R95p as a fraction of annual wet-day total × 100 | % | 1990–2010 | Extreme Rainfall |
+| Consecutive wet days (CWD) | Maximum consecutive days with precipitation ≥ 1 mm | days | — | Extreme Rainfall |
 
 ### A.5 Riverine Flood
 
 Source: CEMS-GloFAS Global River Flood Hazard Maps Version 2.1 (RP-100 layers). Static snapshot; no SSP scenario dimension.
 
-| Slug | Label | Definition | Units | Role |
+| Label | Definition | Units | Role |
+|---|---|---|---|
+| Flood severity index | 5×5 depth-by-extent scoring matrix; ordinal class 1–5 (Very Low to Extreme) | severity class | Scored (weight 1.0) |
+| RP-100 flood depth | Block: p95 of positive flooded-cell depths within polygon. District: flooded-area-weighted mean of block p95 values | m | Display attribute |
+| RP-100 flood extent | Share of polygon area with positive modelled flood depth | fraction (%) | Display attribute |
+
+### A.6 Sectoral-only source metrics
+
+These metrics feed the sectoral bundles (§7) but are not part of any thematic bundle, so they do not appear in A.1–A.5. Definitions, units, and baselines are given here so §7's quantitative basis is reconstructable from this note alone. **CDD** is the highest-leverage of these — it drives a dry-spell rule in five of the eight sectoral bundles. All four are derived from the daily precipitation variable `pr`.
+
+| Label | Definition | Units | Baseline | Bundle(s) |
 |---|---|---|---|---|
-| `jrc_flood_depth_index_rp100` | Flood severity index | 5×5 depth-by-extent scoring matrix; ordinal class 1–5 (Very Low to Extreme) | severity class | Scored (weight 1.0) |
-| `jrc_flood_depth_rp100` | RP-100 flood depth | Block: p95 of positive flooded-cell depths within polygon. District: flooded-area-weighted mean of block p95 values | m | Display attribute |
-| `jrc_flood_extent_rp100` | RP-100 flood extent | Share of polygon area with positive modelled flood depth | fraction (%) | Display attribute |
+| Consecutive dry days (CDD) | Maximum run of consecutive days with precipitation < 1 mm in the year (a "dry day" is `pr` < 1 mm; Climdex CDD) | days | — | Industrial, Investment, Asset (Thermal), Asset (Hydropower), Life & Livelihood |
+| Extremely wet-day precipitation (R99p) | Annual total precipitation on days exceeding the 99th percentile of baseline wet-day precipitation (wet day ≥ 1 mm; ETCCDI R99p) | mm | 1990–2010 | Investment |
+| SPI-3 moderate-drought months | Annual count of calendar months with 3-month SPI below −1, period-mean rolled up. A persistence/low-flow proxy, distinct from the SPI-3 *event-count* and *max-spell* metrics in A.3 | months | 1990–2010 (SPI calibration) | Asset (Thermal) |
+| R95p inter-annual variability (CV) | Coefficient of variation (σ ⁄ μ) of annual R95p very-wet-day totals across the years within the selected future period; an inflow-predictability proxy. The R95p p95 threshold uses the baseline distribution, but the CV itself is computed across the future-period years, not against the baseline | ratio (dimensionless) | 1990–2010 (R95p threshold) | Asset (Hydropower) |
 
 ---
 
@@ -970,24 +986,22 @@ The distinct impact bands used by the §7 rules, deduplicated across the bundles
 
 | Band | Metric(s) | Onset → saturation rationale | Provenance | Confidence | Used by |
 |---|---|---|---|---|---|
-| **40–45 °C** | `txx_annual_max` | IMD plains heatwave: declared ≥ 40 °C (onset), severe ≥ 45 °C (saturation) | External (IMD) | HIGH | Health, Industrial, Infrastructure, Asset (Thermal) |
-| **35–45 °C** | `txx_annual_max` | Onset 35 (rice/wheat reproductive-stage heat-sterility threshold); saturation 45 (IMD severe-heatwave / documented crop-failure regime) | Self-derived | MEDIUM | Agricultural |
-| **28–32 °C** | `tnx_annual_max` | Onset 28 (India hot-night mortality inflection ≈ +9.8 %/°C); saturation 32 (upper envelope of Indian warmest nights) | Self-derived | MEDIUM | Health |
-| **115.6–204.5 mm/day** | `pr_max_1day_precip` | IMD daily-rainfall categories: very heavy 115.6–204.4 (onset) to extremely heavy ≥ 204.5 (saturation) | External (IMD) | HIGH | Health, Industrial, Investment, Infrastructure, Life & Livelihood |
-| **250–500 mm/5 days** | `pr_max_5day_precip` | Onset 250 (drainage-failure regime, ≈ 5× IMD heavy-rain floor); saturation 500 (regional flood-event regime, Kerala 2018 / Mumbai 2005). No external categorical band exists at 5-day scale | Self-derived | LOW | Agricultural, Industrial, Investment, Infrastructure, Asset (Hydropower), Life & Livelihood |
-| **30–90 days** | `pr_consecutive_dry_days_lt1mm` | Onset 30 (IMD Agricultural Drought: four consecutive Drought Weeks ≈ 28 days); saturation 90 (¾ of JJAS monsoon; SPI severe-drought territory) | Self-derived (IMD-anchored onset) | MEDIUM | Industrial, Asset (Thermal), Asset (Hydropower)* |
-| **60–120 days** | `pr_consecutive_dry_days_lt1mm` | Onset 60 (IMD agro-met 4-week prolonged dry spell + ICAR-CRIDA rainfed-kharif critical-water-deficit); saturation 120 (full kharif-to-early-rabi system failure; NDMA framing) | Self-derived | MEDIUM | Life & Livelihood |
-| **6–18 days** | `wsdi_warm_spell_days` | Onset 6 (WSDI minimum qualifying spell, past the ≈ 4-day added-mortality threshold); saturation 18 (multi-spell / season-dominant warm-spell regime) | Self-derived | LOW (Ag/Health/Investment), MEDIUM (Life & Livelihood) | Agricultural, Health, Investment, Life & Livelihood |
-| **15–60 days** | `txge35_extreme_heat_days` | Onset 15 (complete anthesis-window exposure + second window); saturation 60 (≈ 2 months damaging heat, season-dominant) | Self-derived | LOW | Agricultural |
-| **3–12 events / months** | `spi3_count_events_lt_minus1`, `spi3_max_spell_lt_minus1` | Onset 3 (natural SPI < −1 baseline frequency / one SPI-3 window); saturation 12 (near-continuous drought / year-long sustained moderate drought) | Self-derived | LOW | Agricultural |
-| **10–30 days** | `tnle10_cold_nights` | Onset 10 (chilling-injury exposure for sensitive peninsular horticulture); saturation 30 (≈ 1 month sustained cold-night stress). **Peninsular default — over-applies in the northern wheat belt where cold nights are beneficial (vernalization)** | Self-derived | LOW | Agricultural |
-| **7–15 days** | `cwd_consecutive_wet_days` | Onset 7 (week of standing water spans mosquito aquatic cycle / waterlogging onset); saturation 15 (prolonged saturation). Local-hydrology dependent | Self-derived | LOW | Health |
-| **5–15 days/yr** | `hwfi_tmean_90p` | Onset 5 (HWFI minimum qualifying spell); saturation 15 (high annual burden implying multiple qualifying spells) | Self-derived | LOW | Investment |
-| **— (no band)** | `r99p_extreme_wet_precip`, `spi3_count_months_lt_minus1`, `r95p_interannual_variability` | Regime/concentration/variability metrics with no defensible danger threshold; scored on absolute + change lenses only | — | — | Investment, Asset (Thermal), Asset (Hydropower) |
+| **40–45 °C** | Annual max temperature (TXx) | IMD plains heatwave: declared ≥ 40 °C (onset), severe ≥ 45 °C (saturation) | External (IMD) | HIGH | Health, Industrial, Infrastructure, Asset (Thermal) |
+| **35–45 °C** | Annual max temperature (TXx) | Onset 35 (rice/wheat reproductive-stage heat-sterility threshold); saturation 45 (IMD severe-heatwave / documented crop-failure regime) | Self-derived | MEDIUM | Agricultural |
+| **28–32 °C** | Warmest night (TNx) | Onset 28 (India hot-night mortality inflection ≈ +9.8 %/°C); saturation 32 (upper envelope of Indian warmest nights) | Self-derived | MEDIUM | Health |
+| **115.6–204.5 mm/day** | Max 1-day precipitation (Rx1day) | IMD daily-rainfall categories: very heavy 115.6–204.4 (onset) to extremely heavy ≥ 204.5 (saturation) | External (IMD) | HIGH | Health, Industrial, Investment, Infrastructure, Life & Livelihood |
+| **250–500 mm/5 days** | Max 5-day precipitation (Rx5day) | Onset 250 (drainage-failure regime, ≈ 5× IMD heavy-rain floor); saturation 500 (regional flood-event regime, Kerala 2018 / Mumbai 2005). No external categorical band exists at 5-day scale | Self-derived | LOW | Agricultural, Industrial, Investment, Infrastructure, Asset (Hydropower), Life & Livelihood |
+| **30–90 days** | Consecutive dry days (CDD) | Onset 30 (IMD Agricultural Drought: four consecutive Drought Weeks ≈ 28 days); saturation 90 (¾ of JJAS monsoon; SPI severe-drought territory) | Self-derived (IMD-anchored onset) | MEDIUM | Industrial, Investment, Asset (Thermal), Asset (Hydropower) |
+| **60–120 days** | Consecutive dry days (CDD) | Onset 60 (IMD agro-met 4-week prolonged dry spell + ICAR-CRIDA rainfed-kharif critical-water-deficit); saturation 120 (full kharif-to-early-rabi system failure; NDMA framing) | Self-derived | MEDIUM | Life & Livelihood |
+| **6–18 days** | Warm spell duration (WSDI) | Onset 6 (WSDI minimum qualifying spell, past the ≈ 4-day added-mortality threshold); saturation 18 (multi-spell / season-dominant warm-spell regime) | Self-derived | LOW (Ag/Health), MEDIUM (Life & Livelihood) | Agricultural, Health, Life & Livelihood |
+| **15–60 days** | Extreme heat days (TX ≥ 35 °C) | Onset 15 (complete anthesis-window exposure + second window); saturation 60 (≈ 2 months damaging heat, season-dominant) | Self-derived | LOW | Agricultural |
+| **3–12 events / months** | SPI-3 drought events, SPI-3 max drought spell | Onset 3 (natural SPI < −1 baseline frequency / one SPI-3 window); saturation 12 (near-continuous drought / year-long sustained moderate drought) | Self-derived | LOW | Agricultural |
+| **10–30 days** | Cold nights (TN ≤ 10 °C) | Onset 10 (chilling-injury exposure for sensitive peninsular horticulture); saturation 30 (≈ 1 month sustained cold-night stress). **Peninsular default — over-applies in the northern wheat belt where cold nights are beneficial (vernalization)** | Self-derived | LOW | Agricultural |
+| **7–15 days** | Consecutive wet days (CWD) | Onset 7 (week of standing water spans mosquito aquatic cycle / waterlogging onset); saturation 15 (prolonged saturation). Local-hydrology dependent | Self-derived | LOW | Health |
+| **5–15 days/yr** | Heatwave spell days (HWFI) | Onset 5 (HWFI minimum qualifying spell); saturation 15 (high annual burden implying multiple qualifying spells) | Self-derived | LOW | Investment |
+| **— (no band)** | Extremely wet-day precip (R99p), SPI-3 moderate-drought months, R95p inter-annual variability (CV) | Regime/concentration/variability metrics with no defensible danger threshold; scored on absolute + change lenses only | — | — | Investment, Asset (Thermal), Asset (Hydropower) |
 
-\* Hydropower's `cdd_ge_60` rule reuses the same 30–90 day band as the Industrial/Thermal CDD rules; its slug threshold differs but the impact band is identical.
-
-**Zone-dependence caveat.** Several self-derived bands are calibrated to a national/plains or peninsular default and are known to mis-apply in specific agro-climatic zones — most notably the 10–30 day cold-night band (beneficial in the northern wheat belt) and the heat bands in non-plains terrain. Zone-specific refinement is tracked as deferred work (internal backlog BL-0020/BL-0021); the present bands are the documented Phase-1 defaults.
+**Zone-dependence caveat.** Several self-derived bands are calibrated to a national/plains or peninsular default and are known to mis-apply in specific agro-climatic zones — most notably the 10–30 day cold-night band (beneficial in the northern wheat belt) and the heat bands in non-plains terrain. Zone-specific refinement is tracked as deferred work; the present bands are the documented Phase-1 defaults.
 
 ---
 
