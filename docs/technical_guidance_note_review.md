@@ -255,6 +255,98 @@ What's missing or soft:
 
 ---
 
+## §1 Rewrite — working draft (PDF-informed)
+
+**Status:** WORKING DRAFT — iterate here; not applied to the note. Provisional ledger CHG-0150–0154 (reconcile against the 0145–0149 editorial batch before applying).
+
+**Why this exists.** The public outreach piece *"Why India's Climate Resilience Efforts Need an Analytics Boost"* (ChatGPT-authored, 8 pp; the project's motivation/announcement blog) assembles the evidence base and policy anchors that §1 currently *asserts* without support. This draft mines that PDF for **evidence, policy anchoring, landscape positioning, and scope reconciliation** — **not** its tone, anecdotes, or numbers. The technical register is preserved throughout.
+
+### Guardrails applied
+- **No code references; by-label only; no slugs** (standing convention).
+- **§1.2 bullets preserved verbatim** — they are code-verified (see "Verified correct"); only surrounding prose is touched.
+- **No blog numbers imported.** 54 % water stress (Aqueduct — and Aqueduct was *dropped* from IRT), ND-GAIN 115th, CEEW 75 % / 3-in-4, Ahmedabad 1,100 deaths / 27 % / >45 °C — all secondary, unverified; the Ahmedabad ">45 °C/27 %" additionally collides with the heat-threshold findings (F16/F18). PDF sources are *pointers to chase*, not quotable facts.
+- **Scientific precision on downscaling.** The draft does **not** claim statistical (BCSD) downscaling "fixes" monsoon dynamics — it credits downscaling for resolution + bias-correction to an Indian observational reference, and routes residual parent-GCM monsoon uncertainty through the ensemble/scenario spread. (A technical reader would catch an over-claim here.)
+- This draft folds in F14 (already applied as CHG-0143/0144 → line 38 softened, §1.4 present); it does not undo those.
+
+### Consistency risks the PDF exposes (must-resolve, independent of the rewrite)
+1. **Cyclones.** PDF lists cyclones as a hazard; §1.1's hazard list has none. Draft adds an explicit "tropical-cyclone / coastal-storm hazards not yet represented" to §1.3 out-of-scope.
+2. **Exposure / vulnerability / "composite resilience index."** PDF repeatedly promises the full triad + a composite *resilience* index; the note delivers a hazard-*pressure* score with exposure/vulnerability out of scope. Draft adds a half-sentence in the opener and §1.3 scoping this note to the hazard-pressure layer of the broader IRT vision — inoculating the note against the blog's wider promise.
+3. **No blog numbers** (see guardrails).
+
+### Open iteration questions (resolve as we iterate)
+- **Q1 — Landscape citations.** The §1.1 landscape paragraph names ND-GAIN, WRI Aqueduct / India Water Tool, DST NCVA, CEEW Climate Risk Atlas without inline references. Decide: (a) add proper references, (b) soften to unnamed categories ("global readiness indices, single-risk water tools, national vulnerability assessments"), or (c) drop the paragraph. Aqueduct stays *external landscape only* — never implying IRT uses it.
+- **Q2 — Policy-anchor depth.** How hard to lean on the 2019 MoEFCC revised SAPCC guidelines? Currently one sentence in the opener + one clause in §1.2. More? A reference?
+- **Q3 — §1.1 length.** The draft adds a monsoon-resolution paragraph and a landscape paragraph; §1.1 grows ~2×. Acceptable, or compress?
+- **Q4 — CHG numbering.** Reconcile CHG-0150–0154 against the 0145–0149 editorial batch before applying.
+
+### Sourcing map (each addition → PDF origin)
+| Addition | PDF origin | Defensibility note |
+|---|---|---|
+| Opener: SAPCC critique + "some had no forward projections" + monsoon-resolution + 2019 MoEFCC guidelines | p.1 (CSE review), p.4 (2019 revised SAPCC guidelines) | Converts bare "coarse/aggregated" assertion into the documented national critique; ties IRT to current guidance |
+| Opener closer: scope-to-hazard-layer | reconciles blog full-platform promise (p.6) | Inoculates against the wider promise up front |
+| §1.1 monsoon ¶ (resolution vs fidelity split) | p.1 ("global models don't capture monsoon dynamics") | Credits downscaling for resolution/bias only; residual → ensemble. No over-claim |
+| §1.1 landscape ¶ (ND-GAIN / Aqueduct / DST / CEEW) | p.5–6 | Neutral, complementary-not-competing; reinforces hazard ≠ risk; no numbers |
+| §1.2 line-38 clause: "…which current national guidance now asks states to reach" | 2019 MoEFCC guidelines | Small factual strengthening of the (post-F14a) capability statement; still non-comparative |
+| §1.3 out-of-scope: cyclones; hazard-of-triad framing; composite-resilience reconciliation | p.1/p.6 cyclones; p.2 hazard/exposure/vuln; p.6 composite index | Resolves all three consistency risks |
+| §1.4: "the gap analytics was asked to fill" + triad restatement | p.4 mainstreaming | Ties misuse guard to motivation without anecdotes |
+
+### Proposed §1 (full draft text)
+
+```markdown
+## 1. Introduction and Framing
+
+Climate adaptation in India is planned and financed at the subnational level — by states, districts, and increasingly by blocks — yet the climate-projection products that usually inform those decisions are global, spatially coarse, and aggregated across hazards. Subnational climate strategies have been criticised on exactly this point: they have leaned on broad, one-size-fits-all vulnerability assessments, some were prepared without explicit forward climate projections at all, and many relied on coarse global models that resolve India's monsoon regimes poorly. National guidance now asks for better — the 2019 revision of the State Action Plan on Climate Change guidelines explicitly calls for updated, higher-resolution projections, systematic risk and vulnerability screening, and the mainstreaming of climate risk into sectoral development planning.
+
+The India Resilience Tool (IRT) is built to close the resolution-and-specificity half of that gap: it turns downscaled CMIP6 projections into district- and block-level, multi-hazard climate **hazard-pressure** scores that a planner can read at the administrative unit they actually govern. This note documents that layer end to end — data provenance, downscaling, grid-first computation, individual climate-index definitions, and the assembly of those indices into thematic and sectoral bundles and a single composite score. It is deliberately scoped to the hazard-pressure layer; exposure, vulnerability, and the composite resilience information that the broader IRT platform envisions are out of scope here (→ §1.3).
+
+### 1.1 The subnational climate-planning problem
+
+India spans a subcontinent of climatic regimes — the arid northwest, the monsoon core, the Himalayan north, the peninsular plateau, and long eastern and western coastlines. A single national figure, or a value read off a coarse global grid, therefore tells a district little about the hazard it specifically faces. Two limitations of the usual products compound this. First, **spatial resolution**: a global grid cell spans many districts and cannot represent intra-state contrast — one district in drought while its neighbour floods is invisible at that scale. Second, **regional fidelity**: global models represent the Indian summer monsoon — the dominant control on rainfall and, through it, on drought and flood hazard — with substantial and model-dependent error. Statistical downscaling (→ §3) addresses the first directly and the second only partially: it refines resolution and bias-corrects against an Indian observational reference, but it inherits the parent models' monsoon behaviour, so the residual uncertainty is carried explicitly through the multi-model ensemble and the two emissions scenarios rather than assumed away.
+
+The relevant hazards are also multiple and co-occurring: extreme daytime and night-time heat, humid heat, meteorological drought, extreme rainfall and flash flooding, winter cold, and riverine flooding, each with its own seasonality and geography. Adaptation decisions against these hazards are made for multi-decade horizons under genuine scenario and model uncertainty, which means planners need projections that are (a) resolved to the administrative units they manage, (b) available for more than one emissions future, and (c) available for more than one time horizon. IRT is organised around exactly those three needs.
+
+Several existing efforts map climate risk in or over India, each at a particular scale or scope: global readiness-and-vulnerability indices (e.g. ND-GAIN) operate at country resolution; single-risk tools (e.g. the WRI Aqueduct water-risk layers and the India Water Tool) focus on water stress; and national assessments — the Department of Science and Technology's district-level climate vulnerability assessment and the Council on Energy, Environment and Water's Climate Risk Atlas — map exposure and socio-economic vulnerability at district scale. IRT is complementary rather than competing: it contributes a multi-hazard, downscaled, per-period reading of the climate **hazard pressure** itself, at district and block level, intended to sit alongside the exposure and vulnerability layers those other efforts provide.
+
+### 1.2 What the tool provides
+
+The tool's design choices, stated plainly:
+
+- **Spatial resolution.** Scores are produced at **district (ADM2)** and **block (ADM3)** level, computed *grid-first* from a 0.25° (~25 km) downscaled grid and then area-aggregated to administrative polygons (→ §3, §4).
+- **Climate inputs.** Projections come from **NASA-NEX GDDP-CMIP6**, a statistically downscaled, bias-corrected product over a multi-model CMIP6 ensemble (→ §2.1, §2.3).
+- **Scenarios and horizons.** Two emissions pathways — **SSP2-4.5** and **SSP5-8.5** — across multiple future periods (2020–2040 through 2060–2080), measured against a **1990–2010** historical baseline (→ §2.2).
+- **Hazards and indices.** A library of standard (ETCCDI, SPI) and India-context climate indices spanning heat, humid heat, cold, drought, and extreme rainfall, plus a static riverine-flood layer from global flood-hazard data (→ §5).
+- **Aggregation.** Indices are normalized and combined into **six thematic hazard bundles** and **eight sectoral hazard-pressure bundles**, each emitting a single 0–100 *higher-is-worse* composite (→ §6, §7, §8).
+
+IRT's contribution is to operate at the administrative resolution — district (ADM2) and block (ADM3) — at which Indian adaptation is actually planned and which current national guidance now asks states to reach, using India-context indices and thresholds and explicit per-hazard decomposition rather than a single aggregate index value.
+
+### 1.3 Scope of this note and how to read it
+
+**In scope:** data provenance (§2), the downscaling context (§3), grid-first computation and spatial/temporal aggregation (§4), individual metric definitions (§5), thematic bundle construction (§6), sectoral bundle construction (§7), and the composite output (§8), with a complete metric reference and impact-band catalogue in the appendices.
+
+**Out of scope:** the web dashboard and its UI/UX; **exposure** layers (population, land use, built-up area); groundwater and other hydrological-context layers; **vulnerability / adaptive-capacity** components; and tropical-cyclone and coastal-storm hazards, which are not yet represented. In the standard hazard × exposure × vulnerability decomposition, IRT supplies the **hazard** term; because exposure and vulnerability are excluded, the scores in this note are climate **hazard-pressure** indices, not full risk scores in the IPCC sense — the word "Risk" in a bundle name denotes *hazard pressure relevant to that sector*, and the full caveat is set out in §7.1 and §8.1. The broader IRT platform is envisioned to bring hazard, exposure, and vulnerability together into composite resilience information; this note documents the hazard-pressure layer only.
+
+**Section roadmap:**
+
+| Section | What it covers |
+|---|---|
+| §2 Climate Data Sources | CMIP6 ensemble and scenarios, temporal coverage, the NASA-NEX downscaled product, and the JRC flood data |
+| §3 Downscaling | What statistical downscaling is, the BCSD method NASA-NEX uses, grid resolution, and reproducibility |
+| §4 Grid-First Compute | Why indices are computed per grid cell first, then area-aggregated to districts/blocks, with period and ensemble handling |
+| §5 Metric Definitions | Definition, units, baseline, and derivation of each temperature, precipitation, drought, humid-heat, and flood index |
+| §6 Thematic Bundles | The six hazard-family bundles: per-period normalization and fixed-weight compositing |
+| §7 Sectoral Bundles | The eight sector hazard-pressure bundles: the lens-based blended-rule framework and impact bands |
+| §8 Composite Score and Output | What the 0–100 composite is and is not, and how to read it across scenario, period, and spatial level |
+| Appendix A / B | Complete metric reference; sectoral impact-band derivations |
+
+### 1.4 How to use these scores — and how not to
+
+These bundles are decision-support inputs for **relative prioritisation**: comparing districts or blocks against one another, or one scenario/period against another, to flag where a given hazard pressure is high or rising. They are designed to *screen and rank* — to direct attention and further assessment — which is precisely the gap that subnational planning guidance has asked analytics to fill.
+
+They are **not** measurements of realised risk or impact. A "Health Risk 80" denotes high hazard pressure on the health sector at that location — not that 80 % of people will be harmed, nor a probability of any specific outcome. Because exposure and vulnerability are out of scope (→ §1.3), and because IRT supplies only the hazard term of the hazard × exposure × vulnerability decomposition, a high score does not by itself establish that people or assets are actually at risk; it must be combined with exposure and vulnerability information before it can support resource-allocation or investment decisions. Scores are also relative within each period's spatial normalization, so absolute values should not be read as physical quantities or compared across unrelated indices (→ §8.1).
+```
+
+---
+
 ## Suggested fix order
 
 1. **F1, F2** (period conventions + `Current`) — they touch §1/§2/§4/§7/§8 and affect interpretation; settle the convention first.
