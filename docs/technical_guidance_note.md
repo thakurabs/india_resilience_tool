@@ -146,7 +146,7 @@ The following variables were obtained from the NEX-GDDP-CMIP6 product:
 
 Temperature variables are converted from kelvin to degrees Celsius (°C) and precipitation is converted from kg m⁻² s⁻¹ to mm day⁻¹ (× 86400) during pre-processing (→ §4.1).
 
-**Spatial resolution and domain:** NEX-GDDP-CMIP6 is provided at **0.25° × 0.25°** horizontal resolution (~25 km at the equator). All data are clipped to the India domain: **68.0°E–97.5°E, 5.0°N–45.0°N**.
+**Spatial resolution and domain:** NEX-GDDP-CMIP6 is provided at **0.25° × 0.25°** horizontal resolution (~25 km at the equator). All data are clipped to the India domain: **68.0°E–97.5°E, 5.0°N–45.0°N** (grid dimensions and resolution implications for district vs block analysis are detailed in §3.3).
 
 **Source:** Thrasher et al. (2022) — full citation in References.
 
@@ -611,22 +611,11 @@ The Riverine Flood composite is fully determined by the single JRC severity inde
 
 The eight **sectoral bundles** answer a different question from the thematic bundles of §6. A thematic bundle co-normalizes the metrics of *one hazard family* and averages them. A sectoral bundle instead scores a sector's exposure to a **curated set of hazard pressures drawn from across families**, and evaluates each pressure through a *rule* that fuses three readings of the same metric: its absolute magnitude, its projected change versus the historical baseline, and — where a defensible danger threshold exists — its position within a fixed harm **impact band**. The output is still a 0–100 *higher-is-worse* score per geography, scenario, and period, but the construction is a blended-rule pipeline rather than a weighted average of co-normalized metrics.
 
-> **Scope caveat (Phase 1).** These are **sector climate hazard-pressure** scores. They characterise the climatic *hazard* a sector faces; they do **not** yet incorporate exposure, vulnerability, or adaptive capacity, and are therefore not full sectoral risk scores in the technical sense. This boundary is intrinsic to the current compute path.
+> **Scope caveat.** These are **sector climate hazard-pressure** scores: they characterise the climatic *hazard* a sector faces and do not incorporate exposure, vulnerability, or adaptive capacity, so they are not full sectoral risk scores in the IPCC sense (→ §1, §8). The word "Risk" in a bundle name denotes *hazard pressure relevant to that sector*.
 
 ### 7.1 Sector Hazard-Pressure Framework
 
-The eight sectoral bundles and their rule counts:
-
-| Bundle | Rules |
-|---|---|
-| Agricultural Risk | 7 |
-| Health Risk | 5 |
-| Industrial Risk | 4 |
-| Investment / Financial Risk | 5 |
-| Infrastructure Risk | 3 |
-| Asset Risk (Thermal Power Plants) | 3 |
-| Asset Risk (Hydropower Plants) | 3 |
-| Life & Livelihood Loss Risk | 4 |
+The eight sectoral bundles are **Agricultural Risk**, **Health Risk**, **Industrial Risk**, **Investment / Financial Risk**, **Infrastructure Risk**, **Asset Risk (Thermal Power Plants)**, **Asset Risk (Hydropower Plants)**, and **Life & Livelihood Loss Risk**. Each bundle's full rule set — source metrics, rule weights, lens archetypes, and impact bands — is given in §7.5.
 
 Every bundle is an **ordered set of rules**; each rule binds exactly one source metric (§5) to a scoring recipe and an explicit *rule weight*. All eight bundles use explicit, normalized rule weights that sum to 1.0 (§7.5). All are computed at both district and block level, for scenarios **SSP2-4.5** and **SSP5-8.5**, over the future periods **2020–2040, 2040–2060, 2060–2080**; the historical 1990–2010 window enters only as the change-lens baseline, not as a published period.
 
@@ -675,10 +664,6 @@ so a rule whose change lens is unavailable is scored on absolute (+impact) alone
 $$\text{Composite}_b = \frac{\sum_{r\in R_b} W_r\, S_r}{\sum_{r\in R_b} W_r}, \qquad f_b = \!\!\sum_{r:\,S_r\text{ finite}}\!\! W_r$$
 
 where $f_b$ is the **available-rule-weight fraction** (the share of total rule weight that resolved to a valid score). A composite is published only if $f_b \ge 0.70$ **and** at least one rule is present; otherwise it is set to NaN. The 0.70 floor prevents a sector score from being asserted when nearly a third of its weighted evidence base is missing — a stricter posture than the thematic "≥ 1 component" gate of §6.3, appropriate because sectoral rules are fewer and individually more consequential. Both $f_b$ and the available-rule count are persisted with every composite.
-
-> A second rule type — a **trend** rule, scoring an adverse yearly slope within the future window — is specified but unused, and **no shipped bundle uses it**; every current rule is of the blended type above. It is noted here only for completeness and is excluded from the per-bundle tables.
-
-**Inputs and two standing caveats.** Each metric is reduced to one value per geography from the 24-model ensemble using the **ensemble mean** (the same ensemble-mean statistic used for the thematic scores and the displayed statistic). The multi-model **median** is the methodologically preferred central estimate — robust to a single divergent model, per IPCC practice — but adopting it is a tool-wide change pending its own approval and tests. Separately, the change lens is only as trustworthy as its baseline: it must read the reconciled **1990–2010** historical window, the same period used for the displayed historical-delta columns. The residual code-gap in which some indices still calibrate on 1981–2010 (§5.1) applies to the change lens too; it is flagged here, not silent. Ensemble spread (std, p05/p95, model count) is deliberately **not** folded into the 0–100 score — it is surfaced separately as a confidence annotation, so a "70 with wide model disagreement" and a "70 with tight agreement" remain distinguishable.
 
 ### 7.3 Reading the Score: What Each Lens Lets You Compare
 
