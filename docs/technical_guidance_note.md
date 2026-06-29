@@ -402,7 +402,7 @@ Where §5.2 captures rainfall excess, drought is its slow, accumulated counterpa
 
 **Derivation**
 
-Monthly precipitation totals are accumulated over rolling $k$-month windows (where $k = 3$, $6$, or $12$). The resulting monthly series for each cell is fitted to a two-parameter **Gamma distribution** over the calibration period 1990–2010 using the Method of Moments estimator:
+For each grid cell, the daily precipitation field (`pr`, converted to mm) is first summed to calendar-month totals — a month is retained only if at least 90% of its days carry finite values, otherwise it is set missing — yielding a contiguous monthly precipitation series trimmed to whole calendar (January–December) years. This monthly series is the input to the **Standardised Precipitation Index** computation, which IRT performs with the open-source `climate_indices` Python package (Adams 2021). Monthly totals are accumulated over rolling $k$-month windows (where $k = 3$, $6$, or $12$), and the resulting series for each cell is fitted to a two-parameter **Gamma distribution** over the calibration period 1990–2010 using the Method of Moments estimator:
 
 $$f(x;\, \alpha, \beta) = \frac{x^{\alpha-1}\, e^{-x/\beta}}{\beta^\alpha\, \Gamma(\alpha)}, \quad x > 0$$
 
@@ -414,14 +414,14 @@ SPI is obtained by mapping this CDF through the standard normal quantile functio
 
 $$\text{SPI} = \Phi^{-1}\!\bigl(H(x)\bigr)$$
 
-The Gamma parameters ($\alpha$, $\beta$, $q$) are estimated once from the 1990–2010 historical run and applied unchanged to SSP future data, preserving cross-period comparability of SPI values. The implementation uses the open-source `climate-indices` package (Adams 2021) with Method of Moments fitting.
+The Gamma parameters ($\alpha$, $\beta$, $q$) are estimated once from the 1990–2010 historical run and applied unchanged to SSP future data, preserving cross-period comparability of SPI values.
 
 **Bundle metrics**
 
 The monthly SPI series is not used directly in composites. Two annual aggregation statistics are derived per cell, per year:
 
-- **Count of drought events** (`spi{k}_count_events_lt_minus1`): number of contiguous episodes per year during which SPI remains continuously below −1, averaged over the 20-year analysis period. SPI < −1 corresponds to the 15.9th percentile of the standard normal — conditions that occur in approximately one year in six under the baseline climatology.
-- **Maximum drought spell** (`spi{k}_max_spell_lt_minus1`): longest consecutive-month period per year during which SPI is continuously below −1, expressed as the period maximum over the analysis window (not the mean).
+- **Count of drought events**: number of contiguous episodes per year during which SPI remains continuously below −1, averaged over the analysis period. SPI < −1 corresponds to the 15.9th percentile of the standard normal — conditions that occur in approximately one year in six under the baseline climatology.
+- **Maximum drought spell**: longest consecutive-month period per year during which SPI is continuously below −1, expressed as the period maximum over the analysis window (not the mean).
 
 These per-cell annual metric fields are then area-weighted and aggregated to administrative units following the procedure in §4.2.
 
@@ -995,7 +995,7 @@ Anandhi, A., Frei, A., Pierson, D. C., Schneiderman, E. M., Zion, M. S., Lounsbu
 
 Baugh, C., Colonese, J., D'Angelo, C., Dottori, F., Neal, J., Prudhomme, C., and Salamon, P. (2024). Global river flood hazard maps (Version 2.1) [Dataset]. European Commission, Joint Research Centre (JRC). https://doi.org/10.2905/JRC.VD32YWG
 
-Department of Science and Technology (2021). *Climate Vulnerability Assessment for Adaptation Planning in India Using a Common Framework.* DST, Government of India — IIT Mandi, IIT Guwahati and IISc Bengaluru.
+Department of Science and Technology (DST) (2021). *Climate Vulnerability Assessment for Adaptation Planning in India Using a Common Framework.* DST, Government of India — IIT Mandi, IIT Guwahati and IISc Bengaluru.
 
 Dubash, N. K., and Jogesh, A. (2014). *From Margins to Mainstream? State Climate Change Planning in India.* Centre for Policy Research, New Delhi.
 
@@ -1021,7 +1021,7 @@ OECD and European Commission, Joint Research Centre (2008). *Handbook on Constru
 
 Raymond, C., Matthews, T., and Horton, R. M. (2020). The emergence of heat and humidity too severe for human tolerance. *Science Advances*, 6(19), eaaw1838. https://doi.org/10.1126/sciadv.aaw1838
 
-Reserve Bank of India (2023). *Report on Currency and Finance 2022–23: Towards a Greener Cleaner India.* RBI, Mumbai.
+Reserve Bank of India (RBI) (2023). *Report on Currency and Finance 2022–23: Towards a Greener Cleaner India.* RBI, Mumbai.
 
 Santer, B. D., Mears, C., Doutriaux, C., Caldwell, P., Gleckler, P. J., Wigley, T. M. L., Solomon, S., Gillett, N. P., Ivanova, D., Karl, T. R., Lanzante, J. R., Meehl, G. A., Stott, P. A., Taylor, K. E., Thorne, P. W., McCarthy, M. P., and Wehner, M. F. (2011). Separating signal and noise in atmospheric temperature changes: The importance of timescale. *Journal of Geophysical Research: Atmospheres*, 116, D22105. https://doi.org/10.1029/2011JD016263
 
