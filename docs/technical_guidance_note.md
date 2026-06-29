@@ -1014,5 +1014,63 @@ The distinct impact bands used by the §7 rules, deduplicated across the bundles
 
 ---
 
-*Document last updated: 2026-06-24*  
+## References
+
+Anandhi, A., Frei, A., Pierson, D. C., Schneiderman, E. M., Zion, M. S., Lounsbury, D., and Matonse, A. H. (2011). Examination of change factor methodologies for climate change impact assessment. *Water Resources Research*, 47, W03501. https://doi.org/10.1029/2010WR009104
+
+Baugh, C., Colonese, J., D'Angelo, C., Dottori, F., Neal, J., Prudhomme, C., and Salamon, P. (2024). Global river flood hazard maps (Version 2.1) [Dataset]. European Commission, Joint Research Centre (JRC). https://doi.org/10.2905/JRC.VD32YWG
+
+Department of Science and Technology (2021). *Climate Vulnerability Assessment for Adaptation Planning in India Using a Common Framework.* DST, Government of India — IIT Mandi, IIT Guwahati and IISc Bengaluru.
+
+Dubash, N. K., and Jogesh, A. (2014). *From Margins to Mainstream? State Climate Change Planning in India.* Centre for Policy Research, New Delhi.
+
+Gasparrini, A., Guo, Y., Hashizume, M., Lavigne, E., Zanobetti, A., Schwartz, J., et al. (2015). Mortality risk attributable to high and low ambient temperature: a multicountry observational study. *The Lancet*, 386(9991), 369–375. https://doi.org/10.1016/S0140-6736(14)62114-0
+
+Government of India (2008). *National Action Plan on Climate Change.* Prime Minister's Council on Climate Change, New Delhi.
+
+Government of India, Ministry of Finance (2018). *Economic Survey 2017–18, Volume I*, Chapter 6: "Climate, Climate Change, and Agriculture: Coping with Climate Change." Department of Economic Affairs, New Delhi.
+
+Hawkins, E., and Sutton, R. (2012). Time of emergence of climate signals. *Geophysical Research Letters*, 39, L01702. https://doi.org/10.1029/2011GL050087
+
+IPCC (2022). *Summary for Policymakers.* In *Climate Change 2022: Impacts, Adaptation and Vulnerability* (Working Group II contribution to the Sixth Assessment Report). Cambridge University Press.
+
+Jain, S., Salunke, P., Mishra, S. K., Sahany, S., and Choudhary, N. (2019). Advantage of NEX-GDDP over CMIP5 and CORDEX data: Indian Summer Monsoon. *Atmospheric Research*, 228, 152–160. https://doi.org/10.1016/j.atmosres.2019.05.026
+
+Konda, G., and Vissa, N. K. (2023). Evaluation of CMIP6 models for simulations of surplus/deficit summer monsoon conditions over India. *Climate Dynamics*, 60, 1023–1042. https://doi.org/10.1007/s00382-022-06367-1
+
+Maurer, E. P., Hidalgo, H. G., Das, T., Dettinger, M. D., and Cayan, D. R. (2010). The utility of daily large-scale climate data in the assessment of climate change impacts on daily streamflow in California. *Hydrology and Earth System Sciences*, 14(6), 1125–1138. https://doi.org/10.5194/hess-14-1125-2010
+
+McKee, T. B., Doesken, N. J., and Kleist, J. (1993). The relationship of drought frequency and duration to time scales. *Proceedings of the 8th Conference on Applied Climatology*, American Meteorological Society, Boston, 179–184.
+
+Monocongo (2021). *climate_indices: Reference implementations of commonly used climate indices in Python.* https://github.com/monocongo/climate_indices
+
+OECD and European Commission, Joint Research Centre (2008). *Handbook on Constructing Composite Indicators: Methodology and User Guide.* OECD Publishing, Paris. https://doi.org/10.1787/9789264043466-en
+
+Raymond, C., Matthews, T., and Horton, R. M. (2020). The emergence of heat and humidity too severe for human tolerance. *Science Advances*, 6(19), eaaw1838. https://doi.org/10.1126/sciadv.aaw1838
+
+Reserve Bank of India (2023). *Report on Currency and Finance 2022–23: Towards a Greener Cleaner India.* RBI, Mumbai.
+
+Santer, B. D., Mears, C., Doutriaux, C., Caldwell, P., Gleckler, P. J., Wigley, T. M. L., Solomon, S., Gillett, N. P., Ivanova, D., Karl, T. R., Lanzante, J. R., Meehl, G. A., Stott, P. A., Taylor, K. E., Thorne, P. W., McCarthy, M. P., and Wehner, M. F. (2011). Separating signal and noise in atmospheric temperature changes: The importance of timescale. *Journal of Geophysical Research: Atmospheres*, 116, D22105. https://doi.org/10.1029/2011JD016263
+
+Sheffield, J., Goteti, G., and Wood, E. F. (2006). Development of a 50-year high-resolution global dataset of meteorological forcings for land surface modeling. *Journal of Climate*, 19(13), 3088–3111.
+
+Sherwood, S. C., and Huber, M. (2010). An adaptability limit to climate change due to heat stress. *Proceedings of the National Academy of Sciences*, 107(21), 9552–9555. https://doi.org/10.1073/pnas.0913352107
+
+Singh, C., Deshpande, T., and Basu, R. (2017). How do we assess vulnerability to climate change in India? A systematic review of literature. *Regional Environmental Change*, 17(2), 527–538. https://doi.org/10.1007/s10113-016-1043-y
+
+Stull, R. (2011). Wet-bulb temperature from relative humidity and air temperature. *Journal of Applied Meteorology and Climatology*, 50(11), 2267–2269. https://doi.org/10.1175/JAMC-D-11-0143.1
+
+Tebaldi, C., and Knutti, R. (2007). The use of the multi-model ensemble in probabilistic climate projections. *Philosophical Transactions of the Royal Society A*, 365, 2053–2075. https://doi.org/10.1098/rsta.2007.2076
+
+Thrasher, B., Wang, W., Michaelis, A., Melton, F., Lee, T., and Nemani, R. (2022). NASA Global Daily Downscaled Projections, CMIP6. *Scientific Data*, 9, 262. https://doi.org/10.1038/s41597-022-01393-4
+
+Vecellio, D. J., Wolf, S. T., Cottle, R. M., and Kenney, W. L. (2022). Evaluating the 35°C wet-bulb temperature adaptability threshold for young, healthy subjects (PSU HEAT Project). *Journal of Applied Physiology*, 132(2), 340–345. https://doi.org/10.1152/japplphysiol.00738.2021
+
+Wood, A. W., Maurer, E. P., Kumar, A., and Lettenmaier, D. P. (2002). Long-range experimental hydrologic forecasting for the eastern United States. *Journal of Geophysical Research: Atmospheres*, 107(D20), 4429. https://doi.org/10.1029/2001JD000659
+
+Zhang, X., Alexander, L., Hegerl, G. C., Jones, P., Klein Tank, A., Peterson, T. C., Trewin, B., and Zwiers, F. W. (2011). Indices for monitoring changes in extremes based on daily temperature and precipitation data. *WIREs Climate Change*, 2(6), 851–870. https://doi.org/10.1002/wcc.147
+
+---
+
+*Document last updated: 2026-06-29*  
 *Maintained by: Abu Bakar Siddiqui Thakur*
