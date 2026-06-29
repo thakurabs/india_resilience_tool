@@ -148,7 +148,7 @@ Temperature variables are converted from kelvin to degrees Celsius (°C) and pre
 
 **Spatial resolution and domain:** NEX-GDDP-CMIP6 is provided at **0.25° × 0.25°** horizontal resolution (~25 km at the equator). All data are clipped to the India domain: **68.0°E–97.5°E, 5.0°N–45.0°N**.
 
-**Citation:** Thrasher, B., Wang, W., Michaelis, A., Melton, F., Lee, T., and Nemani, R. (2022). NASA Global Daily Downscaled Projections, CMIP6. *Scientific Data*, 9, 262. https://doi.org/10.1038/s41597-022-01393-4
+**Source:** Thrasher et al. (2022) — full citation in References.
 
 ### 2.4 JRC Global Flood Data
 
@@ -156,7 +156,7 @@ Riverine flood metrics (→ §5.5) are derived from the **CEMS-GloFAS Global Riv
 
 Because this is a static, observationally-derived snapshot product rather than a future climate projection, the Riverine Flood bundle carries a "Snapshot" scenario label in the tool and is not available under SSP2-4.5 or SSP5-8.5 (→ §6.1).
 
-**Citation:** Baugh, C., Colonese, J., D'Angelo, C., Dottori, F., Neal, J., Prudhomme, C., and Salamon, P. (2024). Global river flood hazard maps (Version 2.1) [Dataset]. European Commission, Joint Research Centre (JRC). https://doi.org/10.2905/JRC.VD32YWG
+**Source:** Baugh et al. (2024) — full citation in References.
 
 ---
 
@@ -212,13 +212,7 @@ Spatial aggregation from the 0.25° grid to administrative units is described in
 
 **Dataset access and version**
 
-NEX-GDDP-CMIP6 is publicly available via the NASA Center for Climate Simulation (https://www.nccs.nasa.gov/services/data-collections/land-based-products/nex-gddp-cmip6). The IRT pipeline ingests the product as released (all 24 GCMs, variant r1i1p1f1, both SSPs). The authoritative dataset description and processing documentation is:
-
-> Thrasher, B., Wang, W., Michaelis, A., Melton, F., Lee, T., and Nemani, R. (2022). NASA Global Daily Downscaled Projections, CMIP6. *Scientific Data*, 9, 262. https://doi.org/10.1038/s41597-022-01393-4
-
-> Wood, A. W., Maurer, E. P., Kumar, A., and Lettenmaier, D. P. (2002). Long-range experimental hydrologic forecasting for the eastern United States. *Journal of Geophysical Research: Atmospheres*, 107(D20), 4429. https://doi.org/10.1029/2001JD000659
-
-> Sheffield, J., Goteti, G., and Wood, E. F. (2006). Development of a 50-year high-resolution global dataset of meteorological forcings for land surface modeling. *Journal of Climate*, 19(13), 3088–3111.
+NEX-GDDP-CMIP6 is publicly available via the NASA Center for Climate Simulation (https://www.nccs.nasa.gov/services/data-collections/land-based-products/nex-gddp-cmip6). The IRT pipeline ingests the product as released (all 24 GCMs, variant r1i1p1f1, both SSPs). The authoritative dataset description and processing documentation are Thrasher et al. (2022) for the product itself, with Wood et al. (2002) and Sheffield et al. (2006) documenting the underlying BCSD method and reference forcing dataset respectively (full citations in References).
 
 **Internal validation: Telangana domain**
 
@@ -233,8 +227,6 @@ This arises because BCSD applies monthly-scale quantile mapping and then bilinea
 The extreme-rainfall underestimation is therefore a structural limitation of the GCM ensemble, not a downscaling artefact. Users interpreting the Extreme Rainfall | Flash Flood bundle (→ §5.2) should note that absolute metric values likely understate observed extreme rainfall intensities.
 
 *Comparative context*: Jain et al. (2019) evaluated the NEX-GDDP (CMIP5-era) product against IMD gridded observations over the Indian subcontinent for the summer monsoon season (1975–2005), benchmarking it against multi-model means from 28 raw CMIP5 models and 10 CORDEX regional models. NEX-GDDP surpassed both CMIP5 and CORDEX in reproducing seasonal mean temperature and precipitation patterns (spatial pattern correlation ~0.8; RMSE ~4.25°C for temperature and ~2.48 mm day⁻¹ for precipitation), inter-annual variability, and annual cycle characteristics. The simulation of extremes was also found to be more realistic in NEX-GDDP relative to raw CMIP5 and CORDEX output, with reduced inter-model spread — supporting the use of the NEX-GDDP product for climate change impact assessment. Although these findings pertain to the CMIP5-era version of NEX-GDDP, the BCSD methodology is common to both the CMIP5 and CMIP6 versions; the results are therefore informative about the relative improvement that the downscaling procedure confers over raw GCM output.
-
-> Jain, S., Salunke, P., Mishra, S. K., Sahany, S., and Choudhary, N. (2019). Advantage of NEX-GDDP over CMIP5 and CORDEX data: Indian Summer Monsoon. *Atmospheric Research*, 228, 152–160. https://doi.org/10.1016/j.atmosres.2019.05.026
 
 > **[FIGURES TO INSERT]** The following validation figures from the notebook analysis will be incorporated here to provide visual evidence of the bias characterisation. Until they are inserted, the specific quantitative values cited in this subsection (ERA5 and model domain-mean temperatures, the Adilabad Rx1day comparison, and the per-model resolutions) should be read as **provisional** pending the supporting figures. Source notebooks: `notebooks/era5_vs_cmip_clean_tel_1980_1985.ipynb` and `notebooks/rainfall_metrics_imd_cmip6_tel_box_1980_1985.ipynb`.
 > 1. Taylor diagram — near-surface temperature (tas) vs ERA5, Telangana 1980–1985
@@ -307,12 +299,6 @@ For each metric, each GCM, and each scenario, the pipeline applies a three-stage
 This three-stage chain is designed to separate climate signal from noise at two distinct scales. Averaging annual index values over each multi-decadal window (stage 2) filters out interannual variability driven by modes such as ENSO and the Indian Ocean Dipole, dampening the imprint of any particular sequence of years and bringing out the underlying forced climate change signal. Santer et al. (2011) demonstrate that signal-to-noise ratios in *global-mean* atmospheric temperature trends are below 1 at 10-year timescales but exceed 3.9 at 32-year trends, and that at least 17 years of data are required to reliably distinguish the forced climate change signal from internal variability noise — a *trend-detection* timescale invoked here to motivate *period-mean* estimation. These detection results are derived for global-mean lower-tropospheric temperature, where internal variability is heavily averaged down; at the district and block scale interannual noise is proportionally larger and the time of emergence correspondingly later (§3.4), so multi-decadal averaging *dampens* — rather than fully isolates — the interannual variability in the local indices. Hawkins and Sutton (2012) formalise this as the *time of emergence* — the point at which the forced signal rises detectably above the background noise of natural variability — which multi-decadal period averaging is designed to approach.
 
 Averaging across 24 GCMs (stage 3) reduces sensitivity to the structural biases of any individual model; Tebaldi and Knutti (2007) provide the foundational treatment of this argument, showing that multi-model ensemble means systematically outperform individual model projections because model-specific errors arising from different structural choices are partially uncorrelated across the ensemble and therefore partially cancel in the mean. The two operations are applied in sequence — time-averaging first, then ensemble-averaging — so that each model's period mean contributes equally to the ensemble average regardless of its interannual variance.
-
-> Santer, B. D., Mears, C., Doutriaux, C., Caldwell, P., Gleckler, P. J., Wigley, T. M. L., Solomon, S., Gillett, N. P., Ivanova, D., Karl, T. R., Lanzante, J. R., Meehl, G. A., Stott, P. A., Taylor, K. E., Thorne, P. W., McCarthy, M. P., and Wehner, M. F. (2011). Separating signal and noise in atmospheric temperature changes: The importance of timescale. *Journal of Geophysical Research: Atmospheres*, 116, D22105. https://doi.org/10.1029/2011JD016263
-
-> Hawkins, E. and Sutton, R. (2012). Time of emergence of climate signals. *Geophysical Research Letters*, 39, L01702. https://doi.org/10.1029/2011GL050087
-
-> Tebaldi, C. and Knutti, R. (2007). The use of the multi-model ensemble in probabilistic climate projections. *Philosophical Transactions of the Royal Society A*, 365, 2053–2075. https://doi.org/10.1098/rsta.2007.2076
 
 **Analysis periods**
 
@@ -396,8 +382,6 @@ $$\text{hwa} = \max_{t \in s^*}\, x_t \quad ({}^\circ\text{C})$$
 
 This captures both the persistence and the intensity of the strongest annual heatwave event as a single value in absolute Celsius — not an anomaly relative to a threshold.
 
-> Zhang, X., Alexander, L., Hegerl, G. C., Jones, P., Klein Tank, A., Peterson, T. C., Trewin, B., and Zwiers, F. W. (2011). Indices for monitoring changes in extremes based on daily temperature and precipitation data. *WIREs Climate Change*, 2(6), 851–870. https://doi.org/10.1002/wcc.147
-
 ### 5.2 Precipitation and Extreme Rainfall Metrics
 
 The precipitation indices characterise rainfall intensity and accumulation. All six Extreme Rainfall | Flash Flood Risk bundle metrics are derived from the daily precipitation variable `pr` (converted from kg m⁻² s⁻¹ to mm day⁻¹). Four are canonical ETCCDI indices with no IRT-specific departures: **Rx1day** (annual maximum 1-day total), **Rx5day** (annual maximum 5-day running total), **R20mm** (count of days with precipitation ≥ 20 mm), and **CWD** (maximum consecutive wet days, where a wet day is any day with precipitation ≥ 1 mm). See Appendix A for parameter details.
@@ -430,7 +414,7 @@ SPI is obtained by mapping this CDF through the standard normal quantile functio
 
 $$\text{SPI} = \Phi^{-1}\!\bigl(H(x)\bigr)$$
 
-The Gamma parameters ($\alpha$, $\beta$, $q$) are estimated once from the 1990–2010 historical run and applied unchanged to SSP future data, preserving cross-period comparability of SPI values. The implementation uses the open-source `climate-indices` package (Monocongo 2021) with Method of Moments fitting.
+The Gamma parameters ($\alpha$, $\beta$, $q$) are estimated once from the 1990–2010 historical run and applied unchanged to SSP future data, preserving cross-period comparability of SPI values. The implementation uses the open-source `climate-indices` package (Adams 2021) with Method of Moments fitting.
 
 **Bundle metrics**
 
@@ -440,9 +424,6 @@ The monthly SPI series is not used directly in composites. Two annual aggregatio
 - **Maximum drought spell** (`spi{k}_max_spell_lt_minus1`): longest consecutive-month period per year during which SPI is continuously below −1, expressed as the period maximum over the analysis window (not the mean).
 
 These per-cell annual metric fields are then area-weighted and aggregated to administrative units following the procedure in §4.2.
-
-
-> McKee, T. B., Doesken, N. J., and Kleist, J. (1993). The relationship of drought frequency and duration to time scales. *Proceedings of the 8th Conference on Applied Climatology*, 17–22 January, Anaheim, California. American Meteorological Society, 179–183.
 
 ### 5.4 Wet-Bulb Temperature and Humid Heat Metrics
 
@@ -455,14 +436,6 @@ $T_{wb}$ is computed from daily near-surface air temperature ($T$ in °C, from `
 $$T_{wb} = T \cdot \arctan\!\bigl(0.151977\,\sqrt{RH + 8.313659}\,\bigr) + \arctan(T + RH) - \arctan(RH - 1.676331) + 0.00391838 \cdot RH^{1.5} \cdot \arctan(0.023101\,RH) - 4.686035$$
 
 This approximation has a mean absolute error below 0.3°C relative to the psychrometric wet-bulb across its validity range ($-20°\text{C} \leq T \leq 50°\text{C}$, $5\% \leq RH \leq 99\%$, excepting jointly low-humidity and cold conditions), covering the $0°\text{C}$–$50°\text{C}$ range of tropical and subtropical conditions in India. $T_{wb}$ is computed day-by-day from the daily `tas` and `hurs` fields before spatial aggregation, consistent with the grid-first architecture (→ §4.1). The summer season for the summer-mean wet-bulb metric is March–May (MAM), consistent with the summer temperature means in §5.1.
-
-> Stull, R. (2011). Wet-bulb temperature from relative humidity and air temperature. *Journal of Applied Meteorology and Climatology*, 50(11), 2267–2269. https://doi.org/10.1175/JAMC-D-11-0143.1
-
-> Sherwood, S. C., and Huber, M. (2010). An adaptability limit to climate change due to heat stress. *Proceedings of the National Academy of Sciences*, 107(21), 9552–9555. https://doi.org/10.1073/pnas.0913352107
-
-> Raymond, C., Matthews, T., and Horton, R. M. (2020). The emergence of heat and humidity too severe for human tolerance. *Science Advances*, 6(19), eaaw1838. https://doi.org/10.1126/sciadv.aaw1838
-
-> Vecellio, D. J., Wolf, S. T., Cottle, R. M., and Kenney, W. L. (2022). Evaluating the 35°C wet-bulb temperature adaptability threshold for young, healthy subjects (PSU HEAT Project). *Journal of Applied Physiology*, 132(2), 340–345. https://doi.org/10.1152/japplphysiol.00738.2021
 
 ### 5.5 Riverine Flood Metrics (JRC)
 
@@ -1016,6 +989,8 @@ The distinct impact bands used by the §7 rules, deduplicated across the bundles
 
 ## References
 
+Adams, J. (2021). *climate_indices: An open source Python library providing reference implementations of commonly used climate indices* [Computer software]. https://github.com/monocongo/climate_indices
+
 Anandhi, A., Frei, A., Pierson, D. C., Schneiderman, E. M., Zion, M. S., Lounsbury, D., and Matonse, A. H. (2011). Examination of change factor methodologies for climate change impact assessment. *Water Resources Research*, 47, W03501. https://doi.org/10.1029/2010WR009104
 
 Baugh, C., Colonese, J., D'Angelo, C., Dottori, F., Neal, J., Prudhomme, C., and Salamon, P. (2024). Global river flood hazard maps (Version 2.1) [Dataset]. European Commission, Joint Research Centre (JRC). https://doi.org/10.2905/JRC.VD32YWG
@@ -1040,9 +1015,7 @@ Konda, G., and Vissa, N. K. (2023). Evaluation of CMIP6 models for simulations o
 
 Maurer, E. P., Hidalgo, H. G., Das, T., Dettinger, M. D., and Cayan, D. R. (2010). The utility of daily large-scale climate data in the assessment of climate change impacts on daily streamflow in California. *Hydrology and Earth System Sciences*, 14(6), 1125–1138. https://doi.org/10.5194/hess-14-1125-2010
 
-McKee, T. B., Doesken, N. J., and Kleist, J. (1993). The relationship of drought frequency and duration to time scales. *Proceedings of the 8th Conference on Applied Climatology*, American Meteorological Society, Boston, 179–184.
-
-Monocongo (2021). *climate_indices: Reference implementations of commonly used climate indices in Python.* https://github.com/monocongo/climate_indices
+McKee, T. B., Doesken, N. J., and Kleist, J. (1993). The relationship of drought frequency and duration to time scales. *Proceedings of the 8th Conference on Applied Climatology*, 17–22 January, Anaheim, California. American Meteorological Society, 179–184.
 
 OECD and European Commission, Joint Research Centre (2008). *Handbook on Constructing Composite Indicators: Methodology and User Guide.* OECD Publishing, Paris. https://doi.org/10.1787/9789264043466-en
 
