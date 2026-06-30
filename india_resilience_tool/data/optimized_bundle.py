@@ -168,6 +168,39 @@ def optimized_yearly_models_path_from_metric_root(
     return metric_root / "yearly_models" / "hydro" / level_norm / "master.parquet"
 
 
+def optimized_state_values_path(
+    slug: str,
+    *,
+    level: AdminLevel,
+    data_dir: Optional[Path] = None,
+) -> Path:
+    """
+    Return the precomputed area-weighted state-values Parquet path for a metric/level.
+
+    Layout (one all-states file per metric/level, isolated from ``masters/``):
+      - ``metrics/<slug>/state_values/admin/<level>/all_states.parquet``
+
+    Only admin levels (``district``/``block``) are supported.
+    """
+    metric_root = resolve_optimized_metric_root(slug, data_dir=data_dir)
+    return optimized_state_values_path_from_metric_root(metric_root, level=level)
+
+
+def optimized_state_values_path_from_metric_root(
+    metric_root: Path | str,
+    *,
+    level: AdminLevel,
+) -> Path:
+    """Return the precomputed state-values path when the metric root is already known."""
+    metric_root = _metric_root_path(metric_root)
+    level_norm = str(level).strip().lower()
+    if level_norm not in {"district", "block"}:
+        raise ValueError(
+            f"State-values precompute is admin-only; unsupported level={level_norm!r}"
+        )
+    return metric_root / "state_values" / "admin" / level_norm / "all_states.parquet"
+
+
 def optimized_geometry_path(
     *,
     level: AdminLevel,

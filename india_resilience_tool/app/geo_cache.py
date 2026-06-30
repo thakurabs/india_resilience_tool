@@ -12,6 +12,8 @@ import pandas as pd
 import streamlit as st
 
 from india_resilience_tool.config.constants import (
+    ADM2_MIN_AREA,
+    ADM3_MIN_AREA,
     MAX_LAT,
     MAX_LON,
     MIN_LAT,
@@ -138,7 +140,7 @@ def load_local_adm2(
         path=path,
         tolerance=float(tolerance),
         bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
-        min_area=0.0003,
+        min_area=ADM2_MIN_AREA,
     )
     return gdf
 
@@ -162,7 +164,7 @@ def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM3) -> gpd.GeoD
         path=path,
         tolerance=float(tolerance),
         bbox=(MIN_LON, MIN_LAT, MAX_LON, MAX_LAT),
-        min_area=0.00005,
+        min_area=ADM3_MIN_AREA,
     )
     return gdf
 

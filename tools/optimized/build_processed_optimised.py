@@ -99,6 +99,7 @@ from india_resilience_tool.data.optimized_bundle import (
     optimized_geometry_path,
     optimized_master_path,
     optimized_master_sources_from_metric_root,
+    optimized_state_values_path,
     optimized_yearly_ensemble_path,
     optimized_yearly_models_path,
     resolve_optimized_metric_root,
@@ -2449,6 +2450,31 @@ def audit_processed_optimised_parity(
             }
         )
 
+
+    # Non-fatal presence check: the precomputed area-weighted state-values table
+    # is an optional read-path accelerator (the app falls back to live
+    # computation), so its absence is a warning, not a publish-blocking error.
+    _state_values_seen: set[tuple[str, str]] = set()
+    for task in plan.master_tasks:
+        slug = str(task.slug or "").strip()
+        level = str(task.level or "").strip().lower()
+        if not slug or level not in {"district", "block"}:
+            continue
+        if (slug, level) in _state_values_seen:
+            continue
+        _state_values_seen.add((slug, level))
+        state_values_target = optimized_state_values_path(slug, level=level, data_dir=data_dir)
+        if not state_values_target.exists():
+            issues.append(
+                _issue(
+                    stage="state-values",
+                    slug=slug,
+                    level=level,
+                    target=state_values_target,
+                    severity="warning",
+                    reason="precomputed_state_values_missing",
+                )
+            )
 
     if require_block_yearly_models and "block" in set(_selected_levels(effective_levels)):
         for slug in _selected_slugs(metrics):

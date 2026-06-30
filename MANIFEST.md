@@ -60,7 +60,8 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.pipeline.build_proposal_bundles --help` | Build persisted admin district/block proposal climate-risk bundle masters under `processed/<proposal_composite_slug>/<state>/` and the helper `r95p_interannual_variability` masters; all 8 sector-wise proposal bundles use explicit rule weights, lens-decomposed scoring, and an `available_rule_weight_fraction` coverage gate (0.70): Health Risk (lens dossier §6), Industrial Risk (CHG-0028, lens dossier §7), Investment / Financial Risk (CHG-0033, lens dossier §8), Infrastructure Risk (CHG-0034, lens dossier §9), Asset Risk (Thermal Power Plants) (CHG-0057/0058, lens dossier §10), Asset Risk (Hydropower Plants) (CHG-0036, lens dossier §11), Agricultural Risk (CHG-0032, lens dossier §12), and Life & Livelihood Loss Risk (CHG-0037, lens dossier §13). Each rule persists `{rule_slug}__{scenario}__{period}__{score,abs_score,chg_score,imp_score}` columns under the four-token master schema, but only active lenses are written (for example Thermal `spi3_low_flow_proxy_norm` and Investment `r99p_positive_trend` omit `__imp_score`; see `docs/lens_scoring_methodology.md` §5.1). Per-lens rule columns are part of the `processed_optimised/` contract from artifact version 3 onward |
 | `python -m tools.pipeline.build_glance_view_model --help` | Build persisted optimized Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal dashboard prep gets these through `build_processed_optimised` |
 | `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional exact-target `--prune-scope`, destructive `--full-rebuild`, optional admin `--state` scoping, opt-in shared-admin artifact rebuilds, optional scoped `--report-path`, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
-| python -m tools.optimized.audit_processed_optimised_parity --help | Audit processed_optimised with optional level/admin-state filtering, state-scoped report paths, and strict block yearly-model checks via require-block-yearly-models plus strict |
+| python -m tools.optimized.audit_processed_optimised_parity --help | Audit processed_optimised with optional level/admin-state filtering, state-scoped report paths, and strict block yearly-model checks via require-block-yearly-models plus strict. Warning-severity issues (e.g. an absent precomputed `state_values` table) are non-fatal unless `--strict` |
+| `python -m tools.optimized.build_state_values --help` | Precompute area-weighted state headline values per `(metric, scenario, period, stat)` into `processed_optimised/metrics/<slug>/state_values/admin/<level>/all_states.parquet`; parity with the live KPI by construction (shared canonical merge + `analysis.area_weighting`), enabling a real Position-in-India rank. Run automatically by `prepare_dashboard` between the optimized build and the parity audit |
 | `python -m tools.diagnostics.heat_stress_gridfirst_parity --help` | Compare legacy polygon-mean-first vs Heat Stress v2 grid-first CSV extracts for pilot diagnostics, including deltas, rank shifts, and top movers |
 | python -m tools.diagnostics.list_optimized_yearly_metrics --help | List optimized metrics with yearly artifacts for a selected level/state; format args emits repeated metric flags for recovery runs |
 | `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
@@ -186,6 +187,7 @@ Aqueduct methodology note:
 
 | File | Purpose |
 |------|---------|
+| `area_weighting.py` | Streamlit-free area-weighted state aggregation: `with_area_weights` (attach `__area_m2`, prefer `area_m2`, lazy geodesic fallback) and `weighted_state_mean`→`(value, n_units)` from one mask. Single definition shared by `state_summary_view` and `build_state_values` |
 | `bundle_scores.py` | Streamlit-free landing bundle-score normalization, aggregation, and driver helpers |
 | `__init__.py` | Package marker |
 | `map_enrichment.py` | Streamlit-free map enrichment helpers: baseline/delta, ranking, tooltip prep |
@@ -269,7 +271,7 @@ Aqueduct methodology note:
 | `composite_metrics.py` | Declarative visible-Glance bundle -> persisted composite metric mapping and helpers |
 | `dashboard_bundles.py` | Declarative dashboard bundle catalog: ordering, grouped selector labels, canonical bundle names, and composite-slug mapping |
 | `proposal_bundles.py` | Declarative proposal climate-risk bundle specs, exact rule order, and validation helpers for the offline proposal-bundle builder |
-| `constants.py` | UI, styling, scenario, and geometry-render constants |
+| `constants.py` | UI, styling, scenario, and geometry-render constants, including `ADM2_MIN_AREA`/`ADM3_MIN_AREA` (boundary-load min-area thresholds shared by `app/geo_cache` and the offline state-value precompute for parity) |
 | `metrics_registry.py` | Canonical metric, pillar, and domain registry |
 | `paths.py` | Library-side path config mirroring root `paths.py` |
 | `variables.py` | Dashboard-facing variable registry derived from metrics registry |
@@ -288,7 +290,7 @@ Aqueduct methodology note:
 | `river_topology.py` | Streamlit-free river reach validation and hydro-side river summary builders |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
 | `master_loader.py` | Robust master-table loading, normalization, schema parsing, and Parquet-first runtime preference |
-| `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle, including optimized geometry, context, and Glance view-model paths |
+| `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle, including optimized geometry, context, and Glance view-model paths, plus `optimized_state_values_path[_from_metric_root]` for the precomputed area-weighted `state_values/admin/<level>/all_states.parquet` table (kept out of `is_optimized_metric_root`'s child list) |
 | `source_inventory.py` | Persistent raw NetCDF inventory shards for source discovery, validation, engine reuse, and marker-invalidating source signatures |
 | `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
 | `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |

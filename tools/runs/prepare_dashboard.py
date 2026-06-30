@@ -556,7 +556,15 @@ def _resolve_climate_runtime_scope(
         write_report=False,
     )
     parity_issues = list(parity.get("issues", []))
-    global_issues = tuple(issue for issue in parity_issues if not str(issue.get("slug") or "").strip())
+    # Only error-severity issues block readiness; warnings (e.g. an optional,
+    # live-fallback-backed precomputed artifact being absent) must not force a
+    # rebuild or mark metrics pending.
+    blocking_issues = [
+        issue
+        for issue in parity_issues
+        if str(issue.get("severity") or "error").strip().lower() != "warning"
+    ]
+    global_issues = tuple(issue for issue in blocking_issues if not str(issue.get("slug") or "").strip())
 
     by_level: dict[str, ClimateLevelReadiness] = {}
     for level in levels:
@@ -617,7 +625,7 @@ def _resolve_climate_runtime_scope(
 
         parity_metric_issues = {
             str(issue.get("slug")).strip()
-            for issue in parity_issues
+            for issue in blocking_issues
             if str(issue.get("slug") or "").strip() and str(issue.get("level") or "").strip() == level
         }
 
@@ -897,6 +905,7 @@ def _resolve_runtime_scope(
         issue
         for issue in report.get("issues", [])
         if _issue_relevant_to_levels(issue, levels)
+        and str(issue.get("severity") or "error").strip().lower() != "warning"
     ]
     pending_metrics = _dedupe_keep_order(
         [str(issue.get("slug") or "").strip() for issue in relevant_issues if str(issue.get("slug") or "").strip()]
@@ -933,6 +942,24 @@ def _build_optimised_step(
     return PlannedCommand(label=label, argv=argv)
 
 
+def _build_state_values_step(
+    args: argparse.Namespace,
+    metrics: Sequence[str] | None,
+    *,
+    label: str = "processed-optimised-state-values",
+) -> PlannedCommand:
+    """Precompute area-weighted state headline values over the fresh bundle.
+
+    Admin-only by construction (the tool defaults to district+block and skips
+    levels without master shards), so no ``--level`` is forwarded. Runs without
+    ``--strict`` so coverage-cliff/join warnings never block publish; the parity
+    audit's presence check (non-fatal) flags a missing artifact.
+    """
+    argv = _py_module_cmd("tools.optimized.build_state_values")
+    _append_repeat(argv, "--metric", metrics)
+    return PlannedCommand(label=label, argv=argv)
+
+
 def _build_audit_step(
     args: argparse.Namespace,
     metrics: Sequence[str] | None,
@@ -958,13 +985,17 @@ def _build_runtime_plan(
 
     plan: list[PlannedCommand] = []
     if allow_optimised and not bool(getattr(args, "skip_optimised", False)) and scope.runtime_needed:
+        execution_metrics = _select_metrics_for_execution(scope)
         plan.append(
             _build_optimised_step(
                 args,
-                _select_metrics_for_execution(scope),
+                execution_metrics,
                 overwrite=overwrite_optimised,
             )
         )
+        # Precompute state headline values over the freshly built bundle, before
+        # the parity audit reports on them.
+        plan.append(_build_state_values_step(args, execution_metrics))
     if not bool(getattr(args, "skip_audit", False)):
         plan.append(_build_audit_step(args, scope.selected_metrics))
     return plan

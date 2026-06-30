@@ -74,9 +74,21 @@ def main(argv: Optional[list[str]] = None) -> int:
                 f"severity={issue.get('severity', 'error')} | "
                 f"missing={','.join(issue.get('missing_columns') or [])}"
             )
-        if bool(args.strict) and any(issue.get("severity", "error") == "error" for issue in report["issues"]):
+        has_error = any(
+            str(issue.get("severity", "error")).strip().lower() == "error"
+            for issue in report["issues"]
+        )
+        has_warning = any(
+            str(issue.get("severity", "error")).strip().lower() == "warning"
+            for issue in report["issues"]
+        )
+        # Error-severity issues always fail the audit. Warning-only issues (e.g.
+        # an optional, live-fallback-backed precomputed artifact being absent)
+        # are non-fatal unless --strict is requested.
+        if has_error:
             return 1
-        return 1
+        if has_warning and bool(args.strict):
+            return 1
     return 0
 
 

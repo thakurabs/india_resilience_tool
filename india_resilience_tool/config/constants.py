@@ -20,6 +20,14 @@ SIMPLIFY_TOL_ADM1: float = 0.015
 SIMPLIFY_TOL_BASIN_RENDER: float = 0.0035
 SIMPLIFY_TOL_SUBBASIN_RENDER: float = 0.005
 
+# ---- Minimum polygon area thresholds (degrees^2) ----
+# These drop sliver/tiny polygons during boundary load so the rendered unit set
+# (and any area-weighted aggregation over it) is stable. They are load-bearing
+# for state-value parity: the runtime geometry load and any offline precompute
+# MUST use the same thresholds, so keep them here as the single source of truth.
+ADM2_MIN_AREA: float = 0.0003
+ADM3_MIN_AREA: float = 0.00005
+
 # ---- Bounding box for India ----
 MIN_LON: float = 68.0
 MAX_LON: float = 97.5
