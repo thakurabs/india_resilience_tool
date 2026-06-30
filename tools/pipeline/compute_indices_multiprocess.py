@@ -5601,6 +5601,7 @@ class EnsembleBuildStats:
     missing_expected_output_count: int = 0
     skipped_input_count: int = 0
     failure_count: int = 0
+    empty_admin_output_count: int = 0
     errors: tuple[str, ...] = ()
     skipped_reasons: tuple[str, ...] = ()
 
@@ -5619,6 +5620,7 @@ class EnsembleJobResult:
     skipped_input_count: int
     failure_count: int
     summary: str
+    empty_admin_output_count: int = 0
     errors: tuple[str, ...] = ()
     skipped_reasons: tuple[str, ...] = ()
 
@@ -5641,6 +5643,7 @@ def _merge_ensemble_stats(*parts: EnsembleBuildStats) -> EnsembleBuildStats:
         missing_expected_output_count=sum(part.missing_expected_output_count for part in parts),
         skipped_input_count=sum(part.skipped_input_count for part in parts),
         failure_count=sum(part.failure_count for part in parts),
+        empty_admin_output_count=sum(part.empty_admin_output_count for part in parts),
         errors=tuple(error for part in parts for error in part.errors),
         skipped_reasons=tuple(reason for part in parts for reason in part.skipped_reasons),
     )
@@ -5789,6 +5792,8 @@ def _compute_district_ensembles(
         for scenario in scenarios:
             model_yearly = []
             expected_output = False
+            skip_reasons_seen: set[str] = set()
+            scenario_failure = False
             for m in model_dirs:
                 ycsv = m / scenario / f"{district}_yearly.csv"
                 if not path_exists(ycsv):
@@ -5802,6 +5807,7 @@ def _compute_district_ensembles(
                         model_name=m.name,
                     )
                     if cleaned is None:
+                        skip_reasons_seen.add(str(skip_reason or "unknown"))
                         message = f"district={district} model={m.name} scenario={scenario}: {skip_reason}"
                         stats = _merge_ensemble_stats(
                             stats,
@@ -5813,6 +5819,7 @@ def _compute_district_ensembles(
                         continue
                     model_yearly.append(cleaned)
                 except Exception as e:
+                    scenario_failure = True
                     message = f"district={district} model={m.name} scenario={scenario}: {e}"
                     stats = _merge_ensemble_stats(
                         stats,
@@ -5824,21 +5831,34 @@ def _compute_district_ensembles(
 
             if not expected_output:
                 continue
-            stats = _merge_ensemble_stats(
-                stats,
-                EnsembleBuildStats(expected_output_count=1),
-            )
 
             if not model_yearly:
+                benign_empty = (
+                    not scenario_failure
+                    and bool(skip_reasons_seen)
+                    and skip_reasons_seen <= {"no_numeric_rows"}
+                )
+                if benign_empty:
+                    stats = _merge_ensemble_stats(
+                        stats,
+                        EnsembleBuildStats(empty_admin_output_count=1),
+                    )
+                    continue
                 message = f"district={district} scenario={scenario}: no valid filtered yearly inputs"
                 stats = _merge_ensemble_stats(
                     stats,
                     EnsembleBuildStats(
+                        expected_output_count=1,
                         missing_expected_output_count=1,
                         errors=(message,),
                     ),
                 )
                 continue
+
+            stats = _merge_ensemble_stats(
+                stats,
+                EnsembleBuildStats(expected_output_count=1),
+            )
 
             try:
                 written = _write_ensemble_stats(
@@ -5909,6 +5929,8 @@ def _compute_block_ensembles(
                 model_yearly = []
                 retained_inputs: list[Path] = []
                 expected_output = False
+                skip_reasons_seen: set[str] = set()
+                scenario_failure = False
                 for m in model_dirs:
                     ycsv = m / scenario / f"{block}_yearly.csv"
                     if not path_exists(ycsv):
@@ -5922,6 +5944,7 @@ def _compute_block_ensembles(
                             model_name=m.name,
                         )
                         if cleaned is None:
+                            skip_reasons_seen.add(str(skip_reason or "unknown"))
                             message = (
                                 f"district={district} block={block} model={m.name} "
                                 f"scenario={scenario}: {skip_reason}"
@@ -5937,6 +5960,7 @@ def _compute_block_ensembles(
                         model_yearly.append(cleaned)
                         retained_inputs.append(ycsv)
                     except Exception as e:
+                        scenario_failure = True
                         message = (
                             f"district={district} block={block} model={m.name} "
                             f"scenario={scenario}: {e}"
@@ -5951,12 +5975,18 @@ def _compute_block_ensembles(
 
                 if not expected_output:
                     continue
-                stats = _merge_ensemble_stats(
-                    stats,
-                    EnsembleBuildStats(expected_output_count=1),
-                )
 
                 if not model_yearly:
+                    benign_empty = (
+                        not scenario_failure
+                        and bool(skip_reasons_seen)
+                        and skip_reasons_seen <= {"no_numeric_rows"}
+                    )
+                    if benign_empty:
+                        stats = _merge_ensemble_stats(
+                            stats, EnsembleBuildStats(empty_admin_output_count=1)
+                        )
+                        continue
                     message = (
                         f"district={district} block={block} scenario={scenario}: "
                         "no valid filtered yearly inputs"
@@ -5964,11 +5994,16 @@ def _compute_block_ensembles(
                     stats = _merge_ensemble_stats(
                         stats,
                         EnsembleBuildStats(
+                            expected_output_count=1,
                             missing_expected_output_count=1,
                             errors=(message,),
                         ),
                     )
                     continue
+
+                stats = _merge_ensemble_stats(
+                    stats, EnsembleBuildStats(expected_output_count=1)
+                )
 
                 out_dir = ensembles_root / district / block / scenario
                 try:
@@ -7207,6 +7242,7 @@ def _compute_ensembles_for_metric(
             f"{state}/{level}/{slug}: expected={stats.expected_output_count}, "
             f"wrote={stats.written_count}, missing={stats.missing_expected_output_count}, "
             f"skipped_inputs={stats.skipped_input_count}, failures={stats.failure_count}, "
+            f"empty={stats.empty_admin_output_count}, "
             f"first_error={first_error}"
         )
         return EnsembleJobResult(
@@ -7220,6 +7256,7 @@ def _compute_ensembles_for_metric(
             skipped_input_count=stats.skipped_input_count,
             failure_count=stats.failure_count,
             summary=summary,
+            empty_admin_output_count=stats.empty_admin_output_count,
             errors=stats.errors,
             skipped_reasons=stats.skipped_reasons,
         )
@@ -7236,6 +7273,7 @@ def _compute_ensembles_for_metric(
     except Exception as e:
         summary = (
             f"{state}/{level}/{slug}: expected={stats.expected_output_count}, wrote={stats.written_count}, "
+            f"empty={stats.empty_admin_output_count}, "
             f"failures=1, first_error=marker_write_failed: {e}"
         )
         return EnsembleJobResult(
@@ -7249,8 +7287,23 @@ def _compute_ensembles_for_metric(
             skipped_input_count=stats.skipped_input_count,
             failure_count=1,
             summary=summary,
+            empty_admin_output_count=stats.empty_admin_output_count,
             errors=(f"marker_write_failed: {e}",),
             skipped_reasons=stats.skipped_reasons,
+        )
+    if stats.empty_admin_output_count:
+        level_log = (
+            logging.warning
+            if stats.expected_output_count == 0
+            else logging.info
+        )
+        level_log(
+            "%s/%s/%s: %d admin unit(s) reclassified as benign empty "
+            "(coverage-gated all-NaN); expected=%d, empty=%d",
+            state, level, slug,
+            stats.empty_admin_output_count,
+            stats.expected_output_count,
+            stats.empty_admin_output_count,
         )
     return EnsembleJobResult(
         slug=slug,
@@ -7265,8 +7318,9 @@ def _compute_ensembles_for_metric(
         summary=(
             f"{state}/{level}/{slug}: expected={stats.expected_output_count}, "
             f"wrote={stats.written_count}, skipped_inputs={stats.skipped_input_count}, "
-            f"failures={stats.failure_count}"
+            f"failures={stats.failure_count}, empty={stats.empty_admin_output_count}"
         ),
+        empty_admin_output_count=stats.empty_admin_output_count,
         errors=stats.errors,
         skipped_reasons=stats.skipped_reasons,
     )
