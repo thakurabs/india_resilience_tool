@@ -539,11 +539,13 @@ def test_build_execution_plan_counts_exact_tasks(
         "yearly-models": 4,
         "yearly-ensemble": 0,
         "context": 1,
-        "geometry": 7,
+        # Admin-only geometry after the hydro-family removal: basin (1) and
+        # sub-basin (1 per basin_id) geometry tasks are no longer emitted.
+        "geometry": 5,
         "glance": 0,
         "manifest": 1,
     }
-    assert plan.total_tasks == 16
+    assert plan.total_tasks == 14
 
 
 def test_build_progress_failure_summary_reports_remaining() -> None:
