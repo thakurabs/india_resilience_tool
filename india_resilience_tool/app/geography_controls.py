@@ -2,9 +2,8 @@
 Geography & analysis-focus controls for the Streamlit sidebar.
 
 This module keeps the dashboard runtime smaller while preserving stable widget
-keys and introducing a family-aware geography flow:
+keys for the admin geography flow:
   - Admin -> state -> district -> block
-  - Hydro -> basin -> sub-basin
 """
 
 from __future__ import annotations
@@ -20,9 +19,6 @@ from india_resilience_tool.app.geo_cache import (
     load_admin_block_selector_index,
     load_local_adm2,
     list_available_states_from_processed_root_cached,
-    load_basin_selector_index,
-    load_hydro_subbasin_selector_index,
-    load_subbasin_selector_index,
 )
 from india_resilience_tool.app.overlays import (
     OverlayControlState,
@@ -45,20 +41,13 @@ class GeographyContext:
     selected_state: str
     selected_district: str
     selected_block: str
-    selected_basin: str
-    selected_subbasin: str
     overlay_states: dict[str, OverlayControlState]
     gdf_state_districts: Any
 
 
 def _analysis_mode_options(spatial_family: str, admin_level: str) -> list[str]:
     """Return level-aware analysis-mode options for the sidebar selector."""
-    family_norm = str(spatial_family).strip().lower()
     level_norm = str(admin_level).strip().lower()
-    if family_norm == "hydro":
-        if level_norm == "sub_basin":
-            return ["Single sub-basin focus", "Multi-sub-basin portfolio"]
-        return ["Single basin focus", "Multi-basin portfolio"]
     if level_norm == "block":
         return ["Single block focus", "Multi-block portfolio"]
     return ["Single district focus", "Multi-district portfolio"]
@@ -307,80 +296,6 @@ def _build_admin_geography(
     return selected_state, selected_district, selected_block, gdf_state_districts
 
 
-def _build_hydro_geography(
-    *,
-    analysis_ready: bool,
-    admin_level: str,
-    basins_geojson: Path,
-    subbasins_geojson: Path,
-) -> tuple[str, str]:
-    if not basins_geojson.exists():
-        st.error(
-            f"Hydro basin geojson not found at {basins_geojson}. Please provide basins.geojson."
-        )
-        st.stop()
-    if not subbasins_geojson.exists():
-        st.error(
-            f"Hydro sub-basin geojson not found at {subbasins_geojson}. Please provide subbasins.geojson."
-        )
-        st.stop()
-
-    level_norm = str(admin_level).strip().lower()
-    data_dir = basins_geojson.parent
-    hydro_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir)
-    if hydro_index_path.exists():
-        selector_index = load_hydro_subbasin_selector_index(str(hydro_index_path))
-    else:
-        selector_index = (
-            load_subbasin_selector_index(str(subbasins_geojson))
-            if level_norm == "sub_basin"
-            else load_basin_selector_index(str(basins_geojson))
-        )
-
-    basin_names = selector_index.get("basin_names", [])
-    subbasins_by_basin = selector_index.get("subbasins_by_basin", {})
-    subbasins_all = selector_index.get("subbasins_all", [])
-
-    basin_options = ["All"] + [str(v) for v in basin_names]
-    if st.session_state.get("selected_basin") not in basin_options:
-        st.session_state["selected_basin"] = "All"
-
-    selected_basin = st.selectbox(
-        "Basin",
-        options=basin_options,
-        index=basin_options.index(st.session_state["selected_basin"]),
-        key="selected_basin",
-        disabled=not analysis_ready,
-    )
-
-    subbasin_options = ["All"]
-    if selected_basin != "All":
-        subbasin_options = ["All"] + [str(v) for v in subbasins_by_basin.get(str(selected_basin).strip(), [])]
-    elif level_norm == "sub_basin":
-        subbasin_options = ["All"] + [str(v) for v in subbasins_all]
-
-    if st.session_state.get("selected_subbasin") not in subbasin_options:
-        st.session_state["selected_subbasin"] = "All"
-
-    if level_norm == "sub_basin":
-        selected_subbasin = st.selectbox(
-            "Sub-basin",
-            options=subbasin_options,
-            index=subbasin_options.index(st.session_state["selected_subbasin"]),
-            key="selected_subbasin",
-            disabled=not analysis_ready,
-        )
-    else:
-        selected_subbasin = "All"
-        st.session_state["selected_subbasin"] = "All"
-
-    st.session_state["selected_state"] = "All"
-    st.session_state["selected_district"] = "All"
-    st.session_state["selected_block"] = "All"
-
-    return selected_basin, selected_subbasin
-
-
 def render_geography_and_analysis_focus(
     *,
     state_placeholder: Any,
@@ -393,8 +308,6 @@ def render_geography_and_analysis_focus(
     adm1: Any,
     adm2: Optional[Any],
     adm3_geojson: Path,
-    basins_geojson: Path,
-    subbasins_geojson: Path,
     river_display_geojson: Path,
     data_dir: Path,
     simplify_tol_adm3: float,
@@ -434,9 +347,6 @@ def render_geography_and_analysis_focus(
 
             unit_singular = "block" if admin_level == "block" else "district"
             unit_plural = "blocks" if admin_level == "block" else "districts"
-            if str(spatial_family).strip().lower() == "hydro":
-                unit_singular = "sub-basin" if admin_level == "sub_basin" else "basin"
-                unit_plural = "sub-basins" if admin_level == "sub_basin" else "basins"
 
             if analysis_mode == sel_placeholder:
                 st.caption("Select an analysis focus to continue.")
@@ -458,8 +368,6 @@ def render_geography_and_analysis_focus(
             selected_state = "All"
             selected_district = "All"
             selected_block = "All"
-            selected_basin = "All"
-            selected_subbasin = "All"
             gdf_state_districts = (
                 adm2.copy()
                 if adm2 is not None
@@ -467,37 +375,27 @@ def render_geography_and_analysis_focus(
             )
             ensure_overlay_session_state(st.session_state)
 
-            if str(spatial_family).strip().lower() == "hydro":
-                selected_basin, selected_subbasin = _build_hydro_geography(
-                    analysis_ready=analysis_ready,
-                    admin_level=admin_level,
-                    basins_geojson=basins_geojson,
-                    subbasins_geojson=subbasins_geojson,
-                )
-            else:
-                (
-                    selected_state,
-                    selected_district,
-                    selected_block,
-                    gdf_state_districts,
-                ) = _build_admin_geography(
-                    analysis_ready=analysis_ready,
-                    analysis_mode=analysis_mode,
-                    processed_root=processed_root,
-                    adm1=adm1,
-                    adm2=adm2,
-                    adm3_geojson=adm3_geojson,
-                    simplify_tol_adm3=simplify_tol_adm3,
-                    admin_level=admin_level,
-                    data_dir=data_dir,
-                )
+            (
+                selected_state,
+                selected_district,
+                selected_block,
+                gdf_state_districts,
+            ) = _build_admin_geography(
+                analysis_ready=analysis_ready,
+                analysis_mode=analysis_mode,
+                processed_root=processed_root,
+                adm1=adm1,
+                adm2=adm2,
+                adm3_geojson=adm3_geojson,
+                simplify_tol_adm3=simplify_tol_adm3,
+                admin_level=admin_level,
+                data_dir=data_dir,
+            )
 
             overlay_states = resolve_overlay_control_states(
                 session_state=st.session_state,
-                spatial_family=spatial_family,
                 admin_level=admin_level,
                 selected_state=selected_state,
-                selected_basin=selected_basin,
                 river_display_geojson_path=river_display_geojson,
                 data_dir=data_dir,
                 selected_district=selected_district,
@@ -568,8 +466,6 @@ def render_geography_and_analysis_focus(
         selected_state=str(selected_state or "All"),
         selected_district=str(selected_district or "All"),
         selected_block=str(selected_block or "All"),
-        selected_basin=str(selected_basin or "All"),
-        selected_subbasin=str(selected_subbasin or "All"),
         overlay_states=overlay_states,
         gdf_state_districts=gdf_state_districts,
     )

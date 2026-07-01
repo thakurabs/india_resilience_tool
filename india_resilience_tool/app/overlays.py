@@ -40,7 +40,7 @@ LULC_AGRI_UNAVAILABLE_CAPTION = (
     "Available across all map levels when the agricultural LULC overlay artifact is present."
 )
 RIVER_UNAVAILABLE_CAPTION = (
-    "Select a basin/sub-basin (hydro view) or a district (admin view) to enable the river network overlay."
+    "Select a district to enable the river network overlay."
 )
 
 POPULATION_COLOR_RAMP: list[dict[str, Any]] = [
@@ -948,21 +948,17 @@ def discover_rural_facilities_density_overlay_artifact(
 def resolve_overlay_control_states(
     *,
     session_state: MutableMapping[str, Any],
-    spatial_family: str,
     admin_level: str,
     selected_state: str,
-    selected_basin: str,
     river_display_geojson_path: Path,
     data_dir: Path,
     selected_district: str = "All",
 ) -> dict[str, OverlayControlState]:
     """Resolve visible, available, enabled, and opacity state for registered overlays."""
     ensure_overlay_session_state(session_state)
-    family = str(spatial_family or "").strip().lower()
     level = str(admin_level or "").strip().lower()
-    selected_basin_norm = str(selected_basin or "All").strip()
 
-    flood_visible = family == "admin" and level in {"district", "block"}
+    flood_visible = level in {"district", "block"}
     flood_png, _flood_meta, flood_reason = discover_rp100_overlay_artifact(data_dir=data_dir)
     # The RP-100 overlay is pan-India (raster-derived, state-independent), so it is
     # available for any admin state at district/block level once the artifact exists.
@@ -997,22 +993,19 @@ def resolve_overlay_control_states(
     lulc_available = lulc_visible and lulc_png is not None
 
     selected_district_norm = str(selected_district or "All").strip()
-    river_visible = (
-        (family == "hydro" and level in {"basin", "sub_basin"})
-        or (family == "admin" and level in {"district", "block"})
-    )
+    river_visible = level in {"district", "block"}
     river_reason: Optional[str] = None
     if not river_display_geojson_path.exists():
         river_reason = "River overlay unavailable: river_network_display.geojson not found."
         river_available = False
-    elif family == "admin" and level in {"district", "block"}:
+    elif level in {"district", "block"}:
         if selected_district_norm == "All":
             river_reason = "Select a district to show the river network."
             river_available = False
         else:
             river_available = river_visible
     else:
-        river_available = river_visible and selected_basin_norm != "All"
+        river_available = False
 
     state_specs = {
         RP100_FLOOD_OVERLAY_ID: (flood_visible, flood_available, flood_reason),
@@ -1083,35 +1076,16 @@ def overlay_cache_signature(layers: tuple[OverlayRenderLayer, ...]) -> tuple[Any
     return tuple(parts)
 
 
-def _load_table_if_exists(path: Path, loader: Callable[[str], Any]) -> Any:
-    return loader(str(path)) if path.exists() else None
-
-
 def build_overlay_render_layers(
     *,
     overlay_states: Mapping[str, OverlayControlState],
-    spatial_family: str,
     admin_level: str,
-    selected_basin: str,
-    selected_subbasin: str,
     data_dir: Path,
     river_display_geojson_path: Path,
-    river_basin_reconciliation_path: Path,
-    river_subbasin_diagnostics_path: Path,
     alias_fn: Callable[[str], str],
     selected_district: str = "All",
 ) -> tuple[tuple[OverlayRenderLayer, ...], tuple[str, ...], tuple[Any, ...]]:
     """Resolve active control states into concrete map layers and overlay messages."""
-    from india_resilience_tool.app.geo_cache import (
-        build_river_geojson_by_basin,
-        build_river_geojson_by_subbasin,
-        load_river_basin_reconciliation_cached,
-        load_river_subbasin_diagnostics_cached,
-    )
-    from india_resilience_tool.data.river_loader import (
-        resolve_river_basin_reconciliation,
-        resolve_river_subbasin_diagnostics,
-    )
     from india_resilience_tool.viz.folium_featurecollection import clone_featurecollection_for_patch
     from india_resilience_tool.viz.colors import (
         build_built_up_area_legend_html,
@@ -1122,7 +1096,6 @@ def build_overlay_render_layers(
 
     layers: list[OverlayRenderLayer] = []
     messages: list[str] = []
-    family = str(spatial_family or "").strip().lower()
     level = str(admin_level or "").strip().lower()
 
     flood_state = overlay_states.get(RP100_FLOOD_OVERLAY_ID)
@@ -1248,7 +1221,7 @@ def build_overlay_render_layers(
 
     river_state = overlay_states.get(RIVER_NETWORK_OVERLAY_ID)
     river_fc: Optional[Mapping[str, Any]] = None
-    if river_state and river_state.active and family == "admin" and level in {"district", "block"}:
+    if river_state and river_state.active and level in {"district", "block"}:
         from india_resilience_tool.app.geo_cache import build_river_geojson_by_district
         selected_district_norm = str(selected_district or "All").strip()
         if selected_district_norm != "All" and river_display_geojson_path.exists():
@@ -1279,50 +1252,6 @@ def build_overlay_render_layers(
                     )
                 else:
                     river_fc = clone_featurecollection_for_patch(candidate)
-    elif river_state and river_state.active and family == "hydro" and level in {"basin", "sub_basin"}:
-        if level == "sub_basin" and selected_subbasin != "All":
-            diagnostics_df = _load_table_if_exists(
-                river_subbasin_diagnostics_path,
-                load_river_subbasin_diagnostics_cached,
-            )
-            resolution = resolve_river_subbasin_diagnostics(
-                hydro_subbasin_name=selected_subbasin,
-                diagnostics_df=diagnostics_df,
-                alias_fn=alias_fn,
-            )
-            if resolution.get("message"):
-                messages.append(str(resolution["message"]))
-            if resolution.get("status") == "matched" and river_display_geojson_path.exists():
-                river_mtime = _mtime_token(river_display_geojson_path)
-                river_by_selector = build_river_geojson_by_subbasin(
-                    path=str(river_display_geojson_path),
-                    mtime=float(river_mtime or 0.0),
-                )
-                river_fc = clone_featurecollection_for_patch(
-                    river_by_selector.get(alias_fn(selected_subbasin), {"type": "FeatureCollection", "features": []})
-                )
-        else:
-            reconciliation_df = _load_table_if_exists(
-                river_basin_reconciliation_path,
-                load_river_basin_reconciliation_cached,
-            )
-            resolution = resolve_river_basin_reconciliation(
-                hydro_basin_name=selected_basin,
-                reconciliation_df=reconciliation_df,
-                alias_fn=alias_fn,
-            )
-            if resolution.get("message"):
-                messages.append(str(resolution["message"]))
-            resolved_name = str(resolution.get("river_basin_name") or "").strip()
-            if resolution.get("status") == "matched" and resolved_name and river_display_geojson_path.exists():
-                river_mtime = _mtime_token(river_display_geojson_path)
-                river_by_selector = build_river_geojson_by_basin(
-                    path=str(river_display_geojson_path),
-                    mtime=float(river_mtime or 0.0),
-                )
-                river_fc = clone_featurecollection_for_patch(
-                    river_by_selector.get(alias_fn(resolved_name), {"type": "FeatureCollection", "features": []})
-                )
 
     if river_state and river_fc and list((river_fc or {}).get("features", []) or []):
         layers.append(

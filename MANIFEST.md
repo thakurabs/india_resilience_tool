@@ -2,10 +2,9 @@
 
 ## Overview
 
-IRT is a Streamlit-based climate-risk and resilience dashboard organized around two spatial families:
+IRT is a Streamlit-based climate-risk and resilience dashboard organized around admin geographies:
 
 - **Admin**: district, block
-- **Hydro**: basin, sub-basin
 
 The current working tree supports:
 - a default climate-hazard landing / discovery surface that opens on an India state-level bundle map and drills down India -> state -> district before handing off to the detailed workflow
@@ -21,23 +20,22 @@ The current working tree supports:
 - explicit state-click handling on the India overview map and validated district-click handling within state focus
 - type-to-filter geography suggestions in the landing top bar that mirror the map drill-down flow
 - a top-right deep-dive `Back to Glance` action that returns to landing mode using a reverse handoff, with Glance -> Deep Dive now opening the matching persisted composite metric
-- map, rankings, and details flows for district, block, basin, and sub-basin
+- map, rankings, and details flows for district and block
 - drill-down-only nationwide behavior for the finest-grain views:
   - `Admin -> Block` requires a selected state
-  - `Hydro -> Sub-basin` requires a selected basin
-- portfolio workflows for district, block, basin, and sub-basin
+- portfolio workflows for district and block
 - assessment-pillar and domain-based metric navigation, separating climate hazards from bio-physical hazards
 - static exposure-layer support for admin district/block views
 - static groundwater snapshot support for admin district views
-- hydro boundary loading and hydro processed-output discovery
+- retained hydro boundaries and processed outputs for hydrology context/offline workflows
 - Aqueduct direct district/block masters plus SOI hydro masters for water stress, interannual variability, seasonal variability, and water depletion
 - population exposure masters for total population and population density on district/block units
-- `population_exposure_2025_raster` display-only overlay support across admin and hydro map levels, backed by exported PNG/metadata artifacts rather than the raw TIFF
+- `population_exposure_2025_raster` display-only overlay support across admin map levels, backed by exported PNG/metadata artifacts rather than the raw TIFF
 - rural facilities exposure masters for total/category counts and per-100k people rates on district/block units
-- `rural_facilities_density` display-only overlay support across admin and hydro map levels, backed by exported category PNG/metadata artifacts
+- `rural_facilities_density` display-only overlay support across admin map levels, backed by exported category PNG/metadata artifacts
 - groundwater district masters for extraction stage, future availability, extractable resource, and total extraction
-- actionable polygon crosswalk context, navigation, and related-unit highlighting across district/block and basin/sub-basin views
-- shared reference overlay framework for the river network (hydro basin/sub-basin views, plus admin district/block views sliced by selected district when the river artifact carries a `district_names_clean` column) and the admin RP-100 flood-depth raster
+- actionable polygon crosswalk context and related-unit highlighting from district/block to basin/sub-basin context
+- shared reference overlay framework for the river network in admin district/block views sliced by selected district when the river artifact carries a `district_names_clean` column, plus the admin RP-100 flood-depth raster
 
 The crosswalk layer is currently **read-optimized and explanatory**. It is not yet a full weighted transfer engine across spatial families.
 
@@ -237,7 +235,6 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `details_panel.py` | Render the single-unit details panel and crosswalk context/actions |
 | `map_view.py` | Render Folium map and extract level-aware click payloads, including landing state clicks |
-| `hydro_summary_view.py` | Hydro basin summary panel for basin-wide sub-basin selections |
 | `rankings_view.py` | Rankings table rendering and portfolio add flows |
 | `state_summary_view.py` | State summary view for admin-focused overview flows |
 

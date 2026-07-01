@@ -33,14 +33,14 @@ def test_resolve_available_admin_states_returns_all_when_missing(tmp_path: Path)
     assert available_states == ["All"]
 
 
-def test_analysis_mode_options_include_hydro_portfolio_modes() -> None:
+def test_analysis_mode_options_are_admin_only() -> None:
     assert _analysis_mode_options("hydro", "basin") == [
-        "Single basin focus",
-        "Multi-basin portfolio",
+        "Single district focus",
+        "Multi-district portfolio",
     ]
     assert _analysis_mode_options("hydro", "sub_basin") == [
-        "Single sub-basin focus",
-        "Multi-sub-basin portfolio",
+        "Single district focus",
+        "Multi-district portfolio",
     ]
 
 

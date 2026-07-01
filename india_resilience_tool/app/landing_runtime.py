@@ -400,8 +400,6 @@ def build_deep_dive_handoff(
         "selected_state": pending_state,
         "selected_district": pending_district,
         "selected_block": selected_block if is_block_handoff else "All",
-        "selected_basin": "All",
-        "selected_subbasin": "All",
     }
 
 
@@ -2954,8 +2952,6 @@ def render_landing_page(
             selected_state=selected_state or "All",
             selected_district=selected_district or "All",
             selected_block=selected_block or "All",
-            selected_basin="All",
-            selected_subbasin="All",
             map_width=780,
             map_height=520,
             legend_block_html=legend_html,

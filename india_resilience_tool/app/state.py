@@ -23,24 +23,19 @@ ANALYSIS_MODE_PORTFOLIO = "Multi-district portfolio"
 
 # Spatial family constants
 SPATIAL_FAMILY_ADMIN = "admin"
-SPATIAL_FAMILY_HYDRO = "hydro"
 
 # Administrative / spatial level constants
 ADMIN_LEVEL_DISTRICT = "district"
 ADMIN_LEVEL_BLOCK = "block"
-ADMIN_LEVEL_BASIN = "basin"
-ADMIN_LEVEL_SUB_BASIN = "sub_basin"
 
-SpatialFamily = Literal["admin", "hydro"]
-AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+SpatialFamily = Literal["admin"]
+AdminLevel = Literal["district", "block"]
 
 SESSION_DEFAULTS: dict[str, Any] = {
     # Core mode/router keys
     "analysis_mode": ANALYSIS_MODE_SINGLE,
     "portfolio_districts": [],
     "portfolio_blocks": [],
-    "portfolio_basins": [],
-    "portfolio_subbasins": [],
     "portfolio_build_route": None,
     "jump_to_rankings": False,
     "jump_to_map": False,
@@ -71,9 +66,6 @@ SESSION_DEFAULTS: dict[str, Any] = {
     "spatial_family": SPATIAL_FAMILY_ADMIN,
     "admin_level": ADMIN_LEVEL_DISTRICT,
     "selected_block": "All",  # For block-level selection
-    "selected_basin": "All",
-    "selected_subbasin": "All",
-    "hydro_admin_context_level": "district",
     "overlay_rp100_flood_depth_raster_enabled": False,
     "overlay_rp100_flood_depth_raster_opacity_pct": 65,
     "overlay_population_exposure_2025_raster_enabled": False,
@@ -185,15 +177,10 @@ def set_level(
         session_state["admin_level"] = level
         session_state["selected_district"] = "All"
         session_state["selected_block"] = "All"
-        session_state["selected_basin"] = "All"
-        session_state["selected_subbasin"] = "All"
-        session_state["hydro_admin_context_level"] = "district"
-        
+
         # Clear portfolio when switching levels (level-specific lists)
         session_state["portfolio_districts"] = []
         session_state["portfolio_blocks"] = []
-        session_state["portfolio_basins"] = []
-        session_state["portfolio_subbasins"] = []
         session_state["portfolio_multiindex_df"] = None
         session_state["portfolio_multiindex_context"] = None
         
@@ -203,26 +190,14 @@ def set_level(
 
 def get_unit_selection_key(level: AdminLevel) -> str:
     """Get the session state key for unit selection based on level."""
-    if level == "sub_basin":
-        return "selected_subbasin"
-    if level == "basin":
-        return "selected_basin"
     return "selected_block" if level == "block" else "selected_district"
 
 
 def get_level_display_name(level: AdminLevel) -> str:
     """Get display name for a level."""
-    if level == "sub_basin":
-        return "Sub-basin"
-    if level == "basin":
-        return "Basin"
     return "Block" if level == "block" else "District"
 
 
 def get_level_display_name_plural(level: AdminLevel) -> str:
     """Get plural display name for a level."""
-    if level == "sub_basin":
-        return "Sub-basins"
-    if level == "basin":
-        return "Basins"
     return "Blocks" if level == "block" else "Districts"

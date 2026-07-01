@@ -77,37 +77,15 @@ def navigate_from_crosswalk_overlap(
     counterpart_name = str(overlap.get("counterpart_name", "")).strip() or "All"
     counterpart_state = str(overlap.get("counterpart_state_name", "")).strip() or "All"
     counterpart_parent = str(overlap.get("counterpart_parent_name", "")).strip() or "All"
-    basin_name = str(overlap.get("basin_name", "")).strip() or "All"
 
-    if counterpart_level == "sub_basin":
-        pending = {
-            "spatial_family": "hydro",
-            "admin_level": "sub_basin",
-            "analysis_mode": "Single sub-basin focus",
-            "selected_state": "All",
-            "selected_district": "All",
-            "selected_block": "All",
-            "selected_basin": basin_name,
-            "selected_subbasin": counterpart_name,
-        }
-    elif counterpart_level == "basin":
-        pending = {
-            "spatial_family": "hydro",
-            "admin_level": "basin",
-            "analysis_mode": "Single basin focus",
-            "selected_state": "All",
-            "selected_district": "All",
-            "selected_block": "All",
-            "selected_basin": counterpart_name,
-            "selected_subbasin": "All",
-        }
-    elif counterpart_level == "block":
+    if counterpart_level in {"basin", "sub_basin"}:
+        return
+
+    if counterpart_level == "block":
         pending = {
             "spatial_family": "admin",
             "admin_level": "block",
             "analysis_mode": "Single block focus",
-            "selected_basin": "All",
-            "selected_subbasin": "All",
             "selected_state": counterpart_state,
             "selected_district": counterpart_parent,
             "selected_block": counterpart_name,
@@ -117,8 +95,6 @@ def navigate_from_crosswalk_overlap(
             "spatial_family": "admin",
             "admin_level": "district",
             "analysis_mode": "Single district focus",
-            "selected_basin": "All",
-            "selected_subbasin": "All",
             "selected_block": "All",
             "selected_state": counterpart_state,
             "selected_district": counterpart_name,

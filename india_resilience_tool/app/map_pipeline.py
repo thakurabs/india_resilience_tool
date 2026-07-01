@@ -143,18 +143,12 @@ def _stack_legend_blocks(primary_html: str, overlay_html: str, *, map_height: in
 def details_require_geometry(
     *,
     adm_level: str,
-    spatial_family: str,
     selected_state: str,
     selected_district: str,
     selected_block: str,
-    selected_basin: str,
-    selected_subbasin: str,
 ) -> bool:
     """Return whether the right-panel flow still needs merged geometries."""
     level_norm = str(adm_level or "district").strip().lower()
-    family_norm = str(spatial_family or "admin").strip().lower()
-    if family_norm == "hydro" and level_norm == "sub_basin":
-        return selected_basin != "All" and selected_subbasin == "All"
     if level_norm == "block":
         return selected_state != "All" and selected_block == "All"
     return level_norm == "district" and selected_state != "All" and selected_district == "All"
@@ -163,17 +157,12 @@ def details_require_geometry(
 def blocked_drilldown_message(
     *,
     adm_level: str,
-    spatial_family: str,
     selected_state: str,
-    selected_basin: str,
 ) -> Optional[str]:
     """Return the drill-down prompt for fine-grain nationwide views, if any."""
     level_norm = str(adm_level or "district").strip().lower()
-    family_norm = str(spatial_family or "admin").strip().lower()
-    if family_norm != "hydro" and level_norm == "block" and selected_state == "All":
+    if level_norm == "block" and selected_state == "All":
         return "Select a state to render block maps and rankings."
-    if family_norm == "hydro" and level_norm == "sub_basin" and selected_basin == "All":
-        return "Select a basin to render sub-basin maps and rankings."
     return None
 
 
@@ -181,11 +170,9 @@ def _build_nonspatial_details_source_df(
     df: pd.DataFrame,
     *,
     level: str,
-    spatial_family: str,
 ) -> pd.DataFrame:
     """Return a details/rankings dataframe that does not require geometry."""
     level_norm = str(level or "district").strip().lower()
-    family_norm = str(spatial_family or "admin").strip().lower()
     out = df.copy()
     rename_map: dict[str, str] = {}
     if "state" in out.columns and "state_name" not in out.columns:
@@ -195,8 +182,6 @@ def _build_nonspatial_details_source_df(
     if level_norm == "block" and "block" in out.columns and "block_name" not in out.columns:
         rename_map["block"] = "block_name"
     out = out.rename(columns=rename_map)
-    if family_norm == "hydro" and "state_name" not in out.columns:
-        out["state_name"] = "Hydro"
     return out
 
 
@@ -230,13 +215,11 @@ def _level_aware_merge(
     level: str,
     adm2_geojson_path: Path,
     adm3_geojson_path: Path,
-    basin_geojson_path: Path,
-    subbasin_geojson_path: Path,
     simplify_tol_adm2: float,
     simplify_tol_adm3: float,
 ) -> Any:
     level_norm = str(level or "district").strip().lower()
-    boundary_gdf = adm3 if level_norm in {"block", "basin", "sub_basin"} else adm2
+    boundary_gdf = adm3 if level_norm == "block" else adm2
     if boundary_gdf is None:
         raise ValueError(f"Boundary GeoDataFrame is required for level={level_norm!r}")
 
@@ -246,23 +229,11 @@ def _level_aware_merge(
             boundary_path=adm2_geojson_path,
             simplify_tolerance=simplify_tol_adm2,
         )
-    elif level_norm == "block":
+    else:
         boundary_sig = _boundary_signature(
             boundary_gdf,
             boundary_path=adm3_geojson_path,
             simplify_tolerance=simplify_tol_adm3,
-        )
-    elif level_norm == "basin":
-        boundary_sig = _boundary_signature(
-            boundary_gdf,
-            boundary_path=basin_geojson_path,
-            simplify_tolerance=None,
-        )
-    else:
-        boundary_sig = _boundary_signature(
-            boundary_gdf,
-            boundary_path=subbasin_geojson_path,
-            simplify_tolerance=None,
         )
 
     return _get_or_build_merged_for_index_cached(
@@ -281,7 +252,7 @@ def _level_aware_merge(
 
 def _summarize_coverage_buckets(diagnostics: CoverageDiagnostics, *, level: str) -> list[str]:
     """Return short bucket summaries for coverage diagnostics messaging."""
-    level_label = "features" if str(level).strip().lower() in {"basin", "sub_basin"} else str(level).strip().lower() + "s"
+    level_label = str(level).strip().lower() + "s"
     parts: list[str] = []
     if diagnostics.missing_master_row_keys:
         parts.append(f"{len(diagnostics.missing_master_row_keys)} {level_label} without master rows")
@@ -295,7 +266,6 @@ def _summarize_coverage_buckets(diagnostics: CoverageDiagnostics, *, level: str)
 def evaluate_coverage_policy(
     *,
     adm_level: str,
-    spatial_family: str,
     selected_state: str,
     diagnostics: Optional[CoverageDiagnostics],
 ) -> tuple[tuple[str, ...], Optional[str]]:
@@ -303,9 +273,8 @@ def evaluate_coverage_policy(
     if diagnostics is None:
         return (), None
 
-    family_norm = str(spatial_family or "admin").strip().lower()
     level_norm = str(adm_level or "district").strip().lower()
-    if family_norm != "admin" or level_norm not in {"district", "block"}:
+    if level_norm not in {"district", "block"}:
         return (), None
 
     bucket_parts = _summarize_coverage_buckets(diagnostics, level=level_norm)
@@ -342,36 +311,23 @@ def _resolve_composite_master_source(
     *,
     level: str,
     selected_state: str,
-    spatial_family: str,
     data_dir: Path,
 ) -> MasterSourceLike:
     """
     Resolve the composite master source for ``composite_slug`` through the SAME
     optimized-root machinery the dashboard uses for the metric ``df``.
 
-    Reuses the admin/hydro master-source resolvers from the ribbon module so the
+    Reuses the admin master-source resolver from the ribbon module so the
     composite is loaded from the identical bundle layout (optimized-first with
     legacy fallback), rather than a separately-guessed path. The ribbon import is
     performed lazily to keep this module's import graph light.
 
-    Returns a single ``Path`` (hydro) or a tuple of per-state shard ``Path``s
-    (admin), suitable to pass straight to the injected master loader.
+    Returns a tuple of per-state shard ``Path``s suitable to pass straight to the
+    injected master loader.
     """
-    from india_resilience_tool.app.ribbon import (
-        _resolve_admin_master_source,
-        _resolve_hydro_master_source,
-    )
+    from india_resilience_tool.app.ribbon import _resolve_admin_master_source
 
     root = resolve_processed_optimised_root(composite_slug, data_dir=data_dir)
-    if str(spatial_family or "admin").strip().lower() == "hydro":
-        _, source_path, _ = _resolve_hydro_master_source(
-            root,
-            variable_slug=composite_slug,
-            level=level,
-            data_dir=data_dir,
-        )
-        return source_path
-
     optimized_intent = is_optimized_metric_root(root)
     _, source_tuple, _ = _resolve_admin_master_source(
         root,
@@ -389,8 +345,7 @@ def _bundle_join_columns(level_norm: str) -> Optional[list[tuple[str, str, bool]
     Return the (ranking_col, composite_col, is_name) join keys for a level.
 
     Admin levels join on normalized name columns (the only shared admin key
-    across metric and composite masters); hydro levels join on stable IDs.
-    Returns None for unsupported levels.
+    across metric and composite masters). Returns None for unsupported levels.
     """
     if level_norm == "district":
         return [("state_name", "state", True), ("district_name", "district", True)]
@@ -400,10 +355,6 @@ def _bundle_join_columns(level_norm: str) -> Optional[list[tuple[str, str, bool]
             ("district_name", "district", True),
             ("block_name", "block", True),
         ]
-    if level_norm == "basin":
-        return [("basin_id", "basin_id", False)]
-    if level_norm == "sub_basin":
-        return [("subbasin_id", "subbasin_id", False)]
     return None
 
 
@@ -436,7 +387,6 @@ def _resolve_bundle_score_column(
     metric_col: str,
     level: str,
     selected_state: str,
-    spatial_family: str,
     data_dir: Path,
     load_master_and_schema_fn: Callable[..., tuple],
     resolve_composite_source_fn: Callable[..., MasterSourceLike],
@@ -492,7 +442,6 @@ def _resolve_bundle_score_column(
             composite_slug,
             level=level_norm,
             selected_state=selected_state,
-            spatial_family=spatial_family,
             data_dir=data_dir,
         )
     except Exception as exc:  # pragma: no cover - defensive
@@ -583,9 +532,6 @@ def build_map_and_rankings(
     selected_state: str,
     selected_district: str,
     selected_block: str,
-    selected_basin: str,
-    selected_subbasin: str,
-    spatial_family: str,
     include_map: bool,
     crosswalk_overlay: Optional[Mapping[str, Any]],
     overlay_states: Mapping[str, OverlayControlState],
@@ -600,8 +546,6 @@ def build_map_and_rankings(
     basin_geojson_path: Path,
     subbasin_geojson_path: Path,
     river_display_geojson_path: Path,
-    river_basin_reconciliation_path: Path,
-    river_subbasin_diagnostics_path: Path,
     data_dir: Path,
     selected_bundle: Optional[str] = None,
     load_master_and_schema_fn: Optional[Callable[..., tuple]] = None,
@@ -621,9 +565,7 @@ def build_map_and_rankings(
     level_norm = str(adm_level or "district").strip().lower()
     blocked_message = blocked_drilldown_message(
         adm_level=level_norm,
-        spatial_family=spatial_family,
         selected_state=selected_state,
-        selected_basin=selected_basin,
     )
 
     if level_norm in {"district", "block"} and "district" not in df.columns:
@@ -639,21 +581,6 @@ def build_map_and_rankings(
             render_perf_panel_safe()
             st.stop()
 
-    if level_norm == "basin" and "basin_id" not in df.columns:
-        st.error("Basin mode requires master CSV to contain a 'basin_id' column.")
-        render_perf_panel_safe()
-        st.stop()
-
-    if level_norm == "sub_basin" and "subbasin_id" not in df.columns:
-        st.error("Sub-basin mode requires master CSV to contain a 'subbasin_id' column.")
-        render_perf_panel_safe()
-        st.stop()
-
-        if adm3 is None:
-            st.error("Block mode requires ADM3 boundaries to be loaded.")
-            render_perf_panel_safe()
-            st.stop()
-
     # --- Baseline column for this metric + stat (used by map & table) ---
     baseline_col = find_baseline_column_for_stat(
         df.columns,
@@ -663,7 +590,6 @@ def build_map_and_rankings(
     ranking_source = _build_nonspatial_details_source_df(
         df,
         level=level_norm,
-        spatial_family=spatial_family,
     )
 
     # Optional Method-B risk label: classify the risk class by the bundle
@@ -679,7 +605,6 @@ def build_map_and_rankings(
             metric_col=metric_col,
             level=level_norm,
             selected_state=selected_state,
-            spatial_family=spatial_family,
             data_dir=data_dir,
             load_master_and_schema_fn=load_master_and_schema_fn,
             resolve_composite_source_fn=_resolve_composite_master_source,
@@ -690,13 +615,7 @@ def build_map_and_rankings(
     # -------------------------
     with perf_section("rank_table: build"):
         extra_rank_cols: list[str] = []
-        if level_norm == "sub_basin":
-            unit_col = "subbasin_name"
-            extra_rank_cols = ["basin_name", "basin_id", "subbasin_id"]
-        elif level_norm == "basin":
-            unit_col = "basin_name"
-            extra_rank_cols = ["basin_id"]
-        elif level_norm == "block":
+        if level_norm == "block":
             unit_col = "block_name"
         else:
             unit_col = "district_name"
@@ -733,12 +652,9 @@ def build_map_and_rankings(
 
     needs_geometry = include_map or details_require_geometry(
         adm_level=level_norm,
-        spatial_family=spatial_family,
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
     )
 
     if needs_geometry:
@@ -753,8 +669,6 @@ def build_map_and_rankings(
                     level=level_norm,
                     adm2_geojson_path=adm2_geojson_path,
                     adm3_geojson_path=adm3_geojson_path,
-                    basin_geojson_path=basin_geojson_path,
-                    subbasin_geojson_path=subbasin_geojson_path,
                     simplify_tol_adm2=simplify_tol_adm2,
                     simplify_tol_adm3=simplify_tol_adm3,
                 )
@@ -865,23 +779,6 @@ def build_map_and_rankings(
             column="block_name",
             selected_value=selected_block,
         )
-    if level_norm == "basin":
-        scale_gdf = _filter_frame_by_selection_value(
-            scale_gdf,
-            column="basin_name",
-            selected_value=selected_basin,
-        )
-    if level_norm == "sub_basin":
-        scale_gdf = _filter_frame_by_selection_value(
-            scale_gdf,
-            column="basin_name",
-            selected_value=selected_basin,
-        )
-        scale_gdf = _filter_frame_by_selection_value(
-            scale_gdf,
-            column="subbasin_name",
-            selected_value=selected_subbasin,
-        )
 
     scale_vals = pd.to_numeric(
         scale_gdf.get(map_value_col, pd.Series([], dtype=float)), errors="coerce"
@@ -988,34 +885,12 @@ def build_map_and_rankings(
         column="district_name",
         selected_value=selected_district,
     )
-    if level_norm == "basin":
-        display_gdf = _filter_frame_by_selection_value(
-            display_gdf,
-            column="basin_name",
-            selected_value=selected_basin,
-        )
-    if level_norm == "sub_basin":
-        display_gdf = _filter_frame_by_selection_value(
-            display_gdf,
-            column="basin_name",
-            selected_value=selected_basin,
-        )
-        display_gdf = _filter_frame_by_selection_value(
-            display_gdf,
-            column="subbasin_name",
-            selected_value=selected_subbasin,
-        )
 
     overlay_layers, overlay_messages, _overlay_cache_sig = build_overlay_render_layers(
         overlay_states=overlay_states,
-        spatial_family=spatial_family,
         admin_level=level_norm,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
         data_dir=data_dir,
         river_display_geojson_path=river_display_geojson_path,
-        river_basin_reconciliation_path=river_basin_reconciliation_path,
-        river_subbasin_diagnostics_path=river_subbasin_diagnostics_path,
         alias_fn=alias,
         selected_district=selected_district,
     )
@@ -1027,8 +902,6 @@ def build_map_and_rankings(
         display_gdf=display_gdf,
         selected_state=selected_state,
         selected_district=selected_district,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
         map_mode=map_mode,
         baseline_col=baseline_col,
         rank_scope_label=rank_scope_label,
@@ -1054,7 +927,6 @@ def build_map_and_rankings(
     )
     coverage_messages, coverage_block = evaluate_coverage_policy(
         adm_level=level_norm,
-        spatial_family=spatial_family,
         selected_state=selected_state,
         diagnostics=map_build.coverage_diagnostics,
     )

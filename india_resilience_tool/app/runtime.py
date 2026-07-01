@@ -43,10 +43,7 @@ def run_app() -> None:
         BLOCKS_PATH,
         DATA_DIR,
         DISTRICTS_PATH,
-        RIVER_BASIN_RECONCILIATION_PATH,
         RIVER_NETWORK_DISPLAY_PATH,
-        RIVER_REACHES_PATH,
-        RIVER_SUBBASIN_DIAGNOSTICS_PATH,
         SUBBASINS_PATH,
         resolve_processed_optimised_root,
     )
@@ -61,12 +58,9 @@ def run_app() -> None:
         build_adm1_from_adm2,
         build_adm3_geojson_by_district,
         enrich_adm2_with_state_names,
-        load_hydro_subbasin_selector_index,
         load_local_adm1,
         load_local_adm2,
         load_local_adm3,
-        load_local_basin,
-        load_local_subbasin,
     )
     from india_resilience_tool.app.geography_controls import render_geography_and_analysis_focus
     from india_resilience_tool.app.landing_runtime import (
@@ -87,7 +81,6 @@ def run_app() -> None:
         apply_jump_once_flags,
         render_admin_level_selector,
         render_hover_toggle_if_portfolio,
-        render_spatial_family_selector,
     )
     from india_resilience_tool.app.sidebar_branding import render_sidebar_branding
     from india_resilience_tool.app.state import VIEW_MAP, VIEW_RANKINGS
@@ -158,14 +151,8 @@ def run_app() -> None:
     BASIN_GEOJSON = BASINS_PATH
     SUBBASIN_GEOJSON = SUBBASINS_PATH
     optimized_river_display = optimized_context_path("river_network_display.geojson", data_dir=DATA_DIR)
-    optimized_river_basin = optimized_context_path("river_basin_name_reconciliation.parquet", data_dir=DATA_DIR)
-    optimized_river_subbasin = optimized_context_path("river_subbasin_diagnostics.parquet", data_dir=DATA_DIR)
-    optimized_river_reaches = optimized_context_path("river_reaches.parquet", data_dir=DATA_DIR)
 
     RIVER_DISPLAY_GEOJSON = optimized_river_display if optimized_river_display.exists() else RIVER_NETWORK_DISPLAY_PATH
-    RIVER_BASIN_RECONCILIATION_CSV = optimized_river_basin if optimized_river_basin.exists() else RIVER_BASIN_RECONCILIATION_PATH
-    RIVER_SUBBASIN_DIAGNOSTICS_CSV = optimized_river_subbasin if optimized_river_subbasin.exists() else RIVER_SUBBASIN_DIAGNOSTICS_PATH
-    RIVER_REACHES_PARQUET = optimized_river_reaches if optimized_river_reaches.exists() else RIVER_REACHES_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
 
@@ -224,9 +211,9 @@ def run_app() -> None:
     with st.sidebar:
         render_sidebar_branding(logo_path=LOGO_PATH)
 
-        spatial_family = render_spatial_family_selector(label_visibility="collapsed")
+        spatial_family = "admin"
+        st.session_state["spatial_family"] = spatial_family
 
-        # Family-aware level selector
         admin_level = render_admin_level_selector(
             label_visibility="collapsed",
             centered=True,
@@ -234,11 +221,7 @@ def run_app() -> None:
         )
 
         # Read current analysis mode (default depends on admin level)
-        if admin_level == "sub_basin":
-            default_mode = "Single sub-basin focus"
-        elif admin_level == "basin":
-            default_mode = "Single basin focus"
-        elif admin_level == "block":
+        if admin_level == "block":
             default_mode = "Single block focus"
         else:
             default_mode = "Single district focus"
@@ -579,8 +562,6 @@ def run_app() -> None:
         adm1=adm1_for_geography_controls,
         adm2=adm2,
         adm3_geojson=ADM3_GEOJSON,
-        basins_geojson=BASIN_GEOJSON,
-        subbasins_geojson=SUBBASIN_GEOJSON,
         river_display_geojson=RIVER_DISPLAY_GEOJSON,
         data_dir=DATA_DIR,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
@@ -590,8 +571,6 @@ def run_app() -> None:
     selected_state = geo_ctx.selected_state
     selected_district = geo_ctx.selected_district
     selected_block = geo_ctx.selected_block
-    selected_basin = geo_ctx.selected_basin
-    selected_subbasin = geo_ctx.selected_subbasin
     overlay_states = geo_ctx.overlay_states
     gdf_state_districts = geo_ctx.gdf_state_districts
     current_view = _resolve_pre_render_view(
@@ -627,10 +606,6 @@ def run_app() -> None:
             "district": selected_district,
             "block": selected_block,
         }
-    elif _admin_level_for_zoom == "sub_basin" and selected_subbasin != "All":
-        st.session_state.pop("_pending_block_zoom", None)
-    elif _admin_level_for_zoom == "basin" and selected_basin != "All":
-        st.session_state.pop("_pending_block_zoom", None)
     elif selected_district != "All":
         district_row = gdf_state_districts[gdf_state_districts["district_name"] == selected_district]
         if not district_row.empty:
@@ -666,12 +641,9 @@ def run_app() -> None:
 
     details_need_geometry = details_require_geometry(
         adm_level=_admin_level,
-        spatial_family=spatial_family,
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
     )
 
     runtime_adm2_geojson = ADM2_GEOJSON
@@ -722,29 +694,6 @@ def run_app() -> None:
         if optimized_block_geojson.exists():
             runtime_adm3_geojson = optimized_block_geojson
 
-    runtime_basin_geojson = BASIN_GEOJSON
-    optimized_basin_geojson = optimized_geometry_path(level="basin", data_dir=DATA_DIR)
-    if optimized_basin_geojson.exists():
-        runtime_basin_geojson = optimized_basin_geojson
-
-    runtime_subbasin_geojson = SUBBASIN_GEOJSON
-    if selected_basin != "All":
-        hydro_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=DATA_DIR)
-        if hydro_index_path.exists():
-            try:
-                hydro_selector_index = load_hydro_subbasin_selector_index(str(hydro_index_path))
-            except Exception:
-                hydro_selector_index = {}
-            basin_id = str((hydro_selector_index.get("basin_ids_by_name") or {}).get(str(selected_basin).strip()) or "").strip()
-            if basin_id:
-                optimized_subbasin_geojson = optimized_geometry_path(
-                    level="sub_basin",
-                    basin_id=basin_id,
-                    data_dir=DATA_DIR,
-                )
-                if optimized_subbasin_geojson.exists():
-                    runtime_subbasin_geojson = optimized_subbasin_geojson
-
     # Load fine-grain boundaries only when the map or details panel still needs them.
     if _admin_level == "block" and (include_map or details_need_geometry):
         if not runtime_adm3_geojson.exists():
@@ -753,20 +702,6 @@ def run_app() -> None:
             st.stop()
         with perf_section("cold: load adm3"):
             adm3 = load_local_adm3(str(runtime_adm3_geojson), tolerance=SIMPLIFY_TOL_ADM3)
-    elif _admin_level == "basin" and (include_map or details_need_geometry):
-        if not runtime_basin_geojson.exists():
-            st.error(f"Basin geojson not found at {runtime_basin_geojson}. Please provide basins.geojson.")
-            render_perf_panel_safe()
-            st.stop()
-        with perf_section("cold: load basin"):
-            adm3 = load_local_basin(str(runtime_basin_geojson))
-    elif _admin_level == "sub_basin" and (include_map or details_need_geometry):
-        if not runtime_subbasin_geojson.exists():
-            st.error(f"Sub-basin geojson not found at {runtime_subbasin_geojson}. Please provide subbasins.geojson.")
-            render_perf_panel_safe()
-            st.stop()
-        with perf_section("cold: load subbasin"):
-            adm3 = load_local_subbasin(str(runtime_subbasin_geojson))
     else:
         adm3 = None
 
@@ -806,9 +741,6 @@ def run_app() -> None:
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
-        spatial_family=spatial_family,
         include_map=include_map,
         crosswalk_overlay=st.session_state.get("crosswalk_overlay"),
         overlay_states=overlay_states,
@@ -820,11 +752,9 @@ def run_app() -> None:
         normalize_state_fn=normalize_name,
         adm2_geojson_path=runtime_adm2_geojson,
         adm3_geojson_path=runtime_adm3_geojson,
-        basin_geojson_path=runtime_basin_geojson,
-        subbasin_geojson_path=runtime_subbasin_geojson,
+        basin_geojson_path=BASIN_GEOJSON,
+        subbasin_geojson_path=SUBBASIN_GEOJSON,
         river_display_geojson_path=RIVER_DISPLAY_GEOJSON,
-        river_basin_reconciliation_path=RIVER_BASIN_RECONCILIATION_CSV,
-        river_subbasin_diagnostics_path=RIVER_SUBBASIN_DIAGNOSTICS_CSV,
         data_dir=DATA_DIR,
         selected_bundle=str(st.session_state.get("selected_bundle") or "").strip() or None,
         load_master_and_schema_fn=_load_master_and_schema,
@@ -879,8 +809,6 @@ def run_app() -> None:
         selected_state=selected_state,
         selected_district=selected_district,
         selected_block=selected_block,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
         level=_admin_level,
         table_df=artifacts.table_df,
         has_baseline=artifacts.has_baseline,
@@ -930,9 +858,6 @@ def run_app() -> None:
                     selected_district=selected_district,
                     selected_block=selected_block,
                     admin_level=_admin_level,
-                    spatial_family=spatial_family,
-                    selected_basin=selected_basin,
-                    selected_subbasin=selected_subbasin,
                     variables=VARIABLES,
                     variable_slug=str(VARIABLE_SLUG or ""),
                     index_group_labels=INDEX_GROUP_LABELS,
@@ -948,8 +873,6 @@ def run_app() -> None:
                     processed_root=PROCESSED_ROOT if PROCESSED_ROOT is not None else Path("."),
                     pilot_state=PILOT_STATE,
                     data_dir=DATA_DIR,
-                    river_reaches_path=RIVER_REACHES_PARQUET,
-                    river_overlay_message=artifacts.overlay_messages[0] if artifacts.overlay_messages else None,
                     logo_path=LOGO_PATH,
                     fig_size_panel=FIG_SIZE_PANEL,
                     fig_dpi_panel=FIG_DPI_PANEL,

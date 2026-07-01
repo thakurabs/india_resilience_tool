@@ -64,8 +64,6 @@ def render_left_panel(
     selected_state: str,
     selected_district: str,
     selected_block: str,
-    selected_basin: str,
-    selected_subbasin: str,
     level: str,
     # Rankings inputs
     table_df: Any,
@@ -104,8 +102,6 @@ def render_left_panel(
             if st.button("⟲ Reset View", key="reset_map_view"):
                 st.session_state["pending_selected_state"] = "All"
                 st.session_state["pending_selected_district"] = "All"
-                st.session_state["selected_basin"] = "All"
-                st.session_state["selected_subbasin"] = "All"
                 st.session_state["crosswalk_overlay"] = None
                 st.session_state["map_reset_requested"] = True
 
@@ -141,8 +137,6 @@ def render_left_panel(
                         selected_state=selected_state,
                         selected_district=selected_district,
                         selected_block=selected_block,
-                        selected_basin=selected_basin,
-                        selected_subbasin=selected_subbasin,
                         map_width=map_width,
                         map_height=map_height,
                         legend_block_html=legend_block_html,

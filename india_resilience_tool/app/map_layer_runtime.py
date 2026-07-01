@@ -52,8 +52,6 @@ def build_folium_map_for_selection(
     display_gdf: Any,
     selected_state: str,
     selected_district: str,
-    selected_basin: str,
-    selected_subbasin: str,
     map_mode: str,
     baseline_col: Optional[str],
     rank_scope_label: str,
@@ -103,41 +101,13 @@ def build_folium_map_for_selection(
     )
 
     level_norm = str(level).strip().lower()
-    if level_norm not in {"district", "block", "basin", "sub_basin"}:
+    if level_norm not in {"district", "block"}:
         level_norm = "district"
 
     # Load the level-appropriate FeatureCollection cache. The geometry-only
     # FeatureCollection is itself memoized in `geo_cache` keyed on (path, mtime,
     # tolerance); we only need to pick the right builder here.
-    if level_norm == "sub_basin":
-        subbasin_mtime = float(subbasin_geojson_path.stat().st_mtime)
-        if selected_basin != "All":
-            geojson_by_state = build_subbasin_geojson_by_basin(
-                path=str(subbasin_geojson_path),
-                mtime=subbasin_mtime,
-                tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
-            )
-        else:
-            geojson_by_state = build_subbasin_geojson_all(
-                path=str(subbasin_geojson_path),
-                mtime=subbasin_mtime,
-                tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
-            )
-    elif level_norm == "basin":
-        basin_mtime = float(basin_geojson_path.stat().st_mtime)
-        if selected_basin != "All":
-            geojson_by_state = build_basin_geojson_by_basin(
-                path=str(basin_geojson_path),
-                mtime=basin_mtime,
-                tolerance=SIMPLIFY_TOL_BASIN_RENDER,
-            )
-        else:
-            geojson_by_state = build_basin_geojson_all(
-                path=str(basin_geojson_path),
-                mtime=basin_mtime,
-                tolerance=SIMPLIFY_TOL_BASIN_RENDER,
-            )
-    elif level_norm == "block":
+    if level_norm == "block":
         adm3_mtime = float(adm3_geojson_path.stat().st_mtime)
         if selected_state != "All" and selected_district != "All":
             geojson_by_state = build_adm3_geojson_by_district(
@@ -159,24 +129,17 @@ def build_folium_map_for_selection(
             mtime=adm2_mtime,
         )
 
-    if level_norm in {"basin", "sub_basin"}:
-        selection_key = alias_fn(selected_basin) if selected_basin != "All" else "all"
-        fc_source = geojson_by_state.get(selection_key, geojson_by_state.get("all"))
-        geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
+    geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
+    if level_norm == "block" and selected_state != "All" and selected_district != "All":
+        selector_key = f"{alias_fn(selected_state)}|{alias_fn(selected_district)}"
+        fc_source = geojson_by_state.get(selector_key, geojson_by_state.get("all"))
     else:
-        geojson_by_state = ensure_geojson_by_state_has_all(geojson_by_state)
-        if level_norm == "block" and selected_state != "All" and selected_district != "All":
-            selector_key = f"{alias_fn(selected_state)}|{alias_fn(selected_district)}"
-            fc_source = geojson_by_state.get(selector_key, geojson_by_state.get("all"))
-        else:
-            state_key = "all" if selected_state == "All" else (normalize_state_fn(selected_state) or "unknown")
-            fc_source = geojson_by_state.get(state_key, geojson_by_state["all"])
+        state_key = "all" if selected_state == "All" else (normalize_state_fn(selected_state) or "unknown")
+        fc_source = geojson_by_state.get(state_key, geojson_by_state["all"])
 
     base_fc = filter_fc_by_district(
         fc_source or geojson_by_state["all"],
         selected_district=selected_district,
-        selected_basin=selected_basin,
-        selected_subbasin=selected_subbasin,
         level=level_norm,
         alias_fn=alias_fn,
     )
@@ -335,12 +298,7 @@ def build_folium_map_for_selection(
 
     highlight_fn = None
     tooltip = None
-    if level_norm == "sub_basin":
-        layer_name = "Sub-basins"
-    elif level_norm == "basin":
-        layer_name = "Basins"
-    else:
-        layer_name = "Blocks" if level_norm == "block" else "Districts"
+    layer_name = "Blocks" if level_norm == "block" else "Districts"
 
     if hover_enabled:
         tooltip = build_geojson_tooltip(

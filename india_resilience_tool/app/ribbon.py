@@ -44,11 +44,9 @@ from india_resilience_tool.data.master_loader import load_master_csvs, master_so
 from india_resilience_tool.data.optimized_bundle import (
     is_optimized_metric_root,
     list_optimized_states_for_metric_root,
-    optimized_master_path_from_metric_root,
     optimized_master_sources_from_metric_root,
     resolve_optimized_bundle_root,
 )
-from india_resilience_tool.utils.processed_io import read_table
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.charts import (
     PERIOD_ORDER,
@@ -80,34 +78,6 @@ class RibbonContext:
     pretty_metric_label: str
     rebuild_master_csv_if_needed: Callable[..., tuple[bool, str]]
     load_master_and_schema_fn: Callable[[Path | tuple[Path, ...], str], tuple[pd.DataFrame, list[dict], list[str], dict]]
-
-
-def _hydro_output_glob(level: str) -> str:
-    """Return the relative glob used to detect hydro period outputs for a level."""
-    if str(level).strip().lower() == "sub_basin":
-        return "hydro/sub_basins/**/*_periods.csv"
-    return "hydro/basins/**/*_periods.csv"
-
-
-def _hydro_outputs_available(processed_root: Path, level: str) -> bool:
-    """Return True when hydro processed period CSVs exist for the requested level."""
-    try:
-        return any(processed_root.glob(_hydro_output_glob(level)))
-    except Exception:
-        return False
-
-
-def _hydro_master_contract_ready(master_csv_path: Path, level: str) -> bool:
-    """Return True when a hydro master CSV contains the canonical hydro ID columns."""
-    if not master_csv_path.exists():
-        return False
-    try:
-        cols = set(read_table(master_csv_path).columns)
-    except Exception:
-        return False
-    if str(level).strip().lower() == "sub_basin":
-        return {"basin_id", "subbasin_id"}.issubset(cols)
-    return {"basin_id"}.issubset(cols)
 
 
 def _is_external_metric(varcfg: Optional[dict]) -> bool:
@@ -144,9 +114,8 @@ def _supports_baseline_comparison(varcfg: Optional[dict]) -> bool:
 
 
 def _metric_rebuild_command(varcfg: Optional[dict], *, level: str) -> Optional[str]:
-    level_norm = str(level).strip().lower()
-    key = "hydro_rebuild_command" if level_norm in {"basin", "sub_basin"} else "admin_rebuild_command"
-    cmd = str((varcfg or {}).get(key) or "").strip()
+    _ = level
+    cmd = str((varcfg or {}).get("admin_rebuild_command") or "").strip()
     return cmd or None
 
 
@@ -335,36 +304,6 @@ def _admin_audit_score(
     )
 
 
-def _resolve_hydro_master_source(
-    processed_root: Path,
-    *,
-    variable_slug: str,
-    level: str,
-    data_dir: Path,
-) -> tuple[Path, Path, Optional[Path]]:
-    """
-    Resolve the best available hydro master source.
-
-    When the runtime points at an optimized metric root but the optimized bundle
-    does not yet contain hydro artifacts, fall back to the legacy processed root
-    if a hydro master or hydro yearly source outputs exist there.
-    """
-    master_name = get_master_csv_filename(level)
-    if not is_optimized_metric_root(processed_root):
-        return processed_root, processed_root / "hydro" / master_name, None
-
-    optimized_master = optimized_master_path_from_metric_root(processed_root, level=level)
-    if optimized_master.exists():
-        return processed_root, optimized_master, None
-
-    legacy_root = resolve_legacy_processed_root(variable_slug, data_dir=data_dir, mode="portfolio")
-    legacy_master = legacy_root / "hydro" / master_name
-    if legacy_master.exists() or _hydro_outputs_available(legacy_root, level):
-        return legacy_root, legacy_master, legacy_root
-
-    return processed_root, optimized_master, legacy_root
-
-
 def _resolve_admin_master_source(
     processed_root: Path,
     *,
@@ -514,8 +453,6 @@ def render_metric_ribbon(
     varcfg: Optional[dict] = None
     processed_root: Optional[Path] = None
     master_csv_path: Optional[Path | tuple[Path, ...]] = None
-    hydro_checked_legacy_root: Optional[Path] = None
-    optimized_hydro_master_path: Optional[Path] = None
 
     df: Optional[pd.DataFrame] = None
     schema_items: list[dict] = []
@@ -723,23 +660,6 @@ def render_metric_ribbon(
                     data_dir=data_dir,
                     optimized_intent=True,
                 )
-            elif is_optimized_metric_root(processed_root):
-                if level in {"basin", "sub_basin"}:
-                    optimized_hydro_master_path = optimized_master_path_from_metric_root(
-                        processed_root,
-                        level=level,
-                    )
-                    processed_root, master_csv_path, hydro_checked_legacy_root = _resolve_hydro_master_source(
-                        processed_root,
-                        variable_slug=variable_slug,
-                        level=level,
-                        data_dir=data_dir,
-                    )
-            elif level in {"basin", "sub_basin"}:
-                master_name = get_master_csv_filename(level)
-                master_root = processed_root / "hydro"
-                master_root.mkdir(parents=True, exist_ok=True)
-                master_csv_path = master_root / master_name
             elif _is_external_metric(varcfg):
                 master_csv_path = _resolve_external_admin_master_sources(
                     processed_root,
@@ -757,7 +677,6 @@ def render_metric_ribbon(
                 force: bool = False, attach_centroid_geojson: str | None = None
             ) -> tuple[bool, str]:
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
-                is_hydro = level in {"basin", "sub_basin"}
                 is_external = _is_external_metric(varcfg)
                 uses_dedicated_dashboard_bundle_builder = (
                     level in {"district", "block"} and is_dashboard_bundle_slug(variable_slug)
@@ -772,14 +691,6 @@ def render_metric_ribbon(
                             (
                                 "external admin masters are built by dedicated geodata tooling; "
                                 f"run {rebuild_cmd or 'the metric-specific admin master builder'}"
-                            ),
-                        )
-                    if level in {"basin", "sub_basin"}:
-                        return (
-                            False,
-                            (
-                                "external hydro masters are built by dedicated geodata tooling; "
-                                f"run {rebuild_cmd or 'the metric-specific hydro master builder'}"
                             ),
                         )
                     return False, "external metric master CSV missing"
@@ -805,7 +716,6 @@ def render_metric_ribbon(
                     )
                 needs = (
                     force
-                    or (is_hydro and not _hydro_master_contract_ready(master_csv_path, level))
                     or (
                         level in {"district", "block"}
                         and master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state))
@@ -817,19 +727,6 @@ def render_metric_ribbon(
                 )
                 if not needs:
                     return False, "up-to-date"
-                if is_hydro and not _hydro_outputs_available(processed_root, level):
-                    legacy_hint = ""
-                    if hydro_checked_legacy_root is not None and is_optimized_metric_root(processed_root):
-                        legacy_hint = (
-                            f" no legacy hydro processed outputs were found under {hydro_checked_legacy_root / 'hydro'};"
-                        )
-                    return (
-                        False,
-                        (
-                            f"no hydro processed outputs found under {processed_root / 'hydro'};{legacy_hint} "
-                            f"run compute_indices_multiprocess for --level {level} first"
-                        ),
-                    )
                 try:
                     from india_resilience_tool.compute.master_builder import build_master_metrics
                 except Exception as e:
@@ -837,7 +734,7 @@ def render_metric_ribbon(
                 try:
                     master_df = build_master_metrics(
                         str(processed_root),
-                        ("hydro" if level in {"basin", "sub_basin"} else str(pilot_state)),
+                        str(pilot_state),
                         metric_col_in_periods=varcfg["periods_metric_col"],
                         out_path=str(master_csv_path),
                         attach_centroid_geojson=attach_centroid_geojson,
@@ -847,7 +744,7 @@ def render_metric_ribbon(
                     if master_csv_path.exists():
                         return True, "rebuilt"
                     if getattr(master_df, "empty", True):
-                        source_root = processed_root / str(pilot_state) if level in {"district", "block"} else processed_root / "hydro"
+                        source_root = processed_root / str(pilot_state)
                         return False, f"builder found no source rows for {level} under {source_root}"
                     return False, f"builder finished but did not create {master_csv_path}"
                 except Exception as e:
@@ -875,9 +772,6 @@ def render_metric_ribbon(
                     needs_rebuild = master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state)) or state_profile_files_missing_fn(
                         processed_root, str(pilot_state), level
                     )
-                if level in {"basin", "sub_basin"} and not _hydro_master_contract_ready(master_csv_path, level):
-                    needs_rebuild = True
-
                 if needs_rebuild:
                     with st.spinner("Master CSV missing or stale — rebuilding now..."):
                         ok, msg = rebuild_master_csv_if_needed(
@@ -896,11 +790,6 @@ def render_metric_ribbon(
                             f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
                             f"Run `{rebuild_cmd or 'the metric-specific admin master builder'}` first."
                         )
-                    elif level in {"basin", "sub_basin"}:
-                        st.error(
-                            f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
-                            f"Run `{rebuild_cmd or 'the metric-specific hydro master builder'}` first."
-                        )
                     else:
                         st.error(
                             f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}."
@@ -918,19 +807,6 @@ def render_metric_ribbon(
                         st.error(
                             f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
                             f"Run `{rebuild_cmd or 'the bundle-specific admin builder'}` first."
-                        )
-                elif level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
-                    if optimized_hydro_master_path is not None and hydro_checked_legacy_root is not None:
-                        st.error(
-                            f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {optimized_hydro_master_path}. "
-                            f"No legacy hydro processed outputs were found under {hydro_checked_legacy_root / 'hydro'}. "
-                            f"Run the hydro compute pipeline for `--level {level}` on the legacy processed tree, then rebuild `processed_optimised`."
-                        )
-                    else:
-                        st.error(
-                            f"Hydro boundary files are loaded, but no hydro processed outputs were found for "
-                            f"{VARIABLES[variable_slug]['label']} under {processed_root / 'hydro'}. "
-                            f"Run the hydro compute pipeline for `--level {level}` first, then rebuild the master CSV."
                         )
                 else:
                     st.error(

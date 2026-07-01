@@ -1,11 +1,10 @@
 # India Resilience Tool (IRT)
 
-The India Resilience Tool is a Streamlit dashboard for exploring climate-risk metrics across two spatial families:
+The India Resilience Tool is a Streamlit dashboard for exploring climate-risk metrics across admin geographies:
 
 - **Admin**: district and block
-- **Hydro**: basin and sub-basin
 
-IRT combines processed climate-model outputs, boundary layers, rankings, trends, and details views into a single exploration workflow. The current codebase supports admin and hydro map/rankings/details flows, hydro-specific boundaries and processed outputs, and an actionable polygon crosswalk bridge across **district/block** and **basin/sub-basin** views.
+IRT combines processed climate-model outputs, boundary layers, rankings, trends, and details views into a single exploration workflow. The current dashboard supports admin map/rankings/details flows, while retaining hydrology context and related basin/sub-basin highlighting for district/block units.
 
 ![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/streamlit-1.51.0-red.svg)
@@ -30,10 +29,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - uses explicit state clicks at India overview and district clicks within the selected state
   - top-bar geography search provides type-to-filter state and district suggestions
   - Deep Dive preserves current bundle, scenario-period, and geography and opens the existing detailed workflow
-- Spatial-family selector: `Admin` or `Hydro`
-- Level selector:
-  - Admin: `District` / `Block`
-  - Hydro: `Basin` / `Sub-basin`
+- Level selector: `District` / `Block`
 - Ribbon-driven metric selection:
   - assessment pillar
   - domain
@@ -92,11 +88,10 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - Aqueduct seasonal variability on SOI basin, SOI sub-basin, district, and block units
   - Aqueduct water depletion on SOI basin, SOI sub-basin, district, and block units
   - native Aqueduct scenarios: `historical`, `bau`, `opt`, `pes`
-- Map view and rankings table for all four levels
+- Map view and rankings table for district and block levels
 - Fine-grain performance guards:
   - `Admin -> Block` requires a selected state before rendering map or rankings
-  - `Hydro -> Sub-basin` requires a selected basin before rendering map or rankings
-  - nationwide overview remains available at `District` and `Basin`
+  - nationwide overview remains available at `District`
 - Right-side details panel with:
   - risk or metric summary
   - trend over time (when yearly source files exist)
@@ -104,9 +99,9 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - case-study export for admin single-unit flows
 
 ### Portfolio support
-- Implemented for **district**, **block**, **basin**, and **sub-basin**
+- Implemented for **district** and **block**
 
-### Hydro support
+### Hydro context support
 - Canonical hydro boundaries:
   - `basins.geojson`
   - `subbasins.geojson`
@@ -114,10 +109,9 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Hydro master CSVs:
   - `master_metrics_by_basin.csv`
   - `master_metrics_by_sub_basin.csv`
-- Optional hydro river overlay:
+- Optional river overlay:
   - uses `river_network_display.geojson`
-  - basin matching is mediated by `river_basin_name_reconciliation.csv`
-  - available only in hydro basin/sub-basin views
+  - available in admin district/block views when a district is selected and the river artifact carries district attribution
   - exposed through the shared `Reference overlays` sidebar section and off by default
 - Offline river topology artifacts:
   - `river_reaches.parquet`
@@ -136,10 +130,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - `block_basin_crosswalk.csv`
 - Current dashboard use:
   - district and block details show **Basin context** and **Hydrology context**
-  - basin and sub-basin details show **Administrative context**
   - related-unit highlight overlay on the map
-  - admin -> hydro navigation
-  - hydro -> admin navigation
   - hydro admin-context drill-down defaults to districts, with blocks available as an optional drill-down
 
 ### Explicitly not implemented yet

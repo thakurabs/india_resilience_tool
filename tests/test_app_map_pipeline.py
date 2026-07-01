@@ -21,27 +21,21 @@ def test_blocked_drilldown_message_requires_narrowing_for_fine_grain_views() -> 
     assert (
         blocked_drilldown_message(
             adm_level="block",
-            spatial_family="admin",
             selected_state="All",
-            selected_basin="All",
         )
         == "Select a state to render block maps and rankings."
     )
     assert (
         blocked_drilldown_message(
             adm_level="sub_basin",
-            spatial_family="hydro",
             selected_state="All",
-            selected_basin="All",
         )
-        == "Select a basin to render sub-basin maps and rankings."
+        is None
     )
     assert (
         blocked_drilldown_message(
             adm_level="district",
-            spatial_family="admin",
             selected_state="All",
-            selected_basin="All",
         )
         is None
     )
@@ -50,39 +44,27 @@ def test_blocked_drilldown_message_requires_narrowing_for_fine_grain_views() -> 
 def test_details_require_geometry_only_for_summary_flows() -> None:
     assert details_require_geometry(
         adm_level="district",
-        spatial_family="admin",
         selected_state="Telangana",
         selected_district="All",
         selected_block="All",
-        selected_basin="All",
-        selected_subbasin="All",
     )
     assert not details_require_geometry(
         adm_level="district",
-        spatial_family="admin",
         selected_state="Telangana",
         selected_district="Hyderabad",
         selected_block="All",
-        selected_basin="All",
-        selected_subbasin="All",
     )
     assert details_require_geometry(
         adm_level="block",
-        spatial_family="admin",
         selected_state="Telangana",
         selected_district="Hyderabad",
         selected_block="All",
-        selected_basin="All",
-        selected_subbasin="All",
     )
     assert not details_require_geometry(
         adm_level="sub_basin",
-        spatial_family="hydro",
         selected_state="All",
         selected_district="All",
         selected_block="All",
-        selected_basin="Godavari",
-        selected_subbasin="Sabari",
     )
 
 
@@ -95,18 +77,12 @@ def test_build_nonspatial_details_source_df_normalizes_admin_and_hydro_columns()
             "value": [1.0],
         }
     )
-    admin_out = _build_nonspatial_details_source_df(admin_df, level="block", spatial_family="admin")
+    admin_out = _build_nonspatial_details_source_df(admin_df, level="block")
 
     assert admin_out.columns.tolist() == ["state_name", "district_name", "block_name", "value"]
     assert admin_out.loc[0, "state_name"] == "Telangana"
     assert admin_out.loc[0, "district_name"] == "Hyderabad"
     assert admin_out.loc[0, "block_name"] == "Shaikpet"
-
-    hydro_df = pd.DataFrame({"basin_name": ["Godavari"], "value": [2.0]})
-    hydro_out = _build_nonspatial_details_source_df(hydro_df, level="basin", spatial_family="hydro")
-
-    assert hydro_out.loc[0, "state_name"] == "Hydro"
-    assert hydro_out.loc[0, "basin_name"] == "Godavari"
 
 
 def test_filter_frame_by_selection_value_handles_case_and_alias_mismatch() -> None:
@@ -168,7 +144,6 @@ def test_evaluate_coverage_policy_warns_for_legitimate_partial_nationwide_distri
 
     warnings, block = evaluate_coverage_policy(
         adm_level="district",
-        spatial_family="admin",
         selected_state="All",
         diagnostics=diagnostics,
     )
@@ -190,7 +165,6 @@ def test_evaluate_coverage_policy_warns_for_null_values_without_blocking() -> No
 
     warnings, block = evaluate_coverage_policy(
         adm_level="district",
-        spatial_family="admin",
         selected_state="All",
         diagnostics=diagnostics,
     )
@@ -212,7 +186,6 @@ def test_evaluate_coverage_policy_blocks_nationwide_district_broken_joins() -> N
 
     warnings, block = evaluate_coverage_policy(
         adm_level="district",
-        spatial_family="admin",
         selected_state="All",
         diagnostics=diagnostics,
     )
@@ -234,7 +207,6 @@ def test_evaluate_coverage_policy_warns_for_block_level_broken_joins() -> None:
 
     warnings, block = evaluate_coverage_policy(
         adm_level="block",
-        spatial_family="admin",
         selected_state="All",
         diagnostics=diagnostics,
     )

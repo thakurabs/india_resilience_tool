@@ -212,10 +212,8 @@ def test_flood_overlay_available_for_any_admin_state_when_artifact_exists(tmp_pa
     ss = {"overlay_rp100_flood_depth_raster_enabled": True}
     states = resolve_overlay_control_states(
         session_state=ss,
-        spatial_family="admin",
         admin_level="district",
         selected_state="Maharashtra",
-        selected_basin="All",
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
         data_dir=tmp_path,
     )
@@ -226,40 +224,35 @@ def test_flood_overlay_available_for_any_admin_state_when_artifact_exists(tmp_pa
     assert ss["overlay_rp100_flood_depth_raster_enabled"] is True
 
 
-def test_river_visibility_requires_hydro_selected_basin(tmp_path: Path) -> None:
+def test_river_visibility_requires_admin_selected_district(tmp_path: Path) -> None:
     river = tmp_path / "river_network_display.geojson"
     river.write_text("{}", encoding="utf-8")
     states = resolve_overlay_control_states(
         session_state={},
-        spatial_family="hydro",
-        admin_level="basin",
-        selected_state="All",
-        selected_basin="Godavari Basin",
+        admin_level="district",
+        selected_state="Telangana",
         river_display_geojson_path=river,
         data_dir=tmp_path,
+        selected_district="Hyderabad",
     )
     assert states[RIVER_NETWORK_OVERLAY_ID].visible is True
     assert states[RIVER_NETWORK_OVERLAY_ID].available is True
-    assert states[RP100_FLOOD_OVERLAY_ID].visible is False
+    assert states[RP100_FLOOD_OVERLAY_ID].visible is True
 
 
 @pytest.mark.parametrize(
-    ("family", "level"),
+    "level",
     [
-        ("admin", "district"),
-        ("admin", "block"),
-        ("hydro", "basin"),
-        ("hydro", "sub_basin"),
+        "district",
+        "block",
     ],
 )
-def test_population_overlay_visible_across_dashboard_levels(tmp_path: Path, family: str, level: str) -> None:
+def test_population_overlay_visible_across_admin_levels(tmp_path: Path, level: str) -> None:
     _write_valid_population_pair(tmp_path / "population" / "overlay")
     states = resolve_overlay_control_states(
         session_state={},
-        spatial_family=family,
         admin_level=level,
         selected_state="All",
-        selected_basin="All",
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
         data_dir=tmp_path,
     )
@@ -268,16 +261,14 @@ def test_population_overlay_visible_across_dashboard_levels(tmp_path: Path, fami
     assert population.available is True
 
 
-def test_population_overlay_available_in_hydro_all_basin_while_river_is_not(tmp_path: Path) -> None:
+def test_population_overlay_available_in_admin_all_district_while_river_is_not(tmp_path: Path) -> None:
     _write_valid_population_pair(tmp_path / "population" / "overlay")
     river = tmp_path / "river_network_display.geojson"
     river.write_text("{}", encoding="utf-8")
     states = resolve_overlay_control_states(
         session_state={},
-        spatial_family="hydro",
-        admin_level="basin",
+        admin_level="district",
         selected_state="All",
-        selected_basin="All",
         river_display_geojson_path=river,
         data_dir=tmp_path,
     )
@@ -300,10 +291,8 @@ def test_rural_facilities_overlay_category_precedence_and_signature(tmp_path: Pa
             "overlay_rural_facilities_density_enabled": True,
             "overlay_rural_facilities_density_category": "health",
         },
-        spatial_family="hydro",
-        admin_level="basin",
+        admin_level="district",
         selected_state="All",
-        selected_basin="All",
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
         data_dir=tmp_path,
     )
@@ -314,14 +303,9 @@ def test_rural_facilities_overlay_category_precedence_and_signature(tmp_path: Pa
 
     layers, messages, signature = build_overlay_render_layers(
         overlay_states={RURAL_FACILITIES_DENSITY_OVERLAY_ID: rural},
-        spatial_family="hydro",
-        admin_level="basin",
-        selected_basin="All",
-        selected_subbasin="All",
+        admin_level="district",
         data_dir=tmp_path,
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
-        river_basin_reconciliation_path=tmp_path / "river_basin_name_reconciliation.csv",
-        river_subbasin_diagnostics_path=tmp_path / "river_subbasin_diagnostics.csv",
         alias_fn=lambda value: str(value).strip().lower(),
     )
     assert messages == ()
@@ -333,10 +317,8 @@ def test_rural_facilities_overlay_category_precedence_and_signature(tmp_path: Pa
 def test_rural_facilities_overlay_missing_messages(tmp_path: Path) -> None:
     states = resolve_overlay_control_states(
         session_state={},
-        spatial_family="admin",
         admin_level="district",
         selected_state="All",
-        selected_basin="All",
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
         data_dir=tmp_path,
     )
@@ -359,10 +341,8 @@ def test_rural_facilities_total_category_renders_four_layers(tmp_path: Path) -> 
             "overlay_rural_facilities_density_enabled": True,
             "overlay_rural_facilities_density_category": "total",
         },
-        spatial_family="admin",
         admin_level="district",
         selected_state="All",
-        selected_basin="All",
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
         data_dir=tmp_path,
     )
@@ -372,14 +352,9 @@ def test_rural_facilities_total_category_renders_four_layers(tmp_path: Path) -> 
 
     layers, messages, signature = build_overlay_render_layers(
         overlay_states={RURAL_FACILITIES_DENSITY_OVERLAY_ID: rural},
-        spatial_family="admin",
         admin_level="district",
-        selected_basin="All",
-        selected_subbasin="All",
         data_dir=tmp_path,
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
-        river_basin_reconciliation_path=tmp_path / "river_basin_name_reconciliation.csv",
-        river_subbasin_diagnostics_path=tmp_path / "river_subbasin_diagnostics.csv",
         alias_fn=lambda value: str(value).strip().lower(),
     )
 
@@ -403,10 +378,8 @@ def test_rural_facilities_total_category_renders_four_layers(tmp_path: Path) -> 
 def test_population_overlay_missing_artifacts_use_actionable_message(tmp_path: Path) -> None:
     states = resolve_overlay_control_states(
         session_state={},
-        spatial_family="admin",
         admin_level="district",
         selected_state="All",
-        selected_basin="All",
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
         data_dir=tmp_path,
     )
@@ -433,10 +406,8 @@ def test_built_up_overlay_precedence_metadata_and_layer(tmp_path: Path) -> None:
 
     states = resolve_overlay_control_states(
         session_state={"overlay_built_up_area_current_raster_enabled": True},
-        spatial_family="admin",
         admin_level="district",
         selected_state="All",
-        selected_basin="All",
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
         data_dir=tmp_path,
     )
@@ -444,14 +415,9 @@ def test_built_up_overlay_precedence_metadata_and_layer(tmp_path: Path) -> None:
     assert built.available is True
     layers, messages, _signature = build_overlay_render_layers(
         overlay_states={BUILT_UP_AREA_OVERLAY_ID: built},
-        spatial_family="admin",
         admin_level="district",
-        selected_basin="All",
-        selected_subbasin="All",
         data_dir=tmp_path,
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
-        river_basin_reconciliation_path=tmp_path / "river_basin_name_reconciliation.csv",
-        river_subbasin_diagnostics_path=tmp_path / "river_subbasin_diagnostics.csv",
         alias_fn=lambda value: str(value).strip().lower(),
     )
     assert messages == ()
@@ -482,10 +448,8 @@ def test_lulc_overlay_precedence_metadata_missing_and_layer(tmp_path: Path) -> N
 
     states = resolve_overlay_control_states(
         session_state={"overlay_lulc_agri_current_raster_enabled": True},
-        spatial_family="hydro",
-        admin_level="basin",
+        admin_level="district",
         selected_state="All",
-        selected_basin="All",
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
         data_dir=tmp_path,
     )
@@ -493,14 +457,9 @@ def test_lulc_overlay_precedence_metadata_missing_and_layer(tmp_path: Path) -> N
     assert lulc.available is True
     layers, messages, signature = build_overlay_render_layers(
         overlay_states={LULC_AGRI_OVERLAY_ID: lulc},
-        spatial_family="hydro",
-        admin_level="basin",
-        selected_basin="All",
-        selected_subbasin="All",
+        admin_level="district",
         data_dir=tmp_path,
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
-        river_basin_reconciliation_path=tmp_path / "river_basin_name_reconciliation.csv",
-        river_subbasin_diagnostics_path=tmp_path / "river_subbasin_diagnostics.csv",
         alias_fn=lambda value: str(value).strip().lower(),
     )
     assert messages == ()
@@ -638,24 +597,17 @@ def test_active_population_overlay_zero_opacity_returns_image_layer(tmp_path: Pa
                 "overlay_population_exposure_2025_raster_enabled": True,
                 "overlay_population_exposure_2025_raster_opacity_pct": 0,
             },
-            spatial_family="hydro",
-            admin_level="basin",
+            admin_level="district",
             selected_state="All",
-            selected_basin="All",
             river_display_geojson_path=tmp_path / "river_network_display.geojson",
             data_dir=tmp_path,
         )[POPULATION_EXPOSURE_OVERLAY_ID]
     }
     layers, messages, signature = build_overlay_render_layers(
         overlay_states=states,
-        spatial_family="hydro",
-        admin_level="basin",
-        selected_basin="All",
-        selected_subbasin="All",
+        admin_level="district",
         data_dir=tmp_path,
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
-        river_basin_reconciliation_path=tmp_path / "river_basin_name_reconciliation.csv",
-        river_subbasin_diagnostics_path=tmp_path / "river_subbasin_diagnostics.csv",
         alias_fn=lambda value: str(value).strip().lower(),
     )
     assert messages == ()
@@ -673,24 +625,17 @@ def test_active_rp100_overlay_layer_carries_legend_html(tmp_path: Path) -> None:
             session_state={
                 "overlay_rp100_flood_depth_raster_enabled": True,
             },
-            spatial_family="admin",
             admin_level="district",
             selected_state="Telangana",
-            selected_basin="All",
             river_display_geojson_path=tmp_path / "river_network_display.geojson",
             data_dir=tmp_path,
         )[RP100_FLOOD_OVERLAY_ID]
     }
     layers, messages, signature = build_overlay_render_layers(
         overlay_states=states,
-        spatial_family="admin",
         admin_level="district",
-        selected_basin="All",
-        selected_subbasin="All",
         data_dir=tmp_path,
         river_display_geojson_path=tmp_path / "river_network_display.geojson",
-        river_basin_reconciliation_path=tmp_path / "river_basin_name_reconciliation.csv",
-        river_subbasin_diagnostics_path=tmp_path / "river_subbasin_diagnostics.csv",
         alias_fn=lambda value: str(value).strip().lower(),
     )
     rp100_layer = next(layer for layer in layers if layer.overlay_id == RP100_FLOOD_OVERLAY_ID)
@@ -769,10 +714,8 @@ def test_river_overlay_visible_in_admin_district_with_selected_district(tmp_path
     river.write_text("{}", encoding="utf-8")
     states = resolve_overlay_control_states(
         session_state={},
-        spatial_family="admin",
         admin_level="district",
         selected_state="Telangana",
-        selected_basin="All",
         river_display_geojson_path=river,
         data_dir=tmp_path,
         selected_district="Hyderabad",
@@ -788,10 +731,8 @@ def test_river_overlay_unavailable_when_admin_district_is_all(tmp_path: Path) ->
     river.write_text("{}", encoding="utf-8")
     states = resolve_overlay_control_states(
         session_state={},
-        spatial_family="admin",
         admin_level="district",
         selected_state="Telangana",
-        selected_basin="All",
         river_display_geojson_path=river,
         data_dir=tmp_path,
         selected_district="All",

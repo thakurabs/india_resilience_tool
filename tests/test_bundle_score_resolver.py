@@ -34,7 +34,7 @@ class _FakeLoader:
         return self.comp_df, [], [], {}
 
 
-def _fake_source_fn(composite_slug, *, level, selected_state, spatial_family, data_dir):
+def _fake_source_fn(composite_slug, *, level, selected_state, data_dir):
     return Path(f"/fake/{composite_slug}/{level}")
 
 
@@ -59,7 +59,7 @@ def _composite_frame(districts: list[str], col: str = COMPOSITE_COL) -> pd.DataF
 
 
 def _resolve(frame, loader, *, selected_bundle="Heat Risk", variable_slug="txge30_hot_days",
-            metric_col=METRIC_COL, level="district", spatial_family="admin"):
+            metric_col=METRIC_COL, level="district"):
     return _resolve_bundle_score_column(
         ranking_source=frame,
         selected_bundle=selected_bundle,
@@ -67,7 +67,6 @@ def _resolve(frame, loader, *, selected_bundle="Heat Risk", variable_slug="txge3
         metric_col=metric_col,
         level=level,
         selected_state="Telangana",
-        spatial_family=spatial_family,
         data_dir=Path("/fake"),
         load_master_and_schema_fn=loader,
         resolve_composite_source_fn=_fake_source_fn,

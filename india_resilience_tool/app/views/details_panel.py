@@ -447,7 +447,6 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
     import streamlit as st
     from india_resilience_tool.app.crosswalk_runtime import (
         clear_crosswalk_overlay,
-        navigate_from_crosswalk_overlap,
         overlay_matches_context,
         set_crosswalk_overlay_from_context,
     )
@@ -510,27 +509,8 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
             for idx, ov in enumerate(context.overlaps):
                 title = _crosswalk_overlap_title(context, ov)
                 subtitle = _crosswalk_overlap_subtitle(context, ov)
-                cols = st.columns([4, 1], gap="small")
-                with cols[0]:
-                    st.markdown(f"**{title}**")
-                    st.caption(subtitle)
-                with cols[1]:
-                    if st.button(
-                        context.open_action_label,
-                        key=f"btn_crosswalk_open_{context.direction}_{idx}_{ov.counterpart_id}_{context.counterpart_level}",
-                        use_container_width=True,
-                    ):
-                        navigate_from_crosswalk_overlap(
-                            st.session_state,
-                            context=context,
-                            overlap={
-                                "counterpart_name": ov.counterpart_name,
-                                "counterpart_state_name": ov.counterpart_state_name,
-                                "counterpart_parent_name": ov.counterpart_parent_name,
-                                "basin_name": ov.basin_name,
-                            },
-                        )
-                        st.rerun()
+                st.markdown(f"**{title}**")
+                st.caption(subtitle)
 
         if context.coordination_note:
             st.caption(context.coordination_note)
@@ -1574,37 +1554,6 @@ def render_details_panel(
     # Geography header is rendered upstream by `render_geography_header` so it
     # can sit directly under the "Climate Profile" panel header, above the
     # Exposure / Hydrological context cards.
-
-    if crosswalk_contexts:
-        # Admin mode (district/block): old basin/sub-basin expanders are replaced
-        # by the Hydrological Context card rendered above render_details_panel.
-        if level_norm in {"basin", "sub_basin"}:
-            available_admin_levels = [
-                admin_level
-                for admin_level in ("district", "block")
-                if crosswalk_contexts.get(admin_level) is not None
-            ]
-            if available_admin_levels:
-                if st.session_state.get("hydro_admin_context_level") not in available_admin_levels:
-                    preferred = "district" if "district" in available_admin_levels else available_admin_levels[0]
-                    st.session_state["hydro_admin_context_level"] = preferred
-                if len(available_admin_levels) > 1:
-                    selected_admin_context = st.radio(
-                        "Administrative context granularity",
-                        options=available_admin_levels,
-                        format_func=_display_level_name,
-                        horizontal=True,
-                        key="hydro_admin_context_level",
-                    )
-                else:
-                    selected_admin_context = available_admin_levels[0]
-                    st.session_state["hydro_admin_context_level"] = selected_admin_context
-                context = crosswalk_contexts.get(selected_admin_context)
-                if context is not None:
-                    render_crosswalk_context(context=context)
-
-    if level_norm in {"basin", "sub_basin"} and river_context is not None:
-        render_river_context(context=river_context)
 
     # Normalize panel figure size to 16:9 (dashboard style contract)
     fig_size_panel_169 = fig_size_panel
