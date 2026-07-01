@@ -311,15 +311,22 @@ Averaging across 24 GCMs (stage 3) reduces sensitivity to the structural biases 
 
 Each future window is an inclusive 21-year mean (e.g. 2020–2040 covers 2020 through 2040), with the endpoint years 2040 and 2060 each shared by two adjacent windows (→ §2.2).
 
-**Historical scenario: no splice required**
-
-The historical anchor period (1990–2010) falls entirely within the historical simulation run (1950–2014). No splicing of historical and SSP files is required for the anchor period. SSP projection files begin in 2015 and are used exclusively for the 2020–2040, 2040–2060, and 2060–2080 windows.
 
 **Composite normalization (per-period spatial ranking)**
 
 For each (scenario, period) combination, the ensemble-mean metric values across all administrative units are normalised onto a [0, 100] scale using the **spatial minimum and maximum** of that same (scenario, period) slice. Let $v_i$ be the ensemble-mean value for unit $i$, and let $v_{\min}$ and $v_{\max}$ be the minimum and maximum of $v_i$ across all units with finite values in that slice. The normalised score is:
 
-$$S_i = \operatorname{clip}\!\left(\frac{v_i - v_{\min}}{v_{\max} - v_{\min}},\; 0,\; 1\right) \times 100$$
+$$
+S_i =
+\begin{cases}
+0, & \text{if } v_i < v_{\min} \\[6pt]
+
+\frac{v_i - v_{\min}}{v_{\max} - v_{\min}} \times 100, 
+& \text{if } v_{\min} \le v_i \le v_{\max} \\[10pt]
+
+100, & \text{if } v_i > v_{\max}
+\end{cases}
+$$
 
 For metrics where a lower value indicates greater hazard, the score is inverted: $S_i = (1 - \text{scaled}) \times 100$ before clipping. If all units share an identical value ($v_{\max} = v_{\min}$), all receive a score of 50.
 
@@ -358,7 +365,7 @@ The percentile differs between warm and cold index families, but the baseline pe
 | TX90p, TN90p, WSDI, hwfi, hwa | 90th | 
 | TX10p, TN10p, CSDI | 10th | 
 
-**Baseline period.** A single reference period — **1990–2010** (21 years) — is used throughout for every percentile threshold and distribution fit: the temperature percentile and spell indices above, the precipitation percentile indices of §5.2, and the SPI calibration of §5.3. The same window also serves downstream as the **historical reference period** (§2.2/§4.3): the period-over-period change signals in the sectoral rules of §7, and the historical state reported alongside each projection, are measured against 1990–2010. These two uses share one set of years but act at different stages — as a *baseline* it calibrates each index's internal thresholds and fits (the subject of this section); as a *reference period* it anchors change comparisons after the indices are computed. The thematic composites of §6 are a separate case: they are normalized within each period against the spatial spread of units, **not** against the 1990–2010 anchor (see §6.2). Holding one window fixed across these roles keeps the relative indices and cross-period comparisons mutually consistent.
+**Baseline period.** A single reference period **1990–2010** is used throughout for every percentile threshold and distribution fit: the temperature percentile and spell indices above, the precipitation percentile indices of §5.2, and the SPI calibration of §5.3. The same window also serves downstream as the **historical reference period** (§2.2/§4.3): the period-over-period change signals in the sectoral rules of §7, and the historical state reported alongside each projection, are measured against 1990–2010. These two uses share one set of years but act at different stages — as a *baseline* it calibrates each index's internal thresholds and fits (the subject of this section); as a *reference period* it anchors change comparisons after the indices are computed. The thematic composites of §6 are a separate case: they are normalized within each period against the spatial spread of units, **not** against the 1990–2010 anchor (see §6.2). Holding one window fixed across these roles keeps the relative indices and cross-period comparisons mutually consistent.
 
 **Spells.** Several indices count *spells* — maximal runs of consecutive days that satisfy an exceedance condition. The minimum qualifying run length differs by index: WSDI and CSDI require ≥6 consecutive days (ETCCDI convention), whereas the heatwave indices hwfi and hwa require ≥5 consecutive days — an IRT/ETCCDI-style design choice, not an IMD criterion. (IMD's own heat-wave declaration uses a *two*-consecutive-day duration criterion, declared on the second qualifying day; the 5-day minimum here is the tool's own spell-length convention.) Spells are evaluated within a calendar year; a run is not carried across the year boundary.
 
