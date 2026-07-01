@@ -57,6 +57,7 @@ def compute_robust_range(
     *,
     low_pct: float = 2.0,
     high_pct: float = 98.0,
+    min_pad: float = 1.0,
 ) -> tuple[float, float]:
     """
     Compute a robust (vmin, vmax) range using percentiles.
@@ -69,6 +70,7 @@ def compute_robust_range(
         values: numeric-like series
         low_pct: lower percentile in [0, 100]
         high_pct: upper percentile in [0, 100]
+        min_pad: minimum padding for degenerate ranges
 
     Returns:
         (vmin, vmax) as floats (may be NaN if values are empty)
@@ -93,7 +95,7 @@ def compute_robust_range(
         vmin, vmax = vmax, vmin
 
     if vmin == vmax:
-        padding = max(abs(vmin) * 0.1, 1.0)
+        padding = max(abs(vmin) * 0.1, float(min_pad))
         vmin -= padding
         vmax += padding
 

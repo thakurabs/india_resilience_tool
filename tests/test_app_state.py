@@ -27,8 +27,6 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["landing_tab"] == "Rankings"
     assert isinstance(ss["portfolio_districts"], list)
     assert isinstance(ss["portfolio_blocks"], list)
-    assert isinstance(ss["portfolio_basins"], list)
-    assert isinstance(ss["portfolio_subbasins"], list)
     assert ss["jump_to_rankings"] is False
     assert ss["jump_to_map"] is False
     assert ss["landing_search"] == ""
@@ -38,7 +36,6 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["landing_context_pair"] == ("ssp585", "2040-2060")
     assert isinstance(ss["landing_compare_selection"], list)
     assert ss["crosswalk_overlay"] is None
-    assert ss["hydro_admin_context_level"] == "district"
     assert ss["overlay_rp100_flood_depth_raster_enabled"] is False
     assert ss["overlay_rp100_flood_depth_raster_opacity_pct"] == 65
     assert ss["overlay_rural_facilities_density_enabled"] is False

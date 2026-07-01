@@ -17,8 +17,23 @@ from india_resilience_tool.viz.colors import (
     build_vertical_categorical_legend_block_html,
     build_vertical_binned_legend_block_html,
     build_vertical_gradient_legend_html,
+    compute_robust_range,
     get_cmap_hex_list,
 )
+
+
+def test_compute_robust_range_min_pad_respected() -> None:
+    # Degenerate (single-value) range: the padding floor must honour min_pad so a
+    # fraction metric does not balloon to +-1.0 (CHG-0120).
+    single = pd.Series([0.0085])
+
+    vmin_d, vmax_d = compute_robust_range(single)  # default floor 1.0 (backward-compat)
+    assert vmin_d == 0.0085 - 1.0
+    assert vmax_d == 0.0085 + 1.0
+
+    vmin_s, vmax_s = compute_robust_range(single, min_pad=0.01)  # scaled floor
+    assert vmin_s == 0.0085 - 0.01
+    assert vmax_s == 0.0085 + 0.01
 
 
 def test_get_cmap_hex_list_length() -> None:
