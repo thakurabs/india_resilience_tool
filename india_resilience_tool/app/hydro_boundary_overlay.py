@@ -32,30 +32,6 @@ def _path_mtime(path: Path) -> float:
         return 0.0
 
 
-def _optimized_geometry_path(
-    *,
-    data_dir: Path,
-    hydro_level: str,
-    basin_id: str,
-) -> Optional[Path]:
-    try:
-        from india_resilience_tool.data.optimized_bundle import optimized_geometry_path
-
-        if hydro_level == "sub_basin" and basin_id:
-            return Path(
-                optimized_geometry_path(
-                    level="sub_basin",
-                    basin_id=basin_id,
-                    data_dir=data_dir,
-                )
-            )
-        if hydro_level == "basin":
-            return Path(optimized_geometry_path(level="basin", data_dir=data_dir))
-    except Exception:
-        return None
-    return None
-
-
 def _candidate_boundary_paths(
     data_dir: Path,
     hydro_level: str,
@@ -81,14 +57,6 @@ def _candidate_boundary_paths(
                 candidates.insert(0, Path(p))
     except Exception:
         pass
-
-    optimized_path = _optimized_geometry_path(
-        data_dir=Path(data_dir),
-        hydro_level=hydro_level,
-        basin_id=basin_id,
-    )
-    if optimized_path is not None:
-        candidates.insert(0, optimized_path)
 
     unique: list[Path] = []
     seen: set[str] = set()

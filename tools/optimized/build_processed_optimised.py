@@ -57,8 +57,6 @@ from india_resilience_tool.config.constants import (
     SIMPLIFY_TOL_ADM1,
     SIMPLIFY_TOL_ADM2,
     SIMPLIFY_TOL_ADM3,
-    SIMPLIFY_TOL_BASIN_RENDER,
-    SIMPLIFY_TOL_SUBBASIN_RENDER,
 )
 from india_resilience_tool.compute.glance_view_model import (
     GLANCE_FILENAMES,
@@ -1409,32 +1407,9 @@ def _geometry_tasks(
                 )
             )
 
-    if "basin" in selected_levels:
-        tasks.append(
-            BuildTask(
-                stage="geometry",
-                label="basin geometry",
-                level="basin",
-                source_path=Path(cfg.basins_path),
-                target_path=optimized_geometry_path(level="basin", data_dir=data_dir),
-            )
-        )
-
     sub: Optional[gpd.GeoDataFrame] = None
-    if "sub_basin" in selected_levels or {"basin", "sub_basin"} & selected_levels:
+    if "sub_basin" in selected_levels:
         sub = ensure_hydro_columns(gpd.read_file(cfg.subbasins_path).to_crs(4326), level="sub_basin")
-
-    if "sub_basin" in selected_levels and sub is not None:
-        for basin_id in sorted({str(v).strip() for v in sub["basin_id"].astype(str).tolist()}):
-            tasks.append(
-                BuildTask(
-                    stage="geometry",
-                    label=f"sub-basin geometry | {basin_id}",
-                    level="sub_basin",
-                    source_path=Path(cfg.subbasins_path),
-                    target_path=optimized_geometry_path(level="sub_basin", basin_id=basin_id, data_dir=data_dir),
-                )
-            )
 
     if "block" in selected_levels:
         if include_shared_admin_artifacts:
@@ -1545,35 +1520,10 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
                 lambda: _write_parquet(admin_block_index, admin_block_index_path),
             )
 
-    if any(task.level == "basin" for task in tasks):
-        basin = gpd.read_file(cfg.basins_path).to_crs(4326)
-        basin = ensure_hydro_columns(basin, level="basin")
-        basin_out = _simplify_geometry(
-            basin,
-            keep_cols=["basin_id", "basin_name", "hydro_level"],
-            tolerance=SIMPLIFY_TOL_BASIN_RENDER,
-        )
-        basin_path = optimized_geometry_path(level="basin", data_dir=data_dir)
-        basin_task = task_map.get(("basin", None, str(basin_path)))
-        if basin_task is not None:
-            _run_task(basin_task, progress, lambda: _write_geojson(basin_out, basin_path))
-
     sub: Optional[gpd.GeoDataFrame] = None
-    if any(task.level in {"sub_basin", "hydro_subbasin_index"} for task in tasks):
+    if any(task.level == "hydro_subbasin_index" for task in tasks):
         sub = gpd.read_file(cfg.subbasins_path).to_crs(4326)
         sub = ensure_hydro_columns(sub, level="sub_basin")
-
-    if any(task.level == "sub_basin" for task in tasks) and sub is not None:
-        sub_out = _simplify_geometry(
-            sub,
-            keep_cols=["subbasin_id", "subbasin_code", "subbasin_name", "basin_id", "basin_name", "hydro_level"],
-            tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
-        )
-        for basin_id, basin_gdf in sub_out.groupby("basin_id", dropna=False):
-            out_path = optimized_geometry_path(level="sub_basin", basin_id=str(basin_id), data_dir=data_dir)
-            task = task_map.get(("sub_basin", None, str(out_path)))
-            if task is not None:
-                _run_task(task, progress, lambda basin_gdf=basin_gdf, out_path=out_path: _write_geojson(basin_gdf, out_path))
 
     if any(task.level == "hydro_subbasin_index" for task in tasks) and sub is not None:
         hydro_subbasin_index = (

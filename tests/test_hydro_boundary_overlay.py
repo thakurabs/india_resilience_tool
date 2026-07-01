@@ -10,21 +10,31 @@ from india_resilience_tool.app.hydro_boundary_overlay import (
     _read_boundary,
     _read_boundary_cached,
 )
-from india_resilience_tool.data.optimized_bundle import optimized_geometry_path
 
 
-def test_candidate_boundary_paths_prefer_optimized_basin_path(tmp_path: Path) -> None:
-    optimized_path = optimized_geometry_path(level="basin", data_dir=tmp_path)
+def test_candidate_boundary_paths_prefer_canonical_basin_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import paths  # type: ignore
+
+    canonical_path = tmp_path / "basins.geojson"
+    monkeypatch.setattr(paths, "BASINS_PATH", canonical_path)
 
     candidates = _candidate_boundary_paths(tmp_path, "basin")
 
-    assert candidates[0] == optimized_path
+    assert candidates[0] == canonical_path
 
 
-def test_read_boundary_uses_cache_for_repeated_basin_lookup(tmp_path: Path) -> None:
+def test_read_boundary_uses_cache_for_repeated_basin_lookup(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import paths  # type: ignore
+
     _read_boundary_cached.cache_clear()
-    basin_path = optimized_geometry_path(level="basin", data_dir=tmp_path)
-    basin_path.parent.mkdir(parents=True)
+    basin_path = tmp_path / "basins.geojson"
+    monkeypatch.setattr(paths, "BASINS_PATH", basin_path)
     basin_gdf = gpd.GeoDataFrame(
         {"basin_id": ["GODAVARI"], "basin_name": ["Godavari Basin"]},
         geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],

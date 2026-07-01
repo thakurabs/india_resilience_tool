@@ -15,8 +15,8 @@ from typing import Literal, Optional
 from india_resilience_tool.config.paths import get_paths_config
 
 
-AdminLevel = Literal["district", "block", "basin", "sub_basin"]
-SpatialFamily = Literal["admin", "hydro"]
+AdminLevel = Literal["district", "block"]
+SpatialFamily = Literal["admin"]
 
 OPTIMIZED_DIRNAME = "processed_optimised"
 _METRICS_DIRNAME = "metrics"
@@ -205,7 +205,6 @@ def optimized_geometry_path(
     *,
     level: AdminLevel,
     state: Optional[str] = None,
-    basin_id: Optional[str] = None,
     data_dir: Optional[Path] = None,
 ) -> Path:
     """
@@ -221,12 +220,6 @@ def optimized_geometry_path(
         if not state:
             raise ValueError("State is required for block geometry.")
         return root / "admin" / "block" / f"state={str(state).strip()}.geojson"
-    if level_norm == "basin":
-        return root / "hydro" / "basin.geojson"
-    if level_norm == "sub_basin":
-        if not basin_id:
-            raise ValueError("basin_id is required for sub-basin geometry.")
-        return root / "hydro" / "sub_basin" / f"basin_id={str(basin_id).strip()}.geojson"
     raise ValueError(f"Unsupported geometry level: {level!r}")
 
 
@@ -280,7 +273,7 @@ def optimized_master_sources_for_level(
       - a concrete state returns one state Parquet
       - `All` returns every `state=*.parquet` file for the level
 
-    Hydro levels always return one file.
+    Only admin levels are exposed by the dashboard runtime.
     """
     level_norm = str(level).strip().lower()
     metric_root = resolve_optimized_metric_root(slug, data_dir=data_dir)
@@ -300,9 +293,6 @@ def optimized_master_sources_from_metric_root(
     """Return one or many optimized master paths when the metric root is already known."""
     metric_root = _metric_root_path(metric_root)
     level_norm = str(level).strip().lower()
-    if level_norm in {"basin", "sub_basin"}:
-        return (optimized_master_path_from_metric_root(metric_root, level=level_norm),)
-
     level_dir = metric_root / "masters" / "admin" / level_norm
     state_norm = str(selected_state or "All").strip() or "All"
     if state_norm != "All":

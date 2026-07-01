@@ -68,12 +68,6 @@ def build_feature_key_series(
         keys = state_key.str.cat(district_key, sep="|").str.cat(block_key, sep="|")
         return keys.where(valid, pd.NA)
 
-    if level_norm == "sub_basin":
-        return _normalize_series(_string_series(frame, ("subbasin_id",)), alias_fn=alias_fn)
-
-    if level_norm == "basin":
-        return _normalize_series(_string_series(frame, ("basin_id",)), alias_fn=alias_fn)
-
     state_key = _normalize_series(_string_series(frame, ("state_name", "state")), alias_fn=alias_fn)
     district_key = _normalize_series(_string_series(frame, ("district_name", "district")), alias_fn=alias_fn)
     valid = state_key.notna() & district_key.notna()
@@ -107,14 +101,6 @@ def build_feature_key_from_properties(
         block_key = _normalize_value("block_name", "block", "adm3_name", "subdistrict_name", "name")
         if state_key and district_key and block_key:
             return f"{state_key}|{district_key}|{block_key}"
-    elif level_norm == "sub_basin":
-        subbasin_key = _normalize_value("subbasin_id")
-        if subbasin_key:
-            return subbasin_key
-    elif level_norm == "basin":
-        basin_key = _normalize_value("basin_id")
-        if basin_key:
-            return basin_key
     else:
         state_key = _normalize_value("state_name", "state", "adm1_name", "shapeName_0", "shapeGroup")
         district_key = _normalize_value("district_name", "district")
