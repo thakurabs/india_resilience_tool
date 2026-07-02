@@ -235,6 +235,17 @@ Entry fields:
 - `Files to change`: `india_resilience_tool/app/runtime.py`, `india_resilience_tool/app/geography_controls.py`
 - `Test to add`: extend `tests/test_app_geography_controls.py` to assert that block selector gracefully returns an empty-but-valid index when the optimised context artifact is absent.
 
+### BL-0023 — Retire the Aqueduct hydro scripts (extract shared helpers, then delete)
+- `Area`: aqueduct, tools, lean-down
+- `Why deferred`: the final piece of the hydro lean-down's G11 file-deletes. `tools/geodata/build_aqueduct_hydro_crosswalk.py` (225 lines) and `build_aqueduct_hydro_masters.py` (486 lines) are named "hydro" but are ~70% **live shared Aqueduct-general** code that the retained admin builders import — `load_aqueduct_boundaries`, `load_soi_hydro_boundaries`, `AqueductMetricSpec`, `AQUEDUCT_METRIC_SPECS`, `get_aqueduct_metric_spec`, `get_aqueduct_source_column_map`, `get_supported_aqueduct_metric_slugs`, `load_metric_source_table`, `load_crosswalk`, `aggregate_crosswalk_to_targets`. Only ~240 lines (the hydro crosswalk/master `main`/`build_cli` + write helpers, which write the no-longer-surfaced SOI basin/sub-basin Aqueduct masters) is genuinely dead. Deleting the files is therefore a 6-file extract-then-delete refactor of working retained code for a small dead-code payoff, so it was consciously deferred (user decision, 2026-07-02) rather than done as part of the docs + river-pair lean-down (CHG-0174/CHG-0175).
+- `Dependency / trigger`: pick up when the Aqueduct tooling is being reorganized anyway, or when the dead SOI basin/sub-basin master-build path is confirmed permanently unwanted. Retained importers to rewire: `build_aqueduct_admin_crosswalk.py`, `build_aqueduct_block_crosswalk.py`, `build_aqueduct_admin_masters.py`, `validate_aqueduct_workflow.py`, and `tests/test_validate_aqueduct_workflow.py`. `tests/test_aqueduct_hydro_transfer.py` still exists (Phase 3 planned its deletion but was G11-blocked) and would be deleted with the scripts.
+- `Plan`:
+  1. Create `tools/geodata/aqueduct_common.py` and move the shared Aqueduct-general helpers/constants/`AqueductMetricSpec` there (with their internal helpers: `_default_aqueduct_dir`, `_assert_areal_geometries`, `_normalize_pfaf_id_series`, `_numeric_metric_series`, `HydroLevel` alias).
+  2. Rewire the four retained importers + `test_validate_aqueduct_workflow.py` to import from `aqueduct_common`.
+  3. Delete `build_aqueduct_hydro_crosswalk.py`, `build_aqueduct_hydro_masters.py`, and `tests/test_aqueduct_hydro_transfer.py`.
+  4. Update `README.md` / `MANIFEST.md`: drop the two Aqueduct hydro builder commands and the SOI basin/sub-basin master references; keep the admin Aqueduct district/block workflow.
+- `Done when`: the two Aqueduct hydro scripts are gone, no `processed/{aqueduct_slug}/hydro/` master-build path remains, the retained admin Aqueduct district/block builders + `validate_aqueduct_workflow` import their shared helpers from `aqueduct_common` and pass their tests, and no dangling imports remain repo-wide.
+
 ## Icebox
 
 - No items recorded yet.
