@@ -92,8 +92,6 @@ CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variabi
 | `python -m tools.geodata.build_lulc_admin_masters --help` | Build district/block agricultural LULC exposure master CSVs plus the display-only binary agricultural LULC PNG/metadata overlay |
 | `python -m tools.geodata.build_groundwater_district_masters --help` | Build district groundwater assessment master CSVs from the 2024-2025 GEC workbook |
 | `python -m tools.geodata.clean_river_network --src <path> --overwrite` | Clean Survey of India river network into canonical river artifacts |
-| `python -m tools.geodata.build_river_basin_reconciliation --overwrite` | Build hydro-basin ↔ river-basin reconciliation CSV |
-| `python -m tools.geodata.build_river_subbasin_diagnostics --overwrite` | Build hydro sub-basin vs river-name diagnostics CSV |
 | `python -m tools.geodata.build_river_topology --overwrite` | Build topology-ready river reaches, nodes, adjacency, and QA artifacts |
 | `python -m tools.pipeline.enrich_river_network_districts [--dry-run]` | Spatial-join cleaned river display with districts and rewrite `river_network_display.geojson` in place with a `district_names_clean` column (drives admin-view river overlay; backs up original to `.bak` on first run) |
 | `python -m pytest -q` | Run tests |
@@ -384,8 +382,6 @@ Aqueduct methodology note:
 | `build_jrc_flood_depth_admin_masters.py` | Build per-state (`--state`, default Telangana) district/block JRC flood-depth master `{csv,parquet}` files using block flooded-cell `p95` and district flooded-area weighting, plus the derived RP100 Flood Severity Index, RP100 flood-extent masters, RP-100 display overlay PNG/metadata, provenance-aware run summary rows, and stable QA CSVs. Masters write to `processed/{slug}/{state}/`; QA defaults to `jrc_flood_depth/{state}/qa`; the RP-100 overlay is pan-India and shared at `jrc_flood_depth/overlay/` (idempotent across states) |
 | `validate_aqueduct_workflow.py` | Validate Aqueduct cleanup plus direct district/block and SOI hydro transfer outputs for the onboarded Aqueduct metrics |
 | `clean_river_network.py` | Clean Survey of India river shapefile into canonical GeoParquet + display GeoJSON + QA CSV |
-| `build_river_basin_reconciliation.py` | Build the canonical hydro-basin ↔ river-basin reconciliation CSV for river overlays |
-| `build_river_subbasin_diagnostics.py` | Build hydro sub-basin vs river-name diagnostics CSV |
 | `build_river_topology.py` | Build topology-ready river reaches, nodes, adjacency, and QA artifacts |
 | `convert_blocks_shp_to_geojson.py` | Convert block shapefile to standardized GeoJSON |
 | `inspect_block_shapefile.py` | Inspect and optionally convert block shapefiles |
@@ -595,8 +591,6 @@ All three admin-boundary GeoJSONs below are derived together from one bharatlas 
 | `river_network.parquet` | Canonical cleaned river-network line artifact |
 | `river_network_display.geojson` | Simplified river-network display artifact |
 | `river_network_qa.csv` | Row-level QA flags for the cleaned river network |
-| `river_basin_name_reconciliation.csv` | Hydro-basin ↔ river-basin reconciliation registry used by hydro river overlays |
-| `river_subbasin_diagnostics.csv` | Hydro sub-basin vs river-name diagnostics registry for sub-basin overlays |
 | `river_reaches.parquet` | Topology-ready river reach artifact |
 | `river_nodes.parquet` | Topology-ready river node artifact |
 | `river_adjacency.parquet` | Reach-to-reach adjacency artifact |
@@ -693,15 +687,13 @@ Current canonical river-network cleaning outputs:
 - `river_network.parquet`
 - `river_network_display.geojson`
 - `river_network_qa.csv`
-- `river_basin_name_reconciliation.csv`
 
 Current behavior:
 - offline cleaning + QA only
 - preserves raw Survey of India fields and adds canonical cleaned columns
-- hydro-only display overlay available via `river_network_display.geojson`
-- basin-level overlay matching is driven by `river_basin_name_reconciliation.csv`
-- sub-basin overlay diagnostics are supported via `river_subbasin_diagnostics.csv`
+- admin district/block display overlay available via the district-sliced `river_network_display.geojson`
 - topology-ready reach/node/adjacency artifacts are supported offline
+- the former basin/sub-basin reconciliation and diagnostics builders were removed with the navigable hydro river overlay
 - no upstream/downstream routing UI, river crosswalks, or river-based metric computation yet
 
 ### Reference overlays

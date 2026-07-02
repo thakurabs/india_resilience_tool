@@ -394,8 +394,6 @@ Place these in `IRT_DATA_DIR`:
 - `river_network.parquet` (optional canonical cleaned river artifact; not yet used by the dashboard runtime)
 - `river_network_display.geojson` (optional derived display artifact for inspection)
 - `river_network_qa.csv` (optional QA artifact from river cleaning)
-- `river_basin_name_reconciliation.csv` (optional but required for reliable hydro basin river overlays)
-- `river_subbasin_diagnostics.csv` (optional diagnostics artifact for hydro sub-basin river overlays)
 - `river_reaches.parquet` (optional topology-ready reach artifact)
 - `river_nodes.parquet` (optional topology-ready node artifact)
 - `river_adjacency.parquet` (optional topology-ready reach adjacency artifact)
@@ -814,19 +812,11 @@ This creates the first canonical river artifacts under `IRT_DATA_DIR`:
 - `river_network_display.geojson`
 - `river_network_qa.csv`
 
-Then build the hydro-basin reconciliation table used by the hydro river overlay:
-
-```bash
-python -m tools.geodata.build_river_basin_reconciliation --overwrite
-```
-
-This writes:
-- `river_basin_name_reconciliation.csv`
+The former `build_river_basin_reconciliation` and `build_river_subbasin_diagnostics` builders drove the retired navigable hydro (basin/sub-basin) river overlay and have been removed along with it; their `river_basin_name_reconciliation.csv` / `river_subbasin_diagnostics.csv` outputs are no longer built or consumed.
 
 ### Build river topology and missing-assignment diagnostics
 
 ```bash
-python -m tools.geodata.build_river_subbasin_diagnostics --overwrite
 python -m tools.geodata.build_river_topology --overwrite
 ```
 
@@ -834,12 +824,11 @@ This writes:
 - `river_reaches.parquet`
 - `river_nodes.parquet`
 - `river_adjacency.parquet`
-- `river_subbasin_diagnostics.csv`
 - `river_topology_qa.csv`
 - `river_missing_assignments.csv`
 - `river_missing_assignments.geojson`
 
-The river reconciliation and sub-basin diagnostics CSVs are now offline QA artifacts only; the navigable hydro (basin/sub-basin) river overlay has been removed. The admin district/block river overlay is driven directly by the district-sliced river display artifact. Topology-ready river artifacts are supported offline, but upstream/downstream routing and river-based metric computation are still deferred.
+The admin district/block river overlay is driven directly by the district-sliced river display artifact. Topology-ready river artifacts are supported offline, but upstream/downstream routing and river-based metric computation are still deferred.
 
 ## Usage notes
 
