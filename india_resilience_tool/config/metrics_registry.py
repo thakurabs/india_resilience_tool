@@ -90,7 +90,6 @@ class MetricSpec:
     supports_baseline_comparison: bool = True
     supports_scenario_comparison: bool = True
     admin_rebuild_command: Optional[str] = None
-    hydro_rebuild_command: Optional[str] = None
     supported_scenarios: Sequence[str] = field(default_factory=tuple)
     preferred_period_order: Sequence[str] = field(default_factory=tuple)
     supported_spatial_families: Sequence[str] = field(default_factory=tuple)
@@ -143,7 +142,6 @@ class MetricSpec:
             supports_baseline_comparison=bool(d.get("supports_baseline_comparison", True)),
             supports_scenario_comparison=bool(d.get("supports_scenario_comparison", True)),
             admin_rebuild_command=str(d.get("admin_rebuild_command") or "").strip() or None,
-            hydro_rebuild_command=str(d.get("hydro_rebuild_command") or "").strip() or None,
             supported_scenarios=tuple(str(v) for v in (d.get("supported_scenarios") or ())),
             preferred_period_order=tuple(str(v) for v in (d.get("preferred_period_order") or ())),
             supported_spatial_families=tuple(str(v) for v in (d.get("supported_spatial_families") or ())),
@@ -2198,7 +2196,6 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": "python -m tools.pipeline.build_proposal_bundles",
-        "hydro_rebuild_command": None,
         "supported_scenarios": ("ssp245", "ssp585"),
         "preferred_period_order": ("2020-2040", "2040-2060", "2060-2080"),
         "supported_spatial_families": ("admin",),
@@ -2243,7 +2240,6 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
                 if spec.canonical_bundle in THEMATIC_DASHBOARD_BUNDLE_NAMES
                 else "python -m tools.pipeline.build_proposal_bundles"
             ),
-            "hydro_rebuild_command": None,
             "supported_scenarios": spec.supported_scenarios,
             "preferred_period_order": (
                 ("Current",)
@@ -2731,7 +2727,6 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             "supports_baseline_comparison": bool(spec.supports_baseline_comparison),
             "supports_scenario_comparison": bool(spec.supports_scenario_comparison),
             "admin_rebuild_command": spec.admin_rebuild_command,
-            "hydro_rebuild_command": spec.hydro_rebuild_command,
             "supported_scenarios": list(spec.supported_scenarios),
             "preferred_period_order": list(spec.preferred_period_order),
             "supported_spatial_families": list(spec.supported_spatial_families),

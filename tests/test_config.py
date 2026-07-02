@@ -241,7 +241,6 @@ def test_sector_wise_composites_are_exposed_as_admin_derived_metrics() -> None:
         assert cfg["supported_scenarios"] == ["ssp245", "ssp585"]
         assert cfg["units"] == "score"
         assert cfg["admin_rebuild_command"] == "python -m tools.pipeline.build_proposal_bundles"
-        assert cfg["hydro_rebuild_command"] is None
         assert domain in cfg["domains"]
 
 
@@ -263,7 +262,6 @@ def test_r95p_interannual_variability_is_exposed_as_dashboard_derived_metric() -
     assert cfg["display_units"] == "ratio"
     assert cfg["display_scale"] == 1.0
     assert cfg["admin_rebuild_command"] == "python -m tools.pipeline.build_proposal_bundles"
-    assert cfg["hydro_rebuild_command"] is None
     assert "Asset Risk (Hydropower Plants)" in cfg["domains"]
 
 
