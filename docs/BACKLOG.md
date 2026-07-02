@@ -39,18 +39,6 @@ Entry fields:
 - `Dependency / trigger`: continue after the latest `build_river_topology` outputs are regenerated and the debug artifacts are available.
 - `Done when`: unresolved river hydro assignments are explained or fixed, remaining self-loops are inspected, and `river_topology_qa.csv` contains only accepted residual issues.
 
-### BL-0002 — Complete structured visual validation of river overlays and topology artifacts
-- `Area`: river, QA
-- `Why deferred`: the dashboard now shows hydro river overlays and river summaries, but representative basin/sub-basin validation still needs to be completed systematically.
-- `Dependency / trigger`: requires current `river_basin_name_reconciliation.csv`, `river_subbasin_diagnostics.csv`, `river_reaches.parquet`, and the missing-assignment debug artifacts.
-- `Done when`: a representative set of major basins, sub-basins, unresolved cases, and debug layers has been manually reviewed and accepted.
-
-### BL-0003 — Decide whether sub-basin river matching needs a permanent reconciliation artifact
-- `Area`: river, data-contract
-- `Why deferred`: basin-level reconciliation is permanent, but sub-basin matching is still diagnostics-driven and may or may not need to graduate to a canonical mapping file.
-- `Dependency / trigger`: review the current `river_subbasin_diagnostics.csv` results after visual validation.
-- `Done when`: the team explicitly decides either to keep diagnostics-only matching or to introduce `river_subbasin_name_reconciliation.csv`.
-
 ## Next
 
 ### BL-0004 — Build the weighted admin ↔ hydro translation engine
@@ -58,12 +46,6 @@ Entry fields:
 - `Why deferred`: current crosswalks are intentionally read-optimized and explanatory, not analytical transfer engines.
 - `Dependency / trigger`: start after current river QA closure and once the desired weighting/aggregation semantics are agreed.
 - `Done when`: the platform can translate values across admin and hydro geographies with explicit weighting rules and provenance.
-
-### BL-0005 — Add hydro portfolio workflows
-- `Area`: hydro, UI
-- `Why deferred`: portfolio support currently exists only for district and block flows.
-- `Dependency / trigger`: start after hydro single-unit flows and the polygon crosswalk bridge are considered stable enough to widen the interaction model.
-- `Done when`: basin and sub-basin portfolio selection, comparison, and portfolio-side summaries work reliably in the dashboard.
 
 ### BL-0006 — Build the river-network/reach translation layer
 - `Area`: river, crosswalk
@@ -119,52 +101,6 @@ Entry fields:
   - **DEM-derived** classification (elevation cutoff for hilly) + standard **coastal-district list** (Census / MoES-NCCR) + plains residual.
 - `Done when`: each district/block carries a defensible physiographic-zone label, the impact-band scorer looks up per-zone bands, and the per-metric dossiers record zone-specific bands (external where published, self-derived via the protocol otherwise) with the plains default retained as fallback.
 
-### BL-0021 — CHG-0032-RT: Agricultural Risk artifact rebuild on data-prod
-- `Area`: proposal bundles, ops, data pipeline
-- `Why deferred`: CHG-0032 (Agricultural Risk lens migration, code + config + docs + tests) was applied on the dev workstation and verified by `pytest -q` (37/37 on the three targeted test files). The artifact rebuild was attempted but cannot complete on this box: only `txx_annual_max` has the upstream per-state per-level intermediate CSVs in `processed/`, and three of the seven rule metrics (`spi3_count_events_lt_minus1`, `spi3_max_spell_lt_minus1`, `tnle10_cold_nights`) are absent from `processed_optimised/metrics/` as well. Rebuilding them locally would require running `tools.pipeline.compute_indices_multiprocess` from raw CMIP6 model outputs — multi-hour and outside CHG-0032 scope. The dashboard on the data-prod machine will continue to serve old single-lens Agricultural scores until this runs there.
-- `Dependency / trigger`: run on the environment that already has all seven rule metrics' intermediate per-model CSVs under `IRT_DATA_DIR/processed/<metric>/<state>/{districts,blocks}/`. Required metric slugs: `txx_annual_max`, `txge35_extreme_heat_days`, `wsdi_warm_spell_days`, `spi3_count_events_lt_minus1`, `spi3_max_spell_lt_minus1`, `pr_max_5day_precip`, `tnle10_cold_nights`. Confirm via `python -m tools.pipeline.build_master_metrics --list-metrics` before kicking off the build.
-- `Commands` (run from repo root, in order; all flags load-bearing):
-  ```bash
-  # Step 1 — build the seven upstream rule master CSVs (overwrite is default; no flag needed).
-  # Repeat per state if rebuilding more than Telangana; --level both covers district + block.
-  python -m tools.pipeline.build_master_metrics --level both --state Telangana --metrics txx_annual_max txge35_extreme_heat_days wsdi_warm_spell_days spi3_count_events_lt_minus1 spi3_max_spell_lt_minus1 pr_max_5day_precip tnle10_cold_nights
-
-  # Step 2 — aggregate the seven rule masters into the composite bundle master.
-  python -m tools.pipeline.build_proposal_bundles --bundle composite_agricultural_risk --level admin --overwrite
-
-  # Step 3 — convert legacy bundle masters into the optimized runtime parquet shards.
-  # --prune-scope deletes stale optimized files inside the agricultural-risk metric/level scope (destructive; requires --overwrite).
-  python -m tools.optimized.build_processed_optimised --metric composite_agricultural_risk --level admin --overwrite --prune-scope
-
-  # Verification — confirm lens-decomposed columns landed and parity is clean.
-  python -m tools.optimized.audit_processed_optimised_parity --metric composite_agricultural_risk
-  python -c "import pandas as pd; from pathlib import Path; import os; root = Path(os.environ.get('IRT_DATA_DIR','/data/irt'))/'processed'/'composite_agricultural_risk'/'Telangana'; csv = next(root.rglob('master_metrics_by_district.csv')); df = pd.read_csv(csv); print(sorted(c for c in df.columns if 'txx_peak_crop_heat' in c and any(s in c for s in ('abs_score','chg_score','imp_score'))))"
-  ```
-- `Done when`:
-  - All seven rule masters present in `processed/<metric>/<state>/master_metrics_by_{district,block}.csv` for every state in scope.
-  - `processed/composite_agricultural_risk/<state>/master_metrics_by_{district,block}.csv` present and includes `__abs_score`, `__chg_score`, `__imp_score` columns for every (rule, scenario, period) combination.
-  - `processed_optimised/metrics/composite_agricultural_risk/masters/admin/{district,block}/state=<state>.parquet` present.
-  - `audit_processed_optimised_parity --metric composite_agricultural_risk` reports `issues=0`.
-  - Manual dashboard check (Streamlit, Telangana, Sector-wise → Agricultural Risk): bundle ranks shift relative to pre-rebuild baseline (new weights and a live change lens guarantee numeric movement).
-
-### BL-0022 — CHG-0035-RT: Thermal Power lens migration after SPI-3 baseline preflight
-- `Area`: proposal bundles, methodology, compute, docs, tests
-- `Why deferred`: CHG-0035 is currently `SUGGESTED` but blocked by its hard precondition. In the active data environment, `IRT_DATA_DIR` resolves to `/mnt/d/projects/irt_data`, but `processed/spi3_count_months_lt_minus1/` has no state-level legacy master CSVs, so the required read-only preflight could not verify that `_resolve_baseline_column()` finds a historical baseline for real SPI-3 district masters. Landing the Thermal Power change without that proof would make the planned SPI-3 change lens cosmetic in production.
-- `CHG Ledger`: `CHG-0035` — `india_resilience_tool/config/proposal_bundles.py`, `india_resilience_tool/compute/proposal_bundles.py`, `docs/lens_scoring_methodology.md`, `docs/bundle_calculation_audit.md`, `docs/proposal_bundle_methodology.md`, `docs/climate_risk_indicator_inventory.md`, `README.md`, `MANIFEST.md`, and the proposal-bundle test suites. Status: `SUGGESTED`, blocked pending SPI-3 baseline-column verification.
-- `Dependency / trigger`: resume only on an environment that has a real legacy SPI-3 master at `IRT_DATA_DIR/processed/spi3_count_months_lt_minus1/<state>/master_metrics_by_district.csv`. First verify `_resolve_baseline_column(frame, "spi3_count_months_lt_minus1")` returns a non-`None` historical column on that real frame; if it does not, stop and fix baseline availability or baseline-token support before applying CHG-0035.
-- `Plan`:
-  1. Run the blocking SPI-3 baseline preflight against a real district master CSV in the live data environment.
-  2. If the preflight passes, migrate `composite_asset_risk_thermal_power` to dossier §10 explicit weights in `india_resilience_tool/config/proposal_bundles.py` while preserving the current rule order, slugs, and user-visible labels.
-  3. Remove the Thermal SPI-3 absolute-only special case in `india_resilience_tool/compute/proposal_bundles.py` so `spi3_low_flow_proxy_norm` becomes a normal blended rule with absolute + change lenses and no impact lens; keep the Hydropower `r95p_interannual_variability_norm` helper special case unchanged.
-  4. Update the landed docs and inventory text to reflect the applied Thermal Power methodology and the migrated explicit-weight bundle count.
-  5. Extend the proposal-bundle config, builder, per-lens persistence, grid-first contract, and optimized-bundle tests, then run the targeted pytest suite or the documented fallback validation if `pytest` is unavailable.
-- `Done when`:
-  - The SPI-3 preflight proves a real `spi3_count_months_lt_minus1` district master exposes a resolvable historical baseline column.
-  - `composite_asset_risk_thermal_power` uses `weight_mode="explicit_normalized"` with a `0.70` minimum available rule-weight fraction and dossier-§10 rule weights/lens splits.
-  - `spi3_low_flow_proxy_norm` persists `__chg_score` columns, still omits `__imp_score`, and no longer uses the Thermal absolute-only dispatch path.
-  - Thermal Power docs and inventory text describe the landed explicit-weight methodology without changing current slugs or labels.
-  - The targeted proposal-bundle and `processed_optimised` compatibility tests pass in the real project environment.
-
 ## Later
 
 ### BL-0007 — Migrate processed-data storage to build/published/archive Parquet serving
@@ -184,12 +120,6 @@ Entry fields:
 - `Why deferred`: topology artifacts exist offline, but no routed or direction-aware product behavior has been added yet.
 - `Dependency / trigger`: requires stable reach/node/adjacency artifacts and a clear contract for directionality and routed queries.
 - `Done when`: the product can surface upstream/downstream relationships in a user-facing way without ambiguous or misleading routing behavior.
-
-### BL-0009 — Add admin-side river overlays
-- `Area`: river, admin-ui
-- `Why deferred`: the current river overlay is intentionally hydro-only.
-- `Dependency / trigger`: start after the hydro-side river experience is accepted and the desired admin-side narrative is clear.
-- `Done when`: district/block views can optionally show river context without confusing the current admin analysis workflow.
 
 ### BL-0010 — Add river-based metric computation
 - `Area`: river, analytics
@@ -214,26 +144,22 @@ Entry fields:
   - Sub-basin geometry when a basin is selected — `geometry/hydro/sub_basin/basin_id={id}.geojson`; falls back to `subbasins.geojson`
   - River display, reconciliation, diagnostics, reaches — `context/river_*.{geojson,parquet}`; falls back to legacy `IRT_DATA_DIR` flat files
   - Crosswalk context (details panel) — `context/{district,block}_{subbasin,basin}.parquet`; falls back to legacy crosswalk CSVs
-  - Block dropdown index — `context/admin_block_index.parquet` (no graceful fallback — see BL-0019)
+  - Block dropdown index — `context/admin_block_index.parquet`; falls back to loading block names from `blocks_4326.geojson` directly when missing
   - Sub-basin dropdown index — `context/hydro_subbasin_index.parquet`; falls back to loading `subbasins.geojson` directly
 
   **Not yet routed through `processed_optimised` — gaps:**
   1. Landing page ADM2 geometry: `runtime.py` always reads the raw nationwide `districts_4326.geojson` on the landing page (`ADM2_GEOJSON = DISTRICTS_PATH`), even when a state-sharded optimised GeoJSON exists. See BL-0019.
   2. ADM1 (state boundary dissolve): built by dissolving the raw ADM2; follows from gap 1.
-  3. Block selector fallback: if `admin_block_index.parquet` is missing, `geography_controls.py` has no graceful fallback. See BL-0019.
-  4. Legacy master rebuild output: when a climate metric falls back to legacy, `build_master_metrics()` writes the rebuilt master into `processed/{slug}/{state}/` rather than into `processed_optimised/`. The rebuild path still targets the legacy tree.
+  3. Legacy master rebuild output: when a climate metric falls back to legacy, `build_master_metrics()` writes the rebuilt master into `processed/{slug}/{state}/` rather than into `processed_optimised/`. The rebuild path still targets the legacy tree.
 
   **Long-term action (when ready to remove legacy fallback branches):** remove the legacy fallback arms from `_resolve_admin_master_source`, `_resolve_hydro_master_source`, and the timeseries loaders. This makes the dashboard fail fast and clearly when the bundle is incomplete, rather than silently reading stale legacy data. Block this on confirming `processed_optimised` is complete across all metric slugs and levels.
 
-### BL-0019 — Fix two remaining data-feed gaps: landing page geometry and block selector fallback
+### BL-0019 — Fix remaining data-feed gap: landing page geometry not routed through processed_optimised
 - `Area`: app, data-loading, processed_optimised
-- `Why deferred`: both are non-blocking for the current dashboard state (landing page works via raw GeoJSON; block selector works when `admin_block_index.parquet` exists), but they leave the dashboard partially dependent on legacy paths in ways that will matter at deployment time.
+- `Why deferred`: non-blocking for the current dashboard state (landing page works via raw GeoJSON), but leaves the dashboard partially dependent on legacy paths in ways that will matter at deployment time. The companion block-selector-fallback gap is already resolved — `geography_controls.py` now falls back to `blocks_4326.geojson` when `admin_block_index.parquet` is missing.
 - `Dependency / trigger`: fix before the first deployment where `IRT_DATA_DIR` boundary flat files are not co-deployed alongside `processed_optimised`.
-- `Done when`:
-  1. `runtime.py` landing page: in state-focused landing mode (when `selected_state != "All"`), tries `optimized_geometry_path(level="district", state=selected_state)` before falling back to `DISTRICTS_PATH`. For the India-level overview (`state=All`) the raw nationwide GeoJSON remains correct.
-  2. `geography_controls.py` block selector: if `admin_block_index.parquet` is missing, falls back to loading block names from `blocks_4326.geojson` directly (matching the pattern already used by the sub-basin selector when `hydro_subbasin_index.parquet` is absent).
-- `Files to change`: `india_resilience_tool/app/runtime.py`, `india_resilience_tool/app/geography_controls.py`
-- `Test to add`: extend `tests/test_app_geography_controls.py` to assert that block selector gracefully returns an empty-but-valid index when the optimised context artifact is absent.
+- `Done when`: `runtime.py` landing page, in state-focused landing mode (when `selected_state != "All"`), tries `optimized_geometry_path(level="district", state=selected_state)` before falling back to `DISTRICTS_PATH`. For the India-level overview (`state=All`) the raw nationwide GeoJSON remains correct.
+- `Files to change`: `india_resilience_tool/app/runtime.py`
 
 ### BL-0023 — Retire the Aqueduct hydro scripts (extract shared helpers, then delete)
 - `Area`: aqueduct, tools, lean-down
