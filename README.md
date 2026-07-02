@@ -83,11 +83,12 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - optional `Reference overlays` sidebar section in admin district/block views can display the RP-100 flood-depth raster as a display-only overlay
   - the dashboard runtime reads only exported overlay artifacts, not the raw `RP100_depth.tif`
 - Water-risk Aqueduct onboarding:
-  - Aqueduct water stress on SOI basin, SOI sub-basin, district, and block units
-  - Aqueduct interannual variability on SOI basin, SOI sub-basin, district, and block units
-  - Aqueduct seasonal variability on SOI basin, SOI sub-basin, district, and block units
-  - Aqueduct water depletion on SOI basin, SOI sub-basin, district, and block units
+  - Aqueduct water stress on district and block units
+  - Aqueduct interannual variability on district and block units
+  - Aqueduct seasonal variability on district and block units
+  - Aqueduct water depletion on district and block units
   - native Aqueduct scenarios: `historical`, `bau`, `opt`, `pes`
+  - the offline Aqueduct SOI basin/sub-basin masters are no longer surfaced in the dashboard (see "Hydro context support")
 - Map view and rankings table for district and block levels
 - Fine-grain performance guards:
   - `Admin -> Block` requires a selected state before rendering map or rankings
@@ -102,13 +103,12 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 - Implemented for **district** and **block**
 
 ### Hydro context support
-- Canonical hydro boundaries:
+
+The navigable Hydro spatial family (basin/sub-basin map, rankings, details, and portfolio views) has been removed; the dashboard is now **admin-only** (district and block). Hydrology is retained purely as *context* for admin district/block units — a Hydrological Context card, a dominant-basin outline overlay, an optional river overlay, and polygon crosswalk context. The offline basin/sub-basin climate compute pipeline and its `master_metrics_by_basin.csv` / `master_metrics_by_sub_basin.csv` hydro masters have likewise been retired.
+
+- Canonical hydro boundaries (drive the admin basin-outline overlay and crosswalk context):
   - `basins.geojson`
   - `subbasins.geojson`
-- Hydro processed outputs under `processed/{metric}/hydro/`
-- Hydro master CSVs:
-  - `master_metrics_by_basin.csv`
-  - `master_metrics_by_sub_basin.csv`
 - Optional river overlay:
   - uses `river_network_display.geojson`
   - available in admin district/block views when a district is selected and the river artifact carries district attribution
@@ -198,13 +198,13 @@ python -m tools.pipeline.build_spatial_weights --help
 
 This optional offline builder writes private grid-first area-overlap caches under `IRT_DATA_DIR/processed/_internal/spatial_weights/`. The climate compute pipeline can build missing caches on demand; dashboard runtime does not import `exactextract`. The builder now resolves default sample NetCDF and boundary inputs from the effective `--data-dir`, skips valid existing caches, and requires `--overwrite` before replacing a stale cache.
 
-Heat Risk v2 compute also persists private annual per-cell metric fields under `IRT_DATA_DIR/processed/_internal/heat_risk/grid_metrics/<metric>/<model>/<scenario>/<year>.nc` with JSON sidecars. District/block now use grid-first cellwise compute for `tas_annual_mean`, `tasmax_summer_mean`, `tas_summer_mean`, `txge30_hot_days`, and `tasmin_tropical_nights_gt25` in addition to the earlier percentile/heatwave slugs; basin/sub-basin behavior for those five remains on the legacy path. These files are inspection and cache artifacts only; public dashboard CSV paths, slugs, units, and columns remain unchanged.
+Heat Risk v2 compute also persists private annual per-cell metric fields under `IRT_DATA_DIR/processed/_internal/heat_risk/grid_metrics/<metric>/<model>/<scenario>/<year>.nc` with JSON sidecars. District/block use grid-first cellwise compute for `tas_annual_mean`, `tasmax_summer_mean`, `tas_summer_mean`, `txge30_hot_days`, and `tasmin_tropical_nights_gt25` in addition to the earlier percentile/heatwave slugs. These files are inspection and cache artifacts only; public dashboard CSV paths, slugs, units, and columns remain unchanged.
 
 Heat Stress v2 keeps the `composite_heat_stress` slug but scores only eight retained metrics. Six Heat Stress-only metrics (`twb_annual_mean`, `twb_summer_mean`, `twb_annual_max`, `twb_days_ge_28`, `twb_days_ge_30`, and `tasmin_tropical_nights_gt28`) are computed grid-first for admin district/block outputs and cached under `IRT_DATA_DIR/processed/_internal/heat_stress/grid_metrics/<metric>/<model>/<grid_id>/<scenario>/<year>.nc`. TN90p and WSDI continue to reuse the Heat Risk v2 grid-first percentile path. WBD, WBGT, and simplified WBGT metrics remain registered legacy diagnostics but are no longer Heat Stress domain or scoring members.
 
-Drought Risk v2 uses `climate-indices==2.2.0` SPI on monthly precipitation totals computed from daily `pr` grids, then derives grid-first admin district/block metrics before polygon aggregation. The active Drought bundle still uses the six event-count and max-spell metrics; `spi3_count_months_lt_minus1` is now also grid-first for admin levels only and uses explicit `period_mean` / coverage floors in the registry. Hydro basin/sub-basin behavior for all SPI month-count metrics remains legacy. Private Drought caches live under `IRT_DATA_DIR/processed/_internal/drought_risk/`; the public processed CSV and optimized bundle contracts remain unchanged.
+Drought Risk v2 uses `climate-indices==2.2.0` SPI on monthly precipitation totals computed from daily `pr` grids, then derives grid-first admin district/block metrics before polygon aggregation. The active Drought bundle still uses the six event-count and max-spell metrics; `spi3_count_months_lt_minus1` is now also grid-first for admin district/block levels and uses explicit `period_mean` / coverage floors in the registry. Private Drought caches live under `IRT_DATA_DIR/processed/_internal/drought_risk/`; the public processed CSV and optimized bundle contracts remain unchanged.
 
-Extreme Rainfall | Flash Flood Risk v2 computes the active six-metric admin bundle on climate grid cells first for district/block outputs, then applies area-weighted polygon aggregation with retained-cell coverage guards. The proposal-only `r99p_extreme_wet_precip` slug now reuses the same admin grid-first percentile infrastructure with a locked `1990-2010` baseline, `linear` quantile method, and strict `>` exceedance; hydro basin/sub-basin outputs for R99p and all other rainfall percentile metrics remain on the legacy polygon-average path until explicitly migrated. Private annual grids and percentile-threshold caches live under `IRT_DATA_DIR/processed/_internal/extreme_rainfall/`; public slugs, CSV paths, metric columns, composite weights, and optimized artifacts remain unchanged.
+Extreme Rainfall | Flash Flood Risk v2 computes the active six-metric admin bundle on climate grid cells first for district/block outputs, then applies area-weighted polygon aggregation with retained-cell coverage guards. The proposal-only `r99p_extreme_wet_precip` slug now reuses the same admin grid-first percentile infrastructure with a locked `1990-2010` baseline, `linear` quantile method, and strict `>` exceedance. Private annual grids and percentile-threshold caches live under `IRT_DATA_DIR/processed/_internal/extreme_rainfall/`; public slugs, CSV paths, metric columns, composite weights, and optimized artifacts remain unchanged.
 
 CHG-0038 does not change `jrc_flood_depth_index_rp100` or `r95p_interannual_variability`; both remain out of scope and on their existing behavior.
 
@@ -231,7 +231,7 @@ This builds `IRT_DATA_DIR/processed_optimised/` from the existing legacy `IRT_DA
 - per-model yearly overlays
 - case-study export inputs
 - compact ADM1 state polygons at `processed_optimised/geometry/admin/adm1.geojson` for ADM1-first dashboard boot
-- simplified runtime geometry shards plus compact selector indexes for block and sub-basin dropdowns
+- simplified runtime geometry shards plus a compact selector index for block dropdowns
 - reference overlay context files, including river display artifacts and exposure/hazard overlay PNG/metadata when present
 - Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`
 
@@ -291,13 +291,11 @@ python -m tools.geodata.build_lulc_admin_masters --help
 python -m tools.runs.prepare_dashboard lulc --lulc-raster "<path-to-LULC_2_Agri.tif>" --plan-only
 ```
 
-For hydro yearly trends, the builder prefers legacy hydro ensemble CSVs when they exist, and otherwise derives optimized hydro yearly ensemble Parquet from legacy hydro per-model yearly CSVs.
-
 By default, the builder now parallelizes yearly-model and yearly-ensemble stages using roughly `80%` of available logical CPUs. Use `--workers 1` to force serial execution, or pass an explicit worker count when you want tighter control.
 
 Block yearly model-member recovery:
 - climate compute markers use schema version 5; ensemble markers use schema version 4
-- yearly-cleanup-policy default keeps legacy behavior: block per-model yearly CSVs are deleted after ensemble generation, while district, basin, and sub-basin yearly CSVs are preserved
+- yearly-cleanup-policy default keeps legacy behavior: block per-model yearly CSVs are deleted after ensemble generation, while district yearly CSVs are preserved
 - yearly-cleanup-policy preserve keeps block per-model yearly CSVs so optimized yearly_models/admin/block can be rebuilt for model-member trend traces
 - yearly-cleanup-policy delete_after_ensemble is accepted only with level block
 - preserving block yearly CSVs can require substantial disk space; run a one-metric pilot before a full state recovery
@@ -313,10 +311,8 @@ python -m tools.optimized.audit_processed_optimised_parity --state Telangana --l
 The optimized builder also supports level-filtered refreshes and state-scoped admin refreshes:
 
 ```bash
-python -m tools.optimized.build_processed_optimised --overwrite --level hydro
-python -m tools.optimized.build_processed_optimised --overwrite --prune-scope --level sub_basin --metric tas_annual_mean
-python -m tools.optimized.build_processed_optimised --level hydro
-python -m tools.optimized.build_processed_optimised --level sub_basin --metric tas_annual_mean
+python -m tools.optimized.build_processed_optimised --overwrite --prune-scope --level block --metric tas_annual_mean
+python -m tools.optimized.build_processed_optimised --level district --metric tas_annual_mean
 python -m tools.optimized.build_processed_optimised --metric tas_annual_mean --workers 4 --skip-geometry --skip-context --skip-audit
 python -m tools.optimized.build_processed_optimised --metric txx_annual_max --level district --state Telangana --overwrite --prune-scope
 ```
@@ -347,8 +343,8 @@ Use `--no-progress` to suppress the progress bars.
 
 The dashboard prefers optimized runtime assets when they are present:
 - Parquet masters and yearly facts from `processed_optimised/metrics/...`
-- simplified state/basin-scoped geometry from `processed_optimised/geometry/...`
-- compact selector metadata from `processed_optimised/context/admin_block_index.parquet` and `processed_optimised/context/hydro_subbasin_index.parquet`
+- simplified state-scoped geometry from `processed_optimised/geometry/...`
+- compact selector metadata from `processed_optimised/context/admin_block_index.parquet`
 
 Optimized geometry outputs also persist `area_m2`, which the summary views reuse instead of recomputing geodesic area weights on every render.
 
@@ -375,8 +371,7 @@ This validates that every dashboard-visible optimized artifact expected from the
 The parity audit also supports level-filtered checks:
 
 ```bash
-python -m tools.optimized.audit_processed_optimised_parity --level hydro
-python -m tools.optimized.audit_processed_optimised_parity --level sub_basin --metric tas_annual_mean
+python -m tools.optimized.audit_processed_optimised_parity --level block --metric tas_annual_mean
 python -m tools.optimized.audit_processed_optimised_parity --level district --state Telangana --report-path IRT_DATA_DIR/processed_optimised/parity_report__admin__Telangana.json
 ```
 
@@ -480,7 +475,9 @@ processed/{metric_slug}/{state}/
 └── blocks/
 ```
 
-#### Legacy hydro layout
+#### Legacy hydro layout (retired)
+
+The offline basin/sub-basin **climate** compute pipeline has been retired, so `processed/{metric_slug}/hydro/` is no longer produced or consumed for climate metrics. Any pre-existing `processed/{metric_slug}/hydro/` trees from earlier runs are inert and are not read by the dashboard. The historical layout was:
 
 ```text
 processed/{metric_slug}/hydro/
@@ -494,7 +491,7 @@ processed/{metric_slug}/hydro/
     └── ensembles/{basin}/{sub_basin}/{scenario}/{sub_basin}_yearly_ensemble.csv
 ```
 
-For Aqueduct hydro onboarding, the currently supported slugs are:
+The retained offline Aqueduct hydro builder still writes SOI basin/sub-basin masters under the same `processed/{metric_slug}/hydro/` convention, but these are not surfaced in the admin-only dashboard. Its currently supported slugs are:
 
 ```text
 processed/aq_water_stress/hydro/
@@ -565,15 +562,17 @@ Default behavior:
 - `--level all` is implied
 - resolves the live climate metric set per requested level
 - computes only missing runnable climate outputs by default using validated completion markers
-- builds only missing admin + hydro masters
+- builds only missing admin (district/block) masters
 - refreshes only the requested `processed_optimised` levels and metrics
 - reruns readiness verification after execution and returns non-zero if the requested bundle is still incomplete
 - preserves current outputs unless `--overwrite` is supplied
 
-Hydro-only:
+The supported `--level` values are `all` (implied), `admin`, `district`, and `block`.
+
+Block-only:
 
 ```bash
-python -m tools.runs.prepare_dashboard climate-hazards --level hydro
+python -m tools.runs.prepare_dashboard climate-hazards --level block
 ```
 
 One metric:
@@ -585,19 +584,19 @@ python -m tools.runs.prepare_dashboard climate-hazards --metrics tas_annual_mean
 One metric, one model, one scenario:
 
 ```bash
-python -m tools.runs.prepare_dashboard climate-hazards --level hydro --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
+python -m tools.runs.prepare_dashboard climate-hazards --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
 ```
 
 Plan-only:
 
 ```bash
-python -m tools.runs.prepare_dashboard climate-hazards --level hydro --plan-only
+python -m tools.runs.prepare_dashboard climate-hazards --level district --plan-only
 ```
 
 Audit-only:
 
 ```bash
-python -m tools.runs.prepare_dashboard climate-hazards --level hydro --audit-only
+python -m tools.runs.prepare_dashboard climate-hazards --level district --audit-only
 ```
 
 ### Prepare the dashboard package with the canonical runner
@@ -840,25 +839,22 @@ This writes:
 - `river_missing_assignments.csv`
 - `river_missing_assignments.geojson`
 
-The optional hydro-only river overlay in basin/sub-basin views depends on the reconciliation and diagnostics files. Topology-ready river artifacts are supported offline, but upstream/downstream routing, admin-side river overlays, and river-based metric computation are still deferred.
+The river reconciliation and sub-basin diagnostics CSVs are now offline QA artifacts only; the navigable hydro (basin/sub-basin) river overlay has been removed. The admin district/block river overlay is driven directly by the district-sliced river display artifact. Topology-ready river artifacts are supported offline, but upstream/downstream routing and river-based metric computation are still deferred.
 
 ## Usage notes
 
-### Admin vs Hydro
-- Use **Admin** when you want governance/action units: district or block
-- Use **Hydro** when you want watershed/process units: basin or sub-basin
+### Admin-only spatial family
+- The dashboard operates on governance/action units only: **district** and **block**
+- Watershed/process units (basin, sub-basin) are no longer navigable; hydrology is surfaced only as context on admin units
 
 ### Current crosswalk behavior
 When the polygon crosswalk CSVs are present:
-- district and block details expose related basins and sub-basins
-- basin and sub-basin details expose related districts, with blocks as an optional drill-down
-- you can highlight related units on the map
-- you can jump across the admin/hydro bridge for the current polygon pair
+- district and block details expose related basins and sub-basins as **context**
+- you can highlight related basin/sub-basin units on the admin map as a reference overlay
 
 ### Current limitations
-- Crosswalks are currently **read-optimized and explanatory**, not analytical transfer engines
-- Basin metrics and sub-basin metrics should be computed directly on their own polygons
-- Hydro UI is single-unit oriented today; portfolio/cross-family aggregation is future work
+- Crosswalks are **read-optimized and explanatory**, not analytical transfer engines
+- Basin/sub-basin metrics are no longer computed or served by the tool
 
 ## Development
 

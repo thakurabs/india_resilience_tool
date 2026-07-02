@@ -27,8 +27,8 @@ The current working tree supports:
 - assessment-pillar and domain-based metric navigation, separating climate hazards from bio-physical hazards
 - static exposure-layer support for admin district/block views
 - static groundwater snapshot support for admin district views
-- retained hydro boundaries and processed outputs for hydrology context/offline workflows
-- Aqueduct direct district/block masters plus SOI hydro masters for water stress, interannual variability, seasonal variability, and water depletion
+- retained hydro boundaries (`basins.geojson`/`subbasins.geojson`) for admin-side hydrology context (basin-outline overlay, crosswalk context); the navigable Hydro spatial family and offline basin/sub-basin climate compute pipeline have been removed
+- Aqueduct direct district/block masters for water stress, interannual variability, seasonal variability, and water depletion (the offline Aqueduct SOI basin/sub-basin masters are retained by their standalone builder but are no longer surfaced in the dashboard)
 - population exposure masters for total population and population density on district/block units
 - `population_exposure_2025_raster` display-only overlay support across admin map levels, backed by exported PNG/metadata artifacts rather than the raw TIFF
 - rural facilities exposure masters for total/category counts and per-100k people rates on district/block units
@@ -57,19 +57,17 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 | `python -m tools.pipeline.build_composite_metrics --help` | Build persisted district/block composite masters for active thematic dashboard bundles under the legacy `processed/` metric layout; use `--prune-retired --dry-run` to inspect retired composite cleanup |
 | `python -m tools.pipeline.build_proposal_bundles --help` | Build persisted admin district/block proposal climate-risk bundle masters under `processed/<proposal_composite_slug>/<state>/` and the helper `r95p_interannual_variability` masters; all 8 sector-wise proposal bundles use explicit rule weights, lens-decomposed scoring, and an `available_rule_weight_fraction` coverage gate (0.70): Health Risk (lens dossier §6), Industrial Risk (CHG-0028, lens dossier §7), Investment / Financial Risk (CHG-0033, lens dossier §8), Infrastructure Risk (CHG-0034, lens dossier §9), Asset Risk (Thermal Power Plants) (CHG-0057/0058, lens dossier §10), Asset Risk (Hydropower Plants) (CHG-0036, lens dossier §11), Agricultural Risk (CHG-0032, lens dossier §12), and Life & Livelihood Loss Risk (CHG-0037, lens dossier §13). Each rule persists `{rule_slug}__{scenario}__{period}__{score,abs_score,chg_score,imp_score}` columns under the four-token master schema, but only active lenses are written (for example Thermal `spi3_low_flow_proxy_norm` and Investment `r99p_positive_trend` omit `__imp_score`; see `docs/lens_scoring_methodology.md` §5.1). Per-lens rule columns are part of the `processed_optimised/` contract from artifact version 3 onward |
 | `python -m tools.pipeline.build_glance_view_model --help` | Build persisted optimized Glance view-model artifacts under `processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/`; normal dashboard prep gets these through `build_processed_optimised` |
-| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional exact-target `--prune-scope`, destructive `--full-rebuild`, optional admin `--state` scoping, opt-in shared-admin artifact rebuilds, optional scoped `--report-path`, hydro yearly fallback-from-models, optional `--level` filtering, `--workers` overrides, and nested terminal progress bars |
+| `python -m tools.optimized.build_processed_optimised --help` | Build the compact `processed_optimised` runtime bundle from the legacy `processed/` tree, with scoped `--overwrite`, optional exact-target `--prune-scope`, destructive `--full-rebuild`, optional admin `--state` scoping, opt-in shared-admin artifact rebuilds, optional scoped `--report-path`, optional admin `--level` filtering (`district`/`block`), `--workers` overrides, and nested terminal progress bars |
 | python -m tools.optimized.audit_processed_optimised_parity --help | Audit processed_optimised with optional level/admin-state filtering, state-scoped report paths, and strict block yearly-model checks via require-block-yearly-models plus strict. Warning-severity issues (e.g. an absent precomputed `state_values` table) are non-fatal unless `--strict` |
 | `python -m tools.optimized.build_state_values --help` | Precompute area-weighted state headline values per `(metric, scenario, period, stat)` into `processed_optimised/metrics/<slug>/state_values/admin/<level>/all_states.parquet`; parity with the live KPI by construction (shared canonical merge + `analysis.area_weighting`), enabling a real Position-in-India rank. Run automatically by `prepare_dashboard` between the optimized build and the parity audit |
 | `python -m tools.diagnostics.heat_stress_gridfirst_parity --help` | Compare legacy polygon-mean-first vs Heat Stress v2 grid-first CSV extracts for pilot diagnostics, including deltas, rank shifts, and top movers |
 | python -m tools.diagnostics.list_optimized_yearly_metrics --help | List optimized metrics with yearly artifacts for a selected level/state; format args emits repeated metric flags for recovery runs |
-| `python -m tools.pipeline.build_master_metrics` | Rebuild admin and hydro master CSVs; hydro levels auto-resolve `processed/{metric}/hydro/` |
+| `python -m tools.pipeline.build_master_metrics` | Rebuild admin (district/block) master CSVs |
 | python -m tools.pipeline.compute_indices_multiprocess --help | Show compute-pipeline options, including yearly-cleanup-policy {default,preserve,delete_after_ensemble} for per-model yearly CSV retention |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics <slug>` | Build district outputs |
 | `python -m tools.pipeline.compute_indices_multiprocess --level block --metrics <slug>` | Build block outputs |
-| `python -m tools.pipeline.compute_indices_multiprocess --level basin --metrics <slug>` | Build basin outputs |
-| `python -m tools.pipeline.compute_indices_multiprocess --level sub_basin --metrics <slug>` | Build sub-basin outputs |
 | `python -m tools.pipeline.build_spatial_weights --help` | Build private Heat Risk v2 grid-first spatial-weight caches under `processed/_internal/spatial_weights/`; the builder resolves defaults from the effective `--data-dir`, skips valid existing caches, and requires `--overwrite` to replace stale ones |
-| `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics spi3_max_spell_lt_minus1` | Build a Drought Risk v2 grid-first admin metric; the active bundle's six event/spell slugs and `spi3_count_months_lt_minus1` now use admin district/block grid-first paths, while hydro remains legacy |
+| `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics spi3_max_spell_lt_minus1` | Build a Drought Risk v2 grid-first admin metric; the active bundle's six event/spell slugs and `spi3_count_months_lt_minus1` now use admin district/block grid-first paths |
 | `python -m tools.pipeline.compute_indices_multiprocess --level district --metrics pr_max_1day_precip` | Build an Extreme Rainfall v2 admin grid-first metric; private annual grids plus `p95` / `p99` percentile thresholds are persisted under `processed/_internal/extreme_rainfall/` |
 
 CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variability` remain unchanged and out of scope.
@@ -109,7 +107,7 @@ CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variabi
 | `IRT_PROCESSED_ROOT` | `IRT_DATA_DIR/processed/{metric}` | Optional processed-root override |
 | `IRT_PROCESSED_OPTIMISED_ROOT` | `IRT_DATA_DIR/processed_optimised` | Optional optimized runtime-bundle override |
 | `IRT_DEBUG` | `0` | Enable debug/perf output |
-| `IRT_GRIDFIRST_BBOX` | `1` (on) | Grid-first compute reads only the requested state's bounding-box slice of the climate grid before loading it into RAM (per-state memory fix). Set `0`/`false` to revert to the exact full-grid behavior. Wired for **all** grid-first families: Drought Risk, Heat Risk, Cold Risk, Heat Stress, and Extreme Rainfall \| Flash Flood Risk. At hydro levels (`basin`/`sub_basin`) the boundary spans all-India, so the subset ≈ full grid and gives **no** memory relief for the level-agnostic heat/cold/heat-stress slugs — keep `-Workers` low there. |
+| `IRT_GRIDFIRST_BBOX` | `1` (on) | Grid-first compute reads only the requested state's bounding-box slice of the climate grid before loading it into RAM (per-state memory fix). Set `0`/`false` to revert to the exact full-grid behavior. Wired for **all** grid-first families: Drought Risk, Heat Risk, Cold Risk, Heat Stress, and Extreme Rainfall \| Flash Flood Risk. Compute is admin-only (district/block). |
 | `IRT_GRIDFIRST_BBOX_STRICT` | `0` (off) | When on, a failure to derive the bbox subset (e.g. missing boundary CRS) raises instead of silently falling back to the full grid. Use for acceptance runs so a green run cannot have quietly skipped the memory fix. No effect when `IRT_GRIDFIRST_BBOX=0`. |
 
 ## Top-level repo map
@@ -191,24 +189,26 @@ Aqueduct methodology note:
 | `map_enrichment.py` | Streamlit-free map enrichment helpers: baseline/delta, ranking, tooltip prep |
 | `metrics.py` | Risk-class and percentile/ranking helpers |
 | `portfolio.py` | Portfolio comparison logic and portfolio-level data prep |
-| `timeseries.py` | Yearly series loading for admin and hydro flows |
+| `timeseries.py` | Yearly series loading for admin district/block flows |
 
 ### `india_resilience_tool/app/`
 
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
+| `_ui_text.py` | Shared UI label/caption text constants |
 | `adm2_cache.py` | Streamlit-cached ADM2 loading and FeatureCollection helpers |
 | `case_study_runtime.py` | Runtime helpers for district-focused case-study export |
 | `color_range_controls.py` | Robust color-range default calculation for maps |
 | `crosswalk_runtime.py` | App-layer crosswalk navigation and overlay-state helpers |
 | `dashboard_bundle_runtime.py` | Runtime helpers for dashboard bundle visibility and composite-source lookup |
 | `details_runtime.py` | Right-panel orchestration and data prep for details views |
-| `geo_cache.py` | Streamlit-cached admin and hydro geometry loading/builders |
+| `geo_cache.py` | Streamlit-cached admin geometry loading/builders plus retained basin/sub-basin context geometry for the crosswalk reference overlay |
 | `geography.py` | Filesystem-backed admin geography discovery helpers |
-| `geography_controls.py` | Sidebar geography + analysis-focus controls for admin and hydro |
+| `geography_controls.py` | Sidebar geography + analysis-focus controls for admin district/block |
 | `glance_exports.py` | Streamlit-free Glance Rankings answer, CSV, and Excel answer-pack helpers |
 | `help_text.py` | Tooltip/help-text helpers for ribbon widgets |
+| `hydro_boundary_overlay.py` | Admin-side dominant-basin outline overlay: reads `basins.geojson`/`subbasins.geojson` directly to draw the retained hydrology-context outline on district/block maps |
 | `landing_runtime.py` | Climate-hazard landing/discovery orchestrator that loads persisted optimized Glance view models only, plus state transitions and Deep Dive handoff |
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
 | `main.py` | Package Streamlit entrypoint |
@@ -222,17 +222,19 @@ Aqueduct methodology note:
 | `portfolio_multistate.py` | Multi-state portfolio helper functions |
 | `portfolio_state_runtime.py` | Session-state wrappers around portfolio operations |
 | `portfolio_ui.py` | Portfolio right-panel UI and comparison workflows |
-| `ribbon.py` | Metric selection ribbon, master loading, and hydro-master readiness checks |
+| `ribbon.py` | Metric selection ribbon, master loading, and admin-master readiness checks |
 | `runtime.py` | Canonical app orchestrator (`run_app`) |
 | `sidebar.py` | Family/level/view selector widgets and jump-once helpers |
 | `sidebar_branding.py` | Sidebar logo/branding render block |
 | `state.py` | Session-state defaults, level constants, and level-aware helpers |
+| `summary_cache.py` | Streamlit session-state cache for admin district/block context summaries (exposure/hydrology context cards) |
 
 #### `india_resilience_tool/app/views/`
 
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
+| `context_cards.py` | Render admin district/block context cards, including the retained Hydrological Context card and exposure context |
 | `details_panel.py` | Render the single-unit details panel and crosswalk context/actions |
 | `map_view.py` | Render Folium map and extract level-aware click payloads, including landing state clicks |
 | `rankings_view.py` | Rankings table rendering and portfolio add flows |
@@ -246,7 +248,7 @@ Aqueduct methodology note:
 | `composite_metrics.py` | Streamlit-free builders for persisted district/block composite Glance metric masters |
 | `glance_view_model.py` | Streamlit-free builder for persisted optimized Glance district/state scores, drivers, attributes, and distributions |
 | `proposal_bundles.py` | Streamlit-free builders for persisted proposal climate-risk bundle masters plus the `r95p_interannual_variability` helper masters |
-| `master_builder.py` | Build master CSVs, including hydro master enrichment and Parquet companions for runtime serving |
+| `master_builder.py` | Build admin district/block master CSVs plus Parquet companions for runtime serving |
 | `spi_adapter.py` | SPI adapter around `climate-indices` |
 | `gridfirst_spatial.py` | Shared grid-first spatial overlap and NetCDF/sidecar cache helpers used by Heat Risk v2 and Drought Risk v2 |
 | `heat_stress_gridfirst.py` | Heat Stress v2 grid-first Twb and tropical-night metrics for admin district/block outputs, with private annual cell caches under `processed/_internal/heat_stress/grid_metrics/`; shared TN90p/WSDI remain in Heat Risk v2 |
@@ -280,17 +282,20 @@ Aqueduct methodology note:
 | `__init__.py` | Package marker |
 | `adm2_loader.py` | District boundary loading, normalization, and FeatureCollection builders |
 | `adm3_loader.py` | Block boundary loading and normalization |
-| `crosswalks.py` | Polygon crosswalk validation and context builders for district/block ↔ basin/sub-basin |
+| `admin_coverage.py` | Admin district/block feature-key coverage helpers |
+| `crosswalks.py` | Polygon crosswalk validation and context builders for district/block → basin/sub-basin context (basin/sub-basin retained only as read-optimized admin context) |
 | `discovery.py` | Processed-artifact discovery helpers for yearly files and outputs |
-| `hydro_loader.py` | Basin/sub-basin loading, validation, keys, and render simplification |
-| `river_loader.py` | Cleaned river-display loading, validation, reconciliation, diagnostics, and hydro filtering helpers |
-| `river_topology.py` | Streamlit-free river reach validation and hydro-side river summary builders |
+| `exposure_summary.py` | Streamlit-free exposure-context summary builders for admin district/block cards |
+| `hydro_loader.py` | Basin/sub-basin geometry loading, validation, keys, and render simplification for the retained admin basin-outline overlay and crosswalk context |
+| `hydro_summary.py` | Streamlit-free hydrology-context summary builders for the admin district/block Hydrological Context card |
+| `river_loader.py` | Cleaned river-display loading, validation, reconciliation, diagnostics, and district-slice filtering helpers for the admin river overlay |
+| `river_topology.py` | Streamlit-free river reach validation and river summary builders |
 | `master_columns.py` | Streamlit-free master column resolution helpers |
 | `master_loader.py` | Robust master-table loading, normalization, schema parsing, and Parquet-first runtime preference |
 | `optimized_bundle.py` | Path helpers and compact-contract helpers for the `processed_optimised` runtime bundle, including optimized geometry, context, and Glance view-model paths, plus `optimized_state_values_path[_from_metric_root]` for the precomputed area-weighted `state_values/admin/<level>/all_states.parquet` table (kept out of `is_optimized_metric_root`'s child list) |
 | `source_inventory.py` | Persistent raw NetCDF inventory shards for source discovery, validation, engine reuse, and marker-invalidating source signatures |
-| `merge.py` | Boundary ↔ master merge helpers for district, block, basin, and sub-basin |
-| `spatial_match.py` | Click/selection matching helpers for admin and hydro flows |
+| `merge.py` | Boundary ↔ master merge helpers for district and block |
+| `spatial_match.py` | Click/selection matching helpers for admin flows |
 
 ### `india_resilience_tool/utils/`
 
@@ -404,7 +409,7 @@ Aqueduct methodology note:
 | `compute_indices.py` | Older single-process compute pipeline (district/block oriented) |
 | `compute_indices_cli_common.py` | Shared lightweight parser and banner helpers for the climate compute bootstrap/runtime split |
 | `compute_indices_bootstrap.py` | Thin bootstrap CLI that prints immediately, then imports the heavy climate compute runtime |
-| `compute_indices_multiprocess.py` | Main multi-process climate compute runtime for admin and hydro, now using source-inventory prewarm plus validated marker signatures |
+| `compute_indices_multiprocess.py` | Main multi-process climate compute runtime for admin district/block, now using source-inventory prewarm plus validated marker signatures |
 
 ### `tools/runs/`
 
@@ -446,7 +451,6 @@ python -m pytest -q
 - `test_app_sidebar_import.py`
 - `test_app_state.py`
 - `test_app_state_summary_view.py`
-- `test_hydro_summary_view.py`
 - `test_legend_html.py`
 - `test_main_app_import.py`
 - `test_map_view_layout.py`
@@ -516,7 +520,6 @@ python -m pytest -q
 - `test_compute_indices_proposal_metrics.py`
 - `test_compute_indices_synthetic.py`
 - `test_compute_indices_synthetic_comprehensive.py`
-- `test_hydro_compute_pipeline.py`
 - `test_roster_gate.py` — canonical-roster gate at the `build_processed_optimised` master-publish chokepoint (`IRT_ROSTER_GATE` strict/warn/off)
 - `test_legacy_dashboard_map_portfolio_wiring.py`
 - `test_legacy_dashboard_portfolio_panel_call.py`
@@ -636,7 +639,9 @@ Identifier columns:
 - district master: `state`, `district`
 - block master: `state`, `district`, `block`
 
-#### Hydro
+#### Hydro (retired)
+
+The offline basin/sub-basin **climate** compute pipeline has been removed, so `processed/{metric_slug}/hydro/` is no longer produced or consumed for climate metrics. The only remaining writer of this layout is the retained offline Aqueduct hydro builder, whose SOI basin/sub-basin masters are not surfaced in the admin-only dashboard. The historical layout was:
 
 ```text
 processed/{metric_slug}/hydro/
@@ -650,7 +655,7 @@ processed/{metric_slug}/hydro/
     └── ensembles/{basin}/{sub_basin}/{scenario}/{sub_basin}_yearly_ensemble.csv
 ```
 
-Identifier columns:
+Historical identifier columns:
 - basin master: `basin_id`, `basin_name`
 - sub-basin master: `basin_id`, `basin_name`, `subbasin_id`, `subbasin_code`, `subbasin_name`
 
@@ -675,15 +680,12 @@ Required columns:
 
 Current behavior:
 - district and block details -> basin + sub-basin context
-- basin and sub-basin details -> administrative context
-- hydro admin-context defaults to districts, with blocks as an optional drill-down
-- related-unit map overlays
-- admin -> hydro jump
-- hydro -> admin jump
+- related-unit reference overlays on the admin map (highlight related basins/sub-basins)
 
 Not yet supported:
 - weighted transfer across spatial families
 - river-network crosswalk/topology layer
+- navigation into basin/sub-basin views (the Hydro family is removed)
 
 ### River-network artifact
 
@@ -717,16 +719,17 @@ scale is fixed at `0.0-10.0 m`; `depth <= 0.0` is transparent,
 ## Current status vs deferred work
 
 ### Implemented now
-- Admin family: district and block
-- Hydro family: basin and sub-basin
-- Hydro compute outputs and hydro master contracts
-- Hydro map/rankings/details flows
-- Polygon crosswalk context and actionability for district/block ↔ basin/sub-basin
-- Hydro-only river display overlay for basin/sub-basin maps
+- Admin family: district and block (the only navigable spatial family)
+- Retained hydrology context on admin units: Hydrological Context card, dominant-basin outline overlay, and district-sliced river overlay
+- Polygon crosswalk context from district/block to related basin/sub-basin units (read-optimized/explanatory)
+
+### Removed / retired
+- Navigable Hydro family (basin/sub-basin map, rankings, details, portfolio)
+- Offline basin/sub-basin climate compute pipeline and hydro master contracts
+- Navigable hydro-only river display overlay
 
 ### Deferred
 - Weighted admin ↔ hydro translation engine
-- Hydro portfolio workflows
 - River-network/reach translation layer
 
 Long-lived deferred work and shelved initiatives are tracked in `docs/BACKLOG.md`.
@@ -741,5 +744,5 @@ For questions about the codebase:
 | File | Purpose |
 |------|---------|
 | `__init__.py` | Package marker |
-| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin/hydro yearly parity outputs, hydro yearly fallback-from-models, selector-index artifacts, persisted geometry `area_m2`, optional level/state filtering, exact-target scoped prune, and a post-build parity audit |
+| `build_processed_optimised.py` | Build the minimized `processed_optimised` runtime bundle from legacy processed outputs plus current canonical geometry/context artifacts, including admin (district/block) yearly parity outputs, selector-index artifacts, persisted geometry `area_m2`, optional admin level/state filtering, exact-target scoped prune, and a post-build parity audit |
 | `audit_processed_optimised_parity.py` | Audit the optimized runtime bundle against the legacy processed contract, with optional level/state filtering and optional scoped report output |
