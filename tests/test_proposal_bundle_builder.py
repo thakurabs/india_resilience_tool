@@ -27,6 +27,8 @@ from india_resilience_tool.config.proposal_bundles import (
     proposal_rule_abs_score_column,
     proposal_rule_chg_score_column,
     proposal_rule_score_column,
+    proposal_bundle_mean_column,
+    proposal_available_rule_count_column,
 )
 
 
@@ -522,6 +524,61 @@ def test_compute_r95p_helper_raises_when_historical_window_has_no_finite_values(
             state_name=state_name,
             data_dir=tmp_path,
         )
+
+
+def test_compute_r95p_helper_coverage_gated_unit_is_nan_not_raise(tmp_path: Path) -> None:
+    """CHG-0177: the Hydropower R95p-variability helper must tolerate a
+    coverage-gated unit whose ensemble yearly series is empty (a polygon that
+    retains no precip grid cell, e.g. tiny Lakshadweep islands like Andrott).
+    Such a unit scores NaN — as it already does for every other metric —
+    instead of hard-raising and failing the whole Hydropower bundle for the
+    state. A populated unit in the same state still yields a finite value, and
+    the historical finite-guard still protects a genuinely uncomputed state.
+    """
+    state_name = "Lakshadweep"
+    ids = pd.DataFrame(
+        {
+            "state": [state_name, state_name],
+            "district": ["Kavaratti", "Andrott"],
+            "district_key": ["lakshadweep|kavaratti", "lakshadweep|andrott"],
+        }
+    )
+    _write_master(tmp_path, slug="r95p_very_wet_precip", state_name=state_name, level="district", df=ids)
+    _seed_hydropower_baseline_source_masters(tmp_path, ids=ids, state_name=state_name)
+    # Only the covered unit gets a yearly ensemble file; the coverage-gated unit
+    # (Andrott) has no file, so _load_legacy_yearly_series returns empty for it.
+    _write_r95p_yearly_with_historical(
+        tmp_path,
+        state_name=state_name,
+        district_name="Kavaratti",
+        future_rows=[
+            {"year": 2020, "mean": 10.0, "scenario": "ssp245"},
+            {"year": 2021, "mean": 20.0, "scenario": "ssp245"},
+            {"year": 2020, "mean": 10.0, "scenario": "ssp585"},
+            {"year": 2021, "mean": 20.0, "scenario": "ssp585"},
+        ],
+        historical_rows=[
+            {"year": 1995, "mean": 10.0, "scenario": "historical"},
+            {"year": 1996, "mean": 20.0, "scenario": "historical"},
+        ],
+    )
+
+    out = compute_r95p_interannual_variability_master_frame(
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+    )
+
+    future_col = "r95p_interannual_variability__ssp245__2020-2040__mean"
+    hist_col = "r95p_interannual_variability__historical__1990-2010__mean"
+    future_by_unit = dict(zip(out["district"], out[future_col]))
+    hist_by_unit = dict(zip(out["district"], out[hist_col]))
+    # Covered unit: CV over [10, 20] -> std(ddof=0)=5, mean=15 -> 5/15.
+    assert round(float(future_by_unit["Kavaratti"]), 6) == round((5.0 / 15.0), 6)
+    assert round(float(hist_by_unit["Kavaratti"]), 6) == round((5.0 / 15.0), 6)
+    # Coverage-gated unit: NaN, not a hard error.
+    assert pd.isna(future_by_unit["Andrott"])
+    assert pd.isna(hist_by_unit["Andrott"])
 
 
 def test_compute_r95p_helper_raises_when_source_baseline_tokens_disagree(tmp_path: Path) -> None:
@@ -1069,10 +1126,18 @@ def test_compute_thermal_spi_missing_historical_baseline_renormalizes_to_absolut
     assert out[bundle_col].notna().any()
 
 
-def test_synthetic_trend_rule_still_requires_yearly_series(
+def test_synthetic_trend_rule_coverage_gap_yields_nan_not_raise(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """CHG-0177: a coverage-gated unit whose ensemble yearly series is empty (a
+    polygon that retains no source grid cell, e.g. tiny Lakshadweep islands) must
+    score NaN — the same way it already appears NaN in every other metric —
+    rather than hard-raising and aborting the whole bundle/state. Here the single
+    unit has no yearly file, so the trend rule is all-NaN: the bundle frame is
+    still produced, but its score is NaN with an available rule count of zero,
+    which the downstream weight gate treats as an unavailable bundle.
+    """
     state_name = "Telangana"
     ids = pd.DataFrame(
         {
@@ -1103,14 +1168,18 @@ def test_synthetic_trend_rule_still_requires_yearly_series(
         ),
     )
 
-    with pytest.raises(TargetBuildError, match="Missing mandatory yearly ensemble series"):
-        compute_proposal_bundle_master_frame(
-            synthetic_bundle,
-            level="district",
-            state_name=state_name,
-            data_dir=tmp_path,
-            warnings=[],
-        )
+    out = compute_proposal_bundle_master_frame(
+        synthetic_bundle,
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+        warnings=[],
+    )
+
+    score_col = proposal_bundle_mean_column("synthetic_trend_coverage", "ssp245", "2020-2040")
+    count_col = proposal_available_rule_count_column("synthetic_trend_coverage", "ssp245", "2020-2040")
+    assert pd.isna(out[score_col].iloc[0])
+    assert int(out[count_col].iloc[0]) == 0
 
 
 def test_build_proposal_bundles_dry_run_auto_discovers_states_and_returns_target_paths(

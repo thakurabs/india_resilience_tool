@@ -682,8 +682,11 @@ def _build_trend_rule(
 ) -> pd.Series:
     """Build a continuous adverse-trend pressure score from yearly series.
 
-    Missing yearly data raises ``TargetBuildError`` because trend rules cannot be
-    reconstructed from period means. Units with fewer than 10 period years return
+    Coverage-gated units whose ensemble yearly series is empty (a polygon that
+    retains no source grid cell, so the ensemble step benignly dropped it) score
+    NaN rather than raising, mirroring how those units already appear NaN in every
+    other metric. A state whose units are *all* empty still yields an all-NaN
+    score via the finite-guard below. Units with fewer than 10 period years return
     NaN. Non-adverse slopes score zero; positive adverse slopes are scaled within
     the state/level/scenario/period reference distribution.
     """
@@ -700,10 +703,12 @@ def _build_trend_rule(
             data_dir=data_dir,
         )
         if yearly.empty:
-            raise TargetBuildError(
-                f"Missing mandatory yearly ensemble series for metric={rule.metric_slug!r}, bundle={bundle_slug!r}, "
-                f"level={level!r}, state={state_name!r}, unit={_row_labels(row, level=level)!r}."
-            )
+            # CHG-0177: coverage-gated unit (no retained grid cell -> ensemble
+            # yearly benignly dropped). Emit NaN like every other metric does for
+            # this unit instead of failing the whole bundle. A genuinely empty
+            # state is still caught by the finite-guard after the loop.
+            adverse_slopes.append(np.nan)
+            continue
         prepared = _prepare_period_yearly(yearly, period=period)
         if len(prepared) < 10:
             adverse_slopes.append(np.nan)
@@ -801,10 +806,13 @@ def compute_r95p_interannual_variability_master_frame(
                     data_dir=data_dir,
                 )
                 if yearly.empty:
-                    raise TargetBuildError(
-                        f"Missing mandatory yearly ensemble series for helper metric={HELPER_SOURCE_METRIC_SLUG!r}, "
-                        f"level={level!r}, state={state_name!r}, unit={_row_labels(row, level=level)!r}."
-                    )
+                    # CHG-0177: coverage-gated unit (no retained grid cell -> the
+                    # ensemble yearly was benignly dropped). Emit NaN like every
+                    # other metric does for this unit rather than failing the whole
+                    # Hydropower bundle. The historical finite-guard below still
+                    # hard-fails a state whose units are all empty.
+                    values.append(float("nan"))
+                    continue
                 values.append(
                     _compute_r95p_interannual_variability_from_yearly(
                         yearly, start_year=start_year, end_year=end_year
@@ -824,11 +832,12 @@ def compute_r95p_interannual_variability_master_frame(
             data_dir=data_dir,
         )
         if yearly.empty:
-            raise TargetBuildError(
-                f"Missing mandatory historical yearly ensemble series for helper metric="
-                f"{HELPER_SOURCE_METRIC_SLUG!r}, level={level!r}, state={state_name!r}, "
-                f"unit={_row_labels(row, level=level)!r}."
-            )
+            # CHG-0177: coverage-gated unit (no retained grid cell -> the ensemble
+            # yearly was benignly dropped). Emit NaN like every other metric does
+            # for this unit. If EVERY unit is empty the finite-guard below still
+            # raises, so a genuinely uncomputed state cannot slip through.
+            hist_values.append(float("nan"))
+            continue
         hist_values.append(
             _compute_r95p_interannual_variability_from_yearly(yearly, start_year=hist_start, end_year=hist_end)
         )
