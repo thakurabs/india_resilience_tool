@@ -375,8 +375,6 @@ $$\text{TX90p} = 100 \times \frac{1}{N}\sum_t \mathbb{1}\!\left[x_t > \tau_{d(t)
 
 By construction this is ≈ 10% under the baseline climate; a warming year pushes it well above 10%, which is the relative-shift signal the index is designed to capture.
 
-> **[FIGURE TO INSERT]** Day-of-year 90th-percentile threshold curve $\tau_d$ (annual cycle) for one cell, with a single year's daily `tasmax` overlaid and exceedance days marked — illustrating the TX90p / WSDI / hwa threshold framework shared across §5.1.
-
 **Heatwave amplitude (hwa)**
 
 Heatwave amplitude is an IRT-specific index. For each year and grid cell, the DOY-90th-percentile framework (baseline 1990–2010, applied to tasmax, minimum spell length 5 consecutive days) identifies all heatwave spells $s$ within the year. For each spell, the mean daily exceedance above the per-day threshold is:
@@ -427,7 +425,7 @@ The Gamma parameters ($\alpha$, $\beta$, $q$) are estimated once from the 1990�
 
 The monthly SPI series is not used directly in composites. Two annual aggregation statistics are derived per cell, per year:
 
-- **Count of drought events**: number of contiguous episodes per year during which SPI remains continuously below −1, averaged over the analysis period. SPI < −1 corresponds to the 15.9th percentile of the standard normal — conditions that occur in approximately one year in six under the baseline climatology.
+- **Count of drought events**: number of contiguous episodes per year during which SPI remains continuously below −1, averaged over the analysis period. 
 - **Maximum drought spell**: longest consecutive-month period per year during which SPI is continuously below −1, expressed as the period maximum over the analysis window (not the mean).
 
 These per-cell annual metric fields are then area-weighted and aggregated to administrative units following the procedure in §4.2.
@@ -467,13 +465,14 @@ The severity class is read from the matrix (rows = extent class, columns = depth
 | **4** | 3 | 4 | 4 | 5 | 5 |
 | **5** | 4 | 5 | 5 | 5 | 5 |
 
-Severity is scored at **block** level. District severity is the **flooded-area-weighted mean of constituent block severity classes** (and is therefore generally non-integer), computed bottom-up because directly classifying district-scale depth and extent collapses most districts to the lowest classes — district polygons are far larger than the block scale at which the bins were calibrated.
+Severity is scored at **block** level. District severity is the **flooded-area-weighted mean of constituent block severity classes**, computed bottom-up because directly classifying district-scale depth and extent collapses most districts to the lowest classes — district polygons are far larger than the block scale at which the bins were calibrated.
 
 ---
 
 ## 6. Thematic Bundle Construction
 
-Each of the six hazard families defined in §5 is condensed into a single composite **bundle score** on a 0–100 scale, computed independently for every geography, scenario, and time period. Two steps produce that score: each component metric is first normalized onto a common 0–100 *higher-is-worse* scale (§6.2), and the normalized components are then combined with fixed weights (§6.3). This thematic framework — a weighted average of co-normalized climate metrics — is distinct from the sectoral hazard-pressure framework of §7, which scores exposure to curated hazard rules rather than compositing metrics directly.
+Each of the six hazard families defined in §5 is condensed into a single composite **bundle score** on a 0–100 scale, computed independently for every geography, scenario, and time period. Each component metric is first normalized onto a common 0–100 *higher-is-worse* scale (§6.2), and the normalized components are then combined with fixed weights (§6.3). 
+<!-- This thematic framework — a weighted average of co-normalized climate metrics — is distinct from the sectoral hazard-pressure framework of §7, which scores exposure to curated hazard rules rather than compositing metrics directly. -->
 
 ### 6.1 Bundle Taxonomy and Grouping Rationale
 
@@ -481,14 +480,14 @@ The six thematic bundles and the hazard dimension each captures:
 
 | Bundle | Hazard dimension | Component metric families (§5) |
 |---|---|---|
-| Heat Risk | Daytime/nocturnal thermal extremes and background heat | Background means, absolute & percentile extremes, threshold-frequency, heatwave characteristics (§5.1) |
-| Heat Stress | Humid-heat physiological stress | Wet-bulb means/extremes (§5.4) + shared dry-heat persistence WSDI, TN90p (§5.1) |
-| Cold Risk | Winter cold extremes and cold-spell persistence | Background cold, absolute extremes, cold-day thresholds, percentile-relative cold, cold-spell characteristics (§5.1) |
-| Drought Risk | Meteorological drought across timescales | SPI-3/6/12 event counts and maximum spell lengths (§5.3) |
-| Extreme Rainfall \| Flash Flood Risk | Extreme precipitation and wet-spell persistence | Peak intensity, heavy-rain frequency, very-wet contribution, wet-spell persistence (§5.2) |
-| Riverine Flood | Static RP-100 inundation severity | JRC flood severity index (§5.5) |
+| Heat Risk | Daytime/nocturnal thermal extremes and background heat | Background means, absolute & percentile extremes, threshold-frequency, heatwave characteristics |
+| Heat Stress | Humid-heat physiological stress | Wet-bulb means/extremes and dry-heat persistence |
+| Cold Risk | Winter cold extremes and cold-spell persistence | Background cold, absolute extremes, cold-day thresholds, percentile-relative cold, cold-spell characteristics |
+| Drought Risk | Meteorological drought across timescales | SPI-3/6/12 event counts and maximum spell lengths |
+| Extreme Rainfall \| Flash Flood Risk | Extreme precipitation and wet-spell persistence | Peak intensity, heavy-rain frequency, very-wet contribution, wet-spell persistence |
+| Riverine Flood | Static RP-100 inundation severity | Riverine flood severity, depth and extent|
 
-The grouping logic is consistent across bundles: the members of a bundle measure **complementary facets of one hazard** — magnitude (e.g. TXx), frequency (e.g. hot-day counts), persistence (e.g. WSDI), and percentile-relative shift (e.g. TX90p) — rather than redundant restatements of the same signal. Compositing these facets dampens the idiosyncratic noise of any single index and yields a more stable hazard ranking. **Riverine Flood is the structural exception**: it carries a single scored metric (the JRC severity index, weight 1.0), so its "composite" is a pass-through of that one index; the two companion JRC fields (depth, extent) are retained as display attributes at weight 0 (§6.4).
+The grouping logic is consistent across bundles: the members of a bundle measure **complementary facets of one hazard** — magnitude (e.g. TXx), frequency (e.g. hot-day counts), persistence (e.g. WSDI), and percentile-relative shift (e.g. TX90p) — rather than redundant restatements of the same signal. Compositing these facets dampens any possible noise of a single index and yields a more stable hazard ranking. **Riverine Flood is the structural exception**: it carries a single scored metric (the JRC severity index, weight 1.0), so its "composite" is a pass-through of that one index; the two companion JRC fields (depth, extent) are retained as display attributes at weight 0 (§6.4).
 
 ### 6.2 Normalization: Per-Period Spatial Scaling
 
@@ -502,13 +501,12 @@ $$S_i = \operatorname{clip}\!\left(\frac{v_i - v_{\min}}{v_{\max} - v_{\min}},\;
 
 For metrics whose directionality is *lower-is-worse* (e.g. winter-temperature means, where colder is the hazard), the numerator is replaced by $v_{\max}-v_i$ so that the worst tail still maps to 100. Two degenerate cases are handled explicitly: if every geography shares one finite value ($v_{\max}=v_{\min}$), all rows receive **50**; if no finite value exists, the score is NaN.
 
-Three consequences follow from normalizing **per period**:
+Few consequences follow from normalizing **per period**:
 
 - A bundle score is **relative, not absolute**. A district scoring 90 is among the most exposed *of its state's districts for that scenario and period* — it is not a physical magnitude, and it is **not** a change-versus-history signal.
 - Because each scenario–period is rescaled on its own min/max, scores are comparable *within* a period across space; absolute score differences *between* periods reflect the shifting spatial spread, not only the change in the underlying hazard.
-- The 1990–2010 anchor period plays **no role** in this normalization. A baseline-anchored variant — scaling every period against the fixed 1990–2010 historical range to produce a true change signal — exists as a dormant capability but is **not** used by any shipped thematic bundle. It is a dormant capability, noted here only to avoid confusion with the change-based sectoral rules of §7.
 
-The **Riverine Flood** bundle is a static snapshot: the JRC RP-100 severity index has no scenario or future-period dimension, so it is normalized once over the geography set on the same min–max scale (higher severity → worse), with no period anchoring.
+<!-- The **Riverine Flood** bundle is a static snapshot: the JRC RP-100 severity index has no scenario or future-period dimension, so it is normalized once over the geography set on the same min–max scale (higher severity → worse), with no period anchoring. -->
 
 ### 6.3 Weighted Composite Methodology
 
