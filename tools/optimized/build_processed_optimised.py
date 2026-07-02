@@ -84,10 +84,7 @@ from india_resilience_tool.data.adm3_loader import ensure_adm3_columns
 from india_resilience_tool.data.discovery import (
     iter_block_yearly_ensemble_files,
     iter_district_yearly_ensemble_files,
-    iter_hydro_yearly_ensemble_files,
-    iter_hydro_yearly_model_files,
 )
-from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.data.optimized_bundle import (
     OPTIMIZED_DIRNAME,
     bundle_manifest_path,
@@ -110,18 +107,11 @@ from india_resilience_tool.utils.processed_io import read_table, remove_tree, un
 LEGACY_MASTER_FILENAMES = {
     "district": "master_metrics_by_district.csv",
     "block": "master_metrics_by_block.csv",
-    "basin": "master_metrics_by_basin.csv",
-    "sub_basin": "master_metrics_by_sub_basin.csv",
 }
 
 ADMIN_ID_COLS = {
     "district": ["district", "state"],
     "block": ["block", "district", "state"],
-}
-
-HYDRO_ID_COLS = {
-    "basin": ["basin_id", "basin_name"],
-    "sub_basin": ["subbasin_id", "basin_id", "subbasin_name", "basin_name"],
 }
 
 CONTEXT_FILENAMES = {
@@ -131,8 +121,6 @@ CONTEXT_FILENAMES = {
     "block_basin.parquet": "block_basin_crosswalk.csv",
     "river_reaches.parquet": "river_reaches.parquet",
     "river_network_display.geojson": "river_network_display.geojson",
-    "river_basin_name_reconciliation.parquet": "river_basin_name_reconciliation.csv",
-    "river_subbasin_diagnostics.parquet": "river_subbasin_diagnostics.csv",
     "jrc_flood_depth/overlay/rp100_depth_overlay.png": "jrc_flood_depth/overlay/rp100_depth_overlay.png",
     "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json": "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json",
     "population/overlay/population_exposure_2025_overlay.png": "population/overlay/population_exposure_2025_overlay.png",
@@ -154,13 +142,10 @@ CONTEXT_FILENAMES = {
 }
 
 LEVEL_SELECTIONS = {
-    "all": ("district", "block", "basin", "sub_basin"),
+    "all": ("district", "block"),
     "admin": ("district", "block"),
-    "hydro": ("basin", "sub_basin"),
     "district": ("district",),
     "block": ("block",),
-    "basin": ("basin",),
-    "sub_basin": ("sub_basin",),
 }
 
 YEARLY_PARALLEL_CHUNK_SIZE = 64
@@ -602,7 +587,7 @@ def _check_canonical_roster(out: pd.DataFrame, *, slug: str, level: str):
     """Validate a master's admin rows against the live canonical boundary roster.
 
     Returns ``(frame_to_write_or_None, offenders)`` and never raises:
-      * ``off`` / hydro level / no offenders -> ``(out, [])``.
+      * ``off`` / non-admin level / no offenders -> ``(out, [])``.
       * ``warn`` -> ``(out_without_offenders, offenders)``: caller writes the cleaned
         frame and logs. NOTE: this only *annotates* — a renamed unit's sole row is
         dropped, so it stays blank on the map. ``warn`` does not heal.
@@ -659,7 +644,7 @@ def _select_master_columns(
     level: str,
     supported_stats: Iterable[str],
 ) -> pd.DataFrame:
-    id_cols = list(ADMIN_ID_COLS[level]) if level in ADMIN_ID_COLS else list(HYDRO_ID_COLS[level])
+    id_cols = list(ADMIN_ID_COLS[level])
     keep_cols = [c for c in id_cols if c in df.columns]
     keep_cols.extend(_metric_value_cols(df, supported_stats=supported_stats))
     keep_cols.extend(_proposal_retained_admin_master_cols(df, slug=slug, level=level))
@@ -974,137 +959,8 @@ def _build_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) ->
     return _safe_numeric_downcast(grouped)
 
 
-def _load_legacy_hydro_yearly_models(
-    *,
-    level: str,
-    sources: tuple[YearlyEnsembleSource, ...],
-    basin_map: dict[str, tuple[str, str]],
-    subbasin_map: dict[str, tuple[str, str, str, str]],
-    progress: BuildProgress,
-    label_prefix: str = "hydro",
-    workers: int = 1,
-) -> pd.DataFrame:
-    """Load hydro model-yearly rows that can be aggregated into optimized ensembles."""
-    if level not in {"basin", "sub_basin"}:
-        return pd.DataFrame()
-
-    if workers <= 1 or len(sources) <= 1:
-        rows: list[pd.DataFrame] = []
-        for source in sources:
-            row_df = _load_one_legacy_hydro_yearly_model_source(
-                source=source,
-                level=level,
-                basin_map=basin_map,
-                subbasin_map=subbasin_map,
-            )
-            if not row_df.empty:
-                rows.append(row_df)
-        if not rows:
-            return pd.DataFrame()
-        return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
-
-    progress.start_task(BuildTask(stage="yearly-ensemble", label=f"{label_prefix} | parallel hydro model reads"))
-    kind = _yearly_executor_kind()
-    source_chunks = _chunk_tuple(sources, chunk_size=_yearly_chunk_size(len(sources), workers, kind))
-    chunk_results = _execute_parallel_chunks(
-        progress=progress,
-        stage="yearly-ensemble",
-        label_prefix=label_prefix,
-        chunks=source_chunks,
-        worker_count=workers,
-        worker_fn=_load_legacy_hydro_yearly_models_chunk,
-        worker_kwargs={
-            "level": level,
-            "basin_map": basin_map,
-            "subbasin_map": subbasin_map,
-        },
-        kind=kind,
-    )
-    rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
-    if not rows:
-        return pd.DataFrame()
-    return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
-
-
-def _build_hydro_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) -> pd.DataFrame:
-    """Aggregate hydro model-yearly rows into optimized hydro yearly ensembles."""
-    if model_df.empty:
-        return pd.DataFrame()
-
-    if level == "basin":
-        grouped = (
-            model_df.groupby(["basin_id", "basin_name", "scenario", "year"], as_index=False)["value"]
-            .agg(mean="mean", median="median")
-            .sort_values(["basin_name", "scenario", "year"], kind="stable")
-            .reset_index(drop=True)
-        )
-        return _safe_numeric_downcast(grouped)
-
-    grouped = (
-        model_df.groupby(
-            ["basin_id", "basin_name", "subbasin_id", "subbasin_name", "scenario", "year"],
-            as_index=False,
-        )["value"]
-        .agg(mean="mean", median="median")
-        .sort_values(["basin_name", "subbasin_name", "scenario", "year"], kind="stable")
-        .reset_index(drop=True)
-    )
-    return _safe_numeric_downcast(grouped)
-
-
 def _normalized_key(*parts: str) -> str:
     return "|".join(alias(part) for part in parts)
-
-
-@lru_cache(maxsize=None)
-def _hydro_name_maps_cached(
-    data_dir_str: str,
-    slug: str,
-) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, str, str]]]:
-    """Build normalized hydro name -> id lookup maps from the legacy hydro masters."""
-    data_dir = Path(data_dir_str)
-    legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
-    hydro_root = legacy_root / "hydro"
-    basin_map: dict[str, tuple[str, str]] = {}
-    subbasin_map: dict[str, tuple[str, str, str, str]] = {}
-
-    basin_source = _legacy_master_source(hydro_root / LEGACY_MASTER_FILENAMES["basin"])
-    if basin_source is not None:
-        basin_df = _read_legacy_master(hydro_root / LEGACY_MASTER_FILENAMES["basin"])
-        if not basin_df.empty and {"basin_id", "basin_name"}.issubset(set(basin_df.columns)):
-            for _, row in basin_df[["basin_id", "basin_name"]].dropna().drop_duplicates().iterrows():
-                basin_name = str(row["basin_name"]).strip()
-                basin_map[alias(basin_name)] = (str(row["basin_id"]).strip(), basin_name)
-
-    sub_source = _legacy_master_source(hydro_root / LEGACY_MASTER_FILENAMES["sub_basin"])
-    if sub_source is not None:
-        sub_df = _read_legacy_master(hydro_root / LEGACY_MASTER_FILENAMES["sub_basin"])
-        expected = {"basin_id", "basin_name", "subbasin_id", "subbasin_name"}
-        if not sub_df.empty and expected.issubset(set(sub_df.columns)):
-            for _, row in sub_df[list(expected)].dropna().drop_duplicates().iterrows():
-                basin_name = str(row["basin_name"]).strip()
-                sub_name = str(row["subbasin_name"]).strip()
-                key = _normalized_key(basin_name, sub_name)
-                subbasin_map[key] = (
-                    str(row["basin_id"]).strip(),
-                    basin_name,
-                    str(row["subbasin_id"]).strip(),
-                    sub_name,
-                )
-                basin_map.setdefault(alias(basin_name), (str(row["basin_id"]).strip(), basin_name))
-
-    return basin_map, subbasin_map
-
-
-def _hydro_name_maps(
-    *,
-    data_dir: Path,
-    slug: str,
-    level: str,
-) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, str, str]]]:
-    _ = level
-    basin_map, subbasin_map = _hydro_name_maps_cached(str(Path(data_dir).resolve()), slug)
-    return dict(basin_map), dict(subbasin_map)
 
 
 def _load_one_legacy_yearly_ensemble_source(
@@ -1112,8 +968,6 @@ def _load_one_legacy_yearly_ensemble_source(
     source: YearlyEnsembleSource,
     level: str,
     state_name: Optional[str],
-    basin_map: Optional[dict[str, tuple[str, str]]] = None,
-    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
 ) -> pd.DataFrame:
     """Load one optimized yearly-ensemble frame from a legacy yearly source."""
     df = _normalize_legacy_ensemble_df(_read_yearly_csv(source.csv_path))
@@ -1124,26 +978,8 @@ def _load_one_legacy_yearly_ensemble_source(
     df["scenario"] = str(source.scenario).strip().lower()
     if level == "district":
         df["district_key"] = _normalized_key(str(state_name or ""), source.name_1)
-    elif level == "block":
-        df["block_key"] = _normalized_key(str(state_name or ""), source.name_1, str(source.name_2 or ""))
-    elif level == "basin":
-        basin_lookup = basin_map or {}
-        basin_name = str(source.name_1).strip()
-        basin_id, basin_name_out = basin_lookup.get(alias(basin_name), ("", basin_name))
-        df["basin_id"] = basin_id
-        df["basin_name"] = basin_name_out
     else:
-        sub_lookup = subbasin_map or {}
-        basin_name = str(source.name_1).strip()
-        sub_name = str(source.name_2 or "").strip()
-        basin_id, basin_name_out, sub_id, sub_name_out = sub_lookup.get(
-            _normalized_key(basin_name, sub_name),
-            ("", basin_name, "", sub_name),
-        )
-        df["basin_id"] = basin_id
-        df["basin_name"] = basin_name_out
-        df["subbasin_id"] = sub_id
-        df["subbasin_name"] = sub_name_out
+        df["block_key"] = _normalized_key(str(state_name or ""), source.name_1, str(source.name_2 or ""))
     return df
 
 
@@ -1153,8 +989,6 @@ def _load_legacy_yearly_ensemble_chunk(
     *,
     level: str,
     state_name: Optional[str],
-    basin_map: Optional[dict[str, tuple[str, str]]] = None,
-    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
 ) -> tuple[int, pd.DataFrame]:
     """Load one chunk of legacy yearly-ensemble sources in stable order."""
     rows: list[pd.DataFrame] = []
@@ -1163,77 +997,6 @@ def _load_legacy_yearly_ensemble_chunk(
             source=source,
             level=level,
             state_name=state_name,
-            basin_map=basin_map,
-            subbasin_map=subbasin_map,
-        )
-        if not row_df.empty:
-            rows.append(row_df)
-    if not rows:
-        return chunk_index, pd.DataFrame()
-    return chunk_index, pd.concat(rows, ignore_index=True, sort=False)
-
-
-def _load_one_legacy_hydro_yearly_model_source(
-    *,
-    source: YearlyEnsembleSource,
-    level: str,
-    basin_map: dict[str, tuple[str, str]],
-    subbasin_map: dict[str, tuple[str, str, str, str]],
-) -> pd.DataFrame:
-    """Load one hydro yearly model CSV into the optimized model-fallback schema."""
-    df = _read_yearly_csv(source.csv_path)
-    if df.empty:
-        return pd.DataFrame()
-    value_col = _extract_value_column(df)
-    if value_col is None or "year" not in df.columns:
-        return pd.DataFrame()
-
-    df = df.copy()
-    df["year"] = pd.to_numeric(df["year"], errors="coerce")
-    df["value"] = pd.to_numeric(df[value_col], errors="coerce")
-    df = df.dropna(subset=["year", "value"])
-    if df.empty:
-        return pd.DataFrame()
-
-    df["scenario"] = str(source.scenario).strip().lower()
-    df["model"] = str(source.model or "").strip()
-
-    if level == "basin":
-        basin_name = str(source.name_1).strip()
-        basin_id, basin_name_out = basin_map.get(alias(basin_name), ("", basin_name))
-        df["basin_id"] = basin_id
-        df["basin_name"] = basin_name_out
-        return df[["basin_id", "basin_name", "scenario", "model", "year", "value"]]
-
-    basin_name = str(source.name_1).strip()
-    sub_name = str(source.name_2 or "").strip()
-    basin_id, basin_name_out, sub_id, sub_name_out = subbasin_map.get(
-        _normalized_key(basin_name, sub_name),
-        ("", basin_name, "", sub_name),
-    )
-    df["basin_id"] = basin_id
-    df["basin_name"] = basin_name_out
-    df["subbasin_id"] = sub_id
-    df["subbasin_name"] = sub_name_out
-    return df[["basin_id", "basin_name", "subbasin_id", "subbasin_name", "scenario", "model", "year", "value"]]
-
-
-def _load_legacy_hydro_yearly_models_chunk(
-    chunk_index: int,
-    sources: tuple[YearlyEnsembleSource, ...],
-    *,
-    level: str,
-    basin_map: dict[str, tuple[str, str]],
-    subbasin_map: dict[str, tuple[str, str, str, str]],
-) -> tuple[int, pd.DataFrame]:
-    """Load one chunk of hydro yearly model sources in stable order."""
-    rows: list[pd.DataFrame] = []
-    for source in sources:
-        row_df = _load_one_legacy_hydro_yearly_model_source(
-            source=source,
-            level=level,
-            basin_map=basin_map,
-            subbasin_map=subbasin_map,
         )
         if not row_df.empty:
             rows.append(row_df)
@@ -1247,15 +1010,11 @@ def _load_legacy_yearly_ensemble(
     level: str,
     state_name: Optional[str],
     sources: tuple[YearlyEnsembleSource, ...],
-    basin_map: Optional[dict[str, tuple[str, str]]] = None,
-    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
     progress: BuildProgress,
     label_prefix: str = "ensemble",
     workers: int = 1,
 ) -> pd.DataFrame:
     """Load optimized yearly-ensemble rows directly from legacy ensemble CSVs."""
-    basin_lookup = basin_map or {}
-    subbasin_lookup = subbasin_map or {}
     if workers <= 1 or len(sources) <= 1:
         rows: list[pd.DataFrame] = []
         for source in sources:
@@ -1263,8 +1022,6 @@ def _load_legacy_yearly_ensemble(
                 source=source,
                 level=level,
                 state_name=state_name,
-                basin_map=basin_lookup,
-                subbasin_map=subbasin_lookup,
             )
             if not row_df.empty:
                 rows.append(row_df)
@@ -1285,8 +1042,6 @@ def _load_legacy_yearly_ensemble(
         worker_kwargs={
             "level": level,
             "state_name": state_name,
-            "basin_map": basin_lookup,
-            "subbasin_map": subbasin_lookup,
         },
         kind=kind,
     )
@@ -1407,10 +1162,6 @@ def _geometry_tasks(
                 )
             )
 
-    sub: Optional[gpd.GeoDataFrame] = None
-    if "sub_basin" in selected_levels:
-        sub = ensure_hydro_columns(gpd.read_file(cfg.subbasins_path).to_crs(4326), level="sub_basin")
-
     if "block" in selected_levels:
         if include_shared_admin_artifacts:
             tasks.append(
@@ -1422,17 +1173,6 @@ def _geometry_tasks(
                     target_path=optimized_context_path("admin_block_index.parquet", data_dir=data_dir),
                 )
             )
-
-    if "sub_basin" in selected_levels and sub is not None:
-        tasks.append(
-            BuildTask(
-                stage="geometry",
-                label="hydro sub-basin index",
-                level="hydro_subbasin_index",
-                source_path=Path(cfg.subbasins_path),
-                target_path=optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir),
-            )
-        )
 
     return tuple(tasks)
 
@@ -1518,34 +1258,6 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
                 admin_block_index_task,
                 progress,
                 lambda: _write_parquet(admin_block_index, admin_block_index_path),
-            )
-
-    sub: Optional[gpd.GeoDataFrame] = None
-    if any(task.level == "hydro_subbasin_index" for task in tasks):
-        sub = gpd.read_file(cfg.subbasins_path).to_crs(4326)
-        sub = ensure_hydro_columns(sub, level="sub_basin")
-
-    if any(task.level == "hydro_subbasin_index" for task in tasks) and sub is not None:
-        hydro_subbasin_index = (
-            sub[["basin_id", "basin_name", "subbasin_id", "subbasin_name"]]
-            .copy()
-            .dropna(subset=["basin_id", "basin_name", "subbasin_id", "subbasin_name"])
-        )
-        for col in ("basin_id", "basin_name", "subbasin_id", "subbasin_name"):
-            hydro_subbasin_index[col] = hydro_subbasin_index[col].astype("string").str.strip()
-        hydro_subbasin_index = hydro_subbasin_index[
-            (hydro_subbasin_index["basin_id"] != "")
-            & (hydro_subbasin_index["basin_name"] != "")
-            & (hydro_subbasin_index["subbasin_id"] != "")
-            & (hydro_subbasin_index["subbasin_name"] != "")
-        ].drop_duplicates().sort_values(["basin_name", "subbasin_name"]).reset_index(drop=True)
-        hydro_subbasin_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir)
-        hydro_subbasin_index_task = task_map.get(("hydro_subbasin_index", None, str(hydro_subbasin_index_path)))
-        if hydro_subbasin_index_task is not None:
-            _run_task(
-                hydro_subbasin_index_task,
-                progress,
-                lambda: _write_parquet(hydro_subbasin_index, hydro_subbasin_index_path),
             )
 
 
@@ -1869,80 +1581,6 @@ def _build_execution_plan(
                         )
                     )
 
-        hydro_root = legacy_root / "hydro"
-        if hydro_root.exists():
-            for level in ("basin", "sub_basin"):
-                if level not in selected_levels:
-                    continue
-                source = _legacy_master_source(hydro_root / LEGACY_MASTER_FILENAMES[level])
-                if source is None:
-                    continue
-                master_tasks.append(
-                    BuildTask(
-                        stage="masters",
-                        label=f"{slug} | hydro | {level}",
-                        slug=slug,
-                        level=level,
-                        source_path=source,
-                        target_path=optimized_master_path(slug, level=level, data_dir=data_dir),
-                    )
-                )
-                if bool(varcfg.get("supports_yearly_trend", True)):
-                    hydro_sources = tuple(
-                        YearlyEnsembleSource(
-                            scenario=scenario,
-                            csv_path=csv_path,
-                            name_1=basin_name,
-                            name_2=subbasin_name,
-                        )
-                        for basin_name, subbasin_name, scenario, csv_path in iter_hydro_yearly_ensemble_files(
-                            ts_root=legacy_root,
-                            level=level,
-                        )
-                    )
-                    if hydro_sources:
-                        yearly_ensemble_jobs.append(
-                            YearlyEnsembleJob(
-                                slug=slug,
-                                level=level,
-                                target_path=optimized_yearly_ensemble_path(
-                                    slug,
-                                    level=level,
-                                    data_dir=data_dir,
-                                ),
-                                source_mode="legacy_ensemble",
-                                sources=hydro_sources,
-                            )
-                        )
-                    else:
-                        hydro_model_sources = tuple(
-                            YearlyEnsembleSource(
-                                scenario=scenario,
-                                csv_path=csv_path,
-                                name_1=basin_name,
-                                name_2=subbasin_name,
-                                model=model_name,
-                            )
-                            for basin_name, subbasin_name, model_name, scenario, csv_path in iter_hydro_yearly_model_files(
-                                ts_root=legacy_root,
-                                level=level,
-                            )
-                        )
-                        if hydro_model_sources:
-                            yearly_ensemble_jobs.append(
-                                YearlyEnsembleJob(
-                                    slug=slug,
-                                    level=level,
-                                    target_path=optimized_yearly_ensemble_path(
-                                        slug,
-                                        level=level,
-                                        data_dir=data_dir,
-                                    ),
-                                    source_mode="hydro_model_fallback",
-                                    sources=hydro_model_sources,
-                                )
-                            )
-
     context_tasks: list[BuildTask] = []
     scoped_admin_run = _state_scoped_admin_run(states=states, levels=levels)
     if include_context and (not scoped_admin_run or include_shared_admin_artifacts):
@@ -2082,7 +1720,7 @@ def _state_owned_plan_paths(plan: BuildPlan) -> tuple[Path, ...]:
     for task in plan.geometry_tasks:
         if task.target_path is None:
             continue
-        if task.level in {"district", "block", "basin", "sub_basin"}:
+        if task.level in {"district", "block"}:
             owned.append(task.target_path)
     return _iter_unique_paths(owned)
 
@@ -2204,11 +1842,7 @@ def _required_columns_for_master(level: str) -> set[str]:
     level_norm = str(level).strip().lower()
     if level_norm == "district":
         return {"state", "district", "district_key"}
-    if level_norm == "block":
-        return {"state", "district", "block", "block_key"}
-    if level_norm == "basin":
-        return {"basin_id", "basin_name"}
-    return {"basin_id", "basin_name", "subbasin_id", "subbasin_name"}
+    return {"state", "district", "block", "block_key"}
 
 
 def _required_columns_for_yearly_models(level: str) -> set[str]:
@@ -2220,11 +1854,7 @@ def _required_columns_for_yearly_ensemble(level: str) -> set[str]:
     level_norm = str(level).strip().lower()
     if level_norm == "district":
         return {"district_key", "scenario", "year", "mean"}
-    if level_norm == "block":
-        return {"block_key", "scenario", "year", "mean"}
-    if level_norm == "basin":
-        return {"basin_name", "scenario", "year", "mean"}
-    return {"basin_name", "subbasin_name", "scenario", "year", "mean"}
+    return {"block_key", "scenario", "year", "mean"}
 
 
 def _table_has_required_columns(path: Path, required_columns: set[str]) -> tuple[bool, list[str]]:
@@ -2631,43 +2261,19 @@ def build_processed_optimised_bundle(
             _run_task(model_task, progress, _write_models)
 
         for job in plan.yearly_ensemble_jobs:
-            label_prefix = f"{job.slug} | {job.state or 'hydro'} | {job.level}"
-            basin_map: dict[str, tuple[str, str]] = {}
-            subbasin_map: dict[str, tuple[str, str, str, str]] = {}
-            if job.level in {"basin", "sub_basin"}:
-                basin_map, subbasin_map = _hydro_name_maps(
-                    data_dir=data_dir,
-                    slug=job.slug,
-                    level=job.level,
-                )
-
-            if job.source_mode == "hydro_model_fallback":
-                hydro_model_df = _load_legacy_hydro_yearly_models(
-                    level=job.level,
-                    sources=job.sources,
-                    basin_map=basin_map,
-                    subbasin_map=subbasin_map,
-                    progress=progress,
-                    label_prefix=label_prefix,
-                    workers=resolved_workers,
-                )
-                ensemble_df = pd.DataFrame()
-            else:
-                ensemble_df = _load_legacy_yearly_ensemble(
-                    level=job.level,
-                    state_name=job.state,
-                    sources=job.sources,
-                    basin_map=basin_map,
-                    subbasin_map=subbasin_map,
-                    progress=progress,
-                    label_prefix=label_prefix,
-                    workers=resolved_workers,
-                )
-                hydro_model_df = pd.DataFrame()
+            label_prefix = f"{job.slug} | {job.state} | {job.level}"
+            ensemble_df = _load_legacy_yearly_ensemble(
+                level=job.level,
+                state_name=job.state,
+                sources=job.sources,
+                progress=progress,
+                label_prefix=label_prefix,
+                workers=resolved_workers,
+            )
 
             ensemble_task = BuildTask(
                 stage="yearly-ensemble",
-                label=f"{job.slug} | {job.state or 'hydro'} | {job.level} | ensemble parquet",
+                label=f"{job.slug} | {job.state} | {job.level} | ensemble parquet",
                 slug=job.slug,
                 state=job.state,
                 level=job.level,
@@ -2675,13 +2281,6 @@ def build_processed_optimised_bundle(
             )
 
             def _write_ensemble() -> None:
-                if job.source_mode == "hydro_model_fallback":
-                    derived_df = _build_hydro_yearly_ensemble_from_models(hydro_model_df, level=job.level)
-                    if derived_df.empty:
-                        return
-                    _write_parquet(derived_df, job.target_path)
-                    summaries_map[job.slug]["wrote_yearly_ensemble"] = True
-                    return
                 if ensemble_df.empty:
                     return
                 _write_parquet(_safe_numeric_downcast(ensemble_df), job.target_path)

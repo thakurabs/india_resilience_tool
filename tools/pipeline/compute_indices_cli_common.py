@@ -38,7 +38,7 @@ def build_parser(*, default_workers: Optional[int] = None) -> argparse.ArgumentP
     parser.add_argument(
         "-l",
         "--level",
-        choices=["district", "block", "basin", "sub_basin", "both"],
+        choices=["district", "block", "both"],
         default="both",
         help="Spatial level for aggregation (default: both = district + block)",
     )
@@ -51,9 +51,9 @@ def build_parser(*, default_workers: Optional[int] = None) -> argparse.ArgumentP
         choices=YEARLY_CLEANUP_POLICIES,
         default="default",
         help=(
-            "Per-model yearly CSV cleanup policy. default preserves district/basin/sub-basin "
-            "yearly CSVs and deletes block yearly CSVs after ensembles; preserve keeps yearly "
-            "CSVs for all levels; delete_after_ensemble is valid only for block runs."
+            "Per-model yearly CSV cleanup policy. default preserves district yearly CSVs "
+            "and deletes block yearly CSVs after ensembles; preserve keeps yearly CSVs for "
+            "all levels; delete_after_ensemble is valid only for block runs."
         ),
     )
     parser.add_argument(

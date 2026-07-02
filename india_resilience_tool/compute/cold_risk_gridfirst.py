@@ -442,12 +442,6 @@ def compute_cold_risk_rows_for_metric(
                 left, right = unit_key.split("||", 1)
                 row["district"] = left
                 row["block"] = right
-            elif level == "sub_basin" and "||" in unit_key:
-                left, right = unit_key.split("||", 1)
-                row["basin"] = left
-                row["sub_basin"] = right
-            elif level == "basin":
-                row["basin"] = unit_key
             else:
                 row["district"] = unit_key
             if scenario:

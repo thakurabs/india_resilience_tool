@@ -196,10 +196,6 @@ def r95p_threshold_cache_path(cache_root: Path, *, model: str, grid_id: str) -> 
 def _add_unit_fields(row: dict[str, object], *, level: str, unit_key: str) -> None:
     if level == "block" and "||" in unit_key:
         row["district"], row["block"] = unit_key.split("||", 1)
-    elif level == "sub_basin" and "||" in unit_key:
-        row["basin"], row["sub_basin"] = unit_key.split("||", 1)
-    elif level == "basin":
-        row["basin"] = unit_key
     else:
         row["district"] = unit_key
 
@@ -278,7 +274,7 @@ def compute_extreme_rainfall_rows_for_metric(
     The entrypoint accepts registry-style metric mappings but intentionally
     ignores R95p/R95pTOT registry baseline, quantile, and exceedance params:
     admin v2 locks those semantics to 1990-2010, linear quantile, wet days
-    >=1 mm/day, and strict exceedance. Hydro continues to use the legacy path.
+    >=1 mm/day, and strict exceedance.
 
     ``index_range`` is the positional ``(lat0, lat1, lon0, lon1)`` bbox subset
     (per-state memory fix) forwarded to every yearly load — baseline and eval.

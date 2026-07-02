@@ -286,10 +286,6 @@ def _grid_sidecar(
 def _add_unit_fields(row: dict[str, object], unit_key: str, level: str) -> None:
     if level == "block" and "||" in unit_key:
         row["district"], row["block"] = unit_key.split("||", 1)
-    elif level == "sub_basin" and "||" in unit_key:
-        row["basin"], row["sub_basin"] = unit_key.split("||", 1)
-    elif level == "basin":
-        row["basin"] = unit_key
     else:
         row["district"] = unit_key
 

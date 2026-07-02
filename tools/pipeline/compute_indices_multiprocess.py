@@ -81,17 +81,12 @@ import xarray as xr
 import geopandas as gpd
 from rasterio import features
 from affine import Affine
-from shapely.geometry import box
-
 from paths import (
     BASE_OUTPUT_ROOT,
-    BASINS_PATH,
     BLOCKS_PATH,
     DATA_ROOT,
     DISTRICTS_PATH,
-    SUBBASINS_PATH,
 )
-from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.data.source_inventory import (
     SourceInventoryShard,
     combine_shard_signatures,
@@ -175,14 +170,11 @@ USE_CLIMATE_INDICES_PACKAGE = CLIMATE_INDICES_AVAILABLE
 SPI_DISTRIBUTION: str = "gamma"
 
 # Type alias for administrative level
-AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+AdminLevel = Literal["district", "block"]
 
 # Folder names for clean separation
 DISTRICT_FOLDER = "districts"
 BLOCK_FOLDER = "blocks"
-BASIN_FOLDER = "basins"
-SUB_BASIN_FOLDER = "sub_basins"
-HYDRO_ROOT_NAME = "hydro"
 COVERAGE_THRESHOLD = 0.80
 NULL_LIKE_STRINGS = {"", "nan", "<na>", "none", "nat"}
 
@@ -340,7 +332,7 @@ def _is_blank_like(value: object) -> bool:
 
 
 def _safe_component(name: object) -> str:
-    """Build a deterministic hydro-safe folder/file component."""
+    """Build a deterministic filesystem-safe folder/file component."""
     return hydro_fs_token(str(name).strip())
 
 
@@ -396,10 +388,6 @@ def _cold_risk_internal_root() -> Path:
 
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
-    if level == "sub_basin":
-        return SUB_BASIN_FOLDER
-    if level == "basin":
-        return BASIN_FOLDER
     return BLOCK_FOLDER if level == "block" else DISTRICT_FOLDER
 
 def normalize_lat_lon(ds: xr.Dataset) -> xr.Dataset:
@@ -419,36 +407,8 @@ def pr_to_mm_per_day(da: xr.DataArray) -> xr.DataArray:
 # -----------------------------------------------------------------------------
 def get_boundary_path(level: AdminLevel) -> Path:
     """Get the boundary file path based on level."""
-    if level == "sub_basin":
-        return SUBBASINS_PATH
-    if level == "basin":
-        return BASINS_PATH
     return BLOCKS_PATH if level == "block" else DISTRICTS_PATH
 
-
-def _validate_hydro_boundary_identity(
-    gdf: gpd.GeoDataFrame,
-    *,
-    level: AdminLevel,
-) -> None:
-    """Ensure hydro boundary inputs contain non-empty identifiers before mask building."""
-    if level == "sub_basin":
-        required = ["basin_id", "basin_name", "subbasin_id", "subbasin_name"]
-    elif level == "basin":
-        required = ["basin_id", "basin_name"]
-    else:
-        return
-
-    invalid_mask = pd.Series(False, index=gdf.index, dtype=bool)
-    for col in required:
-        invalid_mask |= gdf[col].map(_is_blank_like)
-
-    if invalid_mask.any():
-        sample = gdf.loc[invalid_mask, required].head(5).to_dict("records")
-        raise ValueError(
-            f"Hydro boundary inputs contain blank identity values for level={level}. "
-            f"Required={required}. Sample rows={sample}"
-        )
 
 def load_boundaries(
     path: Path,
@@ -459,13 +419,6 @@ def load_boundaries(
     Load boundary file and optionally filter to a specific state.
     """
     gdf = gpd.read_file(path)
-    
-    if level in {"basin", "sub_basin"}:
-        if gdf.crs is None:
-            gdf = gdf.set_crs("EPSG:4326")
-        gdf = ensure_hydro_columns(gdf, level="sub_basin" if level == "sub_basin" else "basin")
-        _validate_hydro_boundary_identity(gdf, level=level)
-        return gdf
 
     # Find state column
     state_cols = ["STATE_UT", "state_ut", "STATE", "STATE_LGD", "ST_NM", "state_name"]
@@ -540,10 +493,6 @@ def _standardize_block_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 def get_unit_name_column(level: AdminLevel) -> str:
     """Get the column name for the spatial unit based on level."""
-    if level == "sub_basin":
-        return "subbasin_name"
-    if level == "basin":
-        return "basin_name"
     return "block_name" if level == "block" else "district_name"
 
 # Legacy compatibility
@@ -562,200 +511,7 @@ def _unit_key_from_row(row: pd.Series, level: AdminLevel) -> str:
     if level == "block":
         district = str(row.get("district_name", "")).strip()
         return f"{district}||{unit_name}" if district else unit_name
-    if level == "sub_basin":
-        basin_name = str(row.get("basin_name", "")).strip()
-        return f"{basin_name}||{unit_name}" if basin_name else unit_name
     return unit_name
-
-
-def _sample_extent_polygon(sample_ds: xr.Dataset):
-    """Build a polygon covering the full sample climate grid extent."""
-    lats = np.asarray(sample_ds["lat"].values, dtype=float)
-    lons = np.asarray(sample_ds["lon"].values, dtype=float)
-    if lats.size == 0 or lons.size == 0:
-        raise ValueError("Sample dataset has empty lat/lon coordinates")
-
-    yres = abs(float(lats[1] - lats[0])) if lats.size > 1 else 0.0
-    xres = abs(float(lons[1] - lons[0])) if lons.size > 1 else 0.0
-    min_lat = float(np.min(lats)) - (yres / 2.0)
-    max_lat = float(np.max(lats)) + (yres / 2.0)
-    min_lon = float(np.min(lons)) - (xres / 2.0)
-    max_lon = float(np.max(lons)) + (xres / 2.0)
-    return box(min_lon, min_lat, max_lon, max_lat)
-
-
-def _outside_extent_coverage_rows(
-    gdf: gpd.GeoDataFrame,
-    *,
-    level: AdminLevel,
-) -> pd.DataFrame:
-    """Return coverage-QC rows for hydro units outside the climate-data extent."""
-    rows: list[dict[str, object]] = []
-    unit_col = get_unit_name_column(level)
-    for _, row in gdf.iterrows():
-        unit_name = str(row.get(unit_col, "")).strip()
-        qc_row: dict[str, object] = {
-            "unit_key": _unit_key_from_row(row, level),
-            "coverage_fraction": 0.0,
-            "coverage_ok": False,
-            "coverage_threshold": COVERAGE_THRESHOLD,
-            "covered_cells": 0,
-            "total_cells": 0,
-            "eligible_for_processing": False,
-            "extent_intersects": False,
-            "reason": "outside_climate_extent",
-        }
-        if level == "basin":
-            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
-            qc_row["basin_name"] = unit_name
-        elif level == "sub_basin":
-            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
-            qc_row["basin_name"] = str(row.get("basin_name", "")).strip()
-            qc_row["subbasin_id"] = str(row.get("subbasin_id", "")).strip()
-            qc_row["subbasin_name"] = unit_name
-        rows.append(qc_row)
-    return pd.DataFrame(rows)
-
-
-def _filter_hydro_units_to_climate_extent(
-    gdf: gpd.GeoDataFrame,
-    sample_ds: xr.Dataset,
-    *,
-    level: AdminLevel,
-    slug: str,
-    model: str,
-    scenario: str,
-) -> tuple[gpd.GeoDataFrame, pd.DataFrame]:
-    """Restrict hydro units to those intersecting the available climate-data extent."""
-    if level not in {"basin", "sub_basin"}:
-        return gdf.copy(), pd.DataFrame()
-
-    climate_extent = _sample_extent_polygon(sample_ds)
-    intersects_mask = gdf.geometry.intersects(climate_extent).fillna(False)
-    eligible_gdf = gdf.loc[intersects_mask].copy()
-    excluded_gdf = gdf.loc[~intersects_mask].copy()
-
-    if not excluded_gdf.empty:
-        unit_col = get_unit_name_column(level)
-        sample_units = excluded_gdf[unit_col].astype(str).head(5).tolist()
-        logging.info(
-            "[%s] Hydro extent filter for %s/%s at level=%s kept %d of %d units; excluded %d outside climate extent. Sample excluded units: %s",
-            slug,
-            model,
-            scenario,
-            level,
-            len(eligible_gdf),
-            len(gdf),
-            len(excluded_gdf),
-            sample_units,
-        )
-
-    return eligible_gdf, _outside_extent_coverage_rows(excluded_gdf, level=level)
-
-
-def _prune_excluded_hydro_outputs(
-    metric_root_path: Path,
-    *,
-    state_name: str,
-    level: AdminLevel,
-    model: str,
-    scenario: str,
-    excluded_coverage_df: pd.DataFrame,
-    slug: str,
-) -> None:
-    """Delete stale hydro outputs for units excluded by the current climate extent."""
-    if excluded_coverage_df is None or excluded_coverage_df.empty:
-        return
-
-    level_folder = get_level_folder(level)
-    removed_files = 0
-    for _, row in excluded_coverage_df.iterrows():
-        if level == "basin":
-            basin_safe = _safe_component(row.get("basin_name", ""))
-            scenario_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
-            basename = basin_safe
-        elif level == "sub_basin":
-            basin_safe = _safe_component(row.get("basin_name", ""))
-            sub_basin_safe = _safe_component(row.get("subbasin_name", ""))
-            scenario_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
-            basename = sub_basin_safe
-        else:
-            continue
-
-        for suffix in ("_yearly.csv", "_periods.csv"):
-            path = scenario_dir / f"{basename}{suffix}"
-            if path.exists():
-                path.unlink()
-                removed_files += 1
-
-        current = scenario_dir
-        while current != metric_root_path and current.exists():
-            try:
-                current.rmdir()
-            except OSError:
-                break
-            current = current.parent
-
-    if removed_files:
-        logging.info(
-            "[%s] Removed %d stale hydro output files outside the current climate extent for %s/%s level=%s",
-            slug,
-            removed_files,
-            model,
-            scenario,
-            level,
-        )
-
-
-def _prune_excluded_hydro_ensemble_outputs(
-    metric_root_path: Path,
-    *,
-    state_name: str,
-    level: AdminLevel,
-    scenario: str,
-    excluded_coverage_df: pd.DataFrame,
-    slug: str,
-) -> None:
-    """Delete stale hydro ensemble outputs for units excluded by the current climate extent."""
-    if excluded_coverage_df is None or excluded_coverage_df.empty:
-        return
-
-    ensembles_root = metric_root_path / state_name / get_level_folder(level) / "ensembles"
-    if not ensembles_root.exists():
-        return
-
-    removed_files = 0
-    for _, row in excluded_coverage_df.iterrows():
-        if level == "basin":
-            basin_safe = _safe_component(row.get("basin_name", ""))
-            scenario_dir = ensembles_root / basin_safe / scenario
-        elif level == "sub_basin":
-            basin_safe = _safe_component(row.get("basin_name", ""))
-            sub_basin_safe = _safe_component(row.get("subbasin_name", ""))
-            scenario_dir = ensembles_root / basin_safe / sub_basin_safe / scenario
-        else:
-            continue
-
-        for path in scenario_dir.glob("*_yearly_ensemble.csv"):
-            path.unlink()
-            removed_files += 1
-
-        current = scenario_dir
-        while current != ensembles_root and current.exists():
-            try:
-                current.rmdir()
-            except OSError:
-                break
-            current = current.parent
-
-    if removed_files:
-        logging.info(
-            "[%s] Removed %d stale hydro ensemble files outside the current climate extent for scenario=%s level=%s",
-            slug,
-            removed_files,
-            scenario,
-            level,
-        )
 
 
 def build_unit_masks(
@@ -853,14 +609,6 @@ def build_unit_masks(
             qc_row["block"] = unit_name
         elif level == "district":
             qc_row["district"] = unit_name
-        elif level == "basin":
-            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
-            qc_row["basin_name"] = unit_name
-        elif level == "sub_basin":
-            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
-            qc_row["basin_name"] = str(row.get("basin_name", "")).strip()
-            qc_row["subbasin_id"] = str(row.get("subbasin_id", "")).strip()
-            qc_row["subbasin_name"] = unit_name
         coverage_rows.append(qc_row)
 
     return masks, pd.DataFrame(coverage_rows)
@@ -885,20 +633,6 @@ def _add_unit_fields_from_key(row: dict, unit_key: str, level: AdminLevel) -> No
         else:
             row["district"] = "Unknown"
             row["block"] = unit_key
-        return
-
-    if level == "sub_basin":
-        if "||" in unit_key:
-            basin, sub_basin = unit_key.split("||", 1)
-            row["basin"] = basin
-            row["sub_basin"] = sub_basin
-        else:
-            row["basin"] = "Unknown"
-            row["sub_basin"] = unit_key
-        return
-
-    if level == "basin":
-        row["basin"] = unit_key
         return
 
     row["district"] = unit_key
@@ -935,47 +669,6 @@ def _append_coverage_failure_rows(
             }
             _add_unit_fields_from_key(row, unit_key, level)
             rows.append(row)
-
-
-def _validate_output_unit_fields(
-    df: pd.DataFrame,
-    *,
-    level: AdminLevel,
-    slug: str,
-    model: str,
-    scenario: str,
-    stage_label: str,
-) -> None:
-    """Validate hydro identity columns before grouping or writing outputs."""
-    if level == "sub_basin":
-        required = ["basin", "sub_basin"]
-    elif level == "basin":
-        required = ["basin"]
-    else:
-        return
-
-    missing_cols = [col for col in required if col not in df.columns]
-    if missing_cols:
-        raise ValueError(
-            f"[{slug}] Missing required hydro identity columns before writing {stage_label} "
-            f"for level={level}, model={model}, scenario={scenario}: {missing_cols}"
-        )
-
-    invalid_mask = pd.Series(False, index=df.index, dtype=bool)
-    for col in required:
-        invalid_mask |= df[col].map(_is_blank_like)
-
-    if invalid_mask.any():
-        sample_cols = [col for col in required if col in df.columns]
-        for optional_col in ["year", "period", "value"]:
-            if optional_col in df.columns and optional_col not in sample_cols:
-                sample_cols.append(optional_col)
-        sample = df.loc[invalid_mask, sample_cols].head(5).to_dict("records")
-        raise ValueError(
-            f"[{slug}] Invalid hydro identity values before writing {stage_label} "
-            f"for level={level}, model={model}, scenario={scenario}. "
-            f"Required={required}. Sample rows={sample}"
-        )
 
 
 def _write_coverage_qc(
@@ -3854,7 +3547,7 @@ SKIP_REASON_NO_TASKS_AFTER_FILTERS = "no_tasks_after_filters"
 
 def _scope_name_for_level(level: AdminLevel, state: str) -> str:
     """Return the directory scope name used by compute outputs for one level."""
-    return HYDRO_ROOT_NAME if level in {"basin", "sub_basin"} else str(state).strip()
+    return str(state).strip()
 
 
 def _hash_common_years(years: Sequence[int]) -> str:
@@ -3957,76 +3650,6 @@ def _filter_aware_ensemble_marker_path(
     )
 
 
-def _canonical_hydro_unit_key(path: Path, *, level: AdminLevel, ensemble: bool) -> str | tuple[str, str] | None:
-    """Return the canonical hydro unit key encoded by one output path."""
-    try:
-        if level == "basin":
-            basin_dir = path.parents[1].name if ensemble else path.parents[2].name
-            return hydro_fs_token(basin_dir)
-        basin_dir = path.parents[2].name if ensemble else path.parents[3].name
-        sub_basin_dir = path.parents[1].name if ensemble else path.parents[2].name
-        return (hydro_fs_token(basin_dir), hydro_fs_token(sub_basin_dir))
-    except IndexError:
-        return None
-
-
-def _hydro_unit_key_from_output_contents(
-    path: Path,
-    *,
-    level: AdminLevel,
-) -> str | tuple[str, str] | None:
-    """Return the canonical hydro unit key encoded by one output CSV's identity columns."""
-    identity_columns = {"basin", "sub_basin", "basin_name", "subbasin_name"}
-    try:
-        df = read_csv(path, usecols=lambda column: str(column) in identity_columns, nrows=1)
-    except Exception:
-        return None
-
-    if df.empty:
-        return None
-
-    row = df.iloc[0]
-    basin_value = next(
-        (
-            str(row.get(column)).strip()
-            for column in ("basin", "basin_name")
-            if column in df.columns and not _is_blank_like(row.get(column))
-        ),
-        "",
-    )
-    if not basin_value:
-        return None
-
-    if level == "basin":
-        return hydro_fs_token(basin_value)
-
-    sub_basin_value = next(
-        (
-            str(row.get(column)).strip()
-            for column in ("sub_basin", "subbasin_name")
-            if column in df.columns and not _is_blank_like(row.get(column))
-        ),
-        "",
-    )
-    if not sub_basin_value:
-        return None
-    return (hydro_fs_token(basin_value), hydro_fs_token(sub_basin_value))
-
-
-def _hydro_output_unit_key(
-    path: Path,
-    *,
-    level: AdminLevel,
-    ensemble: bool,
-) -> str | tuple[str, str] | None:
-    """Return the canonical hydro unit key for one output, preferring file contents over directory names."""
-    return _hydro_unit_key_from_output_contents(path, level=level) or _canonical_hydro_unit_key(
-        path,
-        level=level,
-        ensemble=ensemble,
-    )
-
-
 def _selected_values_or_all(values: Sequence[str] | None, fallback: Sequence[str]) -> tuple[str, ...]:
     selected = _normalize_filter_values(values)
     return selected if selected is not None else tuple(str(value).strip() for value in fallback)
@@ -4122,41 +3745,12 @@ def _task_output_file_counts(
     if not level_root.exists():
         return 0, 0
 
-    if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
-        yearly_units: set[str] | set[tuple[str, str]] = set()
-        period_units: set[str] | set[tuple[str, str]] = set()
-
-        if level == "basin":
-            yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
-            periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
-        else:
-            yearly_pattern = f"*/*/{model}/{scenario}/*_yearly.csv"
-            periods_pattern = f"*/*/{model}/{scenario}/*_periods.csv"
-
-        for path in glob_paths(level_root, yearly_pattern):
-            unit_key = _hydro_output_unit_key(path, level=level, ensemble=False)
-            if unit_key is not None:
-                yearly_units.add(unit_key)
-
-        for path in glob_paths(level_root, periods_pattern):
-            unit_key = _hydro_output_unit_key(path, level=level, ensemble=False)
-            if unit_key is not None:
-                period_units.add(unit_key)
-
-        return len(yearly_units), len(period_units)
-
-    if level == "district":
-        yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
-        periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
-    elif level == "block":
+    if level == "block":
         yearly_pattern = f"*/*/{model}/{scenario}/*_yearly.csv"
         periods_pattern = f"*/*/{model}/{scenario}/*_periods.csv"
-    elif level == "basin":
-        yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
-        periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
     else:
-        yearly_pattern = f"*/*/{model}/{scenario}/*_yearly.csv"
-        periods_pattern = f"*/*/{model}/{scenario}/*_periods.csv"
+        yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
+        periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
 
     yearly_count = sum(1 for _ in level_root.glob(yearly_pattern))
     periods_count = sum(1 for _ in level_root.glob(periods_pattern))
@@ -4184,47 +3778,12 @@ def _ensemble_output_count(
     yearly_pattern = "**/*_yearly_ensemble.csv"
 
     allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
-    eligible_units: set[str] | set[tuple[str, str]] | None = None
-    if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
-        eligible_units = _hydro_ensemble_scope_from_coverage_qc(
-            metric_root(slug) / scope_name / get_level_folder(level),
-            level=level,
-            allowed_models=allowed_models,
-            allowed_scenarios=allowed_scenarios,
-        )
-
-    if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
-        output_units: set[tuple[str, str]] | set[tuple[tuple[str, str], str]] = set()
-        for path in glob_paths(ensembles_root, yearly_pattern):
-            scenario_name = path.parent.name
-            if allowed_scenarios_norm is not None and scenario_name not in allowed_scenarios_norm:
-                continue
-
-            unit_key = _hydro_output_unit_key(path, level=level, ensemble=True)
-            if unit_key is None:
-                continue
-
-            if eligible_units is not None and unit_key not in eligible_units:
-                continue
-
-            output_units.add((unit_key, scenario_name))
-        return len(output_units)
 
     count = 0
     for path in glob_paths(ensembles_root, yearly_pattern):
         scenario_name = path.parent.name
         if allowed_scenarios_norm is not None and scenario_name not in allowed_scenarios_norm:
             continue
-
-        if eligible_units is not None:
-            if level == "basin":
-                basin_key = path.parents[1].name
-                if basin_key not in eligible_units:
-                    continue
-            else:
-                unit_key = (path.parents[2].name, path.parents[1].name)
-                if unit_key not in eligible_units:
-                    continue
 
         count += 1
     return count
@@ -4258,21 +3817,9 @@ def _write_metric_rows_outputs(
     )
 
     df_yearly = pd.DataFrame(rows)
-    _validate_output_unit_fields(
-        df_yearly,
-        level=level,
-        slug=slug,
-        model=model,
-        scenario=scenario,
-        stage_label="yearly outputs",
-    )
 
     available_years = set(df_yearly["year"].unique())
-    if level == "sub_basin":
-        group_cols = ["basin", "sub_basin"]
-    elif level == "basin":
-        group_cols = ["basin"]
-    elif level == "block":
+    if level == "block":
         group_cols = ["district", "block"]
     else:
         group_cols = ["district"]
@@ -4301,57 +3848,10 @@ def _write_metric_rows_outputs(
         df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
     else:
         df_periods = pd.DataFrame(period_rows)
-    if not df_periods.empty:
-        _validate_output_unit_fields(
-            df_periods,
-            level=level,
-            slug=slug,
-            model=model,
-            scenario=scenario,
-            stage_label="period outputs",
-        )
-
     level_folder = get_level_folder(level)
     yearly_file_count = 0
     period_file_count = 0
-    if level == "sub_basin":
-        for (basin, sub_basin), grp_df in df_yearly.groupby(["basin", "sub_basin"]):
-            basin_safe = _safe_component(basin)
-            sub_basin_safe = _safe_component(sub_basin)
-            out_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
-            ensure_directory(out_dir)
-            grp_df = grp_df.copy()
-            grp_df["model"] = model
-            grp_df["scenario"] = scenario
-            write_csv(grp_df, out_dir / f"{sub_basin_safe}_yearly.csv", index=False)
-            yearly_file_count += 1
-            if not df_periods.empty:
-                period_grp = df_periods.loc[
-                    (df_periods["basin"] == basin) & (df_periods["sub_basin"] == sub_basin)
-                ].copy()
-                if not period_grp.empty:
-                    period_grp["model"] = model
-                    period_grp["scenario"] = scenario
-                    write_csv(period_grp, out_dir / f"{sub_basin_safe}_periods.csv", index=False)
-                    period_file_count += 1
-    elif level == "basin":
-        for basin_name in df_yearly["basin"].unique():
-            basin_safe = _safe_component(basin_name)
-            out_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
-            ensure_directory(out_dir)
-            basin_df = df_yearly[df_yearly["basin"] == basin_name].copy()
-            basin_df["model"] = model
-            basin_df["scenario"] = scenario
-            write_csv(basin_df, out_dir / f"{basin_safe}_yearly.csv", index=False)
-            yearly_file_count += 1
-            if not df_periods.empty:
-                period_df = df_periods[df_periods["basin"] == basin_name].copy()
-                if not period_df.empty:
-                    period_df["model"] = model
-                    period_df["scenario"] = scenario
-                    write_csv(period_df, out_dir / f"{basin_safe}_periods.csv", index=False)
-                    period_file_count += 1
-    elif level == "block":
+    if level == "block":
         for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
             district_safe = _safe_component(district)
             block_safe = _safe_component(block)
@@ -5031,55 +4531,8 @@ def process_metric_for_model_scenario(
             logging.debug(traceback.format_exc())
             raise
 
-    extent_excluded_df = pd.DataFrame()
-    boundary_gdf = gdf
-    if level in {"basin", "sub_basin"}:
-        boundary_gdf, extent_excluded_df = _filter_hydro_units_to_climate_extent(
-            gdf,
-            ds_sample,
-            level=level,
-            slug=slug,
-            model=model,
-            scenario=scenario,
-        )
-        _prune_excluded_hydro_outputs(
-            metric_root_path,
-            state_name=state_name,
-            level=level,
-            model=model,
-            scenario=scenario,
-            excluded_coverage_df=extent_excluded_df,
-            slug=slug,
-        )
-        _prune_excluded_hydro_ensemble_outputs(
-            metric_root_path,
-            state_name=state_name,
-            level=level,
-            scenario=scenario,
-            excluded_coverage_df=extent_excluded_df,
-            slug=slug,
-        )
-        if boundary_gdf.empty:
-            logging.warning(
-                f"[{slug}] No hydro units intersect the climate-data extent for {model}/{scenario} at level={level}"
-            )
-            ds_sample.close()
-            if not extent_excluded_df.empty:
-                _write_coverage_qc(
-                    metric_root_path,
-                    state_name=state_name,
-                    level=level,
-                    model=model,
-                    scenario=scenario,
-                    coverage_df=extent_excluded_df,
-                )
-            return
-
-    masks, coverage_df = build_unit_masks(boundary_gdf, ds_sample, level=level)
+    masks, coverage_df = build_unit_masks(gdf, ds_sample, level=level)
     ds_sample.close()
-
-    if not extent_excluded_df.empty:
-        coverage_df = pd.concat([coverage_df, extent_excluded_df], ignore_index=True, sort=False)
 
     if not masks:
         logging.warning(f"[{slug}] No valid masks built for {level} level")
@@ -5423,23 +4876,11 @@ def process_metric_for_model_scenario(
     )
 
     df_yearly = pd.DataFrame(rows)
-    _validate_output_unit_fields(
-        df_yearly,
-        level=level,
-        slug=slug,
-        model=model,
-        scenario=scenario,
-        stage_label="yearly outputs",
-    )
 
     # Period aggregation (mean over years used, consistent with other day-count metrics)
     # Note: For SPI, years may come from climate-indices output which may differ from year_to_paths
     available_years = set(df_yearly["year"].unique())
-    if level == "sub_basin":
-        group_cols = ["basin", "sub_basin"]
-    elif level == "basin":
-        group_cols = ["basin"]
-    elif level == "block":
+    if level == "block":
         group_cols = ["district", "block"]
     else:
         group_cols = ["district"]
@@ -5463,65 +4904,12 @@ def process_metric_for_model_scenario(
                 logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
 
     df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
-    if not df_periods.empty:
-        _validate_output_unit_fields(
-            df_periods,
-            level=level,
-            slug=slug,
-            model=model,
-            scenario=scenario,
-            stage_label="period outputs",
-        )
 
     # Write outputs with clean folder structure
     try:
         yearly_file_count = 0
         period_file_count = 0
-        if level == "sub_basin":
-            for (basin, sub_basin), grp_df in df_yearly.groupby(["basin", "sub_basin"]):
-                basin_safe = _safe_component(basin)
-                sub_basin_safe = _safe_component(sub_basin)
-
-                out_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
-                ensure_directory(out_dir)
-                grp_df = grp_df.copy()
-                grp_df["model"] = model
-                grp_df["scenario"] = scenario
-                write_csv(grp_df, out_dir / f"{sub_basin_safe}_yearly.csv", index=False)
-                yearly_file_count += 1
-
-                if not df_periods.empty:
-                    period_mask = (
-                        (df_periods["basin"] == basin) &
-                        (df_periods["sub_basin"] == sub_basin)
-                    )
-                    period_grp = df_periods.loc[period_mask].copy()
-                    if not period_grp.empty:
-                        period_grp["model"] = model
-                        period_grp["scenario"] = scenario
-                        write_csv(period_grp, out_dir / f"{sub_basin_safe}_periods.csv", index=False)
-                        period_file_count += 1
-        elif level == "basin":
-            for basin_name in df_yearly["basin"].unique():
-                basin_safe = _safe_component(basin_name)
-
-                out_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
-                ensure_directory(out_dir)
-
-                basin_df = df_yearly[df_yearly["basin"] == basin_name].copy()
-                basin_df["model"] = model
-                basin_df["scenario"] = scenario
-                write_csv(basin_df, out_dir / f"{basin_safe}_yearly.csv", index=False)
-                yearly_file_count += 1
-
-                if not df_periods.empty:
-                    period_df = df_periods[df_periods["basin"] == basin_name].copy()
-                    if not period_df.empty:
-                        period_df["model"] = model
-                        period_df["scenario"] = scenario
-                        write_csv(period_df, out_dir / f"{basin_safe}_periods.csv", index=False)
-                        period_file_count += 1
-        elif level == "block":
+        if level == "block":
             # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
             for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
                 district_safe = _safe_component(district)
@@ -5726,23 +5114,7 @@ def compute_ensembles_generic(
     ensembles_root = level_root / "ensembles"
     ensembles_root.mkdir(parents=True, exist_ok=True)
     
-    if level == "sub_basin":
-        return _compute_sub_basin_ensembles(
-            level_root,
-            ensembles_root,
-            slug=slug,
-            allowed_models=allowed_models,
-            allowed_scenarios=allowed_scenarios,
-        )
-    elif level == "basin":
-        return _compute_basin_ensembles(
-            level_root,
-            ensembles_root,
-            slug=slug,
-            allowed_models=allowed_models,
-            allowed_scenarios=allowed_scenarios,
-        )
-    elif level == "block":
+    if level == "block":
         return _compute_block_ensembles(
             level_root,
             ensembles_root,
@@ -6069,381 +5441,6 @@ def _compute_block_ensembles(
                                 stats,
                                 EnsembleBuildStats(failure_count=1, errors=(message,)),
                             )
-    return stats
-
-
-def _hydro_ensemble_scope_from_coverage_qc(
-    level_root: Path,
-    *,
-    level: AdminLevel,
-    allowed_models: Sequence[str] | None = None,
-    allowed_scenarios: Sequence[str] | None = None,
-) -> set[str] | set[tuple[str, str]] | None:
-    """Return eligible hydro output directories inferred from coverage-QC files."""
-    models = tuple(_normalize_filter_values(allowed_models) or ())
-    scenarios = tuple(_normalize_filter_values(allowed_scenarios) or ())
-
-    candidate_paths: list[Path] = []
-    if models and scenarios:
-        for model in models:
-            for scenario in scenarios:
-                path = level_root / f"coverage_qc_{model}_{scenario}.csv"
-                if path.exists():
-                    candidate_paths.append(path)
-    else:
-        candidate_paths = sorted(level_root.glob("coverage_qc_*.csv"))
-
-    if not candidate_paths:
-        return None
-
-    if level == "basin":
-        eligible_units: set[str] = set()
-    else:
-        eligible_units = set()
-
-    for path in candidate_paths:
-        try:
-            df = pd.read_csv(path)
-        except Exception as exc:
-            logging.debug("Failed to read hydro coverage QC %s: %s", path, exc)
-            continue
-        if df.empty:
-            continue
-
-        if "eligible_for_processing" in df.columns:
-            eligible_mask = df["eligible_for_processing"].fillna(False).astype(bool)
-        elif "coverage_ok" in df.columns:
-            eligible_mask = df["coverage_ok"].fillna(False).astype(bool)
-        else:
-            continue
-
-        eligible_df = df.loc[eligible_mask].copy()
-        if eligible_df.empty:
-            continue
-
-        if level == "basin":
-            if "basin_name" not in eligible_df.columns:
-                continue
-            eligible_units.update(
-                _safe_component(name)
-                for name in eligible_df["basin_name"].astype(str).tolist()
-            )
-        else:
-            required = {"basin_name", "subbasin_name"}
-            if not required.issubset(eligible_df.columns):
-                continue
-            eligible_units.update(
-                (
-                    _safe_component(basin_name),
-                    _safe_component(sub_basin_name),
-                )
-                for basin_name, sub_basin_name in zip(
-                    eligible_df["basin_name"].astype(str),
-                    eligible_df["subbasin_name"].astype(str),
-                )
-            )
-
-    return eligible_units
-
-
-def _compute_basin_ensembles(
-    level_root: Path,
-    ensembles_root: Path,
-    *,
-    slug: str | None = None,
-    allowed_models: Sequence[str] | None = None,
-    allowed_scenarios: Sequence[str] | None = None,
-    yearly_cleanup_policy: str | None = None,
-) -> EnsembleBuildStats:
-    """Compute ensembles for basin-level data."""
-    stats = EnsembleBuildStats()
-    skip_dirs = {"ensembles"}
-    basin_dirs = [
-        p for p in level_root.iterdir()
-        if p.is_dir() and p.name not in skip_dirs
-    ]
-    eligible_basin_dirs = _hydro_ensemble_scope_from_coverage_qc(
-        level_root,
-        level="basin",
-        allowed_models=allowed_models,
-        allowed_scenarios=allowed_scenarios,
-    )
-    if eligible_basin_dirs is not None:
-        total_basin_dirs = len(basin_dirs)
-        basin_dirs = [path for path in basin_dirs if path.name in eligible_basin_dirs]
-        logging.info(
-            "[%s] Hydro basin ensembles restricted by coverage QC: eligible=%d excluded=%d",
-            slug or "ensemble",
-            len(basin_dirs),
-            total_basin_dirs - len(basin_dirs),
-        )
-    metadata_columns = {"basin", "model", "scenario", "year", "source_file"}
-
-    for bdir in basin_dirs:
-        basin = bdir.name
-        model_dirs = _sorted_child_dirs(bdir, allowed_names=allowed_models)
-        if not model_dirs:
-            continue
-        allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
-        if allowed_scenarios_norm is None:
-            scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
-        else:
-            scenarios = list(allowed_scenarios_norm)
-
-        for scenario in scenarios:
-            model_yearly = []
-            expected_output = False
-            for m in model_dirs:
-                ycsv = m / scenario / f"{basin}_yearly.csv"
-                if not path_exists(ycsv):
-                    continue
-                expected_output = True
-                try:
-                    dfy = read_csv(ycsv)
-                    cleaned, skip_reason = _clean_ensemble_yearly_frame(
-                        dfy,
-                        metadata_columns=metadata_columns,
-                        model_name=m.name,
-                    )
-                    if cleaned is None:
-                        message = f"basin={basin} model={m.name} scenario={scenario}: {skip_reason}"
-                        stats = _merge_ensemble_stats(
-                            stats,
-                            EnsembleBuildStats(
-                                skipped_input_count=1,
-                                skipped_reasons=(message,),
-                            ),
-                        )
-                        continue
-                    model_yearly.append(cleaned)
-                except Exception as e:
-                    message = f"basin={basin} model={m.name} scenario={scenario}: {e}"
-                    logging.warning(
-                        "[%s] Failed to read hydro basin yearly for basin=%s model=%s scenario=%s: %s",
-                        slug or "ensemble",
-                        basin,
-                        m.name,
-                        scenario,
-                        e,
-                    )
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(failure_count=1, errors=(message,)),
-                    )
-
-            if not expected_output:
-                continue
-            stats = _merge_ensemble_stats(
-                stats,
-                EnsembleBuildStats(expected_output_count=1),
-            )
-
-            if not model_yearly:
-                message = f"basin={basin} scenario={scenario}: no valid filtered yearly inputs"
-                stats = _merge_ensemble_stats(
-                    stats,
-                    EnsembleBuildStats(
-                        missing_expected_output_count=1,
-                        errors=(message,),
-                    ),
-                )
-                continue
-
-            try:
-                written = _write_ensemble_stats(
-                    model_yearly,
-                    ensembles_root / basin / scenario,
-                    basin,
-                    file_stem=hydro_fs_token(basin),
-                )
-                if written == 0:
-                    message = f"basin={basin} scenario={scenario}: no ensemble outputs produced"
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(
-                            missing_expected_output_count=1,
-                            errors=(message,),
-                        ),
-                    )
-                else:
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(written_count=written),
-                    )
-            except Exception as e:
-                message = f"basin={basin} scenario={scenario}: {e}"
-                logging.warning(
-                    "[%s] Failed to write hydro basin ensemble for basin=%s scenario=%s: %s",
-                    slug or "ensemble",
-                    basin,
-                    scenario,
-                    e,
-                )
-                stats = _merge_ensemble_stats(
-                    stats,
-                    EnsembleBuildStats(
-                        failure_count=1,
-                        missing_expected_output_count=1,
-                        errors=(message,),
-                    ),
-                )
-    return stats
-
-
-def _compute_sub_basin_ensembles(
-    level_root: Path,
-    ensembles_root: Path,
-    *,
-    slug: str | None = None,
-    allowed_models: Sequence[str] | None = None,
-    allowed_scenarios: Sequence[str] | None = None,
-    yearly_cleanup_policy: str | None = None,
-) -> EnsembleBuildStats:
-    """Compute ensembles for sub-basin-level data."""
-    stats = EnsembleBuildStats()
-    skip_dirs = {"ensembles"}
-    basin_dirs = [
-        p for p in level_root.iterdir()
-        if p.is_dir() and p.name not in skip_dirs
-    ]
-    eligible_sub_basin_dirs = _hydro_ensemble_scope_from_coverage_qc(
-        level_root,
-        level="sub_basin",
-        allowed_models=allowed_models,
-        allowed_scenarios=allowed_scenarios,
-    )
-    if eligible_sub_basin_dirs is not None:
-        eligible_basin_names = {basin_name for basin_name, _sub_basin_name in eligible_sub_basin_dirs}
-        basin_dirs = [path for path in basin_dirs if path.name in eligible_basin_names]
-    metadata_columns = {"basin", "sub_basin", "model", "scenario", "year", "source_file"}
-
-    for basin_dir in basin_dirs:
-        basin = basin_dir.name
-        sub_basin_dirs = [p for p in basin_dir.iterdir() if p.is_dir()]
-        if eligible_sub_basin_dirs is not None:
-            sub_basin_dirs = [
-                path for path in sub_basin_dirs if (basin, path.name) in eligible_sub_basin_dirs
-            ]
-        for sbdir in sub_basin_dirs:
-            sub_basin = sbdir.name
-            model_dirs = _sorted_child_dirs(sbdir, allowed_names=allowed_models)
-            if not model_dirs:
-                continue
-            allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
-            if allowed_scenarios_norm is None:
-                scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
-            else:
-                scenarios = list(allowed_scenarios_norm)
-
-            for scenario in scenarios:
-                model_yearly = []
-                retained_inputs: list[Path] = []
-                expected_output = False
-                for m in model_dirs:
-                    ycsv = m / scenario / f"{sub_basin}_yearly.csv"
-                    if not path_exists(ycsv):
-                        continue
-                    expected_output = True
-                    try:
-                        dfy = read_csv(ycsv)
-                        cleaned, skip_reason = _clean_ensemble_yearly_frame(
-                            dfy,
-                            metadata_columns=metadata_columns,
-                            model_name=m.name,
-                        )
-                        if cleaned is None:
-                            message = (
-                                f"basin={basin} sub_basin={sub_basin} "
-                                f"model={m.name} scenario={scenario}: {skip_reason}"
-                            )
-                            stats = _merge_ensemble_stats(
-                                stats,
-                                EnsembleBuildStats(
-                                    skipped_input_count=1,
-                                    skipped_reasons=(message,),
-                                ),
-                            )
-                            continue
-                        model_yearly.append(cleaned)
-                    except Exception as e:
-                        message = f"basin={basin} sub_basin={sub_basin} model={m.name} scenario={scenario}: {e}"
-                        logging.warning(
-                            "[%s] Failed to read hydro sub-basin yearly for basin=%s sub_basin=%s model=%s scenario=%s: %s",
-                            slug or "ensemble",
-                            basin,
-                            sub_basin,
-                            m.name,
-                            scenario,
-                            e,
-                        )
-                        stats = _merge_ensemble_stats(
-                            stats,
-                            EnsembleBuildStats(failure_count=1, errors=(message,)),
-                        )
-
-                if not expected_output:
-                    continue
-                stats = _merge_ensemble_stats(
-                    stats,
-                    EnsembleBuildStats(expected_output_count=1),
-                )
-
-                if not model_yearly:
-                    message = (
-                        f"basin={basin} sub_basin={sub_basin} scenario={scenario}: "
-                        "no valid filtered yearly inputs"
-                    )
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(
-                            missing_expected_output_count=1,
-                            errors=(message,),
-                        ),
-                    )
-                    continue
-
-                try:
-                    written = _write_ensemble_stats(
-                        model_yearly,
-                        ensembles_root / basin / sub_basin / scenario,
-                        sub_basin,
-                        file_stem=hydro_fs_token(sub_basin),
-                    )
-                    if written == 0:
-                        message = (
-                            f"basin={basin} sub_basin={sub_basin} scenario={scenario}: "
-                            "no ensemble outputs produced"
-                        )
-                        stats = _merge_ensemble_stats(
-                            stats,
-                            EnsembleBuildStats(
-                                missing_expected_output_count=1,
-                                errors=(message,),
-                            ),
-                        )
-                    else:
-                        stats = _merge_ensemble_stats(
-                            stats,
-                            EnsembleBuildStats(written_count=written),
-                        )
-                except Exception as e:
-                    message = f"basin={basin} sub_basin={sub_basin} scenario={scenario}: {e}"
-                    logging.warning(
-                        "[%s] Failed to write hydro sub-basin ensemble for basin=%s sub_basin=%s scenario=%s: %s",
-                        slug or "ensemble",
-                        basin,
-                        sub_basin,
-                        scenario,
-                        e,
-                    )
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(
-                            failure_count=1,
-                            missing_expected_output_count=1,
-                            errors=(message,),
-                        ),
-                    )
     return stats
 
 
@@ -7068,10 +6065,9 @@ def _worker_init(level: str = "district", state: str = "Telangana"):
     global _worker_gdf, _worker_level, _worker_state
     _set_inventory_write_mode(False)
     _worker_level = level
-    _worker_state = HYDRO_ROOT_NAME if level in {"basin", "sub_basin"} else state
+    _worker_state = state
     boundary_path = get_boundary_path(level)
-    state_filter = None if level in {"basin", "sub_basin"} else state
-    _worker_gdf = load_boundaries(boundary_path, state_filter=state_filter, level=level)
+    _worker_gdf = load_boundaries(boundary_path, state_filter=state, level=level)
 
 def _execute_processing_task(task: ProcessingTask, gdf: gpd.GeoDataFrame) -> dict[str, Any]:
     """Run one compute task and persist a completion marker on success."""
@@ -7229,7 +6225,7 @@ def _compute_ensembles_for_metric(
             errors=(str(e),),
         )
 
-    zero_output_is_failure = state == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}
+    zero_output_is_failure = False
     hard_failure = (
         stats.failure_count > 0
         or stats.missing_expected_output_count > 0
@@ -7404,12 +6400,7 @@ def run_pipeline_parallel(
                     skipped_existing,
                 )
 
-        if level == "sub_basin":
-            level_display = "Sub-basin"
-        elif level == "basin":
-            level_display = "Basin"
-        else:
-            level_display = "Block" if level == "block" else "District"
+        level_display = "Block" if level == "block" else "District"
         level_folder = get_level_folder(level)
         spi_impl = "climate-indices package" if USE_CLIMATE_INDICES_PACKAGE and CLIMATE_INDICES_AVAILABLE else "legacy (scipy)"
 
@@ -7447,7 +6438,7 @@ def run_pipeline_parallel(
             boundary_path = get_boundary_path(level)
             gdf = load_boundaries(
                 boundary_path,
-                state_filter=None if level in {"basin", "sub_basin"} else state,
+                state_filter=state,
                 level=level,
             )
             logging.info(f"Loaded {len(gdf)} {level} boundaries for {effective_state}")
@@ -7482,7 +6473,7 @@ def run_pipeline_parallel(
                 # forks that need it (G-C6 resume: degrade-not-corrupt by construction).
                 prewarm_gdf = load_boundaries(
                     get_boundary_path(level),
-                    state_filter=None if level in {"basin", "sub_basin"} else state,
+                    state_filter=state,
                     level=level,
                 )
                 logging.info(

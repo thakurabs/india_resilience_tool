@@ -132,25 +132,6 @@ def test_missing_time_column_falls_back_to_empty_string(tmp_path: Path) -> None:
     assert list(all_df["value"]) == [7.0]
 
 
-def test_basin_lookup_miss_uses_fallback_name(tmp_path: Path) -> None:
-    """An unknown basin folder falls back to basin.replace('_', ' ') without merge NaNs."""
-    root = tmp_path / "processed"
-    scope = bmm.HYDRO_ROOT_NAME
-    basin = "Not_A_Real_Basin"
-    sdir = root / scope / bmm.BASIN_FOLDER / basin / "ModelA" / "historical"
-    _write_csv(sdir / f"{basin}_periods.csv", "period,value", ["1990-2010,5.0"])
-    _write_csv(sdir / f"{basin}_yearly.csv", "year,value", ["2000,5.0"])
-
-    all_df, _ = bmm._collect_basin_data(
-        root / scope, scope, ["value"], verbose=False
-    )
-    assert list(all_df.columns) == [
-        "basin", "basin_id", "basin_name", "state", "model", "scenario", "period", "value",
-    ]
-    assert list(all_df["basin_name"].unique()) == ["Not A Real Basin"]
-    assert list(all_df["basin_id"].unique()) == [""]  # fallback id, not NaN
-
-
 def test_value_dtype_preserved_for_object_like_metric(tmp_path: Path) -> None:
     """Non-coercion: an object-y metric column survives unchanged (SPI dtype risk)."""
     root = tmp_path / "processed"

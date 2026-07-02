@@ -35,10 +35,6 @@ def _default_boundary(*, level: str, data_dir: Path) -> Path:
         return data_dir / "blocks_4326.geojson"
     if level == "district":
         return data_dir / "districts_4326.geojson"
-    if level == "basin":
-        return data_dir / "basins.geojson"
-    if level == "sub_basin":
-        return data_dir / "subbasins.geojson"
     raise ValueError(f"Unsupported level: {level}")
 
 
@@ -89,7 +85,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "polygon aggregation. The app runtime does not import exactextract."
         )
     )
-    parser.add_argument("--level", choices=["district", "block", "basin", "sub_basin"], default="district")
+    parser.add_argument("--level", choices=["district", "block"], default="district")
     parser.add_argument("--boundary", type=Path, default=None, help="Boundary GeoJSON/shapefile path.")
     parser.add_argument("--sample-nc", type=Path, default=None, help="Climate NetCDF whose lat/lon grid defines weights.")
     parser.add_argument("--var", default="tasmax", help="Variable used when auto-discovering a sample NetCDF.")

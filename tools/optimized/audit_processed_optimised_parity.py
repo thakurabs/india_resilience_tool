@@ -18,7 +18,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--level",
         action="append",
         dest="levels",
-        choices=["all", "admin", "hydro", "district", "block", "basin", "sub_basin"],
+        choices=["all", "admin", "district", "block"],
         help="Restrict the audit to one or more level groups or concrete levels.",
     )
     parser.add_argument("--skip-geometry", action="store_true", help="Skip optimized geometry validation.")

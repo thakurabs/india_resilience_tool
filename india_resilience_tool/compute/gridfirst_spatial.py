@@ -304,12 +304,6 @@ def _unit_key(row: pd.Series, level: str) -> str:
         district = str(row.get("district_name") or row.get("District") or row.get("DISTRICT") or "").strip()
         block = str(row.get("block_name") or row.get("Sub_dist") or row.get("BLOCK") or "").strip()
         return f"{district}||{block}" if district else block
-    if level == "sub_basin":
-        basin = str(row.get("basin_name") or "").strip()
-        sub = str(row.get("subbasin_name") or "").strip()
-        return f"{basin}||{sub}" if basin else sub
-    if level == "basin":
-        return str(row.get("basin_name") or "").strip()
     return str(row.get("district_name") or row.get("DISTRICT") or row.get("District") or "").strip()
 
 
@@ -418,10 +412,6 @@ def coverage_from_weights(gdf: gpd.GeoDataFrame, weights: pd.DataFrame, *, level
             qc["district"], qc["block"] = key.split("||", 1)
         elif level == "district":
             qc["district"] = key
-        elif level == "basin":
-            qc["basin_name"] = key
-        elif level == "sub_basin" and "||" in key:
-            qc["basin_name"], qc["subbasin_name"] = key.split("||", 1)
         rows.append(qc)
     return pd.DataFrame(rows)
 

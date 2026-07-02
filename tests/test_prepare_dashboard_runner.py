@@ -4,6 +4,7 @@ import argparse
 import io
 import subprocess
 from contextlib import redirect_stdout
+from pathlib import Path
 
 import pytest
 
@@ -75,18 +76,18 @@ def test_aqueduct_bundle_builds_expected_default_steps() -> None:
         "blocks-geojson",
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
-        "aqueduct-hydro-crosswalk",
         "aqueduct-admin-masters",
-        "aqueduct-hydro-masters",
         "aqueduct-validate",
         "processed-optimised-build",
+        "processed-optimised-state-values",
         "processed-optimised-audit",
     ]
-    assert "--overwrite" in plan[-2].argv
-    assert "--prune-scope" not in plan[-2].argv
-    assert "--full-rebuild" not in plan[-2].argv
-    assert "--metric" in plan[-2].argv
-    assert "--skip-audit" in plan[-2].argv
+    build_step = plan[labels.index("processed-optimised-build")]
+    assert "--overwrite" in build_step.argv
+    assert "--prune-scope" not in build_step.argv
+    assert "--full-rebuild" not in build_step.argv
+    assert "--metric" in build_step.argv
+    assert "--skip-audit" in build_step.argv
 
 
 def test_aqueduct_bundle_requires_inputs_when_prepare_baseline_enabled() -> None:
@@ -176,17 +177,17 @@ def test_climate_hazards_audit_only_only_runs_audit() -> None:
         skip_audit=False,
     )
     scope = _climate_scope(
-        levels=["district", "block", "basin", "sub_basin"],
+        levels=["district", "block"],
         pending_by_level={"district": ["tas_annual_mean"]},
     )
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
     assert [step.label for step in plan] == ["processed-optimised-audit"]
-    assert plan[0].argv.count("--level") == 4
+    assert plan[0].argv.count("--level") == 2
 
 
 def test_climate_hazards_skip_optimised_removes_only_build_stage() -> None:
     args = argparse.Namespace(
-        level="hydro",
+        level="admin",
         state=None,
         metrics=["tas_annual_mean"],
         models=None,
@@ -203,10 +204,10 @@ def test_climate_hazards_skip_optimised_removes_only_build_stage() -> None:
         skip_audit=False,
     )
     scope = _climate_scope(
-        levels=["basin", "sub_basin"],
+        levels=["district", "block"],
         pending_by_level={
-            "basin": ["tas_annual_mean"],
-            "sub_basin": ["tas_annual_mean"],
+            "district": ["tas_annual_mean"],
+            "block": ["tas_annual_mean"],
         },
     )
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
@@ -244,8 +245,8 @@ def test_climate_hazards_skip_masters_skips_composite_stage() -> None:
 
 def test_climate_hazards_overwrite_passes_flag_to_compute() -> None:
     args = argparse.Namespace(
-        level="basin",
-        state=None,
+        level="district",
+        state=["Telangana"],
         metrics=["tas_annual_mean"],
         models=None,
         scenarios=None,
@@ -260,11 +261,11 @@ def test_climate_hazards_overwrite_passes_flag_to_compute() -> None:
         skip_optimised=True,
         skip_audit=False,
     )
-    scope = _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]})
+    scope = _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]})
 
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
 
-    assert plan[0].label == "climate-compute:basin"
+    assert plan[0].label == "climate-compute:district:Telangana"
     assert "--overwrite" in plan[0].argv
     assert "--skip-existing" not in plan[0].argv
 
@@ -288,7 +289,7 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
         skip_audit=False,
     )
     scope = ClimateRuntimeScope(
-        levels=("district", "block", "basin", "sub_basin"),
+        levels=("district", "block"),
         by_level={
             "district": ClimateLevelReadiness(
                 level="district",
@@ -312,28 +313,6 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
                 unrunnable_metrics=(),
                 unrunnable_reasons_by_metric={},
             ),
-            "basin": ClimateLevelReadiness(
-                level="basin",
-                selected_metrics=("metric_a", "metric_b"),
-                runnable_metrics=("metric_a", "metric_b"),
-                compute_pending_metrics=(),
-                masters_pending_metrics=(),
-                optimized_pending_metrics=(),
-                complete_metrics=("metric_a", "metric_b"),
-                unrunnable_metrics=(),
-                unrunnable_reasons_by_metric={},
-            ),
-            "sub_basin": ClimateLevelReadiness(
-                level="sub_basin",
-                selected_metrics=("metric_a", "metric_b"),
-                runnable_metrics=("metric_a", "metric_b"),
-                compute_pending_metrics=("metric_b",),
-                masters_pending_metrics=("metric_b",),
-                optimized_pending_metrics=("metric_b",),
-                complete_metrics=("metric_a",),
-                unrunnable_metrics=(),
-                unrunnable_reasons_by_metric={},
-            ),
         },
         global_issues=(),
     )
@@ -341,10 +320,10 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
     plan = build_climate_hazards_plan(args, runtime_scope=scope)
 
     assert [step.label for step in plan] == [
-        "processed-optimised-build:district+block+basin+sub_basin",
+        "processed-optimised-build:district+block",
         "processed-optimised-audit",
     ]
-    assert plan[0].argv.count("--level") == 4
+    assert plan[0].argv.count("--level") == 2
     assert "--overwrite" in plan[0].argv
     assert "--prune-scope" not in plan[0].argv
     assert "--full-rebuild" not in plan[0].argv
@@ -354,57 +333,13 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
     assert "metric_b" in plan[0].argv
 
 
-def test_climate_hazards_plans_only_sub_basin_when_basin_is_complete() -> None:
-    args = argparse.Namespace(
-        level="hydro",
-        state=None,
-        metrics=["tas_annual_mean"],
-        models=None,
-        scenarios=None,
-        workers=None,
-        verbose=False,
-        spi_legacy=False,
-        spi_distribution=None,
-        skip_compute=False,
-        skip_masters=False,
-        overwrite=False,
-        audit_only=False,
-        skip_optimised=False,
-        skip_audit=False,
-    )
-    scope = _climate_scope(
-        levels=["basin", "sub_basin"],
-        pending_by_level={"sub_basin": ["tas_annual_mean"]},
-    )
-    scope.by_level["basin"] = ClimateLevelReadiness(
-        level="basin",
-        selected_metrics=("tas_annual_mean",),
-        runnable_metrics=("tas_annual_mean",),
-        compute_pending_metrics=(),
-        masters_pending_metrics=(),
-        optimized_pending_metrics=(),
-        complete_metrics=("tas_annual_mean",),
-        unrunnable_metrics=(),
-        unrunnable_reasons_by_metric={},
-    )
-    plan = build_climate_hazards_plan(args, runtime_scope=scope)
-    assert [step.label for step in plan] == [
-        "climate-compute:sub_basin",
-        "climate-masters:sub_basin",
-        "processed-optimised-build:sub_basin",
-        "processed-optimised-audit",
-    ]
-    assert "--level" in plan[2].argv
-    assert "sub_basin" in plan[2].argv
-
-
 def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(monkeypatch) -> None:
     parser = build_cli()
     args = parser.parse_args(
         [
             "dashboard-package",
             "--level",
-            "hydro",
+            "admin",
             "--overwrite",
             "--include-pytest",
         ]
@@ -439,10 +374,10 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
         lambda *_args, **_kwargs: _climate_scope(
-            levels=["basin", "sub_basin"],
+            levels=["district", "block"],
             pending_by_level={
-                "basin": ["tas_annual_mean"],
-                "sub_basin": ["tas_annual_mean"],
+                "district": ["tas_annual_mean"],
+                "block": ["tas_annual_mean"],
             },
         ),
     )
@@ -475,10 +410,10 @@ def test_dashboard_package_combines_bundle_stages_and_single_runtime_refresh(mon
     labels = [step.label for step in plan]
     assert labels[0:5] == [
         "blocks-geojson",
-        "climate-compute:basin",
-        "climate-compute:sub_basin",
-        "climate-masters:basin",
-        "climate-masters:sub_basin",
+        "climate-compute:district:Telangana",
+        "climate-compute:block:Telangana",
+        "climate-masters:district",
+        "climate-masters:block",
     ]
     assert labels.count("processed-optimised-build") == 1
     assert labels.count("processed-optimised-audit") == 1
@@ -635,6 +570,7 @@ def test_population_bundle_builds_expected_steps() -> None:
         "blocks-geojson",
         "population-admin-masters",
         "processed-optimised-build",
+        "processed-optimised-state-values",
         "processed-optimised-audit",
     ]
 
@@ -657,11 +593,16 @@ def test_groundwater_bundle_builds_expected_steps() -> None:
     assert [step.label for step in plan] == [
         "groundwater-district-masters",
         "processed-optimised-build",
+        "processed-optimised-state-values",
         "processed-optimised-audit",
     ]
 
 
-def test_jrc_bundle_builds_expected_steps_and_never_forwards_builder_dry_run() -> None:
+def test_jrc_bundle_builds_expected_steps_and_never_forwards_builder_dry_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
     args = argparse.Namespace(
         overwrite=True,
         audit_only=False,
@@ -860,6 +801,7 @@ def test_rural_facilities_bundle_metric_resolution_and_plan() -> None:
         "rural-facilities-admin-masters",
         "admin-exposure-summary",
         "processed-optimised-build",
+        "processed-optimised-state-values",
         "processed-optimised-audit",
     ]
     assert "--source-dir" in plan[1].argv
@@ -1024,7 +966,7 @@ def test_execute_plan_plan_only_uses_plan_prefix() -> None:
 
 
 def test_execute_plan_returns_nonzero_and_prints_failed_step_summary(monkeypatch) -> None:
-    plan = [PlannedCommand(label="climate-compute:basin", argv=["python", "-m", "example"])]
+    plan = [PlannedCommand(label="climate-compute:block", argv=["python", "-m", "example"])]
 
     def _raise_called_process_error(*_args, **_kwargs):
         raise subprocess.CalledProcessError(returncode=7, cmd=["python", "-m", "example"])
@@ -1037,13 +979,13 @@ def test_execute_plan_returns_nonzero_and_prints_failed_step_summary(monkeypatch
     text = buf.getvalue()
 
     assert rc == 7
-    assert "STEP FAILED [1/1] climate-compute:basin (exit=7)" in text
+    assert "STEP FAILED [1/1] climate-compute:block (exit=7)" in text
 
 
 def test_main_returns_nonzero_when_climate_readiness_remains_incomplete(monkeypatch) -> None:
     scopes = [
-        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
-        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district", "block"], pending_by_level={"block": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district", "block"], pending_by_level={"block": ["tas_annual_mean"]}),
     ]
 
     monkeypatch.setattr(
@@ -1063,7 +1005,7 @@ def test_main_returns_nonzero_when_climate_readiness_remains_incomplete(monkeypa
         lambda *_args, **_kwargs: (),
     )
 
-    rc = main(["climate-hazards", "--level", "hydro"])
+    rc = main(["climate-hazards", "--level", "admin"])
 
     assert rc == 1
 
@@ -1079,7 +1021,7 @@ def test_main_skips_post_run_readiness_when_execute_plan_fails(
         resolve_calls += 1
         if resolve_calls > 1:
             raise AssertionError("post-run readiness should be skipped after a failed step")
-        return _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]})
+        return _climate_scope(levels=["district", "block"], pending_by_level={"block": ["tas_annual_mean"]})
 
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._resolve_climate_runtime_scope",
@@ -1094,7 +1036,7 @@ def test_main_skips_post_run_readiness_when_execute_plan_fails(
         lambda *args, **kwargs: 2,
     )
 
-    rc = main(["climate-hazards", "--level", "hydro"])
+    rc = main(["climate-hazards", "--level", "admin"])
 
     captured = capsys.readouterr().out
     assert rc == 2
@@ -1104,12 +1046,12 @@ def test_main_skips_post_run_readiness_when_execute_plan_fails(
 
 def test_main_returns_zero_when_climate_readiness_becomes_complete(monkeypatch) -> None:
     scopes = [
-        _climate_scope(levels=["basin", "sub_basin"], pending_by_level={"sub_basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district", "block"], pending_by_level={"block": ["tas_annual_mean"]}),
         ClimateRuntimeScope(
-            levels=("basin", "sub_basin"),
+            levels=("district", "block"),
             by_level={
-                "basin": ClimateLevelReadiness(
-                    level="basin",
+                "district": ClimateLevelReadiness(
+                    level="district",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=(),
@@ -1119,8 +1061,8 @@ def test_main_returns_zero_when_climate_readiness_becomes_complete(monkeypatch) 
                     unrunnable_metrics=(),
                     unrunnable_reasons_by_metric={},
                 ),
-                "sub_basin": ClimateLevelReadiness(
-                    level="sub_basin",
+                "block": ClimateLevelReadiness(
+                    level="block",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=(),
@@ -1148,7 +1090,7 @@ def test_main_returns_zero_when_climate_readiness_becomes_complete(monkeypatch) 
         lambda *args, **kwargs: 0,
     )
 
-    rc = main(["climate-hazards", "--level", "hydro"])
+    rc = main(["climate-hazards", "--level", "admin"])
 
     assert rc == 0
 
@@ -1158,12 +1100,12 @@ def test_main_returns_zero_when_only_skipped_stage_pending_remains(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     scopes = [
-        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
         ClimateRuntimeScope(
-            levels=("basin",),
+            levels=("district",),
             by_level={
-                "basin": ClimateLevelReadiness(
-                    level="basin",
+                "district": ClimateLevelReadiness(
+                    level="district",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=(),
@@ -1195,23 +1137,23 @@ def test_main_returns_zero_when_only_skipped_stage_pending_remains(
         lambda *_args, **_kwargs: (),
     )
 
-    rc = main(["climate-hazards", "--level", "basin", "--skip-masters", "--skip-optimised"])
+    rc = main(["climate-hazards", "--level", "district", "--skip-masters", "--skip-optimised"])
 
     captured = capsys.readouterr().out
     assert rc == 0
     assert "POST-RUN CLIMATE READINESS" in captured
-    assert "informational basin: masters_pending=1 (--skip-masters)" in captured
-    assert "informational basin: optimized_pending=1 (--skip-optimised)" in captured
+    assert "informational district: masters_pending=1 (--skip-masters)" in captured
+    assert "informational district: optimized_pending=1 (--skip-optimised)" in captured
 
 
 def test_main_keeps_compute_pending_blocking_even_when_later_stages_are_skipped(monkeypatch) -> None:
     scopes = [
-        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
         ClimateRuntimeScope(
-            levels=("basin",),
+            levels=("district",),
             by_level={
-                "basin": ClimateLevelReadiness(
-                    level="basin",
+                "district": ClimateLevelReadiness(
+                    level="district",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=("tas_annual_mean",),
@@ -1243,7 +1185,7 @@ def test_main_keeps_compute_pending_blocking_even_when_later_stages_are_skipped(
         lambda *_args, **_kwargs: (),
     )
 
-    rc = main(["climate-hazards", "--level", "basin", "--skip-masters", "--skip-optimised"])
+    rc = main(["climate-hazards", "--level", "district", "--skip-masters", "--skip-optimised"])
 
     assert rc == 1
 
@@ -1253,12 +1195,12 @@ def test_main_prints_post_run_failure_diagnostics(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     scopes = [
-        _climate_scope(levels=["basin"], pending_by_level={"basin": ["tas_annual_mean"]}),
+        _climate_scope(levels=["district"], pending_by_level={"district": ["tas_annual_mean"]}),
         ClimateRuntimeScope(
-            levels=("basin",),
+            levels=("district",),
             by_level={
-                "basin": ClimateLevelReadiness(
-                    level="basin",
+                "district": ClimateLevelReadiness(
+                    level="district",
                     selected_metrics=("tas_annual_mean",),
                     runnable_metrics=("tas_annual_mean",),
                     compute_pending_metrics=("tas_annual_mean",),
@@ -1287,10 +1229,12 @@ def test_main_prints_post_run_failure_diagnostics(
     )
     monkeypatch.setattr(
         "tools.runs.prepare_dashboard._collect_climate_failure_diagnostics",
-        lambda *_args, **_kwargs: ("basin/tas_annual_mean/hydro: compute marker invalid for ACCESS-CM2/historical: compute_marker_output_count_mismatch",),
+        lambda *_args, **_kwargs: (
+            "district/tas_annual_mean/Telangana: compute marker invalid for ACCESS-CM2/historical: compute_marker_output_count_mismatch",
+        ),
     )
 
-    rc = main(["climate-hazards", "--level", "basin"])
+    rc = main(["climate-hazards", "--level", "district"])
 
     captured = capsys.readouterr().out
     assert rc == 1
@@ -1305,7 +1249,7 @@ def test_climate_runtime_scope_passes_filter_scope_to_ensemble_marker_validation
     args = parser.parse_args([
         "climate-hazards",
         "--level",
-        "hydro",
+        "district",
         "--metrics",
         "tas_annual_mean",
         "--models",
@@ -1361,9 +1305,9 @@ def test_climate_runtime_scope_passes_filter_scope_to_ensemble_marker_validation
 
     from tools.runs.prepare_dashboard import _resolve_climate_runtime_scope
 
-    scope = _resolve_climate_runtime_scope(args, levels=["basin"])
+    scope = _resolve_climate_runtime_scope(args, levels=["district"])
 
-    readiness = scope.by_level["basin"]
+    readiness = scope.by_level["district"]
     assert readiness.compute_pending_metrics == ()
     assert readiness.complete_metrics == ("tas_annual_mean",)
     assert len(calls) == 1

@@ -80,33 +80,6 @@ def _write_admin_legacy_metric_fixture(
     )
 
 
-def _write_hydro_legacy_metric_fixture(tmp_path: Path, *, slug: str = "txx_annual_max") -> None:
-    hydro_root = tmp_path / "processed" / slug / "hydro"
-    hydro_root.mkdir(parents=True)
-    (hydro_root / "master_metrics_by_basin.csv").write_text(
-        f"basin_id,basin_name,{slug}__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,3.0\n",
-        encoding="utf-8",
-    )
-    (hydro_root / "master_metrics_by_sub_basin.csv").write_text(
-        f"basin_id,basin_name,subbasin_id,subbasin_name,{slug}__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,GODAVARI-1,Pranhita,2.0\n",
-        encoding="utf-8",
-    )
-
-    basin_ensemble_dir = hydro_root / "basins" / "ensembles" / "Godavari Basin" / "ssp245"
-    basin_ensemble_dir.mkdir(parents=True)
-    (basin_ensemble_dir / "Godavari Basin_yearly_ensemble.csv").write_text(
-        "year,ensemble_mean,ensemble_median\n2030,3.5,3.4\n",
-        encoding="utf-8",
-    )
-
-    sub_ensemble_dir = hydro_root / "sub_basins" / "ensembles" / "Godavari Basin" / "Pranhita" / "ssp245"
-    sub_ensemble_dir.mkdir(parents=True)
-    (sub_ensemble_dir / "Pranhita_yearly_ensemble.csv").write_text(
-        "year,ensemble_mean,ensemble_median\n2030,2.5,2.4\n",
-        encoding="utf-8",
-    )
-
-
 def _write_geometry_fixture(tmp_path: Path) -> None:
     district_gdf = gpd.GeoDataFrame(
         {"STATE_UT": ["Telangana"], "DISTRICT": ["Hanumakonda"]},
@@ -122,38 +95,13 @@ def _write_geometry_fixture(tmp_path: Path) -> None:
     )
     block_gdf.to_file(tmp_path / "blocks_4326.geojson", driver="GeoJSON")
 
-    basin_gdf = gpd.GeoDataFrame(
-        {"basin_id": ["GODAVARI"], "basin_name": ["Godavari Basin"], "hydro_level": ["basin"]},
-        geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
-        crs="EPSG:4326",
-    )
-    basin_gdf.to_file(tmp_path / "basins.geojson", driver="GeoJSON")
-
-    subbasin_gdf = gpd.GeoDataFrame(
-        {
-            "basin_id": ["GODAVARI"],
-            "basin_name": ["Godavari Basin"],
-            "subbasin_id": ["GODAVARI-1"],
-            "subbasin_code": ["G1"],
-            "subbasin_name": ["Pranhita"],
-            "hydro_level": ["sub_basin"],
-        },
-        geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
-        crs="EPSG:4326",
-    )
-    subbasin_gdf.to_file(tmp_path / "subbasins.geojson", driver="GeoJSON")
-
 
 def _read_output_tables(bundle_root: Path, *, slug: str) -> dict[str, pd.DataFrame]:
     paths = {
         "district_master": bundle_root / "metrics" / slug / "masters" / "admin" / "district" / "state=Telangana.parquet",
         "block_master": bundle_root / "metrics" / slug / "masters" / "admin" / "block" / "state=Telangana.parquet",
-        "basin_master": bundle_root / "metrics" / slug / "masters" / "hydro" / "basin" / "master.parquet",
-        "sub_basin_master": bundle_root / "metrics" / slug / "masters" / "hydro" / "sub_basin" / "master.parquet",
         "district_yearly_ensemble": bundle_root / "metrics" / slug / "yearly_ensemble" / "admin" / "district" / "state=Telangana.parquet",
         "block_yearly_ensemble": bundle_root / "metrics" / slug / "yearly_ensemble" / "admin" / "block" / "state=Telangana.parquet",
-        "basin_yearly_ensemble": bundle_root / "metrics" / slug / "yearly_ensemble" / "hydro" / "basin" / "master.parquet",
-        "sub_basin_yearly_ensemble": bundle_root / "metrics" / slug / "yearly_ensemble" / "hydro" / "sub_basin" / "master.parquet",
         "district_yearly_models": bundle_root / "metrics" / slug / "yearly_models" / "admin" / "district" / "state=Telangana.parquet",
         "block_yearly_models": bundle_root / "metrics" / slug / "yearly_models" / "admin" / "block" / "state=Telangana.parquet",
     }
@@ -393,31 +341,6 @@ def test_write_geometry_bundle_normalizes_raw_admin_columns(
     )
     block_gdf.to_file(tmp_path / "blocks_4326.geojson", driver="GeoJSON")
 
-    basin_gdf = gpd.GeoDataFrame(
-        {
-            "basin_id": ["GODAVARI"],
-            "basin_name": ["Godavari Basin"],
-            "hydro_level": ["basin"],
-        },
-        geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
-        crs="EPSG:4326",
-    )
-    basin_gdf.to_file(tmp_path / "basins.geojson", driver="GeoJSON")
-
-    subbasin_gdf = gpd.GeoDataFrame(
-        {
-            "basin_id": ["GODAVARI"],
-            "basin_name": ["Godavari Basin"],
-            "subbasin_id": ["GODAVARI-1"],
-            "subbasin_code": ["G1"],
-            "subbasin_name": ["Pranhita"],
-            "hydro_level": ["sub_basin"],
-        },
-        geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
-        crs="EPSG:4326",
-    )
-    subbasin_gdf.to_file(tmp_path / "subbasins.geojson", driver="GeoJSON")
-
     plan = BuildPlan(
         summaries_seed=(),
         master_tasks=(),
@@ -439,13 +362,11 @@ def test_write_geometry_bundle_normalizes_raw_admin_columns(
     district_path = optimized_geometry_path(level="district", state="Telangana", data_dir=tmp_path)
     block_path = optimized_geometry_path(level="block", state="Telangana", data_dir=tmp_path)
     block_index_path = tmp_path / "processed_optimised" / "context" / "admin_block_index.parquet"
-    hydro_index_path = tmp_path / "processed_optimised" / "context" / "hydro_subbasin_index.parquet"
     adm1_path = optimized_adm1_path(data_dir=tmp_path)
 
     assert district_path.exists()
     assert block_path.exists()
     assert block_index_path.exists()
-    assert hydro_index_path.exists()
     assert adm1_path.exists()
 
     adm1_out = gpd.read_file(adm1_path)
@@ -458,9 +379,6 @@ def test_write_geometry_bundle_normalizes_raw_admin_columns(
 
     block_index = pd.read_parquet(block_index_path)
     assert {"state_name", "district_name", "block_name"}.issubset(set(block_index.columns))
-
-    hydro_index = pd.read_parquet(hydro_index_path)
-    assert {"basin_id", "basin_name", "subbasin_id", "subbasin_name"}.issubset(set(hydro_index.columns))
 
 
 def test_build_execution_plan_counts_exact_tasks(
@@ -477,13 +395,6 @@ def test_build_execution_plan_counts_exact_tasks(
     )
     (metric_root / "master_metrics_by_block.csv").write_text(
         "state,district,block,txx_annual_max__ssp245__2030-2040__mean\nTelangana,Hanumakonda,Atmakur,1.0\n",
-        encoding="utf-8",
-    )
-
-    hydro_root = tmp_path / "processed" / "txx_annual_max" / "hydro"
-    hydro_root.mkdir(parents=True)
-    (hydro_root / "master_metrics_by_basin.csv").write_text(
-        "basin_id,basin_name,txx_annual_max__ssp245__2030-2040__mean\nGODAVARI,Godavari Basin,1.0\n",
         encoding="utf-8",
     )
 
@@ -511,41 +422,22 @@ def test_build_execution_plan_counts_exact_tasks(
     )
     block_gdf.to_file(tmp_path / "blocks_4326.geojson", driver="GeoJSON")
 
-    basin_gdf = gpd.GeoDataFrame(
-        {"basin_id": ["GODAVARI"], "basin_name": ["Godavari Basin"], "hydro_level": ["basin"]},
-        geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
-        crs="EPSG:4326",
-    )
-    basin_gdf.to_file(tmp_path / "basins.geojson", driver="GeoJSON")
-
-    subbasin_gdf = gpd.GeoDataFrame(
-        {
-            "basin_id": ["GODAVARI"],
-            "basin_name": ["Godavari Basin"],
-            "subbasin_id": ["GODAVARI-1"],
-            "subbasin_code": ["G1"],
-            "subbasin_name": ["Pranhita"],
-            "hydro_level": ["sub_basin"],
-        },
-        geometry=[Polygon([(0, 0), (2, 0), (2, 2), (0, 2)])],
-        crs="EPSG:4326",
-    )
-    subbasin_gdf.to_file(tmp_path / "subbasins.geojson", driver="GeoJSON")
-
     plan = _build_execution_plan(data_dir=tmp_path, metrics=["txx_annual_max"])
 
     assert plan.stage_totals() == {
-        "masters": 3,
+        # Admin-only masters after the hydro-pipeline removal: the basin master
+        # is no longer enumerated.
+        "masters": 2,
         "yearly-models": 4,
         "yearly-ensemble": 0,
         "context": 1,
-        # Admin-only geometry after the hydro-family removal: basin (1) and
-        # sub-basin (1 per basin_id) geometry tasks are no longer emitted.
-        "geometry": 5,
+        # Admin-only geometry after the hydro removal: basin, sub-basin, and the
+        # hydro sub-basin index geometry tasks are no longer emitted.
+        "geometry": 4,
         "glance": 0,
         "manifest": 1,
     }
-    assert plan.total_tasks == 14
+    assert plan.total_tasks == 12
 
 
 def test_build_progress_failure_summary_reports_remaining() -> None:
@@ -758,7 +650,6 @@ def test_build_processed_optimised_parallel_matches_serial_outputs(
     parallel_root = tmp_path / "parallel"
     for root in (serial_root, parallel_root):
         _write_admin_legacy_metric_fixture(root)
-        _write_hydro_legacy_metric_fixture(root)
         _write_geometry_fixture(root)
 
     monkeypatch.setenv("IRT_DATA_DIR", str(serial_root))
@@ -794,7 +685,6 @@ def test_build_processed_optimised_parallel_matches_serial_outputs(
     # Thread executor (opt-in) must produce byte-identical bundle output.
     thread_root = tmp_path / "thread"
     _write_admin_legacy_metric_fixture(thread_root)
-    _write_hydro_legacy_metric_fixture(thread_root)
     _write_geometry_fixture(thread_root)
     monkeypatch.setenv("IRT_DATA_DIR", str(thread_root))
     monkeypatch.setenv("IRT_YEARLY_EXECUTOR", "thread")
@@ -1288,8 +1178,7 @@ def test_build_processed_optimised_rejects_explicit_empty_scope(
     with pytest.raises(ValueError, match="No buildable legacy processed sources found"):
         build_processed_optimised_bundle(
             data_dir=tmp_path,
-            metrics=["txx_annual_max"],
-            levels=["basin"],
+            metrics=["tas_annual_mean"],
             overwrite=True,
             include_geometry=False,
             include_context=False,
@@ -1304,7 +1193,6 @@ def test_build_execution_plan_with_state_defaults_to_admin_only(
 ) -> None:
     monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
     _write_admin_legacy_metric_fixture(tmp_path, state="Telangana", district="Hanumakonda", block="Atmakur")
-    _write_hydro_legacy_metric_fixture(tmp_path)
 
     plan = _build_execution_plan(
         data_dir=tmp_path,

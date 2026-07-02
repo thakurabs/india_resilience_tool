@@ -9,7 +9,7 @@ full dashboard without memorizing internal commands.
 The runner is non-destructive by default:
 - existing outputs are not forcibly deleted unless `--overwrite` is supplied
 - climate runs default to `--level all`
-- climate runs resolve live metrics per requested level (`admin` vs `hydro`)
+- climate runs resolve live metrics per requested admin level (district/block)
 - climate compute uses validated completion markers and `--skip-existing` by
   default unless `--overwrite` is supplied
 - climate, Aqueduct, population, and groundwater flows can refresh
@@ -20,9 +20,9 @@ The runner is non-destructive by default:
 Examples:
     python -m tools.runs.prepare_dashboard --help
     python -m tools.runs.prepare_dashboard climate-hazards
-    python -m tools.runs.prepare_dashboard climate-hazards --level hydro
+    python -m tools.runs.prepare_dashboard climate-hazards --level district
     python -m tools.runs.prepare_dashboard climate-hazards --metrics tas_annual_mean
-    python -m tools.runs.prepare_dashboard climate-hazards --level hydro --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
+    python -m tools.runs.prepare_dashboard climate-hazards --level block --metrics r95ptot_contribution_pct --models CanESM5 --scenarios historical
     python -m tools.runs.prepare_dashboard climate-hazards --plan-only
     python -m tools.runs.prepare_dashboard climate-hazards --audit-only
     python -m tools.runs.prepare_dashboard climate-hazards --overwrite
@@ -47,7 +47,6 @@ DEFAULT_VALIDATION_TESTS = [
     "tests/test_build_blocks_geojson.py",
     "tests/test_prepare_aqueduct_baseline.py",
     "tests/test_aqueduct_admin_transfer.py",
-    "tests/test_aqueduct_hydro_transfer.py",
     "tests/test_groundwater_district_masters.py",
     "tests/test_jrc_flood_depth_admin_masters.py",
     "tests/test_population_admin_masters.py",
@@ -70,31 +69,22 @@ LULC_DOMAIN = "Agricultural LULC Exposure"
 GROUNDWATER_DOMAIN = "Groundwater Status & Availability"
 JRC_DOMAIN = "Riverine Flood"
 LEVEL_GROUPS = {
-    "all": ["district", "block", "basin", "sub_basin"],
+    "all": ["district", "block"],
     "admin": ["district", "block"],
-    "hydro": ["basin", "sub_basin"],
     "district": ["district"],
     "block": ["block"],
-    "basin": ["basin"],
-    "sub_basin": ["sub_basin"],
 }
 LEVEL_TO_FAMILY = {
     "district": "admin",
     "block": "admin",
-    "basin": "hydro",
-    "sub_basin": "hydro",
 }
 LEGACY_MASTER_FILENAMES = {
     "district": "master_metrics_by_district.csv",
     "block": "master_metrics_by_block.csv",
-    "basin": "master_metrics_by_basin.csv",
-    "sub_basin": "master_metrics_by_sub_basin.csv",
 }
 MASTER_REQUIRED_COLUMNS = {
     "district": {"state", "district", "district_key"},
     "block": {"state", "district", "block", "block_key"},
-    "basin": {"basin_id", "basin_name"},
-    "sub_basin": {"basin_id", "basin_name", "subbasin_id", "subbasin_name"},
 }
 
 
@@ -273,9 +263,7 @@ def _metrics_for_domain(domain: str) -> list[str]:
 
 
 def _scope_names_for_level(level: str, admin_states: Sequence[str]) -> tuple[str, ...]:
-    if level in {"district", "block"}:
-        return tuple(admin_states)
-    return ("hydro",)
+    return tuple(admin_states)
 
 
 def _resolve_climate_metrics_for_level(
@@ -358,9 +346,7 @@ def _legacy_master_path(*, slug: str, level: str, scope_name: str, data_dir: Pat
     from india_resilience_tool.config.paths import resolve_processed_root
 
     root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
-    if level in {"district", "block"}:
-        return root / scope_name / LEGACY_MASTER_FILENAMES[level]
-    return root / "hydro" / LEGACY_MASTER_FILENAMES[level]
+    return root / scope_name / LEGACY_MASTER_FILENAMES[level]
 
 
 def _legacy_master_ready(*, slug: str, level: str, scope_name: str, data_dir: Path) -> bool:
@@ -1120,7 +1106,6 @@ def build_aqueduct_plan(
         for label, module in [
             ("aqueduct-admin-crosswalk", "tools.geodata.build_aqueduct_admin_crosswalk"),
             ("aqueduct-block-crosswalk", "tools.geodata.build_aqueduct_block_crosswalk"),
-            ("aqueduct-hydro-crosswalk", "tools.geodata.build_aqueduct_hydro_crosswalk"),
         ]:
             argv = _py_module_cmd(module)
             _append_flag(argv, "--overwrite", bool(args.overwrite))
@@ -1130,11 +1115,6 @@ def build_aqueduct_plan(
         _append_flag(admin_argv, "--overwrite", bool(args.overwrite))
         admin_argv.extend(_build_aqueduct_metric_args(args))
         plan.append(PlannedCommand(label="aqueduct-admin-masters", argv=admin_argv))
-
-        hydro_argv = _py_module_cmd("tools.geodata.build_aqueduct_hydro_masters")
-        _append_flag(hydro_argv, "--overwrite", bool(args.overwrite))
-        hydro_argv.extend(_build_aqueduct_metric_args(args))
-        plan.append(PlannedCommand(label="aqueduct-hydro-masters", argv=hydro_argv))
 
         if not bool(getattr(args, "skip_validation", False)):
             validate_argv = _py_module_cmd("tools.geodata.validate_aqueduct_workflow")
@@ -1779,8 +1759,6 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         "aqueduct-admin-crosswalk": "tools.geodata.build_aqueduct_admin_crosswalk",
         "aqueduct-block-crosswalk": "tools.geodata.build_aqueduct_block_crosswalk",
         "aqueduct-admin-masters": "tools.geodata.build_aqueduct_admin_masters",
-        "aqueduct-hydro-crosswalk": "tools.geodata.build_aqueduct_hydro_crosswalk",
-        "aqueduct-hydro-masters": "tools.geodata.build_aqueduct_hydro_masters",
         "aqueduct-validate": "tools.geodata.validate_aqueduct_workflow",
         "population-admin-masters": "tools.geodata.build_population_admin_masters",
         "rural-facilities-admin-masters": "tools.geodata.build_rural_facilities_admin_masters",
@@ -1936,8 +1914,6 @@ def _print_available_commands() -> None:
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
         "aqueduct-admin-masters",
-        "aqueduct-hydro-crosswalk",
-        "aqueduct-hydro-masters",
         "aqueduct-validate",
         "population-admin-masters",
         "rural-facilities-admin-masters",
@@ -2200,8 +2176,6 @@ def build_cli() -> argparse.ArgumentParser:
         "aqueduct-admin-crosswalk",
         "aqueduct-block-crosswalk",
         "aqueduct-admin-masters",
-        "aqueduct-hydro-crosswalk",
-        "aqueduct-hydro-masters",
         "aqueduct-validate",
         "population-admin-masters",
         "rural-facilities-admin-masters",
