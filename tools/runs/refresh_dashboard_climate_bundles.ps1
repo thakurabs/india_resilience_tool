@@ -5,8 +5,8 @@ Refresh dashboard-ready admin climate bundle metrics for one state.
 .DESCRIPTION
 Computes only the NASA NEX climate metrics required by active thematic and
 sector-wise dashboard bundles, then rebuilds legacy masters, thematic composite
-masters, sector-wise proposal bundle masters, processed_optimised artifacts, and
-strict parity reports.
+masters, sector-wise proposal bundle masters, processed_optimised artifacts,
+precomputed area-weighted state headline values, and strict parity reports.
 
 Riverine Flood is excluded because it is sourced from the JRC flood-depth
 workflow, not the NEX climate compute pipeline.
@@ -64,6 +64,13 @@ param(
     [switch]$SkipBundles,
 
     [switch]$SkipOptimized,
+
+    # CHG-0176: precompute area-weighted state headline values into the optimized
+    # bundle after each level's build and before its strict audit. The audit's
+    # presence check (precomputed_state_values_missing, severity=warning) is
+    # escalated to a hard failure by --strict, so this stage keeps -Level all runs
+    # green. Opt out only when intentionally auditing without the accelerator table.
+    [switch]$SkipStateValues,
 
     [switch]$SkipAudit,
 
@@ -1164,6 +1171,24 @@ foreach ($levelName in $levelsToRun) {
             }
 
             Invoke-NativeChecked -Label "Build processed_optimised dashboard climate artifacts ($levelName)" -Arguments $buildArgs
+        }
+
+        # CHG-0176: precompute the area-weighted state headline values over the
+        # freshly built bundle, BEFORE the strict parity audit reports on them.
+        # Mirrors prepare_dashboard.py: same per-level metric scope as the audit
+        # ($optimizedArgs), no --strict (coverage-cliff/join warnings must never
+        # block publish), and NO --state -- the output is a single all_states.parquet
+        # per metric/level, so passing --state would clobber every other state's rows.
+        # Omitting it rebuilds the snapshot across all states present in the bundle,
+        # refreshing the current state's rows in place. This is what satisfies the
+        # audit's precomputed_state_values_missing presence check under --strict.
+        if (-not $SkipStateValues) {
+            $stateValuesArgs = @(
+                "-m", "tools.optimized.build_state_values",
+                "--level", $levelName
+            ) + $optimizedArgs
+
+            Invoke-NativeChecked -Label "Build precomputed state values ($levelName)" -Arguments $stateValuesArgs
         }
 
         if (-not $SkipAudit) {
