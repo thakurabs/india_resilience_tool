@@ -246,6 +246,22 @@ Entry fields:
   4. Update `README.md` / `MANIFEST.md`: drop the two Aqueduct hydro builder commands and the SOI basin/sub-basin master references; keep the admin Aqueduct district/block workflow.
 - `Done when`: the two Aqueduct hydro scripts are gone, no `processed/{aqueduct_slug}/hydro/` master-build path remains, the retained admin Aqueduct district/block builders + `validate_aqueduct_workflow` import their shared helpers from `aqueduct_common` and pass their tests, and no dangling imports remain repo-wide.
 
+### BL-0024 — Purge inert basin/sub_basin residue left by the hydro lean-down
+- `Area`: hydro lean-down, code hygiene, tech-debt
+- `Why deferred`: after the hydro lean-down (Phases 1–5 + G11 river-pair), the navigable Hydro family and offline basin/sub-basin compute are gone, but the completeness-grep gate is still **red** on genuinely dead `basin`/`sub_basin` branches. The phases removed every runtime **entry point** that could set `level`/`family` to a hydro value (`SPATIAL_FAMILY_HYDRO`, `ADMIN_LEVEL_BASIN/SUB_BASIN`, the sidebar Hydro family selector, hydro `LEVEL_GROUPS`/compute dispatch), so `level` can now only be `district`/`block` and these interior `if level == "basin":` arms are unreachable. The branch bodies were deliberately left because they live **inside functions the retained admin district/block paths still call**, so excising just the hydro arms is fiddlier and carries regression risk to the admin paths — unlike deleting a whole navigable entry point. The gate is a lean-down hygiene check (dead text), not a correctness check; the suite is green and there is no reachable hydro, so this is non-blocking cleanup, not a bug.
+- `Dependency / trigger`: pick up as a focused hygiene pass when the portfolio/rankings surface is being touched anyway. Do it with the completeness-grep gate as the acceptance check and full-suite parity against the current 14-failure baseline.
+- `Scope` (8 files with truly-dead residue — confirmed outside the retained-context allowlist):
+  - `india_resilience_tool/analysis/portfolio.py` — `get_portfolio_storage_key`, `portfolio_key_basin/_subbasin`, `_basin/_subbasin_matches`, `KEY_BASINS/SUBBASINS`, and the `level_norm == "basin"/"sub_basin"` arms throughout (G7 trim only partially applied).
+  - `india_resilience_tool/app/portfolio_ui.py` — `is_basin`/`is_subbasin`/`is_hydro` and `Basin`/`Sub-basin` column handling (~15 sites; highest excision risk, ~2000 lines with admin logic interwoven).
+  - `india_resilience_tool/app/portfolio_multistate.py`, `india_resilience_tool/app/portfolio_state_runtime.py` — shared portfolio storage-key/multistate hydro arms.
+  - `india_resilience_tool/app/views/rankings_view.py` — file-local `AdminLevel = Literal["district","block","basin","sub_basin"]` (never narrowed, G4) + basin/subbasin table-rendering branches.
+  - `india_resilience_tool/compute/spi_adapter.py` — `level in {"block","sub_basin"}` / `level == "basin"` unit-key/name row-shaping (compute is admin-only now).
+  - `india_resilience_tool/data/discovery.py` — the `Literal["basin","sub_basin"]` discover-yearly helpers (siblings of the deleted `discover_hydro_yearly_file`, now uncalled).
+  - `india_resilience_tool/app/geography_controls.py` — dead `st.session_state["selected_basin"/"selected_subbasin"] = "All"` reset writes (session keys no longer drive any widget/render).
+  - Bonus leftover: `india_resilience_tool/app/geo_cache.py` `load_river_*_cached` (G3 intended Phase-1 removal; still present, dead-harmless).
+- `Do NOT touch` (retained hydrology context — correctly excluded from the gate): `map_layer_runtime.py` reference-overlay path, `geo_cache` basin/sub-basin context-geometry builders, `details_runtime` crosswalk_contexts, `details_panel` crosswalk rendering, `crosswalks.py`/`crosswalk_runtime.py`, `folium_featurecollection.py`, `map_view.py`, `hydro_loader`/`hydro_summary`/`hydro_boundary_overlay`/`river_loader`/`river_topology`/`context_cards`/`summary_cache`.
+- `Done when`: the completeness-grep gate (`grep '"sub_basin"|== "basin"|selected_basin|selected_subbasin'` minus the retained-context allowlist) returns nothing across the 8 files, narrowed type aliases no longer list hydro levels, and the full suite shows no new failures vs the recorded baseline.
+
 ## Icebox
 
 - No items recorded yet.
