@@ -432,7 +432,7 @@ These per-cell annual metric fields are then area-weighted and aggregated to adm
 
 ### 5.4 Wet-Bulb Temperature and Humid Heat Metrics
 
-Humid-heat metrics couple temperature with humidity. The body's primary cooling mechanism under heat stress is evaporative sweat loss; at high humidity this mechanism is impaired, generating physiological strain at air temperatures well below those dangerous in dry conditions. Wet-bulb temperature ($T_{wb}$) integrates both air temperature and ambient humidity into a quantity directly proportional to the ambient evaporative cooling capacity. Sherwood and Huber (2010) established 35°C wet-bulb as the theoretical limit of human thermoregulation — the level above which the body can no longer shed metabolic heat even at rest in shade — and Raymond et al. (2020) documented that this limit has begun to be approached, and briefly exceeded, in parts of South Asia and the Persian Gulf. Subsequent empirical work has revised the practical survivability ceiling downward (to roughly 31°C for young, healthy adults under exertion; Vecellio et al. 2022), a revision that §7.4 treats as a cautionary precedent for any threshold the tool adopts. IRT uses working thresholds of 28°C and 30°C, corresponding to severe and very severe occupational heat stress relevant to India's outdoor labour conditions.
+Humid-heat metrics couple temperature with humidity. The body's primary cooling mechanism under heat stress is evaporative sweat loss; at high humidity this mechanism is impaired, generating physiological strain at air temperatures well below those dangerous in dry conditions. Wet-bulb temperature ($T_{wb}$) integrates both air temperature and ambient humidity into a quantity directly proportional to the ambient evaporative cooling capacity. Sherwood and Huber (2010) established 35°C wet-bulb as the theoretical limit of human thermoregulation — the level above which the body can no longer shed metabolic heat even at rest in shade — and Raymond et al. (2020) documented that this limit has begun to be approached, and briefly exceeded, in parts of South Asia and the Persian Gulf. Subsequent empirical work has revised the practical survivability ceiling downward (to roughly 31°C for young, healthy adults under exertion; Vecellio et al. 2022), a revision the tool treats as a cautionary precedent for any threshold it adopts. IRT uses working thresholds of 28°C and 30°C, corresponding to severe and very severe occupational heat stress relevant to India's outdoor labour conditions.
 
 **Stull (2011) approximation**
 
@@ -514,11 +514,12 @@ Within a bundle the normalized component scores are combined as a **weighted mea
 
 $$\text{Composite}_g = \frac{\sum_{m \in A_g} w_m\, S_{g,m}}{\sum_{m \in A_g} w_m}$$
 
-where $A_g$ is the set of component metrics with a valid (non-NaN) normalized score for geography $g$, and $w_m$ are the fixed bundle weights (§6.4). Because each $S_{g,m}\in[0,100]$ and the weights are renormalized to sum to 1 over $A_g$, the composite is itself bounded in $[0,100]$ — no separate clipping is required. The count of contributing metrics ($\lvert A_g\rvert$) is persisted alongside each score for transparency.
+where $A_g$ is the set of component metrics with a valid (non-NaN) normalized score for geography $g$, and $w_m$ are the fixed bundle weights (§6.4). Because each $S_{g,m}\in[0,100]$ and the weights are renormalized to sum to 1 over $A_g$, the composite is itself bounded in $[0,100]$ — no separate clipping is required. 
+<!-- The count of contributing metrics ($\lvert A_g\rvert$) is persisted alongside each score for transparency. -->
 
-Per-row renormalization means a geography missing one metric is scored on its remaining metrics rather than being penalized or dropped. The only completeness gate for the shipped per-period bundles is that **at least one** component must be present: a row with every component missing yields NaN. (The stricter "≥ 4 anchored components" floor applies *only* to the dormant baseline-anchored mode of §6.2 and is inactive for the shipped composites.)
+<!-- Per-row renormalization means a geography missing one metric is scored on its remaining metrics rather than being penalized or dropped. The only completeness gate for the shipped per-period bundles is that **at least one** component must be present: a row with every component missing yields NaN. (The stricter "≥ 4 anchored components" floor applies *only* to the dormant baseline-anchored mode of §6.2 and is inactive for the shipped composites.) -->
 
-Weights are drawn from the approved bundle-weight schedule and sum to 1.0 per bundle. They are organised into **weight groups** that gather related facets together; within a group the weight is, in most bundles, split equally across members, so the group subtotal encodes the relative emphasis placed on that facet of the hazard.
+Weights are organised into **weight groups** that gather related facets together, so the group subtotal encodes the relative emphasis placed on that facet of the hazard.
 
 ### 6.4 Bundle-by-Bundle Metric Weights
 
@@ -526,7 +527,7 @@ The tables below give the full component weighting for each thematic bundle. Eac
 
 $$w_m = (\text{group weight}) \times (\text{share of group})$$
 
-In every bundle except Drought Risk the group is split *equally* among its members, so the share is simply $1/n$ for a group of $n$ metrics (e.g. each of the three metrics in Heat Risk's 0.200 "Mean & Background Heat" group takes a $1/3$ share → $0.200 \times \tfrac13 = 0.0667$). Drought Risk is the one exception, with an unequal $2/5$–$3/5$ split inside each timescale (below). Every bundle's final weights sum to 1.000.
+<!-- In every bundle except Drought Risk the group is split *equally* among its members, so the share is simply $1/n$ for a group of $n$ metrics (e.g. each of the three metrics in Heat Risk's 0.200 "Mean & Background Heat" group takes a $1/3$ share → $0.200 \times \tfrac13 = 0.0667$). Drought Risk is the one exception, with an unequal $2/5$–$3/5$ split inside each timescale (below). Every bundle's final weights sum to 1.000. -->
 
 #### Heat Risk
 
@@ -578,7 +579,7 @@ In every bundle except Drought Risk the group is split *equally* among its membe
 
 #### Drought Risk
 
-Drought Risk is the only bundle with an unequal within-group split: inside each SPI timescale the maximum-spell metric takes a **3/5** share and the event count **2/5**, so duration outweighs frequency. The group weights themselves rise with accumulation window (SPI-12 > SPI-6 > SPI-3), reflecting the greater impact of sustained, long-accumulation drought.
+<!-- Drought Risk is the only bundle with an unequal within-group split: inside each SPI timescale the maximum-spell metric takes a **3/5** share and the event count **2/5**, so duration outweighs frequency. The group weights themselves rise with accumulation window (SPI-12 > SPI-6 > SPI-3), reflecting the greater impact of sustained, long-accumulation drought. -->
 
 | Weight group | Metric | Share of group | Weight |
 |---|---|---|---|
@@ -620,9 +621,9 @@ The eight **sectoral bundles** answer a different question from the thematic bun
 
 ### 7.1 Sector Hazard-Pressure Framework
 
-The eight sectoral bundles are **Agricultural Risk**, **Health Risk**, **Industrial Risk**, **Investment / Financial Risk**, **Infrastructure Risk**, **Asset Risk (Thermal Power Plants)**, **Asset Risk (Hydropower Plants)**, and **Life & Livelihood Loss Risk**. Each bundle's full rule set — source metrics, rule weights, lens archetypes, and impact bands — is given in §7.5.
+The eight sectoral bundles are **Agricultural Risk**, **Health Risk**, **Industrial Risk**, **Investment / Financial Risk**, **Infrastructure Risk**, **Asset Risk (Thermal Power Plants)**, **Asset Risk (Hydropower Plants)**, and **Life & Livelihood Loss Risk**. Each bundle's full rule set — source metrics, rule weights, lens weights, and impact bands — is given in §7.4.
 
-Every bundle is an **ordered set of rules**; each rule binds exactly one source metric (§5) to a scoring recipe and an explicit *rule weight*. All eight bundles use explicit, normalized rule weights that sum to 1.0 (§7.5). All are computed at both district and block level, for scenarios **SSP2-4.5** and **SSP5-8.5**, over the future periods **2020–2040, 2040–2060, 2060–2080**; the historical 1990–2010 window enters only as the change-lens baseline, not as a published period.
+Every bundle is an **ordered set of rules**; each rule binds exactly one source metric (§5) to a scoring recipe and an explicit *rule weight*. All eight bundles use explicit, normalized rule weights that sum to 1.0 (§7.4). All are computed at both district and block level, for scenarios **SSP2-4.5** and **SSP5-8.5**, over the future periods **2020–2040, 2040–2060, 2060–2080**; the historical 1990–2010 window enters only as the change-lens baseline, not as a published period.
 
 A rule's selection encodes a deliberate sector judgement — that a given hazard *matters to that sector* — so the same metric can appear in several bundles under different rule weights and different impact bands, reflecting the sector-specific consequence rather than a single universal harm.
 
@@ -650,13 +651,16 @@ Clipping at the deciles damps the influence of single-cell outliers on the spati
 
 $$\Delta_i = \begin{cases} v_i^{\text{fut}} - v_i^{\text{base}} & \text{absolute\_delta (temperature-like metrics)}\\[4pt] \dfrac{v_i^{\text{fut}} - v_i^{\text{base}}}{\lvert v_i^{\text{base}}\rvert}\times 100 & \text{relative\_pct (counts, rainfall, spells)} \end{cases}$$
 
-The mode is selected automatically: the absolute delta is used for temperature-like metrics (the daily-mean, daily-maximum, and daily-minimum temperature families and other heat indices) and relative percent otherwise. Relative-percent change guards against tiny denominators ($\lvert v^{\text{base}}\rvert < 10^{-6}\Rightarrow$ NaN) so a near-zero baseline cannot explode the score. Because $S_{\text{chg}}$ is itself a spatial p10–p90 rank of the change, it measures *where a unit sits in the distribution of projected change* — not an absolute warming or wetting magnitude. A missing baseline column drops this lens to NaN (with a build warning) and the rule is scored on its remaining lenses.
+The absolute delta is used for temperature-like metrics (the daily-mean, daily-maximum, and daily-minimum temperature families and other heat indices) and relative percent otherwise. Relative-percent change guards against tiny denominators ($\lvert v^{\text{base}}\rvert < 10^{-6}\Rightarrow$ NaN) so a near-zero baseline cannot explode the score. Because $S_{\text{chg}}$ is itself a spatial p10–p90 rank of the change, it measures *where a unit sits in the distribution of projected change* — not an absolute warming or wetting magnitude. A missing baseline column drops this lens to NaN (with a build warning) and the rule is scored on its remaining lenses.
 
 **Impact lens — $S_{\text{imp}}$.** This is the only **absolute, non-spatial** lens: it maps the raw metric value onto a fixed physical harm band $[a, b]$ — $a$ the onset of concern, $b$ the saturation/severe threshold — independent of how other geographies score:
 
 $$S_{\text{imp},i} = \operatorname{clip}\!\left(\frac{v_i - a}{b - a},\; 0,\; 1\right)\times 100$$
 
-A value at or below onset scores 0; at or above saturation, 100. The lens is evaluated only when the rule declares a band; regime/proxy metrics with no defensible threshold omit it (impact weight 0). The bands, their provenance, and their confidence grading are the subject of §7.4.
+A value at or below onset scores 0; at or above saturation, 100. The lens is evaluated only when the rule declares a band; regime/proxy metrics with no defensible threshold omit it (impact weight 0). 
+<!-- The bands, their provenance, and their confidence grading are the subject of §7.4. -->
+
+The impact lens is what distinguishes the sectoral framework from a purely relative ranking. Where the absolute and change lenses only say how a unit compares to its neighbours, the impact lens says how close it is to a recognised danger threshold — an absolute, externally meaningful reading of harm that does not move with the spatial distribution.
 
 **Rule score.** The lens scores present for a rule are combined as a renormalized weighted mean over the lenses actually available (i.e. non-NaN), exactly mirroring the per-row renormalization of §6.3:
 
@@ -664,21 +668,15 @@ $$S_r = \frac{\sum_{\ell \in L_r}\omega_\ell\, S_{\ell}}{\sum_{\ell \in L_r}\ome
 
 so a rule whose change lens is unavailable is scored on absolute (+impact) alone rather than being voided. All three lens scores are persisted alongside the blended rule score for transparency.
 
-**Bundle aggregation and the 0.70 completeness gate.** A bundle composite is the renormalized weighted mean of its rule scores over the rules with a finite score, using the rule weights $W_r$:
+<!-- **Bundle aggregation and the 0.70 completeness gate.** A bundle composite is the renormalized weighted mean of its rule scores over the rules with a finite score, using the rule weights $W_r$:
 
 $$\text{Composite}_b = \frac{\sum_{r\in R_b} W_r\, S_r}{\sum_{r\in R_b} W_r}, \qquad f_b = \!\!\sum_{r:\,S_r\text{ finite}}\!\! W_r$$
 
-where $f_b$ is the **available-rule-weight fraction** (the share of total rule weight that resolved to a valid score). A composite is published only if $f_b \ge 0.70$ **and** at least one rule is present; otherwise it is set to NaN. The 0.70 floor prevents a sector score from being asserted when nearly a third of its weighted evidence base is missing — a stricter posture than the thematic "≥ 1 component" gate of §6.3, appropriate because sectoral rules are fewer and individually more consequential. Both $f_b$ and the available-rule count are persisted with every composite.
+where $f_b$ is the **available-rule-weight fraction** (the share of total rule weight that resolved to a valid score). A composite is published only if $f_b \ge 0.70$ **and** at least one rule is present; otherwise it is set to NaN. The 0.70 floor prevents a sector score from being asserted when nearly a third of its weighted evidence base is missing — a stricter posture than the thematic "≥ 1 component" gate of §6.3, appropriate because sectoral rules are fewer and individually more consequential. Both $f_b$ and the available-rule count are persisted with every composite. -->
 
 ### 7.3 Reading the Score: What Each Lens Lets You Compare
 
-Because two of the three lenses are cohort-relative and only the impact lens is absolute, the blended score is a **hybrid** of relative ranking and absolute danger, and not every comparison of it is valid. The absolute lens carries a specific structural blind spot: since its cohort is rebuilt for each scenario–period, a *uniform* escalation — every unit in a state warming by the same amount between two periods — shifts $q_{10}$ and $q_{90}$ together and leaves the normalized scores unchanged. The absolute lens can rank places against one another; it cannot, on its own, show that the future is worse than the present. The change and impact lenses fill that gap, and the **impact lens is the only carrier of absolute escalation** across periods and across states.
-
-| Comparison | Absolute | Change | Impact | Net interpretation |
-|---|:--:|:--:|:--:|---|
-| Units **within** one `state × level × scenario × period` | ✓ | ✓ | ✓ | fully comparable — a true ranking of units |
-| **Across periods**, same state | re-normalized each period | re-normalized | ✓ (fixed band) | only the impact component is comparable; a flat absolute trend means "same rank", not "no warming" |
-| **Across states** | each state normalized to itself | each to itself | ✓ (fixed band) | only the impact component is cross-state comparable |
+Because two of the three lenses are cohort-relative and only the impact lens is absolute, the blended score is a **hybrid** of relative ranking and absolute danger: it compares units cleanly *within* a cohort, but only partly across periods or states. The reason is the absolute lens. It re-scores every unit against its own cohort — rebuilt for each scenario and period — so it only ever tells you which places are worse off than their neighbours *right now*. It is blind to warming that lifts a whole state together: if every unit heats by the same amount between two periods, the top and bottom of the range ($q_{10}$ and $q_{90}$) rise in step, and the scores don't move. The other two lenses fill this gap. The **change** lens tracks each place's own trend from one period to the next, and the **impact** lens scores every place against a fixed real-world danger scale that never shifts. Because that scale stays put, the impact lens is the only one you can compare across periods and across states and read as genuine worsening rather than a reshuffled ranking.
 
 **Worked example — why the blend beats pure-absolute ranking.** Two districts in one state, scenario SSP5-8.5, period 2060–2080, metric **TXx** (annual-maximum daytime temperature), scored through the Health Risk TXx rule (lens weights 0.40 / 0.25 / 0.35, impact band 40–45 °C). Suppose across this cohort projected TXx spans $q_{10}=41$ °C to $q_{90}=46$ °C, and the warming anomaly versus 1990–2010 spans $q_{10}=+1.0$ °C to $q_{90}=+3.5$ °C:
 
@@ -689,25 +687,25 @@ Because two of the three lenses are cohort-relative and only the impact lens is 
 
 District A is the established heat hazard — hottest among its peers and past the 45 °C heat-wave declaration threshold — and is correctly rated high by either method. District B is the case pure-absolute ranking *hides*: it looks unremarkable relative to peers ($S_{\text{abs}}=20$), but it is warming faster than any of them ($S_{\text{chg}}=100$) and has just crossed the 40 °C heatwave-declaration floor ($S_{\text{imp}}=40$). The blend lifts it to 47 — a mid-range hazard warranting attention — whereas pure-absolute scoring leaves it at 20, mislabelling a fast-warming, newly dangerous district as low priority. The blend thus preserves three decision-relevant signals — current severity, trajectory, and absolute danger-threshold crossing — that a relative ranking alone discards. The cost is interpretability: one number now mixes three signals, which is precisely why the per-lens decomposition is persisted with every rule (§7.2) — a user can read District B's 47 back as $S_{\text{abs}}$ 20 / $S_{\text{chg}}$ 100 / $S_{\text{imp}}$ 40.
 
-### 7.4 The Impact Lens: Bands, Provenance, and Confidence
+<!-- ### 7.4 The Impact Lens: Bands, Provenance, and Confidence
 
-The impact lens is what distinguishes the sectoral framework from a purely relative ranking: it injects an **absolute, externally meaningful** reading of harm. Where the absolute and change lenses only say *how a unit compares to its neighbours*, the impact lens says *how close the unit is to a recognised danger threshold*, on a fixed scale that does not move with the spatial distribution. Each band is a pair $[a,b]$ — onset $a$ (harm begins) and saturation $b$ (harm is near-complete or sector-dominant) — and the linear interpolation of §7.2 converts the raw value into a 0–100 harm-proximity score.
+The impact lens is what distinguishes the sectoral framework from a purely relative ranking: it injects an **absolute, externally meaningful** reading of harm. Where the absolute and change lenses only say *how a unit compares to its neighbours*, the impact lens says *how close the unit is to a recognised danger threshold*, on a fixed scale that does not move with the spatial distribution. Each band is a pair $[a,b]$ — onset $a$ (harm begins) and saturation $b$ (harm is near-complete or sector-dominant) — and the linear interpolation of §7.2 converts the raw value into a 0–100 harm-proximity score. -->
 
-Bands are graded by the strength of their evidentiary support:
+<!-- Bands are graded by the strength of their evidentiary support:
 
 - **HIGH** — anchored on a published, institutionally recognised threshold (e.g. the IMD plains heatwave criterion, or IMD daily-rainfall categories). Treated as external and zone-invariant.
 - **MEDIUM** — derived from literature combined with reasoned judgement, often with an institutionally anchored onset and a self-derived saturation.
-- **LOW** — self-derived from first principles or indirect evidence where no categorical institutional band exists at the relevant scale. By design these rules carry a **small impact weight** (typically 0.15), so a weakly supported band contributes little to the score.
+- **LOW** — self-derived from first principles or indirect evidence where no categorical institutional band exists at the relevant scale. By design these rules carry a **small impact weight** (typically 0.15), so a weakly supported band contributes little to the score. -->
 
-**Provenance, by tier.** The catalog leans on a small number of **externally anchored, high-confidence** bands that recur across sectors and carry the heaviest impact weight: extreme daytime heat (TXx, IMD plains heatwave **40–45 °C**) and one-day rainfall (Rx1day, IMD very-heavy-to-extremely-heavy **115.6–204.5 mm**). These appear in Health, Industrial, Infrastructure, Asset, and Life-&-Livelihood bundles, each time with the same physical band but a sector-specific consequence. The remaining bands are **self-derived**: a MEDIUM tier derived from literature and reasoned judgement, sometimes with an institutionally anchored cut point — multi-week dry spells (CDD, IMD Agricultural-Drought-anchored **30–90** / **60–120 days**), crop reproductive heat (TXx **35–45 °C**, research-derived onset), warmest-night stress (TNx **28–32 °C**, research-derived onset) — and a LOW tier for indices with no institutional category at all: multi-day rainfall (Rx5day **250–500 mm**, anchored on Kerala 2018 / Mumbai 2005), warm spells (WSDI **6–18 days**), damaging-heat-day counts (**15–60 days**), SPI drought episode/spell counts (**3–12**), peninsular chilling nights (**10–30 days**), consecutive wet days (**7–15 days**), and heatwave-frequency days (**5–15 days**). Finally, three **regime/proxy metrics carry no impact lens** — R99p extreme-wet concentration, the SPI-3 low-flow cooling proxy, and R95p interannual variability — because no defensible danger threshold exists for them; they are scored on absolute and change only.
+<!-- **Provenance, by tier.** The catalog leans on a small number of **externally anchored, high-confidence** bands that recur across sectors and carry the heaviest impact weight: extreme daytime heat (TXx, IMD plains heatwave **40–45 °C**) and one-day rainfall (Rx1day, IMD very-heavy-to-extremely-heavy **115.6–204.5 mm**). These appear in Health, Industrial, Infrastructure, Asset, and Life-&-Livelihood bundles, each time with the same physical band but a sector-specific consequence. The remaining bands are **self-derived**: a MEDIUM tier derived from literature and reasoned judgement, sometimes with an institutionally anchored cut point — multi-week dry spells (CDD, IMD Agricultural-Drought-anchored **30–90** / **60–120 days**), crop reproductive heat (TXx **35–45 °C**, research-derived onset), warmest-night stress (TNx **28–32 °C**, research-derived onset) — and a LOW tier for indices with no institutional category at all: multi-day rainfall (Rx5day **250–500 mm**, anchored on Kerala 2018 / Mumbai 2005), warm spells (WSDI **6–18 days**), damaging-heat-day counts (**15–60 days**), SPI drought episode/spell counts (**3–12**), peninsular chilling nights (**10–30 days**), consecutive wet days (**7–15 days**), and heatwave-frequency days (**5–15 days**). Finally, three **regime/proxy metrics carry no impact lens** — R99p extreme-wet concentration, the SPI-3 low-flow cooling proxy, and R95p interannual variability — because no defensible danger threshold exists for them; they are scored on absolute and change only.
 
 **Provenance discipline.** Five principles govern how a band may be admitted: (1) a band scores *danger, not unusualness* — emergence-versus-history is the change lens's job, so an impact band may never be built from a percentile or a standardized anomaly, which would duplicate the change lens; (2) external institutional thresholds are preferred, and a self-derived band is admitted only where none exists, through a documented protocol (harm mechanism → nearest external anchors → cut points → confidence → dated provenance); (3) confidence sets the impact weight, so a low-confidence band cannot drive a rule; (4) a borrowed standard may be used *only* in the construction its source defines — the IMD warm-night "+4.5 to +6.4 °C above normal" departure criterion was **rejected** for TNx because it is defined jointly with a same-day Tmax ≥ 40 °C co-condition against a *daily climatological* normal, neither of which holds for an annual-maximum value, so TNx instead uses an absolute 28–32 °C level band; (5) **no phantom thresholds** — a slug naming a number (e.g. `..._ge_45`) must implement that number as a real band with provenance or be renamed. Every band is versioned, dated, and revisable; the downward revision of the once-canonical 35 °C wet-bulb survivability limit is the cautionary precedent, and any band change is itself a methodology change.
 
-The full onset/saturation derivation, source, zone caveat, and confidence grade for every distinct band are catalogued in **Appendix B**, deduplicated across the bundles that share them.
+The full onset/saturation derivation, source, zone caveat, and confidence grade for every distinct band are catalogued in **Appendix B**, deduplicated across the bundles that share them. -->
 
-### 7.5 Bundle-by-Bundle Rule Tables and Weights
+### 7.4 Bundle-by-Bundle Rule Tables and Weights
 
-Two weight layers govern a sectoral score: the **lens split** *within* each rule (§7.2) and the **rule weight** *within* each bundle. The lens splits are not arbitrary per rule — they fall into a handful of recurring **archetypes** tied to band provenance:
+<!-- Two weight layers govern a sectoral score: the **lens split** *within* each rule (§7.2) and the **rule weight** *within* each bundle. The lens splits are not arbitrary per rule — they fall into a handful of recurring **archetypes** tied to band provenance:
 
 | Lens archetype (abs / chg / imp) | Typical use | Rationale |
 |---|---|---|
@@ -717,13 +715,15 @@ Two weight layers govern a sectoral score: the **lens split** *within* each rule
 | **0.70 / 0.30 / 0.00** | Regime/proxy metrics, no band (SPI low-flow proxy, R95p variability) | Absolute level dominant; emergence supplies a secondary signal |
 | **0.40 / 0.60 / 0.00** | Change-dominant regime metric, no band (R99p concentration) | Emergence of tail concentration vs baseline is the decision-relevant signal |
 
-The per-bundle tables below give each rule's source metric, its **rule weight** (summing to 1.0 per bundle), its lens archetype, and its impact band (or "—" where no band applies). Band derivations are in Appendix B.
+The per-bundle tables below give each rule's source metric, its **rule weight** (summing to 1.0 per bundle), its lens archetype, and its impact band (or "—" where no band applies). Band derivations are in Appendix B. -->
+
+Two weight layers govern a sectoral score: the lens weights (abs / chg / imp) within each rule (§7.2) and the rule weight within each bundle. The lens weights are not arbitrary — the impact weight tracks band confidence: largest (~0.35) for rules on an external, HIGH-confidence IMD band, ~0.30 for IMD-anchored MEDIUM bands, smallest (0.15) for self-derived LOW bands, and 0 for regime/proxy metrics that carry no band at all. The per-bundle tables below give each rule's source metric, its rule weight (summing to 1.0 per bundle), its lens weights, and its impact band (or "—" where none applies). Band derivations are in Appendix B.
 
 #### Agricultural Risk
 
 Selects the agronomic stressors of a kharif–rabi cropping system: reproductive-stage heat, damaging heat-day and warm-spell burden, short-window (SPI-3) drought episodes and their longest spell, kharif-waterlogging rainfall, and — peninsular default — horticultural chilling nights. The heaviest weights sit on 5-day rainfall (0.20) and the two drought rules (0.15 each), reflecting the dominance of water extremes in rainfed agriculture.
 
-| Rule | Source metric | Rule weight | Lens archetype | Impact band |
+| Rule | Source metric | Rule weight | Lens weights (abs/chg/imp) | Impact band |
 |---|---|---|---|---|
 | Peak crop heat | Annual max temperature (TXx) | 0.15 | 0.40 / 0.30 / 0.30 | 35–45 °C |
 | Damaging heat days | Extreme heat days (TX ≥ 35 °C) | 0.10 | 0.45 / 0.40 / 0.15 | 15–60 days |
@@ -737,7 +737,7 @@ Selects the agronomic stressors of a kharif–rabi cropping system: reproductive
 
 Targets the climatic drivers of heat mortality and waterborne/vector disruption: extreme daytime heat (the dominant rule at 0.30, on the HIGH-confidence IMD band), night-time heat that denies physiological recovery, warm-spell duration, and the rainfall/standing-water pathway for disease and disruption.
 
-| Rule | Source metric | Rule weight | Lens archetype | Impact band |
+| Rule | Source metric | Rule weight | Lens weights (abs/chg/imp) | Impact band |
 |---|---|---|---|---|
 | Extreme daytime heat pressure | Annual max temperature (TXx) | 0.30 | 0.40 / 0.25 / 0.35 | 40–45 °C |
 | Warm-spell duration pressure | Warm spell duration (WSDI) | 0.12 | 0.45 / 0.40 / 0.15 | 6–18 days |
@@ -749,7 +749,7 @@ Targets the climatic drivers of heat mortality and waterborne/vector disruption:
 
 Scores process-disruption and water/heat-derating pressures on industry: extreme operational heat (the dominant rule at 0.40), one- and five-day rainfall disruption, and prolonged dry spells stressing process-water supply.
 
-| Rule | Source metric | Rule weight | Lens archetype | Impact band |
+| Rule | Source metric | Rule weight | Lens weights (abs/chg/imp) | Impact band |
 |---|---|---|---|---|
 | 1-day rainfall disruption pressure | Max 1-day precipitation (Rx1day) | 0.25 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
 | 5-day rainfall disruption pressure | Max 5-day precipitation (Rx5day) | 0.15 | 0.45 / 0.40 / 0.15 | 250–500 mm |
@@ -760,7 +760,7 @@ Scores process-disruption and water/heat-derating pressures on industry: extreme
 
 Emphasises *emergence vs the historical baseline* — the signal an investor cares about. It pairs the rainfall-disruption rules with two change-weighted regime metrics: extreme-wet concentration (R99p, change-dominant) and heatwave persistence (HWFI), plus chronic dry-spell water stress for water-intensive assets.
 
-| Rule | Source metric | Rule weight | Lens archetype | Impact band |
+| Rule | Source metric | Rule weight | Lens weights (abs/chg/imp) | Impact band |
 |---|---|---|---|---|
 | 1-day rainfall disruption pressure | Max 1-day precipitation (Rx1day) | 0.25 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
 | 5-day rainfall accumulation pressure | Max 5-day precipitation (Rx5day) | 0.15 | 0.45 / 0.40 / 0.15 | 250–500 mm |
@@ -772,7 +772,7 @@ Emphasises *emergence vs the historical baseline* — the signal an investor car
 
 A compact three-rule design centred on rainfall design loads: one-day design rainfall dominates (0.45), followed by five-day accumulation (0.30) and extreme-heat asset stress (0.25).
 
-| Rule | Source metric | Rule weight | Lens archetype | Impact band |
+| Rule | Source metric | Rule weight | Lens weights (abs/chg/imp) | Impact band |
 |---|---|---|---|---|
 | 1-day rainfall design pressure | Max 1-day precipitation (Rx1day) | 0.45 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
 | 5-day rainfall design pressure | Max 5-day precipitation (Rx5day) | 0.30 | 0.45 / 0.40 / 0.15 | 250–500 mm |
@@ -782,7 +782,7 @@ A compact three-rule design centred on rainfall design loads: one-day design rai
 
 Targets the two climate vulnerabilities of thermal generation: cooling-water availability (dry-spell CDD and an SPI-3 low-flow proxy) and cooling-efficiency loss under extreme heat, weighted roughly evenly (0.35 / 0.35 / 0.30).
 
-| Rule | Source metric | Rule weight | Lens archetype | Impact band |
+| Rule | Source metric | Rule weight | Lens weights (abs/chg/imp) | Impact band |
 |---|---|---|---|---|
 | Dry-spell cooling-water pressure | Consecutive dry days (CDD) | 0.35 | 0.40 / 0.30 / 0.30 | 30–90 days |
 | Extreme heat cooling-efficiency pressure | Annual max temperature (TXx) | 0.35 | 0.40 / 0.25 / 0.35 | 40–45 °C |
@@ -792,7 +792,7 @@ Targets the two climate vulnerabilities of thermal generation: cooling-water ava
 
 Scores inflow-driven generation risk: heavy 5-day rainfall stressing spillway/operations (dominant at 0.45), prolonged dry spells cutting reservoir inflow, and the inflow-predictability signal from R95p **interannual variability** — a helper metric (the coefficient of variation of yearly very-wet precipitation, §7.2/Appendix A) sharing the Rx5day/CDD baseline epoch.
 
-| Rule | Source metric | Rule weight | Lens archetype | Impact band |
+| Rule | Source metric | Rule weight | Lens weights (abs/chg/imp) | Impact band |
 |---|---|---|---|---|
 | 5-day rainfall operations pressure | Max 5-day precipitation (Rx5day) | 0.45 | 0.45 / 0.40 / 0.15 | 250–500 mm |
 | Dry-spell flow pressure | Consecutive dry days (CDD) | 0.35 | 0.40 / 0.30 / 0.30 | 30–90 days |
@@ -802,7 +802,7 @@ Scores inflow-driven generation risk: heavy 5-day rainfall stressing spillway/op
 
 Captures the direct human-exposure hazards: extreme one- and five-day rainfall (flood exposure), prolonged dry spells driving livelihood/crop failure, and warm-spell heat mortality. One-day rainfall carries the largest weight (0.30).
 
-| Rule | Source metric | Rule weight | Lens archetype | Impact band |
+| Rule | Source metric | Rule weight | Lens weights (abs/chg/imp) | Impact band |
 |---|---|---|---|---|
 | 1-day rainfall exposure pressure | Max 1-day precipitation (Rx1day) | 0.30 | 0.40 / 0.25 / 0.35 | 115.6–204.5 mm |
 | 5-day rainfall exposure pressure | Max 5-day precipitation (Rx5day) | 0.25 | 0.40 / 0.30 / 0.30 | 250–500 mm |
