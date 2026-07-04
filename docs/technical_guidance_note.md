@@ -836,11 +836,11 @@ The published combinations differ between the Thematic and Sectoral bundles:
 
 ### 8.2 District vs Block Resolution Behaviour
 
-Both district (ADM2) and block (ADM3) composites are computed **independently from the grid-first index pipeline** — block scores are *not* aggregated down from district scores, nor districts up from blocks; each level combines the 0.25° grid cells into its own polygons in proportion to how much of each cell falls inside them (§4.2). All bundles, thematic and sectoral, support both levels.
+Both district (ADM2) and block (ADM3) composites are computed **independently from the grid-first index pipeline**; each level combines the 0.25° grid cells into its own polygons in proportion to how much of each cell falls inside them (§4.2). All bundles, thematic and sectoral, support both levels.
 
 Two resolution effects follow:
 
-- **Grid coverage.** A district overlaps many 0.25° cells; a small block may overlap only one or two. Block-level scores therefore inherit more spatial variability and are more sensitive to individual grid-cell values and to distortions where a grid cell straddles a boundary and only partly covers the unit. This is a property of the ~25 km native grid, not a defect of the aggregation.
+- **Grid coverage.** A district overlaps many 0.25° cells; a small block may overlap only one or two. Each grid point is treated as a 0.25° square *tile*, and these tiles cover the whole map with no gaps — so a block is never left "between" grid points and always receives a value. A block smaller than one cell sits entirely inside a single tile and simply **takes that one cell's value**; any other small blocks falling inside the same cell take the *same* value. Block-level scores therefore cannot resolve contrast finer than the ~25 km cell: they inherit more spatial variability, are more sensitive to individual grid-cell values, and are more exposed to distortions where a cell straddles a boundary and only partly covers the unit. This is a property of the native grid, not a defect of the aggregation.
 - **Cohort separation.** The normalization cohort (per-period for thematic, the absolute/change lens cohort for sectoral) is the set of units *at that level within the state* (§6.2/§7.2). District scores and block scores are thus normalized against **different cohorts**: a district scoring 80 and a block scoring 80 are not on the same scale, and the two levels should not be cross-compared unit-to-unit. Each level is internally consistent; they are parallel views, not a single nested hierarchy of scores.
 
 ---
