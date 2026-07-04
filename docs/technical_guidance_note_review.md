@@ -466,3 +466,61 @@ No external categorical referent by definition — only the *anchors* in the rat
 - §1.2 "existing global indices are coarser / less India-specific" — *intended non-comparative*, but the one framing claim with an implicit external referent; treat per F14.
 
 **Reading these two appendices together:** every class of claim in the note now has a declared check route — Appendix R1 items go to the web (W1–W5 first), Appendix R2 items go to code-fidelity + internal-consistency (most already ✅), and the residual exposure for R2 is **defensibility** of the self-derived bands (E) and the JRC matrix/bins (D), which IRT must justify on its own authority.
+
+---
+
+## Appendix F — Figure Inventory (all figures the note needs)
+
+Working list of every figure the note should carry, for ready reference during the figure-insertion pass. Ties to finding **F9** (pending figures underpin quantitative claims). IDs use a `FIG-` prefix to avoid collision with the review findings (F1–F21).
+
+**Priority key:** ● Essential (concept is hard to grasp from prose alone) · ◐ Recommended · ○ Optional
+**Source/effort:** *Notebook/pipeline* = buildable from existing outputs · *Author* = hand-drawn schematic or synthetic plot.
+
+### Already reserved in the note (§3.4 validation figures)
+
+These five are the only figures the note currently promises; they sit in the `[FIGURES TO INSERT]` block at §3.4 and several §3.4 numeric claims depend on them.
+
+| ID | Figure | Type | Source |
+|---|---|---|---|
+| FIG-V1 | Taylor diagram — `tas` vs ERA5, Telangana 1980–85 | Data viz | `notebooks/era5_vs_cmip_clean_tel_1980_1985.ipynb` |
+| FIG-V2 | Taylor diagram — `pr` vs ERA5, Telangana | Data viz | same |
+| FIG-V3 | Taylor diagram — `pr` vs IMD, Telangana | Data viz | `notebooks/rainfall_metrics_imd_cmip6_tel_box_1980_1985.ipynb` |
+| FIG-V4 | nRMSE heatmap — precip metrics vs ERA5 & IMD, 24 models | Data viz | same |
+| FIG-V5 | Rx1day bar chart — IMD vs 24 CMIP6, Adilabad | Data viz | same |
+
+### Proposed new figures
+
+| ID | § | Figure | Type | Priority | Source/effort |
+|---|---|---|---|---|---|
+| FIG-01 | §1 | End-to-end pipeline flow: data → downscaling → grid-first compute → metrics → thematic/sectoral bundles → 0–100 composite | Schematic | ● | Author (mirrors §1 "order a score is built" table) |
+| FIG-02 | §1 | Hazard × exposure × vulnerability decomposition, IRT supplying only the **hazard** term | Schematic | ◐ | Author (IPCC 2022 framing) |
+| FIG-03 | §1 | India physiographic zones → hazard portfolio map (arid NW heat, Himalaya cloudburst, IGP flood/heat, coast cyclone, peninsula drought) | Map | ○ | Author from RBI 2023; needs base map |
+| FIG-04 | §2 | India domain (68–97.5°E, 5–45°N) with 0.25° grid overlaid, 118×160 cells | Map | ◐ | Notebook/pipeline |
+| FIG-05 | §2.2 | Temporal-coverage timeline: historical 1950–2014 + SSP 2015–2100, baseline 1990–2010 + three future windows marked | Schematic | ◐ | Author |
+| FIG-06 | §3.2 | **BCSD schematic**: coarse GCM grid → monthly CDF quantile-mapping → spatial disaggregation → 0.25° grid | Schematic | ● | Author |
+| FIG-07 | §3.2 | Quantile-mapping transfer function: $F_{obs}$, $F_{mod}$ CDFs and $x'=F_{obs}^{-1}(F_{mod}(x))$ | Plot | ◐ | Author / synthetic |
+| FIG-08 | §3.3 | Resolution zoom: one district and one block with 0.25° cells overlaid (district 4–20 cells; block ≤1–4) — anchors §3.3 **and** §8.2 | Map | ● | Notebook/pipeline |
+| FIG-09 | §4.1 | **Admin-first vs grid-first** worked example: city cell 36–38°C / valley cell 28–30°C → admin-first 0 hot days, grid-first 2.5 | Schematic | ● | Author |
+| FIG-10 | §4.2 | Fractional-area overlap: admin polygon over grid tiles, intersection areas shaded (the $a_{ij}$ weights) | Schematic | ◐ | Author / buildable |
+| FIG-11 | §4.3 | Three-stage temporal chain: daily→annual→period mean→ensemble mean, 24-model fan collapsing to the mean | Schematic | ◐ | Author |
+| FIG-12 | §5.1 | **DOY percentile threshold curve** $\tau_d$ with ±2-day pooling window and exceedances marked (the TX90p worked example) | Plot | ● | Notebook/pipeline (one cell's baseline) |
+| FIG-13 | §5.1 | Heatwave amplitude (hwa): temp series, threshold curve, worst spell + amplitude marked | Plot | ◐ | Notebook/pipeline |
+| FIG-14 | §5.3 | **SPI derivation**: gamma fit → mixed CDF $H(x)$ → normal-quantile transform to SPI | 3-panel plot | ● | Notebook/pipeline |
+| FIG-15 | §5.5 | JRC severity 5×5 lookup as a colored heatmap (depth × extent → class 1–5) | Data viz | ○ | Table already exists; low value-add |
+| FIG-16 | §6.2 | Per-period min–max normalization: raw metric distribution → 0–100 rescale, incl. flat-field→50 degenerate case | Plot | ◐ | Author / synthetic |
+| FIG-17 | §6 | Example thematic output map: one bundle (e.g. Heat Risk) composite at district level for a state | Map | ◐ | Notebook/pipeline |
+| FIG-18 | §7.2 | **Three-lens blended rule**: absolute + change + impact → weighted rule score → bundle composite (centerpiece of §7) | Schematic | ● | Author |
+| FIG-19 | §7.2 | Impact-band ramp: $\text{clip}((v-a)/(b-a))\times100$ from onset $a$ to saturation $b$ | Plot | ◐ | Author |
+| FIG-20 | §7.3 | Worked example (District A vs B, TXx): $S_{abs}/S_{chg}/S_{imp}$ + blended vs pure-absolute, showing B rescued | Bar/panel | ● | Author from §7.3 table |
+| FIG-21 | §7.2 | Robust p10–p90 (sectoral) vs min–max (thematic) normalization contrast on the same field | Plot | ◐ | Author / synthetic |
+| FIG-22 | §8 | Three-tier band legend (low 0–33.3 / mod 33.3–66.6 / high 66.6–100) | Legend | ○ | Author (trivial) |
+| FIG-23 | §8.2 | **District vs block resolution**: same area rendered at both levels side by side (pairs with FIG-08) | Map | ◐ | Notebook/pipeline |
+
+### Roll-up
+
+- **5** validation figures already reserved (FIG-V1–V5).
+- **23** proposed new (FIG-01–23): **8 Essential** (FIG-01, 06, 08, 09, 12, 14, 18, 20), **11 Recommended**, **4 Optional**.
+- By effort: ~9 buildable from existing notebooks/pipeline outputs, ~14 hand-authored schematics/plots.
+- **Suggested minimum set** for a coherent draft: the 8 Essential + FIG-V1–V5 (= 13 figures).
+
+**Next step (not yet done):** once a shortlist is chosen, insert numbered `[FIGURE FIG-nn: …]` placeholder callouts at the anchor points in `technical_guidance_note.md` so the draft carries its own figure manifest — a note edit, held for `APPROVED: APPLY`.
