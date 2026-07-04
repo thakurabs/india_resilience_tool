@@ -823,16 +823,16 @@ The published combinations differ between the Thematic and Sectoral bundles:
 
 | Bundle type | Scenarios | Periods |
 |---|---|---|
-| **Thematic** (§6) | SSP2-4.5, SSP5-8.5, plus **Snapshot** (the static Riverine bundle) | `Current`, `2020-2040`, `2040-2060`, `2060-2080` |
+| **Thematic — projected** (§6) | SSP2-4.5, SSP5-8.5 | `2020-2040`, `2040-2060`, `2060-2080` |
+| **Thematic — static** (Riverine Flood, §6.2) | Snapshot | `Current` (a single static snapshot) |
 | **Sectoral** (§7) | SSP2-4.5, SSP5-8.5 | `2020-2040`, `2040-2060`, `2060-2080` |
 
-The sectoral method does **not** publish a historical or `Current` period: the 1990–2010 window enters sectoral scores only as the change-lens *baseline* (§7.2), never as an output column. The **Riverine Flood** bundle is the lone static case — a single `Snapshot` published under the `Current` period label (§2.2), with no scenario or future-period dimension (§5.5/§6.2).
+`Current` is **not** a modeled near-present period — it is the fixed label under which a single *static* snapshot is filed, and only the **Riverine Flood** bundle uses it: one `Snapshot` value with no scenario and no future-period dimension (§2.2, §5.5/§6.2). The climate (SSP) thematic bundles have no `Current` output; their scores exist only for the three future windows. The sectoral method likewise publishes no historical or `Current` period — for it, the 1990–2010 window enters only as the change-lens *baseline* (§7.2), never as an output column.
 
 **Comparability:** Both methods rescale each unit *within its cohort* — the other units at the same level, in the same state, for that scenario and period. Because the yardstick is the cohort and not a fixed physical scale, composite scores are **not** directly comparable across periods or states, despite sharing the 0–100 range:
 
 - **Thematic** composites are re-normalized on each period's own spatial min–max. A unit scoring 70 in `2040-2060` and 70 in `2060-2080` is "near the top of its state's spread *in each of those periods*" — it is **not** a statement that the hazard is unchanged between them, nor that the two 70s denote the same physical magnitude. Only the *within-period* ranking of units is strictly valid.
 - **Sectoral** composites blend relative lenses (absolute, change) with the absolute impact lens, so only the **impact component** carries genuine cross-period and cross-state meaning; the blended number mixes ranking and danger and must be read with the lens decomposition (§7.3) when comparing across periods or states.
-- A true cross-period change signal for the thematic bundles would require the **baseline-anchored** normalization that exists but is dormant (§6.2); it is noted here as the intended future path, not a current property.
 
 ### 8.2 District vs Block Resolution Behaviour
 
