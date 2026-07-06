@@ -604,29 +604,55 @@ def figure_18() -> str:
         text(60, 48, "FIG-18. Three-Lens Blended Rule Schematic", "title"),
         text(60, 74, "Sectoral rules blend relative absolute pressure, change from baseline, and fixed impact-band position before bundle aggregation.", "subtitle"),
     ]
-    body.extend(box(60, 160, 210, 120, COLORS["light_blue"], COLORS["source"], "Inputs", ["future metric v", "1990-2010 baseline", "impact band [a,b]"]))
+    body.extend(box(50, 256, 210, 120, COLORS["light_blue"], COLORS["source"], "Inputs", ["future metric v", "1990-2010 baseline", "impact band [a,b]"]))
     lanes = [
-        (390, 118, "S_abs", "p10-p90 cohort position", COLORS["source"], "#e7f2fb"),
-        (390, 268, "S_chg", "change vs 1990-2010, then p10-p90", COLORS["process"], "#e4f7f4"),
-        (390, 418, "S_imp", "clip((v-a)/(b-a)) x 100", COLORS["hazard"], "#fff2cc"),
+        (325, 138, "S_abs", "p10-p90 cohort position", COLORS["source"], "#e7f2fb"),
+        (325, 268, "S_chg", "change vs 1990-2010, then p10-p90", COLORS["process"], "#e4f7f4"),
+        (325, 398, "S_imp", "clip((v-a)/(b-a)) x 100", COLORS["hazard"], "#fff2cc"),
     ]
+    body.append(line(260, 316, 300, 316, COLORS["muted"], 2.0))
+    body.append(line(300, 186, 300, 446, COLORS["muted"], 2.0))
     for x, y, title, sub, stroke, fill in lanes:
-        body.append(arrow(270, 220, x - 18, y + 60))
+        lens_center_y = y + 48
+        body.append(arrow(300, lens_center_y, x, lens_center_y))
         body.extend(box(x, y, 250, 96, fill, stroke, title, [sub], radius=5))
-        body.append(arrow(x + 250, y + 48, 735, 318))
-    body.extend(box(735, 266, 180, 104, COLORS["light_rose"], COLORS["output"], "Rule score S_r", ["lens-weighted mean", "weights per rule"]))
-    body.append(text(820, 394, "Unavailable lenses omitted; weights renormalized.", "small", "middle"))
-    for i, y in enumerate([175, 308, 441]):
-        body.extend(box(965, y, 150, 64, "#fff8e6", COLORS["hazard"], f"Rule {i+1}", [f"W_r{i+1}"], radius=5))
-        body.append(arrow(915, 318, 960, y + 32))
-    body.append(arrow(1115, 308, 1168, 308))
-    body.append(f'<circle cx="1148" cy="308" r="42" fill="{COLORS["light_rose"]}" stroke="{COLORS["output"]}" stroke-width="2"/>')
-    body.append(text(1148, 302, "Bundle", "label", "middle"))
-    body.append(text(1148, 322, "composite", "small", "middle"))
+        body.append(arrow(x + 250, lens_center_y, 610, lens_center_y))
+    body.append(line(610, 186, 610, 446, COLORS["muted"], 2.0))
+    body.append(arrow(610, 316, 640, 316))
+    body.extend(
+        box(
+            640,
+            250,
+            225,
+            132,
+            COLORS["light_rose"],
+            COLORS["output"],
+            "One rule score S_r",
+            ["lens-weighted mean", "available lenses only", "renormalized weights"],
+        )
+    )
+    body.append(arrow(865, 316, 895, 316))
+    body.append(line(895, 186, 895, 446, COLORS["grey"], 1.6, "6 5"))
+    body.append(text(895, 126, "repeat per declared rule", "small", "middle"))
+    repeated_rules = [
+        (930, 150, "Rule 1 score", "S_1, W_r1"),
+        (930, 280, "Rule 2 score", "S_2, W_r2"),
+        (930, 410, "Rule 3 score", "S_3, W_r3"),
+    ]
+    for x, y, label, subline in repeated_rules:
+        rule_center_y = y + 36
+        body.append(arrow(895, rule_center_y, x, rule_center_y))
+        body.extend(box(x, y, 150, 72, "#fff8e6", COLORS["hazard"], label, [subline], radius=5))
+        body.append(arrow(x + 150, rule_center_y, 1105, rule_center_y))
+    body.append(line(1105, 186, 1105, 446, COLORS["muted"], 2.0))
+    body.append(arrow(1105, 316, 1130, 316))
+    body.append(f'<circle cx="1160" cy="316" r="30" fill="{COLORS["light_rose"]}" stroke="{COLORS["output"]}" stroke-width="2"/>')
+    body.append(text(1160, 310, "Bundle", "label", "middle"))
+    body.append(text(1160, 330, "composite", "small", "middle"))
     body.extend(
         box(
             160,
-            615,
+            610,
             880,
             70,
             "#f4f6f8",
