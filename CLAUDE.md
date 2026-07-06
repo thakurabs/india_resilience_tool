@@ -25,6 +25,8 @@ Requires explicit approval before acting:
 
 When approval is unclear: produce a patch + plan, **do not apply changes**.
 
+**When you ask the user a question, stop and wait for their answer.** Do not proceed on best-judgment or on a prompt timeout; the pending decision is theirs.
+
 Preferred approval signals from the user:
 - `APPROVED: APPLY`
 - `APPROVED: RUN TESTS`
