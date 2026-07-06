@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<title>FIG-12. DOY percentile threshold curve</title>
+<desc>Illustrative seasonal percentile threshold.</desc>
+<style>
+text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
+.title { font-size: 26px; font-weight: 700; }
+.subtitle { font-size: 15px; fill: #52606d; }
+.label { font-size: 15px; font-weight: 700; }
+.small { font-size: 12px; fill: #52606d; }
+.tiny { font-size: 10.5px; fill: #52606d; }
+.note { font-size: 12px; fill: #3e4c59; font-style: italic; }
+.axis { stroke: #52606d; stroke-width: 1.2; }
+.gridline { stroke: #d9e2ec; stroke-width: 1; }
+.arrow { stroke: #52606d; stroke-width: 2.0; fill: none; marker-end: url(#arrow); }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+<path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
+</marker>
+</defs>
+<rect width="1200" height="760" fill="white"/>
+<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-12. DOY Percentile Threshold Curve</text>
+<text x="60.0" y="74.0" class="subtitle" text-anchor="start">A day-of-year threshold tau_d is calibrated from a +/-2-day baseline window and applied unchanged to evaluation years.</text>
+<rect x="95" y="125" width="990" height="455" fill="#f8fafc" stroke="#d9e2ec"/>
+<line x1="95.0" y1="145" x2="95.0" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="177.5" y1="145" x2="177.5" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="260.0" y1="145" x2="260.0" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="342.5" y1="145" x2="342.5" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="425.0" y1="145" x2="425.0" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="507.5" y1="145" x2="507.5" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="590.0" y1="145" x2="590.0" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="672.5" y1="145" x2="672.5" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="755.0" y1="145" x2="755.0" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="837.5" y1="145" x2="837.5" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="920.0" y1="145" x2="920.0" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="1002.5" y1="145" x2="1002.5" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="1085.0" y1="145" x2="1085.0" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
+<line x1="150" y1="510.0" x2="1057" y2="510.0" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="140.0" y="514.0" class="tiny" text-anchor="end">18</text>
+<line x1="150" y1="460.0" x2="1057" y2="460.0" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="140.0" y="464.0" class="tiny" text-anchor="end">22</text>
+<line x1="150" y1="410.0" x2="1057" y2="410.0" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="140.0" y="414.0" class="tiny" text-anchor="end">26</text>
+<line x1="150" y1="360.0" x2="1057" y2="360.0" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="140.0" y="364.0" class="tiny" text-anchor="end">30</text>
+<line x1="150" y1="310.0" x2="1057" y2="310.0" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="140.0" y="314.0" class="tiny" text-anchor="end">34</text>
+<line x1="150" y1="260.0" x2="1057" y2="260.0" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="140.0" y="264.0" class="tiny" text-anchor="end">38</text>
+<line x1="150" y1="210.0" x2="1057" y2="210.0" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="140.0" y="214.0" class="tiny" text-anchor="end">42</text>
+<line x1="150" y1="535" x2="1057" y2="535" stroke="#52606d" stroke-width="1.3"/>
+<line x1="150" y1="145" x2="150" y2="535" stroke="#52606d" stroke-width="1.3"/>
+<polyline points="150.0,490.8 157.5,487.9 165.0,484.7 172.4,481.2 179.9,477.3 187.4,473.1 194.9,468.6 202.3,463.9 209.8,458.9 217.3,453.7 224.8,448.4 232.2,442.8 239.7,437.2 247.2,431.4 254.7,425.6 262.1,419.7 269.6,413.7 277.1,407.8 284.6,401.9 292.0,396.0 299.5,390.1 307.0,384.4 314.5,378.7 321.9,373.1 329.4,367.7 336.9,362.3 344.4,357.1 351.8,352.1 359.3,347.2 366.8,342.5 374.3,337.9 381.7,333.5 389.2,329.3 396.7,325.2 404.2,321.4 411.6,317.7 419.1,314.1 426.6,310.7 434.1,307.5 441.5,304.5 449.0,301.6 456.5,298.8 464.0,296.2 471.4,293.7 478.9,291.4 486.4,289.2 493.9,287.2 501.3,285.2 508.8,283.4 516.3,281.7 523.8,280.2 531.2,278.8 538.7,277.5 546.2,276.3 553.7,275.3 561.1,274.4 568.6,273.7 576.1,273.1 583.6,272.7 591.0,272.5 598.5,272.4 606.0,272.5 613.5,272.8 620.9,273.4 628.4,274.1 635.9,275.0 643.4,276.2 650.8,277.7 658.3,279.3 665.8,281.3 673.3,283.5 680.7,286.0 688.2,288.7 695.7,291.8 703.2,295.1 710.6,298.7 718.1,302.6 725.6,306.7 733.1,311.2 740.5,315.9 748.0,320.9 755.5,326.1 763.0,331.6 770.4,337.3 777.9,343.2 785.4,349.3 792.9,355.6 800.3,362.1 807.8,368.7 815.3,375.4 822.8,382.1 830.2,389.0 837.7,395.8 845.2,402.7 852.7,409.6 860.2,416.4 867.6,423.1 875.1,429.7 882.6,436.1 890.1,442.4 897.5,448.4 905.0,454.3 912.5,459.8 920.0,465.1 927.4,470.1 934.9,474.8 942.4,479.0 949.9,483.0 957.3,486.5 964.8,489.6 972.3,492.3 979.8,494.5 987.2,496.3 994.7,497.7 1002.2,498.6 1009.7,499.1 1017.1,499.1 1024.6,498.6 1032.1,497.7 1039.6,496.4 1047.0,494.6 1054.5,492.4" fill="none" stroke="#b8324f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="444.0274725274725" y1="145" x2="444.0274725274725" y2="535" stroke="#c77700" stroke-width="1.2" stroke-dasharray="5 4"/>
+<line x1="453.99450549450546" y1="145" x2="453.99450549450546" y2="535" stroke="#c77700" stroke-width="1.2" stroke-dasharray="5 4"/>
+<rect x="444.010989010989" y="145" width="10" height="390" fill="#f59e0b" fill-opacity="0.12"/>
+<text x="449.0" y="564.0" class="small" text-anchor="middle">1 May (DOY 121)</text>
+<text x="513.0" y="167.0" class="small" text-anchor="start">+/-2-day pooling window</text>
+<circle cx="441.53571428571433" cy="230.00000000000006" r="6" fill="#c77700" stroke="white" stroke-width="1.5"/>
+<circle cx="449.010989010989" cy="212.50000000000006" r="6" fill="#c77700" stroke="white" stroke-width="1.5"/>
+<circle cx="456.48626373626377" cy="203.75" r="6" fill="#c77700" stroke="white" stroke-width="1.5"/>
+<circle cx="546.1895604395604" cy="248.75" r="6" fill="#c77700" stroke="white" stroke-width="1.5"/>
+<circle cx="770.4478021978022" cy="335.0" r="6" fill="#c77700" stroke="white" stroke-width="1.5"/>
+<text x="1069.0" y="177.0" class="label" text-anchor="end">tau_d: baseline 90th percentile</text>
+<text x="1069.0" y="201.0" class="small" text-anchor="end">orange points: evaluation-year exceedances</text>
+<text x="105.0" y="153.0" class="small" text-anchor="start">tasmax (deg C)</text>
+<text x="590.0" y="578.0" class="small" text-anchor="middle">day of year</text>
+<text x="60.0" y="710.0" class="note" text-anchor="start">Source: synthetic illustrative curve. Baseline concept: 1990-2010, Feb 29 excluded, strict exceedance x_t &gt; tau_d.</text>
+</svg>

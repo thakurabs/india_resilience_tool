@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<title>FIG-08. District/block resolution zoom</title>
+<desc>Illustrative resolution contrast.</desc>
+<style>
+text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
+.title { font-size: 26px; font-weight: 700; }
+.subtitle { font-size: 15px; fill: #52606d; }
+.label { font-size: 15px; font-weight: 700; }
+.small { font-size: 12px; fill: #52606d; }
+.tiny { font-size: 10.5px; fill: #52606d; }
+.note { font-size: 12px; fill: #3e4c59; font-style: italic; }
+.axis { stroke: #52606d; stroke-width: 1.2; }
+.gridline { stroke: #d9e2ec; stroke-width: 1; }
+.arrow { stroke: #52606d; stroke-width: 2.0; fill: none; marker-end: url(#arrow); }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+<path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
+</marker>
+</defs>
+<rect width="1200" height="760" fill="white"/>
+<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-08. District/Block Resolution Zoom with 0.25 Degree Cells</text>
+<text x="60.0" y="74.0" class="subtitle" text-anchor="start">Illustrative geometry showing why district outputs are better spatially sampled than small block outputs.</text>
+<rect x="70" y="125" width="485" height="455" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="312.0" y="108.0" class="label" text-anchor="middle">District-scale view</text>
+<line x1="90" y1="135" x2="90" y2="560" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="162" y1="135" x2="162" y2="560" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="234" y1="135" x2="234" y2="560" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="306" y1="135" x2="306" y2="560" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="378" y1="135" x2="378" y2="560" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="450" y1="135" x2="450" y2="560" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="522" y1="135" x2="522" y2="560" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="80" y1="150" x2="545" y2="150" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="80" y1="222" x2="545" y2="222" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="80" y1="294" x2="545" y2="294" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="80" y1="366" x2="545" y2="366" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="80" y1="438" x2="545" y2="438" stroke="#d9e2ec" stroke-width="1"/>
+<line x1="80" y1="510" x2="545" y2="510" stroke="#d9e2ec" stroke-width="1"/>
+<polygon points="135,182 215,145 335,160 453,226 503,335 452,482 310,535 182,492 103,378 94,262" fill="#dff0fb" fill-opacity="0.58" stroke="#2f80b7" stroke-width="3"/>
+<polygon points="150,210 220,172 285,210 250,295 170,318 112,270" fill="#fef3c7" fill-opacity="0.65" stroke="#52606d" stroke-width="1.4"/>
+<polygon points="220,172 333,176 425,235 354,307 285,210" fill="#d9f2ee" fill-opacity="0.65" stroke="#52606d" stroke-width="1.4"/>
+<polygon points="354,307 425,235 488,335 430,410 352,372" fill="#fde2e7" fill-opacity="0.65" stroke="#52606d" stroke-width="1.4"/>
+<polygon points="170,318 250,295 352,372 302,470 196,462 118,375" fill="#e7f0ff" fill-opacity="0.65" stroke="#52606d" stroke-width="1.4"/>
+<polygon points="302,470 352,372 430,410 438,462 328,515 196,462" fill="#ecfdf5" fill-opacity="0.65" stroke="#52606d" stroke-width="1.4"/>
+<polygon points="135,182 215,145 335,160 453,226 503,335 452,482 310,535 182,492 103,378 94,262" fill="none" stroke="#2f80b7" stroke-width="3"/>
+<text x="168.0" y="607.0" class="small" text-anchor="start">District intersects many cells (typical: 4-20)</text>
+<rect x="650" y="125" width="485" height="455" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="892.0" y="108.0" class="label" text-anchor="middle">Block-scale zoom</text>
+<line x1="670" y1="135" x2="670" y2="560" stroke="#d9e2ec" stroke-width="1.6"/>
+<line x1="788" y1="135" x2="788" y2="560" stroke="#d9e2ec" stroke-width="1.6"/>
+<line x1="906" y1="135" x2="906" y2="560" stroke="#d9e2ec" stroke-width="1.6"/>
+<line x1="1024" y1="135" x2="1024" y2="560" stroke="#d9e2ec" stroke-width="1.6"/>
+<line x1="660" y1="150" x2="1125" y2="150" stroke="#d9e2ec" stroke-width="1.6"/>
+<line x1="660" y1="268" x2="1125" y2="268" stroke="#d9e2ec" stroke-width="1.6"/>
+<line x1="660" y1="386" x2="1125" y2="386" stroke="#d9e2ec" stroke-width="1.6"/>
+<line x1="660" y1="504" x2="1125" y2="504" stroke="#d9e2ec" stroke-width="1.6"/>
+<polygon points="725,224 824,168 912,230 884,348 762,356" fill="#fef3c7" fill-opacity="0.75" stroke="#52606d" stroke-width="1.8"/>
+<polygon points="884,348 912,230 1026,253 1074,373 984,481 878,442" fill="#d9f2ee" fill-opacity="0.75" stroke="#52606d" stroke-width="1.8"/>
+<polygon points="762,356 884,348 878,442 785,508 698,432" fill="#e7f0ff" fill-opacity="0.75" stroke="#52606d" stroke-width="1.8"/>
+<polygon points="725,224 824,168 912,230 884,348 762,356" fill="none" stroke="#b8324f" stroke-width="3.5"/>
+<text x="760.0" y="607.0" class="small" text-anchor="start">Small blocks may occupy one or a few grid cells</text>
+<text x="600.0" y="350.0" class="small" text-anchor="middle">zoom</text>
+<path class="arrow" d="M 535.0 350.0 L 642.0 350.0"/>
+<rect x="158" y="650" width="884" height="62" rx="5" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.8" class="flow-box"/>
+<text x="600.0" y="673.0" class="label" text-anchor="middle" data-box="158,650,884,62">Figure note</text>
+<text x="600.0" y="696.0" class="small" text-anchor="middle" data-box="158,650,884,62">0.25 deg grid cell (~25 km scale; physical size varies by latitude). Illustrative geometry, not a boundary-derived map.</text>
+</svg>

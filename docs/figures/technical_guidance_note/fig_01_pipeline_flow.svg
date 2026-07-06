@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="760" viewBox="0 0 1320 760" role="img" aria-labelledby="title desc">
+<title>FIG-01. End-to-end pipeline flow</title>
+<desc>IRT pipeline schematic.</desc>
+<style>
+text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
+.title { font-size: 26px; font-weight: 700; }
+.subtitle { font-size: 15px; fill: #52606d; }
+.label { font-size: 15px; font-weight: 700; }
+.small { font-size: 12px; fill: #52606d; }
+.tiny { font-size: 10.5px; fill: #52606d; }
+.note { font-size: 12px; fill: #3e4c59; font-style: italic; }
+.axis { stroke: #52606d; stroke-width: 1.2; }
+.gridline { stroke: #d9e2ec; stroke-width: 1; }
+.arrow { stroke: #52606d; stroke-width: 2.0; fill: none; marker-end: url(#arrow); }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+<path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
+</marker>
+</defs>
+<rect width="1320" height="760" fill="white"/>
+<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-01. End-to-End IRT Pipeline Flow</text>
+<text x="60.0" y="74.0" class="subtitle" text-anchor="start">From source inputs to grid-first metrics, bundles, and 0-100 higher-is-worse hazard-pressure outputs.</text>
+<rect x="36" y="150" width="178" height="140" rx="6" fill="#dff0fb" stroke="#2f80b7" stroke-width="1.8" class="flow-box"/>
+<text x="125.0" y="195.0" class="label" text-anchor="middle" data-box="36,150,178,140">Climate and flood</text>
+<text x="125.0" y="212.0" class="label" text-anchor="middle" data-box="36,150,178,140">inputs</text>
+<text x="125.0" y="235.0" class="small" text-anchor="middle" data-box="36,150,178,140">NASA-NEX GDDP-CMIP6</text>
+<text x="125.0" y="252.0" class="small" text-anchor="middle" data-box="36,150,178,140">CEMS-GloFAS/JRC RP-100</text>
+<rect x="252" y="150" width="178" height="140" rx="6" fill="#edf7ff" stroke="#2f80b7" stroke-width="1.8" class="flow-box"/>
+<text x="341.0" y="186.5" class="label" text-anchor="middle" data-box="252,150,178,140">Source</text>
+<text x="341.0" y="203.5" class="label" text-anchor="middle" data-box="252,150,178,140">preparation</text>
+<text x="341.0" y="226.5" class="small" text-anchor="middle" data-box="252,150,178,140">BCSD applied by NASA</text>
+<text x="341.0" y="243.5" class="small" text-anchor="middle" data-box="252,150,178,140">India clip + unit</text>
+<text x="341.0" y="260.5" class="small" text-anchor="middle" data-box="252,150,178,140">conversion</text>
+<rect x="468" y="150" width="178" height="140" rx="6" fill="#d9f2ee" stroke="#2b8a7e" stroke-width="1.8" class="flow-box"/>
+<text x="557.0" y="186.5" class="label" text-anchor="middle" data-box="468,150,178,140">Grid-first index</text>
+<text x="557.0" y="203.5" class="label" text-anchor="middle" data-box="468,150,178,140">compute</text>
+<text x="557.0" y="226.5" class="small" text-anchor="middle" data-box="468,150,178,140">Annual per-cell indices</text>
+<text x="557.0" y="243.5" class="small" text-anchor="middle" data-box="468,150,178,140">Static flood metrics</text>
+<text x="557.0" y="260.5" class="small" text-anchor="middle" data-box="468,150,178,140">separately</text>
+<rect x="684" y="150" width="178" height="147" rx="6" fill="#e8f4f2" stroke="#2b8a7e" stroke-width="1.8" class="flow-box"/>
+<text x="773.0" y="173.0" class="label" text-anchor="middle" data-box="684,150,178,147">Spatial +</text>
+<text x="773.0" y="190.0" class="label" text-anchor="middle" data-box="684,150,178,147">temporal</text>
+<text x="773.0" y="207.0" class="label" text-anchor="middle" data-box="684,150,178,147">aggregation</text>
+<text x="773.0" y="230.0" class="small" text-anchor="middle" data-box="684,150,178,147">0.25 deg grid -&gt;</text>
+<text x="773.0" y="247.0" class="small" text-anchor="middle" data-box="684,150,178,147">polygons</text>
+<text x="773.0" y="264.0" class="small" text-anchor="middle" data-box="684,150,178,147">daily -&gt; annual -&gt;</text>
+<text x="773.0" y="281.0" class="small" text-anchor="middle" data-box="684,150,178,147">period -&gt; ensemble</text>
+<rect x="1116" y="150" width="178" height="140" rx="6" fill="#fde2e7" stroke="#b8324f" stroke-width="1.8" class="flow-box"/>
+<text x="1205.0" y="203.5" class="label" text-anchor="middle" data-box="1116,150,178,140">Composite output</text>
+<text x="1205.0" y="226.5" class="small" text-anchor="middle" data-box="1116,150,178,140">0-100 higher = worse</text>
+<text x="1205.0" y="243.5" class="small" text-anchor="middle" data-box="1116,150,178,140">District and block views</text>
+<path class="arrow" d="M 216.0 220.0 L 250.0 220.0"/>
+<path class="arrow" d="M 432.0 220.0 L 466.0 220.0"/>
+<path class="arrow" d="M 648.0 220.0 L 682.0 220.0"/>
+<text x="989.0" y="136.0" class="label" text-anchor="middle">Bundle construction</text>
+<rect x="900" y="150" width="178" height="64" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
+<text x="989.0" y="174.0" class="label" text-anchor="middle" data-box="900,150,178,64">Thematic</text>
+<text x="989.0" y="197.0" class="small" text-anchor="middle" data-box="900,150,178,64">co-normalized metrics</text>
+<rect x="900" y="226" width="178" height="64" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
+<text x="989.0" y="250.0" class="label" text-anchor="middle" data-box="900,226,178,64">Sectoral</text>
+<text x="989.0" y="273.0" class="small" text-anchor="middle" data-box="900,226,178,64">abs/chg/impact lenses</text>
+<path class="arrow" d="M 864.0 220.0 L 880.0 220.0 L 880.0 182.0 L 898.0 182.0"/>
+<path class="arrow" d="M 864.0 220.0 L 880.0 220.0 L 880.0 258.0 L 898.0 258.0"/>
+<path class="arrow" d="M 1080.0 182.0 L 1114.0 182.0"/>
+<path class="arrow" d="M 1080.0 258.0 L 1114.0 258.0"/>
+<rect x="36" y="330" width="1258" height="64" rx="5" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.8" class="flow-box"/>
+<text x="665.0" y="354.0" class="label" text-anchor="middle" data-box="36,330,1258,64">Hazard-pressure scope</text>
+<text x="665.0" y="377.0" class="small" text-anchor="middle" data-box="36,330,1258,64">Composite scores are hazard-pressure indices; exposure and vulnerability are not inputs.</text>
+<text x="60.0" y="492.0" class="label" text-anchor="start">Section path</text>
+<circle cx="165" cy="470" r="21" fill="#ffffff" stroke="#8b95a1" stroke-width="1.5"/>
+<text x="165.0" y="475.0" class="label" text-anchor="middle">2</text>
+<text x="165.0" y="514.0" class="small" text-anchor="middle">Data</text>
+<path class="arrow" d="M 192.0 470.0 L 296.0 470.0"/>
+<circle cx="325" cy="470" r="21" fill="#ffffff" stroke="#8b95a1" stroke-width="1.5"/>
+<text x="325.0" y="475.0" class="label" text-anchor="middle">3</text>
+<text x="325.0" y="514.0" class="small" text-anchor="middle">Downscaling</text>
+<path class="arrow" d="M 352.0 470.0 L 456.0 470.0"/>
+<circle cx="485" cy="470" r="21" fill="#ffffff" stroke="#8b95a1" stroke-width="1.5"/>
+<text x="485.0" y="475.0" class="label" text-anchor="middle">4</text>
+<text x="485.0" y="514.0" class="small" text-anchor="middle">Grid-first</text>
+<path class="arrow" d="M 512.0 470.0 L 616.0 470.0"/>
+<circle cx="645" cy="470" r="21" fill="#ffffff" stroke="#8b95a1" stroke-width="1.5"/>
+<text x="645.0" y="475.0" class="label" text-anchor="middle">5</text>
+<text x="645.0" y="514.0" class="small" text-anchor="middle">Metrics</text>
+<path class="arrow" d="M 672.0 470.0 L 776.0 470.0"/>
+<circle cx="805" cy="470" r="21" fill="#ffffff" stroke="#8b95a1" stroke-width="1.5"/>
+<text x="805.0" y="475.0" class="label" text-anchor="middle">6/7</text>
+<text x="805.0" y="514.0" class="small" text-anchor="middle">Bundles</text>
+<path class="arrow" d="M 832.0 470.0 L 936.0 470.0"/>
+<circle cx="965" cy="470" r="21" fill="#ffffff" stroke="#8b95a1" stroke-width="1.5"/>
+<text x="965.0" y="475.0" class="label" text-anchor="middle">8</text>
+<text x="965.0" y="514.0" class="small" text-anchor="middle">Output</text>
+<text x="60.0" y="710.0" class="note" text-anchor="start">Source: author-created schematic from technical guidance note sections 1-8.</text>
+</svg>

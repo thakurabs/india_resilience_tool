@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<title>FIG-09. Admin-first vs grid-first</title>
+<desc>Worked example of nonlinear threshold bias.</desc>
+<style>
+text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
+.title { font-size: 26px; font-weight: 700; }
+.subtitle { font-size: 15px; fill: #52606d; }
+.label { font-size: 15px; font-weight: 700; }
+.small { font-size: 12px; fill: #52606d; }
+.tiny { font-size: 10.5px; fill: #52606d; }
+.note { font-size: 12px; fill: #3e4c59; font-style: italic; }
+.axis { stroke: #52606d; stroke-width: 1.2; }
+.gridline { stroke: #d9e2ec; stroke-width: 1; }
+.arrow { stroke: #52606d; stroke-width: 2.0; fill: none; marker-end: url(#arrow); }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+<path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
+</marker>
+</defs>
+<rect width="1200" height="760" fill="white"/>
+<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-09. Admin-First vs Grid-First Worked Example</text>
+<text x="60.0" y="74.0" class="subtitle" text-anchor="start">Averaging before thresholding can erase a nonlinear extreme; grid-first computation preserves it.</text>
+<rect x="90" y="170" width="395" height="265" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="287.5" y="152.0" class="label" text-anchor="middle">Admin-first</text>
+<line x1="148" y1="393" x2="457" y2="393" stroke="#52606d" stroke-width="1.3"/>
+<line x1="148" y1="198" x2="148" y2="393" stroke="#52606d" stroke-width="1.3"/>
+<line x1="148" y1="377.25" x2="457" y2="377.25" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="138.0" y="381.2" class="tiny" text-anchor="end">28</text>
+<line x1="148" y1="345.75" x2="457" y2="345.75" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="138.0" y="349.8" class="tiny" text-anchor="end">30</text>
+<line x1="148" y1="314.25" x2="457" y2="314.25" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="138.0" y="318.2" class="tiny" text-anchor="end">32</text>
+<line x1="148" y1="282.75" x2="457" y2="282.75" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="138.0" y="286.8" class="tiny" text-anchor="end">34</text>
+<line x1="148" y1="251.25" x2="457" y2="251.25" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="138.0" y="255.2" class="tiny" text-anchor="end">36</text>
+<line x1="148" y1="219.75" x2="457" y2="219.75" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="138.0" y="223.8" class="tiny" text-anchor="end">38</text>
+<line x1="148" y1="267.0" x2="457" y2="267.0" stroke="#c77700" stroke-width="2" stroke-dasharray="6 5"/>
+<text x="360.0" y="259.0" class="tiny" text-anchor="start">35 deg C threshold</text>
+<circle cx="168" cy="314.25" r="4.5" fill="#8b95a1"/>
+<circle cx="234" cy="298.5" r="4.5" fill="#8b95a1"/>
+<circle cx="300" cy="282.75" r="4.5" fill="#8b95a1"/>
+<circle cx="366" cy="298.5" r="4.5" fill="#8b95a1"/>
+<circle cx="432" cy="314.25" r="4.5" fill="#8b95a1"/>
+<polyline points="168.0,314.2 234.0,298.5 300.0,282.8 366.0,298.5 432.0,314.2" fill="none" stroke="#8b95a1" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="170.0" y="471.0" class="small" text-anchor="start">District average</text>
+<text x="168.0" y="415.0" class="tiny" text-anchor="middle">D1</text>
+<text x="234.0" y="415.0" class="tiny" text-anchor="middle">D2</text>
+<text x="300.0" y="415.0" class="tiny" text-anchor="middle">D3</text>
+<text x="366.0" y="415.0" class="tiny" text-anchor="middle">D4</text>
+<text x="432.0" y="415.0" class="tiny" text-anchor="middle">D5</text>
+<rect x="690" y="170" width="395" height="265" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="887.5" y="152.0" class="label" text-anchor="middle">Grid-first</text>
+<line x1="748" y1="393" x2="1057" y2="393" stroke="#52606d" stroke-width="1.3"/>
+<line x1="748" y1="198" x2="748" y2="393" stroke="#52606d" stroke-width="1.3"/>
+<line x1="748" y1="377.25" x2="1057" y2="377.25" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="738.0" y="381.2" class="tiny" text-anchor="end">28</text>
+<line x1="748" y1="345.75" x2="1057" y2="345.75" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="738.0" y="349.8" class="tiny" text-anchor="end">30</text>
+<line x1="748" y1="314.25" x2="1057" y2="314.25" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="738.0" y="318.2" class="tiny" text-anchor="end">32</text>
+<line x1="748" y1="282.75" x2="1057" y2="282.75" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="738.0" y="286.8" class="tiny" text-anchor="end">34</text>
+<line x1="748" y1="251.25" x2="1057" y2="251.25" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="738.0" y="255.2" class="tiny" text-anchor="end">36</text>
+<line x1="748" y1="219.75" x2="1057" y2="219.75" stroke="#d9e2ec" stroke-width="0.9"/>
+<text x="738.0" y="223.8" class="tiny" text-anchor="end">38</text>
+<line x1="748" y1="267.0" x2="1057" y2="267.0" stroke="#c77700" stroke-width="2" stroke-dasharray="6 5"/>
+<text x="960.0" y="259.0" class="tiny" text-anchor="start">35 deg C threshold</text>
+<circle cx="768" cy="251.25" r="4.5" fill="#b8324f"/>
+<circle cx="834" cy="235.5" r="4.5" fill="#b8324f"/>
+<circle cx="900" cy="219.75" r="4.5" fill="#b8324f"/>
+<circle cx="966" cy="235.5" r="4.5" fill="#b8324f"/>
+<circle cx="1032" cy="251.25" r="4.5" fill="#b8324f"/>
+<polyline points="768.0,251.2 834.0,235.5 900.0,219.8 966.0,235.5 1032.0,251.2" fill="none" stroke="#b8324f" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="770.0" y="489.0" class="small" text-anchor="start">City cell</text>
+<circle cx="768" cy="377.25" r="4.5" fill="#2f80b7"/>
+<circle cx="834" cy="361.5" r="4.5" fill="#2f80b7"/>
+<circle cx="900" cy="345.75" r="4.5" fill="#2f80b7"/>
+<circle cx="966" cy="361.5" r="4.5" fill="#2f80b7"/>
+<circle cx="1032" cy="377.25" r="4.5" fill="#2f80b7"/>
+<polyline points="768.0,377.2 834.0,361.5 900.0,345.8 966.0,361.5 1032.0,377.2" fill="none" stroke="#2f80b7" stroke-width="2.8" stroke-linejoin="round" stroke-linecap="round"/>
+<text x="770.0" y="489.0" class="small" text-anchor="start">Valley cell</text>
+<text x="768.0" y="415.0" class="tiny" text-anchor="middle">D1</text>
+<text x="834.0" y="415.0" class="tiny" text-anchor="middle">D2</text>
+<text x="900.0" y="415.0" class="tiny" text-anchor="middle">D3</text>
+<text x="966.0" y="415.0" class="tiny" text-anchor="middle">D4</text>
+<text x="1032.0" y="415.0" class="tiny" text-anchor="middle">D5</text>
+<rect x="115" y="500" width="345" height="86" rx="6" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
+<text x="287.5" y="526.5" class="label" text-anchor="middle" data-box="115,500,345,86">Average first</text>
+<text x="287.5" y="549.5" class="small" text-anchor="middle" data-box="115,500,345,86">32-34 deg C all days</text>
+<text x="287.5" y="566.5" class="small" text-anchor="middle" data-box="115,500,345,86">Hot days &gt;35 deg C: 0</text>
+<rect x="720" y="500" width="345" height="86" rx="6" fill="#fde2e7" stroke="#b8324f" stroke-width="1.8" class="flow-box"/>
+<text x="892.5" y="526.5" class="label" text-anchor="middle" data-box="720,500,345,86">Threshold first</text>
+<text x="892.5" y="549.5" class="small" text-anchor="middle" data-box="720,500,345,86">City: 5 hot days; valley: 0</text>
+<text x="892.5" y="566.5" class="small" text-anchor="middle" data-box="720,500,345,86">Area-weighted mean: 2.5 hot days</text>
+<path class="arrow" d="M 485.0 545.0 L 690.0 545.0"/>
+<text x="60.0" y="710.0" class="note" text-anchor="start">Source: author-created schematic using the exact conceptual example in section 4.1; values are illustrative.</text>
+</svg>

@@ -54,6 +54,11 @@ processed/
 outputs/
 logs/
 figures/
+!docs/figures/
+!docs/figures/technical_guidance_note/
+!docs/figures/technical_guidance_note/*.py
+!docs/figures/technical_guidance_note/*.svg
+!docs/figures/technical_guidance_note/*.png
 tmp/
 temp/
 

@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<title>FIG-18. Three-lens blended rule schematic</title>
+<desc>Sectoral lens and rule aggregation schematic.</desc>
+<style>
+text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
+.title { font-size: 26px; font-weight: 700; }
+.subtitle { font-size: 15px; fill: #52606d; }
+.label { font-size: 15px; font-weight: 700; }
+.small { font-size: 12px; fill: #52606d; }
+.tiny { font-size: 10.5px; fill: #52606d; }
+.note { font-size: 12px; fill: #3e4c59; font-style: italic; }
+.axis { stroke: #52606d; stroke-width: 1.2; }
+.gridline { stroke: #d9e2ec; stroke-width: 1; }
+.arrow { stroke: #52606d; stroke-width: 2.0; fill: none; marker-end: url(#arrow); }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+<path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
+</marker>
+</defs>
+<rect width="1200" height="760" fill="white"/>
+<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-18. Three-Lens Blended Rule Schematic</text>
+<text x="60.0" y="74.0" class="subtitle" text-anchor="start">Sectoral rules blend relative absolute pressure, change from baseline, and fixed impact-band position before bundle aggregation.</text>
+<rect x="60" y="160" width="210" height="120" rx="6" fill="#dff0fb" stroke="#2f80b7" stroke-width="1.8" class="flow-box"/>
+<text x="165.0" y="195.0" class="label" text-anchor="middle" data-box="60,160,210,120">Inputs</text>
+<text x="165.0" y="218.0" class="small" text-anchor="middle" data-box="60,160,210,120">future metric v</text>
+<text x="165.0" y="235.0" class="small" text-anchor="middle" data-box="60,160,210,120">1990-2010 baseline</text>
+<text x="165.0" y="252.0" class="small" text-anchor="middle" data-box="60,160,210,120">impact band [a,b]</text>
+<path class="arrow" d="M 270.0 220.0 L 372.0 178.0"/>
+<rect x="390" y="118" width="250" height="96" rx="5" fill="#e7f2fb" stroke="#2f80b7" stroke-width="1.8" class="flow-box"/>
+<text x="515.0" y="158.0" class="label" text-anchor="middle" data-box="390,118,250,96">S_abs</text>
+<text x="515.0" y="181.0" class="small" text-anchor="middle" data-box="390,118,250,96">p10-p90 cohort position</text>
+<path class="arrow" d="M 640.0 166.0 L 735.0 318.0"/>
+<path class="arrow" d="M 270.0 220.0 L 372.0 328.0"/>
+<rect x="390" y="268" width="250" height="96" rx="5" fill="#e4f7f4" stroke="#2b8a7e" stroke-width="1.8" class="flow-box"/>
+<text x="515.0" y="308.0" class="label" text-anchor="middle" data-box="390,268,250,96">S_chg</text>
+<text x="515.0" y="331.0" class="small" text-anchor="middle" data-box="390,268,250,96">change vs 1990-2010, then p10-p90</text>
+<path class="arrow" d="M 640.0 316.0 L 735.0 318.0"/>
+<path class="arrow" d="M 270.0 220.0 L 372.0 478.0"/>
+<rect x="390" y="418" width="250" height="96" rx="5" fill="#fff2cc" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
+<text x="515.0" y="458.0" class="label" text-anchor="middle" data-box="390,418,250,96">S_imp</text>
+<text x="515.0" y="481.0" class="small" text-anchor="middle" data-box="390,418,250,96">clip((v-a)/(b-a)) x 100</text>
+<path class="arrow" d="M 640.0 466.0 L 735.0 318.0"/>
+<rect x="735" y="266" width="180" height="104" rx="6" fill="#fde2e7" stroke="#b8324f" stroke-width="1.8" class="flow-box"/>
+<text x="825.0" y="301.5" class="label" text-anchor="middle" data-box="735,266,180,104">Rule score S_r</text>
+<text x="825.0" y="324.5" class="small" text-anchor="middle" data-box="735,266,180,104">lens-weighted mean</text>
+<text x="825.0" y="341.5" class="small" text-anchor="middle" data-box="735,266,180,104">weights per rule</text>
+<text x="820.0" y="394.0" class="small" text-anchor="middle">Unavailable lenses omitted; weights renormalized.</text>
+<rect x="965" y="175" width="150" height="64" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
+<text x="1040.0" y="199.0" class="label" text-anchor="middle" data-box="965,175,150,64">Rule 1</text>
+<text x="1040.0" y="222.0" class="small" text-anchor="middle" data-box="965,175,150,64">W_r1</text>
+<path class="arrow" d="M 915.0 318.0 L 960.0 207.0"/>
+<rect x="965" y="308" width="150" height="64" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
+<text x="1040.0" y="332.0" class="label" text-anchor="middle" data-box="965,308,150,64">Rule 2</text>
+<text x="1040.0" y="355.0" class="small" text-anchor="middle" data-box="965,308,150,64">W_r2</text>
+<path class="arrow" d="M 915.0 318.0 L 960.0 340.0"/>
+<rect x="965" y="441" width="150" height="64" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
+<text x="1040.0" y="465.0" class="label" text-anchor="middle" data-box="965,441,150,64">Rule 3</text>
+<text x="1040.0" y="488.0" class="small" text-anchor="middle" data-box="965,441,150,64">W_r3</text>
+<path class="arrow" d="M 915.0 318.0 L 960.0 473.0"/>
+<path class="arrow" d="M 1115.0 308.0 L 1168.0 308.0"/>
+<circle cx="1148" cy="308" r="42" fill="#fde2e7" stroke="#b8324f" stroke-width="2"/>
+<text x="1148.0" y="302.0" class="label" text-anchor="middle">Bundle</text>
+<text x="1148.0" y="322.0" class="small" text-anchor="middle">composite</text>
+<rect x="160" y="615" width="880" height="70" rx="5" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.8" class="flow-box"/>
+<text x="600.0" y="642.0" class="label" text-anchor="middle" data-box="160,615,880,70">Two weight layers</text>
+<text x="600.0" y="665.0" class="small" text-anchor="middle" data-box="160,615,880,70">Lens weights combine S_abs/S_chg/S_imp inside a rule; rule weights combine finite rule scores into the sector bundle.</text>
+</svg>
