@@ -61,30 +61,30 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <circle cx="170" cy="300" r="17.0" fill="white" fill-opacity="0.88" stroke="#2b8a7e" stroke-width="1.2"/>
 <text x="170.0" y="298.0" class="tiny" text-anchor="middle">a_i5</text>
 <text x="170.0" y="313.0" class="tiny" text-anchor="middle">44%</text>
-<circle cx="285" cy="318" r="22.5" fill="white" fill-opacity="0.88" stroke="#2b8a7e" stroke-width="1.2"/>
-<text x="285.0" y="316.0" class="tiny" text-anchor="middle">a_i6</text>
-<text x="285.0" y="331.0" class="tiny" text-anchor="middle">78%</text>
-<circle cx="382" cy="285" r="15.3" fill="white" fill-opacity="0.88" stroke="#2b8a7e" stroke-width="1.2"/>
-<text x="382.0" y="283.0" class="tiny" text-anchor="middle">a_i7</text>
-<text x="382.0" y="298.0" class="tiny" text-anchor="middle">33%</text>
+<circle cx="255" cy="300" r="22.5" fill="white" fill-opacity="0.88" stroke="#2b8a7e" stroke-width="1.2"/>
+<text x="255.0" y="298.0" class="tiny" text-anchor="middle">a_i6</text>
+<text x="255.0" y="313.0" class="tiny" text-anchor="middle">78%</text>
+<circle cx="350" cy="300" r="15.3" fill="white" fill-opacity="0.88" stroke="#2b8a7e" stroke-width="1.2"/>
+<text x="350.0" y="298.0" class="tiny" text-anchor="middle">a_i7</text>
+<text x="350.0" y="313.0" class="tiny" text-anchor="middle">33%</text>
 <circle cx="262" cy="392" r="14.3" fill="white" fill-opacity="0.88" stroke="#2b8a7e" stroke-width="1.2"/>
 <text x="262.0" y="390.0" class="tiny" text-anchor="middle">a_i10</text>
 <text x="262.0" y="405.0" class="tiny" text-anchor="middle">27%</text>
 <text x="300.0" y="475.0" class="small" text-anchor="middle">Irregular admin polygon over 0.25 deg grid cells</text>
-<text x="300.0" y="500.0" class="tiny" text-anchor="middle">Green slivers and scaled discs encode polygon-cell overlap fraction a_ij.</text>
+<text x="300.0" y="500.0" class="tiny" text-anchor="middle">Green slivers and scaled discs encode equal-area weights a_ij.</text>
 <text x="705.0" y="156.0" class="label" text-anchor="middle">Weighted average</text>
 <g><text x="535.0" y="199.0" class="label" text-anchor="start">v&#772;<tspan baseline-shift="sub" font-size="11px">i</tspan> =</text><line x1="627.0" y1="186.0" x2="877.0" y2="186.0" stroke="#1f2933" stroke-width="1.3"/><text x="752.0" y="176.0" class="label" text-anchor="middle">&#931;<tspan baseline-shift="sub" font-size="11px">j</tspan> a<tspan baseline-shift="sub" font-size="11px">ij</tspan> v<tspan baseline-shift="sub" font-size="11px">j</tspan></text><text x="752.0" y="214.0" class="label" text-anchor="middle">&#931;<tspan baseline-shift="sub" font-size="11px">j</tspan> a<tspan baseline-shift="sub" font-size="11px">ij</tspan></text></g>
 <path class="arrow" d="M 492.0 300.0 L 590.0 210.0"/>
 <rect x="600" y="246" width="410" height="79" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
 <text x="805.0" y="269.0" class="label" text-anchor="middle" data-box="600,246,410,79">Equal-area rule</text>
-<text x="805.0" y="292.0" class="small" text-anchor="middle" data-box="600,246,410,79">Intersection areas a_ij are computed after reprojection to</text>
-<text x="805.0" y="309.0" class="small" text-anchor="middle" data-box="600,246,410,79">EPSG:6933.</text>
+<text x="805.0" y="292.0" class="small" text-anchor="middle" data-box="600,246,410,79">Cells are equal-area after EPSG:6933 reprojection, so area</text>
+<text x="805.0" y="309.0" class="small" text-anchor="middle" data-box="600,246,410,79">fraction is proportional to a_ij.</text>
 <rect x="642" y="374" width="82" height="34" rx="0" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.0"/>
 <text x="683.0" y="396.0" class="tiny" text-anchor="middle">cell</text>
 <rect x="724" y="374" width="82" height="34" rx="0" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.0"/>
 <text x="765.0" y="396.0" class="tiny" text-anchor="middle">value</text>
 <rect x="806" y="374" width="118" height="34" rx="0" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.0"/>
-<text x="865.0" y="396.0" class="tiny" text-anchor="middle">overlap</text>
+<text x="865.0" y="396.0" class="tiny" text-anchor="middle">area frac.</text>
 <rect x="924" y="374" width="108" height="34" rx="0" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.0"/>
 <text x="978.0" y="396.0" class="tiny" text-anchor="middle">contrib.</text>
 <rect x="642" y="408" width="82" height="34" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>

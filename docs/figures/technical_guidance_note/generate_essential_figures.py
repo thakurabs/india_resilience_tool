@@ -658,8 +658,8 @@ def figure_10() -> str:
         (185, 196, "a_i2", 0.52),
         (295, 212, "a_i3", 0.38),
         (170, 300, "a_i5", 0.44),
-        (285, 318, "a_i6", 0.78),
-        (382, 285, "a_i7", 0.33),
+        (255, 300, "a_i6", 0.78),
+        (350, 300, "a_i7", 0.33),
         (262, 392, "a_i10", 0.27),
     ]
     for x, y, label_value, frac in overlaps:
@@ -669,7 +669,7 @@ def figure_10() -> str:
         body.append(text(x, y + 13, f"{frac:.0%}", "tiny", "middle"))
 
     body.append(text(300, 475, "Irregular admin polygon over 0.25 deg grid cells", "small", "middle"))
-    body.append(text(300, 500, "Green slivers and scaled discs encode polygon-cell overlap fraction a_ij.", "tiny", "middle"))
+    body.append(text(300, 500, "Green slivers and scaled discs encode equal-area weights a_ij.", "tiny", "middle"))
     body.append(text(705, 156, "Weighted average", "label", "middle"))
     body.append(formula_area_weighted_average(705, 194))
     body.append(arrow(492, 300, 590, 210))
@@ -682,13 +682,13 @@ def figure_10() -> str:
             "#fff8e6",
             COLORS["hazard"],
             "Equal-area rule",
-            ["Intersection areas a_ij are computed after reprojection to EPSG:6933."],
+            ["Cells are equal-area after EPSG:6933 reprojection, so area fraction is proportional to a_ij."],
             radius=5,
         )
     )
     tx, ty = 642, 374
     widths = [82, 82, 118, 108]
-    headers = ["cell", "value", "overlap", "contrib."]
+    headers = ["cell", "value", "area frac.", "contrib."]
     x = tx
     for w, header in zip(widths, headers):
         body.append(rect(x, ty, w, 34, "#f4f6f8", COLORS["grey"], stroke_width=1.0))
