@@ -136,6 +136,36 @@ def formula_spi_transform(x: float, y: float, anchor: str = "middle") -> str:
     )
 
 
+def formula_area_weighted_average(x: float, y: float) -> str:
+    left_x = x - 170
+    frac_x = x - 78
+    frac_w = 250
+    return (
+        "<g>"
+        f'<text x="{left_x:.1f}" y="{y + 5:.1f}" class="label" text-anchor="start">'
+        "v&#772;"
+        '<tspan baseline-shift="sub" font-size="11px">i</tspan>'
+        " ="
+        "</text>"
+        f'<line x1="{frac_x:.1f}" y1="{y - 8:.1f}" x2="{frac_x + frac_w:.1f}" y2="{y - 8:.1f}" stroke="{COLORS["ink"]}" stroke-width="1.3"/>'
+        f'<text x="{frac_x + frac_w / 2:.1f}" y="{y - 18:.1f}" class="label" text-anchor="middle">'
+        "&#931;"
+        '<tspan baseline-shift="sub" font-size="11px">j</tspan>'
+        " a"
+        '<tspan baseline-shift="sub" font-size="11px">ij</tspan>'
+        " v"
+        '<tspan baseline-shift="sub" font-size="11px">j</tspan>'
+        "</text>"
+        f'<text x="{frac_x + frac_w / 2:.1f}" y="{y + 20:.1f}" class="label" text-anchor="middle">'
+        "&#931;"
+        '<tspan baseline-shift="sub" font-size="11px">j</tspan>'
+        " a"
+        '<tspan baseline-shift="sub" font-size="11px">ij</tspan>'
+        "</text>"
+        "</g>"
+    )
+
+
 def multiline(
     x: float,
     y: float,
@@ -284,6 +314,7 @@ def figure_02() -> str:
     body = [
         text(60, 48, "FIG-02. Hazard, Exposure, and Vulnerability Scope", "title"),
         text(60, 74, "IRT supplies the climate hazard-pressure layer; full risk also needs exposure and vulnerability inputs.", "subtitle"),
+        '<defs><pattern id="scope-hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#8b95a1" stroke-width="1.2" opacity="0.45"/></pattern></defs>',
     ]
     body.append(text(600, 128, "Climate risk = f(Hazard, Exposure, Vulnerability)", "label", "middle"))
     cards = [
@@ -314,9 +345,15 @@ def figure_02() -> str:
     ]
     for x, title, scope, examples, fill, stroke in cards:
         body.extend(box(x, 190, 310, 130, fill, stroke, title, [scope], radius=6))
-        body.append(text(x + 155, 362, "Examples", "label", "middle"))
+        if title != "Hazard":
+            body.append(f'<rect x="{x}" y="190" width="310" height="130" rx="6" fill="url(#scope-hatch)" stroke="none"/>')
+            body.append(rect(x + 135, 198, 166, 28, "white", stroke, stroke_width=1.0, radius=4))
+            body.append(text(x + 218, 217, "NOT PRODUCED BY IRT", "tiny", "middle"))
+        body.append(line(x + 155, 320, x + 155, 342, stroke, 1.0, "3 4"))
+        body.append(rect(x, 342, 310, 208, "white", stroke, stroke_width=1.0, radius=5))
+        body.append(text(x + 155, 370, "Examples", "label", "middle"))
         for i, example in enumerate(examples):
-            py = 398 + i * 42
+            py = 406 + i * 38
             body.append(f'<circle cx="{x + 62}" cy="{py - 4}" r="7" fill="{fill}" stroke="{stroke}" stroke-width="1.5"/>')
             body.append(text(x + 86, py, example, "small"))
     body.append(line(380, 255, 445, 255, COLORS["grey"], 2.0, "6 5"))
@@ -369,6 +406,9 @@ def figure_05() -> str:
         return x0 + (year - start) / (end - start) * (x1 - x0)
 
     axis_y = 620
+    for year in [1950, 1990, 2020, 2040, 2060, 2080, 2100]:
+        xx = xpos(year)
+        body.append(line(xx, 132, xx, axis_y, COLORS["grid"], 0.7))
     body.append(line(x0, axis_y, x1, axis_y, COLORS["muted"], 1.4))
     for year in [1950, 1990, 2020, 2040, 2060, 2080, 2100]:
         xx = xpos(year)
@@ -391,13 +431,13 @@ def figure_05() -> str:
     hist_y = 150
     body.append(rect(xpos(1950), hist_y, xpos(2014) - xpos(1950), 50, "#e7f2fb", COLORS["source"], stroke_width=1.5, radius=5))
     body.append(text((xpos(1950) + xpos(2014)) / 2, hist_y + 31, "Historical raw span: 1950-2014", "small", "middle"))
-    ssp_y = 220
+    ssp_y = 150
     body.append(rect(xpos(2015), ssp_y, xpos(2100) - xpos(2015), 50, "#e4f7f4", COLORS["process"], stroke_width=1.5, radius=5))
     body.append(text((xpos(2015) + xpos(2100)) / 2, ssp_y + 24, "SSP2-4.5 and SSP5-8.5 raw span", "small", "middle"))
     body.append(text((xpos(2015) + xpos(2100)) / 2, ssp_y + 41, "2015-2100", "tiny", "middle"))
     split_x = (xpos(2014) + xpos(2015)) / 2
-    body.append(line(split_x, hist_y + 50, split_x, ssp_y, COLORS["grey"], 1.0, "4 4"))
-    body.append(text(split_x, hist_y + 66, "2014/2015 handoff", "tiny", "middle"))
+    body.append(line(split_x, hist_y - 8, split_x, hist_y + 58, COLORS["grey"], 1.0, "4 4"))
+    body.append(text(split_x, hist_y + 78, "2014/2015 handoff", "tiny", "middle"))
 
     base_y = 330
     body.append(rect(xpos(1990), base_y, xpos(2010) - xpos(1990), 36, "#fff8e6", COLORS["hazard"], stroke_width=1.5, radius=4))
@@ -410,12 +450,12 @@ def figure_05() -> str:
     windows = [(2020, 2040), (2040, 2060), (2060, 2080)]
     win_y = 435
     for i, (a, b) in enumerate(windows):
-        fill = [COLORS["light_rose"], "#fdebd3", "#e7f2fb"][i]
-        body.append(rect(xpos(a), win_y, xpos(b) - xpos(a), 44, fill, COLORS["output"], stroke_width=1.5, radius=4))
+        fill = ["#e5f4f2", "#ccebe6", "#b6dfd8"][i]
+        body.append(rect(xpos(a), win_y, xpos(b) - xpos(a), 44, fill, COLORS["process"], stroke_width=1.5, radius=4))
         body.append(text((xpos(a) + xpos(b)) / 2, win_y + 27, f"{a}-{b}", "tiny", "middle"))
         if i > 0:
-            body.append(line(xpos(a), win_y - 10, xpos(a), win_y + 54, COLORS["output"], 0.9, "3 4"))
-    body.append(text((xpos(2020) + xpos(2080)) / 2, win_y + 75, "Future windows are inclusive 21-year means; endpoints are shared.", "small", "middle"))
+            body.append(line(xpos(a), win_y - 10, xpos(a), win_y + 54, COLORS["process"], 0.9, "3 4"))
+    body.append(text((xpos(2020) + xpos(2080)) / 2, win_y + 68, "Inclusive 21-year means; endpoints are shared.", "small", "middle"))
 
     snap_x = xpos(2025)
     snap_y = 555
@@ -593,35 +633,50 @@ def figure_10() -> str:
     ]
     gx, gy, cell = 88, 140, 96
     values = [22, 35, 48, 31, 55, 64, 46, 70, 82, 39, 52, 61]
+    value_colors = ["#edf7fb", "#d7eef7", "#bde1f1", "#92cde7", "#5ab3d6"]
     for r in range(3):
         for c in range(4):
             x = gx + c * cell
             y = gy + r * cell
             value = values[r * 4 + c]
-            shade = ["#e7f2fb", "#d9f2ee", "#fff2cc", "#fde2e7"][min(value // 22, 3)]
+            shade = value_colors[min(max((value - 20) // 14, 0), len(value_colors) - 1)]
             body.append(rect(x, y, cell, cell, shade, COLORS["grid"], stroke_width=1.1))
             body.append(text(x + cell - 10, y + 20, f"v{r * 4 + c + 1}={value}", "tiny", "end"))
     polygon = "150,178 310,150 442,230 398,372 252,424 126,326"
     body.append(f'<polygon points="{polygon}" fill="{COLORS["output"]}" fill-opacity="0.16" stroke="{COLORS["output"]}" stroke-width="3"/>')
-    overlaps = [
-        (185, 196, "a_i2"),
-        (295, 212, "a_i3"),
-        (170, 300, "a_i5"),
-        (285, 318, "a_i6"),
-        (382, 285, "a_i7"),
-        (262, 392, "a_i10"),
+    slivers = [
+        "184,156 280,154 312,198 184,218",
+        "304,158 410,218 374,258 286,212",
+        "122,246 220,240 230,338 130,330",
+        "220,240 360,260 330,380 236,396",
+        "360,260 434,238 398,372 330,380",
+        "236,396 330,380 300,428 250,424",
     ]
-    for x, y, label_value in overlaps:
-        body.append(f'<circle cx="{x}" cy="{y}" r="18" fill="white" fill-opacity="0.86" stroke="{COLORS["output"]}" stroke-width="1.2"/>')
-        body.append(text(x, y + 4, label_value, "tiny", "middle"))
+    for points in slivers:
+        body.append(f'<polygon points="{points}" fill="{COLORS["process"]}" fill-opacity="0.34" stroke="{COLORS["process"]}" stroke-width="1.0"/>')
+    overlaps = [
+        (185, 196, "a_i2", 0.52),
+        (295, 212, "a_i3", 0.38),
+        (170, 300, "a_i5", 0.44),
+        (285, 318, "a_i6", 0.78),
+        (382, 285, "a_i7", 0.33),
+        (262, 392, "a_i10", 0.27),
+    ]
+    for x, y, label_value, frac in overlaps:
+        r = 10 + 16 * frac
+        body.append(f'<circle cx="{x}" cy="{y}" r="{r:.1f}" fill="white" fill-opacity="0.88" stroke="{COLORS["process"]}" stroke-width="1.2"/>')
+        body.append(text(x, y - 2, label_value, "tiny", "middle"))
+        body.append(text(x, y + 13, f"{frac:.0%}", "tiny", "middle"))
 
     body.append(text(300, 475, "Irregular admin polygon over 0.25 deg grid cells", "small", "middle"))
+    body.append(text(300, 500, "Green slivers and scaled discs encode polygon-cell overlap fraction a_ij.", "tiny", "middle"))
     body.append(text(705, 156, "Weighted average", "label", "middle"))
-    body.append(text(705, 192, "vbar_i = sum_j a_ij v_j / sum_j a_ij", "label", "middle"))
+    body.append(formula_area_weighted_average(705, 194))
+    body.append(arrow(492, 300, 590, 210))
     body.extend(
         box(
             600,
-            238,
+            246,
             410,
             72,
             "#fff8e6",
@@ -631,20 +686,27 @@ def figure_10() -> str:
             radius=5,
         )
     )
-    tx, ty = 650, 368
-    widths = [92, 92, 120, 110]
+    tx, ty = 642, 374
+    widths = [82, 82, 118, 108]
     headers = ["cell", "value", "overlap", "contrib."]
     x = tx
     for w, header in zip(widths, headers):
         body.append(rect(x, ty, w, 34, "#f4f6f8", COLORS["grey"], stroke_width=1.0))
         body.append(text(x + w / 2, ty + 22, header, "tiny", "middle"))
         x += w
-    rows = [("j2", "35", "0.52", "18.2"), ("j6", "64", "0.78", "49.9"), ("j7", "46", "0.33", "15.2"), ("...", "...", "...", "...")]
+    rows = [
+        ("j2", "35", "0.52", "18.2"),
+        ("j6", "64", "0.78", "49.9"),
+        ("j7", "46", "0.33", "15.2"),
+        ("...", "...", "...", "..."),
+        ("v\u0304_i", "", "sum a_ij", "sum c / sum a"),
+    ]
     for row_i, row in enumerate(rows):
         x = tx
         y = ty + 34 + row_i * 34
         for w, value in zip(widths, row):
-            body.append(rect(x, y, w, 34, "white", COLORS["grid"], stroke_width=0.8))
+            fill = "#f8fafc" if row_i == len(rows) - 1 else "white"
+            body.append(rect(x, y, w, 34, fill, COLORS["grid"], stroke_width=0.8))
             body.append(text(x + w / 2, y + 22, value, "tiny", "middle"))
             x += w
     body.append(text(60, 710, "Source: author-created synthetic geometry; values and areas are illustrative.", "note"))
@@ -658,32 +720,39 @@ def figure_11() -> str:
     ]
     body.extend(box(70, 165, 220, 104, COLORS["light_blue"], COLORS["source"], "Daily model fields", ["tasmax, pr, etc.", "one GCM member"]))
     body.append(arrow(292, 217, 350, 217))
-    body.extend(box(350, 155, 230, 124, COLORS["light_teal"], COLORS["process"], "Daily -> annual index", ["hot days, Rx1day,", "SPI spell counts"]))
+    body.extend(box(350, 155, 230, 124, COLORS["light_teal"], COLORS["process"], "Daily \u2192 annual index", ["hot days, Rx1day,", "SPI spell counts"]))
     body.append(arrow(582, 217, 640, 217))
-    body.extend(box(640, 155, 230, 124, "#fff8e6", COLORS["hazard"], "Annual -> period mean", ["example: 2040-2060", "21 annual index fields"]))
+    body.extend(box(640, 155, 230, 124, "#fff8e6", COLORS["hazard"], "Annual \u2192 period mean", ["example: 2040-2060", "21 annual index fields"]))
     body.append(arrow(872, 217, 930, 217))
     body.extend(box(930, 155, 210, 124, COLORS["light_rose"], COLORS["output"], "Per-model period mean", ["one value per model", "per admin unit"]))
+    body.append(line(350, 132, 870, 132, COLORS["process"], 1.5))
+    body.append(line(350, 132, 350, 145, COLORS["process"], 1.5))
+    body.append(line(870, 132, 870, 145, COLORS["process"], 1.5))
+    body.append(text(610, 122, "1. time-average within each model", "small", "middle"))
 
     fan_x0, fan_y0 = 110, 390
-    body.append(text(600, 340, "24-model fan collapses to ensemble statistics", "label", "middle"))
-    body.append(line(fan_x0, fan_y0 + 150, fan_x0 + 980, fan_y0 + 150, COLORS["muted"]))
-    body.append(line(fan_x0, fan_y0 + 20, fan_x0, fan_y0 + 150, COLORS["muted"]))
+    body.append(text(600, 340, "24 model period means collapse to ensemble statistics", "label", "middle"))
+    body.append(line(132, fan_y0 + 82, 448, fan_y0 + 82, COLORS["grid"], 1.1))
+    body.append(line(132, fan_y0 + 46, 132, fan_y0 + 118, COLORS["grid"], 1.1))
+    body.append(line(448, fan_y0 + 46, 448, fan_y0 + 118, COLORS["grid"], 1.1))
+    body.append(text(290, fan_y0 + 140, "24 model period means", "small", "middle"))
+    member_values = [17, 25, 31, 35, 39, 42, 44, 46, 49, 51, 53, 55, 57, 59, 61, 62, 64, 66, 68, 70, 72, 75, 79, 84]
     for i in range(24):
-        x1 = fan_x0 + i * 28
-        y1 = fan_y0 + 125 - (i % 6) * 12
-        x2 = 870
-        y2 = fan_y0 + 82 + ((i % 5) - 2) * 5
-        color = COLORS["grey"] if i % 4 else COLORS["source"]
-        body.append(line(x1, y1, x2, y2, color, 0.8))
+        x = 150 + i * 12
+        y = fan_y0 + 118 - member_values[i] / 100 * 72
+        body.append(line(x, fan_y0 + 82, x, y, COLORS["grey"], 0.9))
+        body.append(f'<circle cx="{x}" cy="{y:.1f}" r="4.2" fill="{COLORS["grey"]}" fill-opacity="0.78"/>')
+    body.append(arrow(466, fan_y0 + 82, 850, fan_y0 + 82))
     body.append(line(890, fan_y0 + 82, 1055, fan_y0 + 82, COLORS["output"], 4.0))
     body.append(text(975, fan_y0 + 70, "ensemble mean", "label", "middle"))
     spread = [("std. dev.", fan_y0 + 110), ("median", fan_y0 + 128), ("p5 / p95", fan_y0 + 146)]
     for label_value, y in spread:
         body.append(line(890, y, 1055, y, COLORS["grey"], 1.4, "5 4"))
         body.append(text(1070, y + 4, label_value, "tiny"))
-    body.append(text(185, fan_y0 + 178, "model period means", "small", "middle"))
-    body.append(text(760, fan_y0 + 178, "time-average first", "small", "middle"))
-    body.append(text(980, fan_y0 + 178, "ensemble-average second", "small", "middle"))
+    body.append(line(850, fan_y0 + 34, 1058, fan_y0 + 34, COLORS["output"], 1.5))
+    body.append(line(850, fan_y0 + 34, 850, fan_y0 + 48, COLORS["output"], 1.5))
+    body.append(line(1058, fan_y0 + 34, 1058, fan_y0 + 48, COLORS["output"], 1.5))
+    body.append(text(954, fan_y0 + 24, "2. ensemble-average across models", "small", "middle"))
     body.extend(
         box(
             210,
@@ -913,6 +982,9 @@ def figure_19() -> str:
     ]
     x0, y0, w, h = 150, 145, 860, 410
     body.append(f'<rect x="{x0}" y="{y0}" width="{w}" height="{h}" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
+    body.append(f'<rect x="{x0 + 60}" y="{y0 + 35}" width="{(w - 100) / 3}" height="{h - 90}" fill="#eef3f8" opacity="0.55"/>')
+    body.append(f'<rect x="{x0 + 60 + (40 - 35) / 15 * (w - 100)}" y="{y0 + 35}" width="{(45 - 40) / 15 * (w - 100)}" height="{h - 90}" fill="#fff2cc" opacity="0.48"/>')
+    body.append(f'<rect x="{x0 + 60 + (45 - 35) / 15 * (w - 100)}" y="{y0 + 35}" width="{(50 - 45) / 15 * (w - 100)}" height="{h - 90}" fill="#fde2e7" opacity="0.42"/>')
     body.append(line(x0 + 60, y0 + h - 55, x0 + w - 40, y0 + h - 55, COLORS["muted"]))
     body.append(line(x0 + 60, y0 + 35, x0 + 60, y0 + h - 55, COLORS["muted"]))
     for s in [0, 25, 50, 75, 100]:
@@ -930,11 +1002,9 @@ def figure_19() -> str:
     body.append(polyline(pts, COLORS["output"], 4.0))
     body.append(line(xp(a), yp(0), xp(a), yp(100), COLORS["hazard"], 1.8, "6 5"))
     body.append(line(xp(b), yp(0), xp(b), yp(100), COLORS["hazard"], 1.8, "6 5"))
-    body.append(text(xp(a), y0 + h - 26, "onset a = 40 deg C", "small", "middle"))
-    body.append(text(xp(b), y0 + h - 26, "saturation b = 45 deg C", "small", "middle"))
-    for v in [35, 40, 45, 50]:
-        body.append(text(xp(v), y0 + h - 8, str(v), "tiny", "middle"))
-    body.append(text(x0 + w / 2, y0 + h + 26, "raw metric value v: TXx (deg C)", "small", "middle"))
+    body.append(text(xp(a), y0 + h - 26, "onset a = 40 \u00b0C", "small", "middle"))
+    body.append(text(xp(b), y0 + h - 26, "saturation b = 45 \u00b0C", "small", "middle"))
+    body.append(text(x0 + w / 2, y0 + h + 22, "raw metric value v: TXx (\u00b0C)", "small", "middle"))
     body.append(text(x0 + 18, y0 + h / 2, "impact score S_imp", "small", "middle", attrs={"transform": f"rotate(-90 {x0 + 18} {y0 + h / 2})"}))
     body.extend(
         box(
@@ -945,14 +1015,14 @@ def figure_19() -> str:
             "#fff8e6",
             COLORS["hazard"],
             "Formula",
-            ["S_imp = clip((v-a)/(b-a)) x 100"],
+            ["S_imp = clip((v - a) / (b - a), 0, 1)", "x 100"],
             radius=5,
         )
     )
     body.append(text(520, 305, "linear ramp", "label", "middle"))
     body.append(text(268, 512, "score = 0", "small", "middle"))
     body.append(text(920, 162, "score = 100", "small", "middle"))
-    body.append(text(60, 710, "Source: author-created synthetic plot using the TXx 40-45 deg C example impact band.", "note"))
+    body.append(text(60, 710, "Source: author-created synthetic plot using the TXx 40-45 \u00b0C example impact band.", "note"))
     return Svg().wrap(body, "FIG-19. Impact-band ramp", "Impact lens ramp schematic.")
 
 
