@@ -519,7 +519,7 @@ These five are the only figures the note currently promises; they sit in the `[F
 ### Roll-up
 
 - **5** validation figures already reserved (FIG-V1–V5).
-- **23** proposed new (FIG-01–23): **8 Essential** (FIG-01, 06, 08, 09, 12, 14, 18, 20), **11 Recommended**, **4 Optional**.
+- **23** proposed new (FIG-01–23): **8 Essential** (FIG-01, 06, 08, 09, 12, 14, 18, 20), **12 Recommended**, **3 Optional**.
 - By effort: ~9 buildable from existing notebooks/pipeline outputs, ~14 hand-authored schematics/plots.
 - **Suggested minimum set** for a coherent draft: the 8 Essential + FIG-V1–V5 (= 13 figures).
 

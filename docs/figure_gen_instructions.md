@@ -157,9 +157,9 @@ Full climate risk requires hazard, exposure, and vulnerability. IRT produces the
 
 ### Content
 
-Use a three-part equation or Venn-style decomposition:
+Use a three-part interaction graphic, functional relationship, or Venn-style decomposition:
 
-`Risk = Hazard x Exposure x Vulnerability`
+`Risk = f(Hazard, Exposure, Vulnerability)`
 
 Mark:
 
@@ -180,7 +180,7 @@ No data required.
 ### Avoid
 
 - Do not show IRT output as the final risk result.
-- Do not use multiplication graphics in a way that implies precise probabilistic risk modeling.
+- Do not use multiplication graphics in a way that implies precise probabilistic risk modeling; if using the note's hazard x exposure x vulnerability shorthand, treat it as interaction framing rather than arithmetic.
 
 ### Acceptance Criteria
 
@@ -801,6 +801,7 @@ Fallback:
 
 - Do not use a normal fit to precipitation directly.
 - Do not imply the Gamma parameters are refit for future SSP periods; the note says baseline parameters are applied unchanged.
+- Do not imply monthly SPI values feed composites directly; composites consume the derived SPI < -1 event-count and maximum-spell metrics described in section 5.3.
 
 ### Acceptance Criteria
 
@@ -927,13 +928,15 @@ A thematic bundle combines several same-family hazard metrics into a 0-100 highe
 
 ### Content
 
-Create a choropleth map for one thematic bundle. Recommended default:
+Create a single-state choropleth map for one thematic bundle. Recommended default:
 
 - Bundle: Heat Risk
 - Level: district
 - Scenario: SSP5-8.5
 - Period: 2040-2060
-- Geography: one state or India-wide, depending on available artifact quality and legibility
+- Geography: one state with complete artifacts and legible district geometry
+
+An India-wide rendering is acceptable only if it is backed by a genuinely pan-India-normalized artifact. Do not mosaic state-cohort-normalized scores into an India-wide map.
 
 Required figure elements:
 
@@ -949,8 +952,8 @@ Required figure elements:
 
 ### Implementation Notes
 
-- Prefer a state map for legibility if the full India map is too dense.
 - Use the same cohort semantics as the data artifact. If the score is state-cohort normalized, say so in the caption.
+- If a pan-India artifact exists, document its normalization cohort explicitly and confirm that the 0-100 values are comparable across states.
 
 ### Avoid
 
@@ -1284,7 +1287,7 @@ Required labels:
 2. Produce the Recommended figures second: `FIG-02`, `FIG-04`, `FIG-05`, `FIG-07`, `FIG-10`, `FIG-11`, `FIG-13`, `FIG-16`, `FIG-17`, `FIG-19`, `FIG-21`, `FIG-23`.
 3. Produce the Optional figures only if the final note has enough space: `FIG-03`, `FIG-15`, `FIG-22`.
 
-Note: Appendix F counts 11 Recommended figures and 4 Optional figures, but the proposed inventory lists 12 Recommended and 3 Optional when read literally from the table. Resolve that count mismatch before final figure planning or update Appendix F's roll-up.
+Note: The Appendix F table and this production order resolve to 12 Recommended figures and 3 Optional figures. If the Appendix F roll-up still says 11 Recommended and 4 Optional in a future draft, treat that as a roll-up typo and correct it to 12/3.
 
 ## Insertion Guidance
 
@@ -1295,3 +1298,5 @@ When figures are ready, insert placeholder callouts or final image links into `d
 ```
 
 Do not insert placeholders into the note until the figure shortlist is agreed. This instruction document is meant to support figure generation first; note edits should be made as a separate applied change.
+
+Section anchors are current for the draft reviewed when this file was written; re-verify each anchor against `docs/technical_guidance_note.md` at insertion time.
