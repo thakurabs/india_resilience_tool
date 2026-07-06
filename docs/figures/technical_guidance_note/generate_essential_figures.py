@@ -1,9 +1,8 @@
-"""Generate essential technical-guidance-note figures as editable SVG.
+"""Generate technical-guidance-note figures as editable SVG.
 
-The figures produced here correspond to FIG-01, FIG-06, FIG-08, FIG-09,
-FIG-12, FIG-14, FIG-18, and FIG-20 in ``docs/figure_gen_instructions.md``.
-They are intentionally self-contained SVG schematics/plots so they can be
-reviewed and edited without a plotting runtime.
+The figures produced here correspond to selected figure specifications in
+``docs/figure_gen_instructions.md``. They are intentionally self-contained SVG
+schematics/plots so they can be reviewed and edited without a plotting runtime.
 """
 
 from __future__ import annotations
@@ -281,6 +280,64 @@ def figure_01() -> str:
     return Svg(width=1320).wrap(body, "FIG-01. End-to-end pipeline flow", "IRT pipeline schematic.")
 
 
+def figure_02() -> str:
+    body = [
+        text(60, 48, "FIG-02. Hazard, Exposure, and Vulnerability Scope", "title"),
+        text(60, 74, "IRT supplies the climate hazard-pressure layer; full risk also needs exposure and vulnerability inputs.", "subtitle"),
+    ]
+    body.append(text(600, 128, "Climate risk = f(Hazard, Exposure, Vulnerability)", "label", "middle"))
+    cards = [
+        (
+            70,
+            "Hazard",
+            "IRT output: climate hazard-pressure",
+            ["heat", "drought", "extreme rainfall", "riverine flood"],
+            COLORS["light_rose"],
+            COLORS["output"],
+        ),
+        (
+            445,
+            "Exposure",
+            "Out of scope: people, assets, systems exposed",
+            ["population", "assets", "crops", "facilities"],
+            "#f4f6f8",
+            COLORS["grey"],
+        ),
+        (
+            820,
+            "Vulnerability",
+            "Out of scope: sensitivity and adaptive capacity",
+            ["income", "age", "infrastructure condition", "coping capacity"],
+            "#f4f6f8",
+            COLORS["grey"],
+        ),
+    ]
+    for x, title, scope, examples, fill, stroke in cards:
+        body.extend(box(x, 190, 310, 130, fill, stroke, title, [scope], radius=6))
+        body.append(text(x + 155, 362, "Examples", "label", "middle"))
+        for i, example in enumerate(examples):
+            py = 398 + i * 42
+            body.append(f'<circle cx="{x + 62}" cy="{py - 4}" r="7" fill="{fill}" stroke="{stroke}" stroke-width="1.5"/>')
+            body.append(text(x + 86, py, example, "small"))
+    body.append(line(380, 255, 445, 255, COLORS["grey"], 2.0, "6 5"))
+    body.append(line(755, 255, 820, 255, COLORS["grey"], 2.0, "6 5"))
+    body.extend(
+        box(
+            210,
+            610,
+            780,
+            78,
+            "#fff8e6",
+            COLORS["hazard"],
+            "Scope caveat",
+            ["IRT Risk bundle names are hazard-pressure indices, not complete probabilistic risk estimates."],
+            radius=5,
+        )
+    )
+    body.append(text(60, 710, "Source: author-created schematic using IPCC-style hazard, exposure, and vulnerability framing.", "note"))
+    return Svg().wrap(body, "FIG-02. Hazard, exposure, and vulnerability scope", "IRT hazard-pressure scope schematic.")
+
+
 def draw_grid(x: float, y: float, cols: int, rows: int, cell: float, fill: str, stroke: str, heavy: int = 0) -> list[str]:
     out = [f'<rect x="{x}" y="{y}" width="{cols * cell}" height="{rows * cell}" fill="{fill}" stroke="{stroke}" stroke-width="1.4"/>']
     for c in range(1, cols):
@@ -298,6 +355,77 @@ def cdf_points(x: float, y: float, w: float, h: float, shift: float) -> list[tup
         yy = y + h - h / (1 + 2.71828 ** (-10 * (t - shift)))
         pts.append((xx, yy))
     return pts
+
+
+def figure_05() -> str:
+    body = [
+        text(60, 48, "FIG-05. Temporal Coverage and Analysis Windows", "title"),
+        text(60, 74, "Historical and SSP raw spans feed baseline and future multi-year analysis windows; static snapshots sit outside SSP time.", "subtitle"),
+    ]
+    x0, x1 = 210, 1085
+    start, end = 1950, 2100
+
+    def xpos(year: int) -> float:
+        return x0 + (year - start) / (end - start) * (x1 - x0)
+
+    axis_y = 620
+    body.append(line(x0, axis_y, x1, axis_y, COLORS["muted"], 1.4))
+    for year in [1950, 1990, 2020, 2040, 2060, 2080, 2100]:
+        xx = xpos(year)
+        body.append(line(xx, axis_y - 10, xx, axis_y + 10, COLORS["muted"], 1.0))
+        body.append(text(xx, axis_y + 30, str(year), "tiny", "middle"))
+    for year in [2010, 2014, 2015]:
+        xx = xpos(year)
+        body.append(line(xx, axis_y - 7, xx, axis_y + 7, COLORS["grey"], 0.9))
+
+    rows = [
+        (150, "Raw climate runs"),
+        (295, "Baseline"),
+        (420, "Future windows"),
+        (535, "Static snapshot"),
+    ]
+    for y, label_value in rows:
+        body.append(text(62, y + 30, label_value, "label"))
+        body.append(line(x0, y + 45, x1, y + 45, COLORS["grid"], 0.6))
+
+    hist_y = 150
+    body.append(rect(xpos(1950), hist_y, xpos(2014) - xpos(1950), 50, "#e7f2fb", COLORS["source"], stroke_width=1.5, radius=5))
+    body.append(text((xpos(1950) + xpos(2014)) / 2, hist_y + 31, "Historical raw span: 1950-2014", "small", "middle"))
+    ssp_y = 220
+    body.append(rect(xpos(2015), ssp_y, xpos(2100) - xpos(2015), 50, "#e4f7f4", COLORS["process"], stroke_width=1.5, radius=5))
+    body.append(text((xpos(2015) + xpos(2100)) / 2, ssp_y + 24, "SSP2-4.5 and SSP5-8.5 raw span", "small", "middle"))
+    body.append(text((xpos(2015) + xpos(2100)) / 2, ssp_y + 41, "2015-2100", "tiny", "middle"))
+    split_x = (xpos(2014) + xpos(2015)) / 2
+    body.append(line(split_x, hist_y + 50, split_x, ssp_y, COLORS["grey"], 1.0, "4 4"))
+    body.append(text(split_x, hist_y + 66, "2014/2015 handoff", "tiny", "middle"))
+
+    base_y = 330
+    body.append(rect(xpos(1990), base_y, xpos(2010) - xpos(1990), 36, "#fff8e6", COLORS["hazard"], stroke_width=1.5, radius=4))
+    body.append(line(xpos(1990), base_y - 18, xpos(2010), base_y - 18, COLORS["hazard"], 1.4))
+    body.append(line(xpos(1990), base_y - 18, xpos(1990), base_y, COLORS["hazard"], 1.4))
+    body.append(line(xpos(2010), base_y - 18, xpos(2010), base_y, COLORS["hazard"], 1.4))
+    body.append(text((xpos(1990) + xpos(2010)) / 2, base_y - 28, "Baseline/reference", "small", "middle"))
+    body.append(text((xpos(1990) + xpos(2010)) / 2, base_y + 23, "1990-2010", "tiny", "middle"))
+
+    windows = [(2020, 2040), (2040, 2060), (2060, 2080)]
+    win_y = 435
+    for i, (a, b) in enumerate(windows):
+        fill = [COLORS["light_rose"], "#fdebd3", "#e7f2fb"][i]
+        body.append(rect(xpos(a), win_y, xpos(b) - xpos(a), 44, fill, COLORS["output"], stroke_width=1.5, radius=4))
+        body.append(text((xpos(a) + xpos(b)) / 2, win_y + 27, f"{a}-{b}", "tiny", "middle"))
+        if i > 0:
+            body.append(line(xpos(a), win_y - 10, xpos(a), win_y + 54, COLORS["output"], 0.9, "3 4"))
+    body.append(text((xpos(2020) + xpos(2080)) / 2, win_y + 75, "Future windows are inclusive 21-year means; endpoints are shared.", "small", "middle"))
+
+    snap_x = xpos(2025)
+    snap_y = 555
+    body.append(line(snap_x, snap_y - 38, snap_x, snap_y + 30, COLORS["grey"], 1.8, "5 4"))
+    body.append(f'<circle cx="{snap_x}" cy="{snap_y - 38}" r="9" fill="{COLORS["grey"]}" stroke="{COLORS["ink"]}" stroke-width="1.0"/>')
+    body.append(text(snap_x + 24, snap_y - 34, "Current / Snapshot inputs", "small"))
+    body.append(text(snap_x + 24, snap_y - 14, "Riverine flood and static exposure layers", "tiny"))
+    body.append(text(snap_x + 24, snap_y + 6, "Not modeled as an SSP period", "tiny"))
+    body.append(text(60, 710, "Source: author-created schematic from section 2.2 data-period definitions.", "note"))
+    return Svg().wrap(body, "FIG-05. Temporal coverage and analysis windows", "Timeline of raw spans and analysis windows.")
 
 
 def figure_06() -> str:
@@ -456,6 +584,121 @@ def figure_09() -> str:
     body.append(arrow(485, 545, 690, 545))
     body.append(text(60, 710, "Source: author-created schematic using the exact conceptual example in section 4.1; values are illustrative.", "note"))
     return Svg().wrap(body, "FIG-09. Admin-first vs grid-first", "Worked example of nonlinear threshold bias.")
+
+
+def figure_10() -> str:
+    body = [
+        text(60, 48, "FIG-10. Fractional-Area Overlap Weights", "title"),
+        text(60, 74, "Administrative values are area-weighted averages of grid-cell values using polygon-cell intersections.", "subtitle"),
+    ]
+    gx, gy, cell = 88, 140, 96
+    values = [22, 35, 48, 31, 55, 64, 46, 70, 82, 39, 52, 61]
+    for r in range(3):
+        for c in range(4):
+            x = gx + c * cell
+            y = gy + r * cell
+            value = values[r * 4 + c]
+            shade = ["#e7f2fb", "#d9f2ee", "#fff2cc", "#fde2e7"][min(value // 22, 3)]
+            body.append(rect(x, y, cell, cell, shade, COLORS["grid"], stroke_width=1.1))
+            body.append(text(x + cell - 10, y + 20, f"v{r * 4 + c + 1}={value}", "tiny", "end"))
+    polygon = "150,178 310,150 442,230 398,372 252,424 126,326"
+    body.append(f'<polygon points="{polygon}" fill="{COLORS["output"]}" fill-opacity="0.16" stroke="{COLORS["output"]}" stroke-width="3"/>')
+    overlaps = [
+        (185, 196, "a_i2"),
+        (295, 212, "a_i3"),
+        (170, 300, "a_i5"),
+        (285, 318, "a_i6"),
+        (382, 285, "a_i7"),
+        (262, 392, "a_i10"),
+    ]
+    for x, y, label_value in overlaps:
+        body.append(f'<circle cx="{x}" cy="{y}" r="18" fill="white" fill-opacity="0.86" stroke="{COLORS["output"]}" stroke-width="1.2"/>')
+        body.append(text(x, y + 4, label_value, "tiny", "middle"))
+
+    body.append(text(300, 475, "Irregular admin polygon over 0.25 deg grid cells", "small", "middle"))
+    body.append(text(705, 156, "Weighted average", "label", "middle"))
+    body.append(text(705, 192, "vbar_i = sum_j a_ij v_j / sum_j a_ij", "label", "middle"))
+    body.extend(
+        box(
+            600,
+            238,
+            410,
+            72,
+            "#fff8e6",
+            COLORS["hazard"],
+            "Equal-area rule",
+            ["Intersection areas a_ij are computed after reprojection to EPSG:6933."],
+            radius=5,
+        )
+    )
+    tx, ty = 650, 368
+    widths = [92, 92, 120, 110]
+    headers = ["cell", "value", "overlap", "contrib."]
+    x = tx
+    for w, header in zip(widths, headers):
+        body.append(rect(x, ty, w, 34, "#f4f6f8", COLORS["grey"], stroke_width=1.0))
+        body.append(text(x + w / 2, ty + 22, header, "tiny", "middle"))
+        x += w
+    rows = [("j2", "35", "0.52", "18.2"), ("j6", "64", "0.78", "49.9"), ("j7", "46", "0.33", "15.2"), ("...", "...", "...", "...")]
+    for row_i, row in enumerate(rows):
+        x = tx
+        y = ty + 34 + row_i * 34
+        for w, value in zip(widths, row):
+            body.append(rect(x, y, w, 34, "white", COLORS["grid"], stroke_width=0.8))
+            body.append(text(x + w / 2, y + 22, value, "tiny", "middle"))
+            x += w
+    body.append(text(60, 710, "Source: author-created synthetic geometry; values and areas are illustrative.", "note"))
+    return Svg().wrap(body, "FIG-10. Fractional-area overlap weights", "Schematic of polygon-cell area weights.")
+
+
+def figure_11() -> str:
+    body = [
+        text(60, 48, "FIG-11. Temporal Aggregation and Ensemble Chain", "title"),
+        text(60, 74, "IRT computes annual indices per model, period-means them, then averages model period means into the ensemble output.", "subtitle"),
+    ]
+    body.extend(box(70, 165, 220, 104, COLORS["light_blue"], COLORS["source"], "Daily model fields", ["tasmax, pr, etc.", "one GCM member"]))
+    body.append(arrow(292, 217, 350, 217))
+    body.extend(box(350, 155, 230, 124, COLORS["light_teal"], COLORS["process"], "Daily -> annual index", ["hot days, Rx1day,", "SPI spell counts"]))
+    body.append(arrow(582, 217, 640, 217))
+    body.extend(box(640, 155, 230, 124, "#fff8e6", COLORS["hazard"], "Annual -> period mean", ["example: 2040-2060", "21 annual index fields"]))
+    body.append(arrow(872, 217, 930, 217))
+    body.extend(box(930, 155, 210, 124, COLORS["light_rose"], COLORS["output"], "Per-model period mean", ["one value per model", "per admin unit"]))
+
+    fan_x0, fan_y0 = 110, 390
+    body.append(text(600, 340, "24-model fan collapses to ensemble statistics", "label", "middle"))
+    body.append(line(fan_x0, fan_y0 + 150, fan_x0 + 980, fan_y0 + 150, COLORS["muted"]))
+    body.append(line(fan_x0, fan_y0 + 20, fan_x0, fan_y0 + 150, COLORS["muted"]))
+    for i in range(24):
+        x1 = fan_x0 + i * 28
+        y1 = fan_y0 + 125 - (i % 6) * 12
+        x2 = 870
+        y2 = fan_y0 + 82 + ((i % 5) - 2) * 5
+        color = COLORS["grey"] if i % 4 else COLORS["source"]
+        body.append(line(x1, y1, x2, y2, color, 0.8))
+    body.append(line(890, fan_y0 + 82, 1055, fan_y0 + 82, COLORS["output"], 4.0))
+    body.append(text(975, fan_y0 + 70, "ensemble mean", "label", "middle"))
+    spread = [("std. dev.", fan_y0 + 110), ("median", fan_y0 + 128), ("p5 / p95", fan_y0 + 146)]
+    for label_value, y in spread:
+        body.append(line(890, y, 1055, y, COLORS["grey"], 1.4, "5 4"))
+        body.append(text(1070, y + 4, label_value, "tiny"))
+    body.append(text(185, fan_y0 + 178, "model period means", "small", "middle"))
+    body.append(text(760, fan_y0 + 178, "time-average first", "small", "middle"))
+    body.append(text(980, fan_y0 + 178, "ensemble-average second", "small", "middle"))
+    body.extend(
+        box(
+            210,
+            620,
+            780,
+            66,
+            "#f4f6f8",
+            COLORS["grey"],
+            "Composite contract",
+            ["Composite scores use the ensemble mean; spread statistics are retained for diagnostics."],
+            radius=5,
+        )
+    )
+    body.append(text(60, 710, "Source: author-created schematic; no trend fit is implied.", "note"))
+    return Svg().wrap(body, "FIG-11. Temporal aggregation and ensemble chain", "Daily to annual to period to ensemble schematic.")
 
 
 def figure_12() -> str:
@@ -663,6 +906,56 @@ def figure_18() -> str:
     return Svg().wrap(body, "FIG-18. Three-lens blended rule schematic", "Sectoral lens and rule aggregation schematic.")
 
 
+def figure_19() -> str:
+    body = [
+        text(60, 48, "FIG-19. Impact-Band Ramp", "title"),
+        text(60, 74, "The impact lens maps absolute metric values below onset to 0, above saturation to 100, and linearly between.", "subtitle"),
+    ]
+    x0, y0, w, h = 150, 145, 860, 410
+    body.append(f'<rect x="{x0}" y="{y0}" width="{w}" height="{h}" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
+    body.append(line(x0 + 60, y0 + h - 55, x0 + w - 40, y0 + h - 55, COLORS["muted"]))
+    body.append(line(x0 + 60, y0 + 35, x0 + 60, y0 + h - 55, COLORS["muted"]))
+    for s in [0, 25, 50, 75, 100]:
+        yy = y0 + h - 55 - s / 100 * (h - 100)
+        body.append(line(x0 + 60, yy, x0 + w - 40, yy, COLORS["grid"], 0.8))
+        body.append(text(x0 + 50, yy + 4, str(s), "tiny", "end"))
+    def xp(v: float) -> float:
+        return x0 + 60 + (v - 35) / 15 * (w - 100)
+
+    def yp(score: float) -> float:
+        return y0 + h - 55 - score / 100 * (h - 100)
+
+    a, b = 40, 45
+    pts = [(xp(35), yp(0)), (xp(a), yp(0)), (xp(b), yp(100)), (xp(50), yp(100))]
+    body.append(polyline(pts, COLORS["output"], 4.0))
+    body.append(line(xp(a), yp(0), xp(a), yp(100), COLORS["hazard"], 1.8, "6 5"))
+    body.append(line(xp(b), yp(0), xp(b), yp(100), COLORS["hazard"], 1.8, "6 5"))
+    body.append(text(xp(a), y0 + h - 26, "onset a = 40 deg C", "small", "middle"))
+    body.append(text(xp(b), y0 + h - 26, "saturation b = 45 deg C", "small", "middle"))
+    for v in [35, 40, 45, 50]:
+        body.append(text(xp(v), y0 + h - 8, str(v), "tiny", "middle"))
+    body.append(text(x0 + w / 2, y0 + h + 26, "raw metric value v: TXx (deg C)", "small", "middle"))
+    body.append(text(x0 + 18, y0 + h / 2, "impact score S_imp", "small", "middle", attrs={"transform": f"rotate(-90 {x0 + 18} {y0 + h / 2})"}))
+    body.extend(
+        box(
+            700,
+            200,
+            330,
+            88,
+            "#fff8e6",
+            COLORS["hazard"],
+            "Formula",
+            ["S_imp = clip((v-a)/(b-a)) x 100"],
+            radius=5,
+        )
+    )
+    body.append(text(520, 305, "linear ramp", "label", "middle"))
+    body.append(text(268, 512, "score = 0", "small", "middle"))
+    body.append(text(920, 162, "score = 100", "small", "middle"))
+    body.append(text(60, 710, "Source: author-created synthetic plot using the TXx 40-45 deg C example impact band.", "note"))
+    return Svg().wrap(body, "FIG-19. Impact-band ramp", "Impact lens ramp schematic.")
+
+
 def figure_20() -> str:
     body = [
         text(60, 48, "FIG-20. District A vs B Lens Worked Example", "title"),
@@ -721,12 +1014,17 @@ def figure_20() -> str:
 
 FIGURES = {
     "fig_01_pipeline_flow.svg": figure_01,
+    "fig_02_hazard_exposure_vulnerability_scope.svg": figure_02,
+    "fig_05_temporal_coverage_analysis_windows.svg": figure_05,
     "fig_06_bcsd_schematic.svg": figure_06,
     "fig_08_district_block_resolution_zoom.svg": figure_08,
     "fig_09_admin_first_vs_grid_first.svg": figure_09,
+    "fig_10_fractional_area_overlap_weights.svg": figure_10,
+    "fig_11_temporal_aggregation_ensemble_chain.svg": figure_11,
     "fig_12_doy_percentile_threshold_curve.svg": figure_12,
     "fig_14_spi_derivation.svg": figure_14,
     "fig_18_three_lens_blended_rule.svg": figure_18,
+    "fig_19_impact_band_ramp.svg": figure_19,
     "fig_20_district_a_b_lens_example.svg": figure_20,
 }
 
