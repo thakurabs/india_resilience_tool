@@ -64,7 +64,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <circle cx="770.4478021978022" cy="335.0" r="6" fill="#c77700" stroke="white" stroke-width="1.5"/>
 <text x="1069.0" y="177.0" class="label" text-anchor="end">tau_d: baseline 90th percentile</text>
 <text x="1069.0" y="201.0" class="small" text-anchor="end">orange points: evaluation-year exceedances</text>
-<text x="105.0" y="153.0" class="small" text-anchor="start">tasmax (deg C)</text>
+<text x="113.0" y="340.0" class="small" text-anchor="middle" transform="rotate(-90 113 340.0)">tasmax (deg C)</text>
 <text x="590.0" y="578.0" class="small" text-anchor="middle">day of year</text>
 <text x="60.0" y="710.0" class="note" text-anchor="start">Source: synthetic illustrative curve. Baseline concept: 1990-2010, Feb 29 excluded, strict exceedance x_t &gt; tau_d.</text>
 </svg>

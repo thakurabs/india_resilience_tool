@@ -498,7 +498,16 @@ def figure_12() -> str:
         body.append(f'<circle cx="{xx}" cy="{yy}" r="6" fill="{COLORS["hazard"]}" stroke="white" stroke-width="1.5"/>')
     body.append(text(x0 + w - 16, y0 + 52, "tau_d: baseline 90th percentile", "label", "end"))
     body.append(text(x0 + w - 16, y0 + 76, "orange points: evaluation-year exceedances", "small", "end"))
-    body.append(text(x0 + 10, y0 + 28, "tasmax (deg C)", "small"))
+    body.append(
+        text(
+            x0 + 18,
+            y0 + 20 + (h - 65) / 2,
+            "tasmax (deg C)",
+            "small",
+            "middle",
+            attrs={"transform": f"rotate(-90 {x0 + 18} {y0 + 20 + (h - 65) / 2})"},
+        )
+    )
     body.append(text(x0 + w / 2, y0 + h - 2, "day of year", "small", "middle"))
     body.append(text(60, 710, "Source: synthetic illustrative curve. Baseline concept: 1990-2010, Feb 29 excluded, strict exceedance x_t > tau_d.", "note"))
     return Svg().wrap(body, "FIG-12. DOY percentile threshold curve", "Illustrative seasonal percentile threshold.")
