@@ -73,7 +73,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <circle cx="1160" cy="316" r="30" fill="#fde2e7" stroke="#b8324f" stroke-width="2"/>
 <text x="1160.0" y="310.0" class="label" text-anchor="middle">Bundle</text>
 <text x="1160.0" y="330.0" class="small" text-anchor="middle">composite</text>
-<rect x="160" y="610" width="880" height="70" rx="5" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.8" class="flow-box"/>
-<text x="600.0" y="637.0" class="label" text-anchor="middle" data-box="160,610,880,70">Two weight layers</text>
-<text x="600.0" y="660.0" class="small" text-anchor="middle" data-box="160,610,880,70">Lens weights combine S_abs/S_chg/S_imp inside a rule; rule weights combine finite rule scores into the sector bundle.</text>
+<rect x="60" y="104" width="230" height="54" rx="4" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.2"/>
+<text x="72.0" y="126.0" class="tiny" text-anchor="start">Lens weights combine scores</text>
+<text x="72.0" y="145.0" class="tiny" text-anchor="start">inside a rule; rule weights form bundle.</text>
 </svg>

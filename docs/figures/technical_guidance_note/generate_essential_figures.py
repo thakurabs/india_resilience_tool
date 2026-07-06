@@ -524,7 +524,7 @@ def figure_14() -> str:
         text(60, 48, "FIG-14. SPI Derivation", "title"),
         text(60, 74, "Monthly precipitation accumulation is fitted with a Gamma distribution, mixed with zero probability, and transformed to standard-normal SPI.", "subtitle"),
     ]
-    panels = [(60, 135, "1. Accumulate monthly precipitation"), (440, 135, "2. Mixed Gamma CDF H(x)"), (820, 135, "3. Normal-quantile transform")]
+    panels = [(60, 135, "1. Accumulate monthly precipitation"), (440, 135, "2. Gamma fit and mixed CDF"), (820, 135, "3. Normal-quantile transform")]
     for x, y, title in panels:
         body.append(f'<rect x="{x}" y="{y}" width="320" height="410" rx="6" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
         body.append(text(x + 160, y + 30, title, "label", "middle"))
@@ -557,10 +557,11 @@ def figure_14() -> str:
         cdf_pts.append((px, cdf_y))
     body.append(polyline(pdf_pts, COLORS["hazard"], 2.5))
     body.append(polyline(cdf_pts, COLORS["output"], 2.5))
-    body.append(line(548, 286, 588, 294, COLORS["hazard"], 1.3))
-    body.append(text(515, 282, "G(x): Gamma CDF", "small"))
-    body.append(line(637, 318, 676, 302, COLORS["output"], 1.3))
-    body.append(text(604, 334, "H(x) = q + (1-q)G(x)", "small"))
+    body.append(rect(518, 182, 178, 54, "white", COLORS["grey"], stroke_width=1.2, radius=4))
+    body.append(line(532, 202, 558, 202, COLORS["hazard"], 2.5))
+    body.append(text(565, 206, "g(x): Gamma density", "tiny"))
+    body.append(line(532, 224, 558, 224, COLORS["output"], 2.5))
+    body.append(text(565, 228, "H(x): mixed CDF", "tiny"))
     body.append(text(x0 + 125, 507, "q = zero-month probability", "small", "middle"))
     # Panel 3 normal transform.
     x0, ybase = 860, 390
@@ -649,19 +650,9 @@ def figure_18() -> str:
     body.append(f'<circle cx="1160" cy="316" r="30" fill="{COLORS["light_rose"]}" stroke="{COLORS["output"]}" stroke-width="2"/>')
     body.append(text(1160, 310, "Bundle", "label", "middle"))
     body.append(text(1160, 330, "composite", "small", "middle"))
-    body.extend(
-        box(
-            160,
-            610,
-            880,
-            70,
-            "#f4f6f8",
-            COLORS["grey"],
-            "Two weight layers",
-            ["Lens weights combine S_abs/S_chg/S_imp inside a rule; rule weights combine finite rule scores into the sector bundle."],
-            radius=5,
-        )
-    )
+    body.append(rect(60, 104, 230, 54, "#f4f6f8", COLORS["grey"], stroke_width=1.2, radius=4))
+    body.append(text(72, 126, "Lens weights combine scores", "tiny"))
+    body.append(text(72, 145, "inside a rule; rule weights form bundle.", "tiny"))
     return Svg().wrap(body, "FIG-18. Three-lens blended rule schematic", "Sectoral lens and rule aggregation schematic.")
 
 
