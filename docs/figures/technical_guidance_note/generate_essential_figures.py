@@ -402,8 +402,6 @@ def figure_08() -> str:
     body.append(text(660, 620, "Three blocks inside one cell all take that cell's value (62); the", "small"))
     body.append(text(660, 638, "adjacent cell can differ (48). Block scores cannot resolve", "small"))
     body.append(text(660, 654, "contrast finer than the ~25 km cell.", "small"))
-    body.append(text(600, 350, "zoom", "small", "middle"))
-    body.append(arrow(535, 350, 642, 350))
     body.extend(
         box(
             158,

@@ -67,8 +67,6 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="660.0" y="620.0" class="small" text-anchor="start">Three blocks inside one cell all take that cell's value (62); the</text>
 <text x="660.0" y="638.0" class="small" text-anchor="start">adjacent cell can differ (48). Block scores cannot resolve</text>
 <text x="660.0" y="654.0" class="small" text-anchor="start">contrast finer than the ~25 km cell.</text>
-<text x="600.0" y="350.0" class="small" text-anchor="middle">zoom</text>
-<path class="arrow" d="M 535.0 350.0 L 642.0 350.0"/>
 <rect x="158" y="672" width="884" height="62" rx="5" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.8" class="flow-box"/>
 <text x="600.0" y="695.0" class="label" text-anchor="middle" data-box="158,672,884,62">Figure note</text>
 <text x="600.0" y="718.0" class="small" text-anchor="middle" data-box="158,672,884,62">0.25 deg grid cell (~25 km scale; physical size varies by latitude). Illustrative geometry, not a boundary-derived map.</text>
