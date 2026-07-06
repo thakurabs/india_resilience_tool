@@ -345,7 +345,7 @@ def figure_06() -> str:
 def figure_08() -> str:
     body = [
         text(60, 48, "FIG-08. District/Block Resolution Zoom with 0.25 Degree Cells", "title"),
-        text(60, 74, "Illustrative geometry showing why district outputs are better spatially sampled than small block outputs.", "subtitle"),
+        text(60, 74, "Illustrative geometry: districts sample many cells; blocks sharing a grid cell share a score.", "subtitle"),
     ]
     # District panel.
     body.append(f'<rect x="70" y="125" width="485" height="455" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
@@ -374,23 +374,42 @@ def figure_08() -> str:
         body.append(line(gx, 135, gx, 560, COLORS["grid"], 1.6))
     for gy in range(150, 560, 118):
         body.append(line(660, gy, 1125, gy, COLORS["grid"], 1.6))
-    zoom_blocks = [
-        ("725,224 824,168 912,230 884,348 762,356", "#fef3c7"),
-        ("884,348 912,230 1026,253 1074,373 984,481 878,442", "#d9f2ee"),
-        ("762,356 884,348 878,442 785,508 698,432", "#e7f0ff"),
+    # Section 8.2 case: several sub-cell blocks fall inside one 0.25 deg cell and
+    # take its single value; a block filling the next cell can carry a different value.
+    body.append(
+        '<rect x="788" y="268" width="118" height="118" fill="#fff7ed" '
+        f'stroke="{COLORS["output"]}" stroke-width="2.5"/>'
+    )
+    shared_value = "62"
+    same_fill = "#f6b26b"
+    shared_blocks = [
+        ("788,268 840,268 855,325 830,386 788,386", (812, 340)),
+        ("840,268 906,268 906,318 870,340 855,325", (874, 300)),
+        ("855,325 870,340 906,318 906,386 830,386", (872, 368)),
     ]
-    for pts, fill in zoom_blocks:
-        body.append(f'<polygon points="{pts}" fill="{fill}" fill-opacity="0.75" stroke="#52606d" stroke-width="1.8"/>')
-    body.append(f'<polygon points="{zoom_blocks[0][0]}" fill="none" stroke="{COLORS["output"]}" stroke-width="3.5"/>')
-    body.append(text(760, 607, "Small blocks may occupy one or a few grid cells", "small"))
+    for pts, (lx, ly) in shared_blocks:
+        body.append(
+            f'<polygon points="{pts}" fill="{same_fill}" fill-opacity="0.85" '
+            'stroke="#52606d" stroke-width="1.4"/>'
+        )
+        body.append(text(lx, ly, shared_value, "label", "middle"))
+    body.append(
+        '<polygon points="906,268 1024,268 1024,386 906,386" fill="#9fc5e8" '
+        'fill-opacity="0.85" stroke="#52606d" stroke-width="1.4"/>'
+    )
+    body.append(text(965, 332, "48", "label", "middle"))
+    body.append(text(660, 600, "Number in each block = its composite score (0-100).", "tiny"))
+    body.append(text(660, 620, "Three blocks inside one cell all take that cell's value (62); the", "small"))
+    body.append(text(660, 638, "adjacent cell can differ (48). Block scores cannot resolve", "small"))
+    body.append(text(660, 654, "contrast finer than the ~25 km cell.", "small"))
     body.append(text(600, 350, "zoom", "small", "middle"))
     body.append(arrow(535, 350, 642, 350))
     body.extend(
         box(
             158,
-            650,
+            672,
             884,
-            58,
+            48,
             "#f4f6f8",
             COLORS["grey"],
             "Figure note",
