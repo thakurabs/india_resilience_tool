@@ -380,12 +380,12 @@ def build_html(source: Path = DEFAULT_SOURCE, *, include_build_timestamp: bool =
         "generator": GENERATOR_VERSION,
         "source_sha256": source_hash,
         "figure_manifest_sha256": manifest_hash,
-        "git_sha": _git_sha(),
         "figure_count": len(figure_assets),
     }
     if include_build_timestamp:
         from datetime import datetime, timezone
 
+        provenance["git_sha"] = _git_sha()
         provenance["built_at_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     html_doc = HTML_TEMPLATE.format(
@@ -471,7 +471,7 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 """
 
 APP_JS = """
-(function(){const scroller=document.querySelector('.content-scroll');const links=[...document.querySelectorAll('.toc-links a')];const headings=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);function onScroll(){let current=headings[0];for(const h of headings){if(h.getBoundingClientRect().top<150)current=h;}links.forEach(a=>a.classList.toggle('active',current&&a.getAttribute('href')==='#'+current.id));}scroller.addEventListener('scroll',onScroll,{passive:true});onScroll();document.querySelector('.back-top').addEventListener('click',()=>scroller.scrollTo({top:0,behavior:'smooth'}));const box=document.querySelector('.lightbox');const boxImg=box.querySelector('img');document.querySelectorAll('.figure-zoom img').forEach(img=>img.addEventListener('click',()=>{boxImg.src=img.src;boxImg.alt=img.alt;box.classList.add('open');}));box.addEventListener('click',()=>box.classList.remove('open'));const input=document.querySelector('.toc-search');const content=document.querySelector('.content');const original=content.innerHTML;input.addEventListener('input',()=>{const q=input.value.trim();content.innerHTML=original;if(!q){return;}const walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.nodeValue.toLowerCase().includes(q.toLowerCase())?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_SKIP});const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);nodes.forEach(n=>{const span=document.createElement('span');const re=new RegExp(q.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'),'ig');span.innerHTML=n.nodeValue.replace(re,m=>'<mark class=\"search-hit\">'+m+'</mark>');n.parentNode.replaceChild(span,n);});const first=document.querySelector('.search-hit');if(first)first.scrollIntoView({block:'center'});});})();
+document.addEventListener('DOMContentLoaded',function(){function renderMath(root){if(window.renderMathInElement){renderMathInElement(root,window.IRT_DOC_MATH_OPTIONS);}}const scroller=document.querySelector('.content-scroll');const links=[...document.querySelectorAll('.toc-links a')];const headings=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);function onScroll(){let current=headings[0];for(const h of headings){if(h.getBoundingClientRect().top<150)current=h;}links.forEach(a=>a.classList.toggle('active',current&&a.getAttribute('href')==='#'+current.id));}scroller.addEventListener('scroll',onScroll,{passive:true});onScroll();document.querySelector('.back-top').addEventListener('click',()=>scroller.scrollTo({top:0,behavior:'smooth'}));const box=document.querySelector('.lightbox');const boxImg=box.querySelector('img');document.querySelectorAll('.figure-zoom img').forEach(img=>img.addEventListener('click',()=>{boxImg.src=img.src;boxImg.alt=img.alt;box.classList.add('open');}));box.addEventListener('click',()=>box.classList.remove('open'));const input=document.querySelector('.toc-search');const content=document.querySelector('.content');const original=content.innerHTML;input.addEventListener('input',()=>{const q=input.value.trim();content.innerHTML=original;if(!q){renderMath(content);return;}const walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.nodeValue.toLowerCase().includes(q.toLowerCase())?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_SKIP});const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);nodes.forEach(n=>{const span=document.createElement('span');const re=new RegExp(q.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'),'ig');span.innerHTML=n.nodeValue.replace(re,m=>'<mark class=\"search-hit\">'+m+'</mark>');n.parentNode.replaceChild(span,n);});renderMath(content);const first=document.querySelector('.search-hit');if(first)first.scrollIntoView({block:'center'});});});
 """
 
 HTML_TEMPLATE = """<!doctype html>
@@ -499,7 +499,8 @@ HTML_TEMPLATE = """<!doctype html>
 <script id="katex-js">{katex_js}</script>
 <script id="katex-auto-render-js">{auto_render_js}</script>
 <script>
-document.addEventListener("DOMContentLoaded",function(){{renderMathInElement(document.body,{{delimiters:[{{left:"$$",right:"$$",display:true}},{{left:"$",right:"$",display:false}}],throwOnError:false}});}});
+window.IRT_DOC_MATH_OPTIONS={{delimiters:[{{left:"$$",right:"$$",display:true}},{{left:"$",right:"$",display:false}}],throwOnError:false}};
+document.addEventListener("DOMContentLoaded",function(){{renderMathInElement(document.body,window.IRT_DOC_MATH_OPTIONS);}});
 </script>
 <script>{app_js}</script>
 </body>

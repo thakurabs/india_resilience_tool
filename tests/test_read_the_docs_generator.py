@@ -51,6 +51,8 @@ def test_build_is_deterministic_without_timestamp() -> None:
     second, _second_info = builder.build_html()
 
     assert first == second
+    assert "built_at_utc" not in first
+    assert "git_sha" not in first
 
 
 def test_committed_asset_is_under_size_ceiling_if_present() -> None:
