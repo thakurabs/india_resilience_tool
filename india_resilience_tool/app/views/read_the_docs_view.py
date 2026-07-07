@@ -14,6 +14,9 @@ ASSET_NAME = "read_the_docs.html"
 _HTML_TAG_RE = re.compile(r"<\s*html\b([^>]*)>", flags=re.IGNORECASE)
 _DATA_THEME_RE = re.compile(r"""\sdata-theme\s*=\s*(['"])(.*?)\1""", flags=re.IGNORECASE)
 _DOC_ROOT_RE = re.compile(r"<\s*div\b([^>]*\bdata-irt-doc-root\b[^>]*)>", flags=re.IGNORECASE)
+DOCS_COMPONENT_HEIGHT = 900
+DOCS_RESIZER_MARKER_KEY = "irt-read-the-docs"
+DOCS_RESIZER_LISTENER_KEY = "__irtReadTheDocsResizeHandler"
 
 
 def _resolve_asset() -> Path | None:
@@ -70,6 +73,140 @@ def _current_theme() -> str:
     return _normalize_theme(st.get_option("theme.base"))
 
 
+def _build_docs_resizer_marker_html(marker_key: str = DOCS_RESIZER_MARKER_KEY) -> str:
+    """Return a hidden parent-DOM marker placed immediately before the docs iframe."""
+    return f'<div class="irt-read-the-docs-marker" data-docs-key="{marker_key}" style="display:none"></div>'
+
+
+def _build_docs_resizer_html(
+    *,
+    marker_key: str = DOCS_RESIZER_MARKER_KEY,
+    listener_key: str = DOCS_RESIZER_LISTENER_KEY,
+    bottom_margin: int = 16,
+    min_height: int = 420,
+    fallback_height: int = DOCS_COMPONENT_HEIGHT,
+) -> str:
+    """Return parent-DOM JavaScript that resizes the docs iframe to available viewport height."""
+    return f"""
+    <script>
+    (function() {{
+      const selfFrame = window.frameElement;
+      const parentWindow = window.parent;
+      if (!selfFrame || !parentWindow) {{
+        return;
+      }}
+
+      const markerKey = {marker_key!r};
+      const listenerKey = {listener_key!r};
+      const bottomMargin = {int(bottom_margin)};
+      const minHeight = {int(min_height)};
+      const fallbackHeight = {int(fallback_height)};
+
+      function coerceHeight(value) {{
+        const rounded = Math.round(Number(value));
+        if (!Number.isFinite(rounded)) {{
+          return fallbackHeight;
+        }}
+        return Math.max(minHeight, rounded);
+      }}
+
+      function updateWrapperHeight(iframe, height) {{
+        let node = iframe;
+        for (let depth = 0; node && depth < 4; depth += 1) {{
+          if (node.style) {{
+            node.style.height = `${{height}}px`;
+            node.style.minHeight = `${{height}}px`;
+          }}
+          node = node.parentElement;
+        }}
+      }}
+
+      function updateInnerDocument(iframe, height) {{
+        try {{
+          const childDocument = iframe.contentDocument;
+          const childWindow = iframe.contentWindow;
+          if (!childDocument) {{
+            return;
+          }}
+          if (childDocument.documentElement) {{
+            childDocument.documentElement.style.height = `${{height}}px`;
+          }}
+          if (childDocument.body) {{
+            childDocument.body.style.height = `${{height}}px`;
+          }}
+          if (childWindow && typeof childWindow.dispatchEvent === "function") {{
+            childWindow.dispatchEvent(new Event("resize"));
+          }}
+        }} catch (error) {{
+          /* Same-origin access is best-effort; the outer iframe height is sufficient. */
+        }}
+      }}
+
+      function chooseTargetIframe(block, marker, resizerFrame) {{
+        const markerTop = marker.getBoundingClientRect().top;
+        const resizerTop = resizerFrame.getBoundingClientRect().top;
+        return Array.from(block.querySelectorAll("iframe"))
+          .filter(function(iframe) {{
+            if (iframe === resizerFrame) {{
+              return false;
+            }}
+            const top = iframe.getBoundingClientRect().top;
+            return top >= markerTop && top <= resizerTop;
+          }})
+          .sort(function(left, right) {{
+            const leftDistance = Math.abs(left.getBoundingClientRect().top - markerTop);
+            const rightDistance = Math.abs(right.getBoundingClientRect().top - markerTop);
+            return leftDistance - rightDistance;
+          }})[0] || null;
+      }}
+
+      function resizeDocsIframe() {{
+        const hostBlock = selfFrame.closest('[data-testid="stVerticalBlock"]');
+        if (!hostBlock) {{
+          return;
+        }}
+        const marker = hostBlock.querySelector(`.irt-read-the-docs-marker[data-docs-key="${{markerKey}}"]`);
+        if (!marker) {{
+          return;
+        }}
+        const target = chooseTargetIframe(hostBlock, marker, selfFrame);
+        if (!target) {{
+          return;
+        }}
+        const available = parentWindow.innerHeight - target.getBoundingClientRect().top - bottomMargin;
+        const height = coerceHeight(available);
+        target.style.height = `${{height}}px`;
+        target.height = String(height);
+        updateWrapperHeight(target, height);
+        updateInnerDocument(target, height);
+      }}
+
+      function scheduleResize() {{
+        if (parentWindow && typeof parentWindow.requestAnimationFrame === "function") {{
+          parentWindow.requestAnimationFrame(resizeDocsIframe);
+          return;
+        }}
+        window.setTimeout(resizeDocsIframe, 0);
+      }}
+
+      scheduleResize();
+      window.setTimeout(scheduleResize, 50);
+      window.setTimeout(scheduleResize, 250);
+      window.setTimeout(scheduleResize, 1000);
+
+      if (parentWindow && typeof parentWindow.addEventListener === "function") {{
+        const previous = parentWindow[listenerKey];
+        if (previous) {{
+          parentWindow.removeEventListener("resize", previous);
+        }}
+        parentWindow[listenerKey] = scheduleResize;
+        parentWindow.addEventListener("resize", scheduleResize);
+      }}
+    }})();
+    </script>
+    """
+
+
 def render_read_the_docs() -> None:
     """Render the committed Technical Guidance Note HTML in an iframe."""
     asset = _resolve_asset()
@@ -80,5 +217,6 @@ def render_read_the_docs() -> None:
         )
         return
     html_doc = asset.read_text(encoding="utf-8")
-    components.html(_stamp_theme(html_doc, _current_theme()), height=900, scrolling=True)
-
+    st.markdown(_build_docs_resizer_marker_html(), unsafe_allow_html=True)
+    components.html(_stamp_theme(html_doc, _current_theme()), height=DOCS_COMPONENT_HEIGHT, scrolling=True)
+    components.html(_build_docs_resizer_html(), height=0, width=0)

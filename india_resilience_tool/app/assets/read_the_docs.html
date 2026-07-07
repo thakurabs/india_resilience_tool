@@ -11,7 +11,7 @@
 :root[data-theme="dark"]{--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}}
 *{box-sizing:border-box}html,body{margin:0;height:100%;scroll-behavior:smooth}body{font:15px/1.62 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
-a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-3{padding-left:18px!important;font-size:13px}.content-scroll{height:100vh;overflow:auto}.content{max-width:980px;margin:0 auto;padding:34px 34px 96px}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:grid;grid-template-columns:1fr 1fr}.toc-level-3{display:none}}
+a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-3{padding-left:18px!important;font-size:13px}.content-scroll{height:100vh;overflow:auto}.content{max-width:none;margin:0;padding:34px 40px 96px}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:grid;grid-template-columns:1fr 1fr}.toc-level-3{display:none}}
 </style>
 </head>
 <body>
@@ -646,7 +646,148 @@ window.IRT_DOC_MATH_OPTIONS={delimiters:[{left:"$$",right:"$$",display:true},{le
 document.addEventListener("DOMContentLoaded",function(){renderMathInElement(document.body,window.IRT_DOC_MATH_OPTIONS);});
 </script>
 <script>
-document.addEventListener('DOMContentLoaded',function(){function renderMath(root){if(window.renderMathInElement){renderMathInElement(root,window.IRT_DOC_MATH_OPTIONS);}}const scroller=document.querySelector('.content-scroll');const links=[...document.querySelectorAll('.toc-links a')];const headings=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);function onScroll(){let current=headings[0];for(const h of headings){if(h.getBoundingClientRect().top<150)current=h;}links.forEach(a=>a.classList.toggle('active',current&&a.getAttribute('href')==='#'+current.id));}scroller.addEventListener('scroll',onScroll,{passive:true});onScroll();document.querySelector('.back-top').addEventListener('click',()=>scroller.scrollTo({top:0,behavior:'smooth'}));const box=document.querySelector('.lightbox');const boxImg=box.querySelector('img');document.querySelectorAll('.figure-zoom img').forEach(img=>img.addEventListener('click',()=>{boxImg.src=img.src;boxImg.alt=img.alt;box.classList.add('open');}));box.addEventListener('click',()=>box.classList.remove('open'));const input=document.querySelector('.toc-search');const content=document.querySelector('.content');const original=content.innerHTML;input.addEventListener('input',()=>{const q=input.value.trim();content.innerHTML=original;if(!q){renderMath(content);return;}const walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.nodeValue.toLowerCase().includes(q.toLowerCase())?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_SKIP});const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);nodes.forEach(n=>{const span=document.createElement('span');const re=new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig');span.innerHTML=n.nodeValue.replace(re,m=>'<mark class="search-hit">'+m+'</mark>');n.parentNode.replaceChild(span,n);});renderMath(content);const first=document.querySelector('.search-hit');if(first)first.scrollIntoView({block:'center'});});});
+(function() {
+  document.addEventListener("DOMContentLoaded", function() {
+    const scroller = document.querySelector(".content-scroll");
+    const content = document.querySelector(".content");
+    const links = Array.from(document.querySelectorAll('.toc-links a[href^="#"]'));
+
+    function renderMath(root) {
+      if (root && window.renderMathInElement) {
+        renderMathInElement(root, window.IRT_DOC_MATH_OPTIONS);
+      }
+    }
+
+    function getAnchorTarget(link) {
+      const href = link ? link.getAttribute("href") : "";
+      if (!href || href.charAt(0) !== "#" || href.length < 2) {
+        return null;
+      }
+      return document.getElementById(href.slice(1));
+    }
+
+    function collectHeadings() {
+      return links.map(getAnchorTarget).filter(Boolean);
+    }
+
+    function setActiveLink(targetId, explicitLink) {
+      links.forEach(function(link) {
+        const isActive = explicitLink
+          ? link === explicitLink
+          : targetId && link.getAttribute("href") === "#" + targetId;
+        link.classList.toggle("active", Boolean(isActive));
+      });
+    }
+
+    function scrollTargetIntoScroller(target) {
+      if (!scroller || !target) {
+        return;
+      }
+      const targetTop = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+      scroller.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    }
+
+    function onScroll() {
+      if (!scroller) {
+        return;
+      }
+      const headings = collectHeadings();
+      let current = headings[0] || null;
+      const scrollerTop = scroller.getBoundingClientRect().top;
+      for (const heading of headings) {
+        if (heading.getBoundingClientRect().top - scrollerTop < 150) {
+          current = heading;
+        }
+      }
+      setActiveLink(current ? current.id : null, null);
+    }
+
+    document.addEventListener("click", function(event) {
+      const link = event.target && event.target.closest ? event.target.closest('a[href^="#"]') : null;
+      if (!link) {
+        return;
+      }
+      event.preventDefault();
+      const target = getAnchorTarget(link);
+      if (!target) {
+        return;
+      }
+      scrollTargetIntoScroller(target);
+      setActiveLink(target.id, link);
+    });
+
+    if (scroller) {
+      scroller.addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+    }
+
+    const backTop = document.querySelector(".back-top");
+    if (backTop && scroller) {
+      backTop.addEventListener("click", function() {
+        scroller.scrollTo({ top: 0, behavior: "smooth" });
+      });
+    }
+
+    const lightbox = document.querySelector(".lightbox");
+    const lightboxImage = lightbox ? lightbox.querySelector("img") : null;
+    if (content && lightbox && lightboxImage) {
+      content.addEventListener("click", function(event) {
+        const image = event.target && event.target.closest ? event.target.closest(".figure-zoom img") : null;
+        if (!image) {
+          return;
+        }
+        lightboxImage.src = image.src;
+        lightboxImage.alt = image.alt;
+        lightbox.classList.add("open");
+      });
+      lightbox.addEventListener("click", function() {
+        lightbox.classList.remove("open");
+      });
+    }
+
+    const input = document.querySelector(".toc-search");
+    if (input && content) {
+      const original = content.innerHTML;
+      input.addEventListener("input", function() {
+        const query = input.value.trim();
+        content.innerHTML = original;
+        renderMath(content);
+        onScroll();
+        if (!query) {
+          return;
+        }
+
+        const needle = query.toLowerCase();
+        const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
+          acceptNode: function(node) {
+            return node.nodeValue.toLowerCase().includes(needle)
+              ? NodeFilter.FILTER_ACCEPT
+              : NodeFilter.FILTER_SKIP;
+          },
+        });
+        const nodes = [];
+        while (walker.nextNode()) {
+          nodes.push(walker.currentNode);
+        }
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\]/g, "\$&");
+        const regex = new RegExp(escapedQuery, "ig");
+        nodes.forEach(function(node) {
+          const span = document.createElement("span");
+          span.innerHTML = node.nodeValue.replace(regex, function(match) {
+            return '<mark class="search-hit">' + match + "</mark>";
+          });
+          if (node.parentNode) {
+            node.parentNode.replaceChild(span, node);
+          }
+        });
+        const first = content.querySelector(".search-hit");
+        if (first) {
+          scrollTargetIntoScroller(first);
+        }
+      });
+    }
+  });
+})();
 </script>
 </body>
 </html>

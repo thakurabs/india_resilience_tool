@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from india_resilience_tool.app.views.read_the_docs_view import _stamp_theme
+from india_resilience_tool.app.views.read_the_docs_view import (
+    DOCS_RESIZER_LISTENER_KEY,
+    DOCS_RESIZER_MARKER_KEY,
+    _build_docs_resizer_html,
+    _build_docs_resizer_marker_html,
+    _stamp_theme,
+)
 
 
 def test_stamp_theme_replaces_existing_html_theme_idempotently() -> None:
@@ -36,3 +42,24 @@ def test_stamp_theme_wraps_fragment_when_no_known_root() -> None:
 
     assert stamped == '<div data-theme="dark" data-irt-doc-root><main>Docs</main></div>'
 
+
+def test_docs_resizer_marker_uses_stable_key() -> None:
+    marker = _build_docs_resizer_marker_html()
+
+    assert "irt-read-the-docs-marker" in marker
+    assert f'data-docs-key="{DOCS_RESIZER_MARKER_KEY}"' in marker
+
+
+def test_docs_resizer_contract_strings_are_stable() -> None:
+    html = _build_docs_resizer_html()
+
+    assert DOCS_RESIZER_MARKER_KEY in html
+    assert DOCS_RESIZER_LISTENER_KEY in html
+    assert "parentWindow.removeEventListener(\"resize\", previous);" in html
+    assert "parentWindow[listenerKey] = scheduleResize;" in html
+    assert "target.style.height = `${height}px`;" in html
+    assert "target.height = String(height);" in html
+    assert "node.style.height = `${height}px`;" in html
+    assert "iframe.contentDocument" in html
+    assert 'childWindow.dispatchEvent(new Event("resize"));' in html
+    assert "chooseTargetIframe(hostBlock, marker, selfFrame)" in html
