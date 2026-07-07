@@ -250,6 +250,84 @@ def line(x1: float, y1: float, x2: float, y2: float, color: str, width: float = 
     return f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" stroke-width="{width}"{dash_attr}/>'
 
 
+def _shoelace_area(poly: list[tuple[float, float]]) -> float:
+    """Unsigned area of a simple polygon via the shoelace formula."""
+    if len(poly) < 3:
+        return 0.0
+    s = 0.0
+    for i in range(len(poly)):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % len(poly)]
+        s += x1 * y2 - x2 * y1
+    return abs(s) / 2.0
+
+
+def _poly_centroid(poly: list[tuple[float, float]]) -> tuple[float, float]:
+    """Area centroid of a simple polygon; vertex mean fallback if degenerate."""
+    a = cx = cy = 0.0
+    n = len(poly)
+    for i in range(n):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % n]
+        cross = x1 * y2 - x2 * y1
+        a += cross
+        cx += (x1 + x2) * cross
+        cy += (y1 + y2) * cross
+    if abs(a) < 1e-9:
+        return sum(p[0] for p in poly) / n, sum(p[1] for p in poly) / n
+    return cx / (3 * a), cy / (3 * a)
+
+
+def _clip_poly_to_rect(
+    poly: list[tuple[float, float]], xmin: float, ymin: float, xmax: float, ymax: float
+) -> list[tuple[float, float]]:
+    """Sutherland-Hodgman clip of a polygon against an axis-aligned rectangle.
+
+    Returns the clipped vertex ring (empty if the polygon misses the rectangle).
+    Consecutive duplicate vertices are removed for a clean SVG polygon. SVG y grows
+    downward; area is orientation-independent so this does not affect the weights.
+    """
+    def _clip_edge(pts, keep, cross):
+        out: list[tuple[float, float]] = []
+        for i in range(len(pts)):
+            cur, prev = pts[i], pts[i - 1]
+            cur_in, prev_in = keep(cur), keep(prev)
+            if cur_in:
+                if not prev_in:
+                    out.append(cross(prev, cur))
+                out.append(cur)
+            elif prev_in:
+                out.append(cross(prev, cur))
+        return out
+
+    def _cross_x(p, q, bound):
+        (px, py), (qx, qy) = p, q
+        t = (bound - px) / (qx - px)
+        return (bound, py + t * (qy - py))
+
+    def _cross_y(p, q, bound):
+        (px, py), (qx, qy) = p, q
+        t = (bound - py) / (qy - py)
+        return (px + t * (qx - px), bound)
+
+    pts = list(poly)
+    pts = _clip_edge(pts, lambda p: p[0] >= xmin, lambda a, b: _cross_x(a, b, xmin))
+    pts = _clip_edge(pts, lambda p: p[0] <= xmax, lambda a, b: _cross_x(a, b, xmax))
+    pts = _clip_edge(pts, lambda p: p[1] >= ymin, lambda a, b: _cross_y(a, b, ymin))
+    pts = _clip_edge(pts, lambda p: p[1] <= ymax, lambda a, b: _cross_y(a, b, ymax))
+    cleaned: list[tuple[float, float]] = []
+    for p in pts:
+        if not cleaned or abs(p[0] - cleaned[-1][0]) > 1e-6 or abs(p[1] - cleaned[-1][1]) > 1e-6:
+            cleaned.append(p)
+    if (
+        len(cleaned) > 1
+        and abs(cleaned[0][0] - cleaned[-1][0]) < 1e-6
+        and abs(cleaned[0][1] - cleaned[-1][1]) < 1e-6
+    ):
+        cleaned.pop()
+    return cleaned
+
+
 def figure_01() -> str:
     body: list[str] = [
         text(60, 48, "FIG-01. End-to-End IRT Pipeline Flow", "title"),
@@ -634,6 +712,7 @@ def figure_10() -> str:
     gx, gy, cell = 88, 140, 96
     values = [22, 35, 48, 31, 55, 64, 46, 70, 82, 39, 52, 61]
     value_colors = ["#edf7fb", "#d7eef7", "#bde1f1", "#92cde7", "#5ab3d6"]
+    # 1) valued grid cells (background)
     for r in range(3):
         for c in range(4):
             x = gx + c * cell
@@ -642,41 +721,51 @@ def figure_10() -> str:
             shade = value_colors[min(max((value - 20) // 14, 0), len(value_colors) - 1)]
             body.append(rect(x, y, cell, cell, shade, COLORS["grid"], stroke_width=1.1))
             body.append(text(x + cell - 10, y + 20, f"v{r * 4 + c + 1}={value}", "tiny", "end"))
-    polygon = "150,178 310,150 442,230 398,372 252,424 126,326"
-    body.append(f'<polygon points="{polygon}" fill="{COLORS["output"]}" fill-opacity="0.16" stroke="{COLORS["output"]}" stroke-width="3"/>')
-    slivers = [
-        "184,156 280,154 312,198 184,218",
-        "304,158 410,218 374,258 286,212",
-        "122,246 220,240 230,338 130,330",
-        "220,240 360,260 330,380 236,396",
-        "360,260 434,238 398,372 330,380",
-        "236,396 330,380 300,428 250,424",
-    ]
-    for points in slivers:
-        body.append(f'<polygon points="{points}" fill="{COLORS["process"]}" fill-opacity="0.34" stroke="{COLORS["process"]}" stroke-width="1.0"/>')
-    overlaps = [
-        (185, 196, "a_i2", 0.52),
-        (295, 212, "a_i3", 0.38),
-        (170, 300, "a_i5", 0.44),
-        (255, 300, "a_i6", 0.78),
-        (350, 300, "a_i7", 0.33),
-        (262, 392, "a_i10", 0.27),
-    ]
-    for x, y, label_value, frac in overlaps:
-        r = 10 + 16 * frac
-        body.append(f'<circle cx="{x}" cy="{y}" r="{r:.1f}" fill="white" fill-opacity="0.88" stroke="{COLORS["process"]}" stroke-width="1.2"/>')
-        body.append(text(x, y - 2, label_value, "tiny", "middle"))
-        body.append(text(x, y + 13, f"{frac:.0%}", "tiny", "middle"))
 
-    body.append(text(300, 475, "Irregular admin polygon over 0.25 deg grid cells", "small", "middle"))
-    body.append(text(300, 500, "Green slivers and scaled discs encode equal-area weights a_ij.", "tiny", "middle"))
+    # 2) district polygon, clipped to every cell -> one true sliver per overlapped cell
+    district = [
+        (230, 150), (340, 150), (376, 236), (430, 288),
+        (376, 332), (356, 408), (240, 412), (184, 332), (184, 236),
+    ]
+    cell_area = float(cell * cell)
+    slivers: list[tuple[int, int, float, float, list[tuple[float, float]], tuple[float, float]]] = []
+    for r in range(3):
+        for c in range(4):
+            idx = r * 4 + c
+            xmin = gx + c * cell
+            ymin = gy + r * cell
+            piece = _clip_poly_to_rect(district, xmin, ymin, xmin + cell, ymin + cell)
+            frac = _shoelace_area(piece) / cell_area
+            if frac <= 0.02:
+                continue
+            slivers.append((idx + 1, values[idx], frac, values[idx] * frac, piece, _poly_centroid(piece)))
+
+    # Shade each sliver green by coverage fraction (darker = larger weight); grid-coloured
+    # stroke so the grid lines visibly cut the district into cell-pieces.
+    for _cn, _v, frac, _co, points, _cen in slivers:
+        pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
+        opacity = 0.16 + 0.5 * frac
+        body.append(f'<polygon points="{pts}" fill="{COLORS["process"]}" fill-opacity="{opacity:.2f}" stroke="{COLORS["grid"]}" stroke-width="1.1"/>')
+
+    # District outline on top so the boundary reads as a single polygon.
+    dpts = " ".join(f"{x:.1f},{y:.1f}" for x, y in district)
+    body.append(f'<polygon points="{dpts}" fill="none" stroke="{COLORS["output"]}" stroke-width="3"/>')
+
+    # Weight label centred in each sliver (full cells show 1.00 in bold).
+    for _cn, _v, frac, _co, _points, (cenx, ceny) in slivers:
+        body.append(text(cenx, ceny + 4, f"{frac:.2f}", "label" if frac > 0.995 else "small", "middle"))
+
+    body.append(text(300, 470, "Grid lines cut the district into one sliver per cell it covers.", "small", "middle"))
+    body.append(text(300, 491, "Sliver area = intersection a_ij; number in sliver = a_ij as a fraction of the cell.", "tiny", "middle"))
+
+    # Formula + equal-area note.
     body.append(text(705, 156, "Weighted average", "label", "middle"))
     body.append(formula_area_weighted_average(705, 194))
     body.append(arrow(492, 300, 590, 210))
     body.extend(
         box(
             600,
-            246,
+            232,
             410,
             72,
             "#fff8e6",
@@ -686,30 +775,28 @@ def figure_10() -> str:
             radius=5,
         )
     )
-    tx, ty = 642, 374
-    widths = [82, 82, 118, 108]
-    headers = ["cell", "value", "area frac.", "contrib."]
+
+    # 3) worked table derived from the SAME computation
+    tx, ty = 618, 336
+    widths = [78, 74, 104, 96]
     x = tx
-    for w, header in zip(widths, headers):
-        body.append(rect(x, ty, w, 34, "#f4f6f8", COLORS["grey"], stroke_width=1.0))
-        body.append(text(x + w / 2, ty + 22, header, "tiny", "middle"))
+    for w, header in zip(widths, ["cell", "value", "area frac.", "contrib."]):
+        body.append(rect(x, ty, w, 30, "#f4f6f8", COLORS["grey"], stroke_width=1.0))
+        body.append(text(x + w / 2, ty + 20, header, "tiny", "middle"))
         x += w
-    rows = [
-        ("j2", "35", "0.52", "18.2"),
-        ("j6", "64", "0.78", "49.9"),
-        ("j7", "46", "0.33", "15.2"),
-        ("...", "...", "...", "..."),
-        ("v\u0304_i", "", "sum a_ij", "sum c / sum a"),
-    ]
-    for row_i, row in enumerate(rows):
+    sum_frac = sum(s[2] for s in slivers)
+    sum_contrib = sum(s[3] for s in slivers)
+    data_rows = [(f"j{cn}", str(v), f"{fr:.2f}", f"{co:.1f}") for cn, v, fr, co, _p, _c in slivers]
+    data_rows.append(("v\u0304_i", "", f"{sum_frac:.2f}", f"{sum_contrib / sum_frac:.1f}"))
+    for row_i, row in enumerate(data_rows):
         x = tx
-        y = ty + 34 + row_i * 34
+        y = ty + 30 + row_i * 30
+        last = row_i == len(data_rows) - 1
         for w, value in zip(widths, row):
-            fill = "#f8fafc" if row_i == len(rows) - 1 else "white"
-            body.append(rect(x, y, w, 34, fill, COLORS["grid"], stroke_width=0.8))
-            body.append(text(x + w / 2, y + 22, value, "tiny", "middle"))
+            body.append(rect(x, y, w, 30, "#f8fafc" if last else "white", COLORS["grid"], stroke_width=0.8))
+            body.append(text(x + w / 2, y + 20, value, "tiny", "middle"))
             x += w
-    body.append(text(60, 710, "Source: author-created synthetic geometry; values and areas are illustrative.", "note"))
+    body.append(text(60, 710, "Source: author-created synthetic geometry; slivers, areas, and the weighted mean are computed by clipping the polygon to each cell.", "note"))
     return Svg().wrap(body, "FIG-10. Fractional-area overlap weights", "Schematic of polygon-cell area weights.")
 
 
