@@ -28,6 +28,7 @@ HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 FENCE_RE = re.compile(r"^```")
 URL_RE = re.compile(r"url\((['\"]?)(?!data:)([^)'\"\s]+)\1\)")
 _SECTION_HEAD_RE = re.compile(r'^<h([12]) id="([^"]+)"')
+_DASHBOARD_FIRST_SECTION = "## 1. Introduction and Framing"
 
 APPROVED_FIGURES: tuple[str, ...] = (
     "fig_02_hazard_exposure_vulnerability_scope.svg",
@@ -109,6 +110,15 @@ def _slugify(text: str) -> str:
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"[^\w\s-]", "", text.lower(), flags=re.UNICODE)
     return re.sub(r"[-\s_]+", "-", text).strip("-") or "section"
+
+
+def _strip_dashboard_cover(markdown: str) -> str:
+    """Remove the static note cover so the dashboard starts at the first real section."""
+    lines = markdown.splitlines()
+    for idx, line in enumerate(lines):
+        if line.strip() == _DASHBOARD_FIRST_SECTION:
+            return "\n".join(lines[idx:])
+    return markdown
 
 
 def heading_id_map(markdown: str) -> tuple[dict[str, str], list[Heading]]:
@@ -439,7 +449,8 @@ def build_html(source: Path = DEFAULT_SOURCE, *, include_build_timestamp: bool =
     markdown = source.read_text(encoding="utf-8")
     figure_assets = validate_figure_manifest(markdown)
     asset_by_name = {asset.filename: asset for asset in figure_assets}
-    body_html, headings = render_markdown(markdown, asset_by_name)
+    display_markdown = _strip_dashboard_cover(markdown)
+    body_html, headings = render_markdown(display_markdown, asset_by_name)
     css, katex_js, auto_render_js, katex_sizes = load_katex_bundle()
     source_hash = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
     manifest_hash = _asset_manifest_hash(figure_assets)

@@ -104,7 +104,7 @@ def test_generated_html_uses_section_pages_and_collapsible_toc() -> None:
     html_doc, _size_info = _generated_html()
 
     assert 'data-section-id="' in html_doc
-    assert '<section class="doc-section active"' in html_doc
+    assert '<section class="doc-section active" data-section-id="1-introduction-and-framing">' in html_doc
     assert ".doc-section{display:none}" in html_doc
     assert ".content.searching .doc-section{display:block}" in html_doc
     assert 'class="toc-group"' in html_doc
@@ -113,6 +113,16 @@ def test_generated_html_uses_section_pages_and_collapsible_toc() -> None:
     assert "function showSection" in html_doc
     assert 'content.classList.add("searching")' in html_doc
     assert 'content.classList.remove("searching")' in html_doc
+
+
+def test_generated_html_omits_dashboard_cover_sections() -> None:
+    html_doc, _size_info = _generated_html()
+
+    assert 'href="#india-resilience-tool-technical-guidance-note"' not in html_doc
+    assert 'href="#climate-risk-methodology-data-metrics-and-bundle-construction"' not in html_doc
+    assert 'data-section-id="india-resilience-tool-technical-guidance-note"' not in html_doc
+    assert 'data-section-id="climate-risk-methodology-data-metrics-and-bundle-construction"' not in html_doc
+    assert 'href="#1-introduction-and-framing"' in html_doc
 
 
 def test_generated_html_emits_valid_search_escape_regex() -> None:
