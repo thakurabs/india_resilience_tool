@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 from functools import lru_cache
 from pathlib import Path
 
@@ -96,6 +98,46 @@ def test_generated_html_uses_delegated_figure_zoom_and_live_headings() -> None:
     assert 'document.querySelectorAll(".figure-zoom img").forEach' not in html_doc
     assert "function collectHeadings()" in html_doc
     assert "const headings = collectHeadings();" in html_doc
+
+
+def test_generated_html_uses_section_pages_and_collapsible_toc() -> None:
+    html_doc, _size_info = _generated_html()
+
+    assert 'data-section-id="' in html_doc
+    assert '<section class="doc-section active"' in html_doc
+    assert ".doc-section{display:none}" in html_doc
+    assert ".content.searching .doc-section{display:block}" in html_doc
+    assert 'class="toc-group"' in html_doc
+    assert 'class="toc-toggle' in html_doc
+    assert 'class="toc-sub"' in html_doc
+    assert "function showSection" in html_doc
+    assert 'content.classList.add("searching")' in html_doc
+    assert 'content.classList.remove("searching")' in html_doc
+
+
+def test_generated_html_emits_valid_search_escape_regex() -> None:
+    html_doc, _size_info = _generated_html()
+
+    assert r"/[.*+?^${}()|[\]\\]/g" in html_doc
+    assert r"/[.*+?^${}()|[\]\]/g" not in html_doc
+    assert r'"\\$&"' in html_doc
+    assert r'"\$&"' not in html_doc
+
+
+def test_generated_app_script_parses_when_node_is_available(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    html_doc, _size_info = _generated_html()
+    script_match = re.search(r"<script>(?P<script>\s*\(function\(\).*?)</script>\s*</body>", html_doc, re.S)
+    assert script_match is not None
+    script_path = tmp_path / "read_the_docs_app.js"
+    script_path.write_text(script_match.group("script"), encoding="utf-8")
+
+    result = subprocess.run([node, "--check", str(script_path)], capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_committed_asset_matches_generated_html_if_present() -> None:

@@ -11,7 +11,7 @@
 :root[data-theme="dark"]{--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}}
 *{box-sizing:border-box}html,body{margin:0;height:100%;scroll-behavior:smooth}body{font:15px/1.62 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
-a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-3{padding-left:18px!important;font-size:13px}.content-scroll{height:100vh;overflow:auto}.content{max-width:none;margin:0;padding:34px 40px 96px}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:grid;grid-template-columns:1fr 1fr}.toc-level-3{display:none}}
+a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-group-head{display:flex;align-items:center;gap:4px}.toc-group-head a{flex:1}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-1,.toc-level-2{font-weight:600}.toc-level-3{padding-left:18px!important;font-size:13px}.toc-toggle{width:20px;height:24px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center}.toc-toggle::before{content:"\25B8";display:block;transition:transform .16s ease}.toc-group.open .toc-toggle::before{transform:rotate(90deg)}.toc-toggle.is-empty{visibility:hidden;cursor:default}.toc-sub{display:none;flex-direction:column;gap:2px;margin-left:24px}.toc-group.open .toc-sub{display:flex}.content-scroll{height:100vh;overflow:auto}.content{max-width:none;margin:0;padding:34px 40px 96px}.doc-section{display:none}.doc-section.active{display:block}.content.searching .doc-section{display:block}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:flex;flex-direction:column}.toc-sub{margin-left:20px}}
 </style>
 </head>
 <body>
@@ -19,59 +19,60 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <aside class="toc-panel" aria-label="Table of contents">
 <p class="toc-title">Read the Docs</p>
 <input class="toc-search" type="search" placeholder="Search note" aria-label="Search note">
-<nav class="toc-links"><a class="toc-level-2" href="#climate-risk-methodology-data-metrics-and-bundle-construction">Climate Risk Methodology: Data, Metrics, and Bundle Construction</a>
-<a class="toc-level-2" href="#1-introduction-and-framing">1. Introduction and Framing</a>
-<a class="toc-level-2" href="#2-climate-data-sources">2. Climate Data Sources</a>
-<a class="toc-level-3" href="#21-cmip6-model-ensemble-and-scenarios">2.1 CMIP6: Model Ensemble and Scenarios</a>
+<nav class="toc-links"><div class="toc-group"><div class="toc-group-head"><button class="toc-toggle is-empty" type="button" aria-expanded="false" aria-label="Toggle section" disabled></button><a class="toc-level-1" href="#india-resilience-tool-technical-guidance-note">India Resilience Tool — Technical Guidance Note</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle is-empty" type="button" aria-expanded="false" aria-label="Toggle section" disabled></button><a class="toc-level-2" href="#climate-risk-methodology-data-metrics-and-bundle-construction">Climate Risk Methodology: Data, Metrics, and Bundle Construction</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle is-empty" type="button" aria-expanded="false" aria-label="Toggle section" disabled></button><a class="toc-level-2" href="#1-introduction-and-framing">1. Introduction and Framing</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle" type="button" aria-expanded="false" aria-label="Toggle section"></button><a class="toc-level-2" href="#2-climate-data-sources">2. Climate Data Sources</a></div>
+<div class="toc-sub"><a class="toc-level-3" href="#21-cmip6-model-ensemble-and-scenarios">2.1 CMIP6: Model Ensemble and Scenarios</a>
 <a class="toc-level-3" href="#22-temporal-coverage-and-analysis-periods">2.2 Temporal Coverage and Analysis Periods</a>
 <a class="toc-level-3" href="#23-nasa-nex-gddp-cmip6-the-downscaled-product">2.3 NASA-NEX GDDP-CMIP6: The Downscaled Product</a>
-<a class="toc-level-3" href="#24-jrc-global-flood-data">2.4 JRC Global Flood Data</a>
-<a class="toc-level-2" href="#3-downscaling-what-it-is-and-how-nasa-nex-applies-it">3. Downscaling: What It Is and How NASA-NEX Applies It</a>
-<a class="toc-level-3" href="#31-what-statistical-downscaling-means">3.1 What Statistical Downscaling Means</a>
+<a class="toc-level-3" href="#24-jrc-global-flood-data">2.4 JRC Global Flood Data</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle" type="button" aria-expanded="false" aria-label="Toggle section"></button><a class="toc-level-2" href="#3-downscaling-what-it-is-and-how-nasa-nex-applies-it">3. Downscaling: What It Is and How NASA-NEX Applies It</a></div>
+<div class="toc-sub"><a class="toc-level-3" href="#31-what-statistical-downscaling-means">3.1 What Statistical Downscaling Means</a>
 <a class="toc-level-3" href="#32-the-bcsd-method-in-nasa-nex-gddp">3.2 The BCSD Method in NASA-NEX GDDP</a>
 <a class="toc-level-3" href="#33-grid-resolution-and-spatial-domain">3.3 Grid Resolution and Spatial Domain</a>
-<a class="toc-level-3" href="#34-provenance-and-reproducibility-notes">3.4 Provenance and Reproducibility Notes</a>
-<a class="toc-level-2" href="#4-grid-first-compute-and-post-processing">4. Grid-First Compute and Post-Processing</a>
-<a class="toc-level-3" href="#41-architecture-why-grid-first">4.1 Architecture: Why Grid-First</a>
+<a class="toc-level-3" href="#34-provenance-and-reproducibility-notes">3.4 Provenance and Reproducibility Notes</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle" type="button" aria-expanded="false" aria-label="Toggle section"></button><a class="toc-level-2" href="#4-grid-first-compute-and-post-processing">4. Grid-First Compute and Post-Processing</a></div>
+<div class="toc-sub"><a class="toc-level-3" href="#41-architecture-why-grid-first">4.1 Architecture: Why Grid-First</a>
 <a class="toc-level-3" href="#42-spatial-aggregation-to-district-and-block">4.2 Spatial Aggregation to District and Block</a>
-<a class="toc-level-3" href="#43-period-aggregation-and-ensemble-handling">4.3 Period Aggregation and Ensemble Handling</a>
-<a class="toc-level-2" href="#5-individual-metric-definitions">5. Individual Metric Definitions</a>
-<a class="toc-level-3" href="#51-temperature-and-heat-metrics">5.1 Temperature and Heat Metrics</a>
+<a class="toc-level-3" href="#43-period-aggregation-and-ensemble-handling">4.3 Period Aggregation and Ensemble Handling</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle" type="button" aria-expanded="false" aria-label="Toggle section"></button><a class="toc-level-2" href="#5-individual-metric-definitions">5. Individual Metric Definitions</a></div>
+<div class="toc-sub"><a class="toc-level-3" href="#51-temperature-and-heat-metrics">5.1 Temperature and Heat Metrics</a>
 <a class="toc-level-3" href="#52-precipitation-and-extreme-rainfall-metrics">5.2 Precipitation and Extreme Rainfall Metrics</a>
 <a class="toc-level-3" href="#53-drought-indices-spi">5.3 Drought Indices (SPI)</a>
 <a class="toc-level-3" href="#54-wet-bulb-temperature-and-humid-heat-metrics">5.4 Wet-Bulb Temperature and Humid Heat Metrics</a>
-<a class="toc-level-3" href="#55-riverine-flood-metrics-jrc">5.5 Riverine Flood Metrics (JRC)</a>
-<a class="toc-level-2" href="#6-thematic-bundle-construction">6. Thematic Bundle Construction</a>
-<a class="toc-level-3" href="#61-bundle-taxonomy-and-grouping-rationale">6.1 Bundle Taxonomy and Grouping Rationale</a>
+<a class="toc-level-3" href="#55-riverine-flood-metrics-jrc">5.5 Riverine Flood Metrics (JRC)</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle" type="button" aria-expanded="false" aria-label="Toggle section"></button><a class="toc-level-2" href="#6-thematic-bundle-construction">6. Thematic Bundle Construction</a></div>
+<div class="toc-sub"><a class="toc-level-3" href="#61-bundle-taxonomy-and-grouping-rationale">6.1 Bundle Taxonomy and Grouping Rationale</a>
 <a class="toc-level-3" href="#62-normalization-per-period-spatial-scaling">6.2 Normalization: Per-Period Spatial Scaling</a>
 <a class="toc-level-3" href="#63-weighted-composite-methodology">6.3 Weighted Composite Methodology</a>
-<a class="toc-level-3" href="#64-bundle-by-bundle-metric-weights">6.4 Bundle-by-Bundle Metric Weights</a>
-<a class="toc-level-2" href="#7-sectoral-bundle-construction">7. Sectoral Bundle Construction</a>
-<a class="toc-level-3" href="#71-sector-hazard-pressure-framework">7.1 Sector Hazard-Pressure Framework</a>
+<a class="toc-level-3" href="#64-bundle-by-bundle-metric-weights">6.4 Bundle-by-Bundle Metric Weights</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle" type="button" aria-expanded="false" aria-label="Toggle section"></button><a class="toc-level-2" href="#7-sectoral-bundle-construction">7. Sectoral Bundle Construction</a></div>
+<div class="toc-sub"><a class="toc-level-3" href="#71-sector-hazard-pressure-framework">7.1 Sector Hazard-Pressure Framework</a>
 <a class="toc-level-3" href="#72-the-blended-rule-absolute-pressure-change-impact-band">7.2 The Blended Rule: Absolute Pressure + Change + Impact Band</a>
 <a class="toc-level-3" href="#73-reading-the-score-what-each-lens-lets-you-compare">7.3 Reading the Score: What Each Lens Lets You Compare</a>
-<a class="toc-level-3" href="#74-bundle-by-bundle-rule-tables-and-weights">7.4 Bundle-by-Bundle Rule Tables and Weights</a>
-<a class="toc-level-2" href="#8-composite-score-and-output">8. Composite Score and Output</a>
-<a class="toc-level-3" href="#81-scenario-and-period-handling">8.1 Scenario and Period Handling</a>
-<a class="toc-level-3" href="#82-district-vs-block-resolution-behaviour">8.2 District vs Block Resolution Behaviour</a>
-<a class="toc-level-2" href="#appendix-a-complete-metric-reference">Appendix A: Complete Metric Reference</a>
-<a class="toc-level-3" href="#a1-heat-risk-and-heat-stress">A.1 Heat Risk and Heat Stress</a>
+<a class="toc-level-3" href="#74-bundle-by-bundle-rule-tables-and-weights">7.4 Bundle-by-Bundle Rule Tables and Weights</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle" type="button" aria-expanded="false" aria-label="Toggle section"></button><a class="toc-level-2" href="#8-composite-score-and-output">8. Composite Score and Output</a></div>
+<div class="toc-sub"><a class="toc-level-3" href="#81-scenario-and-period-handling">8.1 Scenario and Period Handling</a>
+<a class="toc-level-3" href="#82-district-vs-block-resolution-behaviour">8.2 District vs Block Resolution Behaviour</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle" type="button" aria-expanded="false" aria-label="Toggle section"></button><a class="toc-level-2" href="#appendix-a-complete-metric-reference">Appendix A: Complete Metric Reference</a></div>
+<div class="toc-sub"><a class="toc-level-3" href="#a1-heat-risk-and-heat-stress">A.1 Heat Risk and Heat Stress</a>
 <a class="toc-level-3" href="#a2-cold-risk">A.2 Cold Risk</a>
 <a class="toc-level-3" href="#a3-drought-risk">A.3 Drought Risk</a>
 <a class="toc-level-3" href="#a4-extreme-rainfall-flash-flood-risk">A.4 Extreme Rainfall | Flash Flood Risk</a>
 <a class="toc-level-3" href="#a5-riverine-flood">A.5 Riverine Flood</a>
-<a class="toc-level-3" href="#a6-sectoral-only-source-metrics">A.6 Sectoral-only source metrics</a>
-<a class="toc-level-2" href="#appendix-b-sectoral-impact-band-derivations">Appendix B: Sectoral Impact-Band Derivations</a>
-<a class="toc-level-2" href="#references">References</a></nav>
+<a class="toc-level-3" href="#a6-sectoral-only-source-metrics">A.6 Sectoral-only source metrics</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle is-empty" type="button" aria-expanded="false" aria-label="Toggle section" disabled></button><a class="toc-level-2" href="#appendix-b-sectoral-impact-band-derivations">Appendix B: Sectoral Impact-Band Derivations</a></div></div>
+<div class="toc-group"><div class="toc-group-head"><button class="toc-toggle is-empty" type="button" aria-expanded="false" aria-label="Toggle section" disabled></button><a class="toc-level-2" href="#references">References</a></div></div></nav>
 </aside>
 <main class="content-scroll">
-<article class="content"><h1 id="india-resilience-tool-technical-guidance-note">India Resilience Tool — Technical Guidance Note</h1>
-<h2 id="climate-risk-methodology-data-metrics-and-bundle-construction">Climate Risk Methodology: Data, Metrics, and Bundle Construction</h2>
+<article class="content"><section class="doc-section active" data-section-id="india-resilience-tool-technical-guidance-note"><h1 id="india-resilience-tool-technical-guidance-note">India Resilience Tool — Technical Guidance Note</h1></section>
+<section class="doc-section" data-section-id="climate-risk-methodology-data-metrics-and-bundle-construction"><h2 id="climate-risk-methodology-data-metrics-and-bundle-construction">Climate Risk Methodology: Data, Metrics, and Bundle Construction</h2>
 <p><strong>Status:</strong> DRAFT — all sections drafted; final review pending <strong>Scope:</strong> Data sources → downscaling → grid-first compute → individual metrics → thematic and sectoral bundle construction → composite score output <strong>Out of scope:</strong> Exposure layers, vulnerability, adaptive capacity, dashboard UI/UX, pipeline tooling <strong>Primary audience:</strong> Technical peers (climate scientists, GIS specialists) and policy/planning stakeholders <strong>Tone:</strong> Technically rigorous throughout; mathematical derivations included with plain-language explanations alongside</p>
 <p>---</p>
 <blockquote><p><strong>Notation and conventions:</strong></p><p>- Mathematical notation uses standard LaTeX-style inline and display math where rendered.</p><p>- Tables are preferred over prose for metric lists, weights, and parameter values.</p><p>- Cross-references between sections are marked <code>(→ §N.M)</code> or <code>(§N.M)</code>.</p><p>- The note speaks in two registers: mathematical derivations for technical peers, set alongside plain-language statements of what each result means for planning. A reader who wants only the policy reading can skip the display-math blocks — the surrounding prose states each result in words.</p></blockquote>
-<p>---</p>
-<h2 id="1-introduction-and-framing">1. Introduction and Framing</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="1-introduction-and-framing"><h2 id="1-introduction-and-framing">1. Introduction and Framing</h2>
 <p>Climate adaptation in India is planned and financed at the subnational level — by states, districts, and increasingly by blocks — yet the climate-projection products that usually inform those decisions are global, spatially coarse, and aggregated across hazards. India&#x27;s national policy has directed adaptation planning at this level since the National Action Plan on Climate Change (Government of India 2008), under which every state prepared a State Action Plan on Climate Change. Those first-generation plans were widely criticised: they leaned on heterogeneous, often generic vulnerability assessments and were oriented more toward listing implementable actions than toward redirecting development onto a climate-resilient path (Dubash &amp; Jogesh 2014; Singh et al. 2017). Subsequent national efforts have moved toward a standardised, scientifically grounded basis for this planning — notably the Department of Science and Technology&#x27;s common framework for climate vulnerability and risk assessment across Indian states and districts (DST 2021). That this gap is real, and recognised on the demand side, is borne out by practitioners: in a 2022–23 Reserve Bank of India survey, roughly 95 per cent of responding financial institutions reported lacking adequate data to assess climate risk, and respondents specifically called for a national database of climate scenarios at a disaggregated geographic level to assess physical hazards (RBI 2023). The India Resilience Tool (IRT) is built to close the resolution-and-specificity half of that gap: it turns downscaled CMIP6 projections into district- and block-level, multi-hazard climate <strong>hazard-pressure</strong> scores that a planner can read at the administrative unit they actually govern.</p>
 <figure class="doc-figure" id="figure-fig-02-hazard-exposure-vulnerability-scopesvg"><button type="button" class="figure-zoom" aria-label="Zoom figure"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMjAwIiBoZWlnaHQ9Ijc2MCIgdmlld0JveD0iMCAwIDEyMDAgNzYwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+Cjx0aXRsZT5GSUctMDIuIEhhemFyZCwgZXhwb3N1cmUsIGFuZCB2dWxuZXJhYmlsaXR5IHNjb3BlPC90aXRsZT4KPGRlc2M+SVJUIGhhemFyZC1wcmVzc3VyZSBzY29wZSBzY2hlbWF0aWMuPC9kZXNjPgo8c3R5bGU+CnRleHQgeyBmb250LWZhbWlseTogQXJpYWwsIEhlbHZldGljYSwgc2Fucy1zZXJpZjsgZmlsbDogIzFmMjkzMzsgfQoudGl0bGUgeyBmb250LXNpemU6IDI2cHg7IGZvbnQtd2VpZ2h0OiA3MDA7IH0KLnN1YnRpdGxlIHsgZm9udC1zaXplOiAxNXB4OyBmaWxsOiAjNTI2MDZkOyB9Ci5sYWJlbCB7IGZvbnQtc2l6ZTogMTVweDsgZm9udC13ZWlnaHQ6IDcwMDsgfQouc21hbGwgeyBmb250LXNpemU6IDEycHg7IGZpbGw6ICM1MjYwNmQ7IH0KLnRpbnkgeyBmb250LXNpemU6IDEwLjVweDsgZmlsbDogIzUyNjA2ZDsgfQoubm90ZSB7IGZvbnQtc2l6ZTogMTJweDsgZmlsbDogIzNlNGM1OTsgZm9udC1zdHlsZTogaXRhbGljOyB9Ci5heGlzIHsgc3Ryb2tlOiAjNTI2MDZkOyBzdHJva2Utd2lkdGg6IDEuMjsgfQouZ3JpZGxpbmUgeyBzdHJva2U6ICNkOWUyZWM7IHN0cm9rZS13aWR0aDogMTsgfQouYXJyb3cgeyBzdHJva2U6ICM1MjYwNmQ7IHN0cm9rZS13aWR0aDogMi4wOyBmaWxsOiBub25lOyBtYXJrZXItZW5kOiB1cmwoI2Fycm93KTsgfQo8L3N0eWxlPgo8ZGVmcz4KPG1hcmtlciBpZD0iYXJyb3ciIHZpZXdCb3g9IjAgMCAxMiAxMiIgcmVmWD0iMTAiIHJlZlk9IjYiIG1hcmtlcldpZHRoPSIxMiIgbWFya2VySGVpZ2h0PSIxMiIgbWFya2VyVW5pdHM9InVzZXJTcGFjZU9uVXNlIiBvcmllbnQ9ImF1dG8tc3RhcnQtcmV2ZXJzZSI+CjxwYXRoIGQ9Ik0gMSAxIEwgMTEgNiBMIDEgMTEgeiIgZmlsbD0iIzUyNjA2ZCIvPgo8L21hcmtlcj4KPC9kZWZzPgo8cmVjdCB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI3NjAiIGZpbGw9IndoaXRlIi8+Cjx0ZXh0IHg9IjYwLjAiIHk9IjQ4LjAiIGNsYXNzPSJ0aXRsZSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5GSUctMDIuIEhhemFyZCwgRXhwb3N1cmUsIGFuZCBWdWxuZXJhYmlsaXR5IFNjb3BlPC90ZXh0Pgo8dGV4dCB4PSI2MC4wIiB5PSI3NC4wIiBjbGFzcz0ic3VidGl0bGUiIHRleHQtYW5jaG9yPSJzdGFydCI+SVJUIHN1cHBsaWVzIHRoZSBjbGltYXRlIGhhemFyZC1wcmVzc3VyZSBsYXllcjsgZnVsbCByaXNrIGFsc28gbmVlZHMgZXhwb3N1cmUgYW5kIHZ1bG5lcmFiaWxpdHkgaW5wdXRzLjwvdGV4dD4KPGRlZnM+PHBhdHRlcm4gaWQ9InNjb3BlLWhhdGNoIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIiB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBwYXR0ZXJuVHJhbnNmb3JtPSJyb3RhdGUoNDUpIj48bGluZSB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iOCIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuMiIgb3BhY2l0eT0iMC40NSIvPjwvcGF0dGVybj48L2RlZnM+Cjx0ZXh0IHg9IjYwMC4wIiB5PSIxMjguMCIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5DbGltYXRlIHJpc2sgPSBmKEhhemFyZCwgRXhwb3N1cmUsIFZ1bG5lcmFiaWxpdHkpPC90ZXh0Pgo8cmVjdCB4PSI3MCIgeT0iMTkwIiB3aWR0aD0iMzEwIiBoZWlnaHQ9IjEzMCIgcng9IjYiIGZpbGw9IiNmZGUyZTciIHN0cm9rZT0iI2I4MzI0ZiIgc3Ryb2tlLXdpZHRoPSIxLjgiIGNsYXNzPSJmbG93LWJveCIvPgo8dGV4dCB4PSIyMjUuMCIgeT0iMjQ3LjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZGF0YS1ib3g9IjcwLDE5MCwzMTAsMTMwIj5IYXphcmQ8L3RleHQ+Cjx0ZXh0IHg9IjIyNS4wIiB5PSIyNzAuMCIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iNzAsMTkwLDMxMCwxMzAiPklSVCBvdXRwdXQ6IGNsaW1hdGUgaGF6YXJkLXByZXNzdXJlPC90ZXh0Pgo8bGluZSB4MT0iMjI1IiB5MT0iMzIwIiB4Mj0iMjI1IiB5Mj0iMzQyIiBzdHJva2U9IiNiODMyNGYiIHN0cm9rZS13aWR0aD0iMS4wIiBzdHJva2UtZGFzaGFycmF5PSIzIDQiLz4KPHJlY3QgeD0iNzAiIHk9IjM0MiIgd2lkdGg9IjMxMCIgaGVpZ2h0PSIyMDgiIHJ4PSI1IiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSIjYjgzMjRmIiBzdHJva2Utd2lkdGg9IjEuMCIvPgo8dGV4dCB4PSIyMjUuMCIgeT0iMzcwLjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RXhhbXBsZXM8L3RleHQ+CjxjaXJjbGUgY3g9IjEzMiIgY3k9IjQwMiIgcj0iNyIgZmlsbD0iI2ZkZTJlNyIgc3Ryb2tlPSIjYjgzMjRmIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSIxNTYuMCIgeT0iNDA2LjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5oZWF0PC90ZXh0Pgo8Y2lyY2xlIGN4PSIxMzIiIGN5PSI0NDAiIHI9IjciIGZpbGw9IiNmZGUyZTciIHN0cm9rZT0iI2I4MzI0ZiIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KPHRleHQgeD0iMTU2LjAiIHk9IjQ0NC4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJzdGFydCI+ZHJvdWdodDwvdGV4dD4KPGNpcmNsZSBjeD0iMTMyIiBjeT0iNDc4IiByPSI3IiBmaWxsPSIjZmRlMmU3IiBzdHJva2U9IiNiODMyNGYiIHN0cm9rZS13aWR0aD0iMS41Ii8+Cjx0ZXh0IHg9IjE1Ni4wIiB5PSI0ODIuMCIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPmV4dHJlbWUgcmFpbmZhbGw8L3RleHQ+CjxjaXJjbGUgY3g9IjEzMiIgY3k9IjUxNiIgcj0iNyIgZmlsbD0iI2ZkZTJlNyIgc3Ryb2tlPSIjYjgzMjRmIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSIxNTYuMCIgeT0iNTIwLjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5yaXZlcmluZSBmbG9vZDwvdGV4dD4KPHJlY3QgeD0iNDQ1IiB5PSIxOTAiIHdpZHRoPSIzMTAiIGhlaWdodD0iMTMwIiByeD0iNiIgZmlsbD0iI2Y0ZjZmOCIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuOCIgY2xhc3M9ImZsb3ctYm94Ii8+Cjx0ZXh0IHg9IjYwMC4wIiB5PSIyNDcuMCIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iNDQ1LDE5MCwzMTAsMTMwIj5FeHBvc3VyZTwvdGV4dD4KPHRleHQgeD0iNjAwLjAiIHk9IjI3MC4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI0NDUsMTkwLDMxMCwxMzAiPk91dCBvZiBzY29wZTogcGVvcGxlLCBhc3NldHMsIHN5c3RlbXMgZXhwb3NlZDwvdGV4dD4KPHJlY3QgeD0iNDQ1IiB5PSIxOTAiIHdpZHRoPSIzMTAiIGhlaWdodD0iMTMwIiByeD0iNiIgZmlsbD0idXJsKCNzY29wZS1oYXRjaCkiIHN0cm9rZT0ibm9uZSIvPgo8cmVjdCB4PSI1ODAiIHk9IjE5OCIgd2lkdGg9IjE2NiIgaGVpZ2h0PSIyOCIgcng9IjQiIGZpbGw9IndoaXRlIiBzdHJva2U9IiM4Yjk1YTEiIHN0cm9rZS13aWR0aD0iMS4wIi8+Cjx0ZXh0IHg9IjY2My4wIiB5PSIyMTcuMCIgY2xhc3M9InRpbnkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5PVCBQUk9EVUNFRCBCWSBJUlQ8L3RleHQ+CjxsaW5lIHgxPSI2MDAiIHkxPSIzMjAiIHgyPSI2MDAiIHkyPSIzNDIiIHN0cm9rZT0iIzhiOTVhMSIgc3Ryb2tlLXdpZHRoPSIxLjAiIHN0cm9rZS1kYXNoYXJyYXk9IjMgNCIvPgo8cmVjdCB4PSI0NDUiIHk9IjM0MiIgd2lkdGg9IjMxMCIgaGVpZ2h0PSIyMDgiIHJ4PSI1IiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuMCIvPgo8dGV4dCB4PSI2MDAuMCIgeT0iMzcwLjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RXhhbXBsZXM8L3RleHQ+CjxjaXJjbGUgY3g9IjUwNyIgY3k9IjQwMiIgcj0iNyIgZmlsbD0iI2Y0ZjZmOCIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSI1MzEuMCIgeT0iNDA2LjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5wb3B1bGF0aW9uPC90ZXh0Pgo8Y2lyY2xlIGN4PSI1MDciIGN5PSI0NDAiIHI9IjciIGZpbGw9IiNmNGY2ZjgiIHN0cm9rZT0iIzhiOTVhMSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KPHRleHQgeD0iNTMxLjAiIHk9IjQ0NC4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJzdGFydCI+YXNzZXRzPC90ZXh0Pgo8Y2lyY2xlIGN4PSI1MDciIGN5PSI0NzgiIHI9IjciIGZpbGw9IiNmNGY2ZjgiIHN0cm9rZT0iIzhiOTVhMSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KPHRleHQgeD0iNTMxLjAiIHk9IjQ4Mi4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJzdGFydCI+Y3JvcHM8L3RleHQ+CjxjaXJjbGUgY3g9IjUwNyIgY3k9IjUxNiIgcj0iNyIgZmlsbD0iI2Y0ZjZmOCIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSI1MzEuMCIgeT0iNTIwLjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5mYWNpbGl0aWVzPC90ZXh0Pgo8cmVjdCB4PSI4MjAiIHk9IjE5MCIgd2lkdGg9IjMxMCIgaGVpZ2h0PSIxMzAiIHJ4PSI2IiBmaWxsPSIjZjRmNmY4IiBzdHJva2U9IiM4Yjk1YTEiIHN0cm9rZS13aWR0aD0iMS44IiBjbGFzcz0iZmxvdy1ib3giLz4KPHRleHQgeD0iOTc1LjAiIHk9IjIzOC41IiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI4MjAsMTkwLDMxMCwxMzAiPlZ1bG5lcmFiaWxpdHk8L3RleHQ+Cjx0ZXh0IHg9Ijk3NS4wIiB5PSIyNjEuNSIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iODIwLDE5MCwzMTAsMTMwIj5PdXQgb2Ygc2NvcGU6IHNlbnNpdGl2aXR5IGFuZCBhZGFwdGl2ZTwvdGV4dD4KPHRleHQgeD0iOTc1LjAiIHk9IjI3OC41IiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI4MjAsMTkwLDMxMCwxMzAiPmNhcGFjaXR5PC90ZXh0Pgo8cmVjdCB4PSI4MjAiIHk9IjE5MCIgd2lkdGg9IjMxMCIgaGVpZ2h0PSIxMzAiIHJ4PSI2IiBmaWxsPSJ1cmwoI3Njb3BlLWhhdGNoKSIgc3Ryb2tlPSJub25lIi8+CjxyZWN0IHg9Ijk1NSIgeT0iMTk4IiB3aWR0aD0iMTY2IiBoZWlnaHQ9IjI4IiByeD0iNCIgZmlsbD0id2hpdGUiIHN0cm9rZT0iIzhiOTVhMSIgc3Ryb2tlLXdpZHRoPSIxLjAiLz4KPHRleHQgeD0iMTAzOC4wIiB5PSIyMTcuMCIgY2xhc3M9InRpbnkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5PVCBQUk9EVUNFRCBCWSBJUlQ8L3RleHQ+CjxsaW5lIHgxPSI5NzUiIHkxPSIzMjAiIHgyPSI5NzUiIHkyPSIzNDIiIHN0cm9rZT0iIzhiOTVhMSIgc3Ryb2tlLXdpZHRoPSIxLjAiIHN0cm9rZS1kYXNoYXJyYXk9IjMgNCIvPgo8cmVjdCB4PSI4MjAiIHk9IjM0MiIgd2lkdGg9IjMxMCIgaGVpZ2h0PSIyMDgiIHJ4PSI1IiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuMCIvPgo8dGV4dCB4PSI5NzUuMCIgeT0iMzcwLjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RXhhbXBsZXM8L3RleHQ+CjxjaXJjbGUgY3g9Ijg4MiIgY3k9IjQwMiIgcj0iNyIgZmlsbD0iI2Y0ZjZmOCIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSI5MDYuMCIgeT0iNDA2LjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5pbmNvbWU8L3RleHQ+CjxjaXJjbGUgY3g9Ijg4MiIgY3k9IjQ0MCIgcj0iNyIgZmlsbD0iI2Y0ZjZmOCIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSI5MDYuMCIgeT0iNDQ0LjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5hZ2U8L3RleHQ+CjxjaXJjbGUgY3g9Ijg4MiIgY3k9IjQ3OCIgcj0iNyIgZmlsbD0iI2Y0ZjZmOCIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSI5MDYuMCIgeT0iNDgyLjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5pbmZyYXN0cnVjdHVyZSBjb25kaXRpb248L3RleHQ+CjxjaXJjbGUgY3g9Ijg4MiIgY3k9IjUxNiIgcj0iNyIgZmlsbD0iI2Y0ZjZmOCIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSI5MDYuMCIgeT0iNTIwLjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9InN0YXJ0Ij5jb3BpbmcgY2FwYWNpdHk8L3RleHQ+CjxsaW5lIHgxPSIzODAiIHkxPSIyNTUiIHgyPSI0NDUiIHkyPSIyNTUiIHN0cm9rZT0iIzhiOTVhMSIgc3Ryb2tlLXdpZHRoPSIyLjAiIHN0cm9rZS1kYXNoYXJyYXk9IjYgNSIvPgo8bGluZSB4MT0iNzU1IiB5MT0iMjU1IiB4Mj0iODIwIiB5Mj0iMjU1IiBzdHJva2U9IiM4Yjk1YTEiIHN0cm9rZS13aWR0aD0iMi4wIiBzdHJva2UtZGFzaGFycmF5PSI2IDUiLz4KPHJlY3QgeD0iMjEwIiB5PSI2MTAiIHdpZHRoPSI3ODAiIGhlaWdodD0iNzgiIHJ4PSI1IiBmaWxsPSIjZmZmOGU2IiBzdHJva2U9IiNjNzc3MDAiIHN0cm9rZS13aWR0aD0iMS44IiBjbGFzcz0iZmxvdy1ib3giLz4KPHRleHQgeD0iNjAwLjAiIHk9IjY0MS4wIiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSIyMTAsNjEwLDc4MCw3OCI+U2NvcGUgY2F2ZWF0PC90ZXh0Pgo8dGV4dCB4PSI2MDAuMCIgeT0iNjY0LjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZGF0YS1ib3g9IjIxMCw2MTAsNzgwLDc4Ij5JUlQgUmlzayBidW5kbGUgbmFtZXMgYXJlIGhhemFyZC1wcmVzc3VyZSBpbmRpY2VzLCBub3QgY29tcGxldGUgcHJvYmFiaWxpc3RpYyByaXNrIGVzdGltYXRlcy48L3RleHQ+Cjx0ZXh0IHg9IjYwLjAiIHk9IjcxMC4wIiBjbGFzcz0ibm90ZSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5Tb3VyY2U6IGF1dGhvci1jcmVhdGVkIHNjaGVtYXRpYyB1c2luZyBJUENDLXN0eWxlIGhhemFyZCwgZXhwb3N1cmUsIGFuZCB2dWxuZXJhYmlsaXR5IGZyYW1pbmcuPC90ZXh0Pgo8L3N2Zz4K" alt="IRT supplies the climate hazard-pressure layer within the broader hazard, exposure, and vulnerability framing used for full risk assessment." loading="lazy"></button><figcaption>IRT supplies the climate hazard-pressure layer within the broader hazard, exposure, and vulnerability framing used for full risk assessment.</figcaption></figure>
 <p>India spans a subcontinent of climatic regimes — the arid northwest, the monsoon core, the Himalayan north, the peninsular plateau, and long eastern and western coastlines — so a single national figure, or a value read off a coarse global grid, tells a district little about the hazard it specifically faces. A global-model grid cell spans many districts and cannot resolve intra-state contrast — one district in drought while its neighbour floods is invisible at that scale. Recovering that contrast is the central reason IRT is built on a <em>statistically downscaled</em> product rather than raw global-model output: downscaling brings the projections to a ~25 km grid and bias-corrects them against a gridded observational record, restoring the local detail a global grid erases (→ §3). Downscaling does not, however, correct everything it inherits. Global models simulate the Indian summer monsoon — the dominant control on rainfall and, through it, on drought and flood hazard — with substantial, model-dependent error and wide inter-model spread (Konda &amp; Vissa 2023), and a statistically downscaled product carries forward the monsoon behaviour of its parent models. IRT is built to handle that residual uncertainty openly rather than assume it away: every metric is computed across a multi-model ensemble and under two emissions scenarios, and scores are reported as <em>relative</em> hazard pressure within each period rather than as absolute rainfall predictions (→ §4, §6).</p>
@@ -91,8 +92,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <tr><td>§8 Composite Score and Output</td><td>What the 0–100 composite is and is not, and how to read it across scenario, period, and spatial level</td></tr>
 <tr><td>Appendix A / B</td><td>Complete metric reference; sectoral impact-band derivations</td></tr></tbody></table></div>
 <p>A final word on what these scores are for. They are decision-support inputs for <strong>relative prioritisation</strong>: comparing districts or blocks against one another, or one scenario/period against another, to flag where a given hazard pressure is high or rising. They are designed to <em>screen and rank</em> — to direct attention and further assessment — which is precisely the gap that subnational planning guidance has asked analytics to fill. They are <strong>not</strong> measurements of realised risk or impact. A &quot;Health Risk 80&quot; denotes high hazard pressure on the health sector at that location — not that 80 % of people will be harmed, nor a probability of any specific outcome. Because exposure and vulnerability are out of scope, and because IRT supplies only the hazard term of the hazard × exposure × vulnerability decomposition, a high score does not by itself establish that people or assets are actually at risk; it must be combined with exposure and vulnerability information before it can support resource-allocation or investment decisions. Scores are also relative within each period&#x27;s spatial normalization, so absolute values should not be read as physical quantities or compared across unrelated indices (→ §8.1).</p>
-<p>---</p>
-<h2 id="2-climate-data-sources">2. Climate Data Sources</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="2-climate-data-sources"><h2 id="2-climate-data-sources">2. Climate Data Sources</h2>
 <h3 id="21-cmip6-model-ensemble-and-scenarios">2.1 CMIP6: Model Ensemble and Scenarios</h3>
 <p>The Coupled Model Intercomparison Project Phase 6 (CMIP6) is the sixth generation of coordinated climate model experiments, providing the primary basis for the IPCC Sixth Assessment Report (AR6) future climate projections. IRT draws on CMIP6 outputs from 24 general circulation models (GCMs), using the variant label <strong>r1i1p1f1</strong> — denoting the first realisation (r1), initialisation method (i1), physics configuration (p1), and forcing (f1) — for all models and scenarios.</p>
 <p><strong>Scenarios</strong></p>
@@ -156,8 +157,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <p>Riverine flood metrics (→ §5.5) are derived from the <strong>CEMS-GloFAS Global River Flood Hazard Maps</strong> (Version 2.1), a product of the Copernicus Emergency Management Service (CEMS) published by the European Commission Joint Research Centre. IRT uses the <strong>RP-100</strong> (1-in-100-year return period) raster layers: flood depth (metres) and flood extent (binary inundation mask).</p>
 <p>Because this is a static, observationally-derived snapshot product rather than a future climate projection, the Riverine Flood bundle carries a &quot;Snapshot&quot; scenario label in the tool and is not available under SSP2-4.5 or SSP5-8.5 (→ §6.1).</p>
 <p><strong>Source:</strong> Baugh et al. (2024) — full citation in References.</p>
-<p>---</p>
-<h2 id="3-downscaling-what-it-is-and-how-nasa-nex-applies-it">3. Downscaling: What It Is and How NASA-NEX Applies It</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="3-downscaling-what-it-is-and-how-nasa-nex-applies-it"><h2 id="3-downscaling-what-it-is-and-how-nasa-nex-applies-it">3. Downscaling: What It Is and How NASA-NEX Applies It</h2>
 <h3 id="31-what-statistical-downscaling-means">3.1 What Statistical Downscaling Means</h3>
 <p>GCMs are designed to simulate the large-scale dynamics of the climate system — atmospheric circulation, ocean–atmosphere coupling, and radiative transfer — at a global scale. Their native grid spacing is typically 100–300 km, meaning a single model grid cell covers an area comparable to a large Indian state. At this resolution, GCMs cannot resolve the terrain-driven heterogeneity, coastal gradients, or local land–surface feedbacks that determine temperature and rainfall patterns at the district or block level.</p>
 <p><strong>Downscaling</strong> is the process of translating GCM output from its native coarse resolution to a finer spatial scale more appropriate for regional and local analysis. Two broad approaches exist:</p>
@@ -201,8 +202,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <p>1. <strong>Monsoon dynamics.</strong> The Indian Summer Monsoon (ISM) is influenced by complex land–sea thermal gradients, orographic lifting, and large-scale teleconnections (ENSO, IOD). Most CMIP6 GCMs simulate the broad seasonal cycle of ISM precipitation but exhibit systematic biases in onset date, spatial distribution of the monsoon core and break phases, and sub-seasonal variability. BCSD corrects the monthly distribution but preserves the GCM&#x27;s underlying dynamical representation of monsoon structure.</p>
 <p>2. <strong>Himalayan terrain.</strong> The 0.25° grid (~25 km) cannot resolve the elevation gradients of the Hindu Kush–Himalayan arc, where elevations change by 3,000–5,000 m over tens of kilometres. Temperature and precipitation are subject to large interpolation errors at high altitudes; outputs for Himalayan districts and blocks in Uttarakhand, Himachal Pradesh, Jammu &amp; Kashmir, Sikkim, and Arunachal Pradesh should be interpreted with particular caution.</p>
 <p>3. <strong>Coastal resolution.</strong> At 0.25° resolution, coastal grid cells blend land and ocean surface conditions. This can introduce artefacts in temperature and humidity fields for coastal and island districts (including the Kerala coast, Tamil Nadu coast, Lakshadweep, and Andaman &amp; Nicobar Islands).</p>
-<p>---</p>
-<h2 id="4-grid-first-compute-and-post-processing">4. Grid-First Compute and Post-Processing</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="4-grid-first-compute-and-post-processing"><h2 id="4-grid-first-compute-and-post-processing">4. Grid-First Compute and Post-Processing</h2>
 <figure class="doc-figure" id="figure-fig-01-pipeline-flowsvg"><button type="button" class="figure-zoom" aria-label="Zoom figure"><img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMzIwIiBoZWlnaHQ9Ijc2MCIgdmlld0JveD0iMCAwIDEzMjAgNzYwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idGl0bGUgZGVzYyI+Cjx0aXRsZT5GSUctMDEuIEVuZC10by1lbmQgcGlwZWxpbmUgZmxvdzwvdGl0bGU+CjxkZXNjPklSVCBwaXBlbGluZSBzY2hlbWF0aWMuPC9kZXNjPgo8c3R5bGU+CnRleHQgeyBmb250LWZhbWlseTogQXJpYWwsIEhlbHZldGljYSwgc2Fucy1zZXJpZjsgZmlsbDogIzFmMjkzMzsgfQoudGl0bGUgeyBmb250LXNpemU6IDI2cHg7IGZvbnQtd2VpZ2h0OiA3MDA7IH0KLnN1YnRpdGxlIHsgZm9udC1zaXplOiAxNXB4OyBmaWxsOiAjNTI2MDZkOyB9Ci5sYWJlbCB7IGZvbnQtc2l6ZTogMTVweDsgZm9udC13ZWlnaHQ6IDcwMDsgfQouc21hbGwgeyBmb250LXNpemU6IDEycHg7IGZpbGw6ICM1MjYwNmQ7IH0KLnRpbnkgeyBmb250LXNpemU6IDEwLjVweDsgZmlsbDogIzUyNjA2ZDsgfQoubm90ZSB7IGZvbnQtc2l6ZTogMTJweDsgZmlsbDogIzNlNGM1OTsgZm9udC1zdHlsZTogaXRhbGljOyB9Ci5heGlzIHsgc3Ryb2tlOiAjNTI2MDZkOyBzdHJva2Utd2lkdGg6IDEuMjsgfQouZ3JpZGxpbmUgeyBzdHJva2U6ICNkOWUyZWM7IHN0cm9rZS13aWR0aDogMTsgfQouYXJyb3cgeyBzdHJva2U6ICM1MjYwNmQ7IHN0cm9rZS13aWR0aDogMi4wOyBmaWxsOiBub25lOyBtYXJrZXItZW5kOiB1cmwoI2Fycm93KTsgfQo8L3N0eWxlPgo8ZGVmcz4KPG1hcmtlciBpZD0iYXJyb3ciIHZpZXdCb3g9IjAgMCAxMiAxMiIgcmVmWD0iMTAiIHJlZlk9IjYiIG1hcmtlcldpZHRoPSIxMiIgbWFya2VySGVpZ2h0PSIxMiIgbWFya2VyVW5pdHM9InVzZXJTcGFjZU9uVXNlIiBvcmllbnQ9ImF1dG8tc3RhcnQtcmV2ZXJzZSI+CjxwYXRoIGQ9Ik0gMSAxIEwgMTEgNiBMIDEgMTEgeiIgZmlsbD0iIzUyNjA2ZCIvPgo8L21hcmtlcj4KPC9kZWZzPgo8cmVjdCB3aWR0aD0iMTMyMCIgaGVpZ2h0PSI3NjAiIGZpbGw9IndoaXRlIi8+Cjx0ZXh0IHg9IjYwLjAiIHk9IjQ4LjAiIGNsYXNzPSJ0aXRsZSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5GSUctMDEuIEVuZC10by1FbmQgSVJUIFBpcGVsaW5lIEZsb3c8L3RleHQ+Cjx0ZXh0IHg9IjYwLjAiIHk9Ijc0LjAiIGNsYXNzPSJzdWJ0aXRsZSIgdGV4dC1hbmNob3I9InN0YXJ0Ij5Gcm9tIHNvdXJjZSBpbnB1dHMgdG8gZ3JpZC1maXJzdCBtZXRyaWNzLCBidW5kbGVzLCBhbmQgMC0xMDAgaGlnaGVyLWlzLXdvcnNlIGhhemFyZC1wcmVzc3VyZSBvdXRwdXRzLjwvdGV4dD4KPHJlY3QgeD0iMzYiIHk9IjE1MCIgd2lkdGg9IjE3OCIgaGVpZ2h0PSIxNDAiIHJ4PSI2IiBmaWxsPSIjZGZmMGZiIiBzdHJva2U9IiMyZjgwYjciIHN0cm9rZS13aWR0aD0iMS44IiBjbGFzcz0iZmxvdy1ib3giLz4KPHRleHQgeD0iMTI1LjAiIHk9IjE5NS4wIiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSIzNiwxNTAsMTc4LDE0MCI+Q2xpbWF0ZSBhbmQgZmxvb2Q8L3RleHQ+Cjx0ZXh0IHg9IjEyNS4wIiB5PSIyMTIuMCIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iMzYsMTUwLDE3OCwxNDAiPmlucHV0czwvdGV4dD4KPHRleHQgeD0iMTI1LjAiIHk9IjIzNS4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSIzNiwxNTAsMTc4LDE0MCI+TkFTQS1ORVggR0REUC1DTUlQNjwvdGV4dD4KPHRleHQgeD0iMTI1LjAiIHk9IjI1Mi4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSIzNiwxNTAsMTc4LDE0MCI+Q0VNUy1HbG9GQVMvSlJDIFJQLTEwMDwvdGV4dD4KPHJlY3QgeD0iMjUyIiB5PSIxNTAiIHdpZHRoPSIxNzgiIGhlaWdodD0iMTQwIiByeD0iNiIgZmlsbD0iI2VkZjdmZiIgc3Ryb2tlPSIjMmY4MGI3IiBzdHJva2Utd2lkdGg9IjEuOCIgY2xhc3M9ImZsb3ctYm94Ii8+Cjx0ZXh0IHg9IjM0MS4wIiB5PSIxODYuNSIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iMjUyLDE1MCwxNzgsMTQwIj5Tb3VyY2U8L3RleHQ+Cjx0ZXh0IHg9IjM0MS4wIiB5PSIyMDMuNSIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iMjUyLDE1MCwxNzgsMTQwIj5wcmVwYXJhdGlvbjwvdGV4dD4KPHRleHQgeD0iMzQxLjAiIHk9IjIyNi41IiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSIyNTIsMTUwLDE3OCwxNDAiPkJDU0QgYXBwbGllZCBieSBOQVNBPC90ZXh0Pgo8dGV4dCB4PSIzNDEuMCIgeT0iMjQzLjUiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZGF0YS1ib3g9IjI1MiwxNTAsMTc4LDE0MCI+SW5kaWEgY2xpcCArIHVuaXQ8L3RleHQ+Cjx0ZXh0IHg9IjM0MS4wIiB5PSIyNjAuNSIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iMjUyLDE1MCwxNzgsMTQwIj5jb252ZXJzaW9uPC90ZXh0Pgo8cmVjdCB4PSI0NjgiIHk9IjE1MCIgd2lkdGg9IjE3OCIgaGVpZ2h0PSIxNDAiIHJ4PSI2IiBmaWxsPSIjZDlmMmVlIiBzdHJva2U9IiMyYjhhN2UiIHN0cm9rZS13aWR0aD0iMS44IiBjbGFzcz0iZmxvdy1ib3giLz4KPHRleHQgeD0iNTU3LjAiIHk9IjE4Ni41IiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI0NjgsMTUwLDE3OCwxNDAiPkdyaWQtZmlyc3QgaW5kZXg8L3RleHQ+Cjx0ZXh0IHg9IjU1Ny4wIiB5PSIyMDMuNSIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iNDY4LDE1MCwxNzgsMTQwIj5jb21wdXRlPC90ZXh0Pgo8dGV4dCB4PSI1NTcuMCIgeT0iMjI2LjUiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZGF0YS1ib3g9IjQ2OCwxNTAsMTc4LDE0MCI+QW5udWFsIHBlci1jZWxsIGluZGljZXM8L3RleHQ+Cjx0ZXh0IHg9IjU1Ny4wIiB5PSIyNDMuNSIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iNDY4LDE1MCwxNzgsMTQwIj5TdGF0aWMgZmxvb2QgbWV0cmljczwvdGV4dD4KPHRleHQgeD0iNTU3LjAiIHk9IjI2MC41IiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI0NjgsMTUwLDE3OCwxNDAiPnNlcGFyYXRlbHk8L3RleHQ+CjxyZWN0IHg9IjY4NCIgeT0iMTUwIiB3aWR0aD0iMTc4IiBoZWlnaHQ9IjE0NyIgcng9IjYiIGZpbGw9IiNlOGY0ZjIiIHN0cm9rZT0iIzJiOGE3ZSIgc3Ryb2tlLXdpZHRoPSIxLjgiIGNsYXNzPSJmbG93LWJveCIvPgo8dGV4dCB4PSI3NzMuMCIgeT0iMTczLjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZGF0YS1ib3g9IjY4NCwxNTAsMTc4LDE0NyI+U3BhdGlhbCArPC90ZXh0Pgo8dGV4dCB4PSI3NzMuMCIgeT0iMTkwLjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZGF0YS1ib3g9IjY4NCwxNTAsMTc4LDE0NyI+dGVtcG9yYWw8L3RleHQ+Cjx0ZXh0IHg9Ijc3My4wIiB5PSIyMDcuMCIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iNjg0LDE1MCwxNzgsMTQ3Ij5hZ2dyZWdhdGlvbjwvdGV4dD4KPHRleHQgeD0iNzczLjAiIHk9IjIzMC4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI2ODQsMTUwLDE3OCwxNDciPjAuMjUgZGVnIGdyaWQgLSZndDs8L3RleHQ+Cjx0ZXh0IHg9Ijc3My4wIiB5PSIyNDcuMCIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iNjg0LDE1MCwxNzgsMTQ3Ij5wb2x5Z29uczwvdGV4dD4KPHRleHQgeD0iNzczLjAiIHk9IjI2NC4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI2ODQsMTUwLDE3OCwxNDciPmRhaWx5IC0mZ3Q7IGFubnVhbCAtJmd0OzwvdGV4dD4KPHRleHQgeD0iNzczLjAiIHk9IjI4MS4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI2ODQsMTUwLDE3OCwxNDciPnBlcmlvZCAtJmd0OyBlbnNlbWJsZTwvdGV4dD4KPHJlY3QgeD0iMTExNiIgeT0iMTUwIiB3aWR0aD0iMTc4IiBoZWlnaHQ9IjE0MCIgcng9IjYiIGZpbGw9IiNmZGUyZTciIHN0cm9rZT0iI2I4MzI0ZiIgc3Ryb2tlLXdpZHRoPSIxLjgiIGNsYXNzPSJmbG93LWJveCIvPgo8dGV4dCB4PSIxMjA1LjAiIHk9IjIwMy41IiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSIxMTE2LDE1MCwxNzgsMTQwIj5Db21wb3NpdGUgb3V0cHV0PC90ZXh0Pgo8dGV4dCB4PSIxMjA1LjAiIHk9IjIyNi41IiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSIxMTE2LDE1MCwxNzgsMTQwIj4wLTEwMCBoaWdoZXIgPSB3b3JzZTwvdGV4dD4KPHRleHQgeD0iMTIwNS4wIiB5PSIyNDMuNSIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iMTExNiwxNTAsMTc4LDE0MCI+RGlzdHJpY3QgYW5kIGJsb2NrIHZpZXdzPC90ZXh0Pgo8cGF0aCBjbGFzcz0iYXJyb3ciIGQ9Ik0gMjE2LjAgMjIwLjAgTCAyNTAuMCAyMjAuMCIvPgo8cGF0aCBjbGFzcz0iYXJyb3ciIGQ9Ik0gNDMyLjAgMjIwLjAgTCA0NjYuMCAyMjAuMCIvPgo8cGF0aCBjbGFzcz0iYXJyb3ciIGQ9Ik0gNjQ4LjAgMjIwLjAgTCA2ODIuMCAyMjAuMCIvPgo8dGV4dCB4PSI5ODkuMCIgeT0iMTM2LjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QnVuZGxlIGNvbnN0cnVjdGlvbjwvdGV4dD4KPHJlY3QgeD0iOTAwIiB5PSIxNTAiIHdpZHRoPSIxNzgiIGhlaWdodD0iNjQiIHJ4PSI1IiBmaWxsPSIjZmZmOGU2IiBzdHJva2U9IiNjNzc3MDAiIHN0cm9rZS13aWR0aD0iMS44IiBjbGFzcz0iZmxvdy1ib3giLz4KPHRleHQgeD0iOTg5LjAiIHk9IjE3NC4wIiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI5MDAsMTUwLDE3OCw2NCI+VGhlbWF0aWM8L3RleHQ+Cjx0ZXh0IHg9Ijk4OS4wIiB5PSIxOTcuMCIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iOTAwLDE1MCwxNzgsNjQiPmNvLW5vcm1hbGl6ZWQgbWV0cmljczwvdGV4dD4KPHJlY3QgeD0iOTAwIiB5PSIyMjYiIHdpZHRoPSIxNzgiIGhlaWdodD0iNjQiIHJ4PSI1IiBmaWxsPSIjZmZmOGU2IiBzdHJva2U9IiNjNzc3MDAiIHN0cm9rZS13aWR0aD0iMS44IiBjbGFzcz0iZmxvdy1ib3giLz4KPHRleHQgeD0iOTg5LjAiIHk9IjI1MC4wIiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSI5MDAsMjI2LDE3OCw2NCI+U2VjdG9yYWw8L3RleHQ+Cjx0ZXh0IHg9Ijk4OS4wIiB5PSIyNzMuMCIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkYXRhLWJveD0iOTAwLDIyNiwxNzgsNjQiPmFicy9jaGcvaW1wYWN0IGxlbnNlczwvdGV4dD4KPHBhdGggY2xhc3M9ImFycm93IiBkPSJNIDg2NC4wIDIyMC4wIEwgODgwLjAgMjIwLjAgTCA4ODAuMCAxODIuMCBMIDg5OC4wIDE4Mi4wIi8+CjxwYXRoIGNsYXNzPSJhcnJvdyIgZD0iTSA4NjQuMCAyMjAuMCBMIDg4MC4wIDIyMC4wIEwgODgwLjAgMjU4LjAgTCA4OTguMCAyNTguMCIvPgo8cGF0aCBjbGFzcz0iYXJyb3ciIGQ9Ik0gMTA4MC4wIDE4Mi4wIEwgMTExNC4wIDE4Mi4wIi8+CjxwYXRoIGNsYXNzPSJhcnJvdyIgZD0iTSAxMDgwLjAgMjU4LjAgTCAxMTE0LjAgMjU4LjAiLz4KPHJlY3QgeD0iMzYiIHk9IjMzMCIgd2lkdGg9IjEyNTgiIGhlaWdodD0iNjQiIHJ4PSI1IiBmaWxsPSIjZjRmNmY4IiBzdHJva2U9IiM4Yjk1YTEiIHN0cm9rZS13aWR0aD0iMS44IiBjbGFzcz0iZmxvdy1ib3giLz4KPHRleHQgeD0iNjY1LjAiIHk9IjM1NC4wIiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRhdGEtYm94PSIzNiwzMzAsMTI1OCw2NCI+SGF6YXJkLXByZXNzdXJlIHNjb3BlPC90ZXh0Pgo8dGV4dCB4PSI2NjUuMCIgeT0iMzc3LjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZGF0YS1ib3g9IjM2LDMzMCwxMjU4LDY0Ij5Db21wb3NpdGUgc2NvcmVzIGFyZSBoYXphcmQtcHJlc3N1cmUgaW5kaWNlczsgZXhwb3N1cmUgYW5kIHZ1bG5lcmFiaWxpdHkgYXJlIG5vdCBpbnB1dHMuPC90ZXh0Pgo8dGV4dCB4PSI2MC4wIiB5PSI0OTIuMCIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ic3RhcnQiPlNlY3Rpb24gcGF0aDwvdGV4dD4KPGNpcmNsZSBjeD0iMTY1IiBjeT0iNDcwIiByPSIyMSIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSIxNjUuMCIgeT0iNDc1LjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+MjwvdGV4dD4KPHRleHQgeD0iMTY1LjAiIHk9IjUxNC4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkRhdGE8L3RleHQ+CjxwYXRoIGNsYXNzPSJhcnJvdyIgZD0iTSAxOTIuMCA0NzAuMCBMIDI5Ni4wIDQ3MC4wIi8+CjxjaXJjbGUgY3g9IjMyNSIgY3k9IjQ3MCIgcj0iMjEiIGZpbGw9IiNmZmZmZmYiIHN0cm9rZT0iIzhiOTVhMSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KPHRleHQgeD0iMzI1LjAiIHk9IjQ3NS4wIiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjM8L3RleHQ+Cjx0ZXh0IHg9IjMyNS4wIiB5PSI1MTQuMCIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5Eb3duc2NhbGluZzwvdGV4dD4KPHBhdGggY2xhc3M9ImFycm93IiBkPSJNIDM1Mi4wIDQ3MC4wIEwgNDU2LjAgNDcwLjAiLz4KPGNpcmNsZSBjeD0iNDg1IiBjeT0iNDcwIiByPSIyMSIgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjOGI5NWExIiBzdHJva2Utd2lkdGg9IjEuNSIvPgo8dGV4dCB4PSI0ODUuMCIgeT0iNDc1LjAiIGNsYXNzPSJsYWJlbCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+NDwvdGV4dD4KPHRleHQgeD0iNDg1LjAiIHk9IjUxNC4wIiBjbGFzcz0ic21hbGwiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkdyaWQtZmlyc3Q8L3RleHQ+CjxwYXRoIGNsYXNzPSJhcnJvdyIgZD0iTSA1MTIuMCA0NzAuMCBMIDYxNi4wIDQ3MC4wIi8+CjxjaXJjbGUgY3g9IjY0NSIgY3k9IjQ3MCIgcj0iMjEiIGZpbGw9IiNmZmZmZmYiIHN0cm9rZT0iIzhiOTVhMSIgc3Ryb2tlLXdpZHRoPSIxLjUiLz4KPHRleHQgeD0iNjQ1LjAiIHk9IjQ3NS4wIiBjbGFzcz0ibGFiZWwiIHRleHQtYW5jaG9yPSJtaWRkbGUiPjU8L3RleHQ+Cjx0ZXh0IHg9IjY0NS4wIiB5PSI1MTQuMCIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5NZXRyaWNzPC90ZXh0Pgo8cGF0aCBjbGFzcz0iYXJyb3ciIGQ9Ik0gNjcyLjAgNDcwLjAgTCA3NzYuMCA0NzAuMCIvPgo8Y2lyY2xlIGN4PSI4MDUiIGN5PSI0NzAiIHI9IjIxIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiM4Yjk1YTEiIHN0cm9rZS13aWR0aD0iMS41Ii8+Cjx0ZXh0IHg9IjgwNS4wIiB5PSI0NzUuMCIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj42Lzc8L3RleHQ+Cjx0ZXh0IHg9IjgwNS4wIiB5PSI1MTQuMCIgY2xhc3M9InNtYWxsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5CdW5kbGVzPC90ZXh0Pgo8cGF0aCBjbGFzcz0iYXJyb3ciIGQ9Ik0gODMyLjAgNDcwLjAgTCA5MzYuMCA0NzAuMCIvPgo8Y2lyY2xlIGN4PSI5NjUiIGN5PSI0NzAiIHI9IjIxIiBmaWxsPSIjZmZmZmZmIiBzdHJva2U9IiM4Yjk1YTEiIHN0cm9rZS13aWR0aD0iMS41Ii8+Cjx0ZXh0IHg9Ijk2NS4wIiB5PSI0NzUuMCIgY2xhc3M9ImxhYmVsIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj44PC90ZXh0Pgo8dGV4dCB4PSI5NjUuMCIgeT0iNTE0LjAiIGNsYXNzPSJzbWFsbCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+T3V0cHV0PC90ZXh0Pgo8dGV4dCB4PSI2MC4wIiB5PSI3MTAuMCIgY2xhc3M9Im5vdGUiIHRleHQtYW5jaG9yPSJzdGFydCI+U291cmNlOiBhdXRob3ItY3JlYXRlZCBzY2hlbWF0aWMgZnJvbSB0ZWNobmljYWwgZ3VpZGFuY2Ugbm90ZSBzZWN0aW9ucyAxLTguPC90ZXh0Pgo8L3N2Zz4K" alt="The IRT pipeline runs from source climate and hazard data through grid-first metric computation, spatial aggregation, bundle scoring, and dashboard output." loading="lazy"></button><figcaption>The IRT pipeline runs from source climate and hazard data through grid-first metric computation, spatial aggregation, bundle scoring, and dashboard output.</figcaption></figure>
 <h3 id="41-architecture-why-grid-first">4.1 Architecture: Why Grid-First</h3>
 <p>All climate index computations in IRT are performed at the native 0.25° grid resolution before any aggregation to administrative boundaries. This &quot;grid-first&quot; design reflects a methodological choice rooted in the structure of the indices being computed.</p>
@@ -245,8 +246,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <p>100, &amp; \text{if } v_i &gt; v_{\max} \end{cases} $$</p>
 <p>For metrics where a lower value indicates greater hazard, the score is inverted: $S_i = (1 - \text{scaled}) \times 100$ before clipping. If all units share an identical value ($v_{\max} = v_{\min}$), all receive a score of 50.</p>
 <p>This per-period spatial normalization means that a score of, say, 70 for a given unit in the 2040–2060 SSP5-8.5 period indicates that this unit sits at the 70th percentile of the national distribution in that period — not that it is 70% above its own historical baseline. Scores are not directly comparable across different metrics or bundles unless the normalization ranges are understood. The weighted bundle composite (→ §6.3) aggregates these per-metric scores into a single bundle-level value on the same [0, 100] scale.</p>
-<p>---</p>
-<h2 id="5-individual-metric-definitions">5. Individual Metric Definitions</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="5-individual-metric-definitions"><h2 id="5-individual-metric-definitions">5. Individual Metric Definitions</h2>
 <p>The five subsections below correspond to distinct data sources and hazard families. Derivations are given for IRT-specific and non-standard indices; for canonical ETCCDI indices, the definition is cited and only IRT-specific parameter choices are noted. A complete metric reference table — slug, label, variable(s), definition, units, baseline period, and bundle memberships — is given in Appendix A. Metrics are grouped here by the thematic bundle they feed (Heat Risk, Heat Stress, Cold Risk, Extreme Rainfall, Drought Risk, Riverine Flood); the bundles themselves — their membership, normalization, and weighting — are defined in §6.</p>
 <h3 id="51-temperature-and-heat-metrics">5.1 Temperature and Heat Metrics</h3>
 <p>Sustained temperature extremes drive three of the six thematic bundles: Heat Risk (daytime and nocturnal extremes, heatwave characteristics), Heat Stress (humid-heat metrics defined in §5.4, combined with two dry-heat persistence metrics — WSDI and TN90p — that it shares with Heat Risk and which are defined below), and Cold Risk (winter cold extremes and cold-spell persistence). All temperature metrics are derived from daily mean (<code>tas</code>), maximum (<code>tasmax</code>), or minimum (<code>tasmin</code>) temperature, each converted from Kelvin to Celsius before index calculation.</p>
@@ -313,8 +314,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <tr><td><strong>4</strong></td><td>3</td><td>4</td><td>4</td><td>5</td><td>5</td></tr>
 <tr><td><strong>5</strong></td><td>4</td><td>5</td><td>5</td><td>5</td><td>5</td></tr></tbody></table></div>
 <p>Severity is scored at <strong>block</strong> level. District severity is the <strong>flooded-area-weighted mean of constituent block severity classes</strong>, computed bottom-up because directly classifying district-scale depth and extent collapses most districts to the lowest classes — district polygons are far larger than the block scale at which the bins were calibrated.</p>
-<p>---</p>
-<h2 id="6-thematic-bundle-construction">6. Thematic Bundle Construction</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="6-thematic-bundle-construction"><h2 id="6-thematic-bundle-construction">6. Thematic Bundle Construction</h2>
 <p>Each of the six hazard families defined in §5 is condensed into a single composite <strong>bundle score</strong> on a 0–100 scale, computed independently for every geography, scenario, and time period. Each component metric is first normalized onto a common 0–100 <em>higher-is-worse</em> scale (§6.2), and the normalized components are then combined with fixed weights (§6.3). &lt;!-- This thematic framework — a weighted average of co-normalized climate metrics — is distinct from the sectoral hazard-pressure framework of §7, which scores exposure to curated hazard rules rather than compositing metrics directly. --&gt;</p>
 <h3 id="61-bundle-taxonomy-and-grouping-rationale">6.1 Bundle Taxonomy and Grouping Rationale</h3>
 <p>The six thematic bundles and the hazard dimension each captures:</p>
@@ -400,8 +401,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <tr><td><strong>Inundation Depth</strong> (display attribute)</td><td>RP-100 Flood Depth</td><td>—</td><td>0.0000</td></tr>
 <tr><td><strong>Inundation Extent</strong> (display attribute)</td><td>RP-100 Flood Extent</td><td>—</td><td>0.0000</td></tr></tbody></table></div>
 <p>The Riverine Flood composite is fully determined by the single JRC severity index (§5.5); the depth and extent fields are carried at weight 0 for display and drill-down only and do not affect the score.</p>
-<p>---</p>
-<h2 id="7-sectoral-bundle-construction">7. Sectoral Bundle Construction</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="7-sectoral-bundle-construction"><h2 id="7-sectoral-bundle-construction">7. Sectoral Bundle Construction</h2>
 <p>The eight <strong>sectoral bundles</strong> answer a different question from the thematic bundles of §6. A thematic bundle co-normalizes the metrics of <em>one hazard family</em> and averages them. A sectoral bundle instead scores a sector&#x27;s exposure to a <strong>curated set of hazard pressures drawn from across families</strong>, and evaluates each pressure through a <em>rule</em> that fuses three readings of the same metric: its absolute magnitude, its projected change versus the historical baseline, and — where a defensible danger threshold exists — its position within a fixed harm <strong>impact band</strong>. The output is still a 0–100 <em>higher-is-worse</em> score per geography, scenario, and period, but the construction is a blended-rule pipeline rather than a weighted average of co-normalized metrics.</p>
 <blockquote><p><strong>Scope caveat.</strong> These are <strong>sector climate hazard-pressure</strong> scores: they characterise the climatic <em>hazard</em> a sector faces and do not incorporate exposure, vulnerability, or adaptive capacity, so they are not full sectoral risk scores in the IPCC sense (→ §1, §8). The word &quot;Risk&quot; in a bundle name denotes <em>hazard pressure relevant to that sector</em>.</p></blockquote>
 <h3 id="71-sector-hazard-pressure-framework">7.1 Sector Hazard-Pressure Framework</h3>
@@ -506,8 +507,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <tr><td>5-day rainfall exposure pressure</td><td>Max 5-day precipitation (Rx5day)</td><td>0.25</td><td>0.40 / 0.30 / 0.30</td><td>250–500 mm</td></tr>
 <tr><td>Dry-spell livelihood pressure</td><td>Consecutive dry days (CDD)</td><td>0.20</td><td>0.40 / 0.30 / 0.30</td><td>60–120 days</td></tr>
 <tr><td>Warm-spell livelihood pressure</td><td>Warm spell duration (WSDI)</td><td>0.25</td><td>0.40 / 0.30 / 0.30</td><td>6–18 days</td></tr></tbody></table></div>
-<p>---</p>
-<h2 id="8-composite-score-and-output">8. Composite Score and Output</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="8-composite-score-and-output"><h2 id="8-composite-score-and-output">8. Composite Score and Output</h2>
 <p>The <strong>composite score</strong> is the published output of every bundle, thematic and sectoral alike: one 0–100 <em>higher-is-worse</em> number per admin unit, scenario, and period. The two construction methods of §6 and §7 differ internally but emit the same object, so a dashboard or export treats all bundle scores uniformly. It is a <strong>hazard-pressure index, not a risk estimate</strong> — that framing and its consequences are set out in §1 and §7 and not repeated here. For interpretation the 0–100 range is banded into three tiers — <strong>low (0–33.3), moderate (33.3–66.6), high (66.6–100)</strong> — used consistently wherever the score is classified. This section covers how to read the number across the scenario, period, and spatial-level dimensions.</p>
 <p><strong>Why two construction methods?</strong> The two bundle families answer different questions from different inputs, so one recipe would serve neither well. A <em>thematic</em> bundle portrays a single hazard family: its metrics all measure facets of the same phenomenon (heat, or drought, or extreme rainfall), are physically kindred, and can be put on one relative scale and averaged (§6). Its purpose is breadth — a fast, purely relative screen of where a given hazard runs worst across a state. A <em>sectoral</em> bundle answers a narrower, decision-facing question — how much climate hazard pressure one sector faces — and to do so it deliberately draws metrics from <em>across</em> hazard families (for example extreme heat, dry spells, and one-day rainfall in the same bundle). Those metrics are not commensurable, so co-normalizing and averaging them the thematic way would blur unlike hazards into one indistinct number. A sector user also needs more than a ranking: whether a value has crossed a recognised danger threshold, and how fast it is worsening — signals a purely relative average discards by design. The sectoral method therefore scores each hazard through a blended rule that adds an absolute <em>impact</em> lens (distance into a fixed harm band) and a <em>change</em> lens (trajectory versus the 1990–2010 baseline) on top of the relative ranking (§7). The methods stay separate because the questions, the inputs, and the required readings genuinely differ; they converge only at the output, each emitting the same 0–100 number so everything downstream treats them alike.</p>
 <h3 id="81-scenario-and-period-handling">8.1 Scenario and Period Handling</h3>
@@ -522,8 +523,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <p>Both district (ADM2) and block (ADM3) composites are computed <strong>independently from the grid-first index pipeline</strong>; each level combines the 0.25° grid cells into its own polygons in proportion to how much of each cell falls inside them (§4.2). All bundles, thematic and sectoral, support both levels.</p>
 <p>Two resolution effects follow:</p>
 <ul><li><strong>Grid coverage.</strong> A district overlaps many 0.25° cells; a small block may overlap only one or two. Each grid point is treated as a 0.25° square <em>tile</em>, and these tiles cover the whole map with no gaps — so a block is never left &quot;between&quot; grid points and always receives a value. A block smaller than one cell sits entirely inside a single tile and simply <strong>takes that one cell&#x27;s value</strong>; any other small blocks falling inside the same cell take the <em>same</em> value. Block-level scores therefore cannot resolve contrast finer than the ~25 km cell: they inherit more spatial variability, are more sensitive to individual grid-cell values, and are more exposed to distortions where a cell straddles a boundary and only partly covers the unit. This is a property of the native grid, not a defect of the aggregation.</li><li><strong>Cohort separation.</strong> The normalization cohort (per-period for thematic, the absolute/change lens cohort for sectoral) is the set of units <em>at that level within the state</em> (§6.2/§7.2). District scores and block scores are thus normalized against <strong>different cohorts</strong>: a district scoring 80 and a block scoring 80 are not on the same scale, and the two levels should not be cross-compared unit-to-unit. Each level is internally consistent; they are parallel views, not a single nested hierarchy of scores.</li></ul>
-<p>---</p>
-<h2 id="appendix-a-complete-metric-reference">Appendix A: Complete Metric Reference</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="appendix-a-complete-metric-reference"><h2 id="appendix-a-complete-metric-reference">Appendix A: Complete Metric Reference</h2>
 <p>The tables below list every metric that feeds a bundle. Sections A.1–A.5 cover the metrics that appear in a thematic bundle weight entry; <strong>A.6</strong> adds the source metrics used only by the sectoral bundles (§7). Metrics shared across bundles appear once with all bundles noted. Columns: <strong>Slug</strong> (canonical pipeline identifier), <strong>Label</strong> (display name), <strong>Variable(s)</strong> (NEX-GDDP-CMIP6 input or external source), <strong>Definition</strong> (how the annual value is computed), <strong>Units</strong>, <strong>Baseline</strong> (period for percentile/distribution fitting, where applicable), <strong>Bundle(s)</strong>.</p>
 <p>Abbreviations: DOY = day-of-year percentile threshold; MAM = March–May; DJF = December–January–February; MoM = Method of Moments.</p>
 <h3 id="a1-heat-risk-and-heat-stress">A.1 Heat Risk and Heat Stress</h3>
@@ -586,8 +587,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <tr><td>Extremely wet-day precipitation (R99p)</td><td>Annual total precipitation on days exceeding the 99th percentile of baseline wet-day precipitation (wet day ≥ 1 mm; ETCCDI R99p)</td><td>mm</td><td>1990–2010</td><td>Investment</td></tr>
 <tr><td>SPI-3 moderate-drought months</td><td>Annual count of calendar months with 3-month SPI below −1, period-mean rolled up. A persistence/low-flow proxy, distinct from the SPI-3 <em>event-count</em> and <em>max-spell</em> metrics in A.3</td><td>months</td><td>1990–2010 (SPI calibration)</td><td>Asset (Thermal)</td></tr>
 <tr><td>R95p inter-annual variability (CV)</td><td>Coefficient of variation (σ ⁄ μ) of annual R95p very-wet-day totals across the years within the selected future period; an inflow-predictability proxy. The R95p p95 threshold uses the baseline distribution, but the CV itself is computed across the future-period years, not against the baseline</td><td>ratio (dimensionless)</td><td>1990–2010 (R95p threshold)</td><td>Asset (Hydropower)</td></tr></tbody></table></div>
-<p>---</p>
-<h2 id="appendix-b-sectoral-impact-band-derivations">Appendix B: Sectoral Impact-Band Derivations</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="appendix-b-sectoral-impact-band-derivations"><h2 id="appendix-b-sectoral-impact-band-derivations">Appendix B: Sectoral Impact-Band Derivations</h2>
 <p>The distinct impact bands used by the §7 rules, deduplicated across the bundles that share them. <strong>Onset</strong> ($a$) is the harm threshold; <strong>saturation</strong> ($b$) the severe/sector-dominant threshold; the impact lens interpolates linearly between them (§7.2). &quot;External&quot; provenance denotes an institutionally published threshold; &quot;self-derived&quot; denotes a first-principles band where no categorical institutional value exists at the relevant scale.</p>
 <div class="table-wrap"><table><thead><tr><th>Band</th><th>Metric(s)</th><th>Onset → saturation rationale</th><th>Provenance</th><th>Confidence</th><th>Used by</th></tr></thead><tbody><tr><td><strong>40–45 °C</strong></td><td>Annual max temperature (TXx)</td><td>IMD plains heatwave: ≥ 40 °C plains consideration floor (onset), ≥ 45 °C absolute heat-wave declaration threshold — declared irrespective of normal (saturation)</td><td>External (IMD)</td><td>HIGH</td><td>Health, Industrial, Infrastructure, Asset (Thermal)</td></tr>
 <tr><td><strong>35–45 °C</strong></td><td>Annual max temperature (TXx)</td><td>Onset 35 (rice/wheat reproductive-stage heat-sterility threshold); saturation 45 (IMD absolute heat-wave declaration threshold / documented crop-failure regime)</td><td>Self-derived</td><td>MEDIUM</td><td>Agricultural</td></tr>
@@ -604,8 +605,8 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <tr><td><strong>5–15 days/yr</strong></td><td>Heatwave spell days (HWFI)</td><td>Onset 5 (HWFI minimum qualifying spell); saturation 15 (high annual burden implying multiple qualifying spells)</td><td>Self-derived</td><td>LOW</td><td>Investment</td></tr>
 <tr><td><strong>— (no band)</strong></td><td>Extremely wet-day precip (R99p), SPI-3 moderate-drought months, R95p inter-annual variability (CV)</td><td>Regime/concentration/variability metrics with no defensible danger threshold; scored on absolute + change lenses only</td><td>—</td><td>—</td><td>Investment, Asset (Thermal), Asset (Hydropower)</td></tr></tbody></table></div>
 <p><strong>Zone-dependence caveat.</strong> Several self-derived bands are calibrated to a national/plains or peninsular default and are known to mis-apply in specific agro-climatic zones — most notably the 10–30 day cold-night band (beneficial in the northern wheat belt) and the heat bands in non-plains terrain. Zone-specific refinement is tracked as deferred work; the present bands are the documented Phase-1 defaults.</p>
-<p>---</p>
-<h2 id="references">References</h2>
+<p>---</p></section>
+<section class="doc-section" data-section-id="references"><h2 id="references">References</h2>
 <p>Adams, J. (2021). <em>climate_indices: An open source Python library providing reference implementations of commonly used climate indices</em> [Computer software]. https&#58;//github.com/monocongo/climate_indices</p>
 <p>Anandhi, A., Frei, A., Pierson, D. C., Schneiderman, E. M., Zion, M. S., Lounsbury, D., and Matonse, A. H. (2011). Examination of change factor methodologies for climate change impact assessment. <em>Water Resources Research</em>, 47, W03501. https&#58;//doi.org/10.1029/2010WR009104</p>
 <p>Baugh, C., Colonese, J., D&#x27;Angelo, C., Dottori, F., Neal, J., Prudhomme, C., and Salamon, P. (2024). Global river flood hazard maps (Version 2.1) [Dataset]. European Commission, Joint Research Centre (JRC). https&#58;//doi.org/10.2905/JRC.VD32YWG</p>
@@ -634,7 +635,7 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 <p>Wood, A. W., Maurer, E. P., Kumar, A., and Lettenmaier, D. P. (2002). Long-range experimental hydrologic forecasting for the eastern United States. <em>Journal of Geophysical Research: Atmospheres</em>, 107(D20), 4429. https&#58;//doi.org/10.1029/2001JD000659</p>
 <p>Zhang, X., Alexander, L., Hegerl, G. C., Jones, P., Klein Tank, A., Peterson, T. C., Trewin, B., and Zwiers, F. W. (2011). Indices for monitoring changes in extremes based on daily temperature and precipitation data. <em>WIREs Climate Change</em>, 2(6), 851–870. https&#58;//doi.org/10.1002/wcc.147</p>
 <p>---</p>
-<p><em>Document last updated: 2026-06-29</em> <em>Maintained by: Abu Bakar Siddiqui Thakur</em></p><p class="provenance">Build provenance: {&quot;figure_count&quot;: 18, &quot;figure_manifest_sha256&quot;: &quot;5e89c5b7b11a2b96818613a0e90bc85e79f5a41a1a9a7dbaa989394c79c25db5&quot;, &quot;generator&quot;: &quot;read-the-docs-html-v1&quot;, &quot;source_sha256&quot;: &quot;77653b02205a63b73c39a76b1ac4bc0e9ecad59816d2087f4bb99e3b0440666d&quot;}</p></article>
+<p><em>Document last updated: 2026-06-29</em> <em>Maintained by: Abu Bakar Siddiqui Thakur</em></p></section><p class="provenance">Build provenance: {&quot;figure_count&quot;: 18, &quot;figure_manifest_sha256&quot;: &quot;5e89c5b7b11a2b96818613a0e90bc85e79f5a41a1a9a7dbaa989394c79c25db5&quot;, &quot;generator&quot;: &quot;read-the-docs-html-v1&quot;, &quot;source_sha256&quot;: &quot;77653b02205a63b73c39a76b1ac4bc0e9ecad59816d2087f4bb99e3b0440666d&quot;}</p></article>
 </main>
 </div>
 <button class="back-top" type="button" aria-label="Back to top">↑</button>
@@ -651,6 +652,7 @@ document.addEventListener("DOMContentLoaded",function(){renderMathInElement(docu
     const scroller = document.querySelector(".content-scroll");
     const content = document.querySelector(".content");
     const links = Array.from(document.querySelectorAll('.toc-links a[href^="#"]'));
+    let activeSectionId = null;
 
     function renderMath(root) {
       if (root && window.renderMathInElement) {
@@ -670,11 +672,50 @@ document.addEventListener("DOMContentLoaded",function(){renderMathInElement(docu
       return links.map(getAnchorTarget).filter(Boolean);
     }
 
+    function getSections() {
+      return content ? Array.from(content.querySelectorAll(".doc-section")) : [];
+    }
+
+    function getActiveSection() {
+      const sections = getSections();
+      return sections.find(function(section) {
+        return section.classList.contains("active");
+      }) || sections[0] || null;
+    }
+
+    function getSectionForTarget(target) {
+      return target && target.closest ? target.closest(".doc-section") : null;
+    }
+
+    function getTopLinkForSection(sectionId) {
+      return links.find(function(link) {
+        return link.classList.contains("toc-level-1") || link.classList.contains("toc-level-2")
+          ? link.getAttribute("href") === "#" + sectionId
+          : false;
+      }) || null;
+    }
+
+    function setOpenGroup(group) {
+      document.querySelectorAll(".toc-group").forEach(function(candidate) {
+        const isOpen = candidate === group;
+        candidate.classList.toggle("open", isOpen);
+        const toggle = candidate.querySelector(".toc-toggle");
+        if (toggle && !toggle.classList.contains("is-empty")) {
+          toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        }
+      });
+    }
+
     function setActiveLink(targetId, explicitLink) {
+      const activeSection = getActiveSection();
+      const sectionId = activeSection ? activeSection.dataset.sectionId : activeSectionId;
       links.forEach(function(link) {
+        const href = link.getAttribute("href");
+        const isTopLink = sectionId && href === "#" + sectionId;
+        const isCurrentLink = targetId && href === "#" + targetId;
         const isActive = explicitLink
-          ? link === explicitLink
-          : targetId && link.getAttribute("href") === "#" + targetId;
+          ? link === explicitLink || isTopLink || isCurrentLink
+          : Boolean(isTopLink || isCurrentLink);
         link.classList.toggle("active", Boolean(isActive));
       });
     }
@@ -687,14 +728,53 @@ document.addEventListener("DOMContentLoaded",function(){renderMathInElement(docu
       scroller.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     }
 
+    function showSection(id, options) {
+      const opts = options || {};
+      const sections = getSections();
+      if (!sections.length) {
+        return;
+      }
+      const requested = sections.find(function(section) {
+        return section.dataset.sectionId === id;
+      }) || sections[0];
+      activeSectionId = requested.dataset.sectionId;
+      sections.forEach(function(section) {
+        section.classList.toggle("active", section === requested);
+      });
+
+      const topLink = getTopLinkForSection(activeSectionId);
+      setOpenGroup(topLink ? topLink.closest(".toc-group") : null);
+      const scrollTarget = opts.scrollToId ? document.getElementById(opts.scrollToId) : null;
+      const activeTargetId = scrollTarget ? scrollTarget.id : activeSectionId;
+      setActiveLink(activeTargetId, opts.explicitLink || null);
+
+      if (!scroller || opts.resetScroll === false) {
+        return;
+      }
+      if (scrollTarget) {
+        scrollTargetIntoScroller(scrollTarget);
+      } else {
+        scroller.scrollTo({ top: 0, behavior: opts.smooth === false ? "auto" : "smooth" });
+      }
+    }
+
     function onScroll() {
       if (!scroller) {
         return;
       }
       const headings = collectHeadings();
-      let current = headings[0] || null;
+      const activeSection = getActiveSection();
+      if (activeSection) {
+        activeSectionId = activeSection.dataset.sectionId;
+      }
+      const visibleHeadings = activeSection
+        ? headings.filter(function(heading) {
+            return activeSection.contains(heading);
+          })
+        : headings;
+      let current = visibleHeadings[0] || null;
       const scrollerTop = scroller.getBoundingClientRect().top;
-      for (const heading of headings) {
+      for (const heading of visibleHeadings) {
         if (heading.getBoundingClientRect().top - scrollerTop < 150) {
           current = heading;
         }
@@ -712,12 +792,35 @@ document.addEventListener("DOMContentLoaded",function(){renderMathInElement(docu
       if (!target) {
         return;
       }
-      scrollTargetIntoScroller(target);
-      setActiveLink(target.id, link);
+      const section = getSectionForTarget(target);
+      if (!section) {
+        scrollTargetIntoScroller(target);
+        setActiveLink(target.id, link);
+        return;
+      }
+      const scrollToId = link.classList.contains("toc-level-3") || !link.closest(".toc-links")
+        ? target.id
+        : null;
+      showSection(section.dataset.sectionId, {
+        scrollToId: scrollToId,
+        explicitLink: link,
+      });
+    });
+
+    document.addEventListener("click", function(event) {
+      const toggle = event.target && event.target.closest ? event.target.closest(".toc-toggle:not(.is-empty)") : null;
+      if (!toggle) {
+        return;
+      }
+      const group = toggle.closest(".toc-group");
+      const isOpen = group ? group.classList.contains("open") : false;
+      setOpenGroup(isOpen ? null : group);
     });
 
     if (scroller) {
       scroller.addEventListener("scroll", onScroll, { passive: true });
+      const initialSection = getActiveSection();
+      showSection(initialSection ? initialSection.dataset.sectionId : null, { resetScroll: false, smooth: false });
       onScroll();
     }
 
@@ -750,13 +853,21 @@ document.addEventListener("DOMContentLoaded",function(){renderMathInElement(docu
       const original = content.innerHTML;
       input.addEventListener("input", function() {
         const query = input.value.trim();
+        const sectionBeforeSearch = activeSectionId;
         content.innerHTML = original;
-        renderMath(content);
-        onScroll();
+        if (sectionBeforeSearch) {
+          activeSectionId = sectionBeforeSearch;
+        }
         if (!query) {
+          content.classList.remove("searching");
+          showSection(activeSectionId, { resetScroll: false, smooth: false });
+          renderMath(content);
+          onScroll();
           return;
         }
 
+        content.classList.add("searching");
+        showSection(activeSectionId, { resetScroll: false, smooth: false });
         const needle = query.toLowerCase();
         const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
           acceptNode: function(node) {
@@ -769,7 +880,7 @@ document.addEventListener("DOMContentLoaded",function(){renderMathInElement(docu
         while (walker.nextNode()) {
           nodes.push(walker.currentNode);
         }
-        const escapedQuery = query.replace(/[.*+?^${}()|[\]\]/g, "\$&");
+        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
         const regex = new RegExp(escapedQuery, "ig");
         nodes.forEach(function(node) {
           const span = document.createElement("span");
@@ -781,6 +892,7 @@ document.addEventListener("DOMContentLoaded",function(){renderMathInElement(docu
           }
         });
         const first = content.querySelector(".search-hit");
+        renderMath(content);
         if (first) {
           scrollTargetIntoScroller(first);
         }

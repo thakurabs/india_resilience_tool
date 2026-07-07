@@ -27,6 +27,7 @@ FIGURE_TOKEN_RE = re.compile(r"\[FIGURE:\s*([^|\]]+?)\s*\|\s*([^\]]+?)\s*\]")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 FENCE_RE = re.compile(r"^```")
 URL_RE = re.compile(r"url\((['\"]?)(?!data:)([^)'\"\s]+)\1\)")
+_SECTION_HEAD_RE = re.compile(r'^<h([12]) id="([^"]+)"')
 
 APPROVED_FIGURES: tuple[str, ...] = (
     "fig_02_hazard_exposure_vulnerability_scope.svg",
@@ -167,6 +168,37 @@ def _figure_html(filename: str, caption: str, asset: FigureAsset) -> str:
     )
 
 
+def _wrap_sections(blocks: list[str]) -> str:
+    sections: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+    for block in blocks:
+        match = _SECTION_HEAD_RE.match(block)
+        if match:
+            current = {"id": match.group(2), "blocks": []}
+            sections.append(current)
+        if current is None:
+            current = {"id": "__preamble__", "blocks": []}
+            sections.append(current)
+        current_blocks = current["blocks"]
+        if not isinstance(current_blocks, list):  # pragma: no cover - defensive type guard.
+            raise TypeError("Section blocks must be a list")
+        current_blocks.append(block)
+
+    parts: list[str] = []
+    for idx, section in enumerate(sections):
+        section_id = str(section["id"])
+        section_blocks = section["blocks"]
+        if not isinstance(section_blocks, list):  # pragma: no cover - defensive type guard.
+            raise TypeError("Section blocks must be a list")
+        section_class = "doc-section active" if idx == 0 else "doc-section"
+        parts.append(
+            f'<section class="{section_class}" data-section-id="{html.escape(section_id)}">'
+            + "\n".join(str(block) for block in section_blocks)
+            + "</section>"
+        )
+    return "\n".join(parts)
+
+
 def render_markdown(markdown: str, figure_assets: dict[str, FigureAsset]) -> tuple[str, list[Heading]]:
     """Render the note Markdown to HTML with explicit figure token expansion."""
     _validate_math_tokenization_if_available(markdown)
@@ -269,7 +301,7 @@ def render_markdown(markdown: str, figure_assets: dict[str, FigureAsset]) -> tup
     flush_paragraph()
     flush_list()
     flush_blockquote()
-    return "\n".join(rendered), headings
+    return _wrap_sections(rendered), headings
 
 
 def _validate_math_tokenization_if_available(markdown: str) -> None:
@@ -339,11 +371,46 @@ def load_katex_bundle() -> tuple[str, str, str, dict[str, int]]:
 
 
 def _toc_html(headings: Sequence[Heading]) -> str:
-    items = [
-        f'<a class="toc-level-{heading.level}" href="#{heading.element_id}">{html.escape(heading.text)}</a>'
-        for heading in headings
-        if heading.level in {2, 3}
-    ]
+    groups: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+    for heading in headings:
+        if heading.level in {1, 2}:
+            current = {"heading": heading, "children": []}
+            groups.append(current)
+            continue
+        if heading.level == 3 and current is not None:
+            children = current["children"]
+            if not isinstance(children, list):  # pragma: no cover - defensive type guard.
+                raise TypeError("TOC children must be a list")
+            children.append(heading)
+
+    items: list[str] = []
+    for group in groups:
+        heading = group["heading"]
+        children = group["children"]
+        if not isinstance(heading, Heading):  # pragma: no cover - defensive type guard.
+            raise TypeError("TOC heading must be a Heading")
+        if not isinstance(children, list):  # pragma: no cover - defensive type guard.
+            raise TypeError("TOC children must be a list")
+        toggle_class = "toc-toggle" if children else "toc-toggle is-empty"
+        disabled = "" if children else " disabled"
+        sub_html = ""
+        if children:
+            child_links = "\n".join(
+                f'<a class="toc-level-{child.level}" href="#{child.element_id}">{html.escape(child.text)}</a>'
+                for child in children
+                if isinstance(child, Heading)
+            )
+            sub_html = f'\n<div class="toc-sub">{child_links}</div>'
+        items.append(
+            '<div class="toc-group">'
+            '<div class="toc-group-head">'
+            f'<button class="{toggle_class}" type="button" aria-expanded="false" '
+            f'aria-label="Toggle section"{disabled}></button>'
+            f'<a class="toc-level-{heading.level}" href="#{heading.element_id}">{html.escape(heading.text)}</a>'
+            "</div>"
+            f"{sub_html}</div>"
+        )
     return "\n".join(items)
 
 
@@ -467,15 +534,16 @@ APP_CSS = """
 :root[data-theme="dark"]{--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}}
 *{box-sizing:border-box}html,body{margin:0;height:100%;scroll-behavior:smooth}body{font:15px/1.62 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
-a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-3{padding-left:18px!important;font-size:13px}.content-scroll{height:100vh;overflow:auto}.content{max-width:none;margin:0;padding:34px 40px 96px}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:grid;grid-template-columns:1fr 1fr}.toc-level-3{display:none}}
+a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-group-head{display:flex;align-items:center;gap:4px}.toc-group-head a{flex:1}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-1,.toc-level-2{font-weight:600}.toc-level-3{padding-left:18px!important;font-size:13px}.toc-toggle{width:20px;height:24px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center}.toc-toggle::before{content:"\\25B8";display:block;transition:transform .16s ease}.toc-group.open .toc-toggle::before{transform:rotate(90deg)}.toc-toggle.is-empty{visibility:hidden;cursor:default}.toc-sub{display:none;flex-direction:column;gap:2px;margin-left:24px}.toc-group.open .toc-sub{display:flex}.content-scroll{height:100vh;overflow:auto}.content{max-width:none;margin:0;padding:34px 40px 96px}.doc-section{display:none}.doc-section.active{display:block}.content.searching .doc-section{display:block}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:flex;flex-direction:column}.toc-sub{margin-left:20px}}
 """
 
-APP_JS = """
+APP_JS = r"""
 (function() {
   document.addEventListener("DOMContentLoaded", function() {
     const scroller = document.querySelector(".content-scroll");
     const content = document.querySelector(".content");
     const links = Array.from(document.querySelectorAll('.toc-links a[href^="#"]'));
+    let activeSectionId = null;
 
     function renderMath(root) {
       if (root && window.renderMathInElement) {
@@ -495,11 +563,50 @@ APP_JS = """
       return links.map(getAnchorTarget).filter(Boolean);
     }
 
+    function getSections() {
+      return content ? Array.from(content.querySelectorAll(".doc-section")) : [];
+    }
+
+    function getActiveSection() {
+      const sections = getSections();
+      return sections.find(function(section) {
+        return section.classList.contains("active");
+      }) || sections[0] || null;
+    }
+
+    function getSectionForTarget(target) {
+      return target && target.closest ? target.closest(".doc-section") : null;
+    }
+
+    function getTopLinkForSection(sectionId) {
+      return links.find(function(link) {
+        return link.classList.contains("toc-level-1") || link.classList.contains("toc-level-2")
+          ? link.getAttribute("href") === "#" + sectionId
+          : false;
+      }) || null;
+    }
+
+    function setOpenGroup(group) {
+      document.querySelectorAll(".toc-group").forEach(function(candidate) {
+        const isOpen = candidate === group;
+        candidate.classList.toggle("open", isOpen);
+        const toggle = candidate.querySelector(".toc-toggle");
+        if (toggle && !toggle.classList.contains("is-empty")) {
+          toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+        }
+      });
+    }
+
     function setActiveLink(targetId, explicitLink) {
+      const activeSection = getActiveSection();
+      const sectionId = activeSection ? activeSection.dataset.sectionId : activeSectionId;
       links.forEach(function(link) {
+        const href = link.getAttribute("href");
+        const isTopLink = sectionId && href === "#" + sectionId;
+        const isCurrentLink = targetId && href === "#" + targetId;
         const isActive = explicitLink
-          ? link === explicitLink
-          : targetId && link.getAttribute("href") === "#" + targetId;
+          ? link === explicitLink || isTopLink || isCurrentLink
+          : Boolean(isTopLink || isCurrentLink);
         link.classList.toggle("active", Boolean(isActive));
       });
     }
@@ -512,14 +619,53 @@ APP_JS = """
       scroller.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     }
 
+    function showSection(id, options) {
+      const opts = options || {};
+      const sections = getSections();
+      if (!sections.length) {
+        return;
+      }
+      const requested = sections.find(function(section) {
+        return section.dataset.sectionId === id;
+      }) || sections[0];
+      activeSectionId = requested.dataset.sectionId;
+      sections.forEach(function(section) {
+        section.classList.toggle("active", section === requested);
+      });
+
+      const topLink = getTopLinkForSection(activeSectionId);
+      setOpenGroup(topLink ? topLink.closest(".toc-group") : null);
+      const scrollTarget = opts.scrollToId ? document.getElementById(opts.scrollToId) : null;
+      const activeTargetId = scrollTarget ? scrollTarget.id : activeSectionId;
+      setActiveLink(activeTargetId, opts.explicitLink || null);
+
+      if (!scroller || opts.resetScroll === false) {
+        return;
+      }
+      if (scrollTarget) {
+        scrollTargetIntoScroller(scrollTarget);
+      } else {
+        scroller.scrollTo({ top: 0, behavior: opts.smooth === false ? "auto" : "smooth" });
+      }
+    }
+
     function onScroll() {
       if (!scroller) {
         return;
       }
       const headings = collectHeadings();
-      let current = headings[0] || null;
+      const activeSection = getActiveSection();
+      if (activeSection) {
+        activeSectionId = activeSection.dataset.sectionId;
+      }
+      const visibleHeadings = activeSection
+        ? headings.filter(function(heading) {
+            return activeSection.contains(heading);
+          })
+        : headings;
+      let current = visibleHeadings[0] || null;
       const scrollerTop = scroller.getBoundingClientRect().top;
-      for (const heading of headings) {
+      for (const heading of visibleHeadings) {
         if (heading.getBoundingClientRect().top - scrollerTop < 150) {
           current = heading;
         }
@@ -537,12 +683,35 @@ APP_JS = """
       if (!target) {
         return;
       }
-      scrollTargetIntoScroller(target);
-      setActiveLink(target.id, link);
+      const section = getSectionForTarget(target);
+      if (!section) {
+        scrollTargetIntoScroller(target);
+        setActiveLink(target.id, link);
+        return;
+      }
+      const scrollToId = link.classList.contains("toc-level-3") || !link.closest(".toc-links")
+        ? target.id
+        : null;
+      showSection(section.dataset.sectionId, {
+        scrollToId: scrollToId,
+        explicitLink: link,
+      });
+    });
+
+    document.addEventListener("click", function(event) {
+      const toggle = event.target && event.target.closest ? event.target.closest(".toc-toggle:not(.is-empty)") : null;
+      if (!toggle) {
+        return;
+      }
+      const group = toggle.closest(".toc-group");
+      const isOpen = group ? group.classList.contains("open") : false;
+      setOpenGroup(isOpen ? null : group);
     });
 
     if (scroller) {
       scroller.addEventListener("scroll", onScroll, { passive: true });
+      const initialSection = getActiveSection();
+      showSection(initialSection ? initialSection.dataset.sectionId : null, { resetScroll: false, smooth: false });
       onScroll();
     }
 
@@ -575,13 +744,21 @@ APP_JS = """
       const original = content.innerHTML;
       input.addEventListener("input", function() {
         const query = input.value.trim();
+        const sectionBeforeSearch = activeSectionId;
         content.innerHTML = original;
-        renderMath(content);
-        onScroll();
+        if (sectionBeforeSearch) {
+          activeSectionId = sectionBeforeSearch;
+        }
         if (!query) {
+          content.classList.remove("searching");
+          showSection(activeSectionId, { resetScroll: false, smooth: false });
+          renderMath(content);
+          onScroll();
           return;
         }
 
+        content.classList.add("searching");
+        showSection(activeSectionId, { resetScroll: false, smooth: false });
         const needle = query.toLowerCase();
         const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
           acceptNode: function(node) {
@@ -606,6 +783,7 @@ APP_JS = """
           }
         });
         const first = content.querySelector(".search-hit");
+        renderMath(content);
         if (first) {
           scrollTargetIntoScroller(first);
         }
