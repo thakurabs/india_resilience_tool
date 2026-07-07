@@ -1006,6 +1006,80 @@ def figure_14() -> str:
     return Svg().wrap(body, "FIG-14. SPI derivation", "Three-panel illustrative SPI transformation.")
 
 
+def figure_15() -> str:
+    body = [
+        text(60, 48, "FIG-15. JRC RP-100 Severity Lookup Matrix", "title"),
+        text(60, 74, "Flood severity is assigned from a fixed depth-class by extent-class lookup table for the static RP-100 snapshot.", "subtitle"),
+    ]
+    matrix = [
+        [1, 2, 2, 3, 4],
+        [2, 2, 3, 4, 4],
+        [2, 3, 4, 4, 5],
+        [3, 4, 4, 5, 5],
+        [4, 5, 5, 5, 5],
+    ]
+    depth_labels = ["<=0.2 m", "<=0.5 m", "<=1.0 m", "<=2.5 m", ">2.5 m"]
+    extent_labels = ["<=1%", "<=5%", "<=15%", "<=25%", ">25%"]
+    severity_colors = {
+        1: "#dff0fb",
+        2: "#b7e3d8",
+        3: "#fff2cc",
+        4: "#f7c7a6",
+        5: "#e89aa8",
+    }
+    severity_names = {
+        1: "Very low",
+        2: "Low",
+        3: "Moderate",
+        4: "High",
+        5: "Extreme",
+    }
+
+    x0, y0 = 300, 150
+    cell_w, cell_h = 118, 82
+    grid_w, grid_h = cell_w * 5, cell_h * 5
+    body.append(rect(x0 - 160, y0 - 70, grid_w + 300, grid_h + 190, COLORS["panel"], COLORS["grid"], stroke_width=1.2, radius=6))
+    body.append(text(x0 + grid_w / 2, y0 - 42, "Depth class", "label", "middle"))
+    body.append(
+        text(
+            x0 - 118,
+            y0 + grid_h / 2,
+            "Extent class",
+            "label",
+            "middle",
+            attrs={"transform": f"rotate(-90 {x0 - 118} {y0 + grid_h / 2})"},
+        )
+    )
+
+    for col, label in enumerate(depth_labels):
+        x = x0 + col * cell_w + cell_w / 2
+        body.append(text(x, y0 - 16, label, "small", "middle"))
+    for row, label in enumerate(extent_labels):
+        y = y0 + row * cell_h + cell_h / 2
+        body.append(text(x0 - 18, y + 4, label, "small", "end"))
+
+    for row, values in enumerate(matrix):
+        for col, severity in enumerate(values):
+            x = x0 + col * cell_w
+            y = y0 + row * cell_h
+            body.append(rect(x, y, cell_w, cell_h, severity_colors[severity], "white", stroke_width=2.0))
+            body.append(text(x + cell_w / 2, y + 38, str(severity), "label", "middle"))
+            body.append(text(x + cell_w / 2, y + 58, severity_names[severity], "tiny", "middle"))
+
+    body.append(rect(x0, y0, grid_w, grid_h, "none", COLORS["muted"], stroke_width=1.6))
+    body.append(text(x0 + grid_w / 2, y0 + grid_h + 38, "Rows = extent class; columns = depth class.", "small", "middle"))
+
+    legend_x, legend_y = 185, 620
+    body.append(text(legend_x, legend_y - 18, "Severity class", "label"))
+    for severity in range(1, 6):
+        x = legend_x + (severity - 1) * 170
+        body.append(rect(x, legend_y, 34, 24, severity_colors[severity], COLORS["grid"], stroke_width=1.0, radius=3))
+        body.append(text(x + 47, legend_y + 17, f"{severity}: {severity_names[severity]}", "small"))
+
+    body.append(text(60, 710, "Source: author-created from the fixed JRC RP-100 flood depth x extent severity table in section 5.5.", "note"))
+    return Svg().wrap(body, "FIG-15. JRC RP-100 severity lookup matrix", "Heatmap of fixed JRC depth and extent severity classes.")
+
+
 def figure_18() -> str:
     body = [
         text(60, 48, "FIG-18. Three-Lens Blended Rule Schematic", "title"),
@@ -1180,6 +1254,7 @@ FIGURES = {
     "fig_11_temporal_aggregation_ensemble_chain.svg": figure_11,
     "fig_12_doy_percentile_threshold_curve.svg": figure_12,
     "fig_14_spi_derivation.svg": figure_14,
+    "fig_15_jrc_rp100_severity_lookup_matrix.svg": figure_15,
     "fig_18_three_lens_blended_rule.svg": figure_18,
     "fig_19_impact_band_ramp.svg": figure_19,
     "fig_20_district_a_b_lens_example.svg": figure_20,
