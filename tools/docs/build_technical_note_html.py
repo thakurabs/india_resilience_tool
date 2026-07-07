@@ -1,0 +1,511 @@
+"""Build the Technical Guidance Note as a self-contained dashboard HTML asset."""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import html
+import json
+import mimetypes
+import os
+import re
+import subprocess
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Sequence
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SOURCE = REPO_ROOT / "docs" / "technical_guidance_note.md"
+DEFAULT_OUTPUT = REPO_ROOT / "india_resilience_tool" / "app" / "assets" / "read_the_docs.html"
+TECHNICAL_GUIDANCE_FIGURE_ROOT = REPO_ROOT / "docs" / "figures" / "technical_guidance_note"
+TECHNICAL_NOTE_FIGURE_ROOT = REPO_ROOT / "docs" / "figures" / "technical_note"
+KATEX_ROOT = Path(__file__).resolve().parent / "vendor" / "katex"
+GENERATOR_VERSION = "read-the-docs-html-v1"
+MAX_HTML_BYTES = 5 * 1024 * 1024
+FIGURE_TOKEN_RE = re.compile(r"\[FIGURE:\s*([^|\]]+?)\s*\|\s*([^\]]+?)\s*\]")
+HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+FENCE_RE = re.compile(r"^```")
+URL_RE = re.compile(r"url\((['\"]?)(?!data:)([^)'\"\s]+)\1\)")
+
+APPROVED_FIGURES: tuple[str, ...] = (
+    "fig_02_hazard_exposure_vulnerability_scope.svg",
+    "fig_05_temporal_coverage_analysis_windows.svg",
+    "fig_06_bcsd_schematic.svg",
+    "fig_08_district_block_resolution_zoom.svg",
+    "FIG-V1V2V3_taylor.png",
+    "FIG-V4a_nrmse_era5.png",
+    "FIG-V4b_nrmse_imd.png",
+    "FIG-V5_rx1day_adilabad.png",
+    "fig_01_pipeline_flow.svg",
+    "fig_09_admin_first_vs_grid_first.svg",
+    "fig_10_fractional_area_overlap_weights.svg",
+    "fig_11_temporal_aggregation_ensemble_chain.svg",
+    "fig_12_doy_percentile_threshold_curve.svg",
+    "fig_14_spi_derivation.svg",
+    "fig_15_jrc_rp100_severity_lookup_matrix.svg",
+    "fig_18_three_lens_blended_rule.svg",
+    "fig_19_impact_band_ramp.svg",
+    "fig_20_district_a_b_lens_example.svg",
+)
+
+
+@dataclass(frozen=True)
+class Heading:
+    level: int
+    text: str
+    element_id: str
+
+
+@dataclass(frozen=True)
+class FigureAsset:
+    filename: str
+    path: Path
+    mime_type: str
+    byte_size: int
+
+
+def parse_figure_tokens(markdown: str) -> list[tuple[str, str]]:
+    """Return figure filename/caption pairs from explicit callout tokens."""
+    return [(match.group(1).strip(), match.group(2).strip()) for match in FIGURE_TOKEN_RE.finditer(markdown)]
+
+
+def resolve_figure_asset(filename: str) -> FigureAsset:
+    """Resolve an approved figure filename, rejecting traversal and unknown files."""
+    if filename not in APPROVED_FIGURES:
+        raise ValueError(f"Figure {filename!r} is not in APPROVED_FIGURES")
+    if Path(filename).name != filename:
+        raise ValueError(f"Figure filename must be a basename, got {filename!r}")
+    roots = (TECHNICAL_GUIDANCE_FIGURE_ROOT, TECHNICAL_NOTE_FIGURE_ROOT)
+    for root in roots:
+        candidate = (root / filename).resolve()
+        try:
+            inside_root = candidate.is_relative_to(root.resolve())
+        except AttributeError:  # pragma: no cover - Python < 3.9 compatibility.
+            inside_root = os.path.commonpath([str(candidate), str(root.resolve())]) == str(root.resolve())
+        if inside_root and candidate.exists():
+            mime = "image/svg+xml" if candidate.suffix.lower() == ".svg" else "image/png"
+            return FigureAsset(filename=filename, path=candidate, mime_type=mime, byte_size=candidate.stat().st_size)
+    raise FileNotFoundError(f"Approved figure {filename!r} not found in figure roots")
+
+
+def validate_figure_manifest(markdown: str) -> list[FigureAsset]:
+    """Validate that the note references exactly the approved 18-figure manifest."""
+    tokens = parse_figure_tokens(markdown)
+    referenced = [filename for filename, _caption in tokens]
+    unresolved = sorted(set(referenced) - set(APPROVED_FIGURES))
+    unused = [filename for filename in APPROVED_FIGURES if filename not in referenced]
+    if unresolved:
+        raise ValueError(f"Unapproved figure token(s): {', '.join(unresolved)}")
+    if unused:
+        raise ValueError(f"Approved figure(s) missing callouts: {', '.join(unused)}")
+    if len(referenced) != len(APPROVED_FIGURES):
+        raise ValueError(f"Expected {len(APPROVED_FIGURES)} figure callouts, found {len(referenced)}")
+    return [resolve_figure_asset(filename) for filename in referenced]
+
+
+def _slugify(text: str) -> str:
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[^\w\s-]", "", text.lower(), flags=re.UNICODE)
+    return re.sub(r"[-\s_]+", "-", text).strip("-") or "section"
+
+
+def heading_id_map(markdown: str) -> tuple[dict[str, str], list[Heading]]:
+    """Build deterministic heading IDs and fail on ambiguous duplicate text slugs."""
+    slug_counts: dict[str, int] = {}
+    seen_ids: set[str] = set()
+    mapping: dict[str, str] = {}
+    headings: list[Heading] = []
+    for line in markdown.splitlines():
+        match = HEADING_RE.match(line)
+        if not match:
+            continue
+        level = len(match.group(1))
+        text = match.group(2).strip()
+        slug = _slugify(text)
+        count = slug_counts.get(slug, 0) + 1
+        slug_counts[slug] = count
+        element_id = slug if count == 1 else f"{slug}-{count}"
+        if element_id in seen_ids:
+            raise ValueError(f"Duplicate heading id generated: {element_id}")
+        seen_ids.add(element_id)
+        mapping[line] = element_id
+        headings.append(Heading(level=level, text=text, element_id=element_id))
+    return mapping, headings
+
+
+def _inline_markup(text: str) -> str:
+    escaped = html.escape(text)
+    escaped = escaped.replace("https://", "https&#58;//").replace("http://", "http&#58;//")
+    escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
+    escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", escaped)
+    return escaped
+
+
+def _table_html(lines: Sequence[str]) -> str:
+    rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in lines]
+    if len(rows) < 2:
+        return ""
+    header = rows[0]
+    body = rows[2:]
+    head_html = "".join(f"<th>{_inline_markup(cell)}</th>" for cell in header)
+    body_html = "\n".join(
+        "<tr>" + "".join(f"<td>{_inline_markup(cell)}</td>" for cell in row) + "</tr>" for row in body
+    )
+    return f"<div class=\"table-wrap\"><table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table></div>"
+
+
+def _figure_html(filename: str, caption: str, asset: FigureAsset) -> str:
+    payload = base64.b64encode(asset.path.read_bytes()).decode("ascii")
+    src = f"data:{asset.mime_type};base64,{payload}"
+    return (
+        f'<figure class="doc-figure" id="figure-{html.escape(_slugify(filename))}">'
+        f'<button type="button" class="figure-zoom" aria-label="Zoom figure">'
+        f'<img src="{src}" alt="{html.escape(caption)}" loading="lazy"></button>'
+        f"<figcaption>{html.escape(caption)}</figcaption></figure>"
+    )
+
+
+def render_markdown(markdown: str, figure_assets: dict[str, FigureAsset]) -> tuple[str, list[Heading]]:
+    """Render the note Markdown to HTML with explicit figure token expansion."""
+    _validate_math_tokenization_if_available(markdown)
+    id_by_heading_line, headings = heading_id_map(markdown)
+    lines = markdown.splitlines()
+    rendered: list[str] = []
+    paragraph: list[str] = []
+    list_items: list[str] = []
+    blockquote: list[str] = []
+    i = 0
+
+    def flush_paragraph() -> None:
+        nonlocal paragraph
+        if paragraph:
+            rendered.append(f"<p>{_inline_markup(' '.join(paragraph))}</p>")
+            paragraph = []
+
+    def flush_list() -> None:
+        nonlocal list_items
+        if list_items:
+            rendered.append("<ul>" + "".join(f"<li>{item}</li>" for item in list_items) + "</ul>")
+            list_items = []
+
+    def flush_blockquote() -> None:
+        nonlocal blockquote
+        if blockquote:
+            rendered.append("<blockquote>" + "".join(f"<p>{line}</p>" for line in blockquote) + "</blockquote>")
+            blockquote = []
+
+    while i < len(lines):
+        line = lines[i]
+        if FENCE_RE.match(line):
+            flush_paragraph()
+            flush_list()
+            flush_blockquote()
+            code_lines: list[str] = []
+            i += 1
+            while i < len(lines) and not FENCE_RE.match(lines[i]):
+                code_lines.append(lines[i])
+                i += 1
+            rendered.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+            i += 1
+            continue
+        if not line.strip():
+            flush_paragraph()
+            flush_list()
+            flush_blockquote()
+            i += 1
+            continue
+        heading = HEADING_RE.match(line)
+        if heading:
+            flush_paragraph()
+            flush_list()
+            flush_blockquote()
+            level = len(heading.group(1))
+            text = heading.group(2).strip()
+            element_id = id_by_heading_line[line]
+            rendered.append(f'<h{level} id="{element_id}">{_inline_markup(text)}</h{level}>')
+            i += 1
+            continue
+        fig = FIGURE_TOKEN_RE.search(line.strip())
+        if fig:
+            flush_paragraph()
+            flush_list()
+            flush_blockquote()
+            filename = fig.group(1).strip()
+            caption = fig.group(2).strip()
+            rendered.append(_figure_html(filename, caption, figure_assets[filename]))
+            i += 1
+            continue
+        if line.lstrip().startswith(">"):
+            flush_paragraph()
+            flush_list()
+            blockquote.append(_inline_markup(line.lstrip()[1:].strip()))
+            i += 1
+            continue
+        if line.startswith("|") and i + 1 < len(lines) and lines[i + 1].startswith("|"):
+            flush_paragraph()
+            flush_list()
+            flush_blockquote()
+            table_lines = [line]
+            i += 1
+            while i < len(lines) and lines[i].startswith("|"):
+                table_lines.append(lines[i])
+                i += 1
+            rendered.append(_table_html(table_lines))
+            continue
+        list_match = re.match(r"^\s*[-*]\s+(.+)$", line)
+        if list_match:
+            flush_paragraph()
+            flush_blockquote()
+            list_items.append(_inline_markup(list_match.group(1)))
+            i += 1
+            continue
+        flush_list()
+        flush_blockquote()
+        paragraph.append(line.strip())
+        i += 1
+
+    flush_paragraph()
+    flush_list()
+    flush_blockquote()
+    return "\n".join(rendered), headings
+
+
+def _validate_math_tokenization_if_available(markdown: str) -> None:
+    """Use markdown-it-py/dollarmath when installed to catch malformed math blocks."""
+    try:
+        from markdown_it import MarkdownIt
+        from mdit_py_plugins.dollarmath import dollarmath_plugin
+    except ModuleNotFoundError:
+        return
+
+    parser = MarkdownIt("commonmark").enable("table").use(dollarmath_plugin)
+    parser.parse(markdown)
+
+
+def _font_mime(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".woff2":
+        return "font/woff2"
+    if suffix == ".woff":
+        return "font/woff"
+    if suffix == ".ttf":
+        return "font/ttf"
+    return mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+
+
+def inline_katex_css(css: str, root: Path) -> str:
+    """Rewrite KaTeX font URLs to embedded data URIs."""
+    def replace(match: re.Match[str]) -> str:
+        rel = match.group(2)
+        font_path = (root / rel).resolve()
+        try:
+            inside_root = font_path.is_relative_to(root.resolve())
+        except AttributeError:  # pragma: no cover
+            inside_root = os.path.commonpath([str(font_path), str(root.resolve())]) == str(root.resolve())
+        if not inside_root or not font_path.exists():
+            raise FileNotFoundError(f"KaTeX CSS references missing font: {rel}")
+        data = base64.b64encode(font_path.read_bytes()).decode("ascii")
+        return f"url(data:{_font_mime(font_path)};base64,{data})"
+
+    return URL_RE.sub(replace, css)
+
+
+def load_katex_bundle() -> tuple[str, str, str, dict[str, int]]:
+    """Load and inline the vendored KaTeX CSS/JS bundle."""
+    required = {
+        "katex_css": KATEX_ROOT / "katex.min.css",
+        "katex_js": KATEX_ROOT / "katex.min.js",
+        "auto_render_js": KATEX_ROOT / "auto-render.min.js",
+    }
+    missing = [str(path) for path in required.values() if not path.exists()]
+    if missing:
+        raise FileNotFoundError("Missing vendored KaTeX file(s): " + ", ".join(missing))
+    raw_css = required["katex_css"].read_text(encoding="utf-8")
+    css = inline_katex_css(raw_css, KATEX_ROOT)
+    js = required["katex_js"].read_text(encoding="utf-8")
+    js = js.replace("http://www.w3.org/2000/svg", 'http:"+"://www.w3.org/2000/svg')
+    js = js.replace("http://www.w3.org/1998/Math/MathML", 'http:"+"://www.w3.org/1998/Math/MathML')
+    auto_render = required["auto_render_js"].read_text(encoding="utf-8")
+    sizes = {
+        "katex_css_raw": len(raw_css.encode("utf-8")),
+        "katex_css_inlined": len(css.encode("utf-8")),
+        "katex_js": required["katex_js"].stat().st_size,
+        "auto_render_js": required["auto_render_js"].stat().st_size,
+        "katex_fonts": sum(path.stat().st_size for path in (KATEX_ROOT / "fonts").glob("*")),
+    }
+    return css, js, auto_render, sizes
+
+
+def _toc_html(headings: Sequence[Heading]) -> str:
+    items = [
+        f'<a class="toc-level-{heading.level}" href="#{heading.element_id}">{html.escape(heading.text)}</a>'
+        for heading in headings
+        if heading.level in {2, 3}
+    ]
+    return "\n".join(items)
+
+
+def _git_sha() -> str | None:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO_ROOT,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        return None
+
+
+def _asset_manifest_hash(assets: Sequence[FigureAsset]) -> str:
+    digest = hashlib.sha256()
+    for asset in assets:
+        digest.update(asset.filename.encode("utf-8"))
+        digest.update(hashlib.sha256(asset.path.read_bytes()).hexdigest().encode("ascii"))
+    return digest.hexdigest()
+
+
+def build_html(source: Path = DEFAULT_SOURCE, *, include_build_timestamp: bool = False) -> tuple[str, dict[str, object]]:
+    """Build the complete self-contained HTML string and provenance metadata."""
+    markdown = source.read_text(encoding="utf-8")
+    figure_assets = validate_figure_manifest(markdown)
+    asset_by_name = {asset.filename: asset for asset in figure_assets}
+    body_html, headings = render_markdown(markdown, asset_by_name)
+    css, katex_js, auto_render_js, katex_sizes = load_katex_bundle()
+    source_hash = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
+    manifest_hash = _asset_manifest_hash(figure_assets)
+    provenance: dict[str, object] = {
+        "generator": GENERATOR_VERSION,
+        "source_sha256": source_hash,
+        "figure_manifest_sha256": manifest_hash,
+        "git_sha": _git_sha(),
+        "figure_count": len(figure_assets),
+    }
+    if include_build_timestamp:
+        from datetime import datetime, timezone
+
+        provenance["built_at_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    html_doc = HTML_TEMPLATE.format(
+        katex_css=css,
+        app_css=APP_CSS,
+        toc_html=_toc_html(headings),
+        body_html=body_html,
+        provenance=html.escape(json.dumps(provenance, sort_keys=True)),
+        katex_js=katex_js,
+        auto_render_js=auto_render_js,
+        app_js=APP_JS,
+    )
+    _assert_self_contained(html_doc)
+    if len(html_doc.encode("utf-8")) > MAX_HTML_BYTES:
+        raise ValueError(f"HTML output exceeds {MAX_HTML_BYTES} bytes")
+    size_info: dict[str, object] = {
+        "html_bytes": len(html_doc.encode("utf-8")),
+        "figures": {asset.filename: asset.byte_size for asset in figure_assets},
+        **katex_sizes,
+    }
+    return html_doc, size_info
+
+
+def _assert_self_contained(html_doc: str) -> None:
+    if "[FIGURE:" in html_doc or "[FIGURES TO INSERT]" in html_doc:
+        raise ValueError("Generated HTML still contains unresolved figure placeholder text")
+    if re.search(r"https?://", html_doc):
+        raise ValueError("Generated HTML contains external http(s) reference")
+    if URL_RE.search(html_doc):
+        raise ValueError("Generated HTML contains relative CSS url(...) reference")
+
+
+def write_html(html_doc: str, output: Path) -> None:
+    """Write generated HTML, creating the parent directory if needed."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(html_doc, encoding="utf-8", newline="\n")
+
+
+def _print_size_info(size_info: dict[str, object]) -> None:
+    print(f"HTML output: {size_info['html_bytes']:,} bytes")
+    print(f"KaTeX CSS raw: {size_info['katex_css_raw']:,} bytes")
+    print(f"KaTeX CSS inlined: {size_info['katex_css_inlined']:,} bytes")
+    print(f"KaTeX JS: {size_info['katex_js']:,} bytes")
+    print(f"KaTeX auto-render JS: {size_info['auto_render_js']:,} bytes")
+    print(f"KaTeX fonts: {size_info['katex_fonts']:,} bytes")
+    print("Figures:")
+    for filename, byte_size in dict(size_info["figures"]).items():
+        print(f"  {filename}: {byte_size:,} bytes")
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="Source Markdown note.")
+    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Generated HTML output.")
+    parser.add_argument("--dry-run", action="store_true", help="Validate and print size information without writing.")
+    parser.add_argument(
+        "--include-build-timestamp",
+        action="store_true",
+        help="Include a wall-clock timestamp in provenance; off by default for deterministic output.",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
+    html_doc, size_info = build_html(args.source, include_build_timestamp=args.include_build_timestamp)
+    _print_size_info(size_info)
+    if args.dry_run:
+        print("Dry run: no file written.")
+        return 0
+    write_html(html_doc, args.output)
+    print(f"Wrote {args.output}")
+    return 0
+
+
+APP_CSS = """
+:root{color-scheme:light dark;--bg:#f7f8f5;--panel:#ffffff;--text:#17211c;--muted:#66736c;--line:#dce3dd;--accent:#0f766e;--accent-2:#bf6b21;--mark:#fff1a8;--shadow:0 18px 48px rgba(24,35,31,.12)}
+:root[data-theme="dark"]{--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}}
+*{box-sizing:border-box}html,body{margin:0;height:100%;scroll-behavior:smooth}body{font:15px/1.62 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-3{padding-left:18px!important;font-size:13px}.content-scroll{height:100vh;overflow:auto}.content{max-width:980px;margin:0 auto;padding:34px 34px 96px}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:grid;grid-template-columns:1fr 1fr}.toc-level-3{display:none}}
+"""
+
+APP_JS = """
+(function(){const scroller=document.querySelector('.content-scroll');const links=[...document.querySelectorAll('.toc-links a')];const headings=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);function onScroll(){let current=headings[0];for(const h of headings){if(h.getBoundingClientRect().top<150)current=h;}links.forEach(a=>a.classList.toggle('active',current&&a.getAttribute('href')==='#'+current.id));}scroller.addEventListener('scroll',onScroll,{passive:true});onScroll();document.querySelector('.back-top').addEventListener('click',()=>scroller.scrollTo({top:0,behavior:'smooth'}));const box=document.querySelector('.lightbox');const boxImg=box.querySelector('img');document.querySelectorAll('.figure-zoom img').forEach(img=>img.addEventListener('click',()=>{boxImg.src=img.src;boxImg.alt=img.alt;box.classList.add('open');}));box.addEventListener('click',()=>box.classList.remove('open'));const input=document.querySelector('.toc-search');const content=document.querySelector('.content');const original=content.innerHTML;input.addEventListener('input',()=>{const q=input.value.trim();content.innerHTML=original;if(!q){return;}const walker=document.createTreeWalker(content,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.nodeValue.toLowerCase().includes(q.toLowerCase())?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_SKIP});const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);nodes.forEach(n=>{const span=document.createElement('span');const re=new RegExp(q.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'),'ig');span.innerHTML=n.nodeValue.replace(re,m=>'<mark class=\"search-hit\">'+m+'</mark>');n.parentNode.replaceChild(span,n);});const first=document.querySelector('.search-hit');if(first)first.scrollIntoView({block:'center'});});})();
+"""
+
+HTML_TEMPLATE = """<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>India Resilience Tool - Technical Guidance Note</title>
+<style id="katex-css">{katex_css}</style>
+<style>{app_css}</style>
+</head>
+<body>
+<div class="doc-shell" data-irt-doc-root>
+<aside class="toc-panel" aria-label="Table of contents">
+<p class="toc-title">Read the Docs</p>
+<input class="toc-search" type="search" placeholder="Search note" aria-label="Search note">
+<nav class="toc-links">{toc_html}</nav>
+</aside>
+<main class="content-scroll">
+<article class="content">{body_html}<p class="provenance">Build provenance: {provenance}</p></article>
+</main>
+</div>
+<button class="back-top" type="button" aria-label="Back to top">↑</button>
+<div class="lightbox" role="dialog" aria-modal="true"><img alt=""></div>
+<script id="katex-js">{katex_js}</script>
+<script id="katex-auto-render-js">{auto_render_js}</script>
+<script>
+document.addEventListener("DOMContentLoaded",function(){{renderMathInElement(document.body,{{delimiters:[{{left:"$$",right:"$$",display:true}},{{left:"$",right:"$",display:false}}],throwOnError:false}});}});
+</script>
+<script>{app_js}</script>
+</body>
+</html>
+"""
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

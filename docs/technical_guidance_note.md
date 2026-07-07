@@ -1,7 +1,7 @@
 # India Resilience Tool — Technical Guidance Note
 ## Climate Risk Methodology: Data, Metrics, and Bundle Construction
 
-**Status:** DRAFT — all sections drafted; figures (§3.4) and final review pending  
+**Status:** DRAFT — all sections drafted; final review pending
 **Scope:** Data sources → downscaling → grid-first compute → individual metrics → thematic and sectoral bundle construction → composite score output  
 **Out of scope:** Exposure layers, vulnerability, adaptive capacity, dashboard UI/UX, pipeline tooling  
 **Primary audience:** Technical peers (climate scientists, GIS specialists) and policy/planning stakeholders  
@@ -20,6 +20,8 @@
 ## 1. Introduction and Framing
 
 Climate adaptation in India is planned and financed at the subnational level — by states, districts, and increasingly by blocks — yet the climate-projection products that usually inform those decisions are global, spatially coarse, and aggregated across hazards. India's national policy has directed adaptation planning at this level since the National Action Plan on Climate Change (Government of India 2008), under which every state prepared a State Action Plan on Climate Change. Those first-generation plans were widely criticised: they leaned on heterogeneous, often generic vulnerability assessments and were oriented more toward listing implementable actions than toward redirecting development onto a climate-resilient path (Dubash & Jogesh 2014; Singh et al. 2017). Subsequent national efforts have moved toward a standardised, scientifically grounded basis for this planning — notably the Department of Science and Technology's common framework for climate vulnerability and risk assessment across Indian states and districts (DST 2021). That this gap is real, and recognised on the demand side, is borne out by practitioners: in a 2022–23 Reserve Bank of India survey, roughly 95 per cent of responding financial institutions reported lacking adequate data to assess climate risk, and respondents specifically called for a national database of climate scenarios at a disaggregated geographic level to assess physical hazards (RBI 2023). The India Resilience Tool (IRT) is built to close the resolution-and-specificity half of that gap: it turns downscaled CMIP6 projections into district- and block-level, multi-hazard climate **hazard-pressure** scores that a planner can read at the administrative unit they actually govern.
+
+[FIGURE: fig_02_hazard_exposure_vulnerability_scope.svg | IRT supplies the climate hazard-pressure layer within the broader hazard, exposure, and vulnerability framing used for full risk assessment.]
 
 India spans a subcontinent of climatic regimes — the arid northwest, the monsoon core, the Himalayan north, the peninsular plateau, and long eastern and western coastlines — so a single national figure, or a value read off a coarse global grid, tells a district little about the hazard it specifically faces. A global-model grid cell spans many districts and cannot resolve intra-state contrast — one district in drought while its neighbour floods is invisible at that scale. Recovering that contrast is the central reason IRT is built on a *statistically downscaled* product rather than raw global-model output: downscaling brings the projections to a ~25 km grid and bias-corrects them against a gridded observational record, restoring the local detail a global grid erases (→ §3). Downscaling does not, however, correct everything it inherits. Global models simulate the Indian summer monsoon — the dominant control on rainfall and, through it, on drought and flood hazard — with substantial, model-dependent error and wide inter-model spread (Konda & Vissa 2023), and a statistically downscaled product carries forward the monsoon behaviour of its parent models. IRT is built to handle that residual uncertainty openly rather than assume it away: every metric is computed across a multi-model ensemble and under two emissions scenarios, and scores are reported as *relative* hazard pressure within each period rather than as absolute rainfall predictions (→ §4, §6).
 
@@ -116,6 +118,8 @@ Historical and projection files are contiguous across models: each model contrib
 
 IRT aggregates individual-year climate indices into the following multi-year windows:
 
+[FIGURE: fig_05_temporal_coverage_analysis_windows.svg | Raw historical and SSP files are reduced into the 1990–2010 baseline plus three inclusive future analysis windows.]
+
 | Label | Period | Role |
 |-------|--------|------|
 | Historical baseline | 1990–2010 | Reference for per-period normalisation (→ §6.2) |
@@ -177,6 +181,8 @@ NASA-NEX GDDP-CMIP6 applies a statistical downscaling approach. IRT uses the NAS
 
 The NASA-NEX GDDP-CMIP6 product employs **Bias Correction and Spatial Disaggregation (BCSD)** (Wood et al. 2002; Maurer et al. 2010), a two-step statistical procedure:
 
+[FIGURE: fig_06_bcsd_schematic.svg | BCSD first bias-corrects model distributions against reference climatology, then disaggregates corrected anomalies to the 0.25° grid.]
+
 **Step 1 — Bias correction**
 
 For each GCM, each variable, and each calendar month, the empirical cumulative distribution function (CDF) of the model's monthly-mean output is mapped to match the empirical CDF of a reference observational climatology over the historical period. This quantile mapping adjusts systematic biases in both the mean and the distribution tails while preserving the model's interannual variability and long-term trend signal. The reference climatology used by NASA-NEX is the Global Meteorological Forcing Dataset (GMFD; Sheffield et al. 2006), as described in Thrasher et al. (2022).
@@ -198,6 +204,8 @@ BCSD corrects the marginal distribution of temperature and precipitation at the 
 ### 3.3 Grid Resolution and Spatial Domain
 
 The NEX-GDDP-CMIP6 product is provided at **0.25° × 0.25°** horizontal resolution, corresponding to approximately 25 km at the equator and ~27 km at 25°N (typical central India latitude). IRT clips the global product to the India domain — **68.0°E–97.5°E, 5.0°N–45.0°N** — yielding a domain of 118 × 160 grid cells (29.5° ÷ 0.25° = 118 columns, 40.0° ÷ 0.25° = 160 rows).
+
+[FIGURE: fig_08_district_block_resolution_zoom.svg | The 0.25° climate grid gives districts several cells but can leave small blocks represented by very few cells.]
 
 **Resolution implications at district vs block level**
 
@@ -228,12 +236,13 @@ The extreme-rainfall underestimation is therefore a structural limitation of the
 
 *Comparative context*: Jain et al. (2019) evaluated the NEX-GDDP (CMIP5-era) product against IMD gridded observations over the Indian subcontinent for the summer monsoon season (1975–2005), benchmarking it against multi-model means from 28 raw CMIP5 models and 10 CORDEX regional models. NEX-GDDP surpassed both CMIP5 and CORDEX in reproducing seasonal mean temperature and precipitation patterns (spatial pattern correlation ~0.8; RMSE ~4.25°C for temperature and ~2.48 mm day⁻¹ for precipitation), inter-annual variability, and annual cycle characteristics. The simulation of extremes was also found to be more realistic in NEX-GDDP relative to raw CMIP5 and CORDEX output, with reduced inter-model spread — supporting the use of the NEX-GDDP product for climate change impact assessment. Although these findings pertain to the CMIP5-era version of NEX-GDDP, the BCSD methodology is common to both the CMIP5 and CMIP6 versions; the results are therefore informative about the relative improvement that the downscaling procedure confers over raw GCM output.
 
-> **[FIGURES TO INSERT]** The following validation figures from the notebook analysis will be incorporated here to provide visual evidence of the bias characterisation. Until they are inserted, the specific quantitative values cited in this subsection (ERA5 and model domain-mean temperatures, the Adilabad Rx1day comparison, and the per-model resolutions) should be read as **provisional** pending the supporting figures. Source notebooks: `notebooks/era5_vs_cmip_clean_tel_1980_1985.ipynb` and `notebooks/rainfall_metrics_imd_cmip6_tel_box_1980_1985.ipynb`.
-> 1. Taylor diagram — near-surface temperature (tas) vs ERA5, Telangana 1980–1985
-> 2. Taylor diagram — daily precipitation (pr) vs ERA5, Telangana 1980–1985
-> 3. Taylor diagram — daily precipitation (pr) vs IMD, Telangana 1980–1985
-> 4. nRMSE heatmap — precipitation metrics vs ERA5 and vs IMD across 24 models
-> 5. Rx1day comparison bar chart — IMD vs 24 CMIP6 models, Adilabad district 1980–1985
+[FIGURE: FIG-V1V2V3_taylor.png | Taylor diagrams summarise Telangana 1980–1985 model skill for temperature and precipitation against ERA5 and IMD references.]
+
+[FIGURE: FIG-V4a_nrmse_era5.png | Normalised RMSE against ERA5 varies across precipitation metrics and CMIP6 models over the Telangana validation domain.]
+
+[FIGURE: FIG-V4b_nrmse_imd.png | Normalised RMSE against IMD provides an observational cross-check on precipitation metric skill over the same validation domain.]
+
+[FIGURE: FIG-V5_rx1day_adilabad.png | Adilabad Rx1day comparison shows observed IMD annual-maximum daily rainfall above the CMIP6 model range for 1980–1985.]
 
 **Known limitations relevant to India**
 
@@ -249,9 +258,13 @@ Three classes of systematic limitation are relevant to users interpreting IRT ou
 
 ## 4. Grid-First Compute and Post-Processing
 
+[FIGURE: fig_01_pipeline_flow.svg | The IRT pipeline runs from source climate and hazard data through grid-first metric computation, spatial aggregation, bundle scoring, and dashboard output.]
+
 ### 4.1 Architecture: Why Grid-First
 
 All climate index computations in IRT are performed at the native 0.25° grid resolution before any aggregation to administrative boundaries. This "grid-first" design reflects a methodological choice rooted in the structure of the indices being computed.
+
+[FIGURE: fig_09_admin_first_vs_grid_first.svg | Computing non-linear indices on grid cells before aggregation preserves events that an admin-mean-first workflow can erase.]
 
 An alternative — the "admin-first" approach — would average the raw daily GCM values over each administrative unit before computing indices. This is appropriate for linear statistics such as mean temperature, but introduces bias for any non-linear index. Consider a district that straddles a dense urban area and a river valley: one 0.25° cell (the city) records five consecutive days at 36–38°C, while an adjacent cell (the valley) records those same days at 28–30°C. The admin-first approach averages the two cells first, producing a district-mean of 32–34°C — below the 35°C threshold on every day — and consequently reports **zero** extreme-heat days for the district. The grid-first approach computes five hot days for the city cell and zero for the valley cell, then takes the area-weighted mean: 2.5 hot days for the district. The admin-first result is not merely less precise — it erases a multi-day extreme heat event that affected half the district. The distortion compounds further for non-linear indices: spell-length metrics, percentile-exceedance fractions, and the SPI gamma transform all produce systematically biased outputs when applied to pre-averaged spatial means.
 
@@ -264,6 +277,8 @@ The pipeline accordingly computes each annual climate index as a per-cell 2D fie
 **Aggregation method**
 
 Spatial aggregation from the 0.25° grid to administrative polygons uses **fractional area overlap**: for each (polygon, cell) pair, the area of intersection between the cell tile and the polygon is computed, and the resulting intersection area is used as the weight in a weighted average.
+
+[FIGURE: fig_10_fractional_area_overlap_weights.svg | Fractional area-overlap weights assign each grid-cell value to polygons in proportion to actual intersecting area.]
 
 Formally, let $v_j$ denote the index value at grid cell $j$, and let $a_{ij}$ denote the intersection area (in m²) between administrative unit $i$ and cell $j$. The aggregated value for unit $i$ is:
 
@@ -289,6 +304,8 @@ District-level and block-level composite scores are both computed directly from 
 **Temporal aggregation chain**
 
 For each metric, each GCM, and each scenario, the pipeline applies a three-stage temporal aggregation:
+
+[FIGURE: fig_11_temporal_aggregation_ensemble_chain.svg | Daily fields are reduced to annual cell indices, then period means, then ensemble summaries before publication.]
 
 1. **Daily → annual index.** For each calendar year $y$, the daily gridded data for that year (and, for some metrics, the preceding year) are reduced to a single annual index value per cell. The specific reduction depends on the metric family — annual mean, exceedance count, peak intensity, SPI transform, and so on — and is defined metric by metric in §5. The output is a per-cell annual index field.
 
@@ -354,6 +371,8 @@ Metrics are organised in five groups across the three bundles:
 
 All percentile-relative and spell metrics share a common threshold derivation aligned with the ETCCDI TX90p method (Zhang et al. 2011). For each grid cell and calendar day $d = 1, \ldots, 365$ (February 29 excluded), all baseline-period daily values falling within a symmetric ±2-day window centred on $d$ are pooled. For the 21-year baseline this yields approximately 105 values per day-of-year. The $p$-th percentile of this pooled set is the threshold $\tau_d$:
 
+[FIGURE: fig_12_doy_percentile_threshold_curve.svg | The day-of-year percentile threshold is built from a moving five-day baseline window and reused for all evaluation years.]
+
 $$\tau_d = \text{quantile}_p\!\bigl(\{x_{y,d'} : y \in [y_1, y_2],\; |d' - d| \leq 2\}\bigr)$$
 
 where $d'$ is measured on the 365-day no-leap calendar and $[y_1, y_2]$ is the baseline period. During evaluation, day $t$ with value $x_t$ is classified as an exceedance when $x_t > \tau_{d(t)}$ (strict greater-than throughout). The threshold vector $\tau_d$ is computed once per (model, variable, baseline configuration) and applied unchanged to all evaluation years including SSP projections.
@@ -409,6 +428,8 @@ Where §5.2 captures rainfall excess, drought is its slow, accumulated counterpa
 
 For each grid cell, the daily precipitation field (`pr`, converted to mm) is first summed to calendar-month totals — a month is retained only if at least 90% of its days carry finite values, otherwise it is set missing — yielding a contiguous monthly precipitation series trimmed to whole calendar (January–December) years. This monthly series is the input to the **Standardised Precipitation Index** computation, which IRT performs with the open-source `climate_indices` Python package (Adams 2021). Monthly totals are accumulated over rolling $k$-month windows (where $k = 3$, $6$, or $12$), and the resulting series for each cell is fitted to a two-parameter **Gamma distribution** over the calibration period 1990–2010 using the Method of Moments estimator:
 
+[FIGURE: fig_14_spi_derivation.svg | SPI converts monthly precipitation totals into accumulated anomalies, fits a Gamma distribution, and maps the result to a standard-normal drought index.]
+
 $$f(x;\, \alpha, \beta) = \frac{x^{\alpha-1}\, e^{-x/\beta}}{\beta^\alpha\, \Gamma(\alpha)}, \quad x > 0$$
 
 Zero-precipitation months occur with probability $q = P(x = 0)$, estimated as the fraction of zero months in the baseline. The Gamma fit applies to positive-precipitation months only. The mixed cumulative distribution function is:
@@ -451,6 +472,8 @@ Riverine flood metrics depart from the climate grid entirely. They are derived f
 **jrc_flood_extent_rp100** — Share of the polygon's total area covered by positive modelled flood depth, displayed as a percentage. Units: fraction (shown as %).
 
 **jrc_flood_depth_index_rp100** — Composite severity class (ordinal 1–5: Very Low, Low, Moderate, High, Extreme). Each block's RP-100 flood depth and flood extent are first binned independently into 1–5 classes, then combined through a fixed 5×5 lookup matrix.
+
+[FIGURE: fig_15_jrc_rp100_severity_lookup_matrix.svg | The RP-100 flood severity class is read from a fixed depth-by-extent matrix at block level.]
 
 Depth classes (metres): ≤ 0.2 → 1; ≤ 0.5 → 2; ≤ 1.0 → 3; ≤ 2.5 → 4; > 2.5 → 5.
 Extent classes (flooded fraction of polygon): ≤ 0.01 → 1; ≤ 0.05 → 2; ≤ 0.15 → 3; ≤ 0.25 → 4; > 0.25 → 5.
@@ -631,6 +654,10 @@ A rule's selection encodes a deliberate sector judgement — that a given hazard
 
 A rule produces up to three **lens scores**, each on a 0–100 *higher-is-worse* scale, which are then weighted into a single rule score. The lens weights ($\omega_{\text{abs}}, \omega_{\text{chg}}, \omega_{\text{imp}}$) are declared per rule and sum to 1.0; a lens with weight 0 is simply not evaluated. Throughout, all shipped rules are *higher-worse* (the lower-is-worse direction is supported but unused in the current catalog).
 
+[FIGURE: fig_18_three_lens_blended_rule.svg | Sectoral rules blend absolute pressure, change from history, and fixed impact-band proximity into one rule score.]
+
+[FIGURE: fig_19_impact_band_ramp.svg | The impact lens maps raw metric values onto a fixed onset-to-saturation hazard band independent of peer rankings.]
+
 The three lenses are not an arbitrary decomposition: each answers a different, complementary question about the same metric, and each draws on an established methodological tradition. The lens framework is a structured combination of these traditions rather than a novel scoring invention.
 
 | Lens | Question it answers | Anchored to | Methodological tradition |
@@ -677,6 +704,8 @@ where $f_b$ is the **available-rule-weight fraction** (the share of total rule w
 ### 7.3 Reading the Score: What Each Lens Lets You Compare
 
 Because two of the three lenses are cohort-relative and only the impact lens is absolute, the blended score is a **hybrid** of relative ranking and absolute danger: it compares units cleanly *within* a cohort, but only partly across periods or states. The reason is the absolute lens. It re-scores every unit against its own cohort — rebuilt for each scenario and period — so it only ever tells you which places are worse off than their neighbours *right now*. It is blind to warming that lifts a whole state together: if every unit heats by the same amount between two periods, the top and bottom of the range ($q_{10}$ and $q_{90}$) rise in step, and the scores don't move. The other two lenses fill this gap. The **change** lens tracks each place's own trend from one period to the next, and the **impact** lens scores every place against a fixed real-world danger scale that never shifts. Because that scale stays put, the impact lens is the only one you can compare across periods and across states and read as genuine worsening rather than a reshuffled ranking.
+
+[FIGURE: fig_20_district_a_b_lens_example.svg | A two-district example shows how the blended score preserves current severity, fast change, and absolute threshold crossing.]
 
 **Worked example — why the blend beats pure-absolute ranking.** Two districts in one state, scenario SSP5-8.5, period 2060–2080, metric **TXx** (annual-maximum daytime temperature), scored through the Health Risk TXx rule (lens weights 0.40 / 0.25 / 0.35, impact band 40–45 °C). Suppose across this cohort projected TXx spans $q_{10}=41$ °C to $q_{90}=46$ °C, and the warming anomaly versus 1990–2010 spans $q_{10}=+1.0$ °C to $q_{90}=+3.5$ °C:
 

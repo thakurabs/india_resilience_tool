@@ -46,6 +46,8 @@ dependencies:
   - s3fs
   - h5netcdf
   - h5py
+  - markdown-it-py
+  - mdit-py-plugins
   - tqdm
 
   # Tests (suite is the safety gate for refactors)

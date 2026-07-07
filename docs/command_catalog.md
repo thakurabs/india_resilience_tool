@@ -10,6 +10,21 @@ python -m tools.runs.prepare_dashboard --help
 
 Run it from the repo root with the correct Conda environment active.
 
+## Documentation assets
+
+### Regenerate the in-dashboard Technical Guidance Note
+
+```bash
+python -m tools.docs.build_technical_note_html
+```
+
+Use `--dry-run` to validate the 18 approved figure callouts, embedded KaTeX
+bundle, and generated HTML size without writing the committed asset:
+
+```bash
+python -m tools.docs.build_technical_note_html --dry-run
+```
+
 ## Canonical runner
 
 ### List available bundles and steps

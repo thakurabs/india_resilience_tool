@@ -51,6 +51,7 @@ The crosswalk layer is currently **read-optimized and explanatory**. It is not y
 |---------|---------|
 | `streamlit run main.py` | Launch dashboard from root entrypoint |
 | `streamlit run india_resilience_tool/app/main.py` | Launch dashboard from package entrypoint |
+| `python -m tools.docs.build_technical_note_html --help` | Build the committed self-contained `Read the Docs` dashboard HTML asset from `docs/technical_guidance_note.md`, approved figure callouts, and vendored KaTeX |
 | `python -m tools.runs.prepare_dashboard --help` | Show the canonical dashboard-ready prep command for climate, persisted visible-Glance composites, Aqueduct, population, groundwater, state-scoped JRC flood depth, validation, and full package workflows, including level-aware climate readiness, optimized refresh, and final readiness verification |
 | `powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all` | Refresh active admin dashboard climate bundles for district and block by computing only thematic and sector-wise source metrics, then rebuilding masters, composites, proposal bundles, optimized artifacts, precomputed area-weighted state headline values, and strict parity reports. Optional `-Bundle "<name>"` scopes the run to named dashboard bundle(s); compute is incremental (`--skip-existing`) by default with opt-in `-Overwrite`/`-OverwriteMetrics`; masters rebuild freshness-aware via compute completion markers; `-Workers` is opt-in; parity is audited once. Compute→master→composite run per-bundle with fail isolation (C2), then one union optimized+audit pass over the succeeded bundles; on any failure optimized+audit is skipped by default (non-zero exit) unless `-AllowPartialPublish` publishes the succeeded subset with a `*_partial_run.json` manifest. Per-task compute failures (CHG-0059; the compute CLI exits 0 on task — vs ensemble — failures) are surfaced as warnings, a RUN SUMMARY block, and a `*_compute_failures.json` sidecar without blocking publish; pass `-FailOnComputeError` to escalate any bundle with compute failures to a bundle failure |
 | `powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra -JrcDir D:/projects/irt_data/Floodlayers_JRC` | Refresh the full admin Riverine Flood bundle for one state: state-scoped JRC flood-depth masters, district + block `composite_flood_jrc_depth` masters, state-scoped optimized artifacts for the Riverine Flood dashboard metrics, and a strict scoped parity audit. `-PlanOnly` prints the exact commands without running them |
@@ -210,6 +211,7 @@ Aqueduct methodology note:
 | `landing_runtime.py` | Climate-hazard landing/discovery orchestrator that loads persisted optimized Glance view models only, plus state transitions and Deep Dive handoff |
 | `left_panel_runtime.py` | Left-panel orchestration for map vs rankings |
 | `main.py` | Package Streamlit entrypoint |
+| `assets/` | Packaged committed HTML assets, including `read_the_docs.html` for the top-level Read the Docs dashboard view |
 | `map_layer_runtime.py` | Streamlit-free Folium layer construction using cached FeatureCollections |
 | `map_pipeline.py` | Merge -> enrich -> colors -> map/rankings pipeline, including fine-grain drill-down guards and rankings-only fast paths |
 | `master_cache.py` | Streamlit session-state cache for master CSV + schema loading |
@@ -236,6 +238,7 @@ Aqueduct methodology note:
 | `details_panel.py` | Render the single-unit details panel and crosswalk context/actions |
 | `map_view.py` | Render Folium map and extract level-aware click payloads, including landing state clicks |
 | `rankings_view.py` | Rankings table rendering and portfolio add flows |
+| `read_the_docs_view.py` | Render the committed Technical Guidance Note HTML asset via `components.html`, including packaged-asset resolution and theme stamping helpers |
 | `state_summary_view.py` | State summary view for admin-focused overview flows |
 
 ### `india_resilience_tool/compute/`
@@ -325,6 +328,7 @@ Aqueduct methodology note:
 | `AGENTS.md` | Tooling-specific agent instructions |
 | `README.md` | Tooling overview and command reference |
 | `__init__.py` | Package marker |
+| `docs/` | Offline documentation asset generators and vendored dependencies for committed dashboard docs |
 | `subbasin_shp_explore.py` | Inspect, repair, and export canonical hydro boundaries |
 
 ### `tools/data_acquisition/`
@@ -547,6 +551,7 @@ python -m pytest -q
 | `bundle_task_master.md` | Task tracking for bundle-weight methodology migration |
 | `climate_risk_indicator_inventory.md` | Working inventory for aligning dashboard taxonomy with proposed climate risk indicators |
 | `command_catalog.md` | Canonical operator-facing command catalog for dashboard prep workflows |
+| `technical_guidance_note.md` | Methodology reference rendered into the in-dashboard Read the Docs asset |
 | `dead_code_candidate_report.md` | Dead-code analysis notes |
 | `functionality_contract.md` | Product/functionality contract notes |
 | `lens_scoring_methodology.md` | Lens-based scoring framework (absolute/change/impact), scientific basis/references, impact-band provenance policy, score-decomposition schema, and per-metric sector lens dossiers |

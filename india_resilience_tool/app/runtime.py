@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from typing import Mapping
 
+TOP_VIEW_DASHBOARD = "Dashboard"
+TOP_VIEW_DOCS = "Read the Docs"
+TOP_VIEW_OPTIONS = (TOP_VIEW_DASHBOARD, TOP_VIEW_DOCS)
+
 
 def _resolve_pre_render_view(
     session_state: Mapping[str, object],
@@ -28,6 +32,30 @@ def _resolve_pre_render_view(
     if isinstance(view, str) and view.strip():
         return view
     return default_view
+
+
+def _top_view_selector() -> str:
+    """Render and return the top-level app branch without mutating other state."""
+    import streamlit as st
+
+    if hasattr(st, "segmented_control"):
+        selected = st.segmented_control(
+            "View",
+            TOP_VIEW_OPTIONS,
+            default=TOP_VIEW_DASHBOARD,
+            key="irt_top_view",
+            label_visibility="collapsed",
+        )
+    else:
+        selected = st.radio(
+            "View",
+            TOP_VIEW_OPTIONS,
+            index=0,
+            key="irt_top_view",
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    return selected if selected in TOP_VIEW_OPTIONS else TOP_VIEW_DASHBOARD
 
 
 def run_app() -> None:
@@ -67,6 +95,7 @@ def run_app() -> None:
         build_glance_handoff_from_deep_dive,
         render_landing_page,
     )
+    from india_resilience_tool.app.views.read_the_docs_view import render_read_the_docs
     from india_resilience_tool.app.master_freshness import (
         master_needs_rebuild,
         state_profile_files_missing,
@@ -155,6 +184,11 @@ def run_app() -> None:
     RIVER_DISPLAY_GEOJSON = optimized_river_display if optimized_river_display.exists() else RIVER_NETWORK_DISPLAY_PATH
 
     ATTACH_DISTRICT_GEOJSON = str(ADM2_GEOJSON) if ADM2_GEOJSON.exists() else None
+
+    view = _top_view_selector()
+    if view == TOP_VIEW_DOCS:
+        render_read_the_docs()
+        return
 
     def _ensure_adm2_keys(adm2_df):
         if adm2_df is None:

@@ -14,6 +14,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
 
 ### Core dashboard
 - Default landing discovery surface:
+  - includes a top-level `Read the Docs` view that renders the Technical Guidance Note inside the dashboard without triggering dashboard compute
   - launches into an India state-level climate-hazard screening map
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
   - surfaces one grouped bundle list in Glance and Deep Dive with exact selector labels such as `Thematic - Heat Risk` and `Sector-wise - Health Risk`
@@ -549,6 +550,13 @@ python -m tools.runs.prepare_dashboard --help
 ```
 
 For a single command reference, see [`docs/command_catalog.md`](docs/command_catalog.md).
+
+Regenerate the committed in-dashboard Technical Guidance Note asset after editing
+`docs/technical_guidance_note.md` or its approved figures:
+
+```bash
+python -m tools.docs.build_technical_note_html
+```
 
 ### Prepare climate hazards for the dashboard
 

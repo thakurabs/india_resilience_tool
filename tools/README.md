@@ -116,6 +116,12 @@ By default the runner is non-destructive and dashboard-oriented:
 
 For the full command catalog, see [`../docs/command_catalog.md`](../docs/command_catalog.md).
 
+## Documentation assets
+
+| Script | Purpose | Run |
+|---|---|---|
+| `tools/docs/build_technical_note_html.py` | Build the committed self-contained Technical Guidance Note HTML asset for the dashboard `Read the Docs` view. It validates the exact 18-figure manifest, inlines figures and vendored KaTeX, and writes `india_resilience_tool/app/assets/read_the_docs.html`. | `python -m tools.docs.build_technical_note_html --help` |
+
 ## Pipeline
 
 | Script | Purpose | Run |
