@@ -190,11 +190,12 @@ def test_generated_html_focuses_reference_targets_from_existing_hash_handler() -
     assert 'target.classList.add("is-focused");' in html_doc
 
 
-def test_generated_html_uses_full_bleed_content_width() -> None:
+def test_generated_html_uses_readable_content_width() -> None:
     html_doc, _size_info = _generated_html()
 
-    assert ".content{max-width:none;margin:0;padding:34px 40px 96px}" in html_doc
-    assert ".content{max-width:980px" not in html_doc
+    assert ".content{width:100%;max-width:920px;margin:0 auto;padding:34px 40px 96px}" in html_doc
+    assert "html{font-size:var(--irt-doc-font-size,15px)}" in html_doc
+    assert ".content{max-width:none" not in html_doc
 
 
 def test_generated_html_uses_delegated_figure_zoom_and_live_headings() -> None:

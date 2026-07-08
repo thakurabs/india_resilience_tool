@@ -13,10 +13,14 @@ ASSET_PACKAGE = "india_resilience_tool.app.assets"
 ASSET_NAME = "read_the_docs.html"
 _HTML_TAG_RE = re.compile(r"<\s*html\b([^>]*)>", flags=re.IGNORECASE)
 _DATA_THEME_RE = re.compile(r"""\sdata-theme\s*=\s*(['"])(.*?)\1""", flags=re.IGNORECASE)
+_STYLE_ATTR_RE = re.compile(r"""\sstyle\s*=\s*(['"])(.*?)\1""", flags=re.IGNORECASE)
 _DOC_ROOT_RE = re.compile(r"<\s*div\b([^>]*\bdata-irt-doc-root\b[^>]*)>", flags=re.IGNORECASE)
 DOCS_COMPONENT_HEIGHT = 900
 DOCS_RESIZER_MARKER_KEY = "irt-read-the-docs"
 DOCS_RESIZER_LISTENER_KEY = "__irtReadTheDocsResizeHandler"
+DOCS_FONT_SIZE_WIDGET_KEY = "read_the_docs_font_size"
+DOCS_FONT_SIZE_OPTIONS = {"Small": "14px", "Default": "15px", "Large": "17px"}
+DOCS_DEFAULT_FONT_SIZE_LABEL = "Default"
 
 
 def _resolve_asset() -> Path | None:
@@ -39,10 +43,34 @@ def _normalize_theme(theme: object, *, default: str = "light") -> str:
     return fallback if fallback in {"light", "dark"} else "light"
 
 
+def _normalize_font_size_label(font_size_label: object) -> str:
+    value = str(font_size_label or "").strip()
+    return value if value in DOCS_FONT_SIZE_OPTIONS else DOCS_DEFAULT_FONT_SIZE_LABEL
+
+
+def _font_size_value(font_size_label: object) -> str:
+    return DOCS_FONT_SIZE_OPTIONS[_normalize_font_size_label(font_size_label)]
+
+
 def _stamp_tag_theme(match: re.Match[str], theme: str, tag_name: str) -> str:
     attrs = match.group(1)
     attrs = _DATA_THEME_RE.sub("", attrs)
     return f"<{tag_name}{attrs} data-theme=\"{theme}\">"
+
+
+def _stamp_tag_preferences(match: re.Match[str], theme: str, font_size_label: object, tag_name: str) -> str:
+    attrs = _DATA_THEME_RE.sub("", match.group(1))
+    style_match = _STYLE_ATTR_RE.search(attrs)
+    style_value = style_match.group(2) if style_match else ""
+    attrs = _STYLE_ATTR_RE.sub("", attrs)
+    style_declarations = [
+        item.strip()
+        for item in style_value.split(";")
+        if item.strip() and not item.strip().lower().startswith("--irt-doc-font-size:")
+    ]
+    style_declarations.append(f"--irt-doc-font-size:{_font_size_value(font_size_label)}")
+    style_attr = "; ".join(style_declarations)
+    return f"<{tag_name}{attrs} data-theme=\"{theme}\" style=\"{style_attr}\">"
 
 
 def _stamp_theme(html: str, theme: str) -> str:
@@ -63,6 +91,29 @@ def _stamp_theme(html: str, theme: str) -> str:
     if count:
         return stamped
     return f'<div data-theme="{normalized}" data-irt-doc-root>{html}</div>'
+
+
+def _stamp_document_preferences(html: str, theme: str, font_size_label: object) -> str:
+    """Stamp theme and docs font-size preferences onto the document root."""
+    normalized = _normalize_theme(theme)
+    stamped, count = _HTML_TAG_RE.subn(
+        lambda match: _stamp_tag_preferences(match, normalized, font_size_label, "html"),
+        html,
+        count=1,
+    )
+    if count:
+        return stamped
+    stamped, count = _DOC_ROOT_RE.subn(
+        lambda match: _stamp_tag_preferences(match, normalized, font_size_label, "div"),
+        html,
+        count=1,
+    )
+    if count:
+        return stamped
+    return (
+        f'<div data-theme="{normalized}" style="--irt-doc-font-size:{_font_size_value(font_size_label)}" '
+        f"data-irt-doc-root>{html}</div>"
+    )
 
 
 def _current_theme() -> str:
@@ -217,6 +268,16 @@ def render_read_the_docs() -> None:
         )
         return
     html_doc = asset.read_text(encoding="utf-8")
+    font_size_label = st.selectbox(
+        "Font size",
+        options=tuple(DOCS_FONT_SIZE_OPTIONS),
+        index=list(DOCS_FONT_SIZE_OPTIONS).index(DOCS_DEFAULT_FONT_SIZE_LABEL),
+        key=DOCS_FONT_SIZE_WIDGET_KEY,
+    )
     st.markdown(_build_docs_resizer_marker_html(), unsafe_allow_html=True)
-    components.html(_stamp_theme(html_doc, _current_theme()), height=DOCS_COMPONENT_HEIGHT, scrolling=True)
+    components.html(
+        _stamp_document_preferences(html_doc, _current_theme(), font_size_label),
+        height=DOCS_COMPONENT_HEIGHT,
+        scrolling=True,
+    )
     components.html(_build_docs_resizer_html(), height=0, width=0)
