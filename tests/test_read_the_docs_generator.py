@@ -194,12 +194,25 @@ def test_generated_html_uses_readable_content_width() -> None:
     html_doc, _size_info = _generated_html()
 
     assert (
+        ".doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);"
+        "height:100vh;overflow:hidden;max-width:calc(1210px + clamp(24px,4vw,64px));"
+        "margin:0 auto}"
+    ) in html_doc
+    assert (
         ".content{width:calc(100% - clamp(24px,4vw,64px));max-width:920px;"
         "margin:0 auto 0 clamp(24px,4vw,64px);padding:34px 40px 96px}"
     ) in html_doc
+    assert ".doc-shell{display:block;overflow:auto;max-width:none;margin:0}" in html_doc
     assert ".content{width:100%;margin:0;padding:22px 18px 88px}" in html_doc
     assert "html{font-size:var(--irt-doc-font-size,15px)}" in html_doc
     assert ".content{max-width:none" not in html_doc
+
+
+def test_generated_html_omits_visible_build_provenance_footer() -> None:
+    html_doc, _size_info = _generated_html()
+
+    assert "Build provenance:" not in html_doc
+    assert 'class="provenance"' not in html_doc
 
 
 def test_generated_html_uses_delegated_figure_zoom_and_live_headings() -> None:
