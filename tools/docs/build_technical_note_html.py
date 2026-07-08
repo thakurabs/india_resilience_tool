@@ -67,6 +67,21 @@ class FigureAsset:
     byte_size: int
 
 
+@dataclass(frozen=True)
+class ReferenceEntry:
+    element_id: str
+    year: str
+    aliases: tuple[str, ...]
+    source_text: str
+
+
+@dataclass(frozen=True)
+class CitationIndex:
+    entries: tuple[ReferenceEntry, ...]
+    targets: dict[tuple[str, str], ReferenceEntry]
+    alias_pattern: re.Pattern[str] | None
+
+
 def parse_figure_tokens(markdown: str) -> list[tuple[str, str]]:
     """Return figure filename/caption pairs from explicit callout tokens."""
     return [(match.group(1).strip(), match.group(2).strip()) for match in FIGURE_TOKEN_RE.finditer(markdown)]
@@ -112,6 +127,136 @@ def _slugify(text: str) -> str:
     return re.sub(r"[-\s_]+", "-", text).strip("-") or "section"
 
 
+def _dedupe_preserve_order(values: Iterable[str]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        normalized = re.sub(r"\s+", " ", value).strip(" ,;")
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique.append(normalized)
+    return tuple(unique)
+
+
+def _citation_alias_key(alias: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(alias)).strip().casefold()
+
+
+def _reference_year(text: str) -> re.Match[str] | None:
+    return re.search(r"\((?P<year>\d{4})\)", text)
+
+
+def _reference_surnames(pre_year: str) -> list[str]:
+    candidates = re.findall(r"(?:(?:^|,\s+|and\s+))([A-Z][A-Za-z'’.-]+),\s+[A-Z]", pre_year)
+    return candidates
+
+
+def _reference_primary_alias_and_aliases(text: str, year_match: re.Match[str]) -> tuple[str, tuple[str, ...]]:
+    pre_year = text[: year_match.start()].strip()
+    acronym_match = re.search(r"^(?P<full>.+?)\s+\((?P<acronym>[A-Z][A-Z0-9&.-]{1,12})\)\s*$", pre_year)
+    if acronym_match:
+        acronym = acronym_match.group("acronym").strip()
+        full = acronym_match.group("full").strip(" ,.;")
+        return acronym, _dedupe_preserve_order((acronym, full))
+
+    first_comma = pre_year.split(",", 1)[0].strip(" ,.;")
+    surnames = _reference_surnames(pre_year)
+    aliases: list[str] = []
+    if len(surnames) == 1:
+        aliases.append(surnames[0])
+    elif len(surnames) == 2:
+        aliases.extend((f"{surnames[0]} & {surnames[1]}", f"{surnames[0]} and {surnames[1]}", surnames[0]))
+    elif len(surnames) > 2:
+        aliases.extend((f"{surnames[0]} et al.", surnames[0]))
+    else:
+        aliases.append(first_comma or pre_year.strip(" ,.;"))
+
+    primary = first_comma if first_comma else (aliases[0] if aliases else pre_year.strip(" ,.;"))
+    if first_comma and first_comma not in aliases:
+        aliases.append(first_comma)
+    return primary, _dedupe_preserve_order(aliases)
+
+
+def parse_reference_entries(markdown: str, *, reserved_ids: Iterable[str] = ()) -> list[ReferenceEntry]:
+    """Parse bibliography paragraphs under the References heading into link targets."""
+    lines = markdown.splitlines()
+    references_start: int | None = None
+    for idx, line in enumerate(lines):
+        heading = HEADING_RE.match(line)
+        if heading and _slugify(heading.group(2).strip()) == "references":
+            references_start = idx + 1
+            break
+    if references_start is None:
+        return []
+
+    paragraphs: list[str] = []
+    current: list[str] = []
+    for line in lines[references_start:]:
+        if HEADING_RE.match(line):
+            break
+        if not line.strip():
+            if current:
+                paragraphs.append(" ".join(current))
+                current = []
+            continue
+        current.append(line.strip())
+    if current:
+        paragraphs.append(" ".join(current))
+
+    used_ids = set(reserved_ids)
+    id_counts: dict[str, int] = {}
+    entries: list[ReferenceEntry] = []
+    for paragraph in paragraphs:
+        year_match = _reference_year(paragraph)
+        if not year_match:
+            continue
+        primary_alias, aliases = _reference_primary_alias_and_aliases(paragraph, year_match)
+        base_id = f"ref-{_slugify(primary_alias)}-{year_match.group('year')}"
+        count = id_counts.get(base_id, 0) + 1
+        candidate = base_id if count == 1 else f"{base_id}-{count}"
+        while candidate in used_ids:
+            count += 1
+            candidate = f"{base_id}-{count}"
+        id_counts[base_id] = count
+        used_ids.add(candidate)
+        entries.append(
+            ReferenceEntry(
+                element_id=candidate,
+                year=year_match.group("year"),
+                aliases=aliases,
+                source_text=paragraph,
+            )
+        )
+    return entries
+
+
+def build_citation_index(entries: Sequence[ReferenceEntry]) -> CitationIndex:
+    """Build an unambiguous alias/year lookup and escaped longest-first alias regex."""
+    alias_targets: dict[tuple[str, str], list[ReferenceEntry]] = {}
+    for entry in entries:
+        for alias in entry.aliases:
+            alias_targets.setdefault((_citation_alias_key(alias), entry.year), []).append(entry)
+
+    targets: dict[tuple[str, str], ReferenceEntry] = {}
+    for key, matches in alias_targets.items():
+        element_ids = {entry.element_id for entry in matches}
+        if len(element_ids) == 1:
+            targets[key] = matches[0]
+
+    aliases = sorted({html.escape(alias) for entry in entries for alias in entry.aliases}, key=len, reverse=True)
+    if not aliases:
+        return CitationIndex(entries=tuple(entries), targets=targets, alias_pattern=None)
+    pattern = re.compile(
+        r"(?<![A-Za-z0-9])"
+        r"(?P<citation>(?P<alias>" + "|".join(re.escape(alias) for alias in aliases) + r")"
+        r"(?P<gap>\s{1,4})"
+        r"(?P<year>\(\d{4}\)|\d{4}))"
+        r"(?![\d-])"
+    )
+    return CitationIndex(entries=tuple(entries), targets=targets, alias_pattern=pattern)
+
+
 def _strip_dashboard_cover(markdown: str) -> str:
     """Remove the static note cover so the dashboard starts at the first real section."""
     lines = markdown.splitlines()
@@ -145,24 +290,50 @@ def heading_id_map(markdown: str) -> tuple[dict[str, str], list[Heading]]:
     return mapping, headings
 
 
-def _inline_markup(text: str) -> str:
-    escaped = html.escape(text)
-    escaped = escaped.replace("https://", "https&#58;//").replace("http://", "http&#58;//")
-    escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
-    escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
-    escaped = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", escaped)
-    return escaped
+def _link_citations(escaped_text: str, citation_index: CitationIndex | None) -> str:
+    if citation_index is None or citation_index.alias_pattern is None:
+        return escaped_text
+
+    def replace(match: re.Match[str]) -> str:
+        year = match.group("year").strip("()")
+        target = citation_index.targets.get((_citation_alias_key(match.group("alias")), year))
+        if target is None:
+            return match.group("citation")
+        return (
+            f'<a class="citation-ref" href="#{html.escape(target.element_id)}">'
+            f'{match.group("citation")}</a>'
+        )
+
+    return citation_index.alias_pattern.sub(replace, escaped_text)
 
 
-def _table_html(lines: Sequence[str]) -> str:
+def _inline_markup(text: str, citation_index: CitationIndex | None = None) -> str:
+    parts: list[str] = []
+    for segment in re.split(r"(`[^`]+`)", text):
+        if not segment:
+            continue
+        if segment.startswith("`") and segment.endswith("`"):
+            code = html.escape(segment[1:-1])
+            code = code.replace("https://", "https&#58;//").replace("http://", "http&#58;//")
+            parts.append(f"<code>{code}</code>")
+            continue
+        escaped = html.escape(segment)
+        escaped = escaped.replace("https://", "https&#58;//").replace("http://", "http&#58;//")
+        escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
+        escaped = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", escaped)
+        parts.append(_link_citations(escaped, citation_index))
+    return "".join(parts)
+
+
+def _table_html(lines: Sequence[str], citation_index: CitationIndex | None = None) -> str:
     rows = [[cell.strip() for cell in line.strip().strip("|").split("|")] for line in lines]
     if len(rows) < 2:
         return ""
     header = rows[0]
     body = rows[2:]
-    head_html = "".join(f"<th>{_inline_markup(cell)}</th>" for cell in header)
+    head_html = "".join(f"<th>{_inline_markup(cell, citation_index)}</th>" for cell in header)
     body_html = "\n".join(
-        "<tr>" + "".join(f"<td>{_inline_markup(cell)}</td>" for cell in row) + "</tr>" for row in body
+        "<tr>" + "".join(f"<td>{_inline_markup(cell, citation_index)}</td>" for cell in row) + "</tr>" for row in body
     )
     return f"<div class=\"table-wrap\"><table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table></div>"
 
@@ -213,17 +384,32 @@ def render_markdown(markdown: str, figure_assets: dict[str, FigureAsset]) -> tup
     """Render the note Markdown to HTML with explicit figure token expansion."""
     _validate_math_tokenization_if_available(markdown)
     id_by_heading_line, headings = heading_id_map(markdown)
+    reference_entries = parse_reference_entries(markdown, reserved_ids=(heading.element_id for heading in headings))
+    citation_index = build_citation_index(reference_entries)
+    reference_by_text = {entry.source_text: entry for entry in reference_entries}
+    all_ids = [heading.element_id for heading in headings] + [entry.element_id for entry in reference_entries]
+    if len(all_ids) != len(set(all_ids)):
+        raise ValueError("Duplicate HTML id generated")
     lines = markdown.splitlines()
     rendered: list[str] = []
     paragraph: list[str] = []
     list_items: list[str] = []
     blockquote: list[str] = []
+    in_references = False
     i = 0
 
     def flush_paragraph() -> None:
         nonlocal paragraph
         if paragraph:
-            rendered.append(f"<p>{_inline_markup(' '.join(paragraph))}</p>")
+            text = " ".join(paragraph)
+            reference_entry = reference_by_text.get(text) if in_references else None
+            if reference_entry is not None:
+                rendered.append(
+                    f'<p id="{html.escape(reference_entry.element_id)}" '
+                    f'class="reference-entry" tabindex="-1">{_inline_markup(text)}</p>'
+                )
+            else:
+                rendered.append(f"<p>{_inline_markup(text, citation_index)}</p>")
             paragraph = []
 
     def flush_list() -> None:
@@ -266,6 +452,8 @@ def render_markdown(markdown: str, figure_assets: dict[str, FigureAsset]) -> tup
             level = len(heading.group(1))
             text = heading.group(2).strip()
             element_id = id_by_heading_line[line]
+            if level <= 2:
+                in_references = _slugify(text) == "references"
             rendered.append(f'<h{level} id="{element_id}">{_inline_markup(text)}</h{level}>')
             i += 1
             continue
@@ -282,7 +470,7 @@ def render_markdown(markdown: str, figure_assets: dict[str, FigureAsset]) -> tup
         if line.lstrip().startswith(">"):
             flush_paragraph()
             flush_list()
-            blockquote.append(_inline_markup(line.lstrip()[1:].strip()))
+            blockquote.append(_inline_markup(line.lstrip()[1:].strip(), citation_index))
             i += 1
             continue
         if line.startswith("|") and i + 1 < len(lines) and lines[i + 1].startswith("|"):
@@ -294,13 +482,13 @@ def render_markdown(markdown: str, figure_assets: dict[str, FigureAsset]) -> tup
             while i < len(lines) and lines[i].startswith("|"):
                 table_lines.append(lines[i])
                 i += 1
-            rendered.append(_table_html(table_lines))
+            rendered.append(_table_html(table_lines, citation_index))
             continue
         list_match = re.match(r"^\s*[-*]\s+(.+)$", line)
         if list_match:
             flush_paragraph()
             flush_blockquote()
-            list_items.append(_inline_markup(list_match.group(1)))
+            list_items.append(_inline_markup(list_match.group(1), citation_index))
             i += 1
             continue
         flush_list()
@@ -545,7 +733,7 @@ APP_CSS = """
 :root[data-theme="dark"]{--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}}
 *{box-sizing:border-box}html,body{margin:0;height:100%;scroll-behavior:smooth}body{font:15px/1.62 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
-a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-group-head{display:flex;align-items:center;gap:4px}.toc-group-head a{flex:1}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-1,.toc-level-2{font-weight:600}.toc-level-3{padding-left:18px!important;font-size:13px}.toc-toggle{width:20px;height:24px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center}.toc-toggle::before{content:"\\25B8";display:block;transition:transform .16s ease}.toc-group.open .toc-toggle::before{transform:rotate(90deg)}.toc-toggle.is-empty{visibility:hidden;cursor:default}.toc-sub{display:none;flex-direction:column;gap:2px;margin-left:24px}.toc-group.open .toc-sub{display:flex}.content-scroll{height:100vh;overflow:auto}.content{max-width:none;margin:0;padding:34px 40px 96px}.doc-section{display:none}.doc-section.active{display:block}.content.searching .doc-section{display:block}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:flex;flex-direction:column}.toc-sub{margin-left:20px}}
+a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-group-head{display:flex;align-items:center;gap:4px}.toc-group-head a{flex:1}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-1,.toc-level-2{font-weight:600}.toc-level-3{padding-left:18px!important;font-size:13px}.toc-toggle{width:20px;height:24px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:12px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center}.toc-toggle::before{content:"\\25B8";display:block;transition:transform .16s ease}.toc-group.open .toc-toggle::before{transform:rotate(90deg)}.toc-toggle.is-empty{visibility:hidden;cursor:default}.toc-sub{display:none;flex-direction:column;gap:2px;margin-left:24px}.toc-group.open .toc-sub{display:flex}.content-scroll{height:100vh;overflow:auto}.content{max-width:none;margin:0;padding:34px 40px 96px}.doc-section{display:none}.doc-section.active{display:block}.content.searching .doc-section{display:block}.provenance{color:var(--muted);font-size:12px;border-top:1px solid var(--line);margin-top:42px;padding-top:14px}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:34px;margin-top:0}h2{font-size:25px;border-top:1px solid var(--line);padding-top:28px}h3{font-size:19px}h4{font-size:16px}p{margin:.8em 0}.citation-ref{font-weight:600;text-decoration-thickness:.08em;text-underline-offset:.16em}.reference-entry{scroll-margin-top:22px;border-radius:6px;padding:3px 5px;margin-left:-5px}.reference-entry.is-focused{background:color-mix(in srgb,var(--accent) 16%,transparent);outline:2px solid color-mix(in srgb,var(--accent) 48%,transparent);outline-offset:2px;transition:background .2s ease,outline-color .2s ease}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.doc-figure figcaption{color:var(--muted);font-size:13px;margin-top:10px}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{padding:22px 18px 88px}h1{font-size:27px}h2{font-size:22px}.toc-links{display:flex;flex-direction:column}.toc-sub{margin-left:20px}}
 """
 
 APP_JS = r"""
@@ -555,6 +743,7 @@ APP_JS = r"""
     const content = document.querySelector(".content");
     const links = Array.from(document.querySelectorAll('.toc-links a[href^="#"]'));
     let activeSectionId = null;
+    let referenceFocusTimer = null;
 
     function renderMath(root) {
       if (root && window.renderMathInElement) {
@@ -630,12 +819,37 @@ APP_JS = r"""
       scroller.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     }
 
+    function clearReferenceFocus() {
+      document.querySelectorAll(".reference-entry.is-focused").forEach(function(entry) {
+        entry.classList.remove("is-focused");
+      });
+      if (referenceFocusTimer) {
+        window.clearTimeout(referenceFocusTimer);
+        referenceFocusTimer = null;
+      }
+    }
+
+    function focusReferenceTarget(target) {
+      if (!target || !target.classList || !target.classList.contains("reference-entry")) {
+        return;
+      }
+      if (typeof target.focus === "function") {
+        target.focus({preventScroll:true});
+      }
+      target.classList.add("is-focused");
+      referenceFocusTimer = window.setTimeout(function() {
+        target.classList.remove("is-focused");
+        referenceFocusTimer = null;
+      }, 4200);
+    }
+
     function showSection(id, options) {
       const opts = options || {};
       const sections = getSections();
       if (!sections.length) {
         return;
       }
+      clearReferenceFocus();
       const requested = sections.find(function(section) {
         return section.dataset.sectionId === id;
       }) || sections[0];
@@ -655,6 +869,7 @@ APP_JS = r"""
       }
       if (scrollTarget) {
         scrollTargetIntoScroller(scrollTarget);
+        focusReferenceTarget(scrollTarget);
       } else {
         scroller.scrollTo({ top: 0, behavior: opts.smooth === false ? "auto" : "smooth" });
       }

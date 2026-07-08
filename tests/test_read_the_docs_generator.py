@@ -54,6 +54,105 @@ def test_generated_html_has_no_duplicate_heading_ids() -> None:
     assert len(ids) == len(set(ids))
 
 
+def test_generated_html_has_no_duplicate_ids() -> None:
+    html_doc, _size_info = _generated_html()
+    ids = re.findall(r"(?<![-\w])id=\"([^\"]+)\"", html_doc)
+
+    assert ids
+    assert len(ids) == len(set(ids))
+
+
+def test_reference_entries_have_deterministic_ids() -> None:
+    markdown = Path("docs/technical_guidance_note.md").read_text(encoding="utf-8")
+    display_markdown = builder._strip_dashboard_cover(markdown)
+    entries = builder.parse_reference_entries(display_markdown)
+    ids_by_source = {entry.source_text: entry.element_id for entry in entries}
+
+    assert ids_by_source[
+        next(text for text in ids_by_source if text.startswith("Thrasher, B."))
+    ] == "ref-thrasher-2022"
+    assert ids_by_source[
+        next(text for text in ids_by_source if text.startswith("Department of Science and Technology"))
+    ] == "ref-dst-2021"
+    assert ids_by_source[
+        next(text for text in ids_by_source if text.startswith("Reserve Bank of India"))
+    ] == "ref-rbi-2023"
+    assert ids_by_source[
+        next(text for text in ids_by_source if text.startswith("Government of India (2008)"))
+    ] == "ref-government-of-india-2008"
+    assert ids_by_source[
+        next(text for text in ids_by_source if text.startswith("Government of India, Ministry of Finance"))
+    ] == "ref-government-of-india-2018"
+
+
+def test_citations_link_to_reference_entries() -> None:
+    html_doc, _size_info = _generated_html()
+
+    expected_links = [
+        '<a class="citation-ref" href="#ref-dst-2021">DST 2021</a>',
+        '<a class="citation-ref" href="#ref-rbi-2023">RBI 2023</a>',
+        '<a class="citation-ref" href="#ref-dubash-2014">Dubash &amp; Jogesh 2014</a>;',
+        '<a class="citation-ref" href="#ref-baugh-2024">Baugh et al. (2024)</a>',
+        '<a class="citation-ref" href="#ref-stull-2011">Stull (2011)</a>',
+    ]
+
+    for link in expected_links:
+        assert link in html_doc
+
+
+def test_citation_links_preserve_visible_text_and_trailing_punctuation() -> None:
+    html_doc, _size_info = _generated_html()
+
+    assert (
+        'path (<a class="citation-ref" href="#ref-dubash-2014">'
+        "Dubash &amp; Jogesh 2014</a>; "
+        '<a class="citation-ref" href="#ref-singh-2017">Singh et al. 2017</a>).'
+    ) in html_doc
+
+
+def test_inline_citations_support_and_alias_and_skip_code_spans() -> None:
+    markdown = """## Body
+
+`Dubash and Jogesh 2014` and Dubash and Jogesh 2014.
+
+## References
+
+Dubash, N. K., and Jogesh, A. (2014). *From Margins to Mainstream?*
+"""
+
+    html_doc, _headings = builder.render_markdown(markdown, {})
+
+    assert "<code>Dubash and Jogesh 2014</code>" in html_doc
+    assert '<a class="citation-ref" href="#ref-dubash-2014">Dubash and Jogesh 2014</a>.' in html_doc
+
+
+def test_false_positive_year_mentions_remain_plain_text() -> None:
+    html_doc, _size_info = _generated_html()
+
+    for phrase in ("Kerala 2018", "Mumbai 2005", "Economic Survey 2017"):
+        assert phrase in html_doc
+        assert not re.search(rf'<a class="citation-ref"[^>]*>[^<]*{re.escape(phrase)}', html_doc)
+
+
+def test_reference_hrefs_resolve_to_existing_reference_ids() -> None:
+    html_doc, _size_info = _generated_html()
+    ids = set(re.findall(r'\bid="(ref-[^"]+)"', html_doc))
+    hrefs = re.findall(r'href="#(ref-[^"]+)"', html_doc)
+
+    assert hrefs
+    assert set(hrefs) <= ids
+
+
+def test_reference_entries_are_targets_without_external_links() -> None:
+    html_doc, _size_info = _generated_html()
+    reference_entries = re.findall(r'<p id="ref-[^"]+" class="reference-entry" tabindex="-1">.*?</p>', html_doc)
+
+    assert reference_entries
+    assert any("https&#58;//doi.org/10.1038/s41597-022-01393-4" in entry for entry in reference_entries)
+    assert all("<a " not in entry for entry in reference_entries)
+    assert not any('href="https' in entry for entry in reference_entries)
+
+
 def test_build_is_deterministic_without_timestamp() -> None:
     first, _first_info = _generated_html()
     second, _second_info = builder.build_html()
@@ -80,6 +179,15 @@ def test_generated_html_intercepts_hash_links_without_css_selectors() -> None:
     assert "querySelector(a.getAttribute('href'))" not in html_doc
     assert 'querySelector(a.getAttribute("href"))' not in html_doc
     assert 'scroller.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });' in html_doc
+
+
+def test_generated_html_focuses_reference_targets_from_existing_hash_handler() -> None:
+    html_doc, _size_info = _generated_html()
+
+    assert "function focusReferenceTarget(target)" in html_doc
+    assert 'target.classList.contains("reference-entry")' in html_doc
+    assert "target.focus({preventScroll:true});" in html_doc
+    assert 'target.classList.add("is-focused");' in html_doc
 
 
 def test_generated_html_uses_full_bleed_content_width() -> None:
