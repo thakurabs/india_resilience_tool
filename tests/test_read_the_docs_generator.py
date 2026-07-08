@@ -226,6 +226,24 @@ def test_generated_html_uses_delegated_figure_zoom_and_live_headings() -> None:
     assert "const headings = collectHeadings();" in html_doc
 
 
+def test_generated_html_has_accessible_lightbox_close_controls() -> None:
+    html_doc, _size_info = _generated_html()
+
+    assert 'role="dialog"' in html_doc
+    assert 'aria-modal="true"' in html_doc
+    assert 'aria-label="Enlarged figure"' in html_doc
+    assert 'class="lightbox-close"' in html_doc
+    assert 'aria-label="Close enlarged figure"' in html_doc
+    assert "function closeLightbox()" in html_doc
+    assert 'document.querySelector(".lightbox-close")' in html_doc
+    assert 'lightboxClose.addEventListener("click", closeLightbox)' in html_doc
+    assert 'lightboxImage.removeAttribute("src")' in html_doc
+    assert 'lightboxImage.alt = "";' in html_doc
+    assert "event.target === lightbox" in html_doc
+    assert 'event.key === "Escape"' in html_doc
+    assert 'lightbox.classList.contains("open")' in html_doc
+
+
 def test_generated_html_uses_section_pages_and_collapsible_toc() -> None:
     html_doc, _size_info = _generated_html()
 
