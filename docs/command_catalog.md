@@ -18,7 +18,7 @@ Run it from the repo root with the correct Conda environment active.
 python -m tools.docs.build_technical_note_html
 ```
 
-Use `--dry-run` to validate the 18 approved figure callouts, embedded KaTeX
+Use `--dry-run` to validate the 16 approved figure callouts, embedded KaTeX
 bundle, and generated HTML size without writing the committed asset:
 
 ```bash

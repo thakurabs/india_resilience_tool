@@ -238,10 +238,6 @@ The extreme-rainfall underestimation is therefore a structural limitation of the
 
 [FIGURE: FIG-V1V2V3_taylor.png | Taylor diagrams summarise Telangana 1980–1985 model skill for temperature and precipitation against ERA5 and IMD references.]
 
-[FIGURE: FIG-V4a_nrmse_era5.png | Normalised RMSE against ERA5 varies across precipitation metrics and CMIP6 models over the Telangana validation domain.]
-
-[FIGURE: FIG-V4b_nrmse_imd.png | Normalised RMSE against IMD provides an observational cross-check on precipitation metric skill over the same validation domain.]
-
 [FIGURE: FIG-V5_rx1day_adilabad.png | Adilabad Rx1day comparison shows observed IMD annual-maximum daily rainfall above the CMIP6 model range for 1980–1985.]
 
 **Known limitations relevant to India**

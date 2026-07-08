@@ -36,8 +36,6 @@ APPROVED_FIGURES: tuple[str, ...] = (
     "fig_06_bcsd_schematic.svg",
     "fig_08_district_block_resolution_zoom.svg",
     "FIG-V1V2V3_taylor.png",
-    "FIG-V4a_nrmse_era5.png",
-    "FIG-V4b_nrmse_imd.png",
     "FIG-V5_rx1day_adilabad.png",
     "fig_01_pipeline_flow.svg",
     "fig_09_admin_first_vs_grid_first.svg",
@@ -107,7 +105,7 @@ def resolve_figure_asset(filename: str) -> FigureAsset:
 
 
 def validate_figure_manifest(markdown: str) -> list[FigureAsset]:
-    """Validate that the note references exactly the approved 18-figure manifest."""
+    """Validate that the note references exactly the approved figure manifest."""
     tokens = parse_figure_tokens(markdown)
     referenced = [filename for filename, _caption in tokens]
     unresolved = sorted(set(referenced) - set(APPROVED_FIGURES))

@@ -69,7 +69,7 @@ def test_generated_html_invariants() -> None:
 
     assert "[FIGURE:" not in html_doc
     assert "[FIGURES TO INSERT]" not in html_doc
-    assert html_doc.count("<figure") == 18
+    assert html_doc.count("<figure") == 16
     assert "<figcaption" not in html_doc
     assert "http://" not in html_doc
     assert "https://" not in html_doc
@@ -80,7 +80,7 @@ def test_generated_html_invariants() -> None:
     assert size_info["html_bytes"] == len(html_doc.encode("utf-8"))
 
     figures = re.findall(r'<figure class="doc-figure"[^>]*>.*?</figure>', html_doc, re.S)
-    assert len(figures) == 18
+    assert len(figures) == 16
     for figure_html in figures:
         img_match = re.search(r"<img\b[^>]*\balt=\"([^\"]*)\"", figure_html)
         assert img_match is not None
