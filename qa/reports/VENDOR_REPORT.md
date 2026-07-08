@@ -29,6 +29,13 @@ none are model-inferred.
 | N5 | Minor | functional/a11y | US 10 | **SEND** | Missing/invalid coordinates turn the fields' **borders red only** — no error text (spec strings never appear) and no `aria-invalid`; color-only signal invisible to AT/colorblind users. |
 | N6 | Minor | data/doc | US 10 | ASK-PO | CSV sample schema mismatch — app requires `id,custom_name,lat,long`; spec documents `Latitude,Longitude,Label`. |
 | N7 | Cosmetic | data | US 10 | HOLD | Uploaded-coordinates list omits **District** (shows Custom/Point + Block only). |
+| N8 | Minor | functional | US 15 | ASK-PO | Auto-trigger "Save / Don't Save" popup on context change (spec 794–812) **not observed** — unverified whether missing or gated on a stricter dirty-state precondition. |
+| N9 | Minor | data/doc | US 15 | ASK-PO | Saved-item **tag taxonomy** drift — app emits "Single District" (outside spec's Multi-* set); older items carry **no tag**. |
+
+**US 15 headline (positive):** the full **Save → My Analysis list → Reload** loop
+**works end-to-end** — save `201`, graceful duplicate-name guard `409`, blank⇒default
+label, `/my-analysis` list with search + Rename/Delete, and **reload faithfully
+restores** state + district + all filters (verified visually). No new blocker/major.
 
 ---
 
@@ -176,6 +183,56 @@ none are model-inferred.
   *Custom/Point + Block* only (e.g. "Site A, Nampally"; "Point 3, Vijayawada Urban");
   spec lists *Custom Name / Point, Block Name, **District Name*** (e.g. "ABC,
   Hanamkonda, Warangal"). **District** appears omitted. Evidence: `s7b-upload-app-schema.png`.
+- **N8 (Minor, functional, US 15):** The spec (§794–812) describes an **auto-trigger
+  save**: with an unsaved analysis (location + filters), attempting to *change State /
+  change View Zone / switch Geography↔Coordinates* should raise a **"Save / Don't Save"**
+  popup. In testing, changing State on a freshly-built (unsaved) analysis produced **no
+  such prompt**. This could be (a) not implemented, or (b) gated on a stricter
+  "dirty-state" precondition (e.g. requires *Add to Analysis* first) that the test did
+  not satisfy — the evidence can't distinguish these. **Manual Save is unaffected and
+  works fully.** *ASK-PO — confirm whether auto-save is in scope and what triggers it.*
+  Evidence: `runs/…_us15-my-analysis/results.json` step S12, `s12-context-change.png`.
+- **N9 (Minor, data/doc, US 15):** Saved-analysis **tag** taxonomy drifts from spec.
+  The app decorates the stored name as `<label> - <Tag> - <Date>` and emits
+  **"Single District"** for a single-district save (e.g. *"QA US15 … - Single District -
+  08 Jul, 2026"*) — a tag **not** in the spec's enumerated set (Multi-District /
+  Multi-Block / Multi-Coordinates). Older saved items (`14 sites_July5`, `My Analysis`,
+  `test1/test2`) carry **no tag at all**, so the tag is inconsistent across items.
+  *ASK-PO — align the tag set (doc vs app) and backfill/normalise older items.*
+  Evidence: `runs/…_us15-my-analysis/s7-my-analysis-route.png`, POST body `name` field.
+
+**US 15 corroborates existing a11y findings (no new item):** the axe scan on the
+save/list flow re-surfaces **M2** (`image-alt` critical, header brand), **M3**
+(`color-contrast` serious incl. `#E75252`), and **N1** (`link-in-text-block`, MapLibre)
+— all app-chrome issues already filed. This strengthens M2/M3; it is not a separate US 15 defect.
+
+---
+
+## US 15 — behaviours VERIFIED matching spec (no defect)
+
+The full **Save List & Reload** loop was exercised end-to-end (12 steps, 0 failures):
+
+- **Save gating:** *Save Analysis* disabled with no location/filters; enabled once an
+  analysis (State + District + filters) is built.
+- **Save modal:** title "Save Analysis", "Analysis Name" input (placeholder "My
+  Analysis"), Cancel + Save Analysis. Blank name ⇒ **default label** (spec's two options
+  collapse into one blank-or-filled input).
+- **Save API:** unique name → `POST /api/api/saved-analyses` **201** + toast *"Analysis
+  saved successfully."*; **duplicate name → 409** with a correct red toast *"An analysis
+  with this name already exists"* (graceful guard, no crash); blank/default when the
+  default already exists → 409 (confirms blank⇒default).
+- **Listing:** *Welcome > My Analysis* → route **`/my-analysis`** (breadcrumb
+  "Dashboard / My Analysis", heading, **Search Analysis** box). Each row: label + date
+  (+ tag when set) + a **⋮ Actions** menu (`aria-label="Actions for …"`, `aria-haspopup=menu`).
+- **Row actions:** ⋮ menu offers **Rename** and **Delete** (matches US 17 §922–924).
+- **Reload:** clicking a saved row restores the dashboard — State=Telangana,
+  District=Warangal, filters (Heat Risk Composite / SSP2-4.5 / 2020-2040 / Mean), map
+  legend reflects them; `composite-map-data` returns 200. **Verified visually** (`s9-reloaded.png`).
+- **Search:** typing in *Search Analysis* filters the list (`GET …?search=…`).
+
+*Note:* the doubled **`/api/api/`** path (seen on the B1 ranking blocker) is also present
+on `saved-analyses` and `composite-map-data`, but here every call returns 2xx — so the
+doubled segment itself is not fatal; B1's 500 is a ranking-endpoint-specific failure.
 
 ---
 
@@ -188,6 +245,9 @@ none are model-inferred.
 - Scenario + Period are manual; **Statistic ("Mean") + Map Mode auto-default**.
 - Map legend is a **continuous numeric scale**, not categorical "Very Low..Extreme".
 - Map Mode shows "Absolute value" (greyed) vs spec's Predicted/Historical/Change modes.
+- **US 15:** the saved-analysis list is reached **top-right** via *"Welcome, <name>" →
+  My Analysis* (route `/my-analysis`), **not** the top-left nav dropdown the spec
+  (line 815) describes. The feature works fully; only the entry-point position differs.
 
 **US 10 behaviours VERIFIED matching spec (no defect):** Add/Upload mode toggle;
 Lat/Long/Custom-Name inputs; **Add to Analysis** and **Save Analysis** disabled by
@@ -207,14 +267,24 @@ Please use the provided sample"*, unsupported type (`.txt`) → *"Unsupported fi
 - **US 10 mode-switch note:** Spec 446–447 says switching Geography ↔ Coordinates
   should raise a "save or proceed without saving" note. Not observed with an empty
   analysis — is it gated on unsaved work, or missing? (`s10-mode-switch.png`.)
+- **N8 (US 15) auto-save:** Is the auto-trigger "Save / Don't Save" popup on
+  State/View-Zone/panel change (spec 794–812) in scope? If yes, what exactly marks an
+  analysis "unsaved/dirty" — building filters, or only after *Add to Analysis*? (This
+  is the same mutual-exclusivity behaviour as the US 10 mode-switch note above.)
+- **N9 (US 15) tags:** Which tag set is authoritative — should single-site saves be
+  tagged "Single District/Block" (app) or is the spec's Multi-* set the intended
+  taxonomy? Should older untagged items be backfilled?
 
 ---
 
 ## Coverage
 
 - **Done:** US 09 (Geography), US 10 (Coordinates), US 11 (Filters), US 13 (Map),
-  US 14 (Ranking — blocked).
-- **Not yet covered:** US 15–17 (Save/reload, Profiles),
-  US 01 (landing), US 05–08 (nav/profile/feedback).
+  US 14 (Ranking — blocked), **US 15 (My Analysis — Save/reload — passing)**.
+- **Not yet covered:** US 16 (Resilience Profile / single-site), US 17 (My Analysis
+  Profile / multi-site portfolio), US 01 (landing), US 05–08 (nav/profile/feedback).
+- **Coverage caveat (US 15):** the responsive (375px) screenshots landed on the
+  dashboard, not the `/my-analysis` route — **mobile layout of the saved list is
+  unverified**; re-check when covering US 16/17 (same panel family).
 - **Blocked on tooling:** US 02–04 (auth/2FA/reset) need a test email inbox — out of
   current autonomous scope; decide whether to cover.
