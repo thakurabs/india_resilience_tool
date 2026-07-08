@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-<title>FIG-12. DOY percentile threshold curve</title>
-<desc>Illustrative seasonal percentile threshold.</desc>
+<title id="title">FIG-12. DOY percentile threshold curve</title>
+<desc id="desc">Illustrative seasonal percentile threshold.</desc>
 <style>
 text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 .title { font-size: 26px; font-weight: 700; }
@@ -19,8 +19,6 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 </marker>
 </defs>
 <rect width="1200" height="760" fill="white"/>
-<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-12. DOY Percentile Threshold Curve</text>
-<text x="60.0" y="74.0" class="subtitle" text-anchor="start">A day-of-year threshold tau_d is calibrated from a +/-2-day baseline window and applied unchanged to evaluation years.</text>
 <rect x="95" y="125" width="990" height="455" fill="#f8fafc" stroke="#d9e2ec"/>
 <line x1="95.0" y1="145" x2="95.0" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
 <line x1="177.5" y1="145" x2="177.5" y2="535" stroke="#d9e2ec" stroke-width="0.8"/>
@@ -66,5 +64,4 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="1069.0" y="201.0" class="small" text-anchor="end">orange points: evaluation-year exceedances</text>
 <text x="113.0" y="340.0" class="small" text-anchor="middle" transform="rotate(-90 113 340.0)">tasmax (deg C)</text>
 <text x="590.0" y="578.0" class="small" text-anchor="middle">day of year</text>
-<text x="60.0" y="710.0" class="note" text-anchor="start">Source: synthetic illustrative curve. Baseline concept: 1990-2010, Feb 29 excluded, strict exceedance x_t &gt; tau_d.</text>
 </svg>

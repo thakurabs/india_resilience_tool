@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1320" height="760" viewBox="0 0 1320 760" role="img" aria-labelledby="title desc">
-<title>FIG-01. End-to-end pipeline flow</title>
-<desc>IRT pipeline schematic.</desc>
+<title id="title">FIG-01. End-to-end pipeline flow</title>
+<desc id="desc">IRT pipeline schematic.</desc>
 <style>
 text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 .title { font-size: 26px; font-weight: 700; }
@@ -19,8 +19,6 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 </marker>
 </defs>
 <rect width="1320" height="760" fill="white"/>
-<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-01. End-to-End IRT Pipeline Flow</text>
-<text x="60.0" y="74.0" class="subtitle" text-anchor="start">From source inputs to grid-first metrics, bundles, and 0-100 higher-is-worse hazard-pressure outputs.</text>
 <rect x="36" y="150" width="178" height="140" rx="6" fill="#dff0fb" stroke="#2f80b7" stroke-width="1.8" class="flow-box"/>
 <text x="125.0" y="195.0" class="label" text-anchor="middle" data-box="36,150,178,140">Climate and flood</text>
 <text x="125.0" y="212.0" class="label" text-anchor="middle" data-box="36,150,178,140">inputs</text>
@@ -91,5 +89,4 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <circle cx="965" cy="470" r="21" fill="#ffffff" stroke="#8b95a1" stroke-width="1.5"/>
 <text x="965.0" y="475.0" class="label" text-anchor="middle">8</text>
 <text x="965.0" y="514.0" class="small" text-anchor="middle">Output</text>
-<text x="60.0" y="710.0" class="note" text-anchor="start">Source: author-created schematic from technical guidance note sections 1-8.</text>
 </svg>

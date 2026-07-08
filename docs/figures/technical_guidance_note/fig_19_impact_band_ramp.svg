@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-<title>FIG-19. Impact-band ramp</title>
-<desc>Impact lens ramp schematic.</desc>
+<title id="title">FIG-19. Impact-band ramp</title>
+<desc id="desc">Impact lens ramp schematic.</desc>
 <style>
 text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 .title { font-size: 26px; font-weight: 700; }
@@ -19,8 +19,6 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 </marker>
 </defs>
 <rect width="1200" height="760" fill="white"/>
-<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-19. Impact-Band Ramp</text>
-<text x="60.0" y="74.0" class="subtitle" text-anchor="start">The impact lens maps absolute metric values below onset to 0, above saturation to 100, and linearly between.</text>
 <rect x="150" y="145" width="860" height="410" fill="#f8fafc" stroke="#d9e2ec"/>
 <rect x="210" y="180" width="253.33333333333334" height="320" fill="#eef3f8" opacity="0.55"/>
 <rect x="463.3333333333333" y="180" width="253.33333333333331" height="320" fill="#fff2cc" opacity="0.48"/>
@@ -51,5 +49,4 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="520.0" y="305.0" class="label" text-anchor="middle">linear ramp</text>
 <text x="268.0" y="512.0" class="small" text-anchor="middle">score = 0</text>
 <text x="920.0" y="162.0" class="small" text-anchor="middle">score = 100</text>
-<text x="60.0" y="710.0" class="note" text-anchor="start">Source: author-created synthetic plot using the TXx 40-45 °C example impact band.</text>
 </svg>

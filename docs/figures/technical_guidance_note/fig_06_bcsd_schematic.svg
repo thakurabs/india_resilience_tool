@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-<title>FIG-06. BCSD schematic</title>
-<desc>BCSD two-step schematic.</desc>
+<title id="title">FIG-06. BCSD schematic</title>
+<desc id="desc">BCSD two-step schematic.</desc>
 <style>
 text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 .title { font-size: 26px; font-weight: 700; }
@@ -19,8 +19,6 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 </marker>
 </defs>
 <rect width="1200" height="760" fill="white"/>
-<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-06. BCSD Schematic</text>
-<text x="60.0" y="74.0" class="subtitle" text-anchor="start">Bias correction maps monthly model distributions to observations; spatial disaggregation places corrected fields on the 0.25 deg grid.</text>
 <rect x="78" y="168" width="192" height="192" fill="#e7f2fb" stroke="#2f80b7" stroke-width="1.4"/>
 <line x1="142" y1="168" x2="142" y2="360" stroke="#2f80b7" stroke-width="2"/>
 <line x1="206" y1="168" x2="206" y2="360" stroke="#2f80b7" stroke-width="0.8"/>
@@ -60,8 +58,4 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="924.0" y="98.0" class="label" text-anchor="middle">0.25 deg target grid</text>
 <text x="924.0" y="386.0" class="small" text-anchor="middle">Bilinear interpolation /</text>
 <text x="924.0" y="403.0" class="small" text-anchor="middle">anomaly disaggregation</text>
-<rect x="96" y="515" width="1008" height="82" rx="5" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.8" class="flow-box"/>
-<text x="600.0" y="548.0" class="label" text-anchor="middle" data-box="96,515,1008,82">Important limitation</text>
-<text x="600.0" y="571.0" class="small" text-anchor="middle" data-box="96,515,1008,82">NASA applies BCSD before IRT ingestion; BCSD preserves GCM trends/variability but does not fix large-scale monsoon dynamics.</text>
-<text x="60.0" y="710.0" class="note" text-anchor="start">Source: author-created schematic; no real data used.</text>
 </svg>

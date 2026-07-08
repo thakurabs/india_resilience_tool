@@ -2,20 +2,53 @@
 
 from __future__ import annotations
 
+import base64
+import html as html_lib
 import re
 import shutil
 import subprocess
 from functools import lru_cache
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
 
 from tools.docs import build_technical_note_html as builder
 
 
+BANNED_VISIBLE_CHROME = (
+    "FIG-",
+    "Source:",
+    "Scope caveat",
+    "Important limitation",
+    "Figure note",
+    "Method note",
+    "District B callout",
+)
+
+
 @lru_cache(maxsize=1)
 def _generated_html() -> tuple[str, dict[str, object]]:
     return builder.build_html()
+
+
+def _local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _visible_svg_text(root: ET.Element) -> list[str]:
+    return [
+        "".join(node.itertext())
+        for node in root.iter()
+        if _local_name(node.tag) == "text"
+    ]
+
+
+def _embedded_svg_roots(html_doc: str) -> list[ET.Element]:
+    roots: list[ET.Element] = []
+    for payload in re.findall(r'src="data:image/svg\+xml;base64,([^"]+)"', html_doc):
+        roots.append(ET.fromstring(base64.b64decode(payload)))
+    return roots
 
 
 def test_figure_manifest_resolves_exact_approved_set() -> None:
@@ -37,6 +70,7 @@ def test_generated_html_invariants() -> None:
     assert "[FIGURE:" not in html_doc
     assert "[FIGURES TO INSERT]" not in html_doc
     assert html_doc.count("<figure") == 18
+    assert "<figcaption" not in html_doc
     assert "http://" not in html_doc
     assert "https://" not in html_doc
     assert not builder.URL_RE.search(html_doc)
@@ -44,6 +78,21 @@ def test_generated_html_invariants() -> None:
     assert 'id="katex-js"' in html_doc
     assert len(html_doc.encode("utf-8")) < builder.MAX_HTML_BYTES
     assert size_info["html_bytes"] == len(html_doc.encode("utf-8"))
+
+    figures = re.findall(r'<figure class="doc-figure"[^>]*>.*?</figure>', html_doc, re.S)
+    assert len(figures) == 18
+    for figure_html in figures:
+        img_match = re.search(r"<img\b[^>]*\balt=\"([^\"]*)\"", figure_html)
+        assert img_match is not None
+        assert html_lib.unescape(img_match.group(1)).strip()
+
+    assert len(_embedded_svg_roots(html_doc)) == 14
+    for root in _embedded_svg_roots(html_doc):
+        visible_text_nodes = [node for node in root.iter() if _local_name(node.tag) == "text"]
+        assert not any(node.attrib.get("class") in {"title", "subtitle", "note"} for node in visible_text_nodes)
+        visible_text = "\n".join(_visible_svg_text(root))
+        for banned in BANNED_VISIBLE_CHROME:
+            assert banned not in visible_text
 
 
 def test_generated_html_has_no_duplicate_heading_ids() -> None:

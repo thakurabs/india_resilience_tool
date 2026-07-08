@@ -7,10 +7,11 @@ schematics/plots so they can be reviewed and edited without a plotting runtime.
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import NormalDist
-from typing import Iterable
+from typing import Iterable, Sequence
 from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 
@@ -43,8 +44,8 @@ class Svg:
     def wrap(self, body: Iterable[str], title: str, desc: str) -> str:
         lines = [
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.width}" height="{self.height}" viewBox="0 0 {self.width} {self.height}" role="img" aria-labelledby="title desc">',
-            f"<title>{escape(title)}</title>",
-            f"<desc>{escape(desc)}</desc>",
+            f'<title id="title">{escape(title)}</title>',
+            f'<desc id="desc">{escape(desc)}</desc>',
             "<style>",
             "text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }",
             ".title { font-size: 26px; font-weight: 700; }",
@@ -329,10 +330,7 @@ def _clip_poly_to_rect(
 
 
 def figure_01() -> str:
-    body: list[str] = [
-        text(60, 48, "FIG-01. End-to-End IRT Pipeline Flow", "title"),
-        text(60, 74, "From source inputs to grid-first metrics, bundles, and 0-100 higher-is-worse hazard-pressure outputs.", "subtitle"),
-    ]
+    body: list[str] = []
     stages = [
         ("Climate and flood inputs", COLORS["light_blue"], COLORS["source"], ["NASA-NEX GDDP-CMIP6", "CEMS-GloFAS/JRC RP-100"]),
         ("Source preparation", "#edf7ff", COLORS["source"], ["BCSD applied by NASA", "India clip + unit conversion"]),
@@ -384,14 +382,11 @@ def figure_01() -> str:
         body.append(text(x, sy + 44, lab, "small", "middle"))
         if i < len(strip) - 1:
             body.append(arrow(x + 27, sy, x + 131, sy))
-    body.append(text(60, 710, "Source: author-created schematic from technical guidance note sections 1-8.", "note"))
     return Svg(width=1320).wrap(body, "FIG-01. End-to-end pipeline flow", "IRT pipeline schematic.")
 
 
 def figure_02() -> str:
     body = [
-        text(60, 48, "FIG-02. Hazard, Exposure, and Vulnerability Scope", "title"),
-        text(60, 74, "IRT supplies the climate hazard-pressure layer; full risk also needs exposure and vulnerability inputs.", "subtitle"),
         '<defs><pattern id="scope-hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#8b95a1" stroke-width="1.2" opacity="0.45"/></pattern></defs>',
     ]
     body.append(text(600, 128, "Climate risk = f(Hazard, Exposure, Vulnerability)", "label", "middle"))
@@ -436,20 +431,6 @@ def figure_02() -> str:
             body.append(text(x + 86, py, example, "small"))
     body.append(line(380, 255, 445, 255, COLORS["grey"], 2.0, "6 5"))
     body.append(line(755, 255, 820, 255, COLORS["grey"], 2.0, "6 5"))
-    body.extend(
-        box(
-            210,
-            610,
-            780,
-            78,
-            "#fff8e6",
-            COLORS["hazard"],
-            "Scope caveat",
-            ["IRT Risk bundle names are hazard-pressure indices, not complete probabilistic risk estimates."],
-            radius=5,
-        )
-    )
-    body.append(text(60, 710, "Source: author-created schematic using IPCC-style hazard, exposure, and vulnerability framing.", "note"))
     return Svg().wrap(body, "FIG-02. Hazard, exposure, and vulnerability scope", "IRT hazard-pressure scope schematic.")
 
 
@@ -473,10 +454,7 @@ def cdf_points(x: float, y: float, w: float, h: float, shift: float) -> list[tup
 
 
 def figure_05() -> str:
-    body = [
-        text(60, 48, "FIG-05. Temporal Coverage and Analysis Windows", "title"),
-        text(60, 74, "Historical and SSP raw spans feed baseline and future multi-year analysis windows; static snapshots sit outside SSP time.", "subtitle"),
-    ]
+    body: list[str] = []
     x0, x1 = 210, 1085
     start, end = 1950, 2100
 
@@ -542,15 +520,11 @@ def figure_05() -> str:
     body.append(text(snap_x + 24, snap_y - 34, "Current / Snapshot inputs", "small"))
     body.append(text(snap_x + 24, snap_y - 14, "Riverine flood and static exposure layers", "tiny"))
     body.append(text(snap_x + 24, snap_y + 6, "Not modeled as an SSP period", "tiny"))
-    body.append(text(60, 710, "Source: author-created schematic from section 2.2 data-period definitions.", "note"))
     return Svg().wrap(body, "FIG-05. Temporal coverage and analysis windows", "Timeline of raw spans and analysis windows.")
 
 
 def figure_06() -> str:
-    body = [
-        text(60, 48, "FIG-06. BCSD Schematic", "title"),
-        text(60, 74, "Bias correction maps monthly model distributions to observations; spatial disaggregation places corrected fields on the 0.25 deg grid.", "subtitle"),
-    ]
+    body: list[str] = []
     body.extend(draw_grid(78, 168, 3, 3, 64, "#e7f2fb", COLORS["source"], heavy=1))
     body.append(text(174, 138, "Coarse GCM grid", "label", "middle"))
     body.extend(multiline(174, 386, ["Raw monthly value x", "Coarse-resolution dynamics"], "small", anchor="middle"))
@@ -571,28 +545,11 @@ def figure_06() -> str:
     body.extend(draw_grid(812, 126, 8, 8, 28, "#e4f7f4", COLORS["process"], heavy=4))
     body.append(text(924, 98, "0.25 deg target grid", "label", "middle"))
     body.extend(multiline(924, 386, ["Bilinear interpolation /", "anomaly disaggregation"], "small", anchor="middle"))
-    body.extend(
-        box(
-            96,
-            515,
-            1008,
-            82,
-            "#f4f6f8",
-            COLORS["grey"],
-            "Important limitation",
-            ["NASA applies BCSD before IRT ingestion; BCSD preserves GCM trends/variability but does not fix large-scale monsoon dynamics."],
-            radius=5,
-        )
-    )
-    body.append(text(60, 710, "Source: author-created schematic; no real data used.", "note"))
     return Svg().wrap(body, "FIG-06. BCSD schematic", "BCSD two-step schematic.")
 
 
 def figure_08() -> str:
-    body = [
-        text(60, 48, "FIG-08. District/Block Resolution Zoom with 0.25 Degree Cells", "title"),
-        text(60, 74, "Illustrative geometry: districts sample many cells; blocks sharing a grid cell share a score.", "subtitle"),
-    ]
+    body: list[str] = []
     # District panel.
     body.append(f'<rect x="70" y="125" width="485" height="455" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
     body.append(text(312, 108, "District-scale view", "label", "middle"))
@@ -648,27 +605,11 @@ def figure_08() -> str:
     body.append(text(660, 620, "Three blocks inside one cell all take that cell's value (62); the", "small"))
     body.append(text(660, 638, "adjacent cell can differ (48). Block scores cannot resolve", "small"))
     body.append(text(660, 654, "contrast finer than the ~25 km cell.", "small"))
-    body.extend(
-        box(
-            158,
-            672,
-            884,
-            48,
-            "#f4f6f8",
-            COLORS["grey"],
-            "Figure note",
-            ["0.25 deg grid cell (~25 km scale; physical size varies by latitude). Illustrative geometry, not a boundary-derived map."],
-            radius=5,
-        )
-    )
     return Svg().wrap(body, "FIG-08. District/block resolution zoom", "Illustrative resolution contrast.")
 
 
 def figure_09() -> str:
-    body = [
-        text(60, 48, "FIG-09. Admin-First vs Grid-First Worked Example", "title"),
-        text(60, 74, "Averaging before thresholding can erase a nonlinear extreme; grid-first computation preserves it.", "subtitle"),
-    ]
+    body: list[str] = []
     days = [1, 2, 3, 4, 5]
     city = [36, 37, 38, 37, 36]
     valley = [28, 29, 30, 29, 28]
@@ -700,15 +641,11 @@ def figure_09() -> str:
     body.extend(box(115, 500, 345, 86, "#fff8e6", COLORS["hazard"], "Average first", ["32-34 deg C all days", "Hot days >35 deg C: 0"]))
     body.extend(box(720, 500, 345, 86, COLORS["light_rose"], COLORS["output"], "Threshold first", ["City: 5 hot days; valley: 0", "Area-weighted mean: 2.5 hot days"]))
     body.append(arrow(485, 545, 690, 545))
-    body.append(text(60, 710, "Source: author-created schematic using the exact conceptual example in section 4.1; values are illustrative.", "note"))
     return Svg().wrap(body, "FIG-09. Admin-first vs grid-first", "Worked example of nonlinear threshold bias.")
 
 
 def figure_10() -> str:
-    body = [
-        text(60, 48, "FIG-10. Fractional-Area Overlap Weights", "title"),
-        text(60, 74, "Administrative values are area-weighted averages of grid-cell values using polygon-cell intersections.", "subtitle"),
-    ]
+    body: list[str] = []
     gx, gy, cell = 88, 140, 96
     values = [22, 35, 48, 31, 55, 64, 46, 70, 82, 39, 52, 61]
     value_colors = ["#edf7fb", "#d7eef7", "#bde1f1", "#92cde7", "#5ab3d6"]
@@ -796,15 +733,11 @@ def figure_10() -> str:
             body.append(rect(x, y, w, 30, "#f8fafc" if last else "white", COLORS["grid"], stroke_width=0.8))
             body.append(text(x + w / 2, y + 20, value, "tiny", "middle"))
             x += w
-    body.append(text(60, 710, "Source: author-created synthetic geometry; slivers, areas, and the weighted mean are computed by clipping the polygon to each cell.", "note"))
     return Svg().wrap(body, "FIG-10. Fractional-area overlap weights", "Schematic of polygon-cell area weights.")
 
 
 def figure_11() -> str:
-    body = [
-        text(60, 48, "FIG-11. Temporal Aggregation and Ensemble Chain", "title"),
-        text(60, 74, "IRT computes annual indices per model, period-means them, then averages model period means into the ensemble output.", "subtitle"),
-    ]
+    body: list[str] = []
     body.extend(box(70, 165, 220, 104, COLORS["light_blue"], COLORS["source"], "Daily model fields", ["tasmax, pr, etc.", "one GCM member"]))
     body.append(arrow(292, 217, 350, 217))
     body.extend(box(350, 155, 230, 124, COLORS["light_teal"], COLORS["process"], "Daily \u2192 annual index", ["hot days, Rx1day,", "SPI spell counts"]))
@@ -853,15 +786,11 @@ def figure_11() -> str:
             radius=5,
         )
     )
-    body.append(text(60, 710, "Source: author-created schematic; no trend fit is implied.", "note"))
     return Svg().wrap(body, "FIG-11. Temporal aggregation and ensemble chain", "Daily to annual to period to ensemble schematic.")
 
 
 def figure_12() -> str:
-    body = [
-        text(60, 48, "FIG-12. DOY Percentile Threshold Curve", "title"),
-        text(60, 74, "A day-of-year threshold tau_d is calibrated from a +/-2-day baseline window and applied unchanged to evaluation years.", "subtitle"),
-    ]
+    body: list[str] = []
     x0, y0, w, h = 95, 125, 990, 455
     body.append(f'<rect x="{x0}" y="{y0}" width="{w}" height="{h}" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
     for m in range(0, 13):
@@ -906,7 +835,6 @@ def figure_12() -> str:
         )
     )
     body.append(text(x0 + w / 2, y0 + h - 2, "day of year", "small", "middle"))
-    body.append(text(60, 710, "Source: synthetic illustrative curve. Baseline concept: 1990-2010, Feb 29 excluded, strict exceedance x_t > tau_d.", "note"))
     return Svg().wrap(body, "FIG-12. DOY percentile threshold curve", "Illustrative seasonal percentile threshold.")
 
 
@@ -926,10 +854,7 @@ def gamma_cdf_approx(x: float, alpha: float = 2.4, beta: float = 38.0) -> float:
 
 
 def figure_14() -> str:
-    body = [
-        text(60, 48, "FIG-14. SPI Derivation", "title"),
-        text(60, 74, "Monthly precipitation accumulation is fitted with a Gamma distribution, mixed with zero probability, and transformed to standard-normal SPI.", "subtitle"),
-    ]
+    body: list[str] = []
     panels = [(60, 135, "1. Accumulate monthly precipitation"), (440, 135, "2. Gamma fit and mixed CDF"), (820, 135, "3. Normal-quantile transform")]
     for x, y, title in panels:
         body.append(f'<rect x="{x}" y="{y}" width="320" height="410" rx="6" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
@@ -990,27 +915,11 @@ def figure_14() -> str:
     body.append(formula_spi_transform(x0 + 120, 224, "middle"))
     body.append(arrow(380, 340, 438, 340))
     body.append(arrow(760, 340, 818, 340))
-    body.extend(
-        box(
-            155,
-            620,
-            890,
-            70,
-            "#f4f6f8",
-            COLORS["grey"],
-            "Method note",
-            ["Illustrative synthetic distribution. IRT fits Gamma parameters over 1990-2010 and applies them unchanged to SSP periods."],
-            radius=5,
-        )
-    )
     return Svg().wrap(body, "FIG-14. SPI derivation", "Three-panel illustrative SPI transformation.")
 
 
 def figure_15() -> str:
-    body = [
-        text(60, 48, "FIG-15. JRC RP-100 Severity Lookup Matrix", "title"),
-        text(60, 74, "Flood severity is assigned from a fixed depth-class by extent-class lookup table for the static RP-100 snapshot.", "subtitle"),
-    ]
+    body: list[str] = []
     matrix = [
         [1, 2, 2, 3, 4],
         [2, 2, 3, 4, 4],
@@ -1076,15 +985,11 @@ def figure_15() -> str:
         body.append(rect(x, legend_y, 34, 24, severity_colors[severity], COLORS["grid"], stroke_width=1.0, radius=3))
         body.append(text(x + 47, legend_y + 17, f"{severity}: {severity_names[severity]}", "small"))
 
-    body.append(text(60, 710, "Source: author-created from the fixed JRC RP-100 flood depth x extent severity table in section 5.5.", "note"))
     return Svg().wrap(body, "FIG-15. JRC RP-100 severity lookup matrix", "Heatmap of fixed JRC depth and extent severity classes.")
 
 
 def figure_18() -> str:
-    body = [
-        text(60, 48, "FIG-18. Three-Lens Blended Rule Schematic", "title"),
-        text(60, 74, "Sectoral rules blend relative absolute pressure, change from baseline, and fixed impact-band position before bundle aggregation.", "subtitle"),
-    ]
+    body: list[str] = []
     body.extend(box(50, 256, 210, 120, COLORS["light_blue"], COLORS["source"], "Inputs", ["future metric v", "1990-2010 baseline", "impact band [a,b]"]))
     lanes = [
         (325, 138, "S_abs", "p10-p90 cohort position", COLORS["source"], "#e7f2fb"),
@@ -1137,10 +1042,7 @@ def figure_18() -> str:
 
 
 def figure_19() -> str:
-    body = [
-        text(60, 48, "FIG-19. Impact-Band Ramp", "title"),
-        text(60, 74, "The impact lens maps absolute metric values below onset to 0, above saturation to 100, and linearly between.", "subtitle"),
-    ]
+    body: list[str] = []
     x0, y0, w, h = 150, 145, 860, 410
     body.append(f'<rect x="{x0}" y="{y0}" width="{w}" height="{h}" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
     body.append(f'<rect x="{x0 + 60}" y="{y0 + 35}" width="{(w - 100) / 3}" height="{h - 90}" fill="#eef3f8" opacity="0.55"/>')
@@ -1183,15 +1085,11 @@ def figure_19() -> str:
     body.append(text(520, 305, "linear ramp", "label", "middle"))
     body.append(text(268, 512, "score = 0", "small", "middle"))
     body.append(text(920, 162, "score = 100", "small", "middle"))
-    body.append(text(60, 710, "Source: author-created synthetic plot using the TXx 40-45 \u00b0C example impact band.", "note"))
     return Svg().wrap(body, "FIG-19. Impact-band ramp", "Impact lens ramp schematic.")
 
 
 def figure_20() -> str:
-    body = [
-        text(60, 48, "FIG-20. District A vs B Lens Worked Example", "title"),
-        text(60, 74, "Health Risk TXx rule, SSP5-8.5, 2060-2080: the blended score surfaces fast-warming District B.", "subtitle"),
-    ]
+    body: list[str] = []
     lens = {"A - already hot": [90, 20, 100], "B - fast-warming": [20, 100, 40]}
     final = {"A - already hot": [76, 90], "B - fast-warming": [47, 20]}
     labels = ["S_abs", "S_chg", "S_imp"]
@@ -1238,8 +1136,6 @@ def figure_20() -> str:
         body.append(text(gx + 38, 528, "A" if district.startswith("A") else "B", "small", "middle"))
     body.append(text(855, 580, "Blended = 0.40*S_abs + 0.25*S_chg + 0.35*S_imp", "small", "middle"))
     body.append(text(855, 605, "Impact band: TXx 40-45 deg C; cohort q10/q90: 41-46 deg C and +1.0/+3.5 deg C", "small", "middle"))
-    body.extend(box(695, 625, 470, 66, "#fff8e6", COLORS["hazard"], "District B callout", ["Fast-warming and newly above onset; blended score rises from 20 to 47."], radius=5))
-    body.append(text(60, 710, "Source: author-created from the exact worked example table in section 7.3; A/B are illustrative districts.", "note"))
     return Svg().wrap(body, "FIG-20. District A vs B lens worked example", "Worked example bar chart.")
 
 
@@ -1364,14 +1260,22 @@ def export_png(svg_path: Path) -> None:
     cairosvg.svg2png(url=str(svg_path), write_to=str(svg_path.with_suffix(".png")), output_width=2400)
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--png", action="store_true", help="Also export PNG previews next to the generated SVGs.")
+    args = parser.parse_args(argv)
     for filename, builder in FIGURES.items():
         path = OUT_DIR / filename
         svg = builder()
         validate(svg, filename)
         path.write_text(svg, encoding="utf-8")
-        export_png(path)
-        print(path.relative_to(Path.cwd()))
+        if args.png:
+            export_png(path)
+        try:
+            display_path = path.relative_to(Path.cwd())
+        except ValueError:
+            display_path = path
+        print(display_path)
 
 
 if __name__ == "__main__":

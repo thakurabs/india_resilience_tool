@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-<title>FIG-15. JRC RP-100 severity lookup matrix</title>
-<desc>Heatmap of fixed JRC depth and extent severity classes.</desc>
+<title id="title">FIG-15. JRC RP-100 severity lookup matrix</title>
+<desc id="desc">Heatmap of fixed JRC depth and extent severity classes.</desc>
 <style>
 text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 .title { font-size: 26px; font-weight: 700; }
@@ -19,8 +19,6 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 </marker>
 </defs>
 <rect width="1200" height="760" fill="white"/>
-<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-15. JRC RP-100 Severity Lookup Matrix</text>
-<text x="60.0" y="74.0" class="subtitle" text-anchor="start">Flood severity is assigned from a fixed depth-class by extent-class lookup table for the static RP-100 snapshot.</text>
 <rect x="140" y="80" width="890" height="600" rx="6" fill="#f8fafc" stroke="#d9e2ec" stroke-width="1.2"/>
 <text x="595.0" y="108.0" class="label" text-anchor="middle">Depth class</text>
 <text x="182.0" y="355.0" class="label" text-anchor="middle" transform="rotate(-90 182 355.0)">Extent class</text>
@@ -122,5 +120,4 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="742.0" y="637.0" class="small" text-anchor="start">4: High</text>
 <rect x="865" y="620" width="34" height="24" rx="3" fill="#e89aa8" stroke="#d9e2ec" stroke-width="1.0"/>
 <text x="912.0" y="637.0" class="small" text-anchor="start">5: Extreme</text>
-<text x="60.0" y="710.0" class="note" text-anchor="start">Source: author-created from the fixed JRC RP-100 flood depth x extent severity table in section 5.5.</text>
 </svg>

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
-<title>FIG-14. SPI derivation</title>
-<desc>Three-panel illustrative SPI transformation.</desc>
+<title id="title">FIG-14. SPI derivation</title>
+<desc id="desc">Three-panel illustrative SPI transformation.</desc>
 <style>
 text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 .title { font-size: 26px; font-weight: 700; }
@@ -19,8 +19,6 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 </marker>
 </defs>
 <rect width="1200" height="760" fill="white"/>
-<text x="60.0" y="48.0" class="title" text-anchor="start">FIG-14. SPI Derivation</text>
-<text x="60.0" y="74.0" class="subtitle" text-anchor="start">Monthly precipitation accumulation is fitted with a Gamma distribution, mixed with zero probability, and transformed to standard-normal SPI.</text>
 <rect x="60" y="135" width="320" height="410" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
 <text x="220.0" y="165.0" class="label" text-anchor="middle">1. Accumulate monthly precipitation</text>
 <rect x="440" y="135" width="320" height="410" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
@@ -75,7 +73,4 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="980.0" y="224.0" class="label" text-anchor="middle">SPI = &#934;<tspan baseline-shift="super" font-size="11px">-1</tspan>(H(x))</text>
 <path class="arrow" d="M 380.0 340.0 L 438.0 340.0"/>
 <path class="arrow" d="M 760.0 340.0 L 818.0 340.0"/>
-<rect x="155" y="620" width="890" height="70" rx="5" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.8" class="flow-box"/>
-<text x="600.0" y="647.0" class="label" text-anchor="middle" data-box="155,620,890,70">Method note</text>
-<text x="600.0" y="670.0" class="small" text-anchor="middle" data-box="155,620,890,70">Illustrative synthetic distribution. IRT fits Gamma parameters over 1990-2010 and applies them unchanged to SSP periods.</text>
 </svg>
