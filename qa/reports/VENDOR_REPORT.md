@@ -21,10 +21,14 @@ none are model-inferred.
 | M3 | Major | a11y | US 09/11 | **SEND** | Multiple text elements below WCAG AA contrast; error-red `#E75252` worst. |
 | M1 | Major | a11y | US 09 | HOLD→keep | Collapsed-panel reopen affordance / toggle labelling for AT users. |
 | M2 | Major | a11y | US 09/11 | HOLD→keep | Header brand link + icon has no accessible name (critical `image-alt`). |
+| M4 | Major | functional | US 10 | **SEND** | "Show on Map" resolves a valid coordinate correctly **but fires a contradictory "Location could not be resolved" error toast** at the same time. |
 | N1 | Minor | a11y | US 11 | HOLD | MapLibre attribution link not distinguishable without color (third-party control). |
 | N2 | Minor | a11y | US 09 | HOLD | No `<main>` landmark; 9 blocks outside landmarks. |
 | N3 | Minor | data | US 13 | ASK-PO | Map tooltip omits "Baseline (1990–2010)" and "Δ vs baseline / Level of Change". |
 | N4 | Cosmetic | data | US 14 | HOLD | Internal slugs leak in ranking caption. |
+| N5 | Minor | functional/a11y | US 10 | **SEND** | Missing/invalid coordinates turn the fields' **borders red only** — no error text (spec strings never appear) and no `aria-invalid`; color-only signal invisible to AT/colorblind users. |
+| N6 | Minor | data/doc | US 10 | ASK-PO | CSV sample schema mismatch — app requires `id,custom_name,lat,long`; spec documents `Latitude,Longitude,Label`. |
+| N7 | Cosmetic | data | US 10 | HOLD | Uploaded-coordinates list omits **District** (shows Custom/Point + Block only). |
 
 ---
 
@@ -107,6 +111,35 @@ none are model-inferred.
 
 ---
 
+## M4 — Contradictory "could not be resolved" toast on a *successful* coordinate lookup  ★ US 10
+
+- **What:** In the Coordinate Panel → *Add Coordinates*, entering a valid, in-coverage
+  point (Lat `17.8766`, Long `79.2792`) and clicking **Show on Map** resolves the
+  location **correctly** — the panel shows *"This location is GHANPUR(STATION),
+  TELANGANA"* and a pin is plotted — **yet a red error toast "Location could not be
+  resolved for these coordinates." fires at the same moment.** Success and failure are
+  reported simultaneously.
+- **Reproducibility:** Confirmed on **two independent runs** (not a race/flake).
+- **Impact:** Actively misleading. Users are told their action failed when it
+  succeeded; many will re-enter, abandon, or distrust the plotted result. This is the
+  primary "add a single site" path (US 10) and the first thing a user does.
+- **Secondary a11y note:** the toast is a **class-less `<div>` appended to `<body>`
+  with no `role="alert"`/`aria-live`** — screen-reader users get *neither* the success
+  detail nor the (wrong) error announced.
+- **Reproduce:**
+  1. Open **Coordinate Panel** → **Add Coordinates**.
+  2. Enter Lat `17.8766`, Long `79.2792` (any valid in-coverage point).
+  3. Click **Show on Map** → inline "This location is GHANPUR(STATION), TELANGANA"
+     appears **and** a red "Location could not be resolved…" toast pops top-right.
+- **Evidence:** `runs/2026-07-08T09-22-12-815Z_us10-coordinates/s2-show-on-map.png`
+  (both states visible together), `results.json` step **S2** (`CONTRADICTION: inline
+  resolved … but error toast …`).
+- **Verify fix:** on a successful resolve, no error toast fires; on a genuine failure
+  (uncovered/ocean point), the error toast fires and the inline detail is not shown.
+  Give the toast `role="alert"` / `aria-live="assertive"`.
+
+---
+
 ## Minor / Cosmetic
 
 - **N1 (Minor, a11y, US 11):** MapLibre attribution link not distinguishable without
@@ -119,16 +152,48 @@ none are model-inferred.
   Composite Score, Rank in state). *ASK-PO — may be an intended simplification.*
 - **N4 (Cosmetic, data, US 14):** Internal slugs leak in the ranking caption
   ("composite_heat_risk • ssp245 • 2020-2040 • Mean") instead of friendly labels.
+- **N5 (Minor, functional/a11y, US 10):** In *Add Coordinates*, clicking **Show on Map**
+  with **empty** or **invalid** fields (e.g. Lat `999`, Long `abc`) turns the Latitude
+  and Longitude **input borders red** (computed `oklch(0.637 0.237 25.331)` vs grey
+  baseline `rgb(208,208,208)`) — so there *is* a visual signal — but: (a) **no error
+  message text** ever appears; the spec's *"Latitude and Longitude are required"* and
+  *"Enter valid coordinates, Decimal Degrees Only"* are absent; and (b) the inputs carry
+  **no `aria-invalid`** and there is no text alternative, so the red border is a
+  **colour-only** signal — invisible to screen-reader and colour-blind users (WCAG 1.4.1
+  Use of Color, 3.3.1 Error Identification). Verified by DOM probe of computed
+  `border-color` + `aria-invalid` on empty and `999`/`abc` submits.
+  Evidence: `runs/…09-22-12…_us10-coordinates/{s3-missing-validation,s4-invalid-validation}.png`
+  + border/aria DOM probe. *SEND — add error text + `aria-invalid`.*
+  *(Independent Haiku review rated this Major; kept Minor as a visible red-border signal
+  exists, but the missing text + colour-only + no-ARIA combination is a real gap.)*
+- **N6 (Minor, data/doc, US 10):** The downloadable CSV/XLSX **sample** uses columns
+  `id, custom_name, lat, long`, but the v1.3 spec documents `Latitude, Longitude,
+  Label`. A file built to the **documented** schema is rejected *"Invalid file format.
+  Please use the provided sample"*; the app's own sample uploads fine. Fix is either
+  side (doc or accepted headers) — *ASK-PO*. Evidence: downloaded `sample_coordinates.csv`
+  header vs `s7a-upload-documented-schema.png` (rejected) vs `s7b-upload-app-schema.png` (accepted).
+- **N7 (Cosmetic, data, US 10):** The *My Uploaded Coordinates* list shows
+  *Custom/Point + Block* only (e.g. "Site A, Nampally"; "Point 3, Vijayawada Urban");
+  spec lists *Custom Name / Point, Block Name, **District Name*** (e.g. "ABC,
+  Hanamkonda, Warangal"). **District** appears omitted. Evidence: `s7b-upload-app-schema.png`.
 
 ---
 
 ## Informational — spec-drifts (NOT defects)
 
 - "Geography Selection" panel is named **"Administrative Panel"**.
+- US 10 panel is named **"Coordinate Panel"** (spec: "Coordinates Panel"); the sample
+  formats are **.csv / .xlsx / .zip** (spec's "Zipped Shape File" = "Zipped shapefile (.zip)").
 - **10 Risk Domains** offered vs spec's 8 (adds "Drought Risk (Advanced)", "Population Exposure").
 - Scenario + Period are manual; **Statistic ("Mean") + Map Mode auto-default**.
 - Map legend is a **continuous numeric scale**, not categorical "Very Low..Extreme".
 - Map Mode shows "Absolute value" (greyed) vs spec's Predicted/Historical/Change modes.
+
+**US 10 behaviours VERIFIED matching spec (no defect):** Add/Upload mode toggle;
+Lat/Long/Custom-Name inputs; **Add to Analysis** and **Save Analysis** disabled by
+default (no location + no filters); three sample-download links; unnamed upload row →
+"Point N" numbering; upload validation — wrong structure → *"Invalid file format.
+Please use the provided sample"*, unsupported type (`.txt`) → *"Unsupported file format"*.
 
 ---
 
@@ -137,13 +202,19 @@ none are model-inferred.
 - **N3:** Should the map tooltip include Baseline (1990–2010) and Δ / Level of Change?
 - **Map Mode:** Is "Absolute value" (greyed, only option) intended vs the spec's
   Predicted / Historical / Change modes?
+- **N6 (US 10):** Fix the CSV/XLSX schema mismatch doc-side (update the spec/sample
+  columns) or app-side (also accept `Latitude,Longitude,Label`)?
+- **US 10 mode-switch note:** Spec 446–447 says switching Geography ↔ Coordinates
+  should raise a "save or proceed without saving" note. Not observed with an empty
+  analysis — is it gated on unsaved work, or missing? (`s10-mode-switch.png`.)
 
 ---
 
 ## Coverage
 
-- **Done:** US 09 (Geography), US 11 (Filters), US 13 (Map), US 14 (Ranking — blocked).
-- **Not yet covered:** US 10 (Coordinates), US 15–17 (Save/reload, Profiles),
+- **Done:** US 09 (Geography), US 10 (Coordinates), US 11 (Filters), US 13 (Map),
+  US 14 (Ranking — blocked).
+- **Not yet covered:** US 15–17 (Save/reload, Profiles),
   US 01 (landing), US 05–08 (nav/profile/feedback).
 - **Blocked on tooling:** US 02–04 (auth/2FA/reset) need a test email inbox — out of
   current autonomous scope; decide whether to cover.
