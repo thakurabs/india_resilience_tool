@@ -43,9 +43,8 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="580.0" y="577.0" class="small" text-anchor="middle">raw metric value v: TXx (°C)</text>
 <text x="168.0" y="350.0" class="small" text-anchor="middle" transform="rotate(-90 168 350.0)">impact score S_imp</text>
 <rect x="700" y="200" width="330" height="88" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
-<text x="865.0" y="227.5" class="label" text-anchor="middle" data-box="700,200,330,88">Formula</text>
-<text x="865.0" y="250.5" class="small" text-anchor="middle" data-box="700,200,330,88">S_imp = clip((v - a) / (b - a), 0, 1)</text>
-<text x="865.0" y="267.5" class="small" text-anchor="middle" data-box="700,200,330,88">x 100</text>
+<text x="865.0" y="226.0" class="label" text-anchor="middle" data-box="700,200,330,88">Formula</text>
+<g class="math-label" data-math-tex="S_{\mathrm{imp}}=\mathrm{clip}\left(\frac{v-a}{b-a},0,1\right)\times100" data-math-x="865" data-math-y="252" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="865.0" y="252.0" class="small" text-anchor="middle">S_imp = clip((v - a)/(b - a), 0, 1) x 100</text></g>
 <text x="520.0" y="305.0" class="label" text-anchor="middle">linear ramp</text>
 <text x="268.0" y="512.0" class="small" text-anchor="middle">score = 0</text>
 <text x="920.0" y="162.0" class="small" text-anchor="middle">score = 100</text>

@@ -41,6 +41,16 @@ def _visible_text_nodes(root: ET.Element) -> list[ET.Element]:
     return [node for node in root.iter() if _local_name(node.tag) == "text"]
 
 
+def _math_label_groups(root: ET.Element) -> list[ET.Element]:
+    return [
+        node
+        for node in root.iter()
+        if _local_name(node.tag) == "g"
+        and "math-label" in node.attrib.get("class", "").split()
+        and node.attrib.get("data-math-tex")
+    ]
+
+
 def _view_box(root: ET.Element) -> tuple[float, float, float, float]:
     return tuple(float(part) for part in root.attrib["viewBox"].split())  # type: ignore[return-value]
 
@@ -133,6 +143,42 @@ def test_visible_bounds_ignore_generator_background_and_reject_unknown_paths() -
             "Bad path",
             "Unsupported path test.",
         )
+
+
+def test_math_labels_emit_svg_metadata_and_visible_fallbacks() -> None:
+    generator = _load_generator()
+    expected_tex = {
+        r"\mathrm{Climate\ risk}=f(\mathrm{Hazard},\mathrm{Exposure},\mathrm{Vulnerability})",
+        r"x' = F_{\mathrm{obs}}^{-1}(F_{\mathrm{mod}}(x))",
+        r"F_{\mathrm{obs}}",
+        r"F_{\mathrm{mod}}",
+        r"\bar{v}_i = \frac{\sum_j a_{ij}v_j}{\sum_j a_{ij}}",
+        r"\tau_d:\ \mathrm{baseline\ 90th\ percentile}",
+        r"\mathrm{SPI} = \Phi^{-1}(H(x))",
+        r"S_{\mathrm{abs}}",
+        r"S_{\mathrm{chg}}",
+        r"S_{\mathrm{imp}}",
+        r"\mathrm{Blended}=0.40S_{\mathrm{abs}}+0.25S_{\mathrm{chg}}+0.35S_{\mathrm{imp}}",
+        r"\mathrm{Impact\ band:}\ \mathrm{TXx}\ 40{-}45^\circ\mathrm{C};\ \mathrm{cohort}\ q_{10}/q_{90}:41{-}46^\circ\mathrm{C}\ \mathrm{and}\ +1.0/+3.5^\circ\mathrm{C}",
+    }
+    found_tex: set[str] = set()
+
+    for filename, builder in generator.FIGURES.items():
+        root = ET.fromstring(builder())
+        for group in _math_label_groups(root):
+            tex = group.attrib["data-math-tex"]
+            found_tex.add(tex)
+            assert tex.strip()
+            assert group.attrib["data-math-anchor"] in {"start", "middle", "end"}
+            assert group.attrib["data-math-display"] in {"0", "1"}
+            assert float(group.attrib["data-math-x"]) >= 0
+            assert float(group.attrib["data-math-size"]) > 0
+            assert "display:none" not in group.attrib.get("style", "")
+            assert group.attrib.get("aria-hidden") is None
+            fallback = "".join(group.itertext()).strip()
+            assert fallback, filename
+
+    assert expected_tex <= found_tex
 
 
 def test_generator_cli_exports_png_only_when_requested(monkeypatch, tmp_path: Path) -> None:

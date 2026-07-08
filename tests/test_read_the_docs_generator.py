@@ -51,6 +51,16 @@ def _embedded_svg_roots(html_doc: str) -> list[ET.Element]:
     return roots
 
 
+def _math_label_count(root: ET.Element) -> int:
+    return sum(
+        1
+        for node in root.iter()
+        if _local_name(node.tag) == "g"
+        and "math-label" in node.attrib.get("class", "").split()
+        and node.attrib.get("data-math-tex")
+    )
+
+
 def test_figure_manifest_resolves_exact_approved_set() -> None:
     markdown = Path("docs/technical_guidance_note.md").read_text(encoding="utf-8")
 
@@ -98,6 +108,61 @@ def test_generated_html_invariants() -> None:
             assert banned not in visible_text
 
     assert ".doc-figure{margin:24px 0;padding:8px;" in html_doc
+
+
+def test_svg_math_overlays_match_embedded_svg_metadata_counts() -> None:
+    html_doc, _size_info = _generated_html()
+    figures = re.findall(r'<figure class="doc-figure"[^>]*>.*?</figure>', html_doc, re.S)
+
+    for figure_html in figures:
+        svg_payload = re.search(r'src="data:image/svg\+xml;base64,([^"]+)"', figure_html)
+        if svg_payload is None:
+            assert "figure-math-overlay" not in figure_html
+            continue
+        root = ET.fromstring(base64.b64decode(svg_payload.group(1)))
+        metadata_count = _math_label_count(root)
+        overlay_count = figure_html.count('class="figure-math-overlay"')
+        assert overlay_count == metadata_count
+        if metadata_count:
+            assert 'class="figure-media"' in figure_html
+            assert 'class="figure-math-layer"' in figure_html
+
+
+def test_svg_math_extraction_subtracts_nonzero_viewbox_origin_and_hides_only_math_groups() -> None:
+    svg = """<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 100 1200 400">
+<text x="10" y="120">ordinary text</text>
+<g class="math-label" data-math-tex="x^2" data-math-x="600" data-math-y="300" data-math-anchor="middle" data-math-size="20" data-math-display="0">
+<text x="600" y="300">x^2</text>
+</g>
+</svg>"""
+
+    hidden_svg, overlays, view_box = builder._extract_svg_math(svg)
+    root = ET.fromstring(hidden_svg)
+    ordinary = next(node for node in root.iter() if _local_name(node.tag) == "text" and "".join(node.itertext()) == "ordinary text")
+    math_group = next(node for node in root.iter() if _local_name(node.tag) == "g")
+
+    assert view_box == (0.0, 100.0, 1200.0, 400.0)
+    assert len(overlays) == 1
+    assert overlays[0].left_pct == pytest.approx(50.0)
+    assert overlays[0].top_pct == pytest.approx(50.0)
+    assert ordinary.attrib.get("style") != "display:none"
+    assert "display:none" in math_group.attrib["style"]
+    assert math_group.attrib["aria-hidden"] == "true"
+
+
+def test_generated_html_keeps_base64_svg_embedding_and_hides_math_fallbacks_only() -> None:
+    html_doc, _size_info = _generated_html()
+
+    for figure_html in re.findall(r'<figure class="doc-figure"[^>]*>.*?</figure>', html_doc, re.S):
+        assert "<svg xmlns=" not in figure_html
+    assert 'src="data:image/svg+xml;base64,' in html_doc
+    assert 'data-tex="' in html_doc
+    for root in _embedded_svg_roots(html_doc):
+        for node in root.iter():
+            if _local_name(node.tag) == "g" and "math-label" in node.attrib.get("class", "").split():
+                assert "display:none" in node.attrib.get("style", "")
+            if _local_name(node.tag) == "text" and "".join(node.itertext()).strip() == "ordinary text":
+                assert "display:none" not in node.attrib.get("style", "")
 
 
 def test_generated_html_has_no_duplicate_heading_ids() -> None:
@@ -273,7 +338,8 @@ def test_generated_html_uses_delegated_figure_zoom_and_live_headings() -> None:
     html_doc, _size_info = _generated_html()
 
     assert 'content.addEventListener("click", function(event)' in html_doc
-    assert 'event.target.closest(".figure-zoom img")' in html_doc
+    assert 'event.target.closest(".figure-zoom")' in html_doc
+    assert 'zoom.querySelector("img")' in html_doc
     assert "document.querySelectorAll('.figure-zoom img').forEach" not in html_doc
     assert 'document.querySelectorAll(".figure-zoom img").forEach' not in html_doc
     assert "function collectHeadings()" in html_doc
@@ -313,6 +379,19 @@ def test_generated_html_uses_section_pages_and_collapsible_toc() -> None:
     assert 'content.classList.remove("searching")' in html_doc
 
 
+def test_generated_html_renders_svg_math_overlays_explicitly() -> None:
+    html_doc, _size_info = _generated_html()
+
+    assert ".figure-media{position:relative;display:block;width:100%}" in html_doc
+    assert ".figure-math-layer{position:absolute;inset:0;pointer-events:none}" in html_doc
+    assert ".figure-math-overlay .katex-display{margin:0}" in html_doc
+    assert 'aria-hidden="true" data-tex=' in html_doc
+    assert "function renderFigureMath(root)" in html_doc
+    assert "katex.render(overlay.dataset.tex || \"\", overlay" in html_doc
+    assert "dataSize * renderedWidth / viewBoxWidth" in html_doc
+    assert 'window.addEventListener("resize"' in html_doc
+
+
 def test_generated_html_omits_dashboard_cover_sections() -> None:
     html_doc, _size_info = _generated_html()
 
@@ -344,6 +423,25 @@ def test_generated_app_script_parses_when_node_is_available(tmp_path: Path) -> N
     script_path.write_text(script_match.group("script"), encoding="utf-8")
 
     result = subprocess.run([node, "--check", str(script_path)], capture_output=True, text=True, check=False)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_vendored_katex_renders_representative_svg_overlay_tex_when_node_is_available(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+
+    script = tmp_path / "katex_smoke.js"
+    script.write_text(
+        "const katex = require(" + repr(str(builder.KATEX_ROOT / "katex.min.js")) + ");\n"
+        r"const tex = String.raw`\bar{v}_i = \frac{\sum_j a_{ij}v_j}{\sum_j a_{ij}}`;" + "\n"
+        "const html = katex.renderToString(tex, {throwOnError:false});\n"
+        "if (!html.includes('katex')) process.exit(1);\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run([node, str(script)], capture_output=True, text=True, check=False)
 
     assert result.returncode == 0, result.stderr
 

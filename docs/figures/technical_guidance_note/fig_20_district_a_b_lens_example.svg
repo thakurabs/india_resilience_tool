@@ -45,9 +45,9 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="387.0" y="202.0" class="tiny" text-anchor="middle">100</text>
 <rect x="522" y="384.0" width="30" height="116.0" fill="#c77700"/>
 <text x="537.0" y="376.0" class="tiny" text-anchor="middle">40</text>
-<text x="216.0" y="528.0" class="small" text-anchor="middle">S_abs</text>
-<text x="366.0" y="528.0" class="small" text-anchor="middle">S_chg</text>
-<text x="516.0" y="528.0" class="small" text-anchor="middle">S_imp</text>
+<g class="math-label" data-math-tex="S_{\mathrm{abs}}" data-math-x="216" data-math-y="528" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="216.0" y="528.0" class="small" text-anchor="middle">S_abs</text></g>
+<g class="math-label" data-math-tex="S_{\mathrm{chg}}" data-math-x="366" data-math-y="528" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="366.0" y="528.0" class="small" text-anchor="middle">S_chg</text></g>
+<g class="math-label" data-math-tex="S_{\mathrm{imp}}" data-math-x="516" data-math-y="528" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="516.0" y="528.0" class="small" text-anchor="middle">S_imp</text></g>
 <text x="185.0" y="580.0" class="small" text-anchor="start">A: TXx 45.5 deg C, anomaly +1.5 deg C</text>
 <text x="185.0" y="604.0" class="small" text-anchor="start">B: TXx 42.0 deg C, anomaly +3.5 deg C</text>
 <rect x="670" y="130" width="460" height="425" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
@@ -74,6 +74,6 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <rect x="1012" y="442.0" width="34" height="58.0" fill="#8b95a1"/>
 <text x="1029.0" y="434.0" class="tiny" text-anchor="middle">20</text>
 <text x="1008.0" y="528.0" class="small" text-anchor="middle">B</text>
-<text x="855.0" y="580.0" class="small" text-anchor="middle">Blended = 0.40*S_abs + 0.25*S_chg + 0.35*S_imp</text>
-<text x="855.0" y="605.0" class="small" text-anchor="middle">Impact band: TXx 40-45 deg C; cohort q10/q90: 41-46 deg C and +1.0/+3.5 deg C</text>
+<g class="math-label" data-math-tex="\mathrm{Blended}=0.40S_{\mathrm{abs}}+0.25S_{\mathrm{chg}}+0.35S_{\mathrm{imp}}" data-math-x="855" data-math-y="580" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="855.0" y="580.0" class="small" text-anchor="middle">Blended = 0.40*S_abs + 0.25*S_chg + 0.35*S_imp</text></g>
+<g class="math-label" data-math-tex="\mathrm{Impact\ band:}\ \mathrm{TXx}\ 40{-}45^\circ\mathrm{C};\ \mathrm{cohort}\ q_{10}/q_{90}:41{-}46^\circ\mathrm{C}\ \mathrm{and}\ +1.0/+3.5^\circ\mathrm{C}" data-math-x="855" data-math-y="605" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="855.0" y="605.0" class="small" text-anchor="middle">Impact band: TXx 40-45 deg C; cohort q10/q90: 41-46 deg C and +1.0/+3.5 deg C</text></g>
 </svg>

@@ -28,23 +28,23 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <line x1="300" y1="186" x2="300" y2="446" stroke="#52606d" stroke-width="2.0"/>
 <path class="arrow" d="M 300.0 186.0 L 325.0 186.0"/>
 <rect x="325" y="138" width="250" height="96" rx="5" fill="#e7f2fb" stroke="#2f80b7" stroke-width="1.8" class="flow-box"/>
-<text x="450.0" y="178.0" class="label" text-anchor="middle" data-box="325,138,250,96">S_abs</text>
+<g class="math-label" data-math-tex="S_{\mathrm{abs}}" data-math-x="450" data-math-y="178" data-math-anchor="middle" data-math-size="15" data-math-display="0"><text x="450.0" y="178.0" class="label" text-anchor="middle">S_abs</text></g>
 <text x="450.0" y="201.0" class="small" text-anchor="middle" data-box="325,138,250,96">p10-p90 cohort position</text>
 <path class="arrow" d="M 575.0 186.0 L 610.0 186.0"/>
 <path class="arrow" d="M 300.0 316.0 L 325.0 316.0"/>
 <rect x="325" y="268" width="250" height="96" rx="5" fill="#e4f7f4" stroke="#2b8a7e" stroke-width="1.8" class="flow-box"/>
-<text x="450.0" y="308.0" class="label" text-anchor="middle" data-box="325,268,250,96">S_chg</text>
+<g class="math-label" data-math-tex="S_{\mathrm{chg}}" data-math-x="450" data-math-y="308" data-math-anchor="middle" data-math-size="15" data-math-display="0"><text x="450.0" y="308.0" class="label" text-anchor="middle">S_chg</text></g>
 <text x="450.0" y="331.0" class="small" text-anchor="middle" data-box="325,268,250,96">change vs 1990-2010, then p10-p90</text>
 <path class="arrow" d="M 575.0 316.0 L 610.0 316.0"/>
 <path class="arrow" d="M 300.0 446.0 L 325.0 446.0"/>
 <rect x="325" y="398" width="250" height="96" rx="5" fill="#fff2cc" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
-<text x="450.0" y="438.0" class="label" text-anchor="middle" data-box="325,398,250,96">S_imp</text>
+<g class="math-label" data-math-tex="S_{\mathrm{imp}}" data-math-x="450" data-math-y="438" data-math-anchor="middle" data-math-size="15" data-math-display="0"><text x="450.0" y="438.0" class="label" text-anchor="middle">S_imp</text></g>
 <text x="450.0" y="461.0" class="small" text-anchor="middle" data-box="325,398,250,96">clip((v-a)/(b-a)) x 100</text>
 <path class="arrow" d="M 575.0 446.0 L 610.0 446.0"/>
 <line x1="610" y1="186" x2="610" y2="446" stroke="#52606d" stroke-width="2.0"/>
 <path class="arrow" d="M 610.0 316.0 L 640.0 316.0"/>
 <rect x="640" y="250" width="225" height="132" rx="6" fill="#fde2e7" stroke="#b8324f" stroke-width="1.8" class="flow-box"/>
-<text x="752.5" y="291.0" class="label" text-anchor="middle" data-box="640,250,225,132">One rule score S_r</text>
+<g class="math-label" data-math-tex="\mathrm{One\ rule\ score}\ S_r" data-math-x="752.5" data-math-y="291" data-math-anchor="middle" data-math-size="15" data-math-display="0"><text x="752.5" y="291.0" class="label" text-anchor="middle">One rule score S_r</text></g>
 <text x="752.5" y="314.0" class="small" text-anchor="middle" data-box="640,250,225,132">lens-weighted mean</text>
 <text x="752.5" y="331.0" class="small" text-anchor="middle" data-box="640,250,225,132">available lenses only</text>
 <text x="752.5" y="348.0" class="small" text-anchor="middle" data-box="640,250,225,132">renormalized weights</text>
@@ -53,18 +53,18 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="895.0" y="126.0" class="small" text-anchor="middle">repeat per declared rule</text>
 <path class="arrow" d="M 895.0 186.0 L 930.0 186.0"/>
 <rect x="930" y="150" width="150" height="72" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
-<text x="1005.0" y="178.0" class="label" text-anchor="middle" data-box="930,150,150,72">Rule 1 score</text>
-<text x="1005.0" y="201.0" class="small" text-anchor="middle" data-box="930,150,150,72">S_1, W_r1</text>
+<text x="1005.0" y="189.5" class="label" text-anchor="middle" data-box="930,150,150,72">Rule 1 score</text>
+<g class="math-label" data-math-tex="S_1,\ W_{r1}" data-math-x="1005" data-math-y="201" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="1005.0" y="201.0" class="small" text-anchor="middle">S_1, W_{r1}</text></g>
 <path class="arrow" d="M 1080.0 186.0 L 1105.0 186.0"/>
 <path class="arrow" d="M 895.0 316.0 L 930.0 316.0"/>
 <rect x="930" y="280" width="150" height="72" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
-<text x="1005.0" y="308.0" class="label" text-anchor="middle" data-box="930,280,150,72">Rule 2 score</text>
-<text x="1005.0" y="331.0" class="small" text-anchor="middle" data-box="930,280,150,72">S_2, W_r2</text>
+<text x="1005.0" y="319.5" class="label" text-anchor="middle" data-box="930,280,150,72">Rule 2 score</text>
+<g class="math-label" data-math-tex="S_2,\ W_{r2}" data-math-x="1005" data-math-y="331" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="1005.0" y="331.0" class="small" text-anchor="middle">S_2, W_{r2}</text></g>
 <path class="arrow" d="M 1080.0 316.0 L 1105.0 316.0"/>
 <path class="arrow" d="M 895.0 446.0 L 930.0 446.0"/>
 <rect x="930" y="410" width="150" height="72" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
-<text x="1005.0" y="438.0" class="label" text-anchor="middle" data-box="930,410,150,72">Rule 3 score</text>
-<text x="1005.0" y="461.0" class="small" text-anchor="middle" data-box="930,410,150,72">S_3, W_r3</text>
+<text x="1005.0" y="449.5" class="label" text-anchor="middle" data-box="930,410,150,72">Rule 3 score</text>
+<g class="math-label" data-math-tex="S_3,\ W_{r3}" data-math-x="1005" data-math-y="461" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="1005.0" y="461.0" class="small" text-anchor="middle">S_3, W_{r3}</text></g>
 <path class="arrow" d="M 1080.0 446.0 L 1105.0 446.0"/>
 <line x1="1105" y1="186" x2="1105" y2="446" stroke="#52606d" stroke-width="2.0"/>
 <path class="arrow" d="M 1105.0 316.0 L 1130.0 316.0"/>

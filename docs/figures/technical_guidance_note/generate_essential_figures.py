@@ -338,56 +338,65 @@ def text(
     return f'<text x="{x:.1f}" y="{y:.1f}" class="{cls}" text-anchor="{anchor}"{_attrs(attrs)}>{escape(content)}</text>'
 
 
+def math_label(
+    x: float,
+    y: float,
+    tex: str,
+    fallback: str | None = None,
+    cls: str = "label",
+    anchor: str = "middle",
+    size: float | None = None,
+    display: bool = False,
+) -> str:
+    """Emit one SVG fallback group plus metadata for HTML KaTeX overlays.
+
+    Internal contract:
+    ``<g class="math-label" data-math-tex="..." data-math-x="..."
+    data-math-y="..." data-math-anchor="start|middle|end"
+    data-math-size="..." data-math-display="0|1">...</g>``.
+
+    ``data-math-x``, ``data-math-y``, and ``data-math-size`` are SVG
+    user-space pixels. Standalone SVGs keep the fallback group visible and
+    editable; the Read the Docs HTML builder hides only these metadata groups
+    after extracting the overlay information.
+    """
+    if anchor not in {"start", "middle", "end"}:
+        raise ValueError(f"Unsupported math anchor: {anchor!r}")
+    font_size = FONT_PX.get(cls.split()[0], FONT_PX["small"]) if size is None else size
+    attrs = {
+        "class": "math-label",
+        "data-math-tex": tex,
+        "data-math-x": _fmt_float(x),
+        "data-math-y": _fmt_float(y),
+        "data-math-anchor": anchor,
+        "data-math-size": _fmt_float(font_size),
+        "data-math-display": "1" if display else "0",
+    }
+    fallback_text = fallback if fallback is not None else tex
+    return f"<g{_attrs(attrs)}>{text(x, y, fallback_text, cls=cls, anchor=anchor)}</g>"
+
+
 def formula_quantile_mapping(x: float, y: float, anchor: str = "middle") -> str:
-    return (
-        f'<text x="{x:.1f}" y="{y:.1f}" class="label" text-anchor="{anchor}">'
-        "x&#8242; = F"
-        '<tspan baseline-shift="sub" font-size="11px">obs</tspan>'
-        '<tspan baseline-shift="super" font-size="11px">-1</tspan>'
-        "(F"
-        '<tspan baseline-shift="sub" font-size="11px">mod</tspan>'
-        "(x))"
-        "</text>"
+    return math_label(
+        x,
+        y,
+        r"x' = F_{\mathrm{obs}}^{-1}(F_{\mathrm{mod}}(x))",
+        "x' = F_obs^-1(F_mod(x))",
+        anchor=anchor,
     )
 
 
 def formula_spi_transform(x: float, y: float, anchor: str = "middle") -> str:
-    return (
-        f'<text x="{x:.1f}" y="{y:.1f}" class="label" text-anchor="{anchor}">'
-        "SPI = &#934;"
-        '<tspan baseline-shift="super" font-size="11px">-1</tspan>'
-        "(H(x))"
-        "</text>"
-    )
+    return math_label(x, y, r"\mathrm{SPI} = \Phi^{-1}(H(x))", "SPI = Phi^-1(H(x))", anchor=anchor)
 
 
 def formula_area_weighted_average(x: float, y: float) -> str:
-    left_x = x - 170
-    frac_x = x - 78
-    frac_w = 250
-    return (
-        "<g>"
-        f'<text x="{left_x:.1f}" y="{y + 5:.1f}" class="label" text-anchor="start">'
-        "v&#772;"
-        '<tspan baseline-shift="sub" font-size="11px">i</tspan>'
-        " ="
-        "</text>"
-        f'<line x1="{frac_x:.1f}" y1="{y - 8:.1f}" x2="{frac_x + frac_w:.1f}" y2="{y - 8:.1f}" stroke="{COLORS["ink"]}" stroke-width="1.3"/>'
-        f'<text x="{frac_x + frac_w / 2:.1f}" y="{y - 18:.1f}" class="label" text-anchor="middle">'
-        "&#931;"
-        '<tspan baseline-shift="sub" font-size="11px">j</tspan>'
-        " a"
-        '<tspan baseline-shift="sub" font-size="11px">ij</tspan>'
-        " v"
-        '<tspan baseline-shift="sub" font-size="11px">j</tspan>'
-        "</text>"
-        f'<text x="{frac_x + frac_w / 2:.1f}" y="{y + 20:.1f}" class="label" text-anchor="middle">'
-        "&#931;"
-        '<tspan baseline-shift="sub" font-size="11px">j</tspan>'
-        " a"
-        '<tspan baseline-shift="sub" font-size="11px">ij</tspan>'
-        "</text>"
-        "</g>"
+    return math_label(
+        x,
+        y,
+        r"\bar{v}_i = \frac{\sum_j a_{ij}v_j}{\sum_j a_{ij}}",
+        "vbar_i = sum_j a_ij v_j / sum_j a_ij",
+        display=True,
     )
 
 
@@ -433,6 +442,7 @@ def box(
     label: str,
     sublines: Iterable[str] = (),
     radius: int = 6,
+    label_tex: str | None = None,
 ) -> list[str]:
     label_lines = wrap_words(label, w - 24, FONT_PX["label"], bold=True)
     subline_values: list[str] = []
@@ -446,7 +456,10 @@ def box(
     out = [rect(x, y, w, h, fill, stroke, radius=radius, cls="flow-box")]
     box_meta = {"data-box": f"{x},{y},{w},{h}"}
     for i, label_line in enumerate(label_lines):
-        out.append(text(x + w / 2, start_y + i * line_h, label_line, cls="label", anchor="middle", attrs=box_meta))
+        if i == 0 and label_tex is not None and len(label_lines) == 1:
+            out.append(math_label(x + w / 2, start_y, label_tex, label, cls="label", anchor="middle"))
+        else:
+            out.append(text(x + w / 2, start_y + i * line_h, label_line, cls="label", anchor="middle", attrs=box_meta))
     sub_start = start_y + len(label_lines) * line_h + (6 if subline_values else 0)
     for i, subline in enumerate(subline_values):
         out.append(text(x + w / 2, sub_start + i * line_h, subline, cls="small", anchor="middle", attrs=box_meta))
@@ -613,7 +626,16 @@ def figure_02() -> str:
     body = [
         '<defs><pattern id="scope-hatch" patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="#8b95a1" stroke-width="1.2" opacity="0.45"/></pattern></defs>',
     ]
-    body.append(text(600, 128, "Climate risk = f(Hazard, Exposure, Vulnerability)", "label", "middle"))
+    body.append(
+        math_label(
+            600,
+            128,
+            r"\mathrm{Climate\ risk}=f(\mathrm{Hazard},\mathrm{Exposure},\mathrm{Vulnerability})",
+            "Climate risk = f(Hazard, Exposure, Vulnerability)",
+            "label",
+            "middle",
+        )
+    )
     cards = [
         (
             70,
@@ -760,8 +782,8 @@ def figure_06() -> str:
     body.append(line(px + 42, py + 185, px + 42, py + 30, COLORS["muted"]))
     body.append(polyline(cdf_points(px + 42, py + 30, 228, 155, 0.58), COLORS["source"], 2.5))
     body.append(polyline(cdf_points(px + 42, py + 30, 228, 155, 0.47), COLORS["output"], 2.5))
-    body.append(text(px + 65, py + 50, "F_mod", "small"))
-    body.append(text(px + 218, py + 70, "F_obs", "small"))
+    body.append(math_label(px + 65, py + 50, r"F_{\mathrm{mod}}", "F_mod", "small", "start"))
+    body.append(math_label(px + 218, py + 70, r"F_{\mathrm{obs}}", "F_obs", "small", "start"))
     body.append(text(px + 156, py + 212, "monthly value", "tiny", "middle"))
     body.append(text(px + 22, py + 112, "CDF", "tiny", "middle"))
     body.append(formula_quantile_mapping(px + pw / 2, py + 252, "middle"))
@@ -917,7 +939,16 @@ def figure_10() -> str:
         body.append(text(cenx, ceny + 4, f"{frac:.2f}", "label" if frac > 0.995 else "small", "middle"))
 
     body.append(text(300, 470, "Grid lines cut the district into one sliver per cell it covers.", "small", "middle"))
-    body.append(text(300, 491, "Sliver area = intersection a_ij; number in sliver = a_ij as a fraction of the cell.", "tiny", "middle"))
+    body.append(
+        math_label(
+            300,
+            491,
+            r"\mathrm{Sliver\ area}=a_{ij};\ \mathrm{number\ in\ sliver}=a_{ij}\ \mathrm{as\ a\ fraction\ of\ the\ cell.}",
+            "Sliver area = a_ij; number in sliver = a_ij as a fraction of the cell.",
+            "tiny",
+            "middle",
+        )
+    )
 
     # Formula + equal-area note.
     body.append(text(705, 156, "Weighted average", "label", "middle"))
@@ -1046,7 +1077,16 @@ def figure_12() -> str:
         xx = x0 + 55 + (d - 1) / 364 * (w - 83)
         yy = y0 + h - 45 - (val - 16) / 30 * (h - 80)
         body.append(f'<circle cx="{xx}" cy="{yy}" r="6" fill="{COLORS["hazard"]}" stroke="white" stroke-width="1.5"/>')
-    body.append(text(x0 + w - 16, y0 + 52, "tau_d: baseline 90th percentile", "label", "end"))
+    body.append(
+        math_label(
+            x0 + w - 16,
+            y0 + 52,
+            r"\tau_d:\ \mathrm{baseline\ 90th\ percentile}",
+            "tau_d: baseline 90th percentile",
+            "label",
+            "end",
+        )
+    )
     body.append(text(x0 + w - 16, y0 + 76, "orange points: evaluation-year exceedances", "small", "end"))
     body.append(
         text(
@@ -1114,10 +1154,19 @@ def figure_14() -> str:
     body.append(polyline(cdf_pts, COLORS["output"], 2.5))
     body.append(rect(518, 182, 178, 54, "white", COLORS["grey"], stroke_width=1.2, radius=4))
     body.append(line(532, 202, 558, 202, COLORS["hazard"], 2.5))
-    body.append(text(565, 206, "g(x): Gamma density", "tiny"))
+    body.append(math_label(565, 206, r"g(x):\ \mathrm{Gamma\ density}", "g(x): Gamma density", "tiny", "start"))
     body.append(line(532, 224, 558, 224, COLORS["output"], 2.5))
-    body.append(text(565, 228, "H(x): mixed CDF", "tiny"))
-    body.append(text(x0 + 125, 507, "q = zero-month probability", "small", "middle"))
+    body.append(math_label(565, 228, r"H(x):\ \mathrm{mixed\ CDF}", "H(x): mixed CDF", "tiny", "start"))
+    body.append(
+        math_label(
+            x0 + 125,
+            507,
+            r"q=\mathrm{zero\mbox{-}month\ probability}",
+            "q = zero-month probability",
+            "small",
+            "middle",
+        )
+    )
     # Panel 3 normal transform.
     x0, ybase = 860, 390
     body.append(line(x0, ybase, x0 + 230, ybase, COLORS["muted"]))
@@ -1135,7 +1184,7 @@ def figure_14() -> str:
     body.append(line(x0, y_spi, x0 + 230, y_spi, COLORS["output"], 2, "6 4"))
     body.append(f'<rect x="{x0}" y="{y_spi}" width="{0.1587 * 230}" height="{500 - y_spi}" fill="{COLORS["light_rose"]}" fill-opacity="0.9"/>')
     body.append(text(x0 + 42, y_spi + 22, "SPI < -1", "small"))
-    body.append(text(x0 + 116, 530, "H(x)", "small", "middle"))
+    body.append(math_label(x0 + 116, 530, r"H(x)", "H(x)", "small", "middle"))
     body.append(formula_spi_transform(x0 + 120, 224, "middle"))
     body.append(arrow(380, 340, 438, 340))
     body.append(arrow(760, 340, 818, 340))
@@ -1216,16 +1265,16 @@ def figure_18() -> str:
     body: list[str] = []
     body.extend(box(50, 256, 210, 120, COLORS["light_blue"], COLORS["source"], "Inputs", ["future metric v", "1990-2010 baseline", "impact band [a,b]"]))
     lanes = [
-        (325, 138, "S_abs", "p10-p90 cohort position", COLORS["source"], "#e7f2fb"),
-        (325, 268, "S_chg", "change vs 1990-2010, then p10-p90", COLORS["process"], "#e4f7f4"),
-        (325, 398, "S_imp", "clip((v-a)/(b-a)) x 100", COLORS["hazard"], "#fff2cc"),
+        (325, 138, "S_abs", r"S_{\mathrm{abs}}", "p10-p90 cohort position", COLORS["source"], "#e7f2fb"),
+        (325, 268, "S_chg", r"S_{\mathrm{chg}}", "change vs 1990-2010, then p10-p90", COLORS["process"], "#e4f7f4"),
+        (325, 398, "S_imp", r"S_{\mathrm{imp}}", "clip((v-a)/(b-a)) x 100", COLORS["hazard"], "#fff2cc"),
     ]
     body.append(line(260, 316, 300, 316, COLORS["muted"], 2.0))
     body.append(line(300, 186, 300, 446, COLORS["muted"], 2.0))
-    for x, y, title, sub, stroke, fill in lanes:
+    for x, y, title, title_tex, sub, stroke, fill in lanes:
         lens_center_y = y + 48
         body.append(arrow(300, lens_center_y, x, lens_center_y))
-        body.extend(box(x, y, 250, 96, fill, stroke, title, [sub], radius=5))
+        body.extend(box(x, y, 250, 96, fill, stroke, title, [sub], radius=5, label_tex=title_tex))
         body.append(arrow(x + 250, lens_center_y, 610, lens_center_y))
     body.append(line(610, 186, 610, 446, COLORS["muted"], 2.0))
     body.append(arrow(610, 316, 640, 316))
@@ -1239,20 +1288,22 @@ def figure_18() -> str:
             COLORS["output"],
             "One rule score S_r",
             ["lens-weighted mean", "available lenses only", "renormalized weights"],
+            label_tex=r"\mathrm{One\ rule\ score}\ S_r",
         )
     )
     body.append(arrow(865, 316, 895, 316))
     body.append(line(895, 186, 895, 446, COLORS["grey"], 1.6, "6 5"))
     body.append(text(895, 126, "repeat per declared rule", "small", "middle"))
     repeated_rules = [
-        (930, 150, "Rule 1 score", "S_1, W_r1"),
-        (930, 280, "Rule 2 score", "S_2, W_r2"),
-        (930, 410, "Rule 3 score", "S_3, W_r3"),
+        (930, 150, "Rule 1 score", r"S_1,\ W_{r1}"),
+        (930, 280, "Rule 2 score", r"S_2,\ W_{r2}"),
+        (930, 410, "Rule 3 score", r"S_3,\ W_{r3}"),
     ]
-    for x, y, label, subline in repeated_rules:
+    for x, y, label, subline_tex in repeated_rules:
         rule_center_y = y + 36
         body.append(arrow(895, rule_center_y, x, rule_center_y))
-        body.extend(box(x, y, 150, 72, "#fff8e6", COLORS["hazard"], label, [subline], radius=5))
+        body.extend(box(x, y, 150, 72, "#fff8e6", COLORS["hazard"], label, [], radius=5))
+        body.append(math_label(x + 75, y + 51, subline_tex, subline_tex.replace("\\", ""), "small", "middle"))
         body.append(arrow(x + 150, rule_center_y, 1105, rule_center_y))
     body.append(line(1105, 186, 1105, 446, COLORS["muted"], 2.0))
     body.append(arrow(1105, 316, 1130, 316))
@@ -1293,17 +1344,16 @@ def figure_19() -> str:
     body.append(text(xp(b), y0 + h - 26, "saturation b = 45 \u00b0C", "small", "middle"))
     body.append(text(x0 + w / 2, y0 + h + 22, "raw metric value v: TXx (\u00b0C)", "small", "middle"))
     body.append(text(x0 + 18, y0 + h / 2, "impact score S_imp", "small", "middle", attrs={"transform": f"rotate(-90 {x0 + 18} {y0 + h / 2})"}))
-    body.extend(
-        box(
-            700,
-            200,
-            330,
-            88,
-            "#fff8e6",
-            COLORS["hazard"],
-            "Formula",
-            ["S_imp = clip((v - a) / (b - a), 0, 1)", "x 100"],
-            radius=5,
+    body.append(rect(700, 200, 330, 88, "#fff8e6", COLORS["hazard"], stroke_width=1.8, radius=5, cls="flow-box"))
+    body.append(text(865, 226, "Formula", "label", "middle", attrs={"data-box": "700,200,330,88"}))
+    body.append(
+        math_label(
+            865,
+            252,
+            r"S_{\mathrm{imp}}=\mathrm{clip}\left(\frac{v-a}{b-a},0,1\right)\times100",
+            "S_imp = clip((v - a)/(b - a), 0, 1) x 100",
+            "small",
+            "middle",
         )
     )
     body.append(text(520, 305, "linear ramp", "label", "middle"))
@@ -1316,7 +1366,11 @@ def figure_20() -> str:
     body: list[str] = []
     lens = {"A - already hot": [90, 20, 100], "B - fast-warming": [20, 100, 40]}
     final = {"A - already hot": [76, 90], "B - fast-warming": [47, 20]}
-    labels = ["S_abs", "S_chg", "S_imp"]
+    labels = [
+        ("S_abs", r"S_{\mathrm{abs}}"),
+        ("S_chg", r"S_{\mathrm{chg}}"),
+        ("S_imp", r"S_{\mathrm{imp}}"),
+    ]
     colors = [COLORS["source"], COLORS["process"], COLORS["hazard"]]
     # Panel A.
     body.append(f'<rect x="70" y="130" width="520" height="425" rx="6" fill="{COLORS["panel"]}" stroke="{COLORS["grid"]}"/>')
@@ -1335,8 +1389,8 @@ def figure_20() -> str:
             bh = value / 100 * 290
             body.append(f'<rect x="{x}" y="{500 - bh}" width="30" height="{bh}" fill="{colors[i]}"/>')
             body.append(text(x + 15, 500 - bh - 8, str(value), "tiny", "middle"))
-    for i, lab in enumerate(labels):
-        body.append(text(x_positions[i] + 36, 528, lab, "small", "middle"))
+    for i, (lab, tex) in enumerate(labels):
+        body.append(math_label(x_positions[i] + 36, 528, tex, lab, "small", "middle"))
     body.append(text(185, 580, "A: TXx 45.5 deg C, anomaly +1.5 deg C", "small"))
     body.append(text(185, 604, "B: TXx 42.0 deg C, anomaly +3.5 deg C", "small"))
     # Panel B.
@@ -1358,8 +1412,26 @@ def figure_20() -> str:
             body.append(f'<rect x="{x}" y="{500 - bh}" width="34" height="{bh}" fill="{fill}"/>')
             body.append(text(x + 17, 500 - bh - 8, str(value), "tiny", "middle"))
         body.append(text(gx + 38, 528, "A" if district.startswith("A") else "B", "small", "middle"))
-    body.append(text(855, 580, "Blended = 0.40*S_abs + 0.25*S_chg + 0.35*S_imp", "small", "middle"))
-    body.append(text(855, 605, "Impact band: TXx 40-45 deg C; cohort q10/q90: 41-46 deg C and +1.0/+3.5 deg C", "small", "middle"))
+    body.append(
+        math_label(
+            855,
+            580,
+            r"\mathrm{Blended}=0.40S_{\mathrm{abs}}+0.25S_{\mathrm{chg}}+0.35S_{\mathrm{imp}}",
+            "Blended = 0.40*S_abs + 0.25*S_chg + 0.35*S_imp",
+            "small",
+            "middle",
+        )
+    )
+    body.append(
+        math_label(
+            855,
+            605,
+            r"\mathrm{Impact\ band:}\ \mathrm{TXx}\ 40{-}45^\circ\mathrm{C};\ \mathrm{cohort}\ q_{10}/q_{90}:41{-}46^\circ\mathrm{C}\ \mathrm{and}\ +1.0/+3.5^\circ\mathrm{C}",
+            "Impact band: TXx 40-45 deg C; cohort q10/q90: 41-46 deg C and +1.0/+3.5 deg C",
+            "small",
+            "middle",
+        )
+    )
     return Svg().wrap(body, "FIG-20. District A vs B lens worked example", "Worked example bar chart.")
 
 

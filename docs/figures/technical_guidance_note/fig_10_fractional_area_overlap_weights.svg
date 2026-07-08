@@ -59,9 +59,9 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <text x="244.0" y="370.3" class="small" text-anchor="middle">0.59</text>
 <text x="322.9" y="373.1" class="small" text-anchor="middle">0.72</text>
 <text x="300.0" y="470.0" class="small" text-anchor="middle">Grid lines cut the district into one sliver per cell it covers.</text>
-<text x="300.0" y="491.0" class="tiny" text-anchor="middle">Sliver area = intersection a_ij; number in sliver = a_ij as a fraction of the cell.</text>
+<g class="math-label" data-math-tex="\mathrm{Sliver\ area}=a_{ij};\ \mathrm{number\ in\ sliver}=a_{ij}\ \mathrm{as\ a\ fraction\ of\ the\ cell.}" data-math-x="300" data-math-y="491" data-math-anchor="middle" data-math-size="10.5" data-math-display="0"><text x="300.0" y="491.0" class="tiny" text-anchor="middle">Sliver area = a_ij; number in sliver = a_ij as a fraction of the cell.</text></g>
 <text x="705.0" y="156.0" class="label" text-anchor="middle">Weighted average</text>
-<g><text x="535.0" y="199.0" class="label" text-anchor="start">v&#772;<tspan baseline-shift="sub" font-size="11px">i</tspan> =</text><line x1="627.0" y1="186.0" x2="877.0" y2="186.0" stroke="#1f2933" stroke-width="1.3"/><text x="752.0" y="176.0" class="label" text-anchor="middle">&#931;<tspan baseline-shift="sub" font-size="11px">j</tspan> a<tspan baseline-shift="sub" font-size="11px">ij</tspan> v<tspan baseline-shift="sub" font-size="11px">j</tspan></text><text x="752.0" y="214.0" class="label" text-anchor="middle">&#931;<tspan baseline-shift="sub" font-size="11px">j</tspan> a<tspan baseline-shift="sub" font-size="11px">ij</tspan></text></g>
+<g class="math-label" data-math-tex="\bar{v}_i = \frac{\sum_j a_{ij}v_j}{\sum_j a_{ij}}" data-math-x="705" data-math-y="194" data-math-anchor="middle" data-math-size="15" data-math-display="1"><text x="705.0" y="194.0" class="label" text-anchor="middle">vbar_i = sum_j a_ij v_j / sum_j a_ij</text></g>
 <path class="arrow" d="M 492.0 300.0 L 590.0 210.0"/>
 <rect x="600" y="232" width="410" height="79" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
 <text x="805.0" y="255.0" class="label" text-anchor="middle" data-box="600,232,410,79">Equal-area rule</text>

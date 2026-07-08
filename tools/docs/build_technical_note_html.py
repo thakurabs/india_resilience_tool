@@ -14,6 +14,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
+from xml.etree import ElementTree as ET
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SOURCE = REPO_ROOT / "docs" / "technical_guidance_note.md"
@@ -29,6 +30,7 @@ FENCE_RE = re.compile(r"^```")
 URL_RE = re.compile(r"url\((['\"]?)(?!data:)([^)'\"\s]+)\1\)")
 _SECTION_HEAD_RE = re.compile(r'^<h([12]) id="([^"]+)"')
 _DASHBOARD_FIRST_SECTION = "## 1. Introduction and Framing"
+ET.register_namespace("", "http://www.w3.org/2000/svg")
 
 APPROVED_FIGURES: tuple[str, ...] = (
     "fig_02_hazard_exposure_vulnerability_scope.svg",
@@ -63,6 +65,18 @@ class FigureAsset:
     path: Path
     mime_type: str
     byte_size: int
+
+
+@dataclass(frozen=True)
+class FigureMathOverlay:
+    tex: str
+    x: float
+    y: float
+    anchor: str
+    size: float
+    display: bool
+    left_pct: float
+    top_pct: float
 
 
 @dataclass(frozen=True)
@@ -336,15 +350,130 @@ def _table_html(lines: Sequence[str], citation_index: CitationIndex | None = Non
     return f"<div class=\"table-wrap\"><table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table></div>"
 
 
-def _figure_html(filename: str, caption: str, asset: FigureAsset) -> str:
-    payload = base64.b64encode(asset.path.read_bytes()).decode("ascii")
-    src = f"data:{asset.mime_type};base64,{payload}"
+def _xml_local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _xml_class_tokens(node: ET.Element) -> set[str]:
+    return set(node.attrib.get("class", "").split())
+
+
+def _is_svg_math_label(node: ET.Element) -> bool:
+    return (
+        _xml_local_name(node.tag) == "g"
+        and "math-label" in _xml_class_tokens(node)
+        and bool(node.attrib.get("data-math-tex"))
+    )
+
+
+def _parse_svg_view_box(root: ET.Element) -> tuple[float, float, float, float]:
+    view_box = root.attrib.get("viewBox")
+    if view_box:
+        parts = [float(part) for part in view_box.replace(",", " ").split()]
+        if len(parts) != 4:
+            raise ValueError(f"Invalid SVG viewBox: {view_box!r}")
+        return parts[0], parts[1], parts[2], parts[3]
+    width = float(root.attrib.get("width", "0"))
+    height = float(root.attrib.get("height", "0"))
+    if width <= 0 or height <= 0:
+        raise ValueError("SVG math overlays require a positive width/height or viewBox")
+    return 0.0, 0.0, width, height
+
+
+def _append_hidden_style(node: ET.Element) -> None:
+    style = node.attrib.get("style", "").strip()
+    if style and not style.endswith(";"):
+        style += ";"
+    node.attrib["style"] = f"{style}display:none"
+    node.attrib["aria-hidden"] = "true"
+
+
+def _extract_svg_math(svg_text: str) -> tuple[str, list[FigureMathOverlay], tuple[float, float, float, float]]:
+    root = ET.fromstring(svg_text)
+    min_x, min_y, view_width, view_height = _parse_svg_view_box(root)
+    if view_width <= 0 or view_height <= 0:
+        raise ValueError("SVG math overlays require a positive viewBox width and height")
+
+    overlays: list[FigureMathOverlay] = []
+    for node in root.iter():
+        if not _is_svg_math_label(node):
+            continue
+        tex = node.attrib["data-math-tex"].strip()
+        anchor = node.attrib.get("data-math-anchor", "middle")
+        if anchor not in {"start", "middle", "end"}:
+            raise ValueError(f"Invalid math label anchor: {anchor!r}")
+        x = float(node.attrib["data-math-x"])
+        y = float(node.attrib["data-math-y"])
+        size = float(node.attrib["data-math-size"])
+        display = node.attrib.get("data-math-display", "0") == "1"
+        if not tex:
+            raise ValueError("SVG math label has empty TeX metadata")
+        overlays.append(
+            FigureMathOverlay(
+                tex=tex,
+                x=x,
+                y=y,
+                anchor=anchor,
+                size=size,
+                display=display,
+                left_pct=(x - min_x) / view_width * 100.0,
+                top_pct=(y - min_y) / view_height * 100.0,
+            )
+        )
+        _append_hidden_style(node)
+
+    if not overlays:
+        return svg_text, [], (min_x, min_y, view_width, view_height)
+    return ET.tostring(root, encoding="unicode"), overlays, (min_x, min_y, view_width, view_height)
+
+
+def _data_image_src(payload: bytes, mime_type: str) -> str:
+    encoded = base64.b64encode(payload).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
+
+
+def _plain_figure_html(filename: str, caption: str, asset: FigureAsset) -> str:
+    src = _data_image_src(asset.path.read_bytes(), asset.mime_type)
     return (
         f'<figure class="doc-figure" id="figure-{html.escape(_slugify(filename))}">'
         f'<button type="button" class="figure-zoom" aria-label="Zoom figure">'
         f'<img src="{src}" alt="{html.escape(caption)}" loading="lazy"></button>'
         "</figure>"
     )
+
+
+def _svg_math_figure_html(filename: str, caption: str, asset: FigureAsset) -> str:
+    svg_text = asset.path.read_text(encoding="utf-8")
+    hidden_svg, overlays, (_min_x, _min_y, view_width, _view_height) = _extract_svg_math(svg_text)
+    if not overlays:
+        return _plain_figure_html(filename, caption, asset)
+    src = _data_image_src(hidden_svg.encode("utf-8"), asset.mime_type)
+    overlay_html = "\n".join(
+        (
+            '<span class="figure-math-overlay" aria-hidden="true" '
+            f'data-tex="{html.escape(overlay.tex, quote=True)}" '
+            f'data-size="{overlay.size:.6g}" '
+            f'data-anchor="{html.escape(overlay.anchor)}" '
+            f'data-display="{1 if overlay.display else 0}" '
+            f'style="left:{overlay.left_pct:.6g}%;top:{overlay.top_pct:.6g}%"></span>'
+        )
+        for overlay in overlays
+    )
+    return (
+        f'<figure class="doc-figure" id="figure-{html.escape(_slugify(filename))}">'
+        f'<button type="button" class="figure-zoom" aria-label="Zoom figure">'
+        '<span class="figure-media">'
+        f'<img src="{src}" alt="{html.escape(caption)}" loading="lazy">'
+        f'<span class="figure-math-layer" data-viewbox-width="{view_width:.6g}">{overlay_html}</span>'
+        '</span></button>'
+        "</figure>"
+    )
+
+
+def _figure_html(filename: str, caption: str, asset: FigureAsset) -> str:
+    if asset.mime_type == "image/svg+xml":
+        return _svg_math_figure_html(filename, caption, asset)
+    return _plain_figure_html(filename, caption, asset)
 
 
 def _wrap_sections(blocks: list[str]) -> str:
@@ -727,9 +856,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 APP_CSS = """
-:root{color-scheme:light dark;--bg:#f7f8f5;--panel:#ffffff;--text:#17211c;--muted:#66736c;--line:#dce3dd;--accent:#0f766e;--accent-2:#bf6b21;--mark:#fff1a8;--shadow:0 18px 48px rgba(24,35,31,.12)}
-:root[data-theme="dark"]{--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--shadow:0 18px 48px rgba(0,0,0,.28)}}
+:root{color-scheme:light dark;--bg:#f7f8f5;--panel:#ffffff;--text:#17211c;--muted:#66736c;--line:#dce3dd;--accent:#0f766e;--accent-2:#bf6b21;--mark:#fff1a8;--figure-ink:#1f2933;--shadow:0 18px 48px rgba(24,35,31,.12)}
+:root[data-theme="dark"]{--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--figure-ink:#1f2933;--shadow:0 18px 48px rgba(0,0,0,.28)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101412;--panel:#171d1a;--text:#edf3ef;--muted:#a8b4ad;--line:#34413a;--accent:#55c2b5;--accent-2:#f4a261;--mark:#55480d;--figure-ink:#1f2933;--shadow:0 18px 48px rgba(0,0,0,.28)}}
 *{box-sizing:border-box}html{font-size:var(--irt-doc-font-size,15px)}html,body{margin:0;height:100%;scroll-behavior:smooth}body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:1rem;line-height:1.62;background:var(--bg);color:var(--text)}
 a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px,290px) minmax(0,1fr);height:100vh;overflow:hidden;max-width:calc(1210px + clamp(24px,4vw,64px));margin:0 auto}.toc-panel{border-right:1px solid var(--line);background:color-mix(in srgb,var(--panel) 92%,var(--bg));padding:18px 14px;overflow:auto}.toc-title{font-weight:700;margin:0 0 12px}.toc-search{width:100%;height:38px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--text);padding:0 10px;margin-bottom:14px}.toc-links{display:flex;flex-direction:column;gap:2px}.toc-group-head{display:flex;align-items:center;gap:4px}.toc-group-head a{flex:1}.toc-links a{color:var(--muted);text-decoration:none;border-radius:6px;padding:7px 8px}.toc-links a.active,.toc-links a:hover{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--text)}.toc-level-1,.toc-level-2{font-weight:600}.toc-level-3{padding-left:18px!important;font-size:.867rem}.toc-toggle{width:20px;height:24px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:.8rem;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center}.toc-toggle::before{content:"\\25B8";display:block;transition:transform .16s ease}.toc-group.open .toc-toggle::before{transform:rotate(90deg)}.toc-toggle.is-empty{visibility:hidden;cursor:default}.toc-sub{display:none;flex-direction:column;gap:2px;margin-left:24px}.toc-group.open .toc-sub{display:flex}.content-scroll{height:100vh;overflow:auto}.content{width:calc(100% - clamp(24px,4vw,64px));max-width:920px;margin:0 auto 0 clamp(24px,4vw,64px);padding:34px 40px 96px}.doc-section{display:none}.doc-section.active{display:block}.content.searching .doc-section{display:block}h1,h2,h3,h4{line-height:1.22;margin:1.7em 0 .55em}h1{font-size:2.267rem;margin-top:0}h2{font-size:1.667rem;border-top:1px solid var(--line);padding-top:28px}h3{font-size:1.267rem}h4{font-size:1.067rem}p{margin:.8em 0}.citation-ref{font-weight:600;text-decoration-thickness:.08em;text-underline-offset:.16em}.reference-entry{scroll-margin-top:22px;border-radius:6px;padding:3px 5px;margin-left:-5px}.reference-entry.is-focused{background:color-mix(in srgb,var(--accent) 16%,transparent);outline:2px solid color-mix(in srgb,var(--accent) 48%,transparent);outline-offset:2px;transition:background .2s ease,outline-color .2s ease}blockquote{border-left:4px solid var(--accent);margin:18px 0;padding:8px 16px;background:color-mix(in srgb,var(--accent) 9%,transparent);border-radius:0 6px 6px 0}code{background:color-mix(in srgb,var(--line) 55%,transparent);border-radius:4px;padding:.12em .28em}pre{overflow:auto;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:14px}.table-wrap{overflow:auto;margin:16px 0;border:1px solid var(--line);border-radius:6px;background:var(--panel)}table{width:100%;border-collapse:collapse;min-width:580px}th,td{border-bottom:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:color-mix(in srgb,var(--line) 42%,transparent)}tr:last-child td{border-bottom:0}.doc-figure{margin:24px 0;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow)}.figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}.doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}.back-top{position:fixed;right:18px;bottom:18px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:999px;width:42px;height:42px;box-shadow:var(--shadow);cursor:pointer}.lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}.lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}.lightbox-close{position:absolute;top:18px;right:18px;width:44px;height:44px;border:1px solid rgba(255,255,255,.72);border-radius:999px;background:rgba(0,0,0,.76);color:#fff;font-size:1.8rem;line-height:1;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(0,0,0,.35);cursor:pointer;z-index:11}.lightbox-close:hover,.lightbox-close:focus-visible{background:#fff;color:#111;outline:2px solid #fff;outline-offset:2px}.search-hit{background:var(--mark);border-radius:3px}@media(max-width:760px){.doc-shell{display:block;overflow:auto;max-width:none;margin:0}.toc-panel{position:sticky;top:0;z-index:4;border-right:0;border-bottom:1px solid var(--line);max-height:42vh}.content-scroll{height:auto;overflow:visible}.content{width:100%;margin:0;padding:22px 18px 88px}h1{font-size:1.8rem}h2{font-size:1.467rem}.toc-links{display:flex;flex-direction:column}.toc-sub{margin-left:20px}}
 """
@@ -737,6 +866,20 @@ a{color:var(--accent)}.doc-shell{display:grid;grid-template-columns:minmax(220px
 APP_CSS = APP_CSS.replace(
     ".doc-figure{margin:24px 0;padding:14px;",
     ".doc-figure{margin:24px 0;padding:8px;",
+)
+
+APP_CSS = APP_CSS.replace(
+    ".figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}"
+    ".doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}",
+    ".figure-zoom{display:block;width:100%;padding:0;border:0;background:transparent;cursor:zoom-in}"
+    ".figure-media{position:relative;display:block;width:100%}"
+    ".doc-figure img{display:block;width:100%;height:auto;max-height:620px;object-fit:contain}"
+    ".figure-math-layer{position:absolute;inset:0;pointer-events:none}"
+    ".figure-math-overlay{position:absolute;color:var(--figure-ink);line-height:1;white-space:nowrap;transform:translateY(-50%);pointer-events:auto;cursor:zoom-in}"
+    ".figure-math-overlay[data-anchor=\"middle\"]{transform:translate(-50%,-50%)}"
+    ".figure-math-overlay[data-anchor=\"end\"]{transform:translate(-100%,-50%)}"
+    ".figure-math-overlay .katex{font-size:1em;line-height:1}"
+    ".figure-math-overlay .katex-display{margin:0}",
 )
 
 APP_JS = r"""
@@ -752,6 +895,47 @@ APP_JS = r"""
       if (root && window.renderMathInElement) {
         renderMathInElement(root, window.IRT_DOC_MATH_OPTIONS);
       }
+      renderFigureMath(root || document);
+    }
+
+    function updateFigureMathLayout(root) {
+      const scope = root || document;
+      scope.querySelectorAll(".figure-math-layer[data-viewbox-width]").forEach(function(layer) {
+        const media = layer.closest(".figure-media");
+        const image = media ? media.querySelector("img") : null;
+        const renderedWidth = image ? image.getBoundingClientRect().width : 0;
+        const viewBoxWidth = parseFloat(layer.dataset.viewboxWidth || "0");
+        if (!renderedWidth || !viewBoxWidth) {
+          return;
+        }
+        layer.querySelectorAll(".figure-math-overlay[data-size]").forEach(function(overlay) {
+          const dataSize = parseFloat(overlay.dataset.size || "0");
+          if (dataSize) {
+            overlay.style.fontSize = (dataSize * renderedWidth / viewBoxWidth) + "px";
+          }
+        });
+      });
+    }
+
+    function renderFigureMath(root) {
+      const scope = root || document;
+      scope.querySelectorAll(".figure-math-overlay[data-tex]").forEach(function(overlay) {
+        if (!overlay.dataset.rendered && window.katex) {
+          katex.render(overlay.dataset.tex || "", overlay, {
+            displayMode: overlay.dataset.display === "1",
+            throwOnError: false,
+          });
+          overlay.dataset.rendered = "1";
+        }
+      });
+      scope.querySelectorAll(".figure-media img").forEach(function(image) {
+        if (!image.complete) {
+          image.addEventListener("load", function() {
+            updateFigureMathLayout(scope);
+          }, {once:true});
+        }
+      });
+      updateFigureMathLayout(scope);
     }
 
     function getAnchorTarget(link) {
@@ -964,8 +1148,9 @@ APP_JS = r"""
     }
     if (content && lightbox && lightboxImage) {
       content.addEventListener("click", function(event) {
-        const image = event.target && event.target.closest ? event.target.closest(".figure-zoom img") : null;
-        if (!image) {
+        const zoom = event.target && event.target.closest ? event.target.closest(".figure-zoom") : null;
+        const image = zoom ? zoom.querySelector("img") : null;
+        if (!zoom || !image) {
           return;
         }
         lightboxImage.src = image.src;
@@ -1037,6 +1222,10 @@ APP_JS = r"""
         }
       });
     }
+    renderMath(content || document.body);
+    window.addEventListener("resize", function() {
+      updateFigureMathLayout(content || document);
+    });
   });
 })();
 """
@@ -1067,7 +1256,6 @@ HTML_TEMPLATE = """<!doctype html>
 <script id="katex-auto-render-js">{auto_render_js}</script>
 <script>
 window.IRT_DOC_MATH_OPTIONS={{delimiters:[{{left:"$$",right:"$$",display:true}},{{left:"$",right:"$",display:false}}],throwOnError:false}};
-document.addEventListener("DOMContentLoaded",function(){{renderMathInElement(document.body,window.IRT_DOC_MATH_OPTIONS);}});
 </script>
 <script>{app_js}</script>
 </body>
