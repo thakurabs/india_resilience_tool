@@ -31,11 +31,25 @@ none are model-inferred.
 | N7 | Cosmetic | data | US 10 | HOLD | Uploaded-coordinates list omits **District** (shows Custom/Point + Block only). |
 | N8 | Minor | functional | US 15 | ASK-PO | Auto-trigger "Save / Don't Save" popup on context change (spec 794–812) **not observed** — unverified whether missing or gated on a stricter dirty-state precondition. |
 | N9 | Minor | data/doc | US 15 | ASK-PO | Saved-item **tag taxonomy** drift — app emits "Single District" (outside spec's Multi-* set); older items carry **no tag**. |
+| M5 | Major | functional/backend | US 16 | **SEND** | Resilience Profile with a **composite metric** fires `POST /api/api/parquet/trend` + `/scenario-comparison` → **HTTP 500** (×2). UI degrades to "No data available" (no crash), but it's the **same 500 + doubled `/api/api/` family as B1**. |
+| N10 | Minor | a11y | US 16 | HOLD | Profile panel has **`nested-interactive`** controls (axe *serious*) — new vs prior charters; interactive elements nested inside a clickable accordion header. |
+| N11 | Minor | functional | US 16 | ASK-PO | Trend chart offers **"Show model members" + "Max models to draw" slider** but **no "Show percentile band (p05–p95)"** control (spec 872). |
+| N12 | Minor | data | US 16 | ASK-PO | Risk Summary shows **"Position in State"**, spec 861 says **"Position in India"** (scope/label drift; same family as the US 13 tooltip "Rank in state"). |
 
 **US 15 headline (positive):** the full **Save → My Analysis list → Reload** loop
 **works end-to-end** — save `201`, graceful duplicate-name guard `409`, blank⇒default
 label, `/my-analysis` list with search + Rename/Delete, and **reload faithfully
 restores** state + district + all filters (verified visually). No new blocker/major.
+
+**US 16 headline (positive):** the **single-site Resilience Profile works end-to-end**
+for a climate metric (10 steps, 0 failures, 0 errors on the climate-metric path).
+Overview (geography / index / scenario / period), **Risk Summary** (Historical
+Baseline · Projected Value · Δ-with-indicator · Position), a **Trend Over Time**
+line chart (Historical + SSP series, *Show model members* → *Max models* slider),
+a **Scenario Comparison** grouped bar chart (Historical/SSP2-4.5/SSP5-8.5 in the
+spec's blue/orange/red, *Start y-axis at zero*), panel expand/collapse, and a
+**full-screen modal** all render — including a clean **375px mobile** layout. The
+one new backend defect (**M5**) is isolated to **composite** metrics.
 
 ---
 
@@ -58,6 +72,42 @@ restores** state + district + all filters (verified visually). No new blocker/ma
   4. Error banner appears; Network shows the ranking request → 500.
 - **Evidence:** `runs/…_us14-ranking/results.json` (rankingResponses 500), `s1-ranking.png`.
 - **Verify fix:** ranking endpoint returns 200 + rows; re-run `us14` scenario (passes when data loads).
+
+---
+
+## M5 — Resilience Profile fires HTTP 500s on composite metrics
+
+- **What:** In the Resilience Profile (US 16), selecting a **composite** metric
+  (e.g. *Heat Risk Composite (score)*) and opening **Trend Over Time** +
+  **Scenario Comparison** fires two backend calls that both return **HTTP 500**:
+  - `POST https://dev.resilience.org.in/api/api/parquet/trend` → **500**
+  - `POST https://dev.resilience.org.in/api/api/parquet/scenario-comparison` → **500**
+- **Same family as B1:** identical **doubled `/api/api/`** path and a **500** on a
+  `/api/api/parquet/*` endpoint — likely one shared root cause (base-URL/route
+  construction + missing-data error handling). Fixing B1 should be checked against these.
+- **Impact / severity nuance:** *non-blocking* — the UI degrades gracefully to
+  **"No data available"** / **"No data available for the selected filters."** and
+  does not crash. But a 500 is a server error: missing time-series for a composite
+  should return **200 + empty** or **404**, not 500. Rated **Major** for the
+  reproducible server error; downgrade to Minor if the graceful UI is deemed sufficient.
+- **Discriminator:** the **climate-variable** metrics (Annual Mean Temperature, etc.)
+  hit the **same two endpoints and return 200 with full charts** — 0 errors across
+  S1–S9. The 500 is **specific to composite-score metrics**, which have no temporal
+  series. So either the frontend should not request trend/scenario for composites,
+  or the backend should answer empty instead of 500.
+- **Related data behaviour (composite):** Risk Summary also **omits the Historical
+  Baseline** card and shows **Δ = +0.00** for composites (see Informational below).
+- **Reproduce:**
+  1. Log in; State = Telangana, District = Warangal.
+  2. Filters: Risk Domain = Heat Risk, Metric = **Heat Risk Composite (score)**, Scenario, Period, Statistic.
+  3. Open the Resilience Profile → expand **Trend Over Time** and **Scenario Comparison**.
+  4. Both show "No data available"; Network shows the two POSTs → 500.
+- **Evidence:** `runs/…_us16-resilience-profile/results.json` (2× `httperror` 500),
+  `s10-composite-nodata.png`. Contrast with `s5-trend.png` / `s7-scenario-comparison.png`
+  (climate metric, 200 + charts).
+- **Verify fix:** composite metric returns 200 (empty or populated) on
+  `/api/api/parquet/trend` + `/scenario-comparison`; no 500 in Network; re-run `us16`
+  scenario S10 (still shows "No data available" but with 0 real error events).
 
 ---
 
@@ -236,6 +286,41 @@ doubled segment itself is not fatal; B1's 500 is a ranking-endpoint-specific fai
 
 ---
 
+## US 16 — behaviours VERIFIED matching spec (no defect)
+
+Single-site Resilience Profile exercised end-to-end (10 steps, 0 failures; 0 real
+error events on the climate-metric path, `Annual Mean Temperature`):
+
+- **Empty state:** with no location, the panel body reads **"No location(s)
+  selected"** (spec 848's "select a location/coordinate to view Insights" — wording
+  drift only).
+- **Profile Overview:** heading **"Warangal — District Climate Profile"** +
+  **Index / Scenario / Period** lines, all populated from the active filters.
+- **Risk Summary:** **Historical Baseline** (28.27 °C) · **Projected Value**
+  (28.69 °C) · **Δ vs baseline** with up/down indicator (**↑ +0.42**) · **Position**
+  (7) — all present, no NaN/blank. (Label drift → **N12**.)
+- **Trend Over Time (State Average):** SVG line chart, **Historical + SSP245**
+  series, historical/projection divider ~2020, **Year** X-axis, metric Y-axis;
+  **"Show model members"** → **"Max models to draw" slider** (default 5) appears
+  (spec 871 ✓). (Percentile-band control absent → **N11**.)
+- **Scenario Comparison (Period-Mean):** SVG grouped bar chart —
+  **Historical (blue) / SSP2-4.5 (orange) / SSP5-8.5 (red)** matching the spec's
+  colour codes — grouped by period; **"Start y-axis at zero"** control/note present.
+- **Panel interaction:** expand/collapse toggle + **full-screen modal**
+  (`role=dialog`, ~1354×792) with a **"Close expanded Resilience Profile view"**
+  control; the modal shows the same profile (spec 896 "same functionalities").
+- **Dynamic update + data hygiene:** charts re-render on filter change; 0 NaN/blank
+  in the DOM scan; **375px mobile** layout renders the full panel cleanly.
+
+**US 16 corroborates existing a11y findings (+1 new candidate):** the axe scan
+re-surfaces **M2** (`image-alt` critical), **M3** (`color-contrast` serious),
+**N1** (`link-in-text-block`), **N2** (`landmark-one-main`/`region`) — all
+app-chrome, already filed. **New:** **N10** `nested-interactive` (*serious*) —
+not seen on prior charters; the profile-panel accordion header nests interactive
+controls.
+
+---
+
 ## Informational — spec-drifts (NOT defects)
 
 - "Geography Selection" panel is named **"Administrative Panel"**.
@@ -248,6 +333,19 @@ doubled segment itself is not fatal; B1's 500 is a ranking-endpoint-specific fai
 - **US 15:** the saved-analysis list is reached **top-right** via *"Welcome, <name>" →
   My Analysis* (route `/my-analysis`), **not** the top-left nav dropdown the spec
   (line 815) describes. The feature works fully; only the entry-point position differs.
+- **US 16 empty-state wording:** panel says **"No location(s) selected"** vs spec 848's
+  "select a location or coordinate to view Insights" — functionally equivalent.
+- **US 16 composite Risk Summary:** for a **composite** metric the Risk Summary
+  **omits the Historical Baseline** card and shows **Δ = +0.00** (composites have no
+  historical value). Confirm this is intended and that +0.00 is not read as "no change".
+- **US 16 full-screen modal (single-site):** the modal shows the profile only; the
+  spec 897–899 **left/right split** (Left: Saved Analysis / Manage Portfolio / Refine
+  your filters; Right: Compare Portfolio) is **not present for a single site with an
+  empty portfolio** — this appears to be the **US 17 (multi-site)** surface. Not a
+  single-site defect; will verify under US 17.
+- **US 16 Recharts warning (INFO):** two console warnings *"width(-1)/height(-1) of
+  chart should be greater than 0"* — a chart mounts into a zero-size container
+  (collapsed accordion / modal transition). Cosmetic; no user-visible break.
 
 **US 10 behaviours VERIFIED matching spec (no defect):** Add/Upload mode toggle;
 Lat/Long/Custom-Name inputs; **Add to Analysis** and **Save Analysis** disabled by
@@ -274,17 +372,31 @@ Please use the provided sample"*, unsupported type (`.txt`) → *"Unsupported fi
 - **N9 (US 15) tags:** Which tag set is authoritative — should single-site saves be
   tagged "Single District/Block" (app) or is the spec's Multi-* set the intended
   taxonomy? Should older untagged items be backfilled?
+- **M5 (US 16) composite charts:** Should **composite-score** metrics show Trend +
+  Scenario Comparison at all (they have no time series)? If not, the frontend should
+  skip those requests; either way the backend should not return **500** for missing data.
+- **N11 (US 16) percentile band:** Is the **"Show percentile band (p05–p95)"** control
+  (spec 872) in scope? Only "Show model members" + a "Max models to draw" slider exist today.
+- **N12 (US 16) position scope:** Is the Risk Summary rank **state-relative
+  ("Position in State")** as implemented, or **India-wide ("Position in India")** per
+  spec 861? (Same question as the US 13 tooltip "Rank in state".)
+- **US 16 modal split:** Confirm the left/right **Saved Analysis / Manage Portfolio /
+  Refine filters / Compare Portfolio** split is intended **only** for multi-site
+  (US 17) with a non-empty portfolio, not for a single-site profile.
 
 ---
 
 ## Coverage
 
 - **Done:** US 09 (Geography), US 10 (Coordinates), US 11 (Filters), US 13 (Map),
-  US 14 (Ranking — blocked), **US 15 (My Analysis — Save/reload — passing)**.
-- **Not yet covered:** US 16 (Resilience Profile / single-site), US 17 (My Analysis
-  Profile / multi-site portfolio), US 01 (landing), US 05–08 (nav/profile/feedback).
-- **Coverage caveat (US 15):** the responsive (375px) screenshots landed on the
-  dashboard, not the `/my-analysis` route — **mobile layout of the saved list is
-  unverified**; re-check when covering US 16/17 (same panel family).
+  US 14 (Ranking — blocked), US 15 (My Analysis — Save/reload — passing),
+  **US 16 (Resilience Profile / single-site — passing; M5 composite-500)**.
+- **Not yet covered:** US 17 (My Analysis Profile / multi-site portfolio — the
+  Manage Portfolio / Compare Portfolio / left-right-split surface), US 01 (landing),
+  US 05–08 (nav/profile/feedback).
+- **US 15 mobile caveat — partially closed:** the 375px shot for US 16 confirms the
+  right-hand **profile panel** renders cleanly on mobile (same panel family). The
+  `/my-analysis` **saved-list** route specifically is still unverified at 375px —
+  capture it under US 17.
 - **Blocked on tooling:** US 02–04 (auth/2FA/reset) need a test email inbox — out of
   current autonomous scope; decide whether to cover.
