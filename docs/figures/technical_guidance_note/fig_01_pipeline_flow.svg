@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="760" viewBox="0 0 1320 760" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="426.5" viewBox="0 107.1 1320 426.5" role="img" aria-labelledby="title desc">
 <title id="title">FIG-01. End-to-end pipeline flow</title>
 <desc id="desc">IRT pipeline schematic.</desc>
 <style>
@@ -18,7 +18,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
 </marker>
 </defs>
-<rect width="1320" height="760" fill="white"/>
+<rect x="0" y="107.1" width="1320" height="426.5" fill="white" data-bg="canvas"/>
 <rect x="36" y="150" width="178" height="140" rx="6" fill="#dff0fb" stroke="#2f80b7" stroke-width="1.8" class="flow-box"/>
 <text x="125.0" y="195.0" class="label" text-anchor="middle" data-box="36,150,178,140">Climate and flood</text>
 <text x="125.0" y="212.0" class="label" text-anchor="middle" data-box="36,150,178,140">inputs</text>

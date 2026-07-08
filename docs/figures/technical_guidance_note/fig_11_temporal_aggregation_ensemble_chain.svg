@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="607.22" viewBox="0 95.68 1200 607.22" role="img" aria-labelledby="title desc">
 <title id="title">FIG-11. Temporal aggregation and ensemble chain</title>
 <desc id="desc">Daily to annual to period to ensemble schematic.</desc>
 <style>
@@ -18,7 +18,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
 </marker>
 </defs>
-<rect width="1200" height="760" fill="white"/>
+<rect x="0" y="95.68" width="1200" height="607.22" fill="white" data-bg="canvas"/>
 <rect x="70" y="165" width="220" height="104" rx="6" fill="#dff0fb" stroke="#2f80b7" stroke-width="1.8" class="flow-box"/>
 <text x="180.0" y="200.5" class="label" text-anchor="middle" data-box="70,165,220,104">Daily model fields</text>
 <text x="180.0" y="223.5" class="small" text-anchor="middle" data-box="70,165,220,104">tasmax, pr, etc.</text>

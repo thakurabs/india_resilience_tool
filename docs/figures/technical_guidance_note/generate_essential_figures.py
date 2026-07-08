@@ -8,6 +8,8 @@ schematics/plots so they can be reviewed and edited without a plotting runtime.
 from __future__ import annotations
 
 import argparse
+import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from statistics import NormalDist
@@ -36,14 +38,27 @@ COLORS = {
 }
 
 
+SVG_NS = "http://www.w3.org/2000/svg"
+CROP_PADDING_PX = 16.0
+ARROW_MARKER_ALLOWANCE_PX = 14.0
+PATH_TOKEN_RE = re.compile(r"[A-Za-z]|[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
+POINT_TOKEN_RE = re.compile(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?")
+ROTATE_RE = re.compile(
+    r"^rotate\(\s*(?P<angle>[-+]?(?:\d+(?:\.\d*)?|\.\d+))"
+    r"(?:[\s,]+(?P<cx>[-+]?(?:\d+(?:\.\d*)?|\.\d+))[\s,]+(?P<cy>[-+]?(?:\d+(?:\.\d*)?|\.\d+)))?\s*\)$"
+)
+
+
 @dataclass(frozen=True)
 class Svg:
     width: int = 1200
     height: int = 760
 
     def wrap(self, body: Iterable[str], title: str, desc: str) -> str:
+        body_lines = list(body)
+        crop_y, crop_height = _vertical_crop(self.width, self.height, body_lines)
         lines = [
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.width}" height="{self.height}" viewBox="0 0 {self.width} {self.height}" role="img" aria-labelledby="title desc">',
+            f'<svg xmlns="{SVG_NS}" width="{self.width}" height="{_fmt_float(crop_height)}" viewBox="0 {_fmt_float(crop_y)} {self.width} {_fmt_float(crop_height)}" role="img" aria-labelledby="title desc">',
             f'<title id="title">{escape(title)}</title>',
             f'<desc id="desc">{escape(desc)}</desc>',
             "<style>",
@@ -63,8 +78,8 @@ class Svg:
             '<path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>',
             "</marker>",
             "</defs>",
-            f'<rect width="{self.width}" height="{self.height}" fill="white"/>',
-            *body,
+            f'<rect x="0" y="{_fmt_float(crop_y)}" width="{self.width}" height="{_fmt_float(crop_height)}" fill="white" data-bg="canvas"/>',
+            *body_lines,
             "</svg>",
         ]
         return "\n".join(lines) + "\n"
@@ -73,8 +88,217 @@ class Svg:
 FONT_PX = {"title": 26.0, "subtitle": 15.0, "label": 15.0, "small": 12.0, "tiny": 10.5, "note": 12.0}
 
 
+@dataclass(frozen=True)
+class Bounds:
+    left: float
+    top: float
+    right: float
+    bottom: float
+
+    @property
+    def width(self) -> float:
+        return self.right - self.left
+
+    @property
+    def height(self) -> float:
+        return self.bottom - self.top
+
+    def expand(self, amount: float) -> "Bounds":
+        return Bounds(self.left - amount, self.top - amount, self.right + amount, self.bottom + amount)
+
+    def union(self, other: "Bounds") -> "Bounds":
+        return Bounds(
+            min(self.left, other.left),
+            min(self.top, other.top),
+            max(self.right, other.right),
+            max(self.bottom, other.bottom),
+        )
+
+
+def _fmt_float(value: float) -> str:
+    if abs(value - round(value)) < 1e-6:
+        return str(int(round(value)))
+    return f"{value:.3f}".rstrip("0").rstrip(".")
+
+
 def approx_px(content: str, font_px: float, bold: bool = False) -> float:
     return len(content) * font_px * (0.60 if bold else 0.53)
+
+
+def _parse_points(value: str) -> list[tuple[float, float]]:
+    numbers = [float(token.group(0)) for token in POINT_TOKEN_RE.finditer(value)]
+    if len(numbers) % 2:
+        raise ValueError(f"Expected an even number of point coordinates, got {value!r}")
+    return list(zip(numbers[0::2], numbers[1::2]))
+
+
+def _path_points(d: str) -> list[tuple[float, float]]:
+    tokens = [match.group(0) for match in PATH_TOKEN_RE.finditer(d)]
+    points: list[tuple[float, float]] = []
+    command: str | None = None
+    i = 0
+    while i < len(tokens):
+        token = tokens[i]
+        if token.isalpha():
+            command = token
+            i += 1
+            if command in {"Z", "z"}:
+                command = None
+                continue
+        if command not in {"M", "L"}:
+            raise ValueError(f"Unsupported SVG path command {command!r}; only absolute M/L paths are supported")
+        if i + 1 >= len(tokens) or tokens[i].isalpha() or tokens[i + 1].isalpha():
+            raise ValueError(f"Malformed SVG path data for command {command!r}: {d!r}")
+        points.append((float(tokens[i]), float(tokens[i + 1])))
+        i += 2
+        if command == "M":
+            command = "L"
+    return points
+
+
+def _bounds_from_points(points: Sequence[tuple[float, float]]) -> Bounds | None:
+    if not points:
+        return None
+    xs = [point[0] for point in points]
+    ys = [point[1] for point in points]
+    return Bounds(min(xs), min(ys), max(xs), max(ys))
+
+
+def _class_tokens(node: ET.Element) -> set[str]:
+    return set(node.attrib.get("class", "").split())
+
+
+def _stroke_allowance(node: ET.Element) -> float:
+    stroke = node.attrib.get("stroke")
+    class_names = _class_tokens(node)
+    if "arrow" in class_names:
+        width = 2.0
+    elif stroke and stroke != "none":
+        width = _float_attr(node, "stroke-width", 1.0)
+    else:
+        width = _float_attr(node, "stroke-width", 0.0)
+    allowance = max(width / 2.0, 0.0)
+    if "arrow" in class_names or node.attrib.get("marker-end"):
+        allowance += ARROW_MARKER_ALLOWANCE_PX
+    return allowance
+
+
+def _apply_transform(bounds: Bounds, transform: str | None) -> Bounds:
+    if not transform:
+        return bounds
+    match = ROTATE_RE.match(transform.strip())
+    if not match:
+        raise ValueError(f"Unsupported SVG transform {transform!r}; only rotate(...) is supported")
+    angle = math.radians(float(match.group("angle")))
+    cx = float(match.group("cx")) if match.group("cx") is not None else 0.0
+    cy = float(match.group("cy")) if match.group("cy") is not None else 0.0
+    sin_a = math.sin(angle)
+    cos_a = math.cos(angle)
+    corners = [
+        (bounds.left, bounds.top),
+        (bounds.right, bounds.top),
+        (bounds.right, bounds.bottom),
+        (bounds.left, bounds.bottom),
+    ]
+    rotated = []
+    for x, y in corners:
+        dx = x - cx
+        dy = y - cy
+        rotated.append((cx + dx * cos_a - dy * sin_a, cy + dx * sin_a + dy * cos_a))
+    result = _bounds_from_points(rotated)
+    if result is None:  # pragma: no cover - four corners always produce bounds.
+        raise ValueError("Could not compute rotated bounds")
+    return result
+
+
+def _text_bounds(node: ET.Element) -> Bounds:
+    content = "".join(node.itertext())
+    x = _float_attr(node, "x")
+    y = _float_attr(node, "y")
+    cls = node.attrib.get("class", "small").split()[0]
+    font_px = FONT_PX.get(cls, FONT_PX["small"])
+    bold = cls in {"title", "label"}
+    text_width = approx_px(content, font_px, bold=bold)
+    if any(_local_name(child.tag) == "tspan" for child in node):
+        text_width *= 1.08
+        top = y - 1.20 * font_px
+        bottom = y + 0.62 * font_px
+    else:
+        top = y - 0.86 * font_px
+        bottom = y + 0.30 * font_px
+    anchor = node.attrib.get("text-anchor", "start")
+    left = x - text_width / 2 if anchor == "middle" else x - text_width if anchor == "end" else x
+    bounds = Bounds(left, top, left + text_width, bottom)
+    return _apply_transform(bounds, node.attrib.get("transform"))
+
+
+def _element_bounds(node: ET.Element) -> Bounds | None:
+    tag = _local_name(node.tag)
+    if tag == "rect":
+        bounds = Bounds(
+            _float_attr(node, "x"),
+            _float_attr(node, "y"),
+            _float_attr(node, "x") + _float_attr(node, "width"),
+            _float_attr(node, "y") + _float_attr(node, "height"),
+        )
+        return bounds.expand(_stroke_allowance(node))
+    if tag == "circle":
+        cx = _float_attr(node, "cx")
+        cy = _float_attr(node, "cy")
+        r = _float_attr(node, "r")
+        return Bounds(cx - r, cy - r, cx + r, cy + r).expand(_stroke_allowance(node))
+    if tag == "line":
+        bounds = _bounds_from_points(
+            [
+                (_float_attr(node, "x1"), _float_attr(node, "y1")),
+                (_float_attr(node, "x2"), _float_attr(node, "y2")),
+            ]
+        )
+        return bounds.expand(_stroke_allowance(node)) if bounds else None
+    if tag == "path":
+        bounds = _bounds_from_points(_path_points(node.attrib.get("d", "")))
+        return bounds.expand(_stroke_allowance(node)) if bounds else None
+    if tag in {"polyline", "polygon"}:
+        bounds = _bounds_from_points(_parse_points(node.attrib.get("points", "")))
+        return bounds.expand(_stroke_allowance(node)) if bounds else None
+    if tag == "text":
+        return _text_bounds(node)
+    return None
+
+
+def _iter_bounded_nodes(root: ET.Element, *, include_background: bool = False) -> Iterable[ET.Element]:
+    def visit(node: ET.Element, skip: bool = False) -> Iterable[ET.Element]:
+        tag = _local_name(node.tag)
+        skip_here = skip or tag in {"defs", "style"}
+        if not skip_here and (include_background or node.attrib.get("data-bg") != "canvas"):
+            yield node
+        for child in list(node):
+            yield from visit(child, skip_here)
+
+    return visit(root)
+
+
+def _visible_bounds(root: ET.Element, *, include_background: bool = False) -> Bounds | None:
+    bounds: Bounds | None = None
+    for node in _iter_bounded_nodes(root, include_background=include_background):
+        node_bounds = _element_bounds(node)
+        if node_bounds is not None:
+            bounds = node_bounds if bounds is None else bounds.union(node_bounds)
+    return bounds
+
+
+def _body_root(body: Sequence[str]) -> ET.Element:
+    return ET.fromstring(f'<svg xmlns="{SVG_NS}">' + "\n".join(body) + "</svg>")
+
+
+def _vertical_crop(width: float, height: float, body: Sequence[str]) -> tuple[float, float]:
+    del width  # Cropping is intentionally vertical-only.
+    bounds = _visible_bounds(_body_root(body))
+    if bounds is None:
+        return 0.0, height
+    crop_y = max(0.0, bounds.top - CROP_PADDING_PX)
+    crop_bottom = min(height, bounds.bottom + CROP_PADDING_PX)
+    return crop_y, max(1.0, crop_bottom - crop_y)
 
 
 def wrap_words(content: str, max_px: float, font_px: float, bold: bool = False) -> list[str]:
@@ -1175,6 +1399,17 @@ def _canvas_size(root: ET.Element) -> tuple[float, float]:
     return _float_attr(root, "width", 1200.0), _float_attr(root, "height", 760.0)
 
 
+def _view_box(root: ET.Element) -> tuple[float, float, float, float]:
+    view_box = root.attrib.get("viewBox")
+    if view_box:
+        parts = [float(part) for part in view_box.replace(",", " ").split()]
+        if len(parts) != 4:
+            raise AssertionError(f"Invalid viewBox: {view_box!r}")
+        return parts[0], parts[1], parts[2], parts[3]
+    width, height = _canvas_size(root)
+    return 0.0, 0.0, width, height
+
+
 def _rects(root: ET.Element, cls: str) -> list[tuple[float, float, float, float]]:
     found: list[tuple[float, float, float, float]] = []
     for node in root.iter():
@@ -1198,48 +1433,44 @@ def _overlap(a: tuple[float, float, float, float], b: tuple[float, float, float,
 
 def validate(svg: str, filename: str) -> None:
     root = ET.fromstring(svg)
-    width, height = _canvas_size(root)
+    min_x, min_y, width, height = _view_box(root)
+    max_x = min_x + width
+    max_y = min_y + height
 
-    for node in root.iter():
+    backgrounds = [
+        node
+        for node in root.iter()
+        if _local_name(node.tag) == "rect" and node.attrib.get("data-bg") == "canvas"
+    ]
+    if len(backgrounds) != 1:
+        raise AssertionError(f"{filename}: expected one generator background rect")
+    bg = backgrounds[0]
+    bg_box = (_float_attr(bg, "x"), _float_attr(bg, "y"), _float_attr(bg, "width"), _float_attr(bg, "height"))
+    if abs(bg_box[0] - min_x) > 0.1 or abs(bg_box[1] - min_y) > 0.1 or abs(bg_box[2] - width) > 0.1 or abs(bg_box[3] - height) > 0.1:
+        raise AssertionError(f"{filename}: background rect does not match viewBox")
+
+    for node in _iter_bounded_nodes(root, include_background=True):
         tag = _local_name(node.tag)
-        if tag == "rect":
-            x = _float_attr(node, "x")
-            y = _float_attr(node, "y")
-            w = _float_attr(node, "width")
-            h = _float_attr(node, "height")
-            if x < -0.1 or y < -0.1 or x + w > width + 0.1 or y + h > height + 0.1:
-                raise AssertionError(f"{filename}: rect outside canvas at {(x, y, w, h)}")
-        elif tag == "circle":
-            cx = _float_attr(node, "cx")
-            cy = _float_attr(node, "cy")
-            r = _float_attr(node, "r")
-            if cx - r < -0.1 or cy - r < -0.1 or cx + r > width + 0.1 or cy + r > height + 0.1:
-                raise AssertionError(f"{filename}: circle outside canvas at {(cx, cy, r)}")
-        elif tag == "line":
-            x1 = _float_attr(node, "x1")
-            y1 = _float_attr(node, "y1")
-            x2 = _float_attr(node, "x2")
-            y2 = _float_attr(node, "y2")
-            if min(x1, x2) < -0.1 or min(y1, y2) < -0.1 or max(x1, x2) > width + 0.1 or max(y1, y2) > height + 0.1:
-                raise AssertionError(f"{filename}: line outside canvas")
-        elif tag == "text":
+        if tag in {"rect", "circle", "line", "path", "polyline", "polygon", "text"}:
+            bounds = _element_bounds(node)
+            if bounds is not None and (
+                bounds.left < min_x - 1.0
+                or bounds.right > max_x + 1.0
+                or bounds.top < min_y - 1.0
+                or bounds.bottom > max_y + 1.0
+            ):
+                content = "".join(node.itertext()).strip()
+                detail = f": {content!r}" if content else ""
+                raise AssertionError(f"{filename}: {tag} outside viewBox{detail}")
+        if tag == "text":
             content = "".join(node.itertext())
-            x = _float_attr(node, "x")
-            y = _float_attr(node, "y")
-            cls = node.attrib.get("class", "small")
-            font_px = FONT_PX.get(cls, FONT_PX["small"])
-            bold = cls in {"title", "label"}
-            text_width = approx_px(content, font_px, bold=bold)
-            anchor = node.attrib.get("text-anchor", "start")
-            left = x - text_width / 2 if anchor == "middle" else x - text_width if anchor == "end" else x
-            right = left + text_width
-            if left < -1.0 or right > width + 1.0 or y < -1.0 or y > height + 1.0:
-                raise AssertionError(f"{filename}: text outside canvas: {content!r}")
+            raw_bounds = _text_bounds(node)
             box_meta = node.attrib.get("data-box")
             if box_meta:
                 bx, by, bw, bh = [float(part) for part in box_meta.split(",")]
-                if left < bx + 8 or right > bx + bw - 8:
+                if raw_bounds.left < bx + 8 or raw_bounds.right > bx + bw - 8:
                     raise AssertionError(f"{filename}: text exceeds box: {content!r}")
+                y = _float_attr(node, "y")
                 if y < by + 8 or y > by + bh - 6:
                     raise AssertionError(f"{filename}: text vertical extent exceeds box: {content!r}")
 
@@ -1268,7 +1499,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         path = OUT_DIR / filename
         svg = builder()
         validate(svg, filename)
-        path.write_text(svg, encoding="utf-8")
+        path.write_text(svg, encoding="utf-8", newline="\n")
         if args.png:
             export_png(path)
         try:

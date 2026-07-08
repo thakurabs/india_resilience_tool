@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="358.2" viewBox="0 69.1 1200 358.2" role="img" aria-labelledby="title desc">
 <title id="title">FIG-06. BCSD schematic</title>
 <desc id="desc">BCSD two-step schematic.</desc>
 <style>
@@ -18,7 +18,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
 </marker>
 </defs>
-<rect width="1200" height="760" fill="white"/>
+<rect x="0" y="69.1" width="1200" height="358.2" fill="white" data-bg="canvas"/>
 <rect x="78" y="168" width="192" height="192" fill="#e7f2fb" stroke="#2f80b7" stroke-width="1.4"/>
 <line x1="142" y1="168" x2="142" y2="360" stroke="#2f80b7" stroke-width="2"/>
 <line x1="206" y1="168" x2="206" y2="360" stroke="#2f80b7" stroke-width="0.8"/>

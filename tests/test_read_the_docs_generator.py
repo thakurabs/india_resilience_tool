@@ -90,9 +90,14 @@ def test_generated_html_invariants() -> None:
     for root in _embedded_svg_roots(html_doc):
         visible_text_nodes = [node for node in root.iter() if _local_name(node.tag) == "text"]
         assert not any(node.attrib.get("class") in {"title", "subtitle", "note"} for node in visible_text_nodes)
+        view_box = [float(part) for part in root.attrib["viewBox"].split()]
+        assert view_box[3] < 760
+        assert float(root.attrib["height"]) == view_box[3]
         visible_text = "\n".join(_visible_svg_text(root))
         for banned in BANNED_VISIBLE_CHROME:
             assert banned not in visible_text
+
+    assert ".doc-figure{margin:24px 0;padding:8px;" in html_doc
 
 
 def test_generated_html_has_no_duplicate_heading_ids() -> None:

@@ -8,6 +8,8 @@ from pathlib import Path
 from types import ModuleType
 from xml.etree import ElementTree as ET
 
+import pytest
+
 
 GENERATOR_PATH = Path("docs/figures/technical_guidance_note/generate_essential_figures.py")
 BANNED_VISIBLE_CHROME = (
@@ -39,6 +41,20 @@ def _visible_text_nodes(root: ET.Element) -> list[ET.Element]:
     return [node for node in root.iter() if _local_name(node.tag) == "text"]
 
 
+def _view_box(root: ET.Element) -> tuple[float, float, float, float]:
+    return tuple(float(part) for part in root.attrib["viewBox"].split())  # type: ignore[return-value]
+
+
+def _background_rect(root: ET.Element) -> ET.Element:
+    backgrounds = [
+        node
+        for node in root.iter()
+        if _local_name(node.tag) == "rect" and node.attrib.get("data-bg") == "canvas"
+    ]
+    assert len(backgrounds) == 1
+    return backgrounds[0]
+
+
 def test_generated_svgs_keep_accessible_metadata_without_visible_chrome() -> None:
     generator = _load_generator()
 
@@ -62,6 +78,61 @@ def test_generated_svgs_keep_accessible_metadata_without_visible_chrome() -> Non
         text_content = "\n".join("".join(node.itertext()) for node in visible_text)
         for banned in BANNED_VISIBLE_CHROME:
             assert banned not in text_content
+
+
+def test_generated_svgs_are_vertically_cropped_to_visible_content() -> None:
+    generator = _load_generator()
+    formerly_whitespace_heavy = {
+        "fig_02_hazard_exposure_vulnerability_scope.svg",
+        "fig_06_bcsd_schematic.svg",
+        "fig_18_three_lens_blended_rule.svg",
+        "fig_20_district_a_b_lens_example.svg",
+    }
+
+    assert len(generator.FIGURES) == 14
+    for filename, builder in generator.FIGURES.items():
+        root = ET.fromstring(builder())
+        _min_x, min_y, _width, height = _view_box(root)
+        content_bounds = generator._visible_bounds(root)
+        assert content_bounds is not None
+        assert float(root.attrib["height"]) == height
+        assert height < 760
+        if filename in formerly_whitespace_heavy:
+            assert min_y > 0
+
+        background = _background_rect(root)
+        assert float(background.attrib["y"]) == min_y
+        assert float(background.attrib["height"]) == height
+
+        if min_y > 0:
+            assert abs(content_bounds.top - min_y - generator.CROP_PADDING_PX) <= 1.0
+        bottom_padding = min_y + height - content_bounds.bottom
+        assert 0.0 <= bottom_padding <= generator.CROP_PADDING_PX + 1.0
+
+
+def test_visible_bounds_ignore_generator_background_and_reject_unknown_paths() -> None:
+    generator = _load_generator()
+    svg = generator.Svg(width=160, height=120).wrap(
+        [
+            '<rect x="0" y="0" width="160" height="120" fill="white" data-bg="canvas"/>',
+            '<rect x="20" y="45" width="50" height="20" fill="white" stroke="#52606d"/>',
+        ],
+        "Bounds test",
+        "Background exclusion test.",
+    )
+    root = ET.fromstring(svg)
+    bounds = generator._visible_bounds(root)
+
+    assert bounds is not None
+    assert 40 <= bounds.top <= 45
+    assert bounds.bottom <= 70
+
+    with pytest.raises(ValueError, match="Unsupported SVG path command"):
+        generator.Svg(width=160, height=120).wrap(
+            ['<path d="M 10 10 C 20 20 30 20 40 10" stroke="#52606d" fill="none"/>'],
+            "Bad path",
+            "Unsupported path test.",
+        )
 
 
 def test_generator_cli_exports_png_only_when_requested(monkeypatch, tmp_path: Path) -> None:

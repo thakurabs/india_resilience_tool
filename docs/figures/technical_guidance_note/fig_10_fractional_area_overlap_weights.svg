@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="498.95" viewBox="0 123.45 1200 498.95" role="img" aria-labelledby="title desc">
 <title id="title">FIG-10. Fractional-area overlap weights</title>
 <desc id="desc">Schematic of polygon-cell area weights.</desc>
 <style>
@@ -18,7 +18,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
 </marker>
 </defs>
-<rect width="1200" height="760" fill="white"/>
+<rect x="0" y="123.45" width="1200" height="498.95" fill="white" data-bg="canvas"/>
 <rect x="88" y="140" width="96" height="96" rx="0" fill="#edf7fb" stroke="#d9e2ec" stroke-width="1.1"/>
 <text x="174.0" y="160.0" class="tiny" text-anchor="end">v1=22</text>
 <rect x="184" y="140" width="96" height="96" rx="0" fill="#d7eef7" stroke="#d9e2ec" stroke-width="1.1"/>

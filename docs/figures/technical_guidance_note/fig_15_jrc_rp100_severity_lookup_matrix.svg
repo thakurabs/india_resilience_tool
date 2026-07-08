@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="633.2" viewBox="0 63.4 1200 633.2" role="img" aria-labelledby="title desc">
 <title id="title">FIG-15. JRC RP-100 severity lookup matrix</title>
 <desc id="desc">Heatmap of fixed JRC depth and extent severity classes.</desc>
 <style>
@@ -18,7 +18,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
 </marker>
 </defs>
-<rect width="1200" height="760" fill="white"/>
+<rect x="0" y="63.4" width="1200" height="633.2" fill="white" data-bg="canvas"/>
 <rect x="140" y="80" width="890" height="600" rx="6" fill="#f8fafc" stroke="#d9e2ec" stroke-width="1.2"/>
 <text x="595.0" y="108.0" class="label" text-anchor="middle">Depth class</text>
 <text x="182.0" y="355.0" class="label" text-anchor="middle" transform="rotate(-90 182 355.0)">Extent class</text>

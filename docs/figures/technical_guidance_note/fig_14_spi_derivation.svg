@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="443" viewBox="0 118.5 1200 443" role="img" aria-labelledby="title desc">
 <title id="title">FIG-14. SPI derivation</title>
 <desc id="desc">Three-panel illustrative SPI transformation.</desc>
 <style>
@@ -18,7 +18,7 @@ text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
 <path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
 </marker>
 </defs>
-<rect width="1200" height="760" fill="white"/>
+<rect x="0" y="118.5" width="1200" height="443" fill="white" data-bg="canvas"/>
 <rect x="60" y="135" width="320" height="410" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
 <text x="220.0" y="165.0" class="label" text-anchor="middle">1. Accumulate monthly precipitation</text>
 <rect x="440" y="135" width="320" height="410" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
