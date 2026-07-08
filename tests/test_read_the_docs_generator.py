@@ -193,7 +193,11 @@ def test_generated_html_focuses_reference_targets_from_existing_hash_handler() -
 def test_generated_html_uses_readable_content_width() -> None:
     html_doc, _size_info = _generated_html()
 
-    assert ".content{width:100%;max-width:920px;margin:0 auto;padding:34px 40px 96px}" in html_doc
+    assert (
+        ".content{width:calc(100% - clamp(24px,4vw,64px));max-width:920px;"
+        "margin:0 auto 0 clamp(24px,4vw,64px);padding:34px 40px 96px}"
+    ) in html_doc
+    assert ".content{width:100%;margin:0;padding:22px 18px 88px}" in html_doc
     assert "html{font-size:var(--irt-doc-font-size,15px)}" in html_doc
     assert ".content{max-width:none" not in html_doc
 
