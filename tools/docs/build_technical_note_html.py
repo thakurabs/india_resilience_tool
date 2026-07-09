@@ -882,6 +882,14 @@ APP_CSS = APP_CSS.replace(
     ".figure-math-overlay .katex-display{margin:0}",
 )
 
+APP_CSS = APP_CSS.replace(
+    ".lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}"
+    ".lightbox.open{display:flex}.lightbox img{max-width:96vw;max-height:90vh;background:#fff;border-radius:8px}",
+    ".lightbox{position:fixed;inset:0;background:rgba(0,0,0,.78);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}"
+    ".lightbox.open{display:flex}.lightbox-media{position:relative;display:inline-block;line-height:0;max-width:96vw;max-height:90vh}"
+    ".lightbox-media img{display:block;width:auto;max-width:96vw;max-height:90vh;object-fit:contain;background:#fff;border-radius:8px}",
+)
+
 APP_JS = r"""
 (function() {
   document.addEventListener("DOMContentLoaded", function() {
@@ -1137,6 +1145,7 @@ APP_JS = r"""
 
     const lightbox = document.querySelector(".lightbox");
     const lightboxImage = lightbox ? lightbox.querySelector("img") : null;
+    const lightboxMathSlot = lightbox ? lightbox.querySelector(".lightbox-math-slot") : null;
     const lightboxClose = document.querySelector(".lightbox-close");
     function closeLightbox() {
       if (!lightbox || !lightboxImage) {
@@ -1145,6 +1154,9 @@ APP_JS = r"""
       lightbox.classList.remove("open");
       lightboxImage.removeAttribute("src");
       lightboxImage.alt = "";
+      if (lightboxMathSlot) {
+        lightboxMathSlot.replaceChildren();
+      }
     }
     if (content && lightbox && lightboxImage) {
       content.addEventListener("click", function(event) {
@@ -1155,7 +1167,16 @@ APP_JS = r"""
         }
         lightboxImage.src = image.src;
         lightboxImage.alt = image.alt;
+        if (lightboxMathSlot) {
+          const sourceMathLayer = zoom.querySelector(".figure-math-layer");
+          if (sourceMathLayer) {
+            lightboxMathSlot.replaceChildren(sourceMathLayer.cloneNode(true));
+          } else {
+            lightboxMathSlot.replaceChildren();
+          }
+        }
         lightbox.classList.add("open");
+        renderFigureMath(lightbox);
       });
       if (lightboxClose) {
         lightboxClose.addEventListener("click", closeLightbox);
@@ -1225,6 +1246,9 @@ APP_JS = r"""
     renderMath(content || document.body);
     window.addEventListener("resize", function() {
       updateFigureMathLayout(content || document);
+      if (lightbox && lightbox.classList.contains("open")) {
+        updateFigureMathLayout(lightbox);
+      }
     });
   });
 })();
@@ -1251,7 +1275,7 @@ HTML_TEMPLATE = """<!doctype html>
 </main>
 </div>
 <button class="back-top" type="button" aria-label="Back to top">↑</button>
-<div class="lightbox" role="dialog" aria-modal="true" aria-label="Enlarged figure"><button class="lightbox-close" type="button" aria-label="Close enlarged figure">&times;</button><img alt=""></div>
+<div class="lightbox" role="dialog" aria-modal="true" aria-label="Enlarged figure"><button class="lightbox-close" type="button" aria-label="Close enlarged figure">&times;</button><span class="figure-media lightbox-media"><img alt=""><span class="lightbox-math-slot"></span></span></div>
 <script id="katex-js">{katex_js}</script>
 <script id="katex-auto-render-js">{auto_render_js}</script>
 <script>

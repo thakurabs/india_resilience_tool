@@ -353,12 +353,16 @@ def test_generated_html_has_accessible_lightbox_close_controls() -> None:
     assert 'aria-modal="true"' in html_doc
     assert 'aria-label="Enlarged figure"' in html_doc
     assert 'class="lightbox-close"' in html_doc
+    assert 'class="figure-media lightbox-media"' in html_doc
+    assert 'class="lightbox-math-slot"' in html_doc
     assert 'aria-label="Close enlarged figure"' in html_doc
     assert "function closeLightbox()" in html_doc
     assert 'document.querySelector(".lightbox-close")' in html_doc
+    assert 'lightbox.querySelector(".lightbox-math-slot")' in html_doc
     assert 'lightboxClose.addEventListener("click", closeLightbox)' in html_doc
     assert 'lightboxImage.removeAttribute("src")' in html_doc
     assert 'lightboxImage.alt = "";' in html_doc
+    assert "lightboxMathSlot.replaceChildren();" in html_doc
     assert "event.target === lightbox" in html_doc
     assert 'event.key === "Escape"' in html_doc
     assert 'lightbox.classList.contains("open")' in html_doc
@@ -383,13 +387,22 @@ def test_generated_html_renders_svg_math_overlays_explicitly() -> None:
     html_doc, _size_info = _generated_html()
 
     assert ".figure-media{position:relative;display:block;width:100%}" in html_doc
+    assert ".lightbox-media{position:relative;display:inline-block;line-height:0;max-width:96vw;max-height:90vh}" in html_doc
+    assert ".lightbox-media img{display:block;width:auto;max-width:96vw;max-height:90vh;object-fit:contain" in html_doc
     assert ".figure-math-layer{position:absolute;inset:0;pointer-events:none}" in html_doc
     assert ".figure-math-overlay .katex-display{margin:0}" in html_doc
     assert 'aria-hidden="true" data-tex=' in html_doc
     assert "function renderFigureMath(root)" in html_doc
     assert "katex.render(overlay.dataset.tex || \"\", overlay" in html_doc
     assert "dataSize * renderedWidth / viewBoxWidth" in html_doc
+    assert 'const sourceMathLayer = zoom.querySelector(".figure-math-layer");' in html_doc
+    assert "sourceMathLayer.cloneNode(true)" in html_doc
+    assert "lightboxMathSlot.replaceChildren(sourceMathLayer.cloneNode(true));" in html_doc
+    assert "renderFigureMath(lightbox);" in html_doc
     assert 'window.addEventListener("resize"' in html_doc
+    assert "updateFigureMathLayout(content || document);" in html_doc
+    assert 'if (lightbox && lightbox.classList.contains("open"))' in html_doc
+    assert "updateFigureMathLayout(lightbox);" in html_doc
 
 
 def test_generated_html_omits_dashboard_cover_sections() -> None:
