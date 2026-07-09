@@ -26,6 +26,7 @@ reproduced manually · `DEPRIORITISED` = parked, revisit later ·
 | M1 | Major | a11y | US 09 | HOLD→keep | Collapsed-panel reopen affordance / toggle labelling for AT users. |
 | M2 | Major | a11y | US 09/11 | HOLD→keep | Header brand link + icon has no accessible name (critical `image-alt`). |
 | M4 | Major | functional | US 10 | **SEND** | "Show on Map" resolves a valid coordinate correctly **but fires a contradictory "Location could not be resolved" error toast** at the same time. **Reproduced 3/3** on video (`runs/repro-m4/`) — but **only on the first "Show on Map" of a fresh page load**. The resolve API (`POST /api/api/geo/reverse-geocode`) returns **200**; the toast fires ~60ms after click, **independent of the successful response** → a **frontend logic bug**, not a backend failure. Not reproducible in a warmed session (why it looked flaky). |
+| M7 | Major | functional/data | US 10 | HOLD | **No value or geographic validation on coordinate upload.** Out-of-range (lat 999 / long −500 / 1e9), non-numeric (`abc`), empty, unbounded-name (5000 chars), and out-of-India (London/Pacific/Null Island) coordinates are all **accepted, resolved to blocks, and plotted** — identically across **CSV, XLSX, and shapefile (.zip)**. All uploads return HTTP 200 → the only rejection is client-side structural (wrong shape / unsupported type / >1 MB); cell values are never validated. |
 | N1 | Minor | a11y | US 11 | HOLD | MapLibre attribution link not distinguishable without color (third-party control). |
 | N2 | Minor | a11y | US 09 | HOLD | No `<main>` landmark; 9 blocks outside landmarks. |
 | N3 | Minor | data | US 13 | ASK-PO | Map tooltip omits "Baseline (1990–2010)" and "Δ vs baseline / Level of Change". |
@@ -50,6 +51,9 @@ reproduced manually · `DEPRIORITISED` = parked, revisit later ·
 | N20 | Cosmetic | functional | US 07 | ASK-PO | Profile save button labelled **"Update"** (spec 302 says **"Save"**). |
 | N21 | Minor | functional | US 08 | ASK-PO | Feedback popup **auto-triggers on a timer mid-session** (unprompted). Spec 08 defines only header-manual + logout-auto triggers, not a timed nudge. |
 | N22 | Minor | data/doc | US 01 | ASK-PO | Logged-in header shows no **Donate button** or **Resustainability logo** (spec 46–49). May exist only on the pre-auth landing — confirm (pre-auth surface unverifiable while logged in). |
+| N23 | Minor | security | US 10 | HOLD | **Formula/CSV injection (CWE-1236) stored verbatim.** `=cmd\|…`, `@SUM(…)`, `+…`, `-…` in `custom_name` are accepted + shown verbatim (CSV & XLSX) in portfolio labels **and** the auto-derived saved-analysis name. **Currently latent:** both plausible download sinks are clean — Compare-Portfolio report exports **district names only**, and saved-analysis Actions = Rename/Delete (no export). No live Excel-formula sink found; fix as defense-in-depth. See detail §N23. |
+| N24 | Cosmetic | data | US 10 | HOLD | Shapefile upload **silently drops the `.dbf` custom_name** — every point auto-labelled "Point N"; user site names are lost (injection inert on this path). |
+| N25 | Minor | data | US 10/17 | ASK-PO | **Out-of-pilot-state uploaded site silently dropped** from Compare Portfolio. A site resolving to Vijayawada Urban (Ntr, Andhra Pradesh) shows in the upload list + portfolio but is **absent from the comparison report** (3 of 4 sites exported), with no warning. |
 
 **US 15 headline (positive):** the full **Save → My Analysis list → Reload** loop
 **works end-to-end** — save `201`, graceful duplicate-name guard `409`, blank⇒default
@@ -287,6 +291,73 @@ unverifiable while logged in; **N22**), US 02–04 (need a test-email inbox), US
 
 ---
 
+## M7 — No value or geographic validation on coordinate upload  ★ US 10
+
+- **What:** The Upload Coordinates flow accepts and processes clearly-invalid data
+  with no value-level validation. Verified **accepted** (resolved to blocks, plotted,
+  addable to analysis) — not rejected, not flagged:
+  - **Out-of-range:** lat `999`, long `-500`, `1e9`.
+  - **Non-numeric:** `abc`, `#$%` in a coordinate cell.
+  - **Empty:** blank lat/long cells.
+  - **Out-of-India:** London, mid-Pacific, Null Island `(0,0)`.
+  - **Unbounded name:** 5000-character `custom_name`.
+  - **Malformed CSV:** unclosed quote / ragged columns partially ingested as garbage rows.
+- **Format-independent:** identical on **CSV** and **XLSX**; the **shapefile (.zip)**
+  path also accepts out-of-India geometry — fixture `z07` moves the sample's 3 points
+  to London/Pacific/Null Island and they upload as "Point 1..3" and plot.
+- **What *is* rejected (client-side, correctly):** wrong structure (missing `.shp`,
+  `.dbf`-only), unsupported type (`.txt`, binary-as-`.csv`), empty/header-only files,
+  and >1 MB (fixture `f01`). So structural gating exists; **value/bounds gating does not.**
+- **Root-cause signal:** every upload returns **HTTP 200** → validation is entirely
+  client-side and simply omits value/geographic checks.
+- **Impact:** garbage or foreign coordinates silently resolve to arbitrary blocks;
+  users can build, save, and compare analyses on meaningless points with no warning.
+- **Reproduce:** Coordinate Panel → Upload Coordinates → Upload each fixture in
+  `wrongly_accepted_upload_fixtures.zip` (v01–v08 CSV, x01/x02/x03/x05 XLSX, z07 shapefile).
+- **Evidence:** `runs/…_us10-adversarial-upload/adversarial-results.json` (CSV matrix),
+  `runs/…_us10-adversarial-formats/adversarial-results.json` (XLSX + shapefile incl. z07).
+- **Verify fix:** out-of-range / non-numeric / empty / out-of-India rows are rejected
+  or flagged with **visible text** before resolve/plot.
+
+---
+
+## N23 — Formula/CSV injection stored verbatim (CWE-1236), currently latent  ★ US 10 security
+
+- **What:** `custom_name` values beginning with `=`, `+`, `-`, `@` (classic
+  spreadsheet formula-injection triggers) are accepted and stored **without
+  sanitisation** on CSV and XLSX. Fixture `v05`: `=cmd|' /C calc'!A1`,
+  `@SUM(1+9)*cmd|'/C calc'!A0`, `+1+1`, `-2+3`.
+- **Where the payload persists (verbatim):**
+  - *My Uploaded Coordinates* list + map/portfolio labels.
+  - *Manage Portfolio* rows (e.g. `=cmd|' /C calc'!A1, Nampally, Hyderabad`).
+  - **Saved-analysis names** — the Save Analysis modal **auto-defaults the name to
+    the first site's injected value** (`=cmd|' /C calc'!A1 - Nampally - Hyderabad -
+    Multi Coordinate`), persisted server-side and displayed in the Saved Analysis list.
+- **Severity = LATENT (no live download sink found).** Two investigations closed the
+  two plausible "detonators" that would write the payload into a downloaded file:
+  - **A — Save Analysis / My Analysis:** the per-analysis **Actions (⋮) menu offers
+    Rename / Delete only** — no export / share / download of a saved analysis.
+  - **B — Add to Analysis → Compare Portfolio → Download Reports:** the produced
+    `portfolio-comparison-table-*.xlsx` stores **resolved district names only**
+    (sheet cells `<v>Ibrahimpatnam</v>`, `<v>Nampally</v>`, `<v>Serilingampally</v>`) —
+    the user `custom_name` is **discarded**, so the payload never enters the workbook.
+  So no current path executes the formula in a downloaded spreadsheet.
+- **Why still fix it:** it is a genuine *stored* injection — the unsanitised value is
+  persisted and rendered verbatim in several places, and any future export that
+  includes site or analysis names (or an admin / all-users export) would make it live.
+  Standard mitigation: prefix a leading `= + - @` (and tab/CR) with `'` on **any** cell
+  export, and/or reject/flag formula-leading names on input.
+- **Reproduce:** upload `v05_formula_injection.csv`; observe verbatim names in the
+  coordinate list, portfolio, and the Save Analysis default name. Then
+  `node qa/harness/portfolio-detonator.mjs` (report xlsx → district names only) and
+  `node qa/harness/saved-analysis-probe.mjs` (Actions = Rename/Delete; name default = payload).
+- **Evidence:** `runs/portfolio-detonator/` (report xlsx + payload scan "none in
+  archive"; sheet cells = district names), `runs/saved-analysis-probe/`
+  (`A1-save-dialog.png` default name = payload; `A4-actions-menu.png` = Rename/Delete only).
+- **Reassuring (no XSS):** a `<script>` name is HTML-escaped in the DOM; no JS dialog fires (v07).
+
+---
+
 ## Minor / Cosmetic
 
 - **N1 (Minor, a11y, US 11):** MapLibre attribution link not distinguishable without
@@ -340,6 +411,20 @@ unverifiable while logged in; **N22**), US 02–04 (need a test-email inbox), US
   `test1/test2`) carry **no tag at all**, so the tag is inconsistent across items.
   *ASK-PO — align the tag set (doc vs app) and backfill/normalise older items.*
   Evidence: `runs/…_us15-my-analysis/s7-my-analysis-route.png`, POST body `name` field.
+- **N24 (Cosmetic, data, US 10):** On **shapefile (.zip)** upload the `.dbf`
+  `custom_name` attribute is **silently ignored** — every feature is auto-labelled
+  *"Point N"*, so user-supplied site names are lost on this path (fixtures `z02`, `z05`).
+  (Side effect: `.dbf` formula-injection is inert here — the name never surfaces.)
+  Consistent with the CSV/XLSX "district omitted" list gap (**N7**). Evidence:
+  `runs/…_us10-adversarial-formats/adversarial-results.json` (z02/z05 → "Point N").
+- **N25 (Minor, data, US 10/17):** An uploaded site that resolves **outside the pilot
+  state** is **silently dropped** from the Compare Portfolio report. `v05` row 3
+  (`+1+1`, resolving to *Vijayawada Urban, Ntr, Andhra Pradesh*) appears in *My Uploaded
+  Coordinates* and *Manage Portfolio* but is **absent from the comparison workbook**
+  (only 3 of the 4 sites exported), with no warning to the user. *ASK-PO — should
+  out-of-state sites be rejected on upload, or flagged, rather than dropped downstream?*
+  Evidence: `runs/portfolio-detonator/` report xlsx (sheet2 lists Ibrahimpatnam /
+  Nampally / Serilingampally only; Vijayawada absent).
 
 **US 15 corroborates existing a11y findings (no new item):** the axe scan on the
 save/list flow re-surfaces **M2** (`image-alt` critical, header brand), **M3**
