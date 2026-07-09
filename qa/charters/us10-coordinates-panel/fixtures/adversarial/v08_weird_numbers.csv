@@ -1,0 +1,5 @@
+id,custom_name,lat,long
+1,Dup,17.38,78.48
+1,Dup,17.38,78.48
+2,Pad,  17.44 , 78.34 
+3,NegZero,-0.0,-0.0
