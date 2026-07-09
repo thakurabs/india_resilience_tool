@@ -8,8 +8,12 @@ below is verified against raw evidence (axe JSON / network results / screenshots
 none are model-inferred.
 
 **Send priority (agreed):** B1 (blocker) → **M3** → M1 → M2 → minors.
-**Send column:** `SEND` = queued to send · `HOLD` = keep, decide later ·
+**Send column:** `SEND` = queued to send · `SENT` = reported to vendor ·
+`HOLD` = keep, decide later · `NEEDS-REPRO` = verified in evidence but not yet
+reproduced manually · `DEPRIORITISED` = parked, revisit later ·
 `ASK-PO` = confirm intent before filing · `INFO` = informational, not a defect.
+
+**Reported to vendor so far:** B1, M3, M6, N5.
 
 ---
 
@@ -17,25 +21,25 @@ none are model-inferred.
 
 | # | Sev | Area | Story | Send | Finding |
 |---|-----|------|-------|------|---------|
-| B1 | **Blocker** | functional | US 12/14 | **SEND** *(sent)* | Ranking Table can't load — `GET /api/api/parquet/ranking` → HTTP 500; doubled `/api/api/` path. |
-| M3 | Major | a11y | US 09/11 | **SEND** | Multiple text elements below WCAG AA contrast; error-red `#E75252` worst. |
+| B1 | **Blocker** | functional | US 12/14 | **SENT** | Ranking Table can't load — `GET /api/api/parquet/ranking` → HTTP 500; doubled `/api/api/` path. |
+| M3 | Major | a11y | US 09/11 | **SENT** | Multiple text elements below WCAG AA contrast; error-red `#E75252` worst. Includes internal slugs bleeding into the ranking-table view. |
 | M1 | Major | a11y | US 09 | HOLD→keep | Collapsed-panel reopen affordance / toggle labelling for AT users. |
 | M2 | Major | a11y | US 09/11 | HOLD→keep | Header brand link + icon has no accessible name (critical `image-alt`). |
-| M4 | Major | functional | US 10 | **SEND** | "Show on Map" resolves a valid coordinate correctly **but fires a contradictory "Location could not be resolved" error toast** at the same time. |
+| M4 | Major | functional | US 10 | **SEND** | "Show on Map" resolves a valid coordinate correctly **but fires a contradictory "Location could not be resolved" error toast** at the same time. **Reproduced 3/3** on video (`runs/repro-m4/`) — but **only on the first "Show on Map" of a fresh page load**. The resolve API (`POST /api/api/geo/reverse-geocode`) returns **200**; the toast fires ~60ms after click, **independent of the successful response** → a **frontend logic bug**, not a backend failure. Not reproducible in a warmed session (why it looked flaky). |
 | N1 | Minor | a11y | US 11 | HOLD | MapLibre attribution link not distinguishable without color (third-party control). |
 | N2 | Minor | a11y | US 09 | HOLD | No `<main>` landmark; 9 blocks outside landmarks. |
 | N3 | Minor | data | US 13 | ASK-PO | Map tooltip omits "Baseline (1990–2010)" and "Δ vs baseline / Level of Change". |
 | N4 | Cosmetic | data | US 14 | HOLD | Internal slugs leak in ranking caption. |
-| N5 | Minor | functional/a11y | US 10 | **SEND** | Missing/invalid coordinates turn the fields' **borders red only** — no error text (spec strings never appear) and no `aria-invalid`; color-only signal invisible to AT/colorblind users. |
+| N5 | Minor | functional/a11y | US 10 | **SENT** | Missing/invalid coordinates turn the fields' **borders red only** — no error text (spec strings never appear) and no `aria-invalid`; color-only signal invisible to AT/colorblind users. |
 | N6 | Minor | data/doc | US 10 | ASK-PO | CSV sample schema mismatch — app requires `id,custom_name,lat,long`; spec documents `Latitude,Longitude,Label`. |
 | N7 | Cosmetic | data | US 10 | HOLD | Uploaded-coordinates list omits **District** (shows Custom/Point + Block only). |
 | N8 | Minor | functional | US 15 | ASK-PO | Auto-trigger "Save / Don't Save" popup on context change (spec 794–812) **not observed** — unverified whether missing or gated on a stricter dirty-state precondition. |
 | N9 | Minor | data/doc | US 15 | ASK-PO | Saved-item **tag taxonomy** drift — app emits "Single District" (outside spec's Multi-* set); older items carry **no tag**. |
-| M5 | Major | functional/backend | US 16 | **SEND** | Resilience Profile with a **composite metric** fires `POST /api/api/parquet/trend` + `/scenario-comparison` → **HTTP 500** (×2). UI degrades to "No data available" (no crash), but it's the **same 500 + doubled `/api/api/` family as B1**. |
+| M5 | Major | functional/backend | US 16 | **DEPRIORITISED** | Resilience Profile with a **composite metric** fires `POST /api/api/parquet/trend` + `/scenario-comparison` → **HTTP 500** (×2). UI degrades to "No data available" (no crash), but it's the **same 500 + doubled `/api/api/` family as B1**. Parked — may not be a real bug (composites have no time series); revisit after B1 fix. |
 | N10 | Minor | a11y | US 16 | HOLD | Profile panel has **`nested-interactive`** controls (axe *serious*) — new vs prior charters; interactive elements nested inside a clickable accordion header. |
 | N11 | Minor | functional | US 16 | ASK-PO | Trend chart offers **"Show model members" + "Max models to draw" slider** but **no "Show percentile band (p05–p95)"** control (spec 872). |
 | N12 | Minor | data | US 16 | ASK-PO | Risk Summary shows **"Position in State"**, spec 861 says **"Position in India"** (scope/label drift; same family as the US 13 tooltip "Rank in state"). |
-| M6 | Major | data/functional | US 17 | **SEND** | Portfolio **count banner reads "You have added 1 district"** while Manage Portfolio holds **2** (Warangal + Karimnagar) — the total is wrong (and not pluralised). Spec 912–914. |
+| M6 | Major | data/functional | US 17 | **SENT** | Portfolio **count banner reads "You have added 1 district"** while Manage Portfolio holds **2** (Warangal + Karimnagar) — the total is wrong (and not pluralised). Spec 912–914. |
 | N13 | Minor | data | US 17 | ASK-PO | Multi-site comparison **Table omits "Position in State"** (spec 980 lists it first). |
 | N14 | Minor | a11y | US 17 | HOLD | Comparison table / heatmap scroll container is **not keyboard-focusable** (axe `scrollable-region-focusable`, *serious*, new). |
 | N15 | Minor | functional | US 17 | ASK-PO | No **"Refine your filters"** section inside the panel/modal (spec 897/1035). Top *Select Resilience Filters* panel is separate. |
@@ -248,21 +252,35 @@ unverifiable while logged in; **N22**), US 02–04 (need a test-email inbox), US
   TELANGANA"* and a pin is plotted — **yet a red error toast "Location could not be
   resolved for these coordinates." fires at the same moment.** Success and failure are
   reported simultaneously.
-- **Reproducibility:** Confirmed on **two independent runs** (not a race/flake).
+- **Reproducibility:** Confirmed on **5 independent runs** (2 original + **3/3 on a
+  dedicated video-repro run**, `qa/harness/repro-m4.mjs` → `runs/repro-m4/`). The
+  trigger is the **first "Show on Map" of a fresh page load**; it does **not** fire in
+  a warmed session (each Playwright run is a brand-new context = first-ever click),
+  which is why manual retesting in one session appeared not to reproduce it.
+- **Root cause (corrected):** the resolve API `POST /api/api/geo/reverse-geocode`
+  returns **HTTP 200** — the backend succeeds and supplies the inline "This location
+  is GHANPUR(STATION), TELANGANA". The error toast appears **~57–61ms after the click**,
+  faster than the network round-trip, so it is fired **optimistically by the frontend,
+  independent of the (successful) response**. This is a **frontend logic bug**, not a
+  cold-load/network race and not a backend error.
 - **Impact:** Actively misleading. Users are told their action failed when it
   succeeded; many will re-enter, abandon, or distrust the plotted result. This is the
   primary "add a single site" path (US 10) and the first thing a user does.
 - **Secondary a11y note:** the toast is a **class-less `<div>` appended to `<body>`
   with no `role="alert"`/`aria-live`** — screen-reader users get *neither* the success
   detail nor the (wrong) error announced.
-- **Reproduce:**
-  1. Open **Coordinate Panel** → **Add Coordinates**.
-  2. Enter Lat `17.8766`, Long `79.2792` (any valid in-coverage point).
-  3. Click **Show on Map** → inline "This location is GHANPUR(STATION), TELANGANA"
+- **Reproduce (must be a cold load):**
+  1. **Hard-reload** the page (Ctrl/Cmd+Shift+R) — the toast only fires on the
+     **first** Show-on-Map action; a warmed session will not reproduce it.
+  2. Open **Coordinate Panel** → **Add Coordinates**.
+  3. Enter Lat `17.8766`, Long `79.2792` (any valid in-coverage point).
+  4. Click **Show on Map** → inline "This location is GHANPUR(STATION), TELANGANA"
      appears **and** a red "Location could not be resolved…" toast pops top-right.
-- **Evidence:** `runs/2026-07-08T09-22-12-815Z_us10-coordinates/s2-show-on-map.png`
-  (both states visible together), `results.json` step **S2** (`CONTRADICTION: inline
-  resolved … but error toast …`).
+  - Automated: `node qa/harness/repro-m4.mjs 3` (fresh context per attempt) — 3/3.
+- **Evidence:** `runs/repro-m4/attempt-{1,2,3}.webm` (screen recordings),
+  `attempt-1.png` (both states together), `repro-log.json` (toast at ~60ms +
+  reverse-geocode **200**); original `runs/2026-07-08T09-22-12-815Z_us10-coordinates/s2-show-on-map.png`,
+  `results.json` step **S2**.
 - **Verify fix:** on a successful resolve, no error toast fires; on a genuine failure
   (uncovered/ocean point), the error toast fires and the inline detail is not shown.
   Give the toast `role="alert"` / `aria-live="assertive"`.
