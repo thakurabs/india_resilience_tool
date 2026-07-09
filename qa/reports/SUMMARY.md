@@ -1,5 +1,11 @@
 # QA Summary — India Resilience Tool (vendor UAT)
 
+> **⚠ Early snapshot (US 09/11/13/14 only).** The current, complete running log —
+> all 17 user stories, findings B1/M1–M6/N1–N22 — lives in **`VENDOR_REPORT.md`**.
+> Per-charter reports: `us06`/`us07`/`us08`/`us09`/`us11`/`us12`/`us13`/`us14`/`us15`/
+> `us16`/`us17` + `blocked-and-partial-stories.md`. Prefer those over this file.
+
+
 **App:** dev.resilience.org.in · **Basis:** Resilience Actions User Stories v1.3
 **Method:** Playwright harness → Haiku evidence review → Opus triage (all findings
 verified against raw evidence). Session-authenticated (saved 2FA session).

@@ -35,6 +35,17 @@ none are model-inferred.
 | N10 | Minor | a11y | US 16 | HOLD | Profile panel has **`nested-interactive`** controls (axe *serious*) — new vs prior charters; interactive elements nested inside a clickable accordion header. |
 | N11 | Minor | functional | US 16 | ASK-PO | Trend chart offers **"Show model members" + "Max models to draw" slider** but **no "Show percentile band (p05–p95)"** control (spec 872). |
 | N12 | Minor | data | US 16 | ASK-PO | Risk Summary shows **"Position in State"**, spec 861 says **"Position in India"** (scope/label drift; same family as the US 13 tooltip "Rank in state"). |
+| M6 | Major | data/functional | US 17 | **SEND** | Portfolio **count banner reads "You have added 1 district"** while Manage Portfolio holds **2** (Warangal + Karimnagar) — the total is wrong (and not pluralised). Spec 912–914. |
+| N13 | Minor | data | US 17 | ASK-PO | Multi-site comparison **Table omits "Position in State"** (spec 980 lists it first). |
+| N14 | Minor | a11y | US 17 | HOLD | Comparison table / heatmap scroll container is **not keyboard-focusable** (axe `scrollable-region-focusable`, *serious*, new). |
+| N15 | Minor | functional | US 17 | ASK-PO | No **"Refine your filters"** section inside the panel/modal (spec 897/1035). Top *Select Resilience Filters* panel is separate. |
+| N16 | Minor | functional | US 17 | ASK-PO | No **auto-metrics note** ("N metrics from 1 domain(s)…", spec 962–966). |
+| N17 | Cosmetic | functional | US 17 | ASK-PO | No **"Advanced Metric / Manually refine" checkbox** (spec 968–972); a *Select Metrics* multi-select is used instead. |
+| N18 | Cosmetic | functional | US 17 | ASK-PO | **Scenario as checkboxes** (SSP2-4.5 / SSP5-8.5), not the spec's *Single / Compare Scenario* modes (spec 951–961). Functionally equivalent. |
+| N19 | Minor | data | US 07 | ASK-PO | User Profile **omits the "State" field** (spec 280 & 289 list State among profile fields). Only Country (India, locked) shown. |
+| N20 | Cosmetic | functional | US 07 | ASK-PO | Profile save button labelled **"Update"** (spec 302 says **"Save"**). |
+| N21 | Minor | functional | US 08 | ASK-PO | Feedback popup **auto-triggers on a timer mid-session** (unprompted). Spec 08 defines only header-manual + logout-auto triggers, not a timed nudge. |
+| N22 | Minor | data/doc | US 01 | ASK-PO | Logged-in header shows no **Donate button** or **Resustainability logo** (spec 46–49). May exist only on the pre-auth landing — confirm (pre-auth surface unverifiable while logged in). |
 
 **US 15 headline (positive):** the full **Save → My Analysis list → Reload** loop
 **works end-to-end** — save `201`, graceful duplicate-name guard `409`, blank⇒default
@@ -50,6 +61,42 @@ a **Scenario Comparison** grouped bar chart (Historical/SSP2-4.5/SSP5-8.5 in the
 spec's blue/orange/red, *Start y-axis at zero*), panel expand/collapse, and a
 **full-screen modal** all render — including a clean **375px mobile** layout. The
 one new backend defect (**M5**) is isolated to **composite** metrics.
+
+**US 17 headline (positive):** the **multi-site portfolio works end-to-end** (12
+steps, 0 failures, 0 errors). *Add to Analysis* → a ≥2-site portfolio; **Manage
+Portfolio** lists each site with a working **Remove ⊗** and **Clear Portfolio**;
+**Compare Portfolio** (risk domain → *All Metrics (14)* → SSP2-4.5 / Early century)
+loads a per-metric **comparison Table** (District/State/Scenario/Period/Index Value/
+Absolute Change/Change Percentile/Level of Change, one row per site) and a
+**Heatmap** — both via `portfolio-comparison-table` + `portfolio-heatmap`, **HTTP
+200, no 500s**. The **full-screen modal** shows the spec's **left/right split**
+(Saved Analysis + Manage Portfolio | Compare Portfolio), and the panel is clean at
+**375px** — which **closes the open US 15 mobile caveat** for this panel family.
+The one real bug (**M6**) is a wrong portfolio count; the rest are spec-label drifts.
+
+**US 12 headline (positive):** the **Map View ↔ Ranking Table toggle works to spec**
+(5 steps, 0 failed) — Map View default, **mutual exclusivity** (switching hides the
+other view), and **geography + filters preserved** across the switch. The only issue
+is that the Ranking Table has no data to show — the existing **B1** blocker (ranking
+endpoint → 500). Note: in this build the failing call is **`POST /api/api/parquet/ranking`**
+(B1 was originally logged as `GET`); same endpoint, doubled path, and 500.
+
+**Chrome stories (US 06/07/08) — all passing (read-only, session-safe).**
+- **US 06 (Header & Dropdown Nav):** logo + title + "Welcome, [Name]" + Share
+  Feedback; dropdown = **User Profile · My Analysis · Logout**; routes to `/profile`
+  and `/my-analysis` work. (Logout not clicked — session-safe.) No findings.
+- **US 07 (User Profile):** `/profile` shows Name · Email (**locked**) · Organization ·
+  Designation · Purpose of Use · Thematic Activity · Country (India, locked) · Reset
+  Password (Send OTP). Two drifts: **State field missing (N19)** and **"Update" vs
+  "Save" (N20)**. Edit/Save/Reset not triggered.
+- **US 08 (Feedback):** Share Feedback opens a popup with 5 experience radios +
+  "Tell us more" + star rating + Submit + close — matches spec. **Submit never
+  clicked** (emails admin). Timed mid-session auto-popup noted (**N21**); logout
+  auto-trigger variant not verifiable without logout.
+
+**Blocked / partial (see `blocked-and-partial-stories.md`):** US 01 (pre-auth landing —
+unverifiable while logged in; **N22**), US 02–04 (need a test-email inbox), US 05
+(first-visit guide — already onboarded, won't re-trigger; absence is spec-consistent).
 
 ---
 
@@ -108,6 +155,31 @@ one new backend defect (**M5**) is isolated to **composite** metrics.
 - **Verify fix:** composite metric returns 200 (empty or populated) on
   `/api/api/parquet/trend` + `/scenario-comparison`; no 500 in Network; re-run `us16`
   scenario S10 (still shows "No data available" but with 0 real error events).
+
+---
+
+## M6 — Portfolio count banner is wrong (says 1, holds 2)  ★ US 17
+
+- **What:** After adding two districts to the portfolio (Warangal, then Karimnagar),
+  the green banner at the top of **My Analysis** reads **"You have added 1 district
+  in your portfolio."** — but **Manage Portfolio** correctly lists **both** sites,
+  each with a working Remove ⊗. Spec 912–914 expects the true total
+  (*"You have added 2 districts to your portfolio"*).
+- **Two problems in one string:** (a) the **count is wrong** (1 vs 2); (b) even for
+  one site it is not pluralised against the count. The banner appears to reflect the
+  *last add action*, not the portfolio total.
+- **Impact / severity:** the portfolio itself is correct (2 sites compared in the
+  Table + Heatmap), so this is a **display defect**, not data loss — but it directly
+  contradicts a headline acceptance-criterion number the user reads first. Rated
+  **Major** as a user-facing correctness bug; downgrade to Minor if treated as cosmetic.
+- **Reproduce:**
+  1. Log in; State = Telangana, District = Warangal → **Add to Analysis**.
+  2. Add a 2nd district (Karimnagar) → **Add to Analysis**.
+  3. Expand **My Analysis**: banner says "1 district"; Manage Portfolio lists 2.
+- **Evidence:** `runs/2026-07-08T15-32-52-396Z_us17-analysis-profile/` — `results.json`
+  step S3 (`count banner says "1 district" but Manage Portfolio lists 2`), `s3-two-sites.png`,
+  `s4-manage.png`.
+- **Verify fix:** banner shows "2 districts" with correct pluralisation; re-run `us17` S3.
 
 ---
 
@@ -383,20 +455,46 @@ Please use the provided sample"*, unsupported type (`.txt`) → *"Unsupported fi
 - **US 16 modal split:** Confirm the left/right **Saved Analysis / Manage Portfolio /
   Refine filters / Compare Portfolio** split is intended **only** for multi-site
   (US 17) with a non-empty portfolio, not for a single-site profile.
+  **→ Answered by US 17:** the left/right split **is** present in the multi-site
+  modal (Saved Analysis + Manage Portfolio left, Compare Portfolio right).
+- **N13 (US 17):** Should the multi-site comparison Table include **Position in
+  State** (spec 980)? Currently absent (has State/District/Scenario/Period + values).
+- **N15 (US 17):** Is a **"Refine your filters"** section meant to live inside the
+  My Analysis panel/modal left column (spec 897/1035), or does the top *Select
+  Resilience Filters* panel satisfy it?
+- **N16/N17 (US 17):** Is the **auto-metrics note** ("N metrics from 1 domain") and
+  the **Advanced-Metric "manually refine" checkbox** (spec 962–972) in scope? Today
+  metrics are chosen via a *Select Metrics* multi-select with no auto-note.
+- **N18 (US 17):** Is scenario meant to be a **Single/Compare mode** toggle (spec
+  951–961) or are the current SSP2-4.5 / SSP5-8.5 **checkboxes** acceptable?
+- **N19 (US 07):** Should the User Profile include a **State** field (spec 280/289)?
+  It is absent today (only Country = India, locked).
+- **N20 (US 07):** Profile save button reads **"Update"** vs spec's **"Save"** —
+  which label is canonical?
+- **N21 (US 08):** Is the **timed mid-session feedback auto-popup** intended? Spec 08
+  defines only a header-manual trigger and a logout auto-trigger.
+- **N22 (US 01):** Are the **Donate button** and **Resustainability logo** (spec 46–49)
+  meant to appear only on the **pre-auth landing**, or also in the logged-in header?
 
 ---
 
-## Coverage
+## Coverage — all 17 user stories accounted for
 
-- **Done:** US 09 (Geography), US 10 (Coordinates), US 11 (Filters), US 13 (Map),
-  US 14 (Ranking — blocked), US 15 (My Analysis — Save/reload — passing),
-  **US 16 (Resilience Profile / single-site — passing; M5 composite-500)**.
-- **Not yet covered:** US 17 (My Analysis Profile / multi-site portfolio — the
-  Manage Portfolio / Compare Portfolio / left-right-split surface), US 01 (landing),
-  US 05–08 (nav/profile/feedback).
-- **US 15 mobile caveat — partially closed:** the 375px shot for US 16 confirms the
-  right-hand **profile panel** renders cleanly on mobile (same panel family). The
-  `/my-analysis` **saved-list** route specifically is still unverified at 375px —
-  capture it under US 17.
-- **Blocked on tooling:** US 02–04 (auth/2FA/reset) need a test email inbox — out of
-  current autonomous scope; decide whether to cover.
+**Functionally covered (12):**
+- US 09 (Geography), US 10 (Coordinates), US 11 (Filters), US 12 (View Mode —
+  passing), US 13 (Map), US 14 (Ranking — **B1 blocked**), US 15 (My Analysis
+  Save/reload — passing), US 16 (Resilience Profile / single-site — passing;
+  **M5**), US 17 (My Analysis Profile / multi-site — passing; **M6**),
+  US 06 (Header/Dropdown — passing), US 07 (Profile — passing; **N19/N20**),
+  US 08 (Feedback header flow — passing; **N21**).
+- **US 15 mobile caveat — CLOSED** by US 17 S12 (375px, no overflow).
+
+**Blocked / partial (5) — see `blocked-and-partial-stories.md`:**
+- US 01 (landing) — **pre-auth surface unverifiable while logged in** (**N22**).
+- US 02 / US 03 / US 04 (Sign In+2FA / Sign Up / Reset Password) — **need a
+  test-email inbox** (+ a disposable account for US 03). Out of autonomous scope.
+- US 05 (First-Time Visitor Guide) — **already onboarded**; the guide won't
+  re-trigger (spec-consistent). Needs a fresh user to verify the walkthrough.
+
+**To close the remaining 5:** provision a disposable email inbox + a fresh test
+account, and one logged-out capture for the pre-auth landing (US 01).
