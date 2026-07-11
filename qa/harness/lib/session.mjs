@@ -16,7 +16,20 @@ export async function withSession(fn, { viewport } = {}) {
       `No saved session at ${AUTH_STATE}. Run: node qa/harness/capture-session.mjs first.`,
     );
   }
-  const browser = await chromium.launch({ headless: true });
+  // Opt-in software GL (SwiftShader) so deck.gl WebGL hit-testing works headless,
+  // enabling map-click probes. Default path is unchanged (no args) when unset.
+  const useSoftwareGL = process.env.QA_SOFTWARE_GL === '1';
+  const browser = await chromium.launch({
+    headless: true,
+    args: useSoftwareGL
+      ? [
+          '--use-gl=angle',
+          '--use-angle=swiftshader',
+          '--enable-unsafe-swiftshader',
+          '--ignore-gpu-blocklist',
+        ]
+      : [],
+  });
   const context = await browser.newContext({
     storageState: AUTH_STATE,
     viewport: viewport || { width: 1440, height: 900 },

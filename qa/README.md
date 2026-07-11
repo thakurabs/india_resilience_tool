@@ -47,6 +47,25 @@ When a run reports "bounced to login", the session expired — re-run step 2.
 ## Environment
 
 - `IRT_QA_URL` — override the target base URL (default `https://dev.resilience.org.in`).
+- `QA_SOFTWARE_GL` — set to `1` to launch chromium with software GL (SwiftShader:
+  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`).
+  Needed for map probes that rely on deck.gl WebGL hit-testing headless (e.g. the
+  map-interactivity probe). Default (unset) launches with no extra GL args.
+
+### Map-interactivity probe (dropdown-gating + portfolio commutativity)
+
+```bash
+node --check qa/harness/add-to-analysis-map-interactivity.mjs   # syntax check first
+node qa/harness/capture-session.mjs                             # refresh session if >~24h old
+QA_SOFTWARE_GL=1 node qa/harness/add-to-analysis-map-interactivity.mjs
+```
+
+The probe emits **no Claim verdict unless three hard gates pass** (`stateNormalized`,
+`interactionCalibrated`, `mapPopoverScopedAdd`); otherwise it records `BLOCKED (<gate>)`.
+Evidence lands in `runs/<id>_us-map-interactivity/` with a machine-generated
+`automated-summary.md` (not a vendor report — the triaged report is authored by hand). If
+calibration surfaces nothing even with `QA_SOFTWARE_GL=1`, deck.gl likely needs a real GL
+context — fall back to a headed / `xvfb-run` invocation.
 
 ## Auth scope note
 
