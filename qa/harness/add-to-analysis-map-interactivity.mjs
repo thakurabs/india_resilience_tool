@@ -51,10 +51,19 @@ const TH = {
   CLAIM2_DISTINCT_MIN: 6,  // Claim 2 full coverage needs A,B,C + D,E,F distinct
   OUTSIDE_SELECTED_MAX: 1, // gating: at most this many live points outside the pick
   OVERLAP_MIN: 0.8,        // "not gated": L1 overlaps L0 by >= 80%
-  GRID_N: 5,               // sweep grid resolution (n x n)
+  GRID_N: 6,               // sweep grid resolution (n x n) — 6x6 lands enough
+                           // on-polygon points over Telangana's irregular shape.
 };
 
 const W = (page, ms) => page.waitForTimeout(ms);
+
+// Field vocabulary of the ACTUAL map info surfaces (confirmed live + us13 report):
+//   district hover/click tooltip -> "District", "State", "Composite Score", "Rank in state"
+//   coordinate-point popover     -> "Latitude"/"Longitude"/"Value"/"Position"
+// (Baseline / Δ-vs-baseline are omitted by the app per us13.) A surfaced info box
+// is identified by these fields AND/OR a dropdown-roster district-name match — never
+// by the presence of the bare word "District" (which also appears in filter chrome).
+const INFO_FIELD_RE = 'Composite Score|Rank in state|Latitude|Longitude|Position in state';
 
 // ===========================================================================
 // Duplicated closure from add-to-analysis-crossflow.mjs (COMPLETE) — bodies are
@@ -309,23 +318,28 @@ async function switchToAdmin(page) {
  * (#3, #5)
  */
 async function clearMapPopover(page) {
+  // Non-destructive: never remove app-managed nodes (that corrupts React's map
+  // reconciliation). Dismiss the click tooltip via Escape / its own close control,
+  // and move the pointer off the canvas so any hover tooltip fades naturally.
   await page.keyboard.press('Escape').catch(() => {});
   await page.evaluate(() => {
     const c = (t) => (t || '').trim().replace(/\s+/g, ' ');
-    // First try clicking a close control inside a tooltip/popover; then remove
-    // any residual transient map tooltip nodes (they re-render on next hover).
     const hints = '[role="tooltip"],[class*="tooltip"],[class*="Tooltip"],[class*="popup"],[class*="Popup"],[class*="popover"],[class*="Popover"],[class*="deck-tooltip"]';
     document.querySelectorAll(hints).forEach((el) => {
-      const close = [...el.querySelectorAll('button,[role="button"]')].find((b) => /close|dismiss|×|✕|⊗/i.test(c(b.innerText) + ' ' + (b.getAttribute('aria-label') || '')));
+      const close = [...el.querySelectorAll('button,[role="button"]')].find((b) => /^(close|dismiss)$|×|✕|⊗/i.test(c(b.innerText) + ' ' + (b.getAttribute('aria-label') || '')));
       if (close) { try { close.click(); } catch (e) { /* noop */ } }
-      try { el.remove(); } catch (e) { /* noop */ }
     });
   }).catch(() => {});
-  await W(page, 150);
-  return page.evaluate(() => {
-    const hints = '[role="tooltip"],[class*="tooltip"],[class*="popup"],[class*="popover"]';
-    return [...document.querySelectorAll(hints)].filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; }).length;
-  }).catch(() => 0);
+  await page.mouse.move(3, 3).catch(() => {}); // off-canvas → hover tooltip clears
+  await W(page, 200);
+  // Report how many map info-boxes remain visible (0 = clean).
+  return page.evaluate((fieldReSrc) => {
+    const fieldRe = new RegExp(fieldReSrc, 'i');
+    return [...document.querySelectorAll('div,section,aside,[role="tooltip"]')].filter((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && r.width < 640 && fieldRe.test(el.innerText || '');
+    }).length;
+  }, INFO_FIELD_RE).catch(() => 0);
 }
 
 /**
@@ -425,25 +439,34 @@ async function selectDistrictExact(page, name) {
   const dBtn = page.getByRole('button', { name: /Select District/i }).first();
   await dBtn.click().catch(() => {});
   await W(page, 600);
-  // Best-effort deselect of any already-checked options in the open listbox.
+  // Deselect any already-checked options so each admin add is exactly one district.
   await page.evaluate(() => {
-    const box = [...document.querySelectorAll('[role="listbox"],ul')].find((el) => el.querySelector('li[role="option"]'));
-    if (!box) return;
-    box.querySelectorAll('li[role="option"][aria-selected="true"]').forEach((o) => { try { o.click(); } catch (e) { /* noop */ } });
+    [...document.querySelectorAll('li[role="option"][aria-selected="true"]')].forEach((o) => { try { o.click(); } catch (e) { /* noop */ } });
   }).catch(() => {});
+  await W(page, 300);
   await page.locator('li[role="option"]').filter({ hasText: new RegExp(`^${name}$`) }).first().click();
   await W(page, 500);
+  // Verify against the option's SELECTED state (robust to button-label truncation
+  // — the multi-select "Select District(s)" collapses long names like
+  // "Bhadradri Kothagudem"). Fall back to the collapsed button text only if the
+  // control does not expose aria-selected.
+  const check = await page.evaluate(() => {
+    const c = (t) => (t || '').trim().replace(/\s+/g, ' ');
+    const selOpts = [...document.querySelectorAll('li[role="option"][aria-selected="true"]')].map((o) => c(o.innerText));
+    const b = [...document.querySelectorAll('button')].find((x) => /Select District|District/i.test(x.getAttribute('aria-label') || '') || /District/i.test(c(x.innerText)));
+    return { selOpts, btnText: b ? c(b.innerText) : '' };
+  });
   await dBtn.click().catch(() => {}); // close dropdown
   await W(page, 400);
-  const disp = await page.evaluate(() => {
-    const c = (t) => (t || '').trim().replace(/\s+/g, ' ');
-    const b = [...document.querySelectorAll('button')].find((x) => /Select District|District/i.test(x.getAttribute('aria-label') || '') || /District/i.test(c(x.innerText)));
-    return b ? c(b.innerText) : '';
-  });
-  if (!new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(disp)) {
-    throw new Error(`selectDistrictExact(${name}): district display shows "${disp}" — selection not confirmed`);
+  const rx = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const rxFirst = new RegExp('\\b' + name.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const ok = check.selOpts.length
+    ? check.selOpts.some((s) => rx.test(s))
+    : (rx.test(check.btnText) || rxFirst.test(check.btnText));
+  if (!ok) {
+    throw new Error(`selectDistrictExact(${name}): not confirmed (selOpts=${JSON.stringify(check.selOpts)}, btn="${check.btnText}")`);
   }
-  return disp;
+  return check.selOpts.length ? check.selOpts.join(', ') : check.btnText;
 }
 
 /**
@@ -459,11 +482,16 @@ async function addViaAdminExact(page, name) {
   await ensureAddReady(page, false);
   const added = await addToAnalysis(page);
   await expandPanel(page);
-  const post = (await portfolioCount(page)).effective;
+  const pc = await portfolioCount(page);
+  const post = pc.effective;
   if (post !== pre + 1) {
     throw new Error(`addViaAdminExact(${name}): expected ${pre + 1}, got ${post} (pre=${pre}, added=${added})`);
   }
-  return { added, preCount: pre, postCount: post };
+  // Soft scoped proof: the new roster entry should mention this district (labels
+  // can truncate, so this is recorded, not asserted).
+  const rxFirst = new RegExp('\\b' + name.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  const labelMatch = (pc.roster.labels || []).some((l) => rxFirst.test(l));
+  return { added, preCount: pre, postCount: post, labelMatch };
 }
 
 /** Cheap positive-only map view signature — a change is proof of a viewport/transform shift (#2). */
@@ -480,37 +508,49 @@ const viewSignature = (page) => page.evaluate(() => {
  * dropdown roster (Baseline omitted per us13 — click tooltip only). Returns
  * SERIALIZABLE metadata only, never a DOM handle. (#5)
  */
-async function readSurfaced(page, roster) {
-  return page.evaluate((names) => {
+async function readSurfaced(page, roster, fieldRe) {
+  return page.evaluate(({ names, fieldReSrc }) => {
     const c = (t) => (t || '').trim().replace(/\s+/g, ' ');
-    const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const fieldRe = new RegExp(fieldReSrc, 'i');
+    const vis = (el) => {
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      // NB: do NOT exclude pointer-events:none — the hover tooltip is click-through.
+      // The field-vocabulary filter below (Composite Score / Rank in state) already
+      // excludes the filter/selection chrome, which lacks those labels.
+      return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+    };
     const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const hints = '[role="tooltip"],[class*="tooltip"],[class*="Tooltip"],[class*="popup"],[class*="Popup"],[class*="popover"],[class*="Popover"],[class*="deck-tooltip"],[data-modal-root]';
-    let cands = [...document.querySelectorAll(hints)].filter(vis);
-    if (!cands.length) {
-      cands = [...document.querySelectorAll('div,section,aside')].filter((el) => {
-        const r = el.getBoundingClientRect();
-        return vis(el) && r.width < 620 && r.height < 620 && /Baseline|Position|Value|Latitude|Longitude|District/i.test(el.innerText || '');
-      });
-    }
+    // An info surface is a SMALL box that carries the map-tooltip fields; the
+    // filter panel / selection chrome is large and lacks "Composite Score"/"Rank".
+    const cands = [...document.querySelectorAll('div,section,aside,[role="tooltip"]')].filter((el) => {
+      const r = el.getBoundingClientRect();
+      if (!vis(el) || r.width < 60 || r.width > 640 || r.height < 40 || r.height > 640) return false;
+      return fieldRe.test(el.innerText || '');
+    });
+    // Prefer the smallest candidate that also matches a roster district name.
+    cands.sort((a, b) => {
+      const ra = a.getBoundingClientRect(); const rb = b.getBoundingClientRect();
+      return (ra.width * ra.height) - (rb.width * rb.height);
+    });
+    let best = null;
     for (const el of cands) {
       const t = c(el.innerText);
       if (!t) continue;
       const hit = (names || []).find((nm) => nm && new RegExp('\\b' + esc(nm) + '\\b', 'i').test(t));
-      const fieldy = /Baseline|Position|Value|Latitude|Longitude/i.test(t);
-      if (hit || fieldy) {
-        const r = el.getBoundingClientRect();
-        return {
-          surfaced: true,
-          district: hit || null,
-          text: t.slice(0, 300),
-          rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
-          hint: (el.className || el.tagName || '').toString().slice(0, 60),
-        };
-      }
+      const r = el.getBoundingClientRect();
+      const rec = {
+        surfaced: true,
+        district: hit || null,
+        text: t.slice(0, 300),
+        rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+        hint: (el.className || el.tagName || '').toString().slice(0, 60),
+      };
+      if (hit) return rec;            // roster-name match is the strongest signal
+      if (!best) best = rec;          // else remember the smallest field-y box
     }
-    return { surfaced: false, district: null, text: '', rect: null, hint: '' };
-  }, roster);
+    return best || { surfaced: false, district: null, text: '', rect: null, hint: '' };
+  }, { names: roster, fieldReSrc: fieldRe || 'Composite Score|Rank in state|Latitude|Longitude' });
 }
 
 /**
@@ -523,8 +563,17 @@ async function interactionProbe(page, fracX, fracY, mode, roster) {
   if (!box) return { mode, surfaced: false, district: null, popoverText: '', rect: null, selectorHint: 'no-canvas' };
   const x = box.x + box.width * fracX;
   const y = box.y + box.height * fracY;
-  if (mode === 'hover') { await page.mouse.move(x, y); await W(page, 500); } else { await page.mouse.click(x, y); await W(page, 900); }
-  const res = await readSurfaced(page, roster);
+  if (mode === 'hover') {
+    // deck.gl hover needs a genuine pointermove delta ending on the target — a
+    // single teleport move is unreliable, so approach in two steps then settle.
+    await page.mouse.move(x - 6, y - 6);
+    await page.mouse.move(x, y, { steps: 3 });
+    await W(page, 650);
+  } else {
+    await page.mouse.click(x, y);
+    await W(page, 900);
+  }
+  const res = await readSurfaced(page, roster, INFO_FIELD_RE);
   return { mode, surfaced: res.surfaced, district: res.district, popoverText: res.text, rect: res.rect, selectorHint: res.hint };
 }
 
@@ -585,26 +634,32 @@ async function mapAddScoped(page, fracX, fracY) {
   const y = box.y + box.height * fracY;
   await page.mouse.click(x, y);
   await W(page, 1400);
-  const result = await page.evaluate(({ px, py }) => {
+  const result = await page.evaluate(({ px, py, fieldReSrc }) => {
     const c = (t) => (t || '').trim().replace(/\s+/g, ' ');
-    const vis = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-    // A map popover = a small floating box carrying coordinate/box fields AND an
-    // Add-to-Analysis control INSIDE it. Choose the one nearest the click.
-    const cands = [...document.querySelectorAll('div,section,aside')].filter((el) => {
+    const fieldRe = new RegExp(fieldReSrc, 'i');
+    const vis = (el) => {
       const r = el.getBoundingClientRect();
-      if (!vis(el) || r.width > 700 || r.height > 700) return false;
+      const s = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && s.pointerEvents !== 'none';
+    };
+    // A map popover = a SMALL floating box carrying the district/coordinate tooltip
+    // fields AND an "Add to Analysis" control INSIDE it (the click tooltip's CTA,
+    // per us13). Pick the smallest such box; record its District field for scoping.
+    const cands = [...document.querySelectorAll('div,section,aside,[role="tooltip"]')].filter((el) => {
+      const r = el.getBoundingClientRect();
+      if (!vis(el) || r.width < 60 || r.width > 640 || r.height < 40 || r.height > 640) return false;
       const t = el.innerText || '';
-      return /Baseline|Position|Value|Latitude|Longitude/i.test(t) && /Add to Analysis/i.test(t);
+      return fieldRe.test(t) && /Add to Analysis/i.test(t);
     });
     if (!cands.length) return { boxSeen: false, added: false, popoverText: '' };
-    const dist = (el) => { const r = el.getBoundingClientRect(); const cx = r.x + r.width / 2; const cy = r.y + r.height / 2; return Math.hypot(cx - px, cy - py); };
-    cands.sort((a, b) => dist(a) - dist(b));
+    cands.sort((a, b) => { const ra = a.getBoundingClientRect(); const rb = b.getBoundingClientRect(); return (ra.width * ra.height) - (rb.width * rb.height); });
     const pop = cands[0];
-    const addBtn = [...pop.querySelectorAll('button')].find((b) => /Add to Analysis/i.test(b.textContent) && !b.disabled && vis(b));
+    const addBtn = [...pop.querySelectorAll('button,[role="button"]')].find((b) => /Add to Analysis/i.test(b.textContent) && !b.disabled && vis(b));
     const popoverText = c(pop.innerText).slice(0, 300);
-    if (addBtn) { addBtn.click(); return { boxSeen: true, added: true, popoverText }; }
-    return { boxSeen: true, added: false, popoverText };
-  }, { px: x, py: y });
+    const dm = (popoverText.match(/District\s+([A-Za-z .()'-]+?)\s+State/i) || [])[1] || null;
+    if (addBtn) { addBtn.click(); return { boxSeen: true, added: true, popoverText, popoverDistrict: dm }; }
+    return { boxSeen: true, added: false, popoverText, popoverDistrict: dm };
+  }, { px: x, py: y, fieldReSrc: INFO_FIELD_RE });
   if (result.added) await W(page, 1600);
   await expandPanel(page);
   const post = (await portfolioCount(page)).effective;
@@ -613,6 +668,7 @@ async function mapAddScoped(page, fracX, fracY) {
     reason: result.boxSeen ? (result.added ? 'scoped-add' : 'no-add-in-popover') : 'no-map-popover',
     boxSeen: result.boxSeen,
     popoverText: result.popoverText,
+    popoverDistrict: result.popoverDistrict || null,
     preCount: pre,
     postCount: post,
     preGlobalAddEnabled,
@@ -623,14 +679,15 @@ async function mapAddScoped(page, fracX, fracY) {
  * Sweep an n x n canvas grid via interactionProbe. Returns per-point serializable
  * records, the live-point set, and distinct reachable districts.
  */
-async function sweepGrid(page, n, mode, roster) {
+async function sweepGrid(page, n, mode, roster, bbox = { x0: 0, y0: 0, x1: 1, y1: 1 }) {
   const points = [];
   const livePoints = [];
   const districts = new Set();
+  const { x0, y0, x1, y1 } = bbox;
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
-      const fracX = (i + 0.5) / n;
-      const fracY = (j + 0.5) / n;
+      const fracX = x0 + ((i + 0.5) / n) * (x1 - x0);
+      const fracY = y0 + ((j + 0.5) / n) * (y1 - y0);
       const s = await interactionProbe(page, fracX, fracY, mode, roster);
       const rec = { fracX: Number(fracX.toFixed(3)), fracY: Number(fracY.toFixed(3)), surfaced: s.surfaced, district: s.district, parentDistrict: s.district };
       points.push(rec);
@@ -639,6 +696,24 @@ async function sweepGrid(page, n, mode, roster) {
     }
   }
   return { points, livePoints, distinctDistricts: [...districts] };
+}
+
+/**
+ * Derive the interactive (state) bounding box in canvas fracs from a coarse
+ * sweep's live points, padded and clamped. Focusing subsequent sweeps here (vs.
+ * the full canvas, ~75% of which is off-state basemap) concentrates samples on
+ * the choropleth so live-point counts reflect real interactivity, not geometry.
+ */
+function deriveLiveBBox(coarse, pad = 0.06) {
+  const lp = coarse.livePoints;
+  if (lp.length < 3) return { x0: 0, y0: 0, x1: 1, y1: 1, focused: false };
+  const xs = lp.map((p) => p.fracX); const ys = lp.map((p) => p.fracY);
+  const clamp = (v) => Math.max(0, Math.min(1, v));
+  return {
+    x0: clamp(Math.min(...xs) - pad), y0: clamp(Math.min(...ys) - pad),
+    x1: clamp(Math.max(...xs) + pad), y1: clamp(Math.max(...ys) + pad),
+    focused: true,
+  };
 }
 
 /** Overlap fraction of two live-point sets (by frac coordinate key). */
@@ -734,6 +809,7 @@ await withSession(async (page) => {
   // -----------------------------------------------------------------------
   console.log('\n== PHASE 1 — calibrate interaction (hover -> click) ==');
   let CALIB = { mode: null };
+  let STATE_BBOX = { x0: 0, y0: 0, x1: 1, y1: 1, focused: false };
   const g1 = g0 && await safe(run, page, 'Gate interactionCalibrated', async () => {
     const probeCorners = [[0.5, 0.5], [0.35, 0.45], [0.6, 0.55], [0.45, 0.6], [0.55, 0.4]];
     for (const mode of ['hover', 'click']) {
@@ -779,9 +855,12 @@ await withSession(async (page) => {
   if (g15) {
     console.log('\n== PHASE 2 — Claim 1 (dropdown gates interactivity) ==');
     await safe(run, page, 'Claim 1', async () => {
-      // 2a baseline sweep (state-wide).
+      // 2a baseline sweep (state-wide): coarse full-canvas pass -> focus on the
+      // state's live extent -> dense baseline sweep there.
       await clearGeographyToStateWide(page);
-      const base = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster);
+      const coarse = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster);
+      STATE_BBOX = deriveLiveBBox(coarse);
+      const base = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster, STATE_BBOX);
       await shot(page, run, 'p2a-baseline-sweep');
       const L0 = base.livePoints; const D0 = base.distinctDistricts;
       if (L0.length < TH.L0_LIVE_MIN || D0.length < TH.D0_DISTINCT_MIN) {
@@ -795,7 +874,7 @@ await withSession(async (page) => {
       const blockRoster = await discoverBlockRoster(page);
       const sigAfter = await viewSignature(page);
       const viewDelta = sigBefore !== sigAfter;
-      const after = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster);
+      const after = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster, STATE_BBOX);
       await shot(page, run, 'p2b-selected-sweep');
       const L1 = after.livePoints; const D1 = after.distinctDistricts;
       // Classify each post-selection point.
@@ -819,12 +898,13 @@ await withSession(async (page) => {
       }
       // 2d reversibility.
       await clearGeographyToStateWide(page);
-      const rev = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster);
+      const rev = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster, STATE_BBOX);
       await shot(page, run, 'p2d-reversibility');
       const reverted = overlapFraction(L0, rev.livePoints) >= TH.OVERLAP_MIN;
 
       let verdict;
-      if (gating && reverted) verdict = 'CONFIRMED (gating, reversible drill-down)';
+      if (gating && reverted && !viewChanged) verdict = 'CONFIRMED (interactivity-only gating, reversible; no view change)';
+      else if (gating && reverted && viewChanged) verdict = 'CONFIRMED (gating via reversible drill-down; view changed)';
       else if (gating && !reverted) verdict = 'CONFIRMED (gating, HARD lock-out — not reversible)';
       else if (viewChanged) verdict = 'NOT-REPRODUCED (view-change/drill-down, not interactivity lock)';
       else verdict = 'NOT-REPRODUCED (map stays broadly live after district pick)';
@@ -848,7 +928,11 @@ await withSession(async (page) => {
     console.log('\n== PHASE 3 — Claim 2 (commutativity) ==');
     await safe(run, page, 'Claim 2', async () => {
       await clearGeographyToStateWide(page);
-      const base = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster);
+      if (!STATE_BBOX || !STATE_BBOX.focused) {
+        const coarse = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster);
+        STATE_BBOX = deriveLiveBBox(coarse);
+      }
+      const base = await sweepGrid(page, TH.GRID_N, CALIB.mode, roster, STATE_BBOX);
       const D0 = base.distinctDistricts;
       const full = D0.length >= TH.CLAIM2_DISTINCT_MIN;
       P.claim2Coverage = full ? 'full' : 'reduced';
