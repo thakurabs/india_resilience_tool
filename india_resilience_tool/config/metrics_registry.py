@@ -305,7 +305,12 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Percentage of days when daily maximum temperature exceeds the 90th "
             "percentile threshold computed per calendar day from the baseline period "
-            "using a moving window (ETCCDI TX90p)."
+            "using a moving window (ETCCDI TX90p). "
+            "Note: because each district is measured against its own baseline "
+            "threshold, this index sits near 10% everywhere in the historical "
+            "baseline and carries little spatial signal there. Its meaningful signal "
+            "appears under future warming scenarios (SSP2-4.5 / SSP5-8.5), where "
+            "exceedance climbs well above 10%."
         ),
     },
     {
@@ -329,7 +334,12 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Percentage of days when daily minimum temperature exceeds the 90th "
             "percentile threshold computed per calendar day from the baseline period "
-            "using a moving window (ETCCDI TN90p-style)."
+            "using a moving window (ETCCDI TN90p-style). "
+            "Note: because each district is measured against its own baseline "
+            "threshold, this index sits near 10% everywhere in the historical "
+            "baseline and carries little spatial signal there. Its meaningful signal "
+            "appears under future warming scenarios (SSP2-4.5 / SSP5-8.5), where "
+            "exceedance climbs well above 10%."
         ),
     },
     {
@@ -355,7 +365,12 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Percentage of days when daily maximum temperature is strictly below the "
             "10th percentile threshold computed per calendar day from the baseline period "
-            "(1990-2010) using a 5-day moving window (ETCCDI TX10p)."
+            "(1990-2010) using a 5-day moving window (ETCCDI TX10p). "
+            "Note: because each district is measured against its own baseline "
+            "threshold, this index sits near 10% everywhere in the historical "
+            "baseline and carries little spatial signal there. Its meaningful signal "
+            "appears under future warming scenarios (SSP2-4.5 / SSP5-8.5), where "
+            "cool-day frequency falls below 10%."
         ),
     },
     {
@@ -381,7 +396,12 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Percentage of days when daily minimum temperature is strictly below the "
             "10th percentile threshold computed per calendar day from the baseline period "
-            "(1990-2010) using a 5-day moving window (ETCCDI TN10p)."
+            "(1990-2010) using a 5-day moving window (ETCCDI TN10p). "
+            "Note: because each district is measured against its own baseline "
+            "threshold, this index sits near 10% everywhere in the historical "
+            "baseline and carries little spatial signal there. Its meaningful signal "
+            "appears under future warming scenarios (SSP2-4.5 / SSP5-8.5), where "
+            "cool-night frequency falls below 10%."
         ),
     },
     

@@ -42,6 +42,13 @@ are methodology/coverage choices.
 
 ## FLAG A — Percentile-exceedance indices are inert in the historical slice
 
+**Status:** RESOLVED via **Option 1 (annotate)** — 2026-07-13.
+Registry `description` for all four metrics now carries a plain-language note
+that they are near-flat (~10 %) by construction in the historical baseline and
+carry real signal only under future warming scenarios; this renders in the
+UI metric-picker "About this metric" tooltip (`app/ribbon.py`). No scoring or
+methodology change. See CHG-0226/CHG-0227.
+
 **Metrics:** `tx90p_hot_days_pct`, `tn90p_warm_nights_pct`,
 `tx10p_cool_days_pct`, `tn10p_cool_nights_pct`.
 
@@ -50,6 +57,33 @@ are methodology/coverage choices.
 - `tn90p`: 10.18 – 10.40
 - `tx10p`: 9.32 – 9.45
 - `tn10p`: 9.23 – 9.45
+
+**Future-slice confirmation (audit re-run 2026-07-13, all 781 districts, 0 % NaN):**
+the flatness is historical-only; the future signal is large, monotonic in
+scenario+time, and geographically physical (low-variability tropical islands
+cross their own threshold on ~99 % of days; high-seasonal-spread interior MP
+dilutes toward 50 %).
+
+| metric | historical mean (range) | ssp585 2060–2080 mean (range) |
+|---|---|---|
+| `tx90p_hot_days_pct` | 10.32 % (0.18 pp) | **59.9 %** (48.8 pp) |
+| `tn90p_warm_nights_pct` | 10.29 % (0.22 pp) | **70.5 %** (41.7 pp) |
+| `tx10p_cool_days_pct` | 9.38 % (0.13 pp) | **1.8 %** (3.3 pp) |
+| `tn10p_cool_nights_pct` | 9.34 % (0.22 pp) | **4.6 %** (5.8 pp) |
+
+Reproduced by `flag_a_future_audit.py` (staged in scratch during the audit;
+writes `flag_a_future_audit.csv`).
+
+**Scoring-path note (why the historical flatness is not merely inert):**
+`analysis/bundle_scores.py::normalize_metric_series` is min–max across the
+frame — it stretches `[min, max] → [0, 100]` regardless of whether the spread
+is signal or noise. On the historical slice this stretches ~0.2 pp of noise to
+the full 0–100 range at ~7–10 % bundle weight. Option 1 documents this rather
+than changing it; the default landing view is a **future** slice
+(`ssp585 / 2040-2060`, `app/landing_runtime.py:61`) where the metrics are
+legitimate, so the residual noise only bites when a user explicitly selects the
+historical slice. A signal-blind-normalization guard was considered and
+deferred (would be a methodology change).
 
 **Root cause (not a bug):** these count exceedances of each district's **own
 baseline percentile threshold** (local/relative, computed per calendar day).
