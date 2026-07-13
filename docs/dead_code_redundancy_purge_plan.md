@@ -1,8 +1,11 @@
 # Dead and Redundant Code Purge Plan
 
-**Plan Status:** Ready for execution after explicit approval  
-**Planning Snapshot:** `GIT:add_flood_depth@6c481b9`  
-**Planning Working Tree:** Dirty; 13 untracked files, no tracked modifications  
+**Plan Status:** Reviewed and ready for execution after explicit approval
+
+**Planning Snapshot:** `GIT:add_flood_depth@37cac63`
+
+**Planning Working Tree:** Dirty; 13 untracked files, no tracked modifications
+
 **Change Range:** `CHG-0222` through `CHG-0227`
 
 ## Summary
@@ -56,7 +59,8 @@ Implementation requirements:
 - Preserve runtime-facing interfaces:
   - `render_geography_and_analysis_focus`
   - `build_portfolio_multiindex_df`
-  - all `_portfolio_*` wrappers imported by `app/runtime.py`
+  - all seven `_portfolio_*` wrappers imported by `app/runtime.py`: `_portfolio_add`, `_portfolio_clear`, `_portfolio_contains`, `_portfolio_key`, `_portfolio_normalize`, `_portfolio_remove`, and `_portfolio_set_flash`
+  - the derived runtime alias `_portfolio_remove_all = _portfolio_clear`; `_portfolio_clear` must survive even though runtime does not call it under its original name
   - `render_portfolio_panel`, `render_rankings_view`, SPI compute functions, and admin discovery functions
 - Update hydro-positive cases in `tests/test_portfolio.py`, `tests/test_portfolio_tier3_multistate.py`, and `tests/test_app_geography_controls.py`.
 - Explicitly classify `india_resilience_tool/app/runtime.py` as `RETAIN_CALLSITE_VERIFY`; its basin comment documents the retained overlay and is not purge residue.
@@ -65,16 +69,18 @@ Implementation requirements:
 Narrow acceptance pass:
 
 ```bash
-rg -n -w 'navigable|hydro_mode|selected_basin|selected_subbasin' <eight-source-files>
+rg -n 'navigable|hydro_mode|selected_basin|selected_subbasin' <eight-source-files>
 ```
 
 Context acceptance pass:
 
 ```bash
-rg -n -w 'basin|sub_basin' <eight-source-files>
+rg -n 'basin' <eight-source-files>
 ```
 
-Acceptance means zero **unclassified** hits, not zero textual hits. Each broad-pass hit must be labeled `PURGE` or `RETAIN_CONTEXT/COMPUTE`.
+Do not add `-w` to either command: underscores are word characters, so word-boundary matching misses compound identifiers such as `basin_id`, `subbasin_name`, `item_basin_id`, `basin_dir`, and `is_basin`. The plain `basin` substring also covers `sub_basin`, `subbasin`, and their compound forms.
+
+Acceptance means zero **unclassified** hits, not zero textual hits. Each broad-pass hit must be labeled `PURGE` or `RETAIN_CONTEXT/COMPUTE`. Budget for a substantial classification pass: planning snapshot `37cac63` contains 513 broad-pass hits across the eight files, while the narrow pass contains only two; refresh both counts at execution time.
 
 Retain the established hydrology-context modules, including `app/runtime.py`, map/runtime overlays, details/context cards, crosswalks, hydro/river loaders, topology, summary cache, geo cache, and Folium feature-collection code.
 
