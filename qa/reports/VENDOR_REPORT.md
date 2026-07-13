@@ -25,7 +25,7 @@ reproduced manually · `DEPRIORITISED` = parked, revisit later ·
 | M3 | Major | a11y | US 09/11 | **SENT** | Multiple text elements below WCAG AA contrast; error-red `#E75252` worst. Includes internal slugs bleeding into the ranking-table view. |
 | M1 | Major | a11y | US 09 | HOLD→keep | Collapsed-panel reopen affordance / toggle labelling for AT users. |
 | M2 | Major | a11y | US 09/11 | HOLD→keep | Header brand link + icon has no accessible name (critical `image-alt`). |
-| M4 | Major | functional | US 10 | **SEND** | "Show on Map" resolves a valid coordinate correctly **but fires a contradictory "Location could not be resolved" error toast** at the same time. **Reproduced 3/3** on video (`runs/repro-m4/`) — but **only on the first "Show on Map" of a fresh page load**. The resolve API (`POST /api/api/geo/reverse-geocode`) returns **200**; the toast fires ~60ms after click, **independent of the successful response** → a **frontend logic bug**, not a backend failure. Not reproducible in a warmed session (why it looked flaky). |
+| M4 | Major | functional | US 10 | **RESOLVED** (re-verified 2026-07-13) | "Show on Map" fired a contradictory "Location could not be resolved" error toast on a successful resolve. **No longer reproducible:** across 15 fresh cold-load attempts the toast is never shown and, per a `MutationObserver`, the toast node is **never inserted** (0/6 decisive); resolves return **200** with correct inline text + pin (15/15). The earlier "3/3" was a false positive from an `innerText` text-scrape heuristic, not a visible toast. See M4 detail for verification method. |
 | M7 | Major | functional/data | US 10 | HOLD | **No value or geographic validation on coordinate upload.** Out-of-range (lat 999 / long −500 / 1e9), non-numeric (`abc`), empty, unbounded-name (5000 chars), and out-of-India (London/Pacific/Null Island) coordinates are all **accepted, resolved to blocks, and plotted** — identically across **CSV, XLSX, and shapefile (.zip)**. All uploads return HTTP 200 → the only rejection is client-side structural (wrong shape / unsupported type / >1 MB); cell values are never validated. |
 | N1 | Minor | a11y | US 11 | HOLD | MapLibre attribution link not distinguishable without color (third-party control). |
 | N2 | Minor | a11y | US 09 | HOLD | No `<main>` landmark; 9 blocks outside landmarks. |
@@ -248,7 +248,27 @@ unverifiable while logged in; **N22**), US 02–04 (need a test-email inbox), US
 
 ---
 
-## M4 — Contradictory "could not be resolved" toast on a *successful* coordinate lookup  ★ US 10
+## M4 — Contradictory "could not be resolved" toast on a *successful* coordinate lookup  ★ US 10  — ✅ RESOLVED (re-verified 2026-07-13)
+
+> **Status: RESOLVED / no longer reproducible (re-verified 2026-07-13).** Re-tested against
+> the live `dev.resilience.org.in` build. Across **15 fresh cold-load attempts** (every context
+> is a brand-new "first Show-on-Map"), the error toast was **never visible** in any screenshot,
+> and a `MutationObserver` armed on `<body>` before the click — which cannot miss a node
+> insertion regardless of timing — recorded the toast node being inserted **0/6 times**.
+> Every resolve returned `POST /api/api/geo/reverse-geocode` **200** with the correct inline
+> "This location is …" text and a plotted pin (**15/15**).
+>
+> **Correction to the original finding:** the "reproduced 3/3" claim came from `repro-m4.mjs`,
+> which decides "toast fired" by regex-scraping `document.body.innerText` — it never inspects
+> pixels or DOM node insertions. That heuristic produced false positives (matches at ~57–61ms
+> with **no** visible toast in the +760ms screenshot and **no** corresponding DOM node). The
+> authoritative `MutationObserver` re-test finds no toast. M4 is considered fixed.
+>
+> Residual note: all false-positive matches occurred on the very first activity of a fresh
+> login session; a first-resolve-after-fresh-token cold path could not be re-triggered and is
+> not considered a live defect.
+>
+> _Original finding preserved below for the record._
 
 - **What:** In the Coordinate Panel → *Add Coordinates*, entering a valid, in-coverage
   point (Lat `17.8766`, Long `79.2792`) and clicking **Show on Map** resolves the
