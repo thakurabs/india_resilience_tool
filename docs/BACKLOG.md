@@ -199,6 +199,13 @@ Entry fields:
   - Partial lever for sectoral bundles without new machinery: raise the impact-lens weight (score → absolute as `ω_imp → 1`), or publish `S_imp` itself as a separate "absolute danger" field.
 - `Done when`: an absolute, cross-state/cross-period-comparable composite is published **alongside** (not replacing) the current per-period relative scores, with the chosen route documented in the technical note, a scientific-compute pytest test added (methodology-impacting change per CLAUDE.md §4), and the relative-vs-absolute distinction surfaced in the UI so the two are not conflated.
 
+### BL-0026 — Execute the coordinated dead and redundant code purge
+- `Area`: code hygiene, hydro lean-down, Aqueduct tooling, repository maintenance
+- `Why deferred`: the purge is fully planned but deliberately held for an isolated worktree and staged validation because it combines untracked-file disposition, caller-sensitive removal of inert hydro branches, and extraction of live Aqueduct helpers before deleting obsolete CLIs. Treating these as one coordinated initiative prevents partial cleanup from losing pending work or leaving dangling imports.
+- `Dependency / trigger`: begin only after re-baselining the live SHA and classifying every untracked file. Preserve the pending exposure/hydro patch, map/design/performance specifications, block-placeholder test, and active boundary-audit diagnostics unless they are explicitly abandoned.
+- `Plan`: follow `docs/dead_code_redundancy_purge_plan.md` (`CHG-0222` through `CHG-0227`). This umbrella item coordinates `BL-0023` and `BL-0024`; `build_blocks_geojson.py` remains methodology-deferred and is not a purge candidate.
+- `Done when`: approved untracked removals have persistent per-file quarantine records, all hydro-residue hits are classified, downstream callers retain compatible interfaces, the Aqueduct hydro CLIs are removed only after the shared-helper import gate passes, focused and full-suite results show no new failures, documentation has no stale operational references, and graphify has been refreshed.
+
 ## Icebox
 
 - No items recorded yet.
