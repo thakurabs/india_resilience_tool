@@ -18,7 +18,7 @@ from contextlib import nullcontext
 from typing import Any, Callable, Mapping, Optional, Tuple
 
 RESPONSIVE_MAP_MIN_HEIGHT = 420
-RESPONSIVE_MAP_MAX_HEIGHT = 700
+RESPONSIVE_MAP_MAX_HEIGHT = 820
 
 PANE_BASE_POLYGONS = "irt-base-polygons"
 PANE_POPULATION_RASTER = "irt-population-raster"

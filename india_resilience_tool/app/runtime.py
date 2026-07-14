@@ -442,7 +442,7 @@ def run_app() -> None:
     # Main layout: left (workspace) + right (panel: scrollable, collapsible)
     rhs_collapsed = bool(st.session_state.get("right_panel_collapsed", False))
 
-    col_weights = [5, 3] if not rhs_collapsed else [9.4, 0.6]
+    col_weights = [6, 2.4] if not rhs_collapsed else [9.4, 0.6]
     col1, col2 = st.columns(col_weights)
 
     with col1:
@@ -752,7 +752,7 @@ def run_app() -> None:
     # Build map + rankings artifacts.
     # When the ribbon is collapsed, the three-row ribbon (~250px) frees vertical
     # space; grow the map to fill it so collapse actually expands the canvas.
-    MAP_WIDTH, MAP_HEIGHT = 780, 560
+    MAP_WIDTH, MAP_HEIGHT = 780, 660
     if bool(st.session_state.get("ribbon_collapsed", False)):
         MAP_HEIGHT += 250
     pending_zoom = st.session_state.pop("_pending_block_zoom", None)
