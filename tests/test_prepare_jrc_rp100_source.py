@@ -50,15 +50,46 @@ def test_fallback_footprint_from_filename_parses_nominal_10_degree_tile() -> Non
 
 
 def test_tile_extents_selection_uses_one_pixel_boundary_buffer(tmp_path: Path) -> None:
+    buffer_degrees = prep.NATIVE_PIXEL_DEGREES
+    inside_gap = buffer_degrees * 0.5
+    outside_gap = buffer_degrees * 1.5
     boundary_path = _write_boundary(tmp_path, geom=box(10.0, 1.0, 10.2, 2.0))
-    footprints = prep.load_tile_extents(_write_tile_extents(tmp_path))
+    footprints = [
+        prep.TileFootprint(
+            tile_id="WITHIN_BUFFER",
+            filename="RP100_depth_N00E000.tif",
+            bounds=(-0.5, 0.0, 10.0 - inside_gap, 10.0),
+            geometry_wkt=box(-0.5, 0.0, 10.0 - inside_gap, 10.0).wkt,
+            source="test",
+        ),
+        prep.TileFootprint(
+            tile_id="TOUCHING",
+            filename="RP100_depth_N00E010.tif",
+            bounds=(10.0, 0.0, 20.0, 10.0),
+            geometry_wkt=box(10.0, 0.0, 20.0, 10.0).wkt,
+            source="test",
+        ),
+        prep.TileFootprint(
+            tile_id="OUTSIDE_BUFFER",
+            filename="RP100_depth_N00E020.tif",
+            bounds=(-20.0, 0.0, 10.0 - outside_gap, 10.0),
+            geometry_wkt=box(-20.0, 0.0, 10.0 - outside_gap, 10.0).wkt,
+            source="test",
+        ),
+    ]
 
     selected = prep.select_intersecting_tiles(
         boundary_path=boundary_path,
         tile_footprints=footprints,
     )
 
-    assert [tile.tile_id for tile in selected] == ["N00E000", "N00E010"]
+    assert [tile.tile_id for tile in selected] == ["TOUCHING", "WITHIN_BUFFER"]
+    selected_without_buffer = prep.select_intersecting_tiles(
+        boundary_path=boundary_path,
+        tile_footprints=footprints,
+        selection_buffer_degrees=0.0,
+    )
+    assert [tile.tile_id for tile in selected_without_buffer] == ["TOUCHING"]
 
 
 def test_build_inventory_and_manifest_skeleton_are_deterministic(tmp_path: Path) -> None:
