@@ -689,23 +689,33 @@ district GeoJSON through an explicit alias workflow, and writes:
 Bootstrap the official JRC RP-100 source files into an empty raw-data folder
 before preparing the strict manifest. This manual PowerShell command downloads
 the official root metadata, `tile_extents.geojson`, and every non-reclass
-`RP100_depth.tif` tile from the official JRC flood-hazard directory. It is a
-repeatable interim operator step until CHG-0232 adds the first-class validated
-downloader.
+`RP100_depth.tif` tile from the official JRC flood-hazard directory. The
+download remains a manual operator step; the source finalizer below validates
+the downloaded files and writes the strict manifest/VRT contract.
 
 ```powershell
 $Out="D:\projects\irt_data\jrc_raw_new"; $Base="https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/CEMS-GLOFAS/flood_hazard"; New-Item -ItemType Directory -Force "$Out\RP100" | Out-Null; curl.exe -L --fail -o "$Out\README.txt" "$Base/README.txt"; curl.exe -L --fail -o "$Out\CHANGELOG.txt" "$Base/CHANGELOG.txt"; curl.exe -L --fail -o "$Out\tile_extents.geojson" "$Base/tile_extents.geojson"; $page=(Invoke-WebRequest -UseBasicParsing "$Base/RP100/").Content; $files=[regex]::Matches($page,'href="([^"]+_RP100_depth\.tif)"') | ForEach-Object {$_.Groups[1].Value} | Where-Object {$_ -notmatch '_reclass'} | Sort-Object -Unique; foreach ($f in $files) { curl.exe -L --fail --continue-at - -o "$Out\RP100\$f" "$Base/RP100/$f" }
 ```
 
-Prepare a planned strict RP-100 source manifest scaffold without downloading rasters:
+Prepare a planned strict RP-100 source inventory/manifest scaffold without downloading rasters:
 
 ```bash
 python -m tools.data_acquisition.prepare_jrc_rp100_source --boundary-path /path/to/districts_4326.geojson --tile-extents-path /path/to/tile_extents.geojson --output-dir /path/to/jrc_rp100_v2_1_2 --dry-run
 ```
 
+After the official `RP100/*.tif` files have been downloaded into the same source folder,
+finalize the strict source. This validates filename coverage against `source_inventory.json`,
+checks each selected raster's CRS, 3-arc-second resolution, `-9999` nodata, bounds, and full
+blockwise readability, then writes `RP100_depth.vrt`, `RP100_tile_coverage.vrt`, and a validated
+`source_manifest.json`:
+
 ```bash
-python -m tools.runs.prepare_dashboard jrc-flood-depth --state Telangana --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
-python -m tools.geodata.build_jrc_flood_depth_admin_masters --state Telangana --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.data_acquisition.prepare_jrc_rp100_source --output-dir /path/to/jrc_rp100_v2_1_2 --finalize --overwrite
+```
+
+```bash
+python -m tools.runs.prepare_dashboard jrc-flood-depth --state Telangana --source-manifest /path/to/jrc_rp100_v2_1_2/source_manifest.json --rp100-only --overwrite
+python -m tools.geodata.build_jrc_flood_depth_admin_masters --state Telangana --source-manifest /path/to/jrc_rp100_v2_1_2/source_manifest.json --rp100-only --overwrite
 ```
 
 This builds district and block snapshot masters for the selected state. For example, `--state Telangana` writes:

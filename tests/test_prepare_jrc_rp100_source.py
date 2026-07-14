@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pytest
+import rasterio
+from rasterio.transform import from_origin
 from shapely.geometry import box
 
 from tools.data_acquisition import prepare_jrc_rp100_source as prep
@@ -56,6 +59,54 @@ def _write_official_tile_extents(tmp_path: Path) -> Path:
     path = tmp_path / "official_tile_extents.geojson"
     gdf.to_file(path, driver="GeoJSON")
     return path
+
+
+def _inventory_for_tiles(tmp_path: Path, tiles: list[prep.TileFootprint]) -> dict[str, object]:
+    boundary_path = _write_boundary(tmp_path, geom=box(*tiles[0].bounds))
+    return prep.build_inventory(
+        dataset_version="2.1.2",
+        base_url=prep.DEFAULT_BASE_URL,
+        boundary_path=boundary_path,
+        tile_footprints=tiles,
+        selected_tiles=tiles,
+        tile_extents_path=None,
+        selection_buffer_degrees=0.0,
+    )
+
+
+def _tiny_tile(tile_id: str, filename: str, west: float, south: float) -> prep.TileFootprint:
+    east = west + 4 * prep.NATIVE_PIXEL_DEGREES
+    north = south + 4 * prep.NATIVE_PIXEL_DEGREES
+    geom = box(west, south, east, north)
+    return prep.TileFootprint(
+        tile_id=tile_id,
+        filename=filename,
+        bounds=(west, south, east, north),
+        geometry_wkt=geom.wkt,
+        source="test",
+    )
+
+
+def _write_native_depth_tile(path: Path, bounds: tuple[float, float, float, float], *, nodata: float = -9999.0) -> None:
+    west, south, east, north = bounds
+    width = int(round((east - west) / prep.NATIVE_PIXEL_DEGREES))
+    height = int(round((north - south) / prep.NATIVE_PIXEL_DEGREES))
+    data = np.arange(1, width * height + 1, dtype=np.float32).reshape(height, width)
+    data[-1, -1] = nodata
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=height,
+        width=width,
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_origin(west, north, prep.NATIVE_PIXEL_DEGREES, prep.NATIVE_PIXEL_DEGREES),
+        nodata=nodata,
+    ) as dst:
+        dst.write(data, 1)
 
 
 def test_fallback_footprint_from_filename_parses_nominal_10_degree_tile() -> None:
@@ -232,3 +283,69 @@ def test_fallback_mode_marks_validation_required(tmp_path: Path) -> None:
 def test_duplicate_tile_ids_fail_fast() -> None:
     with pytest.raises(ValueError, match="Duplicate JRC tile IDs"):
         prep.load_fallback_filenames(["RP100_depth_N00E000.tif", "copy_N00E000.tif"])
+
+
+def test_cli_finalize_validates_tiles_and_writes_vrts(tmp_path: Path) -> None:
+    output_dir = tmp_path / "jrc_source"
+    tile = _tiny_tile("N30E070", "ID184_N30_E70_RP100_depth.tif", 70.0, 20.0)
+    inventory = _inventory_for_tiles(tmp_path, [tile])
+    output_dir.mkdir(parents=True)
+    (output_dir / "source_inventory.json").write_text(json.dumps(inventory, indent=2), encoding="utf-8")
+    _write_native_depth_tile(output_dir / "RP100" / tile.filename, tile.bounds)
+
+    rc = prep.main(["--output-dir", str(output_dir), "--finalize", "--overwrite"])
+
+    assert rc == 0
+    manifest = json.loads((output_dir / "source_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["acquisition_status"] == "validated"
+    assert manifest["validated_tile_ids"] == ["N30E070"]
+    assert manifest["rp100_depth_vrt"] == "RP100_depth.vrt"
+    assert manifest["rp100_tile_coverage_vrt"] == "RP100_tile_coverage.vrt"
+    assert manifest["tiles"][0]["path"] == "RP100/ID184_N30_E70_RP100_depth.tif"
+    assert manifest["tiles"][0]["coverage_path"] == "RP100_tile_coverage/N30E070_coverage.tif"
+    assert "raster_bounds_match_official_tile_extents" in manifest["integrity_basis"]
+
+    with rasterio.open(output_dir / "RP100_depth.vrt") as depth, rasterio.open(output_dir / "RP100_tile_coverage.vrt") as coverage:
+        assert depth.crs.to_string() == "EPSG:4326"
+        assert coverage.crs.to_string() == "EPSG:4326"
+        assert depth.shape == coverage.shape == (4, 4)
+        assert tuple(depth.bounds) == tuple(coverage.bounds)
+        assert np.isclose(depth.nodata, -9999.0)
+        assert np.isclose(coverage.nodata, 0.0)
+        assert set(np.unique(coverage.read(1, masked=False)).tolist()) == {1}
+
+
+def test_finalize_fails_when_expected_tile_file_is_missing(tmp_path: Path) -> None:
+    output_dir = tmp_path / "jrc_source"
+    tile = _tiny_tile("N30E070", "ID184_N30_E70_RP100_depth.tif", 70.0, 20.0)
+    inventory = _inventory_for_tiles(tmp_path, [tile])
+    output_dir.mkdir(parents=True)
+    (output_dir / "source_inventory.json").write_text(json.dumps(inventory, indent=2), encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="Expected JRC RP-100 tile is missing"):
+        prep.finalize_downloaded_source(
+            inventory_path=output_dir / "source_inventory.json",
+            output_dir=output_dir,
+            overwrite=True,
+            acquisition_timestamp_utc="2026-07-14T00:00:00+00:00",
+            finalization_timestamp_utc="2026-07-14T00:00:01+00:00",
+        )
+
+
+def test_finalize_fails_when_raster_bounds_do_not_match_inventory(tmp_path: Path) -> None:
+    output_dir = tmp_path / "jrc_source"
+    tile = _tiny_tile("N30E070", "ID184_N30_E70_RP100_depth.tif", 70.0, 20.0)
+    inventory = _inventory_for_tiles(tmp_path, [tile])
+    output_dir.mkdir(parents=True)
+    (output_dir / "source_inventory.json").write_text(json.dumps(inventory, indent=2), encoding="utf-8")
+    shifted_bounds = (tile.bounds[0] + prep.NATIVE_PIXEL_DEGREES, tile.bounds[1], tile.bounds[2] + prep.NATIVE_PIXEL_DEGREES, tile.bounds[3])
+    _write_native_depth_tile(output_dir / "RP100" / tile.filename, shifted_bounds)
+
+    with pytest.raises(ValueError, match="raster bounds"):
+        prep.finalize_downloaded_source(
+            inventory_path=output_dir / "source_inventory.json",
+            output_dir=output_dir,
+            overwrite=True,
+            acquisition_timestamp_utc="2026-07-14T00:00:00+00:00",
+            finalization_timestamp_utc="2026-07-14T00:00:01+00:00",
+        )
