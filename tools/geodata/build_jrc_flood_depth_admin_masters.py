@@ -77,6 +77,8 @@ RP100_OVERLAY_DISPLAY_MIN_M = 0.0
 RP100_OVERLAY_DISPLAY_MAX_M = 10.0
 STRICT_RP100_RESOLUTION_DEGREES = 1.0 / 1200.0
 STRICT_RP100_RESOLUTION_TOLERANCE = 1e-12
+DISTRICT_SUPPORTED_AREA_ABSOLUTE_TOLERANCE_KM2 = 1e-6
+DISTRICT_SUPPORTED_AREA_RELATIVE_TOLERANCE = 1e-9
 RP100_OVERLAY_COLORS: tuple[tuple[float, tuple[int, int, int]], ...] = (
     (0.5, (214, 240, 255)),
     (1.0, (157, 217, 255)),
@@ -628,6 +630,31 @@ def _add_area_km2(gdf: gpd.GeoDataFrame, *, area_col: str) -> gpd.GeoDataFrame:
     return out
 
 
+def _district_supported_area_tolerance_km2(district_area_km2: float) -> float:
+    """Return the tolerance for comparing summed child support to district area."""
+    area = abs(float(district_area_km2)) if np.isfinite(district_area_km2) else 0.0
+    return max(
+        DISTRICT_SUPPORTED_AREA_ABSOLUTE_TOLERANCE_KM2,
+        area * DISTRICT_SUPPORTED_AREA_RELATIVE_TOLERANCE,
+    )
+
+
+def _supported_area_exceeds_district_area(
+    supported_area_km2: float,
+    district_area_km2: float,
+) -> bool:
+    """Return True when supported area exceeds district area beyond geometry-noise tolerance."""
+    tolerance = _district_supported_area_tolerance_km2(district_area_km2)
+    return float(supported_area_km2) > float(district_area_km2) + tolerance
+
+
+def _bounded_unit_fraction(value: float) -> float:
+    """Clamp tiny floating overshoots in fraction diagnostics to the physical 0-1 range."""
+    if pd.isna(value):
+        return value
+    return float(min(max(float(value), 0.0), 1.0))
+
+
 def _geometry_coverage_stats(
     dataset: rasterio.io.DatasetReader,
     geom,
@@ -1015,6 +1042,7 @@ def _build_district_frames(
         district_valid_support_fraction = (
             float(district_valid_supported_area_km2 / district_area_km2) if district_area_km2 > 0 else 0.0
         )
+        district_valid_support_fraction = _bounded_unit_fraction(district_valid_support_fraction)
         covered = district_blocks.loc[district_blocks["valid_supported_area_km2"] > 0.0].copy()
         covered_flooded = district_blocks.loc[district_blocks["flooded_supported_area_km2"] > 0.0].copy()
 
@@ -1063,7 +1091,7 @@ def _build_district_frames(
             raise ValueError(
                 f"{metric_slug} district {src_row.district_name!r} has flooded supported area exceeding valid supported area."
             )
-        if district_valid_supported_area_km2 > district_area_km2 + 1e-6:
+        if _supported_area_exceeds_district_area(district_valid_supported_area_km2, district_area_km2):
             raise ValueError(
                 f"{metric_slug} district {src_row.district_name!r} has valid supported area exceeding district polygon area."
             )
@@ -1564,6 +1592,7 @@ def _build_derived_extent_outputs(
         )
         district_area_km2 = float(district_row.district_area_km2)
         covered_valid_support_fraction = _safe_fraction(district_valid_supported_area_km2, district_area_km2)
+        covered_valid_support_fraction = _bounded_unit_fraction(covered_valid_support_fraction)
         publishable = bool(district_valid_supported_area_km2 > 0.0)
         extent_fraction = _safe_fraction(district_flooded_supported_area_km2, district_area_km2)
         if not publishable:

@@ -22,6 +22,7 @@ from tools.geodata.build_jrc_flood_depth_admin_masters import (
     _classify_depth_index,
     _classify_extent_index,
     _default_qa_dir,
+    _supported_area_exceeds_district_area,
     _lookup_severity_index,
     _validate_strict_rp100_contract,
     build_jrc_flood_depth_outputs,
@@ -1103,6 +1104,19 @@ def test_jrc_builder_uses_authoritative_district_polygon_area_as_denominator(
     assert float(hyderabad["district_valid_support_fraction"]) < 1.0
     assert float(hyderabad["direct_p95_positive_depth_m"]) == pytest.approx(9.0)
     assert float(hyderabad["delta_vs_direct_p95_positive_m"]) < 0.0
+
+
+def test_jrc_district_supported_area_tolerance_allows_meter_scale_boundary_drift() -> None:
+    district_area_km2 = 1747.033333564752
+
+    assert not _supported_area_exceeds_district_area(
+        district_area_km2 + 0.000001342528,
+        district_area_km2,
+    )
+    assert _supported_area_exceeds_district_area(
+        district_area_km2 + 0.01,
+        district_area_km2,
+    )
 
 
 def test_jrc_builder_fails_when_flooded_blocks_are_missing_p95_values(
