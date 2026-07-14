@@ -2,10 +2,11 @@
 
 ## Status
 
-- **Planning snapshot:** `GIT:add_flood_depth@18dd0c2` — three commits ahead of origin when this plan was saved.
+- **Planning snapshot:** `GIT:add_flood_depth@d46c686` — aligned with origin when this plan was amended.
 - **Change Ledger:**
   - `CHG-0228` — replace defective RP-100 source and rebuild affected outputs — `SUGGESTED`.
   - `CHG-0229` — add source, coverage, sentinel, and publication validation — `SUGGESTED`.
+  - `CHG-0231` — incorporate review fixes for sentinel provenance, coverage VRT gaps, mask alignment, state coverage definition, fallback footprint validation, and snapshot freshness — `APPLIED`.
 - **Approval boundary:** this plan does not authorize implementation, downloads, pipelines, publication, or commits.
 
 ## Summary
@@ -42,7 +43,7 @@ The command will:
 - Download and pin the official README, changelog, RP-100 directory listing, and `tile_extents.geojson`, which is currently published at the [official JRC flood-hazard root](https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/CEMS-GLOFAS/flood_hazard/).
 - Select tiles intersecting the canonical India district union buffered by one native pixel, `1/1200°`, to avoid exact-touch seam omissions.
 - Derive the expected India tile count at runtime; never treat the global tile count as the India count.
-- If `tile_extents.geojson` is unavailable or unreadable, derive nominal 10-degree footprints from official tile filenames. When both sources exist, require their footprints and the downloaded raster bounds to agree.
+- If `tile_extents.geojson` is unavailable or unreadable, derive nominal 10-degree footprints from official tile filenames. Before relying on the fallback, validate at least one fallback-derived footprint against an actual downloaded raster's bounds. When both sources exist, require official extents, fallback footprints, and downloaded raster bounds to agree.
 - Download each tile through a unique `.part` file, then atomically rename it after validation.
 - Partition tile IDs uniquely among workers and use an atomic per-tile lock file so separate processes cannot write the same `.part`.
 - On resume, retain a tile only when its recorded size and SHA-256 match the local file and the raster still passes validation.
@@ -78,11 +79,13 @@ A suspect tile—size mismatch, interrupted transfer, inconsistent range respons
 Avoid materializing a roughly 5.5 GB national float32 mosaic. Produce:
 
 - `RP100_depth.vrt`, referencing official raw tiles by relative path.
-- One compressed, tiled `uint8` coverage GeoTIFF per source tile, containing `1` across the verified tile footprint.
-- `RP100_tile_coverage.vrt`, mosaicking those masks on exactly the same grid.
+- One compressed, tiled `uint8` coverage GeoTIFF per source tile, containing `1` across the verified tile footprint and copying the depth tile's CRS, transform, width, height, and bounds verbatim.
+- `RP100_tile_coverage.vrt`, mosaicking those masks on exactly the same grid and resolving gaps outside acquired tile footprints to literal `0`.
 - `source_inventory.json` and `source_manifest.json`.
 
 The coverage mask is independent of raw depth values: a present official tile is covered even where its depth raster contains `-9999`.
+
+Coverage masks must never recompute their own grid from nominal bounds. Each mask inherits the corresponding depth tile's grid metadata exactly so strict depth/coverage alignment cannot fail because of sub-pixel rounding.
 
 The manifest will pin:
 
@@ -201,6 +204,17 @@ Pinned sentinel intervals:
 | Gorakhpur | 0.5261 | 0.46–0.60 |
 | Ballia | 0.6551 | 0.59–0.73 |
 
+The observed-share values above are provisional planning anchors until the first authorized corrected build records their provenance. Before they become hard acceptance gates, regenerate them from the corrected v2.1.2 build and freeze a reviewed validation contract that records, per table revision:
+
+- JRC dataset version.
+- Source-manifest SHA-256.
+- Canonical boundary SHA-256.
+- Tool name, command, and code commit used to compute the shares.
+- Computation timestamp.
+- Reviewer and review note.
+
+Until that freeze occurs, validation may require that sentinel names and intervals are present, but it must not treat the provisional four-decimal values as measured acceptance evidence. If the first authorized corrected build falls outside these provisional intervals, review the generated shares, source manifest, boundary hash, and extraction logs before either revising the intervals or failing the release.
+
 Sentinel rules:
 
 - Missing sentinel state or district fails validation; it is never skipped.
@@ -215,7 +229,7 @@ National gates:
 - No raster/VRT grid mismatch, unknown source version, missing manifest, or zero-nodata strict source is allowed.
 - Every canonical district and block must resolve to full, partial, none, or documented representative-point fallback.
 - Partial official footprint coverage is reported, not treated as acquisition failure.
-- A state/UT with aggregate source coverage of at least `0.99` and no positive RP-100 cell fails unless explicitly reviewed as expected-dry.
+- A state/UT with aggregate source coverage of at least `0.99` and no positive RP-100 cell fails unless explicitly reviewed as expected-dry. Aggregate source coverage is area-weighted over the state's canonical admin units using the same area-denominator semantics as the existing valid-supported-area rollups.
 - A partially covered all-zero state is a warning requiring QA inspection, not an automatic source-failure conclusion.
 
 Do not guess an expected-dry allowlist. Begin empty and generate an all-zero candidate report during the first corrected build.
