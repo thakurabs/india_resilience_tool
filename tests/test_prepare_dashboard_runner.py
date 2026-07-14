@@ -1333,6 +1333,8 @@ def _jrc_standalone_args(**overrides) -> argparse.Namespace:
         skip_optimised=False,
         skip_audit=False,
         state="Maharashtra",
+        source_manifest=None,
+        rp100_only=False,
         source_dir="/tmp/jrc",
         assume_units="m",
         districts_path=None,
@@ -1358,6 +1360,45 @@ def test_jrc_state_is_forwarded_to_builder() -> None:
     argv = builder.argv
     assert "--state" in argv and argv[argv.index("--state") + 1] == "Maharashtra"
     assert "--overlay-dir" in argv and argv[argv.index("--overlay-dir") + 1] == "/tmp/ov"
+    assert "--allow-unversioned-source" in argv
+
+
+def test_jrc_strict_rp100_manifest_is_forwarded_to_builder() -> None:
+    args = _jrc_standalone_args(
+        source_manifest="/tmp/source_manifest.json",
+        rp100_only=True,
+        source_dir=None,
+        assume_units=None,
+    )
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp100", "jrc_flood_extent_rp100", "jrc_flood_depth_index_rp100"],
+        pending_metrics=[],
+        has_global_issues=False,
+    )
+    plan = build_jrc_flood_depth_plan(args, include_blocks_geojson=False, runtime_scope=scope)
+    builder = next(s for s in plan if s.label == "jrc-flood-depth-admin-masters")
+    argv = builder.argv
+    assert "--source-manifest" in argv
+    assert argv[argv.index("--source-manifest") + 1] == "/tmp/source_manifest.json"
+    assert "--rp100-only" in argv
+    assert "--source-dir" not in argv
+    assert "--allow-unversioned-source" not in argv
+
+
+def test_jrc_source_manifest_requires_rp100_only() -> None:
+    args = _jrc_standalone_args(
+        source_manifest="/tmp/source_manifest.json",
+        rp100_only=False,
+        source_dir=None,
+        assume_units=None,
+    )
+    scope = BundleRuntimeScope(
+        selected_metrics=["jrc_flood_depth_rp100"],
+        pending_metrics=["jrc_flood_depth_rp100"],
+        has_global_issues=False,
+    )
+    with pytest.raises(SystemExit, match="requires --rp100-only with --source-manifest"):
+        build_jrc_flood_depth_plan(args, include_blocks_geojson=False, runtime_scope=scope)
 
 
 def test_jrc_explicit_state_forces_builder_and_publishes_full_set_when_audit_clean() -> None:

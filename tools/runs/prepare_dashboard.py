@@ -1010,6 +1010,8 @@ def _add_jrc_flags(parser: argparse.ArgumentParser, *, prefixed: bool = False) -
     if prefixed:
         parser.add_argument("--include-jrc-flood-depth", action="store_true", help="Include the JRC flood-depth bundle.")
         parser.add_argument("--jrc-state", default=None, help="Admin state for JRC flood-depth masters (default: Telangana).")
+        parser.add_argument("--jrc-source-manifest", default=None, help="Strict RP-100 source_manifest.json from prepare_jrc_rp100_source.")
+        parser.add_argument("--jrc-rp100-only", action="store_true", help="Build only strict RP-100 JRC outputs from --jrc-source-manifest.")
         parser.add_argument("--jrc-source-dir", default=None, help="Directory containing the required JRC flood-depth rasters.")
         parser.add_argument("--jrc-assume-units", default=None, help="Attested JRC flood-depth units; must be 'm' when provided.")
         parser.add_argument("--jrc-districts-path", default=None, help="Optional override path to canonical district boundaries.")
@@ -1018,6 +1020,8 @@ def _add_jrc_flags(parser: argparse.ArgumentParser, *, prefixed: bool = False) -
         parser.add_argument("--jrc-overlay-dir", default=None, help="Optional override directory for the shared RP-100 overlay.")
         return
     parser.add_argument("--state", default="Telangana", help="Admin state for JRC flood-depth masters (default: Telangana).")
+    parser.add_argument("--source-manifest", default=None, help="Strict RP-100 source_manifest.json from prepare_jrc_rp100_source.")
+    parser.add_argument("--rp100-only", action="store_true", help="Build only strict RP-100 JRC outputs from --source-manifest.")
     parser.add_argument("--source-dir", default=None, help="Directory containing the required JRC flood-depth rasters.")
     parser.add_argument("--assume-units", default=None, help="Attested JRC flood-depth units; must be 'm'.")
     parser.add_argument("--districts-path", default=None, help="Optional override path to canonical district boundaries.")
@@ -1033,10 +1037,23 @@ def _validate_jrc_inputs(
     require_source: bool,
 ) -> None:
     source_dir_attr = "jrc_source_dir" if prefixed else "source_dir"
+    source_manifest_attr = "jrc_source_manifest" if prefixed else "source_manifest"
+    rp100_only_attr = "jrc_rp100_only" if prefixed else "rp100_only"
     assume_units_attr = "jrc_assume_units" if prefixed else "assume_units"
     source_dir = getattr(args, source_dir_attr, None)
+    source_manifest = getattr(args, source_manifest_attr, None)
     assume_units = getattr(args, assume_units_attr, None)
     if not require_source:
+        return
+    if source_manifest:
+        if source_dir:
+            prefix = "--jrc-" if prefixed else "--"
+            raise SystemExit(
+                f"JRC flood-depth planning accepts either {prefix}source-manifest or {prefix}source-dir, not both."
+            )
+        if not bool(getattr(args, rp100_only_attr, False)):
+            prefix = "--jrc-" if prefixed else "--"
+            raise SystemExit(f"JRC flood-depth planning requires {prefix}rp100-only with {prefix}source-manifest.")
         return
     if not source_dir or not assume_units:
         prefix = "--jrc-" if prefixed else "--"
@@ -1056,6 +1073,8 @@ def _build_jrc_builder_args(
     argv: list[str] = []
     state_attr = "jrc_state" if prefixed else "state"
     source_dir_attr = "jrc_source_dir" if prefixed else "source_dir"
+    source_manifest_attr = "jrc_source_manifest" if prefixed else "source_manifest"
+    rp100_only_attr = "jrc_rp100_only" if prefixed else "rp100_only"
     assume_units_attr = "jrc_assume_units" if prefixed else "assume_units"
     districts_attr = "jrc_districts_path" if prefixed else "districts_path"
     blocks_attr = "jrc_blocks_path" if prefixed else "blocks_path"
@@ -1063,8 +1082,13 @@ def _build_jrc_builder_args(
     overlay_attr = "jrc_overlay_dir" if prefixed else "overlay_dir"
     if getattr(args, state_attr, None):
         argv.extend(["--state", str(getattr(args, state_attr))])
+    if getattr(args, source_manifest_attr, None):
+        argv.extend(["--source-manifest", str(getattr(args, source_manifest_attr))])
+    if bool(getattr(args, rp100_only_attr, False)):
+        argv.append("--rp100-only")
     if getattr(args, source_dir_attr, None):
         argv.extend(["--source-dir", str(getattr(args, source_dir_attr))])
+        argv.append("--allow-unversioned-source")
     if getattr(args, assume_units_attr, None):
         argv.extend(["--assume-units", str(getattr(args, assume_units_attr))])
     if getattr(args, districts_attr, None):
@@ -1707,6 +1731,8 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     jrc_ns_kwargs = dict(vars(args))
     jrc_ns_kwargs.update(
         state=getattr(args, "jrc_state", None) or "Telangana",
+        source_manifest=getattr(args, "jrc_source_manifest", None),
+        rp100_only=bool(getattr(args, "jrc_rp100_only", False)),
         source_dir=getattr(args, "jrc_source_dir", None),
         assume_units=getattr(args, "jrc_assume_units", None),
         districts_path=getattr(args, "jrc_districts_path", None),

@@ -97,6 +97,20 @@ class RasterContract:
 
 
 @dataclass(frozen=True)
+class StrictRp100RasterContract:
+    """Resolved manifest-pinned RP-100 depth and source-coverage rasters."""
+
+    source_manifest_path: Path
+    source_manifest_sha256: str
+    depth_path: Path
+    coverage_path: Path
+    dataset_version: str
+    raster_crs: str
+    raster_shape: str
+    nodata_value: str
+
+
+@dataclass(frozen=True)
 class GeometryCoverageStats:
     """One polygon's raster extent/depth summary using the shared clipping rule."""
 
@@ -108,6 +122,23 @@ class GeometryCoverageStats:
     max_valid_depth_m: float
     mean_valid_depth_m: float
     p95_positive_depth_m: float
+
+
+@dataclass(frozen=True)
+class StrictGeometryCoverageStats:
+    """One polygon's strict RP-100 summary with explicit source coverage."""
+
+    total_in_polygon_cell_count: int
+    source_covered_cell_count: int
+    source_coverage_fraction: float
+    source_coverage_state: str
+    partial_coverage: bool
+    dry_source_cell_count: int
+    flooded_source_cell_count: int
+    max_flooded_depth_m: float
+    mean_flooded_depth_m: float
+    p95_positive_depth_m: float
+    sampling_mode: str
 
 
 def _derived_metric_column(metric_slug: str) -> str:
@@ -249,6 +280,98 @@ def _validate_raster_contract(source_dir: Path, *, assume_units: str) -> RasterC
     return RasterContract(
         source_dir=source_dir,
         raster_paths=raster_paths,
+        raster_crs=raster_crs,
+        raster_shape=raster_shape,
+        nodata_value=nodata_value,
+    )
+
+
+def _sha256_file(path: Path) -> str:
+    """Return the SHA-256 hex digest for one local file."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _resolve_manifest_path(manifest_path: Path, raw_value: object, *, field_name: str) -> Path:
+    raw = str(raw_value or "").strip()
+    if not raw:
+        raise ValueError(f"Source manifest is missing required field {field_name!r}.")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = manifest_path.parent / path
+    return path.expanduser().resolve()
+
+
+def _validate_strict_rp100_contract(source_manifest: Path) -> StrictRp100RasterContract:
+    """Validate a manifest-pinned RP-100 depth VRT plus explicit coverage VRT."""
+    manifest_path = source_manifest.expanduser().resolve()
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"JRC RP-100 source manifest not found: {manifest_path}")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"JRC RP-100 source manifest is not valid JSON: {manifest_path}") from exc
+
+    dataset_version = str(
+        manifest.get("dataset_version")
+        or manifest.get("jrc_version")
+        or manifest.get("version")
+        or ""
+    ).strip()
+    if not dataset_version:
+        raise ValueError("Source manifest must pin a JRC dataset_version.")
+
+    depth_path = _resolve_manifest_path(
+        manifest_path,
+        manifest.get("rp100_depth_vrt") or manifest.get("depth_vrt") or manifest.get("RP100_depth.vrt"),
+        field_name="rp100_depth_vrt",
+    )
+    coverage_path = _resolve_manifest_path(
+        manifest_path,
+        manifest.get("rp100_tile_coverage_vrt") or manifest.get("coverage_vrt") or manifest.get("RP100_tile_coverage.vrt"),
+        field_name="rp100_tile_coverage_vrt",
+    )
+    if not depth_path.exists():
+        raise FileNotFoundError(f"Manifest RP-100 depth VRT not found: {depth_path}")
+    if not coverage_path.exists():
+        raise FileNotFoundError(f"Manifest RP-100 coverage VRT not found: {coverage_path}")
+
+    with rasterio.open(depth_path) as depth, rasterio.open(coverage_path) as coverage:
+        if depth.count != 1 or coverage.count != 1:
+            raise ValueError("Strict RP-100 depth and coverage rasters must be single-band.")
+        if depth.crs is None or coverage.crs is None:
+            raise ValueError("Strict RP-100 depth and coverage rasters must have CRS.")
+        depth_grid = (depth.crs.to_string(), depth.transform, depth.shape, tuple(depth.bounds), depth.res)
+        coverage_grid = (coverage.crs.to_string(), coverage.transform, coverage.shape, tuple(coverage.bounds), coverage.res)
+        if depth_grid != coverage_grid:
+            raise ValueError(
+                "Strict RP-100 depth and coverage rasters must share CRS, transform, shape, bounds, and resolution."
+            )
+        if depth.crs.to_string() != "EPSG:4326":
+            raise ValueError(f"Strict RP-100 depth raster must be EPSG:4326, got {depth.crs.to_string()}.")
+        if depth.nodata is None or not np.isclose(float(depth.nodata), -9999.0):
+            raise ValueError(f"Strict RP-100 depth nodata must be -9999, got {depth.nodata!r}.")
+
+        for _, window in coverage.block_windows(1):
+            unique = np.unique(coverage.read(1, window=window, masked=False))
+            if not np.isin(unique, [0, 1]).all():
+                raise ValueError("Strict RP-100 coverage raster values must be restricted to 0/1.")
+
+        raster_crs = depth.crs.to_string()
+        raster_shape = f"{depth.height}x{depth.width}"
+        nodata_value = str(depth.nodata)
+
+    return StrictRp100RasterContract(
+        source_manifest_path=manifest_path,
+        source_manifest_sha256=_sha256_file(manifest_path),
+        depth_path=depth_path,
+        coverage_path=coverage_path,
+        dataset_version=dataset_version,
         raster_crs=raster_crs,
         raster_shape=raster_shape,
         nodata_value=nodata_value,
@@ -554,6 +677,94 @@ def _geometry_coverage_stats(
     )
 
 
+def _strict_coverage_state(source_coverage_fraction: float) -> str:
+    if source_coverage_fraction >= 0.99:
+        return "full"
+    if source_coverage_fraction > 0.0:
+        return "partial"
+    return "none"
+
+
+def _strict_stats_from_samples(*, depth_value: object, coverage_value: object) -> StrictGeometryCoverageStats:
+    covered = bool(np.isfinite(coverage_value) and int(coverage_value) == 1)
+    if not covered:
+        return StrictGeometryCoverageStats(1, 0, 0.0, "none", False, 0, 0, np.nan, np.nan, np.nan, "representative_point_fallback")
+    try:
+        depth = float(depth_value)
+    except (TypeError, ValueError):
+        depth = float("nan")
+    flooded = bool(np.isfinite(depth) and depth > 0.0)
+    return StrictGeometryCoverageStats(
+        1,
+        1,
+        1.0,
+        "full",
+        False,
+        0 if flooded else 1,
+        1 if flooded else 0,
+        depth if flooded else np.nan,
+        depth if flooded else np.nan,
+        depth if flooded else np.nan,
+        "representative_point_fallback",
+    )
+
+
+def _strict_geometry_coverage_stats(
+    *,
+    depth_dataset: rasterio.io.DatasetReader,
+    coverage_dataset: rasterio.io.DatasetReader,
+    geom,
+) -> StrictGeometryCoverageStats:
+    if geom is None or geom.is_empty:
+        return StrictGeometryCoverageStats(0, 0, 0.0, "none", False, 0, 0, np.nan, np.nan, np.nan, "cell_center_mask")
+    try:
+        window = geometry_window(depth_dataset, [mapping(geom)])
+    except WindowError:
+        return StrictGeometryCoverageStats(0, 0, 0.0, "none", False, 0, 0, np.nan, np.nan, np.nan, "cell_center_mask")
+
+    depth = np.asarray(depth_dataset.read(1, window=window, masked=False), dtype=float)
+    coverage = np.asarray(coverage_dataset.read(1, window=window, masked=False), dtype=np.uint8)
+    if depth.size == 0:
+        return StrictGeometryCoverageStats(0, 0, 0.0, "none", False, 0, 0, np.nan, np.nan, np.nan, "cell_center_mask")
+
+    in_polygon_mask = geometry_mask(
+        [mapping(geom)],
+        out_shape=depth.shape,
+        transform=depth_dataset.window_transform(window),
+        invert=True,
+        all_touched=False,
+    )
+    total_in_polygon = int(np.count_nonzero(in_polygon_mask))
+    if total_in_polygon == 0:
+        point = geom.representative_point()
+        sample_xy = [(point.x, point.y)]
+        depth_sample = next(depth_dataset.sample(sample_xy))[0]
+        coverage_sample = next(coverage_dataset.sample(sample_xy))[0]
+        return _strict_stats_from_samples(depth_value=depth_sample, coverage_value=coverage_sample)
+
+    source_covered = np.logical_and(coverage == 1, in_polygon_mask)
+    source_covered_count = int(np.count_nonzero(source_covered))
+    source_coverage_fraction = float(source_covered_count / total_in_polygon) if total_in_polygon else 0.0
+    state = _strict_coverage_state(source_coverage_fraction)
+    flooded = source_covered & np.isfinite(depth) & (depth > 0.0)
+    flooded_depth = depth[flooded]
+    flooded_count = int(flooded_depth.size)
+    dry_count = int(source_covered_count - flooded_count)
+    return StrictGeometryCoverageStats(
+        total_in_polygon,
+        source_covered_count,
+        source_coverage_fraction,
+        state,
+        state == "partial",
+        dry_count,
+        flooded_count,
+        float(np.nanmax(flooded_depth)) if flooded_count else np.nan,
+        float(np.nanmean(flooded_depth)) if flooded_count else np.nan,
+        _quantile_linear(flooded_depth, 0.95),
+        "cell_center_mask",
+    )
+
+
 def _build_block_frames(
     *,
     block_gdf: gpd.GeoDataFrame,
@@ -622,6 +833,92 @@ def _build_block_frames(
                 "flooded_supported_area_km2": flooded_supported_area_km2,
                 "dashboard_value_m": dashboard_value,
                 "coverage_pass": bool(coverage_pass),
+            }
+        )
+
+    master_df = pd.DataFrame(master_rows).sort_values(["state", "district", "block"]).reset_index(drop=True)
+    qa_df = pd.DataFrame(qa_rows).sort_values(["state", "district", "block"]).reset_index(drop=True)
+    return master_df, qa_df
+
+
+def _build_strict_rp100_block_frames(
+    *,
+    block_gdf: gpd.GeoDataFrame,
+    depth_dataset: rasterio.io.DatasetReader,
+    coverage_dataset: rasterio.io.DatasetReader,
+    state: str = TARGET_STATE,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    col = _derived_metric_column(DERIVED_INDEX_SOURCE_METRIC_SLUG)
+    block_raster = block_gdf.to_crs(depth_dataset.crs).copy()
+
+    master_rows: list[dict[str, object]] = []
+    qa_rows: list[dict[str, object]] = []
+    for src_row, raster_row in zip(block_gdf.itertuples(index=False), block_raster.itertuples(index=False)):
+        stats = _strict_geometry_coverage_stats(
+            depth_dataset=depth_dataset,
+            coverage_dataset=coverage_dataset,
+            geom=raster_row.geometry,
+        )
+        coverage_pass = stats.source_covered_cell_count > 0
+        valid_support_fraction = _safe_fraction(
+            stats.source_covered_cell_count,
+            stats.total_in_polygon_cell_count,
+        )
+        flooded_support_fraction = _safe_fraction(
+            stats.flooded_source_cell_count,
+            stats.total_in_polygon_cell_count,
+        )
+        valid_supported_area_km2 = (
+            float(src_row.block_area_km2) * valid_support_fraction if pd.notna(valid_support_fraction) else np.nan
+        )
+        flooded_supported_area_km2 = (
+            float(src_row.block_area_km2) * flooded_support_fraction if pd.notna(flooded_support_fraction) else np.nan
+        )
+        if not coverage_pass:
+            dashboard_value = np.nan
+        elif stats.flooded_source_cell_count == 0:
+            dashboard_value = 0.0
+        else:
+            dashboard_value = stats.p95_positive_depth_m
+
+        master_rows.append(
+            {
+                "state": state,
+                "district": src_row.district_name,
+                "block": src_row.block_name,
+                "block_key": src_row.block_key,
+                "block_area_km2": float(src_row.block_area_km2),
+                col: dashboard_value,
+            }
+        )
+        qa_rows.append(
+            {
+                "state": state,
+                "district": src_row.district_name,
+                "block": src_row.block_name,
+                "block_key": src_row.block_key,
+                "block_area_km2": float(src_row.block_area_km2),
+                "total_in_polygon_cell_count": stats.total_in_polygon_cell_count,
+                "valid_in_polygon_cell_count": stats.source_covered_cell_count,
+                "coverage_fraction": stats.source_coverage_fraction,
+                "zero_valid_cell_count": stats.dry_source_cell_count,
+                "positive_valid_cell_count": stats.flooded_source_cell_count,
+                "max_valid_depth_m": stats.max_flooded_depth_m,
+                "mean_valid_depth_m": 0.0 if coverage_pass and stats.flooded_source_cell_count == 0 else stats.mean_flooded_depth_m,
+                "p95_positive_depth_m": 0.0 if coverage_pass and stats.flooded_source_cell_count == 0 else stats.p95_positive_depth_m,
+                "valid_support_fraction_of_block_area": valid_support_fraction,
+                "flooded_support_fraction_of_block_area": flooded_support_fraction,
+                "valid_supported_area_km2": valid_supported_area_km2,
+                "flooded_supported_area_km2": flooded_supported_area_km2,
+                "dashboard_value_m": dashboard_value,
+                "coverage_pass": bool(coverage_pass),
+                "source_covered_cell_count": stats.source_covered_cell_count,
+                "source_coverage_fraction": stats.source_coverage_fraction,
+                "source_coverage_state": stats.source_coverage_state,
+                "partial_coverage": stats.partial_coverage,
+                "dry_source_cell_count": stats.dry_source_cell_count,
+                "flooded_source_cell_count": stats.flooded_source_cell_count,
+                "sampling_mode": stats.sampling_mode,
             }
         )
 
@@ -816,6 +1113,95 @@ def _build_district_frames(
 
     master_df = pd.DataFrame(master_rows).sort_values(["state", "district"]).reset_index(drop=True)
     qa_df = pd.DataFrame(qa_rows).sort_values(["state", "district"]).reset_index(drop=True)
+    return master_df, qa_df
+
+
+def _build_strict_rp100_district_frames(
+    *,
+    district_gdf: gpd.GeoDataFrame,
+    block_master_df: pd.DataFrame,
+    block_qa_df: pd.DataFrame,
+    depth_dataset: rasterio.io.DatasetReader,
+    coverage_dataset: rasterio.io.DatasetReader,
+    state: str = TARGET_STATE,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    master_df, qa_df = _build_district_frames(
+        district_gdf=district_gdf,
+        block_master_df=block_master_df,
+        block_qa_df=block_qa_df,
+        dataset=depth_dataset,
+        metric_slug=DERIVED_INDEX_SOURCE_METRIC_SLUG,
+        state=state,
+    )
+    district_raster = district_gdf.to_crs(depth_dataset.crs).copy()
+    strict_direct_rows: list[dict[str, object]] = []
+    for src_row, raster_row in zip(district_gdf.itertuples(index=False), district_raster.itertuples(index=False)):
+        stats = _strict_geometry_coverage_stats(
+            depth_dataset=depth_dataset,
+            coverage_dataset=coverage_dataset,
+            geom=raster_row.geometry,
+        )
+        direct_p95 = 0.0 if stats.source_covered_cell_count > 0 and stats.flooded_source_cell_count == 0 else stats.p95_positive_depth_m
+        strict_direct_rows.append(
+            {
+                "district_key": src_row.district_key,
+                "direct_total_in_polygon_cell_count": stats.total_in_polygon_cell_count,
+                "direct_valid_in_polygon_cell_count": stats.source_covered_cell_count,
+                "direct_positive_valid_cell_count": stats.flooded_source_cell_count,
+                "direct_p95_positive_depth_m": direct_p95,
+                "direct_source_coverage_fraction": stats.source_coverage_fraction,
+                "direct_source_coverage_state": stats.source_coverage_state,
+                "direct_partial_coverage": stats.partial_coverage,
+                "direct_sampling_mode": stats.sampling_mode,
+            }
+        )
+    direct_df = pd.DataFrame(strict_direct_rows)
+    qa_df = qa_df.drop(
+        columns=[
+            "direct_total_in_polygon_cell_count",
+            "direct_valid_in_polygon_cell_count",
+            "direct_positive_valid_cell_count",
+            "direct_p95_positive_depth_m",
+            "delta_vs_direct_p95_positive_m",
+            "delta_warn",
+        ],
+        errors="ignore",
+    ).merge(direct_df, on="district_key", how="left", validate="one_to_one")
+    qa_df["delta_vs_direct_p95_positive_m"] = [
+        float(chosen - direct)
+        if pd.notna(chosen) and pd.notna(direct)
+        else np.nan
+        for chosen, direct in zip(qa_df["chosen_value_m"], qa_df["direct_p95_positive_depth_m"])
+    ]
+    qa_df["delta_warn"] = qa_df["delta_vs_direct_p95_positive_m"].map(
+        lambda value: bool(pd.notna(value) and abs(float(value)) > 1.0)
+    )
+    source_columns = [
+        "source_covered_cell_count",
+        "source_coverage_fraction",
+        "source_coverage_state",
+        "partial_coverage",
+        "dry_source_cell_count",
+        "flooded_source_cell_count",
+        "sampling_mode",
+    ]
+    district_join_keys = qa_df["district"].map(lambda value: _district_join_key(state, value))
+    block_join_keys = block_qa_df["district"].map(lambda value: _district_join_key(state, value))
+    for idx, district_key in district_join_keys.items():
+        block_rows = block_qa_df.loc[block_join_keys == district_key]
+        if block_rows.empty:
+            continue
+        qa_df.loc[idx, "source_covered_cell_count"] = int(pd.to_numeric(block_rows["source_covered_cell_count"], errors="coerce").fillna(0).sum())
+        qa_df.loc[idx, "dry_source_cell_count"] = int(pd.to_numeric(block_rows["dry_source_cell_count"], errors="coerce").fillna(0).sum())
+        qa_df.loc[idx, "flooded_source_cell_count"] = int(pd.to_numeric(block_rows["flooded_source_cell_count"], errors="coerce").fillna(0).sum())
+        frac = float(qa_df.loc[idx, "district_valid_support_fraction"])
+        qa_df.loc[idx, "source_coverage_fraction"] = frac
+        qa_df.loc[idx, "source_coverage_state"] = _strict_coverage_state(frac)
+        qa_df.loc[idx, "partial_coverage"] = bool(_strict_coverage_state(frac) == "partial")
+        qa_df.loc[idx, "sampling_mode"] = "mixed" if block_rows["sampling_mode"].nunique() > 1 else str(block_rows["sampling_mode"].iloc[0])
+    for column in source_columns:
+        if column not in qa_df.columns:
+            qa_df[column] = np.nan
     return master_df, qa_df
 
 
@@ -1497,6 +1883,177 @@ def build_jrc_flood_depth_outputs(
     return outputs
 
 
+def build_jrc_rp100_strict_outputs(
+    *,
+    source_manifest: Path,
+    districts_path: Path,
+    blocks_path: Path,
+    qa_dir: Path,
+    overwrite: bool,
+    dry_run: bool,
+    overlay_dir: Optional[Path] = None,
+    state: str = TARGET_STATE,
+) -> dict[str, object]:
+    """Build strict manifest-pinned RP-100 masters plus derived extent/severity."""
+    contract = _validate_strict_rp100_contract(source_manifest)
+    district_gdf, block_gdf = _load_state_admin(
+        state=state,
+        districts_path=districts_path,
+        blocks_path=blocks_path,
+    )
+    district_gdf = _add_area_km2(district_gdf, area_col="district_area_km2")
+    block_gdf = _add_area_km2(block_gdf, area_col="block_area_km2")
+
+    all_target_paths: list[Path] = []
+    for metric_slug in (DERIVED_INDEX_SOURCE_METRIC_SLUG, DERIVED_EXTENT_METRIC_SLUG, DERIVED_INDEX_METRIC_SLUG):
+        all_target_paths.extend(_expected_output_paths(metric_slug=metric_slug, qa_dir=qa_dir, state=state))
+    all_target_paths.append(qa_dir / "admin_boundary_join_qa.csv")
+    all_target_paths.append(qa_dir / "run_summary.csv")
+    resolved_overlay_dir = overlay_dir or _default_overlay_dir()
+    if not overwrite:
+        existing = [path for path in all_target_paths if path.exists()]
+        if existing:
+            joined = ", ".join(str(path) for path in existing[:8])
+            more = " ..." if len(existing) > 8 else ""
+            raise FileExistsError(f"Refusing to overwrite existing outputs without --overwrite: {joined}{more}")
+
+    join_validation = _collect_admin_join_validation(district_gdf=district_gdf, block_gdf=block_gdf)
+    admin_join_qa_path = qa_dir / "admin_boundary_join_qa.csv"
+    if not dry_run:
+        _write_csv(join_validation.qa_df, admin_join_qa_path, overwrite=overwrite)
+    if (
+        join_validation.missing_in_blocks
+        or join_validation.missing_in_districts
+        or join_validation.duplicate_within_source
+    ):
+        _raise_admin_join_error(join_validation, qa_path=admin_join_qa_path)
+
+    outputs: dict[str, object] = {}
+    with rasterio.open(contract.depth_path) as depth_dataset, rasterio.open(contract.coverage_path) as coverage_dataset:
+        block_master_df, block_qa_df = _build_strict_rp100_block_frames(
+            block_gdf=block_gdf,
+            depth_dataset=depth_dataset,
+            coverage_dataset=coverage_dataset,
+            state=state,
+        )
+        district_master_df, district_qa_df = _build_strict_rp100_district_frames(
+            district_gdf=district_gdf,
+            block_master_df=block_master_df,
+            block_qa_df=block_qa_df,
+            depth_dataset=depth_dataset,
+            coverage_dataset=coverage_dataset,
+            state=state,
+        )
+
+    outputs[DERIVED_INDEX_SOURCE_METRIC_SLUG] = {
+        "block_master_df": block_master_df,
+        "district_master_df": district_master_df,
+        "block_qa_df": block_qa_df,
+        "district_qa_df": district_qa_df,
+    }
+    derived_extent_output = _build_derived_extent_outputs(raw_output=outputs[DERIVED_EXTENT_SOURCE_METRIC_SLUG], state=state)
+    outputs[DERIVED_EXTENT_METRIC_SLUG] = derived_extent_output
+    outputs[DERIVED_INDEX_METRIC_SLUG] = _build_derived_index_outputs(
+        raw_depth_output=outputs[DERIVED_INDEX_SOURCE_METRIC_SLUG],
+        extent_output=derived_extent_output,
+    )
+
+    run_summary_rows: list[dict[str, object]] = []
+    for metric_slug, metric_kind, source_metric_slug, component_slugs in (
+        (DERIVED_INDEX_SOURCE_METRIC_SLUG, "raw_raster_strict_rp100", "", ""),
+        (DERIVED_EXTENT_METRIC_SLUG, "derived_extent_strict_rp100", DERIVED_EXTENT_SOURCE_METRIC_SLUG, ""),
+        (
+            DERIVED_INDEX_METRIC_SLUG,
+            "derived_severity_matrix_strict_rp100",
+            DERIVED_INDEX_SOURCE_METRIC_SLUG,
+            "jrc_flood_depth_rp100;jrc_flood_extent_rp100",
+        ),
+    ):
+        output = outputs[metric_slug]
+        metric_col = _derived_metric_column(metric_slug)
+        block_qa = output["block_qa_df"]
+        district_qa = output["district_qa_df"]
+        publishable_block_col = "publishable" if "publishable" in block_qa.columns else metric_col
+        publishable_district_col = "publishable" if "publishable" in district_qa.columns else metric_col
+        run_summary_rows.append(
+            {
+                "run_utc": pd.Timestamp.utcnow().isoformat(),
+                "metric_slug": metric_slug,
+                "metric_kind": metric_kind,
+                "source_metric_slug": source_metric_slug,
+                "component_metric_slugs": component_slugs,
+                "source_dir": str(contract.source_manifest_path.parent),
+                "source_manifest": str(contract.source_manifest_path),
+                "source_manifest_sha256": contract.source_manifest_sha256,
+                "jrc_dataset_version": contract.dataset_version,
+                "assume_units": ASSUME_UNITS,
+                "raster_crs": contract.raster_crs,
+                "raster_shape": contract.raster_shape,
+                "nodata_value": contract.nodata_value,
+                "depth_method": "strict_rp100_block_p95_positive__district_flooded_area_weighted_v3",
+                "coverage_method": "strict_source_coverage_v1",
+                "district_area_denominator": "district_polygon_area_epsg6933_v2",
+                "percentile_method": "q95_linear__positive_depth_only_v2",
+                "severity_method": (
+                    "rp100_block_severity_flooded_area_weighted_v1"
+                    if metric_slug == DERIVED_INDEX_METRIC_SLUG
+                    else ""
+                ),
+                "blocks_total": int(output["block_master_df"].shape[0]),
+                "blocks_covered": int(
+                    block_qa[publishable_block_col].fillna(False).astype(bool).sum()
+                    if publishable_block_col == "publishable"
+                    else output["block_master_df"][metric_col].notna().sum()
+                ),
+                "blocks_uncovered": int(
+                    (~block_qa[publishable_block_col].fillna(False).astype(bool)).sum()
+                    if publishable_block_col == "publishable"
+                    else output["block_master_df"][metric_col].isna().sum()
+                ),
+                "blocks_partial_coverage": int(block_qa.get("partial_coverage", pd.Series(dtype=bool)).fillna(False).astype(bool).sum()),
+                "districts_total": int(output["district_master_df"].shape[0]),
+                "districts_covered": int(
+                    district_qa[publishable_district_col].fillna(False).astype(bool).sum()
+                    if publishable_district_col == "publishable"
+                    else output["district_master_df"][metric_col].notna().sum()
+                ),
+                "districts_uncovered": int(
+                    (~district_qa[publishable_district_col].fillna(False).astype(bool)).sum()
+                    if publishable_district_col == "publishable"
+                    else output["district_master_df"][metric_col].isna().sum()
+                ),
+                "districts_partial_coverage": int(district_qa.get("partial_coverage", pd.Series(dtype=bool)).fillna(False).astype(bool).sum()),
+                "district_delta_warn_count": int(district_qa.get("delta_warn", pd.Series(dtype=bool)).fillna(False).astype(bool).sum()),
+                "boundary_join_missing_count": int(
+                    join_validation.missing_in_blocks + join_validation.missing_in_districts
+                ),
+                "boundary_join_duplicate_count": int(join_validation.duplicate_within_source),
+            }
+        )
+
+        if not dry_run:
+            processed_root = resolve_processed_root(metric_slug, data_dir=get_paths_config().data_dir, mode="portfolio")
+            state_root = processed_root / state
+            _write_master(output["district_master_df"], state_root / get_master_csv_filename("district"), overwrite=overwrite)
+            _write_master(output["block_master_df"], state_root / get_master_csv_filename("block"), overwrite=overwrite)
+            _write_csv(output["block_qa_df"], qa_dir / f"{metric_slug}_block_qa.csv", overwrite=overwrite)
+            _write_csv(output["district_qa_df"], qa_dir / f"{metric_slug}_district_qa.csv", overwrite=overwrite)
+
+    run_summary_df = pd.DataFrame(run_summary_rows).sort_values("metric_slug").reset_index(drop=True)
+    if not dry_run:
+        _write_csv(run_summary_df, qa_dir / "run_summary.csv", overwrite=overwrite)
+    outputs["run_summary_df"] = run_summary_df
+    outputs["contract"] = contract
+    outputs["admin_join_qa_df"] = join_validation.qa_df
+    outputs["rp100_overlay"] = export_rp100_depth_overlay(
+        raster_path=contract.depth_path,
+        overlay_dir=resolved_overlay_dir,
+        overwrite=overwrite,
+        dry_run=dry_run,
+    )
+    return outputs
+
+
 def build_cli() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -1505,8 +2062,16 @@ def build_cli() -> argparse.ArgumentParser:
             "flood-extent outputs."
         )
     )
-    parser.add_argument("--source-dir", required=True, help="Directory containing the required JRC flood-depth rasters.")
-    parser.add_argument("--assume-units", choices=[ASSUME_UNITS], required=True, help="Attest the raster depth units.")
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--source-manifest", default=None, help="Strict RP-100 source_manifest.json from prepare_jrc_rp100_source.")
+    source_group.add_argument("--source-dir", default=None, help="Legacy directory containing the required JRC flood-depth rasters.")
+    parser.add_argument("--rp100-only", action="store_true", help="Build only strict manifest-pinned RP-100 depth, extent, and severity outputs.")
+    parser.add_argument(
+        "--allow-unversioned-source",
+        action="store_true",
+        help="Allow the legacy --source-dir interface for unresolved RP-10/50/100/500 provenance.",
+    )
+    parser.add_argument("--assume-units", choices=[ASSUME_UNITS], default=None, help="Attest legacy raster depth units.")
     parser.add_argument(
         "--state",
         default=TARGET_STATE,
@@ -1543,21 +2108,45 @@ def main(argv: Optional[list[str]] = None) -> int:
         if args.overlay_dir
         else _default_overlay_dir().resolve()
     )
-    outputs = build_jrc_flood_depth_outputs(
-        source_dir=Path(args.source_dir).expanduser().resolve(),
-        districts_path=Path(args.districts_path).expanduser().resolve(),
-        blocks_path=Path(args.blocks_path).expanduser().resolve(),
-        qa_dir=qa_dir,
-        overlay_dir=overlay_dir,
-        assume_units=str(args.assume_units),
-        overwrite=bool(args.overwrite),
-        dry_run=bool(args.dry_run),
-        state=state,
-    )
+    if args.source_manifest:
+        if not bool(args.rp100_only):
+            raise SystemExit("--source-manifest requires --rp100-only.")
+        outputs = build_jrc_rp100_strict_outputs(
+            source_manifest=Path(args.source_manifest).expanduser().resolve(),
+            districts_path=Path(args.districts_path).expanduser().resolve(),
+            blocks_path=Path(args.blocks_path).expanduser().resolve(),
+            qa_dir=qa_dir,
+            overlay_dir=overlay_dir,
+            overwrite=bool(args.overwrite),
+            dry_run=bool(args.dry_run),
+            state=state,
+        )
+    else:
+        if bool(args.rp100_only):
+            raise SystemExit("--rp100-only requires --source-manifest.")
+        if not bool(args.allow_unversioned_source):
+            raise SystemExit("Legacy --source-dir builds require --allow-unversioned-source.")
+        if not args.assume_units:
+            raise SystemExit("Legacy --source-dir builds require --assume-units m.")
+        outputs = build_jrc_flood_depth_outputs(
+            source_dir=Path(args.source_dir).expanduser().resolve(),
+            districts_path=Path(args.districts_path).expanduser().resolve(),
+            blocks_path=Path(args.blocks_path).expanduser().resolve(),
+            qa_dir=qa_dir,
+            overlay_dir=overlay_dir,
+            assume_units=str(args.assume_units),
+            overwrite=bool(args.overwrite),
+            dry_run=bool(args.dry_run),
+            state=state,
+        )
     run_summary_df = outputs["run_summary_df"]
-    contract: RasterContract = outputs["contract"]
+    contract = outputs["contract"]
     print("JRC FLOOD DEPTH ADMIN MASTERS")
-    print(f"source_dir: {contract.source_dir}")
+    if isinstance(contract, StrictRp100RasterContract):
+        print(f"source_manifest: {contract.source_manifest_path}")
+        print(f"jrc_dataset_version: {contract.dataset_version}")
+    else:
+        print(f"source_dir: {contract.source_dir}")
     print(f"raster_crs: {contract.raster_crs}")
     print(f"raster_shape: {contract.raster_shape}")
     print(f"metrics: {', '.join(sorted(slug for slug in outputs if slug in ALL_OUTPUT_METRIC_SLUGS))}")
