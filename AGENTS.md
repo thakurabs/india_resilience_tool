@@ -174,7 +174,17 @@ Formatting requirement for git handoff commands:
 
 ---
 
-## 9) PERFECT HANDOFF POINT (mandatory on session end)
+## 9) Operator command clarity
+
+When giving the user commands for data downloads, builds, or pipelines:
+- Provide steps in strict chronological order.
+- Avoid ambiguous prerequisite language such as "assuming X exists."
+- Instead, give explicit verification commands or concrete file checks before the next step.
+- Clearly state whether each command downloads data, validates data, writes manifests, builds derived artifacts, or publishes outputs.
+
+---
+
+## 10) PERFECT HANDOFF POINT (mandatory on session end)
 
 Whenever the user indicates they are ending / pausing the session (examples: “wrap up”, “pause”, “handoff”, “end”, “stop”, `/quit`, `/new`),
 append a copy-paste-ready section titled:
@@ -196,7 +206,7 @@ Important:
 
 ---
 
-## 10) Geospatial environment hygiene (PROJ / GDAL stack)
+## 11) Geospatial environment hygiene (PROJ / GDAL stack)
 
 This repo's geo stack (`pyproj`, `rasterio`, `fiona`, `shapely`, `geopandas`) is fragile on Windows because each package can bundle its own PROJ/GDAL native libraries. Mixing conda-forge and pip installs causes DLL/`proj.db` version mismatches that surface as cryptic runtime errors.
 
@@ -256,7 +266,7 @@ pip list --format=columns | grep -iE "^(pyproj|rasterio|fiona|shapely|geopandas|
 
 ---
 
-## 11) Nested AGENTS.md
+## 12) Nested AGENTS.md
 
 This repo uses nested `AGENTS.md` files to improve agent performance. Apply the closest applicable instructions when working in subdirectories.
 
