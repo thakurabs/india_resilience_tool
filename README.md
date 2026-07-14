@@ -626,8 +626,8 @@ python -m tools.runs.prepare_dashboard dashboard-package --plan-only
 Optional JRC flood-depth prep:
 
 ```bash
-python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
-python -m tools.runs.prepare_dashboard dashboard-package --include-jrc-flood-depth --jrc-source-dir /path/to/Floodlayers_JRC --jrc-assume-units m --overwrite
+python -m tools.runs.prepare_dashboard jrc-flood-depth --source-manifest D:/projects/irt_data/jrc_raw_new/source_manifest.json --rp100-only --overwrite
+python -m tools.runs.prepare_dashboard dashboard-package --include-jrc-flood-depth --jrc-source-manifest D:/projects/irt_data/jrc_raw_new/source_manifest.json --jrc-rp100-only --overwrite
 ```
 
 For JRC flood-depth prep, runner `--overwrite` refreshes the selected state's JRC masters and QA outputs but does not wipe unrelated
@@ -636,7 +636,7 @@ For JRC flood-depth prep, runner `--overwrite` refreshes the selected state's JR
 For the full dashboard-ready Riverine Flood bundle for one state, including district and block composite publish:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra -JrcDir D:/projects/irt_data/Floodlayers_JRC
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra
 ```
 
 ### Build population exposure masters
@@ -744,7 +744,7 @@ pulling this change because older persisted `jrc_flood_depth_index_rp100` output
 ### Refresh the full Riverine Flood bundle for one state
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra -JrcDir D:/projects/irt_data/Floodlayers_JRC
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra
 ```
 
 This script runs the full admin Riverine Flood workflow for the selected state:

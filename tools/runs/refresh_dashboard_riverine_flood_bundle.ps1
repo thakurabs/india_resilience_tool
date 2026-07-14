@@ -11,19 +11,22 @@ This script is the ready-made operator workflow for any state whose JRC rasters
 and canonical admin boundaries are available.
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra -JrcDir D:/projects/irt_data/Floodlayers_JRC
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra
 
 .EXAMPLE
-powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Telangana -JrcDir D:/projects/irt_data/Floodlayers_JRC -PlanOnly
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Telangana -SourceManifest D:/projects/irt_data/jrc_raw_new/source_manifest.json -PlanOnly
 #>
 
 [CmdletBinding()]
 param(
     [string]$State = "Telangana",
 
-    [Parameter(Mandatory = $true)]
+    [string]$SourceManifest = "D:/projects/irt_data/jrc_raw_new/source_manifest.json",
+
     [Alias("SourceDir")]
-    [string]$JrcDir,
+    [string]$JrcDir = "",
+
+    [switch]$Rp100Only,
 
     [ValidateSet("m", "cm", "mm")]
     [string]$AssumeUnits = "m",
@@ -46,6 +49,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$DefaultSourceManifest = "D:/projects/irt_data/jrc_raw_new/source_manifest.json"
 
 $RiverineMetrics = @(
     "composite_flood_jrc_depth",
@@ -149,14 +153,30 @@ function Invoke-NativeChecked {
 }
 
 $Python = Resolve-PythonCommand -RequestedPython $Python
+$sourceManifestWasExplicit = $PSBoundParameters.ContainsKey("SourceManifest")
+$jrcDirWasExplicit = $PSBoundParameters.ContainsKey("JrcDir")
+$useStrictManifest = -not $jrcDirWasExplicit
+
+if ($jrcDirWasExplicit -and $sourceManifestWasExplicit) {
+    throw "Pass either -SourceManifest or -JrcDir, not both."
+}
+if ($jrcDirWasExplicit -and $Rp100Only) {
+    throw "-Rp100Only is only valid with -SourceManifest strict mode, not legacy -JrcDir."
+}
+if ($useStrictManifest -and (-not $SourceManifest -or -not $SourceManifest.Trim())) {
+    $SourceManifest = $DefaultSourceManifest
+}
 
 $jrcArgs = @(
     "-m", "tools.runs.prepare_dashboard",
     "jrc-flood-depth",
-    "--state", $State,
-    "--source-dir", $JrcDir,
-    "--assume-units", $AssumeUnits
+    "--state", $State
 )
+if ($useStrictManifest) {
+    $jrcArgs += @("--source-manifest", $SourceManifest, "--rp100-only")
+} else {
+    $jrcArgs += @("--source-dir", $JrcDir, "--assume-units", $AssumeUnits)
+}
 if ($QaDir) {
     $jrcArgs += @("--qa-dir", $QaDir)
 }
@@ -194,7 +214,7 @@ foreach ($metric in $RiverineMetrics) {
     $optimizedArgs += @("--metric", $metric)
 }
 if ($IncludeSharedAdmin) {
-    $optimizedArgs += "--include-shared-admin"
+    $optimizedArgs += "--include-shared-admin-artifacts"
 }
 
 $auditArgs = @(
@@ -207,13 +227,18 @@ foreach ($metric in $RiverineMetrics) {
     $auditArgs += @("--metric", $metric)
 }
 if ($IncludeSharedAdmin) {
-    $auditArgs += "--include-shared-admin"
+    $auditArgs += "--include-shared-admin-artifacts"
 }
 
 Write-Host "RIVERINE FLOOD REFRESH"
 Write-Host "state: $State"
-Write-Host "jrc_dir: $JrcDir"
-Write-Host "assume_units: $AssumeUnits"
+if ($useStrictManifest) {
+    Write-Host "source_manifest: $SourceManifest"
+    Write-Host "rp100_only: True"
+} else {
+    Write-Host "jrc_dir: $JrcDir"
+    Write-Host "assume_units: $AssumeUnits"
+}
 Write-Host "levels: district, block"
 Write-Host ("metrics: " + ($RiverineMetrics -join ", "))
 if ($PlanOnly) {
