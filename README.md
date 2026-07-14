@@ -686,6 +686,17 @@ district GeoJSON through an explicit alias workflow, and writes:
 
 ### Build JRC flood-depth masters for one state
 
+Bootstrap the official JRC RP-100 source files into an empty raw-data folder
+before preparing the strict manifest. This manual PowerShell command downloads
+the official root metadata, `tile_extents.geojson`, and every non-reclass
+`RP100_depth.tif` tile from the official JRC flood-hazard directory. It is a
+repeatable interim operator step until CHG-0232 adds the first-class validated
+downloader.
+
+```powershell
+$Out="D:\projects\irt_data\jrc_raw_new"; $Base="https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/CEMS-GLOFAS/flood_hazard"; New-Item -ItemType Directory -Force "$Out\RP100" | Out-Null; curl.exe -L --fail -o "$Out\README.txt" "$Base/README.txt"; curl.exe -L --fail -o "$Out\CHANGELOG.txt" "$Base/CHANGELOG.txt"; curl.exe -L --fail -o "$Out\tile_extents.geojson" "$Base/tile_extents.geojson"; $page=(Invoke-WebRequest -UseBasicParsing "$Base/RP100/").Content; $files=[regex]::Matches($page,'href="([^"]+_RP100_depth\.tif)"') | ForEach-Object {$_.Groups[1].Value} | Where-Object {$_ -notmatch '_reclass'} | Sort-Object -Unique; foreach ($f in $files) { curl.exe -L --fail --continue-at - -o "$Out\RP100\$f" "$Base/RP100/$f" }
+```
+
 Prepare a planned strict RP-100 source manifest scaffold without downloading rasters:
 
 ```bash
