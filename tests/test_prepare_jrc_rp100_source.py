@@ -41,12 +41,44 @@ def _write_tile_extents(tmp_path: Path) -> Path:
     return path
 
 
+def _write_official_tile_extents(tmp_path: Path) -> Path:
+    gdf = gpd.GeoDataFrame(
+        {
+            "id": [184, 187],
+            "name": ["N30_E70", "N80_E80"],
+            "geometry": [
+                box(70.0, 20.0, 80.0, 30.0),
+                box(80.0, 80.0, 90.0, 90.0),
+            ],
+        },
+        crs="EPSG:4326",
+    )
+    path = tmp_path / "official_tile_extents.geojson"
+    gdf.to_file(path, driver="GeoJSON")
+    return path
+
+
 def test_fallback_footprint_from_filename_parses_nominal_10_degree_tile() -> None:
     tile = prep.fallback_footprint_from_filename("RP100_depth_S10W080.tif")
 
     assert tile.tile_id == "S10W080"
     assert tile.bounds == (-80.0, -10.0, -70.0, 0.0)
     assert tile.source == "filename_fallback"
+
+
+def test_tile_token_accepts_official_underscore_tile_names() -> None:
+    assert prep._tile_token("N70_W180") == "N70W180"
+    assert prep._tile_token("N30_E70") == "N30E070"
+
+
+def test_load_tile_extents_derives_official_rp100_filename_from_id_and_name(tmp_path: Path) -> None:
+    tile_extents_path = _write_official_tile_extents(tmp_path)
+
+    footprints = prep.load_tile_extents(tile_extents_path)
+
+    assert [tile.tile_id for tile in footprints] == ["N30E070", "N80E080"]
+    assert footprints[0].filename == "ID184_N30_E70_RP100_depth.tif"
+    assert footprints[0].url_path == "RP100/ID184_N30_E70_RP100_depth.tif"
 
 
 def test_tile_extents_selection_uses_one_pixel_boundary_buffer(tmp_path: Path) -> None:

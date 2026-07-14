@@ -29,7 +29,7 @@ DEFAULT_BASE_URL = "https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/CEMS-GLOFAS
 NATIVE_PIXEL_DEGREES = 1.0 / 1200.0
 SOURCE_MANIFEST_SCHEMA_VERSION = 1
 SOURCE_INVENTORY_SCHEMA_VERSION = 1
-_TILE_TOKEN_RE = re.compile(r"(?P<lat_hemi>[NS])(?P<lat>\d{1,2})(?P<lon_hemi>[EW])(?P<lon>\d{1,3})", re.IGNORECASE)
+_TILE_TOKEN_RE = re.compile(r"(?P<lat_hemi>[NS])(?P<lat>\d{1,2})_?(?P<lon_hemi>[EW])(?P<lon>\d{1,3})", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -80,6 +80,18 @@ def _tile_token(raw: object) -> str:
     return f"{lat_hemi}{lat:02d}{lon_hemi}{lon:03d}"
 
 
+def _official_tile_filename(tile_name: str, tile_id_value: object) -> str:
+    """Return the official RP-100 depth filename for a tile-extents feature."""
+    try:
+        numeric_id = int(tile_id_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Tile extents feature has invalid id for tile {tile_name!r}: {tile_id_value!r}") from exc
+    name = str(tile_name or "").strip()
+    if not name:
+        raise ValueError("Tile extents feature has an empty tile name.")
+    return f"ID{numeric_id}_{name}_RP100_depth.tif"
+
+
 def _signed_from_hemi(hemi: str, value: int) -> int:
     return -value if hemi.upper() in {"S", "W"} else value
 
@@ -105,7 +117,16 @@ def fallback_footprint_from_filename(filename: str) -> TileFootprint:
 
 
 def _feature_filename(row: object) -> str:
-    for attr in ("filename", "file_name", "name", "tile", "tile_name", "path", "url", "href"):
+    filename = getattr(row, "filename", None)
+    if filename is not None and str(filename).strip():
+        return Path(str(filename).strip()).name
+
+    name = getattr(row, "name", None)
+    tile_id_value = getattr(row, "id", None)
+    if name is not None and str(name).strip() and tile_id_value is not None:
+        return _official_tile_filename(str(name).strip(), tile_id_value)
+
+    for attr in ("file_name", "tile", "tile_name", "path", "url", "href"):
         value = getattr(row, attr, None)
         if value is not None and str(value).strip():
             return Path(str(value).strip()).name
