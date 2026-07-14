@@ -686,6 +686,12 @@ district GeoJSON through an explicit alias workflow, and writes:
 
 ### Build JRC flood-depth masters for one state
 
+Prepare a planned strict RP-100 source manifest scaffold without downloading rasters:
+
+```bash
+python -m tools.data_acquisition.prepare_jrc_rp100_source --boundary-path /path/to/districts_4326.geojson --tile-extents-path /path/to/tile_extents.geojson --output-dir /path/to/jrc_rp100_v2_1_2 --dry-run
+```
+
 ```bash
 python -m tools.runs.prepare_dashboard jrc-flood-depth --state Telangana --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
 python -m tools.geodata.build_jrc_flood_depth_admin_masters --state Telangana --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
