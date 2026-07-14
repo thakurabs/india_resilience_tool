@@ -75,7 +75,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - the dashboard runtime reads only exported LULC overlay PNG/metadata artifacts, not the raw TIFF
 - JRC flood-depth onboarding:
   - state-scoped district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)` for any state whose JRC masters have been built and published
-  - RP-100 can be rebuilt from a strict `source_manifest.json` that points to aligned `RP100_depth.vrt` and `RP100_tile_coverage.vrt` sources; strict mode keeps missing source coverage as no-data while treating covered `-9999`/zero/non-positive depth as dry support
+  - RP-100 can be rebuilt from a strict `source_manifest.json` that points to aligned 3-arc-second `RP100_depth.vrt` and `RP100_tile_coverage.vrt` sources; strict mode keeps missing source coverage as no-data while treating covered `-9999`/zero/non-positive depth as dry support
   - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
   - derived `RP-100 Flood Extent` persisted from the RP-100 depth layer as the share of total polygon area covered by positive depth
   - `RP-10 Flood Depth`, `RP-50 Flood Depth`, `RP-100 Flood Depth`, `RP-500 Flood Depth`

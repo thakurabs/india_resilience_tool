@@ -75,6 +75,8 @@ RP100_OVERLAY_SOURCE_NAME = "RP100_depth.tif"
 RP100_OVERLAY_MAX_DIMENSION = 4096
 RP100_OVERLAY_DISPLAY_MIN_M = 0.0
 RP100_OVERLAY_DISPLAY_MAX_M = 10.0
+STRICT_RP100_RESOLUTION_DEGREES = 1.0 / 1200.0
+STRICT_RP100_RESOLUTION_TOLERANCE = 1e-12
 RP100_OVERLAY_COLORS: tuple[tuple[float, tuple[int, int, int]], ...] = (
     (0.5, (214, 240, 255)),
     (1.0, (157, 217, 255)),
@@ -354,6 +356,14 @@ def _validate_strict_rp100_contract(source_manifest: Path) -> StrictRp100RasterC
             )
         if depth.crs.to_string() != "EPSG:4326":
             raise ValueError(f"Strict RP-100 depth raster must be EPSG:4326, got {depth.crs.to_string()}.")
+        if (
+            abs(float(depth.res[0]) - STRICT_RP100_RESOLUTION_DEGREES) > STRICT_RP100_RESOLUTION_TOLERANCE
+            or abs(float(depth.res[1]) - STRICT_RP100_RESOLUTION_DEGREES) > STRICT_RP100_RESOLUTION_TOLERANCE
+        ):
+            raise ValueError(
+                "Strict RP-100 depth raster resolution must be exactly 3 arc-seconds "
+                f"({STRICT_RP100_RESOLUTION_DEGREES} degrees), got {depth.res}."
+            )
         if depth.nodata is None or not np.isclose(float(depth.nodata), -9999.0):
             raise ValueError(f"Strict RP-100 depth nodata must be -9999, got {depth.nodata!r}.")
 
