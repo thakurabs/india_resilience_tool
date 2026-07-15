@@ -6,7 +6,7 @@
 
 **Planning Working Tree:** Dirty; 13 untracked files, no tracked modifications
 
-**Change Range:** `CHG-0222` through `CHG-0227`; extended by `CHG-0230` through `CHG-0233` (amendment snapshot `GIT:add_flood_depth@861f44c`). `CHG-0228` (Aqueduct wholesale) and `CHG-0229` (retired-feature test trim) are pending in-chat amendments from prior sessions and are cross-referenced below but not defined in this document yet.
+**Change Range:** `CHG-0222` through `CHG-0227`; extended by `CHG-0230` through `CHG-0233` (amendment snapshot `GIT:add_flood_depth@861f44c`); review-hardening amendments `CHG-0234` (snapshot `GIT:add_flood_depth@9eba23f`). `CHG-0228` (Aqueduct wholesale) and `CHG-0229` (retired-feature test trim) are pending in-chat amendments from prior sessions and are cross-referenced below but not defined in this document yet.
 
 ## Summary
 
@@ -26,15 +26,18 @@ Tracked implementation CHGs receive separate commits. Inventory, quarantine, and
   - `REVIEW_RETAIN_DEFAULT`: performance Phase 2 brief, cross-linked to the deferred block-builder decision.
   - `KEEP_IN_PLACE`: all boundary/roster diagnostic scripts until that workstream is explicitly closed.
   - `QUARANTINE_CANDIDATE`: only `tools/_scratch_roster_inventory.py`.
+  - `SCRATCH_OUT_OF_SCOPE`: session/scratch working artifacts that fit no other bucket — leave untouched, never quarantine or delete under this plan. At the `9eba23f` re-check this covers `notebooks/scratch/`, `scratch/results/*`, `scratch/run_gridfirst_hwa_hwm_composite.py`, and `scratch/run_hwa_hwm_distinctness.py`. New boundary/roster diagnostics that appear after the planning snapshot (e.g. `tools/diagnostics/blocks_dedupe.py`, `district_jk_dump.py`, `district_merge_audit.py`, `district_roster_audit.py`, `verify_jk_west.py`) join the existing `KEEP_IN_PLACE` bucket.
+- The untracked set drifts between sessions (13 entries at `37cac63`, 18 at `9eba23f`); the execution-time re-capture must re-classify every entry into one of the six classes above — no ad-hoc judgment outside the taxonomy.
+- **Baseline capture (before any edit):** run `python -m pytest -q` at the execution SHA (or the hermetic focused subset if the full suite is environment-blocked, stating what blocked it) and store the raw output in the CHG-0223 quarantine directory as `pytest_baseline_<sha>.txt`. This record replaces `docs/pytest_baseline_failures.md` (deleted under CHG-0232) as the comparison baseline for the Test Plan's "no new failures" acceptance.
 - Tag affected tests as hermetic, data-dependent, or Windows-only before running them.
-- Acceptance: every untracked file and affected test has one explicit disposition.
+- Acceptance: every untracked file and affected test has one explicit disposition, and the pytest baseline record exists.
 
 ### CHG-0223: Persistent Quarantine
 
 - Never use `git clean`, wildcards, or directory-level moves; skip `tools/patches/` entirely.
 - Move approved candidates individually to `/mnt/d/projects/irt_dead_code_quarantine/<date>/<sha>/CHG-0223/`.
 - Record source, destination, SHA-256, reason, and exact restore command.
-- Keep quarantine until 30 days after the purge branch merges.
+- Keep quarantine until 30 days after the purge branch merges. At merge time, propose (with explicit user approval, per repo rule §7) a dated `docs/BACKLOG.md` line as the disposal reminder — the retention window otherwise has no trigger mechanism.
 - This is a filesystem action recorded in-chat; it creates no commit.
 
 ## Implementation Changes
@@ -85,6 +88,10 @@ Acceptance means zero **unclassified** hits, not zero textual hits. Each broad-p
 Retain the established hydrology-context modules, including `app/runtime.py`, map/runtime overlays, details/context cards, crosswalks, hydro/river loaders, topology, summary cache, geo cache, and Folium feature-collection code.
 
 ### CHG-0225: Aqueduct Refactor-Then-Delete
+
+**Decision gate (blocks execution):** define or explicitly reject `CHG-0228` (Aqueduct wholesale amendment) **before** executing this change. The active clean-regen direction contemplates dropping Aqueduct entirely; if `CHG-0228` deletes the whole Aqueduct family, the `aqueduct_common.py` extraction below is wasted work that mints new purge residue. Do not start CHG-0225 while CHG-0228 is undefined.
+
+**Symbol duplication policy:** `aqueduct_common.py` is a deliberate tools-side consolidation, not the single repo-wide home of its symbols. Two symbols already have other live homes that stay untouched: `HydroLevel` is independently defined in `india_resilience_tool/data/hydro_loader.py` (dashboard-live, retained) and in `tools/geodata/build_district_subbasin_crosswalk.py`; `_normalize_pfaf_id_series` has its own copy in `tools/geodata/prepare_aqueduct_baseline.py` (classified LIVE/KEEP). These duplicates are accepted and recorded here; optionally rewire `prepare_aqueduct_baseline.py` to import from `aqueduct_common` as a follow-up, but it is not required for acceptance.
 
 Create `tools/geodata/aqueduct_common.py` with the verified 20-symbol closure:
 
@@ -156,9 +163,12 @@ Reproduce commands:
 # pipeline seed list (expect 20 unique strings)
 grep -oE '"tools\.[a-z_.]+"' tools/runs/prepare_dashboard.py | sort -u
 
-# per-candidate zero-reference check (expect no hits outside the file itself)
-git grep -l <name> -- '*.py' '*.md'
+# per-candidate zero-reference check (expect no hits outside the file itself
+# and the ledger/plan exclusions listed below)
+git grep -l <name> -- '*.py' '*.md' ':!docs/dead_code_redundancy_purge_plan.md' ':!docs/HANDOFF.md' ':!docs/BACKLOG.md'
 ```
+
+**Gate exclusions:** this plan document, `docs/HANDOFF.md`, and `docs/BACKLOG.md` are ledger/plan references — they name every candidate by construction, so hits in them never count against the zero-reference gate and they are never sweep targets under it. Without this exclusion the gate is unsatisfiable. Note one cosmetic asymmetry when reading gate output: `tools/diagnostics/block_orphan_audit.py` does not contain its own name in its content, so unlike the other candidates it produces no self-hit.
 
 The closure script itself is short (~90 lines: collect `*.py` under `india_resilience_tool/`, `tools/`, `tests/` plus `main.py`/`paths.py`; parse with `ast`; resolve every import to the longest known module prefix; BFS from each seed set) and is re-written in a scratchpad at execution time rather than kept in the repo.
 
@@ -179,7 +189,7 @@ Additional dynamic-reference pitfalls recorded for future audits:
 
 ### CHG-0231: Orphan Code and Scripts
 
-All deletions route through the CHG-0223 quarantine mechanism and the CHG-0227 closeout sweep. Gate for every row: re-run the zero-reference git-grep at the execution SHA before deleting.
+All deletions route through the CHG-0223 quarantine mechanism and the CHG-0227 closeout sweep. Gate for every row: re-run the zero-reference git-grep at the execution SHA before deleting, using the CHG-0230 gate exclusions (this plan doc, `docs/HANDOFF.md`, `docs/BACKLOG.md` do not count as references).
 
 | File | Evidence (at `861f44c`) | Disposition |
 |---|---|---|
@@ -188,7 +198,7 @@ All deletions route through the CHG-0223 quarantine mechanism and the CHG-0227 c
 | `tools/diagnostics/health_txx_lens_demo.py` | Zero references | `DELETE` |
 | `tools/diagnostics/profile_compute_realdata.py` | Zero references | `DELETE` |
 | `tools/diagnostics/profile_drought_spi.py` | Zero references | `DELETE` |
-| `tools/pipeline/compute_indices.py` | Superseded single-process/debug CLI; no `.py` references outside itself; doc rows in `docs/functionality_contract.md`, `docs/refactor_acceptance.md`, `tools/README.md` | **ASK-USER** — CLI-surface retirement; on approval, `DELETE` and sweep the three doc rows |
+| `tools/pipeline/compute_indices.py` | Superseded single-process/debug CLI; no `.py` references outside itself; doc rows in `docs/functionality_contract.md`, `docs/refactor_acceptance.md`, `tools/README.md`, and `MANIFEST.md:410` ("Older single-process compute pipeline") | **ASK-USER** — CLI-surface retirement; on approval, `DELETE` and sweep all four doc rows (the `MANIFEST.md` row is the most damaging if left stale — it is the AI-facing source of truth) |
 | `tools/pipeline/compute_indices_bootstrap.py` | LIVE via `__import__` from `compute_indices_multiprocess.py:65` + own test | **KEEP** (corrects an earlier draft that marked it a candidate) |
 
 Untracked files keep their CHG-0222 classifications unchanged (roster diagnostics `KEEP_IN_PLACE`; `tools/_scratch_roster_inventory.py` `QUARANTINE_CANDIDATE`). CHG-0231 touches no untracked files.
@@ -202,9 +212,9 @@ Vocabulary: `DELETE` / `TRIM` / `REFRESH` / `KEEP`. Rule: a doc that is the sole
 | `docs/dead_code_candidate_report.md` | Every row marked done; superseded by this plan + git history | `DELETE` after skim-confirm |
 | `docs/refactor_acceptance.md` | Completed-initiative artifact | `DELETE` after confirming no open items (note: holds a `compute_indices` doc row swept by CHG-0231) |
 | `docs/bundle_task_master.md` | Completed-initiative artifact | `DELETE` after confirming no open items |
-| `docs/pytest_baseline_failures.md` | Point-in-time baseline record | `DELETE` after confirming baseline is superseded |
-| `docs/c6_workers_yearly_retention_benchmark.md` | Perf-era brief | `DELETE` if superseded by `docs/perf_phase2_brief.md` (RETAIN per CHG-0222), else `KEEP` |
-| `docs/c7_bundle_only_runner_design.md` | Perf-era brief | Same gate as above |
+| `docs/pytest_baseline_failures.md` | Point-in-time baseline record | `DELETE` only after the CHG-0222 baseline capture (`pytest_baseline_<sha>.txt` in the quarantine directory) exists — that record supersedes this doc |
+| `docs/c6_workers_yearly_retention_benchmark.md` | Perf-era brief | `DELETE` only if `docs/perf_phase2_brief.md` is **committed** (it is currently untracked; a working-tree-only supersession record cannot authorize deleting tracked docs from HEAD) and it supersedes this brief; else `KEEP` |
+| `docs/c7_bundle_only_runner_design.md` | Perf-era brief | Same gate as above (perf brief must be committed first) |
 | `docs/aqueduct_onboarding_methodology.md` (~29 KB) | Mostly retired-CLI material | `TRIM` per CHG-0225 rule: retain and rekey only the live area-weighted transfer methodology around `aggregate_crosswalk_to_targets` |
 | `docs/aqueduct_field_contract.md` | Same family | `TRIM` under the same rule |
 | `docs/module_responsibility_map.md` | Stale rows (e.g. `adm2_cache`) but live purpose | `REFRESH`, or fold into `MANIFEST.md` if fully redundant with it |
@@ -245,6 +255,7 @@ Aqueduct hydro tools are already disposed by CHG-0225 (and pending CHG-0228); cr
 
 ## Test Plan
 
+- **Step 0 — baseline capture (CHG-0222):** before any edit, run `python -m pytest -q` (or the hermetic subset if environment-blocked) at the execution SHA and store the output as `pytest_baseline_<sha>.txt` in the CHG-0223 quarantine directory. All later "no new failures" comparisons are against this record.
 - CHG-0224: run portfolio core/UI/tier tests, geography-controls tests, rankings tests, SPI hygiene tests, landing/ribbon/overlay tests, and legacy runtime portfolio wiring tests.
 - Add a downstream-caller gate for all eight edited modules:
   - enumerate importers;
@@ -260,7 +271,7 @@ python -c "import tools.geodata.aqueduct_common; import tools.geodata.build_aque
 - Run Aqueduct baseline, admin-transfer, validator, metrics-registry, and configuration tests.
 - Run `python -m pytest -q` where the configured Windows/data environment permits.
 - If the full suite is environment-blocked, run every hermetic focused test and record the exact Windows/data-dependent checklist and baseline comparison.
-- Acceptance requires no new failures relative to the execution-time baseline.
+- Acceptance requires no new failures relative to the Step 0 baseline record (`pytest_baseline_<sha>.txt`).
 
 ## Assumptions and Ledger
 
@@ -282,3 +293,4 @@ python -c "import tools.geodata.aqueduct_common; import tools.geodata.build_aque
 | `CHG-0231` orphan code and scripts | `SUGGESTED` |
 | `CHG-0232` stale documentation disposition | `SUGGESTED` |
 | `CHG-0233` doc-only-referenced tools | `SUGGESTED` |
+| `CHG-0234` review-hardening amendments (gate exclusions, CHG-0228 decision gate, duplication policy, scratch class, committed-brief gate, baseline capture) | `APPLIED (user-confirmed)` |
