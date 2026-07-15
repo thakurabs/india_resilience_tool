@@ -22,6 +22,7 @@ class DashboardBundleSpec:
     supported_levels: tuple[str, ...]
     show_in_landing: bool
     supported_scenarios: tuple[str, ...] = ("ssp245", "ssp585")
+    composite_normalization: str = "per_period"
 
 
 DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
@@ -65,6 +66,18 @@ DASHBOARD_BUNDLES: tuple[DashboardBundleSpec, ...] = (
         supported_levels=("district", "block"),
         show_in_landing=True,
         supported_scenarios=("snapshot",),
+    ),
+    DashboardBundleSpec(
+        group_key="thematic",
+        group_label="Thematic",
+        canonical_bundle="Water Risk",
+        selector_label="Thematic - Water Risk",
+        composite_slug="composite_water_risk",
+        composite_label="Composite Water Risk",
+        supported_levels=("district",),
+        show_in_landing=True,
+        supported_scenarios=("snapshot",),
+        composite_normalization="pre_scaled_ordinal",
     ),
     DashboardBundleSpec(
         group_key="thematic",

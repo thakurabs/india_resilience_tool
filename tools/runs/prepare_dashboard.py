@@ -68,6 +68,7 @@ BUILT_UP_AREA_DOMAIN = "Built-up Area Exposure"
 LULC_DOMAIN = "Agricultural LULC Exposure"
 GROUNDWATER_DOMAIN = "Groundwater Status & Availability"
 JRC_DOMAIN = "Riverine Flood"
+WATER_RISK_DOMAIN = "Water Risk"
 LEVEL_GROUPS = {
     "all": ["district", "block"],
     "admin": ["district", "block"],
@@ -273,13 +274,21 @@ def _resolve_climate_metrics_for_level(
 ) -> tuple[list[str], list[str]]:
     from india_resilience_tool.config.metrics_registry import (
         get_domains_for_pillar,
+        get_metric_spec,
         get_metrics_for_domain,
+        is_climate_compute_metric,
     )
 
     family = LEVEL_TO_FAMILY[level]
     metrics: list[str] = []
     for domain in get_domains_for_pillar(CLIMATE_PILLAR, spatial_family=family, level=level):
         metrics.extend(get_metrics_for_domain(domain, spatial_family=family, level=level))
+    # Positive compute contract: the climate pipeline computes only pipeline-sourced,
+    # scenario/period metrics. Composites (derived) and externally sourced snapshots
+    # (JRC flood, groundwater, water scarcity, ...) surface under Climate Hazards for
+    # display but are built by their own steps, so they are excluded from climate
+    # compute planning and parity here.
+    metrics = [slug for slug in metrics if is_climate_compute_metric(get_metric_spec(slug))]
     live_metrics = _dedupe_keep_order(metrics)
 
     explicit = _split_csv_values(getattr(args, "metrics", None))
@@ -317,6 +326,8 @@ def _resolve_bundle_metrics(bundle: str, args: argparse.Namespace) -> list[str]:
         return _metrics_for_domain(GROUNDWATER_DOMAIN)
     if bundle == "jrc-flood-depth":
         return _metrics_for_domain(JRC_DOMAIN)
+    if bundle == "water-availability":
+        return _metrics_for_domain(WATER_RISK_DOMAIN)
     if bundle == "dashboard-package":
         metrics: list[str] = []
         metrics.extend(_resolve_climate_bundle_metrics(args))
@@ -329,6 +340,8 @@ def _resolve_bundle_metrics(bundle: str, args: argparse.Namespace) -> list[str]:
         metrics.extend(_metrics_for_domain(GROUNDWATER_DOMAIN))
         if bool(getattr(args, "include_jrc_flood_depth", False)):
             metrics.extend(_metrics_for_domain(JRC_DOMAIN))
+        if bool(getattr(args, "include_water_risk", False)):
+            metrics.extend(_metrics_for_domain(WATER_RISK_DOMAIN))
         return _dedupe_keep_order(metrics)
     return []
 
@@ -382,14 +395,24 @@ def _resolve_composite_runtime_scope(
     data_dir: Path,
     overwrite: bool,
 ) -> BundleRuntimeScope:
+    from india_resilience_tool.config.dashboard_bundles import get_dashboard_bundle_spec_by_slug
+
     composite_levels = [level for level in levels if level in {"district", "block"}]
     selected_metrics = _resolve_composite_metric_slugs() if composite_levels else []
+
+    def _composite_levels_for_slug(slug: str) -> list[str]:
+        # Gate each composite by its own supported_levels so a district-only
+        # composite (e.g. composite_water_risk) never awaits/builds block masters.
+        spec = get_dashboard_bundle_spec_by_slug(slug)
+        supported = set(spec.supported_levels) if spec is not None else {"district", "block"}
+        return [level for level in composite_levels if level in supported]
+
     pending_metrics: list[str] = []
     if overwrite:
         pending_metrics = list(selected_metrics)
     else:
         for slug in selected_metrics:
-            for level in composite_levels:
+            for level in _composite_levels_for_slug(slug):
                 if not all(
                     _legacy_master_ready(
                         slug=slug,
@@ -1409,6 +1432,61 @@ def build_jrc_flood_depth_plan(
     return plan
 
 
+def build_water_availability_plan(
+    args: argparse.Namespace,
+    *,
+    include_runtime: bool = True,
+    runtime_scope: Optional[BundleRuntimeScope] = None,
+) -> list[PlannedCommand]:
+    """Build the water-availability district prep plan (district-only).
+
+    Mirrors the JRC flood-depth plan: build the source class masters, build the
+    Water Risk composite (targeted to ``composite_water_risk`` only) from those
+    masters, then publish the optimized bundle, precompute state values, and audit.
+    District-only: the composite never awaits or builds block masters.
+    """
+    scope = runtime_scope or _resolve_runtime_scope("water-availability", args, levels=("district",))
+    if bool(getattr(args, "audit_only", False)):
+        return [] if bool(getattr(args, "skip_audit", False)) else [_build_audit_step(args, scope.selected_metrics)]
+
+    plan: list[PlannedCommand] = []
+    if bool(args.overwrite) or scope.runtime_needed or not include_runtime:
+        argv = _py_module_cmd("tools.geodata.build_water_availability_district_masters")
+        _append_flag(argv, "--overwrite", bool(args.overwrite))
+        if getattr(args, "water_workbook", None):
+            argv.extend(["--workbook", str(args.water_workbook)])
+        plan.append(PlannedCommand(label="water-availability-district-masters", argv=argv))
+
+        # Build the Water Risk composite master from the just-built source masters,
+        # BEFORE the optimized publish + audit. Targeted to composite_water_risk only
+        # (via is_composite_metric over this bundle's scope), not all visible composites.
+        from india_resilience_tool.config.composite_metrics import is_composite_metric
+
+        composite_slugs = [m for m in scope.selected_metrics if is_composite_metric(m)]
+        if composite_slugs:
+            water_states = _resolve_admin_states(getattr(args, "state", None))
+            plan.extend(
+                _build_composite_master_steps(
+                    args,
+                    levels=("district",),
+                    admin_states=water_states,
+                    scope=scope,
+                    metrics=composite_slugs,
+                    force_overwrite=True,
+                )
+            )
+        publish_metrics = scope.selected_metrics
+        if include_runtime and not bool(getattr(args, "skip_optimised", False)):
+            plan.append(_build_optimised_step(args, publish_metrics, levels=("district",), overwrite=False))
+            # Precompute state headline values over the freshly built bundle, before audit.
+            plan.append(_build_state_values_step(args, publish_metrics))
+        if include_runtime and not bool(getattr(args, "skip_audit", False)):
+            plan.append(_build_audit_step(args, publish_metrics, levels=("district",)))
+    elif include_runtime:
+        plan.extend(_build_runtime_plan(args, scope=scope, overwrite_optimised=False))
+    return plan
+
+
 def _build_climate_compute_steps(
     args: argparse.Namespace,
     *,
@@ -1671,6 +1749,11 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
         if bool(getattr(args, "include_jrc_flood_depth", False))
         else BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False)
     )
+    water_scope = (
+        _resolve_runtime_scope("water-availability", args, levels=("district",))
+        if bool(getattr(args, "include_water_risk", False))
+        else BundleRuntimeScope(selected_metrics=[], pending_metrics=[], has_global_issues=False)
+    )
 
     package_scope = BundleRuntimeScope(
         selected_metrics=_dedupe_keep_order(
@@ -1689,6 +1772,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
             + rural_facilities_scope.pending_metrics
             + groundwater_scope.pending_metrics
             + jrc_scope.pending_metrics
+            + water_scope.pending_metrics
         ),
         has_global_issues=(
             climate_scope.has_global_issues
@@ -1700,6 +1784,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
             or rural_facilities_scope.has_global_issues
             or groundwater_scope.has_global_issues
             or jrc_scope.has_global_issues
+            or water_scope.has_global_issues
         ),
     )
 
@@ -1750,6 +1835,11 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
         if bool(getattr(args, "include_jrc_flood_depth", False))
         else []
     )
+    water_plan = (
+        build_water_availability_plan(args, include_runtime=False, runtime_scope=water_scope)
+        if bool(getattr(args, "include_water_risk", False))
+        else []
+    )
 
     plan: list[PlannedCommand] = []
     if aqueduct_plan or population_plan or built_up_plan or lulc_plan or rural_facilities_plan or jrc_plan:
@@ -1763,6 +1853,7 @@ def build_dashboard_package_plan(args: argparse.Namespace) -> list[PlannedComman
     plan.extend(rural_facilities_plan)
     plan.extend(groundwater_plan)
     plan.extend(jrc_plan)
+    plan.extend(water_plan)
     plan.extend(_build_runtime_plan(args, scope=package_scope))
 
     if bool(getattr(args, "include_pytest", False)) and not bool(getattr(args, "audit_only", False)):
@@ -1792,6 +1883,7 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         "lulc-admin-masters": "tools.geodata.build_lulc_admin_masters",
         "groundwater-district-masters": "tools.geodata.build_groundwater_district_masters",
         "jrc-flood-depth-admin-masters": "tools.geodata.build_jrc_flood_depth_admin_masters",
+        "water-availability-district-masters": "tools.geodata.build_water_availability_district_masters",
     }
     if step in module_map:
         argv = _py_module_cmd(module_map[step])
@@ -1829,6 +1921,9 @@ def build_step_plan(args: argparse.Namespace) -> list[PlannedCommand]:
                 argv.extend(["--workbook", str(args.groundwater_workbook)])
             if getattr(args, "groundwater_alias_csv", None):
                 argv.extend(["--district-alias-csv", str(args.groundwater_alias_csv)])
+        if step == "water-availability-district-masters":
+            if getattr(args, "water_workbook", None):
+                argv.extend(["--workbook", str(args.water_workbook)])
         if step == "jrc-flood-depth-admin-masters":
             _validate_jrc_inputs(args, require_source=True)
             argv.extend(_build_jrc_builder_args(args))
@@ -1913,6 +2008,8 @@ def build_command_plan(args: argparse.Namespace) -> list[PlannedCommand]:
         return build_groundwater_plan(args, include_runtime=True)
     if command == "jrc-flood-depth":
         return build_jrc_flood_depth_plan(args, include_runtime=True)
+    if command == "water-availability":
+        return build_water_availability_plan(args, include_runtime=True)
     if command == "dashboard-package":
         return build_dashboard_package_plan(args)
     if command == "validate":
@@ -1930,6 +2027,7 @@ def _print_available_commands() -> None:
     print("  lulc")
     print("  groundwater")
     print("  jrc-flood-depth")
+    print("  water-availability")
     print("  dashboard-package")
     print("  validate")
     print("")
@@ -1947,6 +2045,7 @@ def _print_available_commands() -> None:
         "lulc-admin-masters",
         "groundwater-district-masters",
         "jrc-flood-depth-admin-masters",
+        "water-availability-district-masters",
         "climate-compute",
         "climate-masters",
         "pytest-validation",
@@ -2093,6 +2192,27 @@ def _add_groundwater_flags(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_water_flags(parser: argparse.ArgumentParser, *, bundle: bool = False) -> None:
+    parser.add_argument(
+        "--water-workbook",
+        default=None,
+        help="Optional override path to the NITI per-capita water-availability workbook.",
+    )
+    if bundle:
+        parser.add_argument(
+            "--include-water-risk",
+            action="store_true",
+            help="Include the Water Risk (per-capita scarcity) district bundle.",
+        )
+    else:
+        parser.add_argument(
+            "--state",
+            action="append",
+            default=None,
+            help="Admin state(s) whose Water Risk composite to build (default: Telangana).",
+        )
+
+
 def _add_climate_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--level",
@@ -2178,6 +2298,13 @@ def build_cli() -> argparse.ArgumentParser:
     _add_common_runner_flags(p_jrc, include_runtime_controls=True)
     _add_jrc_flags(p_jrc, prefixed=False)
 
+    p_water = subparsers.add_parser(
+        "water-availability",
+        help="Prepare the Water Risk (per-capita scarcity) district bundle for --state (default Telangana).",
+    )
+    _add_common_runner_flags(p_water, include_runtime_controls=True)
+    _add_water_flags(p_water, bundle=False)
+
     p_pkg = subparsers.add_parser("dashboard-package", help="Prepare all dashboard bundles end to end.")
     _add_common_runner_flags(p_pkg, include_runtime_controls=True)
     _add_climate_flags(p_pkg)
@@ -2188,6 +2315,7 @@ def build_cli() -> argparse.ArgumentParser:
     _add_rural_facilities_flags(p_pkg)
     _add_groundwater_flags(p_pkg)
     _add_jrc_flags(p_pkg, prefixed=True)
+    _add_water_flags(p_pkg, bundle=True)
     p_pkg.add_argument("--include-rural-facilities", action="store_true", help="Include the rural facilities exposure bundle.")
     p_pkg.add_argument("--include-pytest", action="store_true", help="Run the default validation pytest set at the end.")
 
@@ -2209,6 +2337,7 @@ def build_cli() -> argparse.ArgumentParser:
         "lulc-admin-masters",
         "groundwater-district-masters",
         "jrc-flood-depth-admin-masters",
+        "water-availability-district-masters",
     ]:
         sub = subparsers.add_parser(name, help=f"Run the `{name}` step only.")
         _add_common_runner_flags(sub)
@@ -2224,6 +2353,8 @@ def build_cli() -> argparse.ArgumentParser:
             _add_groundwater_flags(sub)
         elif name == "jrc-flood-depth-admin-masters":
             _add_jrc_flags(sub, prefixed=False)
+        elif name == "water-availability-district-masters":
+            _add_water_flags(sub, bundle=False)
         elif name != "blocks-geojson":
             _add_aqueduct_flags(sub, bundle=(name == "aqueduct-baseline"))
 

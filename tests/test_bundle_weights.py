@@ -139,5 +139,6 @@ def test_all_visible_glance_bundles_have_custom_weights_in_this_pass() -> None:
         "Cold Risk",
         "Drought Risk",
         "Riverine Flood",
+        "Water Risk",
         "Extreme Rainfall | Flash Flood Risk",
     }

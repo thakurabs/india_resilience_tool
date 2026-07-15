@@ -327,8 +327,9 @@ def test_climate_hazards_overwrite_uses_single_optimised_rebuild_for_full_select
     assert "--overwrite" in plan[0].argv
     assert "--prune-scope" not in plan[0].argv
     assert "--full-rebuild" not in plan[0].argv
-    assert plan[0].argv.count("--metric") == 8
+    assert plan[0].argv.count("--metric") == 9
     assert "composite_heat_risk" in plan[0].argv
+    assert "composite_water_risk" in plan[0].argv
     assert "metric_a" in plan[0].argv
     assert "metric_b" in plan[0].argv
 
@@ -1519,3 +1520,63 @@ def test_dashboard_package_maps_jrc_state_and_overlay_dir(monkeypatch) -> None:
     argv = builder.argv
     assert argv[argv.index("--state") + 1] == "Maharashtra"
     assert argv[argv.index("--overlay-dir") + 1] == "/tmp/ov"
+
+
+def test_climate_metrics_exclude_water_and_composites() -> None:
+    from india_resilience_tool.config.metrics_registry import get_metric_spec, is_climate_compute_metric
+    from tools.runs.prepare_dashboard import _resolve_climate_metrics_for_level
+
+    args = argparse.Namespace(level="district", metrics=None, scenarios=None)
+    selected, _ = _resolve_climate_metrics_for_level(args, level="district")
+    # No externally sourced water metrics and no composites leak into climate compute.
+    assert not any(slug.startswith("water_scarcity") for slug in selected)
+    assert not any(slug.startswith("composite_") for slug in selected)
+    # Everything that remains satisfies the positive compute contract.
+    assert all(is_climate_compute_metric(get_metric_spec(slug)) for slug in selected)
+
+
+def test_water_availability_plan_builds_expected_district_only_steps() -> None:
+    from tools.runs.prepare_dashboard import build_water_availability_plan
+
+    args = argparse.Namespace(
+        overwrite=True,
+        plan_only=False,
+        dry_run=False,
+        audit_only=False,
+        skip_optimised=False,
+        skip_audit=False,
+        verbose=False,
+        state=["Telangana"],
+        water_workbook=None,
+    )
+    scope = BundleRuntimeScope(
+        selected_metrics=[
+            "composite_water_risk",
+            "water_scarcity_percapita",
+            "water_scarcity_percapita_2050",
+            "water_scarcity_deterioration_2050",
+        ],
+        pending_metrics=[
+            "composite_water_risk",
+            "water_scarcity_percapita",
+            "water_scarcity_percapita_2050",
+            "water_scarcity_deterioration_2050",
+        ],
+        has_global_issues=False,
+    )
+    plan = build_water_availability_plan(args, runtime_scope=scope)
+    labels = [step.label for step in plan]
+    assert labels == [
+        "water-availability-district-masters",
+        "composite-masters:district",
+        "processed-optimised-build",
+        "processed-optimised-state-values",
+        "processed-optimised-audit",
+    ]
+    # The composite step is targeted to composite_water_risk only, district level.
+    composite_step = plan[labels.index("composite-masters:district")]
+    assert "--metric" in composite_step.argv
+    assert "composite_water_risk" in composite_step.argv
+    assert "--level" in composite_step.argv
+    assert "district" in composite_step.argv
+    assert "block" not in composite_step.argv

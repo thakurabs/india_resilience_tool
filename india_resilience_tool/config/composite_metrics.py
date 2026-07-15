@@ -45,7 +45,7 @@ VISIBLE_GLANCE_COMPOSITES: tuple[CompositeMetricSpec, ...] = tuple(
             if not entry.is_attribute
         ),
         supported_levels=spec.supported_levels,
-        normalization="per_period",
+        normalization=spec.composite_normalization,
     )
     for spec in THEMATIC_DASHBOARD_BUNDLES
 )

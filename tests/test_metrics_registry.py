@@ -673,3 +673,26 @@ def test_aqueduct_metrics_and_domain_are_fully_retired() -> None:
         assert scenario not in cst.SCENARIO_DISPLAY
         assert scenario not in cst.SCENARIO_UI_LABEL
         assert scenario not in cst.SCENARIO_HELP_MD
+
+
+def test_get_metric_spec_returns_spec_or_none() -> None:
+    from india_resilience_tool.config.metrics_registry import get_metric_spec
+
+    assert get_metric_spec("water_scarcity_percapita") is not None
+    assert get_metric_spec("definitely_not_a_metric") is None
+
+
+def test_is_climate_compute_metric_positive_contract() -> None:
+    from india_resilience_tool.config.metrics_registry import (
+        get_metric_spec,
+        is_climate_compute_metric,
+    )
+
+    # pipeline / scenario_period metric qualifies
+    assert is_climate_compute_metric(get_metric_spec("tas_annual_mean")) is True
+    # externally sourced static snapshots do not (water scarcity, JRC flood)
+    assert is_climate_compute_metric(get_metric_spec("water_scarcity_percapita")) is False
+    assert is_climate_compute_metric(get_metric_spec("water_scarcity_deterioration_2050")) is False
+    assert is_climate_compute_metric(get_metric_spec("jrc_flood_depth_index_rp100")) is False
+    # None (unknown slug) is safely not-climate-compute
+    assert is_climate_compute_metric(None) is False

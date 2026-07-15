@@ -68,6 +68,16 @@ def test_dashboard_bundle_catalog_is_exact() -> None:
         (
             "thematic",
             "Thematic",
+            "Water Risk",
+            "Thematic - Water Risk",
+            "composite_water_risk",
+            "Composite Water Risk",
+            ("district",),
+            True,
+        ),
+        (
+            "thematic",
+            "Thematic",
             "Heat Stress",
             "Thematic - Heat Stress",
             "composite_heat_stress",

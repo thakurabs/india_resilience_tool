@@ -334,6 +334,31 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             workbook_group="Inundation Extent",
         ),
     ),
+    "Water Risk": (
+        BundleWeightEntry(
+            bundle_domain="Water Risk",
+            metric_slug="water_scarcity_percapita",
+            weight=1.0,
+            source_note="NITI Aayog present-day (2025) per-capita water-scarcity class; 2050 projection and deterioration shown as inline glance attributes",
+            workbook_group="Water Scarcity",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Water Risk",
+            metric_slug="water_scarcity_percapita_2050",
+            weight=0.0,
+            source_note="",
+            is_attribute=True,
+            workbook_group="Water Scarcity (2050 projection)",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Water Risk",
+            metric_slug="water_scarcity_deterioration_2050",
+            weight=0.0,
+            source_note="",
+            is_attribute=True,
+            workbook_group="Water Scarcity Deterioration",
+        ),
+    ),
     "Extreme Rainfall | Flash Flood Risk": (
         BundleWeightEntry(
             bundle_domain="Extreme Rainfall | Flash Flood Risk",

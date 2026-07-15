@@ -33,6 +33,56 @@ FLOOD_SEVERITY_CLASS_COLORS: tuple[str, ...] = (
     "#b30000",
 )
 
+# Per-capita water-scarcity classes 1..4 (No Stress -> Absolute scarcity), green->red.
+WATER_SCARCITY_CLASS_COLORS: tuple[str, ...] = (
+    "#1a9850",
+    "#fee08b",
+    "#fc8d59",
+    "#d73027",
+)
+
+# Water-scarcity deterioration steps 0..3 (No change -> Worsens by 3), neutral->red.
+# 0-based: index 0 corresponds to class code 0 ("No change").
+WATER_DETERIORATION_CLASS_COLORS: tuple[str, ...] = (
+    "#e0e0e0",
+    "#fdae61",
+    "#f46d43",
+    "#d73027",
+)
+
+# Registry of fixed per-metric ordinal palettes (keyed by lowercase slug). Metrics
+# absent here fall back to a colormap-sampled categorical palette so any k-class
+# ordinal renders coherently. Slugs are hard-coded to keep viz free of app imports.
+_CLASS_SCALE_PALETTES: dict[str, tuple[str, ...]] = {
+    "jrc_flood_depth_index_rp100": FLOOD_SEVERITY_CLASS_COLORS,
+    "water_scarcity_percapita": WATER_SCARCITY_CLASS_COLORS,
+    "water_scarcity_percapita_2050": WATER_SCARCITY_CLASS_COLORS,
+    "water_scarcity_deterioration_2050": WATER_DETERIORATION_CLASS_COLORS,
+}
+
+
+def _sampled_categorical_palette(n_classes: int) -> tuple[str, ...]:
+    """Sample ``n_classes`` hex colors from a sequential colormap (generic fallback)."""
+    n = max(1, int(n_classes))
+    cmap = mpl.colormaps.get_cmap("YlOrRd")
+    if n == 1:
+        return (mcolors.to_hex(cmap(0.5)),)
+    return tuple(mcolors.to_hex(cmap(i / (n - 1))) for i in range(n))
+
+
+def class_scale_palette(slug: str, n_classes: int) -> tuple[str, ...]:
+    """Return an ``n_classes``-length ordinal palette (min class first) for a slug.
+
+    Uses the registered fixed palette when the slug is known and long enough;
+    otherwise samples a sequential colormap so an arbitrary k-class metric renders
+    coherently and no lookup runs past the end of a fixed tuple.
+    """
+    key = str(slug or "").strip().lower()
+    palette = _CLASS_SCALE_PALETTES.get(key)
+    if palette is not None and int(n_classes) <= len(palette):
+        return tuple(palette[: int(n_classes)])
+    return _sampled_categorical_palette(n_classes)
+
 
 @lru_cache(maxsize=16)
 def get_cmap_hex_list(cmap_name: str, *, nsteps: int = 256) -> list[str]:

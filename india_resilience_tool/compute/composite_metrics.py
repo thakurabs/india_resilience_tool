@@ -317,6 +317,106 @@ def _compute_baseline_anchored_score_frame(
     return out
 
 
+def _ordinal_class_bounds(metric_slug: str) -> tuple[int, int]:
+    """Return (min_code, max_code) for a scored ordinal component, or raise.
+
+    The ``pre_scaled_ordinal`` composite mode maps integer class codes to an
+    absolute 0-100 score. It requires every scored (weight>0) component to carry a
+    contiguous integer ``class_labels`` mapping in the registry (e.g. ``{1: ...,
+    2: ..., 3: ..., 4: ...}``). This blocks a future continuous component from
+    silently riding the ordinal mapping; such metrics must use a different mode.
+    """
+    spec = METRICS_BY_SLUG.get(metric_slug)
+    labels = getattr(spec, "class_labels", None) if spec is not None else None
+    if not labels:
+        raise ValueError(
+            "pre_scaled_ordinal composite requires integer class_labels for scored "
+            f"component {metric_slug!r}, but none are defined in the registry."
+        )
+    try:
+        codes = sorted(int(key) for key in labels.keys())
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"pre_scaled_ordinal composite component {metric_slug!r} has non-integer "
+            f"class_labels keys: {list(labels.keys())!r}."
+        ) from exc
+    if len(codes) < 2 or codes != list(range(codes[0], codes[0] + len(codes))):
+        raise ValueError(
+            f"pre_scaled_ordinal composite component {metric_slug!r} must have contiguous "
+            f"integer class_labels; got {codes!r}."
+        )
+    return codes[0], codes[-1]
+
+
+def _pre_scaled_ordinal_series(
+    values: pd.Series,
+    *,
+    min_code: int,
+    max_code: int,
+    higher_is_worse: bool,
+) -> pd.Series:
+    """Map ordinal class codes onto an absolute 0-100 scale (min->0, max->100).
+
+    Unlike the default per-period min-max normalization, this mapping is data
+    independent, so the same class always yields the same score in every state.
+    Missing/non-numeric values become NaN.
+    """
+    numeric = pd.to_numeric(values, errors="coerce")
+    out = pd.Series(np.nan, index=numeric.index, dtype=float)
+    finite = numeric[np.isfinite(numeric)]
+    if finite.empty or max_code == min_code:
+        return out
+    scaled = (finite - float(min_code)) / (float(max_code) - float(min_code))
+    if not higher_is_worse:
+        scaled = 1.0 - scaled
+    out.loc[finite.index] = (scaled * 100.0).clip(0.0, 100.0)
+    return out
+
+
+def _compute_pre_scaled_ordinal_score_frame(
+    wide: pd.DataFrame,
+    *,
+    metric_specs: list[BundleMetricSpec],
+    id_columns: list[str],
+) -> pd.DataFrame:
+    """Score a composite from fixed ordinal classes (absolute pre-scaled mapping).
+
+    Every scored (weight>0) component is validated to carry contiguous integer
+    class_labels (raising otherwise), then mapped 1..k -> 0..100 before the
+    existing per-row weighted mean.
+    """
+    out = wide.loc[:, [col for col in id_columns if col in wide.columns]].copy()
+    normalized_cols: list[str] = []
+    weights: list[float] = []
+    for spec in metric_specs:
+        if float(spec.weight) <= 0.0:
+            continue  # attributes are excluded upstream; guard the scored contract anyway
+        min_code, max_code = _ordinal_class_bounds(spec.slug)
+        if spec.column not in wide.columns:
+            continue
+        norm_col = f"{spec.slug}__landing_norm"
+        out[norm_col] = _pre_scaled_ordinal_series(
+            wide[spec.column],
+            min_code=min_code,
+            max_code=max_code,
+            higher_is_worse=bool(spec.higher_is_worse),
+        )
+        normalized_cols.append(norm_col)
+        weights.append(float(spec.weight))
+    if not normalized_cols:
+        out["bundle_score"] = np.nan
+        out["available_metric_count"] = 0
+        return out
+    norm_frame = out[normalized_cols]
+    weight_series = pd.Series(weights, index=normalized_cols, dtype=float)
+    available_weights = norm_frame.notna().mul(weight_series, axis=1).sum(axis=1)
+    weighted_sum = norm_frame.mul(weight_series, axis=1).sum(axis=1, skipna=True)
+    out["bundle_score"] = weighted_sum.div(available_weights.where(available_weights > 0.0))
+    out["available_metric_count"] = norm_frame.notna().sum(axis=1).astype(int)
+    out.loc[out["available_metric_count"] == 0, "bundle_score"] = np.nan
+    return out
+
+
 def compute_composite_master_frame(
     spec: CompositeMetricSpec,
     *,
@@ -352,8 +452,9 @@ def compute_composite_master_frame(
 
     output = next(iter(component_frames.values()))[id_columns].drop_duplicates().reset_index(drop=True)
     bundle_metric_specs = _bundle_metric_specs(spec)
+    normalization_mode = getattr(spec, "normalization", "per_period")
     anchor_wide = None
-    if getattr(spec, "normalization", "per_period") == "baseline_anchored":
+    if normalization_mode == "baseline_anchored":
         anchor_wide = _build_wide_component_frame(
             component_frames,
             level=level_norm,
@@ -362,7 +463,13 @@ def compute_composite_master_frame(
         )
     for scenario, period in available_pairs:
         wide = _build_wide_component_frame(component_frames, level=level_norm, scenario=scenario, period=period)
-        if anchor_wide is not None:
+        if normalization_mode == "pre_scaled_ordinal":
+            score_frame = _compute_pre_scaled_ordinal_score_frame(
+                wide,
+                metric_specs=bundle_metric_specs,
+                id_columns=id_columns,
+            )
+        elif anchor_wide is not None:
             score_frame = _compute_baseline_anchored_score_frame(
                 wide,
                 anchor_wide=anchor_wide,
@@ -460,6 +567,10 @@ def build_composite_metrics(
         if not requested_states:
             requested_states = _discover_states_for_spec(spec, level=levels_resolved[0], data_dir=data_dir)
         for level in levels_resolved:
+            if level not in spec.supported_levels:
+                # District-only composites (e.g. composite_water_risk) must never
+                # await or build block masters.
+                continue
             for state_name in requested_states:
                 frame = compute_composite_master_frame(
                     spec,

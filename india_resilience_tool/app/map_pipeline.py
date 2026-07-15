@@ -49,7 +49,7 @@ from india_resilience_tool.data.merge import (
 )
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.colors import (
-    FLOOD_SEVERITY_CLASS_COLORS,
+    class_scale_palette,
     apply_fillcolor_classed,
     apply_fillcolor_binned,
     build_rp100_flood_depth_legend_html,
@@ -119,10 +119,14 @@ def _build_legend_title(varcfg: Mapping[str, Any]) -> str:
 
 
 def _uses_fixed_class_scale(variable_slug: str, varcfg: Mapping[str, Any]) -> bool:
-    return (
-        str(variable_slug or "").strip().lower() == FLOOD_SEVERITY_METRIC_SLUG
-        and str(varcfg.get("class_display_mode") or "").strip().lower() == "label_with_score"
-    )
+    """Return whether a metric renders on a fixed ordinal class scale (any class-display mode).
+
+    Generalized beyond the JRC flood slug to any metric declaring a class-display
+    mode plus class_labels (e.g. water scarcity, deterioration). The color range and
+    palette are derived from the metric's own class codes, not a hard-coded 1..5.
+    """
+    mode = str(varcfg.get("class_display_mode") or "").strip().lower()
+    return mode in ("label_with_score", "label_only") and bool(varcfg.get("class_labels"))
 
 
 def _stack_legend_blocks(primary_html: str, overlay_html: str, *, map_height: int) -> str:
@@ -804,7 +808,10 @@ def build_map_and_rankings(
 
     if use_fixed_class_scale:
         color_slider_placeholder.empty()
-        vmin, vmax = 1.0, 5.0
+        # Derive the class range from the metric's own labels (min..max code), so
+        # 1-based scarcity (1..4) and 0-based deterioration (0..3) both render correctly.
+        _class_codes = sorted(class_labels)
+        vmin, vmax = (float(_class_codes[0]), float(_class_codes[-1])) if _class_codes else (1.0, 5.0)
     elif use_composite_bundle_scale:
         color_slider_placeholder.empty()
         vmin, vmax = 0.0, 100.0
@@ -852,10 +859,13 @@ def build_map_and_rankings(
     with perf_section("colors: apply_fillcolor_binned"):
         with st.spinner("Computing colors..."):
             if use_fixed_class_scale:
+                _class_codes = sorted(class_labels)
+                _min_code = _class_codes[0] if _class_codes else 1
+                _palette = class_scale_palette(variable_slug, len(_class_codes))
                 value_to_color = {
-                    class_index: FLOOD_SEVERITY_CLASS_COLORS[class_index - 1]
-                    for class_index in sorted(class_labels)
-                    if 1 <= class_index <= len(FLOOD_SEVERITY_CLASS_COLORS)
+                    class_index: _palette[class_index - _min_code]
+                    for class_index in _class_codes
+                    if 0 <= (class_index - _min_code) < len(_palette)
                 }
                 merged = apply_fillcolor_classed(
                     merged,
@@ -944,7 +954,7 @@ def build_map_and_rankings(
                 for index in sorted(class_labels)
                 if index in class_labels
             ],
-            colors=list(FLOOD_SEVERITY_CLASS_COLORS[: len(class_labels)]),
+            colors=list(class_scale_palette(variable_slug, len(class_labels))),
             map_height=map_height,
             bar_width_px=18,
         )

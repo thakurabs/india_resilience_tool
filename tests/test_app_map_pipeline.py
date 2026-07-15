@@ -214,3 +214,41 @@ def test_evaluate_coverage_policy_warns_for_block_level_broken_joins() -> None:
     assert block is None
     assert len(warnings) == 1
     assert "failed to join" in warnings[0]
+
+
+def test_uses_fixed_class_scale_generalizes_to_water_metrics() -> None:
+    from india_resilience_tool.app.map_pipeline import _uses_fixed_class_scale
+
+    assert _uses_fixed_class_scale(
+        "water_scarcity_percapita",
+        {"class_display_mode": "label_with_score", "class_labels": {1: "a", 2: "b", 3: "c", 4: "d"}},
+    )
+    # label_only (deterioration) also uses the fixed class scale
+    assert _uses_fixed_class_scale(
+        "water_scarcity_deterioration_2050",
+        {"class_display_mode": "label_only", "class_labels": {0: "a", 1: "b", 2: "c", 3: "d"}},
+    )
+    # a plain continuous metric does not
+    assert not _uses_fixed_class_scale("tas_annual_mean", {})
+
+
+def test_class_scale_palette_lengths_and_zero_based_offset() -> None:
+    from india_resilience_tool.viz.colors import (
+        WATER_DETERIORATION_CLASS_COLORS,
+        WATER_SCARCITY_CLASS_COLORS,
+        class_scale_palette,
+    )
+
+    # exact-length fixed palettes for the 4-class water metrics
+    assert class_scale_palette("water_scarcity_percapita", 4) == WATER_SCARCITY_CLASS_COLORS
+    assert class_scale_palette("water_scarcity_deterioration_2050", 4) == WATER_DETERIORATION_CLASS_COLORS
+    # an out-of-registry k-class metric falls back to a sampled palette of the right length
+    fallback = class_scale_palette("some_unknown_metric", 3)
+    assert len(fallback) == 3
+    # 0-based deterioration: code 0 maps to the FIRST color (min_code offset), not dropped
+    codes = [0, 1, 2, 3]
+    min_code = min(codes)
+    palette = class_scale_palette("water_scarcity_deterioration_2050", len(codes))
+    value_to_color = {c: palette[c - min_code] for c in codes}
+    assert value_to_color[0] == WATER_DETERIORATION_CLASS_COLORS[0]
+    assert value_to_color[3] == WATER_DETERIORATION_CLASS_COLORS[3]

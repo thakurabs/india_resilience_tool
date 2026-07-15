@@ -19,6 +19,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - defaults to the `Heat Risk` bundle under `SSP5-8.5`, `2040-2060`
   - surfaces one grouped bundle list in Glance and Deep Dive with exact selector labels such as `Thematic - Heat Risk` and `Sector-wise - Health Risk`
   - thematic bundles remain available for `Heat Risk`, `Heat Stress`, `Drought Risk`, `Flood & Extreme Rainfall Risk`, and `Cold Risk`
+  - `Water Risk` is a district-only thematic snapshot bundle (NITI Aayog per-capita water scarcity): the scored headline is the present-day (2025) scarcity class, with the 2050 projection and its deterioration shown as inline attributes; its composite uses an absolute pre-scaled ordinal score (fixed classes → 0/33/67/100), not relative normalization
   - sector-wise bundles are available for `Agricultural Risk`, `Health Risk`, `Industrial Risk`, `Investment / Financial Risk`, `Infrastructure Risk`, `Asset Risk (Thermal Power Plants)`, `Asset Risk (Hydropower Plants)`, and `Life & Livelihood Loss Risk`
   - `Agricultural Risk` is the survivor agriculture bundle; the former `Agriculture & Growing Conditions` thematic bundle is retired and treated as a legacy alias to `Agricultural Risk`
   - `Life & Livelihood Loss Risk` is available at district and block level when the persisted block proposal bundle master has been built
@@ -540,6 +541,22 @@ processed/gw_stage_extraction_pct/{state}/master_metrics_by_district.csv
 processed/gw_future_availability_ham/{state}/master_metrics_by_district.csv
 processed/gw_extractable_resource_ham/{state}/master_metrics_by_district.csv
 processed/gw_total_extraction_ham/{state}/master_metrics_by_district.csv
+```
+
+Water Risk (per-capita water scarcity) is a district-only thematic snapshot bundle.
+Build it end to end (source masters → `composite_water_risk` → optimized publish →
+state values → parity audit) with:
+
+```bash
+python -m tools.runs.prepare_dashboard water-availability --state Telangana --overwrite
+```
+
+Masters land under:
+
+```text
+processed/water_scarcity_percapita/{state}/master_metrics_by_district.csv
+processed/water_scarcity_percapita_2050/{state}/master_metrics_by_district.csv
+processed/water_scarcity_deterioration_2050/{state}/master_metrics_by_district.csv
 ```
 
 ## Common commands

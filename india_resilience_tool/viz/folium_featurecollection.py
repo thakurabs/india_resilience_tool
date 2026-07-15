@@ -22,6 +22,7 @@ from india_resilience_tool.data.admin_coverage import (
     build_feature_key_from_properties,
     build_feature_key_series,
 )
+from india_resilience_tool.viz.formatting import metric_uses_class_display
 
 
 def ensure_geojson_by_state_has_all(geojson_by_state: Mapping[str, dict]) -> dict[str, dict]:
@@ -370,8 +371,9 @@ def build_geojson_tooltip(
         tooltip_fields += ["_tooltip_baseline", "_tooltip_delta"]
         tooltip_aliases += ["Baseline (1990–2010)", "Δ vs baseline"]
 
-    metric_slug_norm = str(metric_slug or "").strip().lower()
-    if metric_slug_norm != "jrc_flood_depth_index_rp100":
+    # Suppress the redundant separate risk-class row for any class-display metric
+    # (JRC flood, water scarcity, deterioration, ...): its value already shows the class.
+    if not metric_uses_class_display(metric_slug):
         tooltip_fields.append("_risk_class")
         tooltip_aliases.append("Risk class")
     tooltip_fields.append("_tooltip_rank")

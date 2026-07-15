@@ -49,6 +49,25 @@ SEVERITY_CLASS_LABELS: dict[int, str] = {
 }
 
 
+# Per-capita water-scarcity ordinal classes (code -> display label; higher = worse).
+WATER_SCARCITY_CLASS_LABELS: dict[int, str] = {
+    1: "No Stress",
+    2: "Stress",
+    3: "Scarcity",
+    4: "Absolute scarcity",
+}
+
+
+# 2050-vs-2025 water-scarcity deterioration: a delta of class steps (0..3), NOT a
+# scarcity class. Rendered label-only (no numeric suffix) via class_display_mode.
+WATER_DETERIORATION_LABELS: dict[int, str] = {
+    0: "No change",
+    1: "Worsens by 1 class",
+    2: "Worsens by 2 classes",
+    3: "Worsens by 3 classes",
+}
+
+
 @dataclass(frozen=True)
 class MetricSpec:
     """
@@ -2223,6 +2242,108 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_admin_states": (),
         "rank_higher_is_worse": True,
     },
+    {
+        "name": "Per-Capita Water Scarcity (2025)",
+        "slug": "water_scarcity_percapita",
+        "label": "Per-Capita Water Scarcity (2025)",
+        "group": "water",
+        "value_col": "water_scarcity_percapita",
+        "periods_metric_col": "water_scarcity_percapita",
+        "units": "scarcity class (1-4)",
+        "display_units": "",
+        "class_labels": WATER_SCARCITY_CLASS_LABELS,
+        "class_display_mode": "label_with_score",
+        "description": (
+            "Present-day (2025) per-capita water-availability scarcity class from the "
+            "NITI Aayog ICED district dataset. Ordinal 1-4 (1=No Stress, 2=Stress, "
+            "3=Scarcity, 4=Absolute scarcity), where higher is worse. Externally sourced "
+            "district snapshot, not a climate scenario projection."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard water-availability --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Per-Capita Water Scarcity (2050 projection)",
+        "slug": "water_scarcity_percapita_2050",
+        "label": "Per-Capita Water Scarcity (2050 projection)",
+        "group": "water",
+        "value_col": "water_scarcity_percapita_2050",
+        "periods_metric_col": "water_scarcity_percapita_2050",
+        "units": "scarcity class (1-4)",
+        "display_units": "",
+        "class_labels": WATER_SCARCITY_CLASS_LABELS,
+        "class_display_mode": "label_with_score",
+        "description": (
+            "Projected 2050 per-capita water-availability scarcity class from the NITI "
+            "Aayog ICED district dataset. Same ordinal 1-4 encoding as the 2025 class; "
+            "the projection is monotone (every district stays the same or worsens). "
+            "Carried as an inline attribute alongside the scored 2025 headline."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard water-availability --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Water Scarcity Deterioration (2025->2050)",
+        "slug": "water_scarcity_deterioration_2050",
+        "label": "Water Scarcity Deterioration (2025->2050)",
+        "group": "water",
+        "value_col": "water_scarcity_deterioration_2050",
+        "periods_metric_col": "water_scarcity_deterioration_2050",
+        "units": "class steps (0-3)",
+        "display_units": "",
+        "class_labels": WATER_DETERIORATION_LABELS,
+        "class_display_mode": "label_only",
+        "description": (
+            "Projected worsening of the per-capita water-scarcity class from 2025 to 2050, "
+            "expressed as the number of class steps (0=No change to 3=Worsens by 3 classes). "
+            "This is a delta of ordinal class steps, NOT a scarcity class, so it uses its own "
+            "delta labels and renders label-only. Carried as an inline attribute."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard water-availability --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": True,
+    },
     *[
         {
             "name": spec.composite_label,
@@ -2281,6 +2402,23 @@ PIPELINE_SLUGS: set[str] = {str(m.get("slug", "")).strip() for m in PIPELINE_MET
 # Typed views derived from metric registries
 PIPELINE_METRICS: list[MetricSpec] = [MetricSpec.from_pipeline_dict(m) for m in PIPELINE_METRICS_RAW]
 METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(ALL_METRICS_RAW)
+
+
+def get_metric_spec(slug: str) -> Optional[MetricSpec]:
+    """Return the MetricSpec for ``slug``, or ``None`` if unknown."""
+    return METRICS_BY_SLUG.get(slug)
+
+
+def is_climate_compute_metric(spec: Optional[MetricSpec]) -> bool:
+    """Return True when a metric enters the climate-compute pipeline.
+
+    A positive compute contract: only pipeline-sourced, scenario/period metrics
+    are computed by the climate pipeline. Externally sourced snapshots (JRC flood,
+    groundwater, water scarcity, ...) are excluded even when they surface under the
+    Climate Hazards pillar. Accepts ``None`` (unknown slug -> not climate-compute)
+    so callers can compose ``is_climate_compute_metric(get_metric_spec(slug))``.
+    """
+    return bool(spec) and spec.source_type == "pipeline" and spec.selection_mode == "scenario_period"
 
 
 # -----------------------------------------------------------------------------
@@ -2479,6 +2617,12 @@ DOMAINS: dict[str, list[str]] = {
         "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp100",
     ],
+    "Water Risk": [
+        "composite_water_risk",
+        "water_scarcity_percapita",
+        "water_scarcity_percapita_2050",
+        "water_scarcity_deterioration_2050",
+    ],
 }
 
 # Domain display order for UI
@@ -2503,6 +2647,7 @@ DOMAIN_ORDER: list[str] = [
     "Agricultural LULC Exposure",
     "Groundwater Status & Availability",
     "Riverine Flood",
+    "Water Risk",
 ]
 
 PILLAR_DOMAINS: dict[str, list[str]] = {
@@ -2521,6 +2666,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
         "Asset Risk (Hydropower Plants)",
         "Life & Livelihood Loss Risk",
         "Drought Risk (Advanced)",
+        "Water Risk",
     ],
     "Bio-physical Hazards": [
         "Groundwater Status & Availability",
@@ -2589,6 +2735,13 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "Flood extent uses total polygon area; depth uses flooded-cell p95 block depth "
         "and flooded-area-weighted district rollups. State availability depends on which "
         "state-scoped JRC masters have been built and published."
+    ),
+    "Water Risk": (
+        "District per-capita water-scarcity snapshot from the NITI Aayog ICED dataset. "
+        "The scored headline is the present-day (2025) scarcity class (1-4, higher worse); "
+        "the 2050 projection and its class-step deterioration are carried as inline "
+        "attributes. District-only; the composite uses an absolute pre-scaled ordinal "
+        "score (0/33/67/100 from the fixed classes), not relative normalization."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "

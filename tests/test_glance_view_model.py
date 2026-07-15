@@ -264,3 +264,13 @@ def test_glance_builder_persists_raw_primary_class_metric_for_riverine_flood(tmp
     district = pd.read_parquet(root / "district.parquet")
 
     assert district["jrc_flood_depth_index_rp100"].tolist() == [3]
+
+
+def test_attribute_display_routes_class_metrics_by_own_mode() -> None:
+    from india_resilience_tool.compute.glance_view_model import _attribute_display
+
+    # 2050 scarcity attribute -> label_with_score
+    assert _attribute_display("water_scarcity_percapita_2050", 3) == "Scarcity (3)"
+    # deterioration attribute -> label_only (bare delta, NOT a scarcity class)
+    assert _attribute_display("water_scarcity_deterioration_2050", 1) == "Worsens by 1 class"
+    assert _attribute_display("water_scarcity_deterioration_2050", 0) == "No change"

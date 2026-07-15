@@ -36,6 +36,7 @@ from india_resilience_tool.data.optimized_bundle import (
 )
 from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.charts import canonical_period_label, ordered_period_keys, ordered_scenario_keys
+from india_resilience_tool.viz.formatting import format_metric_compact, metric_uses_class_display
 from paths import get_master_csv_filename, resolve_processed_root
 
 
@@ -820,6 +821,11 @@ def _attribute_display(slug: str, value: object) -> Optional[str]:
     numeric = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
     if not np.isfinite(numeric):
         return None
+    # Class-display attributes render through class-aware formatting using the
+    # metric's own labels/mode: the 2050 scarcity attribute shows "Scarcity (3)",
+    # the deterioration attribute shows a bare delta label ("Worsens by 1 class").
+    if metric_uses_class_display(slug):
+        return format_metric_compact(numeric, metric_slug=slug)
     varcfg = VARIABLES.get(slug, {})
     scale = float(varcfg.get("display_scale") or 1.0)
     units = str(varcfg.get("display_units") or varcfg.get("units") or "").strip()
