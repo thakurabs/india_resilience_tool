@@ -6,7 +6,7 @@
 
 **Planning Working Tree:** Dirty; 13 untracked files, no tracked modifications
 
-**Change Range:** `CHG-0222` through `CHG-0227`
+**Change Range:** `CHG-0222` through `CHG-0227`; extended by `CHG-0230` through `CHG-0233` (amendment snapshot `GIT:add_flood_depth@861f44c`). `CHG-0228` (Aqueduct wholesale) and `CHG-0229` (retired-feature test trim) are pending in-chat amendments from prior sessions and are cross-referenced below but not defined in this document yet.
 
 ## Summary
 
@@ -121,10 +121,120 @@ load_crosswalk, aggregate_crosswalk_to_targets
 ### CHG-0227: Closeout
 
 - Sweep deleted symbols, filenames, dotted paths, command examples, and PowerShell references.
+- The sweep list additionally covers every file deleted under `CHG-0231`/`CHG-0232`/`CHG-0233`:
+  - `india_resilience_tool/app/adm2_cache.py`, `tests/test_app_adm2_cache.py`, and their mentions in `MANIFEST.md`, `docs/module_responsibility_map.md`, `india_resilience_tool/app/CLAUDE.md`;
+  - the four never-referenced diagnostics (`block_orphan_audit`, `health_txx_lens_demo`, `profile_compute_realdata`, `profile_drought_spi`);
+  - any doc deleted or trimmed under `CHG-0232`;
+  - any tool deleted under `CHG-0233` plus its rows in `tools/README.md`, `docs/command_catalog.md`, and `MANIFEST.md`.
 - Remove stale `__pycache__` directories only after deletion and testing.
 - Refresh graphify and verify deleted module nodes are absent; use an approved full rebuild if incremental shrink handling leaves stale nodes.
 - Update `BL-0023` and `BL-0024` only when explicitly requested.
 - Update `docs/HANDOFF.md` only after explicit `Applied CHG-xxxx` confirmation.
+
+## Reachability Inventory and Redundancy Extension (CHG-0230 – CHG-0233)
+
+### CHG-0230: Reachability Inventory (evidence base; no deletions)
+
+**Snapshot:** analysis and re-verification both at `GIT:add_flood_depth@861f44c`. The graphify graph used for initial clues was built at `6e7e222` (2026-07-07); all counts below were re-derived directly from source at `861f44c` and must be re-verified again at the execution SHA of any deletion package.
+
+#### Method
+
+Graphify alone under-reports liveness. Its AST pass misses three dynamic patterns, all present in this repo:
+
+1. **Function-body imports** — `app/runtime.py` imports ~25 modules inside `run_app`, not at module top level.
+2. **Subprocess module launches** — `tools/runs/prepare_dashboard.py` invokes pipeline stages via `python -m <tools.* string>`; those modules never appear as import edges.
+3. **`importlib` dynamic references** — string-based module loads, e.g. `resources.files(ASSET_PACKAGE)` and `__import__(...)`.
+
+The authoritative analysis is a repo-wide Python-AST **import closure** (walks all `Import`/`ImportFrom` nodes anywhere in each module body, resolving relative imports) seeded from:
+
+- **Dashboard seed:** `main.py`.
+- **Pipeline seeds (21):** `tools/runs/prepare_dashboard.py` itself plus the 20 unique `"tools.*"` module strings it launches via `python -m` (this set includes the other documented CLIs: `build_processed_optimised`, `audit_processed_optimised_parity`, `compute_indices_multiprocess`, etc.).
+
+Reproduce commands:
+
+```bash
+# pipeline seed list (expect 20 unique strings)
+grep -oE '"tools\.[a-z_.]+"' tools/runs/prepare_dashboard.py | sort -u
+
+# per-candidate zero-reference check (expect no hits outside the file itself)
+git grep -l <name> -- '*.py' '*.md'
+```
+
+The closure script itself is short (~90 lines: collect `*.py` under `india_resilience_tool/`, `tools/`, `tests/` plus `main.py`/`paths.py`; parse with `ast`; resolve every import to the longest known module prefix; BFS from each seed set) and is re-written in a scratchpad at execution time rather than kept in the repo.
+
+#### Verified live-feature map (at `861f44c`)
+
+Of **98** `india_resilience_tool` package modules (excluding `compute/tests/`):
+
+- **85 dashboard-live** (reachable from `main.py`), plus `main.py` and `paths.py`. By subpackage: app 32 (runtime, map pipeline/layer-runtime/view, rankings/state-summary/details views + runtimes + context cards, read-the-docs view, portfolio ui/multistate/state-runtime, case-study runtime, glance exports, landing/left-panel runtimes, ribbon, sidebar + branding, geography + controls, geo/master caches + freshness, overlays + hydro boundary overlay, crosswalk/dashboard-bundle runtimes, perf, state, help text, color-range controls); analysis 6 (portfolio, metrics, timeseries, area_weighting, map_enrichment); data 16 (master loader/columns, optimized_bundle, adm2/adm3 loaders, discovery, merge, crosswalks, hydro loader/summary, river loader/topology, exposure_summary, admin_coverage, spatial_match); compute 3 dashboard-side (incl. master_builder, spi_adapter); config 9; viz 8; utils 3.
+- **11 pipeline-only live** (reachable only via `prepare_dashboard` planned commands — **all KEEP**): `compute/cold_risk_gridfirst`, `drought_risk_gridfirst`, `extreme_rainfall_gridfirst`, `heat_risk_gridfirst`, `heat_stress_gridfirst`, `gridfirst_spatial`, `composite_metrics`, `proposal_bundles`, `glance_view_model`, `analysis/bundle_scores`, `data/source_inventory`.
+- **2 import-unreachable**, of which only one is dead:
+  - `app/assets/__init__.py` — **FALSE POSITIVE, KEEP**: loaded dynamically via `ASSET_PACKAGE = "india_resilience_tool.app.assets"` (`app/views/read_the_docs_view.py:12`).
+  - `app/adm2_cache.py` — **truly dead** (see CHG-0231).
+
+Additional dynamic-reference pitfalls recorded for future audits:
+
+- `india_resilience_tool/compute/tests/*` are live pytest tests (rootdir collection), not dead code; any redundancy there belongs to the CHG-0229 test-dedup appendix.
+- `tools/pipeline/compute_indices_bootstrap.py` is **LIVE**: `compute_indices_multiprocess.py:65` loads it via `__import__("tools.pipeline.compute_indices_bootstrap", ...)`, and it is covered by `tests/test_compute_indices_bootstrap.py`. It appears in no static import edge — a textbook dynamic-import false dead-positive.
+
+### CHG-0231: Orphan Code and Scripts
+
+All deletions route through the CHG-0223 quarantine mechanism and the CHG-0227 closeout sweep. Gate for every row: re-run the zero-reference git-grep at the execution SHA before deleting.
+
+| File | Evidence (at `861f44c`) | Disposition |
+|---|---|---|
+| `india_resilience_tool/app/adm2_cache.py` | Unreachable from all entry points; referenced only by its own test and stale doc rows (`MANIFEST.md`, `docs/module_responsibility_map.md`, `app/CLAUDE.md`) | `DELETE` with `tests/test_app_adm2_cache.py`; sweep the three doc mentions |
+| `tools/diagnostics/block_orphan_audit.py` | Zero references in `*.py`/`*.md` outside itself | `DELETE` |
+| `tools/diagnostics/health_txx_lens_demo.py` | Zero references | `DELETE` |
+| `tools/diagnostics/profile_compute_realdata.py` | Zero references | `DELETE` |
+| `tools/diagnostics/profile_drought_spi.py` | Zero references | `DELETE` |
+| `tools/pipeline/compute_indices.py` | Superseded single-process/debug CLI; no `.py` references outside itself; doc rows in `docs/functionality_contract.md`, `docs/refactor_acceptance.md`, `tools/README.md` | **ASK-USER** — CLI-surface retirement; on approval, `DELETE` and sweep the three doc rows |
+| `tools/pipeline/compute_indices_bootstrap.py` | LIVE via `__import__` from `compute_indices_multiprocess.py:65` + own test | **KEEP** (corrects an earlier draft that marked it a candidate) |
+
+Untracked files keep their CHG-0222 classifications unchanged (roster diagnostics `KEEP_IN_PLACE`; `tools/_scratch_roster_inventory.py` `QUARANTINE_CANDIDATE`). CHG-0231 touches no untracked files.
+
+### CHG-0232: Stale Documentation Disposition
+
+Vocabulary: `DELETE` / `TRIM` / `REFRESH` / `KEEP`. Rule: a doc that is the sole home of methodology prose is never `DELETE` — at most `TRIM`/`REFRESH`. Every `DELETE` requires a skim-confirm gate (open the file, confirm no open items or unique methodology) at execution time.
+
+| Doc | Signal | Disposition |
+|---|---|---|
+| `docs/dead_code_candidate_report.md` | Every row marked done; superseded by this plan + git history | `DELETE` after skim-confirm |
+| `docs/refactor_acceptance.md` | Completed-initiative artifact | `DELETE` after confirming no open items (note: holds a `compute_indices` doc row swept by CHG-0231) |
+| `docs/bundle_task_master.md` | Completed-initiative artifact | `DELETE` after confirming no open items |
+| `docs/pytest_baseline_failures.md` | Point-in-time baseline record | `DELETE` after confirming baseline is superseded |
+| `docs/c6_workers_yearly_retention_benchmark.md` | Perf-era brief | `DELETE` if superseded by `docs/perf_phase2_brief.md` (RETAIN per CHG-0222), else `KEEP` |
+| `docs/c7_bundle_only_runner_design.md` | Perf-era brief | Same gate as above |
+| `docs/aqueduct_onboarding_methodology.md` (~29 KB) | Mostly retired-CLI material | `TRIM` per CHG-0225 rule: retain and rekey only the live area-weighted transfer methodology around `aggregate_crosswalk_to_targets` |
+| `docs/aqueduct_field_contract.md` | Same family | `TRIM` under the same rule |
+| `docs/module_responsibility_map.md` | Stale rows (e.g. `adm2_cache`) but live purpose | `REFRESH`, or fold into `MANIFEST.md` if fully redundant with it |
+| `docs/functionality_contract.md` | Live contract doc with stale rows | `REFRESH` (sweep `compute_indices` row if CHG-0231 ASK-USER approves) |
+| `README_EXPOSURE_HYDRO_CONTEXT_PATCH.md` (untracked) | `PROTECTED_PENDING` per CHG-0222 | Out of scope here |
+
+Aqueduct-doc trims defer to CHG-0225/CHG-0228 rules; do not duplicate their dispositions here.
+
+### CHG-0233: Doc-Only-Referenced Tools
+
+Seventeen tools are referenced only from `.md` files. Doc-only reference is **not** dead-code evidence by itself — most are documented offline runbook steps required by the clean-regen direction. Per-file gate: zero-`.py`-reference recheck at execution SHA; every `DELETE` also sweeps its rows in `tools/README.md`, `docs/command_catalog.md`, and `MANIFEST.md`.
+
+**KEEP — documented offline runbook steps (clean-regen + retained hydro-context feature):** `tools/data_acquisition/*` (ERA5/NEX downloads), `tools/data_prep/*` (hurs derivation, reanalysis prep, ERA5 organize), `tools/geodata/build_admin_boundaries_from_lgd.py`, `tools/geodata/build_adm1_geojson.py`, `tools/geodata/build_states_geojson.py`, river/crosswalk builders (`build_river_topology`, `clean_river_network`, `enrich_river_network_districts`, `build_block_*`/`district_*` crosswalk builders, `build_admin_hydro_summary`).
+
+**KEEP — active tooling:** `tools/docs/build_technical_note_html.py` (builds the committed Read-the-Docs asset), `tools/diagnostics/profile_prepare_dashboard.py`, `tools/diagnostics/roster_audit.py`, `tools/diagnostics/verify_admin_join_consistency.py`, `tools/diagnostics/migrate_trailing_dot_dirs.py` (stale-dir remediation), `tools/diagnostics/audit_thematic_bundle_completeness.py`.
+
+**DELETE candidates (superseded / one-shot exploration; each needs its own zero-ref recheck):**
+
+| Tool | Note |
+|---|---|
+| `tools/subbasin_shp_explore.py` | One-shot exploration of retired hydro-mode inputs |
+| `tools/geodata/inspect_block_shapefile.py` | One-shot inspection |
+| `tools/geodata/convert_blocks_shp_to_geojson.py` | Verify against the CHG-0226 `build_blocks_geojson` deferral before deleting |
+| `tools/diagnostics/heat_stress_gridfirst_parity.py` | Superseded parity check |
+| `tools/diagnostics/profile_drought_fullpass.py` | Superseded profiling script |
+| `tools/diagnostics/profile_drought_realdata.py` | Superseded profiling script |
+| `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | v2 exists and is test-referenced |
+| `tools/legacy/DONOTUSE_ArtparkGenerateReport.py` | `tools/legacy/` is do-not-touch — **flag for discussion only, never delete unilaterally** |
+
+Aqueduct hydro tools are already disposed by CHG-0225 (and pending CHG-0228); cross-reference, do not duplicate.
 
 ## Public Interfaces
 
@@ -166,3 +276,9 @@ python -c "import tools.geodata.aqueduct_common; import tools.geodata.build_aque
 | `CHG-0225` Aqueduct extraction and deletion | `SUGGESTED` |
 | `CHG-0226` block-builder deferral | `SUGGESTED` |
 | `CHG-0227` final validation and graph refresh | `SUGGESTED` |
+| `CHG-0228` Aqueduct wholesale amendment (pending in-chat, prior session) | `SUGGESTED` |
+| `CHG-0229` retired-feature test trim (pending in-chat, prior session) | `SUGGESTED` |
+| `CHG-0230` reachability inventory (this document section; no deletions) | `SUGGESTED` |
+| `CHG-0231` orphan code and scripts | `SUGGESTED` |
+| `CHG-0232` stale documentation disposition | `SUGGESTED` |
+| `CHG-0233` doc-only-referenced tools | `SUGGESTED` |
