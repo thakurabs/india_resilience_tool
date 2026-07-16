@@ -17,6 +17,8 @@ from __future__ import annotations
 from contextlib import nullcontext
 from typing import Any, Callable, Mapping, Optional, Tuple
 
+from india_resilience_tool.viz.colors import NO_DATA_FILL_HEX
+
 RESPONSIVE_MAP_MIN_HEIGHT = 420
 RESPONSIVE_MAP_MAX_HEIGHT = 820
 
@@ -32,6 +34,29 @@ PANE_RURAL_FACILITIES_SERVICE_RASTER = "irt-rural-facilities-density-service"
 PANE_FLOOD_RASTER = "irt-flood-raster"
 PANE_CROSSWALK_OVERLAY = "irt-crosswalk-overlay"
 PANE_RIVER_OVERLAY = "irt-river-overlay"
+PANE_ADMIN_OUTLINE = "irt-admin-outline"
+PANE_BASEMAP_LABELS = "irt-basemap-labels"
+
+# CARTO light basemap split into a label-free base + a labels-only tile pane so
+# place names render ABOVE the choropleth (no hazy text under polygons) and only
+# appear once zoomed in past state scale.
+CARTO_LIGHT_NOLABELS_TILES = "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
+CARTO_LIGHT_ONLYLABELS_TILES = "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
+CARTO_TILES_ATTR = (
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors '
+    '&copy; <a href="https://carto.com/attributions">CARTO</a>'
+)
+BASEMAP_LABELS_MIN_ZOOM = 6
+
+# Admin-boundary outline hierarchy (drawn above the choropleth fills): the
+# country outline is strongest, then states, then districts (block view only);
+# the choropleth unit strokes themselves are white hairlines.
+ADMIN_OUTLINE_COLOR = "#6B7280"
+ADMIN_OUTLINE_COUNTRY_WEIGHT = 1.6
+ADMIN_OUTLINE_STATE_WEIGHT = 1.1
+ADMIN_OUTLINE_DISTRICT_WEIGHT = 0.9
+SELECTED_UNIT_OUTLINE_COLOR = "#111111"
+SELECTED_UNIT_OUTLINE_WEIGHT = 2.5
 
 
 def clamp_map_height(
@@ -269,13 +294,20 @@ def build_base_choropleth_map_with_geojson_layer(
     tooltip: Any = None,
     highlight_function: Optional[Callable[[dict], dict]] = None,
 ) -> Any:
-    """Build the base Folium map with the patched choropleth layer only."""
+    """Build the base Folium map with the patched choropleth layer and admin outlines.
+
+    Visual hierarchy: choropleth polygons get white hairline strokes; state
+    outlines sit above them; the dissolved country outline is strongest. At
+    block level the per-district outlines are added by the caller
+    (`build_folium_map_for_selection`), which owns the ADM2 geometry cache.
+    """
     import folium
 
     m = folium.Map(
         location=map_center,
         zoom_start=map_zoom,
-        tiles="CartoDB positron",
+        tiles=CARTO_LIGHT_NOLABELS_TILES,
+        attr=CARTO_TILES_ATTR,
         control_scale=False,
         min_zoom=4,
         max_zoom=12,
@@ -286,7 +318,21 @@ def build_base_choropleth_map_with_geojson_layer(
     )
     _ensure_overlay_panes(m)
 
-    # Fit state bounds when a state is selected but district is "All"
+    # Labels-only tiles above the polygons; zoom-gated so the national view stays
+    # clean and place names appear only from state scale onward.
+    folium.TileLayer(
+        tiles=CARTO_LIGHT_ONLYLABELS_TILES,
+        attr=CARTO_TILES_ATTR,
+        name="Place labels",
+        overlay=True,
+        control=False,
+        min_zoom=BASEMAP_LABELS_MIN_ZOOM,
+        max_zoom=12,
+        pane=PANE_BASEMAP_LABELS,
+    ).add_to(m)
+
+    # Fit state bounds when a state is selected but district is "All";
+    # otherwise (national view) fit India's bounds so the country fills the frame.
     try:
         if selected_state != "All" and selected_district == "All":
             row_state = adm1[adm1["shapeName"].astype(str).str.strip() == selected_state]
@@ -296,6 +342,12 @@ def build_base_choropleth_map_with_geojson_layer(
                 _name = m.get_name()
                 bounds_js = f"<script>var {_name} = {_name}; {_name}.fitBounds({fit_bounds});</script>"
                 m.get_root().html.add_child(folium.Element(bounds_js))
+        elif selected_state == "All":
+            tb = adm1.total_bounds  # (minx, miny, maxx, maxy)
+            m.fit_bounds(
+                [[float(tb[1]), float(tb[0])], [float(tb[3]), float(tb[2])]],
+                padding=(24, 24),
+            )
     except Exception:
         pass
 
@@ -312,10 +364,11 @@ def build_base_choropleth_map_with_geojson_layer(
     def _style_fn(feature: dict) -> dict:
         props = (feature or {}).get("properties", {}) if isinstance(feature, dict) else {}
         return {
-            "fillColor": props.get("fillColor", "#cccccc"),
-            "color": "#666666",
-            "weight": 0.3,
-            "fillOpacity": 0.7,
+            "fillColor": props.get("fillColor", NO_DATA_FILL_HEX),
+            "color": "#FFFFFF",
+            "weight": 0.4,
+            "opacity": 0.6,
+            "fillOpacity": 0.85,
         }
 
     folium.GeoJson(
@@ -329,6 +382,63 @@ def build_base_choropleth_map_with_geojson_layer(
         bubblingMouseEvents=False,
     ).add_to(m)
 
+    # Admin outlines above the choropleth: states always; country strongest.
+    try:
+        from india_resilience_tool.app.geo_cache import (
+            build_country_outline_fc,
+            build_state_outline_fc,
+        )
+
+        add_admin_outline_layer(
+            m,
+            outline_fc=build_state_outline_fc(adm1),
+            name="State outlines",
+            weight=ADMIN_OUTLINE_STATE_WEIGHT,
+        )
+        add_admin_outline_layer(
+            m,
+            outline_fc=build_country_outline_fc(adm1),
+            name="Country outline",
+            weight=ADMIN_OUTLINE_COUNTRY_WEIGHT,
+            opacity=1.0,
+        )
+    except Exception:
+        # Outlines are cosmetic; never block the choropleth on their failure.
+        pass
+
+    return m
+
+
+def add_admin_outline_layer(
+    m: Any,
+    *,
+    outline_fc: Optional[Mapping[str, Any]],
+    name: str,
+    weight: float,
+    color: str = ADMIN_OUTLINE_COLOR,
+    opacity: float = 0.9,
+) -> Any:
+    """Attach a non-interactive boundary-outline layer to an existing Folium map."""
+    import folium
+
+    if not (outline_fc and list((outline_fc or {}).get("features", []) or [])):
+        return m
+
+    folium.GeoJson(
+        data=dict(outline_fc),
+        name=str(name),
+        style_function=lambda _feature: {
+            "fill": False,
+            "color": str(color),
+            "weight": float(weight),
+            "opacity": float(opacity),
+        },
+        smooth_factor=1.5,
+        zoom_on_click=False,
+        bubblingMouseEvents=False,
+        pane=PANE_ADMIN_OUTLINE,
+        interactive=False,
+    ).add_to(m)
     return m
 
 
@@ -432,8 +542,10 @@ def _ensure_overlay_panes(m: Any) -> None:
         (PANE_RURAL_FACILITIES_HEALTH_RASTER, 409),
         (PANE_RURAL_FACILITIES_SERVICE_RASTER, 410),
         (PANE_FLOOD_RASTER, 411),
+        (PANE_ADMIN_OUTLINE, 415),
         (PANE_CROSSWALK_OVERLAY, 420),
         (PANE_RIVER_OVERLAY, 430),
+        (PANE_BASEMAP_LABELS, 440),
     ):
         folium.map.CustomPane(pane_name, z_index=z_index).add_to(m)
     setattr(m, "_irt_overlay_panes_added", True)

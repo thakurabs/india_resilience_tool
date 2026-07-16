@@ -14,6 +14,7 @@ Email: absthakur@resilience.org.in
 from __future__ import annotations
 
 from functools import lru_cache
+import html
 import hashlib
 from typing import Mapping, Sequence
 
@@ -24,6 +25,10 @@ import matplotlib as mpl
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 
+
+# No-data fill for choropleth units: light neutral so missing units recede
+# instead of reading as a mid-gray data class.
+NO_DATA_FILL_HEX = "#E8E8E8"
 
 FLOOD_SEVERITY_CLASS_COLORS: tuple[str, ...] = (
     "#00a651",
@@ -82,6 +87,45 @@ def class_scale_palette(slug: str, n_classes: int) -> tuple[str, ...]:
     if palette is not None and int(n_classes) <= len(palette):
         return tuple(palette[: int(n_classes)])
     return _sampled_categorical_palette(n_classes)
+
+
+# Diverging colormap families keep their full symmetric range when binned;
+# sequential ramps are clipped at the top to avoid near-black high classes.
+_DIVERGING_CMAP_BASES: frozenset[str] = frozenset(
+    {"rdbu", "rdylbu", "rdylgn", "rdgy", "brbg", "puor", "prgn", "piyg", "spectral", "coolwarm", "bwr", "seismic"}
+)
+SEQUENTIAL_CMAP_TOP_FRAC: float = 0.9
+
+
+def _is_diverging_cmap(cmap_name: str) -> bool:
+    """Return whether a Matplotlib colormap name belongs to a diverging family."""
+    base = str(cmap_name or "").strip().lower()
+    if base.endswith("_r"):
+        base = base[:-2]
+    return base in _DIVERGING_CMAP_BASES
+
+
+@lru_cache(maxsize=32)
+def get_binned_cmap_hex_list(cmap_name: str, *, nlevels: int) -> list[str]:
+    """
+    Sample the discrete class colors used by binned choropleths AND their legends.
+
+    Single source of truth so the map fill colors and the legend swatches are
+    always identical. Sequential ramps are sampled over [0, SEQUENTIAL_CMAP_TOP_FRAC]
+    to drop the unreadable near-black top; diverging ramps keep the full range so
+    the scale stays symmetric around the midpoint.
+
+    Args:
+        cmap_name: Matplotlib colormap name
+        nlevels: number of discrete classes (floored at 2)
+
+    Returns:
+        List of hex colors, length nlevels
+    """
+    n = max(2, int(nlevels))
+    cmap = mpl.colormaps.get_cmap(cmap_name)
+    top = 1.0 if _is_diverging_cmap(cmap_name) else SEQUENTIAL_CMAP_TOP_FRAC
+    return [mcolors.to_hex(cmap(top * i / (n - 1))) for i in range(n)]
 
 
 @lru_cache(maxsize=16)
@@ -210,7 +254,7 @@ def apply_fillcolor(
 
     Contract (must match legacy dashboard):
       - merged_df is modified in-place and returned
-      - NaN/inf -> '#cccccc'
+      - NaN/inf -> NO_DATA_FILL_HEX
       - also writes '_metric_val' with numeric-coerced values
 
     Args:
@@ -229,7 +273,7 @@ def apply_fillcolor(
     )
 
     arr = vals.to_numpy(dtype=float)
-    fill = np.full(arr.shape, "#cccccc", dtype=object)
+    fill = np.full(arr.shape, NO_DATA_FILL_HEX, dtype=object)
 
     mask_valid = np.isfinite(arr)
     if np.any(mask_valid):
@@ -277,7 +321,7 @@ def apply_fillcolor_binned(
 
     Contract:
       - merged_df is modified in-place and returned
-      - NaN/inf -> '#cccccc'
+      - NaN/inf -> NO_DATA_FILL_HEX
       - also writes '_metric_val' with numeric-coerced values
 
     Args:
@@ -300,7 +344,7 @@ def apply_fillcolor_binned(
     )
 
     arr = vals.to_numpy(dtype=float)
-    fill = np.full(arr.shape, "#cccccc", dtype=object)
+    fill = np.full(arr.shape, NO_DATA_FILL_HEX, dtype=object)
 
     merged_df["_metric_val"] = vals
 
@@ -324,7 +368,7 @@ def apply_fillcolor_binned(
     idx = np.searchsorted(edges, arr[mask_valid], side="right") - 1
     idx = np.clip(idx, 0, int(nlevels) - 1).astype(int)
 
-    colors = np.array(get_cmap_hex_list(cmap_name, nsteps=int(nlevels)), dtype=object)
+    colors = np.array(get_binned_cmap_hex_list(cmap_name, nlevels=int(nlevels)), dtype=object)
     fill[mask_valid] = colors[idx]
 
     merged_df["fillColor"] = fill
@@ -343,7 +387,7 @@ def apply_fillcolor_classed(
 
     Contract:
       - merged_df is modified in-place and returned
-      - NaN/inf or non-class values -> '#cccccc'
+      - NaN/inf or non-class values -> NO_DATA_FILL_HEX
       - also writes '_metric_val' with numeric-coerced values
       - tolerance=0.5 rounds any float to nearest class (handles bottom-up
         district aggregates which are continuous in [1, 5])
@@ -353,7 +397,7 @@ def apply_fillcolor_classed(
         errors="coerce",
     )
     arr = vals.to_numpy(dtype=float)
-    fill = np.full(arr.shape, "#cccccc", dtype=object)
+    fill = np.full(arr.shape, NO_DATA_FILL_HEX, dtype=object)
 
     merged_df["_metric_val"] = vals
     for idx, value in enumerate(arr):
@@ -457,7 +501,7 @@ def build_vertical_binned_legend_block_html(
             f"{title_text}</div>"
         )
 
-    legend_colors = get_cmap_hex_list(cmap_name, nsteps=int(nlevels))
+    legend_colors = get_binned_cmap_hex_list(cmap_name, nlevels=int(nlevels))
 
     # Use stacked div segments instead of a CSS hard-stop gradient, which can be
     # brittle across renderers/sanitizers. This is deterministic and "truly" discrete.
@@ -624,6 +668,127 @@ def build_vertical_categorical_legend_block_html(
       </div>
     </div>
     {title_html}
+  </div>
+</div>
+"""
+
+
+def _legend_card_title_html(title_text: str) -> str:
+    """Return the compact legend title HTML, or an empty string when titleless."""
+    clean = html.escape(str(title_text or "").strip())
+    if not clean:
+        return ""
+    return f'<div style="font-weight:700; color:#111827; margin-bottom:8px;">{clean}</div>'
+
+
+def build_compact_binned_legend_card_html(
+    *,
+    legend_title: str = "",
+    pretty_metric_label: str | None = None,
+    vmin: float,
+    vmax: float,
+    cmap_name: str,
+    display_scale: float = 1.0,
+    nlevels: int = 7,
+    no_data_label: str = "No data",
+    no_data_color: str = NO_DATA_FILL_HEX,
+) -> str:
+    """Build a fixed in-map compact binned legend card for Folium maps."""
+    n = max(2, int(nlevels))
+    title_html = _legend_card_title_html(str(legend_title or pretty_metric_label or ""))
+
+    try:
+        vmin_f = float(vmin)
+        vmax_f = float(vmax)
+    except Exception:
+        vmin_f, vmax_f = 0.0, 1.0
+    if not np.isfinite(vmin_f) or not np.isfinite(vmax_f):
+        vmin_f, vmax_f = 0.0, 1.0
+    if vmin_f > vmax_f:
+        vmin_f, vmax_f = vmax_f, vmin_f
+    if vmin_f == vmax_f:
+        padding = max(abs(vmin_f) * 0.1, 1.0)
+        vmin_f -= padding
+        vmax_f += padding
+
+    colors = get_binned_cmap_hex_list(cmap_name, nlevels=n)
+    edges = np.linspace(vmin_f, vmax_f, n + 1)
+    rows: list[str] = []
+    for idx in range(n - 1, -1, -1):
+        lower = format_legend_value(float(edges[idx]), vmin=vmin_f, vmax=vmax_f, display_scale=display_scale)
+        upper = format_legend_value(float(edges[idx + 1]), vmin=vmin_f, vmax=vmax_f, display_scale=display_scale)
+        label = f"{lower} - {upper}"
+        rows.append(
+            '<div style="display:flex; align-items:center; gap:7px; min-height:16px;">'
+            f'<span style="width:14px; height:10px; background:{html.escape(colors[idx])};'
+            ' border:1px solid rgba(17,24,39,0.20); flex:0 0 auto;"></span>'
+            f'<span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{html.escape(label)}</span>'
+            "</div>"
+        )
+
+    rows.append(
+        '<div style="display:flex; align-items:center; gap:7px; min-height:16px; margin-top:4px;">'
+        f'<span style="width:14px; height:10px; background:{html.escape(no_data_color)};'
+        ' border:1px solid rgba(17,24,39,0.20); flex:0 0 auto;"></span>'
+        f'<span>{html.escape(str(no_data_label))}</span>'
+        "</div>"
+    )
+
+    rows_html = "\n".join(rows)
+    return f"""
+<div id="irt-compact-map-legend" style="position:fixed; right:18px; bottom:18px; width:240px;
+            max-width:calc(100% - 36px); z-index:650; pointer-events:none;
+            font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:1.2;
+            color:#111827; background:rgba(255,255,255,0.94);
+            border:1px solid rgba(17,24,39,0.18); border-radius:6px;
+            box-shadow:0 4px 14px rgba(17,24,39,0.22); padding:10px 11px;
+            box-sizing:border-box;">
+  {title_html}
+  <div style="display:flex; flex-direction:column; gap:3px;">
+    {rows_html}
+  </div>
+</div>
+"""
+
+
+def build_compact_categorical_legend_card_html(
+    *,
+    legend_title: str = "",
+    labels: Sequence[str],
+    colors: Sequence[str],
+    no_data_label: str = "No data",
+    no_data_color: str = NO_DATA_FILL_HEX,
+) -> str:
+    """Build a fixed in-map compact categorical legend card for Folium maps."""
+    title_html = _legend_card_title_html(legend_title)
+    pairs = [(str(label), str(color)) for label, color in zip(labels, colors) if str(label).strip()]
+    rows = [
+        '<div style="display:flex; align-items:center; gap:7px; min-height:16px;">'
+        f'<span style="width:14px; height:10px; background:{html.escape(color)};'
+        ' border:1px solid rgba(17,24,39,0.20); flex:0 0 auto;"></span>'
+        f'<span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{html.escape(label)}</span>'
+        "</div>"
+        for label, color in pairs
+    ]
+    rows.append(
+        '<div style="display:flex; align-items:center; gap:7px; min-height:16px; margin-top:4px;">'
+        f'<span style="width:14px; height:10px; background:{html.escape(no_data_color)};'
+        ' border:1px solid rgba(17,24,39,0.20); flex:0 0 auto;"></span>'
+        f'<span>{html.escape(str(no_data_label))}</span>'
+        "</div>"
+    )
+    rows_html = "\n".join(rows)
+    return f"""
+<div id="irt-compact-map-legend" style="position:fixed; right:18px; bottom:18px; width:240px;
+            max-width:calc(100% - 36px); z-index:650; pointer-events:none;
+            font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:1.2;
+            color:#111827; background:rgba(255,255,255,0.94);
+            border:1px solid rgba(17,24,39,0.18); border-radius:6px;
+            box-shadow:0 4px 14px rgba(17,24,39,0.22); padding:10px 11px;
+            box-sizing:border-box;">
+  {title_html}
+  <div style="display:flex; flex-direction:column; gap:3px;">
+    {rows_html}
   </div>
 </div>
 """

@@ -22,6 +22,7 @@ from india_resilience_tool.data.admin_coverage import (
     build_feature_key_from_properties,
     build_feature_key_series,
 )
+from india_resilience_tool.viz.colors import NO_DATA_FILL_HEX
 from india_resilience_tool.viz.formatting import metric_uses_class_display
 
 
@@ -275,7 +276,7 @@ def build_props_map_from_gdf(
             upd["block_name"] = record.get("block_name")
 
         fill = record.get("fillColor")
-        upd["fillColor"] = fill if isinstance(fill, str) and fill else "#cccccc"
+        upd["fillColor"] = fill if isinstance(fill, str) and fill else NO_DATA_FILL_HEX
 
         for c in value_cols:
             v = record.get(c)
@@ -330,7 +331,7 @@ def patch_fc_properties(
         if upd:
             props.update(dict(upd))
         else:
-            props.setdefault("fillColor", "#cccccc")
+            props.setdefault("fillColor", NO_DATA_FILL_HEX)
 
         for c in ensure_text_fields:
             props.setdefault(c, None)

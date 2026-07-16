@@ -21,6 +21,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
+import folium
 import streamlit as st
 
 from india_resilience_tool.analysis.map_enrichment import (
@@ -52,9 +53,10 @@ from india_resilience_tool.viz.colors import (
     class_scale_palette,
     apply_fillcolor_classed,
     apply_fillcolor_binned,
+    build_compact_binned_legend_card_html,
+    build_compact_categorical_legend_card_html,
     build_rp100_flood_depth_legend_html,
     build_vertical_categorical_legend_block_html,
-    build_vertical_binned_legend_block_html,
 )
 from india_resilience_tool.viz.tables import build_rankings_table_df as _build_rankings_table_df
 from india_resilience_tool.viz.charts import period_display_label
@@ -68,6 +70,11 @@ from india_resilience_tool.data.optimized_bundle import is_optimized_metric_root
 
 
 FLOOD_SEVERITY_METRIC_SLUG = "jrc_flood_depth_index_rp100"
+
+# Discrete choropleth classes (equal intervals over the active color range).
+# 7 keeps classes decodable by eye; fixed-class metrics are unaffected (they
+# derive their palette from their own class labels).
+MAP_COLOR_NLEVELS = 7
 
 
 @dataclass(frozen=True)
@@ -879,7 +886,7 @@ def build_map_and_rankings(
                     vmin,
                     vmax,
                     cmap_name=cmap_name,
-                    nlevels=15,
+                    nlevels=MAP_COLOR_NLEVELS,
                 )
 
     # Filter for map display (preserves legacy behavior: block selection does not
@@ -947,7 +954,7 @@ def build_map_and_rankings(
     overlay_messages = tuple(overlay_messages) + tuple(coverage_messages)
 
     if use_fixed_class_scale:
-        legend_block_html = build_vertical_categorical_legend_block_html(
+        primary_legend_card_html = build_compact_categorical_legend_card_html(
             legend_title=str(varcfg.get("label") or variable_slug),
             labels=[
                 str(class_labels[index])
@@ -955,22 +962,18 @@ def build_map_and_rankings(
                 if index in class_labels
             ],
             colors=list(class_scale_palette(variable_slug, len(class_labels))),
-            map_height=map_height,
-            bar_width_px=18,
         )
     else:
-        legend_block_html = build_vertical_binned_legend_block_html(
+        primary_legend_card_html = build_compact_binned_legend_card_html(
             legend_title=legend_title,
             vmin=vmin,
             vmax=vmax,
             cmap_name=cmap_name,
             display_scale=display_scale,
-            nlevels=15,
-            nticks=5,
-            include_zero_tick=True,
-            map_height=map_height,
-            bar_width_px=18,
+            nlevels=MAP_COLOR_NLEVELS,
         )
+    if primary_legend_card_html:
+        map_build.folium_map.get_root().html.add_child(folium.Element(primary_legend_card_html))
 
     overlay_legend_blocks: list[str] = []
     rp100_overlay_legend = next(
@@ -998,6 +1001,7 @@ def build_map_and_rankings(
     if rural_overlay_legend:
         overlay_legend_blocks.append(rural_overlay_legend)
 
+    legend_block_html = None
     for overlay_legend_html in overlay_legend_blocks:
         if legend_block_html:
             legend_block_html = _stack_legend_blocks(

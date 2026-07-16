@@ -86,6 +86,10 @@ def build_folium_map_for_selection(
         build_subbasin_geojson_by_basin,
     )
     from india_resilience_tool.app.views.map_view import (
+        ADMIN_OUTLINE_DISTRICT_WEIGHT,
+        SELECTED_UNIT_OUTLINE_COLOR,
+        SELECTED_UNIT_OUTLINE_WEIGHT,
+        add_admin_outline_layer,
         add_overlay_render_layers,
         add_reference_overlay_layer,
         build_base_choropleth_map_with_geojson_layer,
@@ -309,11 +313,11 @@ def build_folium_map_for_selection(
             metric_slug=metric_col,
         )
 
+        # Hover: darken the outline only; the fill keeps its class color so the
+        # hovered value stays readable (no yellow flash).
         highlight_fn = lambda _f: {
-            "fillColor": "#ffff00",
-            "color": "#000",
-            "weight": 2,
-            "fillOpacity": 0.9,
+            "color": "#333333",
+            "weight": 2.0,
         }
 
     # Build the base folium map fresh every render. A prior implementation cached
@@ -334,6 +338,53 @@ def build_folium_map_for_selection(
             tooltip=tooltip,
             highlight_function=highlight_fn,
         )
+
+    # Block view: district outlines sit between the block hairlines and the
+    # state outlines so the admin hierarchy stays legible (CHG-0256).
+    district_outline_fc = None
+    if level_norm == "block" and selected_state != "All":
+        try:
+            adm2_mtime = float(adm2_geojson_path.stat().st_mtime)
+            district_outline_by_state = ensure_geojson_by_state_has_all(
+                build_adm2_geojson_by_state(
+                    path=str(adm2_geojson_path),
+                    tolerance=simplify_tolerance_adm2,
+                    mtime=adm2_mtime,
+                )
+            )
+            state_key = normalize_state_fn(selected_state) or "unknown"
+            district_outline_fc = district_outline_by_state.get(state_key)
+            if district_outline_fc and selected_district != "All":
+                district_outline_fc = filter_fc_by_district(
+                    district_outline_fc,
+                    selected_district=selected_district,
+                    level="district",
+                    alias_fn=alias_fn,
+                )
+            add_admin_outline_layer(
+                m,
+                outline_fc=district_outline_fc,
+                name="District outlines",
+                weight=ADMIN_OUTLINE_DISTRICT_WEIGHT,
+            )
+        except Exception:
+            district_outline_fc = None
+
+    # Persistent emphasis outline around the selected district (CHG-0259) —
+    # visually distinct from the transient hover highlight.
+    if selected_district != "All":
+        try:
+            selected_outline_fc = district_outline_fc if level_norm == "block" else base_fc
+            add_admin_outline_layer(
+                m,
+                outline_fc=selected_outline_fc,
+                name="Selected district",
+                color=SELECTED_UNIT_OUTLINE_COLOR,
+                weight=SELECTED_UNIT_OUTLINE_WEIGHT,
+                opacity=1.0,
+            )
+        except Exception:
+            pass
 
     if reference_fc and list((reference_fc or {}).get("features", []) or []):
         ctx = perf_section("map: add related overlay") if perf_section is not None else nullcontext()

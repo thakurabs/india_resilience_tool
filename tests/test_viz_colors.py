@@ -10,14 +10,18 @@ from __future__ import annotations
 import pandas as pd
 
 from india_resilience_tool.viz.colors import (
+    NO_DATA_FILL_HEX,
     FLOOD_SEVERITY_CLASS_COLORS,
     apply_fillcolor,
     apply_fillcolor_classed,
     apply_fillcolor_binned,
+    build_compact_binned_legend_card_html,
+    build_compact_categorical_legend_card_html,
     build_vertical_categorical_legend_block_html,
     build_vertical_binned_legend_block_html,
     build_vertical_gradient_legend_html,
     compute_robust_range,
+    get_binned_cmap_hex_list,
     get_cmap_hex_list,
 )
 
@@ -47,7 +51,7 @@ def test_apply_fillcolor_nan_defaults() -> None:
     df = pd.DataFrame({"x": [1.0, None, 3.0]})
     out = apply_fillcolor(df, "x", vmin=1.0, vmax=3.0, cmap_name="Reds")
     assert "fillColor" in out.columns
-    assert out.loc[1, "fillColor"] == "#cccccc"
+    assert out.loc[1, "fillColor"] == NO_DATA_FILL_HEX
     # valid rows should be hex strings
     assert isinstance(out.loc[0, "fillColor"], str) and out.loc[0, "fillColor"].startswith("#")
     assert isinstance(out.loc[2, "fillColor"], str) and out.loc[2, "fillColor"].startswith("#")
@@ -72,12 +76,26 @@ def test_apply_fillcolor_binned_handles_nan_and_limits() -> None:
     out = apply_fillcolor_binned(df, "x", vmin=0.0, vmax=3.0, cmap_name="Reds", nlevels=3)
 
     assert "fillColor" in out.columns
-    assert out.loc[3, "fillColor"] == "#cccccc"
+    assert out.loc[3, "fillColor"] == NO_DATA_FILL_HEX
 
-    # vmin maps to first bin color; vmax maps to last bin color
-    colors = get_cmap_hex_list("Reds", nsteps=3)
+    # vmin maps to first bin color; vmax maps to last bin color. Bin colors
+    # come from the shared sampler so the map matches the legend (CHG-0252).
+    colors = get_binned_cmap_hex_list("Reds", nlevels=3)
     assert out.loc[0, "fillColor"] == colors[0]
     assert out.loc[2, "fillColor"] == colors[-1]
+
+
+def test_get_binned_cmap_hex_list_clips_sequential_top_not_diverging() -> None:
+    # Sequential ramps drop the near-black top (CHG-0252); diverging ramps keep
+    # their full symmetric range so the midpoint stays neutral.
+    full_reds = get_cmap_hex_list("Reds", nsteps=7)
+    binned_reds = get_binned_cmap_hex_list("Reds", nlevels=7)
+    assert binned_reds[0] == full_reds[0]
+    assert binned_reds[-1] != full_reds[-1]
+
+    full_rdbu = get_cmap_hex_list("RdBu_r", nsteps=7)
+    binned_rdbu = get_binned_cmap_hex_list("RdBu_r", nlevels=7)
+    assert binned_rdbu == full_rdbu
 
 
 def test_build_binned_legend_block_contains_min_max_and_title() -> None:
@@ -94,6 +112,23 @@ def test_build_binned_legend_block_contains_min_max_and_title() -> None:
     assert "0.96" in html
 
 
+def test_build_compact_binned_legend_card_contains_no_data_and_shared_colors() -> None:
+    html = build_compact_binned_legend_card_html(
+        legend_title="°C",
+        vmin=0.0,
+        vmax=7.0,
+        cmap_name="Reds",
+        nlevels=7,
+    )
+
+    assert "position:fixed; right:18px; bottom:18px; width:240px" in html
+    assert "pointer-events:none" in html
+    assert "No data" in html
+    assert NO_DATA_FILL_HEX in html
+    for color in get_binned_cmap_hex_list("Reds", nlevels=7):
+        assert color in html
+
+
 def test_apply_fillcolor_classed_uses_fixed_class_colors() -> None:
     df = pd.DataFrame({"x": [1.0, 3.0, 5.0, None]})
     out = apply_fillcolor_classed(
@@ -105,7 +140,20 @@ def test_apply_fillcolor_classed_uses_fixed_class_colors() -> None:
     assert out.loc[0, "fillColor"] == FLOOD_SEVERITY_CLASS_COLORS[0]
     assert out.loc[1, "fillColor"] == FLOOD_SEVERITY_CLASS_COLORS[2]
     assert out.loc[2, "fillColor"] == FLOOD_SEVERITY_CLASS_COLORS[4]
-    assert out.loc[3, "fillColor"] == "#cccccc"
+    assert out.loc[3, "fillColor"] == NO_DATA_FILL_HEX
+
+
+def test_build_compact_categorical_legend_card_contains_no_data() -> None:
+    html = build_compact_categorical_legend_card_html(
+        legend_title="Flood Severity Index (RP-100)",
+        labels=["VeryLow", "Low", "Moderate", "High", "Extreme"],
+        colors=FLOOD_SEVERITY_CLASS_COLORS,
+    )
+
+    assert "Flood Severity Index (RP-100)" in html
+    assert "Extreme" in html
+    assert "No data" in html
+    assert NO_DATA_FILL_HEX in html
 
 
 def test_build_categorical_legend_block_contains_labels_and_title() -> None:

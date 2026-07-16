@@ -152,6 +152,20 @@ def load_local_adm1(path: str) -> gpd.GeoDataFrame:
 
 
 @st.cache_data(ttl=3600)
+def build_state_outline_fc(adm1: gpd.GeoDataFrame) -> dict:
+    """Geometry-only state-boundary FeatureCollection for the map outline layer."""
+    return gpd.GeoDataFrame(geometry=adm1.geometry, crs=adm1.crs).__geo_interface__
+
+
+@st.cache_data(ttl=3600)
+def build_country_outline_fc(adm1: gpd.GeoDataFrame) -> dict:
+    """Dissolved national-outline FeatureCollection built from the ADM1 polygons."""
+    geoms = adm1.geometry
+    dissolved = geoms.union_all() if hasattr(geoms, "union_all") else geoms.unary_union
+    return gpd.GeoDataFrame(geometry=[dissolved], crs=adm1.crs).__geo_interface__
+
+
+@st.cache_data(ttl=3600)
 def load_local_adm3(path: str, tolerance: float = SIMPLIFY_TOL_ADM3) -> gpd.GeoDataFrame:
     """
     Load ADM3 (blocks) with the same bbox + simplification strategy as ADM2.
