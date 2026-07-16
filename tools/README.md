@@ -389,12 +389,17 @@ Windows tip: if HDF5 writes get flaky under parallelism, fall back to `--workers
   - `IRT_DATA_DIR/CentralReport1773820094787.xlsx`
 - canonical boundary input:
   - `IRT_DATA_DIR/districts_4326.geojson`
+- manual alias input (optional `--district-alias-csv`, defaults to the path below):
+  - `IRT_DATA_DIR/groundwater/groundwater_district_aliases.csv`
+  - mapping rows re-point a source `(state, district)` onto its current canonical district spelling
+  - a target district equal to the `__EXCLUDE__` sentinel marks an intentional source drop (e.g. `DELHI, NAZUL LAND`), recorded in `groundwater_excluded_sources.csv` rather than treated as unmatched
 - outputs:
   - `IRT_DATA_DIR/processed/gw_stage_extraction_pct/{state}/master_metrics_by_district.csv`
   - `IRT_DATA_DIR/processed/gw_future_availability_ham/{state}/master_metrics_by_district.csv`
   - `IRT_DATA_DIR/processed/gw_extractable_resource_ham/{state}/master_metrics_by_district.csv`
   - `IRT_DATA_DIR/processed/gw_total_extraction_ham/{state}/master_metrics_by_district.csv`
-  - QA CSVs under `IRT_DATA_DIR/groundwater/`
+  - QA CSVs under `IRT_DATA_DIR/groundwater/` (`groundwater_unmatched_districts.csv`, `groundwater_excluded_sources.csv`, `groundwater_summary.csv`)
+- multiple source rows that map to one canonical district are summed via declarative rules (`SOURCE_DISTRICT_AGGREGATIONS`, plus the Lakshadweep island roll-up), reported in the summary as `aggregation_rows`
 - the tool refuses to write masters if any source districts remain unmatched after alias resolution
 
 `tools/optimized/build_processed_optimised.py` notes:
