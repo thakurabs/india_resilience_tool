@@ -6,11 +6,11 @@
 
 **Planning Working Tree:** Dirty; 13 untracked files, no tracked modifications
 
-**Change Range:** `CHG-0222` through `CHG-0227`; extended by `CHG-0230` through `CHG-0233` (amendment snapshot `GIT:add_flood_depth@861f44c`); review-hardening amendments `CHG-0234` (snapshot `GIT:add_flood_depth@9eba23f`). `CHG-0228` (Aqueduct wholesale) and `CHG-0229` (retired-feature test trim) are pending in-chat amendments from prior sessions and are cross-referenced below but not defined in this document yet.
+**Change Range:** `CHG-0222` through `CHG-0227`; extended by `CHG-0230` through `CHG-0233` (amendment snapshot `GIT:add_flood_depth@861f44c`); review-hardening amendments `CHG-0234` and Aqueduct wholesale-retirement definition `CHG-0228` (both at snapshot `GIT:add_flood_depth@9eba23f`). `CHG-0228` supersedes `CHG-0225`. `CHG-0229` (retired-feature test trim) remains a pending in-chat amendment from a prior session, cross-referenced below but not defined in this document yet.
 
 ## Summary
 
-Use a clean worktree for tracked purge changes, preserve pending feature and audit work, remove only proven unreachable hydro behavior, and extract live Aqueduct dependencies before deleting obsolete CLIs. Graphify supplies clues only; source references, caller sweeps, documentation, imports, and tests determine deletion safety.
+Use a clean worktree for tracked purge changes, preserve pending feature and audit work, remove only proven unreachable hydro behavior, and retire the Aqueduct pipeline family wholesale under CHG-0228 (which supersedes the earlier extract-then-delete approach of CHG-0225). Graphify supplies clues only; source references, caller sweeps, documentation, imports, and tests determine deletion safety.
 
 Tracked implementation CHGs receive separate commits. Inventory, quarantine, and decision-gate CHGs are recorded in the in-chat ledger without empty commits.
 
@@ -87,13 +87,15 @@ Acceptance means zero **unclassified** hits, not zero textual hits. Each broad-p
 
 Retain the established hydrology-context modules, including `app/runtime.py`, map/runtime overlays, details/context cards, crosswalks, hydro/river loaders, topology, summary cache, geo cache, and Folium feature-collection code.
 
-### CHG-0225: Aqueduct Refactor-Then-Delete
+### CHG-0225: Aqueduct Refactor-Then-Delete — SUPERSEDED by CHG-0228
 
-**Decision gate (blocks execution):** define or explicitly reject `CHG-0228` (Aqueduct wholesale amendment) **before** executing this change. The active clean-regen direction contemplates dropping Aqueduct entirely; if `CHG-0228` deletes the whole Aqueduct family, the `aqueduct_common.py` extraction below is wasted work that mints new purge residue. Do not start CHG-0225 while CHG-0228 is undefined.
+**Status: SUPERSEDED (2026-07-15).** The decision gate below was resolved by defining `CHG-0228` as wholesale Aqueduct retirement. No `aqueduct_common.py` is created; the 20-symbol closure and its consumers are deleted together under `CHG-0228`. This section is retained verbatim for evidence (the closure inventory and consumer list feed the `CHG-0228` scope) — do not execute it.
 
-**Symbol duplication policy:** `aqueduct_common.py` is a deliberate tools-side consolidation, not the single repo-wide home of its symbols. Two symbols already have other live homes that stay untouched: `HydroLevel` is independently defined in `india_resilience_tool/data/hydro_loader.py` (dashboard-live, retained) and in `tools/geodata/build_district_subbasin_crosswalk.py`; `_normalize_pfaf_id_series` has its own copy in `tools/geodata/prepare_aqueduct_baseline.py` (classified LIVE/KEEP). These duplicates are accepted and recorded here; optionally rewire `prepare_aqueduct_baseline.py` to import from `aqueduct_common` as a follow-up, but it is not required for acceptance.
+**Decision gate (resolved):** define or explicitly reject `CHG-0228` (Aqueduct wholesale amendment) **before** executing this change. The active clean-regen direction contemplates dropping Aqueduct entirely; if `CHG-0228` deletes the whole Aqueduct family, the `aqueduct_common.py` extraction below is wasted work that mints new purge residue. → Resolved: `CHG-0228` defined; this change is superseded.
 
-Create `tools/geodata/aqueduct_common.py` with the verified 20-symbol closure:
+**Symbol duplication policy (moot under supersession, retained for reference):** `aqueduct_common.py` was to be a deliberate tools-side consolidation, not the single repo-wide home of its symbols. `HydroLevel` is independently defined in `india_resilience_tool/data/hydro_loader.py` (dashboard-live, retained) and in `tools/geodata/build_district_subbasin_crosswalk.py` — both copies survive `CHG-0228` untouched; `_normalize_pfaf_id_series` has its own copy in `tools/geodata/prepare_aqueduct_baseline.py`, which is now deleted under `CHG-0228`.
+
+Original plan (do not execute): create `tools/geodata/aqueduct_common.py` with the verified 20-symbol closure:
 
 ```text
 HydroLevel, _INVALID_NUMERIC_SENTINELS, BASELINE_PERIOD,
@@ -118,6 +120,33 @@ load_crosswalk, aggregate_crosswalk_to_targets
 - Treat `AQUEDUCT_METRIC_ORDER` and `AQ_WATER_STRESS_COLUMN_MAP` as internal closure members, not public rewire targets.
 - Acceptance: no old filename, dotted module path, import, runbook, or PowerShell invocation remains.
 
+### CHG-0228: Aqueduct Wholesale Retirement (supersedes CHG-0225)
+
+**Decision (2026-07-15, user-confirmed):** retire the entire Aqueduct pipeline family. Definition snapshot `GIT:add_flood_depth@9eba23f`; re-verify all evidence at the execution SHA.
+
+**Evidence basis:**
+
+- The dashboard package (`india_resilience_tool/`, `main.py`) contains zero `aqueduct` references and zero `aq_*` metric slugs; the config registry does not know the metrics exist.
+- Retirement is already a tested negative contract: `tests/test_config.py::test_aqueduct_metrics_are_fully_removed_from_dashboard_variables` and `tests/test_metrics_registry.py::test_aqueduct_metrics_and_domain_are_fully_retired` assert no `aq_*` slug or Aqueduct domain may survive dashboard-side.
+- Only the producer side remained: seven `tools/geodata` modules (~3,010 LOC), four dedicated tests (~725 LOC), and the `aqueduct` subcommand + `dashboard-package` wiring in `tools/runs/prepare_dashboard.py` — a pipeline building data the dashboard is test-guarded against ever displaying.
+- Consistent with the 2026-06-13 clean-regen direction (drop Aqueduct; keep hydro context, climate, riverine, exposure).
+
+**Scope.** All deletions route through the CHG-0223 quarantine; per-file zero-reference gate with the CHG-0230 exclusions at the execution SHA.
+
+1. **Delete seven `tools/geodata` modules:** `prepare_aqueduct_baseline.py` (542 LOC), `build_aqueduct_admin_crosswalk.py` (151), `build_aqueduct_block_crosswalk.py` (155), `build_aqueduct_admin_masters.py` (409), `build_aqueduct_hydro_crosswalk.py` (225), `build_aqueduct_hydro_masters.py` (486), `validate_aqueduct_workflow.py` (1,042). This **reclassifies `prepare_aqueduct_baseline.py` from LIVE/KEEP** (as recorded under CHG-0225/CHG-0230) **to DELETE** — the earlier classification meant "reachable from the pipeline seed," and the pipeline surface itself is now retired.
+2. **Delete four tests:** `tests/test_prepare_aqueduct_baseline.py`, `tests/test_aqueduct_admin_transfer.py`, `tests/test_aqueduct_hydro_transfer.py`, `tests/test_validate_aqueduct_workflow.py`.
+3. **Edit `tools/runs/prepare_dashboard.py`:** remove the `aqueduct` subparser, `build_aqueduct_plan`, the aqueduct step builders (`_build_prepare_aqueduct_baseline_step`, `_build_aqueduct_metric_args`), the aqueduct scope resolution inside `dashboard-package`, aqueduct entries in the `validate`/`pytest-validation` test lists, and the module-docstring example. Update `tests/test_prepare_dashboard_runner.py` to match. Sweep `tools/diagnostics/profile_prepare_dashboard.py` for aqueduct references. Note: after this edit the CHG-0230 pipeline seed count (20 unique `"tools.*"` strings) shrinks — re-derive it rather than expecting 20.
+4. **KEEP:** the two retirement guard tests (they are the negative contract and must keep passing). **KEEP** the `aq_water_stress` fixture slugs in `tests/test_viz_charts.py` and `tests/test_app_state_summary_view.py` — arbitrary placeholder identifiers exercising generic column-shape logic, not Aqueduct functionality; renaming is optional cosmetic follow-up, not in scope.
+5. **Docs:** `docs/aqueduct_onboarding_methodology.md` and `docs/aqueduct_field_contract.md` change from `TRIM` (CHG-0232) to **`DELETE` after skim-confirm**. The CHG-0225 methodology-retention rule dissolves: it protected prose around `aggregate_crosswalk_to_targets`, which is itself deleted here; the dashboard's live area-weighting methodology lives independently in `india_resilience_tool/analysis/area_weighting.py` and its own documentation. Skim-confirm must still verify nothing else unique survives only in these two docs. Sweep remaining rows in `README.md`, `MANIFEST.md`, `tools/README.md`, `docs/command_catalog.md`.
+6. **Out of scope:** processed `aq_*` output directories under `IRT_DATA_DIR` (pipeline-written data; do-not-touch per repo rules). Clean regen simply will not rebuild them.
+
+**Acceptance:**
+
+- Import smoke: `python -c "import tools.runs.prepare_dashboard"` plus `python -m tools.runs.prepare_dashboard list`.
+- `tests/test_prepare_dashboard_runner.py` and both retirement guard tests pass.
+- Repo-wide sweep of `aqueduct` (case-insensitive) and `aq_` slugs: remaining hits only in the guard tests, the fixture slugs noted above, retained SOI hydro-context code (`load_soi_hydro_boundaries` naming heritage, if any), and the CHG-0230 gate-excluded ledger docs.
+- No new pytest failures relative to the Step 0 baseline (the four deleted test files are recorded as removed, not failed).
+
 ### CHG-0226: Block Builder Deferral
 
 - Keep `tools/geodata/build_blocks_geojson.py` as `METHODOLOGY_DEFERRED`.
@@ -128,7 +157,8 @@ load_crosswalk, aggregate_crosswalk_to_targets
 ### CHG-0227: Closeout
 
 - Sweep deleted symbols, filenames, dotted paths, command examples, and PowerShell references.
-- The sweep list additionally covers every file deleted under `CHG-0231`/`CHG-0232`/`CHG-0233`:
+- The sweep list additionally covers every file deleted under `CHG-0228`/`CHG-0231`/`CHG-0232`/`CHG-0233`:
+  - the seven Aqueduct modules, four Aqueduct tests, and two Aqueduct docs from `CHG-0228`, plus their rows in `README.md`, `MANIFEST.md`, `tools/README.md`, `docs/command_catalog.md`;
   - `india_resilience_tool/app/adm2_cache.py`, `tests/test_app_adm2_cache.py`, and their mentions in `MANIFEST.md`, `docs/module_responsibility_map.md`, `india_resilience_tool/app/CLAUDE.md`;
   - the four never-referenced diagnostics (`block_orphan_audit`, `health_txx_lens_demo`, `profile_compute_realdata`, `profile_drought_spi`);
   - any doc deleted or trimmed under `CHG-0232`;
@@ -215,13 +245,13 @@ Vocabulary: `DELETE` / `TRIM` / `REFRESH` / `KEEP`. Rule: a doc that is the sole
 | `docs/pytest_baseline_failures.md` | Point-in-time baseline record | `DELETE` only after the CHG-0222 baseline capture (`pytest_baseline_<sha>.txt` in the quarantine directory) exists — that record supersedes this doc |
 | `docs/c6_workers_yearly_retention_benchmark.md` | Perf-era brief | `DELETE` only if `docs/perf_phase2_brief.md` is **committed** (it is currently untracked; a working-tree-only supersession record cannot authorize deleting tracked docs from HEAD) and it supersedes this brief; else `KEEP` |
 | `docs/c7_bundle_only_runner_design.md` | Perf-era brief | Same gate as above (perf brief must be committed first) |
-| `docs/aqueduct_onboarding_methodology.md` (~29 KB) | Mostly retired-CLI material | `TRIM` per CHG-0225 rule: retain and rekey only the live area-weighted transfer methodology around `aggregate_crosswalk_to_targets` |
-| `docs/aqueduct_field_contract.md` | Same family | `TRIM` under the same rule |
+| `docs/aqueduct_onboarding_methodology.md` (~29 KB) | Retired-CLI material; former TRIM rule dissolved by CHG-0228 (its protected function `aggregate_crosswalk_to_targets` is deleted) | `DELETE` after skim-confirm, per CHG-0228 item 5 |
+| `docs/aqueduct_field_contract.md` | Same family | `DELETE` after skim-confirm, per CHG-0228 item 5 |
 | `docs/module_responsibility_map.md` | Stale rows (e.g. `adm2_cache`) but live purpose | `REFRESH`, or fold into `MANIFEST.md` if fully redundant with it |
 | `docs/functionality_contract.md` | Live contract doc with stale rows | `REFRESH` (sweep `compute_indices` row if CHG-0231 ASK-USER approves) |
 | `README_EXPOSURE_HYDRO_CONTEXT_PATCH.md` (untracked) | `PROTECTED_PENDING` per CHG-0222 | Out of scope here |
 
-Aqueduct-doc trims defer to CHG-0225/CHG-0228 rules; do not duplicate their dispositions here.
+Aqueduct-doc dispositions defer to CHG-0228 (which superseded the CHG-0225 TRIM rule); do not duplicate them here.
 
 ### CHG-0233: Doc-Only-Referenced Tools
 
@@ -244,12 +274,12 @@ Seventeen tools are referenced only from `.md` files. Doc-only reference is **no
 | `tools/data_acquisition/nex_india_subset_download_s3_v1.py` | v2 exists and is test-referenced |
 | `tools/legacy/DONOTUSE_ArtparkGenerateReport.py` | `tools/legacy/` is do-not-touch — **flag for discussion only, never delete unilaterally** |
 
-Aqueduct hydro tools are already disposed by CHG-0225 (and pending CHG-0228); cross-reference, do not duplicate.
+Aqueduct tools are disposed wholesale by CHG-0228 (superseding CHG-0225); cross-reference, do not duplicate.
 
 ## Public Interfaces
 
-- Remove only the two obsolete Aqueduct hydro CLI entry points and hydro-only internal helpers.
-- Add the internal module `tools.geodata.aqueduct_common`.
+- Remove the entire Aqueduct pipeline CLI surface (seven `tools/geodata` modules and the `prepare_dashboard` `aqueduct` subcommand) per CHG-0228, plus hydro-only internal helpers per CHG-0224.
+- No `tools.geodata.aqueduct_common` module is created (CHG-0225 superseded).
 - Preserve all dashboard runtime function names, shared call signatures, district/block behavior, and retained hydrological-context behavior.
 - No ranking, threshold, aggregation, baseline, unit, or geospatial methodology changes are permitted.
 
@@ -262,13 +292,15 @@ Aqueduct hydro tools are already disposed by CHG-0225 (and pending CHG-0228); cr
   - search removed symbols and keyword parameters;
   - import retained caller modules;
   - verify `app/runtime.py` callsites against preserved signatures.
-- CHG-0225 pre-delete and post-delete smoke:
+- CHG-0228 post-delete smoke (replaces the superseded CHG-0225 gate):
 
 ```bash
-python -c "import tools.geodata.aqueduct_common; import tools.geodata.build_aqueduct_admin_crosswalk, tools.geodata.build_aqueduct_block_crosswalk, tools.geodata.build_aqueduct_admin_masters, tools.geodata.validate_aqueduct_workflow; print('import OK')"
+python -c "import tools.runs.prepare_dashboard; print('import OK')"
+python -m tools.runs.prepare_dashboard list
+python -m pytest -q tests/test_prepare_dashboard_runner.py tests/test_config.py tests/test_metrics_registry.py
 ```
 
-- Run Aqueduct baseline, admin-transfer, validator, metrics-registry, and configuration tests.
+- The two Aqueduct retirement guard tests (`test_config.py`, `test_metrics_registry.py`) must pass; the four deleted Aqueduct test files are recorded as removed, not failed.
 - Run `python -m pytest -q` where the configured Windows/data environment permits.
 - If the full suite is environment-blocked, run every hermetic focused test and record the exact Windows/data-dependent checklist and baseline comparison.
 - Acceptance requires no new failures relative to the Step 0 baseline record (`pytest_baseline_<sha>.txt`).
@@ -284,10 +316,10 @@ python -c "import tools.geodata.aqueduct_common; import tools.geodata.build_aque
 | `CHG-0222` baseline and classification | `SUGGESTED` |
 | `CHG-0223` persistent quarantine | `SUGGESTED` |
 | `CHG-0224` hydro residue and caller verification | `SUGGESTED` |
-| `CHG-0225` Aqueduct extraction and deletion | `SUGGESTED` |
+| `CHG-0225` Aqueduct extraction and deletion | `SUPERSEDED` by `CHG-0228` |
 | `CHG-0226` block-builder deferral | `SUGGESTED` |
 | `CHG-0227` final validation and graph refresh | `SUGGESTED` |
-| `CHG-0228` Aqueduct wholesale amendment (pending in-chat, prior session) | `SUGGESTED` |
+| `CHG-0228` Aqueduct wholesale retirement (defined 2026-07-15; supersedes `CHG-0225`) | `SUGGESTED` (definition applied; execution pending approval) |
 | `CHG-0229` retired-feature test trim (pending in-chat, prior session) | `SUGGESTED` |
 | `CHG-0230` reachability inventory (this document section; no deletions) | `SUGGESTED` |
 | `CHG-0231` orphan code and scripts | `SUGGESTED` |
