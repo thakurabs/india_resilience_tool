@@ -33,22 +33,9 @@ IRT sits within a broader climate-risk information landscape. Existing assessmen
 
 The administrative-unit framing is deliberate. District-level climate analysis already has precedent in Indian policy work: the Government of India's *Economic Survey 2017–18* used district-level percentile thresholds to estimate how temperature and rainfall extremes affect crop yields (Government of India 2018). IRT extends that planning logic across multiple hazards and to both district and block geographies. The sections that follow document how the tool moves from climate data to administrative-unit metrics, then to thematic and sectoral hazard-pressure scores.
 
-This note documents that hazard-pressure layer end to end. **In scope** are data provenance (§2), the downscaling context (§3), grid-first computation and spatial/temporal aggregation (§4), individual metric definitions (§5), thematic bundle construction (§6), sectoral bundle construction (§7), and the composite output (§8), with a complete metric reference and impact-band catalogue in the appendices. In the standard hazard × exposure × vulnerability decomposition (IPCC 2022), IRT supplies the **hazard** term; the scores in this note are climate **hazard-pressure** indices, not full risk scores in the IPCC sense — the word "Risk" in a bundle name denotes *hazard pressure relevant to that sector*. 
+In the standard hazard × exposure × vulnerability decomposition (IPCC 2022), IRT supplies the **hazard** term. The scores are climate **hazard-pressure** indices, not full risk scores in the IPCC sense; the word "Risk" in a bundle name denotes hazard pressure relevant to that sector. They are meant for **relative prioritisation**: comparing districts or blocks, and comparing scenario-period choices, to flag where hazard pressure is high or rising and where further assessment should begin. A "Health Risk 80" means high climate hazard pressure relevant to health at that location; it does not mean that 80% of people will be harmed, nor does it estimate realised impact, loss, or probability. 
 
-The note proceeds in the order a score is built — from raw data through to composite output:
-
-| Section | What it covers |
-|---|---|
-| §2 Climate Data Sources | CMIP6 ensemble and scenarios, temporal coverage, the NASA-NEX downscaled product, and the JRC flood data |
-| §3 Downscaling | What statistical downscaling is, the BCSD method NASA-NEX uses, grid resolution, and reproducibility |
-| §4 Grid-First Compute | Why indices are computed per grid cell first, then area-aggregated to districts/blocks, with period and ensemble handling |
-| §5 Metric Definitions | Definition, units, baseline, and derivation of each temperature, precipitation, drought, humid-heat, and flood index |
-| §6 Thematic Bundles | The six hazard-family bundles: per-period normalization and fixed-weight compositing |
-| §7 Sectoral Bundles | The eight sector hazard-pressure bundles: the lens-based blended-rule framework and impact bands |
-| §8 Composite Score and Output | What the 0–100 composite is and is not, and how to read it across scenario, period, and spatial level |
-| Appendix A / B | Complete metric reference; sectoral impact-band derivations |
-
-A final word on what these scores are for. They are decision-support inputs for **relative prioritisation**: comparing districts or blocks against one another, or one scenario/period against another, to flag where a given hazard pressure is high or rising. They are designed to *screen and rank* — to direct attention and further assessment — which is precisely the gap that subnational planning guidance has asked analytics to fill. They are **not** measurements of realised risk or impact. A "Health Risk 80" denotes high hazard pressure on the health sector at that location — not that 80 % of people will be harmed, nor a probability of any specific outcome. Because exposure and vulnerability are out of scope, and because IRT supplies only the hazard term of the hazard × exposure × vulnerability decomposition, a high score does not by itself establish that people or assets are actually at risk; it must be combined with exposure and vulnerability information before it can support resource-allocation or investment decisions. Scores are also relative within each period's spatial normalization, so absolute values should not be read as physical quantities or compared across unrelated indices (→ §8.1).
+The rest of this note explains that hazard-pressure layer in the order it is built. It covers data provenance (§2), downscaling context (§3), grid-first computation and spatial/temporal aggregation (§4), individual metric definitions (§5), thematic bundle construction (§6), sectoral bundle construction (§7), and composite output (§8). The appendices provide the complete metric reference and the sectoral impact-band catalogue.
 
 ---
 
