@@ -308,6 +308,35 @@ def _filter_frame_by_selection_value(
     return frame[mask]
 
 
+def _filter_master_frame_for_geometry_merge(
+    frame: pd.DataFrame,
+    *,
+    level: str,
+    selected_state: str,
+    selected_district: str,
+) -> pd.DataFrame:
+    """Return master rows matching the currently loaded geometry scope."""
+    out = frame
+    state_col = next((col for col in ("state", "state_name") if col in out.columns), None)
+    if state_col is not None:
+        out = _filter_frame_by_selection_value(
+            out,
+            column=state_col,
+            selected_value=selected_state,
+        )
+
+    level_norm = str(level or "district").strip().lower()
+    if level_norm == "block":
+        district_col = next((col for col in ("district", "district_name") if col in out.columns), None)
+        if district_col is not None:
+            out = _filter_frame_by_selection_value(
+                out,
+                column=district_col,
+                selected_value=selected_district,
+            )
+    return out.copy()
+
+
 def _level_aware_merge(
     *,
     adm2: Any,
@@ -761,12 +790,18 @@ def build_map_and_rankings(
     )
 
     if needs_geometry:
+        geometry_merge_df = _filter_master_frame_for_geometry_merge(
+            df,
+            level=level_norm,
+            selected_state=selected_state,
+            selected_district=selected_district,
+        )
         with perf_section("merge: build merged gdf"):
             with st.spinner("Preparing merged geometries with CSV attributes..."):
                 merged = _level_aware_merge(
                     adm2=adm2,
                     adm3=adm3,
-                    df=df,
+                    df=geometry_merge_df,
                     variable_slug=variable_slug,
                     master_csv_path=master_csv_path,
                     level=level_norm,

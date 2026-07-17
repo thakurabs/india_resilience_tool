@@ -7,6 +7,7 @@ import pandas as pd
 from india_resilience_tool.app.map_pipeline import (
     _build_nonspatial_details_source_df,
     _filter_frame_by_selection_value,
+    _filter_master_frame_for_geometry_merge,
     _stack_legend_blocks,
     DOMAIN_CMAP_FAMILY,
     blocked_drilldown_message,
@@ -116,6 +117,46 @@ def test_filter_frame_by_selection_value_handles_case_and_alias_mismatch() -> No
         selected_value="upper godavari",
     )
     assert basin_out["basin_name"].tolist() == ["Upper Godavari"]
+
+
+def test_filter_master_frame_for_geometry_merge_scopes_state_shards() -> None:
+    df = pd.DataFrame(
+        {
+            "state": ["Andhra Pradesh", "Assam", "Andhra Pradesh"],
+            "district": ["Anakapalli", "Cachar", "NTR"],
+            "value": [1.0, 2.0, 3.0],
+        }
+    )
+
+    out = _filter_master_frame_for_geometry_merge(
+        df,
+        level="district",
+        selected_state="andhra pradesh",
+        selected_district="All",
+    )
+
+    assert out["state"].tolist() == ["Andhra Pradesh", "Andhra Pradesh"]
+    assert out["district"].tolist() == ["Anakapalli", "NTR"]
+    assert "state" in out.columns
+
+
+def test_filter_master_frame_for_geometry_merge_scopes_block_district_shards() -> None:
+    df = pd.DataFrame(
+        {
+            "state": ["Telangana", "Telangana", "Telangana", "Karnataka"],
+            "district": ["Hyderabad", "Hyderabad", "Nirmal", "Belagavi"],
+            "block": ["Shaikpet", "Amberpet", "Laxmanchanda", "Athani"],
+        }
+    )
+
+    out = _filter_master_frame_for_geometry_merge(
+        df,
+        level="block",
+        selected_state="Telangana",
+        selected_district="HYDERABAD",
+    )
+
+    assert out["block"].tolist() == ["Shaikpet", "Amberpet"]
 
 
 def test_stack_legend_blocks_keeps_both_legend_fragments() -> None:
