@@ -190,14 +190,16 @@ BCSD corrects the marginal distribution of temperature and precipitation at the 
 
 The NEX-GDDP-CMIP6 product is provided at **0.25° × 0.25°** horizontal resolution, corresponding to approximately 25 km at the equator and ~27 km at 25°N (typical central India latitude). IRT clips the global product to the India domain — **68.0°E–97.5°E, 5.0°N–45.0°N** — yielding a domain of 118 × 160 grid cells (29.5° ÷ 0.25° = 118 columns, 40.0° ÷ 0.25° = 160 rows).
 
-[FIGURE: fig_08_district_block_resolution_zoom.svg | The 0.25° climate grid gives districts several cells but can leave small blocks represented by very few cells.]
+[FIGURE: fig_08_district_block_resolution_zoom.svg | At district scale, several climate-grid cells contribute to the area-weighted mean; at block scale, multiple small blocks can fall within the same 0.25° cell and inherit the same underlying climate value.]
 
 **Resolution implications at district vs block level**
 
-India has 784 districts (mean area ~4,171 km²) and 7,137 sub-district blocks (mean area ~458 km²). At 0.25° resolution (~625 km² per cell):
+India has 784 districts (mean area ~4,171 km²) and 7,137 sub-district blocks (mean area ~458 km²). The 0.25° grid is therefore much better matched to district screening than to fine within-district comparison. At roughly 625 km² per grid cell:
 
-- A typical district contains **4–20** 0.25° cells, providing adequate spatial sampling for area-weighted aggregation.
-- A typical block may contain **fewer than 4** cells, and smaller blocks in densely sub-divided states may fall within a single cell. Block-level composites therefore carry higher spatial uncertainty than district-level composites, and cross-block variation in small block groups may partly reflect grid-cell boundaries rather than true sub-district heterogeneity.
+- A typical district intersects **4–20** 0.25° cells, so its value is usually an area-weighted summary across several independent grid-cell values.
+- A typical block may intersect **fewer than 4** cells, and smaller blocks in densely subdivided states may fall mostly or entirely within a single cell. In that case, neighbouring blocks inside the same cell can receive nearly identical climate-derived values, while a nearby block crossing into the next cell can differ abruptly.
+
+Block-level outputs are therefore useful for screening and for locating broad within-state patterns, but they should not be read as resolving micro-climate variation below the ~25 km source-grid scale. Cross-block contrasts in small or densely subdivided areas may partly reflect grid-cell boundaries rather than true sub-district heterogeneity.
 
 Spatial aggregation from the 0.25° grid to administrative units is described in §4.2.
 
