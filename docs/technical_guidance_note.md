@@ -41,9 +41,11 @@ The rest of this note explains that hazard-pressure layer in the order it is bui
 
 ## 2. Climate Data Sources
 
+IRT combines future climate projections from CMIP6/NEX-GDDP-CMIP6 with a static riverine flood hazard layer from JRC. This section identifies the source datasets, scenarios, time periods, variables, and spatial domain used before the note turns to downscaling and computation.
+
 ### 2.1 CMIP6: Model Ensemble and Scenarios
 
-The Coupled Model Intercomparison Project Phase 6 (CMIP6) is the sixth generation of coordinated climate model experiments, providing the primary basis for the IPCC Sixth Assessment Report (AR6) future climate projections. IRT draws on CMIP6 outputs from 24 general circulation models (GCMs), using the variant label **r1i1p1f1** — denoting the first realisation (r1), initialisation method (i1), physics configuration (p1), and forcing (f1) — for all models and scenarios.
+The Coupled Model Intercomparison Project Phase 6 (CMIP6) is the sixth generation of coordinated global climate model experiments and provides the primary projection basis for the IPCC Sixth Assessment Report (AR6). IRT draws on outputs from 24 general circulation models (GCMs), using the **r1i1p1f1** variant for all models and scenarios. This variant denotes the first realisation (r1), initialisation method (i1), physics configuration (p1), and forcing configuration (f1).
 
 **Scenarios**
 
@@ -116,7 +118,7 @@ A fifth period label, **`Current`**, is reserved for static present-day layers t
 
 ### 2.3 NASA-NEX GDDP-CMIP6: The Downscaled Product
 
-IRT uses the **NASA Earth Exchange Global Daily Downscaled Projections, CMIP6** (NEX-GDDP-CMIP6) as its primary climate input. All spatial disaggregation and bias correction was applied by NASA prior to data release. The downscaling method is described in §3.
+IRT uses the **NASA Earth Exchange Global Daily Downscaled Projections, CMIP6** (NEX-GDDP-CMIP6) as its primary climate input. NASA applied the spatial disaggregation and bias correction before data release; the downscaling method is described in §3.
 
 The following variables were obtained from the NEX-GDDP-CMIP6 product:
 
