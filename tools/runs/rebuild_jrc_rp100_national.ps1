@@ -85,9 +85,33 @@ if (-not (Test-Path $indexRoot)) {
 $allStates = Get-ChildItem -Path $indexRoot -Directory | Select-Object -ExpandProperty Name | Sort-Object
 
 if ($States -and $States.Count -gt 0) {
+    # powershell.exe -File passes arguments as literal strings and does NOT parse
+    # array syntax, so `-States "A","B"` arrives as the single string "A,B".
+    # Several canonical state names contain commas ("Dadra, Nagar Haveli, Daman &
+    # Diu"), so this cannot be split back apart safely. Detect and explain it
+    # rather than reporting every name as unknown.
+    if ($States.Count -eq 1 -and $States[0] -match "," -and $allStates -notcontains $States[0]) {
+        throw @"
+-States looks like an unparsed list: '$($States[0])'
+
+powershell.exe -File does not parse array syntax; "A","B" arrives as one string,
+and canonical state names contain commas, so it cannot be split reliably.
+
+Use one of:
+  # single state (no comma in the name) - works with -File
+  powershell -ExecutionPolicy Bypass -File <this script> -States "Karnataka"
+
+  # multiple states - use -Command so PowerShell parses the array
+  powershell -ExecutionPolicy Bypass -Command "& '<this script>' -States 'Karnataka','Kerala'"
+
+  # or omit -States entirely and let the script derive what needs rebuilding
+  powershell -ExecutionPolicy Bypass -File <this script>
+"@
+    }
+
     $unknown = $States | Where-Object { $allStates -notcontains $_ }
     if ($unknown) {
-        throw ("Unknown state(s): " + ($unknown -join ", "))
+        throw ("Unknown state(s): " + ($unknown -join " | ") + "`nKnown states: " + ($allStates -join " | "))
     }
     $targets = $States
 } elseif ($IncludeStrict) {
