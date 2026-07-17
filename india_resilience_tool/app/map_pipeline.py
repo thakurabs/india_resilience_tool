@@ -15,14 +15,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-import json
 import os
 import re
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
-import folium
+from branca.element import MacroElement, Template
 import streamlit as st
 
 from india_resilience_tool.analysis.map_enrichment import (
@@ -123,6 +122,35 @@ _IRT_FAMILY_PRIORITY: tuple[str, ...] = (
     "irt:exposure",
 )
 DEFAULT_METRIC_CMAP = "irt:heat"
+
+
+def attach_legend_card_control(folium_map: Any, card_html: str) -> None:
+    """Attach the compact legend card to a map as a bottomright Leaflet control.
+
+    Leaflet owns the control's placement inside the map viewport (it can never
+    spill outside the visible map) and stacks it above the attribution.
+
+    The card MUST be a MacroElement child of the map, not figure-level HTML or
+    script: streamlit-folium rebuilds the page JS by walking the map's children
+    (`_generate_leaflet_string`) and silently drops `get_root().script`.
+    """
+    legend_control = MacroElement()
+    legend_control._name = "IrtLegendControl"
+    legend_control._template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        var {{ this.get_name() }} = L.control({position: 'bottomright'});
+        {{ this.get_name() }}.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'irt-map-legend-control');
+            div.innerHTML = {{ this.legend_html|tojson }};
+            return div;
+        };
+        {{ this.get_name() }}.addTo({{ this._parent.get_name() }});
+        {% endmacro %}
+        """
+    )
+    legend_control.legend_html = str(card_html)
+    folium_map.add_child(legend_control)
 
 
 def resolve_metric_cmap_name(variable_slug: str) -> str:
@@ -1038,24 +1066,7 @@ def build_map_and_rankings(
             nlevels=MAP_COLOR_NLEVELS,
         )
     if primary_legend_card_html:
-        # Attach the card as a Leaflet bottomright control: Leaflet owns its
-        # placement inside the map viewport (it can never spill outside the
-        # visible map) and stacks it above the attribution automatically. The
-        # JS goes in the figure's script section, which runs after the map
-        # variable exists.
-        map_var = map_build.folium_map.get_name()
-        legend_control_js = (
-            "(function () {\n"
-            "    var legend = L.control({position: 'bottomright'});\n"
-            "    legend.onAdd = function (map) {\n"
-            "        var div = L.DomUtil.create('div', 'irt-map-legend-control');\n"
-            f"        div.innerHTML = {json.dumps(primary_legend_card_html)};\n"
-            "        return div;\n"
-            "    };\n"
-            f"    legend.addTo({map_var});\n"
-            "})();"
-        )
-        map_build.folium_map.get_root().script.add_child(folium.Element(legend_control_js))
+        attach_legend_card_control(map_build.folium_map, primary_legend_card_html)
 
     overlay_legend_blocks: list[str] = []
     rp100_overlay_legend = next(

@@ -275,3 +275,27 @@ def test_domain_cmap_family_targets_exist_as_ramps() -> None:
     from india_resilience_tool.viz.colors import IRT_RAMP_ANCHORS
 
     assert set(DOMAIN_CMAP_FAMILY.values()) <= set(IRT_RAMP_ANCHORS)
+
+
+def test_legend_card_control_survives_streamlit_folium_extraction() -> None:
+    # Regression guard: streamlit-folium rebuilds the page JS from the map's
+    # child elements and silently drops figure-level get_root().script, which
+    # made the first legend-control implementation invisible in the app. The
+    # control must therefore ride the map's child tree and appear in the JS
+    # string st_folium actually ships to the browser.
+    import pytest
+
+    folium = pytest.importorskip("folium")
+    streamlit_folium = pytest.importorskip("streamlit_folium")
+
+    from india_resilience_tool.app.map_pipeline import attach_legend_card_control
+
+    m = folium.Map(location=[17.9, 79.5], zoom_start=7)
+    attach_legend_card_control(m, '<div id="irt-compact-map-legend">rows</div>')
+    m.get_root().render()
+    m.render()
+
+    js = streamlit_folium._get_map_string(m)
+    assert "irt-map-legend-control" in js
+    assert "irt-compact-map-legend" in js
+    assert "L.control({position: 'bottomright'})" in js
