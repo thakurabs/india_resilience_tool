@@ -149,6 +149,8 @@ Because this is a static, observationally-derived snapshot product rather than a
 
 ## 3. Downscaling: What It Is and How NASA-NEX Applies It
 
+IRT does not perform its own statistical downscaling. It uses the NASA-NEX GDDP-CMIP6 product after NASA has bias-corrected and spatially disaggregated the original CMIP6 model outputs. This section explains what that means, why the 0.25° product is appropriate for district-level screening, and what limitations remain when using it for Indian districts and blocks.
+
 ### 3.1 What Statistical Downscaling Means
 
 GCMs are designed to simulate the large-scale dynamics of the climate system — atmospheric circulation, ocean–atmosphere coupling, and radiative transfer — at a global scale. Their native grid spacing is typically 100–300 km, meaning a single model grid cell covers an area comparable to a large Indian state. At this resolution, GCMs cannot resolve the terrain-driven heterogeneity, coastal gradients, or local land–surface feedbacks that determine temperature and rainfall patterns at the district or block level.
@@ -158,7 +160,7 @@ GCMs are designed to simulate the large-scale dynamics of the climate system —
 - **Dynamic downscaling** nests a higher-resolution regional climate model (RCM) within the GCM domain, simulating regional atmospheric dynamics explicitly. It is computationally intensive and not available at the pan-India, 24-model scale required here.
 - **Statistical downscaling** uses the statistical relationship between coarse-resolution GCM output and observed fine-resolution climatology to correct and spatially disaggregate GCM fields. It is tractable across large multi-model ensembles.
 
-NASA-NEX GDDP-CMIP6 applies a statistical downscaling approach. IRT uses the NASA-NEX product as published online.
+NASA-NEX GDDP-CMIP6 applies the statistical approach. IRT uses the NASA-NEX product as published online, without modifying the NASA downscaling method.
 
 ### 3.2 The BCSD Method in NASA-NEX GDDP
 
@@ -213,7 +215,7 @@ As part of dataset QA, a validation analysis was conducted comparing NEX-GDDP-CM
 
 *Precipitation*: Area-mean daily precipitation for ERA5 (2.47 mm day⁻¹) and IMD (2.65 mm day⁻¹) agree closely at the seasonal mean scale. Spatial correlations between district-level precipitation metrics and ERA5 for the best-performing models range from 0.81 to 0.90, indicating moderate spatial skill at district resolution. However, the ensemble systematically underestimates peak daily rainfall intensities: the IMD Rx1day (mean annual maximum 1-day rainfall) for Adilabad district is approximately 77 mm day⁻¹, while the 24 CMIP6 models range from approximately 33 to 55 mm day⁻¹ — a consistent dry bias in extreme events that persists after BCSD.
 
-This arises because BCSD applies monthly-scale quantile mapping and then bilinear spatial disaggregation to 0.25°; neither step alters the GCM's underlying atmospheric dynamics. The convective processes that generate intense short-duration rainfall events are parameterised at each GCM's native grid spacing — ranging from approximately 70 km (EC-Earth3, the finest in the ensemble) to 310 km (CanESM5, the coarsest), with most models at 100–200 km; these are approximate physical grid spacings (grid interval × ~111 km), not the coarser CMIP6 nominal-resolution attributes (e.g. 500 km for CanESM5) — at which mesoscale convective systems responsible for high-intensity daily rainfall in the Indian region cannot be explicitly resolved. The BCSD spatial disaggregation resamples these coarse fields to the 0.25° output grid but adds no new sub-grid meteorological information.
+This underestimation is expected because BCSD applies monthly-scale quantile mapping and then bilinear spatial disaggregation to 0.25°; neither step alters the GCM's underlying atmospheric dynamics. The convective processes that generate intense short-duration rainfall events are parameterised at each GCM's native grid spacing — ranging from approximately 70 km (EC-Earth3, the finest in the ensemble) to 310 km (CanESM5, the coarsest), with most models at 100–200 km; these are approximate physical grid spacings (grid interval × ~111 km), not the coarser CMIP6 nominal-resolution attributes (e.g. 500 km for CanESM5) — at which mesoscale convective systems responsible for high-intensity daily rainfall in the Indian region cannot be explicitly resolved. The BCSD spatial disaggregation resamples these coarse fields to the 0.25° output grid but adds no new sub-grid meteorological information.
 
 The extreme-rainfall underestimation is therefore a structural limitation of the GCM ensemble, not a downscaling artefact. Users interpreting the Extreme Rainfall | Flash Flood bundle (→ §5.2) should note that absolute metric values likely understate observed extreme rainfall intensities.
 
