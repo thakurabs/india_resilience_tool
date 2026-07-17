@@ -78,7 +78,14 @@ RP100_OVERLAY_DISPLAY_MAX_M = 10.0
 STRICT_RP100_RESOLUTION_DEGREES = 1.0 / 1200.0
 STRICT_RP100_RESOLUTION_TOLERANCE = 1e-12
 DISTRICT_SUPPORTED_AREA_ABSOLUTE_TOLERANCE_KM2 = 1e-6
-DISTRICT_SUPPORTED_AREA_RELATIVE_TOLERANCE = 1e-9
+# Under full source coverage every block's valid_support_fraction is 1.0, so
+# district_valid_supported_area_km2 collapses to child_block_area_sum_km2 and this
+# guard degenerates into a block-layer vs district-polygon geometry check. The LGD
+# layers agree only to ~5e-9 relative (worst national case: Kargil, 65 m^2 over
+# 14,205 km^2), so a tolerance at the noise floor fails on real, correct data.
+# 1e-7 keeps ~20x headroom over observed geometry noise while still rejecting the
+# gross masking/units errors this guard exists to catch.
+DISTRICT_SUPPORTED_AREA_RELATIVE_TOLERANCE = 1e-7
 RP100_OVERLAY_COLORS: tuple[tuple[float, tuple[int, int, int]], ...] = (
     (0.5, (214, 240, 255)),
     (1.0, (157, 217, 255)),

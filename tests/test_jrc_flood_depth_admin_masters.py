@@ -1118,6 +1118,20 @@ def test_jrc_district_supported_area_tolerance_allows_meter_scale_boundary_drift
         district_area_km2,
     )
 
+    # Kargil (Ladakh): worst observed national block-vs-district drift, 65 m^2 over
+    # 14,205 km^2 (4.59e-9 relative). Fully covered only under the strict v2.1.2
+    # source, which is why it first failed there and not in the pilot states.
+    kargil_area_km2 = 14205.223836
+    assert not _supported_area_exceeds_district_area(
+        kargil_area_km2 + 0.00006514709275506902,
+        kargil_area_km2,
+    )
+    # A gross masking/units error must still be rejected.
+    assert _supported_area_exceeds_district_area(
+        kargil_area_km2 * 1.001,
+        kargil_area_km2,
+    )
+
 
 def test_jrc_builder_fails_when_flooded_blocks_are_missing_p95_values(
     tmp_path: Path,
