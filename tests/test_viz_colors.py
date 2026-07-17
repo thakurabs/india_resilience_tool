@@ -85,6 +85,46 @@ def test_apply_fillcolor_binned_handles_nan_and_limits() -> None:
     assert out.loc[2, "fillColor"] == colors[-1]
 
 
+def test_irt_domain_ramps_are_monotone_in_oklab_lightness() -> None:
+    # Scientific-correctness gate for the SDG-anchored ramps: class lightness
+    # must decrease monotonically (perceptual ordering) with steps big enough
+    # to keep adjacent classes distinguishable (min deltaL >= 0.06), and the
+    # composite ramp must satisfy the same gate.
+    from india_resilience_tool.viz.colors import (
+        IRT_COMPOSITE_CMAP,
+        IRT_RAMP_ANCHORS,
+        _srgb_to_oklab,
+    )
+
+    for name in list(IRT_RAMP_ANCHORS) + [IRT_COMPOSITE_CMAP]:
+        hexes = get_binned_cmap_hex_list(name, nlevels=7)
+        assert len(hexes) == 7, name
+        lightness = [_srgb_to_oklab(h)[0] for h in hexes]
+        deltas = [lightness[i] - lightness[i + 1] for i in range(len(lightness) - 1)]
+        assert all(d > 0 for d in deltas), f"{name}: lightness not monotone: {lightness}"
+        assert min(deltas) >= 0.06, f"{name}: weakest class step deltaL={min(deltas):.3f}"
+
+
+def test_irt_ramps_hold_their_sdg_anchor_hue() -> None:
+    # Brand contract: each domain ramp is built with the anchor's OKLab hue
+    # held fixed, so the saturated middle/dark classes must sit on the
+    # anchor's hue angle (small tolerance for sRGB gamut clipping).
+    import math
+
+    from india_resilience_tool.viz.colors import IRT_RAMP_ANCHORS, _srgb_to_oklab
+
+    def hue_deg(hex_color: str) -> float:
+        _, a, b = _srgb_to_oklab(hex_color)
+        return math.degrees(math.atan2(b, a)) % 360
+
+    for name, anchor in IRT_RAMP_ANCHORS.items():
+        anchor_hue = hue_deg(anchor)
+        for h in get_binned_cmap_hex_list(name, nlevels=7)[2:6]:
+            diff = abs(hue_deg(h) - anchor_hue) % 360
+            diff = min(diff, 360 - diff)
+            assert diff <= 6.0, f"{name}: class {h} hue off anchor by {diff:.1f} deg"
+
+
 def test_get_binned_cmap_hex_list_clips_sequential_top_not_diverging() -> None:
     # Sequential ramps drop the near-black top (CHG-0252); diverging ramps keep
     # their full symmetric range so the midpoint stays neutral.
@@ -121,7 +161,10 @@ def test_build_compact_binned_legend_card_contains_no_data_and_shared_colors() -
         nlevels=7,
     )
 
-    assert "position:fixed; right:18px; bottom:18px; width:240px" in html
+    # Positioning is owned by the Leaflet bottomright control that hosts the
+    # card, so the card itself must NOT carry fixed positioning.
+    assert "position:fixed" not in html
+    assert "width:240px" in html
     assert "pointer-events:none" in html
     assert "No data" in html
     assert NO_DATA_FILL_HEX in html

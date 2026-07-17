@@ -105,24 +105,116 @@ def _is_diverging_cmap(cmap_name: str) -> bool:
     return base in _DIVERGING_CMAP_BASES
 
 
+# ---------------------------------------------------------------------------
+# IRT domain ramps: single-hue sequential ramps anchored on UN SDG brand
+# colors, interpolated in OKLab so class lightness is monotone by construction
+# (perceptual ordering) while the brand hue is hit exactly at its own
+# lightness position. Referenced by "irt:<family>" pseudo colormap names.
+# "irt:composite" is the one multi-hue exception, reserved for composite
+# indices: matplotlib magma_r sampled away from its near-white/near-black
+# ends (perceptually uniform, CVD-safe, warm-to-dark = worse).
+# ---------------------------------------------------------------------------
+IRT_RAMP_ANCHORS: dict[str, str] = {
+    "irt:heat": "#C5192D",  # SDG 4 red — heat / health domains
+    "irt:water": "#126A9F",  # SDG 16 blue — water / flood / groundwater
+    "irt:agri": "#407F46",  # SDG 13 green — agriculture domains
+    "irt:exposure": "#F89D2A",  # SDG 11 orange — exposure / socio-economic
+    "irt:drought": "#BF8D2C",  # SDG 12 bronze — drought / aridity
+    "irt:cold": "#13496B",  # SDG 17 navy — cold risk
+}
+IRT_COMPOSITE_CMAP = "irt:composite"
+_IRT_COMPOSITE_SPAN: tuple[float, float] = (0.04, 0.86)
+
+
+def _srgb_to_oklab(hex_color: str) -> tuple[float, float, float]:
+    """Convert a hex sRGB color to OKLab (Björn Ottosson's reference math)."""
+
+    def lin(c: float) -> float:
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (lin(int(hex_color.lstrip("#")[i : i + 2], 16) / 255.0) for i in (0, 2, 4))
+    l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    return (
+        0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+        1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+        0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+    )
+
+
+def _oklab_to_hex(L: float, a: float, b: float) -> str:
+    """Convert an OKLab color to hex sRGB, clipping to gamut."""
+    l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+    g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+    bb = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+
+    def srgb(c: float) -> int:
+        c = max(0.0, min(1.0, c))
+        return round(255 * (12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055))
+
+    return "#{:02X}{:02X}{:02X}".format(srgb(r), srgb(g), srgb(bb))
+
+
+def _sdg_anchored_ramp(anchor_hex: str, n: int) -> list[str]:
+    """Light-tint -> anchor -> deepened-anchor ramp with fixed hue in OKLCh.
+
+    The anchor sits at its natural lightness position so lightness steps are
+    spread evenly across classes (light anchors like orange otherwise crowd
+    the light end and adjacent classes become hard to tell apart).
+    """
+    import math
+
+    aL, aa, ab = _srgb_to_oklab(anchor_hex)
+    aC, ah = math.hypot(aa, ab), math.atan2(ab, aa)
+    light_L, light_C = 0.955, min(0.035, aC * 0.25)
+    dark_L, dark_C = max(0.28, aL * 0.72), aC * 0.82
+    t_anchor = (light_L - aL) / (light_L - dark_L)
+    out: list[str] = []
+    for i in range(n):
+        t = i / (n - 1)
+        if t <= t_anchor:
+            u = t / t_anchor
+            L, C = light_L + (aL - light_L) * u, light_C + (aC - light_C) * u
+        else:
+            u = (t - t_anchor) / (1 - t_anchor)
+            L, C = aL + (dark_L - aL) * u, aC + (dark_C - aC) * u
+        out.append(_oklab_to_hex(L, C * math.cos(ah), C * math.sin(ah)))
+    return out
+
+
 @lru_cache(maxsize=32)
 def get_binned_cmap_hex_list(cmap_name: str, *, nlevels: int) -> list[str]:
     """
     Sample the discrete class colors used by binned choropleths AND their legends.
 
     Single source of truth so the map fill colors and the legend swatches are
-    always identical. Sequential ramps are sampled over [0, SEQUENTIAL_CMAP_TOP_FRAC]
-    to drop the unreadable near-black top; diverging ramps keep the full range so
-    the scale stays symmetric around the midpoint.
+    always identical. "irt:*" names resolve to the SDG-anchored domain ramps
+    (or the magma_r-based composite ramp) defined above; their endpoints are
+    already designed, so no clipping applies. For Matplotlib names, sequential
+    ramps are sampled over [0, SEQUENTIAL_CMAP_TOP_FRAC] to drop the unreadable
+    near-black top; diverging ramps keep the full range so the scale stays
+    symmetric around the midpoint.
 
     Args:
-        cmap_name: Matplotlib colormap name
+        cmap_name: Matplotlib colormap name or an "irt:*" ramp name
         nlevels: number of discrete classes (floored at 2)
 
     Returns:
         List of hex colors, length nlevels
     """
     n = max(2, int(nlevels))
+    name = str(cmap_name or "").strip()
+    if name == IRT_COMPOSITE_CMAP:
+        cmap = mpl.colormaps.get_cmap("magma_r")
+        lo, hi = _IRT_COMPOSITE_SPAN
+        return [mcolors.to_hex(cmap(lo + (hi - lo) * i / (n - 1))) for i in range(n)]
+    anchor = IRT_RAMP_ANCHORS.get(name)
+    if anchor is not None:
+        return _sdg_anchored_ramp(anchor, n)
     cmap = mpl.colormaps.get_cmap(cmap_name)
     top = 1.0 if _is_diverging_cmap(cmap_name) else SEQUENTIAL_CMAP_TOP_FRAC
     return [mcolors.to_hex(cmap(top * i / (n - 1))) for i in range(n)]
@@ -736,8 +828,8 @@ def build_compact_binned_legend_card_html(
 
     rows_html = "\n".join(rows)
     return f"""
-<div id="irt-compact-map-legend" style="position:fixed; right:18px; bottom:18px; width:240px;
-            max-width:calc(100% - 36px); z-index:650; pointer-events:none;
+<div id="irt-compact-map-legend" style="width:240px; max-width:calc(100vw - 36px);
+            pointer-events:none;
             font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:1.2;
             color:#111827; background:rgba(255,255,255,0.94);
             border:1px solid rgba(17,24,39,0.18); border-radius:6px;
@@ -779,8 +871,8 @@ def build_compact_categorical_legend_card_html(
     )
     rows_html = "\n".join(rows)
     return f"""
-<div id="irt-compact-map-legend" style="position:fixed; right:18px; bottom:18px; width:240px;
-            max-width:calc(100% - 36px); z-index:650; pointer-events:none;
+<div id="irt-compact-map-legend" style="width:240px; max-width:calc(100vw - 36px);
+            pointer-events:none;
             font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:1.2;
             color:#111827; background:rgba(255,255,255,0.94);
             border:1px solid rgba(17,24,39,0.18); border-radius:6px;

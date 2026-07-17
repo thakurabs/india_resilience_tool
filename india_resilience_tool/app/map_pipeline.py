@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import os
 import re
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
@@ -56,7 +57,7 @@ from india_resilience_tool.viz.colors import (
     build_compact_binned_legend_card_html,
     build_compact_categorical_legend_card_html,
     build_rp100_flood_depth_legend_html,
-    build_vertical_categorical_legend_block_html,
+    IRT_COMPOSITE_CMAP,
 )
 from india_resilience_tool.viz.tables import build_rankings_table_df as _build_rankings_table_df
 from india_resilience_tool.viz.charts import period_display_label
@@ -75,6 +76,69 @@ FLOOD_SEVERITY_METRIC_SLUG = "jrc_flood_depth_index_rp100"
 # 7 keeps classes decodable by eye; fixed-class metrics are unaffected (they
 # derive their palette from their own class labels).
 MAP_COLOR_NLEVELS = 7
+
+# Domain -> SDG-anchored ramp family ("A+B" palette scheme): regular metrics
+# wear their domain's hue so the hue itself identifies the domain; composite
+# bundle scores are the single exception and wear the multi-hue composite
+# ramp (IRT_COMPOSITE_CMAP). Baseline-change mode stays diverging RdBu_r.
+#
+# Two tiers: physical-hazard domains define what a metric *is* and win over
+# sectoral/exposure domains, which describe where it is *applied* (e.g.
+# pr_max_1day_precip sits in Extreme Rainfall AND Health/Industrial/... risk
+# — it colors as water, not as the sector).
+_PHYSICAL_DOMAIN_FAMILY: dict[str, str] = {
+    "Heat Risk": "irt:heat",
+    "Heat Stress": "irt:heat",
+    "Cold Risk": "irt:cold",
+    "Drought Risk": "irt:drought",
+    "Drought Risk (Advanced)": "irt:drought",
+    "Water Risk": "irt:water",
+    "Groundwater Status & Availability": "irt:water",
+    "Riverine Flood": "irt:water",
+    "Extreme Rainfall | Flash Flood Risk": "irt:water",
+    "Agricultural Risk": "irt:agri",
+    "Agricultural LULC Exposure": "irt:agri",
+}
+_SECTORAL_DOMAIN_FAMILY: dict[str, str] = {
+    "Health Risk": "irt:heat",
+    "Population Exposure": "irt:exposure",
+    "Rural Facilities Exposure": "irt:exposure",
+    "Built-up Area Exposure": "irt:exposure",
+    "Industrial Risk": "irt:exposure",
+    "Investment / Financial Risk": "irt:exposure",
+    "Infrastructure Risk": "irt:exposure",
+    "Asset Risk (Thermal Power Plants)": "irt:exposure",
+    "Asset Risk (Hydropower Plants)": "irt:exposure",
+    "Life & Livelihood Loss Risk": "irt:exposure",
+}
+DOMAIN_CMAP_FAMILY: dict[str, str] = {**_SECTORAL_DOMAIN_FAMILY, **_PHYSICAL_DOMAIN_FAMILY}
+# Tie-break within a tier so multi-domain metrics resolve deterministically
+# (e.g. txx_annual_max sits in Heat AND Agricultural risk -> heat).
+_IRT_FAMILY_PRIORITY: tuple[str, ...] = (
+    "irt:heat",
+    "irt:cold",
+    "irt:drought",
+    "irt:water",
+    "irt:agri",
+    "irt:exposure",
+)
+DEFAULT_METRIC_CMAP = "irt:heat"
+
+
+def resolve_metric_cmap_name(variable_slug: str) -> str:
+    """Resolve a metric's sequential ramp from its registered domains."""
+    from india_resilience_tool.config.variables import get_domains_for_metric
+
+    try:
+        domains = get_domains_for_metric(str(variable_slug))
+    except Exception:
+        domains = []
+    for tier in (_PHYSICAL_DOMAIN_FAMILY, _SECTORAL_DOMAIN_FAMILY):
+        families = {tier[d] for d in domains if d in tier}
+        for family in _IRT_FAMILY_PRIORITY:
+            if family in families:
+                return family
+    return DEFAULT_METRIC_CMAP
 
 
 @dataclass(frozen=True)
@@ -843,8 +907,9 @@ def build_map_and_rankings(
 
         vmin, vmax = float(vmin_vmax[0] / display_scale), float(vmin_vmax[1] / display_scale)
 
-    # Choose colormap: diverging for baseline-change; YlOrRd for composite bundle
-    # scores (matches Glance 0-100 palette); Reds for all other metrics.
+    # Choose colormap: diverging for baseline-change; the multi-hue composite
+    # ramp for composite bundle scores; the metric's SDG-anchored domain ramp
+    # for all other metrics.
     if supports_baseline_comparison and map_mode == "Change from 1990-2010 baseline":
         cmap_name = "RdBu_r"  # blue-negative, red-positive
         pretty_metric_label = (
@@ -852,12 +917,12 @@ def build_map_and_rankings(
             f"{sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
         )
     elif use_composite_bundle_scale:
-        cmap_name = "YlOrRd"
+        cmap_name = IRT_COMPOSITE_CMAP
         pretty_metric_label = (
             f"{str(varcfg.get('label') or variable_slug)} · {sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
         )
     else:
-        cmap_name = "Reds"
+        cmap_name = resolve_metric_cmap_name(variable_slug)
         pretty_metric_label = (
             f"{str(varcfg.get('label') or variable_slug)} · {sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
         )
@@ -973,7 +1038,24 @@ def build_map_and_rankings(
             nlevels=MAP_COLOR_NLEVELS,
         )
     if primary_legend_card_html:
-        map_build.folium_map.get_root().html.add_child(folium.Element(primary_legend_card_html))
+        # Attach the card as a Leaflet bottomright control: Leaflet owns its
+        # placement inside the map viewport (it can never spill outside the
+        # visible map) and stacks it above the attribution automatically. The
+        # JS goes in the figure's script section, which runs after the map
+        # variable exists.
+        map_var = map_build.folium_map.get_name()
+        legend_control_js = (
+            "(function () {\n"
+            "    var legend = L.control({position: 'bottomright'});\n"
+            "    legend.onAdd = function (map) {\n"
+            "        var div = L.DomUtil.create('div', 'irt-map-legend-control');\n"
+            f"        div.innerHTML = {json.dumps(primary_legend_card_html)};\n"
+            "        return div;\n"
+            "    };\n"
+            f"    legend.addTo({map_var});\n"
+            "})();"
+        )
+        map_build.folium_map.get_root().script.add_child(folium.Element(legend_control_js))
 
     overlay_legend_blocks: list[str] = []
     rp100_overlay_legend = next(

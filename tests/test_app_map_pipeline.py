@@ -8,9 +8,11 @@ from india_resilience_tool.app.map_pipeline import (
     _build_nonspatial_details_source_df,
     _filter_frame_by_selection_value,
     _stack_legend_blocks,
+    DOMAIN_CMAP_FAMILY,
     blocked_drilldown_message,
     details_require_geometry,
     evaluate_coverage_policy,
+    resolve_metric_cmap_name,
 )
 from india_resilience_tool.data.admin_coverage import CoverageDiagnostics
 from india_resilience_tool.app.overlays import RP100_FLOOD_DEPTH_BINS
@@ -252,3 +254,24 @@ def test_class_scale_palette_lengths_and_zero_based_offset() -> None:
     value_to_color = {c: palette[c - min_code] for c in codes}
     assert value_to_color[0] == WATER_DETERIORATION_CLASS_COLORS[0]
     assert value_to_color[3] == WATER_DETERIORATION_CLASS_COLORS[3]
+
+
+def test_resolve_metric_cmap_name_maps_domains_to_sdg_families() -> None:
+    # Domain-hue contract (palette scheme "A+B"): a metric resolves to its
+    # domain's SDG-anchored ramp; multi-domain metrics resolve to the
+    # physical-hazard family deterministically; unknown slugs fall back.
+    assert resolve_metric_cmap_name("tas_annual_mean") == "irt:heat"
+    assert resolve_metric_cmap_name("water_scarcity_percapita") == "irt:water"
+    # In Extreme Rainfall (water family) AND several sectoral risk domains:
+    # the physical-hazard hue must win.
+    assert resolve_metric_cmap_name("pr_max_1day_precip") == "irt:water"
+    assert resolve_metric_cmap_name("population_total") == "irt:exposure"
+    assert resolve_metric_cmap_name("not_a_real_metric") == "irt:heat"
+
+
+def test_domain_cmap_family_targets_exist_as_ramps() -> None:
+    # Every family named in the mapping must be a resolvable ramp, otherwise
+    # the map render raises at color time.
+    from india_resilience_tool.viz.colors import IRT_RAMP_ANCHORS
+
+    assert set(DOMAIN_CMAP_FAMILY.values()) <= set(IRT_RAMP_ANCHORS)
