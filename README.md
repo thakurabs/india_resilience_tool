@@ -33,7 +33,6 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - Deep Dive preserves current bundle, scenario-period, and geography and opens the existing detailed workflow
 - Level selector: `District` / `Block`
 - Ribbon-driven metric selection:
-  - assessment pillar
   - domain
   - metric
   - scenario
@@ -41,9 +40,8 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - statistic
   - map mode
 - Top-level taxonomy:
-  - `Climate Hazards` for climate-model-derived heat, cold, rainfall, flood, drought, and variability layers
-  - `Bio-physical Hazards` for externally sourced physical hazard layers such as Aqueduct and groundwater assessment
-  - `Exposure` for static exposure layers such as population
+  - a single `Climate Hazards` pillar collects all UI-navigable domains, including the JRC `Riverine Flood` flood-depth domain
+  - exposure and groundwater domains (population, rural facilities, built-up, agricultural LULC, groundwater assessment) are retained in the registry so their data-prep pipelines keep resolving, but are hidden from UI pillar navigation
 - Groundwater status onboarding:
   - district-only metrics from the 2024-2025 GEC workbook
   - Stage of Ground Water Extraction
@@ -75,7 +73,7 @@ IRT combines processed climate-model outputs, boundary layers, rankings, trends,
   - optional `Reference overlays` sidebar section across admin and hydro views can display the display-only agricultural LULC raster overlay
   - the dashboard runtime reads only exported LULC overlay PNG/metadata artifacts, not the raw TIFF
 - JRC flood-depth onboarding:
-  - state-scoped district and block metrics under `Bio-physical Hazards -> Flood Inundation Depth (JRC)` for any state whose JRC masters have been built and published
+  - state-scoped district and block metrics under `Climate Hazards -> Riverine Flood` for any state whose JRC masters have been built and published
   - RP-100 can be rebuilt from a strict `source_manifest.json` that points to aligned 3-arc-second `RP100_depth.vrt` and `RP100_tile_coverage.vrt` sources; strict mode keeps missing source coverage as no-data while treating covered `-9999`/zero/non-positive depth as dry support
   - derived `Flood Severity Index (RP-100)` persisted from RP-100 depth plus RP-100 extent using a fixed severity matrix
   - derived `RP-100 Flood Extent` persisted from the RP-100 depth layer as the share of total polygon area covered by positive depth

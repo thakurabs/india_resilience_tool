@@ -1034,7 +1034,8 @@ def test_enter_deep_dive_uses_persisted_composite_for_riverine_flood(monkeypatch
     assert session_state["registry_metric"] == "composite_flood_jrc_depth"
     assert session_state["sel_scenario"] == "snapshot"
     assert session_state["sel_period"] == "Current"
-    assert session_state["selected_pillar"] == "Bio-physical Hazards"
+    # CHG-0273: Riverine Flood was re-homed from Bio-physical into Climate Hazards.
+    assert session_state["selected_pillar"] == "Climate Hazards"
 
 
 def test_enter_deep_dive_uses_sector_wise_composite_metric(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1820,7 +1821,7 @@ def test_build_glance_handoff_from_deep_dive_preserves_landing_ui_state_when_inc
     detailed_state = {
         "spatial_family": "admin",
         "admin_level": "district",
-        "selected_pillar": "Exposure",
+        "selected_pillar": "Climate Hazards",
         "selected_bundle": "Population",
         "sel_scenario": "snapshot",
         "sel_period": "2025",

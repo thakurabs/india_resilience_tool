@@ -85,7 +85,9 @@ def test_population_metrics_are_exposed_as_static_admin_layers() -> None:
         assert cfg["supports_scenario_comparison"] is False
         assert cfg["units"] == units
         assert "Population Exposure" in cfg["domains"]
-        assert "Exposure" in cfg["pillars"]
+        # CHG-0273: exposure domains are unhomed from UI pillars (kept in DOMAINS
+        # for the pipeline), so the metric no longer resolves to any pillar.
+        assert cfg["pillars"] == []
 
 
 def test_groundwater_metrics_are_exposed_as_static_district_layers() -> None:
@@ -118,7 +120,9 @@ def test_groundwater_metrics_are_exposed_as_static_district_layers() -> None:
         assert cfg["units"] == units
         assert cfg["rank_higher_is_worse"] is worse_high
         assert "Groundwater Status & Availability" in cfg["domains"]
-        assert "Bio-physical Hazards" in cfg["pillars"]
+        # CHG-0273: Groundwater is unhomed from UI pillars (kept in DOMAINS for
+        # the pipeline), so the metric no longer resolves to any pillar.
+        assert cfg["pillars"] == []
 
 
 def test_jrc_metrics_are_exposed_as_static_admin_layers() -> None:
@@ -154,7 +158,8 @@ def test_jrc_metrics_are_exposed_as_static_admin_layers() -> None:
         else:
             assert cfg["units"] == "m"
         assert "Riverine Flood" in cfg["domains"]
-        assert "Bio-physical Hazards" in cfg["pillars"]
+        # CHG-0273: Riverine Flood was re-homed from Bio-physical into Climate Hazards.
+        assert "Climate Hazards" in cfg["pillars"]
 
 
 def test_visible_glance_composites_are_exposed_as_admin_derived_metrics() -> None:

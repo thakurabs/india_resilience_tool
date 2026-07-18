@@ -24,7 +24,7 @@ The current working tree supports:
 - drill-down-only nationwide behavior for the finest-grain views:
   - `Admin -> Block` requires a selected state
 - portfolio workflows for district and block
-- assessment-pillar and domain-based metric navigation, separating climate hazards from bio-physical hazards
+- domain-based metric navigation under a single `Climate Hazards` pillar (exposure/groundwater domains retained for pipelines but hidden from UI nav)
 - static exposure-layer support for admin district/block views
 - static groundwater snapshot support for admin district views
 - retained hydro boundaries (`basins.geojson`/`subbasins.geojson`) for admin-side hydrology context (basin-outline overlay, crosswalk context); the navigable Hydro spatial family and offline basin/sub-basin climate compute pipeline have been removed

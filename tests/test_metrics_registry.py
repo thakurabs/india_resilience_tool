@@ -551,19 +551,24 @@ def test_get_pipeline_bundles_remains_static_for_sector_wise_domains() -> None:
     assert "Life & Livelihood Loss Risk" not in pipeline_bundles
 
 
-def test_taxonomy_exposes_climate_and_biophysical_pillars() -> None:
+def test_taxonomy_exposes_single_climate_hazards_pillar() -> None:
+    # CHG-0273: the taxonomy was collapsed to a single Climate Hazards pillar.
+    # Bio-physical Hazards and Exposure are no longer pillars; their exposure
+    # domains stay in DOMAINS (pipeline contract) but are unhomed from UI nav.
     pillars = get_pillars(spatial_family="admin", level="district")
-    assert "Climate Hazards" in pillars
-    assert "Bio-physical Hazards" in pillars
-    assert "Exposure" in pillars
+    assert pillars == ["Climate Hazards"]
+    assert "Bio-physical Hazards" not in pillars
+    assert "Exposure" not in pillars
     assert get_default_pillar(spatial_family="admin", level="district") == "Climate Hazards"
 
 
-def test_biophysical_pillar_has_no_hydro_basin_domains() -> None:
-    # Groundwater and Riverine Flood are admin-only, so the Bio-physical pillar
-    # exposes no domains in the hydro/basin context.
-    domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="hydro", level="basin")
-    assert domains == []
+def test_riverine_flood_is_homed_under_climate_hazards() -> None:
+    # CHG-0273: Riverine Flood (the JRC flood-depth domain) was moved from
+    # Bio-physical into Climate Hazards to preserve the flood-depth feature.
+    assert get_pillar_for_domain("Riverine Flood") == "Climate Hazards"
+    assert "Riverine Flood" in get_domains_for_pillar(
+        "Climate Hazards", spatial_family="admin", level="district"
+    )
 
 
 def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
@@ -574,14 +579,20 @@ def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
     ) == "Heat Risk"
 
 
-def test_population_exposure_domain_is_admin_only() -> None:
-    admin_domains = get_domains_for_pillar("Exposure", spatial_family="admin", level="district")
-    assert admin_domains == [
+def test_exposure_domains_are_unhomed_but_still_resolve_metrics() -> None:
+    # CHG-0273 (option b): the exposure domains are hidden from UI pillar
+    # navigation (unhomed) but remain in DOMAINS so the data-prep pipelines keep
+    # resolving them by domain name. Preserve that domain->metric contract here.
+    assert "Exposure" not in get_pillars(spatial_family="admin", level="district")
+    for domain in (
         "Population Exposure",
         "Rural Facilities Exposure",
         "Built-up Area Exposure",
         "Agricultural LULC Exposure",
-    ]
+    ):
+        assert get_pillar_for_domain(domain) == ""
+        assert get_metrics_for_domain(domain), domain
+
     admin_metrics = set(get_metrics_for_bundle("Population Exposure", spatial_family="admin", level="block"))
     assert admin_metrics == {"population_total", "population_density"}
     rural_metrics = set(get_metrics_for_bundle("Rural Facilities Exposure", spatial_family="admin", level="block"))
@@ -592,16 +603,11 @@ def test_population_exposure_domain_is_admin_only() -> None:
     assert METRICS_BY_SLUG["built_up_area_km2"].fixed_scenario == "snapshot"
     assert METRICS_BY_SLUG["built_up_area_share_pct"].fixed_period == "Current"
 
-    hydro_pillars = get_pillars(spatial_family="hydro", level="basin")
-    assert "Exposure" not in hydro_pillars
-
 
 def test_groundwater_domain_is_admin_district_only() -> None:
-    admin_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="district")
-    assert admin_domains == [
-        "Groundwater Status & Availability",
-        "Riverine Flood",
-    ]
+    # CHG-0273: Groundwater is now unhomed (kept in DOMAINS for the pipeline);
+    # its district-only metric-resolution contract is preserved.
+    assert get_pillar_for_domain("Groundwater Status & Availability") == ""
     admin_metrics = set(
         get_metrics_for_bundle("Groundwater Status & Availability", spatial_family="admin", level="district")
     )
@@ -612,8 +618,10 @@ def test_groundwater_domain_is_admin_district_only() -> None:
         "gw_total_extraction_ham",
     }
 
-    block_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="block")
-    assert block_domains == ["Riverine Flood"]
+    # Groundwater is district-only: it resolves no metrics at block level.
+    assert get_metrics_for_bundle(
+        "Groundwater Status & Availability", spatial_family="admin", level="block"
+    ) == []
 
 
 def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None:

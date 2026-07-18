@@ -90,7 +90,6 @@ _PHYSICAL_DOMAIN_FAMILY: dict[str, str] = {
     "Heat Stress": "irt:heat",
     "Cold Risk": "irt:cold",
     "Drought Risk": "irt:drought",
-    "Drought Risk (Advanced)": "irt:drought",
     "Water Risk": "irt:water",
     "Groundwater Status & Availability": "irt:water",
     "Riverine Flood": "irt:water",

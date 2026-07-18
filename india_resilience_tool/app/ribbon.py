@@ -31,8 +31,6 @@ from india_resilience_tool.config.variables import (
     get_domains_for_pillar,
     get_metrics_for_domain,
     normalize_domain_name,
-    get_pillar_description,
-    get_pillar_for_domain,
     get_pillars,
 )
 from india_resilience_tool.data.master_loader import resolve_preferred_master_path
@@ -498,46 +496,23 @@ def render_metric_ribbon(
             '<div class="irt-ribbon-body-marker"></div>',
             unsafe_allow_html=True,
         )
-        row1 = st.columns([2.2, 3.0, 1.8])
+        row1 = st.columns([3.0, 1.8])
         row2 = st.columns([1.8, 2.2, 1.4])
         row3 = st.columns([2.4, 1.2, 1.8])
         spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
         current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
 
-        # --- Pillar selection ---
+        # --- Pillar selection (collapsed to a single Climate Hazards pillar) ---
+        # The taxonomy now exposes exactly one pillar, so there is no dropdown:
+        # force-select it and keep session state consistent for downstream reads.
         all_pillars = get_pillars(spatial_family=spatial_family, level=current_level)
         if not all_pillars:
             st.error("No assessment pillars defined in metrics_registry.py")
             render_perf_panel_safe()
             st.stop()
 
-        pillar_options = [sel_placeholder] + all_pillars
-        cur_pillar = st.session_state.get("selected_pillar", sel_placeholder)
-        if cur_pillar not in pillar_options:
-            inferred_pillar = get_pillar_for_domain(st.session_state.get("selected_bundle", ""))
-            if inferred_pillar in all_pillars:
-                cur_pillar = inferred_pillar
-                st.session_state["selected_pillar"] = inferred_pillar
-            else:
-                cur_pillar = sel_placeholder
-                st.session_state["selected_pillar"] = sel_placeholder
-
-        with row1[0]:
-            pillar_help = help_md_to_plain_text(RIBBON_HELP_MD["assessment_pillar"])
-            selected_pillar_preview = st.session_state.get("selected_pillar", sel_placeholder)
-            if selected_pillar_preview != sel_placeholder:
-                pillar_desc_preview = get_pillar_description(selected_pillar_preview)
-                if pillar_desc_preview:
-                    pillar_help += f"\n\nThis pillar covers:\n- {pillar_desc_preview}"
-
-            selected_pillar = st.selectbox(
-                "Assessment pillar",
-                options=pillar_options,
-                index=pillar_options.index(cur_pillar),
-                key="selected_pillar",
-                label_visibility="visible",
-                help=pillar_help,
-            )
+        selected_pillar = all_pillars[0]
+        st.session_state["selected_pillar"] = selected_pillar
 
         # --- Domain selection ---
         domain_disabled = selected_pillar == sel_placeholder
@@ -562,7 +537,7 @@ def render_metric_ribbon(
         elif cur_bundle != st.session_state.get("selected_bundle", sel_placeholder):
             st.session_state["selected_bundle"] = cur_bundle
 
-        with row1[1]:
+        with row1[0]:
             bundle_help = help_md_to_plain_text(RIBBON_HELP_MD["risk_domain"])
             selected_bundle_preview = st.session_state.get("selected_bundle", sel_placeholder)
             if selected_bundle_preview != sel_placeholder:
@@ -604,7 +579,7 @@ def render_metric_ribbon(
                 st.session_state["selected_var"] = index_slugs[0]
         cur_var = st.session_state.get("selected_var", sel_placeholder)
 
-        with row1[2]:
+        with row1[1]:
             metric_help = help_md_to_plain_text(RIBBON_HELP_MD["metric"])
             selected_metric_preview = st.session_state.get("selected_var", sel_placeholder)
             if selected_metric_preview != sel_placeholder and selected_metric_preview in VARIABLES:

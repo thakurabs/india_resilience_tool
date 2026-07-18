@@ -304,10 +304,13 @@ def test_domain_options_for_non_dashboard_context_preserve_existing_registry_ord
         lambda *args, **kwargs: ["Population Exposure", "Aqueduct Water Risk"],
     )
 
+    # CHG-0273: the dashboard-bundle reordering only fires for admin district/block
+    # under Climate Hazards; any other context returns registry order unchanged.
+    # Exercise that fallback via the hydro/basin context (Exposure is no longer a pillar).
     options = _domain_options_for_context(
-        selected_pillar="Exposure",
-        spatial_family="admin",
-        current_level="district",
+        selected_pillar="Climate Hazards",
+        spatial_family="hydro",
+        current_level="basin",
         data_dir=tmp_path,
     )
 

@@ -664,7 +664,7 @@ def run_app() -> None:
     if not _ready_for_map:
         with col1:
             st.info(
-                "Complete the selections in the **ribbon above the map** (Assessment pillar, Domain, Metric, Scenario, Period, Statistic, Map mode) "
+                "Complete the selections in the **ribbon above the map** (Domain, Metric, Scenario, Period, Statistic, Map mode) "
                 "and choose an **Analysis focus** in the sidebar to render the map."
             )
         render_perf_panel_safe()
@@ -941,7 +941,6 @@ def run_app() -> None:
     render_perf_panel_safe()
     st.markdown("---")
     st.caption(
-        "Notes: first choose an Assessment pillar (e.g. Climate Hazards, Bio-physical Hazards), "
-        "then a Domain, then a Metric within that domain. "
+        "Notes: choose a Domain, then a Metric within that domain. "
         "Details panel shows risk cards, trends, narrative, and case-study export."
     )

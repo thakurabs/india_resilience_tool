@@ -2562,25 +2562,6 @@ DOMAINS: dict[str, list[str]] = {
     "Life & Livelihood Loss Risk": [
         "composite_life_livelihood_loss_risk",
     ],
-    "Drought Risk (Advanced)": [
-        # Short-term vs long-term SPI + severity splits (keep available but not default)
-        "spi3_drought_index",
-        "spi3_count_months_lt_minus1",
-        "spi3_count_months_lt_minus2",
-
-        "spi6_drought_index",
-        "spi6_count_months_lt_minus1",
-        "spi6_count_months_lt_minus2",
-
-        "spi12_drought_index",
-        "spi12_count_months_lt_minus1",
-        "spi12_count_months_lt_minus2",
-
-        # Climatic water-balance drought (SPEI) – optional (currently disabled)
-        # "spei3_drought_index",
-        # "spei6_drought_index",
-        # "spei12_drought_index",
-    ],
     "Population Exposure": [
         "population_total",
         "population_density",
@@ -2630,6 +2611,7 @@ DOMAIN_ORDER: list[str] = [
     "Heat Risk",
     "Drought Risk",
     "Extreme Rainfall | Flash Flood Risk",
+    "Riverine Flood",
     "Heat Stress",
     "Cold Risk",
     "Agricultural Risk",
@@ -2640,13 +2622,11 @@ DOMAIN_ORDER: list[str] = [
     "Asset Risk (Thermal Power Plants)",
     "Asset Risk (Hydropower Plants)",
     "Life & Livelihood Loss Risk",
-    "Drought Risk (Advanced)",
     "Population Exposure",
     "Rural Facilities Exposure",
     "Built-up Area Exposure",
     "Agricultural LULC Exposure",
     "Groundwater Status & Availability",
-    "Riverine Flood",
     "Water Risk",
 ]
 
@@ -2655,6 +2635,7 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
         "Heat Risk",
         "Drought Risk",
         "Extreme Rainfall | Flash Flood Risk",
+        "Riverine Flood",
         "Heat Stress",
         "Cold Risk",
         "Agricultural Risk",
@@ -2665,29 +2646,16 @@ PILLAR_DOMAINS: dict[str, list[str]] = {
         "Asset Risk (Thermal Power Plants)",
         "Asset Risk (Hydropower Plants)",
         "Life & Livelihood Loss Risk",
-        "Drought Risk (Advanced)",
         "Water Risk",
     ],
-    "Bio-physical Hazards": [
-        "Groundwater Status & Availability",
-        "Riverine Flood",
-    ],
-    "Exposure": [
-        "Population Exposure",
-        "Rural Facilities Exposure",
-        "Built-up Area Exposure",
-        "Agricultural LULC Exposure",
-    ],
-    "Vulnerability": [],
-    "Adaptive Capacity": [],
+    # NOTE: Population/Rural/Built-up/LULC/Groundwater exposure domains are
+    # intentionally NOT homed under any pillar. They stay in DOMAINS/DOMAIN_ORDER
+    # so the data-prep pipelines (tools/runs/prepare_dashboard.py) keep resolving
+    # them by domain name, but they are hidden from UI pillar navigation.
 }
 
 PILLAR_ORDER: list[str] = [
     "Climate Hazards",
-    "Bio-physical Hazards",
-    "Exposure",
-    "Vulnerability",
-    "Adaptive Capacity",
 ]
 
 DOMAIN_TO_PILLAR: dict[str, str] = {
@@ -2797,20 +2765,6 @@ PILLAR_DESCRIPTIONS: dict[str, str] = {
     "Climate Hazards": (
         "Climate-model-derived hazard and climate-condition layers, including heat, "
         "cold, rainfall, flood, drought, and variability metrics."
-    ),
-    "Bio-physical Hazards": (
-        "Physical hazard layers from externally sourced geospatial products, kept "
-        "separate from climate hazard indices to make provenance clear."
-    ),
-    "Exposure": (
-        "People, assets, land use, and other layers that describe what is present "
-        "in places potentially affected by hazards."
-    ),
-    "Vulnerability": (
-        "Future placeholder for sensitivity and vulnerability layers."
-    ),
-    "Adaptive Capacity": (
-        "Future placeholder for coping, readiness, and adaptive capacity layers."
     ),
 }
 
