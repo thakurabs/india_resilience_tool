@@ -38,16 +38,6 @@ NAME_ALIASES: dict[str, str] = {
     "mumbai city": "mumbai",
     "sub urban mumbai": "mumbai suburban",
     "raygad": "raigarh",
-    # CHG-0272: state-level reconciliation between the ADM2 boundary source
-    # (districts_4326 STATE_UT) and master state spellings. normalize_name drops
-    # '&' entirely but preserves the word 'and', so boundary "AND"/suffix forms
-    # diverge from master "&"/clean forms. Alias boundary spelling -> master
-    # spelling so state-prefixed join keys reconcile (surfaced by the JRC
-    # flood-depth master, the first to carry these states).
-    "andaman and nicobar islands": "andaman nicobar islands",
-    "chhatisgarh": "chhattisgarh",
-    "jammu and kashmir": "jammu kashmir",
-    "lakshadweep ut": "lakshadweep",
 }
 
 

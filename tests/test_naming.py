@@ -50,25 +50,6 @@ def test_maharashtra_block_and_district_spellings_reconcile() -> None:
     assert normalize_compact("Mumbai City") != normalize_compact("Sub Urban Mumbai")
 
 
-def test_boundary_vs_master_state_spellings_reconcile() -> None:
-    # CHG-0272: districts_4326 STATE_UT spellings vs flood-depth master state
-    # spellings must alias to the same key so state-prefixed joins succeed.
-    # normalize_name strips '&' but keeps 'and', so these diverge without aliases.
-    pairs = [
-        ("ANDAMAN AND NICOBAR ISLANDS", "Andaman & Nicobar Islands"),
-        ("CHHATISGARH", "Chhattisgarh"),
-        ("JAMMU AND KASHMIR", "Jammu & Kashmir"),
-        ("Lakshadweep-UT", "Lakshadweep"),
-    ]
-    for boundary_name, master_name in pairs:
-        assert alias(boundary_name) == alias(master_name), (
-            f"{boundary_name!r} did not reconcile with {master_name!r}"
-        )
-
-    # Neighbouring UT/state must stay distinct from Jammu & Kashmir.
-    assert alias("LADAKH") != alias("Jammu & Kashmir")
-
-
 def test_safe_fs_component_strips_trailing_dot_the_bug() -> None:
     # CHG-0115: Maharashtra block "Parali V ." produced folder token "Parali_V_."
     # ending in a dot, which Win32 scandir cannot traverse (WinError 3). The fixed
