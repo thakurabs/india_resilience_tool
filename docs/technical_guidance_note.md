@@ -33,7 +33,7 @@ IRT sits within a broader climate-risk information landscape. Existing assessmen
 
 The administrative-unit framing is deliberate. District-level climate analysis already has precedent in Indian policy work: the Government of India's *Economic Survey 2017–18* used district-level percentile thresholds to estimate how temperature and rainfall extremes affect crop yields (Government of India 2018). IRT extends that planning logic across multiple hazards and to both district and block geographies. The sections that follow document how the tool moves from climate data to administrative-unit metrics, then to thematic and sectoral hazard-pressure scores.
 
-In the standard hazard × exposure × vulnerability decomposition (IPCC 2022), IRT supplies the **hazard** term. The scores are climate **hazard-pressure** indices, not full risk scores in the IPCC sense; the word "Risk" in a bundle name denotes hazard pressure relevant to that sector. They are meant for **relative prioritisation**: comparing districts or blocks, and comparing scenario-period choices, to flag where hazard pressure is high or rising and where further assessment should begin. A "Health Risk 80" means high climate hazard pressure relevant to health at that location; it does not mean that 80% of people will be harmed, nor does it estimate realised impact, loss, or probability. 
+In the standard hazard × exposure × vulnerability decomposition (IPCC 2022), IRT supplies the **hazard** term. The scores are climate **hazard-pressure** indices, not full risk scores in the IPCC sense; the word "Risk" in a bundle name denotes climate hazard pressure relevant to that sector, not a sectoral impact model. They are meant for **relative prioritisation**: comparing districts or blocks, and comparing scenario-period choices, to flag where hazard pressure is high or rising and where further assessment should begin. A "Health Risk 80" means high climate hazard pressure relevant to health at that location; it does not mean that 80% of people will be harmed, nor does it estimate realised impact, loss, or probability.
 
 The rest of this note explains that hazard-pressure layer in the order it is built. It covers data provenance (§2), downscaling context (§3), grid-first computation and spatial/temporal aggregation (§4), individual metric definitions (§5), thematic bundle construction (§6), sectoral bundle construction (§7), and composite output (§8). The appendices provide the complete metric reference and the sectoral impact-band catalogue.
 
@@ -164,37 +164,37 @@ NASA-NEX GDDP-CMIP6 applies the statistical approach. IRT uses the NASA-NEX prod
 
 ### 3.2 The BCSD Method in NASA-NEX GDDP
 
-The NASA-NEX GDDP-CMIP6 product employs **Bias Correction and Spatial Disaggregation (BCSD)** (Wood et al. 2002; Maurer et al. 2010), a two-step statistical procedure:
+The NASA-NEX GDDP-CMIP6 product employs a **daily variant of Bias Correction and Spatial Disaggregation (BCSD)** (Wood et al. 2002; Maurer et al. 2010; Thrasher et al. 2022). The method combines distributional bias correction with spatial disaggregation to a 0.25° grid:
 
-[FIGURE: fig_06_bcsd_schematic.svg | BCSD first bias-corrects model distributions against reference climatology, then disaggregates corrected anomalies to the 0.25° grid.]
+[FIGURE: fig_06_bcsd_schematic.svg | BCSD bias-corrects model distributions against reference climatology, then combines GCM change signals with observed spatial detail on the 0.25° grid.]
 
 **Step 1 — Bias correction**
 
-For each GCM, each variable, and each calendar month, the empirical cumulative distribution function (CDF) of the model's monthly-mean output is mapped to match the empirical CDF of a reference observational climatology over the historical period. This quantile mapping adjusts systematic biases in both the mean and the distribution tails while preserving the model's interannual variability and long-term trend signal. The reference climatology used by NASA-NEX is the Global Meteorological Forcing Dataset (GMFD; Sheffield et al. 2006), as described in Thrasher et al. (2022).
+For each GCM and variable, the method compares historical model output with corresponding observationally derived reference data over a common reference period. Quantile mapping is then used to adjust the modelled distribution so that the corrected historical values are more consistent with the observed reference distribution. The reference forcing dataset used by NASA-NEX is the Global Meteorological Forcing Dataset (GMFD; Sheffield et al. 2006), as described in Thrasher et al. (2022).
 
-Formally, let $F_{\text{obs}}$ and $F_{\text{mod}}$ denote the empirical CDFs of the observed and modelled monthly distributions over the bias-correction reference period. The bias-corrected value $x'$ for a raw model value $x$ is:
+Formally, let $F_{\text{obs}}$ and $F_{\text{mod}}$ denote the empirical CDFs of the observed and modelled distributions over the bias-correction reference period. The bias-corrected value $x'$ for a raw model value $x$ is:
 
 $$x' = F_{\text{obs}}^{-1}\!\bigl(F_{\text{mod}}(x)\bigr)$$
 
-This transfer function is derived on the coarse GCM grid and then applied to all years, including future projections (where the model's distribution shift due to climate change is preserved relative to the corrected historical distribution).
+The transfer function is derived from the historical overlap between model and reference data and then applied to both historical and future model output. In the future period, the model's climate-change signal is therefore retained relative to the bias-corrected historical distribution.
 
 **Step 2 — Spatial disaggregation**
 
-Bias-corrected monthly anomalies at the coarse GCM resolution are spatially interpolated to the target 0.25° × 0.25° grid using bilinear interpolation. Daily sub-monthly variability is disaggregated by preserving the daily anomaly patterns from the bias-corrected monthly fields.
+After bias correction, the GCM fields are spatially disaggregated to the 0.25° GMFD grid. In simplified terms, the method factors out the observed fine-grid climatology, interpolates the model residual or anomaly fields from the coarse GCM grid to the 0.25° grid, and then factors the fine-grid climatology back in. Temperature variables use additive residuals; precipitation and related moisture variables use multiplicative ratios.
 
 **What BCSD corrects and what it does not**
 
-BCSD corrects the marginal distribution of temperature and precipitation at the monthly scale. It does not alter the GCM's large-scale atmospheric dynamics, synoptic circulation patterns, or temporal sequencing. Biases in monsoon onset timing, intraseasonal oscillations, or the frequency of extreme daily events are only partially addressed by the monthly-scale distribution-matching step; residual dynamical biases remain (→ §3.4).
+BCSD corrects important marginal distribution biases and adds observed historical spatial detail to the GCM fields. It does not alter the GCM's large-scale atmospheric dynamics, synoptic circulation patterns, or temporal sequencing, and it does not create new meteorological information below the source-model scale. Biases in monsoon onset timing, intraseasonal oscillations, or the frequency and sequencing of extreme daily events may therefore remain after downscaling (→ §3.4).
 
 ### 3.3 Grid Resolution and Spatial Domain
 
-The NEX-GDDP-CMIP6 product is provided at **0.25° × 0.25°** horizontal resolution, corresponding to approximately 25 km at the equator and ~27 km at 25°N (typical central India latitude). IRT clips the global product to the India domain — **68.0°E–97.5°E, 5.0°N–45.0°N** — yielding a domain of 118 × 160 grid cells (29.5° ÷ 0.25° = 118 columns, 40.0° ÷ 0.25° = 160 rows).
+The NEX-GDDP-CMIP6 product is provided at **0.25° × 0.25°** horizontal resolution, corresponding to roughly **25-28 km over India** depending on latitude and direction: 0.25° latitude is about 27.8 km, while 0.25° longitude narrows from about 27.6 km near 5°N to about 19.7 km near 45°N. IRT clips the global product to the India domain — **68.0°E–97.5°E, 5.0°N–45.0°N** — yielding a domain of 118 × 160 grid cells (29.5° ÷ 0.25° = 118 columns, 40.0° ÷ 0.25° = 160 rows).
 
 [FIGURE: fig_08_district_block_resolution_zoom.svg | At district scale, several climate-grid cells contribute to the area-weighted mean; at block scale, multiple small blocks can fall within the same 0.25° cell and inherit the same underlying climate value.]
 
 **Resolution implications at district vs block level**
 
-India has 784 districts (mean area ~4,171 km²) and 7,137 sub-district blocks (mean area ~458 km²). The 0.25° grid is therefore much better matched to district screening than to fine within-district comparison. At roughly 625 km² per grid cell:
+India has 784 districts (mean area ~4,171 km²) and 7,137 sub-district blocks (mean area ~458 km²). The 0.25° grid is therefore much better matched to district screening than to fine within-district comparison. A grid cell over much of India is on the order of **600-750 km²**, varying by latitude:
 
 - A typical district intersects **4–20** 0.25° cells, so its value is usually an area-weighted summary across several independent grid-cell values.
 - A typical block may intersect **fewer than 4** cells, and smaller blocks in densely subdivided states may fall mostly or entirely within a single cell. In that case, neighbouring blocks inside the same cell can receive nearly identical climate-derived values, while a nearby block crossing into the next cell can differ abruptly.
@@ -211,7 +211,7 @@ NEX-GDDP-CMIP6 is publicly available via the NASA Center for Climate Simulation 
 
 **Internal validation: Telangana domain**
 
-As part of dataset QA, a validation analysis was conducted comparing NEX-GDDP-CMIP6 historical daily output against ERA5 reanalysis and IMD gridded observations over the Telangana domain for the period 1980–1985, using polygon-overlap area weighting for spatial aggregation. Results should be interpreted in the context of this limited spatial and temporal sample; they are illustrative of the dataset's bias characteristics rather than a full pan-India evaluation.
+As part of dataset QA, a validation analysis was conducted comparing NEX-GDDP-CMIP6 historical daily output against ERA5 reanalysis and IMD gridded observations over the Telangana domain for the period 1980–1985, using polygon-overlap area weighting for spatial aggregation. Results should be interpreted in the context of this limited spatial and temporal sample; they are illustrative of the dataset's bias characteristics over one state and six historical years, not a full pan-India validation of all models, hazards, or seasons.
 
 *Temperature*: The 24-model ensemble reproduces ERA5 mean near-surface temperature over Telangana with good fidelity. The ERA5 domain-mean daily temperature is 27.3°C; most individual GCMs fall within ±0.5°C of this value (model range approximately 26.8–28.0°C), with tight clustering in normalised standard deviation and spatial correlation visible in the Taylor diagram.
 
