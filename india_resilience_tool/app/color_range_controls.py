@@ -2,7 +2,7 @@
 Color range controls for the IRT map (app-layer).
 
 This module keeps the dashboard runtime smaller by isolating the map color-range
-default computation (robust p2–p98) and slider bounds handling.
+default computation (robust p2–p98) and color-domain bounds handling.
 """
 
 from __future__ import annotations
@@ -21,11 +21,11 @@ def compute_color_range_defaults(
     display_scale: float = 1.0,
 ) -> Tuple[float, float, float, float]:
     """
-    Compute slider bounds and a robust default range for a numeric series.
+    Compute full data bounds and a robust default color range for a numeric series.
 
     Contract (legacy):
-    - Slider bounds use full min/max of visible data.
-    - Default selection uses robust p2–p98 (falls back to min/max).
+    - Data bounds use full min/max of visible data.
+    - The applied color domain uses robust p2–p98 (falls back to min/max).
     - If all values are identical, pad bounds by 10% (floor 1/display_scale).
     - Non-negative single-value ranges clamp the lower bound to 0.
     """

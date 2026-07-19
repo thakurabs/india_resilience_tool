@@ -56,6 +56,8 @@ from india_resilience_tool.viz.colors import (
     build_compact_binned_legend_card_html,
     build_compact_categorical_legend_card_html,
     build_rp100_flood_depth_legend_html,
+    symmetric_diverging_range,
+    DEFAULT_CHOROPLETH_NLEVELS,
     IRT_COMPOSITE_CMAP,
 )
 from india_resilience_tool.viz.tables import build_rankings_table_df as _build_rankings_table_df
@@ -70,11 +72,6 @@ from india_resilience_tool.data.optimized_bundle import is_optimized_metric_root
 
 
 FLOOD_SEVERITY_METRIC_SLUG = "jrc_flood_depth_index_rp100"
-
-# Discrete choropleth classes (equal intervals over the active color range).
-# 7 keeps classes decodable by eye; fixed-class metrics are unaffected (they
-# derive their palette from their own class labels).
-MAP_COLOR_NLEVELS = 7
 
 # Domain -> SDG-anchored ramp family ("A+B" palette scheme): regular metrics
 # wear their domain's hue so the hue itself identifies the domain; composite
@@ -683,7 +680,6 @@ def build_map_and_rankings(
     simplify_tol_adm2: float,
     simplify_tol_adm3: float,
     map_height: int,
-    color_slider_placeholder: Any,
     perf_section: Any,
     render_perf_panel_safe: Any,
 ) -> MapArtifacts:
@@ -932,50 +928,45 @@ def build_map_and_rankings(
         int(key): str(value)
         for key, value in dict(varcfg.get("class_labels") or {}).items()
     } if use_fixed_class_scale else {}
-    data_min, data_max, vmin_default, vmax_default = compute_color_range_defaults(scale_vals)
     display_units, display_scale = get_metric_display_meta(
         metric_slug=variable_slug,
         units=str(varcfg.get("unit") or varcfg.get("units") or "").strip(),
     )
+    # display_scale must be resolved *before* this call: it sets the degenerate-range
+    # padding floor in the metric's own units.
+    data_min, data_max, vmin_default, vmax_default = compute_color_range_defaults(
+        scale_vals,
+        display_scale=display_scale,
+    )
     use_composite_bundle_scale = is_dashboard_bundle_slug(variable_slug) and not use_fixed_class_scale
 
     if use_fixed_class_scale:
-        color_slider_placeholder.empty()
         # Derive the class range from the metric's own labels (min..max code), so
         # 1-based scarcity (1..4) and 0-based deterioration (0..3) both render correctly.
         _class_codes = sorted(class_labels)
         vmin, vmax = (float(_class_codes[0]), float(_class_codes[-1])) if _class_codes else (1.0, 5.0)
     elif use_composite_bundle_scale:
-        color_slider_placeholder.empty()
         vmin, vmax = 0.0, 100.0
     else:
-        slider_min = float(data_min * display_scale)
-        slider_max = float(data_max * display_scale)
-        slider_default = (float(vmin_default * display_scale), float(vmax_default * display_scale))
-        slider_step = max((slider_max - slider_min) / 200.0, 0.001)
-        slider_label = "Color range (min → max)"
-        if display_units:
-            slider_label = f"{slider_label} [{display_units}]"
-
-        with st.sidebar:
-            vmin_vmax = color_slider_placeholder.slider(
-                slider_label,
-                min_value=slider_min,
-                max_value=slider_max,
-                value=slider_default,
-                step=slider_step,
-                key="color_range_slider",
-            )
-
-        vmin, vmax = float(vmin_vmax[0] / display_scale), float(vmin_vmax[1] / display_scale)
+        vmin, vmax = float(vmin_default), float(vmax_default)
 
     # Choose colormap: diverging for baseline-change; the multi-hue composite
     # ramp for composite bundle scores; the metric's SDG-anchored domain ramp
     # for all other metrics.
-    if supports_baseline_comparison and map_mode == "Change from 1990-2010 baseline":
+    # NOTE: test map_mode here, not a boolean hoisted above the baseline lookup —
+    # the missing-baseline fallback resets map_mode to "Absolute value", and a
+    # stale flag would render absolute values on a zero-anchored diverging ramp.
+    if supports_baseline_comparison and map_mode == baseline_map_mode_label:
         cmap_name = "RdBu_r"  # blue-negative, red-positive
+        # Anchor the domain on zero so the ramp's neutral midpoint marks no change.
+        vmin, vmax = symmetric_diverging_range(vmin, vmax)
+        baseline_label_text = (
+            "vs baseline"
+            if str(varcfg.get("source_type") or "").strip().lower() == "external"
+            else "vs 1990–2010"
+        )
         pretty_metric_label = (
-            f"Δ {str(varcfg.get('label') or variable_slug)} vs 1990–2010 · "
+            f"Δ {str(varcfg.get('label') or variable_slug)} {baseline_label_text} · "
             f"{sel_scenario_display} · {period_display_label(sel_period)} · {sel_stat}"
         )
     elif use_composite_bundle_scale:
@@ -1013,7 +1004,7 @@ def build_map_and_rankings(
                     vmin,
                     vmax,
                     cmap_name=cmap_name,
-                    nlevels=MAP_COLOR_NLEVELS,
+                    nlevels=DEFAULT_CHOROPLETH_NLEVELS,
                 )
 
     # Filter for map display (preserves legacy behavior: block selection does not
@@ -1097,7 +1088,7 @@ def build_map_and_rankings(
             vmax=vmax,
             cmap_name=cmap_name,
             display_scale=display_scale,
-            nlevels=MAP_COLOR_NLEVELS,
+            nlevels=DEFAULT_CHOROPLETH_NLEVELS,
         )
     if primary_legend_card_html:
         attach_legend_card_control(map_build.folium_map, primary_legend_card_html)
