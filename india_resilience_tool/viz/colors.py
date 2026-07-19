@@ -123,6 +123,13 @@ IRT_RAMP_ANCHORS: dict[str, str] = {
     "irt:cold": "#13496B",  # SDG 17 navy — cold risk
 }
 IRT_COMPOSITE_CMAP = "irt:composite"
+
+# Discrete choropleth classes (equal intervals over the active color range),
+# shared by the map fill, the map legend, and the landing-page map so all three
+# stay in step. 5 keeps classes decodable by eye; over a zero-anchored diverging
+# domain it also puts a 20%-wide neutral band around zero. Fixed-class metrics
+# are unaffected — they derive their palette from their own class labels.
+DEFAULT_CHOROPLETH_NLEVELS = 5
 _IRT_COMPOSITE_SPAN: tuple[float, float] = (0.04, 0.86)
 
 
@@ -173,16 +180,24 @@ def _sdg_anchored_ramp(anchor_hex: str, n: int) -> list[str]:
     light_L, light_C = 0.955, min(0.035, aC * 0.25)
     dark_L, dark_C = max(0.28, aL * 0.72), aC * 0.82
     t_anchor = (light_L - aL) / (light_L - dark_L)
-    out: list[str] = []
-    for i in range(n):
-        t = i / (n - 1)
+    t_anchor = min(0.95, max(0.05, t_anchor))
+
+    def sample(t: float) -> str:
         if t <= t_anchor:
             u = t / t_anchor
             L, C = light_L + (aL - light_L) * u, light_C + (aC - light_C) * u
         else:
             u = (t - t_anchor) / (1 - t_anchor)
             L, C = aL + (dark_L - aL) * u, aC + (dark_C - aC) * u
-        out.append(_oklab_to_hex(L, C * math.cos(ah), C * math.sin(ah)))
+        return _oklab_to_hex(L, C * math.cos(ah), C * math.sin(ah))
+
+    if int(n) <= 1:
+        return [sample(0.5)]
+
+    out: list[str] = []
+    for i in range(n):
+        t = i / (n - 1)
+        out.append(sample(t))
     return out
 
 
@@ -232,10 +247,9 @@ def get_cmap_hex_list(cmap_name: str, *, nsteps: int = 256) -> list[str]:
     Returns:
         List of hex colors, length nsteps
     """
-    cmap = mpl.colormaps.get_cmap(cmap_name)
     if nsteps < 2:
         nsteps = 2
-    return [mcolors.to_hex(cmap(i / (nsteps - 1))) for i in range(nsteps)]
+    return get_binned_cmap_hex_list(cmap_name, nlevels=int(nsteps))
 
 
 def compute_robust_range(
@@ -286,6 +300,31 @@ def compute_robust_range(
         vmax += padding
 
     return vmin, vmax
+
+
+def symmetric_diverging_range(vmin: float, vmax: float) -> tuple[float, float]:
+    """
+    Return (-M, +M) so a diverging ramp's neutral midpoint sits exactly on zero.
+
+    A diverging palette (e.g. RdBu_r) places its neutral colour at the midpoint of
+    the domain. Over a data-driven asymmetric range such as (-2, +8) that midpoint
+    lands at +3, so zero-change units render cool ("cooling") and real change near
+    +3 renders neutral. Anchoring the domain symmetrically about zero makes the
+    palette's sign boundary match the data's sign boundary.
+
+    Args:
+        vmin: lower bound of the data-driven range
+        vmax: upper bound of the data-driven range
+
+    Returns:
+        (-M, +M) where M is the largest absolute finite bound. Falls back to
+        (-1.0, 1.0) when neither bound is finite or both are zero.
+    """
+    finite_bounds = [float(b) for b in (vmin, vmax) if np.isfinite(b)]
+    magnitude = max((abs(b) for b in finite_bounds), default=0.0)
+    if magnitude == 0.0:
+        magnitude = 1.0
+    return -magnitude, magnitude
 
 
 def format_legend_value(
@@ -383,7 +422,13 @@ def apply_fillcolor(
 
         t = np.clip(t, 0.0, 1.0)
 
-        cmap = plt.get_cmap(cmap_name)
+        if str(cmap_name or "").strip().startswith("irt:"):
+            cmap = mcolors.LinearSegmentedColormap.from_list(
+                str(cmap_name),
+                get_cmap_hex_list(cmap_name, nsteps=256),
+            )
+        else:
+            cmap = plt.get_cmap(cmap_name)
         rgba = cmap(t[mask_valid])
         hex_valid = np.array(
             [

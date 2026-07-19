@@ -75,6 +75,46 @@ def test_validate_registry_against_pipeline_reports_duplicates_but_no_mismatch()
     assert not any("periods_metric_col" in s and "value_col" in s for s in issues)
 
 
+def test_validate_registry_against_pipeline_flags_invalid_class_display_contracts() -> None:
+    pipeline = [
+        {
+            "slug": "bad_codes",
+            "name": "Bad codes",
+            "var": "tas",
+            "value_col": "bad_codes",
+            "class_labels": {1: "Low", 3: "High"},
+            "class_display_mode": "label_with_score",
+            "supports_baseline_comparison": False,
+        },
+        {
+            "slug": "bad_baseline",
+            "name": "Bad baseline",
+            "var": "tas",
+            "value_col": "bad_baseline",
+            "class_labels": {0: "No change", 1: "Worse"},
+            "class_display_mode": "label_only",
+            "supports_baseline_comparison": True,
+        },
+    ]
+    reg = build_registry_from_pipeline(pipeline)
+
+    issues = validate_registry_against_pipeline(reg, pipeline)
+
+    assert any("bad_codes" in issue and "contiguous integer codes" in issue for issue in issues)
+    assert any("bad_baseline" in issue and "supports_baseline_comparison=False" in issue for issue in issues)
+
+
+def test_real_class_display_metrics_have_valid_codes_and_no_baseline_mode() -> None:
+    issues = validate_registry_against_pipeline(METRICS_BY_SLUG, PIPELINE_METRICS_RAW)
+
+    class_contract_issues = [
+        issue
+        for issue in issues
+        if issue.startswith("Class-display metric")
+    ]
+    assert class_contract_issues == []
+
+
 def test_tropical_nights_gt25_metric_is_registered_for_heat_risk() -> None:
     assert "tasmin_tropical_nights_gt25" in METRICS_BY_SLUG
 

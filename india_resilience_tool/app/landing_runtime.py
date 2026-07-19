@@ -55,6 +55,8 @@ from india_resilience_tool.viz.charts import (
 from india_resilience_tool.viz.colors import (
     apply_fillcolor_binned,
     build_vertical_binned_legend_block_html,
+    DEFAULT_CHOROPLETH_NLEVELS,
+    IRT_COMPOSITE_CMAP,
 )
 
 LANDING_DEFAULT_BUNDLE = "Heat Risk"
@@ -1155,8 +1157,8 @@ def _build_landing_map_artifacts(
         "bundle_score_numeric",
         0.0,
         100.0,
-        cmap_name="YlOrRd",
-        nlevels=15,
+        cmap_name=IRT_COMPOSITE_CMAP,
+        nlevels=DEFAULT_CHOROPLETH_NLEVELS,
     )
     fc = _selection_to_feature_collection(
         display_gdf,
@@ -1184,9 +1186,9 @@ def _build_landing_map_artifacts(
             legend_title="Bundle score",
             vmin=0.0,
             vmax=100.0,
-            cmap_name="YlOrRd",
-            nlevels=15,
-            nticks=5,
+            cmap_name=IRT_COMPOSITE_CMAP,
+            nlevels=DEFAULT_CHOROPLETH_NLEVELS,
+            nticks=DEFAULT_CHOROPLETH_NLEVELS + 1,
             include_zero_tick=True,
             map_height=520,
         )

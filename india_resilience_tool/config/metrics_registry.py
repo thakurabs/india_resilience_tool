@@ -224,6 +224,31 @@ def validate_registry_against_pipeline(
                 f"but pipeline value_col='{pm_value_col}'."
             )
 
+    class_display_modes = {"label_with_score", "label_only"}
+    for slug, spec in sorted(registry_by_slug.items()):
+        class_labels = dict(spec.class_labels or {})
+        class_display_mode = str(spec.class_display_mode or "").strip().lower()
+        if not class_labels or class_display_mode not in class_display_modes:
+            continue
+
+        try:
+            class_codes = sorted(int(code) for code in class_labels)
+        except (TypeError, ValueError):
+            issues.append(
+                f"Class-display metric '{slug}' has non-integer class_labels keys."
+            )
+            continue
+
+        if class_codes != list(range(class_codes[0], class_codes[-1] + 1)):
+            issues.append(
+                f"Class-display metric '{slug}' class_labels must use contiguous integer codes."
+            )
+
+        if spec.supports_baseline_comparison:
+            issues.append(
+                f"Class-display metric '{slug}' must set supports_baseline_comparison=False."
+            )
+
     return issues
 
 

@@ -355,10 +355,23 @@ def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp
 def test_build_landing_map_artifacts_keeps_bundle_score_legend_for_jrc_bundle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from india_resilience_tool.viz.colors import build_vertical_binned_legend_block_html
+
+    legend_calls: list[dict[str, object]] = []
+
     monkeypatch.setattr(
         landing_runtime,
         "build_choropleth_map_with_geojson_layer",
         lambda **kwargs: {"tooltip": kwargs["tooltip"]},
+    )
+    def _record_legend_call(**kwargs):
+        legend_calls.append(kwargs)
+        return build_vertical_binned_legend_block_html(**kwargs)
+
+    monkeypatch.setattr(
+        landing_runtime,
+        "build_vertical_binned_legend_block_html",
+        _record_legend_call,
     )
 
     state_scores = pd.DataFrame(
@@ -397,6 +410,27 @@ def test_build_landing_map_artifacts_keeps_bundle_score_legend_for_jrc_bundle(
 
     assert legend_html is not None
     assert "Bundle score" in legend_html
+
+    # Visual parity with the main map (CHG-0280): the landing map must use the
+    # composite ramp at the shared class count, not its own YlOrRd/15 scale.
+    # Legend presence alone never caught the mismatch.
+    from india_resilience_tool.viz.colors import (
+        DEFAULT_CHOROPLETH_NLEVELS,
+        IRT_COMPOSITE_CMAP,
+        get_binned_cmap_hex_list,
+    )
+
+    composite_palette = get_binned_cmap_hex_list(
+        IRT_COMPOSITE_CMAP, nlevels=DEFAULT_CHOROPLETH_NLEVELS
+    )
+    assert legend_calls
+    assert legend_calls[-1]["nlevels"] == DEFAULT_CHOROPLETH_NLEVELS
+    assert legend_calls[-1]["nticks"] == DEFAULT_CHOROPLETH_NLEVELS + 1
+    for color in composite_palette:
+        assert color in legend_html, f"landing legend missing composite class {color}"
+    for stale in get_binned_cmap_hex_list("YlOrRd", nlevels=15):
+        if stale not in composite_palette:
+            assert stale not in legend_html
 
 
 def test_build_block_map_frame_merges_scores_and_sorts_blocks() -> None:

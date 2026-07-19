@@ -8,7 +8,9 @@ from india_resilience_tool.app.map_pipeline import (
     _build_nonspatial_details_source_df,
     _filter_frame_by_selection_value,
     _filter_master_frame_for_geometry_merge,
+    _resolve_map_color_domain,
     _stack_legend_blocks,
+    _uses_fixed_class_scale,
     DOMAIN_CMAP_FAMILY,
     blocked_drilldown_message,
     details_require_geometry,
@@ -157,6 +159,49 @@ def test_filter_master_frame_for_geometry_merge_scopes_block_district_shards() -
     )
 
     assert out["block"].tolist() == ["Shaikpet", "Amberpet"]
+
+
+def test_resolve_map_color_domain_keeps_baseline_deltas_data_driven() -> None:
+    assert _resolve_map_color_domain(
+        variable_slug="composite_heat_risk",
+        use_fixed_class_scale=False,
+        baseline_mode_active=True,
+        vmin_default=-2.0,
+        vmax_default=8.0,
+        class_labels={},
+    ) == (-2.0, 8.0)
+
+    assert _resolve_map_color_domain(
+        variable_slug="composite_heat_risk",
+        use_fixed_class_scale=False,
+        baseline_mode_active=False,
+        vmin_default=-2.0,
+        vmax_default=8.0,
+        class_labels={},
+    ) == (0.0, 100.0)
+
+
+def test_fixed_class_scale_is_structurally_exclusive_from_baseline_domain() -> None:
+    cfg = {
+        "slug": "water_scarcity_percapita",
+        "class_labels": {1: "No Stress", 2: "Stress", 3: "Scarcity", 4: "Absolute scarcity"},
+        "class_display_mode": "label_with_score",
+        "supports_baseline_comparison": True,
+    }
+
+    assert _uses_fixed_class_scale("water_scarcity_percapita", cfg)
+    assert _resolve_map_color_domain(
+        variable_slug="water_scarcity_percapita",
+        use_fixed_class_scale=True,
+        baseline_mode_active=True,
+        vmin_default=-2.0,
+        vmax_default=8.0,
+        class_labels=cfg["class_labels"],
+    ) == (1.0, 4.0)
+
+    from india_resilience_tool.app.ribbon import _supports_baseline_comparison
+
+    assert not _supports_baseline_comparison(cfg)
 
 
 def test_stack_legend_blocks_keeps_both_legend_fragments() -> None:

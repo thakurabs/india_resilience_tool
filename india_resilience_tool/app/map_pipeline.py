@@ -224,6 +224,26 @@ def _uses_fixed_class_scale(variable_slug: str, varcfg: Mapping[str, Any]) -> bo
     return mode in ("label_with_score", "label_only") and bool(varcfg.get("class_labels"))
 
 
+def _resolve_map_color_domain(
+    *,
+    variable_slug: str,
+    use_fixed_class_scale: bool,
+    baseline_mode_active: bool,
+    vmin_default: float,
+    vmax_default: float,
+    class_labels: Mapping[int, str],
+) -> tuple[float, float]:
+    """Return the raw color domain before colormap-family specific adjustments."""
+    if use_fixed_class_scale:
+        class_codes = sorted(class_labels)
+        return (float(class_codes[0]), float(class_codes[-1])) if class_codes else (1.0, 5.0)
+    if baseline_mode_active:
+        return float(vmin_default), float(vmax_default)
+    if is_dashboard_bundle_slug(variable_slug):
+        return 0.0, 100.0
+    return float(vmin_default), float(vmax_default)
+
+
 def _stack_legend_blocks(primary_html: str, overlay_html: str, *, map_height: int) -> str:
     """Pair the choropleth legend and active overlay legend in one legend column."""
     return f"""
@@ -859,7 +879,12 @@ def build_map_and_rankings(
 
     # --- Decide which column the map will actually show ---
     map_value_col = metric_col  # default: absolute values
-    supports_baseline_comparison = bool(varcfg.get("supports_baseline_comparison", True))
+    use_fixed_class_scale = _uses_fixed_class_scale(variable_slug, varcfg)
+    class_labels = {
+        int(key): str(value)
+        for key, value in dict(varcfg.get("class_labels") or {}).items()
+    } if use_fixed_class_scale else {}
+    supports_baseline_comparison = bool(varcfg.get("supports_baseline_comparison", True)) and not use_fixed_class_scale
     baseline_map_mode_label = (
         "Change from baseline"
         if str(varcfg.get("source_type") or "").strip().lower() == "external"
@@ -877,6 +902,9 @@ def build_map_and_rankings(
             map_mode = "Absolute value"
             st.session_state["map_mode"] = map_mode
             map_value_col = metric_col
+    # NOTE: compute this only after the missing-baseline fallback above mutates
+    # map_mode; otherwise absolute values can inherit a stale diverging delta scale.
+    baseline_mode_active = supports_baseline_comparison and map_mode == baseline_map_mode_label
 
     # --- Compute rank/percentile/risk class per state for tooltip quick-glance ---
     with perf_section("map: compute rank + risk class"):
@@ -923,11 +951,6 @@ def build_map_and_rankings(
         render_perf_panel_safe()
         st.stop()
 
-    use_fixed_class_scale = _uses_fixed_class_scale(variable_slug, varcfg)
-    class_labels = {
-        int(key): str(value)
-        for key, value in dict(varcfg.get("class_labels") or {}).items()
-    } if use_fixed_class_scale else {}
     display_units, display_scale = get_metric_display_meta(
         metric_slug=variable_slug,
         units=str(varcfg.get("unit") or varcfg.get("units") or "").strip(),
@@ -938,25 +961,25 @@ def build_map_and_rankings(
         scale_vals,
         display_scale=display_scale,
     )
-    use_composite_bundle_scale = is_dashboard_bundle_slug(variable_slug) and not use_fixed_class_scale
+    use_composite_bundle_scale = (
+        is_dashboard_bundle_slug(variable_slug)
+        and not use_fixed_class_scale
+        and not baseline_mode_active
+    )
 
-    if use_fixed_class_scale:
-        # Derive the class range from the metric's own labels (min..max code), so
-        # 1-based scarcity (1..4) and 0-based deterioration (0..3) both render correctly.
-        _class_codes = sorted(class_labels)
-        vmin, vmax = (float(_class_codes[0]), float(_class_codes[-1])) if _class_codes else (1.0, 5.0)
-    elif use_composite_bundle_scale:
-        vmin, vmax = 0.0, 100.0
-    else:
-        vmin, vmax = float(vmin_default), float(vmax_default)
+    vmin, vmax = _resolve_map_color_domain(
+        variable_slug=variable_slug,
+        use_fixed_class_scale=use_fixed_class_scale,
+        baseline_mode_active=baseline_mode_active,
+        vmin_default=vmin_default,
+        vmax_default=vmax_default,
+        class_labels=class_labels,
+    )
 
     # Choose colormap: diverging for baseline-change; the multi-hue composite
     # ramp for composite bundle scores; the metric's SDG-anchored domain ramp
     # for all other metrics.
-    # NOTE: test map_mode here, not a boolean hoisted above the baseline lookup —
-    # the missing-baseline fallback resets map_mode to "Absolute value", and a
-    # stale flag would render absolute values on a zero-anchored diverging ramp.
-    if supports_baseline_comparison and map_mode == baseline_map_mode_label:
+    if baseline_mode_active:
         cmap_name = "RdBu_r"  # blue-negative, red-positive
         # Anchor the domain on zero so the ramp's neutral midpoint marks no change.
         vmin, vmax = symmetric_diverging_range(vmin, vmax)

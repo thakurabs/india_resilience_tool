@@ -21,6 +21,7 @@ from india_resilience_tool.app.dashboard_bundle_runtime import (
 )
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.help_text import RIBBON_HELP_MD, help_md_to_plain_text
+from india_resilience_tool.app.map_pipeline import _uses_fixed_class_scale
 from india_resilience_tool.app.master_cache import make_load_master_and_schema_fn
 from india_resilience_tool.config.paths import resolve_processed_root as resolve_legacy_processed_root
 from india_resilience_tool.config.constants import SCENARIO_HELP_MD, SCENARIO_UI_LABEL
@@ -108,7 +109,11 @@ def _supported_statistics(varcfg: Optional[dict]) -> list[str]:
 
 
 def _supports_baseline_comparison(varcfg: Optional[dict]) -> bool:
-    return bool((varcfg or {}).get("supports_baseline_comparison", True))
+    cfg = varcfg or {}
+    return bool(cfg.get("supports_baseline_comparison", True)) and not _uses_fixed_class_scale(
+        str(cfg.get("slug") or ""),
+        cfg,
+    )
 
 
 def _metric_rebuild_command(varcfg: Optional[dict], *, level: str) -> Optional[str]:

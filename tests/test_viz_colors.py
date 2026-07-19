@@ -119,7 +119,10 @@ def test_irt_ramps_hold_their_sdg_anchor_hue() -> None:
 
     for name, anchor in IRT_RAMP_ANCHORS.items():
         anchor_hue = hue_deg(anchor)
-        for h in get_binned_cmap_hex_list(name, nlevels=7)[2:6]:
+        ramp = get_binned_cmap_hex_list(name, nlevels=7)
+        # Saturated middle/dark classes only — skip the pale low end, where the
+        # hue angle is numerically unstable at near-zero chroma.
+        for h in ramp[len(ramp) // 3 : -1]:
             diff = abs(hue_deg(h) - anchor_hue) % 360
             diff = min(diff, 360 - diff)
             assert diff <= 6.0, f"{name}: class {h} hue off anchor by {diff:.1f} deg"
@@ -128,14 +131,51 @@ def test_irt_ramps_hold_their_sdg_anchor_hue() -> None:
 def test_get_binned_cmap_hex_list_clips_sequential_top_not_diverging() -> None:
     # Sequential ramps drop the near-black top (CHG-0252); diverging ramps keep
     # their full symmetric range so the midpoint stays neutral.
-    full_reds = get_cmap_hex_list("Reds", nsteps=7)
-    binned_reds = get_binned_cmap_hex_list("Reds", nlevels=7)
-    assert binned_reds[0] == full_reds[0]
-    assert binned_reds[-1] != full_reds[-1]
+    import matplotlib as mpl
+    import matplotlib.colors as mcolors
 
-    full_rdbu = get_cmap_hex_list("RdBu_r", nsteps=7)
+    raw_reds = [mcolors.to_hex(mpl.colormaps.get_cmap("Reds")(i / 6)) for i in range(7)]
+    binned_reds = get_binned_cmap_hex_list("Reds", nlevels=7)
+    assert binned_reds[0] == raw_reds[0]
+    assert binned_reds[-1] != raw_reds[-1]
+    assert binned_reds[-1] != mcolors.to_hex(mpl.colormaps.get_cmap("Reds")(1.0))
+
+    raw_rdbu = [mcolors.to_hex(mpl.colormaps.get_cmap("RdBu_r")(i / 6)) for i in range(7)]
     binned_rdbu = get_binned_cmap_hex_list("RdBu_r", nlevels=7)
-    assert binned_rdbu == full_rdbu
+    assert binned_rdbu == raw_rdbu
+
+
+def test_irt_cmap_names_work_for_gradients_and_legacy_fillcolor() -> None:
+    from india_resilience_tool.viz.colors import IRT_COMPOSITE_CMAP
+
+    composite = get_cmap_hex_list(IRT_COMPOSITE_CMAP, nsteps=9)
+    assert len(composite) == 9
+    assert all(color.startswith("#") for color in composite)
+
+    html = build_vertical_gradient_legend_html(
+        pretty_metric_label="Composite",
+        vmin=0.0,
+        vmax=100.0,
+        cmap_name=IRT_COMPOSITE_CMAP,
+    )
+    assert "Composite" in html
+
+    df = pd.DataFrame({"x": [0.0, 50.0, 100.0, None]})
+    out = apply_fillcolor(df, "x", vmin=0.0, vmax=100.0, cmap_name="irt:heat")
+    assert out.loc[3, "fillColor"] == NO_DATA_FILL_HEX
+    assert all(str(out.loc[i, "fillColor"]).startswith("#") for i in (0, 1, 2))
+
+
+def test_sdg_anchored_ramp_handles_single_and_clamped_multi_step() -> None:
+    from india_resilience_tool.viz.colors import _sdg_anchored_ramp
+
+    one = _sdg_anchored_ramp("#ffffee", 1)
+    assert len(one) == 1
+    assert one[0].startswith("#")
+
+    five = _sdg_anchored_ramp("#ffffee", 5)
+    assert len(five) == 5
+    assert all(color.startswith("#") for color in five)
 
 
 def test_build_binned_legend_block_contains_min_max_and_title() -> None:
@@ -210,3 +250,62 @@ def test_build_categorical_legend_block_contains_labels_and_title() -> None:
     assert "Flood Severity Index (RP-100)" in html
     assert "VeryLow" in html
     assert "Extreme" in html
+
+
+def test_symmetric_diverging_range_anchors_midpoint_on_zero() -> None:
+    from india_resilience_tool.viz.colors import symmetric_diverging_range
+
+    # The defect: a data-driven delta range like -2..+8 puts the diverging
+    # ramp's neutral midpoint at +3, so zero-change units render cool.
+    vmin, vmax = symmetric_diverging_range(-2.0, 8.0)
+    assert (vmin, vmax) == (-8.0, 8.0)
+    assert (vmin + vmax) / 2.0 == 0.0
+
+    # Largest absolute bound wins regardless of which side it is on.
+    assert symmetric_diverging_range(-9.0, 3.0) == (-9.0, 9.0)
+    # Single-signed ranges still straddle zero.
+    assert symmetric_diverging_range(1.0, 4.0) == (-4.0, 4.0)
+
+
+def test_symmetric_diverging_range_handles_non_finite_and_zero() -> None:
+    import math
+
+    from india_resilience_tool.viz.colors import symmetric_diverging_range
+
+    # One finite bound is preserved as the magnitude.
+    assert symmetric_diverging_range(float("nan"), 5.0) == (-5.0, 5.0)
+    assert symmetric_diverging_range(-6.0, math.inf) == (-6.0, 6.0)
+    # Degenerate cases fall back to a unit domain rather than collapsing.
+    assert symmetric_diverging_range(0.0, 0.0) == (-1.0, 1.0)
+    assert symmetric_diverging_range(float("nan"), float("nan")) == (-1.0, 1.0)
+
+
+def test_zero_gets_the_neutral_class_on_a_symmetric_delta_domain() -> None:
+    # End-to-end intent of CHG-0277: apply the anchoring step to a realistic
+    # asymmetric delta range, then assert 0.0 lands on the ramp's middle class.
+    # Both halves matter — on the raw -2..+8 domain, 0.0 is not the midpoint.
+    from india_resilience_tool.viz.colors import (
+        DEFAULT_CHOROPLETH_NLEVELS,
+        get_binned_cmap_hex_list,
+        symmetric_diverging_range,
+    )
+
+    vmin, vmax = symmetric_diverging_range(-2.0, 8.0)
+    assert (vmin, vmax) == (-8.0, 8.0)
+
+    gdf = pd.DataFrame({"delta": [-8.0, 0.0, 8.0]})
+    out = apply_fillcolor_binned(
+        gdf,
+        "delta",
+        vmin,
+        vmax,
+        cmap_name="RdBu_r",
+        nlevels=DEFAULT_CHOROPLETH_NLEVELS,
+    )
+
+    palette = get_binned_cmap_hex_list("RdBu_r", nlevels=DEFAULT_CHOROPLETH_NLEVELS)
+    neutral = palette[DEFAULT_CHOROPLETH_NLEVELS // 2]
+    colors = list(out["fillColor"])
+    assert colors[1].lower() == neutral.lower()
+    # ...and the signed extremes still take opposite ends of the ramp.
+    assert colors[0].lower() != colors[2].lower()
