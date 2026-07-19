@@ -1026,17 +1026,6 @@ def _build_landing_map_artifacts(
             localize=True,
             sticky=True,
         )
-        fc = _selection_to_feature_collection(
-            display_gdf,
-            property_columns=(
-                "__state_key",
-                "state_name",
-                "shapeName",
-                "bundle_score_display",
-                "score_band",
-                "fillColor",
-            ),
-        )
         selected_state_for_fit = "All"
         selected_district_for_fit = "All"
         reference_fc = None
@@ -1057,21 +1046,6 @@ def _build_landing_map_artifacts(
             aliases=["Block", "District", "Bundle score", "Risk band"],
             localize=True,
             sticky=True,
-        )
-        fc = _selection_to_feature_collection(
-            display_gdf,
-            property_columns=(
-                "__state_key",
-                "__district_key",
-                "__block_key",
-                "__bkey",
-                "block_name",
-                "district_name",
-                "state_name",
-                "bundle_score_display",
-                "score_band",
-                "fillColor",
-            ),
         )
         selected_state_for_fit = str(selected_state or "All")
         selected_district_for_fit = str(selected_district or "All")
@@ -1112,18 +1086,6 @@ def _build_landing_map_artifacts(
             localize=True,
             sticky=True,
         )
-        fc = _selection_to_feature_collection(
-            display_gdf,
-            property_columns=(
-                "__state_key",
-                "__district_key",
-                "district_name",
-                "state_name",
-                "bundle_score_display",
-                "score_band",
-                "fillColor",
-            ),
-        )
         selected_state_for_fit = str(selected_state or "All")
         selected_district_for_fit = "All"
         layer_name = "Districts"
@@ -1160,6 +1122,8 @@ def _build_landing_map_artifacts(
         cmap_name=IRT_COMPOSITE_CMAP,
         nlevels=DEFAULT_CHOROPLETH_NLEVELS,
     )
+    # Serialize once, here — after fill colors exist. The property superset below
+    # covers every focus level, so per-branch builds above would only be discarded.
     fc = _selection_to_feature_collection(
         display_gdf,
         property_columns=(
