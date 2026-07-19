@@ -269,9 +269,6 @@ def run_app() -> None:
         color_slider_placeholder = st.empty()
         st.markdown("---")
 
-        master_controls_placeholder = st.empty()
-        st.markdown("---")
-
         st.checkbox(
             "Show performance timings",
             key="perf_enabled",
@@ -546,33 +543,7 @@ def run_app() -> None:
     map_mode = ribbon_ctx.map_mode
     metric_col = ribbon_ctx.metric_col
     _ribbon_ready = ribbon_ctx.ribbon_ready
-    rebuild_master_csv_if_needed = ribbon_ctx.rebuild_master_csv_if_needed
     _load_master_and_schema = ribbon_ctx.load_master_and_schema_fn
-
-    # -------------------------
-    # Master controls (sidebar)
-    # -------------------------
-    with master_controls_placeholder.container():
-        st.markdown("#### Master CSV controls")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            auto_check = st.button("Check / Rebuild master (auto)", key="btn_auto_check")
-        with col_b:
-            force_btn = st.button("Rebuild now", key="btn_force_rebuild")
-
-    if auto_check:
-        ok, msg = rebuild_master_csv_if_needed(force=False, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON)
-        if ok:
-            st.success("Master CSV rebuilt or already up-to-date.")
-        else:
-            st.info(f"Master CSV status: {msg}")
-
-    if force_btn:
-        ok, msg = rebuild_master_csv_if_needed(force=True, attach_centroid_geojson=ATTACH_DISTRICT_GEOJSON)
-        if ok:
-            st.success("Master CSV force-rebuilt.")
-        else:
-            st.error(f"Forced rebuild failed: {msg}")
 
     # Sync pending selections
     if "pending_selected_state" in st.session_state:

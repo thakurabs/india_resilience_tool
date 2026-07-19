@@ -808,7 +808,7 @@ def render_metric_ribbon(
                 else:
                     st.error(
                         f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
-                        f"Click 'Rebuild now' in the sidebar under 'Master dataset'."
+                        "Run `python -m tools.pipeline.build_master_metrics` to rebuild admin masters, then rerun the dashboard."
                     )
                 render_perf_panel_safe()
                 st.stop()
