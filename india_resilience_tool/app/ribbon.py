@@ -443,7 +443,7 @@ def render_metric_ribbon(
     - Preserves placeholder-first selection behavior.
     """
     # Force deliberate choices for ribbon controls
-    for k in ("selected_pillar", "selected_bundle", "selected_var", "sel_scenario", "sel_period", "sel_stat"):
+    for k in ("selected_pillar", "selected_bundle", "selected_var", "sel_scenario", "sel_period", "sel_stat", "map_mode"):
         st.session_state.setdefault(k, sel_placeholder)
 
     # Bound once a metric is selected (safe defaults otherwise)
@@ -570,7 +570,6 @@ def render_metric_ribbon(
             selected_bundle = st.selectbox(
                 "Domain",
                 options=domain_options,
-                index=domain_options.index(cur_bundle),
                 key="selected_bundle",
                 label_visibility="visible",
                 disabled=domain_disabled,
@@ -621,7 +620,6 @@ def render_metric_ribbon(
             selected_var = st.selectbox(
                 "Metric",
                 options=metric_options,
-                index=metric_options.index(cur_var) if cur_var in metric_options else 0,
                 key="selected_var",
                 label_visibility="visible",
                 format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
@@ -874,7 +872,6 @@ def render_metric_ribbon(
             sel_scenario = st.selectbox(
                 "Scenario",
                 options=scenario_options,
-                index=scenario_options.index(cur_scn),
                 key="sel_scenario",
                 label_visibility="visible",
                 disabled=scenario_disabled,
@@ -929,7 +926,6 @@ def render_metric_ribbon(
             sel_period = st.selectbox(
                 "Period",
                 options=period_options,
-                index=period_options.index(cur_per),
                 key="sel_period",
                 label_visibility="visible",
                 disabled=period_disabled,
@@ -955,7 +951,6 @@ def render_metric_ribbon(
             sel_stat = st.selectbox(
                 "Statistic",
                 options=stat_options,
-                index=stat_options.index(cur_stat),
                 key="sel_stat",
                 label_visibility="visible",
                 disabled=stat_disabled,
@@ -989,7 +984,6 @@ def render_metric_ribbon(
             map_mode = st.selectbox(
                 "Map mode",
                 options=map_mode_options,
-                index=map_mode_options.index(cur_map_mode),
                 key="map_mode",
                 label_visibility="visible",
                 disabled=(metric_ready and map_mode_options == ["Absolute value"]),
@@ -1031,10 +1025,13 @@ def render_metric_ribbon(
             # writes land *before* runtime.py syncs them, letting a reset apply to
             # the same run's map build instead of the next interaction.
             if st.button("⟲ Reset View", key="reset_map_view", use_container_width=True):
+                from india_resilience_tool.app.state import reset_district_option_state
+
                 st.session_state["pending_selected_state"] = "All"
                 st.session_state["pending_selected_district"] = "All"
                 st.session_state["crosswalk_overlay"] = None
                 st.session_state["map_reset_requested"] = True
+                reset_district_option_state(st.session_state)
 
     sel_metric = str(st.session_state.get("registry_metric", registry_metric) or "").strip()
     metric_col: Optional[str] = None

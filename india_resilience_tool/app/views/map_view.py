@@ -315,8 +315,17 @@ def _resolve_national_bounds(
             [float(fallback[1][0]), float(fallback[1][1])]]
 
 
-def attach_map_view_controls(folium_map: Any, national_bounds: list[list[float]]) -> None:
+def attach_map_view_controls(
+    folium_map: Any,
+    national_bounds: list[list[float]],
+    *,
+    max_bounds: Optional[list[list[float]]] = None,
+) -> None:
     """Attach the top-right control cluster: zoom, fullscreen, and fit-to-India.
+
+    When ``max_bounds`` is given, panning is clamped to it via ``map.setMaxBounds``
+    inside the same MacroElement (figure-level script injection is dropped by
+    streamlit-folium -- see below).
 
     The control MUST be a ``MacroElement`` child of the map, not figure-level HTML or
     script: streamlit-folium rebuilds the page JS by walking the map's children
@@ -343,6 +352,9 @@ def attach_map_view_controls(folium_map: Any, national_bounds: list[list[float]]
         (function () {
             var map = {{ this._parent.get_name() }};
             var nationalBounds = {{ this.national_bounds|tojson }};
+            var maxBounds = {{ this.max_bounds|tojson }};
+
+            if (maxBounds) { map.setMaxBounds(maxBounds); }
 
             L.control.zoom({ position: 'topright' }).addTo(map);
 
@@ -497,6 +509,12 @@ def attach_map_view_controls(folium_map: Any, national_bounds: list[list[float]]
     )
     control.national_bounds = [[float(national_bounds[0][0]), float(national_bounds[0][1])],
                                [float(national_bounds[1][0]), float(national_bounds[1][1])]]
+    control.max_bounds = (
+        [[float(max_bounds[0][0]), float(max_bounds[0][1])],
+         [float(max_bounds[1][0]), float(max_bounds[1][1])]]
+        if max_bounds is not None
+        else None
+    )
     folium_map.add_child(control)
 
 
@@ -561,26 +579,13 @@ def build_base_choropleth_map_with_geojson_layer(
             row_state = adm1[adm1["shapeName"].astype(str).str.strip() == selected_state]
             if not row_state.empty:
                 b = row_state.iloc[0].geometry.bounds
-                fit_bounds = [[b[1], b[0]], [b[3], b[2]]]
-                _name = m.get_name()
-                bounds_js = f"<script>var {_name} = {_name}; {_name}.fitBounds({fit_bounds});</script>"
-                m.get_root().html.add_child(folium.Element(bounds_js))
+                m.fit_bounds([[b[1], b[0]], [b[3], b[2]]])
         elif selected_state == "All":
             m.fit_bounds(national_bounds, padding=(24, 24))
     except Exception:
         pass
 
-    # Clamp panning to India-ish bounds (legacy)
-    try:
-        _name = m.get_name()
-        bounds_js = (
-            f"<script>var {_name} = {_name}; {_name}.setMaxBounds({bounds_latlon});</script>"
-        )
-        m.get_root().html.add_child(folium.Element(bounds_js))
-    except Exception:
-        pass
-
-    attach_map_view_controls(m, national_bounds)
+    attach_map_view_controls(m, national_bounds, max_bounds=bounds_latlon)
 
     def _style_fn(feature: dict) -> dict:
         props = (feature or {}).get("properties", {}) if isinstance(feature, dict) else {}
@@ -1094,6 +1099,49 @@ def find_block_at_coordinates(
     return None, None, None
 
 
+def resolve_clicked_state_for_navigation(
+    *,
+    returned: Optional[Mapping[str, Any]],
+    merged: Optional[Any],
+    level: str,
+    clicked_district: Optional[str],
+    clicked_state: Optional[str],
+    normalize_fn: Callable[[str], str],
+) -> Optional[str]:
+    """Resolve the state for a click-driven navigation when the payload lacks one.
+
+    A click at state="All" can carry only a district name, which is ambiguous
+    for duplicated district names. When ``clicked_state`` is missing or "All",
+    fall back to the click coordinates and return the coordinate-derived state
+    only if the coordinate-derived district matches ``clicked_district`` under
+    ``normalize_fn`` (same guard as the add-to-portfolio fallback). Returns
+    ``clicked_state`` unchanged when it already names a concrete state, and
+    None when no coordinate resolution is possible.
+    """
+    state_norm = str(clicked_state or "").strip()
+    if state_norm and state_norm != "All":
+        return clicked_state
+
+    district_norm = str(clicked_district or "").strip()
+    if not district_norm or merged is None or not returned:
+        return None
+
+    lat, lon = extract_click_coordinates(returned)
+    if lat is None or lon is None:
+        return None
+
+    if str(level).strip().lower() == "block":
+        _block, coord_district, coord_state = find_block_at_coordinates(merged, lat, lon)
+    else:
+        coord_district, coord_state = find_district_at_coordinates(merged, lat, lon)
+
+    if not coord_district or not coord_state:
+        return None
+    if normalize_fn(coord_district) == normalize_fn(district_norm):
+        return coord_state
+    return None
+
+
 def find_basin_at_coordinates(
     merged: Any,
     lat: float,
@@ -1157,8 +1205,13 @@ def add_portfolio_legend_to_map(
 ) -> None:
     """
     Add a legend item indicating portfolio units.
+
+    Attached as a bottomleft Leaflet control via a map-child MacroElement:
+    figure-level HTML (`get_root().html`) is silently dropped by
+    streamlit-folium -- see `attach_legend_card_control` in `map_pipeline.py`.
     """
-    import folium
+    from branca.element import MacroElement
+    from jinja2 import Template
 
     if portfolio_count == 0:
         return
@@ -1173,10 +1226,6 @@ def add_portfolio_legend_to_map(
 
     legend_html = f"""
     <div style="
-        position: fixed;
-        bottom: 50px;
-        left: 10px;
-        z-index: 1000;
         background: white;
         padding: 8px 12px;
         border-radius: 4px;
@@ -1194,7 +1243,24 @@ def add_portfolio_legend_to_map(
         </div>
     </div>
     """
-    m.get_root().html.add_child(folium.Element(legend_html))
+
+    legend_control = MacroElement()
+    legend_control._name = "IrtPortfolioLegendControl"
+    legend_control._template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        var {{ this.get_name() }} = L.control({position: 'bottomleft'});
+        {{ this.get_name() }}.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'irt-portfolio-legend-control');
+            div.innerHTML = {{ this.legend_html|tojson }};
+            return div;
+        };
+        {{ this.get_name() }}.addTo({{ this._parent.get_name() }});
+        {% endmacro %}
+        """
+    )
+    legend_control.legend_html = legend_html
+    m.add_child(legend_control)
 
 
 def render_map_view(
@@ -1364,6 +1430,9 @@ def render_map_view(
         )
         if map_key_suffix:
             map_key = f"{map_key}_{map_key_suffix}"
+        # Reset View bumps this nonce (runtime.py) so st_folium remounts and
+        # drops its retained pan/zoom and stale click payload (CHG-0281).
+        map_key = f"{map_key}_r{int(st.session_state.get('map_key_nonce', 0))}"
         st.markdown(
             (
                 f'<div class="irt-responsive-map-marker" data-map-key="{map_key}" '

@@ -340,3 +340,71 @@ def test_legend_card_control_survives_streamlit_folium_extraction() -> None:
     assert "irt-map-legend-control" in js
     assert "irt-compact-map-legend" in js
     assert "L.control({position: 'bottomright'})" in js
+
+
+def test_map_view_controls_survive_extraction_with_max_bounds() -> None:
+    # Regression guard (CHG-0278): the pan clamp used to ride a figure-level
+    # get_root().html script that streamlit-folium silently drops. It now lives
+    # inside the IrtMapViewControls MacroElement and must appear in the JS
+    # string st_folium ships, alongside the existing control cluster markers.
+    import pytest
+
+    folium = pytest.importorskip("folium")
+    streamlit_folium = pytest.importorskip("streamlit_folium")
+
+    from india_resilience_tool.app.views.map_view import attach_map_view_controls
+
+    m = folium.Map(location=[22.5, 80.0], zoom_start=5)
+    attach_map_view_controls(
+        m,
+        [[6.0, 68.0], [37.5, 97.5]],
+        max_bounds=[[5.0, 65.0], [45.0, 100.0]],
+    )
+    m.get_root().render()
+    m.render()
+
+    js = streamlit_folium._get_map_string(m)
+    assert "setMaxBounds" in js
+    assert "[[5.0, 65.0], [45.0, 100.0]]" in js
+    assert "irt-map-view-controls" in js
+    assert "Fit to India" in js
+    assert "Toggle fullscreen" in js
+
+
+def test_portfolio_legend_survives_streamlit_folium_extraction() -> None:
+    # Regression guard (CHG-0278): the portfolio legend used to attach via
+    # get_root().html, which streamlit-folium drops. It must now be a
+    # bottomleft L.control MacroElement in the map's child tree.
+    import pytest
+
+    folium = pytest.importorskip("folium")
+    streamlit_folium = pytest.importorskip("streamlit_folium")
+
+    from india_resilience_tool.app.views.map_view import add_portfolio_legend_to_map
+
+    m = folium.Map(location=[22.5, 80.0], zoom_start=5)
+    add_portfolio_legend_to_map(m, 3, level="district")
+    m.get_root().render()
+    m.render()
+
+    js = streamlit_folium._get_map_string(m)
+    assert "irt-portfolio-legend-control" in js
+    assert "In portfolio (3 districts)" in js
+    assert "L.control({position: 'bottomleft'})" in js
+
+
+def test_portfolio_legend_skipped_for_empty_portfolio() -> None:
+    import pytest
+
+    folium = pytest.importorskip("folium")
+    streamlit_folium = pytest.importorskip("streamlit_folium")
+
+    from india_resilience_tool.app.views.map_view import add_portfolio_legend_to_map
+
+    m = folium.Map(location=[22.5, 80.0], zoom_start=5)
+    add_portfolio_legend_to_map(m, 0, level="district")
+    m.get_root().render()
+    m.render()
+
+    js = streamlit_folium._get_map_string(m)
+    assert "irt-portfolio-legend-control" not in js

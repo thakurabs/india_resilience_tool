@@ -26,14 +26,18 @@ def test_resolve_pre_render_view_falls_back_to_active_view_then_default() -> Non
 
 
 def test_top_view_selector_uses_segmented_control(monkeypatch) -> None:
+    # CHG-0280: the widget no longer passes a `default=` argument; the key is
+    # seeded into session_state before widget creation instead.
     class StubStreamlit:
+        session_state: dict = {}
+
         @staticmethod
-        def segmented_control(label, options, default, key, label_visibility):
+        def segmented_control(label, options, key, label_visibility):
             assert label == "View"
             assert options == (TOP_VIEW_DASHBOARD, TOP_VIEW_DOCS)
-            assert default == TOP_VIEW_DASHBOARD
             assert key == "irt_top_view"
             assert label_visibility == "collapsed"
+            assert StubStreamlit.session_state[key] == TOP_VIEW_DASHBOARD
             return TOP_VIEW_DOCS
 
     import india_resilience_tool.app.runtime as runtime
@@ -44,15 +48,19 @@ def test_top_view_selector_uses_segmented_control(monkeypatch) -> None:
 
 
 def test_top_view_selector_radio_fallback_and_invalid_selection(monkeypatch) -> None:
+    # CHG-0280: no `index=` argument; a stale stored value is coerced back to
+    # the dashboard default before the widget is created.
     class StubStreamlit:
+        session_state: dict = {"irt_top_view": "No longer an option"}
+
         @staticmethod
-        def radio(label, options, index, key, horizontal, label_visibility):
+        def radio(label, options, key, horizontal, label_visibility):
             assert label == "View"
             assert options == (TOP_VIEW_DASHBOARD, TOP_VIEW_DOCS)
-            assert index == 0
             assert key == "irt_top_view"
             assert horizontal is True
             assert label_visibility == "collapsed"
+            assert StubStreamlit.session_state[key] == TOP_VIEW_DASHBOARD
             return "Other"
 
     import india_resilience_tool.app.runtime as runtime

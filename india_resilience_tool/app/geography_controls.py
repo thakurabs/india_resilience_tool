@@ -25,7 +25,15 @@ from india_resilience_tool.app.overlays import (
     ensure_overlay_session_state,
     resolve_overlay_control_states,
 )
+from india_resilience_tool.app.geography import (
+    build_district_options,
+    district_option_label,
+    resolve_district_option,
+    resolve_effective_state,
+    split_district_option,
+)
 from india_resilience_tool.app.sidebar import render_analysis_mode_selector
+from india_resilience_tool.app.state import reset_district_option_state
 from india_resilience_tool.config.variables import VARIABLES
 from india_resilience_tool.data.adm3_loader import (
     get_blocks_for_district as _get_blocks_for_district,
@@ -188,6 +196,7 @@ def _build_admin_geography(
         st.session_state["selected_state"] = restricted_states[0]
         st.session_state["selected_district"] = "All"
         st.session_state["selected_block"] = "All"
+        reset_district_option_state(st.session_state)
     st.session_state["__admin_geography_metric_slug"] = metric_slug
 
     if st.session_state.get("selected_state") not in available_states:
@@ -196,7 +205,6 @@ def _build_admin_geography(
     selected_state = st.selectbox(
         "State",
         options=available_states,
-        index=available_states.index(st.session_state["selected_state"]),
         key="selected_state",
         disabled=(not analysis_ready) or (not metric_ready_for_geography),
     )
@@ -225,23 +233,83 @@ def _build_admin_geography(
             if shard_adm2 is not None:
                 gdf_state_districts = _districts_for_selected_state(shard_adm2, adm1, selected_state)
 
-    districts = ["All"] + sorted(
-        gdf_state_districts["district_name"].astype(str).unique().tolist()
-    )
-    if st.session_state.get("selected_district") not in districts:
-        st.session_state["selected_district"] = "All"
-
     admin_level_from_state = st.session_state.get("admin_level", admin_level)
-    if "Multi" in analysis_mode and str(admin_level_from_state) != "block":
-        st.session_state["selected_district"] = "All"
 
-    selected_district = st.selectbox(
-        "District",
-        options=districts,
-        index=districts.index(st.session_state["selected_district"]),
-        key="selected_district",
-        disabled=not analysis_ready,
-    )
+    if selected_state == "All":
+        # All-India district selector: composite option values disambiguate
+        # duplicated district names ("<district>||<state>"); the canonical
+        # `selected_district` key always holds the bare name and is never a
+        # widget key on this branch (CHG-0279).
+        if (
+            "district_name" in gdf_state_districts.columns
+            and "state_name" in gdf_state_districts.columns
+        ):
+            pair_rows = (
+                gdf_state_districts[["district_name", "state_name"]]
+                .astype(str)
+                .itertuples(index=False, name=None)
+            )
+            district_state_pairs = [(d.strip(), s.strip()) for d, s in pair_rows]
+        else:
+            district_state_pairs = []
+        district_options = ["All"] + build_district_options(district_state_pairs)
+
+        district_state_map: dict[str, list[str]] = {}
+        for district, state in district_state_pairs:
+            if district:
+                district_state_map.setdefault(district, []).append(state)
+
+        if "Multi" in analysis_mode and str(admin_level_from_state) != "block":
+            st.session_state["selected_district"] = "All"
+            reset_district_option_state(st.session_state)
+        if st.session_state.get("selected_district") not in {
+            split_district_option(opt)[0] for opt in district_options
+        }:
+            st.session_state["selected_district"] = "All"
+            reset_district_option_state(st.session_state)
+
+        st.session_state["selected_district_option"] = resolve_district_option(
+            st.session_state, district_options
+        )
+
+        raw_option = st.selectbox(
+            "District",
+            options=district_options,
+            key="selected_district_option",
+            format_func=district_option_label,
+            disabled=not analysis_ready,
+        )
+
+        parsed_district, option_state = split_district_option(raw_option)
+        # Legal write: `selected_district` is not a widget key on this branch.
+        st.session_state["selected_district"] = parsed_district
+        if parsed_district == "All":
+            effective_state = "All"
+        else:
+            effective_state = (
+                option_state
+                or resolve_effective_state(parsed_district, district_state_map)
+                or "All"
+            )
+        st.session_state["_district_effective_state"] = effective_state
+        selected_district = parsed_district
+    else:
+        districts = ["All"] + sorted(
+            gdf_state_districts["district_name"].astype(str).unique().tolist()
+        )
+        if st.session_state.get("selected_district") not in districts:
+            st.session_state["selected_district"] = "All"
+
+        if "Multi" in analysis_mode and str(admin_level_from_state) != "block":
+            st.session_state["selected_district"] = "All"
+
+        selected_district = st.selectbox(
+            "District",
+            options=districts,
+            key="selected_district",
+            disabled=not analysis_ready,
+        )
+        effective_state = selected_state
 
     selected_block = "All"
     if str(admin_level_from_state) == "block":
@@ -251,7 +319,7 @@ def _build_admin_geography(
             block_index_path = optimized_context_path("admin_block_index.parquet", data_dir=data_dir)
             if block_index_path.exists():
                 selector_index = load_admin_block_selector_index(str(block_index_path))
-                selector_key = f"{alias(selected_state)}|{alias(selected_district)}"
+                selector_key = f"{alias(effective_state)}|{alias(selected_district)}"
                 block_options = ["All"] + [str(v) for v in selector_index.get("blocks_by_selector", {}).get(selector_key, [])]
             else:
                 if not adm3_geojson.exists():
@@ -265,7 +333,7 @@ def _build_admin_geography(
                 try:
                     blocks = _get_blocks_for_district(
                         adm3_sidebar,
-                        selected_state,
+                        effective_state,
                         selected_district,
                         normalize_fn=alias,
                     )
@@ -283,7 +351,6 @@ def _build_admin_geography(
         selected_block = st.selectbox(
             "Block",
             options=block_options,
-            index=block_options.index(st.session_state["selected_block"]),
             key="selected_block",
             disabled=not analysis_ready,
         )
@@ -293,7 +360,9 @@ def _build_admin_geography(
     st.session_state["selected_basin"] = "All"
     st.session_state["selected_subbasin"] = "All"
 
-    return selected_state, selected_district, selected_block, gdf_state_districts
+    # Surface the effective state (resolved from a composite option or unique
+    # bare name) as the context's state; the state widget itself stays "All".
+    return effective_state, selected_district, selected_block, gdf_state_districts
 
 
 def render_geography_and_analysis_focus(
@@ -410,16 +479,13 @@ def render_geography_and_analysis_focus(
                         disabled=(not analysis_ready) or (not overlay_state.available),
                     )
                     if overlay_state.category_key and overlay_state.category_choices:
-                        current_category = overlay_state.selected_category or overlay_state.category_choices[0]
-                        index = (
-                            overlay_state.category_choices.index(current_category)
-                            if current_category in overlay_state.category_choices
-                            else 0
-                        )
+                        # ensure_overlay_session_state (called above) has already
+                        # coerced the category key to a valid choice.
+                        if st.session_state.get(overlay_state.category_key) not in overlay_state.category_choices:
+                            st.session_state[overlay_state.category_key] = overlay_state.category_choices[0]
                         st.selectbox(
                             f"{overlay_state.label} category",
                             options=list(overlay_state.category_choices),
-                            index=index,
                             key=overlay_state.category_key,
                             disabled=(not analysis_ready) or (not overlay_state.available),
                         )
@@ -427,7 +493,6 @@ def render_geography_and_analysis_focus(
                         overlay_state.slider_label,
                         min_value=0,
                         max_value=100,
-                        value=int(overlay_state.opacity_pct),
                         step=5,
                         key=overlay_state.opacity_key,
                         disabled=(not analysis_ready) or (not overlay_state.available),

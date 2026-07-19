@@ -155,37 +155,70 @@ def get_current_level(session_state: Optional[MutableMapping[str, Any]] = None) 
     return session_state.get("admin_level", ADMIN_LEVEL_DISTRICT)
 
 
+def reset_level_dependent_state(
+    session_state: Optional[MutableMapping[str, Any]] = None,
+) -> None:
+    """
+    Unconditionally reset all state that depends on the administrative level.
+
+    Resets:
+    - Selected district/block back to "All"
+    - Portfolio lists and multiindex selection/context (items are level-specific)
+    - Cached merged data
+    """
+    if session_state is None:
+        import streamlit as st
+        session_state = st.session_state
+
+    session_state["selected_district"] = "All"
+    session_state["selected_block"] = "All"
+
+    # Clear portfolio when switching levels (level-specific lists)
+    session_state["portfolio_districts"] = []
+    session_state["portfolio_blocks"] = []
+    session_state["portfolio_multiindex_df"] = None
+    session_state["portfolio_multiindex_context"] = None
+    session_state["portfolio_multiindex_selection"] = []
+
+    # Clear merged cache
+    session_state["_merged_cache"] = {}
+
+    reset_district_option_state(session_state)
+
+
+def reset_district_option_state(
+    session_state: MutableMapping[str, Any],
+) -> None:
+    """
+    Clear the auxiliary district-option keys used by the state="All" selector.
+
+    Single canonical reset for `selected_district_option` and
+    `_district_effective_state`; tolerates absent keys.
+    """
+    session_state.pop("selected_district_option", None)
+    session_state.pop("_district_effective_state", None)
+
+
 def set_level(
     session_state: Optional[MutableMapping[str, Any]] = None,
     level: AdminLevel = ADMIN_LEVEL_DISTRICT,
 ) -> None:
     """
     Set the administrative level and reset dependent state.
-    
-    When switching levels, we need to reset:
-    - Selected district/block
-    - Portfolio (since items are level-specific)
-    - Cached merged data
+
+    No-ops when `session_state["admin_level"]` already equals `level`;
+    widget-driven callers that update `admin_level` before calling should use
+    `reset_level_dependent_state` directly.
     """
     if session_state is None:
         import streamlit as st
         session_state = st.session_state
-    
+
     old_level = session_state.get("admin_level", ADMIN_LEVEL_DISTRICT)
-    
+
     if old_level != level:
         session_state["admin_level"] = level
-        session_state["selected_district"] = "All"
-        session_state["selected_block"] = "All"
-
-        # Clear portfolio when switching levels (level-specific lists)
-        session_state["portfolio_districts"] = []
-        session_state["portfolio_blocks"] = []
-        session_state["portfolio_multiindex_df"] = None
-        session_state["portfolio_multiindex_context"] = None
-        
-        # Clear merged cache
-        session_state["_merged_cache"] = {}
+        reset_level_dependent_state(session_state)
 
 
 def get_unit_selection_key(level: AdminLevel) -> str:

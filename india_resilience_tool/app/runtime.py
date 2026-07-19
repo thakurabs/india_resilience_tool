@@ -38,11 +38,16 @@ def _top_view_selector() -> str:
     """Render and return the top-level app branch without mutating other state."""
     import streamlit as st
 
+    # Seed/coerce before widget creation so no default argument is needed
+    # (avoids the double-default Session State API warning).
+    st.session_state.setdefault("irt_top_view", TOP_VIEW_DASHBOARD)
+    if st.session_state["irt_top_view"] not in TOP_VIEW_OPTIONS:
+        st.session_state["irt_top_view"] = TOP_VIEW_DASHBOARD
+
     if hasattr(st, "segmented_control"):
         selected = st.segmented_control(
             "View",
             TOP_VIEW_OPTIONS,
-            default=TOP_VIEW_DASHBOARD,
             key="irt_top_view",
             label_visibility="collapsed",
         )
@@ -50,7 +55,6 @@ def _top_view_selector() -> str:
         selected = st.radio(
             "View",
             TOP_VIEW_OPTIONS,
-            index=0,
             key="irt_top_view",
             horizontal=True,
             label_visibility="collapsed",
@@ -266,13 +270,11 @@ def run_app() -> None:
 
         state_placeholder = st.empty()
         metric_ui_placeholder = st.empty()
-        color_slider_placeholder = st.empty()
         st.markdown("---")
 
         st.checkbox(
             "Show performance timings",
             key="perf_enabled",
-            value=st.session_state.get("perf_enabled", DEBUG),
             help="Per-section timings for the current rerun, plus a compact 'Total ms' line above the map.",
         )
 
@@ -546,10 +548,24 @@ def run_app() -> None:
     _load_master_and_schema = ribbon_ctx.load_master_and_schema_fn
 
     # Sync pending selections
+    _pending_selection_applied = False
     if "pending_selected_state" in st.session_state:
         st.session_state["selected_state"] = st.session_state.pop("pending_selected_state")
+        _pending_selection_applied = True
     if "pending_selected_district" in st.session_state:
         st.session_state["selected_district"] = st.session_state.pop("pending_selected_district")
+        _pending_selection_applied = True
+    if _pending_selection_applied:
+        # Let the district-option seed logic re-derive the widget option from
+        # the new canonical selection instead of overriding it (CHG-0279).
+        from india_resilience_tool.app.state import reset_district_option_state
+
+        reset_district_option_state(st.session_state)
+
+    # Reset View: bump the map key nonce so st_folium remounts, dropping its
+    # retained camera and stale click payload (CHG-0281).
+    if st.session_state.pop("map_reset_requested", False):
+        st.session_state["map_key_nonce"] = int(st.session_state.get("map_key_nonce", 0)) + 1
 
     adm1_for_geography_controls = adm1
     if adm2 is not None:
@@ -612,7 +628,14 @@ def run_app() -> None:
             "block": selected_block,
         }
     elif selected_district != "All":
-        district_row = gdf_state_districts[gdf_state_districts["district_name"] == selected_district]
+        _district_mask = gdf_state_districts["district_name"] == selected_district
+        # Disambiguate duplicated district names using the effective state
+        # resolved by the geography controls (CHG-0279).
+        if selected_state != "All" and "state_name" in gdf_state_districts.columns:
+            _district_mask &= (
+                gdf_state_districts["state_name"].astype(str).map(alias) == alias(selected_state)
+            )
+        district_row = gdf_state_districts[_district_mask]
         if not district_row.empty:
             centroid = district_row.iloc[0].geometry.centroid
             st.session_state["map_center"] = [float(centroid.y), float(centroid.x)]
@@ -766,7 +789,6 @@ def run_app() -> None:
         simplify_tol_adm2=SIMPLIFY_TOL_ADM2,
         simplify_tol_adm3=SIMPLIFY_TOL_ADM3,
         map_height=MAP_HEIGHT,
-        color_slider_placeholder=color_slider_placeholder,
         perf_section=perf_section,
         render_perf_panel_safe=render_perf_panel_safe,
     )

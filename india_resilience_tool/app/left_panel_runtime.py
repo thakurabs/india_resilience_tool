@@ -89,7 +89,11 @@ def render_left_panel(
     import streamlit as st
 
     from india_resilience_tool.app.state import VIEW_MAP, VIEW_RANKINGS
-    from india_resilience_tool.app.views.map_view import render_map_view, render_unit_add_to_portfolio
+    from india_resilience_tool.app.views.map_view import (
+        render_map_view,
+        render_unit_add_to_portfolio,
+        resolve_clicked_state_for_navigation,
+    )
     from india_resilience_tool.app.views.rankings_view import render_rankings_view
     from india_resilience_tool.app.sidebar import render_view_selector
 
@@ -161,6 +165,23 @@ def render_left_panel(
                         merged=merged,
                         level=level,
                     )
+
+            # Nationwide clicks may carry only a district name, which is
+            # ambiguous for duplicated names; resolve the state from the click
+            # coordinates before queuing navigation (CHG-0279 §5a).
+            if (
+                clicked_district
+                and str(clicked_state or "").strip() in {"", "All"}
+                and str(selected_state or "").strip() == "All"
+            ):
+                clicked_state = resolve_clicked_state_for_navigation(
+                    returned=returned,
+                    merged=merged,
+                    level=level,
+                    clicked_district=clicked_district,
+                    clicked_state=clicked_state,
+                    normalize_fn=portfolio_normalize_fn,
+                )
 
             if _queue_pending_map_navigation(
                 session_state=st.session_state,
