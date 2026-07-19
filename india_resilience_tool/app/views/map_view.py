@@ -149,6 +149,11 @@ def _build_responsive_map_resizer_html(
           if (iframe === selfFrame) {{
             return false;
           }}
+          // A fullscreen map is position:fixed and owns its own sizing; forcing the
+          // responsive height onto it would fight the fullscreen styles every tick.
+          if (iframe.classList.contains("irt-map-fullscreen")) {{
+            return false;
+          }}
           const rect = iframe.getBoundingClientRect();
           if (rect.width <= 0) {{
             return false;
@@ -285,6 +290,216 @@ def build_choropleth_map_with_geojson_layer(
     return m
 
 
+def _resolve_national_bounds(
+    *,
+    adm1: Any,
+    fallback: list[list[float]],
+) -> list[list[float]]:
+    """Resolve the national framing box as ``[[south, west], [north, east]]``.
+
+    Prefers the dissolved ADM1 extent so the camera matches the app's own national
+    view. ``fallback`` (the ``bounds_latlon`` pan clamp) is deliberately only a last
+    resort: it is a generous India-ish rectangle (lat 5-45) that is materially taller
+    than India's land extent (~8-37N), so fitting it frames the country small inside
+    a large empty box.
+    """
+    try:
+        tb = adm1.total_bounds  # (minx, miny, maxx, maxy)
+        bounds = [[float(tb[1]), float(tb[0])], [float(tb[3]), float(tb[2])]]
+        if all(v == v for pair in bounds for v in pair):  # reject NaNs
+            if bounds[0][0] < bounds[1][0] and bounds[0][1] < bounds[1][1]:
+                return bounds
+    except Exception:
+        pass
+    return [[float(fallback[0][0]), float(fallback[0][1])],
+            [float(fallback[1][0]), float(fallback[1][1])]]
+
+
+def attach_map_view_controls(folium_map: Any, national_bounds: list[list[float]]) -> None:
+    """Attach the top-right control cluster: zoom, fullscreen, and fit-to-India.
+
+    The control MUST be a ``MacroElement`` child of the map, not figure-level HTML or
+    script: streamlit-folium rebuilds the page JS by walking the map's children
+    (``_generate_leaflet_string``) and silently drops ``get_root().script``. See the
+    same constraint documented on ``attach_legend_card_control`` in ``map_pipeline.py``.
+
+    Leaflet's own zoom control is created here rather than via ``folium.Map(zoom_control=...)``
+    so its corner is set explicitly; the folium kwarg's string form is version-dependent
+    and fails silently to the default top-left corner.
+
+    Fullscreen deliberately does NOT survive a Streamlit rerun -- clicking a district
+    rebuilds the iframe and drops out of fullscreen. Persisting it would require
+    round-tripping through session state on every map interaction; the reset is the
+    accepted tradeoff.
+    """
+    from branca.element import MacroElement
+    from jinja2 import Template
+
+    control = MacroElement()
+    control._name = "IrtMapViewControls"
+    control._template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function () {
+            var map = {{ this._parent.get_name() }};
+            var nationalBounds = {{ this.national_bounds|tojson }};
+
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            var frame = window.frameElement;
+            var savedFrameCss = null;
+            var savedAncestors = [];
+            var savedLegendCss = null;
+            var isFullscreen = false;
+
+            function legendFrame() {
+                // The side legend is a separate components.html iframe rendered under a
+                // conditional, so it is legitimately absent on some layouts -- no-op then.
+                if (!frame || !frame.parentElement) { return null; }
+                var block = frame.closest('[data-testid="stVerticalBlock"]');
+                if (!block) { return null; }
+                var mine = frame.getBoundingClientRect();
+                var found = null;
+                Array.prototype.forEach.call(block.querySelectorAll('iframe'), function (el) {
+                    if (el === frame || found) { return; }
+                    var r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.left >= mine.right - 4) { found = el; }
+                });
+                return found;
+            }
+
+            function neutraliseAncestors() {
+                // position:fixed resolves against the nearest ancestor establishing a
+                // containing block, so any transform/filter/perspective/will-change up
+                // the chain would clip "fullscreen" to the map column instead of the
+                // viewport. Cleared for the duration and restored on exit.
+                savedAncestors = [];
+                for (var el = frame.parentElement; el; el = el.parentElement) {
+                    var cs = window.getComputedStyle(el);
+                    var bf = cs.backdropFilter || cs.webkitBackdropFilter || 'none';
+                    if (cs.transform !== 'none' || cs.filter !== 'none' ||
+                        cs.perspective !== 'none' || bf !== 'none' ||
+                        cs.willChange !== 'auto') {
+                        savedAncestors.push([el, el.style.cssText]);
+                        el.style.transform = 'none';
+                        el.style.filter = 'none';
+                        el.style.perspective = 'none';
+                        el.style.willChange = 'auto';
+                    }
+                }
+            }
+
+            function restoreAncestors() {
+                savedAncestors.forEach(function (pair) { pair[0].style.cssText = pair[1]; });
+                savedAncestors = [];
+            }
+
+            function syncSize() {
+                window.setTimeout(function () {
+                    window.dispatchEvent(new Event('resize'));
+                    if (map && typeof map.invalidateSize === 'function') { map.invalidateSize(); }
+                }, 60);
+            }
+
+            function enter() {
+                if (!frame || isFullscreen) { return; }
+                savedFrameCss = frame.style.cssText;
+                neutraliseAncestors();
+                frame.classList.add('irt-map-fullscreen');
+                frame.style.position = 'fixed';
+                frame.style.top = '0';
+                frame.style.left = '0';
+                frame.style.width = '100vw';
+                frame.style.height = '100vh';
+                frame.style.zIndex = '2147483000';
+                var lf = legendFrame();
+                if (lf) {
+                    savedLegendCss = lf.style.cssText;
+                    lf.style.position = 'fixed';
+                    lf.style.right = '12px';
+                    lf.style.bottom = '12px';
+                    lf.style.zIndex = '2147483001';
+                }
+                isFullscreen = true;
+                syncSize();
+            }
+
+            function exit() {
+                if (!frame || !isFullscreen) { return; }
+                frame.classList.remove('irt-map-fullscreen');
+                frame.style.cssText = savedFrameCss || '';
+                restoreAncestors();
+                var lf = legendFrame();
+                if (lf && savedLegendCss !== null) { lf.style.cssText = savedLegendCss; }
+                savedLegendCss = null;
+                isFullscreen = false;
+                syncSize();
+            }
+
+            function toggle() { if (isFullscreen) { exit(); } else { enter(); } }
+
+            function onEscape(evt) {
+                if (evt.key === 'Escape' && isFullscreen) { exit(); }
+            }
+
+            function onParentEscape(evt) {
+                // Exit-by-rerun leaks this listener: the iframe is destroyed without the
+                // exit path running, and the parent document keeps a closure owned by a
+                // dead frame. Self-remove once the frame is detached.
+                if (!frame || !frame.isConnected) {
+                    window.parent.document.removeEventListener('keydown', onParentEscape);
+                    return;
+                }
+                onEscape(evt);
+            }
+
+            document.addEventListener('keydown', onEscape);
+            try {
+                if (window.parent && window.parent.document !== document) {
+                    window.parent.document.addEventListener('keydown', onParentEscape);
+                }
+            } catch (err) { /* cross-origin parent: iframe-local Escape still works */ }
+
+            var ctl = L.control({ position: 'topright' });
+            ctl.onAdd = function () {
+                var div = L.DomUtil.create('div', 'leaflet-bar irt-map-view-controls');
+
+                var fsBtn = L.DomUtil.create('a', '', div);
+                fsBtn.href = '#';
+                fsBtn.title = 'Toggle fullscreen';
+                fsBtn.setAttribute('role', 'button');
+                fsBtn.textContent = '\\u2921';
+
+                var fitBtn = L.DomUtil.create('a', '', div);
+                fitBtn.href = '#';
+                fitBtn.title = 'Fit to India';
+                fitBtn.setAttribute('role', 'button');
+                fitBtn.textContent = '\\u25a1';
+
+                L.DomEvent.disableClickPropagation(div);
+                L.DomEvent.disableScrollPropagation(div);
+
+                L.DomEvent.on(fsBtn, 'click', function (e) {
+                    L.DomEvent.preventDefault(e);
+                    toggle();
+                    fsBtn.textContent = isFullscreen ? '\\u2715' : '\\u2921';
+                });
+                L.DomEvent.on(fitBtn, 'click', function (e) {
+                    L.DomEvent.preventDefault(e);
+                    map.fitBounds(nationalBounds, { padding: [24, 24] });
+                });
+                return div;
+            };
+            ctl.addTo(map);
+        })();
+        {% endmacro %}
+        """
+    )
+    control.national_bounds = [[float(national_bounds[0][0]), float(national_bounds[0][1])],
+                               [float(national_bounds[1][0]), float(national_bounds[1][1])]]
+    folium_map.add_child(control)
+
+
 def build_base_choropleth_map_with_geojson_layer(
     *,
     fc: Mapping[str, Any],
@@ -316,7 +531,9 @@ def build_base_choropleth_map_with_geojson_layer(
         min_zoom=4,
         max_zoom=12,
         prefer_canvas=True,
-        zoom_control=True,
+        # Zoom control is created explicitly in `attach_map_view_controls` so it
+        # shares the top-right cluster with the fullscreen / fit-India buttons.
+        zoom_control=False,
         dragging=True,
         scrollWheelZoom=True,
     )
@@ -337,6 +554,8 @@ def build_base_choropleth_map_with_geojson_layer(
 
     # Fit state bounds when a state is selected but district is "All";
     # otherwise (national view) fit India's bounds so the country fills the frame.
+    national_bounds = _resolve_national_bounds(adm1=adm1, fallback=bounds_latlon)
+
     try:
         if selected_state != "All" and selected_district == "All":
             row_state = adm1[adm1["shapeName"].astype(str).str.strip() == selected_state]
@@ -347,11 +566,7 @@ def build_base_choropleth_map_with_geojson_layer(
                 bounds_js = f"<script>var {_name} = {_name}; {_name}.fitBounds({fit_bounds});</script>"
                 m.get_root().html.add_child(folium.Element(bounds_js))
         elif selected_state == "All":
-            tb = adm1.total_bounds  # (minx, miny, maxx, maxy)
-            m.fit_bounds(
-                [[float(tb[1]), float(tb[0])], [float(tb[3]), float(tb[2])]],
-                padding=(24, 24),
-            )
+            m.fit_bounds(national_bounds, padding=(24, 24))
     except Exception:
         pass
 
@@ -364,6 +579,8 @@ def build_base_choropleth_map_with_geojson_layer(
         m.get_root().html.add_child(folium.Element(bounds_js))
     except Exception:
         pass
+
+    attach_map_view_controls(m, national_bounds)
 
     def _style_fn(feature: dict) -> dict:
         props = (feature or {}).get("properties", {}) if isinstance(feature, dict) else {}
