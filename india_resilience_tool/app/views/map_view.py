@@ -144,12 +144,16 @@ def _build_responsive_map_resizer_html(
       }}
 
       function findTargetIframes(block, markerTop) {{
+        const resizerTop = selfFrame.getBoundingClientRect().top;
         return Array.from(block.querySelectorAll("iframe")).filter((iframe) => {{
           if (iframe === selfFrame) {{
             return false;
           }}
           const rect = iframe.getBoundingClientRect();
-          return Math.abs(rect.top - markerTop) < 220 && rect.height >= 0;
+          if (rect.width <= 0) {{
+            return false;
+          }}
+          return rect.top >= markerTop - 4 && rect.top <= resizerTop;
         }});
       }}
 
@@ -1146,7 +1150,9 @@ def render_map_view(
         st.markdown(
             (
                 f'<div class="irt-responsive-map-marker" data-map-key="{map_key}" '
-                'style="display:none;"></div>'
+                # `display:none` yields an empty client rect, so the resizer below
+                # would measure a marker top of 0 and target unrelated iframes.
+                'style="height:0;width:0;overflow:hidden;visibility:hidden;"></div>'
             ),
             unsafe_allow_html=True,
         )
