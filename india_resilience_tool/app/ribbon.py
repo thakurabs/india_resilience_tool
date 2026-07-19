@@ -496,9 +496,31 @@ def render_metric_ribbon(
             '<div class="irt-ribbon-body-marker"></div>',
             unsafe_allow_html=True,
         )
-        row1 = st.columns([3.0, 1.8])
-        row2 = st.columns([1.8, 2.2, 1.4])
-        row3 = st.columns([2.4, 1.2, 1.8])
+        # Tighten the ribbon grid without leaking to the rest of the page. The
+        # markers are empty divs, not wrappers, so each rule has to reach its
+        # owning Streamlit block via :has() (same shape as the collapse selector
+        # above); the :not(:has(... nested)) clause pins it to the innermost block.
+        st.markdown(
+            "<style>"
+            # Row gap between the two selectbox rows.
+            "[data-testid='stVerticalBlock']:has(.irt-ribbon-body-marker)"
+            ":not(:has([data-testid='stVerticalBlock'] .irt-ribbon-body-marker))"
+            "{gap:0.35rem !important;}"
+            # Drop the marker div's own block spacing.
+            "[data-testid='stVerticalBlock']:has(.irt-ribbon-body-marker)"
+            ":not(:has([data-testid='stVerticalBlock'] .irt-ribbon-body-marker))"
+            " [data-testid='stMarkdownContainer']:has(.irt-ribbon-body-marker)"
+            "{display:none !important;}"
+            # Chevron: cap its width so it reads as a centred affordance rather
+            # than a full-width bar. Scoped through the toggle marker only.
+            "[data-testid='stVerticalBlock']:has(.irt-ribbon-toggle-marker)"
+            ":not(:has([data-testid='stVerticalBlock'] .irt-ribbon-toggle-marker))"
+            "{gap:0.2rem !important;}"
+            "</style>",
+            unsafe_allow_html=True,
+        )
+        row1 = st.columns(3, gap="medium")
+        row2 = st.columns(3, gap="medium")
         spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
         current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
 
@@ -839,7 +861,7 @@ def render_metric_ribbon(
             default=_fixed_scenario(varcfg) if _is_static_snapshot_metric(varcfg) else sel_placeholder,
         )
 
-        with row2[0]:
+        with row1[2]:
             scenario_help = help_md_to_plain_text(RIBBON_HELP_MD["scenario"])
             if _is_static_snapshot_metric(varcfg):
                 scenario_help = "This metric uses a fixed snapshot selection and does not expose multiple scenarios."
@@ -900,7 +922,7 @@ def render_metric_ribbon(
             default=canonical_period_label(_fixed_period(varcfg)) if _is_static_snapshot_metric(varcfg) else sel_placeholder,
         )
 
-        with row2[1]:
+        with row2[0]:
             period_help = help_md_to_plain_text(RIBBON_HELP_MD["period"])
             if _is_static_snapshot_metric(varcfg):
                 period_help = "This metric uses a fixed data snapshot year and does not expose multi-period climate windows."
@@ -928,7 +950,7 @@ def render_metric_ribbon(
             default=(stat_values[0] if (_is_static_snapshot_metric(varcfg) and stat_values) else sel_placeholder),
         )
 
-        with row2[2]:
+        with row2[1]:
             statistic_help = help_md_to_plain_text(RIBBON_HELP_MD["statistic"])
             sel_stat = st.selectbox(
                 "Statistic",
@@ -958,7 +980,7 @@ def render_metric_ribbon(
             default=("Absolute value" if map_mode_options == ["Absolute value"] else sel_placeholder),
         )
 
-        with row3[0]:
+        with row2[2]:
             map_mode_help = help_md_to_plain_text(RIBBON_HELP_MD["map_mode"])
             if metric_ready and not _supports_baseline_comparison(varcfg):
                 map_mode_help = "This metric only supports absolute-value mapping; baseline change mode is not available."
@@ -980,7 +1002,11 @@ def render_metric_ribbon(
         )
 
     with toggle_ct:
-        _t_left, _t_mid, _t_right = st.columns([1, 0.25, 1])
+        st.markdown(
+            '<div class="irt-ribbon-toggle-marker"></div>',
+            unsafe_allow_html=True,
+        )
+        _t_left, _t_mid, _t_right = st.columns([1, 0.25, 0.55])
         with _t_mid:
             if _ribbon_collapsed:
                 st.button(
@@ -1000,6 +1026,15 @@ def render_metric_ribbon(
                     type="secondary",
                     on_click=_toggle_ribbon_collapsed,
                 )
+        with _t_right:
+            # Rendered here (not in left_panel_runtime) so the pending-selection
+            # writes land *before* runtime.py syncs them, letting a reset apply to
+            # the same run's map build instead of the next interaction.
+            if st.button("⟲ Reset View", key="reset_map_view", use_container_width=True):
+                st.session_state["pending_selected_state"] = "All"
+                st.session_state["pending_selected_district"] = "All"
+                st.session_state["crosswalk_overlay"] = None
+                st.session_state["map_reset_requested"] = True
 
     sel_metric = str(st.session_state.get("registry_metric", registry_metric) or "").strip()
     metric_col: Optional[str] = None

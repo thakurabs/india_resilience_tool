@@ -96,15 +96,8 @@ def render_left_panel(
     returned: Mapping[str, Any] = {}
 
     with col:
-        # Ribbon is shown above; keep only the reset action here (right-aligned)
-        _, reset_col = st.columns([4, 1])
-        with reset_col:
-            if st.button("⟲ Reset View", key="reset_map_view"):
-                st.session_state["pending_selected_state"] = "All"
-                st.session_state["pending_selected_district"] = "All"
-                st.session_state["crosswalk_overlay"] = None
-                st.session_state["map_reset_requested"] = True
-
+        # Ribbon is shown above and now owns the "Reset View" action (rendered
+        # inline with the collapse chevron), so nothing is needed here.
         # Main view selector: Map vs Rankings (replaces tabs)
         view = render_view_selector(label="View", horizontal=True)
 
