@@ -309,6 +309,7 @@ def test_landing_bundle_domains_exclude_jrc_flood_bundle(monkeypatch: pytest.Mon
         "Drought Risk",
         "Extreme Rainfall | Flash Flood Risk",
         "Riverine Flood",
+        "Water Risk",
         "Heat Stress",
         "Cold Risk",
         "Agricultural Risk",
