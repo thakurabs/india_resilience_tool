@@ -975,6 +975,44 @@ def _discover_scopes(metric_root: Path, level: AdminLevel = "district") -> List[
     return _discover_states(metric_root, level)
 
 
+def _scope_name_exists(processed_root: Path, name: str) -> bool:
+    """Return whether ``name`` exists verbatim as a state directory under any metric.
+
+    Deliberately a short-circuiting existence check rather than a directory listing:
+    this exists solely to disambiguate a ``--state`` value that itself contains
+    commas, so one hit answers the question. Enumerating all scope names costs a full
+    walk of every metric root, and validating them via :func:`_looks_like_state_dir`
+    is far worse again — that walks the five-level block tree for every state lacking
+    block data, minutes per metric.
+    """
+    if not name:
+        return False
+    for metric_root in _discover_metric_dirs(processed_root):
+        try:
+            if (metric_root / name).is_dir():
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _parse_state_filter(raw: str, available: Optional[set[str]] = None) -> Optional[List[str]]:
+    """Resolve the ``--state`` CLI value into a list of scope names.
+
+    ``--state`` is documented as comma-separated, but at least one canonical admin
+    state name contains commas ("Dadra, Nagar Haveli, Daman & Diu"). Splitting that
+    on commas yields fragments that match no scope, so the whole string is preferred
+    whenever it names a real scope; otherwise the value is split as documented.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if available and text in available:
+        return [text]
+    parts = [s.strip() for s in text.split(",") if s.strip()]
+    return parts or None
+
+
 # -----------------------------------------------------------------------------
 # Batch mode
 # -----------------------------------------------------------------------------
@@ -988,8 +1026,12 @@ def build_all_master_metrics(
     verbose: bool = True,
     skip_existing: bool = False,
     num_workers: int = 1,
-) -> None:
-    """Build master CSVs for all metrics under processed_root."""
+) -> int:
+    """Build master CSVs for all metrics under processed_root.
+
+    Returns the number of (metric, scope) pairs that matched the active filters, so
+    callers can distinguish real work from a filter that silently matched nothing.
+    """
     variables, metrics_by_slug = _try_import_registries()
 
     metric_dirs = _discover_metric_dirs(processed_root)
@@ -1015,10 +1057,11 @@ def build_all_master_metrics(
 
     if not eligible_slugs:
         print("[BATCH] No eligible metrics found.", file=sys.stderr)
-        return
+        return 0
 
     state_filter_norm = {str(s).strip() for s in state_filter if str(s).strip()} if state_filter else None
     master_filename = get_master_csv_filename(level)
+    matched_scopes = 0
 
     for slug in eligible_slugs:
         metric_root = processed_root / slug
@@ -1031,6 +1074,8 @@ def build_all_master_metrics(
             if verbose:
                 print(f"[BATCH] {slug}: no matching scopes; skipping")
             continue
+
+        matched_scopes += len(scopes)
 
         vcfg = variables.get(slug, {}) or {}
         periods_metric_col = str(vcfg.get("periods_metric_col") or "").strip()
@@ -1068,6 +1113,8 @@ def build_all_master_metrics(
                 num_workers=num_workers,
             )
 
+    return matched_scopes
+
 
 # -----------------------------------------------------------------------------
 # CLI
@@ -1089,7 +1136,10 @@ def parse_args() -> argparse.Namespace:
         "--state",
         "-s",
         default=None,
-        help="Admin state filter (comma-separated)",
+        help=(
+            "Admin state filter (comma-separated). A value that exactly names an "
+            "existing state is used as-is, so names containing commas work."
+        ),
     )
     p.add_argument(
         "--metrics",
@@ -1127,8 +1177,6 @@ def main() -> None:
 
     cli_level: CLILevel = args.level
     levels_to_run: List[AdminLevel] = ["district", "block"] if cli_level == "both" else [cli_level]  # type: ignore[list-item]
-
-    state_filter = [s.strip() for s in str(args.state).split(",") if s.strip()] if args.state else None
 
     def _print_run_banner(run_idx: int, total: int, lvl: AdminLevel) -> None:
         if not verbose:
@@ -1181,10 +1229,15 @@ def main() -> None:
         print(f"Total: {len(eligible_slugs)}")
         return
 
+    state_raw = str(args.state).strip() if args.state else ""
+    available = {state_raw} if _scope_name_exists(processed_root, state_raw) else set()
+    state_filter = _parse_state_filter(args.state, available) if args.state else None
+
     total_runs = len(levels_to_run)
+    matched_total = 0
     for run_idx, level in enumerate(levels_to_run, start=1):
         _print_run_banner(run_idx, total_runs, level)
-        build_all_master_metrics(
+        matched_total += build_all_master_metrics(
             processed_root,
             level=level,
             metrics_filter=args.metrics,
@@ -1193,6 +1246,12 @@ def main() -> None:
             verbose=verbose,
             skip_existing=bool(args.skip_existing),
             num_workers=int(args.workers),
+        )
+
+    if state_filter and matched_total == 0:
+        raise SystemExit(
+            f"--state {args.state!r} matched no scopes under {processed_root} "
+            f"(resolved to {state_filter}). Nothing was built."
         )
 
 
