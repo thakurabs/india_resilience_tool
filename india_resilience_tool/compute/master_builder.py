@@ -1065,10 +1065,19 @@ def build_all_master_metrics(
 
     for slug in eligible_slugs:
         metric_root = processed_root / slug
-        scopes = _discover_scopes(metric_root, level)
 
         if state_filter_norm:
-            scopes = [s for s in scopes if s in state_filter_norm]
+            # Validate only the requested states. Discovering every scope first and
+            # filtering afterwards makes a single-state run pay a full 36-state scan
+            # per metric, and _looks_like_state_dir is expensive on a negative: it
+            # exhausts the five-level block tree before returning False.
+            scopes = [
+                name
+                for name in sorted(state_filter_norm)
+                if _looks_like_state_dir(metric_root / name, level)
+            ]
+        else:
+            scopes = _discover_scopes(metric_root, level)
 
         if not scopes:
             if verbose:
