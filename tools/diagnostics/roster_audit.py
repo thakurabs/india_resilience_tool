@@ -53,7 +53,11 @@ _REPO = Path(__file__).resolve().parents[2]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from india_resilience_tool.utils.naming import alias  # noqa: E402
+from india_resilience_tool.utils.naming import (  # noqa: E402
+    alias,
+    hydro_fs_token,
+    safe_fs_component,
+)
 
 # The 16 in-scope thematic + sectoral keepers (see plan P3 / CHG-0080..0091).
 KEEPERS_16: tuple[str, ...] = (
@@ -346,11 +350,99 @@ def _do_moves(moves: list[tuple[Path, Path]], *, apply: bool) -> None:
 
 
 # --------------------------------------------------------------------------------------
+# Round-trip guard (CHG-0302) — report-only
+# --------------------------------------------------------------------------------------
+_TRUNCATION_LIMIT = 48  # matches hydro_fs_token's default max_length
+
+
+def _national_roster_names(paths: Paths) -> dict[str, set[str]]:
+    """Collect every distinct admin name nationally, keyed by level.
+
+    Sweeps ALL published per-state geometry shards (not just ``paths.state``) so the
+    round-trip baseline is national and cannot be misread as single-state. Returns
+    ``{"state": {...}, "district": {...}, "block": {...}}`` of raw boundary names.
+    """
+    names: dict[str, set[str]] = {"state": set(), "district": set(), "block": set()}
+    geo_root = paths.optimised / "geometry" / "admin"
+    for level, name_field in (("district", "district_name"), ("block", "block_name")):
+        for shard in sorted((geo_root / level).glob("state=*.geojson")):
+            try:
+                obj = json.loads(shard.read_text(encoding="utf-8"))
+            except Exception as e:  # noqa: BLE001
+                print(f"   [roundtrip] unreadable shard {shard}: {e}")
+                continue
+            for f in obj.get("features", []):
+                props = f.get("properties", {})
+                sn = props.get("state_name")
+                if sn:
+                    names["state"].add(str(sn))
+                unit = props.get(name_field)
+                if unit:
+                    names[level].add(str(unit))
+    return names
+
+
+def run_roundtrip_audit(paths: Paths) -> int:
+    """Report-only write->read round-trip invariant over the national roster (CHG-0302).
+
+    For each admin name the live writer turns into a folder via ``hydro_fs_token`` and
+    ``master_builder`` reads back by mapping ``_``->space, assert the recovered name aliases
+    to the same key as the original. Two offender classes are separated:
+
+      Class 1 — round-trip mismatch, HEALABLE by a NAME_ALIASES entry (e.g. the ``/`` -> ``_``
+                -> space vs. ``/`` -> deleted split that dropped Pulicherla).
+      Class 2 — the name exceeds ``hydro_fs_token``'s length limit, so the token is truncated
+                and hash-suffixed. No alias maps a hash back to a name; this class needs
+                key-based directory naming (what CHG-0289 was for) and is reported separately
+                so it is never misclassified as alias-healable.
+
+    Always returns 0: report-only. Promote into the E) COMPLETENESS non-zero exit once Class 1
+    has held at zero across a full boundary-import cycle.
+    """
+    names = _national_roster_names(paths)
+    print("=" * 80)
+    total = sum(len(v) for v in names.values())
+    print(f"[ROUND-TRIP GUARD] (CHG-0302, report-only) — {total} distinct names "
+          f"(states={len(names['state'])}, districts={len(names['district'])}, "
+          f"blocks={len(names['block'])})")
+
+    class1: list[tuple[str, str]] = []  # (level, name)
+    class2: list[tuple[str, str]] = []
+    for level in ("state", "district", "block"):
+        for name in sorted(names[level]):
+            if len(safe_fs_component(name)) > _TRUNCATION_LIMIT:
+                class2.append((level, name))  # truncated: alias cannot reach it
+                continue
+            recovered = hydro_fs_token(name).replace("_", " ")
+            if alias(recovered) != alias(name):
+                class1.append((level, name))
+
+    print(f"[ROUND-TRIP GUARD] Class 1 (alias-healable round-trip mismatch): {len(class1)}")
+    for level, name in class1:
+        print(f"     [CLASS-1:{level}] {name!r}  ->  token-recovered "
+              f"{hydro_fs_token(name).replace('_', ' ')!r}  "
+              f"(alias {alias(hydro_fs_token(name).replace('_', ' '))!r} != {alias(name)!r})")
+    print(f"[ROUND-TRIP GUARD] Class 2 (truncation/hash — NOT alias-healable): {len(class2)}")
+    for level, name in class2:
+        print(f"     [CLASS-2:{level}] {name!r}  (len={len(safe_fs_component(name))} > {_TRUNCATION_LIMIT})")
+
+    if class1:
+        print("[ROUND-TRIP GUARD] Class 1 > 0 — add a NAME_ALIASES entry for each before "
+              "republishing, or a healed key will need a second data run. (report-only; exit unaffected)")
+    else:
+        print("[ROUND-TRIP GUARD] Class 1 = 0 — round-trip clean across all levels.")
+    return 0
+
+
+# --------------------------------------------------------------------------------------
 # Modes
 # --------------------------------------------------------------------------------------
 def run_audit(paths: Paths, levels: tuple[str, ...], keepers: tuple[str, ...]) -> int:
     slugs = active_slugs(paths)
     exit_code = 0
+    # CHG-0302: round-trip guard runs first (report-only; does not affect exit_code) so the
+    # Class 1 / Class 2 baseline is visible before the per-state completeness gate.
+    run_roundtrip_audit(paths)
     for level in levels:
         canon_keys, canon_dist_aliases = canonical_keys(paths, level)
         print("=" * 80)

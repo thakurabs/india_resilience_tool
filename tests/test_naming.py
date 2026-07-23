@@ -7,6 +7,8 @@ Email: absthakur@resilience.org.in
 
 from __future__ import annotations
 
+import re
+
 from india_resilience_tool.utils.naming import (
     alias,
     hydro_fs_token,
@@ -48,6 +50,45 @@ def test_maharashtra_block_and_district_spellings_reconcile() -> None:
 
     # Distinct Mumbai districts must NOT collapse into each other.
     assert normalize_compact("Mumbai City") != normalize_compact("Sub Urban Mumbai")
+
+
+def test_pulicherla_slash_roundtrip_reconciles() -> None:
+    # CHG-0300/0301: "Pulicherla H/O Reddivaripalle" round-trips through the processed
+    # tree as '_' (hydro_fs_token) -> space, while the boundary roster's normalize_name
+    # deletes '/'. Without the alias the master key was "h o" and the boundary key "ho",
+    # and the roster gate silently dropped the block. The alias reconciles them.
+    assert alias("Pulicherla H/O Reddivaripalle") == alias("Pulicherla H O Reddivaripalle")
+
+
+def test_hydro_fs_token_roundtrip_invariant() -> None:
+    # CHG-0301: the general write->read invariant, written against the function the live
+    # writer actually uses. For any short name, aliasing the token-recovered form must
+    # equal aliasing the original -- otherwise the roster gate drops the row at publish.
+    roundtrip_names = [
+        "Pulicherla H/O Reddivaripalle",  # fails before CHG-0300, passes after
+        "Parali V .",                     # already-passing controls: label-only, keys sound
+        "Ketugram_I",
+        "Y.S.R.",
+        "Brahmamgarimatham.",
+    ]
+    for name in roundtrip_names:
+        recovered = hydro_fs_token(name).replace("_", " ")
+        assert alias(recovered) == alias(name), (
+            f"{name!r} does not round-trip: alias({recovered!r}) != alias({name!r})"
+        )
+
+
+def test_hydro_fs_token_truncation_is_class2_not_alias_healable() -> None:
+    # CHG-0301: a name longer than hydro_fs_token's 48-char limit is truncated and
+    # hash-suffixed. That is Class 2 -- NOT healable by an alias, since no alias maps a
+    # hash back to a name -- and needs key-based directory naming (CHG-0289). Assert the
+    # classification, not the defect: do NOT assert alias(recovered) != alias(name), which
+    # would pin "this must stay broken" and fail the day key-based naming lands.
+    long_name = "Some Extremely Long Block Name That Clearly Exceeds Forty Eight Characters"
+    assert len(safe_fs_component(long_name)) > 48
+    token = hydro_fs_token(long_name)
+    assert token != safe_fs_component(long_name)          # truncated, not the plain form
+    assert re.fullmatch(r".*_[0-9a-f]{8}", token)          # hash-suffixed
 
 
 def test_safe_fs_component_strips_trailing_dot_the_bug() -> None:

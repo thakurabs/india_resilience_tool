@@ -38,6 +38,13 @@ NAME_ALIASES: dict[str, str] = {
     "mumbai city": "mumbai",
     "sub urban mumbai": "mumbai suburban",
     "raygad": "raigarh",
+    # CHG-0300: the '/' in "Pulicherla H/O Reddivaripalle" round-trips through the
+    # processed tree as '_' (hydro_fs_token) and returns as a space, while
+    # normalize_name deletes '/' outright -- so the master key said "h o" and the
+    # boundary roster said "ho", and the roster gate dropped the row. Map the
+    # round-tripped form onto the canonical one. Direction matters: do NOT add the
+    # reverse entry, or the boundary-side key changes and the vendor join breaks.
+    "pulicherla h o reddivaripalle": "pulicherla ho reddivaripalle",
 }
 
 
