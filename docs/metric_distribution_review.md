@@ -136,10 +136,65 @@ coverage gate (0.70), dropping or reweighting those units.
 3. Substitute an arid-robust index (empirical percentile, SPEI, or
    zero-inflated SPI) where SPI3 degenerates.
 
-**Next step to confirm:** trace the exact step in
-`compute/drought_risk_gridfirst.py` (gamma fit vs coverage gate) that emits NaN
-for e.g. Jaisalmer; quantify the downstream coverage-gate cascade into the
-Drought and Agricultural composites.
+**Code trace (2026-07-25, `add_flood_depth@b0617e6`) — the exact NaN-emitting
+path.** Correction to the original pointer: for **district/block** level these
+SPI3 slugs do **not** run through `spi_adapter.compute_spi_rows_climate_indices`.
+`is_drought_gridfirst()` (`compute/drought_risk_gridfirst.py:44`) routes
+`spi3_count_events_lt_minus1`, `spi3_max_spell_lt_minus1`, and
+`spi3_count_months_lt_minus1` at district/block level into the **grid-first**
+path `compute_drought_risk_rows_for_metric`. That code emits the arid NaNs
+through **four gates, in order**:
+
+1. **Gate 1 — baseline coverage** (`compute_spi_grid` → `_baseline_coverage_grid`,
+   ~L213/L163). Per cell, requires `>= ceil(0.83 * n_baseline_years)` *finite*
+   months for every calendar month in the baseline window. Keys on missingness,
+   not dryness — near-zero precip is still finite, so **arid cells pass this. Not
+   the culprit.** Failing cells are skipped and stay all-NaN.
+2. **Gate 2 — the gamma fit itself** (`_compute_spi_series` →
+   `compute_spi_climate_indices` → `climate_indices.indices.spi`, L223 → L132).
+   **True arid root cause.** At `scale_months=3`, dry-season 3-month precip
+   windows in the Thar/arid belt sum to ~=0 across nearly all baseline years, so
+   the gamma (alpha/beta, method-of-moments) can't be estimated for those
+   calendar months and climate-indices returns **NaN**. `_compute_spi_series`
+   also catches any exception and returns an **all-NaN series** (L140-141), so a
+   hard fit failure silently blanks the whole cell. Scales 6/12 always straddle
+   the monsoon -> positive sums -> gamma fits -> **0 % NaN**, matching the
+   observed SPI3-only pattern.
+3. **Gate 3 — min valid months/year** (`annual_spi_metric_grid`, ~L268). Per
+   cell-year, `< min_months_per_year (9)` finite SPI months -> cell-year NaN.
+   Gate 2 knocks out the dry-season months, so arid cells routinely fall under 9.
+4. **Gate 4 — polygon retained-weight floor**
+   (`aggregate_grid_values_with_retention`, ~L328). Per district, if finite
+   area-weight `< min_polygon_cell_weight_fraction (0.50)` -> district value
+   **NaN** (with `retained` recorded). This is the step that stamps the final
+   district-level NaN the audit saw.
+
+**Cascade in one line:** gamma degeneracy on ~=0 dry-season 3-month windows
+(Gate 2, climate-indices returns NaN) -> `<9` valid months/year (Gate 3) ->
+cell-years NaN -> `<50 %` finite polygon area (Gate 4) -> district NaN. The
+downstream effect: the missing SPI3 component can trip the sector bundles'
+`available_rule_weight_fraction` gate (0.70), dropping/reweighting those arid
+units in the Drought and Agricultural composites.
+
+**Settled vs. not.** Settled by reading code: the mechanism, the four gates, and
+that Gate 2 (gamma fit) is the arid-specific one while Gates 3/4 are downstream
+amplifiers (Gate 1 ruled out). **Not** yet empirically confirmed for a specific
+district (e.g. Jaisalmer): whether the killing blow is Gate 2 zeroing enough
+months to trip Gate 3, vs. Gate 4 tripping on partial coverage. Confirming that
+requires running `compute_spi_grid` on the real precip cube under the Windows
+`irt` env and inspecting per-cell NaN counts (WSL lacks the geo/pandas stack).
+
+**Why the empirical drill matters for the fix:** it discriminates the two
+failure classes that map directly onto the decision options above. If **Gate 2**
+dominates, the NaN means no SPI signal mathematically exists -> only Option 1
+(accept + annotate) or Option 3 (arid-robust index) are viable; relaxing
+coverage gates would just average over genuinely-NaN months. If **Gates 3/4** are
+the deciding cut on cells that *did* produce finite SPI, the signal exists and
+our own thresholds discarded it -> Option 2 (relax/redesign the gate) is
+legitimate. Proposed read-only diagnostic (sibling of `tools/diagnostics/
+spi_diagnostic.py`): for one arid district dump per-cell Gate-1 pass rate,
+per-calendar-month gamma NaN rate, per-cell valid-month histogram, and final
+polygon `retained` fraction.
 
 ---
 
