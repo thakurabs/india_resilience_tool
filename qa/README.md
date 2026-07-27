@@ -52,6 +52,16 @@ When a run reports "bounced to login", the session expired — re-run step 2.
   Needed for map probes that rely on deck.gl WebGL hit-testing headless (e.g. the
   map-interactivity probe). Default (unset) launches with no extra GL args.
 
+### Data coverage Phase 0 preflight
+
+```bash
+node qa/harness/data-coverage-runner.mjs --check-selectors
+```
+
+This verifies saved auth reaches the dashboard, dismisses visitor-guide and
+feedback overlays, checks canonical `IRT_DATA_DIR` roster files, and writes
+`run_metadata.json` plus `selector_preflight.json` under `qa/runs/`.
+
 ### Map-interactivity probe (dropdown-gating + portfolio commutativity)
 
 ```bash
