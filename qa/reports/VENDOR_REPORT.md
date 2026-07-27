@@ -28,6 +28,12 @@ cross-flow, and map-interactivity probes. Session smoke passed:
 The QA harness was updated to use the exact expand/header controls before rerunning
 affected charters.
 
+**Manual spot-check follow-up:** operator manual checks after the automated rerun
+cleared several harness/state flags: `v07_unicode.csv` uploads, `f07_csv_named.xlsx`
+shows the specific content/extension mismatch message, US15 Save Analysis enables
+after adding one district, US16 Resilience Profile renders correctly, US08 Share
+Feedback works, and the visible US17 flow works.
+
 ### Fixed / not reproduced
 
 | Prior # | Rerun verdict | Evidence |
@@ -45,9 +51,9 @@ affected charters.
 
 | Prior # | Rerun verdict | Evidence / note |
 |---|---|---|
-| **M5** | **STILL OPEN, shifted context.** US16 no longer records real error events, but US17 comparison still records `POST /api/api/parquet/trend` and `/scenario-comparison` 500s. | `qa/runs/2026-07-27T06-44-59-423Z_us17-analysis-profile/results.json` |
-| **M6** | **CHANGED.** The wrong "1 district" banner is gone, but no count banner is shown while Manage Portfolio lists Warangal + Karimnagar. | same US17 run |
-| **M7** | **MOSTLY FIXED.** Invalid/out-of-range/non-numeric/empty/out-of-India/formula/long-name CSV and XLSX fixtures now reject; out-of-India shapefile rejects. Remaining quirks: Unicode CSV and CSV-renamed-XLSX show no visible feedback; baseline/long-name/junk shapefile zips are accepted. | `qa/runs/2026-07-27T06-05-40-557Z_us10-adversarial-upload/adversarial-results.json`; `qa/runs/2026-07-27T06-07-30-289Z_us10-adversarial-formats/adversarial-results.json` |
+| **M5** | **TECHNICAL BACKGROUND ISSUE, NOT A VISIBLE US17 BLOCKER.** US16 no longer records real error events and manual US16/US17 checks passed. The automated US17 run still captured background `POST /api/api/parquet/trend` and `/scenario-comparison` 500s, likely from a mounted/adjacent Resilience Profile widget rather than the visible portfolio comparison. Keep as backend hygiene unless manual Network inspection ties it to visible missing data. | `qa/runs/2026-07-27T06-44-59-423Z_us17-analysis-profile/results.json` |
+| **M6** | **MANUAL CHECK NEEDED ONLY FOR EXACT BANNER COPY.** The wrong "1 district" banner was not reproduced by the automated rerun; manual US17 flow works. If the acceptance criterion still requires an explicit count banner, verify the exact string before filing. | same US17 run + manual spot-check |
+| **M7** | **MOSTLY FIXED.** Invalid/out-of-range/non-numeric/empty/out-of-India/formula/long-name CSV and XLSX fixtures now reject; out-of-India shapefile rejects. Manual follow-up confirms `v07_unicode.csv` uploads and `f07_csv_named.xlsx` is specifically rejected with "File content does not match its extension. Please upload a genuine file of the selected type." Remaining policy questions: long-name shapefile and valid shapefile-with-extra-junk are accepted; decide whether those should be bounded/rejected. | `qa/runs/2026-07-27T06-05-40-557Z_us10-adversarial-upload/adversarial-results.json`; `qa/runs/2026-07-27T06-07-30-289Z_us10-adversarial-formats/adversarial-results.json`; manual spot-check |
 | **N5** | **CHANGED.** Missing/non-numeric manual coordinates now keep Show on Map disabled; old post-click red-border-only path is not reachable in the harness. Needs manual a11y wording check if disabled-only gating is accepted. | `qa/runs/2026-07-27T06-34-59-550Z_us10-coordinates/results.json` |
 | **B4** | **STILL OPEN / ASK-PO.** Portfolio still does not accumulate across Administrative/Coordinate/Upload/Map modes; final count 1 vs expected approximately 6. | `qa/runs/2026-07-27T06-08-58-632Z_us-crossflow-add-to-analysis/results.json` |
 
@@ -55,10 +61,10 @@ affected charters.
 
 | Candidate | Severity draft | Evidence |
 |---|---|---|
-| **R1 - US15 Save Analysis blocked** | Major / regression | After building an analysis, Save Analysis remains disabled; save modal/reload path could not be reached. The interrupted run did not finalize `results.json`, but screenshots `s2-analysis-built.png`, `s7-my-analysis-route.png`, `s10-row-menu.png`, and `s11-search.png` were captured under `qa/runs/2026-07-27T06-40-09-343Z_us15-my-analysis/`. |
-| **R2 - US16 Resilience Profile content missing** | Major / regression candidate | Climate metric path builds, but overview/risk summary/trend/scenario/full-screen content are missing or empty with no real error events. | `qa/runs/2026-07-27T06-42-45-078Z_us16-resilience-profile/results.json` |
-| **R3 - US08 Share Feedback popup incomplete/not opening** | Minor / needs repro | Full sweep S1 failed to open popup; S2 saw only 2 radio inputs, one option label, no Tell Us More, no Submit. | `qa/runs/2026-07-27T06-34-12-279Z_us08-feedback/results.json` |
-| **R4 - US17 modal selector/content drift** | Minor / harness-or-product triage | Analysis full-screen step resolves a hidden Resilience Profile button and times out; panel otherwise renders at 375px. Needs manual/selector verification before filing. | `qa/runs/2026-07-27T06-44-59-423Z_us17-analysis-profile/results.json` |
+| **R1 - US15 Save Analysis blocked** | **CLEARED MANUALLY / harness-state artifact.** | Manual check confirms Save Analysis enables after adding one district. Do not file from the interrupted automated run unless reproduced manually. |
+| **R2 - US16 Resilience Profile content missing** | **CLEARED MANUALLY / harness-state artifact.** | Manual check confirms Resilience Profile renders correctly. Do not file from the automated empty-content observation unless reproduced manually. |
+| **R3 - US08 Share Feedback popup incomplete/not opening** | **CLEARED MANUALLY / harness-state artifact.** | Manual check confirms Share Feedback works. Do not file from the automated popup-open failure unless reproduced manually. |
+| **R4 - US17 modal selector/content drift** | **CLEARED MANUALLY / harness-selector artifact.** | Manual check confirms US17 works. The automated failure likely selected a hidden Resilience Profile full-screen button rather than a visible US17 control. |
 
 ### Clean regression-watch paths
 
