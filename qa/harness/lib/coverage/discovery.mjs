@@ -75,7 +75,7 @@ async function openFilters(page) {
   return /Risk Domain/i.test(await visibleText(page));
 }
 
-async function setupPath(page, targetUrl, stateName, level, priorLabels) {
+export async function setupPath(page, targetUrl, stateName, level, priorLabels) {
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
   await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(1200);

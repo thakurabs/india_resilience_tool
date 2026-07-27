@@ -59,6 +59,7 @@ node qa/harness/data-coverage-runner.mjs --check-selectors
 node qa/harness/data-coverage-runner.mjs --dry-run
 node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
 node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
+node qa/harness/data-coverage-runner.mjs --pilot --run-dir qa/runs/<id>_data-coverage --max-units 1
 ```
 
 `--check-selectors` verifies saved auth reaches the dashboard, dismisses
@@ -78,6 +79,11 @@ states/levels and writes `filter_universe.jsonl`, `filter_universe.csv`, and
 `coverage_plan_summary.csv` plus `coverage_plan_summary.json`. Add
 `--max-units`, `--shard N/M`, or `--confirm-large-run` to record the safety gate
 that a later probe run will require.
+
+`--pilot` currently runs Phase 3A scaffolding only: it replays selected cascade
+rows from `filter_universe.csv` and writes `coverage_attempts.jsonl`,
+`coverage_observations.jsonl`, and `coverage_observations.csv`. Map, ranking,
+profile, and network assertions are deferred to Phase 3B.
 
 ### Map-interactivity probe (dropdown-gating + portfolio commutativity)
 

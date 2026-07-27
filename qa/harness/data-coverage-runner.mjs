@@ -6,12 +6,14 @@
 // - Phase 1: local expected district/block roster extraction.
 // - Phase 2: deterministic exposed cascade discovery.
 // - Phase 2.5: scope estimation and sharding summaries.
+// - Phase 3A: pilot attempt/observation scaffolding.
 //
 // Usage:
 //   node qa/harness/data-coverage-runner.mjs --check-selectors
 //   node qa/harness/data-coverage-runner.mjs --dry-run
 //   node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
 //   node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
+//   node qa/harness/data-coverage-runner.mjs --pilot --run-dir qa/runs/<id>_data-coverage --max-units 1
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,6 +25,7 @@ import { runPhase0Preflight } from './lib/coverage/preflight.mjs';
 import { writeExpectedRosters } from './lib/coverage/rosters.mjs';
 import { runCascadeDiscovery } from './lib/coverage/discovery.mjs';
 import { writeCoveragePlanSummary } from './lib/coverage/estimation.mjs';
+import { runPilotProbeScaffold } from './lib/coverage/probe.mjs';
 
 function timestampForPath() {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -34,6 +37,7 @@ function parseArgs(argv) {
     dryRun: false,
     discoverOnly: false,
     estimateOnly: false,
+    pilot: false,
     targetUrl: APP_URL,
     runDir: null,
     states: ['Telangana'],
@@ -49,6 +53,7 @@ function parseArgs(argv) {
     else if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--discover-only') opts.discoverOnly = true;
     else if (arg === '--estimate-only') opts.estimateOnly = true;
+    else if (arg === '--pilot') opts.pilot = true;
     else if (arg === '--run-dir') opts.runDir = argv[++i];
     else if (arg === '--target-url') opts.targetUrl = argv[++i];
     else if (arg === '--states') opts.states = splitList(argv[++i]);
@@ -91,6 +96,7 @@ function validateOpts(opts) {
   if (!opts.states.length) throw new Error('--states must include at least one state');
   if (!opts.levels.length) throw new Error('--levels must include district and/or block');
   if (opts.estimateOnly && !opts.runDir) throw new Error('--estimate-only requires --run-dir from a discovery run');
+  if (opts.pilot && !opts.runDir) throw new Error('--pilot requires --run-dir from a discovery run');
 }
 
 function printHelp() {
@@ -102,6 +108,7 @@ Implemented commands:
   node qa/harness/data-coverage-runner.mjs --dry-run
   node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
   node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
+  node qa/harness/data-coverage-runner.mjs --pilot --run-dir qa/runs/<id>_data-coverage --max-units 1
 
 Options:
   --target-url <url>             Override the target URL for this run
@@ -130,9 +137,9 @@ if (opts.help) {
   printHelp();
   process.exit(0);
 }
-if (!opts.checkSelectors && !opts.dryRun && !opts.discoverOnly && !opts.estimateOnly) {
+if (!opts.checkSelectors && !opts.dryRun && !opts.discoverOnly && !opts.estimateOnly && !opts.pilot) {
   printHelp();
-  throw new Error('Use --check-selectors, --dry-run, --discover-only, or --estimate-only. Later coverage modes are not implemented yet.');
+  throw new Error('Use --check-selectors, --dry-run, --discover-only, --estimate-only, or --pilot. Later coverage modes are not implemented yet.');
 }
 
 const runDir = makeRunDir(opts.runDir);
@@ -198,6 +205,18 @@ await withSession(async (page, context) => {
     console.log(`  Filter universe CSV: ${discovery.outputs.csv}`);
     console.log(`  Universe rows: ${discovery.universeRows}`);
     exitCode = 0;
+  } else if (opts.pilot) {
+    console.log('  Running pilot probe scaffold');
+    const pilot = await runPilotProbeScaffold(page, runDir, {
+      targetUrl: opts.targetUrl,
+      maxUnits: opts.maxUnits,
+    });
+    console.log(`  Coverage attempts: ${pilot.outputs.attemptsJsonl}`);
+    console.log(`  Coverage observations JSONL: ${pilot.outputs.observationsJsonl}`);
+    console.log(`  Coverage observations CSV: ${pilot.outputs.observationsCsv}`);
+    console.log(`  Pilot observations: ${pilot.observations}`);
+    console.log(`  Selection failures: ${pilot.selectionFailures}`);
+    exitCode = pilot.selectionFailures ? 2 : 0;
   } else {
     exitCode = 0;
   }
