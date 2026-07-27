@@ -14,6 +14,7 @@ import { withSession, APP_URL } from '../../harness/lib/session.mjs';
 import {
   createRun, attachCollectors, snapshot, dumpDom, runAxe, finalize, step,
 } from '../../harness/lib/evidence.mjs';
+import { openAdmin } from '../../harness/lib/flows.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -244,7 +245,7 @@ await withSession(async (page) => {
 
   // S10 — mode-switch note: with coordinate activity, expand Administrative Panel.
   await safe(run, 'S10: Geography<->Coordinates switch note', async () => {
-    await page.getByRole('button', { name: /Administrative Panel/i }).click().catch(() => {});
+    await openAdmin(page);
     await page.waitForTimeout(1200);
     await shot(page, run, 's10-mode-switch');
     const txt = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '));

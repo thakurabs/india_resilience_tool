@@ -17,6 +17,58 @@ reproduced manually · `DEPRIORITISED` = parked, revisit later ·
 
 ---
 
+## Re-run update - 2026-07-27 vendor build
+
+**Run scope:** priority batch first, then full US06-US17 sweep, plus adversarial upload,
+cross-flow, and map-interactivity probes. Session smoke passed:
+`qa/runs/2026-07-27T05-24-23-708Z_dashboard-root`.
+
+**Harness note:** the build now exposes three controls matching `/Administrative Panel/i`
+(`Administrative Panel`, `Reset administrative panel`, `Expand administrative panel`).
+The QA harness was updated to use the exact expand/header controls before rerunning
+affected charters.
+
+### Fixed / not reproduced
+
+| Prior # | Rerun verdict | Evidence |
+|---|---|---|
+| **B1** | **FIXED.** Ranking Table loads with 34 rows; no load-failure banner and no ranking 5xx observed. | `qa/runs/2026-07-27T06-39-41-576Z_us14-ranking/results.json` |
+| **M3** | **FIXED in axe rerun.** Latest US09/US11 axe reports have no `color-contrast` violations. | `qa/runs/2026-07-27T06-34-27-546Z_us09-geography/us09__axe.json`; `qa/runs/2026-07-27T06-38-09-252Z_us11-filters/us11__axe.json` |
+| **M1** | **NOT REPRODUCED.** Collapse/expand path retained state, and latest axe did not flag the sidebar controls. | `qa/runs/2026-07-27T06-34-27-546Z_us09-geography/results.json` |
+| **M2** | **FIXED in axe rerun.** Latest US09/US11 axe reports have no `image-alt` violations. | same US09/US11 axe files above |
+| **M4** | **STILL FIXED.** Valid Show-on-Map resolve returned Ghanpur Station and no error toast. | `qa/runs/2026-07-27T06-34-59-550Z_us10-coordinates/results.json` |
+| **C4** | **FIXED functionally.** Same coordinate with different name no longer creates an extra row; dedup is silent. | `qa/runs/2026-07-27T06-08-58-632Z_us-crossflow-add-to-analysis/results.json` |
+| **Map Claim 1** | **NOT REPRODUCED.** Probe saw view-change/drill-down behavior, not dropdown interactivity lock. | `qa/runs/2026-07-27T06-18-33-056Z_us-map-interactivity/results.json` |
+| **Map Claim 2** | **FIXED.** Map-first and dropdown-first both ended with 4 sites; commutative. | same map-interactivity run |
+
+### Changed / still needs triage
+
+| Prior # | Rerun verdict | Evidence / note |
+|---|---|---|
+| **M5** | **STILL OPEN, shifted context.** US16 no longer records real error events, but US17 comparison still records `POST /api/api/parquet/trend` and `/scenario-comparison` 500s. | `qa/runs/2026-07-27T06-44-59-423Z_us17-analysis-profile/results.json` |
+| **M6** | **CHANGED.** The wrong "1 district" banner is gone, but no count banner is shown while Manage Portfolio lists Warangal + Karimnagar. | same US17 run |
+| **M7** | **MOSTLY FIXED.** Invalid/out-of-range/non-numeric/empty/out-of-India/formula/long-name CSV and XLSX fixtures now reject; out-of-India shapefile rejects. Remaining quirks: Unicode CSV and CSV-renamed-XLSX show no visible feedback; baseline/long-name/junk shapefile zips are accepted. | `qa/runs/2026-07-27T06-05-40-557Z_us10-adversarial-upload/adversarial-results.json`; `qa/runs/2026-07-27T06-07-30-289Z_us10-adversarial-formats/adversarial-results.json` |
+| **N5** | **CHANGED.** Missing/non-numeric manual coordinates now keep Show on Map disabled; old post-click red-border-only path is not reachable in the harness. Needs manual a11y wording check if disabled-only gating is accepted. | `qa/runs/2026-07-27T06-34-59-550Z_us10-coordinates/results.json` |
+| **B4** | **STILL OPEN / ASK-PO.** Portfolio still does not accumulate across Administrative/Coordinate/Upload/Map modes; final count 1 vs expected approximately 6. | `qa/runs/2026-07-27T06-08-58-632Z_us-crossflow-add-to-analysis/results.json` |
+
+### New or regressed candidates from sweep
+
+| Candidate | Severity draft | Evidence |
+|---|---|---|
+| **R1 - US15 Save Analysis blocked** | Major / regression | After building an analysis, Save Analysis remains disabled; save modal/reload path could not be reached. The interrupted run did not finalize `results.json`, but screenshots `s2-analysis-built.png`, `s7-my-analysis-route.png`, `s10-row-menu.png`, and `s11-search.png` were captured under `qa/runs/2026-07-27T06-40-09-343Z_us15-my-analysis/`. |
+| **R2 - US16 Resilience Profile content missing** | Major / regression candidate | Climate metric path builds, but overview/risk summary/trend/scenario/full-screen content are missing or empty with no real error events. | `qa/runs/2026-07-27T06-42-45-078Z_us16-resilience-profile/results.json` |
+| **R3 - US08 Share Feedback popup incomplete/not opening** | Minor / needs repro | Full sweep S1 failed to open popup; S2 saw only 2 radio inputs, one option label, no Tell Us More, no Submit. | `qa/runs/2026-07-27T06-34-12-279Z_us08-feedback/results.json` |
+| **R4 - US17 modal selector/content drift** | Minor / harness-or-product triage | Analysis full-screen step resolves a hidden Resilience Profile button and times out; panel otherwise renders at 375px. Needs manual/selector verification before filing. | `qa/runs/2026-07-27T06-44-59-423Z_us17-analysis-profile/results.json` |
+
+### Clean regression-watch paths
+
+US06, US07, US09, US11, US12, US13, and US14 completed with zero hard failures in
+the final sweep. US07 still carries the prior State-field and Update-vs-Save spec
+drifts. US10 valid coordinate resolve remains clean; upload schema drift remains
+(`Latitude/Longitude/Label` rejected, `id/custom_name/lat/long` accepted).
+
+---
+
 ## Findings (severity-ordered)
 
 | # | Sev | Area | Story | Send | Finding |
@@ -55,12 +107,12 @@ reproduced manually · `DEPRIORITISED` = parked, revisit later ·
 | N24 | Cosmetic | data | US 10 | HOLD | Shapefile upload **silently drops the `.dbf` custom_name** — every point auto-labelled "Point N"; user site names are lost (injection inert on this path). |
 | N25 | Minor | data | US 10/17 | ASK-PO | **Out-of-pilot-state uploaded site silently dropped** from Compare Portfolio. A site resolving to Vijayawada Urban (Ntr, Andhra Pradesh) shows in the upload list + portfolio but is **absent from the comparison report** (3 of 4 sites exported), with no warning. |
 
-**US 15 headline (positive):** the full **Save → My Analysis list → Reload** loop
+**US 15 prior-pass headline (superseded by 2026-07-27 rerun update above):** the full **Save → My Analysis list → Reload** loop
 **works end-to-end** — save `201`, graceful duplicate-name guard `409`, blank⇒default
 label, `/my-analysis` list with search + Rename/Delete, and **reload faithfully
 restores** state + district + all filters (verified visually). No new blocker/major.
 
-**US 16 headline (positive):** the **single-site Resilience Profile works end-to-end**
+**US 16 prior-pass headline (superseded by 2026-07-27 rerun update above):** the **single-site Resilience Profile works end-to-end**
 for a climate metric (10 steps, 0 failures, 0 errors on the climate-metric path).
 Overview (geography / index / scenario / period), **Risk Summary** (Historical
 Baseline · Projected Value · Δ-with-indicator · Position), a **Trend Over Time**
@@ -70,7 +122,7 @@ spec's blue/orange/red, *Start y-axis at zero*), panel expand/collapse, and a
 **full-screen modal** all render — including a clean **375px mobile** layout. The
 one new backend defect (**M5**) is isolated to **composite** metrics.
 
-**US 17 headline (positive):** the **multi-site portfolio works end-to-end** (12
+**US 17 prior-pass headline (superseded by 2026-07-27 rerun update above):** the **multi-site portfolio works end-to-end** (12
 steps, 0 failures, 0 errors). *Add to Analysis* → a ≥2-site portfolio; **Manage
 Portfolio** lists each site with a working **Remove ⊗** and **Clear Portfolio**;
 **Compare Portfolio** (risk domain → *All Metrics (14)* → SSP2-4.5 / Early century)
@@ -82,7 +134,7 @@ Absolute Change/Change Percentile/Level of Change, one row per site) and a
 **375px** — which **closes the open US 15 mobile caveat** for this panel family.
 The one real bug (**M6**) is a wrong portfolio count; the rest are spec-label drifts.
 
-**US 12 headline (positive):** the **Map View ↔ Ranking Table toggle works to spec**
+**US 12 prior-pass headline (superseded by 2026-07-27 rerun update above):** the **Map View ↔ Ranking Table toggle works to spec**
 (5 steps, 0 failed) — Map View default, **mutual exclusivity** (switching hides the
 other view), and **geography + filters preserved** across the switch. The only issue
 is that the Ranking Table has no data to show — the existing **B1** blocker (ranking
@@ -603,7 +655,7 @@ Please use the provided sample"*, unsupported type (`.txt`) → *"Unsupported fi
 
 ## Coverage — all 17 user stories accounted for
 
-**Functionally covered (12):**
+**Functionally covered (12) - historical pre-2026-07-27 summary; see rerun update above for current verdicts:**
 - US 09 (Geography), US 10 (Coordinates), US 11 (Filters), US 12 (View Mode —
   passing), US 13 (Map), US 14 (Ranking — **B1 blocked**), US 15 (My Analysis
   Save/reload — passing), US 16 (Resilience Profile / single-site — passing;

@@ -8,6 +8,7 @@
 import { withSession, APP_URL } from '../../harness/lib/session.mjs';
 import { createRun, attachCollectors, snapshot, dumpDom, runAxe, finalize } from '../../harness/lib/evidence.mjs';
 import { safe, shot } from '../../harness/lib/runner.mjs';
+import { openAdmin } from '../../harness/lib/flows.mjs';
 
 // The 6 filter triggers all start (or become) the placeholder "Select". Because
 // we select strictly in DOM order, the first exact-"Select" trigger is always
@@ -31,7 +32,7 @@ await withSession(async (page) => {
 
   // S0 — geography setup (State + one District) for the Q1 check.
   await safe(run, 'S0: select Telangana + Adilabad', async () => {
-    await page.getByRole('button', { name: /Administrative Panel/i }).click();
+    await openAdmin(page);
     await page.waitForTimeout(700);
     await page.getByRole('button', { name: /Select State/i }).click();
     await page.waitForTimeout(500);

@@ -13,6 +13,7 @@ import { withSession, APP_URL } from '../../harness/lib/session.mjs';
 import {
   createRun, attachCollectors, snapshot, dumpDom, runAxe, finalize, step,
 } from '../../harness/lib/evidence.mjs';
+import { openAdmin } from '../../harness/lib/flows.mjs';
 import { join } from 'node:path';
 
 const shot = (page, run, name) => page.screenshot({ path: join(run.dir, `${name}.png`) });
@@ -42,7 +43,7 @@ await withSession(async (page) => {
 
   // S1 — panel visible; before a State is chosen, District(s) + Add are disabled.
   await safe(run, 'S1: expand panel & default disabled state', async () => {
-    await page.getByRole('button', { name: /Administrative Panel/i }).click();
+    await openAdmin(page);
     await page.waitForTimeout(800);
     await shot(page, run, 's1-panel');
     const dDisabled = await districtBtn().isDisabled().catch(() => null);

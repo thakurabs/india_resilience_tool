@@ -6,7 +6,12 @@
 export async function openAdmin(page) {
   const stateVisible = await page.getByRole('button', { name: /Select State/i }).isVisible().catch(() => false);
   if (!stateVisible) {
-    await page.getByRole('button', { name: /Administrative Panel/i }).click();
+    const expand = page.getByRole('button', { name: /^Expand administrative panel$/i }).first();
+    if (await expand.isVisible().catch(() => false)) {
+      await expand.click();
+    } else {
+      await page.getByRole('button', { name: /^Administrative Panel$/i }).first().click();
+    }
     await page.waitForTimeout(700);
   }
 }
