@@ -89,13 +89,26 @@ def test_two_equidistant_donors_average():
 
 
 def test_cell_values_path_drops_atoll_that_fill_recovers():
-    """aggregate_cell_values drops the all-NaN-cell atoll; the fill re-adds it."""
+    """aggregate_cell_values drops the all-NaN-cell atoll; the fill re-adds it.
+
+    The drop only manifests alongside at least one unit with finite data (a
+    single all-NaN unit instead short-circuits to a present NaN), so this uses a
+    two-unit fixture: a full-cell mainland district over a finite cell plus the
+    sub-cell atoll over the NaN cell.
+    """
     grid = _grid()
-    weights = gs.build_area_weights(_atoll_gdf(), grid, level="district")
-    field = _field({(0, 0): 5.0})
+    gdf = gpd.GeoDataFrame(
+        {"district_name": ["MAIN", "ATOLL"]},
+        geometry=[box(77.6, 10.6, 78.4, 11.4), box(78.9, 11.9, 79.1, 12.1)],
+        crs="EPSG:4326",
+    )
+    weights = gs.build_area_weights(gdf, grid, level="district")
+    field = _field({(0, 0): 5.0})  # MAIN's cell finite; ATOLL's cell (1,1) NaN
     base = gs.aggregate_cell_values(field, weights, grid=grid)
+    assert "MAIN" in base and base["MAIN"] == pytest.approx(5.0)
     assert "ATOLL" not in base  # symptom: row-absent
     fills = gs.subcell_idw_fill(field, weights, grid=grid)
+    assert set(fills) == {"ATOLL"}  # MAIN is full-cell with data -> not filled
     assert fills["ATOLL"] == pytest.approx(5.0)
 
 
