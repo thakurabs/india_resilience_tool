@@ -487,6 +487,26 @@ def compute_composite_master_frame(
         pair_frame = score_frame[id_columns + ["bundle_score"]].rename(columns={"bundle_score": score_column})
         output = output.merge(pair_frame, on=id_columns, how="left")
 
+    # Sub-cell climate-fill provenance. A composite blends its component metrics, so
+    # a unit whose composite draws on any idw-filled component must not read
+    # "native". _build_wide_component_frame slices to id+value and drops the flag, so
+    # read it here where the full component masters (component_frames) are still in
+    # scope. The composite is idw iff ANY component is idw for that unit, else native.
+    # Only fires when at least one component master carried the column (post-regen),
+    # so composites over all-native components stay byte-identical.
+    idw_units: Optional[pd.DataFrame] = None
+    for frame in component_frames.values():
+        if "climate_fill_method" not in frame.columns or not set(id_columns).issubset(frame.columns):
+            continue
+        is_idw = frame["climate_fill_method"].astype("string").str.lower().eq("idw").fillna(False)
+        comp_idw = frame.loc[is_idw.to_numpy(), id_columns].drop_duplicates()
+        idw_units = comp_idw if idw_units is None else pd.concat([idw_units, comp_idw], ignore_index=True)
+    if idw_units is not None:
+        idw_units = idw_units.drop_duplicates()
+        idw_units["climate_fill_method"] = "idw"
+        output = output.merge(idw_units, on=id_columns, how="left")
+        output["climate_fill_method"] = output["climate_fill_method"].fillna("native")
+
     return output
 
 

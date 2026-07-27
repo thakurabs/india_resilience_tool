@@ -3842,6 +3842,21 @@ def _write_metric_rows_outputs(
                             meta_values = df_yearly.loc[df_yearly["year"].isin(avail), meta_col].dropna().unique()
                             if len(meta_values) == 1:
                                 grp[meta_col] = meta_values[0]
+                    # Carry sub-cell climate-fill provenance per unit through the
+                    # yearly->period roll-up (the "value"-only agg above drops it).
+                    # idw iff ANY contributing year is idw for that unit, else native.
+                    # Only the paths that don't pass period_rows reach here (heat,
+                    # cold, heat_stress, extreme_rainfall); drought stamps its own.
+                    if "climate_fill_method" in df_yearly.columns:
+                        gc = [c for c in group_cols if c in df_yearly.columns]
+                        sub = df_yearly[df_yearly["year"].isin(avail)]
+                        prov = (
+                            sub.assign(_idw=sub["climate_fill_method"].astype("string").str.lower().eq("idw"))
+                            .groupby(gc)["_idw"].any().reset_index()
+                        )
+                        prov["climate_fill_method"] = np.where(prov.pop("_idw"), "idw", "native")
+                        grp = grp.merge(prov, on=gc, how="left")
+                        grp["climate_fill_method"] = grp["climate_fill_method"].fillna("native")
                     period_frames.append(grp)
                 except Exception as e:
                     logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")

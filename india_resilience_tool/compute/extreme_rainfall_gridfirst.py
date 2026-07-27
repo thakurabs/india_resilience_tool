@@ -22,6 +22,7 @@ from india_resilience_tool.compute.gridfirst_spatial import (
     dataset_grid_spec,
     read_grid_metric_cache,
     read_spatial_weights_cache,
+    subcell_idw_fill,
     write_grid_metric_cache,
     write_spatial_weights_cache,
 )
@@ -361,7 +362,11 @@ def compute_extreme_rainfall_rows_for_metric(
             min_polygon_cell_weight_fraction=MIN_POLYGON_CELL_WEIGHT_FRACTION,
             grid=grid,
         )
+        fills = subcell_idw_fill(ds["value"], weights, grid=grid)
         for unit_key, (value, retained) in values.items():
+            fill_method = "native"
+            if unit_key in fills:
+                value, fill_method = fills[unit_key], "idw"
             row = {
                 "year": int(year),
                 "value": value,
@@ -369,6 +374,7 @@ def compute_extreme_rainfall_rows_for_metric(
                 "source_file": str(source_path),
                 "scenario": scenario,
                 "retained_weight_fraction": retained,
+                "climate_fill_method": fill_method,
             }
             _add_unit_fields(row, level=level, unit_key=unit_key)
             rows.append(row)

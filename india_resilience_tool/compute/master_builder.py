@@ -444,7 +444,15 @@ def _collect_file_frame(
     frame[time_col] = df[time_col].to_numpy() if time_col in df.columns else ""
     for key, val in scalar_ids.items():
         frame[key] = val
-    return frame.reindex(columns=list(column_order))
+    cols = list(column_order)
+    # Preserve sub-cell climate-fill provenance when the source CSV carries it
+    # (gridfirst climate metrics stamp ``climate_fill_method`` per row). Absent
+    # for every other metric, so masters without it stay byte-identical.
+    if "climate_fill_method" in df.columns:
+        frame["climate_fill_method"] = df["climate_fill_method"].to_numpy()
+        if "climate_fill_method" not in cols:
+            cols = cols + ["climate_fill_method"]
+    return frame.reindex(columns=cols)
 
 
 def _collect_district_data(
@@ -689,7 +697,25 @@ def _build_wide_master(
         if progress:
             progress.update()
 
-    return pd.DataFrame(rows)
+    master = pd.DataFrame(rows)
+
+    # Carry sub-cell climate-fill provenance onto the finished wide master. The
+    # ``value`` pre-aggregation (df_grp) collapses non-value columns, and the row
+    # workers build purely from unit_ident + ensemble stats, so this per-unit flag
+    # would otherwise be lost. Reduce to one value per unit (idw iff ANY
+    # contributing row is idw, else native) and left-join on the id columns. Only
+    # fires when the source CSVs carried the column, so masters for metrics without
+    # it stay byte-identical.
+    if "climate_fill_method" in df_all.columns and not master.empty:
+        is_idw = df_all["climate_fill_method"].astype("string").str.lower().eq("idw").fillna(False)
+        prov = pd.DataFrame({col: df_all[col].to_numpy() for col in id_cols})
+        prov["_is_idw"] = is_idw.to_numpy()
+        prov = prov.groupby(id_cols, as_index=False)["_is_idw"].any()
+        prov["climate_fill_method"] = np.where(prov.pop("_is_idw"), "idw", "native")
+        master = master.merge(prov, on=id_cols, how="left")
+        master["climate_fill_method"] = master["climate_fill_method"].fillna("native")
+
+    return master
 
 
 def _unique_unit_count(df: pd.DataFrame, level: AdminLevel) -> int:

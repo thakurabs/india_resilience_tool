@@ -992,6 +992,129 @@ def aggregate_percent_days(
     }
 
 
+def _cell_box_area_m2(
+    lat_edges: np.ndarray,
+    lon_edges: np.ndarray,
+    lat_index: int,
+    lon_index: int,
+    to_analysis,
+) -> float:
+    """Return the projected area (m^2) of one grid cell box in the analysis CRS.
+
+    Reuses the exact edge-box projection :func:`build_area_weights` uses so the
+    sub-cell size test compares like with like (polygon overlap area vs cell
+    area, both in ``analysis_crs``).
+    """
+    y0, y1 = sorted((float(lat_edges[lat_index]), float(lat_edges[lat_index + 1])))
+    x0, x1 = sorted((float(lon_edges[lon_index]), float(lon_edges[lon_index + 1])))
+    return float(shapely_transform(to_analysis, box(x0, y0, x1, y1)).area)
+
+
+def _haversine_km(lat0: float, lon0: float, lats: np.ndarray, lons: np.ndarray) -> np.ndarray:
+    """Great-circle distance (km) from one point to an array of points."""
+    radius_km = 6371.0088
+    phi0 = np.radians(float(lat0))
+    lam0 = np.radians(float(lon0))
+    phi1 = np.radians(np.asarray(lats, dtype=float))
+    lam1 = np.radians(np.asarray(lons, dtype=float))
+    dphi = phi1 - phi0
+    dlam = lam1 - lam0
+    a = np.sin(dphi / 2.0) ** 2 + np.cos(phi0) * np.cos(phi1) * np.sin(dlam / 2.0) ** 2
+    return 2.0 * radius_km * np.arcsin(np.sqrt(np.clip(a, 0.0, 1.0)))
+
+
+def subcell_idw_fill(
+    cell_field: xr.DataArray,
+    weights: pd.DataFrame,
+    *,
+    grid: "GridSpec | None" = None,
+    analysis_crs: str = DEFAULT_ANALYSIS_CRS,
+    power: float = 2.0,
+    subcell_margin: float = 0.5,
+    distance_floor_km: float = 1.0,
+) -> dict[str, float]:
+    """Inverse-distance fill for sub-grid-cell polygons overlapping no finite cell.
+
+    A polygon far smaller than the climate grid cell it sits inside (e.g. a coral
+    atoll ~few km^2 inside a ~25 km cell) can fall entirely within an ocean-masked
+    (all-NaN) cell. The base area-weight aggregators then either drop the unit
+    (:func:`aggregate_cell_values` / :func:`aggregate_percent_days`) or NaN it (the
+    retention floor in ``aggregate_grid_values_with_retention``). This helper fills
+    **only** those units, by an inverse-distance-weighted (power ``power``) mean
+    over every finite cell of ``cell_field`` on the same (state-cropped) grid,
+    using great-circle distance from the polygon's area-weighted cell centroid. A
+    ``distance_floor_km`` floor keeps a near-coincident donor from dominating via a
+    divide-by-~0.
+
+    A unit is filled iff BOTH hold:
+
+    * **sub-cell** — its polygon area (sum of ``area_m2``, already in
+      ``analysis_crs``) is ``< subcell_margin`` times the largest projected area of
+      the grid cell(s) it overlaps. A multi-cell mainland block never qualifies, so
+      structurally-NaN cases like arid-SPI3 all-NaN blocks are left untouched; and
+    * **no finite overlapping cell** in ``cell_field`` — units with any real data
+      (including a valid Kiltan temperature cell) are left exactly as aggregated.
+
+    Returns ``{unit_key: idw_value}`` for the filled units only (callers stamp
+    ``climate_fill_method="idw"`` on those, ``"native"`` on the rest). Returns
+    ``{}`` when ``weights`` is empty, the field lacks lat/lon geometry, no finite
+    donor cell exists, or no unit qualifies — in every such case the base
+    aggregator's output is preserved unchanged.
+    """
+    if weights.empty:
+        return {}
+    field = _to_lat_lon_field(cell_field)
+    coords = getattr(field, "coords", {})
+    if "lat" not in coords or "lon" not in coords:
+        # No grid geometry to locate donors/centroid → cannot fill; preserve base.
+        return {}
+    _assert_grid_alignment(field, weights, grid=grid)
+    lat_vals = np.asarray(field["lat"].values, dtype=float)
+    lon_vals = np.asarray(field["lon"].values, dtype=float)
+    n_lon = int(lon_vals.size)
+    flat = np.asarray(field.values, dtype=float).reshape(-1)
+    finite_mask = np.isfinite(flat)
+    if not finite_mask.any():
+        return {}  # no donor cells anywhere on the crop → nothing to fill from
+
+    finite_flat_idx = np.nonzero(finite_mask)[0]
+    donor_lat = lat_vals[finite_flat_idx // n_lon]
+    donor_lon = lon_vals[finite_flat_idx % n_lon]
+    donor_val = flat[finite_flat_idx]
+
+    lat_edges = _coord_edges(lat_vals)
+    lon_edges = _coord_edges(lon_vals)
+    to_analysis = Transformer.from_crs("EPSG:4326", analysis_crs, always_xy=True).transform
+
+    out: dict[str, float] = {}
+    for unit_key, group in weights.groupby("unit_key", sort=False):
+        cell_idx = group["cell_index"].to_numpy(dtype=int)
+        # (2) any finite overlapping cell → leave to the base aggregator.
+        if np.isfinite(flat[cell_idx]).any():
+            continue
+        area = group["area_m2"].to_numpy(dtype=float)
+        poly_area = float(area.sum())
+        if poly_area <= 0.0:
+            continue
+        li = group["lat_index"].to_numpy(dtype=int)
+        lj = group["lon_index"].to_numpy(dtype=int)
+        # (1) sub-cell size test, in the analysis CRS (not degrees).
+        cell_areas = np.array(
+            [_cell_box_area_m2(lat_edges, lon_edges, int(a), int(b), to_analysis) for a, b in zip(li, lj)],
+            dtype=float,
+        )
+        max_cell_area = float(cell_areas.max()) if cell_areas.size else 0.0
+        if not (max_cell_area > 0.0 and poly_area < float(subcell_margin) * max_cell_area):
+            continue
+        # Area-weighted centroid of the unit's overlapping cells.
+        unit_lat = float(np.average(lat_vals[li], weights=area))
+        unit_lon = float(np.average(lon_vals[lj], weights=area))
+        dist_km = np.maximum(_haversine_km(unit_lat, unit_lon, donor_lat, donor_lon), float(distance_floor_km))
+        idw_w = 1.0 / np.power(dist_km, float(power))
+        out[str(unit_key)] = float(np.sum(idw_w * donor_val) / np.sum(idw_w))
+    return out
+
+
 def aggregate_daily_area_mean(da: xr.DataArray, weights: pd.DataFrame) -> dict[str, xr.DataArray]:
     """Return daily area-mean series for each unit, useful for parity tests."""
     out: dict[str, xr.DataArray] = {}

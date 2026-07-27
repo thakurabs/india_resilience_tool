@@ -44,6 +44,7 @@ from india_resilience_tool.compute.gridfirst_spatial import (
     open_year_dataarray,
     read_grid_metric_cache,
     read_threshold_cache,
+    subcell_idw_fill,
     threshold_cache_path,
     write_grid_metric_cache,
     write_threshold_cache,
@@ -430,13 +431,19 @@ def compute_cold_risk_rows_for_metric(
                 write_grid_metric_cache(grid_ds, grid_cache_path, sidecar=grid_sidecar)
 
         values = _aggregate_cell_dataset(grid_ds, value_col=value_col, weights=weights, grid=grid)
+        fills = subcell_idw_fill(grid_ds[value_col], weights, grid=grid)
         source_file = str(cur_path)
-        for unit_key, value in values.items():
+        for unit_key in list(values.keys()) + [u for u in fills if u not in values]:
+            if unit_key in fills:
+                value, fill_method = fills[unit_key], "idw"
+            else:
+                value, fill_method = values[unit_key], "native"
             row: dict[str, object] = {
                 "year": int(year),
                 "value": float(value) if np.isfinite(value) else np.nan,
                 value_col: float(value) if np.isfinite(value) else np.nan,
                 "source_file": source_file,
+                "climate_fill_method": fill_method,
             }
             if level == "block" and "||" in unit_key:
                 left, right = unit_key.split("||", 1)

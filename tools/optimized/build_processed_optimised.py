@@ -648,6 +648,13 @@ def _select_master_columns(
     keep_cols = [c for c in id_cols if c in df.columns]
     keep_cols.extend(_metric_value_cols(df, supported_stats=supported_stats))
     keep_cols.extend(_proposal_retained_admin_master_cols(df, slug=slug, level=level))
+    # Sub-cell climate-fill provenance: a per-unit string flag (native/idw) that
+    # carries no ``__stat`` suffix, so _metric_value_cols never selects it. Keep it
+    # explicitly when present so the published master (what the vendor and coverage
+    # sweep read) records how each unit's value was produced. It is object dtype;
+    # _safe_numeric_downcast only touches float/int, so it passes through untouched.
+    if "climate_fill_method" in df.columns:
+        keep_cols.append("climate_fill_method")
     keep_cols = list(dict.fromkeys(keep_cols))
     out = df[keep_cols].copy()
     if level in {"district", "block"}:

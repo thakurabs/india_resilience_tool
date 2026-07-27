@@ -20,6 +20,7 @@ from india_resilience_tool.compute.gridfirst_spatial import (
     _assert_grid_alignment,
     _hash_paths,
     read_grid_metric_cache,
+    subcell_idw_fill,
     write_grid_metric_cache,
 )
 from india_resilience_tool.compute.heat_risk_gridfirst import concat_years
@@ -609,14 +610,25 @@ def compute_drought_risk_rows_for_metric(
     for year in sorted(year_to_paths):
         if year not in set(int(y) for y in annual_ds["year"].values):
             continue
+        annual_field = annual_ds["value"].sel(year=year)
         values = aggregate_grid_values_with_retention(
-            annual_ds["value"].sel(year=year),
+            annual_field,
             weights,
             min_polygon_cell_weight_fraction=min_polygon_fraction,
             grid=grid,
         )
+        fills = subcell_idw_fill(annual_field, weights, grid=grid)
         for unit_key, (value, retained) in values.items():
-            row = {"year": int(year), "value": value, value_col: value, "retained_weight_fraction": retained}
+            fill_method = "native"
+            if unit_key in fills:
+                value, fill_method = fills[unit_key], "idw"
+            row = {
+                "year": int(year),
+                "value": value,
+                value_col: value,
+                "retained_weight_fraction": retained,
+                "climate_fill_method": fill_method,
+            }
             _add_unit_fields(row, level=level, unit_key=unit_key)
             rows.append(row)
 
@@ -667,6 +679,7 @@ def compute_drought_risk_rows_for_metric(
             min_polygon_cell_weight_fraction=min_polygon_fraction,
             grid=grid,
         )
+        fills = subcell_idw_fill(period_ds["value"], weights, grid=grid)
         year_counts = aggregate_grid_counts(
             period_ds["years_used_count"],
             weights,
@@ -675,6 +688,9 @@ def compute_drought_risk_rows_for_metric(
         )
         for unit_key, (value, retained) in values.items():
             years_used, _count_retained = year_counts.get(unit_key, (np.nan, retained))
+            fill_method = "native"
+            if unit_key in fills:
+                value, fill_method = fills[unit_key], "idw"
             row = {
                 "period": str(period_name),
                 "value": value,
@@ -682,6 +698,7 @@ def compute_drought_risk_rows_for_metric(
                 "years_used_count": years_used,
                 "years_requested": int(np.nanmax(period_ds["years_requested"].values)),
                 "retained_weight_fraction": retained,
+                "climate_fill_method": fill_method,
             }
             _add_unit_fields(row, level=level, unit_key=unit_key)
             period_rows.append(row)

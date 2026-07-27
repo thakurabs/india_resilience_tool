@@ -25,7 +25,7 @@ from india_resilience_tool.compute.gridfirst_spatial import (
     subset_grid_by_index,
     write_grid_metric_cache,
 )
-from india_resilience_tool.compute.heat_risk_gridfirst import aggregate_cell_values
+from india_resilience_tool.compute.heat_risk_gridfirst import aggregate_cell_values, subcell_idw_fill
 
 
 HEAT_STRESS_GRIDFIRST_METHOD_VERSION = "heat-stress-v2-gridfirst-2"
@@ -354,7 +354,12 @@ def compute_heat_stress_rows_for_metric(
                 write_grid_metric_cache(grid_ds, cache_path, sidecar=sidecar)
 
         values = aggregate_cell_values(grid_ds[value_col], weights, grid=grid)
-        for unit_key, value in values.items():
+        fills = subcell_idw_fill(grid_ds[value_col], weights, grid=grid)
+        for unit_key in list(values.keys()) + [u for u in fills if u not in values]:
+            if unit_key in fills:
+                value, fill_method = fills[unit_key], "idw"
+            else:
+                value, fill_method = values[unit_key], "native"
             row: dict[str, object] = {
                 "year": int(year),
                 "value": float(value) if np.isfinite(value) else np.nan,
@@ -362,6 +367,7 @@ def compute_heat_stress_rows_for_metric(
                 "source_file": json.dumps([str(path) for path in paths]),
                 "method_version": HEAT_STRESS_GRIDFIRST_METHOD_VERSION,
                 "aggregation_method": HEAT_STRESS_AGGREGATION_METHOD,
+                "climate_fill_method": fill_method,
             }
             _add_unit_fields(row, str(unit_key), level)
             if scenario:

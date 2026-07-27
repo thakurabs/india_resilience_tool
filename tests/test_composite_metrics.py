@@ -329,3 +329,62 @@ def test_compute_composite_master_frame_derives_missing_block_keys_from_names(tm
     assert "block_key" in out.columns
     assert out["block_key"].tolist() == ["telangana|a|north", "telangana|a|south"]
     assert "composite_drought_risk__ssp245__2020-2040__mean" in out.columns
+
+
+def test_compute_composite_master_frame_propagates_idw_provenance(tmp_path) -> None:
+    """CHG-0306(c): a composite unit drawing on any idw-filled component reads
+    ``climate_fill_method="idw"``; units with only native components read
+    ``"native"``. Guards the provenance read against being taken from
+    ``_build_wide_component_frame`` (which strips the flag)."""
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+
+    id_frame = pd.DataFrame(
+        {
+            "state": [state_name, state_name, state_name],
+            "district": ["A", "B", "C"],
+            "district_key": ["a", "b", "c"],
+        }
+    )
+    component_slugs = list(spec.component_metric_slugs)
+    for i, slug in enumerate(component_slugs):
+        df = id_frame.copy()
+        df[f"{slug}__ssp245__2020-2040__mean"] = [1.0, 2.0, 3.0]
+        # Only the first component is idw, and only for district A. The composite
+        # for A must still read idw (any-component rule); B and C read native.
+        if i == 0:
+            df["climate_fill_method"] = ["idw", "native", "native"]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(
+        spec,
+        level="district",
+        state_name=state_name,
+        data_dir=tmp_path,
+    )
+
+    assert "climate_fill_method" in out.columns
+    by_district = dict(zip(out["district"], out["climate_fill_method"]))
+    assert by_district == {"A": "idw", "B": "native", "C": "native"}
+
+
+def test_compute_composite_master_frame_no_provenance_column_when_absent(tmp_path) -> None:
+    """When no component master carries the flag, the composite output is
+    byte-identical (no ``climate_fill_method`` column added)."""
+    state_name = "Telangana"
+    filename = "master_metrics_by_district.csv"
+    spec = get_composite_metric_for_bundle("Drought Risk")
+    assert spec is not None
+
+    id_frame = pd.DataFrame(
+        {"state": [state_name, state_name], "district": ["A", "B"], "district_key": ["a", "b"]}
+    )
+    for slug in spec.component_metric_slugs:
+        df = id_frame.copy()
+        df[f"{slug}__ssp245__2020-2040__mean"] = [1.0, 2.0]
+        _write_component_master(tmp_path, slug=slug, state_name=state_name, filename=filename, df=df)
+
+    out = compute_composite_master_frame(spec, level="district", state_name=state_name, data_dir=tmp_path)
+    assert "climate_fill_method" not in out.columns
