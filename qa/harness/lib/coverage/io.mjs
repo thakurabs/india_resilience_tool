@@ -1,6 +1,6 @@
 // Small file writers for coverage harness artifacts.
 
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 
 export function csvEscape(value) {
   if (value === null || value === undefined) return '';
@@ -19,4 +19,43 @@ export function writeCsv(path, rows, columns) {
 
 export function appendJsonl(path, record) {
   appendFileSync(path, `${JSON.stringify(record)}\n`);
+}
+
+function parseCsvLine(line) {
+  const cells = [];
+  let cell = '';
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        cell += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ',') {
+      cells.push(cell);
+      cell = '';
+    } else {
+      cell += ch;
+    }
+  }
+  cells.push(cell);
+  return cells;
+}
+
+export function readCsv(path) {
+  const text = readFileSync(path, 'utf8').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = text.split('\n').filter((line) => line.length > 0);
+  if (!lines.length) return [];
+  const header = parseCsvLine(lines[0]);
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line);
+    return Object.fromEntries(header.map((name, idx) => [name, cells[idx] ?? '']));
+  });
 }

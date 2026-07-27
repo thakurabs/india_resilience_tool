@@ -5,11 +5,13 @@
 //   validation, metadata capture, and required selector audit.
 // - Phase 1: local expected district/block roster extraction.
 // - Phase 2: deterministic exposed cascade discovery.
+// - Phase 2.5: scope estimation and sharding summaries.
 //
 // Usage:
 //   node qa/harness/data-coverage-runner.mjs --check-selectors
 //   node qa/harness/data-coverage-runner.mjs --dry-run
 //   node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
+//   node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,6 +22,7 @@ import { collectRunMetadata, writeRunMetadata } from './lib/coverage/metadata.mj
 import { runPhase0Preflight } from './lib/coverage/preflight.mjs';
 import { writeExpectedRosters } from './lib/coverage/rosters.mjs';
 import { runCascadeDiscovery } from './lib/coverage/discovery.mjs';
+import { writeCoveragePlanSummary } from './lib/coverage/estimation.mjs';
 
 function timestampForPath() {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -30,22 +33,30 @@ function parseArgs(argv) {
     checkSelectors: false,
     dryRun: false,
     discoverOnly: false,
+    estimateOnly: false,
     targetUrl: APP_URL,
     runDir: null,
     states: ['Telangana'],
     levels: ['district', 'block'],
     maxDiscoveryPaths: null,
+    maxUnits: null,
+    shard: null,
+    confirmLargeRun: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--check-selectors') opts.checkSelectors = true;
     else if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--discover-only') opts.discoverOnly = true;
+    else if (arg === '--estimate-only') opts.estimateOnly = true;
     else if (arg === '--run-dir') opts.runDir = argv[++i];
     else if (arg === '--target-url') opts.targetUrl = argv[++i];
     else if (arg === '--states') opts.states = splitList(argv[++i]);
     else if (arg === '--levels') opts.levels = splitList(argv[++i]).map((level) => level.toLowerCase());
     else if (arg === '--max-discovery-paths') opts.maxDiscoveryPaths = parsePositiveInt(argv[++i], '--max-discovery-paths');
+    else if (arg === '--max-units') opts.maxUnits = parsePositiveInt(argv[++i], '--max-units');
+    else if (arg === '--shard') opts.shard = parseShard(argv[++i]);
+    else if (arg === '--confirm-large-run') opts.confirmLargeRun = true;
     else if (arg === '--help' || arg === '-h') opts.help = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
@@ -63,11 +74,23 @@ function parsePositiveInt(value, flag) {
   return parsed;
 }
 
+function parseShard(value) {
+  const match = String(value || '').match(/^(\d+)\/(\d+)$/);
+  if (!match) throw new Error('--shard must use N/M format, for example 1/10');
+  const index = Number.parseInt(match[1], 10);
+  const total = Number.parseInt(match[2], 10);
+  if (index < 1 || total < 1 || index > total) {
+    throw new Error('--shard must satisfy 1 <= N <= M');
+  }
+  return { index, total, label: `${index}/${total}` };
+}
+
 function validateOpts(opts) {
   const badLevels = opts.levels.filter((level) => !['district', 'block'].includes(level));
   if (badLevels.length) throw new Error(`Unsupported --levels value(s): ${badLevels.join(', ')}`);
   if (!opts.states.length) throw new Error('--states must include at least one state');
   if (!opts.levels.length) throw new Error('--levels must include district and/or block');
+  if (opts.estimateOnly && !opts.runDir) throw new Error('--estimate-only requires --run-dir from a discovery run');
 }
 
 function printHelp() {
@@ -78,6 +101,7 @@ Implemented commands:
   node qa/harness/data-coverage-runner.mjs --check-selectors
   node qa/harness/data-coverage-runner.mjs --dry-run
   node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
+  node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
 
 Options:
   --target-url <url>             Override the target URL for this run
@@ -85,6 +109,9 @@ Options:
   --states <A,B>                 State names to discover (default: Telangana)
   --levels <district,block>      Admin levels to discover (default: district,block)
   --max-discovery-paths <N>      Stop after N terminal universe rows
+  --max-units <N>                Future probe safety gate / selected-row cap
+  --shard <N/M>                  Future probe safety gate / deterministic shard
+  --confirm-large-run            Future probe safety gate for exhaustive runs
   --help                         Show this message
 
 Planned later-phase flags from DATA_COVERAGE_PLAN.md are intentionally not
@@ -103,9 +130,9 @@ if (opts.help) {
   printHelp();
   process.exit(0);
 }
-if (!opts.checkSelectors && !opts.dryRun && !opts.discoverOnly) {
+if (!opts.checkSelectors && !opts.dryRun && !opts.discoverOnly && !opts.estimateOnly) {
   printHelp();
-  throw new Error('Use --check-selectors, --dry-run, or --discover-only. Later coverage modes are not implemented yet.');
+  throw new Error('Use --check-selectors, --dry-run, --discover-only, or --estimate-only. Later coverage modes are not implemented yet.');
 }
 
 const runDir = makeRunDir(opts.runDir);
@@ -121,6 +148,23 @@ if (opts.dryRun) {
   console.log(`  Counts: ${summary.outputs.expectedCountsByStateLevel}`);
   console.log(`  Totals: states=${summary.totals.states}, districts=${summary.totals.districts}, blocks=${summary.totals.blocks}`);
   console.log(`  Duplicate checks: district=${summary.duplicateChecks.districtsByStateDistrict.length}, block_key=${summary.duplicateChecks.blocksByBlockKey.length}, block_label=${summary.duplicateChecks.blocksByStateDistrictBlock.length}`);
+  process.exit(0);
+}
+
+if (opts.estimateOnly) {
+  console.log('  Building coverage plan summary');
+  const summary = writeCoveragePlanSummary(runDir, {
+    maxUnits: opts.maxUnits,
+    shard: opts.shard,
+    confirmLargeRun: opts.confirmLargeRun,
+  });
+  console.log(`\n  Run dir: ${runDir}`);
+  console.log(`  Source universe rows: ${summary.totalUniverseRows}`);
+  console.log(`  Selected universe rows: ${summary.selectedUniverseRows}`);
+  console.log(`  Summary groups: ${summary.summaryGroups}`);
+  console.log(`  Coverage plan CSV: ${summary.outputs.csv}`);
+  console.log(`  Coverage plan JSON: ${summary.outputs.json}`);
+  console.log(`  Future probe gate: ${summary.executionGate.ok_for_probe ? summary.executionGate.gates.join(', ') : 'missing'}`);
   process.exit(0);
 }
 

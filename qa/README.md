@@ -58,6 +58,7 @@ When a run reports "bounced to login", the session expired — re-run step 2.
 node qa/harness/data-coverage-runner.mjs --check-selectors
 node qa/harness/data-coverage-runner.mjs --dry-run
 node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
+node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
 ```
 
 `--check-selectors` verifies saved auth reaches the dashboard, dismisses
@@ -72,6 +73,11 @@ app.
 `--discover-only` runs Phase 2 exposed-option cascade discovery for the selected
 states/levels and writes `filter_universe.jsonl`, `filter_universe.csv`, and
 `filter_universe_summary.json`.
+
+`--estimate-only` reads an existing discovered `filter_universe.csv` and writes
+`coverage_plan_summary.csv` plus `coverage_plan_summary.json`. Add
+`--max-units`, `--shard N/M`, or `--confirm-large-run` to record the safety gate
+that a later probe run will require.
 
 ### Map-interactivity probe (dropdown-gating + portfolio commutativity)
 
