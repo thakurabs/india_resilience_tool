@@ -11,7 +11,7 @@ function normalize(text) {
   return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
-function resolveDataDir() {
+export function resolveDataDir() {
   if (process.env.IRT_DATA_DIR) return resolve(process.env.IRT_DATA_DIR);
   try {
     const script = "from paths import get_paths_config; print(get_paths_config().data_dir)";
@@ -109,7 +109,7 @@ async function runSelectorChecks(page) {
   return checks;
 }
 
-function checkRosters() {
+export function checkRosters() {
   const dataDir = resolveDataDir();
   const files = [
     { logicalName: 'districts', path: dataDir ? join(dataDir, 'districts_4326.geojson') : null, required: true },

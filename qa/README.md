@@ -56,11 +56,17 @@ When a run reports "bounced to login", the session expired — re-run step 2.
 
 ```bash
 node qa/harness/data-coverage-runner.mjs --check-selectors
+node qa/harness/data-coverage-runner.mjs --dry-run
 ```
 
-This verifies saved auth reaches the dashboard, dismisses visitor-guide and
-feedback overlays, checks canonical `IRT_DATA_DIR` roster files, and writes
-`run_metadata.json` plus `selector_preflight.json` under `qa/runs/`.
+`--check-selectors` verifies saved auth reaches the dashboard, dismisses
+visitor-guide and feedback overlays, checks canonical `IRT_DATA_DIR` roster
+files, and writes `run_metadata.json` plus `selector_preflight.json` under
+`qa/runs/`.
+
+`--dry-run` builds the Phase 1 local expected roster CSVs from
+`districts_4326.geojson` and `blocks_4326.geojson` without probing the vendor
+app.
 
 ### Map-interactivity probe (dropdown-gating + portfolio commutativity)
 
