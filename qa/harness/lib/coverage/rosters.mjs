@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkRosters, resolveDataDir } from './preflight.mjs';
+import { writeCsv } from './io.mjs';
 
 const DISTRICT_ALIASES = {
   state: ['state_name', 'st_nm', 'state', 'state_nm', 'adm1_name', 'STATE_NAME'],
@@ -46,21 +47,6 @@ function resolveField(props, aliases, { required = true, logicalName }) {
     throw new Error(`Could not resolve required field "${logicalName}". Tried: ${aliases.join(', ')}`);
   }
   return found || null;
-}
-
-function csvEscape(value) {
-  if (value === null || value === undefined) return '';
-  const text = String(value);
-  if (/[",\n\r]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
-}
-
-function writeCsv(path, rows, columns) {
-  const lines = [
-    columns.join(','),
-    ...rows.map((row) => columns.map((col) => csvEscape(row[col])).join(',')),
-  ];
-  writeFileSync(path, `${lines.join('\n')}\n`);
 }
 
 function uniqueSorted(values) {

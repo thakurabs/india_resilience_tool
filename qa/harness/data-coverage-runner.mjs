@@ -4,10 +4,12 @@
 // - Phase 0: saved-auth preflight, overlay dismissal, local roster file
 //   validation, metadata capture, and required selector audit.
 // - Phase 1: local expected district/block roster extraction.
+// - Phase 2: deterministic exposed cascade discovery.
 //
 // Usage:
 //   node qa/harness/data-coverage-runner.mjs --check-selectors
 //   node qa/harness/data-coverage-runner.mjs --dry-run
+//   node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -17,6 +19,7 @@ import { installCoverageOverlayDismissal, dismissCoverageOverlays } from './lib/
 import { collectRunMetadata, writeRunMetadata } from './lib/coverage/metadata.mjs';
 import { runPhase0Preflight } from './lib/coverage/preflight.mjs';
 import { writeExpectedRosters } from './lib/coverage/rosters.mjs';
+import { runCascadeDiscovery } from './lib/coverage/discovery.mjs';
 
 function timestampForPath() {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -26,19 +29,45 @@ function parseArgs(argv) {
   const opts = {
     checkSelectors: false,
     dryRun: false,
+    discoverOnly: false,
     targetUrl: APP_URL,
     runDir: null,
+    states: ['Telangana'],
+    levels: ['district', 'block'],
+    maxDiscoveryPaths: null,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--check-selectors') opts.checkSelectors = true;
     else if (arg === '--dry-run') opts.dryRun = true;
+    else if (arg === '--discover-only') opts.discoverOnly = true;
     else if (arg === '--run-dir') opts.runDir = argv[++i];
     else if (arg === '--target-url') opts.targetUrl = argv[++i];
+    else if (arg === '--states') opts.states = splitList(argv[++i]);
+    else if (arg === '--levels') opts.levels = splitList(argv[++i]).map((level) => level.toLowerCase());
+    else if (arg === '--max-discovery-paths') opts.maxDiscoveryPaths = parsePositiveInt(argv[++i], '--max-discovery-paths');
     else if (arg === '--help' || arg === '-h') opts.help = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
+  validateOpts(opts);
   return opts;
+}
+
+function splitList(value) {
+  return String(value || '').split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function parsePositiveInt(value, flag) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${flag} must be a positive integer`);
+  return parsed;
+}
+
+function validateOpts(opts) {
+  const badLevels = opts.levels.filter((level) => !['district', 'block'].includes(level));
+  if (badLevels.length) throw new Error(`Unsupported --levels value(s): ${badLevels.join(', ')}`);
+  if (!opts.states.length) throw new Error('--states must include at least one state');
+  if (!opts.levels.length) throw new Error('--levels must include district and/or block');
 }
 
 function printHelp() {
@@ -48,11 +77,15 @@ Data coverage runner
 Implemented commands:
   node qa/harness/data-coverage-runner.mjs --check-selectors
   node qa/harness/data-coverage-runner.mjs --dry-run
+  node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
 
 Options:
-  --target-url <url>   Override the target URL for this run
-  --run-dir <path>     Write artifacts into an existing/new run dir
-  --help               Show this message
+  --target-url <url>             Override the target URL for this run
+  --run-dir <path>               Write artifacts into an existing/new run dir
+  --states <A,B>                 State names to discover (default: Telangana)
+  --levels <district,block>      Admin levels to discover (default: district,block)
+  --max-discovery-paths <N>      Stop after N terminal universe rows
+  --help                         Show this message
 
 Planned later-phase flags from DATA_COVERAGE_PLAN.md are intentionally not
 accepted yet, so accidental exhaustive runs cannot start from this foundation.
@@ -70,9 +103,9 @@ if (opts.help) {
   printHelp();
   process.exit(0);
 }
-if (!opts.checkSelectors && !opts.dryRun) {
+if (!opts.checkSelectors && !opts.dryRun && !opts.discoverOnly) {
   printHelp();
-  throw new Error('Use --check-selectors or --dry-run. Later coverage modes are not implemented yet.');
+  throw new Error('Use --check-selectors, --dry-run, or --discover-only. Later coverage modes are not implemented yet.');
 }
 
 const runDir = makeRunDir(opts.runDir);
@@ -107,7 +140,23 @@ await withSession(async (page, context) => {
 
   console.log('  Running selector preflight');
   const preflight = await runPhase0Preflight(page, runDir);
-  exitCode = preflight.ok ? 0 : 2;
+  if (!preflight.ok) {
+    exitCode = 2;
+  } else if (opts.discoverOnly) {
+    console.log('  Running cascade discovery');
+    const discovery = await runCascadeDiscovery(page, runDir, {
+      targetUrl: opts.targetUrl,
+      states: opts.states,
+      levels: opts.levels,
+      maxDiscoveryPaths: opts.maxDiscoveryPaths,
+    });
+    console.log(`  Filter universe JSONL: ${discovery.outputs.jsonl}`);
+    console.log(`  Filter universe CSV: ${discovery.outputs.csv}`);
+    console.log(`  Universe rows: ${discovery.universeRows}`);
+    exitCode = 0;
+  } else {
+    exitCode = 0;
+  }
 
   console.log(`\n  Run dir: ${runDir}`);
   console.log(`  Metadata: ${join(runDir, 'run_metadata.json')}`);

@@ -57,6 +57,7 @@ When a run reports "bounced to login", the session expired — re-run step 2.
 ```bash
 node qa/harness/data-coverage-runner.mjs --check-selectors
 node qa/harness/data-coverage-runner.mjs --dry-run
+node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
 ```
 
 `--check-selectors` verifies saved auth reaches the dashboard, dismisses
@@ -67,6 +68,10 @@ files, and writes `run_metadata.json` plus `selector_preflight.json` under
 `--dry-run` builds the Phase 1 local expected roster CSVs from
 `districts_4326.geojson` and `blocks_4326.geojson` without probing the vendor
 app.
+
+`--discover-only` runs Phase 2 exposed-option cascade discovery for the selected
+states/levels and writes `filter_universe.jsonl`, `filter_universe.csv`, and
+`filter_universe_summary.json`.
 
 ### Map-interactivity probe (dropdown-gating + portfolio commutativity)
 
