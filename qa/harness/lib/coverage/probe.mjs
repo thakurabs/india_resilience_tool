@@ -20,6 +20,8 @@ function nowCompact() {
 }
 
 export function selectedPilotRows(rows, opts) {
+  if (opts.sampleStrategy === 'first') return rows.slice(0, opts.maxUnits || 1);
+  if (opts.sampleStrategy === 'stratified') return selectedStratifiedRows(rows, opts);
   const pilotRows = rows.filter((row) => (
     /^Telangana$/i.test(row.state_name)
     && ['district', 'block'].includes(row.admin_level)
@@ -27,6 +29,44 @@ export function selectedPilotRows(rows, opts) {
   ));
   const source = pilotRows.length ? pilotRows : rows;
   return source.slice(0, opts.maxUnits || 1);
+}
+
+function strataKey(row) {
+  return [
+    row.state_name || '',
+    row.admin_level || '',
+    row.risk_domain || '',
+    row.metric || '',
+  ].join('\u001f');
+}
+
+function selectedStratifiedRows(rows, opts) {
+  const limit = opts.maxUnits || 1;
+  const groups = new Map();
+  for (const row of rows) {
+    const key = strataKey(row);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  const orderedGroups = [...groups.values()].sort((a, b) => (
+    (a[0].state_name || '').localeCompare(b[0].state_name || '')
+    || (a[0].admin_level || '').localeCompare(b[0].admin_level || '')
+    || (a[0].risk_domain || '').localeCompare(b[0].risk_domain || '')
+    || (a[0].metric || '').localeCompare(b[0].metric || '')
+  ));
+  const selected = [];
+  for (let idx = 0; selected.length < limit; idx += 1) {
+    let added = false;
+    for (const group of orderedGroups) {
+      if (idx < group.length) {
+        selected.push(group[idx]);
+        added = true;
+        if (selected.length >= limit) break;
+      }
+    }
+    if (!added) break;
+  }
+  return selected;
 }
 
 function attemptId(row, attemptNumber) {
@@ -396,6 +436,7 @@ export async function runPilotProbeScaffold(page, runDir, opts) {
     timestamp: new Date().toISOString(),
     sourceUniverse: universePath,
     selectedRows: selectedRows.length,
+    sampleStrategy: opts.sampleStrategy || 'pilot',
     attempts: attempts.length,
     observations: observations.length,
     selectionFailures: attempts.filter((attempt) => attempt.selection_status !== 'selected').length,

@@ -58,8 +58,10 @@ When a run reports "bounced to login", the session expired — re-run step 2.
 node qa/harness/data-coverage-runner.mjs --check-selectors
 node qa/harness/data-coverage-runner.mjs --dry-run
 node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
+node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block --max-discovery-paths 50 --stratified-discovery
 node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
 node qa/harness/data-coverage-runner.mjs --pilot --run-dir qa/runs/<id>_data-coverage --max-units 1
+node qa/harness/data-coverage-runner.mjs --pilot --run-dir qa/runs/<id>_data-coverage --max-units 50 --sample-strategy stratified
 node qa/harness/data-coverage-runner.mjs --audit-only --run-dir qa/runs/<id>_data-coverage --max-units 1
 ```
 
@@ -74,7 +76,10 @@ app.
 
 `--discover-only` runs Phase 2 exposed-option cascade discovery for the selected
 states/levels and writes `filter_universe.jsonl`, `filter_universe.csv`, and
-`filter_universe_summary.json`.
+`filter_universe_summary.json`. Add `--stratified-discovery` with
+`--max-discovery-paths` to spread the terminal-row cap across requested
+state/level pairs and shallow selector branches instead of exhausting the first
+deep cascade branch.
 
 `--estimate-only` reads an existing discovered `filter_universe.csv` and writes
 `coverage_plan_summary.csv` plus `coverage_plan_summary.json`. Add
@@ -87,6 +92,10 @@ relevant network calls, runs first-pass map/ranking/profile checks, and writes
 `coverage_observations.csv`. Ranking-count evidence prefers API response totals
 or row arrays, then visible UI totals, with virtualized DOM rows retained only as
 a triage fallback.
+
+Add `--sample-strategy stratified` to round-robin selected probe rows across
+`state_name`, `admin_level`, `risk_domain`, and `metric` groups from the
+discovered universe.
 
 `--audit-only` reads an existing probe run without opening the browser and writes
 `coverage_run_audit.json`. It verifies that each selected universe row has one

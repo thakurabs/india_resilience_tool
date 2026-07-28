@@ -31,7 +31,7 @@ function attemptIdsFromObservation(observation) {
 function selectedRowsForAudit(universeRows, attempts, opts) {
   if (opts.maxUnits !== null) {
     return {
-      source: 'pilot_selector',
+      source: `${opts.sampleStrategy || 'pilot'}_selector`,
       rows: selectedPilotRows(universeRows, opts),
     };
   }
@@ -147,6 +147,7 @@ export function auditCoverageRun(runDir, opts) {
     ok: errorCount === 0,
     status: errorCount === 0 ? 'pass' : 'fail',
     selectedRows: selected.rows.length,
+    sampleStrategy: opts.sampleStrategy || 'pilot',
     selectionSource: selected.source,
     attempts: attempts.length,
     observations: observations.length,

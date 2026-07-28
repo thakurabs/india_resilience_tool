@@ -48,6 +48,8 @@ function parseArgs(argv) {
     levels: ['district', 'block'],
     maxDiscoveryPaths: null,
     maxUnits: null,
+    sampleStrategy: 'pilot',
+    stratifiedDiscovery: false,
     shard: null,
     confirmLargeRun: false,
   };
@@ -65,6 +67,8 @@ function parseArgs(argv) {
     else if (arg === '--levels') opts.levels = splitList(argv[++i]).map((level) => level.toLowerCase());
     else if (arg === '--max-discovery-paths') opts.maxDiscoveryPaths = parsePositiveInt(argv[++i], '--max-discovery-paths');
     else if (arg === '--max-units') opts.maxUnits = parsePositiveInt(argv[++i], '--max-units');
+    else if (arg === '--sample-strategy') opts.sampleStrategy = argv[++i];
+    else if (arg === '--stratified-discovery') opts.stratifiedDiscovery = true;
     else if (arg === '--shard') opts.shard = parseShard(argv[++i]);
     else if (arg === '--confirm-large-run') opts.confirmLargeRun = true;
     else if (arg === '--help' || arg === '-h') opts.help = true;
@@ -100,6 +104,9 @@ function validateOpts(opts) {
   if (badLevels.length) throw new Error(`Unsupported --levels value(s): ${badLevels.join(', ')}`);
   if (!opts.states.length) throw new Error('--states must include at least one state');
   if (!opts.levels.length) throw new Error('--levels must include district and/or block');
+  if (!['pilot', 'first', 'stratified'].includes(opts.sampleStrategy)) {
+    throw new Error('--sample-strategy must be one of: pilot, first, stratified');
+  }
   if (opts.estimateOnly && !opts.runDir) throw new Error('--estimate-only requires --run-dir from a discovery run');
   if (opts.pilot && !opts.runDir) throw new Error('--pilot requires --run-dir from a discovery run');
   if (opts.auditOnly && !opts.runDir) throw new Error('--audit-only requires --run-dir from a probe run');
@@ -124,6 +131,8 @@ Options:
   --levels <district,block>      Admin levels to discover (default: district,block)
   --max-discovery-paths <N>      Stop after N terminal universe rows
   --max-units <N>                Future probe safety gate / selected-row cap
+  --stratified-discovery         Spread discovery caps across state/level pairs and shallow selector branches
+  --sample-strategy <mode>       Probe/audit row selection: pilot, first, stratified (default: pilot)
   --shard <N/M>                  Future probe safety gate / deterministic shard
   --confirm-large-run            Future probe safety gate for exhaustive runs
   --help                         Show this message
@@ -186,6 +195,7 @@ if (opts.auditOnly) {
   console.log('  Auditing coverage run integrity');
   const audit = auditCoverageRun(runDir, {
     maxUnits: opts.maxUnits,
+    sampleStrategy: opts.sampleStrategy,
   });
   console.log(`\n  Run dir: ${runDir}`);
   console.log(`  Audit JSON: ${audit.outputs.auditJson}`);
@@ -222,6 +232,7 @@ await withSession(async (page, context) => {
       states: opts.states,
       levels: opts.levels,
       maxDiscoveryPaths: opts.maxDiscoveryPaths,
+      stratifiedDiscovery: opts.stratifiedDiscovery,
     });
     console.log(`  Filter universe JSONL: ${discovery.outputs.jsonl}`);
     console.log(`  Filter universe CSV: ${discovery.outputs.csv}`);
@@ -232,6 +243,7 @@ await withSession(async (page, context) => {
     const pilot = await runPilotProbeScaffold(page, runDir, {
       targetUrl: opts.targetUrl,
       maxUnits: opts.maxUnits,
+      sampleStrategy: opts.sampleStrategy,
     });
     console.log(`  Coverage attempts: ${pilot.outputs.attemptsJsonl}`);
     console.log(`  Coverage observations JSONL: ${pilot.outputs.observationsJsonl}`);

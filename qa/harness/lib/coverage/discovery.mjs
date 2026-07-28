@@ -8,6 +8,14 @@ import { appendJsonl, writeCsv } from './io.mjs';
 import { dismissCoverageOverlays } from './overlays.mjs';
 
 const STAGES = ['risk_domain', 'metric', 'scenario', 'period', 'statistic', 'map_mode'];
+const STRATIFIED_STAGE_LIMITS = {
+  risk_domain: 8,
+  metric: 2,
+  scenario: 1,
+  period: 2,
+  statistic: 1,
+  map_mode: 1,
+};
 const STAGE_LABELS = {
   risk_domain: 'Risk Domain',
   metric: 'Metric',
@@ -198,8 +206,15 @@ function makeUniverseRecord({ stateName, level, path }) {
 
 async function discoverForStateLevel(page, opts, stateName, level, jsonlPath, universeRows) {
   const terminalLimit = opts.maxDiscoveryPaths;
+  const pairLimit = opts.maxRowsForPair || null;
+  const pairStartCount = universeRows.length;
+  function reachedLimit() {
+    if (terminalLimit !== null && universeRows.length >= terminalLimit) return true;
+    if (pairLimit !== null && universeRows.length - pairStartCount >= pairLimit) return true;
+    return false;
+  }
   async function visit(stageIndex, path) {
-    if (terminalLimit !== null && universeRows.length >= terminalLimit) return;
+    if (reachedLimit()) return;
     if (stageIndex >= STAGES.length) {
       const record = makeUniverseRecord({ stateName, level, path });
       appendJsonl(jsonlPath, record);
@@ -223,8 +238,10 @@ async function discoverForStateLevel(page, opts, stateName, level, jsonlPath, un
         }));
         return;
       }
-      for (const option of options) {
-        if (terminalLimit !== null && universeRows.length >= terminalLimit) break;
+      const stageLimit = opts.stratifiedDiscovery ? STRATIFIED_STAGE_LIMITS[stage] : null;
+      const selectedOptions = stageLimit ? options.slice(0, stageLimit) : options;
+      for (const option of selectedOptions) {
+        if (reachedLimit()) break;
         appendJsonl(jsonlPath, makeOptionRecord({ stateName, level, stage, priorPath: path, option, source }));
         if (!option.disabled) {
           await visit(stageIndex + 1, { ...path, [stage]: option.label });
@@ -253,13 +270,17 @@ export async function runCascadeDiscovery(page, runDir, opts) {
   if (existsSync(jsonlPath)) writeFileSync(jsonlPath, '');
 
   const universeRows = [];
-  for (const stateName of opts.states) {
-    for (const level of opts.levels) {
+  const stateLevelPairs = opts.states.flatMap((stateName) => opts.levels.map((level) => ({ stateName, level })));
+  const rowsPerPair = opts.stratifiedDiscovery && opts.maxDiscoveryPaths !== null
+    ? Math.max(1, Math.ceil(opts.maxDiscoveryPaths / stateLevelPairs.length))
+    : null;
+  for (const { stateName, level } of stateLevelPairs) {
       if (opts.maxDiscoveryPaths !== null && universeRows.length >= opts.maxDiscoveryPaths) break;
       console.log(`  Discovering ${stateName} / ${level}`);
-      await discoverForStateLevel(page, opts, stateName, level, jsonlPath, universeRows);
-    }
-    if (opts.maxDiscoveryPaths !== null && universeRows.length >= opts.maxDiscoveryPaths) break;
+      await discoverForStateLevel(page, {
+        ...opts,
+        maxRowsForPair: rowsPerPair,
+      }, stateName, level, jsonlPath, universeRows);
   }
 
   writeCsv(csvPath, universeRows, [
@@ -281,6 +302,7 @@ export async function runCascadeDiscovery(page, runDir, opts) {
     states: opts.states,
     levels: opts.levels,
     maxDiscoveryPaths: opts.maxDiscoveryPaths,
+    stratifiedDiscovery: opts.stratifiedDiscovery === true,
     universeRows: universeRows.length,
     outputs: {
       jsonl: jsonlPath,
