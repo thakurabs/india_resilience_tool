@@ -65,6 +65,7 @@ function observationFromAttempt(row, attempt) {
     api_status_summary: attempt.api_status_summary || 'not_checked',
     visible_error_summary: selected ? surfaceStatuses.visible_error_summary || '' : attempt.error_summary,
     observed_count_source: surfaceStatuses.observed_count_source || 'not_checked',
+    observed_count: surfaceStatuses.observed_count ?? '',
     retry_count: 0,
     attempt_ids: attempt.attempt_id,
     evidence_path: '',
@@ -89,6 +90,45 @@ function relevantNetwork(url) {
     && !/analytics|audit\/event|fonts|favicon|telemetry|\.css\b|\.js\b|cdn/i.test(url);
 }
 
+function responseCountCandidates(value, path = '$') {
+  if (Array.isArray(value)) {
+    const objectRows = value.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
+    const candidates = objectRows.length ? [{ source: `${path}[]`, count: objectRows.length }] : [];
+    return candidates.concat(value.flatMap((item, idx) => responseCountCandidates(item, `${path}[${idx}]`)));
+  }
+  if (!value || typeof value !== 'object') return [];
+  const candidates = [];
+  for (const [key, child] of Object.entries(value)) {
+    const childPath = `${path}.${key}`;
+    if (/^(total|total_count|totalCount|count|row_count|rowCount|recordsTotal)$/i.test(key) && Number.isFinite(Number(child))) {
+      candidates.push({ source: childPath, count: Number(child) });
+    } else if (Array.isArray(child)) {
+      const objectRows = child.filter((item) => item && typeof item === 'object' && !Array.isArray(item));
+      if (objectRows.length) candidates.push({ source: childPath, count: objectRows.length });
+      candidates.push(...responseCountCandidates(child, childPath));
+    } else {
+      candidates.push(...responseCountCandidates(child, childPath));
+    }
+  }
+  return candidates;
+}
+
+function bestResponseCountCandidate(events) {
+  const candidates = events
+    .filter((event) => event.status === 200 && event.response_body_summary)
+    .flatMap((event) => (event.response_body_summary.count_candidates || []).map((candidate) => ({
+      ...candidate,
+      url: event.url,
+    })))
+    .filter((candidate) => Number.isFinite(candidate.count) && candidate.count > 0);
+  const rankingPayloads = candidates.filter((candidate) => /\/parquet\/.*(?:map-data|ranking|table|data)|ranking|table/i.test(candidate.url));
+  const sourcePool = rankingPayloads.length ? rankingPayloads : candidates;
+  const preferred = sourcePool.find((candidate) => /total|count|recordsTotal/i.test(candidate.source))
+    || sourcePool.find((candidate) => /data|rows|features|records|results|items/i.test(candidate.source))
+    || sourcePool[0];
+  return preferred || null;
+}
+
 function summarizeNetwork(events) {
   const relevant = events.filter((event) => relevantNetwork(event.url || ''));
   const errors = relevant.filter((event) => event.status >= 400 || event.failure);
@@ -109,10 +149,47 @@ function networkSummaryText(summary) {
 
 function attachObservationNetwork(page) {
   const events = [];
+  const pending = [];
+  async function captureResponseBody(res, event) {
+    const contentType = await res.headerValue('content-type').catch(() => '');
+    if (!/json|text/i.test(contentType || '')) {
+      event.response_body_summary = { content_type: contentType || '', skipped: 'non_text_response' };
+      return;
+    }
+    const text = await res.text().catch(() => '');
+    if (!text) {
+      event.response_body_summary = { content_type: contentType || '', skipped: 'empty_body' };
+      return;
+    }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      event.response_body_summary = {
+        content_type: contentType || '',
+        text_sample: text.replace(/\s+/g, ' ').slice(0, 240),
+        count_candidates: [],
+      };
+      return;
+    }
+    const countCandidates = responseCountCandidates(parsed)
+      .filter((candidate) => candidate.count > 0)
+      .slice(0, 20);
+    event.response_body_summary = {
+      content_type: contentType || '',
+      root_type: Array.isArray(parsed) ? 'array' : typeof parsed,
+      root_keys: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.keys(parsed).slice(0, 20) : [],
+      count_candidates: countCandidates,
+    };
+  }
   const onResponse = (res) => {
     const url = res.url();
     if (relevantNetwork(url)) {
-      events.push({ type: 'response', status: res.status(), url, method: res.request().method() });
+      const event = { type: 'response', status: res.status(), url, method: res.request().method() };
+      events.push(event);
+      pending.push(captureResponseBody(res, event).catch((e) => {
+        event.response_body_summary = { error: String((e && e.message) || e) };
+      }));
     }
   };
   const onFailed = (req) => {
@@ -130,6 +207,9 @@ function attachObservationNetwork(page) {
   page.on('requestfailed', onFailed);
   return {
     events,
+    async flush() {
+      await Promise.allSettled(pending);
+    },
     detach() {
       page.off('response', onResponse);
       page.off('requestfailed', onFailed);
@@ -160,9 +240,11 @@ async function checkMapSurface(page) {
   return { status: 'needs_triage', detail: result };
 }
 
-async function checkRankingSurface(page) {
+async function checkRankingSurface(page, network) {
   await page.getByText(/^Ranking Table$/i).first().click({ timeout: 4000 }).catch(() => {});
   await page.waitForTimeout(3500);
+  await network.flush();
+  const apiCount = bestResponseCountCandidate(network.events);
   const result = await page.evaluate(() => {
     const text = document.body.innerText || '';
     const rows = document.querySelectorAll('table tr, [role="row"]').length;
@@ -177,8 +259,16 @@ async function checkRankingSurface(page) {
     };
   });
   if (result.errored) return { status: 'ranking_api_error', observed_count_source: 'ui_error', detail: result };
-  if (result.rows >= 2) return { status: 'pass', observed_count_source: 'dom_rows_triage', detail: result };
+  if (apiCount) {
+    return {
+      status: 'pass',
+      observed_count_source: 'api_payload',
+      observed_count: apiCount.count,
+      detail: { ...result, apiCount },
+    };
+  }
   if (result.visibleTotal !== null && result.visibleTotal > 0) return { status: 'pass', observed_count_source: 'visible_total', detail: result };
+  if (result.rows >= 2) return { status: 'pass', observed_count_source: 'dom_rows_triage', detail: result };
   if (result.empty) return { status: 'ranking_empty', observed_count_source: 'visible_empty', detail: result };
   return { status: 'needs_triage', observed_count_source: 'unresolved', detail: result };
 }
@@ -198,9 +288,9 @@ async function checkProfileSurface(page) {
   return { status: 'profile_missing', detail: result };
 }
 
-async function checkSurfaces(page) {
+async function checkSurfaces(page, network) {
   const map = await checkMapSurface(page);
-  const ranking = await checkRankingSurface(page);
+  const ranking = await checkRankingSurface(page, network);
   const profile = await checkProfileSurface(page);
   const visibleErrors = [map, ranking, profile]
     .filter((item) => /error|empty|missing/i.test(item.status))
@@ -211,6 +301,7 @@ async function checkSurfaces(page) {
     ranking_status: ranking.status,
     profile_status: profile.status,
     observed_count_source: ranking.observed_count_source || 'not_checked',
+    observed_count: ranking.observed_count ?? '',
     visible_error_summary: visibleErrors,
     details: { map, ranking, profile },
   };
@@ -252,7 +343,9 @@ export async function runPilotProbeScaffold(page, runDir, opts) {
     try {
       const network = attachObservationNetwork(page);
       const body = await replayCascade(page, opts.targetUrl, row);
-      const surfaces = await checkSurfaces(page);
+      await network.flush();
+      const surfaces = await checkSurfaces(page, network);
+      await network.flush();
       network.detach();
       const networkSummary = summarizeNetwork(network.events);
       attempt.surface_statuses = surfaces;
@@ -293,6 +386,7 @@ export async function runPilotProbeScaffold(page, runDir, opts) {
     'api_status_summary',
     'visible_error_summary',
     'observed_count_source',
+    'observed_count',
     'retry_count',
     'attempt_ids',
     'evidence_path',

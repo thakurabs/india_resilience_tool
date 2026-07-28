@@ -84,7 +84,9 @@ that a later probe run will require.
 `--pilot` replays selected cascade rows from `filter_universe.csv`, records
 relevant network calls, runs first-pass map/ranking/profile checks, and writes
 `coverage_attempts.jsonl`, `coverage_observations.jsonl`, and
-`coverage_observations.csv`.
+`coverage_observations.csv`. Ranking-count evidence prefers API response totals
+or row arrays, then visible UI totals, with virtualized DOM rows retained only as
+a triage fallback.
 
 `--audit-only` reads an existing probe run without opening the browser and writes
 `coverage_run_audit.json`. It verifies that each selected universe row has one
