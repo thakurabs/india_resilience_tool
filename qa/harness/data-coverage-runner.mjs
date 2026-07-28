@@ -7,6 +7,7 @@
 // - Phase 2: deterministic exposed cascade discovery.
 // - Phase 2.5: scope estimation and sharding summaries.
 // - Phase 3: pilot attempt/observation scaffolding plus first-pass surface checks.
+// - Phase 3.5: observation integrity audit.
 //
 // Usage:
 //   node qa/harness/data-coverage-runner.mjs --check-selectors
@@ -14,6 +15,7 @@
 //   node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
 //   node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
 //   node qa/harness/data-coverage-runner.mjs --pilot --run-dir qa/runs/<id>_data-coverage --max-units 1
+//   node qa/harness/data-coverage-runner.mjs --audit-only --run-dir qa/runs/<id>_data-coverage --max-units 1
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,6 +28,7 @@ import { writeExpectedRosters } from './lib/coverage/rosters.mjs';
 import { runCascadeDiscovery } from './lib/coverage/discovery.mjs';
 import { writeCoveragePlanSummary } from './lib/coverage/estimation.mjs';
 import { runPilotProbeScaffold } from './lib/coverage/probe.mjs';
+import { auditCoverageRun } from './lib/coverage/audit.mjs';
 
 function timestampForPath() {
   return new Date().toISOString().replace(/[:.]/g, '-');
@@ -38,6 +41,7 @@ function parseArgs(argv) {
     discoverOnly: false,
     estimateOnly: false,
     pilot: false,
+    auditOnly: false,
     targetUrl: APP_URL,
     runDir: null,
     states: ['Telangana'],
@@ -54,6 +58,7 @@ function parseArgs(argv) {
     else if (arg === '--discover-only') opts.discoverOnly = true;
     else if (arg === '--estimate-only') opts.estimateOnly = true;
     else if (arg === '--pilot') opts.pilot = true;
+    else if (arg === '--audit-only') opts.auditOnly = true;
     else if (arg === '--run-dir') opts.runDir = argv[++i];
     else if (arg === '--target-url') opts.targetUrl = argv[++i];
     else if (arg === '--states') opts.states = splitList(argv[++i]);
@@ -97,6 +102,7 @@ function validateOpts(opts) {
   if (!opts.levels.length) throw new Error('--levels must include district and/or block');
   if (opts.estimateOnly && !opts.runDir) throw new Error('--estimate-only requires --run-dir from a discovery run');
   if (opts.pilot && !opts.runDir) throw new Error('--pilot requires --run-dir from a discovery run');
+  if (opts.auditOnly && !opts.runDir) throw new Error('--audit-only requires --run-dir from a probe run');
 }
 
 function printHelp() {
@@ -109,6 +115,7 @@ Implemented commands:
   node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
   node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
   node qa/harness/data-coverage-runner.mjs --pilot --run-dir qa/runs/<id>_data-coverage --max-units 1
+  node qa/harness/data-coverage-runner.mjs --audit-only --run-dir qa/runs/<id>_data-coverage --max-units 1
 
 Options:
   --target-url <url>             Override the target URL for this run
@@ -137,9 +144,9 @@ if (opts.help) {
   printHelp();
   process.exit(0);
 }
-if (!opts.checkSelectors && !opts.dryRun && !opts.discoverOnly && !opts.estimateOnly && !opts.pilot) {
+if (!opts.checkSelectors && !opts.dryRun && !opts.discoverOnly && !opts.estimateOnly && !opts.pilot && !opts.auditOnly) {
   printHelp();
-  throw new Error('Use --check-selectors, --dry-run, --discover-only, --estimate-only, or --pilot. Later coverage modes are not implemented yet.');
+  throw new Error('Use --check-selectors, --dry-run, --discover-only, --estimate-only, --pilot, or --audit-only. Later coverage modes are not implemented yet.');
 }
 
 const runDir = makeRunDir(opts.runDir);
@@ -173,6 +180,21 @@ if (opts.estimateOnly) {
   console.log(`  Coverage plan JSON: ${summary.outputs.json}`);
   console.log(`  Future probe gate: ${summary.executionGate.ok_for_probe ? summary.executionGate.gates.join(', ') : 'missing'}`);
   process.exit(0);
+}
+
+if (opts.auditOnly) {
+  console.log('  Auditing coverage run integrity');
+  const audit = auditCoverageRun(runDir, {
+    maxUnits: opts.maxUnits,
+  });
+  console.log(`\n  Run dir: ${runDir}`);
+  console.log(`  Audit JSON: ${audit.outputs.auditJson}`);
+  console.log(`  Status: ${audit.status}`);
+  console.log(`  Selected rows: ${audit.selectedRows}`);
+  console.log(`  Attempts: ${audit.attempts}`);
+  console.log(`  Observations: ${audit.observations}`);
+  console.log(`  Issues: errors=${audit.errorCount}, warnings=${audit.warningCount}`);
+  process.exit(audit.ok ? 0 : 2);
 }
 
 let exitCode = 0;

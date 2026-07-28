@@ -21,6 +21,18 @@ export function appendJsonl(path, record) {
   appendFileSync(path, `${JSON.stringify(record)}\n`);
 }
 
+export function readJsonl(path) {
+  const text = readFileSync(path, 'utf8').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+  if (!text) return [];
+  return text.split('\n').map((line, idx) => {
+    try {
+      return JSON.parse(line);
+    } catch (e) {
+      throw new Error(`Could not parse JSONL ${path}:${idx + 1}: ${String((e && e.message) || e)}`);
+    }
+  });
+}
+
 function parseCsvLine(line) {
   const cells = [];
   let cell = '';

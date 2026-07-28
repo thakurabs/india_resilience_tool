@@ -60,6 +60,7 @@ node qa/harness/data-coverage-runner.mjs --dry-run
 node qa/harness/data-coverage-runner.mjs --discover-only --states Telangana --levels district,block
 node qa/harness/data-coverage-runner.mjs --estimate-only --run-dir qa/runs/<id>_data-coverage
 node qa/harness/data-coverage-runner.mjs --pilot --run-dir qa/runs/<id>_data-coverage --max-units 1
+node qa/harness/data-coverage-runner.mjs --audit-only --run-dir qa/runs/<id>_data-coverage --max-units 1
 ```
 
 `--check-selectors` verifies saved auth reaches the dashboard, dismisses
@@ -84,6 +85,11 @@ that a later probe run will require.
 relevant network calls, runs first-pass map/ranking/profile checks, and writes
 `coverage_attempts.jsonl`, `coverage_observations.jsonl`, and
 `coverage_observations.csv`.
+
+`--audit-only` reads an existing probe run without opening the browser and writes
+`coverage_run_audit.json`. It verifies that each selected universe row has one
+terminal observation, observation keys are unique, terminal observations link to
+attempts, and skipped/blocked observations carry explicit reasons.
 
 ### Map-interactivity probe (dropdown-gating + portfolio commutativity)
 

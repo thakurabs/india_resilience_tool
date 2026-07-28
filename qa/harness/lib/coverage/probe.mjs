@@ -19,7 +19,7 @@ function nowCompact() {
   return new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
 }
 
-function selectedPilotRows(rows, opts) {
+export function selectedPilotRows(rows, opts) {
   const pilotRows = rows.filter((row) => (
     /^Telangana$/i.test(row.state_name)
     && ['district', 'block'].includes(row.admin_level)
