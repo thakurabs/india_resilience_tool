@@ -6,7 +6,7 @@
 // - Phase 1: local expected district/block roster extraction.
 // - Phase 2: deterministic exposed cascade discovery.
 // - Phase 2.5: scope estimation and sharding summaries.
-// - Phase 3A: pilot attempt/observation scaffolding.
+// - Phase 3: pilot attempt/observation scaffolding plus first-pass surface checks.
 //
 // Usage:
 //   node qa/harness/data-coverage-runner.mjs --check-selectors

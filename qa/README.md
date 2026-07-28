@@ -80,10 +80,10 @@ states/levels and writes `filter_universe.jsonl`, `filter_universe.csv`, and
 `--max-units`, `--shard N/M`, or `--confirm-large-run` to record the safety gate
 that a later probe run will require.
 
-`--pilot` currently runs Phase 3A scaffolding only: it replays selected cascade
-rows from `filter_universe.csv` and writes `coverage_attempts.jsonl`,
-`coverage_observations.jsonl`, and `coverage_observations.csv`. Map, ranking,
-profile, and network assertions are deferred to Phase 3B.
+`--pilot` replays selected cascade rows from `filter_universe.csv`, records
+relevant network calls, runs first-pass map/ranking/profile checks, and writes
+`coverage_attempts.jsonl`, `coverage_observations.jsonl`, and
+`coverage_observations.csv`.
 
 ### Map-interactivity probe (dropdown-gating + portfolio commutativity)
 

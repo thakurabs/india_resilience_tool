@@ -1,7 +1,4 @@
-// Phase 3A pilot probe scaffolding.
-//
-// This module intentionally stops after deterministic cascade replay. Map,
-// ranking, profile, and network assertions are Phase 3B work.
+// Phase 3 pilot probe scaffolding and first-pass surface checks.
 
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -52,20 +49,91 @@ function observationBase(row) {
 
 function observationFromAttempt(row, attempt) {
   const selected = attempt.selection_status === 'selected';
-  return {
-    ...observationBase(row),
-    terminal_status: selected ? 'needs_triage' : 'fail',
-    blocked_reason: '',
-    selection_status: attempt.selection_status,
+  const surfaceStatuses = attempt.surface_statuses || {
     map_status: 'not_checked',
     ranking_status: 'not_checked',
     profile_status: 'not_checked',
-    api_status_summary: 'not_checked',
-    visible_error_summary: selected ? '' : attempt.error_summary,
-    observed_count_source: 'not_checked',
+  };
+  return {
+    ...observationBase(row),
+    terminal_status: terminalStatus(attempt, surfaceStatuses),
+    blocked_reason: '',
+    selection_status: attempt.selection_status,
+    map_status: surfaceStatuses.map_status,
+    ranking_status: surfaceStatuses.ranking_status,
+    profile_status: surfaceStatuses.profile_status,
+    api_status_summary: attempt.api_status_summary || 'not_checked',
+    visible_error_summary: selected ? surfaceStatuses.visible_error_summary || '' : attempt.error_summary,
+    observed_count_source: surfaceStatuses.observed_count_source || 'not_checked',
     retry_count: 0,
     attempt_ids: attempt.attempt_id,
     evidence_path: '',
+  };
+}
+
+function terminalStatus(attempt, surfaceStatuses) {
+  if (attempt.selection_status !== 'selected') return 'fail';
+  const statuses = [
+    surfaceStatuses.map_status,
+    surfaceStatuses.ranking_status,
+    surfaceStatuses.profile_status,
+  ];
+  if (statuses.some((status) => /error|empty|missing|failed/i.test(status))) return 'fail';
+  if (surfaceStatuses.observed_count_source === 'dom_rows_triage') return 'needs_triage';
+  if (statuses.some((status) => /needs_triage|not_checked/i.test(status))) return 'needs_triage';
+  return 'pass';
+}
+
+function relevantNetwork(url) {
+  return /\/api\/|\/parquet\/|ranking|map|trend|scenario-comparison|profile|chart|table/i.test(url)
+    && !/analytics|audit\/event|fonts|favicon|telemetry|\.css\b|\.js\b|cdn/i.test(url);
+}
+
+function summarizeNetwork(events) {
+  const relevant = events.filter((event) => relevantNetwork(event.url || ''));
+  const errors = relevant.filter((event) => event.status >= 400 || event.failure);
+  const statuses = [...new Set(relevant.map((event) => event.status || event.failure || 'unknown'))];
+  return {
+    relevant_count: relevant.length,
+    error_count: errors.length,
+    statuses,
+    errors: errors.slice(0, 12),
+  };
+}
+
+function networkSummaryText(summary) {
+  if (!summary.relevant_count) return 'no_relevant_calls';
+  const statusText = summary.statuses.length ? `statuses=${summary.statuses.join('|')}` : 'statuses=none';
+  return `relevant=${summary.relevant_count}; errors=${summary.error_count}; ${statusText}`;
+}
+
+function attachObservationNetwork(page) {
+  const events = [];
+  const onResponse = (res) => {
+    const url = res.url();
+    if (relevantNetwork(url)) {
+      events.push({ type: 'response', status: res.status(), url, method: res.request().method() });
+    }
+  };
+  const onFailed = (req) => {
+    const url = req.url();
+    if (relevantNetwork(url)) {
+      events.push({
+        type: 'requestfailed',
+        url,
+        method: req.method(),
+        failure: req.failure() ? req.failure().errorText : null,
+      });
+    }
+  };
+  page.on('response', onResponse);
+  page.on('requestfailed', onFailed);
+  return {
+    events,
+    detach() {
+      page.off('response', onResponse);
+      page.off('requestfailed', onFailed);
+    },
   };
 }
 
@@ -75,6 +143,77 @@ async function replayCascade(page, targetUrl, row) {
   await setupPath(page, targetUrl, row.state_name, row.admin_level, labels);
   await dismissCoverageOverlays(page);
   return page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+}
+
+async function checkMapSurface(page) {
+  await page.waitForTimeout(1500);
+  const result = await page.evaluate(() => {
+    const text = document.body.innerText || '';
+    const canvasCount = document.querySelectorAll('canvas').length;
+    const svgCount = document.querySelectorAll('svg').length;
+    const noData = /no data|couldn.?t load|unable to load|error loading|something went wrong/i.test(text);
+    const mapText = /Map View|Add to Analysis|Very Low|Low|Moderate|High|Extreme|Absolute value|Mean/i.test(text);
+    return { canvasCount, svgCount, noData, mapText };
+  });
+  if (result.noData) return { status: 'map_error', detail: result };
+  if (result.canvasCount || result.svgCount || result.mapText) return { status: 'pass', detail: result };
+  return { status: 'needs_triage', detail: result };
+}
+
+async function checkRankingSurface(page) {
+  await page.getByText(/^Ranking Table$/i).first().click({ timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(3500);
+  const result = await page.evaluate(() => {
+    const text = document.body.innerText || '';
+    const rows = document.querySelectorAll('table tr, [role="row"]').length;
+    const errored = /couldn.?t load the ranking data|ranking data failed|error loading|something went wrong/i.test(text);
+    const empty = /no data|no records|no results/i.test(text);
+    const totalMatch = text.match(/(?:total|showing)\D{0,20}(\d+)/i);
+    return {
+      rows,
+      errored,
+      empty,
+      visibleTotal: totalMatch ? Number(totalMatch[1]) : null,
+    };
+  });
+  if (result.errored) return { status: 'ranking_api_error', observed_count_source: 'ui_error', detail: result };
+  if (result.rows >= 2) return { status: 'pass', observed_count_source: 'dom_rows_triage', detail: result };
+  if (result.visibleTotal !== null && result.visibleTotal > 0) return { status: 'pass', observed_count_source: 'visible_total', detail: result };
+  if (result.empty) return { status: 'ranking_empty', observed_count_source: 'visible_empty', detail: result };
+  return { status: 'needs_triage', observed_count_source: 'unresolved', detail: result };
+}
+
+async function checkProfileSurface(page) {
+  await page.waitForTimeout(700);
+  const result = await page.evaluate(() => {
+    const text = document.body.innerText || '';
+    const present = /Resilience Profile|Open Resilience Profile|Profile/i.test(text);
+    const errored = /profile.*(error|failed|couldn.?t load)|something went wrong/i.test(text);
+    const empty = /profile.*(no data|empty|not available)/i.test(text);
+    return { present, errored, empty };
+  });
+  if (result.errored) return { status: 'profile_api_error', detail: result };
+  if (result.empty) return { status: 'profile_empty', detail: result };
+  if (result.present) return { status: 'pass', detail: result };
+  return { status: 'profile_missing', detail: result };
+}
+
+async function checkSurfaces(page) {
+  const map = await checkMapSurface(page);
+  const ranking = await checkRankingSurface(page);
+  const profile = await checkProfileSurface(page);
+  const visibleErrors = [map, ranking, profile]
+    .filter((item) => /error|empty|missing/i.test(item.status))
+    .map((item) => item.status)
+    .join('; ');
+  return {
+    map_status: map.status,
+    ranking_status: ranking.status,
+    profile_status: profile.status,
+    observed_count_source: ranking.observed_count_source || 'not_checked',
+    visible_error_summary: visibleErrors,
+    details: { map, ranking, profile },
+  };
 }
 
 /** Run Phase 3A pilot scaffolding and write attempts/terminal observations. */
@@ -108,10 +247,18 @@ export async function runPilotProbeScaffold(page, runDir, opts) {
       ...observationBase(row),
       selection_status: 'selected',
       error_summary: '',
-      note: 'Phase 3A only: cascade replay complete; map/ranking/profile checks deferred.',
+      note: 'Phase 3B pilot: cascade replay plus first-pass map/ranking/profile checks.',
     };
     try {
+      const network = attachObservationNetwork(page);
       const body = await replayCascade(page, opts.targetUrl, row);
+      const surfaces = await checkSurfaces(page);
+      network.detach();
+      const networkSummary = summarizeNetwork(network.events);
+      attempt.surface_statuses = surfaces;
+      attempt.network_events = network.events;
+      attempt.network_summary = networkSummary;
+      attempt.api_status_summary = networkSummaryText(networkSummary);
       attempt.body_text_sample = body.replace(/\s+/g, ' ').slice(0, 240);
     } catch (e) {
       attempt.selection_status = 'selection_failed';
@@ -158,6 +305,10 @@ export async function runPilotProbeScaffold(page, runDir, opts) {
     attempts: attempts.length,
     observations: observations.length,
     selectionFailures: attempts.filter((attempt) => attempt.selection_status !== 'selected').length,
+    terminalStatusCounts: observations.reduce((counts, observation) => {
+      counts[observation.terminal_status] = (counts[observation.terminal_status] || 0) + 1;
+      return counts;
+    }, {}),
     outputs: {
       attemptsJsonl: attemptsPath,
       observationsJsonl: observationsJsonlPath,
