@@ -134,6 +134,23 @@ SITES: tuple[tuple[str, ...], ...] = (
     ("DC27", "Nxtra by Airtel", "Nxtra Manesar", "operational", "Delhi NCR",
      "IMT Manesar", "28.36719", "76.92067", "Gurugram",
      "Haryana", "locality", "baxtel.com/data-center/nxtra-data-manesar"),
+    # Delhi NCT proper. STT is effectively the only commercial colocation
+    # operator inside the territory; CtrlS "Delhi" is in Noida, and Nxtra,
+    # Sify, NTT, Yotta and AdaniConneX are all Noida/Greater Noida/Manesar.
+    # Delhi 2 and Delhi 3 share the Greater Kailash I complex and therefore
+    # merge onto one upload point.
+    ("DC35", "STT GDC India", "STT Delhi 1", "operational", "Delhi NCR",
+     "Videsh Sanchar Bhavan, Bangla Sahib Road", "28.63559", "77.21013",
+     "New Delhi", "Delhi", "locality",
+     "sttelemediagdc.com/in-en/locations/delhi; inflect.com delhi-dc1"),
+    ("DC36", "STT GDC India", "STT Delhi 2", "operational", "Delhi NCR",
+     "Block E, Greater Kailash I", "28.55127", "77.23602",
+     "South East", "Delhi", "locality",
+     "sttelemediagdc.com/in-en/locations/delhi; datacenters.com stt-delhi-2"),
+    ("DC37", "STT GDC India", "STT Delhi 3", "operational", "Delhi NCR",
+     "Block E, Greater Kailash I", "28.55127", "77.23602",
+     "South East", "Delhi", "locality",
+     "sttelemediagdc.com/in-en/resources/STT-Delhi-DC-2; datacentermap.com stt-delhi-dc3"),
     # --- East / West / other ---
     ("DC28", "STT GDC India", "STT Kolkata DC 1", "operational", "Kolkata",
      "Ultadanga", "22.59613", "88.38528", "Kolkata",

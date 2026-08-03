@@ -7,13 +7,13 @@ study. Act 1 stress-tests the operating footprint; Act 2 screens for new ground.
 
 | File | Contents |
 |------|----------|
-| `upload/dc_sites_operational.csv` | 30 operating campuses as 26 unique points — the Act 1 upload set |
+| `upload/dc_sites_operational.csv` | 33 operating campuses as 28 unique points — the Act 1 upload set |
 | `upload/dc_sites_announced.csv` | 4 announced/under-construction sites — Act 2 only |
-| `upload/by_state/<state>.csv` | Operating sites split by state (10 files) |
-| `reference/dc_sites_all.csv` | All 34 sites with operator, district, precision and source |
+| `upload/by_state/<state>.csv` | Operating sites split by state (11 files) |
+| `reference/dc_sites_all.csv` | All 37 sites with operator, district, precision and source |
 | `build_site_csvs.py` | Regenerates every CSV above from one embedded table |
 
-Coverage: 34 sites, 19 districts, 11 states.
+Coverage: 37 sites, 21 districts, 11 states.
 
 ## Upload format
 
@@ -37,10 +37,24 @@ label names every operator at it, rather than being dropped:
 13,"SIPCOT IT Park, Siruseri - STT GDC India, Sify, AdaniConneX",12.82358,80.22215
 ```
 
-Three such merges exist — SIPCOT Siruseri (3 campuses), Ambattur (2) and
-Electronic City (2) — so 30 operating sites upload as 26 points. When reading
-results back, remember that a merged point carries the risk score for a
-*cluster*, not one operator's campus.
+Four such merges exist — SIPCOT Siruseri (3 campuses), Ambattur (2), Electronic
+City (2) and Greater Kailash I (2) — so 33 operating sites upload as 28 points.
+When reading results back, remember that a merged point carries the risk score
+for a *cluster*, not one operator's campus.
+
+### Delhi NCT
+
+Delhi NCT proper hosts very little commercial colocation capacity. STT GDC is
+effectively the only operator inside the territory — STT Delhi 1 at Videsh
+Sanchar Bhavan (Bangla Sahib Road, New Delhi district) and STT Delhi 2 and 3
+sharing the Greater Kailash I complex (South East district), together about
+12 MW. Everything else branded "Delhi" sits outside NCT: CtrlS Delhi is roughly
+350 m from CtrlS Noida, and Nxtra, Sify, NTT, Yotta and AdaniConneX are all in
+Noida, Greater Noida or Manesar.
+
+Note also that "Okhla" in operator listings usually means **Noida** — New Okhla
+Industrial Development Authority — not the Okhla area of Delhi. There is no
+data-centre cluster in Okhla proper.
 
 That format has nowhere to carry provenance, which is why `reference/` exists.
 Join the two on coordinates, or on the row order within a file — the reference
@@ -70,7 +84,7 @@ No coordinate is estimated or inferred by hand.
 ## Caveats — read before using these in a demo
 
 - **Locality precision, not campus precision.** The `precision` column is
-  `locality` for 32 sites and `city` for 2 (DC32 Jamnagar, DC34 Lucknow). This is
+  `locality` for 35 sites and `city` for 2 (DC32 Jamnagar, DC34 Lucknow). This is
   adequate to resolve a site to its district; it is not a building footprint.
   Sites near a district boundary are the ones to check — the Navi Mumbai cluster
   straddles Thane/Raigad.
