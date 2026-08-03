@@ -108,6 +108,7 @@ thematic_bundle_audit.json
 # --------------------------------
 scratch/
 notebooks/scratch/
+tools/_scratch_*.py
 
 # --------------------------------
 # graphify knowledge graph (local-only; rebuild with `/graphify . --update`)
