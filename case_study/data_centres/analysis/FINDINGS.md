@@ -1,16 +1,18 @@
-# Findings — Humid heat and India's data-centre clusters
+# Findings — Climate exposure of India's data-centre clusters
 
 **Status:** DRAFT · **Date:** 2026-07-30
-**Source:** `dev.resilience.org.in`, Compare Portfolio flow, **Heat Stress** bundle
+**Source:** `dev.resilience.org.in`, Compare Portfolio flow
+**Bundles:** Heat Stress · Riverine Flood (RP-100) · Extreme Rainfall / Flash Flood
 **Level:** block · **Scenario:** SSP5-8.5 · **Baseline:** 1990–2010
-**Coverage:** 7 state exports → 18 blocks → 5 metro clusters
+**Coverage:** 7 state heat exports (18 blocks) + 2 national exports (22 blocks)
 
 ---
 
 ## 1. Scope and provenance
 
-Six Compare Portfolio exports, all dated 2026-07-30, all Heat Stress bundle at
-block level under SSP5-8.5:
+All exports dated 2026-07-30, block level.
+
+### Heat Stress — seven state exports, `heat_stress/<state>/`
 
 | State | Export file | Blocks returned |
 |---|---|---|
@@ -22,10 +24,27 @@ block level under SSP5-8.5:
 | Haryana | `...-1543.xlsx` | Gurgaon |
 | Delhi | `...-1600.xlsx` | New Delhi, South East |
 
-Blocks were resolved by the tool from the uploaded coordinates in
-`../upload/by_state/*.csv`. Note that Ambattur resolved to **Chennai** district
-rather than Tiruvallur — boundary vintage, not a file error (flagged in the
-handoff risk list).
+Uploaded from `../upload/by_state/*.csv`, one state at a time.
+
+### Riverine Flood and Extreme Rainfall — two national exports
+
+| Bundle | Export file | Blocks |
+|---|---|---|
+| Riverine Flood (RP-100, snapshot) | `riverine_flood/...-1609.xlsx` | 22 |
+| Extreme Rainfall / Flash Flood | `extreme_rainfall/...-1610.xlsx` | 22 |
+
+Both uploaded from `../upload/dc_sites_operational.csv` — all 28 operating
+points in one run, which the tool resolved to 22 distinct blocks (several
+points share a block). These two therefore cover **more geography than the heat
+set**, including Kolkata, Bhubaneswar, Jaipur and Gandhinagar.
+
+⚠ **The composite tab in both national exports is scoped to Maharashtra**
+("Riverine Flood — Maharashtra") and lists only 6 blocks, while the metric
+sheets carry all 22. This is trap N25 partially applying. The composite tabs are
+unused here (§2), but they must not be read as national.
+
+Note that Ambattur resolved to **Chennai** district rather than Tiruvallur —
+boundary vintage, not a file error (flagged in the handoff risk list).
 
 Dev-environment data can be republished. All values here are as of 2026-07-30.
 
@@ -102,6 +121,22 @@ Maharashtra — Pune is already ~9% of national operational capacity and sits on
 the favourable side. It is also a within-state comparison, so it survives every
 comparability constraint.
 
+**The Ghats boundary appears in rainfall as well as heat**, which makes it a
+physical-geography finding rather than a single-metric one. Rx1day, mid-century:
+
+| Block | Rx1day mid (mm) | Very heavy rain days, mid |
+|---|---:|---:|
+| Thane (MMR, coastal) | **101.8** | 48.3 |
+| Mulshi (Pune district, **Ghats crest**) | 66.8 | 28.5 |
+| Pune City (Pune district, **rain shadow**) | **46.1** (lowest of 22) | 14.1 |
+
+Pune district contains both the wettest inland block and the driest block in the
+entire portfolio. Mulshi sits on the Ghats crest and behaves like a coastal
+block on rainfall while behaving like a plateau block on wet-bulb; Pune City,
+~40 km east in the rain shadow, is the mildest block measured on rainfall
+intensity. Any state-level or even district-level treatment of Maharashtra
+destroys this.
+
 ### F4 — Delhi NCR fails differently from the coastal clusters
 
 NCR is the **driest cluster on average and the most extreme at its peak**:
@@ -171,9 +206,83 @@ Two consequences:
 - The siting recommendation can rest on observed baseline climate, which is far
   more defensible than a recommendation resting on a high-emissions scenario.
 
+### F7 — Riverine flood: extent is the only usable metric, and it re-ranks the portfolio
+
+The Riverine Flood bundle returns three metrics. **Only flood extent is usable:**
+
+- **Flood Severity Index is saturated.** 15 of 22 blocks score the maximum 5;
+  only Jaipur and Hyderabad sit low (2). It does not discriminate. This is
+  flag C in `docs/metric_distribution_review.md`, confirmed live.
+- **RP-100 Flood Depth is not a site depth.** Gandhinagar returns 13.76 m, Pune
+  City 12.64 m, Thiruporur 7.50 m. These read as block maxima — river-channel
+  values — not depth at a campus. Never present as "this facility floods to X m."
+- **Flood Extent (fraction of block inundated at RP-100)** ranges 0.00–0.53 and
+  separates cleanly.
+
+| Band | Blocks (extent) |
+|---|---|
+| **High** | Bisrakh 0.53 · Dankaur 0.39 · Chennai 0.35 · Thiruporur 0.32 · Thane 0.29 |
+| **Moderate** | Mumbai Suburban 0.24 · Kolkata 0.22 · Bhubaneswar 0.21 · South East Delhi 0.18 · Gandipet 0.15 · Gandhinagar 0.14 · Gurgaon 0.14 |
+| **Low** | Panvel 0.08 · Pune City 0.07 · Mulshi 0.05 · Nashik 0.05 |
+| **Negligible** | Bengaluru East 0.02 · Bengaluru South 0.01 · New Delhi 0.01 · Sanganer 0.00 · Shabad 0.00 · Shaikpet 0.00 |
+
+**The Noida blocks are the most flood-exposed in the portfolio** — Yamuna and
+Hindon floodplain — and they were already the humid-heat worst within NCR (F5).
+Eastern NCR takes both hits.
+
+Hyderabad and Jaipur are effectively flood-free: zero extent, severity 2,
+depth 1.0 m.
+
+### F8 — Extreme rainfall: MMR dominates, and Chennai does not
+
+Rx1day, mid-century (mm):
+
+| Thane | Mumbai Sub. | Panvel | Gandhinagar | Mulshi | Chennai | NCR | Hyderabad | Bengaluru | Pune City |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 101.8 | 99.4 | 98.5 | 73.9 | 66.8 | 64.1 | 60–63 | 52.3 | 48.6 | 46.1 |
+
+MMR leads Rx1day by ~35% over the next cluster and leads very-heavy-rain days by
+~67% (48.6 against Kolkata's 29.1). On consecutive wet days it again leads
+(46.3 against Kolkata 37.7).
+
+**Chennai is mid-pack on rainfall intensity and near the bottom on heavy-rain
+days (16.2).** This is the strongest available evidence for the pluvial-versus-
+fluvial beat, and it cuts against the intuitive reading: Chennai's exposure is
+not driven by exceptional rainfall. Its riverine extent is high (0.35) and its
+drainage failure is well documented, but its rainfall statistics are ordinary.
+A tool that separates the two mechanisms says something a combined "flood risk"
+score cannot.
+
+### F9 — Combining the three bundles changes the cluster ranking
+
+| Cluster | Humid heat (days ≥28, mid) | Riverine extent | Rx1day mid | Verdict |
+|---|---:|---:|---:|---|
+| **MMR** | 67–69 | 0.24–0.29 | **98–102** | **Worst overall** — top tier on all three |
+| **Chennai** | **64–75** | 0.32–0.35 | 64 | Heat and fluvial, not pluvial |
+| **Delhi NCR (east)** | 65–67 | **0.39–0.53** | 61–63 | Heat and worst flood extent |
+| **Delhi NCR (west)** | 51–59 | 0.01–0.14 | 60–62 | Materially better than east |
+| **Bengaluru** | **1.4–1.9** | 0.01–0.02 | 48.6 | Best on heat, low on both flood axes |
+| **Hyderabad** | 5.5–7.6 | **0.00** | 52.3 | **Best combined profile** |
+| **Pune City** | 9.2 | 0.07 | **46.1** | Lowest rainfall intensity measured |
+
+Two shifts follow:
+
+1. **MMR is the worst cluster overall, not joint-worst.** It is top-tier on humid
+   heat, high on riverine extent, and first by a wide margin on both rainfall
+   metrics. It holds ~46% of operational capacity and ~41% of the pipeline.
+2. **Hyderabad has the strongest combined profile of any major cluster** — low
+   humid heat, zero flood extent, low rainfall intensity — and it carries the
+   ~540 MW pipeline, the largest growth bet in the country after Mumbai.
+
+The second point matters for tone. The deck can report that the market's biggest
+expansion is also its best climate call, which is more credible than a document
+that only finds fault.
+
 ---
 
-## 4. Full data table
+## 4. Full data tables
+
+### 4a. Heat Stress — 18 blocks
 
 SSP5-8.5, block level, baseline 1990–2010. Sorted by mid-century days ≥28 °C.
 
@@ -198,6 +307,39 @@ SSP5-8.5, block level, baseline 1990–2010. Sorted by mid-century days ≥28 °
 | Bengaluru | Bengaluru South | 20.98 | 22.44 | 24.95 | 0.43 | 1.90 | 5.98 | 0.01 | 0.12 | 0.49 |
 | Bengaluru | Bengaluru East | 20.75 | 22.21 | 24.74 | 0.23 | 1.39 | 4.91 | 0.00 | 0.06 | 0.32 |
 
+### 4b. Riverine Flood and Extreme Rainfall — 22 blocks
+
+Flood is a present-day snapshot (RP-100). Rainfall is SSP5-8.5. Sorted by flood
+extent. **Severity and depth are shown for completeness only — see F7 for why
+neither should be used.**
+
+| Block (district) | Extent | Sev. | Depth (m) | Rx1day base | mid | R20mm mid | CWD mid |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Bisrakh (Gautam Buddha Nagar) | 0.53 | 5 | 2.88 | 54.7 | 63.1 | 16.8 | 16.4 |
+| Dankaur (Gautam Buddha Nagar) | 0.39 | 5 | 3.17 | 53.2 | 60.9 | 16.6 | 17.0 |
+| Chennai (Chennai) | 0.35 | 5 | 4.52 | 58.9 | 64.1 | 16.2 | 27.4 |
+| Thiruporur (Chengalpattu) | 0.32 | 5 | 7.50 | 58.5 | 63.5 | 17.2 | 25.4 |
+| Thane (Thane) | 0.29 | 5 | 5.80 | 85.3 | 101.8 | 48.3 | 44.5 |
+| Mumbai Suburban (Mumbai Suburban) | 0.24 | 5 | 4.93 | 83.5 | 99.4 | 48.6 | 46.3 |
+| Township Area (Kolkata) | 0.22 | 5 | 3.51 | 48.6 | 53.6 | 29.1 | 37.7 |
+| Bhubaneswar (Khordha) | 0.21 | 5 | 3.69 | 50.1 | 55.5 | 25.9 | 25.9 |
+| South East (South East, Delhi) | 0.18 | 5 | 5.46 | 54.4 | 63.0 | 16.3 | 16.2 |
+| Gandipet (Ranga Reddy) | 0.15 | 5 | 2.60 | 45.7 | 52.3 | 17.1 | 16.4 |
+| Gandhinagar (Gandhinagar) | 0.14 | 5 | 13.76 | 62.7 | 73.9 | 18.0 | 18.2 |
+| Gurgaon (Gurugram) | 0.14 | 5 | 3.78 | 51.8 | 60.1 | 14.3 | 15.8 |
+| Panvel (Raigad) | 0.08 | 5 | 3.17 | 83.5 | 98.5 | 45.9 | 42.6 |
+| Pune City (Pune) | 0.07 | 5 | 12.64 | 39.6 | 46.1 | 14.1 | 33.9 |
+| Mulshi (Pune) | 0.05 | 5 | 3.97 | 58.0 | 66.8 | 28.5 | 39.6 |
+| Nashik (Nashik) | 0.05 | 4 | 6.76 | 46.7 | 56.6 | 19.9 | 32.4 |
+| Bengaluru East (Bengaluru Urban) | 0.02 | 4 | 4.78 | 43.8 | 48.9 | 16.2 | 16.5 |
+| Bengaluru South (Bengaluru Urban) | 0.01 | 4 | 3.64 | 43.6 | 48.6 | 15.7 | 17.1 |
+| New Delhi (New Delhi) | 0.01 | 4 | 4.31 | 53.9 | 62.6 | 15.4 | 16.0 |
+| Sanganer (Jaipur) | 0.00 | 2 | 1.00 | 49.0 | 57.1 | 13.3 | 14.6 |
+| Shabad (Ranga Reddy) | 0.00 | 3 | 1.68 | 45.5 | 52.0 | 17.4 | 16.7 |
+| Shaikpet (Hyderabad) | 0.00 | 2 | 1.00 | 45.7 | 52.3 | 17.1 | 16.4 |
+
+Rx1day and R20mm in mm and days/year; CWD in days.
+
 ---
 
 ## 5. Implication for the case study
@@ -216,6 +358,16 @@ about 62% of announced capacity is still going into the exposed three.
 This is an argument about the *next* decision, not a verdict on past ones. The
 industry sited for fibre, power, land and customer proximity — all rational. Humid
 heat was not on the scorecard because nobody had it at this resolution.
+
+**Adding flood and rainfall does not soften this — it concentrates it.** The
+three exposed clusters are exposed on more than one axis each (F9): MMR on all
+three, Chennai on heat and fluvial extent, eastern NCR on heat and the worst
+flood extent in the portfolio. Meanwhile the favourable tier holds up across all
+three bundles, with Hyderabad clean on every axis measured.
+
+That is the strongest form of the argument: the ranking does not depend on
+choosing humid heat as the lens. Three independent physical mechanisms point the
+same way.
 
 ### Intra-cluster vs inter-cluster
 
@@ -237,11 +389,23 @@ Everywhere else, the cluster is the decision unit.
 
 ## 6. Caveats and limitations
 
-- **SSP5-8.5 only.** All detail sheets carry the high-emissions scenario. F6
-  argues the ordering is scenario-insensitive, but the deck should state the
-  scenario plainly or add an SSP2-4.5 pass.
+- **SSP5-8.5 only.** All projected detail sheets carry the high-emissions
+  scenario. F6 argues the ordering is scenario-insensitive, but the deck should
+  state the scenario plainly or add an SSP2-4.5 pass.
 - **Composite excluded** for the reasons in §2. No slide should show composite
-  trends, scenario comparisons, or cross-state composite values.
+  trends, scenario comparisons, or cross-state composite values. Note also that
+  the composite tabs in the two national exports are **Maharashtra-scoped**
+  despite the metric sheets being national (§1).
+- **Flood metrics: only extent is usable.** Severity index is saturated (15 of
+  22 blocks at the maximum), and depth reads as a block maximum rather than a
+  site value (Gandhinagar 13.76 m, Pune City 12.64 m). See F7.
+- **On flood, ignore `Change Percentile` and `Level of Change`.** Riverine Flood
+  is a snapshot: `Baseline` and `Absolute Change` are 0 for every row, so those
+  two columns rank nothing. Gandipet is labelled "Extreme" against an extent of
+  0.15. These labels are artefacts.
+- **Flood and rainfall cover 22 blocks; heat covers 18.** The national exports
+  reach Kolkata, Bhubaneswar, Jaipur and Gandhinagar, which have no heat export.
+  Do not present a combined three-bundle verdict for those four.
 - **Merged upload points score clusters, not campuses.** Seven sites sit behind
   three coordinates (SIPCOT Siruseri ×3, Ambattur ×2, Electronic City ×2).
 - **Locality-precise, not campus-precise** coordinates. Adequate for block and
@@ -254,7 +418,7 @@ Everywhere else, the cluster is the decision unit.
   non-monotonic — 6.13 baseline → **5.78** mid → 12.71 end (East) and 6.63 →
   **6.20** → 13.37 (South). Bengaluru is the only cluster showing this. Low-count
   metric at ~900 m elevation, but it needs a check before appearing anywhere.
-- **Sample basis.** 34 sites against a reported national population of ~271
+- **Sample basis.** 37 sites against a reported national population of ~271
   facilities (CEEW, Jan 2026). This is a capacity-weighted sample of the major
   clusters, not a census.
 
@@ -267,18 +431,23 @@ Everywhere else, the cluster is the decision unit.
    Delhi district) and STT Delhi 2 and 3 sharing the Greater Kailash I complex
    (South East district, merged to one upload point). `upload/by_state/delhi.csv`
    now exists with 2 points. No centroid was invented. **Delhi exported
-   2026-07-30** (`analysis/delhi/...-1600.xlsx`); both blocks landed inside the
+   2026-07-30** (`heat_stress/delhi/...-1600.xlsx`); both blocks landed inside the
    predicted Gurugram–Noida bracket and upgraded F5 from a two-point split to a
    five-block gradient.
 
    Worth carrying into the narrative: Delhi NCT proper hosts only ~12 MW of
    commercial colocation, all STT. The NCR cluster is really Noida plus Gurugram,
    which is why the original inventory was not materially wrong.
-2. **Riverine Flood (RP100) and Extreme Rainfall exports** not yet run. These are
-   Act 1 beats 1 and 2; only the heat beat is evidenced so far.
-3. **Heat ∩ drought coincidence cut** — the intersection of high Heat Stress and
+2. ~~Riverine Flood and Extreme Rainfall exports not yet run.~~ **RESOLVED
+   2026-07-30.** Both run nationally from `dc_sites_operational.csv`, 22 blocks
+   each → F7, F8, F9. All three Act 1 beats are now evidenced.
+3. **Heat export for the four national-only blocks** — Kolkata, Bhubaneswar,
+   Jaipur and Gandhinagar have flood and rainfall but no heat, so they cannot
+   appear in a three-bundle verdict. Four state exports (WB, OD, RJ, GJ) would
+   close it. Low priority: together they are a small share of capacity.
+4. **Heat ∩ drought coincidence cut** — the intersection of high Heat Stress and
    high Drought, which the deep-research report identifies as the Hyderabad and
    NCR "peak coincidence" problem. Cheap once Drought exports exist.
-4. **Cluster capacity table** — C&W H1 2025 MW figures per cluster, so every
+5. **Cluster capacity table** — C&W H1 2025 MW figures per cluster, so every
    cluster claim carries weight and a citation.
-5. **SSP2-4.5 pass** if the deck needs a lower-emissions comparison.
+6. **SSP2-4.5 pass** if the deck needs a lower-emissions comparison.
