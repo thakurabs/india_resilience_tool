@@ -102,6 +102,14 @@ thematic_bundle_audit.csv
 thematic_bundle_audit.json
 
 # --------------------------------
+# Ephemeral scratch working dirs (regenerated on demand).
+# Files intentionally committed under scratch/ stay tracked; gitignore only
+# affects untracked files, so this just hides the working-scratch noise.
+# --------------------------------
+scratch/
+notebooks/scratch/
+
+# --------------------------------
 # graphify knowledge graph (local-only; rebuild with `/graphify . --update`)
 # --------------------------------
 graphify-out/
