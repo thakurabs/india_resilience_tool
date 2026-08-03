@@ -152,49 +152,151 @@ through **four gates, in order**:
    the culprit.** Failing cells are skipped and stay all-NaN.
 2. **Gate 2 — the gamma fit itself** (`_compute_spi_series` →
    `compute_spi_climate_indices` → `climate_indices.indices.spi`, L223 → L132).
-   **True arid root cause.** At `scale_months=3`, dry-season 3-month precip
-   windows in the Thar/arid belt sum to ~=0 across nearly all baseline years, so
-   the gamma (alpha/beta, method-of-moments) can't be estimated for those
-   calendar months and climate-indices returns **NaN**. `_compute_spi_series`
-   also catches any exception and returns an **all-NaN series** (L140-141), so a
-   hard fit failure silently blanks the whole cell. Scales 6/12 always straddle
-   the monsoon -> positive sums -> gamma fits -> **0 % NaN**, matching the
-   observed SPI3-only pattern.
+   **Inferred (not yet empirically confirmed) arid root cause.** At
+   `scale_months=3`, dry-season 3-month precip windows in the Thar/arid belt
+   likely sum to ~=0 across nearly all baseline years, so the gamma (alpha/beta,
+   method-of-moments) cannot be estimated for those calendar months and
+   climate-indices returns **NaN**. Scales 6/12 always straddle the monsoon ->
+   positive sums -> gamma fits -> **0 % NaN**, which is *consistent with* the
+   observed SPI3-only pattern (consistency, not proof).
+   **Caveat — do not over-read a fully-NaN cell:** `_compute_spi_series` catches
+   *any* `Exception` and returns an all-NaN series (L140-141), so an all-NaN cell
+   is not by itself evidence of gamma degeneracy — it may be a caught exception.
+   The empirical drill must separate climate-indices *returned* NaNs from
+   *caught* exceptions before attributing a fully-NaN cell to arid gamma failure.
 3. **Gate 3 — min valid months/year** (`annual_spi_metric_grid`, ~L268). Per
    cell-year, `< min_months_per_year (9)` finite SPI months -> cell-year NaN.
-   Gate 2 knocks out the dry-season months, so arid cells routinely fall under 9.
+   If Gate 2 knocks out the dry-season months, arid cells could fall under 9.
+3.5. **Gate 3.5 — period-year coverage floor (period artifacts only)**
+   (`period_rollup_grid`, `compute/drought_risk_gridfirst.py:287`). **This is the
+   gate the audited slice actually hits, and the original cascade skipped it.**
+   The audit artifact is a *period* value (`historical / 1990-2010 /
+   ensemble-mean`); period rows roll the annual cell grid to one period via
+   `period_rollup_grid` **before** polygon aggregation, requiring finite annual
+   values in `>= ceil(min_years_per_period_fraction * n_period_years)` years
+   (`min_years_per_period_fraction=0.75`, `config/metrics_registry.py:1455`).
+   Gate 3 having NaN'd enough arid cell-years can trip this floor -> the cell is
+   NaN for the whole period, which then feeds Gate 4. Yearly rows skip this gate;
+   the audited period rows do not — so the binding fix may be the period-year
+   floor rather than Gate 3 or Gate 4 alone.
 4. **Gate 4 — polygon retained-weight floor**
    (`aggregate_grid_values_with_retention`, ~L328). Per district, if finite
    area-weight `< min_polygon_cell_weight_fraction (0.50)` -> district value
    **NaN** (with `retained` recorded). This is the step that stamps the final
    district-level NaN the audit saw.
 
-**Cascade in one line:** gamma degeneracy on ~=0 dry-season 3-month windows
-(Gate 2, climate-indices returns NaN) -> `<9` valid months/year (Gate 3) ->
-cell-years NaN -> `<50 %` finite polygon area (Gate 4) -> district NaN. The
-downstream effect: the missing SPI3 component can trip the sector bundles'
-`available_rule_weight_fraction` gate (0.70), dropping/reweighting those arid
-units in the Drought and Agricultural composites.
+**Cascade in one line (inferred, pending the empirical drill):** gamma
+degeneracy on ~=0 dry-season 3-month windows (Gate 2, climate-indices returns
+NaN) -> `<9` valid months/year (Gate 3) -> cell-years NaN -> for the audited
+*period* artifact, `<75 %` finite years/period (Gate 3.5) -> `<50 %` finite
+polygon area (Gate 4) -> district NaN. The downstream effect: the missing SPI3
+component can trip the sector bundles' `available_rule_weight_fraction` gate
+(0.70), dropping/reweighting those arid units in the Drought and Agricultural
+composites.
 
-**Settled vs. not.** Settled by reading code: the mechanism, the four gates, and
-that Gate 2 (gamma fit) is the arid-specific one while Gates 3/4 are downstream
-amplifiers (Gate 1 ruled out). **Not** yet empirically confirmed for a specific
-district (e.g. Jaisalmer): whether the killing blow is Gate 2 zeroing enough
-months to trip Gate 3, vs. Gate 4 tripping on partial coverage. Confirming that
-requires running `compute_spi_grid` on the real precip cube under the Windows
-`irt` env and inspecting per-cell NaN counts (WSL lacks the geo/pandas stack).
+**Settled vs. not.** Settled by reading code: the *routing* (district/block SPI3
+-> grid-first `compute_drought_risk_rows_for_metric`, not the legacy adapter —
+confirmed at `tools/pipeline/compute_indices_multiprocess.py:4442`) and the *set
+of gates* (1, 2, 3, 3.5 for period artifacts, 4). **Inferred, not settled:**
+which gate actually binds. Gate 2 as the arid-specific root cause is a hypothesis
+consistent with the SPI3-only pattern but **not** empirically confirmed for any
+district (e.g. Jaisalmer) — that needs `compute_spi_grid` run on the real precip
+cube under the Windows `irt` env, with per-cell NaN counts, *returned*-NaN vs
+*caught*-exception separated (see Gate 2 caveat), and the period-rollup gate
+(3.5) included. WSL lacks the geo/pandas stack.
 
 **Why the empirical drill matters for the fix:** it discriminates the two
 failure classes that map directly onto the decision options above. If **Gate 2**
 dominates, the NaN means no SPI signal mathematically exists -> only Option 1
 (accept + annotate) or Option 3 (arid-robust index) are viable; relaxing
-coverage gates would just average over genuinely-NaN months. If **Gates 3/4** are
-the deciding cut on cells that *did* produce finite SPI, the signal exists and
-our own thresholds discarded it -> Option 2 (relax/redesign the gate) is
-legitimate. Proposed read-only diagnostic (sibling of `tools/diagnostics/
-spi_diagnostic.py`): for one arid district dump per-cell Gate-1 pass rate,
-per-calendar-month gamma NaN rate, per-cell valid-month histogram, and final
-polygon `retained` fraction.
+coverage gates would just average over genuinely-NaN months. If **Gates 3/3.5/4**
+are the deciding cut on cells that *did* produce finite SPI, the signal exists
+and our own thresholds discarded it -> Option 2 (relax/redesign the gate) is
+legitimate. Proposed read-only diagnostic
+(`tools/diagnostics/drought_spi_arid_nan_trace.py`): for one arid district dump
+per-cell Gate-1 pass rate, per-calendar-month SPI NaN rate with returned-NaN vs
+caught-exception separated (Gate 2), per-cell valid-month histogram (Gate 3),
+per-cell finite-years-per-period count (Gate 3.5), and final polygon `retained`
+fraction (Gate 4).
+
+**Empirical run (2026-07-25, `add_flood_depth@b0617e6`, CanESM5 single model,
+`r1i1p1f1` national bundle, `tools/diagnostics/drought_spi_arid_nan_trace.py`).**
+The drill **partly refutes** the inferred cascade above and reframes the root
+cause:
+
+- **Gate 1:** 180/180 arid cells pass (100 %). Confirmed not the culprit.
+- **Gate 2 is per-CALENDAR-MONTH, not per-cell — and P3 is settled.** The
+  returned-vs-exception split is **0 exceptions / 0 returned-all-NaN / 180
+  (100 %) returned >=1 finite**, so the caught-exception path is NOT involved and
+  gamma never collapses a whole cell. The NaN is **seasonal**: dry-season 3-month
+  windows degenerate (climate-indices `compute.py:816/819` emits `Mean of empty
+  slice` -> NaN gamma params) so those months return NaN while the monsoon months
+  fit cleanly. Jaisalmer per-month NaN rate: **Dec 70.7 %, Jan 65.6 %, Feb
+  49.9 %, Mar 29.3 %, Apr 27.9 %, May 19.7 %, Jun–Oct ~0 %.** The wet control
+  (East Khasi Hills) is ~0 % every month. Mechanism confirmed, but it removes
+  *months*, not *cells*.
+- **Gate 3 is the real amplifier** (not a passive downstream step): with ~5–7 dry
+  months NaN/year, **30 % of cell-years fall under the 9-valid-month floor and
+  22 % of cells (40/180) lose ALL years.**
+- **Gate 3.5:** 118/180 cells (65.6 %) clear the 1990–2010 period floor; 22
+  finite-in-annual cells fall below it.
+- **Gate 4 / district: Jaisalmer is FINITE** (period value 0.768, retained
+  0.884). **The audited district-level NaN is NOT reproduced single-model.**
+
+**Revised conclusion.** The dry-season gamma-degeneracy mechanism is confirmed
+and Gate 3 is the binding amplifier, but single-model CanESM5 does **not** drive
+Jaisalmer to NaN — so the first write's "Gate 2 stamps the district NaN" claim
+does not hold. The audited 4.4 % district NaN (an **ensemble-mean** artifact)
+must come from (a) the **ensemble-mean combine** propagating a per-model NaN (if
+the combine is not skipna, any one model NaN -> district NaN), and/or (b)
+**districts other than Jaisalmer**, which was a guess — the audit named
+Rajasthan-18 but not the specific units.
+
+**Actual NaN roster + ensemble mechanism (2026-07-27, from the published
+`processed/spi3_count_events_lt_minus1/*/master_metrics_by_district.csv`, column
+`spi3_events_lt_minus1__historical__1990-2010__mean`).** Enumerated the real 34
+NaN districts instead of guessing — **Jaisalmer is NOT among them** (it is finite
+at 0.784), confirming the single-model drill above was on the wrong unit.
+
+- **Roster (34, 4.34 % of 784):** Rajasthan 18 (Ajmer, Balotra, Banswara,
+  Barmer, Beawar, Bhilwara, Chittorgarh, Dungarpur, Jalore, Jodhpur, Jodhpur
+  Gramin, Pali, Pratapgarh, Rajsamand, Salumbar, Shahpura, Sirohi, Udaipur),
+  Gujarat 10 (Arvalli, Banas Kantha, Chhotaudepur, Dohad, Mahisagar, Narmada,
+  Panch Mahals, Patan, Sabar Kantha, Vadodara), Madhya Pradesh 5 (Alirajpur,
+  Jhabua, Mandsaur, Neemuch, Ratlam), Maharashtra 1 (Nandurbar). A contiguous
+  semi-arid belt: W Rajasthan + the SE-Rajasthan/E-Gujarat/W-MP Aravalli
+  tri-junction — **not** the driest Thar (Jaisalmer/Bikaner survive).
+- **Ensemble combine is skipna.** The `__mean` is a `nanmean` over models that
+  produced a finite district value; `__n_models` records how many did. A district
+  is NaN **iff `n_models = 0`** — i.e. **all ~24 models failed** to yield a finite
+  value for that unit (n_models/values_per_model are blank on every NaN row). So
+  the earlier hypothesis "combine is not skipna, one model NaN -> district NaN" is
+  **wrong**; it is the opposite (needs *every* model to fail).
+- **The failure is a continuous fragility gradient, not a cliff.** n_models
+  histogram over 784 districts: **654 have all 24**, then a smooth arid-belt tail
+  — 34 with 0, 10 with 1, 8 with 2, 7 with 3 … Jaisalmer survives on **2/24**,
+  Bikaner on 13, Kota/Nagaur/Phalodi on **1/24**. The 34 NaN units are simply
+  where all 24 models landed just under the coverage floors, while their equally
+  arid neighbours cleared them in 1–2 models.
+
+**Resolved conclusion (Flag B).** This gradient is the signature of a
+**threshold-margin** effect at the Gate-3 (`min_months_per_year=9`) /
+Gate-3.5 (`min_years_per_period_fraction=0.75`) / Gate-4
+(`min_polygon_cell_weight_fraction=0.50`) coverage floors, driven by dry-season
+per-month gamma degeneracy (confirmed above). It is **not** an absolute
+"gamma cannot fit here" limit — if it were, no model would ever succeed, yet even
+arid districts clear on 1–13 models. **Therefore Option 2 (relax/redesign the
+arid coverage gate) is the indicated fix**, optionally paired with Option 1
+(annotate). Secondary flag surfaced: districts surviving on **`n_models <= 3`**
+(e.g. Jaisalmer 2, Kota/Nagaur/Phalodi 1) have statistically fragile ensemble
+means and are borderline-comparable to the 24-model districts — worth a
+reliability caveat regardless of the NaN fix.
+
+Roster reproduced by `scratch/list_spi3_nan_districts.py` (stdlib `csv`, no
+pandas; read-only). Recommended follow-ups: (1) sensitivity sweep — recompute the
+34 with a relaxed Gate 3 (e.g. `min_months_per_year=6`) / Gate 3.5 to see how many
+recover and whether recovered values are physically sane; (2) decide the
+`n_models <= 3` reliability policy.
 
 ---
 
