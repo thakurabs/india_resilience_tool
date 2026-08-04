@@ -1,6 +1,6 @@
 # Blog Structure — India Resilience Tool Data-Centre Case Study
 
-**Working title:** What climate-hazard screening reveals about India's data-centre geography
+**Working title:** 150 Kilometres, 7.5 Times the Humid Heat: What IRT Reveals About India's Data-Centre Geography
 
 **Format:** LinkedIn newsletter / long-form blog post, approximately 2,000-2,500 words.
 
@@ -69,7 +69,7 @@ A simple two-bar chart: Mumbai Suburban vs Pune City, mid-century days >=28 degC
 **IRT positioning:**
 
 - IRT turns downscaled CMIP6 climate projections and selected hazard layers into district- and block-level hazard-pressure evidence.
-- It is designed for comparison across places, hazards, scenarios, and time horizons.
+- It supports exploration across places, hazards, scenarios, and horizons, including like-for-like comparison of a physical indicator across geographies.
 - It helps planners and infrastructure decision-makers ask better first questions: where is hazard pressure high, what mechanism is driving it, and where should deeper investigation begin?
 - It supplies the hazard-pressure layer within a broader risk frame. It does not claim to estimate realised loss, business interruption, asset vulnerability, social vulnerability, adaptive capacity, or engineering resilience.
 
@@ -77,7 +77,7 @@ A simple two-bar chart: Mumbai Suburban vs Pune City, mid-century days >=28 degC
 
 - Say "hazard-pressure" when describing IRT outputs.
 - Say "screening" or "first gate," not "final assessment."
-- Say "climate Risk" only where referring to the wider policy problem or common terminology, and clarify that IRT's numeric outputs are hazard-pressure indicators.
+- Say "climate risk" only where referring to the wider policy problem or common terminology, and clarify that IRT's numeric outputs are hazard-pressure indicators.
 
 **Potential line:**
 
@@ -140,13 +140,13 @@ Use only citation-backed capacity claims. Candidate claims from the deep researc
 
 **Composite-score constraint:**
 
-Composite scores should not be used for the cross-state case-study findings. The findings should rely on physical metrics only: days per year, degC, mm of rainfall, and mapped flood extent. This is because dashboard composites are cohort-normalised and can be misleading when read across states or periods without the right context.
+Composite scores should not be used for the cross-state case-study findings. The findings should rely on physical metrics only: days per year, degC, mm of rainfall, and mapped flood extent. The relative composite scores used in these case-study exports are comparable only within the same state and period. They were therefore excluded from all cross-state and cross-period findings.
 
 **Method honesty box:**
 
 Use a boxed note or visually distinct paragraph:
 
-> What this screening covers: The operating portfolio comprised 33 campuses represented by 28 unique locality-level coordinate points. The national rainfall and riverine-flood runs resolved these points to 22 blocks; humid-heat analysis covered 18 blocks across seven states. Composite scores were excluded. Heat and extreme rainfall use projected climate indicators, while RP-100 riverine flood is a present-day snapshot. Results describe block-level climate pressure, not campus-level flood depth or engineering risk. Water sources, grid resilience, access routes, drainage, coastal inundation, cyclone exposure, storm surge, and campus design were not assessed.
+> What this screening covers: The operating portfolio comprised 33 campuses represented by 28 unique locality-level coordinate points. The national rainfall and riverine-flood runs resolved these points to 22 blocks; humid-heat analysis covered 18 blocks across seven states. Composite scores were excluded. Heat and extreme rainfall use projected climate indicators, while RP-100 riverine flood is a present-day snapshot. Results describe block-level climate pressure, not campus-level flood depth or engineering risk. Because the source coordinates are locality-level rather than campus-level, block assignments are screening-grade and should be verified using precise facility coordinates before decision use, especially near administrative boundaries. Water sources, grid resilience, access routes, drainage, coastal inundation, cyclone exposure, storm surge, and campus design were not assessed.
 
 **Visual candidate:**
 
@@ -207,7 +207,7 @@ Use "eastern NCR shows greater measured humid-heat pressure and mapped riverine 
 
 ### 5.3 Chennai: Riverine Exposure Is Not The Same As Rainfall Intensity
 
-**Core finding:** Chennai's screened blocks show high humid heat and high mapped riverine flood extent, but Chennai is not exceptional among the screened blocks on the selected regional rainfall indicators.
+**Core finding:** Chennai's screened blocks show high humid heat and comparatively high mapped riverine flood extent among the screened blocks, but Chennai is not exceptional among the screened blocks on the selected block-level rainfall indicators.
 
 **Evidence to use:**
 
@@ -224,7 +224,7 @@ Use "eastern NCR shows greater measured humid-heat pressure and mapped riverine 
 
 **Careful wording:**
 
-Use "selected regional rainfall indicators" and avoid implying there is no local pluvial or drainage risk.
+Use "selected block-level rainfall indicators" and avoid implying there is no local pluvial or drainage risk.
 
 ---
 
@@ -235,10 +235,10 @@ Use "selected regional rainfall indicators" and avoid implying there is no local
 **Key synthesis points:**
 
 - MMR is compound-exposed across the measured indicators: high humid heat, material mapped riverine flood extent in screened blocks, and the strongest extreme-rainfall indicators in the portfolio.
-- Chennai is highly exposed on humid heat and mapped riverine extent, while its selected rainfall-intensity indicators are not the portfolio's highest.
+- Chennai is highly exposed on humid heat and has comparatively high mapped riverine extent among the screened blocks, while its selected block-level rainfall indicators are not the portfolio's highest.
 - Eastern NCR combines higher measured humid-heat pressure with the highest mapped RP-100 flood extent among screened blocks.
 - Pune City, Bengaluru, and Hyderabad avoid the leading exposure tier on the measured indicators.
-- Hyderabad shows one of the strongest all-round profiles on the three measured indicators, including zero mapped RP-100 flood extent in the resolved Hyderabad blocks. This must be caveated because water, grid, access, drainage, heat-island effects, and facility design were not assessed.
+- Hyderabad remains outside the leading humid-heat and rainfall tiers. Two resolved blocks, Shabad and Shaikpet, have zero mapped RP-100 flood extent, while Gandipet records 0.15. Its profile is comparatively favourable, but not uniformly flood-free. This must be caveated because water, grid, access, drainage, heat-island effects, and facility design were not assessed.
 
 **Important caution:**
 
@@ -246,11 +246,11 @@ Do not declare an overall "best" or "worst" location unless a formal weighting r
 
 **Potential line:**
 
-Infrastructure does not fail because a composite score is high. It fails through physical mechanisms: lost cooling headroom, inundated substations, inaccessible roads, overwhelmed drainage, or constrained water supplies. Screening helps identify which mechanisms require deeper investigation.
+Infrastructure does not fail because a composite score is high. It can fail when cooling headroom shrinks, substations or access routes flood, drainage is overwhelmed, or water supplies become constrained. Screening helps identify which mechanisms require deeper investigation.
 
 **Visual candidates:**
 
-- Three-axis cluster table: humid heat days >=28 degC, mapped RP-100 flood extent, Rx1day mid-century.
+- Three-axis cluster table: humid heat days >=28 degC, mapped RP-100 flood extent, Rx1day mid-century. Show missing values explicitly rather than silently changing the portfolio denominator.
 - Optional ranked dot plot by cluster for each metric, avoiding a single weighted total.
 
 ---
@@ -315,18 +315,18 @@ Climate-hazard screening will not decide every infrastructure question. But it s
 
 ## Visual Plan
 
-1. **Lead chart:** Mumbai Suburban vs Pune City, mid-century days >=28 degC wet-bulb.
-2. **Portfolio heatmap:** downloaded from IRT, physical metric view only.
-3. **Maharashtra split chart:** MMR blocks vs Pune/Nashik blocks for humid heat and optionally Rx1day.
-4. **NCR gradient chart:** west-to-east dot/slope chart for days >=28 degC and/or days >=30 degC wet-bulb.
-5. **Cluster mechanism table:** humid heat, mapped RP-100 flood extent, and Rx1day by cluster, with no weighted total.
-6. **Optional Chennai callout:** high mapped riverine extent but not highest selected rainfall-intensity indicators.
+Keep the post to four priority visuals so the 2,000-2,500 word format does not feel crowded. Put coverage and horizon directly in every caption, especially because humid heat covers 18 blocks while rainfall and riverine flood cover 22.
+
+1. **Lead chart:** Mumbai Suburban vs Pune City, SSP5-8.5 mid-century days >=28 degC wet-bulb.
+2. **Portfolio heatmap:** downloaded from IRT, physical metric view only, with coverage and horizon stated in the caption.
+3. **NCR gradient chart:** west-to-east dot/slope chart for days >=28 degC and/or days >=30 degC wet-bulb.
+4. **Cluster mechanism table:** humid heat, mapped RP-100 flood extent, and Rx1day by cluster, with no weighted total and missing values shown explicitly.
 
 ---
 
 ## Sources And Notes To Prepare Before Publication
 
-Use a short "Sources and notes" section at the end of the post, rather than inline academic-style citations.
+Use a short "Sources and notes" section at the end of the post, rather than inline academic-style citations. For precise market-capacity statistics, use direct links or numbered endnotes so readers can audit the claim from LinkedIn.
 
 Candidate source groups:
 
