@@ -230,8 +230,10 @@ The Riverine Flood bundle returns three metrics. **Only flood extent is usable:*
 Hindon floodplain — and they were already the humid-heat worst within NCR (F5).
 Eastern NCR takes both hits.
 
-Hyderabad and Jaipur are effectively flood-free: zero extent, severity 2,
-depth 1.0 m.
+Jaipur is effectively flood-free in this export: zero extent, severity 2,
+depth 1.0 m. Hyderabad is mixed: Shabad and Shaikpet show zero mapped extent,
+while Gandipet records 0.15 and is labelled severity 5. Treat Hyderabad as
+comparatively favourable on flood extent, not uniformly flood-free.
 
 ### F8 — Extreme rainfall: MMR dominates, and Chennai does not
 
@@ -245,10 +247,11 @@ MMR leads Rx1day by ~35% over the next cluster and leads very-heavy-rain days by
 ~67% (48.6 against Kolkata's 29.1). On consecutive wet days it again leads
 (46.3 against Kolkata 37.7).
 
-**Chennai is mid-pack on rainfall intensity and near the bottom on heavy-rain
-days (16.2).** This is the strongest available evidence for the pluvial-versus-
-fluvial beat, and it cuts against the intuitive reading: Chennai's exposure is
-not driven by exceptional rainfall. Its riverine extent is high (0.35) and its
+**Chennai is mid-pack on the selected block-level rainfall-intensity indicators
+and near the bottom on heavy-rain days (16.2).** This is the strongest available
+evidence for the pluvial-versus-fluvial beat, and it cuts against the intuitive
+reading: Chennai's exposure is not driven by exceptional rainfall. Its mapped
+riverine extent is comparatively high among the screened blocks (0.35) and its
 drainage failure is well documented, but its rainfall statistics are ordinary.
 A tool that separates the two mechanisms says something a combined "flood risk"
 score cannot.
@@ -257,26 +260,29 @@ score cannot.
 
 | Cluster | Humid heat (days ≥28, mid) | Riverine extent | Rx1day mid | Verdict |
 |---|---:|---:|---:|---|
-| **MMR** | 67–69 | 0.24–0.29 | **98–102** | **Worst overall** — top tier on all three |
+| **MMR** | 67–69 | 0.24–0.29 | **98–102** | Compound-exposed across the measured indicators |
 | **Chennai** | **64–75** | 0.32–0.35 | 64 | Heat and fluvial, not pluvial |
 | **Delhi NCR (east)** | 65–67 | **0.39–0.53** | 61–63 | Heat and worst flood extent |
 | **Delhi NCR (west)** | 51–59 | 0.01–0.14 | 60–62 | Materially better than east |
 | **Bengaluru** | **1.4–1.9** | 0.01–0.02 | 48.6 | Best on heat, low on both flood axes |
-| **Hyderabad** | 5.5–7.6 | **0.00** | 52.3 | **Best combined profile** |
+| **Hyderabad** | 5.5–7.6 | 0.00–0.15 | 52.0–52.3 | Comparatively favourable on measured indicators, but not uniformly flood-free |
 | **Pune City** | 9.2 | 0.07 | **46.1** | Lowest rainfall intensity measured |
 
 Two shifts follow:
 
-1. **MMR is the worst cluster overall, not joint-worst.** It is top-tier on humid
-   heat, high on riverine extent, and first by a wide margin on both rainfall
-   metrics. It holds ~46% of operational capacity and ~41% of the pipeline.
-2. **Hyderabad has the strongest combined profile of any major cluster** — low
-   humid heat, zero flood extent, low rainfall intensity — and it carries the
-   ~540 MW pipeline, the largest growth bet in the country after Mumbai.
+1. **MMR is compound-exposed across the measured indicators.** It is top-tier on
+   humid heat, high on mapped riverine extent, and first by a wide margin on both
+   rainfall metrics. It holds ~46% of operational capacity and ~41% of the
+   pipeline.
+2. **Hyderabad remains outside the leading humid-heat and rainfall tiers.** Two
+   resolved blocks have zero mapped flood extent, while Gandipet records 0.15.
+   Its profile is comparatively favourable on the measured indicators, but water,
+   grid, access, drainage, heat-island effects, and facility design were not
+   assessed.
 
-The second point matters for tone. The deck can report that the market's biggest
-expansion is also its best climate call, which is more credible than a document
-that only finds fault.
+The second point matters for tone. The deck can report that one of the market's
+largest expansion bets does not sit in the leading exposure tier on the measured
+indicators, which is more credible than a document that only finds fault.
 
 ---
 
@@ -362,8 +368,9 @@ heat was not on the scorecard because nobody had it at this resolution.
 **Adding flood and rainfall does not soften this — it concentrates it.** The
 three exposed clusters are exposed on more than one axis each (F9): MMR on all
 three, Chennai on heat and fluvial extent, eastern NCR on heat and the worst
-flood extent in the portfolio. Meanwhile the favourable tier holds up across all
-three bundles, with Hyderabad clean on every axis measured.
+flood extent in the portfolio. Meanwhile the favourable tier mostly holds up
+across the measured indicators, with Hyderabad still comparatively favourable
+but not uniformly flood-free.
 
 That is the strongest form of the argument: the ranking does not depend on
 choosing humid heat as the lens. Three independent physical mechanisms point the
@@ -408,8 +415,10 @@ Everywhere else, the cluster is the decision unit.
   Do not present a combined three-bundle verdict for those four.
 - **Merged upload points score clusters, not campuses.** Seven sites sit behind
   three coordinates (SIPCOT Siruseri ×3, Ambattur ×2, Electronic City ×2).
-- **Locality-precise, not campus-precise** coordinates. Adequate for block and
-  district resolution; not a site-level verdict.
+- **Locality-precise, not campus-precise coordinates.** Block assignments are
+  screening-grade and should be verified with precise facility coordinates before
+  decision use, especially near administrative boundaries. They are not a
+  site-level verdict.
 - **Absent hazards.** Coastal inundation, sea-level rise, cyclone and storm surge
   are not in the tool and are first-order for Chennai and MMR — together ~61% of
   national capacity. Grid resilience (SAIDI/SAIFI, dual feed, substation flood
