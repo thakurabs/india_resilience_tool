@@ -134,6 +134,7 @@ CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variabi
 | Path | Purpose |
 |------|---------|
 | `india_resilience_tool/` | Main application package |
+| `assistant/` | Proposed architecture and future implementation area for the governed conversational data-analysis assistant |
 | `tools/` | Operational, data-prep, pipeline, diagnostics, and geodata utilities |
 | `tests/` | Main pytest suite |
 | `docs/` | Handoffs, smoke tests, and repo/process notes |
