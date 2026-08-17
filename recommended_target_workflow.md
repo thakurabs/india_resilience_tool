@@ -27,9 +27,48 @@ The first screen should already contain a useful result:
 - an India map;
 - a clearly labelled default risk bundle;
 - a clearly labelled default scenario-period;
-- a risk-band legend;
-- the top hotspot states; and
+- a Relative Risk Concentration Index legend;
+- the states with the highest relative risk concentration; and
 - one sentence explaining what the score represents.
+
+The national map should not average state-normalized district or block composite scores and
+present the result as an absolute, pan-India risk comparison. Instead, it should use a
+`Relative Risk Concentration Index` (RRCI) derived from the distribution of valid administrative
+units across the five existing risk bands:
+
+- `Very Low`;
+- `Low`;
+- `Medium`;
+- `High`; and
+- `Very High`.
+
+For a chosen bundle, scenario-period, and administrative level, the initial RRCI definition is:
+
+```text
+RRCI = (0 x Very Low count
+        + 25 x Low count
+        + 50 x Medium count
+        + 75 x High count
+        + 100 x Very High count)
+       / total valid unit count
+```
+
+Dividing by the total valid unit count makes the index independent of how many districts or
+blocks a state contains. Equivalently, the RRCI is the weighted sum of the proportions of valid
+units in the five bands. It ranges from 0, when every valid unit is in `Very Low`, to 100, when
+every valid unit is in `Very High`.
+
+The RRCI must be calculated separately for districts and blocks; the two administrative levels
+must not be mixed in one index. The default national overview should use a single declared level
+consistently across all states. It should also show valid-unit coverage and return `Insufficient
+data` when an agreed minimum coverage requirement is not met.
+
+The RRCI is a summary of the concentration of locally normalized composite risk bands. It does
+not convert the underlying state-cohort composite scores into an absolute pan-India risk scale.
+The national overview must therefore use language such as `relative risk concentration`, not
+claim that one state has greater absolute climate risk than another. The score-to-band thresholds,
+coverage requirement, default administrative level, and treatment of partial component data must
+be fixed as explicit methodological contracts before implementation.
 
 The application should avoid an empty first screen that requires the user to complete a series
 of controls before seeing any information. Defaults must be visible and clearly identified so
