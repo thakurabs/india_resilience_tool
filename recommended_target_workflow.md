@@ -70,6 +70,63 @@ claim that one state has greater absolute climate risk than another. The score-t
 coverage requirement, default administrative level, and treatment of partial component data must
 be fixed as explicit methodological contracts before implementation.
 
+### National map visual encoding
+
+The pan-India map should use a continuous, hierarchical colour treatment rather than assigning
+states to five discrete colour classes.
+
+For the active bundle and scenario-period, the 36 valid state and union-territory RRCI values
+should be positioned continuously between the observed national minimum and maximum. Each value
+should then be interpolated through a five-anchor palette running from green through light green,
+yellow, and orange to red. Distinct RRCI values therefore receive distinct interpolated colours;
+the five palette colours are anchors in one continuous scale, not class bins. The map should show
+one continuous RRCI colourbar with the observed minimum, maximum, and intermediate numeric ticks.
+If all valid RRCI values are equal, the map should use the palette midpoint and show the single
+observed value rather than constructing a false range.
+
+State and union-territory interiors should retain visible district boundaries. Within each state,
+district composite scores should control the strength of the state's assigned colour:
+
+```text
+district tint strength = 30% + 70% x (district composite score / 100)
+```
+
+A district score of 0 therefore receives a light 30% tint of its state's colour rather than
+white, while a score of 100 receives the full state colour. Intermediate scores receive
+progressively stronger tints. The 30% floor is the initial visual specification and may be tuned
+through accessibility and visual-regression testing without changing the analytical method.
+Colour interpolation should use a perceptual colour space such as OKLCH or CIELAB so the gradient
+appears visually even and avoids muddy intermediate colours.
+
+State boundaries should use a strong neutral stroke, while district boundaries should use a thin,
+subtle neutral stroke. The national map should not add a persistent solid-colour state anchor,
+district-level colourbar, or permanent explanatory sentence. A compact information control may
+hold the interpretation and the caveat that the observed minimum-maximum colour scale is relative
+to the active bundle and scenario-period and will rescale when those selections change.
+
+### National map interaction
+
+In the pan-India view, hovering anywhere within a state should highlight the whole state and show
+state-level information only:
+
+- state or union-territory name;
+- RRCI value;
+- relative rank among states and union territories with valid RRCI values; and
+- valid-unit coverage, expressed as valid districts over expected districts and as a percentage.
+
+District names, district composite scores, and district risk bands should not appear in the
+pan-India tooltip even though district boundaries and tint variation remain visible on the map.
+
+Clicking anywhere within a state should select and zoom to that state, transition to the district
+analysis view, replace the national RRCI legend with the five district risk bands, and enable
+district-level hover and selection. The visual hierarchy is therefore:
+
+```text
+National view: continuous state RRCI colour + district composite-score tint
+    → select state
+State view: five district risk bands + district-level interaction
+```
+
 The application should avoid an empty first screen that requires the user to complete a series
 of controls before seeing any information. Defaults must be visible and clearly identified so
 the user understands what is being shown without mistaking them for personal selections.
