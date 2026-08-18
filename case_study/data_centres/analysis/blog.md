@@ -1,4 +1,6 @@
-# 150 Kilometres, 7.5 Times as Many Humid-Heat Days: What IRT Reveals About India’s Data-Centre Geography
+# India Needs a First Climate Screen for Infrastructure: A Data-Centre Pilot Shows Why
+
+*Just 150 kilometres separate Mumbai Suburban and Pune City, but the India Resilience Tool finds a 7.5-fold difference in projected humid-heat days—showing why block-level hazard evidence belongs at the start of infrastructure planning.*
 
 Mumbai Suburban and Pune City are roughly 150 kilometres apart. They sit in the same state, within the orbit of the same broad market and policy environment. Yet under a high-emissions pathway at mid-century, the block containing the screened Mumbai sites records about 69 days a year at or above 28°C wet-bulb, compared with about nine days in Pune City.
 
@@ -10,25 +12,29 @@ That 150-kilometre difference is the case for making climate-hazard screening an
 
 > **Visual 1 — The 150-kilometre divide.** Two-bar chart comparing Mumbai Suburban (69.1) and Pune City (9.2) on projected 24-model ensemble-mean days per year at or above 28°C wet-bulb. Block level; SSP5-8.5; mid-century, 2040–2060; humid-heat coverage: 18 blocks across seven states.
 
-## The missing first gate
+## From national climate concern to local infrastructure decisions
 
-India plans, finances and permits adaptation-relevant infrastructure at subnational scales: states, districts and, increasingly, blocks. Climate information, however, often reaches decision-makers as a national map, a coarse grid, a generic vulnerability label or an opaque composite score. The scale of the evidence and the scale of the decision do not always meet.
+India does not lack climate plans or national-scale assessments. The harder problem is translating climate science into evidence that can be used at the scale where land, infrastructure and investment decisions are actually made. States, districts and, increasingly, blocks govern very different physical geographies, yet climate information often reaches decision-makers as a national map, a coarse grid, a generic vulnerability label or an opaque composite score. The scale of the evidence and the scale of the decision do not always meet.
 
-The [India Resilience Tool](https://irt.resilience.org.in) was built to help close that gap. IRT turns downscaled CMIP6 projections and selected hazard layers into district- and block-level hazard-pressure evidence. Users can explore places, hazards, scenarios and time horizons, and compare physical indicators—days per year, degrees Celsius, millimetres of rainfall or mapped flood extent—across geographies.
+The demand for better information is visible among the institutions expected to finance the transition. In a 2022–23 Reserve Bank of India survey, roughly 95% of responding financial institutions reported lacking adequate data to assess climate risk. Respondents specifically called for a national database of climate scenarios at a disaggregated geographic level for assessing physical hazards.
+
+This is the resolution-and-specificity gap that the [India Resilience Tool](https://irt.resilience.org.in) is designed to address. IRT turns downscaled CMIP6 projections and selected hazard layers into district- and block-level hazard-pressure evidence. Users can explore places, hazards, scenarios and time horizons, and compare physical indicators—days per year, degrees Celsius, millimetres of rainfall or mapped flood extent—across geographies.
+
+That administrative resolution matters in a country spanning the arid northwest, Himalayan north, monsoon core, peninsular plateau and long eastern and western coastlines. One place may be facing rising humid heat, another more intense rainfall and another longer dry spells. A single national figure cannot tell a district or infrastructure planner where each pressure is intensifying or which locations should be prioritised for further assessment.
 
 The distinction between *hazard pressure* and *risk* matters. Risk in the fuller sense also depends on exposure, vulnerability, adaptive capacity, engineering design, operating controls and the consequences of failure. IRT does not estimate realised losses or business interruption, and it does not replace a site survey or engineering study.
 
-It is an early, practical filter: a way to see where climate pressure is visible in present-day or projected evidence, which mechanism is driving it and where deeper investigation should begin—before capital, land and policy lock in the next generation of infrastructure.
+IRT supplies one layer in that larger assessment stack: an early, practical screen of physical hazard pressure. It helps identify where pressure is high or rising, which mechanism is driving it and where exposure, vulnerability, engineering and financial analysis should begin—before capital, land and policy lock in the next generation of infrastructure.
 
-## Why data centres are a useful test
+## A data-centre pilot of the first screen
 
 Data centres are usually discussed as digital infrastructure. In physical terms, they are intensive, interconnected infrastructure systems. Their continuity depends not only on servers and fibre, but also on electricity supply, cooling systems, water availability or alternative heat rejection, substations, drainage, roads and backup-fuel logistics. Each dependency can be climate-sensitive.
 
 India’s market is expanding quickly and remains concentrated in a handful of clusters: Mumbai Metropolitan Region (MMR), Chennai, Hyderabad, Bengaluru, Delhi NCR and Pune, alongside several emerging locations. Cushman & Wakefield’s *India Data Centre Update H1 2025* reported about 1,280 MW of operational capacity, with Mumbai alone accounting for around 46%.
 
-That concentration is not irrational. Data-centre locations reflect fibre connectivity, access to power, land, customers, cloud regions and state incentives. The issue is what happens next. Climate-hazard pressure now needs to sit alongside those established criteria before new capacity is locked in.
+That concentration is not irrational. Data-centre locations reflect fibre connectivity, access to power, land, customers, cloud regions and state incentives. The question is whether climate-hazard pressure can be brought alongside those established criteria before new capacity is locked in.
 
-The sector therefore offers a useful test: can a screening tool reveal decision-relevant differences hidden by familiar city and cluster labels?
+The sector therefore offers a practical pilot for IRT’s central proposition: can block-level, multi-hazard evidence reveal decision-relevant differences hidden by familiar city and cluster labels?
 
 ## How we screened the portfolio
 
@@ -82,6 +88,17 @@ Yet Chennai is not exceptional among the screened blocks on the selected block-l
 
 A single “flood risk” label could obscure this distinction. Rainfall intensity, mapped riverine extent, local drainage failure, coastal inundation and storm surge are different mechanisms. They require different data and different responses. This screening did not assess Chennai’s local drainage, cyclone, coastal-inundation or storm-surge exposure. Its narrower finding is still useful: among the indicators measured here, rainfall intensity and mapped riverine extent tell different stories.
 
+## What the pilot demonstrates about climate-hazard screening
+
+The value of the pilot is not a new league table of data-centre locations. It is a demonstration of what changes when climate evidence is brought closer to the scale and structure of an infrastructure decision.
+
+- **Administrative granularity changes the picture.** Nearby locations within the same state or commercial cluster can show materially different hazard pressures. District and block evidence can reveal contrasts hidden by national, state or city labels.
+- **Different hazards draw different geographies.** The Western Ghats divide humid heat and rainfall differently; NCR’s gradient crosses state boundaries; Chennai’s rainfall indicators and mapped riverine extent tell different stories. A single hazard label or weighted total would hide those mechanisms.
+- **Physical metrics make the next question clearer.** Days above a wet-bulb threshold, millimetres of one-day rainfall and percentage of block area within a mapped flood footprint connect more directly to cooling, drainage, access, substation and water-system investigations than an unexplained score.
+- **Screening makes due diligence proportionate.** It does not determine whether a campus is safe or viable. It identifies where site coordinates, engineering design, utilities, exposure and vulnerability need closer examination.
+
+That is the role IRT can play beyond this portfolio: turning a general concern about future climate into a location- and mechanism-specific agenda for further assessment.
+
 ## What the portfolio suggests—and what it does not
 
 Across the measured indicators, MMR appears compound-exposed: high humid heat, material mapped riverine flood extent and the strongest extreme-rainfall values in the portfolio. Chennai combines high humid heat with comparatively high mapped riverine extent, while its selected rainfall indicators are not the portfolio’s highest. Eastern NCR combines higher humid-heat pressure within its cluster with the highest mapped RP-100 flood extent in the screened set.
@@ -94,31 +111,32 @@ Infrastructure does not fail because a composite score is high. It can fail when
 
 > **Visual 4 — Different hazards, different stories.** Cluster mechanism table showing projected 24-model ensemble-mean mid-century days at or above 28°C wet-bulb, present-day mapped RP-100 flood extent as a percentage of block area, and projected 24-model ensemble-mean mid-century Rx1day. No weighted total; show ranges and missing values explicitly. Block level; SSP5-8.5, 2040–2060 for heat and rainfall; present-day snapshot for flood; heat coverage: 18 blocks, rainfall and flood coverage: 22 blocks.
 
-## From data centres to infrastructure policy
+## Putting the first screen into infrastructure planning
 
-Data centres are the case study, but the principle applies to industrial parks, logistics hubs, hospitals, energy assets, transport corridors, urban expansion and major public investments.
+Data centres are the pilot, but the principle applies to industrial parks, logistics hubs, hospitals, energy assets, transport corridors, urban expansion and major public investments. Climate-hazard information becomes useful when it enters ordinary decisions about where to build, what to design for and which questions must be resolved before capital is committed.
 
 Climate-hazard screening should happen before land acquisition and design lock-in. State and local incentive packages should require evidence that relevant hazard pressures have been screened and material mechanisms identified. Lenders and investors should ask for the same evidence during due diligence. Utilities should consider the climate-sensitive power and water dependencies created by concentrated infrastructure loads. Land-use planning should use district- and block-level evidence to inform where new clusters are encouraged and what safeguards they require.
 
 This is not a punitive standard, nor a retrospective judgement on clusters built for rational market reasons. It is a way to ask better questions earlier. If a screening flags humid heat, the next step may be a cooling-system and water-source assessment. If it flags mapped riverine extent, the next step may be site-scale hydrology, drainage, substation and access-route analysis. Coastal locations may require cyclone, storm-surge and compound rainfall–tide modelling that this case study did not provide.
 
-The screening does not make the investment decision. It makes the investigation proportionate to the hazard pressures identified in present-day and projected evidence.
+The screening does not make the investment decision. It makes the investigation proportionate to the hazard pressures identified in present-day and projected evidence. Mainstreaming that first screen would help move infrastructure planning from general climate awareness toward proactive, location-specific due diligence.
 
 ## The first filter, not the final answer
 
-IRT is designed to make climate hazard pressure visible at the administrative scales where decisions are made. It is not a replacement for precise site coordinates, surveys, engineering studies, hydrological modelling, local utility data, water-source analysis or community consultation.
+IRT is designed to make climate hazard pressure visible at the administrative scales where decisions are made. It closes an important information gap, but it is not a replacement for precise site coordinates, surveys, engineering studies, hydrological modelling, local utility data, water-source analysis, exposure and vulnerability assessment or community consultation.
 
 Its value is that it can change the first conversation. Instead of asking only whether a location has land, fibre, power and incentives, planners can also ask: which climate mechanisms are visible here, how do nearby alternatives differ, and what needs deeper investigation before we commit?
 
 Explore the [India Resilience Tool](https://irt.resilience.org.in) and contact Resilience Actions to request a demo.
 
-Climate-hazard screening will not decide every infrastructure question. But it should decide what questions get asked before the next generation of infrastructure is locked into place.
+The data-centre pilot shows what this first filter can do: reveal local contrasts, separate hazard mechanisms and direct the next stage of investigation. Climate-hazard screening will not decide every infrastructure question. But it should decide what questions get asked before the next generation of infrastructure is locked into place.
 
 ---
 
 ## Sources and notes
 
 1. India Resilience Tool, including the in-app Technical Guidance Note: [irt.resilience.org.in](https://irt.resilience.org.in). Case-study values come from development-deployment portfolio exports dated 30 July 2026 and were checked against the documented export tables before publication. The Technical Guidance Note documents IRT’s 24-model ensemble implementation and interpretation limits.
-2. Cushman & Wakefield, *India Data Centre Update H1 2025*: [stable report page](https://www.cushmanwakefield.com/en/india/insights/india-data-centre-update). Market-capacity figures refer to the report’s H1 2025 snapshot; announced or upcoming capacity is not treated as operational.
-3. Projected heat and rainfall indicators use the downscaled, bias-corrected NASA NEX-GDDP-CMIP6 climate dataset: [NASA Center for Climate Simulation](https://www.nccs.nasa.gov/data-collections/nex-gddp-cmip6/). IRT’s 24-model selection and aggregation method are documented in the IRT Technical Guidance Note rather than by NASA.
-4. RP-100 riverine flood is a present-day/static screening layer derived from Baugh et al. (2024), *Global river flood hazard maps, Version 2.1*, Joint Research Centre: [dataset DOI](https://doi.org/10.2905/JRC.VD32YWG). Mapped extent is the percentage of a block intersecting the modelled RP-100 inundation footprint; it is not flood depth at a campus.
+2. Reserve Bank of India, *Report on Currency and Finance 2022–23: Towards a Greener Cleaner India*, Chapter III stakeholder survey. The survey reported that roughly 95% of responding financial institutions lacked adequate climate-risk data and recorded demand for geographically disaggregated physical-hazard scenarios.
+3. Cushman & Wakefield, *India Data Centre Update H1 2025*: [stable report page](https://www.cushmanwakefield.com/en/india/insights/india-data-centre-update). Market-capacity figures refer to the report’s H1 2025 snapshot; announced or upcoming capacity is not treated as operational.
+4. Projected heat and rainfall indicators use the downscaled, bias-corrected NASA NEX-GDDP-CMIP6 climate dataset: [NASA Center for Climate Simulation](https://www.nccs.nasa.gov/data-collections/nex-gddp-cmip6/). IRT’s 24-model selection and aggregation method are documented in the IRT Technical Guidance Note rather than by NASA.
+5. RP-100 riverine flood is a present-day/static screening layer derived from Baugh et al. (2024), *Global river flood hazard maps, Version 2.1*, Joint Research Centre: [dataset DOI](https://doi.org/10.2905/JRC.VD32YWG). Mapped extent is the percentage of a block intersecting the modelled RP-100 inundation footprint; it is not flood depth at a campus.
