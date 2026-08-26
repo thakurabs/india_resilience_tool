@@ -134,7 +134,7 @@ CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variabi
 | Path | Purpose |
 |------|---------|
 | `india_resilience_tool/` | Main application package |
-| `assistant/` | Proposed architecture and future implementation area for the governed conversational data-analysis assistant |
+| `assistant/` | Proposed architecture for the governed conversational data-analysis assistant plus isolated evaluation harnesses; evaluation code is not assistant runtime code |
 | `tools/` | Operational, data-prep, pipeline, diagnostics, and geodata utilities |
 | `tests/` | Main pytest suite |
 | `docs/` | Handoffs, smoke tests, and repo/process notes |
@@ -143,6 +143,24 @@ CHG-0038 scope note: `jrc_flood_depth_index_rp100` and `r95p_interannual_variabi
 Notes:
 - `__pycache__/` directories are intentionally omitted below.
 - Local logs, zips, and untracked working files are not treated as canonical repo modules.
+
+### `assistant/`
+
+| Path | Purpose |
+|------|---------|
+| `ARCHITECTURE.md` | Proposed governed IRT data-analysis assistant architecture and its explicit separation from external-product evaluations |
+| `evaluations/cravis/` | CHG-0321 human-gated, `n=1` CRAVIS interaction driver and evaluation framework (Node 18 + existing Playwright dependency; independent of `qa/`) |
+| `evaluations/cravis/cli.mjs` | Inert-on-import CLI exposing simulation, authentication capture, zero-send recon, one-prompt campaign execution, human review locking, and locked report generation |
+| `evaluations/cravis/config/` | Fixed P01-P08 prompts and non-sent oracles, fourteen-dimension rubric, selector policy, and origin policy |
+| `evaluations/cravis/lib/` | Pure hashing, validation, ledger, quota, redaction, download, CSV, scoring, review, reporting, reference-data, simulator, and browser workflow modules |
+| `evaluations/cravis/fixtures/user-districts.csv` | Ten-row synthetic upload fixture for exact, alias, unmatched, duplicate, and blank district behavior |
+| `evaluations/cravis/tests/` | Node tests for crash safety, DOM observation, quota proof, policy/security, scoring, locking, deterministic reports, and inert imports |
+
+CRAVIS raw evidence, authentication state, campaign runs, reference downloads,
+videos, screenshots, downloads, temporary state, and draft reports are local and
+gitignored. Final report generation requires a complete, hash-valid P01-P08 human
+review lock. The evaluator does not alter IRT methodology; CRAVIS RCP and IRT SSP
+contracts remain distinct unless documented source support establishes a mapping.
 
 Reference overlay contracts:
 - `rp100_flood_depth_raster`: display-only RP-100 flood-depth raster overlay backed by `jrc_flood_depth/overlay/rp100_depth_overlay.png` and metadata, with optimized copies under `processed_optimised/context/`.

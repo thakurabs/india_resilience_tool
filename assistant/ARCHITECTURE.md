@@ -596,3 +596,21 @@ The MVP is ready when it can:
 
 Document retrieval may later support questions about methodology and guidance, but
 structured data tools remain the authority for numerical answers.
+
+## 20. Separation from the CRAVIS case-study evaluator
+
+`assistant/evaluations/cravis/` is an external-product interaction and evaluation
+harness, not an implementation component of this proposed IRT assistant. It has
+its own Node/Playwright CLI, prompt oracles, human scoring lock, raw-evidence
+boundary, and reporting contracts. The evaluator must not import planned IRT
+assistant runtime modules, and the future IRT assistant must not depend on CRAVIS
+session state, selectors, campaign ledgers, evidence, or scores.
+
+The evaluator's capability mapping may inform roadmap decisions, but an observed
+CRAVIS behavior does not change IRT metric definitions or prove a suitable IRT
+methodology. In particular, CRAVIS-native RCP 4.5/8.5 outputs are not equivalent
+to IRT SSP contracts without documented source support. Legitimate scenario,
+source, baseline, aggregation, or uncertainty differences should be recorded as
+`methodology_conflict` rather than silently copied or treated automatically as an
+IRT capability gap. The case study is `n=1` and is not a general performance
+estimate.
