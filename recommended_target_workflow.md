@@ -28,16 +28,16 @@ The first screen should already contain a useful result:
 - a clearly labelled default bundle;
 - a clearly labelled default scenario;
 - a clearly labelled default period;
-- a `High Bundle-Score Concentration (%)` legend;
+- an `Elevated Bundle-Score Concentration (%)` legend;
 - the eligible states and union territories with the highest concentrations; and
 - a concise explanation of what the screening statistic represents.
 
 The national map should not average State/cohort-normalized district or block composite scores
 and present the result as an absolute pan-India climate-risk comparison. Instead, the Phase 1
-district overview should use `High Bundle-Score Concentration (%)`:
+district overview should use `Elevated Bundle-Score Concentration (%)`:
 
 ```text
-High Bundle-Score Concentration (%)
+Elevated Bundle-Score Concentration (%)
 =
 100 x
 (number of valid districts with bundle composite score >= 50)
@@ -45,16 +45,17 @@ High Bundle-Score Concentration (%)
 (number of valid districts)
 ```
 
-The fixed threshold of `50` corresponds to the persisted Glance `High` and `Very High` score
-bands. The Glance score-band contract is `Low` for scores below 25, `Moderate` for scores from 25
-to below 50, `High` for scores from 50 to below 75, and `Very High` for scores of at least 75.
-The concentration statistic ranges from 0%, when no valid district reaches the threshold, to
-100%, when every valid district reaches it.
+The elevated-score threshold is fixed at `50`. The concentration statistic ranges from 0%, when
+no valid district reaches the threshold, to 100%, when every valid district reaches it. This
+threshold is independent of the five interpretive score bands: it includes the upper half of the
+`Moderate` band together with the complete `High` and `Extreme` bands. The interface should state
+the `>= 50` rule in the headline and method note without subdividing the Moderate band in the
+distribution chart.
 
 The national statistic answers:
 
-> Within this State/UT, what proportion of valid districts receive a High or Very High score under
-> the selected IRT bundle methodology?
+> Within this State/UT, what proportion of valid districts meet or exceed the defined
+> elevated-score threshold under the selected IRT bundle methodology?
 
 It does not answer which State/UT has greater absolute physical climate hazard or climate risk.
 The statistic summarizes the concentration of State/cohort-normalized bundle scores and must be
@@ -75,27 +76,35 @@ Coverage validity and ranking stability are separate quality checks:
 coverage_fraction = n_valid / n_expected
 ```
 
-The initial national screening contract is:
+The initial screening contract is:
 
 ```text
 coverage < 90%
     -> show Insufficient coverage
-    -> suppress the concentration percentage and national rank
+    -> suppress the concentration percentage and rank
 
 coverage >= 90% and n_valid < 10
     -> show the concentration percentage
-    -> suppress the national rank
+    -> suppress the rank
     -> flag Small cohort
 
 coverage >= 90% and n_valid >= 10
     -> show the concentration percentage
-    -> eligible for national ranking
+    -> eligible for ranking
 ```
 
 For interpretation, `n_valid < 5` may be labelled `Very small cohort` and `n_valid = 5-9` may be
-labelled `Small cohort`; both remain unranked. State/UTs with no valid composite data should show
-`Data not available`. National rankings should use competition ranks, so identical percentages
-receive the same rank and the following rank reflects the number of preceding entries.
+labelled `Small cohort`; both remain unranked. Units with no valid composite data should show
+`Data not available`. The same coverage and denominator logic should apply consistently to each
+parent-child ranking cohort: State/UTs across India, districts within a selected State/UT, and
+blocks within a selected district. A geography may remain available for drill-down when usable
+lower-level data exists even if its parent-level concentration or rank is suppressed.
+
+Rankings should use competition ranks, so identical values receive the same rank and the following
+rank reflects the number of preceding entries. Population descending should determine display
+order within a tie without changing the shared rank. If population is missing or also tied, use
+alphabetical order as the deterministic fallback. Show a top-10 shortlist by default with a
+`View all` action.
 
 Every national screening artifact should retain at least:
 
@@ -133,7 +142,7 @@ on a fixed `0-100%` colour scale. Values should be interpolated through a five-a
 ```
 
 The five palette colours are anchors in one continuous scale, not class bins. The map should show
-one continuous `High Bundle-Score Concentration (%)` colourbar with fixed numeric ticks. The scale
+one continuous `Elevated Bundle-Score Concentration (%)` colourbar with fixed numeric ticks. The scale
 must not rescale to the observed State/UT range when the bundle, scenario, or period changes;
 identical colours should continue to represent identical percentages across selections.
 
@@ -164,7 +173,7 @@ In the pan-India view, hovering anywhere within a state should highlight the who
 state-level information only:
 
 - state or union-territory name;
-- High Bundle-Score Concentration (%);
+- Elevated Bundle-Score Concentration (%);
 - districts meeting the threshold over valid districts;
 - valid districts over expected districts and the coverage percentage;
 - national rank and the number of rank-eligible State/UTs, when eligible; and
@@ -174,29 +183,82 @@ District names, district composite scores, and district score bands should not a
 pan-India tooltip even though district boundaries and tint variation remain visible on the map.
 
 Clicking anywhere within a state should select and zoom to that state, transition to the district
-analysis view, replace the national concentration legend with the four persisted Glance score
-bands, and enable district-level hover and selection. The visual hierarchy is therefore:
+analysis view, replace the national concentration colourbar with a continuous fixed `0-100`
+colourbar titled `District Bundle Score`, and enable district-level hover and selection. Districts
+should use their composite scores directly on this scale. Block boundaries should be shown as thin,
+subtle context outlines only; block scores, tint, hover, and selection should not be introduced
+until the user enters the district view. Block geometry should be loaded only after a State/UT is
+selected.
+
+The five interpretive score bands are:
+
+```text
+Very Low: 0 <= score < 20
+Low:      20 <= score < 40
+Moderate: 40 <= score < 60
+High:     60 <= score < 80
+Extreme:  80 <= score <= 100
+```
+
+The visual hierarchy is therefore:
 
 ```text
 National view: continuous State/UT concentration colour + district composite-score tint
     → select state
-State view: four district score bands + district-level interaction
+State view: continuous district composite-score colour + block outlines
+            + five-band distribution and district-level interaction
+    → select district
+District view: continuous block composite-score colour + block-level interaction
 ```
+
+The State and district views should preserve the fixed `0-100` colour domain so identical colours
+retain identical score meanings across geography, bundle, scenario, and period selections. The
+district-view legend title should be `Block Bundle Score`. The continuous map colourbar and the
+five-band distribution serve different purposes: the colourbar encodes exact mapped scores, while
+the bands provide a compact interpretive and filtering aid.
 
 The threshold statistic is not the complete evidence surface. The selected State/UT overview
 should retain the full district bundle-score distribution alongside the headline count, for
 example:
 
 ```text
-High Bundle-Score Concentration
+Elevated Bundle-Score Concentration
 11 of 33 valid districts >= 50
 
-Full district bundle-score distribution
-[distribution or score-band visualization]
+District bundle-score distribution
+[five-band interactive bar chart]
 ```
 
-The full distribution is necessary because values immediately below and far below the threshold
-otherwise count identically, as do values immediately above and far above it.
+The chart should show all five bands in the fixed order even when a band has zero units. Counts are
+the default display; percentages and exact score ranges may appear in tooltips. One band may be
+selected at a time. Selecting a bar should highlight matching districts, mute rather than hide the
+remaining districts, and filter the ranking shortlist. Selecting the active bar again or using
+`Clear filter` should restore all districts. Zero-count bars should remain visible but disabled.
+The Moderate bar should remain a single ordinary band; it should not be split or given a special
+two-tone treatment around the `>= 50` concentration threshold.
+
+The State-view layout contract is:
+
+```text
+Header
+    State/UT name + persistent Bundle, Scenario, and Period selectors
+
+Headline
+    Elevated District Bundle-Score Concentration (%)
+    n >= 50 / n_valid + coverage + eligible national rank or quality explanation
+
+Map
+    Continuous District Bundle Score colour + district interaction + block outlines
+
+Supporting evidence
+    Five-band interactive distribution + top-10 district shortlist + metric/rule signals
+
+Context and Evidence
+    Collapsed exposure, hydrology, data-quality, and optional-overlay content
+
+Navigation
+    India > State/UT breadcrumb
+```
 
 The application should avoid an empty first screen that requires the user to complete a series
 of controls before seeing any information. Defaults must be visible and clearly identified so
@@ -226,6 +288,11 @@ Geography should be navigated through search or direct map interaction rather th
 fourth analysis selector. This is easier to understand than requiring every geographic dimension
 to be configured before the map becomes useful.
 
+Bundle, Scenario, and Period selections should persist throughout drill-down. Breadcrumbs should
+provide the reversible geographic path, for example `India > Uttar Pradesh > Kaushambi`. Browser
+Back and URL-compatible state should restore the previous valid geography, selectors, filters,
+map extent, and Overview section where practical.
+
 Coordinate analysis should remain available as an alternate location-entry path, but it should
 not compete visually with the default geography-first workflow. A clear action such as
 `Analyse a custom location` can reveal manual coordinate and file-upload controls when needed.
@@ -235,8 +302,8 @@ not compete visually with the default geography-first workflow. A clear action s
 After a geography is selected, the first summary should answer the user's likely question in
 plain language. For example:
 
-> Warangal has a Heat Risk bundle score of 72, in the Very High score band and ranking 4 of 33
-> districts in Telangana. Its strongest drivers are X, Y, and Z.
+> Warangal has a Heat Risk bundle score of 72, ranking 4 of 33 districts in Telangana. Its assigned
+> five-band classification and strongest drivers are shown below.
 
 The answer card should contain:
 
@@ -244,7 +311,7 @@ The answer card should contain:
 - score band;
 - rank within the declared State/cohort comparison group;
 - difference from the State/cohort mean or median, when useful;
-- two or three strongest drivers; and
+- up to five strongest metric drivers or rule signals; and
 - a concise interpretation boundary, such as `Hazard-only; does not include exposure,
   vulnerability, or resilience`.
 
@@ -265,8 +332,11 @@ Supporting information should be available through secondary or expandable secti
 These sections should not all be expanded on first load.
 
 The hotspot list should provide direct navigation to a selected geography. The bundle-score
-distribution chart should allow a user to select a score band and filter the ranking table to the
-corresponding locations. The active filter and comparison scope should remain visible.
+distribution chart should use the single-band interaction defined in the State-view contract and
+filter the ranking table to the corresponding locations. State-view distributions, filters,
+rankings, and answer cards should use the same band order: `Very Low`, `Low`, `Moderate`, `High`,
+`Extreme`. Filtering must retain each location's original rank rather than recalculating rank
+within the filtered subset. The active filter and comparison scope should remain visible.
 
 Comparison should be a deliberate follow-up action. It should not add controls to the initial
 path before the user has understood the first result.
@@ -282,15 +352,35 @@ Overview exports should focus on the current answer and visible evidence:
 Exposure and hydrological information should support interpretation without competing with the
 main bundle-score or hazard-pressure question.
 
-In Overview:
+In Overview, a compact `Context and Evidence` section should be available from the State view
+onward and collapsed by default:
 
 - place exposure overlays under a collapsed `Context layers` control;
 - allow a map layer to be selected independently of the risk analysis;
-- show an Exposure Summary only after a single district, block, or coordinate is selected;
-- show Hydrological Context only after a single location is selected;
+- show a State/UT-level Exposure Summary and Hydrological Context using appropriately aggregated
+  context artifacts;
+- show progressively more local context after a district, block, or coordinate is selected;
 - keep basin, sub-basin, and river-network overlays optional; and
 - do not blend exposure or hydrological context into the displayed hazard score unless the
   methodology explicitly defines that relationship.
+
+The established IRT context fields should guide this section. Exposure may include population,
+rural-facility counts and rates, built-up area and share, and agricultural LULC area and share.
+Hydrological context may include the dominant basin and sub-basin, other intersecting basins,
+overlap shares, hydrological type, primary river, drainage area, and available boundary or river
+overlays.
+
+State/UT context must follow scientifically appropriate aggregation rules:
+
+- sum population, facility counts, built-up area, and agricultural LULC area;
+- recalculate shares from State/UT totals rather than averaging district percentages;
+- recalculate per-capita rates from State/UT totals;
+- calculate basin shares from State/UT-to-basin geometry intersections rather than counting the
+  dominant basin assigned to individual districts;
+- exclude missing values transparently and display context coverage, units, source dates, and
+  provenance; and
+- keep exposure and hydrology contextual rather than silently incorporating them into the bundle
+  score.
 
 A compact context summary could read:
 
@@ -343,9 +433,23 @@ Detailed Analysis should initially show the same selected result, followed by a 
 Advanced controls should be disclosed in response to user intent instead of being prerequisites
 for the first useful result.
 
-Bundle-level drivers should provide a path to their underlying metrics or rules. Where the data
-supports it, the user should be able to move from the bundle score to the contributing metric,
-its raw value, its normalized contribution, and the method used to include it in the composite.
+Overview should reuse the existing persisted Glance driver contract rather than introduce a new
+weighted-contribution calculation. For thematic bundles, show `Metric Drivers`; for sectoral
+bundles, show `Top Rule Signals`. At State/UT scope, rank each available metric or rule using its
+existing mean normalized score across valid districts. District and block views should use their
+persisted unit-scoped rows, including the documented parent-district fallback when block-scoped
+drivers are unavailable.
+
+These values should be described as normalized metric drivers or rule signals, not as percentage
+shares of the composite. The interface must not claim, for example, that a metric `contributed 34%
+of the composite`, and no additional weighted-contribution calculation is required for this
+workflow.
+
+Where a driver has a one-to-one underlying metric or rule route, selecting it should open Detailed
+Analysis with the current geography, administrative level, bundle, scenario, and period preserved
+and the corresponding metric or rule selected. A sectoral rule without a one-to-one Detailed
+Analysis target should be displayed as informative text and remain unclickable; it should not be
+routed to an approximate or unrelated metric.
 
 ## 8. Preserve a reversible return path
 
@@ -376,10 +480,16 @@ refinement:
 - Advanced capability is discoverable without being compulsory.
 - Overview and Detailed Analysis use one canonical analysis context.
 - Scores, bands, ranks, legends, and comparison scopes remain consistent between levels.
+- Maps use continuous fixed `0-100` score or concentration colour domains with view-specific legend
+  titles; discrete bands are interpretive and interactive supporting evidence.
 - Switching levels does not clear or silently reinterpret the user's selections.
 - Exposure and hydrology remain clearly identified as contextual information unless they are
   explicitly included in a score.
 - Missing or partial data is visible and does not silently become a valid-looking score.
 - National screening results are never described as absolute interstate climate-risk scores.
 - Coverage validity and denominator-based ranking eligibility remain explicit and separate.
+- Rankings use top-10 shortlists, competition ranks, population-descending display order within
+  ties, and original ranks under filtering.
+- Geometry is loaded progressively: national district context first, State-scoped block outlines
+  after State selection, and block attributes/interactions only when needed.
 - The interface answers a user question before offering additional analytical controls.
