@@ -52,6 +52,45 @@ threshold is independent of the five interpretive score bands: it includes the u
 the `>= 50` rule in the headline and method note without subdividing the Moderate band in the
 distribution chart.
 
+`Elevated Bundle-Score Concentration (%)` is the single headline national screening statistic.
+Do not add a State/UT median bundle score as a second headline or parallel national ranking
+measure. The five-band distribution provides the supporting view of the complete score
+distribution without introducing a competing summary statistic.
+
+The national screening surface is limited to the 13 scenario-based thematic and sector-wise
+bundles:
+
+```text
+Thematic
+    Heat Risk
+    Drought Risk
+    Extreme Rainfall | Flash Flood Risk
+    Heat Stress
+    Cold Risk
+
+Sector-wise
+    Agricultural Risk
+    Health Risk
+    Industrial Risk
+    Investment / Financial Risk
+    Infrastructure Risk
+    Asset Risk (Thermal Power Plants)
+    Asset Risk (Hydropower Plants)
+    Life & Livelihood Loss Risk
+```
+
+`Water Risk`, `Riverine Flood`, and other snapshot, standalone, or non-bundle products are outside
+the scope of this scenario-and-period screening surface. Their different temporal or normalization
+contracts should not be silently mixed with the 13 eligible bundles.
+
+The public defaults are fixed as:
+
+```text
+Bundle:   Heat Risk
+Scenario: SSP5-8.5
+Period:   2040-2060
+```
+
 The national statistic answers:
 
 > Within this State/UT, what proportion of valid districts meet or exceed the defined
@@ -104,7 +143,51 @@ Rankings should use competition ranks, so identical values receive the same rank
 rank reflects the number of preceding entries. Population descending should determine display
 order within a tie without changing the shared rank. If population is missing or also tied, use
 alphabetical order as the deterministic fallback. Show a top-10 shortlist by default with a
-`View all` action.
+`View all` action. Calculate ranks from the full unrounded concentration values; round only for
+display. Exact unrounded equality receives a tied rank. If two unequal values appear identical at
+the default display precision, the tooltip or expanded ranking should expose sufficient additional
+decimal precision to explain their order.
+
+### Expected denominator and boundary-vintage contract
+
+The canonical Phase 1 administrative roster contains:
+
+```text
+784 districts
+7,137 blocks
+```
+
+`n_expected` must come from this fixed, versioned canonical administrative roster, never from the
+set of rows that happen to contain scores for the active bundle. District expectations should use
+the canonical State/UT-district roster, while block expectations should use the canonical
+State/UT-district-block roster. Missing bundle scores reduce `n_valid`; they must not reduce
+`n_expected`.
+
+District scores, block scores, map geometry, and denominator artifacts must reference the same
+administrative-roster version. The offline build should reject duplicate geographic keys,
+unexpected units, missing parent keys, or a mismatch between score and boundary-roster versions.
+Stable official geographic identifiers should be retained alongside display names wherever the
+source provides them.
+
+Each published screening artifact or its accompanying manifest must record enough provenance to
+reproduce the denominator contract, including:
+
+```text
+admin_roster_version
+boundary_source
+boundary_source_date_or_version
+boundary_build_date
+district_boundary_hash
+block_boundary_hash
+expected_district_count
+expected_block_count
+expected counts by State/UT
+```
+
+Any change to the canonical roster, including the addition, removal, merger, split, or renaming of
+an administrative unit, requires an explicit boundary-scope decision, a new roster version, updated
+State/UT denominator counts, and revalidation of scores, coverage, ranks, geometry joins, and map
+labels. It must not enter production merely because a newer boundary file is present.
 
 Every national screening artifact should retain at least:
 
@@ -123,7 +206,30 @@ pct_ge_threshold
 rank_eligible
 national_rank
 quality_flag
+admin_roster_version
+boundary_source_date_or_version
 ```
+
+### Current case-study validation baseline
+
+The refreshed national-screening case study successfully rebuilt the 13 eligible composite and
+Glance artifact families against the canonical roster. The accepted validation baseline is:
+
+```text
+Eligible bundles:             13
+Scenarios:                     2
+Periods:                       3
+Administrative levels:        2
+Threshold diagnostic rows:   28,080
+Canonical districts:          784
+Canonical blocks:            7,137
+Optimized parity issues:       0
+```
+
+The refreshed artifacts also contain valid Heat Risk scores for all three districts in `Dadra,
+Nagar Haveli, Daman & Diu`. Under the default selection and threshold, its value is visible but its
+national rank is suppressed because `n_valid = 3` is below the ranking minimum of 10. This is the
+intended small-cohort treatment, not a missing-data case.
 
 ### National map visual encoding
 
@@ -264,8 +370,8 @@ The application should avoid an empty first screen that requires the user to com
 of controls before seeing any information. Defaults must be visible and clearly identified so
 the user understands what is being shown without mistaking them for personal selections.
 
-The suitability of the specific public bundle, scenario, and period defaults should be reviewed
-separately from the workflow design.
+The public defaults are `Heat Risk`, `SSP5-8.5`, and `2040-2060`. They should remain visibly
+identified as defaults rather than being mistaken for user-selected values.
 
 ## 2. Limit the primary controls to three
 
@@ -310,7 +416,7 @@ The answer card should contain:
 - bundle score;
 - score band;
 - rank within the declared State/cohort comparison group;
-- difference from the State/cohort mean or median, when useful;
+- the declared State/cohort comparison scope;
 - up to five strongest metric drivers or rule signals; and
 - a concise interpretation boundary, such as `Hazard-only; does not include exposure,
   vulnerability, or resilience`.
