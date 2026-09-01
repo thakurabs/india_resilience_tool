@@ -91,6 +91,18 @@ Scenario: SSP5-8.5
 Period:   2040-2060
 ```
 
+The Overview uses the following user-facing labels while retaining the SSP and period identifiers
+in the artifact and URL state:
+
+```text
+Middle-of-the-road (SSP2-4.5)
+Fossil-fuelled development (SSP5-8.5)
+
+Early century (2020–2040)
+Mid-century (2040–2060)
+End century (2060–2080)
+```
+
 The national statistic answers:
 
 > Within this State/UT, what proportion of valid districts meet or exceed the defined
@@ -132,21 +144,66 @@ coverage >= 90% and n_valid >= 10
     -> eligible for ranking
 ```
 
-For interpretation, `n_valid < 5` may be labelled `Very small cohort` and `n_valid = 5-9` may be
-labelled `Small cohort`; both remain unranked. Units with no valid composite data should show
-`Data not available`. The same coverage and denominator logic should apply consistently to each
-parent-child ranking cohort: State/UTs across India, districts within a selected State/UT, and
-blocks within a selected district. A geography may remain available for drill-down when usable
-lower-level data exists even if its parent-level concentration or rank is suppressed.
+If coverage and cohort-size requirements both fail, show both `Insufficient coverage` and `Small
+cohort`; do not invent another combined category. When coverage is below 90%, show `n_valid`,
+`n_expected`, and coverage but suppress the concentration percentage and rank. When coverage is at
+least 90% but the cohort is small, show the calculable concentration percentage and suppress only
+the rank. If `n_valid = 0`, show `No valid data` and no score or concentration, band, rank, or
+drivers.
+
+All cohorts with `n_valid < 10` use the single label `Small cohort` and remain unranked. Units with
+no valid composite data should show `No valid data`. A geography may remain available for
+drill-down when usable lower-level data exists even if its parent-level concentration or rank is
+suppressed.
+
+Ranking is hierarchical and comparison-cohort-specific:
+
+```text
+National view
+    Rank State/UTs by Elevated Bundle-Score Concentration.
+    Publish rank only when the State/UT has district coverage >= 90%
+    and at least 10 valid districts.
+
+State view
+    Rank individual District Bundle Scores within the selected State/UT.
+    Publish district ranks only when the parent State/UT district cohort has
+    coverage >= 90% and at least 10 valid districts.
+
+District view
+    Rank individual Block Bundle Scores within the selected district.
+    Publish block ranks only when the parent district block cohort has
+    coverage >= 90% and at least 10 valid blocks.
+```
+
+Rank eligibility controls whether a rank may be shown; it does not determine whether a valid
+individual district or block score may be shown. Do not rank districts by block concentration in
+Phase 1, and do not expose State-wide or national block ranks in Overview.
+
+The national rank denominator is the number of rank-eligible State/UTs. The District rank
+denominator is `n_valid` districts in the selected State/UT, and the Block rank denominator is
+`n_valid` blocks in the selected District. Missing or invalid units do not participate in ranking,
+and `n_expected` must not be presented as the rank denominator when some units are invalid. No
+separate `n_ranked` field or public term is required.
 
 Rankings should use competition ranks, so identical values receive the same rank and the following
-rank reflects the number of preceding entries. Population descending should determine display
-order within a tie without changing the shared rank. If population is missing or also tied, use
-alphabetical order as the deterministic fallback. Show a top-10 shortlist by default with a
-`View all` action. Calculate ranks from the full unrounded concentration values; round only for
-display. Exact unrounded equality receives a tied rank. If two unequal values appear identical at
-the default display precision, the tooltip or expanded ranking should expose sufficient additional
-decimal precision to explain their order.
+rank reflects the number of preceding entries. Alphabetical or stable administrative-code sorting
+may order tied rows visually but must not break the statistical tie. Show a top-10 shortlist by
+default with a `View all` action. Calculate thresholds, band assignment, eligibility, and ranks
+from full-precision stored values; round only for display. Exact full-precision equality receives a
+tied rank. If two unequal values appear identical at the default display precision, the tooltip or
+expanded ranking should expose sufficient additional decimal precision to explain their order.
+When a genuine tie exists, user-facing text may say `Rank N (tied) of M valid units`.
+
+Use the following display precision:
+
+```text
+Bundle scores:             1 decimal place
+Concentration percentages: 1 decimal place
+Coverage percentages:      1 decimal place
+Counts and ranks:           integers
+```
+
+A redundant `.0` may be suppressed where useful, for example `100%`.
 
 ### Expected denominator and boundary-vintage contract
 
@@ -157,6 +214,9 @@ The canonical Phase 1 administrative roster contains:
 7,137 blocks
 ```
 
+Before production release, the roster build must assign and persist a concrete immutable
+`admin_roster_version`; the counts alone are not a version identifier.
+
 `n_expected` must come from this fixed, versioned canonical administrative roster, never from the
 set of rows that happen to contain scores for the active bundle. District expectations should use
 the canonical State/UT-district roster, while block expectations should use the canonical
@@ -166,8 +226,10 @@ State/UT-district-block roster. Missing bundle scores reduce `n_valid`; they mus
 District scores, block scores, map geometry, and denominator artifacts must reference the same
 administrative-roster version. The offline build should reject duplicate geographic keys,
 unexpected units, missing parent keys, or a mismatch between score and boundary-roster versions.
-Stable official geographic identifiers should be retained alongside display names wherever the
-source provides them.
+Stable official geographic identifiers should be used for joins, cohort membership, and ranking,
+and retained alongside display names wherever the source provides them. Names are presentation
+fields and must not be the primary production join keys. Moving the current name-derived Glance
+keys to stable administrative identifiers is explicit production migration work.
 
 Each published screening artifact or its accompanying manifest must record enough provenance to
 reproduce the denominator contract, including:
@@ -210,6 +272,14 @@ admin_roster_version
 boundary_source_date_or_version
 ```
 
+Each released analytical artifact set must also have a unique reproducible build identity that
+records the build timestamp, exact source-code commit SHA, artifact manifest, manifest
+hash/checksum, and `admin_roster_version`. The manifest is the canonical inventory of supported
+Bundle x Scenario x Period x administrative-level artifacts and must identify each artifact path or
+identifier and version/checksum. Validation baselines must reference this same build identity.
+Analytically meaningful changes to code, roster, inputs, or artifacts create a new identity rather
+than mutating a validated release.
+
 ### Current case-study validation baseline
 
 The refreshed national-screening case study successfully rebuilt the 13 eligible composite and
@@ -230,6 +300,10 @@ The refreshed artifacts also contain valid Heat Risk scores for all three distri
 Nagar Haveli, Daman & Diu`. Under the default selection and threshold, its value is visible but its
 national rank is suppressed because `n_valid = 3` is below the ranking minimum of 10. This is the
 intended small-cohort treatment, not a missing-data case.
+
+This case-study baseline is methodology evidence rather than a released provenance identity. The
+production acceptance rebuild must record its build timestamp, source commit, manifest checksum,
+and concrete `admin_roster_version` before these values become a release baseline.
 
 ### National map visual encoding
 
@@ -266,12 +340,31 @@ through accessibility and visual-regression testing without changing the analyti
 Colour interpolation should use a perceptual colour space such as OKLCH or CIELAB so the gradient
 appears visually even and avoids muddy intermediate colours.
 
+At national zoom, district tint is supporting within-State variation only. It must not imply that
+district scores are absolute interstate comparisons. When a State/UT is selected, the national
+concentration encoding ends: districts are recoloured directly from their own scores on the fixed
+0–100 District Bundle Score display scale, and the parent State's national hue is not inherited.
+
 State boundaries should use a strong neutral stroke, while district boundaries should use a thin,
 subtle neutral stroke. Grey should identify missing composite data. A distinct dashed State/UT
 outline may identify a small cohort whose percentage remains visible but is not rank eligible.
 The map should not add a separate district-level colourbar because district tint is supporting
 context rather than the national headline statistic. A compact persistent method note should
 explain the State/UT statistic, district tint, quality flags, and interstate interpretation caveat.
+
+No-data units must use one consistent neutral treatment and must never be mapped onto the valid
+low-score end of the palette. Insufficient coverage and small cohort are quality flags rather than
+score values: preserve a calculable quantitative fill where permitted and add a secondary pattern
+or outline instead of replacing the score colour.
+
+Hover should provide temporary modest emphasis; selection should provide stronger persistent
+emphasis. Selection takes precedence over hover and filter styling, while quality-state styling
+must remain visible. Colour must not be the sole carrier of score, band, selection, or quality.
+Equivalent text and accessible tables, keyboard-operable geography and filter controls, visible
+focus, adequate contrast, and colour-vision-deficiency testing are required. Tiny geographies must
+remain selectable through usable map targets where feasible and an equivalent non-map control.
+Exact palette hex values and responsive stroke widths belong in the design-system implementation
+specification, subject to these requirements.
 
 ### National map interaction
 
@@ -366,6 +459,50 @@ Navigation
     India > State/UT breadcrumb
 ```
 
+The district ranking denominator is the number of valid districts in the selected State/UT, not
+the number expected when some scores are invalid. A valid district score remains visible when the
+parent State/UT cohort is ineligible for ranking.
+
+The District-view layout contract is:
+
+```text
+Header
+    District name + parent State/UT
+    Persistent Bundle, Scenario, and Period selectors
+
+District answer
+    District Bundle Score + five-band classification
+    District rank within State/UT when the parent cohort is eligible
+    Relevant coverage or quality status
+
+Drivers
+    Up to three valid District-scoped metric drivers or rule signals
+
+Map and within-District variation
+    Continuous Block Bundle Score on a fixed 0–100 display scale
+    Interactive Block inspection
+    Five-band Block distribution + top-10 Blocks ranked within the District
+
+Context and Evidence
+    Collapsed exposure, hydrology, data-quality, and optional-overlay content
+
+Navigation
+    India > State/UT > District breadcrumb
+```
+
+Do not add an Elevated Block Concentration headline or rank districts by block concentration in
+Phase 1. Block information explains within-District heterogeneity; it does not redefine the
+District's primary score.
+
+A selected Block is an inspection state within District view, not a fourth full Overview
+navigation level. Keep the District map visible and show the Block name, parent District and
+State/UT, Block Bundle Score, five-band classification, eligible rank among valid Blocks within the
+selected District, relevant data-quality state, and valid Block-scoped driver/rule signals. A new
+Block selection replaces the previous one and may be cleared without leaving District view. The
+breadcrumb remains `India > State/UT > District`. Do not show Elevated Block Concentration,
+State-wide or national Block rank, another nested distribution, or a duplicated full Context and
+Evidence hierarchy. Show `View Detailed Analysis` only when a registered valid route exists.
+
 The application should avoid an empty first screen that requires the user to complete a series
 of controls before seeing any information. Defaults must be visible and clearly identified so
 the user understands what is being shown without mistaking them for personal selections.
@@ -396,12 +533,39 @@ to be configured before the map becomes useful.
 
 Bundle, Scenario, and Period selections should persist throughout drill-down. Breadcrumbs should
 provide the reversible geographic path, for example `India > Uttar Pradesh > Kaushambi`. Browser
-Back and URL-compatible state should restore the previous valid geography, selectors, filters,
-map extent, and Overview section where practical.
+Back is outside the Overview analytical-state model; breadcrumbs and in-application navigation are
+authoritative for moving through analytical states. Existing application-shell Browser Back
+behavior is not redefined by this workflow.
+
+When Bundle, Scenario, or Period changes, preserve the current geography where it remains
+supported; clear band filters, hover, and temporary emphasis; and recompute scores, bands, ranks,
+drivers, and distributions. If a geography still exists in the canonical roster but has no valid
+score under the new selection, remain at that geography and show `No valid data`. Fall back through
+`Block -> District -> State/UT -> India` only when the selected geography or level is genuinely
+obsolete or unsupported, and explain what could not be restored.
+
+Band filters are view-local transient state. Clear them when Bundle, Scenario, Period, or
+administrative level changes. Applying a filter must not clear an already selected geography that
+falls outside the band; selection takes precedence over filter emphasis. Breadcrumb navigation
+preserves Bundle, Scenario, and Period, clears selections below the destination level, and clears
+the previous view's filters.
 
 Coordinate analysis should remain available as an alternate location-entry path, but it should
 not compete visually with the default geography-first workflow. A clear action such as
 `Analyse a custom location` can reveal manual coordinate and file-upload controls when needed.
+
+Supported Bundle x Scenario x Period combinations come from the deployed artifact manifest.
+Normal selectors must not offer unsupported combinations. An obsolete or invalid deep-linked
+combination should fall back to a valid configured selection with a concise explanation. By
+contrast, when an expected artifact is missing or unloadable, retain the requested selectors and
+show an unavailable state; never silently substitute another scenario, period, or stale artifact.
+
+During loading, preserve the page structure and selected geography, show an explicit loading
+state, and disable interactions that depend on the incoming artifact. Never display old analytical
+values under newly selected labels. A valid artifact with no valid data should show `No valid data`
+for the affected geography while independently available Context and Evidence may remain visible.
+An artifact-version mismatch must never render mixed-version analytical outputs: show a generic
+unavailable state and retain technical details in logs and diagnostics.
 
 ## 3. Present a direct answer, not merely visualizations
 
@@ -417,7 +581,7 @@ The answer card should contain:
 - score band;
 - rank within the declared State/cohort comparison group;
 - the declared State/cohort comparison scope;
-- up to five strongest metric drivers or rule signals; and
+- up to three strongest valid metric drivers or rule signals; and
 - a concise interpretation boundary, such as `Hazard-only; does not include exposure,
   vulnerability, or resilience`.
 
@@ -453,6 +617,10 @@ Overview exports should focus on the current answer and visible evidence:
 - the visible ranking rows; and
 - an answer pack containing the current context, drivers, metadata, and method note.
 
+With an active band filter, export the currently filtered rows only, retain their original
+unfiltered ranks, record the active filter and selection metadata, and never recompute ranks inside
+the exported subset.
+
 ## 5. Treat exposure and hydrology as context, not primary filters
 
 Exposure and hydrological information should support interpretation without competing with the
@@ -469,6 +637,16 @@ onward and collapsed by default:
 - keep basin, sub-basin, and river-network overlays optional; and
 - do not blend exposure or hydrological context into the displayed hazard score unless the
   methodology explicitly defines that relationship.
+
+Context and Evidence is supplementary. Its absence must not invalidate a bundle score, band, rank,
+or drivers. Show only fields supported at the current administrative level; do not infer,
+interpolate, or substitute missing context from another geography level. Omit an unavailable field,
+and show a concise unavailable-state message when an entire subsection is absent. Omit unavailable
+overlays from the selector rather than showing disabled controls.
+
+Do not impose one universal minimum-coverage threshold across all context datasets. Any necessary
+coverage rule belongs to that dataset or metric's own scientific contract. Where relevant, context
+artifacts should expose source, unit, source date/version, validity or availability, and coverage.
 
 The established IRT context fields should guide this section. Exposure may include population,
 rural-facility counts and rates, built-up area and share, and agricultural LULC area and share.
@@ -512,8 +690,16 @@ The transition should preserve:
 - the selected unit;
 - bundle;
 - scenario;
-- period; and
+- period;
+- selected driver or rule when the action originated from one; and
 - the current comparison context where compatible.
+
+Do not carry hover, band filter, tooltip, or temporary map emphasis into Detailed Analysis.
+
+Use canonical Bundle-to-Detailed-Analysis and driver/rule-to-Detailed-Analysis route registries.
+Do not infer destinations from labels or names. Preserve geography exactly where supported and do
+not substitute another administrative level unless the registry explicitly defines that fallback.
+If no valid route exists, do not show an active Detailed Analysis action.
 
 Detailed Analysis should open on the composite metric corresponding to the selected bundle. It
 should not open with `Metric = All`, because `All` does not clearly communicate whether the user
@@ -542,20 +728,25 @@ for the first useful result.
 Overview should reuse the existing persisted Glance driver contract rather than introduce a new
 weighted-contribution calculation. For thematic bundles, show `Metric Drivers`; for sectoral
 bundles, show `Top Rule Signals`. At State/UT scope, rank each available metric or rule using its
-existing mean normalized score across valid districts. District and block views should use their
-persisted unit-scoped rows, including the documented parent-district fallback when block-scoped
-drivers are unavailable.
+existing mean normalized score across valid districts. District and Block views must use valid
+persisted rows scoped to that exact administrative level. Do not infer, interpolate, or borrow
+driver signals from another level.
 
 These values should be described as normalized metric drivers or rule signals, not as percentage
 shares of the composite. The interface must not claim, for example, that a metric `contributed 34%
 of the composite`, and no additional weighted-contribution calculation is required for this
-workflow.
+workflow. Show no more than three valid drivers/rules, ordered by full-precision signal strength,
+without displaying their numeric signal values in Overview. If fewer than three exist, show only
+those available. If none exist, show `Driver information is not available for this geography.` No
+secondary tie-breaking rule is required for driver ordering at this stage.
 
 Where a driver has a one-to-one underlying metric or rule route, selecting it should open Detailed
 Analysis with the current geography, administrative level, bundle, scenario, and period preserved
 and the corresponding metric or rule selected. A sectoral rule without a one-to-one Detailed
 Analysis target should be displayed as informative text and remain unclickable; it should not be
-routed to an approximate or unrelated metric.
+routed to an approximate or unrelated metric. Driver validity and route availability are separate:
+a valid unroutable driver remains normally styled rather than being greyed out. A canonical
+driver/rule-to-Detailed-Analysis route registry controls clickability.
 
 ## 8. Preserve a reversible return path
 
@@ -565,15 +756,107 @@ routed to an approximate or unrelated metric.
 - bundle;
 - scenario;
 - period;
-- selected score-band filter; and
-- the last Overview section or comparison state where practical.
+- selected Block inspection state, where applicable;
+- map extent; and
+- major panel expansion state where technically supported.
+
+Do not restore hover, tooltip, band-filter, or other temporary emphasis state.
 
 If a Detailed Analysis selection cannot map directly to an Overview bundle, returning should
 restore the last valid Overview context rather than clearing or partially reconstructing the
 analysis.
 
-The browser Back button should also behave predictably. Navigation should not depend exclusively
-on an in-page mode switch.
+Browser controls are outside the dashboard analytical-state model. Breadcrumbs and in-application
+navigation must provide the complete reversible path without depending on Browser Back.
+
+## 9. Production migration contract
+
+The current Glance implementation is legacy input to a migration, not authority for the new
+Overview. It must not silently preserve State mean as the national value, four-band artifacts, old
+ranking/filter semantics, name-derived administrative joins, or inferred navigation routes.
+
+The national State/UT artifact must provide at least:
+
+```text
+state_id
+state_name
+bundle_id
+scenario
+period
+admin_level
+threshold
+n_expected
+n_valid
+coverage_fraction
+n_ge_threshold
+pct_ge_threshold
+rank_eligible
+national_rank
+eligible_state_count
+quality_flag
+admin_roster_version
+artifact_build_id
+```
+
+The five-band migration must replace the current four-band fields and distributions throughout the
+Overview; all assignment uses full-precision scores. National maps use State/UT concentration
+colour with district tint as supporting within-State variation. State maps end that encoding and
+use District Bundle Score directly on the fixed 0–100 display scale. District maps use Block Bundle
+Score on that same fixed display scale, without inherited parent hue.
+
+Production work must also implement the canonical route registries, selector/filter/geography
+state transitions, quality states, stable administrative-ID joins, immutable roster/build identity,
+progressive geometry loading, and accessibility requirements defined above. Block geometry should
+load only after State selection; Block attributes and interaction should activate only in District
+view.
+
+## 10. Minimum acceptance-test contract
+
+At minimum, synthetic and artifact-contract tests must prove:
+
+### Ranking and coverage
+
+- national State ranking uses concentration rather than State mean;
+- District ranking is within the selected State/UT only;
+- Block ranking is within the selected District only;
+- rank is suppressed when coverage is below 90% or `n_valid < 10`;
+- concentration is also suppressed when coverage is below 90%;
+- valid individual scores remain visible when parent-cohort rank is suppressed;
+- competition-ranking ties and rank denominators are correct;
+- `n_expected` comes from the versioned roster rather than score rows; and
+- missing score rows reduce coverage and never participate in ranking.
+
+### Precision and bands
+
+- threshold `>= 50`, five-band assignment, eligibility, and ranking use full precision;
+- display rounding cannot change a threshold result, band, rank, or tie; and
+- the legacy four-band labels cannot enter new Overview artifacts.
+
+### Interaction and navigation
+
+- filtering never recomputes rank or clears a selected geography outside the active band;
+- Bundle, Scenario, Period, and administrative-level changes clear the local band filter;
+- a roster-valid no-data geography remains selected with a no-data state;
+- an obsolete or unsupported Block, District, or State falls back only to its nearest valid parent;
+- Block inspection does not create a fourth breadcrumb level; and
+- Detailed Analysis routing and return preserve only the declared durable state.
+
+### Maps, routing, and data states
+
+- India, State, and District views use their declared legend titles and encodings;
+- the same lower-level score maps to the same colour regardless of parent geography;
+- clickable drivers have registered routes and valid unroutable drivers remain visible;
+- unsupported combinations, missing expected artifacts, version mismatch, and valid no-data
+  artifacts have distinct behaviors; and
+- loading never displays stale analytical values under new selector labels.
+
+### Accessibility and provenance
+
+- geography and band filtering have keyboard-operable non-map alternatives;
+- score, selection, and quality are communicated without relying on colour alone;
+- small geographies remain selectable outside the map; and
+- artifacts reject missing/mismatched roster versions, build identities, and stable administrative
+  keys.
 
 ## Core workflow principles
 
@@ -594,8 +877,8 @@ refinement:
 - Missing or partial data is visible and does not silently become a valid-looking score.
 - National screening results are never described as absolute interstate climate-risk scores.
 - Coverage validity and denominator-based ranking eligibility remain explicit and separate.
-- Rankings use top-10 shortlists, competition ranks, population-descending display order within
-  ties, and original ranks under filtering.
+- Rankings use top-10 shortlists, competition ranks, stable alphabetical or administrative-code
+  display order within ties, and original ranks under filtering.
 - Geometry is loaded progressively: national district context first, State-scoped block outlines
   after State selection, and block attributes/interactions only when needed.
 - The interface answers a user question before offering additional analytical controls.
