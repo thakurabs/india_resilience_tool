@@ -4,6 +4,7 @@ import math
 
 from india_resilience_tool.config.bundle_weights import (
     LANDING_BUNDLE_WEIGHTS,
+    get_bundle_attribute_slugs,
     get_bundle_weights,
     validate_bundle_weights,
 )
@@ -38,14 +39,21 @@ def test_heat_stress_bundle_weights_are_stable_and_sum_to_one() -> None:
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
+        "twb_days_ge_28",
         "twb_days_ge_30",
-        "wbd_le_3",
-        "wbd_gt3_le6",
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
-        "wbd_le_3_consecutive_days",
         "wsdi_warm_spell_days",
-        "twb_days_ge_28",
+    ]
+    assert [entry.weight for entry in entries] == [
+        0.20 / 2.0,
+        0.20 / 2.0,
+        0.40 / 3.0,
+        0.40 / 3.0,
+        0.40 / 3.0,
+        0.20 / 2.0,
+        0.20 / 2.0,
+        0.20 / 1.0,
     ]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
@@ -76,20 +84,33 @@ def test_drought_risk_bundle_weights_are_stable_and_sum_to_one() -> None:
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "spi6_max_spell_lt_minus1",
+        "spi12_max_spell_lt_minus1",
     ]
-    assert [entry.weight for entry in entries] == [0.20, 0.30, 0.50]
+    assert [entry.weight for entry in entries] == [0.08, 0.12, 0.20, 0.12, 0.18, 0.30]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
 
 
 def test_jrc_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Flood Inundation Depth (JRC)")
+    entries = get_bundle_weights("Riverine Flood")
 
-    assert [entry.metric_slug for entry in entries] == ["jrc_flood_depth_index_rp100"]
-    assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    non_attr = [e for e in entries if not e.is_attribute]
+    attr = [e for e in entries if e.is_attribute]
+
+    assert [e.metric_slug for e in non_attr] == ["jrc_flood_depth_index_rp100"]
+    assert [e.metric_slug for e in attr] == ["jrc_flood_depth_rp100", "jrc_flood_extent_rp100"]
+    assert all(e.weight == 0.0 for e in attr)
+    assert math.isclose(sum(e.weight for e in non_attr), 1.0, rel_tol=0.0, abs_tol=1e-9)
+
+    assert get_bundle_attribute_slugs("Riverine Flood") == (
+        "jrc_flood_depth_rp100",
+        "jrc_flood_extent_rp100",
+    )
 
 
 def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Flood & Extreme Rainfall Risk")
+    entries = get_bundle_weights("Extreme Rainfall | Flash Flood Risk")
 
     assert [entry.metric_slug for entry in entries] == [
         "pr_max_1day_precip",
@@ -100,23 +121,11 @@ def test_flood_bundle_weights_are_stable_and_sum_to_one() -> None:
         "cwd_consecutive_wet_days",
     ]
     assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+    assert all("Flood Depth Index remains deferred" not in (entry.substitution_note or "") for entry in entries)
 
 
-def test_agriculture_bundle_weights_are_stable_and_sum_to_one() -> None:
-    entries = get_bundle_weights("Agriculture & Growing Conditions")
-
-    assert [entry.metric_slug for entry in entries] == [
-        "gsl_growing_season",
-        "tasmax_summer_mean",
-        "txge35_extreme_heat_days",
-        "wsdi_warm_spell_days",
-        "tasmin_winter_mean",
-        "tnle10_cold_nights",
-        "spi3_drought_index",
-        "prcptot_annual_total",
-        "dtr_daily_temp_range",
-    ]
-    assert math.isclose(sum(entry.weight for entry in entries), 1.0, rel_tol=0.0, abs_tol=1e-9)
+def test_retired_agriculture_growing_conditions_has_no_active_bundle_weights() -> None:
+    assert get_bundle_weights("Agriculture & Growing Conditions") == ()
 
 
 def test_validate_bundle_weights_reports_no_issues() -> None:
@@ -129,7 +138,7 @@ def test_all_visible_glance_bundles_have_custom_weights_in_this_pass() -> None:
         "Heat Stress",
         "Cold Risk",
         "Drought Risk",
-        "Flood Inundation Depth (JRC)",
-        "Flood & Extreme Rainfall Risk",
-        "Agriculture & Growing Conditions",
+        "Riverine Flood",
+        "Water Risk",
+        "Extreme Rainfall | Flash Flood Risk",
     }

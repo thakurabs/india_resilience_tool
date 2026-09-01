@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="443" viewBox="0 118.5 1200 443" role="img" aria-labelledby="title desc">
+<title id="title">FIG-14. SPI derivation</title>
+<desc id="desc">Three-panel illustrative SPI transformation.</desc>
+<style>
+text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
+.title { font-size: 26px; font-weight: 700; }
+.subtitle { font-size: 15px; fill: #52606d; }
+.label { font-size: 15px; font-weight: 700; }
+.small { font-size: 12px; fill: #52606d; }
+.tiny { font-size: 10.5px; fill: #52606d; }
+.note { font-size: 12px; fill: #3e4c59; font-style: italic; }
+.axis { stroke: #52606d; stroke-width: 1.2; }
+.gridline { stroke: #d9e2ec; stroke-width: 1; }
+.arrow { stroke: #52606d; stroke-width: 2.0; fill: none; marker-end: url(#arrow); }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+<path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
+</marker>
+</defs>
+<rect x="0" y="118.5" width="1200" height="443" fill="white" data-bg="canvas"/>
+<rect x="60" y="135" width="320" height="410" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="220.0" y="165.0" class="label" text-anchor="middle">1. Accumulate monthly precipitation</text>
+<rect x="440" y="135" width="320" height="410" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="600.0" y="165.0" class="label" text-anchor="middle">2. Gamma fit and mixed CDF</text>
+<rect x="820" y="135" width="320" height="410" rx="6" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="980.0" y="165.0" class="label" text-anchor="middle">3. Normal-quantile transform</text>
+<rect x="90" y="466.92857142857144" width="15" height="18.07142857142857" fill="#2f80b7"/>
+<text x="97.5" y="502.0" class="tiny" text-anchor="middle">J</text>
+<rect x="112" y="470.2142857142857" width="15" height="14.785714285714285" fill="#2f80b7"/>
+<text x="119.5" y="502.0" class="tiny" text-anchor="middle">F</text>
+<rect x="134" y="460.35714285714283" width="15" height="24.642857142857142" fill="#2f80b7"/>
+<text x="141.5" y="502.0" class="tiny" text-anchor="middle">M</text>
+<rect x="156" y="439.82142857142856" width="15" height="45.17857142857143" fill="#2f80b7"/>
+<text x="163.5" y="502.0" class="tiny" text-anchor="middle">A</text>
+<rect x="178" y="390.5357142857143" width="15" height="94.46428571428571" fill="#2f80b7"/>
+<text x="185.5" y="502.0" class="tiny" text-anchor="middle">M</text>
+<rect x="200" y="312.5" width="15" height="172.5" fill="#2f80b7"/>
+<text x="207.5" y="502.0" class="tiny" text-anchor="middle">J</text>
+<rect x="222" y="275.5357142857143" width="15" height="209.46428571428572" fill="#2f80b7"/>
+<text x="229.5" y="502.0" class="tiny" text-anchor="middle">J</text>
+<rect x="244" y="287.8571428571429" width="15" height="197.14285714285714" fill="#2f80b7"/>
+<text x="251.5" y="502.0" class="tiny" text-anchor="middle">A</text>
+<rect x="266" y="345.3571428571429" width="15" height="139.64285714285714" fill="#2f80b7"/>
+<text x="273.5" y="502.0" class="tiny" text-anchor="middle">S</text>
+<rect x="288" y="414.35714285714283" width="15" height="70.64285714285715" fill="#2f80b7"/>
+<text x="295.5" y="502.0" class="tiny" text-anchor="middle">O</text>
+<rect x="310" y="450.5" width="15" height="34.5" fill="#2f80b7"/>
+<text x="317.5" y="502.0" class="tiny" text-anchor="middle">N</text>
+<rect x="332" y="463.64285714285717" width="15" height="21.357142857142858" fill="#2f80b7"/>
+<text x="339.5" y="502.0" class="tiny" text-anchor="middle">D</text>
+<line x1="85" y1="485" x2="345" y2="485" stroke="#52606d" stroke-width="1.3"/>
+<line x1="85" y1="250" x2="85" y2="485" stroke="#52606d" stroke-width="1.3"/>
+<text x="210.0" y="522.0" class="small" text-anchor="middle">calendar months -&gt; SPI-3/6/12 accumulations</text>
+<text x="93.0" y="238.0" class="small" text-anchor="start">mm</text>
+<line x1="480" y1="485" x2="725" y2="485" stroke="#52606d" stroke-width="1.3"/>
+<line x1="480" y1="250" x2="480" y2="485" stroke="#52606d" stroke-width="1.3"/>
+<polyline points="482.1,481.7 484.1,476.8 486.2,471.3 488.2,465.6 490.3,460.0 492.4,454.6 494.4,449.3 496.5,444.4 498.5,439.8 500.6,435.6 502.6,431.7 504.7,428.1 506.8,424.9 508.8,422.1 510.9,419.6 512.9,417.4 515.0,415.5 517.1,413.9 519.1,412.6 521.2,411.6 523.2,410.8 525.3,410.2 527.4,409.9 529.4,409.7 531.5,409.7 533.5,409.9 535.6,410.3 537.6,410.8 539.7,411.4 541.8,412.1 543.8,413.0 545.9,413.9 547.9,414.9 550.0,416.0 552.1,417.2 554.1,418.4 556.2,419.6 558.2,420.9 560.3,422.3 562.4,423.6 564.4,425.0 566.5,426.4 568.5,427.9 570.6,429.3 572.6,430.7 574.7,432.2 576.8,433.6 578.8,435.0 580.9,436.4 582.9,437.8 585.0,439.2 587.1,440.6 589.1,441.9 591.2,443.2 593.2,444.6 595.3,445.8 597.4,447.1 599.4,448.3 601.5,449.5 603.5,450.7 605.6,451.9 607.6,453.0 609.7,454.1 611.8,455.2 613.8,456.2 615.9,457.3 617.9,458.3 620.0,459.2 622.1,460.2 624.1,461.1 626.2,462.0 628.2,462.8 630.3,463.6 632.4,464.4 634.4,465.2 636.5,466.0 638.5,466.7 640.6,467.4 642.6,468.1 644.7,468.8 646.8,469.4 648.8,470.0 650.9,470.6 652.9,471.2 655.0,471.7 657.1,472.3 659.1,472.8 661.2,473.3 663.2,473.8 665.3,474.2 667.4,474.7 669.4,475.1 671.5,475.5 673.5,475.9 675.6,476.3 677.6,476.6 679.7,477.0 681.8,477.3 683.8,477.7 685.9,478.0 687.9,478.3 690.0,478.6 692.1,478.8 694.1,479.1 696.2,479.4 698.2,479.6 700.3,479.8 702.4,480.1 704.4,480.3 706.5,480.5 708.5,480.7 710.6,480.9 712.6,481.1 714.7,481.2 716.8,481.4 718.8,481.6 720.9,481.7 722.9,481.9 725.0,482.0" fill="none" stroke="#c77700" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<polyline points="482.1,467.7 484.1,467.5 486.2,466.9 488.2,466.1 490.3,465.1 492.4,463.7 494.4,462.2 496.5,460.3 498.5,458.3 500.6,456.0 502.6,453.5 504.7,450.9 506.8,448.1 508.8,445.1 510.9,442.0 512.9,438.8 515.0,435.5 517.1,432.2 519.1,428.7 521.2,425.2 523.2,421.7 525.3,418.1 527.4,414.5 529.4,410.9 531.5,407.3 533.5,403.7 535.6,400.1 537.6,396.5 539.7,392.9 541.8,389.4 543.8,385.9 545.9,382.5 547.9,379.1 550.0,375.8 552.1,372.5 554.1,369.2 556.2,366.1 558.2,363.0 560.3,359.9 562.4,356.9 564.4,354.0 566.5,351.2 568.5,348.4 570.6,345.7 572.6,343.1 574.7,340.5 576.8,338.0 578.8,335.6 580.9,333.2 582.9,330.9 585.0,328.7 587.1,326.5 589.1,324.4 591.2,322.3 593.2,320.4 595.3,318.5 597.4,316.6 599.4,314.8 601.5,313.1 603.5,311.4 605.6,309.8 607.6,308.2 609.7,306.7 611.8,305.3 613.8,303.9 615.9,302.5 617.9,301.2 620.0,299.9 622.1,298.7 624.1,297.6 626.2,296.4 628.2,295.3 630.3,294.3 632.4,293.3 634.4,292.3 636.5,291.4 638.5,290.5 640.6,289.6 642.6,288.8 644.7,288.0 646.8,287.2 648.8,286.5 650.9,285.8 652.9,285.1 655.0,284.5 657.1,283.9 659.1,283.3 661.2,282.7 663.2,282.1 665.3,281.6 667.4,281.1 669.4,280.6 671.5,280.1 673.5,279.7 675.6,279.3 677.6,278.9 679.7,278.5 681.8,278.1 683.8,277.7 685.9,277.4 687.9,277.1 690.0,276.7 692.1,276.4 694.1,276.1 696.2,275.9 698.2,275.6 700.3,275.4 702.4,275.1 704.4,274.9 706.5,274.7 708.5,274.4 710.6,274.2 712.6,274.0 714.7,273.9 716.8,273.7 718.8,273.5 720.9,273.4 722.9,273.2 725.0,273.0" fill="none" stroke="#b8324f" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="518" y="182" width="178" height="54" rx="4" fill="white" stroke="#8b95a1" stroke-width="1.2"/>
+<line x1="532" y1="202" x2="558" y2="202" stroke="#c77700" stroke-width="2.5"/>
+<g class="math-label" data-math-tex="g(x):\ \mathrm{Gamma\ density}" data-math-x="565" data-math-y="206" data-math-anchor="start" data-math-size="10.5" data-math-display="0"><text x="565.0" y="206.0" class="tiny" text-anchor="start">g(x): Gamma density</text></g>
+<line x1="532" y1="224" x2="558" y2="224" stroke="#b8324f" stroke-width="2.5"/>
+<g class="math-label" data-math-tex="H(x):\ \mathrm{mixed\ CDF}" data-math-x="565" data-math-y="228" data-math-anchor="start" data-math-size="10.5" data-math-display="0"><text x="565.0" y="228.0" class="tiny" text-anchor="start">H(x): mixed CDF</text></g>
+<g class="math-label" data-math-tex="q=\mathrm{zero\mbox{-}month\ probability}" data-math-x="605" data-math-y="507" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="605.0" y="507.0" class="small" text-anchor="middle">q = zero-month probability</text></g>
+<line x1="860" y1="390" x2="1090" y2="390" stroke="#52606d" stroke-width="1.3"/>
+<line x1="975" y1="235" x2="975" y2="500" stroke="#52606d" stroke-width="1.3"/>
+<polyline points="864.6,482.4 866.9,474.6 869.2,468.8 871.5,464.0 873.8,460.0 876.1,456.4 878.4,453.2 880.7,450.3 883.0,447.7 885.3,445.2 887.6,442.9 889.9,440.7 892.2,438.6 894.5,436.6 896.8,434.8 899.1,432.9 901.4,431.2 903.7,429.5 906.0,427.9 908.3,426.3 910.6,424.7 912.9,423.2 915.2,421.8 917.5,420.4 919.8,419.0 922.1,417.6 924.4,416.2 926.7,414.9 929.0,413.6 931.3,412.3 933.6,411.0 935.9,409.8 938.2,408.6 940.5,407.3 942.8,406.1 945.1,404.9 947.4,403.7 949.7,402.6 952.0,401.4 954.3,400.2 956.6,399.1 958.9,397.9 961.2,396.8 963.5,395.7 965.8,394.5 968.1,393.4 970.4,392.3 972.7,391.1 975.0,390.0 977.3,388.9 979.6,387.7 981.9,386.6 984.2,385.5 986.5,384.3 988.8,383.2 991.1,382.1 993.4,380.9 995.7,379.8 998.0,378.6 1000.3,377.4 1002.6,376.3 1004.9,375.1 1007.2,373.9 1009.5,372.7 1011.8,371.4 1014.1,370.2 1016.4,369.0 1018.7,367.7 1021.0,366.4 1023.3,365.1 1025.6,363.8 1027.9,362.4 1030.2,361.0 1032.5,359.6 1034.8,358.2 1037.1,356.8 1039.4,355.3 1041.7,353.7 1044.0,352.1 1046.3,350.5 1048.6,348.8 1050.9,347.1 1053.2,345.2 1055.5,343.4 1057.8,341.4 1060.1,339.3 1062.4,337.1 1064.7,334.8 1067.0,332.3 1069.3,329.7 1071.6,326.8 1073.9,323.6 1076.2,320.0 1078.5,316.0 1080.8,311.2 1083.1,305.4 1085.4,297.6" fill="none" stroke="#2b8a7e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+<line x1="860" y1="435" x2="1090" y2="435" stroke="#b8324f" stroke-width="2" stroke-dasharray="6 4"/>
+<rect x="860" y="435" width="36.501000000000005" height="65" fill="#fde2e7" fill-opacity="0.9"/>
+<text x="902.0" y="457.0" class="small" text-anchor="start">SPI &lt; -1</text>
+<g class="math-label" data-math-tex="H(x)" data-math-x="976" data-math-y="530" data-math-anchor="middle" data-math-size="12" data-math-display="0"><text x="976.0" y="530.0" class="small" text-anchor="middle">H(x)</text></g>
+<g class="math-label" data-math-tex="\mathrm{SPI} = \Phi^{-1}(H(x))" data-math-x="980" data-math-y="224" data-math-anchor="middle" data-math-size="15" data-math-display="0"><text x="980.0" y="224.0" class="label" text-anchor="middle">SPI = Phi^-1(H(x))</text></g>
+<path class="arrow" d="M 380.0 340.0 L 438.0 340.0"/>
+<path class="arrow" d="M 760.0 340.0 L 818.0 340.0"/>
+</svg>

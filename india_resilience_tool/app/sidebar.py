@@ -21,58 +21,17 @@ from typing import Callable, Optional
 # Re-export state module constants for convenience
 from india_resilience_tool.app.state import (
     ADMIN_LEVEL_BLOCK,
-    ADMIN_LEVEL_BASIN,
     ADMIN_LEVEL_DISTRICT,
-    ADMIN_LEVEL_SUB_BASIN,
     ANALYSIS_MODE_PORTFOLIO,
     ANALYSIS_MODE_SINGLE,
     SPATIAL_FAMILY_ADMIN,
-    SPATIAL_FAMILY_HYDRO,
     VIEW_MAP,
     VIEW_RANKINGS,
     get_current_level,
     get_level_display_name,
     get_level_display_name_plural,
-    set_level,
+    reset_level_dependent_state,
 )
-
-
-def render_spatial_family_selector(
-    *,
-    label: str = "Spatial family",
-    label_visibility: str = "collapsed",
-) -> str:
-    """Render the Admin/Hydro selector and return the selected family."""
-    import streamlit as st
-
-    options = [SPATIAL_FAMILY_ADMIN, SPATIAL_FAMILY_HYDRO]
-    current = st.session_state.get("spatial_family", SPATIAL_FAMILY_ADMIN)
-    if current not in options:
-        current = SPATIAL_FAMILY_ADMIN
-
-    def _fmt(opt: str) -> str:
-        return "Hydro" if opt == SPATIAL_FAMILY_HYDRO else "Admin"
-
-    selected = st.radio(
-        label,
-        options=options,
-        index=options.index(current),
-        key="spatial_family",
-        horizontal=True,
-        label_visibility=label_visibility,
-        format_func=_fmt,
-    )
-
-    if selected == SPATIAL_FAMILY_HYDRO:
-        desired_level = st.session_state.get("admin_level", ADMIN_LEVEL_BASIN)
-        if desired_level not in {ADMIN_LEVEL_BASIN, ADMIN_LEVEL_SUB_BASIN}:
-            set_level(session_state=st.session_state, level=ADMIN_LEVEL_BASIN)
-    else:
-        desired_level = st.session_state.get("admin_level", ADMIN_LEVEL_DISTRICT)
-        if desired_level not in {ADMIN_LEVEL_DISTRICT, ADMIN_LEVEL_BLOCK}:
-            set_level(session_state=st.session_state, level=ADMIN_LEVEL_DISTRICT)
-
-    return selected
 
 
 def apply_jump_once_flags() -> None:
@@ -113,22 +72,18 @@ def render_admin_level_selector(
 
     Contract:
     - key must remain 'admin_level'
-    - when switching level, dependent selections + caches must be reset (via set_level)
+    - when switching level, dependent selections + caches must be reset
+      (via reset_level_dependent_state)
     """
     import streamlit as st
 
-    family = st.session_state.get("spatial_family", SPATIAL_FAMILY_ADMIN)
-    options = (
-        [ADMIN_LEVEL_BASIN, ADMIN_LEVEL_SUB_BASIN]
-        if family == SPATIAL_FAMILY_HYDRO
-        else [ADMIN_LEVEL_DISTRICT, ADMIN_LEVEL_BLOCK]
-    )
+    options = [ADMIN_LEVEL_DISTRICT, ADMIN_LEVEL_BLOCK]
     default_level = options[0]
-    current = st.session_state.get("admin_level", default_level)
-    try:
-        idx = options.index(current)
-    except Exception:
-        idx = 0
+    # Seed/coerce before widget creation so no index argument is needed
+    # (avoids the double-default Session State API warning).
+    st.session_state.setdefault("admin_level", default_level)
+    if st.session_state["admin_level"] not in options:
+        st.session_state["admin_level"] = default_level
 
     if use_markdown_header:
         st.markdown(
@@ -148,7 +103,6 @@ def render_admin_level_selector(
             selected = st.radio(
                 label,
                 options=options,
-                index=idx,
                 key="admin_level",
                 horizontal=True,
                 label_visibility=label_visibility,
@@ -158,17 +112,19 @@ def render_admin_level_selector(
         selected = st.radio(
             label,
             options=options,
-            index=idx,
             key="admin_level",
             horizontal=True,
             label_visibility=label_visibility,
             format_func=_fmt,
         )
 
-    prev = st.session_state.get("_admin_level_prev", current)
-    if prev != selected:
+    prev = st.session_state.get("_admin_level_prev")
+    if prev is None:
+        # First render: seed only, no reset.
         st.session_state["_admin_level_prev"] = selected
-        set_level(session_state=st.session_state, level=selected)
+    elif prev != selected:
+        st.session_state["_admin_level_prev"] = selected
+        reset_level_dependent_state(st.session_state)
 
     return selected
 
@@ -209,15 +165,7 @@ def render_analysis_mode_selector(
     unit = get_level_display_name(level_norm)  # "District" / "Block"
 
     if help_text is None:
-        if level_norm == "sub_basin":
-            help_text = (
-                "Choose “Single sub-basin focus” to explore one sub-basin at a time."
-            )
-        elif level_norm == "basin":
-            help_text = (
-                "Choose “Single basin focus” to explore one basin at a time."
-            )
-        elif level_norm == "block":
+        if level_norm == "block":
             help_text = (
                 "Choose “Single block focus” to explore one block at a time, "
                 "or “Multi-block portfolio” to build and compare a set of blocks."
@@ -236,29 +184,16 @@ def render_analysis_mode_selector(
             unsafe_allow_html=True,
         )
 
-    current = st.session_state.get("analysis_mode", placeholder)
-    if current is None or current not in opts_with_placeholder:
-        current = placeholder
+    # Seed/coerce before widget creation so no index argument is needed
+    # (avoids the double-default Session State API warning).
+    st.session_state.setdefault("analysis_mode", placeholder)
+    if st.session_state["analysis_mode"] not in opts_with_placeholder:
         st.session_state["analysis_mode"] = placeholder
-
-    try:
-        idx = opts_with_placeholder.index(current)
-    except Exception:
-        # Fall back to placeholder; we ignore `index` because we want a deliberate choice.
-        idx = 0
 
     def _fmt(opt: str) -> str:
         if opt == placeholder:
             return placeholder
         # Preserve stored values; only change display label.
-        if level_norm == "basin":
-            return str(opt).replace("district", "basin").replace("District", "Basin")
-        if level_norm == "sub_basin":
-            return (
-                str(opt)
-                .replace("district", "sub-basin")
-                .replace("District", "Sub-basin")
-            )
         if level_norm != "block":
             return opt
         if opt == ANALYSIS_MODE_SINGLE:
@@ -271,7 +206,6 @@ def render_analysis_mode_selector(
     mode = st.selectbox(
         label,
         options=opts_with_placeholder,
-        index=idx,
         key="analysis_mode",
         label_visibility=label_visibility,
         help=help_text,
@@ -308,9 +242,11 @@ def render_hover_toggle_if_portfolio(
     """
     import streamlit as st
 
+    # Seed before widget creation (the deep-dive path may not have called
+    # ensure_session_state); avoids the double-default warning.
+    st.session_state.setdefault("hover_enabled", True)
     hover_enabled = st.checkbox(
         label,
-        value=bool(st.session_state.get("hover_enabled", True)),
         key="hover_enabled",
     )
     return hover_enabled
@@ -335,16 +271,15 @@ def render_view_selector(
 
     ss = st.session_state
     options = [VIEW_MAP, VIEW_RANKINGS]
-    current = ss.get("main_view_selector", ss.get("active_view", VIEW_MAP))
-    try:
-        index = options.index(current)
-    except Exception:
-        index = 0
+    # Seed/coerce before widget creation so no index argument is needed
+    # (avoids the double-default Session State API warning).
+    if ss.get("main_view_selector") not in options:
+        current = ss.get("active_view", VIEW_MAP)
+        ss["main_view_selector"] = current if current in options else VIEW_MAP
 
     choice = st.radio(
         label,
         options=options,
-        index=index,
         key="main_view_selector",
         horizontal=horizontal,
     )

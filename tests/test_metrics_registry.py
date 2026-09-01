@@ -17,13 +17,24 @@ from india_resilience_tool.config.metrics_registry import (
     get_default_pillar,
     get_bundles,
     get_domain_description,
+    get_domains_for_metric,
     get_domains_for_pillar,
+    get_metrics_for_domain,
     get_metrics_for_bundle,
     get_pillar_for_domain,
     get_pillars,
     get_pipeline_bundles,
     validate_registry_against_pipeline,
 )
+from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
+    EXTREME_RAINFALL_GRIDFIRST_SLUGS,
+    R95P_BASELINE_YEARS,
+    R95P_QUANTILE_METHOD,
+    R95P_STRICT_EXCEEDANCE,
+    is_extreme_rainfall_gridfirst,
+)
+from india_resilience_tool.compute.heat_risk_gridfirst import HEAT_RISK_GRIDFIRST_SLUGS, is_heat_risk_gridfirst
+from india_resilience_tool.compute.heat_stress_gridfirst import HEAT_STRESS_GRIDFIRST_SLUGS
 
 
 def test_pipeline_metrics_present() -> None:
@@ -64,17 +75,44 @@ def test_validate_registry_against_pipeline_reports_duplicates_but_no_mismatch()
     assert not any("periods_metric_col" in s and "value_col" in s for s in issues)
 
 
-def test_wbd_metrics_registered() -> None:
-    assert "wbd_le_3" in METRICS_BY_SLUG
-    assert "wbd_le_6" in METRICS_BY_SLUG
+def test_validate_registry_against_pipeline_flags_invalid_class_display_contracts() -> None:
+    pipeline = [
+        {
+            "slug": "bad_codes",
+            "name": "Bad codes",
+            "var": "tas",
+            "value_col": "bad_codes",
+            "class_labels": {1: "Low", 3: "High"},
+            "class_display_mode": "label_with_score",
+            "supports_baseline_comparison": False,
+        },
+        {
+            "slug": "bad_baseline",
+            "name": "Bad baseline",
+            "var": "tas",
+            "value_col": "bad_baseline",
+            "class_labels": {0: "No change", 1: "Worse"},
+            "class_display_mode": "label_only",
+            "supports_baseline_comparison": True,
+        },
+    ]
+    reg = build_registry_from_pipeline(pipeline)
 
-    severe = METRICS_BY_SLUG["wbd_le_3"]
-    humid = METRICS_BY_SLUG["wbd_le_6"]
+    issues = validate_registry_against_pipeline(reg, pipeline)
 
-    assert severe.compute == "wet_bulb_depression_days_le_threshold_stull"
-    assert humid.compute == "wet_bulb_depression_days_le_threshold_stull"
-    assert severe.value_col == "wbd_le_3_days"
-    assert humid.value_col == "wbd_le_6_days"
+    assert any("bad_codes" in issue and "contiguous integer codes" in issue for issue in issues)
+    assert any("bad_baseline" in issue and "supports_baseline_comparison=False" in issue for issue in issues)
+
+
+def test_real_class_display_metrics_have_valid_codes_and_no_baseline_mode() -> None:
+    issues = validate_registry_against_pipeline(METRICS_BY_SLUG, PIPELINE_METRICS_RAW)
+
+    class_contract_issues = [
+        issue
+        for issue in issues
+        if issue.startswith("Class-display metric")
+    ]
+    assert class_contract_issues == []
 
 
 def test_tropical_nights_gt25_metric_is_registered_for_heat_risk() -> None:
@@ -89,27 +127,35 @@ def test_tropical_nights_gt25_metric_is_registered_for_heat_risk() -> None:
     assert "tasmin_tropical_nights_gt20" not in heat_risk_metrics
 
 
+def test_heat_risk_warm_percentile_metrics_use_linear_quantile_and_strict_exceedance() -> None:
+    audited = {
+        "tx90p_hot_days_pct",
+        "tn90p_warm_nights_pct",
+        "wsdi_warm_spell_days",
+        "hwfi_tmean_90p",
+        "hwfi_events_tmean_90p",
+        "hwa_heatwave_amplitude",
+    }
+
+    assert audited < HEAT_RISK_GRIDFIRST_SLUGS
+    for slug in audited:
+        spec = METRICS_BY_SLUG[slug]
+        assert spec.params["quantile_method"] == "linear"
+        assert spec.params["exceed_ge"] is False
+
+
 def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
     assert "twb_summer_mean" in METRICS_BY_SLUG
     assert "tasmin_tropical_nights_gt28" in METRICS_BY_SLUG
-    assert "wbd_gt3_le6" in METRICS_BY_SLUG
-    assert "wbd_le_3_consecutive_days" in METRICS_BY_SLUG
     assert "twb_days_ge_28" in METRICS_BY_SLUG
 
     summer = METRICS_BY_SLUG["twb_summer_mean"]
     tropical_nights = METRICS_BY_SLUG["tasmin_tropical_nights_gt28"]
-    moderate = METRICS_BY_SLUG["wbd_gt3_le6"]
-    consecutive = METRICS_BY_SLUG["wbd_le_3_consecutive_days"]
     threshold = METRICS_BY_SLUG["twb_days_ge_28"]
 
     assert summer.compute == "wet_bulb_seasonal_mean_stull"
     assert summer.params["months"] == [3, 4, 5]
     assert tropical_nights.params["thresh_k"] == 28.0 + 273.15
-    assert moderate.compute == "wet_bulb_depression_days_range_stull"
-    assert moderate.params["lower_c"] == 3.0
-    assert moderate.params["upper_c"] == 6.0
-    assert consecutive.compute == "wet_bulb_depression_longest_run_le_threshold_stull"
-    assert consecutive.params["min_spell_days"] == 3
     assert threshold.compute == "wet_bulb_days_ge_threshold_stull"
     assert threshold.params["thresh_c"] == 28.0
 
@@ -119,16 +165,109 @@ def test_heat_stress_metrics_and_bundle_membership_are_registered() -> None:
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
+        "twb_days_ge_28",
         "twb_days_ge_30",
-        "wbd_le_3",
-        "wbd_gt3_le6",
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
-        "wbd_le_3_consecutive_days",
         "wsdi_warm_spell_days",
-        "twb_days_ge_28",
+        "wbgt_shade_stull_annual_mean",
+        "wbgt_shade_stull_days_ge_28",
+        "wbgt_shade_stull_days_ge_30",
+        "wbgt_shade_stull_days_ge_32",
+        "swbgt_empirical_annual_mean",
+        "swbgt_empirical_days_ge_28",
+        "swbgt_empirical_days_ge_30",
+        "swbgt_empirical_days_ge_32",
     ]
     assert "wbd_le_6" not in heat_stress_metrics
+
+
+def test_heat_stress_gridfirst_slugs_do_not_overlap_heat_risk_gridfirst_slugs() -> None:
+    assert HEAT_STRESS_GRIDFIRST_SLUGS & HEAT_RISK_GRIDFIRST_SLUGS == set()
+
+
+def test_wbgt_and_swbgt_metrics_registered_as_heat_stress_diagnostics() -> None:
+    expected = {
+        "wbgt_shade_stull_annual_mean": (
+            "Shaded WBGT (Annual Mean)",
+            "wbgt_shade_stull_annual_mean",
+            "wbgt_shade_stull_annual_mean_C",
+        ),
+        "wbgt_shade_stull_days_ge_28": (
+            "Shaded WBGT Days (≥ 28°C)",
+            "wbgt_shade_stull_days_ge_threshold",
+            "wbgt_shade_stull_days_ge_28_days",
+        ),
+        "wbgt_shade_stull_days_ge_30": (
+            "Shaded WBGT Days (≥ 30°C)",
+            "wbgt_shade_stull_days_ge_threshold",
+            "wbgt_shade_stull_days_ge_30_days",
+        ),
+        "wbgt_shade_stull_days_ge_32": (
+            "Shaded WBGT Days (≥ 32°C)",
+            "wbgt_shade_stull_days_ge_threshold",
+            "wbgt_shade_stull_days_ge_32_days",
+        ),
+        "swbgt_empirical_annual_mean": (
+            "Outdoor WBGT (Annual Mean)",
+            "swbgt_empirical_annual_mean",
+            "swbgt_empirical_annual_mean_C",
+        ),
+        "swbgt_empirical_days_ge_28": (
+            "Outdoor WBGT Days (≥ 28°C)",
+            "swbgt_empirical_days_ge_threshold",
+            "swbgt_empirical_days_ge_28_days",
+        ),
+        "swbgt_empirical_days_ge_30": (
+            "Outdoor WBGT Days (≥ 30°C)",
+            "swbgt_empirical_days_ge_threshold",
+            "swbgt_empirical_days_ge_30_days",
+        ),
+        "swbgt_empirical_days_ge_32": (
+            "Outdoor WBGT Days (≥ 32°C)",
+            "swbgt_empirical_days_ge_threshold",
+            "swbgt_empirical_days_ge_32_days",
+        ),
+    }
+
+    heat_stress_metrics = set(get_metrics_for_bundle("Heat Stress", spatial_family="admin", level="district"))
+
+    for slug, (label, compute, value_col) in expected.items():
+        assert slug in METRICS_BY_SLUG
+        # Diagnostics: visible under Heat Stress domain. NOT scored in
+        # composite_heat_stress (asserted below via bundle_weights).
+        assert slug in heat_stress_metrics
+
+        spec = METRICS_BY_SLUG[slug]
+        assert spec.label == label
+        assert spec.var == "tas"
+        assert list(spec.vars or []) == ["tas", "hurs"]
+        assert spec.compute == compute
+        assert spec.value_col == value_col
+        assert spec.description is not None
+        assert "tas" in spec.description
+        assert "hurs" in spec.description
+        if slug.startswith("wbgt_shade"):
+            assert "shaded" in spec.description.lower()
+            assert "no-direct-sun" in spec.description.lower()
+            assert "direct solar radiation" in spec.description.lower()
+            assert "radiant heat load" in spec.description.lower()
+        else:
+            assert "outdoor heat-stress screening indicator" in spec.description.lower()
+            assert "wbgt-style estimate" in spec.description.lower()
+            assert "vapour pressure" in spec.description
+            assert "solar radiation" in spec.description.lower()
+            assert "wind speed" in spec.description.lower()
+            assert "black-globe temperature" in spec.description.lower()
+
+    from india_resilience_tool.config.bundle_weights import LANDING_BUNDLE_WEIGHTS
+
+    scored_slugs = {entry.metric_slug for entry in LANDING_BUNDLE_WEIGHTS["Heat Stress"]}
+    for slug in expected:
+        assert slug not in scored_slugs, (
+            f"{slug} is a Heat Stress diagnostic and must not be a scored input "
+            "in composite_heat_stress (would double-count Twb-based humid-heat signal)."
+        )
 
 
 def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
@@ -174,6 +313,8 @@ def test_cold_risk_metrics_and_bundle_membership_are_registered() -> None:
 
 
 def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
+    from india_resilience_tool.compute.drought_risk_gridfirst import DROUGHT_GRIDFIRST_SLUGS, is_drought_gridfirst
+
     assert "spi3_count_events_lt_minus1" in METRICS_BY_SLUG
     assert "spi6_count_events_lt_minus1" in METRICS_BY_SLUG
     assert "spi12_count_events_lt_minus1" in METRICS_BY_SLUG
@@ -195,12 +336,23 @@ def test_drought_risk_metrics_and_bundle_membership_are_registered() -> None:
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "spi6_max_spell_lt_minus1",
+        "spi12_max_spell_lt_minus1",
     ]
+    for slug in drought_metrics[1:]:
+        params = METRICS_BY_SLUG[slug].params
+        assert int(params["min_event_months"]) > 0
+    for slug in ("spi3_max_spell_lt_minus1", "spi6_max_spell_lt_minus1", "spi12_max_spell_lt_minus1"):
+        assert METRICS_BY_SLUG[slug].params["period_rollup"] == "period_max"
+    assert set(drought_metrics[1:]) == set(DROUGHT_GRIDFIRST_SLUGS)
+    assert is_drought_gridfirst("spi3_count_events_lt_minus1", "district") is True
+    assert is_drought_gridfirst("spi3_count_events_lt_minus1", "basin") is False
 
 
 def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
     flood_metrics = get_metrics_for_bundle(
-        "Flood & Extreme Rainfall Risk",
+        "Extreme Rainfall | Flash Flood Risk",
         spatial_family="admin",
         level="district",
     )
@@ -213,37 +365,96 @@ def test_flood_bundle_membership_remains_the_current_six_metric_set() -> None:
         "r95ptot_contribution_pct",
         "cwd_consecutive_wet_days",
     ]
+    assert set(flood_metrics[1:]).issubset(EXTREME_RAINFALL_GRIDFIRST_SLUGS)
 
 
-def test_agriculture_bundle_membership_is_the_approved_nine_metric_mix() -> None:
+def test_extreme_rainfall_v2_keeps_registry_and_admin_semantics_explicit() -> None:
+    r20 = METRICS_BY_SLUG["r20mm_very_heavy_precip_days"]
+    r95p = METRICS_BY_SLUG["r95p_very_wet_precip"]
+    r95ptot = METRICS_BY_SLUG["r95ptot_contribution_pct"]
+
+    assert r20.params["thresh_mm"] == 20.0
+    assert r20.params["exceed_ge"] is True
+    assert r95p.params["baseline_years"] == (1981, 2010)
+    assert r95p.params["quantile_method"] == "nearest"
+    assert r95p.params["exceed_ge"] is True
+    assert r95ptot.params["baseline_years"] == (1981, 2010)
+    assert r95ptot.params["quantile_method"] == "nearest"
+    assert r95ptot.params["exceed_ge"] is True
+    assert R95P_BASELINE_YEARS == (1990, 2010)
+    assert R95P_QUANTILE_METHOD == "linear"
+    assert R95P_STRICT_EXCEEDANCE is True
+
+
+def test_proposal_pipeline_metrics_are_registered_without_changing_dashboard_domains() -> None:
+    assert "r99p_extreme_wet_precip" in METRICS_BY_SLUG
+
+    r99p = METRICS_BY_SLUG["r99p_extreme_wet_precip"]
+
+    assert r99p.compute == "percentile_precipitation_total"
+    assert r99p.params["percentile"] == 99
+    assert r99p.params["quantile_method"] == "nearest"
+    assert r99p.params["exceed_ge"] is True
+    assert "r99p_extreme_wet_precip" in EXTREME_RAINFALL_GRIDFIRST_SLUGS
+    assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "district") is True
+    assert is_extreme_rainfall_gridfirst("r99p_extreme_wet_precip", "basin") is False
+
+    flood_metrics = get_metrics_for_bundle(
+        "Extreme Rainfall | Flash Flood Risk",
+        spatial_family="admin",
+        level="district",
+    )
+    assert "r99p_extreme_wet_precip" not in flood_metrics
+
+
+def test_heat_risk_admin_only_gridfirst_metrics_keep_hydro_legacy_dispatch() -> None:
+    assert is_heat_risk_gridfirst("txx_annual_max", "basin") is True
+    assert is_heat_risk_gridfirst("tas_annual_mean", "district") is True
+    assert is_heat_risk_gridfirst("tas_annual_mean", "basin") is False
+    assert is_heat_risk_gridfirst("tas_summer_mean", "sub_basin") is False
+
+
+def test_spi3_count_months_metric_has_explicit_gridfirst_period_and_coverage_params() -> None:
+    spec = METRICS_BY_SLUG["spi3_count_months_lt_minus1"]
+
+    assert spec.params["annual_aggregation"] == "count_months_lt"
+    assert spec.params["min_months_per_year"] == 9
+    assert spec.params["period_rollup"] == "period_mean"
+    assert spec.params["min_years_per_period_fraction"] == 0.75
+    assert spec.params["min_baseline_years_per_calendar_month_fraction"] == 0.83
+    assert spec.params["min_polygon_cell_weight_fraction"] == 0.50
+
+
+def test_agricultural_risk_bundle_membership_uses_final_seven_metric_mix_and_legacy_alias() -> None:
     agriculture_metrics = get_metrics_for_bundle(
-        "Agriculture & Growing Conditions",
+        "Agricultural Risk",
         spatial_family="admin",
         level="district",
     )
     assert agriculture_metrics == [
-        "composite_agriculture_growing_conditions",
-        "gsl_growing_season",
-        "tasmax_summer_mean",
-        "tasmin_winter_mean",
-        "dtr_daily_temp_range",
+        "composite_agricultural_risk",
+        "txx_annual_max",
         "txge35_extreme_heat_days",
-        "tnle10_cold_nights",
         "wsdi_warm_spell_days",
-        "spi3_drought_index",
-        "prcptot_annual_total",
+        "spi3_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "pr_max_5day_precip",
+        "tnle10_cold_nights",
     ]
-    assert METRICS_BY_SLUG["prcptot_annual_total"].rank_higher_is_worse is False
+    assert get_metrics_for_bundle(
+        "Agriculture & Growing Conditions",
+        spatial_family="admin",
+        level="district",
+    ) == agriculture_metrics
 
 
 def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hydro() -> None:
     expected = {
         "Heat Risk": "composite_heat_risk",
         "Drought Risk": "composite_drought_risk",
-        "Flood & Extreme Rainfall Risk": "composite_flood_extreme_rainfall_risk",
+        "Extreme Rainfall | Flash Flood Risk": "composite_flood_extreme_rainfall_risk",
         "Heat Stress": "composite_heat_stress",
         "Cold Risk": "composite_cold_risk",
-        "Agriculture & Growing Conditions": "composite_agriculture_growing_conditions",
     }
 
     for domain, slug in expected.items():
@@ -267,10 +478,6 @@ def test_visible_glance_composites_are_first_in_admin_domains_and_hidden_from_hy
 def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
     pipeline_bundles = get_pipeline_bundles()
     dashboard_only = {
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
         "jrc_flood_depth_rp10",
@@ -283,46 +490,125 @@ def test_dashboard_only_metrics_do_not_leak_into_pipeline_bundles() -> None:
         assert slug in METRICS_BY_SLUG
 
 
-def test_aqueduct_metric_is_context_limited_to_supported_views() -> None:
-    admin_district_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="admin", level="district"))
-    admin_block_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="admin", level="block"))
-    assert "Aqueduct Water Risk" in get_bundles(spatial_family="hydro", level="basin")
-    hydro_metrics = set(get_metrics_for_bundle("Aqueduct Water Risk", spatial_family="hydro", level="sub_basin"))
-    assert "Aqueduct Water Risk" in get_bundles(spatial_family="admin", level="district")
-    assert {
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
-    }.issubset(hydro_metrics)
-    assert {
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
-    }.issubset(admin_district_metrics)
-    assert {
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
-    }.issubset(admin_block_metrics)
+def test_sector_wise_domains_expand_to_composite_plus_source_metrics_in_exact_order() -> None:
+    assert get_metrics_for_domain(
+        "Infrastructure Risk",
+        spatial_family="admin",
+        level="district",
+    ) == [
+        "composite_infrastructure_risk",
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "txx_annual_max",
+    ]
+    assert get_metrics_for_domain(
+        "Infrastructure Risk",
+        spatial_family="admin",
+        level="block",
+    ) == [
+        "composite_infrastructure_risk",
+        "pr_max_1day_precip",
+        "pr_max_5day_precip",
+        "txx_annual_max",
+    ]
+    assert get_metrics_for_domain(
+        "Health Risk",
+        spatial_family="admin",
+        level="district",
+    ) == [
+        "composite_health_risk",
+        "txx_annual_max",
+        "wsdi_warm_spell_days",
+        "tnx_annual_max",
+        "pr_max_1day_precip",
+        "cwd_consecutive_wet_days",
+    ]
 
 
-def test_taxonomy_exposes_climate_and_biophysical_pillars() -> None:
+def test_sector_wise_domains_remain_hidden_in_unsupported_contexts() -> None:
+    assert get_metrics_for_domain(
+        "Health Risk",
+        spatial_family="admin",
+        level="basin",
+    ) == []
+    assert get_metrics_for_domain(
+        "Health Risk",
+        spatial_family="hydro",
+        level="basin",
+    ) == []
+
+
+def test_sector_wise_reverse_membership_is_context_aware() -> None:
+    district_domains = get_domains_for_metric(
+        "pr_max_1day_precip",
+        spatial_family="admin",
+        level="district",
+    )
+    assert "Extreme Rainfall | Flash Flood Risk" in district_domains
+    assert "Health Risk" in district_domains
+    assert "Industrial Risk" in district_domains
+    assert "Infrastructure Risk" in district_domains
+    assert "Life & Livelihood Loss Risk" in district_domains
+    assert "Agricultural Risk" in get_domains_for_metric(
+        "pr_max_5day_precip",
+        spatial_family="admin",
+        level="district",
+    )
+
+    block_domains = get_domains_for_metric(
+        "pr_max_1day_precip",
+        spatial_family="admin",
+        level="block",
+    )
+    assert "Life & Livelihood Loss Risk" in block_domains
+
+    hydro_domains = get_domains_for_metric(
+        "pr_max_1day_precip",
+        spatial_family="hydro",
+        level="basin",
+    )
+    assert "Health Risk" not in hydro_domains
+    assert "Infrastructure Risk" not in hydro_domains
+
+
+def test_hydropower_sector_bundle_includes_helper_metric() -> None:
+    assert get_metrics_for_domain(
+        "Asset Risk (Hydropower Plants)",
+        spatial_family="admin",
+        level="district",
+    ) == [
+        "composite_asset_risk_hydropower",
+        "pr_max_5day_precip",
+        "pr_consecutive_dry_days_lt1mm",
+        "r95p_interannual_variability",
+    ]
+
+
+def test_get_pipeline_bundles_remains_static_for_sector_wise_domains() -> None:
+    pipeline_bundles = get_pipeline_bundles()
+    assert "Health Risk" not in pipeline_bundles
+    assert "Infrastructure Risk" not in pipeline_bundles
+    assert "Life & Livelihood Loss Risk" not in pipeline_bundles
+
+
+def test_taxonomy_exposes_single_climate_hazards_pillar() -> None:
+    # CHG-0273: the taxonomy was collapsed to a single Climate Hazards pillar.
+    # Bio-physical Hazards and Exposure are no longer pillars; their exposure
+    # domains stay in DOMAINS (pipeline contract) but are unhomed from UI nav.
     pillars = get_pillars(spatial_family="admin", level="district")
-    assert "Climate Hazards" in pillars
-    assert "Bio-physical Hazards" in pillars
-    assert "Exposure" in pillars
+    assert pillars == ["Climate Hazards"]
+    assert "Bio-physical Hazards" not in pillars
+    assert "Exposure" not in pillars
     assert get_default_pillar(spatial_family="admin", level="district") == "Climate Hazards"
 
 
-def test_aqueduct_domain_lives_under_biophysical_hazards() -> None:
-    domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="hydro", level="basin")
-    assert domains == ["Aqueduct Water Risk"]
-    assert get_pillar_for_domain("Aqueduct Water Risk") == "Bio-physical Hazards"
-    assert get_pillar_for_domain("Water Risk") == "Bio-physical Hazards"
-    assert "Aqueduct" in get_domain_description("Aqueduct Water Risk")
+def test_riverine_flood_is_homed_under_climate_hazards() -> None:
+    # CHG-0273: Riverine Flood (the JRC flood-depth domain) was moved from
+    # Bio-physical into Climate Hazards to preserve the flood-depth feature.
+    assert get_pillar_for_domain("Riverine Flood") == "Climate Hazards"
+    assert "Riverine Flood" in get_domains_for_pillar(
+        "Climate Hazards", spatial_family="admin", level="district"
+    )
 
 
 def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
@@ -333,23 +619,35 @@ def test_default_domain_remains_heat_risk_for_climate_hazards() -> None:
     ) == "Heat Risk"
 
 
-def test_population_exposure_domain_is_admin_only() -> None:
-    admin_domains = get_domains_for_pillar("Exposure", spatial_family="admin", level="district")
-    assert admin_domains == ["Population Exposure"]
+def test_exposure_domains_are_unhomed_but_still_resolve_metrics() -> None:
+    # CHG-0273 (option b): the exposure domains are hidden from UI pillar
+    # navigation (unhomed) but remain in DOMAINS so the data-prep pipelines keep
+    # resolving them by domain name. Preserve that domain->metric contract here.
+    assert "Exposure" not in get_pillars(spatial_family="admin", level="district")
+    for domain in (
+        "Population Exposure",
+        "Rural Facilities Exposure",
+        "Built-up Area Exposure",
+        "Agricultural LULC Exposure",
+    ):
+        assert get_pillar_for_domain(domain) == ""
+        assert get_metrics_for_domain(domain), domain
+
     admin_metrics = set(get_metrics_for_bundle("Population Exposure", spatial_family="admin", level="block"))
     assert admin_metrics == {"population_total", "population_density"}
-
-    hydro_pillars = get_pillars(spatial_family="hydro", level="basin")
-    assert "Exposure" not in hydro_pillars
+    rural_metrics = set(get_metrics_for_bundle("Rural Facilities Exposure", spatial_family="admin", level="block"))
+    assert "rural_facilities_total_count" in rural_metrics
+    assert "rural_facilities_total_count_per_100k" in rural_metrics
+    built_metrics = set(get_metrics_for_bundle("Built-up Area Exposure", spatial_family="admin", level="block"))
+    assert built_metrics == {"built_up_area_km2", "built_up_area_share_pct"}
+    assert METRICS_BY_SLUG["built_up_area_km2"].fixed_scenario == "snapshot"
+    assert METRICS_BY_SLUG["built_up_area_share_pct"].fixed_period == "Current"
 
 
 def test_groundwater_domain_is_admin_district_only() -> None:
-    admin_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="district")
-    assert admin_domains == [
-        "Aqueduct Water Risk",
-        "Groundwater Status & Availability",
-        "Flood Inundation Depth (JRC)",
-    ]
+    # CHG-0273: Groundwater is now unhomed (kept in DOMAINS for the pipeline);
+    # its district-only metric-resolution contract is preserved.
+    assert get_pillar_for_domain("Groundwater Status & Availability") == ""
     admin_metrics = set(
         get_metrics_for_bundle("Groundwater Status & Availability", spatial_family="admin", level="district")
     )
@@ -360,51 +658,89 @@ def test_groundwater_domain_is_admin_district_only() -> None:
         "gw_total_extraction_ham",
     }
 
-    block_domains = get_domains_for_pillar("Bio-physical Hazards", spatial_family="admin", level="block")
-    assert block_domains == ["Aqueduct Water Risk", "Flood Inundation Depth (JRC)"]
+    # Groundwater is district-only: it resolves no metrics at block level.
+    assert get_metrics_for_bundle(
+        "Groundwater Status & Availability", spatial_family="admin", level="block"
+    ) == []
 
 
 def test_jrc_flood_depth_domain_is_admin_only_and_telangana_restricted() -> None:
     district_metrics = get_metrics_for_bundle(
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
         spatial_family="admin",
         level="district",
     )
     block_metrics = get_metrics_for_bundle(
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
         spatial_family="admin",
         level="block",
     )
     assert district_metrics == [
+        "composite_flood_jrc_depth",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
-        "jrc_flood_depth_rp10",
-        "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
-        "jrc_flood_depth_rp500",
     ]
     assert block_metrics == district_metrics
+    # Composite is first so Deep Dive opens the same choropleth as Glance.
+    assert district_metrics[0] == "composite_flood_jrc_depth"
     assert get_metrics_for_bundle(
-        "Flood Inundation Depth (JRC)",
+        "Riverine Flood",
         spatial_family="hydro",
         level="basin",
     ) == []
-    spec = METRICS_BY_SLUG["jrc_flood_depth_index_rp100"]
-    assert spec.supported_admin_states == ("Telangana",)
-    assert spec.fixed_period == "Current"
-    assert spec.supports_yearly_trend is False
-    assert spec.supports_baseline_comparison is False
-    assert spec.supports_scenario_comparison is False
-    assert spec.label == "Flood Severity Index (RP-100)"
-    assert spec.class_display_mode == "label_with_score"
-    assert spec.class_labels == {
-        1: "VeryLow",
-        2: "Low",
-        3: "Moderate",
-        4: "High",
-        5: "Extreme",
-    }
     extent_spec = METRICS_BY_SLUG["jrc_flood_extent_rp100"]
     assert extent_spec.units == "fraction"
     assert extent_spec.display_units == "%"
     assert extent_spec.display_scale == 100.0
+
+
+def test_aqueduct_metrics_and_domain_are_fully_retired() -> None:
+    """Aqueduct was dropped; no aq_* slug or 'Aqueduct' domain may survive.
+
+    Regression guard for CHG-0072/0073: removal must be complete across slugs,
+    bundles, domain order/descriptions, and legacy aliases so the dashboard never
+    surfaces a dangling Aqueduct selector or maps to a missing domain.
+    """
+    from india_resilience_tool.config import metrics_registry as mr
+
+    # No Aqueduct metric slugs remain.
+    assert not [slug for slug in METRICS_BY_SLUG if slug.startswith("aq_")]
+
+    # No Aqueduct domain remains anywhere it is enumerated.
+    assert "Aqueduct Water Risk" not in get_bundles()
+    assert "Aqueduct Water Risk" not in mr.DOMAIN_ORDER
+    assert "Aqueduct Water Risk" not in mr.DOMAIN_DESCRIPTIONS
+    assert "Aqueduct Water Risk" not in mr.DOMAIN_TO_PILLAR
+    assert "Aqueduct Water Risk" not in mr.LEGACY_DOMAIN_ALIASES.values()
+
+    # The orphaned Aqueduct-only scenarios are gone from display/help maps.
+    from india_resilience_tool.config import constants as cst
+
+    for scenario in ("bau", "opt", "pes"):
+        assert scenario not in cst.SCENARIO_DISPLAY
+        assert scenario not in cst.SCENARIO_UI_LABEL
+        assert scenario not in cst.SCENARIO_HELP_MD
+
+
+def test_get_metric_spec_returns_spec_or_none() -> None:
+    from india_resilience_tool.config.metrics_registry import get_metric_spec
+
+    assert get_metric_spec("water_scarcity_percapita") is not None
+    assert get_metric_spec("definitely_not_a_metric") is None
+
+
+def test_is_climate_compute_metric_positive_contract() -> None:
+    from india_resilience_tool.config.metrics_registry import (
+        get_metric_spec,
+        is_climate_compute_metric,
+    )
+
+    # pipeline / scenario_period metric qualifies
+    assert is_climate_compute_metric(get_metric_spec("tas_annual_mean")) is True
+    # externally sourced static snapshots do not (water scarcity, JRC flood)
+    assert is_climate_compute_metric(get_metric_spec("water_scarcity_percapita")) is False
+    assert is_climate_compute_metric(get_metric_spec("water_scarcity_deterioration_2050")) is False
+    assert is_climate_compute_metric(get_metric_spec("jrc_flood_depth_index_rp100")) is False
+    # None (unknown slug) is safely not-climate-compute
+    assert is_climate_compute_metric(None) is False

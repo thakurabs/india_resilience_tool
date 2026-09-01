@@ -15,6 +15,7 @@ Completed in code:
 - `Task 6` Finish `Flood & Extreme Rainfall Risk` with current available metrics
 - `Task 7` Implement missing metrics for `Cold Risk`
 - `Task 8` Finish `Agriculture & Growing Conditions`
+  - Retired/absorbed later into `Sector-wise - Agricultural Risk`; retained here as task history.
 - `Task 9` Extend the scoring engine for weighted averages
 - `Task 10` Update landing runtime to use weighted bundle specs
 - `Task 11` Tighten method transparency in the UI
@@ -36,7 +37,7 @@ Explicitly deferred:
   - `Drought Risk`
   - `Flood & Extreme Rainfall Risk`
   - `Cold Risk`
-  - `Agriculture & Growing Conditions`
+  - `Agriculture & Growing Conditions` (historical; later retired/absorbed into `Agricultural Risk`)
 - Remove from Glance View:
   - `Rainfall Totals & Typical Wetness`
   - `Temperature Variability`
@@ -141,11 +142,11 @@ Explicitly deferred:
 - Glance launches without `Rainfall Totals & Typical Wetness` and `Temperature Variability`.
 - `Heat Risk` reflects the updated tropical nights threshold.
 - `Heat Stress` and `Cold Risk` render with expanded metric sets and weighted scores.
-- `Drought Risk`, `Flood & Extreme Rainfall Risk`, and `Agriculture & Growing Conditions` render with their final approved bundle definitions after implementation.
+- `Drought Risk` and `Flood & Extreme Rainfall Risk` render with their final approved bundle definitions; agriculture now renders through `Agricultural Risk`.
 - Deep Dive remains intact for all remaining Glance bundles.
 
 ## Recommended Implementation Order
 
-1. Run rebuilds and validation for `Drought Risk`, `Flood & Extreme Rainfall Risk`, and `Agriculture & Growing Conditions`.
+1. Run rebuilds and validation for `Drought Risk`, `Flood & Extreme Rainfall Risk`, and the survivor `Agricultural Risk` bundle.
 2. Resolve any remaining readiness or coverage issues discovered during those rebuilds.
 3. Keep `Flood Depth Index` on the deferred to-do list.

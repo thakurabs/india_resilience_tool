@@ -124,10 +124,26 @@ def _write_district_geojson(path: Path) -> Path:
 def _write_district_geojson_with_lakshadweep(path: Path) -> Path:
     gdf = gpd.GeoDataFrame(
         {
-            "state_name": ["Lakshadweep-UT"],
+            "state_name": ["Lakshadweep"],
             "district_name": ["Lakshadweep"],
         },
         geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        crs="EPSG:4326",
+    )
+    gdf.to_file(path, driver="GeoJSON")
+    return path
+
+
+def _write_state_alias_geojson(path: Path) -> Path:
+    gdf = gpd.GeoDataFrame(
+        {
+            "state_name": ["Jammu & Kashmir", "Chhattisgarh"],
+            "district_name": ["Srinagar", "Raipur"],
+        },
+        geometry=[
+            Polygon([(0, 0), (1, 0), (1, 1), (0, 1)]),
+            Polygon([(1, 0), (2, 0), (2, 1), (1, 1)]),
+        ],
         crs="EPSG:4326",
     )
     gdf.to_file(path, driver="GeoJSON")
@@ -441,7 +457,7 @@ def test_build_groundwater_district_outputs_aggregates_lakshadweep_islands(
     assert outputs["source_df"].shape[0] == 1
     assert outputs["crosswalk_df"]["source_district"].tolist() == ["Lakshadweep"]
     master_row = outputs["master_df"].iloc[0]
-    assert master_row["state"] == "Lakshadweep-UT"
+    assert master_row["state"] == "Lakshadweep"
     assert master_row["district"] == "Lakshadweep"
     assert float(master_row[GROUNDWATER_EXTRACTABLE_RESOURCE_COL]) == pytest.approx(582.89)
     assert float(master_row[GROUNDWATER_TOTAL_EXTRACTION_COL]) == pytest.approx(336.85)
@@ -619,3 +635,135 @@ def test_build_groundwater_district_outputs_still_fails_on_non_bengaluru_conflic
             overwrite=True,
             dry_run=False,
         )
+
+
+def test_build_groundwater_district_outputs_matches_lgd_ampersand_state_names_exactly(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CGWB 'AND'-style states must resolve exactly onto LGD '&'-style canonical states."""
+    workbook_path = _write_groundwater_workbook(
+        tmp_path / "groundwater.xlsx",
+        [
+            {"B": "JAMMU AND KASHMIR", "C": "Srinagar", "D": "", "CP": 12288.16, "DF": 6947.93, "DJ": 56.54, "DR": 5340.23},
+            {"B": "CHHATTISGARH", "C": "RAIPUR", "D": "", "CP": 100.0, "DF": 50.0, "DJ": 50.0, "DR": 30.0},
+        ],
+    )
+    districts_path = _write_state_alias_geojson(tmp_path / "districts.geojson")
+    qa_dir = tmp_path / "groundwater"
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+
+    outputs = build_groundwater_district_outputs(
+        workbook_path=workbook_path,
+        districts_path=districts_path,
+        qa_dir=qa_dir,
+        alias_csv_path=tmp_path / "missing_aliases.csv",
+        overwrite=True,
+        dry_run=True,
+    )
+
+    crosswalk_df = outputs["crosswalk_df"]
+    assert crosswalk_df["match_method"].tolist() == ["exact", "exact"]
+    assert sorted(crosswalk_df["canonical_state"].tolist()) == ["Chhattisgarh", "Jammu & Kashmir"]
+    assert sorted(outputs["master_df"]["district"].tolist()) == ["Raipur", "Srinagar"]
+
+
+def test_build_groundwater_district_outputs_excludes_sentinel_rows_with_qa_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workbook_path = _write_groundwater_workbook(
+        tmp_path / "groundwater.xlsx",
+        [
+            {"B": "Bihar", "C": "Purnia", "D": "", "CP": 10.0, "DF": 5.0, "DJ": 50.0, "DR": 3.0},
+            {"B": "DELHI", "C": "NAZUL LAND", "D": "", "CP": 7.5, "DF": 2.5, "DJ": 33.3, "DR": 1.0},
+        ],
+    )
+    districts_path = _write_district_geojson(tmp_path / "districts.geojson")
+    qa_dir = tmp_path / "groundwater"
+    alias_csv = tmp_path / "groundwater_aliases.csv"
+    pd.DataFrame(
+        [
+            {
+                "source_state": "DELHI",
+                "source_district": "NAZUL LAND",
+                "canonical_state": "DELHI",
+                "canonical_district": "__EXCLUDE__",
+                "notes": "govt land category, no district counterpart",
+            },
+            {
+                "source_state": "DELHI",
+                "source_district": "GONE FROM WORKBOOK",
+                "canonical_state": "DELHI",
+                "canonical_district": "__EXCLUDE__",
+                "notes": "stale exclusion",
+            },
+        ]
+    ).to_csv(alias_csv, index=False)
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+
+    outputs = build_groundwater_district_outputs(
+        workbook_path=workbook_path,
+        districts_path=districts_path,
+        qa_dir=qa_dir,
+        alias_csv_path=alias_csv,
+        overwrite=True,
+        dry_run=False,
+    )
+
+    assert outputs["master_df"]["district"].tolist() == ["Purnia"]
+    assert "NAZUL LAND" not in outputs["crosswalk_df"]["source_district"].tolist()
+
+    excluded_df = pd.read_csv(qa_dir / "groundwater_excluded_sources.csv")
+    excluded = {row["source_district"]: bool(row["found_in_source"]) for _, row in excluded_df.iterrows()}
+    assert excluded == {"NAZUL LAND": True, "GONE FROM WORKBOOK": False}
+    assert excluded_df.loc[
+        excluded_df["source_district"].eq("NAZUL LAND"), "reason"
+    ].tolist() == ["govt land category, no district counterpart"]
+
+
+def test_build_groundwater_district_outputs_aggregates_declared_mp_child_districts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workbook_path = _write_groundwater_workbook(
+        tmp_path / "groundwater.xlsx",
+        [
+            {"B": "MADHYA PRADESH", "C": "SATNA", "D": "", "CP": 100.0, "DF": 50.0, "DJ": 50.0, "DR": 30.0},
+            {"B": "MADHYA PRADESH", "C": "MAIHAR", "D": "", "CP": 50.0, "DF": 25.0, "DJ": 50.0, "DR": 10.0},
+        ],
+    )
+    gdf = gpd.GeoDataFrame(
+        {
+            "state_name": ["Madhya Pradesh"],
+            "district_name": ["Satna"],
+        },
+        geometry=[Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])],
+        crs="EPSG:4326",
+    )
+    districts_path = tmp_path / "districts.geojson"
+    gdf.to_file(districts_path, driver="GeoJSON")
+    qa_dir = tmp_path / "groundwater"
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path))
+
+    outputs = build_groundwater_district_outputs(
+        workbook_path=workbook_path,
+        districts_path=districts_path,
+        qa_dir=qa_dir,
+        alias_csv_path=tmp_path / "missing_aliases.csv",
+        overwrite=True,
+        dry_run=False,
+    )
+
+    assert outputs["source_df"].shape[0] == 1
+    master_row = outputs["master_df"].iloc[0]
+    assert master_row["district"] == "Satna"
+    assert float(master_row[GROUNDWATER_EXTRACTABLE_RESOURCE_COL]) == pytest.approx(150.0)
+    assert float(master_row[GROUNDWATER_TOTAL_EXTRACTION_COL]) == pytest.approx(75.0)
+    assert float(master_row[GROUNDWATER_FUTURE_AVAILABILITY_COL]) == pytest.approx(40.0)
+    assert float(master_row[GROUNDWATER_STAGE_COL]) == pytest.approx(50.0)
+
+    aggregation_df = pd.read_csv(qa_dir / "groundwater_source_aggregations.csv")
+    assert aggregation_df["aggregation_rule"].tolist() == ["mp_maihar_into_satna"]
+    assert aggregation_df["source_districts"].tolist() == ["MAIHAR|SATNA"]
+    assert aggregation_df["aggregated_source_district"].tolist() == ["SATNA"]

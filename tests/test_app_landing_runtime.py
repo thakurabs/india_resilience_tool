@@ -8,55 +8,27 @@ import pytest
 from shapely.geometry import Polygon
 
 import india_resilience_tool.app.landing_runtime as landing_runtime
-from india_resilience_tool.analysis.bundle_scores import BundleMetricSpec
 from india_resilience_tool.app.landing_runtime import (
-    LandingMetricContext,
     _apply_landing_map_click,
-    _assemble_bundle_context,
-    _bundle_metric_specs,
     _build_landing_search_options,
     _landing_bundle_domains,
     _sanitize_landing_context,
-    _intersect_bundle_scenario_period_pairs,
     apply_landing_back,
     build_deep_dive_handoff,
     build_glance_handoff_from_deep_dive,
     ensure_landing_state,
     set_landing_focus_district,
     set_landing_focus_india,
+    set_landing_focus_block,
     set_landing_focus_state,
     sync_landing_widget_state,
 )
 
-def _metric_context(
-    slug: str,
-    *,
-    pairs: tuple[tuple[str, str], ...],
-    weight: float = 1.0,
-    higher_is_worse: bool = True,
-    column: str | None = None,
-    label: str | None = None,
-    source_signature: tuple[tuple[str, float | None], ...] = (),
-    source_paths: tuple[str, ...] = (),
-) -> LandingMetricContext:
-    return LandingMetricContext(
-        spec=BundleMetricSpec(
-            slug=slug,
-            label=label or slug,
-            column=column or slug,
-            weight=weight,
-            higher_is_worse=higher_is_worse,
-        ),
-        source_signature=source_signature,
-        source_paths=source_paths,
-        available_pairs=pairs,
-    )
-
 @pytest.fixture(autouse=True)
 def _clear_landing_runtime_caches() -> None:
-    landing_runtime._prepare_bundle_context_cached.clear()
+    landing_runtime._load_glance_artifact_cached.clear()
     yield
-    landing_runtime._prepare_bundle_context_cached.clear()
+    landing_runtime._load_glance_artifact_cached.clear()
 
 def _adm1_gdf() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(
@@ -86,6 +58,77 @@ def _adm2_gdf() -> gpd.GeoDataFrame:
         crs="EPSG:4326",
     )
 
+
+def _adm3_by_district() -> dict[str, dict]:
+    gdf = gpd.GeoDataFrame(
+        {
+            "state_name": ["Telangana", "Telangana"],
+            "district_name": ["Nalgonda", "Nalgonda"],
+            "block_name": ["Chityal", "Narketpalle"],
+            "__bkey": ["telangana|nalgonda|chityal", "telangana|nalgonda|narketpalle"],
+            "geometry": [
+                Polygon([(0, 0), (1, 0), (1, 2), (0, 2)]),
+                Polygon([(1, 0), (2, 0), (2, 2), (1, 2)]),
+            ],
+        },
+        geometry="geometry",
+        crs="EPSG:4326",
+    )
+    return {
+        "telangana|nalgonda": {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "state_name": row["state_name"],
+                        "district_name": row["district_name"],
+                        "block_name": row["block_name"],
+                        "__bkey": row["__bkey"],
+                    },
+                    "geometry": row["geometry"].__geo_interface__,
+                }
+                for _, row in gdf.iterrows()
+            ],
+        }
+    }
+
+
+def _block_scores() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "state_name": ["Telangana", "Telangana"],
+            "district_name": ["Nalgonda", "Nalgonda"],
+            "block_name": ["Chityal", "Narketpalle"],
+            "__state_key": ["telangana", "telangana"],
+            "__district_key": ["telangana|nalgonda", "telangana|nalgonda"],
+            "__block_key": ["telangana|nalgonda|chityal", "telangana|nalgonda|narketpalle"],
+            "bundle_score": [91.0, 62.0],
+            "bundle_score_display": ["91.0", "62.0"],
+            "score_band": ["Extreme", "Moderate"],
+            "block_rank_within_district": [1, 2],
+            "block_count_within_district": [2, 2],
+            "block_rank_within_state": [3, 8],
+            "block_count_within_state": [10, 10],
+            "district_bundle_score_display": ["80.0", "80.0"],
+        }
+    )
+
+
+def _district_ranking_scores() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "state_name": ["Telangana", "Telangana", "Telangana"],
+            "district_name": ["Nizamabad", "Kamareddy", "Bhadradri Kothagudem"],
+            "bundle_score": [74.9, 74.5, 70.1],
+            "bundle_score_display": ["74.9", "74.5", "70.1"],
+            "score_band": ["High", "High", "Moderate"],
+            "district_rank": [1, 2, 3],
+            "district_count": [33, 33, 33],
+        }
+    )
+
+
 class _DummyContext:
     def __enter__(self) -> "_DummyContext":
         return self
@@ -102,8 +145,12 @@ class _DummyStreamlit:
         self.rerun_calls = 0
         self.captions: list[str] = []
         self.dataframes: list[pd.DataFrame] = []
+        self.markdowns: list[str] = []
+        self.text_areas: list[str] = []
 
     def columns(self, spec) -> list[_DummyContext]:
+        if isinstance(spec, int):
+            return [_DummyContext() for _ in range(spec)]
         return [_DummyContext() for _ in spec]
 
     def expander(self, *args, **kwargs) -> _DummyContext:
@@ -127,10 +174,22 @@ class _DummyStreamlit:
             self.session_state[key] = options[0] if options else None
         return self.session_state.get(key) if key is not None else (options[0] if options else None)
 
+    def multiselect(self, _label, options, default=None, key=None, **kwargs):
+        selected = list(default or [])
+        if key is not None:
+            self.session_state[key] = selected
+        return selected
+
     def button(self, *args, **kwargs) -> bool:
         return False
 
     def text_input(self, *args, value=None, **kwargs):
+        return value
+
+    def text_area(self, *args, value=None, key=None, **kwargs):
+        if key is not None:
+            self.session_state[key] = value
+        self.text_areas.append(str(value or ""))
         return value
 
     def rerun(self) -> None:
@@ -141,6 +200,8 @@ class _DummyStreamlit:
         return None
 
     def markdown(self, *args, **kwargs) -> None:
+        if args:
+            self.markdowns.append(str(args[0]))
         return None
 
     def caption(self, *args, **kwargs) -> None:
@@ -170,20 +231,52 @@ class _DummyStreamlit:
         self.dataframes.append(data.copy() if isinstance(data, pd.DataFrame) else data)
         return None
 
+    def download_button(self, *args, **kwargs) -> bool:
+        return False
+
 
 def _driver_context(
     district_scores: pd.DataFrame,
     *,
-    metric_specs: list[BundleMetricSpec],
+    metric_specs: list[object] | None = None,
     available: bool = True,
     reason: str | None = None,
 ) -> landing_runtime.LandingDriverContext:
     return landing_runtime.LandingDriverContext(
         district_scores=district_scores,
-        metric_specs=metric_specs,
+        metric_specs=list(metric_specs or []),
         available=available,
         reason=reason,
     )
+
+
+def _write_glance_pair(
+    tmp_path: Path,
+    *,
+    bundle_slug: str = "composite_heat_risk",
+    scenario: str = "ssp585",
+    period: str = "2040-2060",
+    district: pd.DataFrame | None = None,
+    state: pd.DataFrame | None = None,
+    drivers: pd.DataFrame | None = None,
+    attributes: pd.DataFrame | None = None,
+    distributions: pd.DataFrame | None = None,
+    block: pd.DataFrame | None = None,
+) -> None:
+    root = landing_runtime.optimized_glance_root(
+        bundle_slug,
+        scenario=scenario,
+        period=period,
+        data_dir=tmp_path,
+    )
+    root.mkdir(parents=True, exist_ok=True)
+    (district if district is not None else pd.DataFrame()).to_parquet(root / "district.parquet", index=False)
+    (state if state is not None else pd.DataFrame()).to_parquet(root / "state.parquet", index=False)
+    (drivers if drivers is not None else pd.DataFrame()).to_parquet(root / "drivers.parquet", index=False)
+    (attributes if attributes is not None else pd.DataFrame()).to_parquet(root / "attributes.parquet", index=False)
+    (distributions if distributions is not None else pd.DataFrame()).to_parquet(root / "distributions.parquet", index=False)
+    if block is not None:
+        block.to_parquet(root / "block.parquet", index=False)
 
 def test_ensure_landing_state_sets_frozen_defaults() -> None:
     session_state: dict[str, object] = {}
@@ -197,6 +290,7 @@ def test_ensure_landing_state_sets_frozen_defaults() -> None:
     assert session_state["landing_focus_level"] == "india"
     assert session_state["landing_selected_state"] is None
     assert session_state["landing_selected_district"] is None
+    assert session_state["landing_selected_block"] is None
     assert session_state["landing_tab"] == "Rankings"
     assert session_state["landing_search_selection"] is None
     assert session_state["landing_search_last_applied"] is None
@@ -204,15 +298,36 @@ def test_ensure_landing_state_sets_frozen_defaults() -> None:
     assert session_state[landing_runtime.LANDING_MAP_CONTEXT_KEY] is None
     assert session_state[landing_runtime.LANDING_MAP_INPUT_ARMED_KEY] is False
 
-def test_landing_bundle_domains_exclude_jrc_flood_bundle() -> None:
-    assert _landing_bundle_domains() == [
+def test_landing_bundle_domains_exclude_jrc_flood_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        landing_runtime,
+        "_glance_scenario_period_options",
+        lambda bundle_domain, *, data_dir: (("ssp585", "2040-2060"),),
+    )
+    assert _landing_bundle_domains(data_dir=Path("/tmp")) == [
         "Heat Risk",
         "Drought Risk",
-        "Flood & Extreme Rainfall Risk",
+        "Extreme Rainfall | Flash Flood Risk",
+        "Riverine Flood",
+        "Water Risk",
         "Heat Stress",
         "Cold Risk",
-        "Agriculture & Growing Conditions",
+        "Agricultural Risk",
+        "Health Risk",
+        "Industrial Risk",
+        "Investment / Financial Risk",
+        "Infrastructure Risk",
+        "Asset Risk (Thermal Power Plants)",
+        "Asset Risk (Hydropower Plants)",
+        "Life & Livelihood Loss Risk",
     ]
+
+
+def test_landing_bundle_display_uses_exact_grouped_label() -> None:
+    assert landing_runtime._landing_bundle_display("Extreme Rainfall | Flash Flood Risk") == (
+        "Thematic - Extreme Rainfall | Flash Flood Risk"
+    )
+    assert landing_runtime._landing_bundle_display("Health Risk") == "Sector-wise - Health Risk"
 
 def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp_path: Path) -> None:
     session_state: dict[str, object] = {
@@ -221,6 +336,11 @@ def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp
         "landing_period": "2040-2060",
     }
 
+    monkeypatch.setattr(
+        landing_runtime,
+        "_landing_bundle_domains",
+        lambda *, data_dir: ["Heat Risk", "Health Risk"],
+    )
     monkeypatch.setattr(
         landing_runtime,
         "_bundle_scenario_period_options",
@@ -233,57 +353,26 @@ def test_sanitize_landing_context_falls_back_from_hidden_bundle(monkeypatch, tmp
     assert session_state["landing_scenario"] == "ssp585"
     assert session_state["landing_period"] == "2040-2060"
 
-def test_bundle_metric_specs_use_custom_heat_risk_weights() -> None:
-    specs = _bundle_metric_specs("Heat Risk")
-    by_slug = {spec.slug: spec for spec in specs}
-
-    assert by_slug["tasmin_tropical_nights_gt25"].weight == 0.2 / 3.0
-    assert by_slug["hwfi_tmean_90p"].weight == 0.15 / 2.0
-
-def test_bundle_metric_specs_use_custom_heat_stress_weights() -> None:
-    specs = _bundle_metric_specs("Heat Stress")
-    by_slug = {spec.slug: spec for spec in specs}
-
-    assert len(specs) == 11
-    assert by_slug["twb_summer_mean"].weight == 0.20 / 2.0
-    assert by_slug["wbd_gt3_le6"].weight == 0.15 / 2.0
-    assert by_slug["twb_days_ge_28"].weight == 0.25 / 3.0
-    assert "wbd_le_6" not in by_slug
-
-def test_bundle_metric_specs_use_custom_cold_risk_weights() -> None:
-    specs = _bundle_metric_specs("Cold Risk")
-    by_slug = {spec.slug: spec for spec in specs}
-
-    assert len(specs) == 11
-    assert by_slug["tasmin_winter_min"].weight == 0.20 / 2.0
-    assert by_slug["tnle10_cold_nights"].weight == 0.25 / 3.0
-    assert by_slug["tnle10_consecutive_cold_nights"].weight == 0.20 / 2.0
-    assert "fd_frost_days" not in by_slug
-    assert "tnlt2_cold_nights" not in by_slug
-
-def test_bundle_metric_specs_use_custom_drought_risk_weights() -> None:
-    specs = _bundle_metric_specs("Drought Risk")
-    by_slug = {spec.slug: spec for spec in specs}
-
-    assert len(specs) == 3
-    assert by_slug["spi3_count_events_lt_minus1"].weight == 0.20
-    assert by_slug["spi6_count_events_lt_minus1"].weight == 0.30
-    assert by_slug["spi12_count_events_lt_minus1"].weight == 0.50
-
-def test_bundle_metric_specs_use_custom_jrc_flood_weights_only() -> None:
-    specs = _bundle_metric_specs("Flood Inundation Depth (JRC)")
-
-    assert [spec.slug for spec in specs] == ["jrc_flood_depth_index_rp100"]
-    assert specs[0].weight == 1.0
-
-
 def test_build_landing_map_artifacts_keeps_bundle_score_legend_for_jrc_bundle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from india_resilience_tool.viz.colors import build_vertical_binned_legend_block_html
+
+    legend_calls: list[dict[str, object]] = []
+
     monkeypatch.setattr(
         landing_runtime,
         "build_choropleth_map_with_geojson_layer",
         lambda **kwargs: {"tooltip": kwargs["tooltip"]},
+    )
+    def _record_legend_call(**kwargs):
+        legend_calls.append(kwargs)
+        return build_vertical_binned_legend_block_html(**kwargs)
+
+    monkeypatch.setattr(
+        landing_runtime,
+        "build_vertical_binned_legend_block_html",
+        _record_legend_call,
     )
 
     state_scores = pd.DataFrame(
@@ -312,7 +401,7 @@ def test_build_landing_map_artifacts_keeps_bundle_score_legend_for_jrc_bundle(
         adm2=_adm2_gdf(),
         state_scores=state_scores,
         district_scores=district_scores,
-        bundle_domain="Flood Inundation Depth (JRC)",
+        bundle_domain="Riverine Flood",
         scenario="snapshot",
         period="Current",
         focus_level="india",
@@ -323,29 +412,76 @@ def test_build_landing_map_artifacts_keeps_bundle_score_legend_for_jrc_bundle(
     assert legend_html is not None
     assert "Bundle score" in legend_html
 
-def test_bundle_metric_specs_use_custom_flood_weights() -> None:
-    specs = _bundle_metric_specs("Flood & Extreme Rainfall Risk")
-    by_slug = {spec.slug: spec for spec in specs}
+    # Visual parity with the main map (CHG-0280): the landing map must use the
+    # composite ramp at the shared class count, not its own YlOrRd/15 scale.
+    # Legend presence alone never caught the mismatch.
+    from india_resilience_tool.viz.colors import (
+        DEFAULT_CHOROPLETH_NLEVELS,
+        IRT_COMPOSITE_CMAP,
+        get_binned_cmap_hex_list,
+    )
 
-    assert len(specs) == 6
-    assert by_slug["pr_max_1day_precip"].weight == 0.25 / 2.0
-    assert by_slug["r20mm_very_heavy_precip_days"].weight == 0.25
-    assert by_slug["cwd_consecutive_wet_days"].weight == 0.25
+    composite_palette = get_binned_cmap_hex_list(
+        IRT_COMPOSITE_CMAP, nlevels=DEFAULT_CHOROPLETH_NLEVELS
+    )
+    assert legend_calls
+    assert legend_calls[-1]["nlevels"] == DEFAULT_CHOROPLETH_NLEVELS
+    assert legend_calls[-1]["nticks"] == DEFAULT_CHOROPLETH_NLEVELS + 1
+    for color in composite_palette:
+        assert color in legend_html, f"landing legend missing composite class {color}"
+    for stale in get_binned_cmap_hex_list("YlOrRd", nlevels=15):
+        if stale not in composite_palette:
+            assert stale not in legend_html
 
-def test_bundle_metric_specs_use_custom_agriculture_weights() -> None:
-    specs = _bundle_metric_specs("Agriculture & Growing Conditions")
-    by_slug = {spec.slug: spec for spec in specs}
 
-    assert len(specs) == 9
-    assert by_slug["gsl_growing_season"].weight == 0.20
-    assert by_slug["prcptot_annual_total"].weight == 0.20 / 2.0
-    assert by_slug["dtr_daily_temp_range"].weight == 0.20
+def test_build_block_map_frame_merges_scores_and_sorts_blocks() -> None:
+    frame = landing_runtime._build_block_map_frame(
+        _adm3_by_district(),
+        _block_scores().iloc[::-1].reset_index(drop=True),
+        selected_state="Telangana",
+        selected_district="Nalgonda",
+    )
 
-def test_bundle_metric_specs_default_to_equal_weights_without_custom_config() -> None:
-    specs = _bundle_metric_specs("Rainfall Totals & Typical Wetness")
+    assert frame["__block_key"].tolist() == [
+        "telangana|nalgonda|chityal",
+        "telangana|nalgonda|narketpalle",
+    ]
+    assert frame["bundle_score_display"].tolist() == ["91.0", "62.0"]
 
-    assert specs
-    assert all(spec.weight == 1.0 for spec in specs)
+
+def test_build_landing_map_artifacts_supports_block_focus_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_build_map(**kwargs):
+        captured.update(kwargs)
+        return {"layer": kwargs["layer_name"]}
+
+    monkeypatch.setattr(landing_runtime, "build_choropleth_map_with_geojson_layer", fake_build_map)
+
+    _map, legend_html, label, frame = landing_runtime._build_landing_map_artifacts(
+        adm1=_adm1_gdf(),
+        adm2=_adm2_gdf(),
+        adm3_by_district=_adm3_by_district(),
+        state_scores=pd.DataFrame(),
+        district_scores=pd.DataFrame(),
+        block_scores=_block_scores(),
+        bundle_domain="Heat Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="block",
+        selected_state="Telangana",
+        selected_district="Nalgonda",
+        selected_block="Chityal",
+    )
+
+    assert captured["layer_name"] == "Blocks"
+    assert captured["reference_level"] == "block"
+    assert captured["reference_layer_name"] == "Selected block"
+    assert frame["block_name"].tolist() == ["Chityal", "Narketpalle"]
+    assert legend_html is not None
+    assert "Block-level" in label
 
 def test_sync_landing_widget_state_updates_scenario_period_pair() -> None:
     session_state: dict[str, object] = {
@@ -367,27 +503,44 @@ def test_landing_focus_transitions_cover_india_state_district_back_reset() -> No
     assert session_state["landing_focus_level"] == "state"
     assert session_state["landing_selected_state"] == "Telangana"
     assert session_state["landing_selected_district"] is None
+    assert session_state["landing_selected_block"] is None
 
     set_landing_focus_district(session_state, "Telangana", "Nalgonda")
     assert session_state["landing_focus_level"] == "district"
     assert session_state["landing_selected_state"] == "Telangana"
     assert session_state["landing_selected_district"] == "Nalgonda"
+    assert session_state["landing_selected_block"] is None
+
+    set_landing_focus_block(session_state, "Telangana", "Nalgonda", "Chityal")
+    assert session_state["landing_focus_level"] == "block"
+    assert session_state["landing_selected_state"] == "Telangana"
+    assert session_state["landing_selected_district"] == "Nalgonda"
+    assert session_state["landing_selected_block"] == "Chityal"
+
+    apply_landing_back(session_state)
+    assert session_state["landing_focus_level"] == "district"
+    assert session_state["landing_selected_state"] == "Telangana"
+    assert session_state["landing_selected_district"] == "Nalgonda"
+    assert session_state["landing_selected_block"] is None
 
     apply_landing_back(session_state)
     assert session_state["landing_focus_level"] == "state"
     assert session_state["landing_selected_state"] == "Telangana"
     assert session_state["landing_selected_district"] is None
+    assert session_state["landing_selected_block"] is None
 
     apply_landing_back(session_state)
     assert session_state["landing_focus_level"] == "india"
     assert session_state["landing_selected_state"] is None
     assert session_state["landing_selected_district"] is None
+    assert session_state["landing_selected_block"] is None
 
     set_landing_focus_district(session_state, "Telangana", "Nalgonda")
     set_landing_focus_india(session_state)
     assert session_state["landing_focus_level"] == "india"
     assert session_state["landing_selected_state"] is None
     assert session_state["landing_selected_district"] is None
+    assert session_state["landing_selected_block"] is None
 
 def test_apply_landing_search_selection_updates_focus_without_bundle_notice_dependency() -> None:
     session_state: dict[str, object] = {
@@ -481,6 +634,7 @@ def test_queue_landing_map_transition_preserves_valid_focus_actions() -> None:
         "state",
         "telangana",
         "",
+        "",
     )
 
     assert queued_district is True
@@ -491,6 +645,7 @@ def test_queue_landing_map_transition_preserves_valid_focus_actions() -> None:
         "district",
         "telangana",
         "hyderabad",
+        "",
     )
 
 def test_identical_landing_click_is_allowed_again_after_pending_transition_is_consumed() -> None:
@@ -545,7 +700,7 @@ def test_replayed_india_click_noop_does_not_recreate_pending_transition() -> Non
         selected_state="Telangana",
         selected_district=None,
     )
-    click_action, next_state, next_district = _apply_landing_map_click(
+    click_action, next_state, next_district, next_block = _apply_landing_map_click(
         focus_level="state",
         returned=replayed_payload,
         clicked_state="Telangana",
@@ -561,6 +716,7 @@ def test_replayed_india_click_noop_does_not_recreate_pending_transition() -> Non
         action=click_action,
         state_name=next_state,
         district_name=next_district,
+        block_name=next_block,
     )
 
     assert queued is True
@@ -568,6 +724,7 @@ def test_replayed_india_click_noop_does_not_recreate_pending_transition() -> Non
     assert click_action == "noop"
     assert next_state is None
     assert next_district is None
+    assert next_block is None
     assert replay_queued is False
     assert landing_runtime.LANDING_PENDING_MAP_TRANSITION_KEY not in session_state
 
@@ -714,12 +871,7 @@ def test_render_landing_page_ignores_stale_payloads_until_first_empty_then_accep
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
     monkeypatch.setattr(landing_runtime, "_sanitize_landing_context", lambda *args, **kwargs: None)
-    monkeypatch.setattr(landing_runtime, "_collect_bundle_metric_contexts", lambda *args, **kwargs: [])
-    monkeypatch.setattr(
-        landing_runtime,
-        "_intersect_bundle_scenario_period_pairs",
-        lambda metric_contexts: [("ssp245", "2020-2040")],
-    )
+    monkeypatch.setattr(landing_runtime, "_landing_bundle_domains", lambda *, data_dir: ["Heat Risk", "Health Risk"])
     monkeypatch.setattr(
         landing_runtime,
         "_prepare_bundle_context",
@@ -831,6 +983,43 @@ def test_build_deep_dive_handoff_preserves_bundle_and_geography_context() -> Non
     assert handoff["selected_district"] == "Nalgonda"
     assert handoff["map_mode"] == "Absolute value"
 
+
+def test_build_deep_dive_handoff_uses_block_only_when_selected() -> None:
+    handoff = build_deep_dive_handoff(
+        {
+            "landing_bundle": "Heat Risk",
+            "landing_scenario": "ssp585",
+            "landing_period": "2040-2060",
+            "landing_focus_level": "block",
+            "landing_selected_state": "Telangana",
+            "landing_selected_district": "Nalgonda",
+            "landing_selected_block": "Chityal",
+        },
+        bundle_domain="Heat Risk",
+        metric_slug="tas_annual_mean",
+    )
+
+    assert handoff["admin_level"] == "block"
+    assert handoff["analysis_mode"] == "Single block focus"
+    assert handoff["selected_state"] == "Telangana"
+    assert handoff["selected_district"] == "Nalgonda"
+    assert handoff["selected_block"] == "Chityal"
+
+    district_handoff = build_deep_dive_handoff(
+        {
+            "landing_focus_level": "block",
+            "landing_selected_state": "Telangana",
+            "landing_selected_district": "Nalgonda",
+            "landing_selected_block": None,
+        },
+        bundle_domain="Heat Risk",
+        metric_slug="tas_annual_mean",
+    )
+
+    assert district_handoff["admin_level"] == "district"
+    assert district_handoff["selected_district"] == "Nalgonda"
+    assert district_handoff["selected_block"] == "All"
+
 def test_build_deep_dive_handoff_requires_non_empty_metric_slug() -> None:
     with pytest.raises(ValueError, match="metric_slug"):
         build_deep_dive_handoff(
@@ -860,25 +1049,190 @@ def test_enter_deep_dive_uses_persisted_composite_metric_for_visible_bundle(monk
     assert session_state["registry_metric"] == "composite_heat_stress"
 
 
+def test_enter_deep_dive_uses_persisted_composite_for_riverine_flood(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Riverine Flood",
+        "landing_scenario": "snapshot",
+        "landing_period": "Current",
+        "landing_focus_level": "district",
+        "landing_selected_state": "Telangana",
+        "landing_selected_district": "Khammam",
+    }
+
+    monkeypatch.setattr(landing_runtime.st, "rerun", lambda: (_ for _ in ()).throw(_DummyRerun()))
+
+    with pytest.raises(_DummyRerun):
+        landing_runtime._enter_deep_dive(session_state)
+
+    assert session_state["selected_bundle"] == "Riverine Flood"
+    assert session_state["selected_var"] == "composite_flood_jrc_depth"
+    assert session_state["registry_metric"] == "composite_flood_jrc_depth"
+    assert session_state["sel_scenario"] == "snapshot"
+    assert session_state["sel_period"] == "Current"
+    # CHG-0273: Riverine Flood was re-homed from Bio-physical into Climate Hazards.
+    assert session_state["selected_pillar"] == "Climate Hazards"
+
+
+def test_enter_deep_dive_uses_sector_wise_composite_metric(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {
+        "landing_bundle": "Health Risk",
+        "landing_scenario": "ssp585",
+        "landing_period": "2040-2060",
+        "landing_focus_level": "district",
+        "landing_selected_state": "Telangana",
+        "landing_selected_district": "Nalgonda",
+    }
+
+    monkeypatch.setattr(landing_runtime.st, "rerun", lambda: (_ for _ in ()).throw(_DummyRerun()))
+
+    with pytest.raises(_DummyRerun):
+        landing_runtime._enter_deep_dive(session_state)
+
+    assert session_state["selected_bundle"] == "Health Risk"
+    assert session_state["selected_var"] == "composite_health_risk"
+    assert session_state["registry_metric"] == "composite_health_risk"
+
+
+def test_prepare_driver_context_uses_proposal_rule_scores_for_sector_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _ = monkeypatch
+    _write_glance_pair(
+        tmp_path,
+        bundle_slug="composite_health_risk",
+        drivers=pd.DataFrame(
+            {
+                "scope_level": ["state", "district"],
+                "state_name": ["Telangana", "Telangana"],
+                "district_name": [None, "Nalgonda"],
+                "__state_key": ["telangana", "telangana"],
+                "__district_key": [None, "telangana|nalgonda"],
+                "driver_rank": [1, 1],
+                "driver_slug": ["txx_ge_45", "txx_ge_45"],
+                "driver_label": ["Extreme daytime heat pressure", "Extreme daytime heat pressure"],
+                "driver_score": [62.5, 100.0],
+                "driver_score_display": ["62.5", "100.0"],
+                "driver_source": ["proposal_rule_score", "proposal_rule_score"],
+            }
+        ),
+    )
+
+    context = landing_runtime._prepare_driver_context(
+        "Health Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert context.available is True
+    assert context.reason is None
+    assert context.metric_specs == []
+    assert context.district_scores["driver_label"].tolist() == [
+        "Extreme daytime heat pressure",
+        "Extreme daytime heat pressure",
+    ]
+
+
+def test_prepare_driver_context_sector_bundle_missing_proposal_spec_returns_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = monkeypatch
+
+    context = landing_runtime._prepare_driver_context(
+        "Missing Sector Bundle",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert context.available is False
+    assert context.reason == "empty_driver_artifact"
+
+
+def test_prepare_driver_context_sector_bundle_pair_unsupported_when_only_composite_mean_exists(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = monkeypatch
+
+    context = landing_runtime._prepare_driver_context(
+        "Health Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert context.available is False
+    assert context.reason == "empty_driver_artifact"
+
+
+def test_prepare_driver_context_sector_bundle_keeps_available_rules_when_some_rule_scores_are_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = monkeypatch
+    _write_glance_pair(
+        tmp_path,
+        bundle_slug="composite_health_risk",
+        drivers=pd.DataFrame(
+            {
+                "scope_level": ["district"],
+                "state_name": ["Telangana"],
+                "district_name": ["Nalgonda"],
+                "__state_key": ["telangana"],
+                "__district_key": ["telangana|nalgonda"],
+                "driver_rank": [1],
+                "driver_slug": ["txx_ge_45"],
+                "driver_label": ["Extreme daytime heat pressure"],
+                "driver_score": [100.0],
+                "driver_score_display": ["100.0"],
+                "driver_source": ["proposal_rule_score"],
+            }
+        ),
+    )
+
+    context = landing_runtime._prepare_driver_context(
+        "Health Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        stat="mean",
+        data_dir=tmp_path,
+    )
+
+    assert context.available is True
+    assert context.district_scores["driver_label"].tolist() == ["Extreme daytime heat pressure"]
+
+
+def test_landing_driver_heading_uses_top_rule_signals_for_sector_bundle() -> None:
+    assert landing_runtime._landing_driver_heading("Health Risk") == "Top Rule Signals"
+
+
+def test_landing_driver_heading_uses_metric_drivers_for_thematic_bundle() -> None:
+    assert landing_runtime._landing_driver_heading("Heat Risk") == "Metric Drivers"
+
+
 def test_prepare_bundle_context_reads_persisted_composite_metric(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(
-        landing_runtime,
-        "_resolve_metric_master_sources",
-        lambda metric_slug, *, data_dir: (Path("/tmp") / f"{metric_slug}.csv",),
-    )
-    monkeypatch.setattr(
-        landing_runtime,
-        "_load_metric_scenario_period_pairs_cached",
-        lambda metric_slug, source_signature, source_paths: (("ssp585", "2040-2060"),),
-    )
-    monkeypatch.setattr(
-        landing_runtime,
-        "_load_metric_district_values_cached",
-        lambda metric_slug, scenario, period, stat, source_signature, source_paths: pd.DataFrame(
+    _ = monkeypatch
+    _write_glance_pair(
+        tmp_path,
+        district=pd.DataFrame(
             {
                 "state_name": ["Telangana", "Telangana"],
                 "district_name": ["A", "B"],
-                "raw_metric_value": [20.0, 80.0],
+                "__state_key": ["telangana", "telangana"],
+                "__district_key": ["telangana|a", "telangana|b"],
+                "bundle_score": [20.0, 80.0],
+                "bundle_score_display": ["20.0", "80.0"],
+            }
+        ),
+        state=pd.DataFrame(
+            {
+                "state_name": ["Telangana"],
+                "__state_key": ["telangana"],
+                "bundle_score": [50.0],
+                "bundle_score_display": ["50.0"],
             }
         ),
     )
@@ -893,6 +1247,52 @@ def test_prepare_bundle_context_reads_persisted_composite_metric(monkeypatch: py
 
     assert district_scores["bundle_score"].tolist() == [20.0, 80.0]
     assert state_scores["bundle_score"].tolist() == [50.0]
+
+
+def test_glance_pair_loader_does_not_call_runtime_bundle_scoring(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import india_resilience_tool.analysis.bundle_scores as bundle_scores
+
+    def fail_scoring(*_args, **_kwargs):
+        raise AssertionError("compute_bundle_score_frame called during Glance render")
+
+    monkeypatch.setattr(bundle_scores, "compute_bundle_score_frame", fail_scoring)
+    _write_glance_pair(
+        tmp_path,
+        district=pd.DataFrame({"state_name": ["Telangana"], "district_name": ["A"], "bundle_score": [42.0]}),
+        state=pd.DataFrame({"state_name": ["Telangana"], "bundle_score": [42.0]}),
+    )
+
+    context = landing_runtime._load_glance_pair_context(
+        "Heat Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        data_dir=tmp_path,
+    )
+
+    assert context.district["bundle_score"].tolist() == [42.0]
+    assert context.block is None
+
+
+def test_glance_pair_loader_optionally_loads_block_artifact(tmp_path: Path) -> None:
+    _write_glance_pair(
+        tmp_path,
+        district=pd.DataFrame({"state_name": ["Telangana"], "district_name": ["Nalgonda"], "bundle_score": [80.0]}),
+        state=pd.DataFrame({"state_name": ["Telangana"], "bundle_score": [80.0]}),
+        block=_block_scores(),
+    )
+
+    context = landing_runtime._load_glance_pair_context(
+        "Heat Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        data_dir=tmp_path,
+    )
+
+    assert context.block is not None
+    assert context.block["block_name"].tolist() == ["Chityal", "Narketpalle"]
 
 
 def test_render_landing_page_passes_composite_scores_and_component_driver_context_to_state_summary(
@@ -934,11 +1334,11 @@ def test_render_landing_page_passes_composite_scores_and_component_driver_contex
     )
     driver_context = _driver_context(
         component_district_scores,
-        metric_specs=[BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a")],
     )
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
     monkeypatch.setattr(landing_runtime, "_sanitize_landing_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_landing_bundle_domains", lambda *, data_dir: ["Heat Risk", "Health Risk"])
     monkeypatch.setattr(landing_runtime, "_bundle_scenario_period_options", lambda *args, **kwargs: [("ssp585", "2040-2060")])
     monkeypatch.setattr(landing_runtime, "_prepare_bundle_context", lambda *args, **kwargs: (composite_district_scores, composite_state_scores))
     monkeypatch.setattr(landing_runtime, "_prepare_driver_context", lambda *args, **kwargs: driver_context)
@@ -960,6 +1360,7 @@ def test_render_landing_page_passes_composite_scores_and_component_driver_contex
     assert captured["district_scores"] is composite_district_scores
     assert captured["state_scores"] is composite_state_scores
     assert captured["driver_context"] is driver_context
+    assert captured["bundle_domain"] == "Heat Risk"
     assert captured["state_name"] == "Telangana"
 
 
@@ -997,11 +1398,11 @@ def test_render_landing_page_passes_composite_scores_and_component_driver_contex
     )
     driver_context = _driver_context(
         component_district_scores,
-        metric_specs=[BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a")],
     )
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
     monkeypatch.setattr(landing_runtime, "_sanitize_landing_context", lambda *args, **kwargs: None)
+    monkeypatch.setattr(landing_runtime, "_landing_bundle_domains", lambda *, data_dir: ["Heat Risk", "Health Risk"])
     monkeypatch.setattr(landing_runtime, "_bundle_scenario_period_options", lambda *args, **kwargs: [("ssp585", "2040-2060")])
     monkeypatch.setattr(landing_runtime, "_prepare_bundle_context", lambda *args, **kwargs: (composite_district_scores, composite_state_scores))
     monkeypatch.setattr(landing_runtime, "_prepare_driver_context", lambda *args, **kwargs: driver_context)
@@ -1022,6 +1423,7 @@ def test_render_landing_page_passes_composite_scores_and_component_driver_contex
 
     assert captured["district_scores"] is composite_district_scores
     assert captured["driver_context"] is driver_context
+    assert captured["bundle_domain"] == "Heat Risk"
     assert captured["state_name"] == "Telangana"
     assert captured["district_name"] == "Nalgonda"
 
@@ -1048,25 +1450,27 @@ def test_state_driver_scope_uses_selected_state_only_with_partial_component_cove
     )
     driver_scores = pd.DataFrame(
         {
+            "scope_level": ["state", "state", "state"],
             "state_name": ["Telangana", "Telangana", "Maharashtra"],
-            "district_name": ["A", "B", "Pune"],
+            "district_name": [None, None, None],
             "__state_key": ["telangana", "telangana", "maharashtra"],
-            "__district_key": ["telangana|a", "telangana|b", "maharashtra|pune"],
-            "metric_a__landing_norm": [10.0, 30.0, 99.0],
-            "metric_b__landing_norm": [70.0, 50.0, 1.0],
+            "__district_key": [None, None, None],
+            "driver_rank": [2, 1, 1],
+            "driver_slug": ["metric_a", "metric_b", "metric_a"],
+            "driver_label": ["Metric A", "Metric B", "Metric A"],
+            "driver_score": [20.0, 60.0, 99.0],
+            "driver_score_display": ["20.0", "60.0", "99.0"],
+            "driver_source": ["thematic_component_norm", "thematic_component_norm", "thematic_component_norm"],
         }
     )
     driver_context = _driver_context(
         driver_scores,
-        metric_specs=[
-            BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a"),
-            BundleMetricSpec(slug="metric_b", label="Metric B", column="metric_b"),
-        ],
     )
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
 
     landing_runtime._render_state_summary(
+        bundle_domain="Heat Risk",
         state_name="Telangana",
         district_scores=composite_district_scores,
         state_scores=composite_state_scores,
@@ -1095,21 +1499,27 @@ def test_district_driver_scope_falls_back_when_selected_district_has_no_componen
     )
     driver_scores = pd.DataFrame(
         {
+            "scope_level": ["district"],
             "state_name": ["Telangana"],
             "district_name": ["Khammam"],
             "__state_key": ["telangana"],
             "__district_key": ["telangana|khammam"],
-            "metric_a__landing_norm": [10.0],
+            "driver_rank": [1],
+            "driver_slug": ["metric_a"],
+            "driver_label": ["Metric A"],
+            "driver_score": [10.0],
+            "driver_score_display": ["10.0"],
+            "driver_source": ["thematic_component_norm"],
         }
     )
     driver_context = _driver_context(
         driver_scores,
-        metric_specs=[BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a")],
     )
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
 
     landing_runtime._render_district_summary(
+        bundle_domain="Heat Risk",
         state_name="Telangana",
         district_name="Nalgonda",
         district_scores=composite_district_scores,
@@ -1141,29 +1551,173 @@ def test_driver_frame_skips_all_nan_normalized_metrics_and_shows_existing_captio
     )
     driver_scores = pd.DataFrame(
         {
-            "state_name": ["Telangana"],
-            "district_name": ["A"],
-            "__state_key": ["telangana"],
-            "__district_key": ["telangana|a"],
-            "metric_a__landing_norm": [float("nan")],
-            "metric_b__landing_norm": [float("nan")],
+            "scope_level": ["state", "state"],
+            "state_name": ["Telangana", "Telangana"],
+            "district_name": [None, None],
+            "__state_key": ["telangana", "telangana"],
+            "__district_key": [None, None],
+            "driver_rank": [1, 2],
+            "driver_slug": ["metric_a", "metric_b"],
+            "driver_label": ["Metric A", "Metric B"],
+            "driver_score": [float("nan"), float("nan")],
+            "driver_score_display": [None, None],
+            "driver_source": ["thematic_component_norm", "thematic_component_norm"],
         }
     )
     driver_context = _driver_context(
         driver_scores,
-        metric_specs=[
-            BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a"),
-            BundleMetricSpec(slug="metric_b", label="Metric B", column="metric_b"),
-        ],
     )
 
     monkeypatch.setattr(landing_runtime, "st", stub_st)
 
     landing_runtime._render_state_summary(
+        bundle_domain="Heat Risk",
         state_name="Telangana",
         district_scores=composite_district_scores,
         state_scores=composite_state_scores,
         driver_context=driver_context,
+    )
+
+    assert "No driver detail is available for this scope." in stub_st.captions
+
+
+def test_block_summary_prefers_selected_block_drivers(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {"landing_bundle": "Heat Risk"}
+    stub_st = _DummyStreamlit(session_state)
+    driver_scores = pd.DataFrame(
+        {
+            "scope_level": ["district", "block", "block"],
+            "state_name": ["Telangana", "Telangana", "Telangana"],
+            "district_name": ["Nalgonda", "Nalgonda", "Nalgonda"],
+            "block_name": [None, "Chityal", "Narketpalle"],
+            "__state_key": ["telangana", "telangana", "telangana"],
+            "__district_key": ["telangana|nalgonda", "telangana|nalgonda", "telangana|nalgonda"],
+            "__block_key": [None, "telangana|nalgonda|chityal", "telangana|nalgonda|narketpalle"],
+            "driver_rank": [1, 1, 1],
+            "driver_slug": ["district_metric", "selected_metric", "other_metric"],
+            "driver_label": ["District Metric", "Selected Metric", "Other Metric"],
+            "driver_score": [80.0, 42.0, 99.0],
+            "driver_score_display": ["80.0", "42.0", "99.0"],
+            "driver_source": ["thematic_component_norm", "thematic_component_norm", "thematic_component_norm"],
+        }
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_block_summary(
+        bundle_domain="Heat Risk",
+        state_name="Telangana",
+        district_name="Nalgonda",
+        block_name="Chityal",
+        block_scores=_block_scores(),
+        driver_context=_driver_context(driver_scores),
+    )
+
+    rendered = stub_st.dataframes[-1]
+    assert rendered["Metric driver"].tolist() == ["Selected Metric"]
+    assert rendered["Normalized score"].tolist() == ["42.0"]
+    assert "**Metric Drivers**" in stub_st.markdowns
+
+
+def test_block_summary_falls_back_to_parent_district_drivers(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {"landing_bundle": "Heat Risk"}
+    stub_st = _DummyStreamlit(session_state)
+    driver_scores = pd.DataFrame(
+        {
+            "scope_level": ["district"],
+            "state_name": ["Telangana"],
+            "district_name": ["Nalgonda"],
+            "block_name": [None],
+            "__state_key": ["telangana"],
+            "__district_key": ["telangana|nalgonda"],
+            "__block_key": [None],
+            "driver_rank": [1],
+            "driver_slug": ["district_metric"],
+            "driver_label": ["District Metric"],
+            "driver_score": [80.0],
+            "driver_score_display": ["80.0"],
+            "driver_source": ["thematic_component_norm"],
+        }
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_block_summary(
+        bundle_domain="Heat Risk",
+        state_name="Telangana",
+        district_name="Nalgonda",
+        block_name="Chityal",
+        block_scores=_block_scores(),
+        driver_context=_driver_context(driver_scores),
+    )
+
+    rendered = stub_st.dataframes[-1]
+    assert rendered["Metric driver"].tolist() == ["District Metric"]
+    assert "**Parent District Metric Drivers**" in stub_st.markdowns
+
+
+def test_block_summary_handles_legacy_driver_frame_without_block_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {"landing_bundle": "Heat Risk"}
+    stub_st = _DummyStreamlit(session_state)
+    driver_scores = pd.DataFrame(
+        {
+            "scope_level": ["district"],
+            "state_name": ["Telangana"],
+            "district_name": ["Nalgonda"],
+            "__state_key": ["telangana"],
+            "__district_key": ["telangana|nalgonda"],
+            "driver_rank": [1],
+            "driver_slug": ["district_metric"],
+            "driver_label": ["District Metric"],
+            "driver_score": [80.0],
+            "driver_score_display": ["80.0"],
+            "driver_source": ["thematic_component_norm"],
+        }
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_block_summary(
+        bundle_domain="Heat Risk",
+        state_name="Telangana",
+        district_name="Nalgonda",
+        block_name="Chityal",
+        block_scores=_block_scores(),
+        driver_context=_driver_context(driver_scores),
+    )
+
+    rendered = stub_st.dataframes[-1]
+    assert rendered["Metric driver"].tolist() == ["District Metric"]
+    assert "**Parent District Metric Drivers**" in stub_st.markdowns
+
+
+def test_block_summary_handles_legacy_driver_frame_without_scope_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_state: dict[str, object] = {"landing_bundle": "Heat Risk"}
+    stub_st = _DummyStreamlit(session_state)
+    driver_scores = pd.DataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Nalgonda"],
+            "__state_key": ["telangana"],
+            "__district_key": ["telangana|nalgonda"],
+            "driver_rank": [1],
+            "driver_slug": ["district_metric"],
+            "driver_label": ["District Metric"],
+            "driver_score": [80.0],
+            "driver_score_display": ["80.0"],
+            "driver_source": ["thematic_component_norm"],
+        }
+    )
+
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_block_summary(
+        bundle_domain="Heat Risk",
+        state_name="Telangana",
+        district_name="Nalgonda",
+        block_name="Chityal",
+        block_scores=_block_scores(),
+        driver_context=_driver_context(driver_scores),
     )
 
     assert "No driver detail is available for this scope." in stub_st.captions
@@ -1211,9 +1765,31 @@ def test_build_glance_handoff_from_deep_dive_maps_compatible_district_context() 
     assert handoff["landing_focus_level"] == "district"
     assert handoff["landing_selected_state"] == "Telangana"
     assert handoff["landing_selected_district"] == "Nalgonda"
+    assert handoff["landing_selected_block"] is None
     assert handoff["landing_search_selection"] is None
     assert handoff["landing_search_last_applied"] is None
     assert handoff["landing_search_reset_pending"] is True
+
+
+def test_build_glance_handoff_from_deep_dive_maps_compatible_block_context() -> None:
+    detailed_state = {
+        "spatial_family": "admin",
+        "admin_level": "block",
+        "selected_pillar": "Climate Hazards",
+        "selected_bundle": "Heat Risk",
+        "sel_scenario": "ssp585",
+        "sel_period": "2040-2060",
+        "selected_state": "Telangana",
+        "selected_district": "Nalgonda",
+        "selected_block": "Chityal",
+    }
+
+    handoff = build_glance_handoff_from_deep_dive(detailed_state)
+
+    assert handoff["landing_focus_level"] == "block"
+    assert handoff["landing_selected_state"] == "Telangana"
+    assert handoff["landing_selected_district"] == "Nalgonda"
+    assert handoff["landing_selected_block"] == "Chityal"
 
 def test_build_glance_handoff_from_deep_dive_maps_compatible_state_context() -> None:
     detailed_state = {
@@ -1280,7 +1856,7 @@ def test_build_glance_handoff_from_deep_dive_preserves_landing_ui_state_when_inc
     detailed_state = {
         "spatial_family": "admin",
         "admin_level": "district",
-        "selected_pillar": "Exposure",
+        "selected_pillar": "Climate Hazards",
         "selected_bundle": "Population",
         "sel_scenario": "snapshot",
         "sel_period": "2025",
@@ -1294,285 +1870,6 @@ def test_build_glance_handoff_from_deep_dive_preserves_landing_ui_state_when_inc
     assert "landing_compare_selection" not in handoff
     assert handoff["landing_active"] is True
     assert handoff["landing_search_reset_pending"] is True
-
-def test_intersect_bundle_scenario_period_pairs_uses_required_metric_intersection() -> None:
-    contexts = [
-        _metric_context(
-            "metric_a",
-            pairs=(("ssp245", "2020-2040"), ("ssp585", "2040-2060")),
-        ),
-        _metric_context(
-            "metric_b",
-            pairs=(("ssp245", "2020-2040"), ("ssp585", "2040-2060")),
-        ),
-        _metric_context(
-            "metric_c",
-            pairs=(("ssp245", "2020-2040"),),
-        ),
-    ]
-
-    assert _intersect_bundle_scenario_period_pairs(contexts) == [("ssp245", "2020-2040")]
-
-def test_context_key_round_trip_preserves_metric_specs() -> None:
-    contexts = [
-        _metric_context(
-            "metric_a",
-            pairs=(("snapshot", "Current"),),
-            weight=2.5,
-            higher_is_worse=False,
-            column="metric_a_col",
-            label="Metric A",
-            source_signature=(("source_a.csv", 1.0),),
-            source_paths=("a.csv",),
-        ),
-        _metric_context(
-            "metric_b",
-            pairs=(("snapshot", "Current"), ("ssp585", "2040-2060")),
-            weight=0.75,
-            higher_is_worse=True,
-            column="metric_b_col",
-            label="Metric B",
-            source_signature=(("source_b.csv", 2.0),),
-            source_paths=("b.csv",),
-        ),
-    ]
-
-    context_key = landing_runtime._bundle_context_cache_key(contexts)
-    specs = landing_runtime._metric_specs_from_context_key(context_key)
-
-    assert [(spec.slug, spec.column, spec.weight, spec.higher_is_worse) for spec in specs] == [
-        ("metric_a", "metric_a_col", 2.5, False),
-        ("metric_b", "metric_b_col", 0.75, True),
-    ]
-
-def test_prepare_bundle_context_cached_uses_available_pairs_not_source_paths(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    contexts = [
-        _metric_context(
-            "jrc_flood_depth_index_rp100",
-            pairs=(("snapshot", "Current"),),
-            source_signature=(("synthetic.csv", 1.0),),
-            source_paths=("D:/processed/jrc_flood_depth_index_rp100.csv",),
-        )
-    ]
-    context_key = landing_runtime._bundle_context_cache_key(contexts)
-
-    def fake_loader(
-        metric_slug: str,
-        scenario: str,
-        period: str,
-        stat: str,
-        source_signature: tuple[tuple[str, float | None], ...],
-        source_paths: tuple[str, ...],
-    ) -> pd.DataFrame:
-        _ = (metric_slug, scenario, period, stat, source_signature, source_paths)
-        return pd.DataFrame(
-            {
-                "state_name": ["Telangana", "Telangana"],
-                "district_name": ["Adilabad", "Hyderabad"],
-                "raw_metric_value": [5.0, 4.0],
-            }
-        )
-
-    monkeypatch.setattr(landing_runtime, "_load_metric_district_values_cached", fake_loader)
-
-    district_scores, state_scores, metric_specs = landing_runtime._prepare_bundle_context_cached(
-        "Flood Inundation Depth (JRC)",
-        "snapshot",
-        "Current",
-        "mean",
-        context_key,
-    )
-
-    assert [spec.slug for spec in metric_specs] == ["jrc_flood_depth_index_rp100"]
-    assert not district_scores.empty
-    assert not state_scores.empty
-    assert district_scores["bundle_score"].notna().all()
-    assert state_scores["bundle_score"].notna().all()
-
-def test_prepare_bundle_context_cached_preserves_weighted_scoring_round_trip(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    contexts = [
-        _metric_context(
-            "metric_a",
-            pairs=(("snapshot", "Current"),),
-            weight=2.0,
-            higher_is_worse=True,
-            source_signature=(("metric_a.csv", 1.0),),
-            source_paths=("metric_a.csv",),
-        ),
-        _metric_context(
-            "metric_b",
-            pairs=(("snapshot", "Current"),),
-            weight=1.0,
-            higher_is_worse=False,
-            source_signature=(("metric_b.csv", 1.0),),
-            source_paths=("metric_b.csv",),
-        ),
-    ]
-    context_key = landing_runtime._bundle_context_cache_key(contexts)
-
-    def fake_loader(
-        metric_slug: str,
-        scenario: str,
-        period: str,
-        stat: str,
-        source_signature: tuple[tuple[str, float | None], ...],
-        source_paths: tuple[str, ...],
-    ) -> pd.DataFrame:
-        _ = (scenario, period, stat, source_signature, source_paths)
-        if metric_slug == "metric_a":
-            return pd.DataFrame(
-                {
-                    "state_name": ["Telangana", "Telangana"],
-                    "district_name": ["Adilabad", "Hyderabad"],
-                    "raw_metric_value": [10.0, 20.0],
-                }
-            )
-        return pd.DataFrame(
-            {
-                "state_name": ["Telangana", "Telangana"],
-                "district_name": ["Adilabad", "Hyderabad"],
-                "raw_metric_value": [1.0, 5.0],
-            }
-        )
-
-    monkeypatch.setattr(landing_runtime, "_load_metric_district_values_cached", fake_loader)
-
-    district_scores, state_scores, metric_specs = landing_runtime._prepare_bundle_context_cached(
-        "Synthetic Weighted Bundle",
-        "snapshot",
-        "Current",
-        "mean",
-        context_key,
-    )
-
-    assert [(spec.slug, spec.weight, spec.higher_is_worse) for spec in metric_specs] == [
-        ("metric_a", 2.0, True),
-        ("metric_b", 1.0, False),
-    ]
-    district_by_name = district_scores.set_index("district_name")
-    assert district_by_name.loc["Adilabad", "bundle_score"] == pytest.approx(100.0 / 3.0)
-    assert district_by_name.loc["Hyderabad", "bundle_score"] == pytest.approx(200.0 / 3.0)
-    assert state_scores.set_index("state_name").loc["Telangana", "bundle_score"] == pytest.approx(50.0)
-
-def test_prepare_bundle_context_cached_returns_empty_for_unsupported_pair() -> None:
-    contexts = [
-        _metric_context(
-            "metric_a",
-            pairs=(("ssp585", "2040-2060"),),
-            source_signature=(("metric_a.csv", 1.0),),
-            source_paths=("metric_a.csv",),
-        )
-    ]
-    context_key = landing_runtime._bundle_context_cache_key(contexts)
-
-    district_scores, state_scores, metric_specs = landing_runtime._prepare_bundle_context_cached(
-        "Unsupported Pair Bundle",
-        "snapshot",
-        "Current",
-        "mean",
-        context_key,
-    )
-
-    assert [spec.slug for spec in metric_specs] == ["metric_a"]
-    assert district_scores.empty
-    assert state_scores.empty
-
-@pytest.mark.parametrize("bad_entry", [("a", "b", "c", 1.0, True, (), ()), ("a", "b", "c", 1.0, True, (), (), (), ())])
-def test_decode_context_key_entry_rejects_malformed_schema(bad_entry: tuple[object, ...]) -> None:
-    with pytest.raises(ValueError, match="expected 8 fields"):
-        landing_runtime._decode_context_key_entry(bad_entry)
-
-def test_assemble_bundle_context_builds_ranked_outputs_deterministically() -> None:
-    merged_frame = pd.DataFrame(
-        {
-            "state_name": ["A", "A", "B"],
-            "district_name": ["One", "Two", "Three"],
-            "metric_a": [10.0, 20.0, 30.0],
-            "metric_b": [10.0, 20.0, 30.0],
-        }
-    )
-    metric_specs = [
-        BundleMetricSpec(slug="metric_a", label="Metric A", column="metric_a", higher_is_worse=True),
-        BundleMetricSpec(slug="metric_b", label="Metric B", column="metric_b", higher_is_worse=True),
-    ]
-
-    district_scores, state_scores, returned_specs = _assemble_bundle_context(
-        merged_frame,
-        metric_specs=metric_specs,
-    )
-
-    assert [spec.slug for spec in returned_specs] == ["metric_a", "metric_b"]
-    assert dict(zip(state_scores["state_name"], state_scores["bundle_score"])) == {"A": 25.0, "B": 100.0}
-
-    district_by_name = district_scores.set_index("district_name")
-    assert district_by_name.loc["Two", "district_rank"] == 1.0
-    assert district_by_name.loc["One", "district_rank"] == 2.0
-    assert district_by_name.loc["Two", "district_count"] == 2
-
-def test_resolve_first_valid_landing_metric_skips_invalid_first_metric(monkeypatch: pytest.MonkeyPatch) -> None:
-    contexts = [
-        _metric_context("metric_a", pairs=(("ssp585", "2040-2060"),)),
-        _metric_context("metric_b", pairs=(("ssp585", "2040-2060"),)),
-    ]
-
-    def fake_loader(
-        metric_slug: str,
-        scenario: str,
-        period: str,
-        stat: str,
-        source_signature: tuple[tuple[str, float | None], ...],
-        source_paths: tuple[str, ...],
-    ) -> pd.DataFrame:
-        _ = (scenario, period, stat, source_signature, source_paths)
-        if metric_slug == "metric_a":
-            return pd.DataFrame({"state_name": ["A"], "district_name": ["One"], "raw_metric_value": [float("nan")]})
-        return pd.DataFrame({"state_name": ["A"], "district_name": ["One"], "raw_metric_value": [42.0]})
-
-    monkeypatch.setattr(landing_runtime, "_load_metric_district_values_cached", fake_loader)
-
-    metric_slug = landing_runtime._resolve_first_valid_landing_metric(
-        "Heat Risk",
-        scenario="ssp585",
-        period="2040-2060",
-        stat="mean",
-        data_dir=Path("."),
-        metric_contexts=contexts,
-    )
-
-    assert metric_slug == "metric_b"
-
-def test_resolve_first_valid_landing_metric_returns_none_when_no_metric_has_data(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    contexts = [_metric_context("metric_a", pairs=(("ssp585", "2040-2060"),))]
-
-    def fake_loader(
-        metric_slug: str,
-        scenario: str,
-        period: str,
-        stat: str,
-        source_signature: tuple[tuple[str, float | None], ...],
-        source_paths: tuple[str, ...],
-    ) -> pd.DataFrame:
-        _ = (metric_slug, scenario, period, stat, source_signature, source_paths)
-        return pd.DataFrame({"state_name": ["A"], "district_name": ["One"], "raw_metric_value": [float("nan")]})
-
-    monkeypatch.setattr(landing_runtime, "_load_metric_district_values_cached", fake_loader)
-
-    metric_slug = landing_runtime._resolve_first_valid_landing_metric(
-        "Heat Risk",
-        scenario="ssp585",
-        period="2040-2060",
-        stat="mean",
-        data_dir=Path("."),
-        metric_contexts=contexts,
-    )
-
-    assert metric_slug is None
 
 def test_build_landing_search_options_includes_state_and_district_labels() -> None:
     state_scores = pd.DataFrame({"state_name": ["Telangana", "Maharashtra"]})
@@ -1658,7 +1955,7 @@ def test_apply_landing_map_click_enters_state_focus_from_india() -> None:
         adm2=adm2,
     )
 
-    assert action == ("focus_state", "Telangana", None)
+    assert action == ("focus_state", "Telangana", None, None)
 
 def test_apply_landing_map_click_enters_state_focus_from_coordinates_only() -> None:
     adm1 = _adm1_gdf()
@@ -1675,7 +1972,7 @@ def test_apply_landing_map_click_enters_state_focus_from_coordinates_only() -> N
         adm2=adm2,
     )
 
-    assert action == ("focus_state", "Telangana", None)
+    assert action == ("focus_state", "Telangana", None, None)
 
 def test_apply_landing_map_click_noops_on_invalid_india_click() -> None:
     adm1 = _adm1_gdf()
@@ -1692,7 +1989,7 @@ def test_apply_landing_map_click_noops_on_invalid_india_click() -> None:
         adm2=adm2,
     )
 
-    assert action == ("noop", None, None)
+    assert action == ("noop", None, None, None)
 
 def test_apply_landing_map_click_enters_district_focus_from_state() -> None:
     adm1 = _adm1_gdf()
@@ -1720,7 +2017,7 @@ def test_apply_landing_map_click_enters_district_focus_from_state() -> None:
         visible_districts=visible_districts,
     )
 
-    assert action == ("focus_district", "Telangana", "Nalgonda")
+    assert action == ("focus_district", "Telangana", "Nalgonda", None)
 
 def test_apply_landing_map_click_switches_district_within_state_focus() -> None:
     adm1 = _adm1_gdf()
@@ -1748,7 +2045,7 @@ def test_apply_landing_map_click_switches_district_within_state_focus() -> None:
         visible_districts=visible_districts,
     )
 
-    assert action == ("focus_district", "Telangana", "Khammam")
+    assert action == ("focus_district", "Telangana", "Khammam", None)
 
 def test_apply_landing_map_click_noops_on_same_district_selection() -> None:
     adm1 = _adm1_gdf()
@@ -1776,7 +2073,7 @@ def test_apply_landing_map_click_noops_on_same_district_selection() -> None:
         visible_districts=visible_districts,
     )
 
-    assert action == ("noop", None, None)
+    assert action == ("noop", None, None, None)
 
 def test_apply_landing_map_click_noops_on_invalid_district_payload() -> None:
     adm1 = _adm1_gdf()
@@ -1796,7 +2093,7 @@ def test_apply_landing_map_click_noops_on_invalid_district_payload() -> None:
         visible_districts=visible_districts,
     )
 
-    assert action == ("noop", None, None)
+    assert action == ("noop", None, None, None)
 
 def test_apply_landing_map_click_noops_on_replayed_state_payload_before_coords_fallback() -> None:
     adm1 = _adm1_gdf()
@@ -1825,7 +2122,7 @@ def test_apply_landing_map_click_noops_on_replayed_state_payload_before_coords_f
         visible_districts=visible_districts,
     )
 
-    assert action == ("noop", None, None)
+    assert action == ("noop", None, None, None)
 
 def test_apply_landing_map_click_enters_district_focus_from_coordinates_only() -> None:
     adm1 = _adm1_gdf()
@@ -1845,7 +2142,7 @@ def test_apply_landing_map_click_enters_district_focus_from_coordinates_only() -
         visible_districts=visible_districts,
     )
 
-    assert action == ("focus_district", "Telangana", "Nalgonda")
+    assert action == ("focus_district", "Telangana", "Nalgonda", None)
 
 def test_apply_landing_map_click_noops_when_replayed_coordinates_resolve_to_no_score_district() -> None:
     adm1 = _adm1_gdf()
@@ -1865,4 +2162,332 @@ def test_apply_landing_map_click_noops_when_replayed_coordinates_resolve_to_no_s
         visible_districts=visible_districts,
     )
 
-    assert action == ("noop", None, None)
+    assert action == ("noop", None, None, None)
+
+
+def test_apply_landing_map_click_selects_block_from_payload() -> None:
+    adm1 = _adm1_gdf()
+    adm2 = _adm2_gdf()
+    visible_blocks = landing_runtime._build_block_map_frame(
+        _adm3_by_district(),
+        _block_scores(),
+        selected_state="Telangana",
+        selected_district="Nalgonda",
+    )
+
+    action = _apply_landing_map_click(
+        focus_level="block",
+        returned={
+            "last_object_clicked": {
+                "properties": {
+                    "__block_key": "telangana|nalgonda|chityal",
+                    "block_name": "Chityal",
+                    "district_name": "Nalgonda",
+                    "state_name": "Telangana",
+                }
+            }
+        },
+        clicked_state="Telangana",
+        clicked_district="Nalgonda",
+        clicked_block="Chityal",
+        selected_state="Telangana",
+        selected_district="Nalgonda",
+        selected_block=None,
+        adm1=adm1,
+        adm2=adm2,
+        visible_blocks=visible_blocks,
+    )
+
+    assert action == ("focus_block", "Telangana", "Nalgonda", "Chityal")
+
+
+def test_apply_landing_map_click_noops_on_same_block_selection() -> None:
+    visible_blocks = landing_runtime._build_block_map_frame(
+        _adm3_by_district(),
+        _block_scores(),
+        selected_state="Telangana",
+        selected_district="Nalgonda",
+    )
+
+    action = _apply_landing_map_click(
+        focus_level="block",
+        returned={
+            "last_object_clicked": {
+                "properties": {
+                    "__block_key": "telangana|nalgonda|chityal",
+                    "block_name": "Chityal",
+                    "district_name": "Nalgonda",
+                    "state_name": "Telangana",
+                }
+            }
+        },
+        clicked_state="Telangana",
+        clicked_district="Nalgonda",
+        clicked_block="Chityal",
+        selected_state="Telangana",
+        selected_district="Nalgonda",
+        selected_block="Chityal",
+        adm1=_adm1_gdf(),
+        adm2=_adm2_gdf(),
+        visible_blocks=visible_blocks,
+    )
+
+    assert action == ("noop", None, None, None)
+
+
+def test_render_landing_rankings_shows_blocks_for_block_focus(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_st = _DummyStreamlit({})
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_landing_rankings(
+        focus_level="block",
+        selected_state="Telangana",
+        selected_district="Nalgonda",
+        selected_block="Chityal",
+        state_scores=pd.DataFrame(),
+        district_scores=pd.DataFrame(),
+        block_scores=_block_scores(),
+    )
+
+    rendered = stub_st.dataframes[-1]
+    assert stub_st.captions[-1] == "Selected block: CHITYAL - rank 1 / 2, score 91.0, Extreme risk band"
+    assert rendered["Block"].tolist() == ["Chityal", "Narketpalle"]
+    assert rendered["Current focus"].tolist() == ["Selected", ""]
+
+
+def test_render_landing_rankings_surfaces_selected_district_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_st = _DummyStreamlit({})
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    landing_runtime._render_landing_rankings(
+        focus_level="district",
+        selected_state="Telangana",
+        selected_district="Kamareddy",
+        selected_block=None,
+        state_scores=pd.DataFrame(),
+        district_scores=_district_ranking_scores(),
+        block_scores=None,
+    )
+
+    rendered = stub_st.dataframes[-1]
+    assert stub_st.captions[-1] == "Selected district: KAMAREDDY - rank 2 / 33, score 74.5, High risk band"
+    assert rendered["District"].tolist() == ["Nizamabad", "Kamareddy", "Bhadradri Kothagudem"]
+    assert rendered["Current focus"].tolist() == ["", "Selected", ""]
+
+
+def _band_filter(**overrides: object) -> dict[str, object]:
+    base = {
+        "band": "High",
+        "scope": "state",
+        "bundle": "Heat Risk",
+        "scenario": "ssp585",
+        "period": "2040-2060",
+        "state_name": "Telangana",
+        "district_name": None,
+    }
+    base.update(overrides)
+    return base
+
+
+def _scored_df(bands: list[str]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "state_name": ["Telangana"] * len(bands),
+            "district_name": [f"D{idx}" for idx, _ in enumerate(bands)],
+            "score_band": bands,
+            "bundle_score": list(range(len(bands))),
+        }
+    )
+
+
+def test_apply_landing_band_filter_filters_on_internal_score_band_column() -> None:
+    df = _scored_df(["High", "Moderate", "High", "Low"])
+    out, applied = landing_runtime._apply_landing_band_filter(
+        df,
+        _band_filter(band="High", scope="state", state_name="Telangana"),
+        expected_scope="state",
+        state_name="Telangana",
+    )
+    assert applied == "High"
+    assert out["score_band"].tolist() == ["High", "High"]
+
+
+def test_apply_landing_band_filter_returns_input_on_scope_mismatch() -> None:
+    df = _scored_df(["High", "Low"])
+    out, applied = landing_runtime._apply_landing_band_filter(
+        df,
+        _band_filter(scope="national", state_name=None),
+        expected_scope="state",
+        state_name="Telangana",
+    )
+    assert applied is None
+    assert len(out) == len(df)
+
+
+def test_apply_landing_band_filter_returns_input_on_state_name_mismatch() -> None:
+    df = _scored_df(["High", "Low"])
+    out, applied = landing_runtime._apply_landing_band_filter(
+        df,
+        _band_filter(state_name="Maharashtra"),
+        expected_scope="state",
+        state_name="Telangana",
+    )
+    assert applied is None
+    assert len(out) == len(df)
+
+
+def test_apply_landing_band_filter_requires_matching_district_for_block_scope() -> None:
+    df = _scored_df(["High", "High"])
+    out, applied = landing_runtime._apply_landing_band_filter(
+        df,
+        _band_filter(scope="block", state_name="Telangana", district_name="Khammam", band="High"),
+        expected_scope="block",
+        state_name="Telangana",
+        district_name="Nalgonda",
+    )
+    assert applied is None
+    assert len(out) == len(df)
+
+
+def test_clear_stale_landing_band_filter_drops_filter_on_bundle_change() -> None:
+    session: dict[str, object] = {landing_runtime.LANDING_BAND_FILTER_KEY: _band_filter()}
+    landing_runtime._clear_stale_landing_band_filter(
+        session,
+        bundle="Flood Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+    )
+    assert landing_runtime.LANDING_BAND_FILTER_KEY not in session
+
+
+def test_clear_stale_landing_band_filter_drops_filter_on_focus_mismatch() -> None:
+    session: dict[str, object] = {
+        landing_runtime.LANDING_BAND_FILTER_KEY: _band_filter(scope="national", state_name=None)
+    }
+    landing_runtime._clear_stale_landing_band_filter(
+        session,
+        bundle="Heat Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+    )
+    assert landing_runtime.LANDING_BAND_FILTER_KEY not in session
+
+
+def test_clear_stale_landing_band_filter_preserves_matching_context() -> None:
+    session: dict[str, object] = {landing_runtime.LANDING_BAND_FILTER_KEY: _band_filter()}
+    landing_runtime._clear_stale_landing_band_filter(
+        session,
+        bundle="Heat Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+    )
+    assert session[landing_runtime.LANDING_BAND_FILTER_KEY]["band"] == "High"
+
+
+def test_build_block_band_distribution_orders_present_bands_high_to_low_and_drops_zeros() -> None:
+    block_df = pd.DataFrame(
+        {
+            "block_name": ["a", "b", "c", "d"],
+            "score_band": ["Low", "High", "High", "Very High"],
+        }
+    )
+    out = landing_runtime._build_block_band_distribution(block_df)
+    assert out["band"].tolist() == ["Very High", "High", "Low"]
+    assert out["count"].tolist() == [1, 2, 1]
+
+
+def test_build_block_band_distribution_returns_empty_for_empty_input() -> None:
+    out = landing_runtime._build_block_band_distribution(pd.DataFrame())
+    assert out.empty
+    assert list(out.columns) == ["band", "count"]
+
+
+def test_glance_answer_text_area_resets_when_export_context_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_st = _DummyStreamlit(
+        {
+            "landing_glance_answer_context_token": "old",
+            "landing_glance_answer_text": "For MANCHERIAL, stale block answer.",
+            "landing_glance_answer_text_area": "For MANCHERIAL, stale block answer.",
+        }
+    )
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    visible = landing_runtime._compute_visible_ranking_rows(
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+        selected_block=None,
+        state_scores=pd.DataFrame(),
+        district_scores=pd.DataFrame(
+            {
+                "state_name": ["Telangana", "Telangana"],
+                "district_name": ["Nizamabad", "Kamareddy"],
+                "bundle_score": [74.9, 74.5],
+                "bundle_score_display": ["74.9", "74.5"],
+                "score_band": ["High", "High"],
+                "district_rank": [1, 2],
+                "district_count": [2, 2],
+            }
+        ),
+    )
+
+    landing_runtime._render_glance_answer_export_panel(
+        visible_rows=visible,
+        drivers=pd.DataFrame(),
+        bundle_domain="Extreme Rainfall | Flash Flood Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="state",
+        selected_state="Telangana",
+        selected_district=None,
+    )
+
+    assert "For Telangana" in stub_st.session_state["landing_glance_answer_text_area"]
+    assert "Nizamabad, Kamareddy" in stub_st.session_state["landing_glance_answer_text_area"]
+    assert "MANCHERIAL" not in stub_st.session_state["landing_glance_answer_text_area"]
+
+
+def test_glance_answer_text_area_resets_to_selected_district_focus(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_st = _DummyStreamlit(
+        {
+            "landing_glance_answer_context_token": "old",
+            "landing_glance_answer_text": "For MANCHERIAL, stale block answer.",
+            "landing_glance_answer_text_area": "For MANCHERIAL, stale block answer.",
+        }
+    )
+    monkeypatch.setattr(landing_runtime, "st", stub_st)
+
+    visible = landing_runtime._compute_visible_ranking_rows(
+        focus_level="district",
+        selected_state="Telangana",
+        selected_district="Kamareddy",
+        selected_block=None,
+        state_scores=pd.DataFrame(),
+        district_scores=_district_ranking_scores(),
+    )
+
+    landing_runtime._render_glance_answer_export_panel(
+        visible_rows=visible,
+        drivers=pd.DataFrame(),
+        bundle_domain="Extreme Rainfall | Flash Flood Risk",
+        scenario="ssp585",
+        period="2040-2060",
+        focus_level="district",
+        selected_state="Telangana",
+        selected_district="Kamareddy",
+    )
+
+    answer = stub_st.session_state["landing_glance_answer_text_area"]
+    assert answer.startswith("For Telangana district rankings, Kamareddy is the current focus.")
+    assert "It ranks 2 / 33" in answer
+    assert "Nizamabad, Kamareddy, Bhadradri Kothagudem" in answer
+    assert "MANCHERIAL" not in answer

@@ -17,8 +17,46 @@ from __future__ import annotations
 from contextlib import nullcontext
 from typing import Any, Callable, Mapping, Optional, Tuple
 
+from india_resilience_tool.viz.colors import NO_DATA_FILL_HEX
+
 RESPONSIVE_MAP_MIN_HEIGHT = 420
-RESPONSIVE_MAP_MAX_HEIGHT = 700
+RESPONSIVE_MAP_MAX_HEIGHT = 820
+
+PANE_BASE_POLYGONS = "irt-base-polygons"
+PANE_POPULATION_RASTER = "irt-population-raster"
+PANE_LULC_AGRI_RASTER = "irt-lulc-agri-raster"
+PANE_BUILT_UP_AREA_RASTER = "irt-built-up-area-raster"
+PANE_RURAL_FACILITIES_RASTER = "irt-rural-facilities-density"
+PANE_RURAL_FACILITIES_AGRO_RASTER = "irt-rural-facilities-density-agro"
+PANE_RURAL_FACILITIES_EDUCATION_RASTER = "irt-rural-facilities-density-education"
+PANE_RURAL_FACILITIES_HEALTH_RASTER = "irt-rural-facilities-density-health"
+PANE_RURAL_FACILITIES_SERVICE_RASTER = "irt-rural-facilities-density-service"
+PANE_FLOOD_RASTER = "irt-flood-raster"
+PANE_CROSSWALK_OVERLAY = "irt-crosswalk-overlay"
+PANE_RIVER_OVERLAY = "irt-river-overlay"
+PANE_ADMIN_OUTLINE = "irt-admin-outline"
+PANE_BASEMAP_LABELS = "irt-basemap-labels"
+
+# CARTO light basemap split into a label-free base + a labels-only tile pane so
+# place names render ABOVE the choropleth (no hazy text under polygons) and only
+# appear once zoomed in past state scale.
+CARTO_LIGHT_NOLABELS_TILES = "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png"
+CARTO_LIGHT_ONLYLABELS_TILES = "https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png"
+CARTO_TILES_ATTR = (
+    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors '
+    '&copy; <a href="https://carto.com/attributions">CARTO</a>'
+)
+BASEMAP_LABELS_MIN_ZOOM = 6
+
+# Admin-boundary outline hierarchy (drawn above the choropleth fills): the
+# country outline is strongest, then states, then districts (block view only);
+# the choropleth unit strokes themselves are white hairlines.
+ADMIN_OUTLINE_COLOR = "#6B7280"
+ADMIN_OUTLINE_COUNTRY_WEIGHT = 1.6
+ADMIN_OUTLINE_STATE_WEIGHT = 1.1
+ADMIN_OUTLINE_DISTRICT_WEIGHT = 0.9
+SELECTED_UNIT_OUTLINE_COLOR = "#111111"
+SELECTED_UNIT_OUTLINE_WEIGHT = 2.5
 
 
 def clamp_map_height(
@@ -106,12 +144,21 @@ def _build_responsive_map_resizer_html(
       }}
 
       function findTargetIframes(block, markerTop) {{
+        const resizerTop = selfFrame.getBoundingClientRect().top;
         return Array.from(block.querySelectorAll("iframe")).filter((iframe) => {{
           if (iframe === selfFrame) {{
             return false;
           }}
+          // A fullscreen map is position:fixed and owns its own sizing; forcing the
+          // responsive height onto it would fight the fullscreen styles every tick.
+          if (iframe.classList.contains("irt-map-fullscreen")) {{
+            return false;
+          }}
           const rect = iframe.getBoundingClientRect();
-          return Math.abs(rect.top - markerTop) < 220 && rect.height >= 0;
+          if (rect.width <= 0) {{
+            return false;
+          }}
+          return rect.top >= markerTop - 4 && rect.top <= resizerTop;
         }});
       }}
 
@@ -243,6 +290,234 @@ def build_choropleth_map_with_geojson_layer(
     return m
 
 
+def _resolve_national_bounds(
+    *,
+    adm1: Any,
+    fallback: list[list[float]],
+) -> list[list[float]]:
+    """Resolve the national framing box as ``[[south, west], [north, east]]``.
+
+    Prefers the dissolved ADM1 extent so the camera matches the app's own national
+    view. ``fallback`` (the ``bounds_latlon`` pan clamp) is deliberately only a last
+    resort: it is a generous India-ish rectangle (lat 5-45) that is materially taller
+    than India's land extent (~8-37N), so fitting it frames the country small inside
+    a large empty box.
+    """
+    try:
+        tb = adm1.total_bounds  # (minx, miny, maxx, maxy)
+        bounds = [[float(tb[1]), float(tb[0])], [float(tb[3]), float(tb[2])]]
+        if all(v == v for pair in bounds for v in pair):  # reject NaNs
+            if bounds[0][0] < bounds[1][0] and bounds[0][1] < bounds[1][1]:
+                return bounds
+    except Exception:
+        pass
+    return [[float(fallback[0][0]), float(fallback[0][1])],
+            [float(fallback[1][0]), float(fallback[1][1])]]
+
+
+def attach_map_view_controls(
+    folium_map: Any,
+    national_bounds: list[list[float]],
+    *,
+    max_bounds: Optional[list[list[float]]] = None,
+) -> None:
+    """Attach the top-right control cluster: zoom, fullscreen, and fit-to-India.
+
+    When ``max_bounds`` is given, panning is clamped to it via ``map.setMaxBounds``
+    inside the same MacroElement (figure-level script injection is dropped by
+    streamlit-folium -- see below).
+
+    The control MUST be a ``MacroElement`` child of the map, not figure-level HTML or
+    script: streamlit-folium rebuilds the page JS by walking the map's children
+    (``_generate_leaflet_string``) and silently drops ``get_root().script``. See the
+    same constraint documented on ``attach_legend_card_control`` in ``map_pipeline.py``.
+
+    Leaflet's own zoom control is created here rather than via ``folium.Map(zoom_control=...)``
+    so its corner is set explicitly; the folium kwarg's string form is version-dependent
+    and fails silently to the default top-left corner.
+
+    Fullscreen deliberately does NOT survive a Streamlit rerun -- clicking a district
+    rebuilds the iframe and drops out of fullscreen. Persisting it would require
+    round-tripping through session state on every map interaction; the reset is the
+    accepted tradeoff.
+    """
+    from branca.element import MacroElement
+    from jinja2 import Template
+
+    control = MacroElement()
+    control._name = "IrtMapViewControls"
+    control._template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        (function () {
+            var map = {{ this._parent.get_name() }};
+            var nationalBounds = {{ this.national_bounds|tojson }};
+            var maxBounds = {{ this.max_bounds|tojson }};
+
+            if (maxBounds) { map.setMaxBounds(maxBounds); }
+
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            var frame = window.frameElement;
+            var savedFrameCss = null;
+            var savedAncestors = [];
+            var savedLegendCss = null;
+            var isFullscreen = false;
+
+            function legendFrame() {
+                // The side legend is a separate components.html iframe rendered under a
+                // conditional, so it is legitimately absent on some layouts -- no-op then.
+                if (!frame || !frame.parentElement) { return null; }
+                var block = frame.closest('[data-testid="stVerticalBlock"]');
+                if (!block) { return null; }
+                var mine = frame.getBoundingClientRect();
+                var found = null;
+                Array.prototype.forEach.call(block.querySelectorAll('iframe'), function (el) {
+                    if (el === frame || found) { return; }
+                    var r = el.getBoundingClientRect();
+                    if (r.width > 0 && r.left >= mine.right - 4) { found = el; }
+                });
+                return found;
+            }
+
+            function neutraliseAncestors() {
+                // position:fixed resolves against the nearest ancestor establishing a
+                // containing block, so any transform/filter/perspective/will-change up
+                // the chain would clip "fullscreen" to the map column instead of the
+                // viewport. Cleared for the duration and restored on exit.
+                savedAncestors = [];
+                for (var el = frame.parentElement; el; el = el.parentElement) {
+                    var cs = window.getComputedStyle(el);
+                    var bf = cs.backdropFilter || cs.webkitBackdropFilter || 'none';
+                    if (cs.transform !== 'none' || cs.filter !== 'none' ||
+                        cs.perspective !== 'none' || bf !== 'none' ||
+                        cs.willChange !== 'auto') {
+                        savedAncestors.push([el, el.style.cssText]);
+                        el.style.transform = 'none';
+                        el.style.filter = 'none';
+                        el.style.perspective = 'none';
+                        el.style.willChange = 'auto';
+                    }
+                }
+            }
+
+            function restoreAncestors() {
+                savedAncestors.forEach(function (pair) { pair[0].style.cssText = pair[1]; });
+                savedAncestors = [];
+            }
+
+            function syncSize() {
+                window.setTimeout(function () {
+                    window.dispatchEvent(new Event('resize'));
+                    if (map && typeof map.invalidateSize === 'function') { map.invalidateSize(); }
+                }, 60);
+            }
+
+            function enter() {
+                if (!frame || isFullscreen) { return; }
+                savedFrameCss = frame.style.cssText;
+                neutraliseAncestors();
+                frame.classList.add('irt-map-fullscreen');
+                frame.style.position = 'fixed';
+                frame.style.top = '0';
+                frame.style.left = '0';
+                frame.style.width = '100vw';
+                frame.style.height = '100vh';
+                frame.style.zIndex = '2147483000';
+                var lf = legendFrame();
+                if (lf) {
+                    savedLegendCss = lf.style.cssText;
+                    lf.style.position = 'fixed';
+                    lf.style.right = '12px';
+                    lf.style.bottom = '12px';
+                    lf.style.zIndex = '2147483001';
+                }
+                isFullscreen = true;
+                syncSize();
+            }
+
+            function exit() {
+                if (!frame || !isFullscreen) { return; }
+                frame.classList.remove('irt-map-fullscreen');
+                frame.style.cssText = savedFrameCss || '';
+                restoreAncestors();
+                var lf = legendFrame();
+                if (lf && savedLegendCss !== null) { lf.style.cssText = savedLegendCss; }
+                savedLegendCss = null;
+                isFullscreen = false;
+                syncSize();
+            }
+
+            function toggle() { if (isFullscreen) { exit(); } else { enter(); } }
+
+            function onEscape(evt) {
+                if (evt.key === 'Escape' && isFullscreen) { exit(); }
+            }
+
+            function onParentEscape(evt) {
+                // Exit-by-rerun leaks this listener: the iframe is destroyed without the
+                // exit path running, and the parent document keeps a closure owned by a
+                // dead frame. Self-remove once the frame is detached.
+                if (!frame || !frame.isConnected) {
+                    window.parent.document.removeEventListener('keydown', onParentEscape);
+                    return;
+                }
+                onEscape(evt);
+            }
+
+            document.addEventListener('keydown', onEscape);
+            try {
+                if (window.parent && window.parent.document !== document) {
+                    window.parent.document.addEventListener('keydown', onParentEscape);
+                }
+            } catch (err) { /* cross-origin parent: iframe-local Escape still works */ }
+
+            var ctl = L.control({ position: 'topright' });
+            ctl.onAdd = function () {
+                var div = L.DomUtil.create('div', 'leaflet-bar irt-map-view-controls');
+
+                var fsBtn = L.DomUtil.create('a', '', div);
+                fsBtn.href = '#';
+                fsBtn.title = 'Toggle fullscreen';
+                fsBtn.setAttribute('role', 'button');
+                fsBtn.textContent = '\\u2921';
+
+                var fitBtn = L.DomUtil.create('a', '', div);
+                fitBtn.href = '#';
+                fitBtn.title = 'Fit to India';
+                fitBtn.setAttribute('role', 'button');
+                fitBtn.textContent = '\\u25a1';
+
+                L.DomEvent.disableClickPropagation(div);
+                L.DomEvent.disableScrollPropagation(div);
+
+                L.DomEvent.on(fsBtn, 'click', function (e) {
+                    L.DomEvent.preventDefault(e);
+                    toggle();
+                    fsBtn.textContent = isFullscreen ? '\\u2715' : '\\u2921';
+                });
+                L.DomEvent.on(fitBtn, 'click', function (e) {
+                    L.DomEvent.preventDefault(e);
+                    map.fitBounds(nationalBounds, { padding: [24, 24] });
+                });
+                return div;
+            };
+            ctl.addTo(map);
+        })();
+        {% endmacro %}
+        """
+    )
+    control.national_bounds = [[float(national_bounds[0][0]), float(national_bounds[0][1])],
+                               [float(national_bounds[1][0]), float(national_bounds[1][1])]]
+    control.max_bounds = (
+        [[float(max_bounds[0][0]), float(max_bounds[0][1])],
+         [float(max_bounds[1][0]), float(max_bounds[1][1])]]
+        if max_bounds is not None
+        else None
+    )
+    folium_map.add_child(control)
+
+
 def build_base_choropleth_map_with_geojson_layer(
     *,
     fc: Mapping[str, Any],
@@ -256,52 +531,70 @@ def build_base_choropleth_map_with_geojson_layer(
     tooltip: Any = None,
     highlight_function: Optional[Callable[[dict], dict]] = None,
 ) -> Any:
-    """Build the base Folium map with the patched choropleth layer only."""
+    """Build the base Folium map with the patched choropleth layer and admin outlines.
+
+    Visual hierarchy: choropleth polygons get white hairline strokes; state
+    outlines sit above them; the dissolved country outline is strongest. At
+    block level the per-district outlines are added by the caller
+    (`build_folium_map_for_selection`), which owns the ADM2 geometry cache.
+    """
     import folium
 
     m = folium.Map(
         location=map_center,
         zoom_start=map_zoom,
-        tiles="CartoDB positron",
+        tiles=CARTO_LIGHT_NOLABELS_TILES,
+        attr=CARTO_TILES_ATTR,
         control_scale=False,
         min_zoom=4,
         max_zoom=12,
         prefer_canvas=True,
-        zoom_control=True,
+        # Zoom control is created explicitly in `attach_map_view_controls` so it
+        # shares the top-right cluster with the fullscreen / fit-India buttons.
+        zoom_control=False,
         dragging=True,
         scrollWheelZoom=True,
     )
+    _ensure_overlay_panes(m)
 
-    # Fit state bounds when a state is selected but district is "All"
+    # Labels-only tiles above the polygons; zoom-gated so the national view stays
+    # clean and place names appear only from state scale onward.
+    folium.TileLayer(
+        tiles=CARTO_LIGHT_ONLYLABELS_TILES,
+        attr=CARTO_TILES_ATTR,
+        name="Place labels",
+        overlay=True,
+        control=False,
+        min_zoom=BASEMAP_LABELS_MIN_ZOOM,
+        max_zoom=12,
+        pane=PANE_BASEMAP_LABELS,
+    ).add_to(m)
+
+    # Fit state bounds when a state is selected but district is "All";
+    # otherwise (national view) fit India's bounds so the country fills the frame.
+    national_bounds = _resolve_national_bounds(adm1=adm1, fallback=bounds_latlon)
+
     try:
         if selected_state != "All" and selected_district == "All":
             row_state = adm1[adm1["shapeName"].astype(str).str.strip() == selected_state]
             if not row_state.empty:
                 b = row_state.iloc[0].geometry.bounds
-                fit_bounds = [[b[1], b[0]], [b[3], b[2]]]
-                _name = m.get_name()
-                bounds_js = f"<script>var {_name} = {_name}; {_name}.fitBounds({fit_bounds});</script>"
-                m.get_root().html.add_child(folium.Element(bounds_js))
+                m.fit_bounds([[b[1], b[0]], [b[3], b[2]]])
+        elif selected_state == "All":
+            m.fit_bounds(national_bounds, padding=(24, 24))
     except Exception:
         pass
 
-    # Clamp panning to India-ish bounds (legacy)
-    try:
-        _name = m.get_name()
-        bounds_js = (
-            f"<script>var {_name} = {_name}; {_name}.setMaxBounds({bounds_latlon});</script>"
-        )
-        m.get_root().html.add_child(folium.Element(bounds_js))
-    except Exception:
-        pass
+    attach_map_view_controls(m, national_bounds, max_bounds=bounds_latlon)
 
     def _style_fn(feature: dict) -> dict:
         props = (feature or {}).get("properties", {}) if isinstance(feature, dict) else {}
         return {
-            "fillColor": props.get("fillColor", "#cccccc"),
-            "color": "#666666",
-            "weight": 0.3,
-            "fillOpacity": 0.7,
+            "fillColor": props.get("fillColor", NO_DATA_FILL_HEX),
+            "color": "#FFFFFF",
+            "weight": 0.4,
+            "opacity": 0.6,
+            "fillOpacity": 0.85,
         }
 
     folium.GeoJson(
@@ -315,6 +608,63 @@ def build_base_choropleth_map_with_geojson_layer(
         bubblingMouseEvents=False,
     ).add_to(m)
 
+    # Admin outlines above the choropleth: states always; country strongest.
+    try:
+        from india_resilience_tool.app.geo_cache import (
+            build_country_outline_fc,
+            build_state_outline_fc,
+        )
+
+        add_admin_outline_layer(
+            m,
+            outline_fc=build_state_outline_fc(adm1),
+            name="State outlines",
+            weight=ADMIN_OUTLINE_STATE_WEIGHT,
+        )
+        add_admin_outline_layer(
+            m,
+            outline_fc=build_country_outline_fc(adm1),
+            name="Country outline",
+            weight=ADMIN_OUTLINE_COUNTRY_WEIGHT,
+            opacity=1.0,
+        )
+    except Exception:
+        # Outlines are cosmetic; never block the choropleth on their failure.
+        pass
+
+    return m
+
+
+def add_admin_outline_layer(
+    m: Any,
+    *,
+    outline_fc: Optional[Mapping[str, Any]],
+    name: str,
+    weight: float,
+    color: str = ADMIN_OUTLINE_COLOR,
+    opacity: float = 0.9,
+) -> Any:
+    """Attach a non-interactive boundary-outline layer to an existing Folium map."""
+    import folium
+
+    if not (outline_fc and list((outline_fc or {}).get("features", []) or [])):
+        return m
+
+    folium.GeoJson(
+        data=dict(outline_fc),
+        name=str(name),
+        style_function=lambda _feature: {
+            "fill": False,
+            "color": str(color),
+            "weight": float(weight),
+            "opacity": float(opacity),
+        },
+        smooth_factor=1.5,
+        zoom_on_click=False,
+        bubblingMouseEvents=False,
+        pane=PANE_ADMIN_OUTLINE,
+        interactive=False,
+    ).add_to(m)
     return m
 
 
@@ -345,44 +695,15 @@ def add_reference_overlay_layer(
             "fillOpacity": 0.0,
         }
 
-    reference_tooltip = None
-    if reference_level_norm == "district":
-        reference_tooltip = folium.features.GeoJsonTooltip(
-            fields=["district_name", "state_name"],
-            aliases=["District", "State"],
-            localize=True,
-            sticky=True,
-        )
-    elif reference_level_norm == "block":
-        reference_tooltip = folium.features.GeoJsonTooltip(
-            fields=["block_name", "district_name", "state_name"],
-            aliases=["Block", "District", "State"],
-            localize=True,
-            sticky=True,
-        )
-    elif reference_level_norm == "basin":
-        reference_tooltip = folium.features.GeoJsonTooltip(
-            fields=["basin_name"],
-            aliases=["Basin"],
-            localize=True,
-            sticky=True,
-        )
-    elif reference_level_norm == "sub_basin":
-        reference_tooltip = folium.features.GeoJsonTooltip(
-            fields=["subbasin_name", "basin_name"],
-            aliases=["Sub-basin", "Basin"],
-            localize=True,
-            sticky=True,
-        )
-
     folium.GeoJson(
         data=dict(reference_fc),
         name=str(reference_layer_name or "Related units"),
         style_function=_reference_style,
-        tooltip=reference_tooltip,
         smooth_factor=1.5,
         zoom_on_click=False,
         bubblingMouseEvents=False,
+        pane=PANE_CROSSWALK_OVERLAY,
+        interactive=False,
     ).add_to(m)
     return m
 
@@ -392,6 +713,7 @@ def add_river_overlay_layer(
     *,
     river_fc: Optional[Mapping[str, Any]] = None,
     river_layer_name: Optional[str] = None,
+    opacity: float = 0.75,
 ) -> Any:
     """Attach the river overlay layer to an existing Folium map."""
     import folium
@@ -417,14 +739,67 @@ def add_river_overlay_layer(
         style_function=lambda _feature: {
             "color": "#2563eb",
             "weight": 1.8,
-            "opacity": 0.75,
+            "opacity": float(opacity),
         },
         tooltip=river_tooltip,
         smooth_factor=1.0,
         zoom_on_click=False,
         bubblingMouseEvents=False,
+        pane=PANE_RIVER_OVERLAY,
     ).add_to(m)
 
+    return m
+
+
+def _ensure_overlay_panes(m: Any) -> None:
+    """Create the fixed z-order panes used by IRT map overlays."""
+    import folium
+
+    if getattr(m, "_irt_overlay_panes_added", False):
+        return
+    for pane_name, z_index in (
+        (PANE_BASE_POLYGONS, 400),
+        (PANE_LULC_AGRI_RASTER, 404),
+        (PANE_POPULATION_RASTER, 405),
+        (PANE_BUILT_UP_AREA_RASTER, 406),
+        (PANE_RURAL_FACILITIES_RASTER, 407),
+        (PANE_RURAL_FACILITIES_AGRO_RASTER, 407),
+        (PANE_RURAL_FACILITIES_EDUCATION_RASTER, 408),
+        (PANE_RURAL_FACILITIES_HEALTH_RASTER, 409),
+        (PANE_RURAL_FACILITIES_SERVICE_RASTER, 410),
+        (PANE_FLOOD_RASTER, 411),
+        (PANE_ADMIN_OUTLINE, 415),
+        (PANE_CROSSWALK_OVERLAY, 420),
+        (PANE_RIVER_OVERLAY, 430),
+        (PANE_BASEMAP_LABELS, 440),
+    ):
+        folium.map.CustomPane(pane_name, z_index=z_index).add_to(m)
+    setattr(m, "_irt_overlay_panes_added", True)
+
+
+def add_overlay_render_layers(m: Any, *, overlay_layers: tuple[Any, ...]) -> Any:
+    """Attach generic reference overlay render layers to an existing Folium map."""
+    import folium
+
+    _ensure_overlay_panes(m)
+    for layer in overlay_layers:
+        if getattr(layer, "kind", "") == "image":
+            folium.raster_layers.ImageOverlay(
+                image=str(layer.image_path),
+                bounds=layer.bounds_latlon,
+                name=str(layer.name),
+                interactive=False,
+                cross_origin=False,
+                opacity=float(layer.opacity),
+                pane=str(getattr(layer, "pane", None) or PANE_FLOOD_RASTER),
+            ).add_to(m)
+        elif getattr(layer, "kind", "") == "geojson":
+            add_river_overlay_layer(
+                m,
+                river_fc=layer.feature_collection,
+                river_layer_name=str(layer.name),
+                opacity=float(layer.opacity),
+            )
     return m
 
 
@@ -724,6 +1099,49 @@ def find_block_at_coordinates(
     return None, None, None
 
 
+def resolve_clicked_state_for_navigation(
+    *,
+    returned: Optional[Mapping[str, Any]],
+    merged: Optional[Any],
+    level: str,
+    clicked_district: Optional[str],
+    clicked_state: Optional[str],
+    normalize_fn: Callable[[str], str],
+) -> Optional[str]:
+    """Resolve the state for a click-driven navigation when the payload lacks one.
+
+    A click at state="All" can carry only a district name, which is ambiguous
+    for duplicated district names. When ``clicked_state`` is missing or "All",
+    fall back to the click coordinates and return the coordinate-derived state
+    only if the coordinate-derived district matches ``clicked_district`` under
+    ``normalize_fn`` (same guard as the add-to-portfolio fallback). Returns
+    ``clicked_state`` unchanged when it already names a concrete state, and
+    None when no coordinate resolution is possible.
+    """
+    state_norm = str(clicked_state or "").strip()
+    if state_norm and state_norm != "All":
+        return clicked_state
+
+    district_norm = str(clicked_district or "").strip()
+    if not district_norm or merged is None or not returned:
+        return None
+
+    lat, lon = extract_click_coordinates(returned)
+    if lat is None or lon is None:
+        return None
+
+    if str(level).strip().lower() == "block":
+        _block, coord_district, coord_state = find_block_at_coordinates(merged, lat, lon)
+    else:
+        coord_district, coord_state = find_district_at_coordinates(merged, lat, lon)
+
+    if not coord_district or not coord_state:
+        return None
+    if normalize_fn(coord_district) == normalize_fn(district_norm):
+        return coord_state
+    return None
+
+
 def find_basin_at_coordinates(
     merged: Any,
     lat: float,
@@ -787,8 +1205,13 @@ def add_portfolio_legend_to_map(
 ) -> None:
     """
     Add a legend item indicating portfolio units.
+
+    Attached as a bottomleft Leaflet control via a map-child MacroElement:
+    figure-level HTML (`get_root().html`) is silently dropped by
+    streamlit-folium -- see `attach_legend_card_control` in `map_pipeline.py`.
     """
-    import folium
+    from branca.element import MacroElement
+    from jinja2 import Template
 
     if portfolio_count == 0:
         return
@@ -803,10 +1226,6 @@ def add_portfolio_legend_to_map(
 
     legend_html = f"""
     <div style="
-        position: fixed;
-        bottom: 50px;
-        left: 10px;
-        z-index: 1000;
         background: white;
         padding: 8px 12px;
         border-radius: 4px;
@@ -824,7 +1243,24 @@ def add_portfolio_legend_to_map(
         </div>
     </div>
     """
-    m.get_root().html.add_child(folium.Element(legend_html))
+
+    legend_control = MacroElement()
+    legend_control._name = "IrtPortfolioLegendControl"
+    legend_control._template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        var {{ this.get_name() }} = L.control({position: 'bottomleft'});
+        {{ this.get_name() }}.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'irt-portfolio-legend-control');
+            div.innerHTML = {{ this.legend_html|tojson }};
+            return div;
+        };
+        {{ this.get_name() }}.addTo({{ this._parent.get_name() }});
+        {% endmacro %}
+        """
+    )
+    legend_control.legend_html = legend_html
+    m.add_child(legend_control)
 
 
 def render_map_view(
@@ -845,6 +1281,7 @@ def render_map_view(
     selected_subbasin: str = "All",
     level: str = "district",
     perf_section: Optional[Callable[[str], Any]] = None,
+    map_key_suffix: str = "",
 ) -> Tuple[Mapping[str, Any], Optional[str], Optional[str]]:
     """
     Render the folium map inside Streamlit using st_folium, and extract click info.
@@ -991,10 +1428,17 @@ def render_map_view(
             f"{selected_state}_{selected_district}_{selected_block}_"
             f"{selected_basin}_{selected_subbasin}_{str(level).strip().lower()}"
         )
+        if map_key_suffix:
+            map_key = f"{map_key}_{map_key_suffix}"
+        # Reset View bumps this nonce (runtime.py) so st_folium remounts and
+        # drops its retained pan/zoom and stale click payload (CHG-0281).
+        map_key = f"{map_key}_r{int(st.session_state.get('map_key_nonce', 0))}"
         st.markdown(
             (
                 f'<div class="irt-responsive-map-marker" data-map-key="{map_key}" '
-                'style="display:none;"></div>'
+                # `display:none` yields an empty client rect, so the resizer below
+                # would measure a marker top of 0 and target unrelated iframes.
+                'style="height:0;width:0;overflow:hidden;visibility:hidden;"></div>'
             ),
             unsafe_allow_html=True,
         )
@@ -1028,12 +1472,21 @@ def render_map_view(
                 width=map_width,
                 height=map_height,
                 returned_objects=["last_object_clicked", "last_clicked", "last_active_drawing"],
-                use_container_width=False,
+                use_container_width=True,
                 key=map_key,
             )
+        # When the ribbon is collapsed, lift the responsive-resizer cap so the
+        # map can actually grow into the freed vertical space (the JS clamps to
+        # `max_height`, otherwise the map stays at ~700px even with more room).
+        _resizer_max = (
+            RESPONSIVE_MAP_MAX_HEIGHT + 250
+            if bool(st.session_state.get("ribbon_collapsed", False))
+            else RESPONSIVE_MAP_MAX_HEIGHT
+        )
         _render_responsive_map_resizer(
             map_key=map_key,
             default_height=map_height,
+            max_height=_resizer_max,
         )
 
     if not isinstance(returned, dict):

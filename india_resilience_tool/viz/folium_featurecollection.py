@@ -13,11 +13,17 @@ Contract:
 
 from __future__ import annotations
 
-import hashlib
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Mapping, Sequence, Tuple
 
 import folium
 import pandas as pd
+
+from india_resilience_tool.data.admin_coverage import (
+    build_feature_key_from_properties,
+    build_feature_key_series,
+)
+from india_resilience_tool.viz.colors import NO_DATA_FILL_HEX
+from india_resilience_tool.viz.formatting import metric_uses_class_display
 
 
 def ensure_geojson_by_state_has_all(geojson_by_state: Mapping[str, dict]) -> dict[str, dict]:
@@ -44,46 +50,10 @@ def filter_fc_by_district(
     fc: dict,
     *,
     selected_district: str,
-    selected_basin: str = "All",
-    selected_subbasin: str = "All",
     level: str = "district",
     alias_fn: Callable[[str], str],
 ) -> dict:
-    """Filter a feature collection to the active district or basin selection."""
-    level_norm = str(level).strip().lower()
-    if level_norm == "basin" and selected_basin and selected_basin != "All":
-        basin_key = alias_fn(selected_basin)
-        features = [
-            f
-            for f in fc.get("features", [])
-            if alias_fn(((f.get("properties") or {}).get("basin_name", ""))) == basin_key
-        ]
-        fc = dict(fc)
-        fc["features"] = features
-        return fc
-
-    if level_norm == "sub_basin" and selected_basin and selected_basin != "All":
-        basin_key = alias_fn(selected_basin)
-        features = [
-            f
-            for f in fc.get("features", [])
-            if alias_fn(((f.get("properties") or {}).get("basin_name", ""))) == basin_key
-        ]
-        fc = dict(fc)
-        fc["features"] = features
-    if level_norm == "sub_basin" and selected_subbasin and selected_subbasin != "All":
-        subbasin_key = alias_fn(selected_subbasin)
-        features = [
-            f
-            for f in fc.get("features", [])
-            if alias_fn(((f.get("properties") or {}).get("subbasin_name", ""))) == subbasin_key
-        ]
-        fc = dict(fc)
-        fc["features"] = features
-        return fc
-    if level_norm in {"basin", "sub_basin"}:
-        return fc
-
+    """Filter a feature collection to the active district selection."""
     if not selected_district or selected_district == "All":
         return fc
 
@@ -209,27 +179,6 @@ def clone_featurecollection_for_patch(fc: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
-def props_map_signature(props_map: Mapping[str, Mapping[str, Any]]) -> str:
-    """Return a stable signature for a patched-properties payload."""
-    hasher = hashlib.sha1()
-    for feature_key in sorted(str(k) for k in props_map.keys()):
-        hasher.update(feature_key.encode("utf-8"))
-        props = props_map.get(feature_key) or {}
-        for prop_key, prop_value in sorted(props.items(), key=lambda item: str(item[0])):
-            hasher.update(str(prop_key).encode("utf-8"))
-            if hasattr(prop_value, "item"):
-                prop_value = prop_value.item()
-            hasher.update(repr(prop_value).encode("utf-8"))
-    return hasher.hexdigest()
-
-
-def _string_series(frame: pd.DataFrame, column: str) -> pd.Series:
-    """Return a string series with nulls normalized to empty strings."""
-    if column not in frame.columns:
-        return pd.Series("", index=frame.index, dtype="object")
-    return frame[column].where(frame[column].notna(), "").astype(str)
-
-
 def build_props_map_from_gdf(
     prop_gdf: pd.DataFrame,
     *,
@@ -255,18 +204,11 @@ def build_props_map_from_gdf(
     if level_norm == "sub_basin" and "subbasin_name" not in prop_work.columns and "subbasin" in prop_work.columns:
         prop_work["subbasin_name"] = prop_work["subbasin"]
 
-    if feature_key_col not in prop_work.columns:
-        if is_block_level:
-            state_key = _string_series(prop_work, "state_name").map(alias_fn)
-            district_key = _string_series(prop_work, "district_name").map(alias_fn)
-            block_key = _string_series(prop_work, "block_name").map(alias_fn)
-            prop_work[feature_key_col] = state_key.str.cat(district_key, sep="|").str.cat(block_key, sep="|")
-        elif level_norm == "sub_basin":
-            prop_work[feature_key_col] = _string_series(prop_work, "subbasin_id").map(alias_fn)
-        elif level_norm == "basin":
-            prop_work[feature_key_col] = _string_series(prop_work, "basin_id").map(alias_fn)
-        else:
-            prop_work[feature_key_col] = _string_series(prop_work, "district_name").map(alias_fn)
+    prop_work[feature_key_col] = build_feature_key_series(
+        prop_work,
+        level=level_norm,
+        alias_fn=alias_fn,
+    )
 
     value_cols: list[str] = []
     for c in (
@@ -334,7 +276,7 @@ def build_props_map_from_gdf(
             upd["block_name"] = record.get("block_name")
 
         fill = record.get("fillColor")
-        upd["fillColor"] = fill if isinstance(fill, str) and fill else "#cccccc"
+        upd["fillColor"] = fill if isinstance(fill, str) and fill else NO_DATA_FILL_HEX
 
         for c in value_cols:
             v = record.get(c)
@@ -376,52 +318,20 @@ def patch_fc_properties(
 
         k = props.get(feature_key_col)
         if not isinstance(k, str) or not k:
-            if is_block_level:
-                props["block_name"] = (
-                    props.get("block_name")
-                    or props.get("block")
-                    or props.get("adm3_name")
-                    or props.get("name")
-                )
-                props["district_name"] = (
-                    props.get("district_name")
-                    or props.get("district")
-                    or props.get("adm2_name")
-                    or props.get("shapeName_2")
-                    or props.get("shapeName_1")
-                )
-                props["state_name"] = (
-                    props.get("state_name")
-                    or props.get("state")
-                    or props.get("adm1_name")
-                    or props.get("shapeName_0")
-                    or props.get("shapeGroup")
-                )
-                k = (
-                    f"{alias_fn(props.get('state_name', ''))}|"
-                    f"{alias_fn(props.get('district_name', ''))}|"
-                    f"{alias_fn(props.get('block_name', ''))}"
-                )
-            elif str(level).strip().lower() == "sub_basin":
-                props["subbasin_name"] = props.get("subbasin_name") or props.get("name")
-                props["subbasin_id"] = props.get("subbasin_id")
-                props["basin_name"] = props.get("basin_name")
-                props["basin_id"] = props.get("basin_id")
-                k = alias_fn(props.get("subbasin_id", ""))
-            elif str(level).strip().lower() == "basin":
-                props["basin_name"] = props.get("basin_name") or props.get("name")
-                props["basin_id"] = props.get("basin_id")
-                k = alias_fn(props.get("basin_id", ""))
-            else:
-                k = alias_fn(props.get("district_name", ""))
-
-            props[feature_key_col] = k
+            k = build_feature_key_from_properties(
+                props,
+                level=level,
+                alias_fn=alias_fn,
+                feature_key_col=feature_key_col,
+            )
+            if k:
+                props[feature_key_col] = k
 
         upd = props_map.get(str(k))
         if upd:
             props.update(dict(upd))
         else:
-            props.setdefault("fillColor", "#cccccc")
+            props.setdefault("fillColor", NO_DATA_FILL_HEX)
 
         for c in ensure_text_fields:
             props.setdefault(c, None)
@@ -462,8 +372,9 @@ def build_geojson_tooltip(
         tooltip_fields += ["_tooltip_baseline", "_tooltip_delta"]
         tooltip_aliases += ["Baseline (1990–2010)", "Δ vs baseline"]
 
-    metric_slug_norm = str(metric_slug or "").strip().lower()
-    if metric_slug_norm != "jrc_flood_depth_index_rp100":
+    # Suppress the redundant separate risk-class row for any class-display metric
+    # (JRC flood, water scarcity, deterioration, ...): its value already shows the class.
+    if not metric_uses_class_display(metric_slug):
         tooltip_fields.append("_risk_class")
         tooltip_aliases.append("Risk class")
     tooltip_fields.append("_tooltip_rank")

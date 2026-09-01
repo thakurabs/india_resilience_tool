@@ -23,11 +23,10 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["landing_focus_level"] == "india"
     assert ss["landing_selected_state"] is None
     assert ss["landing_selected_district"] is None
+    assert ss["landing_selected_block"] is None
     assert ss["landing_tab"] == "Rankings"
     assert isinstance(ss["portfolio_districts"], list)
     assert isinstance(ss["portfolio_blocks"], list)
-    assert isinstance(ss["portfolio_basins"], list)
-    assert isinstance(ss["portfolio_subbasins"], list)
     assert ss["jump_to_rankings"] is False
     assert ss["jump_to_map"] is False
     assert ss["landing_search"] == ""
@@ -37,8 +36,15 @@ def test_ensure_session_state_sets_defaults() -> None:
     assert ss["landing_context_pair"] == ("ssp585", "2040-2060")
     assert isinstance(ss["landing_compare_selection"], list)
     assert ss["crosswalk_overlay"] is None
-    assert ss["hydro_admin_context_level"] == "district"
-    assert ss["show_river_network"] is False
+    assert ss["overlay_rp100_flood_depth_raster_enabled"] is False
+    assert ss["overlay_rp100_flood_depth_raster_opacity_pct"] == 65
+    assert ss["overlay_rural_facilities_density_enabled"] is False
+    assert ss["overlay_rural_facilities_density_opacity_pct"] == 55
+    assert ss["overlay_rural_facilities_density_category"] == "total"
+    assert ss["overlay_built_up_area_current_raster_enabled"] is False
+    assert ss["overlay_built_up_area_current_raster_opacity_pct"] == 55
+    assert ss["overlay_river_network_enabled"] is False
+    assert ss["overlay_river_network_opacity_pct"] == 75
     assert ss["_pending_crosswalk_navigation"] is None
 
 

@@ -42,7 +42,7 @@ Usage:
   python compute_indices_multiprocess.py --list-metrics         # List available metrics
   python compute_indices_multiprocess.py --list-models          # List discovered models
   python compute_indices_multiprocess.py --state Telangana      # Specific state
-  python compute_indices_multiprocess.py --spi-legacy           # Force legacy SPI (scipy-based)
+  python compute_indices_multiprocess.py --spi-legacy           # Rejected compatibility flag (exits 2)
   python compute_indices_multiprocess.py --spi-distribution pearson  # Use Pearson Type III for SPI
 
 SPI/SPEI Implementation:
@@ -53,18 +53,25 @@ SPI/SPEI Implementation:
   - Proper zero-inflation handling
   - Numba-accelerated performance
   
-  If climate-indices is not installed, or --spi-legacy is specified, the pipeline
-  falls back to the legacy scipy-based implementation.
+  Legacy scipy/z-score SPI is no longer accepted because it is non-conformant
+  with WMO SPI methodology.
 
 Author: Abu Bakar Siddiqui Thakur
 Email: absthakur@resilience.org.in
 """
 
-import os, glob, sys, time, argparse, logging, json, traceback, hashlib, shutil
+if __name__ == "__main__" and __import__("os").environ.get("_IRT_CMP_BOOTSTRAPPED") != "1":
+    raise SystemExit(
+        __import__("tools.pipeline.compute_indices_bootstrap", fromlist=["main"]).main(
+            __import__("sys").argv[1:]
+        )
+    )
+
+import os, glob, sys, time, logging, json, traceback, hashlib, shutil, threading
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Literal, Optional, Sequence
-from dataclasses import dataclass
+from typing import Any, Literal, Mapping, Optional, Sequence
+from dataclasses import dataclass, field
 from functools import partial
 from multiprocessing import Pool, cpu_count
 
@@ -74,18 +81,56 @@ import xarray as xr
 import geopandas as gpd
 from rasterio import features
 from affine import Affine
-from shapely.geometry import box
-
 from paths import (
     BASE_OUTPUT_ROOT,
-    BASINS_PATH,
     BLOCKS_PATH,
     DATA_ROOT,
     DISTRICTS_PATH,
-    SUBBASINS_PATH,
 )
-from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
+from india_resilience_tool.data.source_inventory import (
+    SourceInventoryShard,
+    combine_shard_signatures,
+    load_or_refresh_inventory_shard,
+    yearly_files_for_dir as inventory_yearly_files_for_dir,
+)
 from india_resilience_tool.config.metrics_registry import PIPELINE_METRICS_RAW
+from india_resilience_tool.compute.heat_risk_gridfirst import (
+    DEFAULT_BASELINE_YEARS as HEAT_RISK_GRIDFIRST_BASELINE_YEARS,
+    GRIDFIRST_BASELINE_THRESHOLD_COMPUTES as HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES,
+    build_area_weights as build_heat_risk_area_weights,
+    compute_heat_risk_rows_for_metric,
+    coverage_from_weights as heat_risk_coverage_from_weights,
+    dataset_grid_spec as heat_risk_dataset_grid_spec,
+    is_heat_risk_gridfirst,
+    read_spatial_weights_cache as read_heat_risk_spatial_weights_cache,
+    write_spatial_weights_cache as write_heat_risk_spatial_weights_cache,
+)
+from india_resilience_tool.compute.heat_stress_gridfirst import (
+    HEAT_STRESS_GRIDFIRST_SLUGS,
+    compute_heat_stress_rows_for_metric,
+    stull_twb_c,
+)
+from india_resilience_tool.compute.drought_risk_gridfirst import (
+    compute_drought_risk_rows_for_metric,
+    is_drought_gridfirst,
+)
+from india_resilience_tool.compute.extreme_rainfall_gridfirst import (
+    compute_extreme_rainfall_rows_for_metric,
+    is_extreme_rainfall_gridfirst,
+)
+from india_resilience_tool.compute.cold_risk_gridfirst import (
+    COLD_RISK_GRIDFIRST_SLUGS,
+    compute_cold_risk_rows_for_metric,
+)
+from india_resilience_tool.compute.gridfirst_spatial import (
+    bbox_to_index_range,
+    build_area_weights as build_gridfirst_area_weights,
+    coverage_from_weights as gridfirst_coverage_from_weights,
+    dataset_grid_spec as gridfirst_dataset_grid_spec,
+    read_spatial_weights_cache as read_gridfirst_spatial_weights_cache,
+    subset_grid_by_index,
+    write_spatial_weights_cache as write_gridfirst_spatial_weights_cache,
+)
 from india_resilience_tool.utils.naming import hydro_fs_token
 from india_resilience_tool.utils.processed_io import (
     ensure_directory,
@@ -95,6 +140,11 @@ from india_resilience_tool.utils.processed_io import (
     remove_tree,
     unlink_file,
     write_csv,
+)
+from tools.pipeline.compute_indices_cli_common import (
+    build_parser as build_compute_parser,
+    effective_yearly_cleanup_policy,
+    validate_yearly_cleanup_policy_args,
 )
 
 # -----------------------------------------------------------------------------
@@ -120,14 +170,11 @@ USE_CLIMATE_INDICES_PACKAGE = CLIMATE_INDICES_AVAILABLE
 SPI_DISTRIBUTION: str = "gamma"
 
 # Type alias for administrative level
-AdminLevel = Literal["district", "block", "basin", "sub_basin"]
+AdminLevel = Literal["district", "block"]
 
 # Folder names for clean separation
 DISTRICT_FOLDER = "districts"
 BLOCK_FOLDER = "blocks"
-BASIN_FOLDER = "basins"
-SUB_BASIN_FOLDER = "sub_basins"
-HYDRO_ROOT_NAME = "hydro"
 COVERAGE_THRESHOLD = 0.80
 NULL_LIKE_STRINGS = {"", "nan", "<na>", "none", "nat"}
 
@@ -143,6 +190,8 @@ MIN_YEARS_REQUIRED_FRACTION = 0.6
 MIN_YEARS_ABSOLUTE = 5
 METRICS = PIPELINE_METRICS_RAW
 DEFAULT_WORKERS = max(1, int(cpu_count() * 0.75))
+_inventory_writes_allowed = True
+_inventory_path_engines: dict[str, str] = {}
 
 def setup_logging(verbose: bool = False):
     import sys
@@ -154,6 +203,118 @@ def setup_logging(verbose: bool = False):
         stream=sys.stdout,
         force=True,   # critical: overwrites any pre-existing handlers
     )
+
+
+class PeriodicProgressLogger:
+    """Emit lightweight stage progress with both milestone and heartbeat logs."""
+
+    def __init__(
+        self,
+        *,
+        total: int,
+        prefix: str,
+        report_every: int | None = None,
+        heartbeat_seconds: float = 30.0,
+    ) -> None:
+        self.total = max(0, int(total))
+        self.prefix = str(prefix)
+        self.report_every = max(1, int(report_every or self._default_report_every(self.total)))
+        self.heartbeat_seconds = max(1.0, float(heartbeat_seconds))
+        self.completed = 0
+        self.failed = 0
+        self.start_time = time.time()
+        self.last_log_time = self.start_time
+        self._last_logged_snapshot: tuple[int, int] | None = None
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
+
+    @staticmethod
+    def _default_report_every(total: int) -> int:
+        if total <= 0:
+            return 1
+        return max(10, min(50, total // 100 or 10))
+
+    def start(self) -> None:
+        if self.total <= 0:
+            return
+        logging.info(
+            "%s started: total=%d report_every=%d heartbeat_seconds=%.0f",
+            self.prefix,
+            self.total,
+            self.report_every,
+            self.heartbeat_seconds,
+        )
+        self._heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name=f"{self.prefix.lower().replace(' ', '_')}_progress",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
+
+    def update(self, *, completed_increment: int = 1, failed_increment: int = 0) -> None:
+        with self._lock:
+            self.completed += int(completed_increment)
+            self.failed += int(failed_increment)
+            should_log = (
+                self.completed == 1
+                or self.completed == self.total
+                or self.completed % self.report_every == 0
+            )
+            if should_log:
+                self._emit_progress_log_locked(reason="milestone")
+
+    def finish(self) -> None:
+        self._stop_event.set()
+        if self._heartbeat_thread is not None:
+            self._heartbeat_thread.join(timeout=max(1.0, self.heartbeat_seconds))
+        if self.total > 0:
+            with self._lock:
+                self._emit_progress_log_locked(reason="final", force=True)
+
+    def _heartbeat_loop(self) -> None:
+        while not self._stop_event.wait(self.heartbeat_seconds):
+            with self._lock:
+                if self.completed >= self.total:
+                    return
+                self._emit_progress_log_locked(reason="heartbeat")
+
+    def _emit_progress_log_locked(self, *, reason: str, force: bool = False) -> None:
+        now = time.time()
+        snapshot = (self.completed, self.failed)
+        if force and self.completed == self.total and self._last_logged_snapshot == snapshot:
+            return
+        if not force and (now - self.last_log_time) < 1.0 and self.completed < self.total:
+            return
+
+        elapsed = max(0.0, now - self.start_time)
+        percent = (100.0 * self.completed / self.total) if self.total else 100.0
+        if self.completed > 0 and elapsed > 0:
+            rate = self.completed / elapsed
+            eta_seconds = max(0.0, (self.total - self.completed) / rate) if rate > 0 else None
+            rate_text = f"{rate:.2f}/s"
+            eta_text = f"{eta_seconds:.0f}s" if eta_seconds is not None else "n/a"
+            waiting_text = "no"
+        else:
+            rate_text = "n/a"
+            eta_text = "n/a"
+            waiting_text = "yes"
+
+        logging.info(
+            "%s progress [%s]: %d/%d (%.1f%%) failed=%d elapsed=%.1fs rate=%s eta=%s waiting_for_first_completion=%s",
+            self.prefix,
+            reason,
+            self.completed,
+            self.total,
+            percent,
+            self.failed,
+            elapsed,
+            rate_text,
+            eta_text,
+            waiting_text,
+        )
+        self.last_log_time = now
+        self._last_logged_snapshot = snapshot
 
 # -----------------------------------------------------------------------------
 # BASIC HELPERS
@@ -171,7 +332,7 @@ def _is_blank_like(value: object) -> bool:
 
 
 def _safe_component(name: object) -> str:
-    """Build a deterministic hydro-safe folder/file component."""
+    """Build a deterministic filesystem-safe folder/file component."""
     return hydro_fs_token(str(name).strip())
 
 
@@ -180,12 +341,53 @@ def metric_root(slug: str) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     return root
 
+
+def _heat_risk_internal_root() -> Path:
+    """Private cache root for Heat Risk v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "heat_risk"
+
+
+def _state_token(state_name: str | None) -> str:
+    """Filesystem-safe token for a state name used in cache filenames."""
+    cleaned = "".join(ch if ch.isalnum() else "-" for ch in str(state_name or "").strip())
+    cleaned = "-".join(part for part in cleaned.split("-") if part)
+    return cleaned.lower() or "all"
+
+
+def _heat_risk_spatial_weights_path(
+    level: AdminLevel, grid_id: str, state: str | None = None
+) -> Path:
+    """Return the private spatial-weight cache path for a level/grid/state triple.
+
+    The state token keeps per-state weight caches distinct even when the grid is
+    shared (full-India grid → identical ``grid_id`` and boundary hash across
+    states), preventing one state from reading another's cached weights.
+    """
+    name = f"{level}__{_state_token(state)}__{grid_id}.parquet"
+    return BASE_OUTPUT_ROOT / "_internal" / "spatial_weights" / name
+
+
+def _drought_risk_internal_root() -> Path:
+    """Private cache root for Drought Risk v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "drought_risk"
+
+
+def _heat_stress_internal_root() -> Path:
+    """Private cache root for Heat Stress v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "heat_stress"
+
+
+def _extreme_rainfall_internal_root() -> Path:
+    """Private cache root for Extreme Rainfall v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "extreme_rainfall"
+
+
+def _cold_risk_internal_root() -> Path:
+    """Private cache root for Cold Risk v2 build artifacts."""
+    return BASE_OUTPUT_ROOT / "_internal" / "cold_risk"
+
 def get_level_folder(level: AdminLevel) -> str:
     """Get the subfolder name for a given level."""
-    if level == "sub_basin":
-        return SUB_BASIN_FOLDER
-    if level == "basin":
-        return BASIN_FOLDER
     return BLOCK_FOLDER if level == "block" else DISTRICT_FOLDER
 
 def normalize_lat_lon(ds: xr.Dataset) -> xr.Dataset:
@@ -205,36 +407,8 @@ def pr_to_mm_per_day(da: xr.DataArray) -> xr.DataArray:
 # -----------------------------------------------------------------------------
 def get_boundary_path(level: AdminLevel) -> Path:
     """Get the boundary file path based on level."""
-    if level == "sub_basin":
-        return SUBBASINS_PATH
-    if level == "basin":
-        return BASINS_PATH
     return BLOCKS_PATH if level == "block" else DISTRICTS_PATH
 
-
-def _validate_hydro_boundary_identity(
-    gdf: gpd.GeoDataFrame,
-    *,
-    level: AdminLevel,
-) -> None:
-    """Ensure hydro boundary inputs contain non-empty identifiers before mask building."""
-    if level == "sub_basin":
-        required = ["basin_id", "basin_name", "subbasin_id", "subbasin_name"]
-    elif level == "basin":
-        required = ["basin_id", "basin_name"]
-    else:
-        return
-
-    invalid_mask = pd.Series(False, index=gdf.index, dtype=bool)
-    for col in required:
-        invalid_mask |= gdf[col].map(_is_blank_like)
-
-    if invalid_mask.any():
-        sample = gdf.loc[invalid_mask, required].head(5).to_dict("records")
-        raise ValueError(
-            f"Hydro boundary inputs contain blank identity values for level={level}. "
-            f"Required={required}. Sample rows={sample}"
-        )
 
 def load_boundaries(
     path: Path,
@@ -245,13 +419,6 @@ def load_boundaries(
     Load boundary file and optionally filter to a specific state.
     """
     gdf = gpd.read_file(path)
-    
-    if level in {"basin", "sub_basin"}:
-        if gdf.crs is None:
-            gdf = gdf.set_crs("EPSG:4326")
-        gdf = ensure_hydro_columns(gdf, level="sub_basin" if level == "sub_basin" else "basin")
-        _validate_hydro_boundary_identity(gdf, level=level)
-        return gdf
 
     # Find state column
     state_cols = ["STATE_UT", "state_ut", "STATE", "STATE_LGD", "ST_NM", "state_name"]
@@ -326,10 +493,6 @@ def _standardize_block_columns(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
 def get_unit_name_column(level: AdminLevel) -> str:
     """Get the column name for the spatial unit based on level."""
-    if level == "sub_basin":
-        return "subbasin_name"
-    if level == "basin":
-        return "basin_name"
     return "block_name" if level == "block" else "district_name"
 
 # Legacy compatibility
@@ -348,200 +511,7 @@ def _unit_key_from_row(row: pd.Series, level: AdminLevel) -> str:
     if level == "block":
         district = str(row.get("district_name", "")).strip()
         return f"{district}||{unit_name}" if district else unit_name
-    if level == "sub_basin":
-        basin_name = str(row.get("basin_name", "")).strip()
-        return f"{basin_name}||{unit_name}" if basin_name else unit_name
     return unit_name
-
-
-def _sample_extent_polygon(sample_ds: xr.Dataset):
-    """Build a polygon covering the full sample climate grid extent."""
-    lats = np.asarray(sample_ds["lat"].values, dtype=float)
-    lons = np.asarray(sample_ds["lon"].values, dtype=float)
-    if lats.size == 0 or lons.size == 0:
-        raise ValueError("Sample dataset has empty lat/lon coordinates")
-
-    yres = abs(float(lats[1] - lats[0])) if lats.size > 1 else 0.0
-    xres = abs(float(lons[1] - lons[0])) if lons.size > 1 else 0.0
-    min_lat = float(np.min(lats)) - (yres / 2.0)
-    max_lat = float(np.max(lats)) + (yres / 2.0)
-    min_lon = float(np.min(lons)) - (xres / 2.0)
-    max_lon = float(np.max(lons)) + (xres / 2.0)
-    return box(min_lon, min_lat, max_lon, max_lat)
-
-
-def _outside_extent_coverage_rows(
-    gdf: gpd.GeoDataFrame,
-    *,
-    level: AdminLevel,
-) -> pd.DataFrame:
-    """Return coverage-QC rows for hydro units outside the climate-data extent."""
-    rows: list[dict[str, object]] = []
-    unit_col = get_unit_name_column(level)
-    for _, row in gdf.iterrows():
-        unit_name = str(row.get(unit_col, "")).strip()
-        qc_row: dict[str, object] = {
-            "unit_key": _unit_key_from_row(row, level),
-            "coverage_fraction": 0.0,
-            "coverage_ok": False,
-            "coverage_threshold": COVERAGE_THRESHOLD,
-            "covered_cells": 0,
-            "total_cells": 0,
-            "eligible_for_processing": False,
-            "extent_intersects": False,
-            "reason": "outside_climate_extent",
-        }
-        if level == "basin":
-            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
-            qc_row["basin_name"] = unit_name
-        elif level == "sub_basin":
-            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
-            qc_row["basin_name"] = str(row.get("basin_name", "")).strip()
-            qc_row["subbasin_id"] = str(row.get("subbasin_id", "")).strip()
-            qc_row["subbasin_name"] = unit_name
-        rows.append(qc_row)
-    return pd.DataFrame(rows)
-
-
-def _filter_hydro_units_to_climate_extent(
-    gdf: gpd.GeoDataFrame,
-    sample_ds: xr.Dataset,
-    *,
-    level: AdminLevel,
-    slug: str,
-    model: str,
-    scenario: str,
-) -> tuple[gpd.GeoDataFrame, pd.DataFrame]:
-    """Restrict hydro units to those intersecting the available climate-data extent."""
-    if level not in {"basin", "sub_basin"}:
-        return gdf.copy(), pd.DataFrame()
-
-    climate_extent = _sample_extent_polygon(sample_ds)
-    intersects_mask = gdf.geometry.intersects(climate_extent).fillna(False)
-    eligible_gdf = gdf.loc[intersects_mask].copy()
-    excluded_gdf = gdf.loc[~intersects_mask].copy()
-
-    if not excluded_gdf.empty:
-        unit_col = get_unit_name_column(level)
-        sample_units = excluded_gdf[unit_col].astype(str).head(5).tolist()
-        logging.info(
-            "[%s] Hydro extent filter for %s/%s at level=%s kept %d of %d units; excluded %d outside climate extent. Sample excluded units: %s",
-            slug,
-            model,
-            scenario,
-            level,
-            len(eligible_gdf),
-            len(gdf),
-            len(excluded_gdf),
-            sample_units,
-        )
-
-    return eligible_gdf, _outside_extent_coverage_rows(excluded_gdf, level=level)
-
-
-def _prune_excluded_hydro_outputs(
-    metric_root_path: Path,
-    *,
-    state_name: str,
-    level: AdminLevel,
-    model: str,
-    scenario: str,
-    excluded_coverage_df: pd.DataFrame,
-    slug: str,
-) -> None:
-    """Delete stale hydro outputs for units excluded by the current climate extent."""
-    if excluded_coverage_df is None or excluded_coverage_df.empty:
-        return
-
-    level_folder = get_level_folder(level)
-    removed_files = 0
-    for _, row in excluded_coverage_df.iterrows():
-        if level == "basin":
-            basin_safe = _safe_component(row.get("basin_name", ""))
-            scenario_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
-            basename = basin_safe
-        elif level == "sub_basin":
-            basin_safe = _safe_component(row.get("basin_name", ""))
-            sub_basin_safe = _safe_component(row.get("subbasin_name", ""))
-            scenario_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
-            basename = sub_basin_safe
-        else:
-            continue
-
-        for suffix in ("_yearly.csv", "_periods.csv"):
-            path = scenario_dir / f"{basename}{suffix}"
-            if path.exists():
-                path.unlink()
-                removed_files += 1
-
-        current = scenario_dir
-        while current != metric_root_path and current.exists():
-            try:
-                current.rmdir()
-            except OSError:
-                break
-            current = current.parent
-
-    if removed_files:
-        logging.info(
-            "[%s] Removed %d stale hydro output files outside the current climate extent for %s/%s level=%s",
-            slug,
-            removed_files,
-            model,
-            scenario,
-            level,
-        )
-
-
-def _prune_excluded_hydro_ensemble_outputs(
-    metric_root_path: Path,
-    *,
-    state_name: str,
-    level: AdminLevel,
-    scenario: str,
-    excluded_coverage_df: pd.DataFrame,
-    slug: str,
-) -> None:
-    """Delete stale hydro ensemble outputs for units excluded by the current climate extent."""
-    if excluded_coverage_df is None or excluded_coverage_df.empty:
-        return
-
-    ensembles_root = metric_root_path / state_name / get_level_folder(level) / "ensembles"
-    if not ensembles_root.exists():
-        return
-
-    removed_files = 0
-    for _, row in excluded_coverage_df.iterrows():
-        if level == "basin":
-            basin_safe = _safe_component(row.get("basin_name", ""))
-            scenario_dir = ensembles_root / basin_safe / scenario
-        elif level == "sub_basin":
-            basin_safe = _safe_component(row.get("basin_name", ""))
-            sub_basin_safe = _safe_component(row.get("subbasin_name", ""))
-            scenario_dir = ensembles_root / basin_safe / sub_basin_safe / scenario
-        else:
-            continue
-
-        for path in scenario_dir.glob("*_yearly_ensemble.csv"):
-            path.unlink()
-            removed_files += 1
-
-        current = scenario_dir
-        while current != ensembles_root and current.exists():
-            try:
-                current.rmdir()
-            except OSError:
-                break
-            current = current.parent
-
-    if removed_files:
-        logging.info(
-            "[%s] Removed %d stale hydro ensemble files outside the current climate extent for scenario=%s level=%s",
-            slug,
-            removed_files,
-            scenario,
-            level,
-        )
 
 
 def build_unit_masks(
@@ -639,14 +609,6 @@ def build_unit_masks(
             qc_row["block"] = unit_name
         elif level == "district":
             qc_row["district"] = unit_name
-        elif level == "basin":
-            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
-            qc_row["basin_name"] = unit_name
-        elif level == "sub_basin":
-            qc_row["basin_id"] = str(row.get("basin_id", "")).strip()
-            qc_row["basin_name"] = str(row.get("basin_name", "")).strip()
-            qc_row["subbasin_id"] = str(row.get("subbasin_id", "")).strip()
-            qc_row["subbasin_name"] = unit_name
         coverage_rows.append(qc_row)
 
     return masks, pd.DataFrame(coverage_rows)
@@ -671,20 +633,6 @@ def _add_unit_fields_from_key(row: dict, unit_key: str, level: AdminLevel) -> No
         else:
             row["district"] = "Unknown"
             row["block"] = unit_key
-        return
-
-    if level == "sub_basin":
-        if "||" in unit_key:
-            basin, sub_basin = unit_key.split("||", 1)
-            row["basin"] = basin
-            row["sub_basin"] = sub_basin
-        else:
-            row["basin"] = "Unknown"
-            row["sub_basin"] = unit_key
-        return
-
-    if level == "basin":
-        row["basin"] = unit_key
         return
 
     row["district"] = unit_key
@@ -721,47 +669,6 @@ def _append_coverage_failure_rows(
             }
             _add_unit_fields_from_key(row, unit_key, level)
             rows.append(row)
-
-
-def _validate_output_unit_fields(
-    df: pd.DataFrame,
-    *,
-    level: AdminLevel,
-    slug: str,
-    model: str,
-    scenario: str,
-    stage_label: str,
-) -> None:
-    """Validate hydro identity columns before grouping or writing outputs."""
-    if level == "sub_basin":
-        required = ["basin", "sub_basin"]
-    elif level == "basin":
-        required = ["basin"]
-    else:
-        return
-
-    missing_cols = [col for col in required if col not in df.columns]
-    if missing_cols:
-        raise ValueError(
-            f"[{slug}] Missing required hydro identity columns before writing {stage_label} "
-            f"for level={level}, model={model}, scenario={scenario}: {missing_cols}"
-        )
-
-    invalid_mask = pd.Series(False, index=df.index, dtype=bool)
-    for col in required:
-        invalid_mask |= df[col].map(_is_blank_like)
-
-    if invalid_mask.any():
-        sample_cols = [col for col in required if col in df.columns]
-        for optional_col in ["year", "period", "value"]:
-            if optional_col in df.columns and optional_col not in sample_cols:
-                sample_cols.append(optional_col)
-        sample = df.loc[invalid_mask, sample_cols].head(5).to_dict("records")
-        raise ValueError(
-            f"[{slug}] Invalid hydro identity values before writing {stage_label} "
-            f"for level={level}, model={model}, scenario={scenario}. "
-            f"Required={required}. Sample rows={sample}"
-        )
 
 
 def _write_coverage_qc(
@@ -885,15 +792,7 @@ def _wet_bulb_stull_c(t_c: xr.DataArray, rh_pct: xr.DataArray) -> xr.DataArray:
     Returns:
         Wet-bulb temperature in °C (time series).
     """
-    rh = rh_pct.clip(min=0.0, max=100.0)
-    # Stull (2011) approximation
-    return (
-        t_c * np.arctan(0.151977 * np.sqrt(rh + 8.313659))
-        + np.arctan(t_c + rh)
-        - np.arctan(rh - 1.676331)
-        + 0.00391838 * (rh ** 1.5) * np.arctan(0.023101 * rh)
-        - 4.686035
-    )
+    return stull_twb_c(t_c, rh_pct)
 
 
 def _wet_bulb_daily_mean_c(
@@ -984,6 +883,155 @@ def wet_bulb_days_ge_threshold_stull(
     if twb is None:
         return 0
     flags = (twb >= float(thresh_c)).fillna(False)
+    return int(flags.sum(dim="time").item())
+
+
+def _wbgt_shade_stull_daily_mean_c(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> xr.DataArray | None:
+    # Superseded by heat_stress_gridfirst v2.1 grid-first path for the 4 WBGT_shade
+    # slugs (CHG-0012). Retained for legacy admin-first fallback only.
+    """
+    Return district-mean daily shaded/no-solar WBGT approximation in °C.
+
+    The calculation uses daily near-surface air temperature and relative humidity:
+    WBGT_shade = 0.7 * Twb_Stull + 0.3 * Ta.
+
+    Missing/invalid values propagate as NaN in the daily series; downstream summary
+    functions ignore NaNs for means and treat NaNs as non-events for threshold counts.
+    """
+    twb_c = _wet_bulb_daily_mean_c(tas_da, hurs_da, mask)
+    if twb_c is None:
+        return None
+
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return None
+    tas_c = _drop_feb29_time(tas_k) - 273.15
+
+    return 0.7 * twb_c + 0.3 * tas_c
+
+
+def _relative_humidity_to_percent(rh: xr.DataArray) -> xr.DataArray:
+    """
+    Return relative humidity in percent, accepting either 0-1 or 0-100 inputs.
+
+    Missing values are preserved. Values outside the physical 0-100% range are
+    clipped to avoid invalid powers in heat-stress formulae.
+    """
+    try:
+        rh_max = float(rh.max(dim="time", skipna=True).item())
+        if rh_max <= 1.5:
+            rh = rh * 100.0
+    except Exception:
+        pass
+    return rh.clip(min=0.0, max=100.0)
+
+
+def _swbgt_empirical_daily_mean_c(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> xr.DataArray | None:
+    # Superseded by heat_stress_gridfirst v2.1 grid-first path for the 4 SWBGT
+    # slugs (CHG-0012). Retained for legacy admin-first fallback only.
+    """
+    Return district-mean daily simplified empirical WBGT proxy in °C.
+
+    The calculation uses daily near-surface air temperature and relative humidity:
+    sWBGT = 0.567 * Ta + 0.393 * e + 3.94, where e is vapour pressure in hPa.
+
+    Missing/invalid values propagate as NaN in the daily series; downstream summary
+    functions ignore NaNs for means and treat NaNs as non-events for threshold counts.
+    """
+    tas_k = _get_district_daily_mean(tas_da, mask)
+    rh = _get_district_daily_mean(hurs_da, mask)
+    if tas_k.sizes.get("time", 0) == 0:
+        return None
+
+    tas_c = _drop_feb29_time(tas_k) - 273.15
+    rh = _relative_humidity_to_percent(_drop_feb29_time(rh))
+
+    saturation_vapour_pressure_hpa = 6.112 * np.exp(
+        (17.67 * tas_c) / (tas_c + 243.5)
+    )
+    vapour_pressure_hpa = (rh / 100.0) * saturation_vapour_pressure_hpa
+    return 0.567 * tas_c + 0.393 * vapour_pressure_hpa + 3.94
+
+
+def wbgt_shade_stull_annual_mean(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """
+    Annual mean shaded/no-solar WBGT approximation (°C).
+
+    Missing daily values are ignored in the annual mean. If no valid daily values
+    are available for the unit/year, NaN is returned.
+    """
+    wbgt = _wbgt_shade_stull_daily_mean_c(tas_da, hurs_da, mask)
+    if wbgt is None:
+        return np.nan
+    return float(wbgt.mean(dim="time", skipna=True).item())
+
+
+def wbgt_shade_stull_days_ge_threshold(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_c: float = 30.0,
+    **kwargs: Any,
+) -> int:
+    """
+    Count days where shaded/no-solar WBGT approximation is >= `thresh_c` °C.
+
+    Missing daily values are treated as non-events for threshold counts.
+    """
+    _ = kwargs
+    wbgt = _wbgt_shade_stull_daily_mean_c(tas_da, hurs_da, mask)
+    if wbgt is None:
+        return 0
+    flags = (wbgt >= float(thresh_c)).fillna(False)
+    return int(flags.sum(dim="time").item())
+
+
+def swbgt_empirical_annual_mean(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+) -> float:
+    """
+    Annual mean simplified empirical WBGT proxy (°C).
+
+    Missing daily values are ignored in the annual mean. If no valid daily values
+    are available for the unit/year, NaN is returned.
+    """
+    swbgt = _swbgt_empirical_daily_mean_c(tas_da, hurs_da, mask)
+    if swbgt is None:
+        return np.nan
+    return float(swbgt.mean(dim="time", skipna=True).item())
+
+
+def swbgt_empirical_days_ge_threshold(
+    tas_da: xr.DataArray,
+    hurs_da: xr.DataArray,
+    mask: xr.DataArray,
+    thresh_c: float = 30.0,
+    **kwargs: Any,
+) -> int:
+    """
+    Count days where simplified empirical WBGT proxy is >= `thresh_c` °C.
+
+    Missing daily values are treated as non-events for threshold counts.
+    """
+    _ = kwargs
+    swbgt = _swbgt_empirical_daily_mean_c(tas_da, hurs_da, mask)
+    if swbgt is None:
+        return 0
+    flags = (swbgt >= float(thresh_c)).fillna(False)
     return int(flags.sum(dim="time").item())
 
 
@@ -1517,8 +1565,10 @@ def growing_season_length(da, mask, thresh_k=278.15, min_spell_days=6):
 # -----------------------------------------------------------------------------
 # PRECIPITATION COMPUTE FUNCTIONS
 # -----------------------------------------------------------------------------
-def count_rainy_days(da, mask, thresh_mm=2.5):
-    return int((_get_district_daily_mean(pr_to_mm_per_day(da), mask) > thresh_mm).sum().item())
+def count_rainy_days(da, mask, thresh_mm=2.5, exceed_ge=False):
+    dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
+    flags = dm >= thresh_mm if exceed_ge else dm > thresh_mm
+    return int(flags.sum().item())
 
 def rx1day(da, mask):
     dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
@@ -1534,6 +1584,26 @@ def rx5day_events_over_threshold(da, mask, event_thresh_mm=50.0, window_days=5):
     if dm.size == 0: return 0
     rolling = dm.rolling(time=window_days, min_periods=window_days).sum()
     return _count_events((rolling >= event_thresh_mm).fillna(False).values, 1)
+
+def consecutive_heavy_rainfall_events(
+    da,
+    mask,
+    daily_thresh_mm=150.0,
+    min_event_days=2,
+):
+    """Count heavy-rainfall events as runs of consecutive days above a daily threshold.
+
+    Contract:
+      - One event is one run of at least `min_event_days` consecutive days with
+        precipitation >= `daily_thresh_mm`.
+      - Longer runs count as a single event.
+      - Missing values break runs and are treated as non-events.
+    """
+    dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
+    if dm.size == 0:
+        return 0
+    flags = (dm >= float(daily_thresh_mm)).fillna(False).values
+    return _count_events(flags, int(min_event_days))
 
 def simple_daily_intensity_index(da, mask, wet_day_thresh_mm=1.0):
     dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
@@ -1580,8 +1650,12 @@ def percentile_precipitation_total(
     baseline_wet = _filter_to_baseline(wet, baseline_years)
     if baseline_wet.size == 0:
         baseline_wet = wet  # Fall back to full series if no baseline data
-    thresh = float(baseline_wet.quantile(percentile / 100.0).item())
-    return float(dm.where(dm > thresh, 0).sum().item())
+    thresh = float(_quantile_compat(baseline_wet, q=percentile / 100.0, dim="time", method=quantile_method).item())
+    if exceed_ge:
+        selected = dm.where(dm >= thresh, 0)
+    else:
+        selected = dm.where(dm > thresh, 0)
+    return float(selected.sum().item())
 
 def percentile_precipitation_contribution(
     da,
@@ -1602,8 +1676,12 @@ def percentile_precipitation_contribution(
     baseline_wet = _filter_to_baseline(wet, baseline_years)
     if baseline_wet.size == 0:
         baseline_wet = wet  # Fall back to full series if no baseline data
-    thresh = float(baseline_wet.quantile(percentile / 100.0).item())
-    return 100.0 * float(dm.where(dm > thresh, 0).sum().item()) / prcptot
+    thresh = float(_quantile_compat(baseline_wet, q=percentile / 100.0, dim="time", method=quantile_method).item())
+    if exceed_ge:
+        selected = dm.where(dm >= thresh, 0)
+    else:
+        selected = dm.where(dm > thresh, 0)
+    return 100.0 * float(selected.sum().item()) / prcptot
 
 def standardised_precipitation_index(
     da,
@@ -1614,7 +1692,11 @@ def standardised_precipitation_index(
     threshold=None,
     quantile_method="nearest",
     exceed_ge=True,
+    min_months_per_year=9,
+    min_event_months=1,
+    **_ignored_params,
 ):
+    _ = min_months_per_year, min_event_months, _ignored_params
     dm = _get_district_daily_mean(pr_to_mm_per_day(da), mask)
     if dm.size == 0: return np.nan
     total = float(dm.sum().item())
@@ -1623,8 +1705,26 @@ def standardised_precipitation_index(
     mean_p, std_p = float(baseline_dm.mean().item()) * 365, float(baseline_dm.std().item()) * np.sqrt(365)
     return (total - mean_p) / std_p if std_p > 0 else 0.0
 
-def standardised_precipitation_evapotranspiration_index(da, mask, scale_months=3, baseline_years=(1985, 2014), annual_aggregation=None):
-    return standardised_precipitation_index(da, mask, scale_months, baseline_years, annual_aggregation=annual_aggregation)
+def standardised_precipitation_evapotranspiration_index(
+    da,
+    mask,
+    scale_months=3,
+    baseline_years=(1985, 2014),
+    annual_aggregation=None,
+    min_months_per_year=9,
+    min_event_months=1,
+    **_ignored_params,
+):
+    return standardised_precipitation_index(
+        da,
+        mask,
+        scale_months,
+        baseline_years,
+        annual_aggregation=annual_aggregation,
+        min_months_per_year=min_months_per_year,
+        min_event_months=min_event_months,
+        **_ignored_params,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -1678,6 +1778,91 @@ PRECIP_PERCENTILE_COMPUTE_NAMES = {
     "percentile_precipitation_contribution",
 }
 
+
+def _metric_role_varnames(
+    *,
+    metric: Mapping[str, Any],
+    scenario: str,
+    level: AdminLevel,
+) -> dict[str, tuple[str, ...]]:
+    """Return source-variable roles consumed by one metric task."""
+    req_vars = tuple(required_vars_for_metric(metric))
+    primary_var = str(metric.get("var") or (req_vars[0] if req_vars else "")).strip()
+    compute_name = str(metric.get("compute") or "").strip()
+    params = dict(metric.get("params") or {})
+    roles: dict[str, tuple[str, ...]] = {}
+    if req_vars:
+        roles["eval"] = req_vars
+    if scenario == "historical":
+        return roles
+
+    months = {int(value) for value in params.get("months", []) if str(value).strip()}
+    if compute_name in SPI_COMPUTE_NAMES and primary_var:
+        roles["spi_calibration"] = (primary_var,)
+    if compute_name in TX90P_COMPUTE_NAMES and primary_var:
+        roles["baseline"] = (primary_var,)
+    if compute_name in HEATWAVE_BASELINE_COMPUTE_NAMES and primary_var:
+        roles["baseline"] = (primary_var,)
+    if compute_name in PRECIP_PERCENTILE_COMPUTE_NAMES and primary_var:
+        roles["baseline"] = (primary_var,)
+    if compute_name in {"seasonal_mean", "seasonal_min"} and months == {1, 2, 12} and primary_var:
+        roles["historical_prev_dec"] = (primary_var,)
+    if primary_var:
+        if is_heat_risk_gridfirst(str(metric.get("slug") or ""), level) and compute_name in HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
+            roles["baseline"] = (primary_var,)
+        if is_drought_gridfirst(str(metric.get("slug") or ""), level):
+            roles["baseline"] = (primary_var,)
+        if is_extreme_rainfall_gridfirst(str(metric.get("slug") or ""), level) and metric.get("slug") in {
+            "r95p_very_wet_precip",
+            "r99p_extreme_wet_precip",
+            "r95ptot_contribution_pct",
+        }:
+            roles["baseline"] = (primary_var,)
+    if metric.get("slug") in COLD_RISK_GRIDFIRST_SLUGS and primary_var:
+        from india_resilience_tool.compute.cold_risk_gridfirst import (
+            COLD_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES,
+            COLD_RISK_GRIDFIRST_DJF_COMPUTES,
+        )
+
+        if compute_name in COLD_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
+            roles["baseline"] = (primary_var,)
+        if compute_name in COLD_RISK_GRIDFIRST_DJF_COMPUTES:
+            roles["historical_prev_dec"] = (primary_var,)
+    return roles
+
+
+def _role_source_signatures(
+    *,
+    metric: Mapping[str, Any],
+    model: str,
+    scenario: str,
+    level: AdminLevel,
+    allow_write: bool,
+) -> dict[str, str]:
+    """Return deterministic source signatures for the roles a task uses."""
+    role_varnames = _metric_role_varnames(metric=metric, scenario=scenario, level=level)
+    signatures: dict[str, str] = {}
+    eval_signature = ""
+    for role_name, varnames in role_varnames.items():
+        scenario_name = "historical" if role_name != "eval" else scenario
+        shards = _resolve_role_var_shards(
+            scenario_name=scenario_name,
+            varnames=varnames,
+            model=model,
+            allow_write=allow_write,
+        )
+        if not shards:
+            continue
+        role_signature = _inventory_signature_for_role(role_name=role_name, shards=shards)
+        if role_name == "eval":
+            eval_signature = role_signature
+        signatures[role_name] = role_signature
+    if "spi_calibration" not in signatures and eval_signature and scenario != "historical" and str(metric.get("compute") or "") in SPI_COMPUTE_NAMES:
+        signatures["spi_calibration"] = eval_signature
+    if "baseline" not in signatures and eval_signature and scenario != "historical" and str(metric.get("compute") or "") in PRECIP_PERCENTILE_COMPUTE_NAMES:
+        signatures["baseline"] = eval_signature
+    return signatures
+
 def _require_scipy_stats():
     """Import scipy.stats only when SPI/SPEI is requested (keeps base pipeline lighter)."""
     try:
@@ -1711,7 +1896,7 @@ def _collect_monthly_totals_by_unit(
             continue
         ds = None
         try:
-            ds = normalize_lat_lon(xr.open_dataset(p))
+            ds = normalize_lat_lon(_open_inventory_dataset(p))
             if varname not in ds:
                 continue
             da = ds[varname]
@@ -2122,7 +2307,7 @@ def _collect_daily_mean_by_unit(
             continue
 
         time_coder = xr.coders.CFDatetimeCoder(use_cftime=True)
-        ds = xr.open_dataset(p, decode_times=time_coder)
+        ds = _open_inventory_dataset(p, decode_times=time_coder)
         ds = normalize_lat_lon(ds)
         if varname not in ds:
             continue
@@ -3063,29 +3248,49 @@ def _compute_precip_percentile_rows_for_metric(
     return rows
 
 
-def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
+def _compute_seasonal_djf_cross_year_rows_for_metric(
     metric: dict,
     model: str,
     scenario: str,
     year_to_paths: dict[int, dict[str, Path]],
     masks: dict[str, xr.DataArray],
     level: AdminLevel,
+    *,
+    reducer: str,
+    historical_year_to_paths: dict[int, dict[str, Path]] | None = None,
 ) -> list[dict]:
     """
-    Seasonal mean for DJF computed as:
+    Seasonal reduction for DJF computed as:
       Dec (year-1) + Jan/Feb (year)
 
     This avoids the common per-year-file pitfall where "DJF of year Y" is mistakenly
     computed as Dec(Y) + Jan(Y) + Feb(Y).
+
+    Args:
+        reducer: ``"mean"`` -> uses :func:`seasonal_mean`; ``"min"`` -> uses
+            :func:`seasonal_min`.
+        historical_year_to_paths: Optional fallback inventory used to resolve
+            ``Dec(year-1)`` when the previous year is not in
+            ``year_to_paths`` (typical for SSP first years where Dec belongs to
+            the historical scenario for the same model). When ``None`` (the
+            default, e.g. for the historical scenario itself), no fallback is
+            applied and the first available year remains NaN.
     """
     slug = metric["slug"]
     value_col = metric["value_col"]
     varname = metric.get("var")
     months = list((metric.get("params", {}) or {}).get("months", []))
 
-    # Guard: this helper is only for DJF
+    # Guard: this helper is only for DJF.
     if set(months) != {12, 1, 2}:
         raise ValueError(f"[{slug}] DJF cross-year helper called for non-DJF months={months}")
+
+    if reducer == "mean":
+        reduce_fn = seasonal_mean
+    elif reducer == "min":
+        reduce_fn = seasonal_min
+    else:
+        raise ValueError(f"[{slug}] DJF cross-year helper: unsupported reducer={reducer!r}")
 
     rows: list[dict] = []
     years = sorted(year_to_paths.keys())
@@ -3095,21 +3300,27 @@ def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
             cur_path = year_to_paths.get(year, {}).get(varname)
             prev_path = year_to_paths.get(year - 1, {}).get(varname)
 
-            # If we don't have the previous year, we can't form DJF correctly.
+            # If the previous year is missing in the current scenario inventory,
+            # try the supplied historical fallback. This lets SSP first years
+            # source Dec(year-1) from the historical archive for the same model.
+            if prev_path is None and historical_year_to_paths is not None:
+                prev_path = historical_year_to_paths.get(year - 1, {}).get(varname)
+
+            # If we still don't have both files, we can't form DJF correctly.
             if cur_path is None or prev_path is None:
                 v = np.nan
             else:
-                ds_prev = normalize_lat_lon(xr.open_dataset(prev_path))
-                ds_cur = normalize_lat_lon(xr.open_dataset(cur_path))
+                ds_prev = normalize_lat_lon(_open_inventory_dataset(prev_path))
+                ds_cur = normalize_lat_lon(_open_inventory_dataset(cur_path))
                 try:
                     da_prev = ds_prev[varname]
                     da_cur = ds_cur[varname]
 
-                    # Drop Feb 29 for consistency
+                    # Drop Feb 29 for consistency.
                     da_prev = _drop_feb29_time(da_prev)
                     da_cur = _drop_feb29_time(da_cur)
 
-                    # Select Dec(prev) and Jan-Feb(cur)
+                    # Select Dec(prev) and Jan-Feb(cur).
                     dec_prev = da_prev.sel(time=da_prev["time"].dt.month == 12)
                     jf_cur = da_cur.sel(time=da_cur["time"].dt.month.isin([1, 2]))
 
@@ -3117,7 +3328,7 @@ def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
                         v = np.nan
                     else:
                         da = xr.concat([dec_prev, jf_cur], dim="time")
-                        v = float(seasonal_mean(da, mask, months=[12, 1, 2]))
+                        v = float(reduce_fn(da, mask, months=[12, 1, 2]))
                 finally:
                     ds_prev.close()
                     ds_cur.close()
@@ -3129,15 +3340,62 @@ def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
     return rows
 
 
+def _compute_seasonal_mean_djf_cross_year_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+    level: AdminLevel,
+    *,
+    historical_year_to_paths: dict[int, dict[str, Path]] | None = None,
+) -> list[dict]:
+    """DJF cross-year seasonal mean. See :func:`_compute_seasonal_djf_cross_year_rows_for_metric`."""
+    return _compute_seasonal_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model=model,
+        scenario=scenario,
+        year_to_paths=year_to_paths,
+        masks=masks,
+        level=level,
+        reducer="mean",
+        historical_year_to_paths=historical_year_to_paths,
+    )
+
+
+def _compute_seasonal_min_djf_cross_year_rows_for_metric(
+    metric: dict,
+    model: str,
+    scenario: str,
+    year_to_paths: dict[int, dict[str, Path]],
+    masks: dict[str, xr.DataArray],
+    level: AdminLevel,
+    *,
+    historical_year_to_paths: dict[int, dict[str, Path]] | None = None,
+) -> list[dict]:
+    """DJF cross-year seasonal min. See :func:`_compute_seasonal_djf_cross_year_rows_for_metric`."""
+    return _compute_seasonal_djf_cross_year_rows_for_metric(
+        metric=metric,
+        model=model,
+        scenario=scenario,
+        year_to_paths=year_to_paths,
+        masks=masks,
+        level=level,
+        reducer="min",
+        historical_year_to_paths=historical_year_to_paths,
+    )
+
+
 # -----------------------------------------------------------------------------
 # FILE I/O HELPERS
 # -----------------------------------------------------------------------------
+def _source_inventory_root() -> Path:
+    """Return the shared raw-source inventory cache root."""
+    return BASE_OUTPUT_ROOT / "_internal" / "source_inventory"
+
+
 def yearly_files_for_dir(dirpath: Path) -> dict:
-    out = {}
-    for f in glob.glob(str(dirpath / "*.nc")):
-        y = os.path.splitext(os.path.basename(f))[0]
-        if y.isdigit(): out[int(y)] = Path(f)
-    return dict(sorted(out.items()))
+    return inventory_yearly_files_for_dir(Path(dirpath))
 
 def var_data_dir(data_root: Path, scenario_subdir: str, varname: str, model: str) -> Path:
     parts = list(Path(scenario_subdir).parts)
@@ -3165,25 +3423,85 @@ def validated_year_files(data_dir: Path) -> tuple[dict, dict]:
 
 def validated_year_files_for_var(data_dir: Path, varname: str) -> tuple[dict, dict]:
     """Return yearly files that open successfully and contain the requested variable."""
-    valid, bad = validated_year_files(data_dir)
-    if not valid:
-        return valid, bad
+    scenario_name = Path(data_dir).parents[1].name
+    model_name = Path(data_dir).name
+    shard = load_or_refresh_inventory_shard(
+        _source_inventory_root(),
+        data_dir=Path(data_dir),
+        scenario=scenario_name,
+        varname=varname,
+        model=model_name,
+        allow_write=_inventory_writes_allowed,
+    )
+    for record in shard.valid_year_records().values():
+        if record.engine:
+            _inventory_path_engines[str(record.path.resolve())] = str(record.engine)
+    return shard.valid_year_files(), shard.invalid_year_details()
 
-    var_valid: dict[int, Path] = {}
-    var_bad: dict[int, dict[str, Any]] = dict(bad)
-    for year, path in valid.items():
-        try:
-            ds = normalize_lat_lon(xr.open_dataset(path))
-            try:
-                if varname in ds and getattr(ds[varname], "size", 0) > 0:
-                    var_valid[year] = path
-                else:
-                    var_bad[year] = {"path": path, "reason": f"missing_variable:{varname}"}
-            finally:
-                ds.close()
-        except Exception as exc:
-            var_bad[year] = {"path": path, "reason": f"variable_check_failed:{exc}"}
-    return dict(sorted(var_valid.items())), var_bad
+
+def _inventory_shard_for_var(
+    *,
+    scenario_name: str,
+    varname: str,
+    model: str,
+    data_dir: Path,
+    allow_write: bool,
+) -> SourceInventoryShard:
+    """Return one inventory shard for a scenario/var/model directory."""
+    shard = load_or_refresh_inventory_shard(
+        _source_inventory_root(),
+        data_dir=data_dir,
+        scenario=scenario_name,
+        varname=varname,
+        model=model,
+        allow_write=allow_write,
+    )
+    for record in shard.valid_year_records().values():
+        if record.engine:
+            _inventory_path_engines[str(record.path.resolve())] = str(record.engine)
+    return shard
+
+
+def _open_inventory_dataset(path: Path, **kwargs) -> xr.Dataset:
+    """Open a source dataset using the validated inventory backend when known."""
+    engine = _inventory_path_engines.get(str(Path(path).resolve()))
+    if engine:
+        return xr.open_dataset(path, engine=engine, **kwargs)
+    return xr.open_dataset(path, **kwargs)
+
+
+def _resolve_role_var_shards(
+    *,
+    scenario_name: str,
+    varnames: Sequence[str],
+    model: str,
+    allow_write: bool,
+) -> dict[str, SourceInventoryShard]:
+    """Return inventory shards keyed by variable for one logical source role."""
+    shards: dict[str, SourceInventoryShard] = {}
+    for varname in varnames:
+        data_dir = var_data_dir(DATA_ROOT, f"{scenario_name}/tas", varname, model)
+        if not data_dir.exists():
+            continue
+        shards[str(varname)] = _inventory_shard_for_var(
+            scenario_name=scenario_name,
+            varname=str(varname),
+            model=model,
+            data_dir=data_dir,
+            allow_write=allow_write,
+        )
+    return shards
+
+
+def _inventory_signature_for_role(
+    *,
+    role_name: str,
+    shards: Mapping[str, SourceInventoryShard],
+) -> str:
+    """Return one deterministic signature for a logical source role."""
+    return combine_shard_signatures(
+        {f"{role_name}:{varname}": shard for varname, shard in shards.items()}
+    )
 
 def discover_models(data_root: Path, scenarios: dict, variables: list = None) -> list:
     if variables is None: variables = ["tas", "tasmax", "tasmin", "pr"]
@@ -3197,7 +3515,17 @@ def discover_models(data_root: Path, scenarios: dict, variables: list = None) ->
                 if entry.is_dir(): models.add(entry.name)
     return sorted(models)
 
-MODELS = discover_models(DATA_ROOT, SCENARIOS)
+MODELS: list[str] = []
+_MODELS_DISCOVERED = False
+
+
+def _get_models() -> list[str]:
+    """Discover climate models lazily so CLI startup can log before discovery."""
+    global MODELS, _MODELS_DISCOVERED
+    if not _MODELS_DISCOVERED:
+        MODELS = discover_models(DATA_ROOT, SCENARIOS)
+        _MODELS_DISCOVERED = True
+    return MODELS
 
 def required_vars_for_metric(metric: dict) -> list[str]:
     """Return required CMIP variables for a metric dict (supports multi-var metrics)."""
@@ -3208,8 +3536,8 @@ def required_vars_for_metric(metric: dict) -> list[str]:
     return [str(v)] if v else []
 
 
-COMPUTE_MARKER_SCHEMA_VERSION = 3
-ENSEMBLE_MARKER_SCHEMA_VERSION = 3
+COMPUTE_MARKER_SCHEMA_VERSION = 5
+ENSEMBLE_MARKER_SCHEMA_VERSION = 4
 SKIP_REASON_MISSING_REQUIRED_VARS = "missing_required_vars"
 SKIP_REASON_NO_AVAILABLE_YEARS = "no_available_years"
 SKIP_REASON_NO_COMMON_YEARS = "no_common_years"
@@ -3219,7 +3547,7 @@ SKIP_REASON_NO_TASKS_AFTER_FILTERS = "no_tasks_after_filters"
 
 def _scope_name_for_level(level: AdminLevel, state: str) -> str:
     """Return the directory scope name used by compute outputs for one level."""
-    return HYDRO_ROOT_NAME if level in {"basin", "sub_basin"} else str(state).strip()
+    return str(state).strip()
 
 
 def _hash_common_years(years: Sequence[int]) -> str:
@@ -3322,76 +3650,6 @@ def _filter_aware_ensemble_marker_path(
     )
 
 
-def _canonical_hydro_unit_key(path: Path, *, level: AdminLevel, ensemble: bool) -> str | tuple[str, str] | None:
-    """Return the canonical hydro unit key encoded by one output path."""
-    try:
-        if level == "basin":
-            basin_dir = path.parents[1].name if ensemble else path.parents[2].name
-            return hydro_fs_token(basin_dir)
-        basin_dir = path.parents[2].name if ensemble else path.parents[3].name
-        sub_basin_dir = path.parents[1].name if ensemble else path.parents[2].name
-        return (hydro_fs_token(basin_dir), hydro_fs_token(sub_basin_dir))
-    except IndexError:
-        return None
-
-
-def _hydro_unit_key_from_output_contents(
-    path: Path,
-    *,
-    level: AdminLevel,
-) -> str | tuple[str, str] | None:
-    """Return the canonical hydro unit key encoded by one output CSV's identity columns."""
-    identity_columns = {"basin", "sub_basin", "basin_name", "subbasin_name"}
-    try:
-        df = read_csv(path, usecols=lambda column: str(column) in identity_columns, nrows=1)
-    except Exception:
-        return None
-
-    if df.empty:
-        return None
-
-    row = df.iloc[0]
-    basin_value = next(
-        (
-            str(row.get(column)).strip()
-            for column in ("basin", "basin_name")
-            if column in df.columns and not _is_blank_like(row.get(column))
-        ),
-        "",
-    )
-    if not basin_value:
-        return None
-
-    if level == "basin":
-        return hydro_fs_token(basin_value)
-
-    sub_basin_value = next(
-        (
-            str(row.get(column)).strip()
-            for column in ("sub_basin", "subbasin_name")
-            if column in df.columns and not _is_blank_like(row.get(column))
-        ),
-        "",
-    )
-    if not sub_basin_value:
-        return None
-    return (hydro_fs_token(basin_value), hydro_fs_token(sub_basin_value))
-
-
-def _hydro_output_unit_key(
-    path: Path,
-    *,
-    level: AdminLevel,
-    ensemble: bool,
-) -> str | tuple[str, str] | None:
-    """Return the canonical hydro unit key for one output, preferring file contents over directory names."""
-    return _hydro_unit_key_from_output_contents(path, level=level) or _canonical_hydro_unit_key(
-        path,
-        level=level,
-        ensemble=ensemble,
-    )
-
-
 def _selected_values_or_all(values: Sequence[str] | None, fallback: Sequence[str]) -> tuple[str, ...]:
     selected = _normalize_filter_values(values)
     return selected if selected is not None else tuple(str(value).strip() for value in fallback)
@@ -3416,7 +3674,7 @@ def _cleanup_compute_outputs_for_overwrite(
     allowed_scenarios: Sequence[str] | None = None,
 ) -> None:
     """Remove selected compute outputs, coverage QC files, and markers before overwrite."""
-    models = set(_selected_values_or_all(allowed_models, MODELS))
+    models = set(_selected_values_or_all(allowed_models, _get_models()))
     scenarios = set(_selected_values_or_all(allowed_scenarios, tuple(SCENARIOS.keys())))
 
     level_root = metric_root(slug) / scope_name / get_level_folder(level)
@@ -3487,41 +3745,12 @@ def _task_output_file_counts(
     if not level_root.exists():
         return 0, 0
 
-    if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
-        yearly_units: set[str] | set[tuple[str, str]] = set()
-        period_units: set[str] | set[tuple[str, str]] = set()
-
-        if level == "basin":
-            yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
-            periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
-        else:
-            yearly_pattern = f"*/*/{model}/{scenario}/*_yearly.csv"
-            periods_pattern = f"*/*/{model}/{scenario}/*_periods.csv"
-
-        for path in glob_paths(level_root, yearly_pattern):
-            unit_key = _hydro_output_unit_key(path, level=level, ensemble=False)
-            if unit_key is not None:
-                yearly_units.add(unit_key)
-
-        for path in glob_paths(level_root, periods_pattern):
-            unit_key = _hydro_output_unit_key(path, level=level, ensemble=False)
-            if unit_key is not None:
-                period_units.add(unit_key)
-
-        return len(yearly_units), len(period_units)
-
-    if level == "district":
-        yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
-        periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
-    elif level == "block":
+    if level == "block":
         yearly_pattern = f"*/*/{model}/{scenario}/*_yearly.csv"
         periods_pattern = f"*/*/{model}/{scenario}/*_periods.csv"
-    elif level == "basin":
-        yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
-        periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
     else:
-        yearly_pattern = f"*/*/{model}/{scenario}/*_yearly.csv"
-        periods_pattern = f"*/*/{model}/{scenario}/*_periods.csv"
+        yearly_pattern = f"*/{model}/{scenario}/*_yearly.csv"
+        periods_pattern = f"*/{model}/{scenario}/*_periods.csv"
 
     yearly_count = sum(1 for _ in level_root.glob(yearly_pattern))
     periods_count = sum(1 for _ in level_root.glob(periods_pattern))
@@ -3529,8 +3758,8 @@ def _task_output_file_counts(
 
 
 def _compute_marker_yearly_cleanup_policy(level: AdminLevel) -> str:
-    """Return the yearly-output retention policy encoded in compute markers."""
-    return "delete_after_ensemble" if level == "block" else "preserve"
+    """Return the default yearly-output retention policy encoded in compute markers."""
+    return effective_yearly_cleanup_policy(level, "default")
 
 
 def _ensemble_output_count(
@@ -3540,6 +3769,7 @@ def _ensemble_output_count(
     scope_name: str,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> int:
     """Count ensemble yearly CSVs for one metric/level scope and filter slice."""
     ensembles_root = metric_root(slug) / scope_name / get_level_folder(level) / "ensembles"
@@ -3548,31 +3778,6 @@ def _ensemble_output_count(
     yearly_pattern = "**/*_yearly_ensemble.csv"
 
     allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
-    eligible_units: set[str] | set[tuple[str, str]] | None = None
-    if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
-        eligible_units = _hydro_ensemble_scope_from_coverage_qc(
-            metric_root(slug) / scope_name / get_level_folder(level),
-            level=level,
-            allowed_models=allowed_models,
-            allowed_scenarios=allowed_scenarios,
-        )
-
-    if scope_name == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}:
-        output_units: set[tuple[str, str]] | set[tuple[tuple[str, str], str]] = set()
-        for path in glob_paths(ensembles_root, yearly_pattern):
-            scenario_name = path.parent.name
-            if allowed_scenarios_norm is not None and scenario_name not in allowed_scenarios_norm:
-                continue
-
-            unit_key = _hydro_output_unit_key(path, level=level, ensemble=True)
-            if unit_key is None:
-                continue
-
-            if eligible_units is not None and unit_key not in eligible_units:
-                continue
-
-            output_units.add((unit_key, scenario_name))
-        return len(output_units)
 
     count = 0
     for path in glob_paths(ensembles_root, yearly_pattern):
@@ -3580,18 +3785,135 @@ def _ensemble_output_count(
         if allowed_scenarios_norm is not None and scenario_name not in allowed_scenarios_norm:
             continue
 
-        if eligible_units is not None:
-            if level == "basin":
-                basin_key = path.parents[1].name
-                if basin_key not in eligible_units:
-                    continue
-            else:
-                unit_key = (path.parents[2].name, path.parents[1].name)
-                if unit_key not in eligible_units:
-                    continue
-
         count += 1
     return count
+
+
+def _write_metric_rows_outputs(
+    *,
+    rows: list[dict],
+    period_rows: list[dict] | None = None,
+    coverage_df: pd.DataFrame,
+    metric_root_path: Path,
+    state_name: str,
+    level: AdminLevel,
+    slug: str,
+    model: str,
+    scenario: str,
+    scenario_conf: dict,
+    value_col: str,
+    year_to_paths: dict[int, dict[str, Path]],
+) -> dict[str, int] | None:
+    """Write yearly and period metric rows using the pipeline's existing layout."""
+    if not rows:
+        return None
+
+    _append_coverage_failure_rows(
+        rows,
+        coverage_df,
+        sorted(year_to_paths.keys()),
+        level=level,
+        value_col=value_col,
+    )
+
+    df_yearly = pd.DataFrame(rows)
+
+    available_years = set(df_yearly["year"].unique())
+    if level == "block":
+        group_cols = ["district", "block"]
+    else:
+        group_cols = ["district"]
+    if period_rows is None:
+        period_frames = []
+        for period_name, (y0, y1) in scenario_conf["periods"].items():
+            avail = [y for y in available_years if y0 <= y <= y1]
+            n_req, n_avail = y1 - y0 + 1, len(avail)
+            if n_avail >= MIN_YEARS_ABSOLUTE and n_avail / n_req >= MIN_YEARS_REQUIRED_FRACTION:
+                try:
+                    grp = df_yearly[df_yearly["year"].isin(avail)].groupby(
+                        [c for c in group_cols if c in df_yearly.columns]
+                    ).agg({"value": "mean"}).reset_index()
+                    grp["period"] = period_name
+                    grp["years_used_count"] = n_avail
+                    grp["years_requested"] = n_req
+                    grp[value_col] = grp["value"]
+                    for meta_col in ("method_version", "aggregation_method"):
+                        if meta_col in df_yearly.columns:
+                            meta_values = df_yearly.loc[df_yearly["year"].isin(avail), meta_col].dropna().unique()
+                            if len(meta_values) == 1:
+                                grp[meta_col] = meta_values[0]
+                    # Carry sub-cell climate-fill provenance per unit through the
+                    # yearly->period roll-up (the "value"-only agg above drops it).
+                    # idw iff ANY contributing year is idw for that unit, else native.
+                    # Only the paths that don't pass period_rows reach here (heat,
+                    # cold, heat_stress, extreme_rainfall); drought stamps its own.
+                    if "climate_fill_method" in df_yearly.columns:
+                        gc = [c for c in group_cols if c in df_yearly.columns]
+                        sub = df_yearly[df_yearly["year"].isin(avail)]
+                        prov = (
+                            sub.assign(_idw=sub["climate_fill_method"].astype("string").str.lower().eq("idw"))
+                            .groupby(gc)["_idw"].any().reset_index()
+                        )
+                        prov["climate_fill_method"] = np.where(prov.pop("_idw"), "idw", "native")
+                        grp = grp.merge(prov, on=gc, how="left")
+                        grp["climate_fill_method"] = grp["climate_fill_method"].fillna("native")
+                    period_frames.append(grp)
+                except Exception as e:
+                    logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
+        df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
+    else:
+        df_periods = pd.DataFrame(period_rows)
+    level_folder = get_level_folder(level)
+    yearly_file_count = 0
+    period_file_count = 0
+    if level == "block":
+        for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
+            district_safe = _safe_component(district)
+            block_safe = _safe_component(block)
+            out_dir = metric_root_path / state_name / level_folder / district_safe / block_safe / model / scenario
+            ensure_directory(out_dir)
+            grp_df = grp_df.copy()
+            grp_df["model"] = model
+            grp_df["scenario"] = scenario
+            write_csv(grp_df, out_dir / f"{block_safe}_yearly.csv", index=False)
+            yearly_file_count += 1
+            if not df_periods.empty:
+                period_grp = df_periods.loc[
+                    (df_periods["district"] == district) & (df_periods["block"] == block)
+                ].copy()
+                if not period_grp.empty:
+                    period_grp["model"] = model
+                    period_grp["scenario"] = scenario
+                    write_csv(period_grp, out_dir / f"{block_safe}_periods.csv", index=False)
+                    period_file_count += 1
+    else:
+        for dist_name in df_yearly["district"].unique():
+            dist_safe = _safe_component(dist_name)
+            out_dir = metric_root_path / state_name / level_folder / dist_safe / model / scenario
+            ensure_directory(out_dir)
+            dist_df = df_yearly[df_yearly["district"] == dist_name].copy()
+            dist_df["model"] = model
+            dist_df["scenario"] = scenario
+            write_csv(dist_df, out_dir / f"{dist_safe}_yearly.csv", index=False)
+            yearly_file_count += 1
+            if not df_periods.empty:
+                period_df = df_periods[df_periods["district"] == dist_name].copy()
+                if not period_df.empty:
+                    period_df["model"] = model
+                    period_df["scenario"] = scenario
+                    write_csv(period_df, out_dir / f"{dist_safe}_periods.csv", index=False)
+                    period_file_count += 1
+
+    logging.debug(f"[{slug}] Wrote {len(df_yearly)} yearly rows, {len(df_periods)} period rows for {model}/{scenario}")
+    _write_coverage_qc(
+        metric_root_path,
+        state_name=state_name,
+        level=level,
+        model=model,
+        scenario=scenario,
+        coverage_df=coverage_df,
+    )
+    return {"yearly_file_count": yearly_file_count, "period_file_count": period_file_count}
 
 
 # -----------------------------------------------------------------------------
@@ -3664,60 +3986,568 @@ def process_metric_for_model_scenario(
     if sample_path is None:
         sample_path = next(iter(year_to_paths[sample_year].values()))
 
-    ds_sample = normalize_lat_lon(xr.open_dataset(sample_path))
+    ds_sample = normalize_lat_lon(_open_inventory_dataset(sample_path))
     if primary_var not in ds_sample:
         ds_sample.close()
         return
 
-    extent_excluded_df = pd.DataFrame()
-    boundary_gdf = gdf
-    if level in {"basin", "sub_basin"}:
-        boundary_gdf, extent_excluded_df = _filter_hydro_units_to_climate_extent(
-            gdf,
-            ds_sample,
-            level=level,
-            slug=slug,
-            model=model,
-            scenario=scenario,
-        )
-        _prune_excluded_hydro_outputs(
-            metric_root_path,
-            state_name=state_name,
-            level=level,
-            model=model,
-            scenario=scenario,
-            excluded_coverage_df=extent_excluded_df,
-            slug=slug,
-        )
-        _prune_excluded_hydro_ensemble_outputs(
-            metric_root_path,
-            state_name=state_name,
-            level=level,
-            scenario=scenario,
-            excluded_coverage_df=extent_excluded_df,
-            slug=slug,
-        )
-        if boundary_gdf.empty:
-            logging.warning(
-                f"[{slug}] No hydro units intersect the climate-data extent for {model}/{scenario} at level={level}"
+    # Bounding-box subset of the climate grid (per-state memory fix). The
+    # kill-switch is read once here so the GridSpec and the data loads derive
+    # from a single source of truth, then forwarded to every grid-first family
+    # (drought, heat, cold, heat stress, extreme rainfall). When disabled or
+    # unavailable, grid_index_range is None (exact full-grid behavior).
+    #
+    # IRT_GRIDFIRST_BBOX=0 disables the subset. IRT_GRIDFIRST_BBOX_STRICT=1
+    # turns a subset-derivation failure into a hard error instead of a silent
+    # full-grid fallback (used for acceptance runs so a green run cannot have
+    # quietly skipped the memory fix).
+    bbox_enabled = str(os.environ.get("IRT_GRIDFIRST_BBOX", "1")).strip().lower() not in {"0", "false", "no", "off"}
+    bbox_strict = str(os.environ.get("IRT_GRIDFIRST_BBOX_STRICT", "0")).strip().lower() in {"1", "true", "yes", "on"}
+    grid_index_range: tuple[int, int, int, int] | None = None
+    if bbox_enabled and not gdf.empty:
+        try:
+            # total_bounds is only meaningful in EPSG:4326 for the lat/lon grid
+            # mapping; reproject explicitly and fail loudly on a missing CRS
+            # rather than assuming the boundary is already 4326.
+            if gdf.crs is None:
+                raise ValueError("boundary GeoDataFrame has no CRS; cannot derive an EPSG:4326 bbox")
+            bbox_gdf = gdf.to_crs("EPSG:4326")
+            minx, miny, maxx, maxy = (float(v) for v in bbox_gdf.total_bounds)
+            sample_lat = np.asarray(ds_sample["lat"].values, dtype=float)
+            sample_lon = np.asarray(ds_sample["lon"].values, dtype=float)
+            grid_index_range = bbox_to_index_range(sample_lat, sample_lon, (minx, miny, maxx, maxy))
+            lat0, lat1, lon0, lon1 = grid_index_range
+            full_cells = int(sample_lat.size) * int(sample_lon.size)
+            subset_cells = (lat1 - lat0) * (lon1 - lon0)
+            retained_pct = (100.0 * subset_cells / full_cells) if full_cells else 0.0
+            logging.info(
+                "[%s] grid bbox subset: full=%dx%d subset=%dx%d (%.1f%% of cells retained)",
+                slug,
+                int(sample_lat.size),
+                int(sample_lon.size),
+                lat1 - lat0,
+                lon1 - lon0,
+                retained_pct,
             )
+        except Exception as e:
+            if bbox_strict:
+                logging.error(f"[{slug}] grid bbox subset failed and IRT_GRIDFIRST_BBOX_STRICT is set: {e}")
+                raise
+            logging.warning(f"[{slug}] grid bbox subset disabled (falling back to full grid): {e}")
+            grid_index_range = None
+
+    if is_heat_risk_gridfirst(slug, level):
+        try:
+            grid = heat_risk_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
             ds_sample.close()
-            if not extent_excluded_df.empty:
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
+            weights = read_heat_risk_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+                state=state_name,
+            )
+            if weights is None:
+                logging.info(
+                    "[%s] Building Heat Risk v2 spatial weights for level=%s grid=%s",
+                    slug,
+                    level,
+                    grid.grid_id,
+                )
+                weights = build_heat_risk_area_weights(gdf, grid, level=level)
+                write_heat_risk_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                    state=state_name,
+                )
+            coverage_df = heat_risk_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(
+                coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+                .astype(str)
+                .tolist()
+            )
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Heat Risk v2 spatial weights available for level={level}")
                 _write_coverage_qc(
                     metric_root_path,
                     state_name=state_name,
                     level=level,
                     model=model,
                     scenario=scenario,
-                    coverage_df=extent_excluded_df,
+                    coverage_df=coverage_df,
                 )
-            return
+                return
 
-    masks, coverage_df = build_unit_masks(boundary_gdf, ds_sample, level=level)
+            metric_for_grid = dict(metric)
+            grid_params = dict(metric.get("params") or {})
+            grid_params["baseline_years"] = HEAT_RISK_GRIDFIRST_BASELINE_YEARS
+            grid_params.setdefault("quantile_method", "linear")
+            grid_params.setdefault("exceed_ge", False)
+            grid_params["grid_id"] = grid.grid_id
+            metric_for_grid["params"] = grid_params
+
+            if metric_for_grid.get("compute") not in HEAT_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
+                baseline_year_to_paths = year_to_paths
+            else:
+                baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                    metric=metric_for_grid,
+                    primary_var=primary_var,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=SCENARIOS,
+                    year_to_paths=year_to_paths,
+                )
+                if missing_baseline or not baseline_year_to_paths:
+                    logging.warning(f"[{slug}] Missing Heat Risk v2 historical baseline for {model}/{scenario}")
+                    return
+
+            rows = compute_heat_risk_rows_for_metric(
+                metric=metric_for_grid,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                baseline_year_to_paths=baseline_year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_heat_risk_internal_root(),
+                index_range=grid_index_range,
+                grid=grid,
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Heat Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    if slug in COLD_RISK_GRIDFIRST_SLUGS:
+        try:
+            grid = gridfirst_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
+            weights = read_gridfirst_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+                state=state_name,
+            )
+            if weights is None:
+                logging.info(
+                    "[%s] Building Cold Risk v2 spatial weights for level=%s grid=%s",
+                    slug,
+                    level,
+                    grid.grid_id,
+                )
+                weights = build_gridfirst_area_weights(gdf, grid, level=level)
+                write_gridfirst_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                    state=state_name,
+                )
+            coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(
+                coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+                .astype(str)
+                .tolist()
+            )
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Cold Risk v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            metric_for_grid = dict(metric)
+            grid_params = dict(metric.get("params") or {})
+            grid_params["grid_id"] = grid.grid_id
+            metric_for_grid["params"] = grid_params
+
+            # Baseline year_to_paths (only needed for compute kinds that build
+            # per-cell DOY thresholds — TX10p, TN10p, CSDI).
+            from india_resilience_tool.compute.cold_risk_gridfirst import (
+                COLD_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES,
+                COLD_RISK_GRIDFIRST_DJF_COMPUTES,
+            )
+            compute_kind = metric_for_grid.get("compute")
+            if compute_kind in COLD_RISK_GRIDFIRST_BASELINE_THRESHOLD_COMPUTES:
+                baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                    metric=metric_for_grid,
+                    primary_var=primary_var,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=SCENARIOS,
+                    year_to_paths=year_to_paths,
+                )
+                if missing_baseline or not baseline_year_to_paths:
+                    logging.warning(f"[{slug}] Missing Cold Risk v2 historical baseline for {model}/{scenario}")
+                    return
+            else:
+                baseline_year_to_paths = year_to_paths
+
+            # Historical fallback inventory for SSP first-year Dec (matches the
+            # Phase 2 polygon-mean dispatcher behavior at line ~4632).
+            historical_year_to_paths: dict[int, dict[str, Path]] | None = None
+            if compute_kind in COLD_RISK_GRIDFIRST_DJF_COMPUTES and scenario != "historical":
+                hist_conf = SCENARIOS.get("historical")
+                if hist_conf:
+                    hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], primary_var, model)
+                    if hist_dir.exists():
+                        valid_year_files, _ = validated_year_files_for_var(hist_dir, primary_var)
+                        if valid_year_files:
+                            historical_year_to_paths = {
+                                int(y): {primary_var: p} for y, p in valid_year_files.items()
+                            }
+
+            rows = compute_cold_risk_rows_for_metric(
+                metric=metric_for_grid,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                baseline_year_to_paths=baseline_year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_cold_risk_internal_root(),
+                historical_year_to_paths=historical_year_to_paths,
+                index_range=grid_index_range,
+                grid=grid,
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Cold Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    if slug in HEAT_STRESS_GRIDFIRST_SLUGS:
+        try:
+            grid = gridfirst_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
+            weights = read_gridfirst_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+                state=state_name,
+            )
+            if weights is None:
+                logging.info(
+                    "[%s] Building Heat Stress v2 spatial weights for level=%s grid=%s",
+                    slug,
+                    level,
+                    grid.grid_id,
+                )
+                weights = build_gridfirst_area_weights(gdf, grid, level=level)
+                write_gridfirst_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                    state=state_name,
+                )
+            coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(
+                coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+                .astype(str)
+                .tolist()
+            )
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Heat Stress v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            metric_for_grid = dict(metric)
+            grid_params = dict(metric.get("params") or {})
+            grid_params["grid_id"] = grid.grid_id
+            metric_for_grid["params"] = grid_params
+
+            rows = compute_heat_stress_rows_for_metric(
+                metric=metric_for_grid,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_heat_stress_internal_root(),
+                index_range=grid_index_range,
+                grid=grid,
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Heat Stress v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    if is_extreme_rainfall_gridfirst(slug, level):
+        try:
+            grid = gridfirst_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
+            weights = read_gridfirst_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+                state=state_name,
+            )
+            if weights is None:
+                logging.info(
+                    "[%s] Building Extreme Rainfall v2 spatial weights for level=%s grid=%s",
+                    slug,
+                    level,
+                    grid.grid_id,
+                )
+                weights = build_gridfirst_area_weights(gdf, grid, level=level)
+                write_gridfirst_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                    state=state_name,
+                )
+            coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(
+                coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"]
+                .astype(str)
+                .tolist()
+            )
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Extreme Rainfall v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            baseline_year_to_paths: dict[int, dict[str, Path]]
+            if slug in {"r95p_very_wet_precip", "r99p_extreme_wet_precip", "r95ptot_contribution_pct"}:
+                baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                    metric=metric,
+                    primary_var=primary_var,
+                    model=model,
+                    scenario=scenario,
+                    scenario_conf=SCENARIOS,
+                    year_to_paths=year_to_paths,
+                )
+                if missing_baseline or not baseline_year_to_paths:
+                    logging.warning(f"[{slug}] Missing Extreme Rainfall v2 historical baseline for {model}/{scenario}")
+                    return
+            else:
+                baseline_year_to_paths = {}
+
+            metric_for_grid = dict(metric)
+            grid_params = dict(metric.get("params") or {})
+            grid_params["grid_id"] = grid.grid_id
+            metric_for_grid["params"] = grid_params
+
+            rows = compute_extreme_rainfall_rows_for_metric(
+                metric=metric_for_grid,
+                model=model,
+                scenario=scenario,
+                year_to_paths=year_to_paths,
+                baseline_year_to_paths=baseline_year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_extreme_rainfall_internal_root(),
+                index_range=grid_index_range,
+                grid=grid,
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Extreme Rainfall v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    if is_drought_gridfirst(slug, level):
+        try:
+            grid = gridfirst_dataset_grid_spec(subset_grid_by_index(ds_sample, grid_index_range))
+            ds_sample.close()
+            boundary_path = get_boundary_path(level)
+            weights_path = _heat_risk_spatial_weights_path(level, grid.grid_id, state=state_name)
+            weights = read_gridfirst_spatial_weights_cache(
+                weights_path,
+                grid=grid,
+                level=level,
+                boundary_path=boundary_path,
+                state=state_name,
+            )
+            if weights is None:
+                logging.info("[%s] Building Drought Risk v2 spatial weights for level=%s grid=%s", slug, level, grid.grid_id)
+                weights = build_gridfirst_area_weights(gdf, grid, level=level)
+                write_gridfirst_spatial_weights_cache(
+                    weights,
+                    output_path=weights_path,
+                    grid=grid,
+                    level=level,
+                    boundary_path=boundary_path,
+                    state=state_name,
+                )
+            coverage_df = gridfirst_coverage_from_weights(gdf, weights, level=level)
+            valid_units = set(coverage_df.loc[coverage_df["coverage_ok"].astype(bool), "unit_key"].astype(str).tolist())
+            weights = weights[weights["unit_key"].astype(str).isin(valid_units)].copy()
+            if weights.empty:
+                logging.warning(f"[{slug}] No Drought Risk v2 spatial weights available for level={level}")
+                _write_coverage_qc(
+                    metric_root_path,
+                    state_name=state_name,
+                    level=level,
+                    model=model,
+                    scenario=scenario,
+                    coverage_df=coverage_df,
+                )
+                return
+
+            baseline_year_to_paths, missing_baseline = _resolve_baseline_year_to_paths(
+                metric=metric,
+                primary_var=primary_var,
+                model=model,
+                scenario=scenario,
+                scenario_conf=SCENARIOS,
+                year_to_paths=year_to_paths,
+            )
+            if missing_baseline or not baseline_year_to_paths:
+                logging.warning(f"[{slug}] Missing Drought Risk v2 historical baseline for {model}/{scenario}")
+                return
+
+            metric_for_drought = dict(metric)
+            drought_params = dict(metric.get("params") or {})
+            drought_params["grid_id"] = grid.grid_id
+            metric_for_drought["params"] = drought_params
+
+            rows, period_rows = compute_drought_risk_rows_for_metric(
+                metric=metric_for_drought,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                year_to_paths=year_to_paths,
+                baseline_year_to_paths=baseline_year_to_paths,
+                weights=weights,
+                level=level,
+                cache_root=_drought_risk_internal_root(),
+                index_range=grid_index_range,
+                grid=grid,
+            )
+            return _write_metric_rows_outputs(
+                rows=rows,
+                period_rows=period_rows,
+                coverage_df=coverage_df,
+                metric_root_path=metric_root_path,
+                state_name=state_name,
+                level=level,
+                slug=slug,
+                model=model,
+                scenario=scenario,
+                scenario_conf=scenario_conf,
+                value_col=value_col,
+                year_to_paths=year_to_paths,
+            )
+        except Exception as e:
+            try:
+                ds_sample.close()
+            except Exception:
+                pass
+            logging.error(f"[{slug}] Drought Risk v2 grid-first computation failed for {model}/{scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            raise
+
+    masks, coverage_df = build_unit_masks(gdf, ds_sample, level=level)
     ds_sample.close()
-
-    if not extent_excluded_df.empty:
-        coverage_df = pd.concat([coverage_df, extent_excluded_df], ignore_index=True, sort=False)
 
     if not masks:
         logging.warning(f"[{slug}] No valid masks built for {level} level")
@@ -3954,20 +4784,50 @@ def process_metric_for_model_scenario(
             raise
 
     # ------------------------------------------------------------------
-    # Special-case DJF seasonal mean (Dec from previous year + Jan/Feb current year)
+    # Special-case DJF seasonal mean/min (Dec from previous year + Jan/Feb current year).
+    # For SSP scenarios, the previous-year Dec lives in the historical archive for
+    # the same model; resolve that fallback once so the first SSP year is not NaN.
     # ------------------------------------------------------------------
-    elif metric.get("compute") == "seasonal_mean" and set((params or {}).get("months", [])) == {12, 1, 2}:
+    elif (
+        metric.get("compute") in {"seasonal_mean", "seasonal_min"}
+        and set((params or {}).get("months", [])) == {12, 1, 2}
+    ):
         try:
-            rows = _compute_seasonal_mean_djf_cross_year_rows_for_metric(
-                metric=metric,
-                model=model,
-                scenario=scenario,
-                year_to_paths=year_to_paths,
-                masks=masks,
-                level=level,
-            )
+            historical_year_to_paths: dict[int, dict[str, Path]] | None = None
+            if scenario != "historical":
+                varname = (metric.get("var") or "").strip()
+                hist_conf = SCENARIOS.get("historical")
+                if varname and hist_conf:
+                    hist_dir = var_data_dir(DATA_ROOT, hist_conf["subdir"], varname, model)
+                    if hist_dir.exists():
+                        valid_year_files, _ = validated_year_files_for_var(hist_dir, varname)
+                        if valid_year_files:
+                            historical_year_to_paths = {
+                                y: {varname: p} for y, p in valid_year_files.items()
+                            }
+
+            if metric.get("compute") == "seasonal_mean":
+                rows = _compute_seasonal_mean_djf_cross_year_rows_for_metric(
+                    metric=metric,
+                    model=model,
+                    scenario=scenario,
+                    year_to_paths=year_to_paths,
+                    masks=masks,
+                    level=level,
+                    historical_year_to_paths=historical_year_to_paths,
+                )
+            else:
+                rows = _compute_seasonal_min_djf_cross_year_rows_for_metric(
+                    metric=metric,
+                    model=model,
+                    scenario=scenario,
+                    year_to_paths=year_to_paths,
+                    masks=masks,
+                    level=level,
+                    historical_year_to_paths=historical_year_to_paths,
+                )
         except Exception as e:
-            logging.error(f"[{slug}] DJF seasonal mean computation failed for {model}/{scenario}: {e}")
+            logging.error(f"[{slug}] DJF cross-year computation failed for {model}/{scenario}: {e}")
             logging.debug(traceback.format_exc())
             raise
 
@@ -3982,7 +4842,7 @@ def process_metric_for_model_scenario(
             try:
                 # Open each required variable once for this year.
                 for v, nc_path in paths_by_var.items():
-                    ds = normalize_lat_lon(xr.open_dataset(nc_path))
+                    ds = normalize_lat_lon(_open_inventory_dataset(nc_path))
                     if v not in ds:
                         raise KeyError(f"Variable '{v}' not found in {nc_path}")
                     ds_by_var[v] = ds
@@ -4031,23 +4891,11 @@ def process_metric_for_model_scenario(
     )
 
     df_yearly = pd.DataFrame(rows)
-    _validate_output_unit_fields(
-        df_yearly,
-        level=level,
-        slug=slug,
-        model=model,
-        scenario=scenario,
-        stage_label="yearly outputs",
-    )
 
     # Period aggregation (mean over years used, consistent with other day-count metrics)
     # Note: For SPI, years may come from climate-indices output which may differ from year_to_paths
     available_years = set(df_yearly["year"].unique())
-    if level == "sub_basin":
-        group_cols = ["basin", "sub_basin"]
-    elif level == "basin":
-        group_cols = ["basin"]
-    elif level == "block":
+    if level == "block":
         group_cols = ["district", "block"]
     else:
         group_cols = ["district"]
@@ -4071,65 +4919,12 @@ def process_metric_for_model_scenario(
                 logging.warning(f"[{slug}] Period aggregation failed for {period_name}: {e}")
 
     df_periods = pd.concat(period_frames, ignore_index=True) if period_frames else pd.DataFrame()
-    if not df_periods.empty:
-        _validate_output_unit_fields(
-            df_periods,
-            level=level,
-            slug=slug,
-            model=model,
-            scenario=scenario,
-            stage_label="period outputs",
-        )
 
     # Write outputs with clean folder structure
     try:
         yearly_file_count = 0
         period_file_count = 0
-        if level == "sub_basin":
-            for (basin, sub_basin), grp_df in df_yearly.groupby(["basin", "sub_basin"]):
-                basin_safe = _safe_component(basin)
-                sub_basin_safe = _safe_component(sub_basin)
-
-                out_dir = metric_root_path / state_name / level_folder / basin_safe / sub_basin_safe / model / scenario
-                ensure_directory(out_dir)
-                grp_df = grp_df.copy()
-                grp_df["model"] = model
-                grp_df["scenario"] = scenario
-                write_csv(grp_df, out_dir / f"{sub_basin_safe}_yearly.csv", index=False)
-                yearly_file_count += 1
-
-                if not df_periods.empty:
-                    period_mask = (
-                        (df_periods["basin"] == basin) &
-                        (df_periods["sub_basin"] == sub_basin)
-                    )
-                    period_grp = df_periods.loc[period_mask].copy()
-                    if not period_grp.empty:
-                        period_grp["model"] = model
-                        period_grp["scenario"] = scenario
-                        write_csv(period_grp, out_dir / f"{sub_basin_safe}_periods.csv", index=False)
-                        period_file_count += 1
-        elif level == "basin":
-            for basin_name in df_yearly["basin"].unique():
-                basin_safe = _safe_component(basin_name)
-
-                out_dir = metric_root_path / state_name / level_folder / basin_safe / model / scenario
-                ensure_directory(out_dir)
-
-                basin_df = df_yearly[df_yearly["basin"] == basin_name].copy()
-                basin_df["model"] = model
-                basin_df["scenario"] = scenario
-                write_csv(basin_df, out_dir / f"{basin_safe}_yearly.csv", index=False)
-                yearly_file_count += 1
-
-                if not df_periods.empty:
-                    period_df = df_periods[df_periods["basin"] == basin_name].copy()
-                    if not period_df.empty:
-                        period_df["model"] = model
-                        period_df["scenario"] = scenario
-                        write_csv(period_df, out_dir / f"{basin_safe}_periods.csv", index=False)
-                        period_file_count += 1
-        elif level == "block":
+        if level == "block":
             # Structure: {metric}/{state}/blocks/{district}/{block}/{model}/{scenario}/
             for (district, block), grp_df in df_yearly.groupby(["district", "block"]):
                 district_safe = _safe_component(district)
@@ -4209,6 +5004,7 @@ class EnsembleBuildStats:
     missing_expected_output_count: int = 0
     skipped_input_count: int = 0
     failure_count: int = 0
+    empty_admin_output_count: int = 0
     errors: tuple[str, ...] = ()
     skipped_reasons: tuple[str, ...] = ()
 
@@ -4227,6 +5023,7 @@ class EnsembleJobResult:
     skipped_input_count: int
     failure_count: int
     summary: str
+    empty_admin_output_count: int = 0
     errors: tuple[str, ...] = ()
     skipped_reasons: tuple[str, ...] = ()
 
@@ -4249,6 +5046,7 @@ def _merge_ensemble_stats(*parts: EnsembleBuildStats) -> EnsembleBuildStats:
         missing_expected_output_count=sum(part.missing_expected_output_count for part in parts),
         skipped_input_count=sum(part.skipped_input_count for part in parts),
         failure_count=sum(part.failure_count for part in parts),
+        empty_admin_output_count=sum(part.empty_admin_output_count for part in parts),
         errors=tuple(error for part in parts for error in part.errors),
         skipped_reasons=tuple(reason for part in parts for reason in part.skipped_reasons),
     )
@@ -4313,6 +5111,7 @@ def compute_ensembles_generic(
     slug: str | None = None,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> EnsembleBuildStats:
     """Compute ensemble statistics across models."""
     root = Path(output_root)
@@ -4330,29 +5129,14 @@ def compute_ensembles_generic(
     ensembles_root = level_root / "ensembles"
     ensembles_root.mkdir(parents=True, exist_ok=True)
     
-    if level == "sub_basin":
-        return _compute_sub_basin_ensembles(
-            level_root,
-            ensembles_root,
-            slug=slug,
-            allowed_models=allowed_models,
-            allowed_scenarios=allowed_scenarios,
-        )
-    elif level == "basin":
-        return _compute_basin_ensembles(
-            level_root,
-            ensembles_root,
-            slug=slug,
-            allowed_models=allowed_models,
-            allowed_scenarios=allowed_scenarios,
-        )
-    elif level == "block":
+    if level == "block":
         return _compute_block_ensembles(
             level_root,
             ensembles_root,
             slug=slug,
             allowed_models=allowed_models,
             allowed_scenarios=allowed_scenarios,
+            yearly_cleanup_policy=yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level),
         )
     else:
         return _compute_district_ensembles(
@@ -4370,6 +5154,7 @@ def _compute_district_ensembles(
     slug: str | None = None,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> EnsembleBuildStats:
     """Compute ensembles for district-level data."""
     stats = EnsembleBuildStats()
@@ -4394,6 +5179,8 @@ def _compute_district_ensembles(
         for scenario in scenarios:
             model_yearly = []
             expected_output = False
+            skip_reasons_seen: set[str] = set()
+            scenario_failure = False
             for m in model_dirs:
                 ycsv = m / scenario / f"{district}_yearly.csv"
                 if not path_exists(ycsv):
@@ -4407,6 +5194,7 @@ def _compute_district_ensembles(
                         model_name=m.name,
                     )
                     if cleaned is None:
+                        skip_reasons_seen.add(str(skip_reason or "unknown"))
                         message = f"district={district} model={m.name} scenario={scenario}: {skip_reason}"
                         stats = _merge_ensemble_stats(
                             stats,
@@ -4418,6 +5206,7 @@ def _compute_district_ensembles(
                         continue
                     model_yearly.append(cleaned)
                 except Exception as e:
+                    scenario_failure = True
                     message = f"district={district} model={m.name} scenario={scenario}: {e}"
                     stats = _merge_ensemble_stats(
                         stats,
@@ -4429,21 +5218,34 @@ def _compute_district_ensembles(
 
             if not expected_output:
                 continue
-            stats = _merge_ensemble_stats(
-                stats,
-                EnsembleBuildStats(expected_output_count=1),
-            )
 
             if not model_yearly:
+                benign_empty = (
+                    not scenario_failure
+                    and bool(skip_reasons_seen)
+                    and skip_reasons_seen <= {"no_numeric_rows"}
+                )
+                if benign_empty:
+                    stats = _merge_ensemble_stats(
+                        stats,
+                        EnsembleBuildStats(empty_admin_output_count=1),
+                    )
+                    continue
                 message = f"district={district} scenario={scenario}: no valid filtered yearly inputs"
                 stats = _merge_ensemble_stats(
                     stats,
                     EnsembleBuildStats(
+                        expected_output_count=1,
                         missing_expected_output_count=1,
                         errors=(message,),
                     ),
                 )
                 continue
+
+            stats = _merge_ensemble_stats(
+                stats,
+                EnsembleBuildStats(expected_output_count=1),
+            )
 
             try:
                 written = _write_ensemble_stats(
@@ -4484,6 +5286,7 @@ def _compute_block_ensembles(
     slug: str | None = None,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str = "delete_after_ensemble",
 ) -> EnsembleBuildStats:
     """Compute ensembles for block-level data."""
     stats = EnsembleBuildStats()
@@ -4511,7 +5314,10 @@ def _compute_block_ensembles(
             
             for scenario in scenarios:
                 model_yearly = []
+                retained_inputs: list[Path] = []
                 expected_output = False
+                skip_reasons_seen: set[str] = set()
+                scenario_failure = False
                 for m in model_dirs:
                     ycsv = m / scenario / f"{block}_yearly.csv"
                     if not path_exists(ycsv):
@@ -4525,6 +5331,7 @@ def _compute_block_ensembles(
                             model_name=m.name,
                         )
                         if cleaned is None:
+                            skip_reasons_seen.add(str(skip_reason or "unknown"))
                             message = (
                                 f"district={district} block={block} model={m.name} "
                                 f"scenario={scenario}: {skip_reason}"
@@ -4538,7 +5345,9 @@ def _compute_block_ensembles(
                             )
                             continue
                         model_yearly.append(cleaned)
+                        retained_inputs.append(ycsv)
                     except Exception as e:
+                        scenario_failure = True
                         message = (
                             f"district={district} block={block} model={m.name} "
                             f"scenario={scenario}: {e}"
@@ -4553,12 +5362,18 @@ def _compute_block_ensembles(
 
                 if not expected_output:
                     continue
-                stats = _merge_ensemble_stats(
-                    stats,
-                    EnsembleBuildStats(expected_output_count=1),
-                )
 
                 if not model_yearly:
+                    benign_empty = (
+                        not scenario_failure
+                        and bool(skip_reasons_seen)
+                        and skip_reasons_seen <= {"no_numeric_rows"}
+                    )
+                    if benign_empty:
+                        stats = _merge_ensemble_stats(
+                            stats, EnsembleBuildStats(empty_admin_output_count=1)
+                        )
+                        continue
                     message = (
                         f"district={district} block={block} scenario={scenario}: "
                         "no valid filtered yearly inputs"
@@ -4566,11 +5381,16 @@ def _compute_block_ensembles(
                     stats = _merge_ensemble_stats(
                         stats,
                         EnsembleBuildStats(
+                            expected_output_count=1,
                             missing_expected_output_count=1,
                             errors=(message,),
                         ),
                     )
                     continue
+
+                stats = _merge_ensemble_stats(
+                    stats, EnsembleBuildStats(expected_output_count=1)
+                )
 
                 out_dir = ensembles_root / district / block / scenario
                 try:
@@ -4611,392 +5431,31 @@ def _compute_block_ensembles(
                     )
                     continue
 
-                # After successfully writing ensemble outputs, delete per-model yearly CSVs
                 out_csv = out_dir / f"{block}_yearly_ensemble.csv"
                 if path_exists(out_csv):
-                    for m in model_dirs:
-                        ycsv = m / scenario / f"{block}_yearly.csv"
-                        if path_exists(ycsv):
-                            try:
-                                unlink_file(ycsv)
-                            except Exception as e:
-                                logging.debug(
-                                    "Could not delete per-model block yearly CSV: %s (%s)",
-                                    ycsv,
-                                    e,
-                                )
-    return stats
-
-
-def _hydro_ensemble_scope_from_coverage_qc(
-    level_root: Path,
-    *,
-    level: AdminLevel,
-    allowed_models: Sequence[str] | None = None,
-    allowed_scenarios: Sequence[str] | None = None,
-) -> set[str] | set[tuple[str, str]] | None:
-    """Return eligible hydro output directories inferred from coverage-QC files."""
-    models = tuple(_normalize_filter_values(allowed_models) or ())
-    scenarios = tuple(_normalize_filter_values(allowed_scenarios) or ())
-
-    candidate_paths: list[Path] = []
-    if models and scenarios:
-        for model in models:
-            for scenario in scenarios:
-                path = level_root / f"coverage_qc_{model}_{scenario}.csv"
-                if path.exists():
-                    candidate_paths.append(path)
-    else:
-        candidate_paths = sorted(level_root.glob("coverage_qc_*.csv"))
-
-    if not candidate_paths:
-        return None
-
-    if level == "basin":
-        eligible_units: set[str] = set()
-    else:
-        eligible_units = set()
-
-    for path in candidate_paths:
-        try:
-            df = pd.read_csv(path)
-        except Exception as exc:
-            logging.debug("Failed to read hydro coverage QC %s: %s", path, exc)
-            continue
-        if df.empty:
-            continue
-
-        if "eligible_for_processing" in df.columns:
-            eligible_mask = df["eligible_for_processing"].fillna(False).astype(bool)
-        elif "coverage_ok" in df.columns:
-            eligible_mask = df["coverage_ok"].fillna(False).astype(bool)
-        else:
-            continue
-
-        eligible_df = df.loc[eligible_mask].copy()
-        if eligible_df.empty:
-            continue
-
-        if level == "basin":
-            if "basin_name" not in eligible_df.columns:
-                continue
-            eligible_units.update(
-                _safe_component(name)
-                for name in eligible_df["basin_name"].astype(str).tolist()
-            )
-        else:
-            required = {"basin_name", "subbasin_name"}
-            if not required.issubset(eligible_df.columns):
-                continue
-            eligible_units.update(
-                (
-                    _safe_component(basin_name),
-                    _safe_component(sub_basin_name),
-                )
-                for basin_name, sub_basin_name in zip(
-                    eligible_df["basin_name"].astype(str),
-                    eligible_df["subbasin_name"].astype(str),
-                )
-            )
-
-    return eligible_units
-
-
-def _compute_basin_ensembles(
-    level_root: Path,
-    ensembles_root: Path,
-    *,
-    slug: str | None = None,
-    allowed_models: Sequence[str] | None = None,
-    allowed_scenarios: Sequence[str] | None = None,
-) -> EnsembleBuildStats:
-    """Compute ensembles for basin-level data."""
-    stats = EnsembleBuildStats()
-    skip_dirs = {"ensembles"}
-    basin_dirs = [
-        p for p in level_root.iterdir()
-        if p.is_dir() and p.name not in skip_dirs
-    ]
-    eligible_basin_dirs = _hydro_ensemble_scope_from_coverage_qc(
-        level_root,
-        level="basin",
-        allowed_models=allowed_models,
-        allowed_scenarios=allowed_scenarios,
-    )
-    if eligible_basin_dirs is not None:
-        total_basin_dirs = len(basin_dirs)
-        basin_dirs = [path for path in basin_dirs if path.name in eligible_basin_dirs]
-        logging.info(
-            "[%s] Hydro basin ensembles restricted by coverage QC: eligible=%d excluded=%d",
-            slug or "ensemble",
-            len(basin_dirs),
-            total_basin_dirs - len(basin_dirs),
-        )
-    metadata_columns = {"basin", "model", "scenario", "year", "source_file"}
-
-    for bdir in basin_dirs:
-        basin = bdir.name
-        model_dirs = _sorted_child_dirs(bdir, allowed_names=allowed_models)
-        if not model_dirs:
-            continue
-        allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
-        if allowed_scenarios_norm is None:
-            scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
-        else:
-            scenarios = list(allowed_scenarios_norm)
-
-        for scenario in scenarios:
-            model_yearly = []
-            expected_output = False
-            for m in model_dirs:
-                ycsv = m / scenario / f"{basin}_yearly.csv"
-                if not path_exists(ycsv):
-                    continue
-                expected_output = True
-                try:
-                    dfy = read_csv(ycsv)
-                    cleaned, skip_reason = _clean_ensemble_yearly_frame(
-                        dfy,
-                        metadata_columns=metadata_columns,
-                        model_name=m.name,
-                    )
-                    if cleaned is None:
-                        message = f"basin={basin} model={m.name} scenario={scenario}: {skip_reason}"
-                        stats = _merge_ensemble_stats(
-                            stats,
-                            EnsembleBuildStats(
-                                skipped_input_count=1,
-                                skipped_reasons=(message,),
-                            ),
-                        )
-                        continue
-                    model_yearly.append(cleaned)
-                except Exception as e:
-                    message = f"basin={basin} model={m.name} scenario={scenario}: {e}"
-                    logging.warning(
-                        "[%s] Failed to read hydro basin yearly for basin=%s model=%s scenario=%s: %s",
-                        slug or "ensemble",
-                        basin,
-                        m.name,
-                        scenario,
-                        e,
-                    )
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(failure_count=1, errors=(message,)),
-                    )
-
-            if not expected_output:
-                continue
-            stats = _merge_ensemble_stats(
-                stats,
-                EnsembleBuildStats(expected_output_count=1),
-            )
-
-            if not model_yearly:
-                message = f"basin={basin} scenario={scenario}: no valid filtered yearly inputs"
-                stats = _merge_ensemble_stats(
-                    stats,
-                    EnsembleBuildStats(
-                        missing_expected_output_count=1,
-                        errors=(message,),
-                    ),
-                )
-                continue
-
-            try:
-                written = _write_ensemble_stats(
-                    model_yearly,
-                    ensembles_root / basin / scenario,
-                    basin,
-                    file_stem=hydro_fs_token(basin),
-                )
-                if written == 0:
-                    message = f"basin={basin} scenario={scenario}: no ensemble outputs produced"
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(
-                            missing_expected_output_count=1,
-                            errors=(message,),
-                        ),
-                    )
-                else:
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(written_count=written),
-                    )
-            except Exception as e:
-                message = f"basin={basin} scenario={scenario}: {e}"
-                logging.warning(
-                    "[%s] Failed to write hydro basin ensemble for basin=%s scenario=%s: %s",
-                    slug or "ensemble",
-                    basin,
-                    scenario,
-                    e,
-                )
-                stats = _merge_ensemble_stats(
-                    stats,
-                    EnsembleBuildStats(
-                        failure_count=1,
-                        missing_expected_output_count=1,
-                        errors=(message,),
-                    ),
-                )
-    return stats
-
-
-def _compute_sub_basin_ensembles(
-    level_root: Path,
-    ensembles_root: Path,
-    *,
-    slug: str | None = None,
-    allowed_models: Sequence[str] | None = None,
-    allowed_scenarios: Sequence[str] | None = None,
-) -> EnsembleBuildStats:
-    """Compute ensembles for sub-basin-level data."""
-    stats = EnsembleBuildStats()
-    skip_dirs = {"ensembles"}
-    basin_dirs = [
-        p for p in level_root.iterdir()
-        if p.is_dir() and p.name not in skip_dirs
-    ]
-    eligible_sub_basin_dirs = _hydro_ensemble_scope_from_coverage_qc(
-        level_root,
-        level="sub_basin",
-        allowed_models=allowed_models,
-        allowed_scenarios=allowed_scenarios,
-    )
-    if eligible_sub_basin_dirs is not None:
-        eligible_basin_names = {basin_name for basin_name, _sub_basin_name in eligible_sub_basin_dirs}
-        basin_dirs = [path for path in basin_dirs if path.name in eligible_basin_names]
-    metadata_columns = {"basin", "sub_basin", "model", "scenario", "year", "source_file"}
-
-    for basin_dir in basin_dirs:
-        basin = basin_dir.name
-        sub_basin_dirs = [p for p in basin_dir.iterdir() if p.is_dir()]
-        if eligible_sub_basin_dirs is not None:
-            sub_basin_dirs = [
-                path for path in sub_basin_dirs if (basin, path.name) in eligible_sub_basin_dirs
-            ]
-        for sbdir in sub_basin_dirs:
-            sub_basin = sbdir.name
-            model_dirs = _sorted_child_dirs(sbdir, allowed_names=allowed_models)
-            if not model_dirs:
-                continue
-            allowed_scenarios_norm = _normalize_filter_values(allowed_scenarios)
-            if allowed_scenarios_norm is None:
-                scenarios = sorted({s.name for m in model_dirs for s in m.iterdir() if s.is_dir()})
-            else:
-                scenarios = list(allowed_scenarios_norm)
-
-            for scenario in scenarios:
-                model_yearly = []
-                expected_output = False
-                for m in model_dirs:
-                    ycsv = m / scenario / f"{sub_basin}_yearly.csv"
-                    if not path_exists(ycsv):
-                        continue
-                    expected_output = True
-                    try:
-                        dfy = read_csv(ycsv)
-                        cleaned, skip_reason = _clean_ensemble_yearly_frame(
-                            dfy,
-                            metadata_columns=metadata_columns,
-                            model_name=m.name,
-                        )
-                        if cleaned is None:
+                    if yearly_cleanup_policy == "delete_after_ensemble":
+                        for m in model_dirs:
+                            ycsv = m / scenario / f"{block}_yearly.csv"
+                            if path_exists(ycsv):
+                                try:
+                                    unlink_file(ycsv)
+                                except Exception as e:
+                                    logging.debug(
+                                        "Could not delete per-model block yearly CSV: %s (%s)",
+                                        ycsv,
+                                        e,
+                                    )
+                    elif yearly_cleanup_policy == "preserve":
+                        missing_retained = [path for path in retained_inputs if not path_exists(path)]
+                        if missing_retained:
                             message = (
-                                f"basin={basin} sub_basin={sub_basin} "
-                                f"model={m.name} scenario={scenario}: {skip_reason}"
+                                f"district={district} block={block} scenario={scenario}: "
+                                f"preserve policy lost retained yearly inputs: {len(missing_retained)}"
                             )
                             stats = _merge_ensemble_stats(
                                 stats,
-                                EnsembleBuildStats(
-                                    skipped_input_count=1,
-                                    skipped_reasons=(message,),
-                                ),
+                                EnsembleBuildStats(failure_count=1, errors=(message,)),
                             )
-                            continue
-                        model_yearly.append(cleaned)
-                    except Exception as e:
-                        message = f"basin={basin} sub_basin={sub_basin} model={m.name} scenario={scenario}: {e}"
-                        logging.warning(
-                            "[%s] Failed to read hydro sub-basin yearly for basin=%s sub_basin=%s model=%s scenario=%s: %s",
-                            slug or "ensemble",
-                            basin,
-                            sub_basin,
-                            m.name,
-                            scenario,
-                            e,
-                        )
-                        stats = _merge_ensemble_stats(
-                            stats,
-                            EnsembleBuildStats(failure_count=1, errors=(message,)),
-                        )
-
-                if not expected_output:
-                    continue
-                stats = _merge_ensemble_stats(
-                    stats,
-                    EnsembleBuildStats(expected_output_count=1),
-                )
-
-                if not model_yearly:
-                    message = (
-                        f"basin={basin} sub_basin={sub_basin} scenario={scenario}: "
-                        "no valid filtered yearly inputs"
-                    )
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(
-                            missing_expected_output_count=1,
-                            errors=(message,),
-                        ),
-                    )
-                    continue
-
-                try:
-                    written = _write_ensemble_stats(
-                        model_yearly,
-                        ensembles_root / basin / sub_basin / scenario,
-                        sub_basin,
-                        file_stem=hydro_fs_token(sub_basin),
-                    )
-                    if written == 0:
-                        message = (
-                            f"basin={basin} sub_basin={sub_basin} scenario={scenario}: "
-                            "no ensemble outputs produced"
-                        )
-                        stats = _merge_ensemble_stats(
-                            stats,
-                            EnsembleBuildStats(
-                                missing_expected_output_count=1,
-                                errors=(message,),
-                            ),
-                        )
-                    else:
-                        stats = _merge_ensemble_stats(
-                            stats,
-                            EnsembleBuildStats(written_count=written),
-                        )
-                except Exception as e:
-                    message = f"basin={basin} sub_basin={sub_basin} scenario={scenario}: {e}"
-                    logging.warning(
-                        "[%s] Failed to write hydro sub-basin ensemble for basin=%s sub_basin=%s scenario=%s: %s",
-                        slug or "ensemble",
-                        basin,
-                        sub_basin,
-                        scenario,
-                        e,
-                    )
-                    stats = _merge_ensemble_stats(
-                        stats,
-                        EnsembleBuildStats(
-                            failure_count=1,
-                            missing_expected_output_count=1,
-                            errors=(message,),
-                        ),
-                    )
     return stats
 
 
@@ -5047,6 +5506,8 @@ class ProcessingTask:
     required_vars: tuple[str, ...] = ()
     common_years_hash: str = ""
     scope_name: str = "Telangana"
+    source_signatures: dict[str, str] = field(default_factory=dict)
+    yearly_cleanup_policy: str = "delete_after_ensemble"
 
 
 @dataclass(frozen=True)
@@ -5061,6 +5522,17 @@ class ProcessingTaskPlan:
     skipped_reasons_by_metric: dict[str, tuple[str, ...]]
 
 
+@dataclass(frozen=True)
+class SourceAvailability:
+    """Planner-local source inventory state for one model/scenario/variable."""
+
+    data_dir_exists: bool
+    raw_years: set[int]
+    valid_year_files: dict[int, Path]
+    invalid_year_files: dict[int, dict[str, Any]]
+    valid_years: set[int]
+
+
 def build_processing_task_plan(
     *,
     metrics_filter: Sequence[str] | None = None,
@@ -5068,6 +5540,7 @@ def build_processing_task_plan(
     scenarios_filter: Sequence[str] | None = None,
     level: AdminLevel = "district",
     state: str = "Telangana",
+    yearly_cleanup_policy: str = "delete_after_ensemble",
 ) -> ProcessingTaskPlan:
     """Return the exact runnable compute task universe for one level/scope."""
     metrics_to_process = [
@@ -5075,7 +5548,7 @@ def build_processing_task_plan(
         for i, m in enumerate(METRICS)
         if not metrics_filter or m["slug"] in metrics_filter
     ]
-    models_to_process = [m for m in MODELS if not models_filter or m in models_filter]
+    models_to_process = [m for m in _get_models() if not models_filter or m in models_filter]
     scenarios_to_process = {
         k: v for k, v in SCENARIOS.items() if not scenarios_filter or k in scenarios_filter
     }
@@ -5085,20 +5558,132 @@ def build_processing_task_plan(
     for _, metric in metrics_to_process:
         metric_root(metric["slug"])
 
-    years_cache: dict[tuple[str, str, str], set[int]] = {}
+    planning_started_at = time.perf_counter()
+    shard_cache: dict[tuple[str, str, str], SourceInventoryShard] = {}
+    availability_cache: dict[tuple[str, str, str], SourceAvailability] = {}
+    signature_cache: dict[tuple[str, str, str, tuple[str, ...]], str] = {}
+    source_availability_cache_hits = 0
+    signature_cache_hits = 0
     tasks: list[ProcessingTask] = []
     skipped_counts: dict[str, int] = defaultdict(int)
     skipped_reasons_by_metric: dict[str, set[str]] = defaultdict(set)
 
-    def _years_for(model_name: str, scenario_name: str, sconf: dict, varname: str) -> set[int]:
-        key = (model_name, scenario_name, varname)
-        if key in years_cache:
-            return years_cache[key]
-        d = var_data_dir(DATA_ROOT, sconf["subdir"], varname, model_name)
-        valid_year_files, _bad_year_files = validated_year_files_for_var(d, varname) if d.exists() else ({}, {})
-        yrs = set(valid_year_files.keys())
-        years_cache[key] = yrs
-        return yrs
+    def _shard_for(
+        *,
+        model_name: str,
+        scenario_name: str,
+        scenario_subdir: str,
+        varname: str,
+    ) -> SourceInventoryShard | None:
+        key = (scenario_name, varname, model_name)
+        if key in shard_cache:
+            return shard_cache[key]
+        data_dir = var_data_dir(DATA_ROOT, scenario_subdir, varname, model_name)
+        if not data_dir.exists():
+            return None
+        shard = _inventory_shard_for_var(
+            scenario_name=scenario_name,
+            varname=varname,
+            model=model_name,
+            data_dir=data_dir,
+            allow_write=True,
+        )
+        shard_cache[key] = shard
+        return shard
+
+    def _availability_for(
+        model_name: str,
+        scenario_name: str,
+        sconf: Mapping[str, Any],
+        varname: str,
+    ) -> SourceAvailability:
+        nonlocal source_availability_cache_hits
+        key = (scenario_name, varname, model_name)
+        cached = availability_cache.get(key)
+        if cached is not None:
+            source_availability_cache_hits += 1
+            return cached
+        data_dir = var_data_dir(DATA_ROOT, str(sconf["subdir"]), varname, model_name)
+        shard = _shard_for(
+            model_name=model_name,
+            scenario_name=scenario_name,
+            scenario_subdir=str(sconf["subdir"]),
+            varname=varname,
+        )
+        if shard is None:
+            availability = SourceAvailability(
+                data_dir_exists=data_dir.exists(),
+                raw_years=set(),
+                valid_year_files={},
+                invalid_year_files={},
+                valid_years=set(),
+            )
+        else:
+            valid_year_files = shard.valid_year_files()
+            availability = SourceAvailability(
+                data_dir_exists=True,
+                raw_years={int(record.year) for record in shard.records},
+                valid_year_files=valid_year_files,
+                invalid_year_files=shard.invalid_year_details(),
+                valid_years=set(valid_year_files),
+            )
+        availability_cache[key] = availability
+        return availability
+
+    def _role_signature(
+        *,
+        role_name: str,
+        scenario_name: str,
+        varnames: tuple[str, ...],
+        model_name: str,
+    ) -> str:
+        nonlocal signature_cache_hits
+        key = (role_name, scenario_name, model_name, varnames)
+        cached = signature_cache.get(key)
+        if cached is not None:
+            signature_cache_hits += 1
+            return cached
+        shards: dict[str, SourceInventoryShard] = {}
+        for varname in varnames:
+            shard = _shard_for(
+                model_name=model_name,
+                scenario_name=scenario_name,
+                scenario_subdir=f"{scenario_name}/tas",
+                varname=varname,
+            )
+            if shard is not None:
+                shards[varname] = shard
+        signature = _inventory_signature_for_role(role_name=role_name, shards=shards) if shards else ""
+        signature_cache[key] = signature
+        return signature
+
+    def _planner_role_source_signatures(
+        *,
+        metric: Mapping[str, Any],
+        model_name: str,
+        scenario_name: str,
+    ) -> dict[str, str]:
+        role_varnames = _metric_role_varnames(metric=metric, scenario=scenario_name, level=level)
+        signatures: dict[str, str] = {}
+        eval_signature = ""
+        for role_name, varnames in role_varnames.items():
+            resolved_scenario = "historical" if role_name != "eval" else scenario_name
+            role_signature = _role_signature(
+                role_name=role_name,
+                scenario_name=resolved_scenario,
+                varnames=tuple(str(varname) for varname in varnames),
+                model_name=model_name,
+            )
+            if not role_signature:
+                continue
+            if role_name == "eval":
+                eval_signature = role_signature
+            signatures[role_name] = role_signature
+        if "spi_calibration" not in signatures and eval_signature and scenario_name != "historical" and str(metric.get("compute") or "") in SPI_COMPUTE_NAMES:
+            signatures["spi_calibration"] = eval_signature
+        if "baseline" not in signatures and eval_signature and scenario_name != "historical" and str(metric.get("compute") or "") in PRECIP_PERCENTILE_COMPUTE_NAMES:
+            signatures["baseline"] = eval_signature
+        return signatures
 
     for model in models_to_process:
         for scenario, sconf in scenarios_to_process.items():
@@ -5113,15 +5698,10 @@ def build_processing_task_plan(
                 year_sets = []
                 source_invalid = False
                 for v in req_vars:
-                    d = var_data_dir(DATA_ROOT, sconf["subdir"], v, model)
-                    if not d.exists():
-                        year_sets.append(set())
-                        continue
-                    raw_years = yearly_files_for_dir(d)
-                    valid_year_files, _bad_year_files = validated_year_files_for_var(d, v)
-                    if raw_years and not valid_year_files:
+                    availability = _availability_for(model, scenario, sconf, v)
+                    if availability.raw_years and not availability.valid_year_files:
                         source_invalid = True
-                    year_sets.append(set(valid_year_files.keys()))
+                    year_sets.append(availability.valid_years)
                 if any(len(years) == 0 for years in year_sets):
                     reason = SKIP_REASON_INVALID_SOURCE_FILES if source_invalid else SKIP_REASON_NO_AVAILABLE_YEARS
                     skipped_counts[reason] += 1
@@ -5148,6 +5728,12 @@ def build_processing_task_plan(
                         required_vars=req_vars,
                         common_years_hash=_hash_common_years(sorted(common_years)),
                         scope_name=scope_name,
+                        source_signatures=_planner_role_source_signatures(
+                            metric=metric,
+                            model_name=model,
+                            scenario_name=scenario,
+                        ),
+                        yearly_cleanup_policy=yearly_cleanup_policy,
                     )
                 )
 
@@ -5159,6 +5745,20 @@ def build_processing_task_plan(
 
     for task in tasks:
         task.total_tasks = len(tasks)
+
+    planning_elapsed = time.perf_counter() - planning_started_at
+    logging.info(
+        "Task planning inventory cache: unique_source_availability_keys=%d "
+        "source_availability_cache_hits=%d signature_cache_hits=%d",
+        len(availability_cache),
+        source_availability_cache_hits,
+        signature_cache_hits,
+    )
+    logging.info(
+        "Task planning complete: tasks_built=%d elapsed_seconds=%.3f",
+        len(tasks),
+        planning_elapsed,
+    )
 
     return ProcessingTaskPlan(
         level=level,
@@ -5224,6 +5824,14 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
         return MarkerValidationStatus(valid=False, reason="compute_marker_required_vars_mismatch")
     if str(payload.get("common_years_hash", "")).strip() != task.common_years_hash:
         return MarkerValidationStatus(valid=False, reason="compute_marker_common_years_mismatch")
+    if {
+        str(key): str(value)
+        for key, value in dict(payload.get("source_signatures") or {}).items()
+    } != {
+        str(key): str(value)
+        for key, value in dict(task.source_signatures or {}).items()
+    }:
+        return MarkerValidationStatus(valid=False, reason="compute_marker_source_signatures_mismatch")
     if str(payload.get("boundary_path", "")).strip() != boundary_path:
         return MarkerValidationStatus(valid=False, reason="compute_marker_boundary_path_mismatch")
     if int(payload.get("boundary_mtime_ns", -1)) != int(boundary_mtime_ns):
@@ -5231,9 +5839,9 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
 
     yearly_expected = int(payload.get("yearly_file_count", -1))
     periods_expected = int(payload.get("period_file_count", -1))
-    yearly_cleanup_policy = str(
-        payload.get("yearly_cleanup_policy", _compute_marker_yearly_cleanup_policy(task.level))
-    ).strip()
+    yearly_cleanup_policy = str(payload.get("yearly_cleanup_policy", "")).strip()
+    if yearly_cleanup_policy != str(task.yearly_cleanup_policy).strip():
+        return MarkerValidationStatus(valid=False, reason="yearly_cleanup_policy_mismatch")
     yearly_actual, periods_actual = _task_output_file_counts(
         slug=task.slug,
         level=task.level,
@@ -5244,15 +5852,18 @@ def task_completion_marker_status(task: ProcessingTask) -> MarkerValidationStatu
     yearly_counts_valid = yearly_actual == yearly_expected
     if (
         task.level == "block"
-        and yearly_cleanup_policy == "delete_after_ensemble"
+        and task.yearly_cleanup_policy == "delete_after_ensemble"
         and yearly_actual == 0
         and yearly_expected >= 0
     ):
         yearly_counts_valid = True
     if not yearly_counts_valid or periods_actual != periods_expected:
+        reason = "compute_marker_output_count_mismatch"
+        if task.yearly_cleanup_policy == "preserve" and yearly_actual != yearly_expected:
+            reason = "yearly_files_missing_under_preserve_policy"
         return MarkerValidationStatus(
             valid=False,
-            reason="compute_marker_output_count_mismatch",
+            reason=reason,
             detail=(
                 f"expected(yearly={yearly_expected}, periods={periods_expected}) "
                 f"actual(yearly={yearly_actual}, periods={periods_actual})"
@@ -5274,6 +5885,7 @@ def ensemble_completion_marker_status(
     scope_name: str,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> MarkerValidationStatus:
     """Return validator status for one ensemble marker."""
     marker_path = _filter_aware_ensemble_marker_path(
@@ -5305,6 +5917,9 @@ def ensemble_completion_marker_status(
         allowed_scenarios=allowed_scenarios,
     ):
         return MarkerValidationStatus(valid=False, reason="ensemble_marker_filter_scope_mismatch")
+    expected_cleanup_policy = yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level)
+    if str(payload.get("yearly_cleanup_policy", "")).strip() != str(expected_cleanup_policy).strip():
+        return MarkerValidationStatus(valid=False, reason="yearly_cleanup_policy_mismatch")
 
     expected = int(payload.get("expected_output_count", -1))
     actual = _ensemble_output_count(
@@ -5330,6 +5945,7 @@ def ensemble_completion_marker_valid(
     scope_name: str,
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
+    yearly_cleanup_policy: str | None = None,
 ) -> bool:
     """Return True when one ensemble marker can safely skip rebuild."""
     return ensemble_completion_marker_status(
@@ -5338,6 +5954,7 @@ def ensemble_completion_marker_valid(
         scope_name=scope_name,
         allowed_models=allowed_models,
         allowed_scenarios=allowed_scenarios,
+        yearly_cleanup_policy=yearly_cleanup_policy,
     ).valid
 
 
@@ -5353,11 +5970,12 @@ def _write_task_completion_marker(task: ProcessingTask, *, output_meta: Optional
         "scenario": task.scenario,
         "required_vars": list(task.required_vars),
         "common_years_hash": task.common_years_hash,
+        "source_signatures": dict(sorted((str(key), str(value)) for key, value in dict(task.source_signatures or {}).items())),
         "boundary_path": boundary_path,
         "boundary_mtime_ns": int(boundary_mtime_ns),
         "yearly_file_count": int(output_meta.get("yearly_file_count", 0)),
         "period_file_count": int(output_meta.get("period_file_count", 0)),
-        "yearly_cleanup_policy": _compute_marker_yearly_cleanup_policy(task.level),
+        "yearly_cleanup_policy": task.yearly_cleanup_policy,
         "completed_at": time.time(),
     }
     _write_marker_json(
@@ -5380,6 +5998,7 @@ def _write_ensemble_completion_marker(
     allowed_models: Sequence[str] | None = None,
     allowed_scenarios: Sequence[str] | None = None,
     expected_output_count: int,
+    yearly_cleanup_policy: str | None = None,
 ) -> None:
     boundary_path, boundary_mtime_ns = _boundary_signature(level, scope_name)
     payload = {
@@ -5394,6 +6013,7 @@ def _write_ensemble_completion_marker(
             allowed_scenarios=allowed_scenarios,
         ),
         "expected_output_count": int(expected_output_count),
+        "yearly_cleanup_policy": yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level),
         "completed_at": time.time(),
     }
     _write_marker_json(
@@ -5407,6 +6027,50 @@ def _write_ensemble_completion_marker(
         payload,
     )
 
+
+def _set_inventory_write_mode(allowed: bool) -> None:
+    """Control whether inventory lookups may rebuild stale or missing shards."""
+    global _inventory_writes_allowed
+    _inventory_writes_allowed = bool(allowed)
+
+
+def _prewarm_inventory_for_tasks(tasks: Sequence[ProcessingTask]) -> None:
+    """Refresh all source-inventory shards needed by the runnable task set."""
+    requests: set[tuple[str, str, str]] = set()
+    for task in tasks:
+        metric = METRICS[task.metric_idx]
+        role_varnames = _metric_role_varnames(metric=metric, scenario=task.scenario, level=task.level)
+        for role_name, varnames in role_varnames.items():
+            scenario_name = task.scenario if role_name == "eval" else "historical"
+            for varname in varnames:
+                requests.add((scenario_name, str(varname), task.model))
+    if not requests:
+        return
+
+    _set_inventory_write_mode(True)
+    failures: list[str] = []
+    for scenario_name, varname, model in sorted(requests):
+        data_dir = var_data_dir(DATA_ROOT, f"{scenario_name}/tas", varname, model)
+        if not data_dir.exists():
+            continue
+        try:
+            _inventory_shard_for_var(
+                scenario_name=scenario_name,
+                varname=varname,
+                model=model,
+                data_dir=data_dir,
+                allow_write=True,
+            )
+        except Exception as exc:
+            failures.append(
+                f"scenario={scenario_name} var={varname} model={model}: {exc}"
+            )
+    if failures:
+        raise RuntimeError(
+            "Inventory prewarm failed for one or more source shards: "
+            + "; ".join(failures[:10])
+        )
+
 # Global worker state
 _worker_gdf = None
 _worker_level = "district"
@@ -5414,11 +6078,11 @@ _worker_state = "Telangana"
 
 def _worker_init(level: str = "district", state: str = "Telangana"):
     global _worker_gdf, _worker_level, _worker_state
+    _set_inventory_write_mode(False)
     _worker_level = level
-    _worker_state = HYDRO_ROOT_NAME if level in {"basin", "sub_basin"} else state
+    _worker_state = state
     boundary_path = get_boundary_path(level)
-    state_filter = None if level in {"basin", "sub_basin"} else state
-    _worker_gdf = load_boundaries(boundary_path, state_filter=state_filter, level=level)
+    _worker_gdf = load_boundaries(boundary_path, state_filter=state, level=level)
 
 def _execute_processing_task(task: ProcessingTask, gdf: gpd.GeoDataFrame) -> dict[str, Any]:
     """Run one compute task and persist a completion marker on success."""
@@ -5458,10 +6122,98 @@ def _worker_process_task(task: ProcessingTask) -> dict:
     result["duration"] = time.time() - start
     return result
 
+
+def partition_drought_reps(
+    tasks: Sequence[ProcessingTask], level: str
+) -> tuple[list[ProcessingTask], list[ProcessingTask]]:
+    """Split *tasks* into ``(reps, remainder)`` for the Option C (CHG-0113) cube pre-warm.
+
+    Selects exactly one representative grid-first drought task per cube group so a single serial
+    pre-pass cold-builds the shared monthly cube (``load_or_build_monthly_cube``) that every other
+    drought fork of the same group then warm-hits.
+
+    The cube key is morally ``(model, scenario, grid_id, year-span)``, but ``grid_id``/``span`` are not
+    carried on :class:`ProcessingTask`. They are 1:1 with ``(model, scenario)`` today -- all grid-first
+    drought slugs route through the same dispatch with the same grid_id/index_range (guarded by the
+    ``test_drought_slugs_share_baseline_years`` registry invariant) -- so we group by
+    ``(model, scenario)`` and assert that 1:1 mapping in the partition unit test.
+
+    Invariant: ``set(reps) | set(remainder) == set(tasks)``, ``reps`` and ``remainder`` are disjoint,
+    and there is exactly one rep per ``(model, scenario)`` drought group. Non-drought tasks all land in
+    ``remainder``.
+
+    Degrade-not-corrupt: a rep only *pre-warms* the cube. Because ``index_range`` lives in the cube
+    sidecar (CHG-0108 G1), any drift between a rep's cube key and a fork's can at worst cause a cold
+    miss (today's behavior), never a wrong-serve.
+    """
+    reps: list[ProcessingTask] = []
+    remainder: list[ProcessingTask] = []
+    seen_groups: set[tuple[str, str]] = set()
+    for task in tasks:
+        if not is_drought_gridfirst(task.slug, level):
+            remainder.append(task)
+            continue
+        group = (task.model, task.scenario)
+        if group in seen_groups:
+            remainder.append(task)
+        else:
+            seen_groups.add(group)
+            reps.append(task)
+    return reps, remainder
+
+
+def _run_rep_prepass(
+    reps: Sequence[ProcessingTask],
+    gdf: gpd.GeoDataFrame,
+    *,
+    progress: "PeriodicProgressLogger",
+    results: list,
+) -> tuple[int, int]:
+    """Serially run the Option C (CHG-0113) cube pre-warm reps in the parent process.
+
+    Each rep is wrapped exactly like :func:`_worker_process_task` so its ``slug``/``duration`` survive
+    into the CHG-0112 ``[compute-rollup]`` and the ``completed``/``failed`` accounting stays
+    parity-correct with a no-pre-pass run (G-C1, G-C3). A failed rep is recorded once, is NOT retried
+    (it is removed from the forked remainder), and the run still forks the remainder -- those forks
+    merely cold-build the cube (degrade, not corrupt).
+
+    Returns ``(completed, failed)`` increments for the caller to fold into its running totals.
+    """
+    completed = 0
+    failed = 0
+    for rep in reps:
+        start = time.time()
+        result = {
+            "task_id": rep.task_id,
+            "slug": rep.slug,
+            "model": rep.model,
+            "scenario": rep.scenario,
+            "status": "success",
+            "error": None,
+        }
+        try:
+            result.update(_execute_processing_task(rep, gdf))
+        except Exception as e:
+            logging.error(f"Pre-warm rep failed for {rep.slug}/{rep.model}/{rep.scenario}: {e}")
+            logging.debug(traceback.format_exc())
+            result["status"] = "failed"
+            result["error"] = str(e)
+            failed += 1
+        result["duration"] = time.time() - start
+        results.append(result)
+        completed += 1
+        progress.update(failed_increment=1 if result["status"] == "failed" else 0)
+    return completed, failed
+
+
 def _compute_ensembles_for_metric(
-    args: tuple[str, AdminLevel, str, tuple[str, ...] | None, tuple[str, ...] | None]
+    args: tuple[str, AdminLevel, str, tuple[str, ...] | None, tuple[str, ...] | None, str] | tuple[str, AdminLevel, str, tuple[str, ...] | None, tuple[str, ...] | None]
 ) -> EnsembleJobResult:
-    slug, level, state, allowed_models, allowed_scenarios = args
+    if len(args) == 5:
+        slug, level, state, allowed_models, allowed_scenarios = args
+        yearly_cleanup_policy = _compute_marker_yearly_cleanup_policy(level)
+    else:
+        slug, level, state, allowed_models, allowed_scenarios, yearly_cleanup_policy = args
     try:
         stats = compute_ensembles_generic(
             metric_root(slug),
@@ -5470,6 +6222,7 @@ def _compute_ensembles_for_metric(
             slug=slug,
             allowed_models=allowed_models,
             allowed_scenarios=allowed_scenarios,
+            yearly_cleanup_policy=yearly_cleanup_policy,
         )
     except Exception as e:
         summary = f"{state}/{level}/{slug}: expected=0, wrote=0, failures=1, first_error={e}"
@@ -5487,7 +6240,7 @@ def _compute_ensembles_for_metric(
             errors=(str(e),),
         )
 
-    zero_output_is_failure = state == HYDRO_ROOT_NAME and level in {"basin", "sub_basin"}
+    zero_output_is_failure = False
     hard_failure = (
         stats.failure_count > 0
         or stats.missing_expected_output_count > 0
@@ -5500,6 +6253,7 @@ def _compute_ensembles_for_metric(
             f"{state}/{level}/{slug}: expected={stats.expected_output_count}, "
             f"wrote={stats.written_count}, missing={stats.missing_expected_output_count}, "
             f"skipped_inputs={stats.skipped_input_count}, failures={stats.failure_count}, "
+            f"empty={stats.empty_admin_output_count}, "
             f"first_error={first_error}"
         )
         return EnsembleJobResult(
@@ -5513,6 +6267,7 @@ def _compute_ensembles_for_metric(
             skipped_input_count=stats.skipped_input_count,
             failure_count=stats.failure_count,
             summary=summary,
+            empty_admin_output_count=stats.empty_admin_output_count,
             errors=stats.errors,
             skipped_reasons=stats.skipped_reasons,
         )
@@ -5524,10 +6279,12 @@ def _compute_ensembles_for_metric(
             allowed_models=allowed_models,
             allowed_scenarios=allowed_scenarios,
             expected_output_count=stats.expected_output_count,
+            yearly_cleanup_policy=yearly_cleanup_policy,
         )
     except Exception as e:
         summary = (
             f"{state}/{level}/{slug}: expected={stats.expected_output_count}, wrote={stats.written_count}, "
+            f"empty={stats.empty_admin_output_count}, "
             f"failures=1, first_error=marker_write_failed: {e}"
         )
         return EnsembleJobResult(
@@ -5541,8 +6298,23 @@ def _compute_ensembles_for_metric(
             skipped_input_count=stats.skipped_input_count,
             failure_count=1,
             summary=summary,
+            empty_admin_output_count=stats.empty_admin_output_count,
             errors=(f"marker_write_failed: {e}",),
             skipped_reasons=stats.skipped_reasons,
+        )
+    if stats.empty_admin_output_count:
+        level_log = (
+            logging.warning
+            if stats.expected_output_count == 0
+            else logging.info
+        )
+        level_log(
+            "%s/%s/%s: %d admin unit(s) reclassified as benign empty "
+            "(coverage-gated all-NaN); expected=%d, empty=%d",
+            state, level, slug,
+            stats.empty_admin_output_count,
+            stats.expected_output_count,
+            stats.empty_admin_output_count,
         )
     return EnsembleJobResult(
         slug=slug,
@@ -5557,8 +6329,9 @@ def _compute_ensembles_for_metric(
         summary=(
             f"{state}/{level}/{slug}: expected={stats.expected_output_count}, "
             f"wrote={stats.written_count}, skipped_inputs={stats.skipped_input_count}, "
-            f"failures={stats.failure_count}"
+            f"failures={stats.failure_count}, empty={stats.empty_admin_output_count}"
         ),
+        empty_admin_output_count=stats.empty_admin_output_count,
         errors=stats.errors,
         skipped_reasons=stats.skipped_reasons,
     )
@@ -5574,203 +6347,235 @@ def run_pipeline_parallel(
     state: str = "Telangana",
     skip_existing: bool = False,
     overwrite: bool = False,
+    yearly_cleanup_policy: str | None = None,
 ) -> PipelineRunResult:
     """Run the pipeline with parallel processing."""
     setup_logging(verbose)
 
-    task_plan = build_processing_task_plan(
-        metrics_filter=metrics_filter,
-        models_filter=models_filter,
-        scenarios_filter=scenarios_filter,
-        level=level,
-        state=state,
-    )
-    metrics_to_process = [(i, m) for i, m in enumerate(METRICS) if m["slug"] in set(task_plan.selected_metrics)]
-    models_to_process = [m for m in MODELS if not models_filter or m in models_filter]
-    scenarios_to_process = {k: v for k, v in SCENARIOS.items() if not scenarios_filter or k in scenarios_filter}
-    tasks = list(task_plan.tasks)
-    effective_state = task_plan.scope_name
-    ensemble_models = _normalize_filter_values(models_filter)
-    ensemble_scenarios = _normalize_filter_values(scenarios_filter)
+    try:
+        effective_cleanup_policy = yearly_cleanup_policy or _compute_marker_yearly_cleanup_policy(level)
+        task_plan = build_processing_task_plan(
+            metrics_filter=metrics_filter,
+            models_filter=models_filter,
+            scenarios_filter=scenarios_filter,
+            level=level,
+            state=state,
+            yearly_cleanup_policy=effective_cleanup_policy,
+        )
+        metrics_to_process = [(i, m) for i, m in enumerate(METRICS) if m["slug"] in set(task_plan.selected_metrics)]
+        models_to_process = [m for m in _get_models() if not models_filter or m in models_filter]
+        scenarios_to_process = {k: v for k, v in SCENARIOS.items() if not scenarios_filter or k in scenarios_filter}
+        tasks = list(task_plan.tasks)
+        effective_state = task_plan.scope_name
+        ensemble_models = _normalize_filter_values(models_filter)
+        ensemble_scenarios = _normalize_filter_values(scenarios_filter)
 
-    if overwrite:
-        for slug in sorted({task.slug for task in tasks}):
-            _cleanup_compute_outputs_for_overwrite(
-                slug=slug,
-                level=level,
-                scope_name=effective_state,
-                allowed_models=models_filter,
-                allowed_scenarios=scenarios_filter,
-            )
+        if overwrite:
+            for slug in sorted({task.slug for task in tasks}):
+                _cleanup_compute_outputs_for_overwrite(
+                    slug=slug,
+                    level=level,
+                    scope_name=effective_state,
+                    allowed_models=models_filter,
+                    allowed_scenarios=scenarios_filter,
+                )
 
-    if task_plan.skipped_counts_by_reason:
-        joined = ", ".join(f"{reason}={count}" for reason, count in sorted(task_plan.skipped_counts_by_reason.items()))
-        logging.info(f"Task builder skipped combinations ({joined})")
+        if task_plan.skipped_counts_by_reason:
+            joined = ", ".join(f"{reason}={count}" for reason, count in sorted(task_plan.skipped_counts_by_reason.items()))
+            logging.info(f"Task builder skipped combinations ({joined})")
 
-    ensemble_needed_slugs: set[str] = set(task.slug for task in tasks) if not skip_existing else set()
-    if skip_existing:
-        runnable_tasks = list(tasks)
-        tasks = []
-        skipped_existing = 0
-        for task in runnable_tasks:
-            if task_completion_marker_valid(task):
-                skipped_existing += 1
-            else:
-                tasks.append(task)
-                ensemble_needed_slugs.add(task.slug)
-        for slug in {task.slug for task in runnable_tasks}:
-            if slug not in {task.slug for task in tasks} and not ensemble_completion_marker_valid(
-                slug=slug,
-                level=level,
-                scope_name=effective_state,
-                allowed_models=ensemble_models,
-                allowed_scenarios=ensemble_scenarios,
-            ):
-                ensemble_needed_slugs.add(slug)
-        if skipped_existing:
-            logging.info(
-                "Skipping %s runnable compute tasks because validated completion markers already exist",
-                skipped_existing,
-            )
+        ensemble_needed_slugs: set[str] = set(task.slug for task in tasks) if not skip_existing else set()
+        if skip_existing:
+            runnable_tasks = list(tasks)
+            tasks = []
+            skipped_existing = 0
+            for task in runnable_tasks:
+                if task_completion_marker_valid(task):
+                    skipped_existing += 1
+                else:
+                    tasks.append(task)
+                    ensemble_needed_slugs.add(task.slug)
+            for slug in {task.slug for task in runnable_tasks}:
+                ensemble_marker_kwargs: dict[str, Any] = {
+                    "slug": slug,
+                    "level": level,
+                    "scope_name": effective_state,
+                    "allowed_models": ensemble_models,
+                    "allowed_scenarios": ensemble_scenarios,
+                }
+                if effective_cleanup_policy != _compute_marker_yearly_cleanup_policy(level):
+                    ensemble_marker_kwargs["yearly_cleanup_policy"] = effective_cleanup_policy
+                if slug not in {task.slug for task in tasks} and not ensemble_completion_marker_valid(
+                    **ensemble_marker_kwargs,
+                ):
+                    ensemble_needed_slugs.add(slug)
+            if skipped_existing:
+                logging.info(
+                    "Skipping %s runnable compute tasks because validated completion markers already exist",
+                    skipped_existing,
+                )
 
-    if level == "sub_basin":
-        level_display = "Sub-basin"
-    elif level == "basin":
-        level_display = "Basin"
-    else:
         level_display = "Block" if level == "block" else "District"
-    level_folder = get_level_folder(level)
-    
-    # Determine SPI implementation info
-    spi_impl = "climate-indices package" if USE_CLIMATE_INDICES_PACKAGE and CLIMATE_INDICES_AVAILABLE else "legacy (scipy)"
-    
-    logging.info("=" * 60)
-    logging.info("India Resilience Tool - Climate Index Pipeline")
-    logging.info(f"Level: {level_display} (folder: {level_folder}/)")
-    logging.info(f"Output scope: {effective_state}")
-    logging.info(f"Metrics: {len(metrics_to_process)}, Models: {len(models_to_process)}, Scenarios: {len(scenarios_to_process)}")
-    logging.info(f"Runnable tasks: {len(task_plan.tasks)}, Tasks to execute: {len(tasks)}, Workers: {num_workers}")
-    logging.info(f"SPI/SPEI implementation: {spi_impl}")
-    logging.info("=" * 60)
+        level_folder = get_level_folder(level)
+        spi_impl = "climate-indices package" if USE_CLIMATE_INDICES_PACKAGE and CLIMATE_INDICES_AVAILABLE else "legacy (scipy)"
 
-    if not tasks and not ensemble_needed_slugs:
-        logging.info("No compute or ensemble work is pending.")
+        logging.info("=" * 60)
+        logging.info("India Resilience Tool - Climate Index Pipeline")
+        logging.info(f"Level: {level_display} (folder: {level_folder}/)")
+        logging.info(f"Output scope: {effective_state}")
+        logging.info(f"Metrics: {len(metrics_to_process)}, Models: {len(models_to_process)}, Scenarios: {len(scenarios_to_process)}")
+        logging.info(f"Runnable tasks: {len(task_plan.tasks)}, Tasks to execute: {len(tasks)}, Workers: {num_workers}")
+        logging.info(f"SPI/SPEI implementation: {spi_impl}")
+        logging.info(f"Yearly cleanup policy: {effective_cleanup_policy}")
+        logging.info("=" * 60)
+
+        if not tasks and not ensemble_needed_slugs:
+            logging.info("No compute or ensemble work is pending.")
+            return PipelineRunResult(
+                level=level,
+                scope_name=effective_state,
+                compute_failed_count=0,
+                ensemble_results=(),
+            )
+
+        if tasks:
+            logging.info("Prewarming source inventory shards...")
+            _prewarm_inventory_for_tasks(tasks)
+            _set_inventory_write_mode(False)
+
+        start = time.time()
+        results = []
+        completed = 0
+        failed = 0
+        compute_progress = PeriodicProgressLogger(total=len(tasks), prefix="Compute", heartbeat_seconds=30.0)
+
+        if num_workers == 1:
+            boundary_path = get_boundary_path(level)
+            gdf = load_boundaries(
+                boundary_path,
+                state_filter=state,
+                level=level,
+            )
+            logging.info(f"Loaded {len(gdf)} {level} boundaries for {effective_state}")
+
+            compute_progress.start()
+            for task in tasks:
+                try:
+                    result = _execute_processing_task(task, gdf)
+                    result["status"] = "success"
+                    results.append(result)
+                except Exception as e:
+                    logging.error(f"Task failed for {task.slug}/{task.model}/{task.scenario}: {e}")
+                    logging.debug(traceback.format_exc())
+                    results.append({"status": "failed", "error": str(e)})
+                    failed += 1
+                completed += 1
+                compute_progress.update(failed_increment=1 if results[-1]["status"] == "failed" else 0)
+        else:
+            init_fn = partial(_worker_init, level, state)
+            # CHG-0113 (Option C): serially pre-warm the shared drought monthly cube in the parent so
+            # the concurrent forks warm-hit instead of all cold-missing the same cube at once. Gated on
+            # the multi-worker path only -- the num_workers == 1 branch above already self-warms because
+            # it runs tasks sequentially in the parent. Partition FIRST so the single compute_progress
+            # (total=len(tasks)) is updated across both phases with no double/under-count (G-C2).
+            reps, remainder = partition_drought_reps(tasks, level)
+            compute_progress.start()
+            if reps:
+                # G-C5: a NEW parent-side boundary load -- the worker pool loads gdf per-worker via
+                # init_fn, not in the parent. Small and unavoidable for Approach B; dwarfed by the cube
+                # rebuild it removes. Reps are drawn from `tasks` (the to-execute set), so on a resumed
+                # run only groups that still have drought forks get a rep -- the warming work matches the
+                # forks that need it (G-C6 resume: degrade-not-corrupt by construction).
+                prewarm_gdf = load_boundaries(
+                    get_boundary_path(level),
+                    state_filter=state,
+                    level=level,
+                )
+                logging.info(
+                    "Pre-warming drought monthly cube: %d representative task(s) of %d total",
+                    len(reps), len(tasks),
+                )
+                rep_completed, rep_failed = _run_rep_prepass(
+                    reps, prewarm_gdf, progress=compute_progress, results=results
+                )
+                completed += rep_completed
+                failed += rep_failed
+            with Pool(num_workers, initializer=init_fn) as pool:
+                for r in pool.imap_unordered(_worker_process_task, remainder):
+                    results.append(r)
+                    completed += 1
+                    if r["status"] == "failed":
+                        failed += 1
+                    compute_progress.update(failed_increment=1 if r["status"] == "failed" else 0)
+
+        compute_progress.finish()
+
+        logging.info(f"Computation: {time.time() - start:.1f}s, Success: {completed - failed}, Failed: {failed}")
+
+        # CHG-0112: per-slug compute-duration rollup (read-only diagnostic).
+        # Sizes a metric family's share of the compute stage for Amdahl gating.
+        # Durations are per-task wall summed across parallel workers, so the
+        # TOTAL overcounts vs stage wall -- but the *share* is what we want.
+        # Only the multi-worker path records slug/duration, so this no-ops
+        # cleanly under --num-workers 1.
+        by_slug: dict[str, float] = {}
+        for r in results:
+            slug_r, dur_r = r.get("slug"), r.get("duration")
+            if slug_r is None or dur_r is None:
+                continue
+            by_slug[slug_r] = by_slug.get(slug_r, 0.0) + float(dur_r)
+        if by_slug:
+            total_task_s = sum(by_slug.values())
+            drought_s = sum(s for k, s in by_slug.items() if str(k).startswith(("spi3_", "spi6_", "spi12_")))
+            logging.info(
+                "[compute-rollup] total_task_seconds=%.1f drought(spi*)_task_seconds=%.1f drought_share_of_compute=%.1f%%",
+                total_task_s, drought_s, 100.0 * drought_s / total_task_s if total_task_s else 0.0,
+            )
+            for slug_r, secs in sorted(by_slug.items(), key=lambda kv: kv[1], reverse=True)[:15]:
+                logging.info("  [compute-rollup] %-34s %8.1fs (%4.1f%%)", slug_r, secs, 100.0 * secs / total_task_s)
+
+        logging.info("Building ensembles...")
+
+        ensemble_args = [
+            (slug, level, effective_state, ensemble_models, ensemble_scenarios, effective_cleanup_policy)
+            for slug in sorted(ensemble_needed_slugs)
+        ]
+        ensemble_results: list[EnsembleJobResult] = []
+        ensemble_progress = PeriodicProgressLogger(total=len(ensemble_args), prefix="Ensembles", heartbeat_seconds=30.0)
+        if ensemble_args:
+            if num_workers == 1:
+                ensemble_progress.start()
+                for args in ensemble_args:
+                    job_result = _compute_ensembles_for_metric(args)
+                    ensemble_results.append(job_result)
+                    ensemble_progress.update(failed_increment=1 if job_result.status == "failed" else 0)
+            else:
+                ensemble_progress.start()
+                with Pool(num_workers) as pool:
+                    for job_result in pool.imap_unordered(_compute_ensembles_for_metric, ensemble_args):
+                        ensemble_results.append(job_result)
+                        ensemble_progress.update(failed_increment=1 if job_result.status == "failed" else 0)
+            ensemble_progress.finish()
+        else:
+            logging.info("No ensemble work is pending.")
+
+        logging.info(f"TOTAL: {time.time() - start:.1f}s")
         return PipelineRunResult(
             level=level,
             scope_name=effective_state,
-            compute_failed_count=0,
-            ensemble_results=(),
+            compute_failed_count=failed,
+            ensemble_results=tuple(ensemble_results),
         )
-
-    start = time.time()
-    results = []
-    completed = 0
-    failed = 0
-    
-    if num_workers == 1:
-        # Sequential mode
-        boundary_path = get_boundary_path(level)
-        gdf = load_boundaries(
-            boundary_path,
-            state_filter=None if level in {"basin", "sub_basin"} else state,
-            level=level,
-        )
-        logging.info(f"Loaded {len(gdf)} {level} boundaries for {effective_state}")
-
-        for task in tasks:
-            try:
-                result = _execute_processing_task(task, gdf)
-                result["status"] = "success"
-                results.append(result)
-            except Exception as e:
-                logging.error(f"Task failed for {task.slug}/{task.model}/{task.scenario}: {e}")
-                logging.debug(traceback.format_exc())
-                results.append({"status": "failed", "error": str(e)})
-                failed += 1
-            completed += 1
-            if completed % 10 == 0:
-                logging.info(f"Progress: {completed}/{len(tasks)} ({failed} failed)")
-    else:
-        # Parallel mode
-        init_fn = partial(_worker_init, level, state)
-        with Pool(num_workers, initializer=init_fn) as pool:
-            for r in pool.imap_unordered(_worker_process_task, tasks):
-                results.append(r)
-                completed += 1
-                if r["status"] == "failed":
-                    failed += 1
-                if completed % 10 == 0:
-                    logging.info(f"Progress: {completed}/{len(tasks)} ({failed} failed)")
-
-    logging.info(f"Computation: {time.time() - start:.1f}s, Success: {completed - failed}, Failed: {failed}")
-    logging.info("Building ensembles...")
-
-    ensemble_args = [
-        (slug, level, effective_state, ensemble_models, ensemble_scenarios)
-        for slug in sorted(ensemble_needed_slugs)
-    ]
-    ensemble_results: list[EnsembleJobResult] = []
-    if ensemble_args:
-        if num_workers == 1:
-            for args in ensemble_args:
-                ensemble_results.append(_compute_ensembles_for_metric(args))
-        else:
-            with Pool(num_workers) as pool:
-                ensemble_results = list(pool.imap_unordered(_compute_ensembles_for_metric, ensemble_args))
-    else:
-        logging.info("No ensemble work is pending.")
-
-    logging.info(f"TOTAL: {time.time() - start:.1f}s")
-    return PipelineRunResult(
-        level=level,
-        scope_name=effective_state,
-        compute_failed_count=failed,
-        ensemble_results=tuple(ensemble_results),
-    )
+    finally:
+        _set_inventory_write_mode(True)
 
 # -----------------------------------------------------------------------------
 # CLI
 # -----------------------------------------------------------------------------
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="IRT Climate Index Pipeline (Multiprocess)")
-    parser.add_argument("-w", "--workers", type=int, default=DEFAULT_WORKERS,
-                        help=f"Number of worker processes (default: {DEFAULT_WORKERS})")
-    parser.add_argument("-v", "--verbose", action="store_true",
-                        help="Enable verbose/debug logging")
-    parser.add_argument(
-        "-l",
-        "--level",
-        choices=["district", "block", "basin", "sub_basin", "both"],
-        default="both",
-        help="Spatial level for aggregation (default: both = district + block)",
-    )
-    parser.add_argument("-s", "--state", default="Telangana",
-                        help="State to process (default: Telangana)")
-    parser.add_argument("--metrics", nargs="+",
-                        help="Filter to specific metric slugs")
-    parser.add_argument("--models", nargs="+",
-                        help="Filter to specific models")
-    parser.add_argument("--scenarios", nargs="+",
-                        help="Filter to specific scenarios")
-    parser.add_argument(
-        "--skip-existing",
-        action="store_true",
-        help="Skip compute tasks with validated completion markers and intact outputs.",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Delete the selected compute outputs and markers before rebuilding.",
-    )
-    parser.add_argument("--list-metrics", action="store_true",
-                        help="List available metrics and exit")
-    parser.add_argument("--list-models", action="store_true",
-                        help="List discovered models and exit")
-    parser.add_argument("--spi-legacy", action="store_true",
-                        help="Force use of legacy SPI implementation (scipy-based) instead of climate-indices package")
-    parser.add_argument("--spi-distribution", choices=["gamma", "pearson"], default="gamma",
-                        help="Distribution for SPI fitting when using climate-indices package (default: gamma)")
+    parser = build_compute_parser(default_workers=DEFAULT_WORKERS)
     args = parser.parse_args(argv)
+    validate_yearly_cleanup_policy_args(args, parser=parser)
     
     # Handle SPI implementation + distribution flags
     global USE_CLIMATE_INDICES_PACKAGE
@@ -5778,8 +6583,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     SPI_DISTRIBUTION = args.spi_distribution
 
     if args.spi_legacy:
-        USE_CLIMATE_INDICES_PACKAGE = False
-        logging.info("SPI: Using legacy scipy-based implementation (--spi-legacy flag)")
+        print(
+            "Legacy SPI z-score is non-conformant with WMO SPI methodology; rerun without --spi-legacy.",
+            file=sys.stderr,
+        )
+        return 2
     elif CLIMATE_INDICES_AVAILABLE:
         logging.info("SPI: Using climate-indices package")
     else:
@@ -5794,15 +6602,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     
     if args.list_models:
         print("Discovered models:")
-        for m in MODELS:
+        for m in _get_models():
             print(f"  {m}")
-        print(f"Total: {len(MODELS)}")
+        print(f"Total: {len(_get_models())}")
         return 0
     
     # Ensure our banners use the same log format as the pipeline itself
     setup_logging(args.verbose)
 
     levels_to_run = ["district", "block"] if args.level == "both" else [args.level]
+    cleanup_policies_by_level = {
+        lvl: effective_yearly_cleanup_policy(lvl, args.yearly_cleanup_policy)
+        for lvl in levels_to_run
+    }
     total_runs = len(levels_to_run)
     run_results: list[PipelineRunResult] = []
 
@@ -5822,6 +6634,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 state=args.state,
                 skip_existing=bool(args.skip_existing),
                 overwrite=bool(args.overwrite),
+                yearly_cleanup_policy=cleanup_policies_by_level[lvl],
             )
         )
 

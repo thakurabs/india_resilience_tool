@@ -18,6 +18,14 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence
 
 from india_resilience_tool.config.composite_metrics import VISIBLE_GLANCE_COMPOSITES
+from india_resilience_tool.config.dashboard_bundles import (
+    DASHBOARD_BUNDLES,
+    THEMATIC_DASHBOARD_BUNDLES,
+    get_dashboard_bundle_spec,
+)
+from india_resilience_tool.config.proposal_bundles import get_proposal_bundle_source_metric_slugs
+
+THEMATIC_DASHBOARD_BUNDLE_NAMES = frozenset(spec.canonical_bundle for spec in THEMATIC_DASHBOARD_BUNDLES)
 
 
 def infer_group_from_var(var: str) -> str:
@@ -38,6 +46,25 @@ SEVERITY_CLASS_LABELS: dict[int, str] = {
     3: "Moderate",
     4: "High",
     5: "Extreme",
+}
+
+
+# Per-capita water-scarcity ordinal classes (code -> display label; higher = worse).
+WATER_SCARCITY_CLASS_LABELS: dict[int, str] = {
+    1: "No Stress",
+    2: "Stress",
+    3: "Scarcity",
+    4: "Absolute scarcity",
+}
+
+
+# 2050-vs-2025 water-scarcity deterioration: a delta of class steps (0..3), NOT a
+# scarcity class. Rendered label-only (no numeric suffix) via class_display_mode.
+WATER_DETERIORATION_LABELS: dict[int, str] = {
+    0: "No change",
+    1: "Worsens by 1 class",
+    2: "Worsens by 2 classes",
+    3: "Worsens by 3 classes",
 }
 
 
@@ -82,7 +109,6 @@ class MetricSpec:
     supports_baseline_comparison: bool = True
     supports_scenario_comparison: bool = True
     admin_rebuild_command: Optional[str] = None
-    hydro_rebuild_command: Optional[str] = None
     supported_scenarios: Sequence[str] = field(default_factory=tuple)
     preferred_period_order: Sequence[str] = field(default_factory=tuple)
     supported_spatial_families: Sequence[str] = field(default_factory=tuple)
@@ -135,7 +161,6 @@ class MetricSpec:
             supports_baseline_comparison=bool(d.get("supports_baseline_comparison", True)),
             supports_scenario_comparison=bool(d.get("supports_scenario_comparison", True)),
             admin_rebuild_command=str(d.get("admin_rebuild_command") or "").strip() or None,
-            hydro_rebuild_command=str(d.get("hydro_rebuild_command") or "").strip() or None,
             supported_scenarios=tuple(str(v) for v in (d.get("supported_scenarios") or ())),
             preferred_period_order=tuple(str(v) for v in (d.get("preferred_period_order") or ())),
             supported_spatial_families=tuple(str(v) for v in (d.get("supported_spatial_families") or ())),
@@ -197,6 +222,31 @@ def validate_registry_against_pipeline(
             issues.append(
                 f"Mismatch for slug '{slug}': registry periods_metric_col='{reg.periods_metric_col}' "
                 f"but pipeline value_col='{pm_value_col}'."
+            )
+
+    class_display_modes = {"label_with_score", "label_only"}
+    for slug, spec in sorted(registry_by_slug.items()):
+        class_labels = dict(spec.class_labels or {})
+        class_display_mode = str(spec.class_display_mode or "").strip().lower()
+        if not class_labels or class_display_mode not in class_display_modes:
+            continue
+
+        try:
+            class_codes = sorted(int(code) for code in class_labels)
+        except (TypeError, ValueError):
+            issues.append(
+                f"Class-display metric '{slug}' has non-integer class_labels keys."
+            )
+            continue
+
+        if class_codes != list(range(class_codes[0], class_codes[-1] + 1)):
+            issues.append(
+                f"Class-display metric '{slug}' class_labels must use contiguous integer codes."
+            )
+
+        if spec.supports_baseline_comparison:
+            issues.append(
+                f"Class-display metric '{slug}' must set supports_baseline_comparison=False."
             )
 
     return issues
@@ -263,6 +313,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Annual Minimum of Daily Minimum Temperature (TNn)",
         "slug": "tnn_annual_min",
+        "rank_higher_is_worse": False,
         "var": "tasmin",
         "value_col": "tnn_annual_min_C",
         "units": "°C",
@@ -271,7 +322,8 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "group": "temperature",
         "description": (
             "The lowest daily minimum temperature recorded in the year (°C). "
-            "Indicates coldest night. Climdex index TNn."
+            "Indicates coldest night. Climdex index TNn. "
+            "Direction: lower values indicate higher cold risk."
         ),
     },
     
@@ -286,24 +338,23 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "compute": "tx90p_etccdi",
         "params": {
             "percentile": 90,
-            # Match ETCCDI reference baseline you validated against
             "baseline_years": (1981, 2010),
-            # ETCCDI-style moving window (5-day = +/-2 days around day-of-year)
             "window_days": 5,
-            # Quantile method matters for exact matching (esp. small samples)
-            "quantile_method": "nearest",
-            # ETCCDI convention is strictly "above" the percentile; set True only if you
-            # found the reference behaves like >= for your dataset (keep False by default)
-            "exceed_ge": True,
-            # Optional: if your final best match used smoothing on daily thresholds,
-            # set an integer window (e.g., 5). Otherwise omit or keep None.
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             # "smooth": 5,
         },
         "group": "temperature",
         "description": (
             "Percentage of days when daily maximum temperature exceeds the 90th "
             "percentile threshold computed per calendar day from the baseline period "
-            "using a moving window (ETCCDI TX90p)."
+            "using a moving window (ETCCDI TX90p). "
+            "Note: because each district is measured against its own baseline "
+            "threshold, this index sits near 10% everywhere in the historical "
+            "baseline and carries little spatial signal there. Its meaningful signal "
+            "appears under future warming scenarios (SSP2-4.5 / SSP5-8.5), where "
+            "exceedance climbs well above 10%."
         ),
     },
     {
@@ -318,17 +369,21 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "percentile": 90,
             "baseline_years": (1981, 2010),
             "window_days": 5,
-            "quantile_method": "nearest",
-            # ETCCDI convention is ">" not ">="; keep False unless you intentionally chose otherwise
-            "exceed_ge": True,
-            # optional smoothing if needed later
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             # "smooth": 5,
         },
         "group": "temperature",
         "description": (
             "Percentage of days when daily minimum temperature exceeds the 90th "
             "percentile threshold computed per calendar day from the baseline period "
-            "using a moving window (ETCCDI TN90p-style)."
+            "using a moving window (ETCCDI TN90p-style). "
+            "Note: because each district is measured against its own baseline "
+            "threshold, this index sits near 10% everywhere in the historical "
+            "baseline and carries little spatial signal there. Its meaningful signal "
+            "appears under future warming scenarios (SSP2-4.5 / SSP5-8.5), where "
+            "exceedance climbs well above 10%."
         ),
     },
     {
@@ -341,19 +396,25 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "compute": "tx90p_etccdi",
         "params": {
             "percentile": 10,
-            "baseline_years": (1981, 2010),
+            "baseline_years": (1990, 2010),
             "window_days": 5,
             "quantile_method": "nearest",
-            # For "below-percentile" indices, exceed_ge=True means inclusive (<= threshold)
-            "exceed_ge": True,
+            # For "below-percentile" indices, exceed_ge=False means strict (< threshold),
+            # which matches the ETCCDI canonical TX10p convention.
+            "exceed_ge": False,
             "direction": "below",
             # "smooth": 5,
         },
         "group": "temperature",
         "description": (
-            "Percentage of days when daily maximum temperature is below the 10th "
-            "percentile threshold computed per calendar day from the baseline period "
-            "using a moving window (ETCCDI TX10p)."
+            "Percentage of days when daily maximum temperature is strictly below the "
+            "10th percentile threshold computed per calendar day from the baseline period "
+            "(1990-2010) using a 5-day moving window (ETCCDI TX10p). "
+            "Note: because each district is measured against its own baseline "
+            "threshold, this index sits near 10% everywhere in the historical "
+            "baseline and carries little spatial signal there. Its meaningful signal "
+            "appears under future warming scenarios (SSP2-4.5 / SSP5-8.5), where "
+            "cool-day frequency falls below 10%."
         ),
     },
     {
@@ -366,19 +427,25 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "compute": "tx90p_etccdi",
         "params": {
             "percentile": 10,
-            "baseline_years": (1981, 2010),
+            "baseline_years": (1990, 2010),
             "window_days": 5,
             "quantile_method": "nearest",
-            # For "below-percentile" indices, exceed_ge=True means inclusive (<= threshold)
-            "exceed_ge": True,
+            # For "below-percentile" indices, exceed_ge=False means strict (< threshold),
+            # which matches the ETCCDI canonical TN10p convention.
+            "exceed_ge": False,
             "direction": "below",
             # "smooth": 5,
         },
         "group": "temperature",
         "description": (
-            "Percentage of days when daily minimum temperature is below the 10th "
-            "percentile threshold computed per calendar day from the baseline period "
-            "using a moving window (ETCCDI TN10p)."
+            "Percentage of days when daily minimum temperature is strictly below the "
+            "10th percentile threshold computed per calendar day from the baseline period "
+            "(1990-2010) using a 5-day moving window (ETCCDI TN10p). "
+            "Note: because each district is measured against its own baseline "
+            "threshold, this index sits near 10% everywhere in the historical "
+            "baseline and carries little spatial signal there. Its meaningful signal "
+            "appears under future warming scenarios (SSP2-4.5 / SSP5-8.5), where "
+            "cool-night frequency falls below 10%."
         ),
     },
     
@@ -472,59 +539,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "using the Stull (2011) approximation."
     ),
 },
-{
-    "name": "Severe Humid-Heat Days (WBD ≤ 3°C)",
-    "slug": "wbd_le_3",
-    "var": "tas",
-    "vars": ["tas", "hurs"],
-    "value_col": "wbd_le_3_days",
-    "units": "days",
-    "compute": "wet_bulb_depression_days_le_threshold_stull",
-    "params": {"thresh_c": 3.0},
-    "group": "temperature",
-    "description": (
-        "Number of days per year where wet-bulb depression (tas − Twb) is ≤ 3°C, "
-        "derived from tas and hurs using the Stull (2011) approximation. Low depression "
-        "indicates very humid conditions and reduced evaporative cooling, increasing heat stress."
-    ),
-},
-{
-    "name": "Humid-Heat Days (WBD ≤ 6°C)",
-    "slug": "wbd_le_6",
-    "var": "tas",
-    "vars": ["tas", "hurs"],
-    "value_col": "wbd_le_6_days",
-    "units": "days",
-    "compute": "wet_bulb_depression_days_le_threshold_stull",
-    "params": {"thresh_c": 6.0},
-    "group": "temperature",
-    "description": (
-        "Number of days per year where wet-bulb depression (tas − Twb) is ≤ 6°C, "
-        "derived from tas and hurs using the Stull (2011) approximation. Low depression "
-        "indicates humid conditions and reduced evaporative cooling."
-    ),
-},
-{
-    "name": "Moderate Humid-Heat Days (3°C < WBD ≤ 6°C)",
-    "slug": "wbd_gt3_le6",
-    "var": "tas",
-    "vars": ["tas", "hurs"],
-    "value_col": "wbd_gt_3_le_6_days",
-    "units": "days",
-    "compute": "wet_bulb_depression_days_range_stull",
-    "params": {
-        "lower_c": 3.0,
-        "upper_c": 6.0,
-        "lower_inclusive": False,
-        "upper_inclusive": True,
-    },
-    "group": "temperature",
-    "description": (
-        "Number of days per year where wet-bulb depression (tas - Twb) falls in the "
-        "moderate humid-heat range 3°C < WBD <= 6°C, derived from tas and hurs using "
-        "the Stull (2011) approximation."
-    ),
-},
     {
         "name": "Hot Days (TX ≥ 30°C)",
         "slug": "txge30_hot_days",
@@ -551,20 +565,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "description": (
             "Number of days when daily maximum temperature is at or above 35°C. "
             "Climdex index TXge35. Critical for heat stress."
-        ),
-    },
-    {
-        "name": "Tropical Nights (TR, TN > 20°C)",
-        "slug": "tasmin_tropical_nights_gt20",
-        "var": "tasmin",
-        "value_col": "tropical_nights_gt_20C",
-        "units": "days",
-        "compute": "count_days_above_threshold",
-        "params": {"thresh_k": 20.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of nights when daily minimum temperature exceeds 20°C. "
-            "Climdex index TR."
         ),
     },
     {
@@ -611,22 +611,150 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         ),
     },
     {
-        "name": "Consecutive Wet-Bulb Stress Days (WBD ≤ 3°C)",
-        "slug": "wbd_le_3_consecutive_days",
+        "name": "Shaded WBGT (Annual Mean)",
+        "slug": "wbgt_shade_stull_annual_mean",
         "var": "tas",
         "vars": ["tas", "hurs"],
-        "value_col": "wbd_le_3_consecutive_days",
-        "units": "days",
-        "compute": "wet_bulb_depression_longest_run_le_threshold_stull",
-        "params": {"thresh_c": 3.0, "min_spell_days": 3},
+        "value_col": "wbgt_shade_stull_annual_mean_C",
+        "units": "°C",
+        "compute": "wbgt_shade_stull_annual_mean",
+        "params": {},
         "group": "temperature",
         "description": (
-            "Maximum length of a humid-heat spell where wet-bulb depression (tas - Twb) "
-            "stays <= 3°C for at least 3 consecutive days, derived from tas and hurs using "
-            "the Stull (2011) approximation."
+            "Annual mean Shaded WBGT (°C), computed from tas and hurs as "
+            "0.7 × Stull wet-bulb temperature + 0.3 × near-surface air temperature. "
+            "It estimates humid heat stress in shaded or no-direct-sun conditions, "
+            "but does not include direct solar radiation or radiant heat load."
         ),
     },
-    
+    {
+        "name": "Shaded WBGT Days (≥ 28°C)",
+        "slug": "wbgt_shade_stull_days_ge_28",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbgt_shade_stull_days_ge_28_days",
+        "units": "days",
+        "compute": "wbgt_shade_stull_days_ge_threshold",
+        "params": {"thresh_c": 28.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with Shaded WBGT ≥ 28°C, computed from tas and "
+            "hurs using Stull wet-bulb temperature and near-surface air temperature. "
+            "It captures humid heat stress in shaded or no-direct-sun conditions, but "
+            "does not include direct solar radiation or radiant heat load."
+        ),
+    },
+    {
+        "name": "Shaded WBGT Days (≥ 30°C)",
+        "slug": "wbgt_shade_stull_days_ge_30",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbgt_shade_stull_days_ge_30_days",
+        "units": "days",
+        "compute": "wbgt_shade_stull_days_ge_threshold",
+        "params": {"thresh_c": 30.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with Shaded WBGT ≥ 30°C, computed from tas and "
+            "hurs using Stull wet-bulb temperature and near-surface air temperature. "
+            "It captures humid heat stress in shaded or no-direct-sun conditions, but "
+            "does not include direct solar radiation or radiant heat load."
+        ),
+    },
+    {
+        "name": "Shaded WBGT Days (≥ 32°C)",
+        "slug": "wbgt_shade_stull_days_ge_32",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "wbgt_shade_stull_days_ge_32_days",
+        "units": "days",
+        "compute": "wbgt_shade_stull_days_ge_threshold",
+        "params": {"thresh_c": 32.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with Shaded WBGT ≥ 32°C, computed from tas and "
+            "hurs using Stull wet-bulb temperature and near-surface air temperature. "
+            "It captures humid heat stress in shaded or no-direct-sun conditions, but "
+            "does not include direct solar radiation or radiant heat load."
+        ),
+    },
+    {
+        "name": "Outdoor WBGT (Annual Mean)",
+        "slug": "swbgt_empirical_annual_mean",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "swbgt_empirical_annual_mean_C",
+        "units": "°C",
+        "compute": "swbgt_empirical_annual_mean",
+        "params": {},
+        "group": "temperature",
+        "description": (
+            "Annual mean Outdoor WBGT (°C), computed from tas and hurs as a simplified "
+            "temperature-humidity-based WBGT-style estimate: "
+            "0.567 × near-surface air temperature + 0.393 × vapour pressure + 3.94. "
+            "It should be treated as an outdoor heat-stress screening indicator rather "
+            "than a full open-sky WBGT calculation because it does not directly model "
+            "solar radiation, wind speed, or black-globe temperature."
+        ),
+    },
+    {
+        "name": "Outdoor WBGT Days (≥ 28°C)",
+        "slug": "swbgt_empirical_days_ge_28",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "swbgt_empirical_days_ge_28_days",
+        "units": "days",
+        "compute": "swbgt_empirical_days_ge_threshold",
+        "params": {"thresh_c": 28.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with Outdoor WBGT ≥ 28°C, computed from tas and "
+            "hurs via vapour pressure as a simplified temperature-humidity-based "
+            "WBGT-style estimate. It should be treated as an outdoor heat-stress "
+            "screening indicator rather than a full open-sky WBGT calculation because it "
+            "does not directly model solar radiation, wind speed, or black-globe "
+            "temperature."
+        ),
+    },
+    {
+        "name": "Outdoor WBGT Days (≥ 30°C)",
+        "slug": "swbgt_empirical_days_ge_30",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "swbgt_empirical_days_ge_30_days",
+        "units": "days",
+        "compute": "swbgt_empirical_days_ge_threshold",
+        "params": {"thresh_c": 30.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with Outdoor WBGT ≥ 30°C, computed from tas and "
+            "hurs via vapour pressure as a simplified temperature-humidity-based "
+            "WBGT-style estimate. It should be treated as an outdoor heat-stress "
+            "screening indicator rather than a full open-sky WBGT calculation because it "
+            "does not directly model solar radiation, wind speed, or black-globe "
+            "temperature."
+        ),
+    },
+    {
+        "name": "Outdoor WBGT Days (≥ 32°C)",
+        "slug": "swbgt_empirical_days_ge_32",
+        "var": "tas",
+        "vars": ["tas", "hurs"],
+        "value_col": "swbgt_empirical_days_ge_32_days",
+        "units": "days",
+        "compute": "swbgt_empirical_days_ge_threshold",
+        "params": {"thresh_c": 32.0},
+        "group": "temperature",
+        "description": (
+            "Number of days per year with Outdoor WBGT ≥ 32°C, computed from tas and "
+            "hurs via vapour pressure as a simplified temperature-humidity-based "
+            "WBGT-style estimate. It should be treated as an outdoor heat-stress "
+            "screening indicator rather than a full open-sky WBGT calculation because it "
+            "does not directly model solar radiation, wind speed, or black-globe "
+            "temperature."
+        ),
+    },
+
     # --- Warm/Heat Spell Indices ---
     {
         "name": "Warm Spell Duration Index (WSDI)",
@@ -639,8 +767,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "percentile": 90,
             "window_days": 5,
-            "quantile_method": "nearest",
-            "exceed_ge": True,
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 6,
             "direction": "above",
@@ -710,8 +839,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "pct": 90,
             "window_days": 5,
-            "quantile_method": "nearest",
-            "exceed_ge": True,
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 5,
         },
@@ -752,8 +882,10 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "pct": 90,
             "window_days": 5,
-            "quantile_method": "nearest",
-            "exceed_ge": True,
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            # Slug name is historical; metric uses tasmax per IMD heatwave criteria.
+            "quantile_method": "linear",
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 5,
         },
@@ -799,8 +931,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "pct": 90,
             "window_days": 5,
-            "quantile_method": "nearest",
-            "exceed_ge": True,
+            # Heat Risk v2: linear quantile + strict > per docs/heat_risk_methodology_v2.md
+            "quantile_method": "linear",
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 5,
         },
@@ -869,6 +1002,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Winter Mean Temperature (TM; DJF Mean)",
         "slug": "tas_winter_mean",
+        "rank_higher_is_worse": False,
         "var": "tas",
         "value_col": "winter_tas_mean_C",
         "units": "°C",
@@ -876,8 +1010,9 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"months": [12, 1, 2]},
         "group": "temperature",
         "description": (
-            "Mean of daily mean temperature during winter (December–February). "
-            "This is the seasonal TM mean."
+            "Mean of daily mean temperature during winter using the meteorological "
+            "DJF window: December of the prior year combined with January–February of "
+            "the current year. Direction: lower values indicate higher cold risk."
         ),
     },
     # {
@@ -896,6 +1031,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     {
         "name": "Winter Min Temperature (DJF Mean)",
         "slug": "tasmin_winter_mean",
+        "rank_higher_is_worse": False,
         "var": "tasmin",
         "value_col": "winter_tasmin_mean_C",
         "units": "°C",
@@ -903,12 +1039,15 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"months": [12, 1, 2]},
         "group": "temperature",
         "description": (
-            "Mean of daily minimum temperature during winter (December–February)."
+            "Mean of daily minimum temperature during winter using the meteorological "
+            "DJF window: December of the prior year combined with January–February of "
+            "the current year. Direction: lower values indicate higher cold risk."
         ),
     },
     {
         "name": "Winter Minimum Tmin (DJF Min TN)",
         "slug": "tasmin_winter_min",
+        "rank_higher_is_worse": False,
         "var": "tasmin",
         "value_col": "winter_tasmin_min_C",
         "units": "°C",
@@ -916,58 +1055,15 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "params": {"months": [12, 1, 2]},
         "group": "temperature",
         "description": (
-            "Minimum of daily minimum temperature during winter (December-February). "
-            "This captures the coldest winter night in the season."
+            "Minimum of daily minimum temperature during winter using the meteorological "
+            "DJF window: December of the prior year combined with January–February of "
+            "the current year. Captures the coldest winter night in the season. "
+            "Direction: lower values indicate higher cold risk."
         ),
     },
-    {
-        "name": "Daily Temperature Range (DTR)",
-        "slug": "dtr_daily_temp_range",
-        "var": "tasmax",  # Primary var (also requires tasmin)
-        "vars": ["tasmax", "tasmin"],
-        "value_col": "dtr_mean_C",
-        "units": "°C",
-        "compute": "daily_temperature_range",
-        "params": {},
-        "group": "temperature",
-        "description": (
-            "Mean difference between daily maximum and minimum temperature. "
-            "Climdex DTR index."
-        ),
-    },
-    {
-        "name": "Extreme Temperature Range (ETR)",
-        "slug": "etr_extreme_temp_range",
-        "var": "tasmax",  # Primary var (also requires tasmin)
-        "vars": ["tasmax", "tasmin"],
-        "value_col": "etr_range_C",
-        "units": "°C",
-        "compute": "extreme_temperature_range",
-        "params": {},
-        "group": "temperature",
-        "description": (
-            "Difference between highest TX and lowest TN in the year. "
-            "Climdex ETR index."
-        ),
-    },
-    
     # =========================================================================
     # 2. COLD RISK INDICES
     # =========================================================================
-    {
-        "name": "Frost Days (FD, TN < 0°C)",
-        "slug": "fd_frost_days",
-        "var": "tasmin",
-        "value_col": "frost_days",
-        "units": "days",
-        "compute": "count_days_below_threshold",
-        "params": {"thresh_k": 0.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of days when daily minimum temperature is below 0°C. "
-            "Climdex FD index. Critical for agriculture."
-        ),
-    },
     # {
     #     "name": "Icing Days (ID, TX < 0°C)",
     #     "slug": "id_icing_days",
@@ -982,20 +1078,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #         "Climdex ID index. Indicates severe cold."
     #     ),
     # },
-    {
-        "name": "Cold Nights (TN < 2°C)",
-        "slug": "tnlt2_cold_nights",
-        "var": "tasmin",
-        "value_col": "days_tn_lt_2C",
-        "units": "days",
-        "compute": "count_days_below_threshold",
-        "params": {"thresh_k": 2.0 + 273.15},
-        "group": "temperature",
-        "description": (
-            "Number of days when daily minimum temperature is below 2°C. "
-            "Climdex TNlt2 index."
-        ),
-    },
     {
         "name": "Cold Nights (TN <= 10°C)",
         "slug": "tnle10_cold_nights",
@@ -1074,11 +1156,12 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "units": "days",
         "compute": "cold_spell_duration_index",
         "params": {
-            "baseline_years": (1981, 2010),
+            "baseline_years": (1990, 2010),
             "percentile": 10,
             "window_days": 5,
             "quantile_method": "nearest",
-            "exceed_ge": True,
+            # ETCCDI canonical CSDI uses strict TN < p10 (exceed_ge=False).
+            "exceed_ge": False,
             "smooth": None,
             "min_spell_days": 6,
             "direction": "below",
@@ -1086,25 +1169,10 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "group": "temperature",
         "description": (
             "Annual count of days contributing to cold spells, where a cold spell "
-            "is ≥6 consecutive days with TN < 10th percentile. Climdex CSDI."
+            "is ≥6 consecutive days with TN strictly below the 10th percentile threshold "
+            "computed per calendar day from the baseline period (1990-2010). Climdex CSDI."
         ),
     },
-    {
-        "name": "Growing Season Length (GSL)",
-        "slug": "gsl_growing_season",
-        "rank_higher_is_worse": False,
-        "var": "tas",
-        "value_col": "gsl_days",
-        "units": "days",
-        "compute": "growing_season_length",
-        "params": {"thresh_k": 5.0 + 273.15, "min_spell_days": 6},
-        "group": "temperature",
-        "description": (
-            "Number of days between first span of ≥6 days with TM > 5°C and "
-            "first span after July 1 of ≥6 days with TM < 5°C. Climdex GSL."
-        ),
-    },
-    
     # =========================================================================
     # 3. PRECIPITATION / FLOOD-RELATED INDICES
     # =========================================================================
@@ -1138,21 +1206,8 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "Climdex Rx5day index."
         ),
     },
-    
+
     # --- Precipitation Threshold Indices ---
-    {
-        "name": "Rainy Days (PR > 2.5mm)",
-        "slug": "rain_gt_2p5mm",
-        "var": "pr",
-        "value_col": "days_rain_gt_2p5mm",
-        "units": "days",
-        "compute": "count_rainy_days",
-        "params": {"thresh_mm": 2.5},
-        "group": "rain",
-        "description": (
-            "Number of days with precipitation exceeding 2.5mm."
-        ),
-    },
     # {
     #     "name": "Heavy Precipitation Days (R10mm)",
     #     "slug": "pr_heavy_precip_days_gt10mm",
@@ -1173,7 +1228,7 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         "value_col": "r20mm_days",
         "units": "days",
         "compute": "count_rainy_days",
-        "params": {"thresh_mm": 20.0},
+        "params": {"thresh_mm": 20.0, "exceed_ge": True},
         "group": "rain",
         "description": (
             "Number of days with precipitation ≥ 20mm. Climdex R20mm index."
@@ -1217,20 +1272,27 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "(ETCCDI R95p)."
         ),
     },
-    # {
-    #     "name": "Extremely Wet Day Precipitation (R99p)",
-    #     "slug": "r99p_extreme_wet_precip",
-    #     "var": "pr",
-    #     "value_col": "r99p_mm",
-    #     "units": "mm",
-    #     "compute": "percentile_precipitation_total",
-    #     "params": {"percentile": 99, "baseline_years": (1981, 2010)},
-    #     "group": "rain",
-    #     "description": (
-    #         "Total precipitation on days exceeding the 99th percentile of "
-    #         "wet-day precipitation. Climdex R99p index."
-    #     ),
-    # },
+    {
+        "name": "Extremely Wet Day Precipitation (R99p)",
+        "slug": "r99p_extreme_wet_precip",
+        "var": "pr",
+        "value_col": "r99p_mm",
+        "units": "mm",
+        "compute": "percentile_precipitation_total",
+        "params": {
+            "percentile": 99,
+            "baseline_years": (1981, 2010),
+            "quantile_method": "nearest",
+            "exceed_ge": True,
+            "wet_day_mm": 1.0,
+        },
+        "group": "rain",
+        "description": (
+            "Total precipitation from extremely wet days, defined as days with precipitation "
+            "exceeding the 99th percentile of wet-day precipitation in the baseline period "
+            "(ETCCDI R99p)."
+        ),
+    },
     {
         "name": "Very Wet Day Contribution (R95pTOT)",
         "slug": "r95ptot_contribution_pct",
@@ -1266,36 +1328,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
     #         "Climdex R99pTOT = 100 × R99p / PRCPTOT."
     #     ),
     # },
-    
-    # --- Precipitation Intensity & Totals ---
-    {
-        "name": "Simple Daily Intensity Index (SDII)",
-        "slug": "pr_simple_daily_intensity",
-        "var": "pr",
-        "value_col": "simple_daily_intensity_mm_per_day",
-        "units": "mm/day",
-        "compute": "simple_daily_intensity_index",
-        "params": {"wet_day_thresh_mm": 1.0},
-        "group": "rain",
-        "description": (
-            "Mean precipitation on wet days (days with ≥ 1mm). Climdex SDII index."
-        ),
-    },
-    {
-        "name": "Total Wet-Day Precipitation (PRCPTOT)",
-        "slug": "prcptot_annual_total",
-        "rank_higher_is_worse": False,
-        "var": "pr",
-        "value_col": "prcptot_mm",
-        "units": "mm",
-        "compute": "total_wet_day_precipitation",
-        "params": {"wet_thresh_mm": 1.0},
-        "group": "rain",
-        "description": (
-            "Total precipitation from all wet days (≥ 1mm) in the year. "
-            "Climdex PRCPTOT index."
-        ),
-    },
     
     # --- Wet/Dry Spell Indices ---
     {
@@ -1419,6 +1451,11 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "annual_aggregation": "count_months_lt",
             "threshold": -1.0,
+            "min_months_per_year": 9,
+            "period_rollup": "period_mean",
+            "min_years_per_period_fraction": 0.75,
+            "min_baseline_years_per_calendar_month_fraction": 0.83,
+            "min_polygon_cell_weight_fraction": 0.50,
         },
         "group": "rain",
         "description": "Annual count of months with SPI3 below -1 (moderate meteorological drought persistence).",
@@ -1435,9 +1472,39 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "annual_aggregation": "count_events_lt",
             "threshold": -1.0,
+            "min_months_per_year": 9,
+            "min_event_months": 1,
+            "period_rollup": "period_mean",
+            "min_years_per_period_fraction": 0.75,
+            "min_baseline_years_per_calendar_month_fraction": 0.83,
+            "min_polygon_cell_weight_fraction": 0.50,
         },
         "group": "rain",
         "description": "Annual count of contiguous SPI3 drought events below -1 (moderate seasonal drought episodes).",
+    },
+    {
+        "name": "SPI3: Maximum drought spell length with SPI < -1",
+        "slug": "spi3_max_spell_lt_minus1",
+        "var": "pr",
+        "value_col": "spi3_max_spell_lt_minus1",
+        "periods_metric_col": "spi3_max_spell_lt_minus1",
+        "units": "months",
+        "rank_higher_is_worse": True,
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 3,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "max_spell_lt",
+            "threshold": -1.0,
+            "min_months_per_year": 9,
+            "min_event_months": 1,
+            "period_rollup": "period_max",
+            "min_years_per_period_fraction": 0.75,
+            "min_baseline_years_per_calendar_month_fraction": 0.83,
+            "min_polygon_cell_weight_fraction": 0.50,
+        },
+        "group": "rain",
+        "description": "Longest within-year SPI3 drought spell below -1, rolled up by period maximum.",
     },
     {
         "name": "SPI3: Count of months with SPI < -2 (severe drought)",
@@ -1454,38 +1521,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         },
         "group": "rain",
         "description": "Annual count of months with SPI3 below -2 (severe meteorological drought persistence).",
-    },
-    {
-        "name": "SPI3: Count of months with SPI > +1 (moderately wet)",
-        "slug": "spi3_count_months_gt_plus1",
-        "var": "pr",
-        "value_col": "spi3_months_gt_plus1",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 3,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 1.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI3 above +1 (wet persistence).",
-    },
-    {
-        "name": "SPI3: Count of months with SPI > +2 (severely wet)",
-        "slug": "spi3_count_months_gt_plus2",
-        "var": "pr",
-        "value_col": "spi3_months_gt_plus2",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 3,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 2.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI3 above +2 (extremely wet persistence).",
     },
 
     # SPI6 counts
@@ -1517,9 +1552,39 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "annual_aggregation": "count_events_lt",
             "threshold": -1.0,
+            "min_months_per_year": 9,
+            "min_event_months": 1,
+            "period_rollup": "period_mean",
+            "min_years_per_period_fraction": 0.75,
+            "min_baseline_years_per_calendar_month_fraction": 0.83,
+            "min_polygon_cell_weight_fraction": 0.50,
         },
         "group": "rain",
         "description": "Annual count of contiguous SPI6 drought events below -1 (meteorological drought episodes).",
+    },
+    {
+        "name": "SPI6: Maximum drought spell length with SPI < -1",
+        "slug": "spi6_max_spell_lt_minus1",
+        "var": "pr",
+        "value_col": "spi6_max_spell_lt_minus1",
+        "periods_metric_col": "spi6_max_spell_lt_minus1",
+        "units": "months",
+        "rank_higher_is_worse": True,
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 6,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "max_spell_lt",
+            "threshold": -1.0,
+            "min_months_per_year": 9,
+            "min_event_months": 1,
+            "period_rollup": "period_max",
+            "min_years_per_period_fraction": 0.75,
+            "min_baseline_years_per_calendar_month_fraction": 0.83,
+            "min_polygon_cell_weight_fraction": 0.50,
+        },
+        "group": "rain",
+        "description": "Longest within-year SPI6 drought spell below -1, rolled up by period maximum.",
     },
     {
         "name": "SPI6: Count of months with SPI < -2 (severe drought)",
@@ -1536,38 +1601,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         },
         "group": "rain",
         "description": "Annual count of months with SPI6 below -2 (severe meteorological drought persistence).",
-    },
-    {
-        "name": "SPI6: Count of months with SPI > +1 (moderately wet)",
-        "slug": "spi6_count_months_gt_plus1",
-        "var": "pr",
-        "value_col": "spi6_months_gt_plus1",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 6,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 1.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI6 above +1 (wet persistence).",
-    },
-    {
-        "name": "SPI6: Count of months with SPI > +2 (severely wet)",
-        "slug": "spi6_count_months_gt_plus2",
-        "var": "pr",
-        "value_col": "spi6_months_gt_plus2",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 6,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 2.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI6 above +2 (extremely wet persistence).",
     },
 
     # SPI12 counts
@@ -1599,9 +1632,39 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
             "baseline_years": (1981, 2010),
             "annual_aggregation": "count_events_lt",
             "threshold": -1.0,
+            "min_months_per_year": 9,
+            "min_event_months": 1,
+            "period_rollup": "period_mean",
+            "min_years_per_period_fraction": 0.75,
+            "min_baseline_years_per_calendar_month_fraction": 0.83,
+            "min_polygon_cell_weight_fraction": 0.50,
         },
         "group": "rain",
         "description": "Annual count of contiguous SPI12 drought events below -1 (long-term drought episodes).",
+    },
+    {
+        "name": "SPI12: Maximum drought spell length with SPI < -1",
+        "slug": "spi12_max_spell_lt_minus1",
+        "var": "pr",
+        "value_col": "spi12_max_spell_lt_minus1",
+        "periods_metric_col": "spi12_max_spell_lt_minus1",
+        "units": "months",
+        "rank_higher_is_worse": True,
+        "compute": "standardised_precipitation_index",
+        "params": {
+            "scale_months": 12,
+            "baseline_years": (1981, 2010),
+            "annual_aggregation": "max_spell_lt",
+            "threshold": -1.0,
+            "min_months_per_year": 9,
+            "min_event_months": 1,
+            "period_rollup": "period_max",
+            "min_years_per_period_fraction": 0.75,
+            "min_baseline_years_per_calendar_month_fraction": 0.83,
+            "min_polygon_cell_weight_fraction": 0.50,
+        },
+        "group": "rain",
+        "description": "Longest within-year SPI12 drought spell below -1, rolled up by period maximum.",
     },
     {
         "name": "SPI12: Count of months with SPI < -2 (severe drought)",
@@ -1618,38 +1681,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
         },
         "group": "rain",
         "description": "Annual count of months with SPI12 below -2 (severe long-term drought persistence).",
-    },
-    {
-        "name": "SPI12: Count of months with SPI > +1 (moderately wet)",
-        "slug": "spi12_count_months_gt_plus1",
-        "var": "pr",
-        "value_col": "spi12_months_gt_plus1",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 12,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 1.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI12 above +1 (wet persistence).",
-    },
-    {
-        "name": "SPI12: Count of months with SPI > +2 (severely wet)",
-        "slug": "spi12_count_months_gt_plus2",
-        "var": "pr",
-        "value_col": "spi12_months_gt_plus2",
-        "units": "months",
-        "compute": "standardised_precipitation_index",
-        "params": {
-            "scale_months": 12,
-            "baseline_years": (1981, 2010),
-            "annual_aggregation": "count_months_gt",
-            "threshold": 2.0,
-        },
-        "group": "rain",
-        "description": "Annual count of months with SPI12 above +2 (extremely wet persistence).",
     },
     # {
     #     "name": "Standardised Precip-Evapotranspiration Index 3-month (SPEI3)",
@@ -1697,110 +1728,6 @@ PIPELINE_METRICS_RAW: list[dict[str, Any]] = [
 # compute pipeline. These still use the same wide-master contract so the app can
 # treat them like first-class metrics.
 DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
-    {
-        "name": "Aqueduct Water Stress",
-        "slug": "aq_water_stress",
-        "label": "Aqueduct Water Stress",
-        "group": "water",
-        "value_col": "aq_water_stress",
-        "periods_metric_col": "aq_water_stress",
-        "units": "index",
-        "description": (
-            "Aqueduct 4.0 annual water stress transferred from HydroSHEDS Level 6 "
-            "onto Survey of India basin and sub-basin units using area-weighted overlap."
-        ),
-        "source_type": "external",
-        "supports_yearly_trend": False,
-        "selection_mode": "scenario_period",
-        "supported_statistics": ("mean",),
-        "supports_baseline_comparison": True,
-        "supports_scenario_comparison": True,
-        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
-        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
-        "supported_scenarios": ("historical", "bau", "opt", "pes"),
-        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
-        "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "block", "basin", "sub_basin"),
-        "rank_higher_is_worse": True,
-    },
-    {
-        "name": "Aqueduct Interannual Variability",
-        "slug": "aq_interannual_variability",
-        "label": "Aqueduct Interannual Variability",
-        "group": "water",
-        "value_col": "aq_interannual_variability",
-        "periods_metric_col": "aq_interannual_variability",
-        "units": "index",
-        "description": (
-            "Aqueduct 4.0 interannual variability transferred from HydroSHEDS Level 6 "
-            "onto Survey of India basin and sub-basin units using area-weighted overlap."
-        ),
-        "source_type": "external",
-        "supports_yearly_trend": False,
-        "selection_mode": "scenario_period",
-        "supported_statistics": ("mean",),
-        "supports_baseline_comparison": True,
-        "supports_scenario_comparison": True,
-        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
-        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
-        "supported_scenarios": ("historical", "bau", "opt", "pes"),
-        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
-        "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "block", "basin", "sub_basin"),
-        "rank_higher_is_worse": True,
-    },
-    {
-        "name": "Aqueduct Seasonal Variability",
-        "slug": "aq_seasonal_variability",
-        "label": "Aqueduct Seasonal Variability",
-        "group": "water",
-        "value_col": "aq_seasonal_variability",
-        "periods_metric_col": "aq_seasonal_variability",
-        "units": "index",
-        "description": (
-            "Aqueduct 4.0 seasonal variability transferred from HydroSHEDS Level 6 "
-            "onto Survey of India basin and sub-basin units using area-weighted overlap."
-        ),
-        "source_type": "external",
-        "supports_yearly_trend": False,
-        "selection_mode": "scenario_period",
-        "supported_statistics": ("mean",),
-        "supports_baseline_comparison": True,
-        "supports_scenario_comparison": True,
-        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
-        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
-        "supported_scenarios": ("historical", "bau", "opt", "pes"),
-        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
-        "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "block", "basin", "sub_basin"),
-        "rank_higher_is_worse": True,
-    },
-    {
-        "name": "Aqueduct Water Depletion",
-        "slug": "aq_water_depletion",
-        "label": "Aqueduct Water Depletion",
-        "group": "water",
-        "value_col": "aq_water_depletion",
-        "periods_metric_col": "aq_water_depletion",
-        "units": "index",
-        "description": (
-            "Aqueduct 4.0 water depletion transferred from HydroSHEDS Level 6 "
-            "onto Survey of India basin and sub-basin units using area-weighted overlap."
-        ),
-        "source_type": "external",
-        "supports_yearly_trend": False,
-        "selection_mode": "scenario_period",
-        "supported_statistics": ("mean",),
-        "supports_baseline_comparison": True,
-        "supports_scenario_comparison": True,
-        "admin_rebuild_command": "python -m tools.geodata.build_aqueduct_admin_masters --overwrite",
-        "hydro_rebuild_command": "python -m tools.geodata.build_aqueduct_hydro_masters --overwrite",
-        "supported_scenarios": ("historical", "bau", "opt", "pes"),
-        "preferred_period_order": ("1979-2019", "2030", "2050", "2080"),
-        "supported_spatial_families": ("admin", "hydro"),
-        "supported_levels": ("district", "block", "basin", "sub_basin"),
-        "rank_higher_is_worse": True,
-    },
     {
         "name": "Total Population",
         "slug": "population_total",
@@ -1855,6 +1782,161 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supported_levels": ("district", "block"),
         "rank_higher_is_worse": True,
     },
+    {
+        "name": "Built-up Area",
+        "slug": "built_up_area_km2",
+        "label": "Built-up Area",
+        "group": "other",
+        "value_col": "built_up_area_km2",
+        "periods_metric_col": "built_up_area_km2",
+        "units": "km2",
+        "description": (
+            "Current built-up surface area aggregated from the cleaned India built-surface "
+            "raster onto canonical district and block units. Source zero values are valid "
+            "no-built-up cells; 65535 is excluded as invalid/background."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_built_up_area_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Built-up Area Share",
+        "slug": "built_up_area_share_pct",
+        "label": "Built-up Area Share",
+        "group": "other",
+        "value_col": "built_up_area_share_pct",
+        "periods_metric_col": "built_up_area_share_pct",
+        "units": "%",
+        "description": (
+            "Current built-up area as a share of full polygon area in EPSG:6933. "
+            "Raster-supported denominators are emitted only as QA and do not replace "
+            "the canonical geometry-based share."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_built_up_area_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Agricultural LULC Area",
+        "slug": "lulc_agri_area_km2",
+        "label": "Agricultural LULC Area",
+        "group": "other",
+        "value_col": "lulc_agri_area_km2",
+        "periods_metric_col": "lulc_agri_area_km2",
+        "units": "km2",
+        "description": (
+            "Current agricultural land-cover area aggregated from the binary "
+            "LULC_2_Agri.tif raster onto canonical district and block units. "
+            "Only value 1 is interpreted as agricultural LULC; value 0 is "
+            "nodata/background."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_lulc_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Agricultural LULC Share",
+        "slug": "lulc_agri_share_pct",
+        "label": "Agricultural LULC Share",
+        "group": "other",
+        "value_col": "lulc_agri_share_pct",
+        "periods_metric_col": "lulc_agri_share_pct",
+        "units": "%",
+        "description": (
+            "Current agricultural LULC area as a share of full polygon area in "
+            "EPSG:6933. Higher ranks indicate higher exposed agricultural "
+            "land-cover share for climate-risk screening."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.geodata.build_lulc_admin_masters --overwrite",
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "rank_higher_is_worse": True,
+    },
+    *[
+        {
+            "name": label,
+            "slug": slug,
+            "label": label,
+            "group": "other",
+            "value_col": slug,
+            "periods_metric_col": slug,
+            "units": units,
+            "description": (
+                "2019-2021 rural facilities snapshot assigned to canonical blocks and "
+                "rolled up to districts. Higher ranks indicate higher facility "
+                "exposure/concentration, not service adequacy."
+            ),
+            "source_type": "external",
+            "supports_yearly_trend": False,
+            "selection_mode": "static_snapshot",
+            "fixed_scenario": "snapshot",
+            "fixed_period": "2019-2021",
+            "supported_statistics": ("mean",),
+            "supports_baseline_comparison": False,
+            "supports_scenario_comparison": False,
+            "admin_rebuild_command": "python -m tools.geodata.build_rural_facilities_admin_masters --overwrite",
+            "supported_scenarios": ("snapshot",),
+            "preferred_period_order": ("2019-2021",),
+            "supported_spatial_families": ("admin",),
+            "supported_levels": ("district", "block"),
+            "rank_higher_is_worse": True,
+        }
+        for slug, label, units in (
+            ("rural_facilities_total_count", "Total Rural Facilities", "facilities"),
+            ("rural_facilities_agro_count", "Agro Infrastructure Facilities", "facilities"),
+            ("rural_facilities_education_count", "Education Infrastructure Facilities", "facilities"),
+            ("rural_facilities_health_count", "Health Infrastructure Facilities", "facilities"),
+            ("rural_facilities_service_count", "Service Infrastructure Facilities", "facilities"),
+            ("rural_facilities_total_count_per_100k", "Total Rural Facilities per 100k People", "facilities/100k people"),
+            ("rural_facilities_agro_count_per_100k", "Agro Infrastructure Facilities per 100k People", "facilities/100k people"),
+            ("rural_facilities_education_count_per_100k", "Education Infrastructure Facilities per 100k People", "facilities/100k people"),
+            ("rural_facilities_health_count_per_100k", "Health Infrastructure Facilities per 100k People", "facilities/100k people"),
+            ("rural_facilities_service_count_per_100k", "Service Infrastructure Facilities per 100k People", "facilities/100k people"),
+        )
+    ],
     {
         "name": "Stage of Ground Water Extraction",
         "slug": "gw_stage_extraction_pct",
@@ -1971,7 +2053,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "class_labels": SEVERITY_CLASS_LABELS,
         "class_display_mode": "label_with_score",
         "description": (
-            "Telangana-only ordinal severity class derived from RP-100 JRC flood depth "
+            "Ordinal severity class derived from RP-100 JRC flood depth "
             "and RP-100 flood extent using a fixed 5x5 depth-by-extent scoring matrix. "
             "Depth uses flooded-cell p95 block depth and flooded-area-weighted district "
             "depth; extent uses the share of total polygon area covered by positive "
@@ -1987,14 +2069,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2008,7 +2089,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "display_units": "%",
         "display_scale": 100.0,
         "description": (
-            "Telangana-only JRC RP-100 flood extent, defined as the share of total polygon "
+            "JRC RP-100 flood extent, defined as the share of total polygon "
             "area covered by positive modeled flood depth. Block and district values are "
             "both based on total polygon area, while raster-supported area is retained as QA."
         ),
@@ -2021,14 +2102,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2040,7 +2120,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "periods_metric_col": "jrc_flood_depth_rp10",
         "units": "m",
         "description": (
-            "Telangana-only JRC flood-depth snapshot for the 10-year return period. "
+            "JRC flood-depth snapshot for the 10-year return period. "
             "Block values use flooded-cell p95 depth and district values use flooded-area-"
             "weighted means of child block flooded-cell p95 depth. This is an externally "
             "sourced inundation layer, not a climate scenario projection."
@@ -2054,14 +2134,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2073,7 +2152,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "periods_metric_col": "jrc_flood_depth_rp50",
         "units": "m",
         "description": (
-            "Telangana-only JRC flood-depth snapshot for the 50-year return period. "
+            "JRC flood-depth snapshot for the 50-year return period. "
             "Block values use flooded-cell p95 depth and district values use flooded-area-"
             "weighted means of child block flooded-cell p95 depth. This is an externally "
             "sourced inundation layer, not a climate scenario projection."
@@ -2087,14 +2166,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2106,7 +2184,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "periods_metric_col": "jrc_flood_depth_rp100",
         "units": "m",
         "description": (
-            "Telangana-only JRC flood-depth snapshot for the 100-year return period. "
+            "JRC flood-depth snapshot for the 100-year return period. "
             "Block values use flooded-cell p95 depth and district values use flooded-area-"
             "weighted means of child block flooded-cell p95 depth. This is an externally "
             "sourced inundation layer, not a climate scenario projection."
@@ -2120,14 +2198,13 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
         "rank_higher_is_worse": True,
     },
     {
@@ -2139,7 +2216,7 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "periods_metric_col": "jrc_flood_depth_rp500",
         "units": "m",
         "description": (
-            "Telangana-only JRC flood-depth snapshot for the 500-year return period. "
+            "JRC flood-depth snapshot for the 500-year return period. "
             "Block values use flooded-cell p95 depth and district values use flooded-area-"
             "weighted means of child block flooded-cell p95 depth. This is an externally "
             "sourced inundation layer, not a climate scenario projection."
@@ -2153,14 +2230,143 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
         "supports_baseline_comparison": False,
         "supports_scenario_comparison": False,
         "admin_rebuild_command": (
-            "python -m tools.runs.prepare_dashboard jrc-flood-depth "
+            "python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> "
             "--source-dir <JRC_DIR> --assume-units m --overwrite"
         ),
         "supported_scenarios": ("snapshot",),
         "preferred_period_order": ("Current",),
         "supported_spatial_families": ("admin",),
         "supported_levels": ("district", "block"),
-        "supported_admin_states": ("Telangana",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Very Wet Day Precipitation Interannual Variability (R95p CV)",
+        "slug": "r95p_interannual_variability",
+        "label": "Very Wet Day Precipitation Interannual Variability (R95p CV)",
+        "group": "rain",
+        "value_col": "r95p_interannual_variability",
+        "periods_metric_col": "r95p_interannual_variability",
+        "units": "ratio",
+        "display_units": "ratio",
+        "display_scale": 1.0,
+        "description": (
+            "Coefficient of variation of annual R95p values within the selected future period; "
+            "used as the hydropower-sector variability input."
+        ),
+        "source_type": "derived",
+        "supports_yearly_trend": False,
+        "selection_mode": "scenario_period",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": "python -m tools.pipeline.build_proposal_bundles",
+        "supported_scenarios": ("ssp245", "ssp585"),
+        "preferred_period_order": ("2020-2040", "2040-2060", "2060-2080"),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district", "block"),
+        "supported_admin_states": (),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Per-Capita Water Scarcity (2025)",
+        "slug": "water_scarcity_percapita",
+        "label": "Per-Capita Water Scarcity (2025)",
+        "group": "water",
+        "value_col": "water_scarcity_percapita",
+        "periods_metric_col": "water_scarcity_percapita",
+        "units": "scarcity class (1-4)",
+        "display_units": "",
+        "class_labels": WATER_SCARCITY_CLASS_LABELS,
+        "class_display_mode": "label_with_score",
+        "description": (
+            "Present-day (2025) per-capita water-availability scarcity class from the "
+            "NITI Aayog ICED district dataset. Ordinal 1-4 (1=No Stress, 2=Stress, "
+            "3=Scarcity, 4=Absolute scarcity), where higher is worse. Externally sourced "
+            "district snapshot, not a climate scenario projection."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard water-availability --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Per-Capita Water Scarcity (2050 projection)",
+        "slug": "water_scarcity_percapita_2050",
+        "label": "Per-Capita Water Scarcity (2050 projection)",
+        "group": "water",
+        "value_col": "water_scarcity_percapita_2050",
+        "periods_metric_col": "water_scarcity_percapita_2050",
+        "units": "scarcity class (1-4)",
+        "display_units": "",
+        "class_labels": WATER_SCARCITY_CLASS_LABELS,
+        "class_display_mode": "label_with_score",
+        "description": (
+            "Projected 2050 per-capita water-availability scarcity class from the NITI "
+            "Aayog ICED district dataset. Same ordinal 1-4 encoding as the 2025 class; "
+            "the projection is monotone (every district stays the same or worsens). "
+            "Carried as an inline attribute alongside the scored 2025 headline."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard water-availability --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
+        "rank_higher_is_worse": True,
+    },
+    {
+        "name": "Water Scarcity Deterioration (2025->2050)",
+        "slug": "water_scarcity_deterioration_2050",
+        "label": "Water Scarcity Deterioration (2025->2050)",
+        "group": "water",
+        "value_col": "water_scarcity_deterioration_2050",
+        "periods_metric_col": "water_scarcity_deterioration_2050",
+        "units": "class steps (0-3)",
+        "display_units": "",
+        "class_labels": WATER_DETERIORATION_LABELS,
+        "class_display_mode": "label_only",
+        "description": (
+            "Projected worsening of the per-capita water-scarcity class from 2025 to 2050, "
+            "expressed as the number of class steps (0=No change to 3=Worsens by 3 classes). "
+            "This is a delta of ordinal class steps, NOT a scarcity class, so it uses its own "
+            "delta labels and renders label-only. Carried as an inline attribute."
+        ),
+        "source_type": "external",
+        "supports_yearly_trend": False,
+        "selection_mode": "static_snapshot",
+        "fixed_scenario": "snapshot",
+        "fixed_period": "Current",
+        "supported_statistics": ("mean",),
+        "supports_baseline_comparison": False,
+        "supports_scenario_comparison": False,
+        "admin_rebuild_command": (
+            "python -m tools.runs.prepare_dashboard water-availability --overwrite"
+        ),
+        "supported_scenarios": ("snapshot",),
+        "preferred_period_order": ("Current",),
+        "supported_spatial_families": ("admin",),
+        "supported_levels": ("district",),
         "rank_higher_is_worse": True,
     },
     *[
@@ -2175,23 +2381,43 @@ DASHBOARD_ONLY_METRICS_RAW: list[dict[str, Any]] = [
             "display_units": "score",
             "display_scale": 1.0,
             "description": (
-                f"Persisted weighted composite hazard score for the {spec.bundle_domain} bundle. "
+                f"Persisted weighted composite hazard score for the {spec.canonical_bundle} bundle. "
                 "Computed offline from approved bundle weights and per-scenario-period normalization."
+                if spec.canonical_bundle in THEMATIC_DASHBOARD_BUNDLE_NAMES
+                else (
+                    f"Persisted sector-wise climate-risk composite for the {spec.canonical_bundle} domain. "
+                    "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+                )
             ),
             "source_type": "derived",
             "supports_yearly_trend": False,
-            "selection_mode": "scenario_period",
+            "selection_mode": (
+                "static_snapshot"
+                if spec.supported_scenarios == ("snapshot",)
+                else "scenario_period"
+            ),
+            "fixed_scenario": "snapshot" if spec.supported_scenarios == ("snapshot",) else None,
+            "fixed_period": "Current" if spec.supported_scenarios == ("snapshot",) else None,
             "supported_statistics": ("mean",),
             "supports_baseline_comparison": False,
             "supports_scenario_comparison": False,
-            "admin_rebuild_command": "python -m tools.pipeline.build_composite_metrics",
-            "supported_scenarios": ("ssp245", "ssp585"),
-            "preferred_period_order": ("2020-2040", "2040-2060", "2060-2080"),
-            "supported_spatial_families": spec.supported_spatial_families,
+            "admin_rebuild_command": (
+                "python -m tools.pipeline.build_composite_metrics"
+                if spec.canonical_bundle in THEMATIC_DASHBOARD_BUNDLE_NAMES
+                else "python -m tools.pipeline.build_proposal_bundles"
+            ),
+            "supported_scenarios": spec.supported_scenarios,
+            "preferred_period_order": (
+                ("Current",)
+                if spec.supported_scenarios == ("snapshot",)
+                else ("2020-2040", "2040-2060", "2060-2080")
+            ),
+            "supported_spatial_families": ("admin",),
             "supported_levels": spec.supported_levels,
+            "supported_admin_states": (),
             "rank_higher_is_worse": True,
         }
-        for spec in VISIBLE_GLANCE_COMPOSITES
+        for spec in DASHBOARD_BUNDLES
     ],
 ]
 
@@ -2201,6 +2427,23 @@ PIPELINE_SLUGS: set[str] = {str(m.get("slug", "")).strip() for m in PIPELINE_MET
 # Typed views derived from metric registries
 PIPELINE_METRICS: list[MetricSpec] = [MetricSpec.from_pipeline_dict(m) for m in PIPELINE_METRICS_RAW]
 METRICS_BY_SLUG: dict[str, MetricSpec] = build_registry_from_pipeline(ALL_METRICS_RAW)
+
+
+def get_metric_spec(slug: str) -> Optional[MetricSpec]:
+    """Return the MetricSpec for ``slug``, or ``None`` if unknown."""
+    return METRICS_BY_SLUG.get(slug)
+
+
+def is_climate_compute_metric(spec: Optional[MetricSpec]) -> bool:
+    """Return True when a metric enters the climate-compute pipeline.
+
+    A positive compute contract: only pipeline-sourced, scenario/period metrics
+    are computed by the climate pipeline. Externally sourced snapshots (JRC flood,
+    groundwater, water scarcity, ...) are excluded even when they surface under the
+    Climate Hazards pillar. Accepts ``None`` (unknown slug -> not climate-compute)
+    so callers can compose ``is_climate_compute_metric(get_metric_spec(slug))``.
+    """
+    return bool(spec) and spec.source_type == "pipeline" and spec.selection_mode == "scenario_period"
 
 
 # -----------------------------------------------------------------------------
@@ -2256,14 +2499,24 @@ DOMAINS: dict[str, list[str]] = {
         "twb_annual_mean",
         "twb_summer_mean",
         "twb_annual_max",
+        "twb_days_ge_28",
         "twb_days_ge_30",
-        "wbd_le_3",
-        "wbd_gt3_le6",
         "tasmin_tropical_nights_gt28",
         "tn90p_warm_nights_pct",
-        "wbd_le_3_consecutive_days",
         "wsdi_warm_spell_days",
-        "twb_days_ge_28",
+        # WBGT/SWBGT diagnostics: visible under Heat Stress for inspection,
+        # NOT scored in composite_heat_stress (bundle_weights.py unchanged).
+        # Shaded WBGT = 0.7*Twb_stull + 0.3*tas; Outdoor sWBGT uses tas +
+        # vapour pressure. Both are derivatives of inputs already in the
+        # composite, so scoring them would double-count humid-heat signal.
+        "wbgt_shade_stull_annual_mean",
+        "wbgt_shade_stull_days_ge_28",
+        "wbgt_shade_stull_days_ge_30",
+        "wbgt_shade_stull_days_ge_32",
+        "swbgt_empirical_annual_mean",
+        "swbgt_empirical_days_ge_28",
+        "swbgt_empirical_days_ge_30",
+        "swbgt_empirical_days_ge_32",
     ],
     "Cold Risk": [
         "composite_cold_risk",
@@ -2282,19 +2535,7 @@ DOMAINS: dict[str, list[str]] = {
         "csdi_cold_spell_days",
         "tnle10_consecutive_cold_nights",
     ],
-    "Agriculture & Growing Conditions": [
-        "composite_agriculture_growing_conditions",
-        "gsl_growing_season",
-        "tasmax_summer_mean",
-        "tasmin_winter_mean",
-        "dtr_daily_temp_range",
-        "txge35_extreme_heat_days",
-        "tnle10_cold_nights",
-        "wsdi_warm_spell_days",
-        "spi3_drought_index",
-        "prcptot_annual_total",
-    ],
-    "Flood & Extreme Rainfall Risk": [
+    "Extreme Rainfall | Flash Flood Risk": [
         "composite_flood_extreme_rainfall_risk",
         # Peak intensity
         "pr_max_1day_precip",
@@ -2313,51 +2554,62 @@ DOMAINS: dict[str, list[str]] = {
         "cwd_consecutive_wet_days",
         # "pr_5day_precip_events_gt50mm",
     ],
-    "Rainfall Totals & Typical Wetness": [
-        # Annual totals and intensity
-        "prcptot_annual_total",
-        "pr_simple_daily_intensity",
-        "rain_gt_2p5mm",
-    ],
     "Drought Risk": [
         "composite_drought_risk",
         "spi3_count_events_lt_minus1",
         "spi6_count_events_lt_minus1",
         "spi12_count_events_lt_minus1",
+        "spi3_max_spell_lt_minus1",
+        "spi6_max_spell_lt_minus1",
+        "spi12_max_spell_lt_minus1",
     ],
-    "Drought Risk (Advanced)": [
-        # Short-term vs long-term SPI + severity splits (keep available but not default)
-        "spi3_drought_index",
-        "spi3_count_months_lt_minus1",
-        "spi3_count_months_lt_minus2",
-
-        "spi6_drought_index",
-        "spi6_count_months_lt_minus1",
-        "spi6_count_months_lt_minus2",
-
-        "spi12_drought_index",
-        "spi12_count_months_lt_minus1",
-        "spi12_count_months_lt_minus2",
-
-        # Climatic water-balance drought (SPEI) – optional (currently disabled)
-        # "spei3_drought_index",
-        # "spei6_drought_index",
-        # "spei12_drought_index",
+    "Agricultural Risk": [
+        "composite_agricultural_risk",
     ],
-    "Temperature Variability": [
-        # Daily and annual variability
-        "dtr_daily_temp_range",
-        "etr_extreme_temp_range",
+    "Health Risk": [
+        "composite_health_risk",
+    ],
+    "Industrial Risk": [
+        "composite_industrial_risk",
+    ],
+    "Investment / Financial Risk": [
+        "composite_investment_financial_risk",
+    ],
+    "Infrastructure Risk": [
+        "composite_infrastructure_risk",
+    ],
+    "Asset Risk (Thermal Power Plants)": [
+        "composite_asset_risk_thermal_power",
+    ],
+    "Asset Risk (Hydropower Plants)": [
+        "composite_asset_risk_hydropower",
+    ],
+    "Life & Livelihood Loss Risk": [
+        "composite_life_livelihood_loss_risk",
     ],
     "Population Exposure": [
         "population_total",
         "population_density",
     ],
-    "Aqueduct Water Risk": [
-        "aq_water_stress",
-        "aq_interannual_variability",
-        "aq_seasonal_variability",
-        "aq_water_depletion",
+    "Rural Facilities Exposure": [
+        "rural_facilities_total_count",
+        "rural_facilities_agro_count",
+        "rural_facilities_education_count",
+        "rural_facilities_health_count",
+        "rural_facilities_service_count",
+        "rural_facilities_total_count_per_100k",
+        "rural_facilities_agro_count_per_100k",
+        "rural_facilities_education_count_per_100k",
+        "rural_facilities_health_count_per_100k",
+        "rural_facilities_service_count_per_100k",
+    ],
+    "Built-up Area Exposure": [
+        "built_up_area_km2",
+        "built_up_area_share_pct",
+    ],
+    "Agricultural LULC Exposure": [
+        "lulc_agri_area_km2",
+        "lulc_agri_share_pct",
     ],
     "Groundwater Status & Availability": [
         "gw_stage_extraction_pct",
@@ -2365,63 +2617,70 @@ DOMAINS: dict[str, list[str]] = {
         "gw_extractable_resource_ham",
         "gw_total_extraction_ham",
     ],
-    "Flood Inundation Depth (JRC)": [
+    "Riverine Flood": [
+        "composite_flood_jrc_depth",
         "jrc_flood_depth_index_rp100",
         "jrc_flood_extent_rp100",
-        "jrc_flood_depth_rp10",
-        "jrc_flood_depth_rp50",
         "jrc_flood_depth_rp100",
-        "jrc_flood_depth_rp500",
+    ],
+    "Water Risk": [
+        "composite_water_risk",
+        "water_scarcity_percapita",
+        "water_scarcity_percapita_2050",
+        "water_scarcity_deterioration_2050",
     ],
 }
 
 # Domain display order for UI
 DOMAIN_ORDER: list[str] = [
     "Heat Risk",
+    "Drought Risk",
+    "Extreme Rainfall | Flash Flood Risk",
+    "Riverine Flood",
     "Heat Stress",
     "Cold Risk",
-    "Agriculture & Growing Conditions",
-    "Flood & Extreme Rainfall Risk",
-    "Rainfall Totals & Typical Wetness",
-    "Drought Risk",
-    "Drought Risk (Advanced)",
-    "Temperature Variability",
+    "Agricultural Risk",
+    "Health Risk",
+    "Industrial Risk",
+    "Investment / Financial Risk",
+    "Infrastructure Risk",
+    "Asset Risk (Thermal Power Plants)",
+    "Asset Risk (Hydropower Plants)",
+    "Life & Livelihood Loss Risk",
     "Population Exposure",
-    "Aqueduct Water Risk",
+    "Rural Facilities Exposure",
+    "Built-up Area Exposure",
+    "Agricultural LULC Exposure",
     "Groundwater Status & Availability",
-    "Flood Inundation Depth (JRC)",
+    "Water Risk",
 ]
 
 PILLAR_DOMAINS: dict[str, list[str]] = {
     "Climate Hazards": [
         "Heat Risk",
+        "Drought Risk",
+        "Extreme Rainfall | Flash Flood Risk",
+        "Riverine Flood",
         "Heat Stress",
         "Cold Risk",
-        "Agriculture & Growing Conditions",
-        "Flood & Extreme Rainfall Risk",
-        "Rainfall Totals & Typical Wetness",
-        "Drought Risk",
-        "Drought Risk (Advanced)",
-        "Temperature Variability",
+        "Agricultural Risk",
+        "Health Risk",
+        "Industrial Risk",
+        "Investment / Financial Risk",
+        "Infrastructure Risk",
+        "Asset Risk (Thermal Power Plants)",
+        "Asset Risk (Hydropower Plants)",
+        "Life & Livelihood Loss Risk",
+        "Water Risk",
     ],
-    "Bio-physical Hazards": [
-        "Aqueduct Water Risk",
-        "Groundwater Status & Availability",
-        "Flood Inundation Depth (JRC)",
-    ],
-    "Exposure": [
-        "Population Exposure",
-    ],
-    "Vulnerability": [],
-    "Adaptive Capacity": [],
+    # NOTE: Population/Rural/Built-up/LULC/Groundwater exposure domains are
+    # intentionally NOT homed under any pillar. They stay in DOMAINS/DOMAIN_ORDER
+    # so the data-prep pipelines (tools/runs/prepare_dashboard.py) keep resolving
+    # them by domain name, but they are hidden from UI pillar navigation.
 }
 
 PILLAR_ORDER: list[str] = [
     "Climate Hazards",
-    "Bio-physical Hazards",
-    "Exposure",
-    "Vulnerability",
-    "Adaptive Capacity",
 ]
 
 DOMAIN_TO_PILLAR: dict[str, str] = {
@@ -2431,7 +2690,7 @@ DOMAIN_TO_PILLAR: dict[str, str] = {
 }
 
 LEGACY_DOMAIN_ALIASES: dict[str, str] = {
-    "Water Risk": "Aqueduct Water Risk",
+    "Agriculture & Growing Conditions": "Agricultural Risk",
 }
 
 # Defaults for single-focus mode
@@ -2440,25 +2699,42 @@ DEFAULT_DOMAIN: str = "Heat Risk"
 
 # Domain descriptions for UI tooltips/help text
 DOMAIN_DESCRIPTIONS: dict[str, str] = {
-    "Aqueduct Water Risk": (
-        "Hydrologic water-risk metrics derived from Aqueduct and displayed on "
-        "admin and hydro units through audited overlap transfer workflows."
-    ),
     "Population Exposure": (
         "Static population exposure layers derived from the 2025 population raster "
         "and aggregated onto canonical district and block units."
+    ),
+    "Rural Facilities Exposure": (
+        "Static rural facilities exposure/concentration layers from the 2019-2021 "
+        "rural facilities snapshot, assigned deterministically to canonical blocks "
+        "and rolled up to districts."
+    ),
+    "Built-up Area Exposure": (
+        "Static built-up surface exposure layers from the cleaned India built-surface "
+        "raster. Metrics use Current snapshot semantics and geometry-based polygon "
+        "area denominators for shares."
+    ),
+    "Agricultural LULC Exposure": (
+        "Static agricultural land-cover exposure layers from the binary LULC agriculture "
+        "raster. Metrics use Current snapshot semantics, EPSG:6933 equal-area tabulation, "
+        "and geometry-based polygon area denominators for shares."
     ),
     "Groundwater Status & Availability": (
         "District groundwater assessment layers from the 2024-2025 GEC workbook, "
         "covering extraction stage, extractable resource, total extraction, and "
         "future groundwater availability."
     ),
-    "Flood Inundation Depth (JRC)": (
-        "Telangana-only JRC flood snapshot domain covering the derived RP-100 "
-        "Flood Severity Index, RP-100 Flood Extent, plus RP-10, RP-50, RP-100, "
-        "and RP-500 depth layers. Flood extent uses total polygon area, while "
-        "depth layers use flooded-cell p95 block depth and flooded-area-weighted "
-        "district rollups."
+    "Riverine Flood": (
+        "JRC flood snapshot domain covering RP-100 Flood Extent and RP-100 Flood Depth. "
+        "Flood extent uses total polygon area; depth uses flooded-cell p95 block depth "
+        "and flooded-area-weighted district rollups. State availability depends on which "
+        "state-scoped JRC masters have been built and published."
+    ),
+    "Water Risk": (
+        "District per-capita water-scarcity snapshot from the NITI Aayog ICED dataset. "
+        "The scored headline is the present-day (2025) scarcity class (1-4, higher worse); "
+        "the 2050 projection and its class-step deterioration are carried as inline "
+        "attributes. District-only; the composite uses an absolute pre-scaled ordinal "
+        "score (0/33/67/100 from the fixed classes), not relative normalization."
     ),
     "Heat Risk": (
         "Metrics related to extreme heat, heatwaves, and thermal stress. "
@@ -2468,25 +2744,45 @@ DOMAIN_DESCRIPTIONS: dict[str, str] = {
         "Metrics related to cold extremes, frost, and cold spells. "
         "Includes frost days, icing days, and cold spell duration."
     ),
-    "Agriculture & Growing Conditions": (
-        "Metrics relevant to crop suitability and growing season length. "
-        "Useful for non-disaster framing of climate impacts on agriculture."
-    ),
-    "Flood & Extreme Rainfall Risk": (
+    "Extreme Rainfall | Flash Flood Risk": (
         "Metrics related to extreme precipitation events and flood risk. "
         "Includes peak intensity, heavy rain frequency, and wet spell persistence."
-    ),
-    "Rainfall Totals & Typical Wetness": (
-        "Metrics for overall water availability and typical rainfall patterns. "
-        "Distinct from flood extremes; useful for water resource planning."
     ),
     "Drought Risk": (
         "Metrics related to dry spells and drought conditions. "
         "Includes SPI and SPEI indices at multiple timescales."
     ),
-    "Temperature Variability": (
-        "Metrics for daily and annual temperature variability. "
-        "Useful for understanding climate stability and interpreting heat stress."
+    "Agricultural Risk": (
+        "Persisted sector-wise climate-risk composite for agriculture. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Health Risk": (
+        "Persisted sector-wise climate-risk composite for health. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Industrial Risk": (
+        "Persisted sector-wise climate-risk composite for industry. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Investment / Financial Risk": (
+        "Persisted sector-wise climate-risk composite for investment and financial exposure. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Infrastructure Risk": (
+        "Persisted sector-wise climate-risk composite for infrastructure. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Asset Risk (Thermal Power Plants)": (
+        "Persisted sector-wise climate-risk composite for thermal power assets. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Asset Risk (Hydropower Plants)": (
+        "Persisted sector-wise climate-risk composite for hydropower assets. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
+    ),
+    "Life & Livelihood Loss Risk": (
+        "Persisted sector-wise climate-risk composite for life and livelihood loss exposure. "
+        "Admin-only dashboard visibility depends on valid persisted proposal-bundle outputs."
     ),
 }
 
@@ -2494,20 +2790,6 @@ PILLAR_DESCRIPTIONS: dict[str, str] = {
     "Climate Hazards": (
         "Climate-model-derived hazard and climate-condition layers, including heat, "
         "cold, rainfall, flood, drought, and variability metrics."
-    ),
-    "Bio-physical Hazards": (
-        "Physical hazard layers from externally sourced geospatial products, kept "
-        "separate from climate hazard indices to make provenance clear."
-    ),
-    "Exposure": (
-        "People, assets, land use, and other layers that describe what is present "
-        "in places potentially affected by hazards."
-    ),
-    "Vulnerability": (
-        "Future placeholder for sensitivity and vulnerability layers."
-    ),
-    "Adaptive Capacity": (
-        "Future placeholder for coping, readiness, and adaptive capacity layers."
     ),
 }
 
@@ -2597,7 +2879,6 @@ def get_dashboard_variables() -> dict[str, dict[str, Any]]:
             "supports_baseline_comparison": bool(spec.supports_baseline_comparison),
             "supports_scenario_comparison": bool(spec.supports_scenario_comparison),
             "admin_rebuild_command": spec.admin_rebuild_command,
-            "hydro_rebuild_command": spec.hydro_rebuild_command,
             "supported_scenarios": list(spec.supported_scenarios),
             "preferred_period_order": list(spec.preferred_period_order),
             "supported_spatial_families": list(spec.supported_spatial_families),
@@ -2642,6 +2923,37 @@ def _metric_supported_in_context(
             return False
 
     return True
+
+
+def _sector_wise_domain_metric_slugs(
+    domain: str,
+    *,
+    spatial_family: Optional[str] = None,
+    level: Optional[str] = None,
+) -> list[str] | None:
+    """Return sector-wise domain metrics in supported contexts, or None if not sector-wise."""
+    spec = get_dashboard_bundle_spec(domain)
+    if spec is None or spec.group_key != "sector_wise":
+        return None
+
+    family = str(spatial_family or "").strip().lower()
+    level_norm = str(level or "").strip().lower()
+    supported_levels = {str(value).strip().lower() for value in spec.supported_levels if str(value).strip()}
+
+    if family and family != "admin":
+        return []
+    if level_norm and level_norm not in supported_levels:
+        return []
+
+    candidate_slugs = [spec.composite_slug, *get_proposal_bundle_source_metric_slugs(spec.composite_slug)]
+    filtered: list[str] = []
+    for slug in candidate_slugs:
+        metric_spec = METRICS_BY_SLUG.get(slug)
+        if metric_spec is None:
+            continue
+        if _metric_supported_in_context(metric_spec, spatial_family=spatial_family, level=level):
+            filtered.append(slug)
+    return filtered
 
 
 def get_pipeline_bundles() -> dict[str, list[str]]:
@@ -2719,6 +3031,14 @@ def get_metrics_for_domain(
 ) -> list[str]:
     """Return metric slugs for a domain in the current context."""
     canonical_domain = normalize_domain_name(domain)
+    sector_wise_slugs = _sector_wise_domain_metric_slugs(
+        canonical_domain,
+        spatial_family=spatial_family,
+        level=level,
+    )
+    if sector_wise_slugs is not None:
+        return sector_wise_slugs
+
     slugs = list(DOMAINS.get(canonical_domain, []))
     filtered: list[str] = []
     for slug in slugs:
@@ -2742,8 +3062,8 @@ def get_domains_for_metric(
         return []
     return [
         domain
-        for domain, slugs in DOMAINS.items()
-        if slug in slugs and get_metrics_for_domain(domain, spatial_family=spatial_family, level=level)
+        for domain in DOMAIN_ORDER
+        if slug in get_metrics_for_domain(domain, spatial_family=spatial_family, level=level)
     ]
 
 

@@ -1,0 +1,4 @@
+id,custom_name,lat,long
+1,BadLat,999,79.2
+2,BadLong,17.3,-500
+3,NaNish,1e9,1e9

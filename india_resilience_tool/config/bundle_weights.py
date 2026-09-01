@@ -17,6 +17,7 @@ class BundleWeightEntry:
     source_note: str
     substitution_note: str = ""
     workbook_group: Optional[str] = None
+    is_attribute: bool = False
 
 
 LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
@@ -126,78 +127,57 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
             bundle_domain="Heat Stress",
             metric_slug="twb_annual_mean",
             weight=0.20 / 2.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Background Heat Stress",
+            source_note="Heat Stress v2 grid-first bundle",
+            workbook_group="Background humid heat",
         ),
         BundleWeightEntry(
             bundle_domain="Heat Stress",
             metric_slug="twb_summer_mean",
             weight=0.20 / 2.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Background Heat Stress",
+            source_note="Heat Stress v2 grid-first bundle",
+            workbook_group="Background humid heat",
         ),
         BundleWeightEntry(
             bundle_domain="Heat Stress",
             metric_slug="twb_annual_max",
-            weight=0.25 / 2.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Extreme Heat Stress",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Heat Stress",
-            metric_slug="twb_days_ge_30",
-            weight=0.25 / 2.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Extreme Heat Stress",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Heat Stress",
-            metric_slug="wbd_le_3",
-            weight=0.15 / 2.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Humidity Constraint",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Heat Stress",
-            metric_slug="wbd_gt3_le6",
-            weight=0.15 / 2.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Humidity Constraint",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Heat Stress",
-            metric_slug="tasmin_tropical_nights_gt28",
-            weight=0.15 / 2.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Night-time Heat Stress",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Heat Stress",
-            metric_slug="tn90p_warm_nights_pct",
-            weight=0.15 / 2.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Night-time Heat Stress",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Heat Stress",
-            metric_slug="wbd_le_3_consecutive_days",
-            weight=0.25 / 3.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Persistence / Duration",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Heat Stress",
-            metric_slug="wsdi_warm_spell_days",
-            weight=0.25 / 3.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Persistence / Duration",
+            weight=0.40 / 3.0,
+            source_note="Heat Stress v2 grid-first bundle",
+            workbook_group="Extreme / threshold humid heat",
         ),
         BundleWeightEntry(
             bundle_domain="Heat Stress",
             metric_slug="twb_days_ge_28",
-            weight=0.25 / 3.0,
-            source_note="Bundles_comp_Score.xlsx / Heat Stress",
-            workbook_group="Persistence / Duration",
+            weight=0.40 / 3.0,
+            source_note="Heat Stress v2 grid-first bundle",
+            workbook_group="Extreme / threshold humid heat",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Heat Stress",
+            metric_slug="twb_days_ge_30",
+            weight=0.40 / 3.0,
+            source_note="Heat Stress v2 grid-first bundle",
+            workbook_group="Extreme / threshold humid heat",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Heat Stress",
+            metric_slug="tasmin_tropical_nights_gt28",
+            weight=0.20 / 2.0,
+            source_note="Heat Stress v2 grid-first bundle",
+            workbook_group="Night-time recovery stress",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Heat Stress",
+            metric_slug="tn90p_warm_nights_pct",
+            weight=0.20 / 2.0,
+            source_note="Heat Stress v2 grid-first bundle",
+            workbook_group="Night-time recovery stress",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Heat Stress",
+            metric_slug="wsdi_warm_spell_days",
+            weight=0.20 / 1.0,
+            source_note="Heat Stress v2 grid-first bundle",
+            workbook_group="Persistence",
         ),
     ),
     "Cold Risk": (
@@ -283,146 +263,145 @@ LANDING_BUNDLE_WEIGHTS: dict[str, tuple[BundleWeightEntry, ...]] = {
         BundleWeightEntry(
             bundle_domain="Drought Risk",
             metric_slug="spi3_count_events_lt_minus1",
-            weight=0.20,
-            source_note="Approved drought bundle / current weighted pass",
+            weight=0.08,
+            source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses SPI drought-event counts for seasonal drought.",
             workbook_group="Seasonal Drought",
         ),
         BundleWeightEntry(
             bundle_domain="Drought Risk",
             metric_slug="spi6_count_events_lt_minus1",
-            weight=0.30,
-            source_note="Approved drought bundle / current weighted pass",
+            weight=0.12,
+            source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses SPI drought-event counts for meteorological drought.",
             workbook_group="Meteorological Drought",
         ),
         BundleWeightEntry(
             bundle_domain="Drought Risk",
             metric_slug="spi12_count_events_lt_minus1",
-            weight=0.50,
-            source_note="Approved drought bundle / current weighted pass",
+            weight=0.20,
+            source_note="Approved Drought Risk v2 bundle",
             substitution_note="Uses SPI drought-event counts for long-term drought.",
             workbook_group="Long-term Drought",
         ),
-    ),
-    "Flood Inundation Depth (JRC)": (
         BundleWeightEntry(
-            bundle_domain="Flood Inundation Depth (JRC)",
-            metric_slug="jrc_flood_depth_index_rp100",
-            weight=1.0,
-            source_note="Bundles_comp_Score.xlsx / Flood / RP100 depth index pilot",
-            workbook_group="Inundation Severity",
+            bundle_domain="Drought Risk",
+            metric_slug="spi3_max_spell_lt_minus1",
+            weight=0.12,
+            source_note="Approved Drought Risk v2 bundle",
+            substitution_note="Uses longest within-year SPI3 drought spell length.",
+            workbook_group="Seasonal Drought",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Drought Risk",
+            metric_slug="spi6_max_spell_lt_minus1",
+            weight=0.18,
+            source_note="Approved Drought Risk v2 bundle",
+            substitution_note="Uses longest within-year SPI6 drought spell length.",
+            workbook_group="Meteorological Drought",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Drought Risk",
+            metric_slug="spi12_max_spell_lt_minus1",
+            weight=0.30,
+            source_note="Approved Drought Risk v2 bundle",
+            substitution_note="Uses longest within-year SPI12 drought spell length.",
+            workbook_group="Long-term Drought",
         ),
     ),
-    "Flood & Extreme Rainfall Risk": (
+    "Riverine Flood": (
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Riverine Flood",
+            metric_slug="jrc_flood_depth_index_rp100",
+            weight=1.0,
+            source_note="RP-100 severity index (depth × extent matrix); depth and extent shown as inline glance attributes",
+            workbook_group="Inundation Severity",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Riverine Flood",
+            metric_slug="jrc_flood_depth_rp100",
+            weight=0.0,
+            source_note="",
+            is_attribute=True,
+            workbook_group="Inundation Depth",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Riverine Flood",
+            metric_slug="jrc_flood_extent_rp100",
+            weight=0.0,
+            source_note="",
+            is_attribute=True,
+            workbook_group="Inundation Extent",
+        ),
+    ),
+    "Water Risk": (
+        BundleWeightEntry(
+            bundle_domain="Water Risk",
+            metric_slug="water_scarcity_percapita",
+            weight=1.0,
+            source_note="NITI Aayog present-day (2025) per-capita water-scarcity class; 2050 projection and deterioration shown as inline glance attributes",
+            workbook_group="Water Scarcity",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Water Risk",
+            metric_slug="water_scarcity_percapita_2050",
+            weight=0.0,
+            source_note="",
+            is_attribute=True,
+            workbook_group="Water Scarcity (2050 projection)",
+        ),
+        BundleWeightEntry(
+            bundle_domain="Water Risk",
+            metric_slug="water_scarcity_deterioration_2050",
+            weight=0.0,
+            source_note="",
+            is_attribute=True,
+            workbook_group="Water Scarcity Deterioration",
+        ),
+    ),
+    "Extreme Rainfall | Flash Flood Risk": (
+        BundleWeightEntry(
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="pr_max_1day_precip",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
-            substitution_note="Flood Depth Index remains deferred; weights cover the active six-metric flood bundle only.",
+            substitution_note="Riverine/JRC flood depth is handled by the separate Riverine Flood bundle.",
             workbook_group="Peak Intensity",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="pr_max_5day_precip",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Peak Intensity",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="r20mm_very_heavy_precip_days",
             weight=0.25,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Heavy Rain Frequency",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="r95p_very_wet_precip",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Very Wet Contribution",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="r95ptot_contribution_pct",
             weight=0.25 / 2.0,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Very Wet Contribution",
         ),
         BundleWeightEntry(
-            bundle_domain="Flood & Extreme Rainfall Risk",
+            bundle_domain="Extreme Rainfall | Flash Flood Risk",
             metric_slug="cwd_consecutive_wet_days",
             weight=0.25,
             source_note="Approved flood bundle / current available metrics pass",
             workbook_group="Wet-spell Persistence",
-        ),
-    ),
-    "Agriculture & Growing Conditions": (
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="gsl_growing_season",
-            weight=0.20,
-            source_note="Approved agriculture bundle / current weighted pass",
-            workbook_group="Growing Season / Phenology",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="tasmax_summer_mean",
-            weight=0.20 / 3.0,
-            source_note="Approved agriculture bundle / current weighted pass",
-            workbook_group="Heat Burden",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="txge35_extreme_heat_days",
-            weight=0.20 / 3.0,
-            source_note="Approved agriculture bundle / current weighted pass",
-            workbook_group="Heat Burden",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="wsdi_warm_spell_days",
-            weight=0.20 / 3.0,
-            source_note="Approved agriculture bundle / current weighted pass",
-            workbook_group="Heat Burden",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="tasmin_winter_mean",
-            weight=0.20 / 2.0,
-            source_note="Approved agriculture bundle / current weighted pass",
-            workbook_group="Cold Burden",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="tnle10_cold_nights",
-            weight=0.20 / 2.0,
-            source_note="Approved agriculture bundle / current weighted pass",
-            workbook_group="Cold Burden",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="spi3_drought_index",
-            weight=0.20 / 2.0,
-            source_note="Approved agriculture bundle / current weighted pass",
-            workbook_group="Water Availability / Drought",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="prcptot_annual_total",
-            weight=0.20 / 2.0,
-            source_note="Approved agriculture bundle / current weighted pass",
-            substitution_note="Uses PRCPTOT as the approved rainfall proxy for this agriculture pass.",
-            workbook_group="Water Availability / Drought",
-        ),
-        BundleWeightEntry(
-            bundle_domain="Agriculture & Growing Conditions",
-            metric_slug="dtr_daily_temp_range",
-            weight=0.20,
-            source_note="Approved agriculture bundle / current weighted pass",
-            workbook_group="Temperature Variability / Suitability",
         ),
     ),
 }
@@ -436,6 +415,15 @@ def get_bundle_weights(bundle_domain: str) -> tuple[BundleWeightEntry, ...]:
 def has_bundle_weights(bundle_domain: str) -> bool:
     """Return whether a landing bundle has approved custom weights."""
     return bool(get_bundle_weights(bundle_domain))
+
+
+def get_bundle_attribute_slugs(bundle_domain: str) -> tuple[str, ...]:
+    """Return metric slugs declared as inline glance attributes for a bundle."""
+    return tuple(
+        e.metric_slug
+        for e in LANDING_BUNDLE_WEIGHTS.get(str(bundle_domain).strip(), ())
+        if e.is_attribute
+    )
 
 
 def validate_bundle_weights() -> list[str]:
@@ -465,16 +453,23 @@ def validate_bundle_weights() -> list[str]:
             seen.add(entry.metric_slug)
             if entry.metric_slug not in METRICS_BY_SLUG:
                 issues.append(f"Bundle {bundle_domain!r} references unknown metric slug {entry.metric_slug!r}.")
-            elif entry.metric_slug not in available_bundle_metrics:
+            elif not entry.is_attribute and entry.metric_slug not in available_bundle_metrics:
                 issues.append(
                     f"Bundle {bundle_domain!r} references metric slug {entry.metric_slug!r} "
                     "that is not available for admin/district Glance scoring in this bundle."
                 )
-            if float(entry.weight) <= 0.0:
+            if not entry.is_attribute and float(entry.weight) <= 0.0:
                 issues.append(f"Bundle {bundle_domain!r} has non-positive weight for {entry.metric_slug!r}.")
+            if entry.is_attribute and float(entry.weight) != 0.0:
+                issues.append(
+                    f"Bundle {bundle_domain!r} attribute entry {entry.metric_slug!r} must have weight=0.0."
+                )
             total += float(entry.weight)
 
-        if not isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-9):
-            issues.append(f"Bundle {bundle_domain!r} weights sum to {total:.12f}, expected 1.0.")
+        non_attr_weights = sum(float(e.weight) for e in entries if not e.is_attribute)
+        if not isclose(non_attr_weights, 1.0, rel_tol=0.0, abs_tol=1e-9):
+            issues.append(
+                f"Bundle {bundle_domain!r} non-attribute weights sum to {non_attr_weights:.12f}, expected 1.0."
+            )
 
     return issues

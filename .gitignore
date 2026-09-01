@@ -54,6 +54,11 @@ processed/
 outputs/
 logs/
 figures/
+!docs/figures/
+!docs/figures/technical_guidance_note/
+!docs/figures/technical_guidance_note/*.py
+!docs/figures/technical_guidance_note/*.svg
+!docs/figures/technical_guidance_note/*.png
 tmp/
 temp/
 
@@ -78,3 +83,34 @@ processed/
 # --------------------------------
 mouse_nudge.py
 /wip_agent/
+
+# --------------------------------
+# Local tooling / editor state (never commit)
+# --------------------------------
+.claude/
+.codex
+.npmrc
+node_modules/
+*.docx
+
+# --------------------------------
+# Acceptance/diagnostic scratch outputs (regenerated on demand)
+# --------------------------------
+_accept_*.ps1
+accept_*.csv
+thematic_bundle_audit.csv
+thematic_bundle_audit.json
+
+# --------------------------------
+# Ephemeral scratch working dirs (regenerated on demand).
+# Files intentionally committed under scratch/ stay tracked; gitignore only
+# affects untracked files, so this just hides the working-scratch noise.
+# --------------------------------
+scratch/
+notebooks/scratch/
+tools/_scratch_*.py
+
+# --------------------------------
+# graphify knowledge graph (local-only; rebuild with `/graphify . --update`)
+# --------------------------------
+graphify-out/

@@ -9,66 +9,109 @@ This tool is intentionally non-destructive: it reads from the current
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import json
 import shutil
 import sys
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import time
+import warnings
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Optional, TypeVar
+
+from pyproj import datadir
+
+
+def _configure_pyproj_data_dir() -> None:
+    """Point pyproj/GDAL at a usable PROJ database before GeoPandas imports."""
+    candidates = [
+        os.environ.get("PROJ_DATA"),
+        os.environ.get("PROJ_LIB"),
+    ]
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidates.append(str(Path(conda_prefix) / "Library" / "share" / "proj"))
+    candidates.append(str(Path(sys.prefix) / "Library" / "share" / "proj"))
+
+    for candidate in candidates:
+        if not candidate:
+            continue
+        proj_db = Path(candidate) / "proj.db"
+        if proj_db.exists():
+            os.environ.setdefault("PROJ_DATA", str(proj_db.parent))
+            os.environ.setdefault("PROJ_LIB", str(proj_db.parent))
+            datadir.set_data_dir(str(proj_db.parent))
+            return
+
+
+_configure_pyproj_data_dir()
 
 import geopandas as gpd
 import pandas as pd
 from tqdm.auto import tqdm
 
 from india_resilience_tool.config.constants import (
+    SIMPLIFY_TOL_ADM1,
     SIMPLIFY_TOL_ADM2,
     SIMPLIFY_TOL_ADM3,
-    SIMPLIFY_TOL_BASIN_RENDER,
-    SIMPLIFY_TOL_SUBBASIN_RENDER,
+)
+from india_resilience_tool.compute.glance_view_model import (
+    GLANCE_FILENAMES,
+    GLANCE_REQUIRED_COLUMNS,
+    build_glance_view_models,
+    glance_manifest_payload,
+)
+from india_resilience_tool.config.dashboard_bundles import (
+    get_dashboard_bundle_spec_by_slug,
+    get_dashboard_bundle_specs,
 )
 from india_resilience_tool.config.paths import get_paths_config, resolve_processed_root
+from india_resilience_tool.config.proposal_bundles import (
+    get_proposal_bundle_spec_by_slug,
+    proposal_available_rule_count_column,
+    proposal_available_rule_weight_fraction_column,
+    proposal_rule_abs_score_column,
+    proposal_rule_chg_score_column,
+    proposal_rule_imp_score_column,
+    proposal_rule_score_column,
+)
 from india_resilience_tool.config.variables import VARIABLES
 from india_resilience_tool.data.adm2_loader import ensure_adm2_columns
 from india_resilience_tool.data.adm3_loader import ensure_adm3_columns
 from india_resilience_tool.data.discovery import (
     iter_block_yearly_ensemble_files,
     iter_district_yearly_ensemble_files,
-    iter_hydro_yearly_ensemble_files,
-    iter_hydro_yearly_model_files,
 )
-from india_resilience_tool.data.hydro_loader import ensure_hydro_columns
 from india_resilience_tool.data.optimized_bundle import (
     OPTIMIZED_DIRNAME,
     bundle_manifest_path,
+    optimized_adm1_path,
+    optimized_glance_root,
     optimized_context_path,
     optimized_geometry_path,
     optimized_master_path,
+    optimized_master_sources_from_metric_root,
+    optimized_state_values_path,
     optimized_yearly_ensemble_path,
     optimized_yearly_models_path,
+    resolve_optimized_metric_root,
     resolve_optimized_bundle_root,
 )
-from india_resilience_tool.utils.naming import alias
+from india_resilience_tool.utils.naming import alias, normalize_name
 from india_resilience_tool.utils.processed_io import read_table, remove_tree, unlink_file
 
 
 LEGACY_MASTER_FILENAMES = {
     "district": "master_metrics_by_district.csv",
     "block": "master_metrics_by_block.csv",
-    "basin": "master_metrics_by_basin.csv",
-    "sub_basin": "master_metrics_by_sub_basin.csv",
 }
 
 ADMIN_ID_COLS = {
     "district": ["district", "state"],
     "block": ["block", "district", "state"],
-}
-
-HYDRO_ID_COLS = {
-    "basin": ["basin_id", "basin_name"],
-    "sub_basin": ["subbasin_id", "basin_id", "subbasin_name", "basin_name"],
 }
 
 CONTEXT_FILENAMES = {
@@ -78,22 +121,35 @@ CONTEXT_FILENAMES = {
     "block_basin.parquet": "block_basin_crosswalk.csv",
     "river_reaches.parquet": "river_reaches.parquet",
     "river_network_display.geojson": "river_network_display.geojson",
-    "river_basin_name_reconciliation.parquet": "river_basin_name_reconciliation.csv",
-    "river_subbasin_diagnostics.parquet": "river_subbasin_diagnostics.csv",
+    "jrc_flood_depth/overlay/rp100_depth_overlay.png": "jrc_flood_depth/overlay/rp100_depth_overlay.png",
+    "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json": "jrc_flood_depth/overlay/rp100_depth_overlay_meta.json",
+    "population/overlay/population_exposure_2025_overlay.png": "population/overlay/population_exposure_2025_overlay.png",
+    "population/overlay/population_exposure_2025_overlay_meta.json": "population/overlay/population_exposure_2025_overlay_meta.json",
+    "built_up_area/overlay/built_up_area_current_overlay.png": "built_up_area/overlay/built_up_area_current_overlay.png",
+    "built_up_area/overlay/built_up_area_current_overlay_meta.json": "built_up_area/overlay/built_up_area_current_overlay_meta.json",
+    "lulc/overlay/lulc_agri_current_overlay.png": "lulc/overlay/lulc_agri_current_overlay.png",
+    "lulc/overlay/lulc_agri_current_overlay_meta.json": "lulc/overlay/lulc_agri_current_overlay_meta.json",
+    "rural_facilities/overlay/rural_facilities_density_total_overlay.png": "rural_facilities/overlay/rural_facilities_density_total_overlay.png",
+    "rural_facilities/overlay/rural_facilities_density_total_overlay_meta.json": "rural_facilities/overlay/rural_facilities_density_total_overlay_meta.json",
+    "rural_facilities/overlay/rural_facilities_density_agro_overlay.png": "rural_facilities/overlay/rural_facilities_density_agro_overlay.png",
+    "rural_facilities/overlay/rural_facilities_density_agro_overlay_meta.json": "rural_facilities/overlay/rural_facilities_density_agro_overlay_meta.json",
+    "rural_facilities/overlay/rural_facilities_density_education_overlay.png": "rural_facilities/overlay/rural_facilities_density_education_overlay.png",
+    "rural_facilities/overlay/rural_facilities_density_education_overlay_meta.json": "rural_facilities/overlay/rural_facilities_density_education_overlay_meta.json",
+    "rural_facilities/overlay/rural_facilities_density_health_overlay.png": "rural_facilities/overlay/rural_facilities_density_health_overlay.png",
+    "rural_facilities/overlay/rural_facilities_density_health_overlay_meta.json": "rural_facilities/overlay/rural_facilities_density_health_overlay_meta.json",
+    "rural_facilities/overlay/rural_facilities_density_service_overlay.png": "rural_facilities/overlay/rural_facilities_density_service_overlay.png",
+    "rural_facilities/overlay/rural_facilities_density_service_overlay_meta.json": "rural_facilities/overlay/rural_facilities_density_service_overlay_meta.json",
 }
 
 LEVEL_SELECTIONS = {
-    "all": ("district", "block", "basin", "sub_basin"),
+    "all": ("district", "block"),
     "admin": ("district", "block"),
-    "hydro": ("basin", "sub_basin"),
     "district": ("district",),
     "block": ("block",),
-    "basin": ("basin",),
-    "sub_basin": ("sub_basin",),
 }
 
 YEARLY_PARALLEL_CHUNK_SIZE = 64
-MANIFEST_ARTIFACT_VERSION = 2
+MANIFEST_ARTIFACT_VERSION = 3
 PARITY_REPORT_FILENAME = "parity_report.json"
 T = TypeVar("T")
 
@@ -155,6 +211,7 @@ class BuildPlan:
     context_tasks: tuple[BuildTask, ...]
     geometry_tasks: tuple[BuildTask, ...]
     manifest_task: BuildTask
+    glance_slugs: tuple[str, ...] = ()
 
     def stage_totals(self) -> dict[str, int]:
         return {
@@ -163,7 +220,8 @@ class BuildPlan:
             "yearly-ensemble": sum(len(job.sources) + 1 for job in self.yearly_ensemble_jobs),
             "context": len(self.context_tasks),
             "geometry": len(self.geometry_tasks),
-            "manifest": 1,
+            "glance": len(self.glance_slugs),
+            "manifest": 1 if self.manifest_task.target_path is not None else 0,
         }
 
     @property
@@ -184,6 +242,12 @@ class BuildProgress:
         self._overall_bar: Optional[tqdm] = None
         self._stage_bar: Optional[tqdm] = None
         self._stage_name: Optional[str] = None
+        # Per-stage wall-clock accounting (independent of progress-bar enablement).
+        # Stages run serially, so each stage owns the interval between its first
+        # touch and the next stage's first touch; close() seals the final stage.
+        self._stage_elapsed: dict[str, float] = {stage: 0.0 for stage in self._stage_totals}
+        self._timing_stage: Optional[str] = None
+        self._timing_start: Optional[float] = None
 
         if self._enabled:
             self._overall_bar = tqdm(
@@ -223,8 +287,25 @@ class BuildProgress:
         if self._stage_bar is not None:
             self._stage_bar.set_postfix_str(label)
 
+    def _touch_stage_timer(self, stage: str) -> None:
+        """Attribute wall-clock to the stage we are leaving and arm the new stage.
+
+        Runs regardless of progress-bar enablement so timing is available under a
+        profiler that disables bars. Idempotent within a stage.
+        """
+        if stage == self._timing_stage:
+            return
+        now = time.perf_counter()
+        if self._timing_stage is not None and self._timing_start is not None:
+            self._stage_elapsed[self._timing_stage] = (
+                self._stage_elapsed.get(self._timing_stage, 0.0) + (now - self._timing_start)
+            )
+        self._timing_stage = stage
+        self._timing_start = now
+
     def start_task(self, task: BuildTask) -> None:
         self._current_task = task
+        self._touch_stage_timer(task.stage)
         self._ensure_stage(stage=task.stage, label=task.label)
 
     def finish_task(self, task: BuildTask, *, count: int = 1) -> None:
@@ -242,6 +323,7 @@ class BuildProgress:
         if count <= 0:
             return
         self._current_task = BuildTask(stage=stage, label=label)
+        self._touch_stage_timer(stage)
         self._ensure_stage(stage=stage, label=label)
         self._stage_completed[stage] += count
         self._completed_total += count
@@ -266,13 +348,36 @@ class BuildProgress:
             f"remaining_tasks={remaining}, current={current})"
         )
 
+    def _seal_stage_timer(self) -> None:
+        """Fold the currently-open stage interval into its accumulator (idempotent)."""
+        if self._timing_stage is not None and self._timing_start is not None:
+            now = time.perf_counter()
+            self._stage_elapsed[self._timing_stage] = (
+                self._stage_elapsed.get(self._timing_stage, 0.0) + (now - self._timing_start)
+            )
+        self._timing_start = None
+
+    def print_stage_timing(self) -> None:
+        """Emit the per-stage wall-clock split of the build (audit is timed separately)."""
+        total = sum(self._stage_elapsed.values())
+        if total <= 0:
+            return
+        parts = [
+            f"{stage}={self._stage_elapsed.get(stage, 0.0):.1f}s "
+            f"({(self._stage_elapsed.get(stage, 0.0) / total * 100.0):.1f}%)"
+            for stage in self._stage_totals
+        ]
+        print(f"STAGE TIMING total={total:.1f}s " + ", ".join(parts))
+
     def close(self) -> None:
+        self._seal_stage_timer()
         if self._stage_bar is not None:
             self._stage_bar.close()
             self._stage_bar = None
         if self._overall_bar is not None:
             self._overall_bar.close()
             self._overall_bar = None
+        self.print_stage_timing()
 
 
 def _run_task(task: BuildTask, progress: BuildProgress, action) -> None:
@@ -301,6 +406,31 @@ def resolve_build_workers(workers: Optional[int]) -> int:
     if resolved < 1:
         raise ValueError(f"workers must be >= 1, got {workers!r}")
     return resolved
+
+
+def _yearly_executor_kind() -> str:
+    """Resolve the executor backend for the yearly-loader chunk pool.
+
+    ``'process'`` (default) preserves today's ``ProcessPoolExecutor`` behavior;
+    ``'thread'`` (opt-in via ``IRT_YEARLY_EXECUTOR=thread``) uses a thread pool —
+    safe because the yearly workers read CSVs only (no geospatial/pyproj calls)
+    and pay no spawn/pickle tax. Unknown values fall back to ``'process'``.
+    """
+    kind = os.environ.get("IRT_YEARLY_EXECUTOR", "process").strip().lower()
+    return kind if kind in {"process", "thread"} else "process"
+
+
+def _yearly_chunk_size(n_items: int, worker_count: int, kind: str) -> int:
+    """Chunk size for the yearly-loader parallel branch.
+
+    Processes want few large chunks (spawn is costly) -> keep the fixed default.
+    Threads want many small chunks (cheap fan-out) -> split per worker so small
+    single-state jobs actually parallelize. Note this yields ~``ceil(n/workers)``
+    chunks, not ``worker_count`` chunks; callers must not assume the latter.
+    """
+    if kind == "thread" and worker_count > 1:
+        return max(1, math.ceil(n_items / worker_count))
+    return YEARLY_PARALLEL_CHUNK_SIZE
 
 
 def _chunk_tuple(items: tuple[T, ...], *, chunk_size: int) -> tuple[tuple[T, ...], ...]:
@@ -340,6 +470,50 @@ def _metric_value_cols(df: pd.DataFrame, *, supported_stats: Iterable[str]) -> l
     return out
 
 
+def _proposal_retained_admin_master_cols(
+    df: pd.DataFrame,
+    *,
+    slug: str,
+    level: str,
+) -> list[str]:
+    """Return proposal-only admin master columns retained in the optimized bundle."""
+    level_norm = str(level).strip().lower()
+    if level_norm not in {"district", "block"}:
+        return []
+
+    bundle_spec = get_proposal_bundle_spec_by_slug(slug)
+    if bundle_spec is None:
+        return []
+
+    keep_cols: list[str] = []
+    available_cols = set(df.columns)
+    for scenario in ("ssp245", "ssp585"):
+        for period in ("2020-2040", "2040-2060", "2060-2080"):
+            available_count_col = proposal_available_rule_count_column(bundle_spec.composite_slug, scenario, period)
+            if available_count_col in available_cols:
+                keep_cols.append(available_count_col)
+            available_weight_col = proposal_available_rule_weight_fraction_column(
+                bundle_spec.composite_slug,
+                scenario,
+                period,
+            )
+            if available_weight_col in available_cols:
+                keep_cols.append(available_weight_col)
+            for rule in bundle_spec.rules:
+                score_col = proposal_rule_score_column(rule.rule_slug, scenario, period)
+                if score_col in available_cols:
+                    keep_cols.append(score_col)
+                for lens_col_builder in (
+                    proposal_rule_abs_score_column,
+                    proposal_rule_chg_score_column,
+                    proposal_rule_imp_score_column,
+                ):
+                    lens_col = lens_col_builder(rule.rule_slug, scenario, period)
+                    if lens_col in available_cols:
+                        keep_cols.append(lens_col)
+    return keep_cols
+
+
 def _admin_keys(df: pd.DataFrame, *, level: str) -> pd.DataFrame:
     out = df.copy()
     if level == "district":
@@ -356,15 +530,132 @@ def _admin_keys(df: pd.DataFrame, *, level: str) -> pd.DataFrame:
     return out
 
 
+class CanonicalRosterError(RuntimeError):
+    """Raised when published masters carry district/block keys absent from the current canonical boundary roster."""
+
+
+@lru_cache(maxsize=None)
+def _canonical_admin_keys(level: str, source_path: str) -> frozenset:
+    """Return the alias-normalized admin keys for ``level`` from the live boundary source.
+
+    District keys: ``alias(state_name)|alias(district_name)``.
+    Block keys:    ``alias(state_name)|alias(district_name)|alias(block_name)``.
+    Loads the full national boundary layer once (cached per (level, source_path)); the
+    build process is short-lived, so this read happens at most twice per run.
+    """
+    gdf = gpd.read_file(source_path)
+    if level == "district":
+        gdf = ensure_adm2_columns(gdf)
+        keys = (
+            gdf["state_name"].astype(str).map(alias)
+            .str.cat(gdf["district_name"].astype(str).map(alias), sep="|")
+        )
+    else:
+        gdf = ensure_adm3_columns(gdf)
+        keys = (
+            gdf["state_name"].astype(str).map(alias)
+            .str.cat(gdf["district_name"].astype(str).map(alias), sep="|")
+            .str.cat(gdf["block_name"].astype(str).map(alias), sep="|")
+        )
+    return frozenset(str(k) for k in keys.tolist())
+
+
+def _roster_gate_mode() -> str:
+    """Resolve the gate mode from ``IRT_ROSTER_GATE``.
+
+    Default ``warn`` during the boundary-migration transition; the intended end-state
+    is ``strict`` (flip the default in a follow-up once the roster audit is 100% clean).
+    Unknown values fall back to ``strict`` (fail-safe) with a warning.
+    """
+    mode = os.environ.get("IRT_ROSTER_GATE", "warn").strip().lower()
+    if mode not in {"strict", "warn", "off"}:
+        warnings.warn(f"Unknown IRT_ROSTER_GATE={mode!r}; falling back to 'strict'.", stacklevel=2)
+        return "strict"
+    return mode
+
+
+def _roster_offender_summary(slug: str, level: str, n_rows: int, offenders: list) -> str:
+    shown = ", ".join(sorted(offenders)[:12]) + (" …" if len(offenders) > 12 else "")
+    return (
+        f"[roster-gate] {slug} ({level}): {n_rows} row(s) across {len(offenders)} admin "
+        f"unit(s) absent from the current canonical boundary roster — likely stale/renamed "
+        f"names: {shown}"
+    )
+
+
+def _check_canonical_roster(out: pd.DataFrame, *, slug: str, level: str):
+    """Validate a master's admin rows against the live canonical boundary roster.
+
+    Returns ``(frame_to_write_or_None, offenders)`` and never raises:
+      * ``off`` / non-admin level / no offenders -> ``(out, [])``.
+      * ``warn`` -> ``(out_without_offenders, offenders)``: caller writes the cleaned
+        frame and logs. NOTE: this only *annotates* — a renamed unit's sole row is
+        dropped, so it stays blank on the map. ``warn`` does not heal.
+      * ``strict`` -> ``(None, offenders)``: caller skips writing this master (leaving the
+        last-good copy untouched); the run raises once, after the loop, with the full list.
+    """
+    mode = _roster_gate_mode()
+    if mode == "off" or level not in {"district", "block"}:
+        return out, []
+    key_col = "district_key" if level == "district" else "block_key"
+    if key_col not in out.columns:
+        return out, []
+    cfg = get_paths_config()
+    source = str(cfg.districts_path if level == "district" else cfg.blocks_path)
+    canonical = _canonical_admin_keys(level, source)
+    mask_bad = ~out[key_col].astype(str).isin(canonical)
+    if not mask_bad.any():
+        return out, []
+    id_cols = [c for c in ("state", "district", "block") if c in out.columns]
+    offenders = (
+        out.loc[mask_bad, id_cols].drop_duplicates().astype(str).agg(" | ".join, axis=1).tolist()
+    )
+    if mode == "warn":
+        warnings.warn(
+            _roster_offender_summary(slug, level, int(mask_bad.sum()), offenders)
+            + " — dropping rows (IRT_ROSTER_GATE=warn); these units stay blank, not healed.",
+            stacklevel=2,
+        )
+        return out.loc[~mask_bad].copy(), offenders
+    return None, offenders
+
+
+def _roster_violations_report(violations: dict) -> str:
+    lines = [
+        "Canonical-roster gate (IRT_ROSTER_GATE=strict) blocked the publish.",
+        f"{len(violations)} master(s) carried admin units absent from the current boundary "
+        f"roster; their stale copies were left untouched and NOT republished:",
+    ]
+    for slug in sorted(violations):
+        units = sorted(set(violations[slug]))
+        shown = ", ".join(units[:12]) + (" …" if len(units) > 12 else "")
+        lines.append(f"  - {slug}: {len(units)} unit(s) -> {shown}")
+    lines.append(
+        "Rebuild these masters on the current boundaries, or set IRT_ROSTER_GATE=warn to "
+        "publish the clean bundles and drop the stale rows."
+    )
+    return "\n".join(lines)
+
+
 def _select_master_columns(
     df: pd.DataFrame,
     *,
+    slug: str,
     level: str,
     supported_stats: Iterable[str],
 ) -> pd.DataFrame:
-    id_cols = list(ADMIN_ID_COLS[level]) if level in ADMIN_ID_COLS else list(HYDRO_ID_COLS[level])
+    id_cols = list(ADMIN_ID_COLS[level])
     keep_cols = [c for c in id_cols if c in df.columns]
     keep_cols.extend(_metric_value_cols(df, supported_stats=supported_stats))
+    keep_cols.extend(_proposal_retained_admin_master_cols(df, slug=slug, level=level))
+    # Sub-cell climate-fill provenance: a per-unit string flag (native/idw) that
+    # carries no ``__stat`` suffix, so _metric_value_cols never selects it. Keep it
+    # explicitly when present so the published master (what the vendor and coverage
+    # sweep read) records how each unit's value was produced. It is object dtype;
+    # _safe_numeric_downcast only touches float/int, so it passes through untouched.
+    if "climate_fill_method" in df.columns:
+        keep_cols.append("climate_fill_method")
+    keep_cols = list(dict.fromkeys(keep_cols))
     out = df[keep_cols].copy()
     if level in {"district", "block"}:
         out = _admin_keys(out, level=level)
@@ -515,6 +806,36 @@ def _load_legacy_admin_yearly_models_chunk(
     return chunk_index, pd.concat(rows, ignore_index=True, sort=False)
 
 
+def _run_chunks_serial(
+    *,
+    progress: BuildProgress,
+    stage: str,
+    label_prefix: str,
+    chunks: tuple[tuple[str, ...], ...],
+    worker_fn,
+    worker_kwargs: dict[str, object],
+) -> list[tuple[int, pd.DataFrame]]:
+    """Run chunk workers in-process, mirroring the parallel path exactly.
+
+    Used when ``max_workers <= 1`` so a single-chunk job does not pay the cost of
+    spawning a one-worker process pool (pure overhead on Windows). Reproduces all
+    parallel-path invariants: per-chunk ``advance_stage``, deterministic
+    chunk-ordered output via the post-sort, and unswallowed worker exceptions
+    (matching ``future.result()`` semantics).
+    """
+    results: list[tuple[int, pd.DataFrame]] = []
+    for chunk_index, chunk in enumerate(chunks):
+        chunk_result = worker_fn(chunk_index, chunk, **worker_kwargs)
+        progress.advance_stage(
+            stage=stage,
+            label=f"{label_prefix} | chunk {chunk_index + 1}/{len(chunks)}",
+            count=len(chunk),
+        )
+        results.append(chunk_result)
+    results.sort(key=lambda item: item[0])
+    return results
+
+
 def _execute_parallel_chunks(
     *,
     progress: BuildProgress,
@@ -524,14 +845,31 @@ def _execute_parallel_chunks(
     worker_count: int,
     worker_fn,
     worker_kwargs: dict[str, object],
+    kind: str = "process",
 ) -> list[tuple[int, pd.DataFrame]]:
-    """Execute chunked worker tasks and preserve deterministic chunk ordering."""
+    """Execute chunked worker tasks and preserve deterministic chunk ordering.
+
+    ``kind`` selects the parallel backend (``'process'`` or ``'thread'``) and is
+    resolved once by the caller; this function never re-reads the environment.
+    A ``max_workers <= 1`` plan runs serially in-process (no pool spawn).
+    """
     if not chunks:
         return []
 
     max_workers = max(1, min(int(worker_count), len(chunks)))
+    if max_workers <= 1:
+        return _run_chunks_serial(
+            progress=progress,
+            stage=stage,
+            label_prefix=label_prefix,
+            chunks=chunks,
+            worker_fn=worker_fn,
+            worker_kwargs=worker_kwargs,
+        )
+
+    executor_cls = ThreadPoolExecutor if kind == "thread" else ProcessPoolExecutor
     results: list[tuple[int, pd.DataFrame]] = []
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with executor_cls(max_workers=max_workers) as executor:
         future_map = {
             executor.submit(worker_fn, chunk_index, chunk, **worker_kwargs): (chunk_index, len(chunk))
             for chunk_index, chunk in enumerate(chunks)
@@ -592,7 +930,11 @@ def _load_legacy_admin_yearly_models(
         level=level,
     )
     progress.start_task(parallel_task)
-    path_chunks = _chunk_tuple(tuple(str(path) for path in csv_paths), chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
+    kind = _yearly_executor_kind()
+    path_strings = tuple(str(path) for path in csv_paths)
+    path_chunks = _chunk_tuple(
+        path_strings, chunk_size=_yearly_chunk_size(len(path_strings), workers, kind)
+    )
     chunk_results = _execute_parallel_chunks(
         progress=progress,
         stage="yearly-models",
@@ -601,6 +943,7 @@ def _load_legacy_admin_yearly_models(
         worker_count=workers,
         worker_fn=_load_legacy_admin_yearly_models_chunk,
         worker_kwargs={"state_name": state_name, "level": level},
+        kind=kind,
     )
     rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
     if not rows:
@@ -623,135 +966,8 @@ def _build_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) ->
     return _safe_numeric_downcast(grouped)
 
 
-def _load_legacy_hydro_yearly_models(
-    *,
-    level: str,
-    sources: tuple[YearlyEnsembleSource, ...],
-    basin_map: dict[str, tuple[str, str]],
-    subbasin_map: dict[str, tuple[str, str, str, str]],
-    progress: BuildProgress,
-    label_prefix: str = "hydro",
-    workers: int = 1,
-) -> pd.DataFrame:
-    """Load hydro model-yearly rows that can be aggregated into optimized ensembles."""
-    if level not in {"basin", "sub_basin"}:
-        return pd.DataFrame()
-
-    if workers <= 1 or len(sources) <= 1:
-        rows: list[pd.DataFrame] = []
-        for source in sources:
-            row_df = _load_one_legacy_hydro_yearly_model_source(
-                source=source,
-                level=level,
-                basin_map=basin_map,
-                subbasin_map=subbasin_map,
-            )
-            if not row_df.empty:
-                rows.append(row_df)
-        if not rows:
-            return pd.DataFrame()
-        return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
-
-    progress.start_task(BuildTask(stage="yearly-ensemble", label=f"{label_prefix} | parallel hydro model reads"))
-    source_chunks = _chunk_tuple(sources, chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
-    chunk_results = _execute_parallel_chunks(
-        progress=progress,
-        stage="yearly-ensemble",
-        label_prefix=label_prefix,
-        chunks=source_chunks,
-        worker_count=workers,
-        worker_fn=_load_legacy_hydro_yearly_models_chunk,
-        worker_kwargs={
-            "level": level,
-            "basin_map": basin_map,
-            "subbasin_map": subbasin_map,
-        },
-    )
-    rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
-    if not rows:
-        return pd.DataFrame()
-    return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
-
-
-def _build_hydro_yearly_ensemble_from_models(model_df: pd.DataFrame, *, level: str) -> pd.DataFrame:
-    """Aggregate hydro model-yearly rows into optimized hydro yearly ensembles."""
-    if model_df.empty:
-        return pd.DataFrame()
-
-    if level == "basin":
-        grouped = (
-            model_df.groupby(["basin_id", "basin_name", "scenario", "year"], as_index=False)["value"]
-            .agg(mean="mean", median="median")
-            .sort_values(["basin_name", "scenario", "year"], kind="stable")
-            .reset_index(drop=True)
-        )
-        return _safe_numeric_downcast(grouped)
-
-    grouped = (
-        model_df.groupby(
-            ["basin_id", "basin_name", "subbasin_id", "subbasin_name", "scenario", "year"],
-            as_index=False,
-        )["value"]
-        .agg(mean="mean", median="median")
-        .sort_values(["basin_name", "subbasin_name", "scenario", "year"], kind="stable")
-        .reset_index(drop=True)
-    )
-    return _safe_numeric_downcast(grouped)
-
-
 def _normalized_key(*parts: str) -> str:
     return "|".join(alias(part) for part in parts)
-
-
-@lru_cache(maxsize=None)
-def _hydro_name_maps_cached(
-    data_dir_str: str,
-    slug: str,
-) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, str, str]]]:
-    """Build normalized hydro name -> id lookup maps from the legacy hydro masters."""
-    data_dir = Path(data_dir_str)
-    legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
-    hydro_root = legacy_root / "hydro"
-    basin_map: dict[str, tuple[str, str]] = {}
-    subbasin_map: dict[str, tuple[str, str, str, str]] = {}
-
-    basin_source = _legacy_master_source(hydro_root / LEGACY_MASTER_FILENAMES["basin"])
-    if basin_source is not None:
-        basin_df = _read_legacy_master(hydro_root / LEGACY_MASTER_FILENAMES["basin"])
-        if not basin_df.empty and {"basin_id", "basin_name"}.issubset(set(basin_df.columns)):
-            for _, row in basin_df[["basin_id", "basin_name"]].dropna().drop_duplicates().iterrows():
-                basin_name = str(row["basin_name"]).strip()
-                basin_map[alias(basin_name)] = (str(row["basin_id"]).strip(), basin_name)
-
-    sub_source = _legacy_master_source(hydro_root / LEGACY_MASTER_FILENAMES["sub_basin"])
-    if sub_source is not None:
-        sub_df = _read_legacy_master(hydro_root / LEGACY_MASTER_FILENAMES["sub_basin"])
-        expected = {"basin_id", "basin_name", "subbasin_id", "subbasin_name"}
-        if not sub_df.empty and expected.issubset(set(sub_df.columns)):
-            for _, row in sub_df[list(expected)].dropna().drop_duplicates().iterrows():
-                basin_name = str(row["basin_name"]).strip()
-                sub_name = str(row["subbasin_name"]).strip()
-                key = _normalized_key(basin_name, sub_name)
-                subbasin_map[key] = (
-                    str(row["basin_id"]).strip(),
-                    basin_name,
-                    str(row["subbasin_id"]).strip(),
-                    sub_name,
-                )
-                basin_map.setdefault(alias(basin_name), (str(row["basin_id"]).strip(), basin_name))
-
-    return basin_map, subbasin_map
-
-
-def _hydro_name_maps(
-    *,
-    data_dir: Path,
-    slug: str,
-    level: str,
-) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str, str, str]]]:
-    _ = level
-    basin_map, subbasin_map = _hydro_name_maps_cached(str(Path(data_dir).resolve()), slug)
-    return dict(basin_map), dict(subbasin_map)
 
 
 def _load_one_legacy_yearly_ensemble_source(
@@ -759,8 +975,6 @@ def _load_one_legacy_yearly_ensemble_source(
     source: YearlyEnsembleSource,
     level: str,
     state_name: Optional[str],
-    basin_map: Optional[dict[str, tuple[str, str]]] = None,
-    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
 ) -> pd.DataFrame:
     """Load one optimized yearly-ensemble frame from a legacy yearly source."""
     df = _normalize_legacy_ensemble_df(_read_yearly_csv(source.csv_path))
@@ -771,26 +985,8 @@ def _load_one_legacy_yearly_ensemble_source(
     df["scenario"] = str(source.scenario).strip().lower()
     if level == "district":
         df["district_key"] = _normalized_key(str(state_name or ""), source.name_1)
-    elif level == "block":
-        df["block_key"] = _normalized_key(str(state_name or ""), source.name_1, str(source.name_2 or ""))
-    elif level == "basin":
-        basin_lookup = basin_map or {}
-        basin_name = str(source.name_1).strip()
-        basin_id, basin_name_out = basin_lookup.get(alias(basin_name), ("", basin_name))
-        df["basin_id"] = basin_id
-        df["basin_name"] = basin_name_out
     else:
-        sub_lookup = subbasin_map or {}
-        basin_name = str(source.name_1).strip()
-        sub_name = str(source.name_2 or "").strip()
-        basin_id, basin_name_out, sub_id, sub_name_out = sub_lookup.get(
-            _normalized_key(basin_name, sub_name),
-            ("", basin_name, "", sub_name),
-        )
-        df["basin_id"] = basin_id
-        df["basin_name"] = basin_name_out
-        df["subbasin_id"] = sub_id
-        df["subbasin_name"] = sub_name_out
+        df["block_key"] = _normalized_key(str(state_name or ""), source.name_1, str(source.name_2 or ""))
     return df
 
 
@@ -800,8 +996,6 @@ def _load_legacy_yearly_ensemble_chunk(
     *,
     level: str,
     state_name: Optional[str],
-    basin_map: Optional[dict[str, tuple[str, str]]] = None,
-    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
 ) -> tuple[int, pd.DataFrame]:
     """Load one chunk of legacy yearly-ensemble sources in stable order."""
     rows: list[pd.DataFrame] = []
@@ -810,77 +1004,6 @@ def _load_legacy_yearly_ensemble_chunk(
             source=source,
             level=level,
             state_name=state_name,
-            basin_map=basin_map,
-            subbasin_map=subbasin_map,
-        )
-        if not row_df.empty:
-            rows.append(row_df)
-    if not rows:
-        return chunk_index, pd.DataFrame()
-    return chunk_index, pd.concat(rows, ignore_index=True, sort=False)
-
-
-def _load_one_legacy_hydro_yearly_model_source(
-    *,
-    source: YearlyEnsembleSource,
-    level: str,
-    basin_map: dict[str, tuple[str, str]],
-    subbasin_map: dict[str, tuple[str, str, str, str]],
-) -> pd.DataFrame:
-    """Load one hydro yearly model CSV into the optimized model-fallback schema."""
-    df = _read_yearly_csv(source.csv_path)
-    if df.empty:
-        return pd.DataFrame()
-    value_col = _extract_value_column(df)
-    if value_col is None or "year" not in df.columns:
-        return pd.DataFrame()
-
-    df = df.copy()
-    df["year"] = pd.to_numeric(df["year"], errors="coerce")
-    df["value"] = pd.to_numeric(df[value_col], errors="coerce")
-    df = df.dropna(subset=["year", "value"])
-    if df.empty:
-        return pd.DataFrame()
-
-    df["scenario"] = str(source.scenario).strip().lower()
-    df["model"] = str(source.model or "").strip()
-
-    if level == "basin":
-        basin_name = str(source.name_1).strip()
-        basin_id, basin_name_out = basin_map.get(alias(basin_name), ("", basin_name))
-        df["basin_id"] = basin_id
-        df["basin_name"] = basin_name_out
-        return df[["basin_id", "basin_name", "scenario", "model", "year", "value"]]
-
-    basin_name = str(source.name_1).strip()
-    sub_name = str(source.name_2 or "").strip()
-    basin_id, basin_name_out, sub_id, sub_name_out = subbasin_map.get(
-        _normalized_key(basin_name, sub_name),
-        ("", basin_name, "", sub_name),
-    )
-    df["basin_id"] = basin_id
-    df["basin_name"] = basin_name_out
-    df["subbasin_id"] = sub_id
-    df["subbasin_name"] = sub_name_out
-    return df[["basin_id", "basin_name", "subbasin_id", "subbasin_name", "scenario", "model", "year", "value"]]
-
-
-def _load_legacy_hydro_yearly_models_chunk(
-    chunk_index: int,
-    sources: tuple[YearlyEnsembleSource, ...],
-    *,
-    level: str,
-    basin_map: dict[str, tuple[str, str]],
-    subbasin_map: dict[str, tuple[str, str, str, str]],
-) -> tuple[int, pd.DataFrame]:
-    """Load one chunk of hydro yearly model sources in stable order."""
-    rows: list[pd.DataFrame] = []
-    for source in sources:
-        row_df = _load_one_legacy_hydro_yearly_model_source(
-            source=source,
-            level=level,
-            basin_map=basin_map,
-            subbasin_map=subbasin_map,
         )
         if not row_df.empty:
             rows.append(row_df)
@@ -894,15 +1017,11 @@ def _load_legacy_yearly_ensemble(
     level: str,
     state_name: Optional[str],
     sources: tuple[YearlyEnsembleSource, ...],
-    basin_map: Optional[dict[str, tuple[str, str]]] = None,
-    subbasin_map: Optional[dict[str, tuple[str, str, str, str]]] = None,
     progress: BuildProgress,
     label_prefix: str = "ensemble",
     workers: int = 1,
 ) -> pd.DataFrame:
     """Load optimized yearly-ensemble rows directly from legacy ensemble CSVs."""
-    basin_lookup = basin_map or {}
-    subbasin_lookup = subbasin_map or {}
     if workers <= 1 or len(sources) <= 1:
         rows: list[pd.DataFrame] = []
         for source in sources:
@@ -910,8 +1029,6 @@ def _load_legacy_yearly_ensemble(
                 source=source,
                 level=level,
                 state_name=state_name,
-                basin_map=basin_lookup,
-                subbasin_map=subbasin_lookup,
             )
             if not row_df.empty:
                 rows.append(row_df)
@@ -920,7 +1037,8 @@ def _load_legacy_yearly_ensemble(
         return _safe_numeric_downcast(pd.concat(rows, ignore_index=True, sort=False))
 
     progress.start_task(BuildTask(stage="yearly-ensemble", label=f"{label_prefix} | parallel ensemble reads"))
-    source_chunks = _chunk_tuple(sources, chunk_size=YEARLY_PARALLEL_CHUNK_SIZE)
+    kind = _yearly_executor_kind()
+    source_chunks = _chunk_tuple(sources, chunk_size=_yearly_chunk_size(len(sources), workers, kind))
     chunk_results = _execute_parallel_chunks(
         progress=progress,
         stage="yearly-ensemble",
@@ -931,9 +1049,8 @@ def _load_legacy_yearly_ensemble(
         worker_kwargs={
             "level": level,
             "state_name": state_name,
-            "basin_map": basin_lookup,
-            "subbasin_map": subbasin_lookup,
         },
+        kind=kind,
     )
     rows = [chunk_df for _, chunk_df in chunk_results if not chunk_df.empty]
     if not rows:
@@ -988,9 +1105,7 @@ def _copy_context_artifacts(*, tasks: tuple[BuildTask, ...], progress: BuildProg
 
         def _copy_one() -> None:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            if src.suffix.lower() == ".geojson":
-                shutil.copy2(src, dst)
-            elif src.suffix.lower() == ".parquet":
+            if src.suffix.lower() in {".geojson", ".parquet", ".png", ".json"}:
                 shutil.copy2(src, dst)
             else:
                 df = pd.read_csv(src)
@@ -999,13 +1114,23 @@ def _copy_context_artifacts(*, tasks: tuple[BuildTask, ...], progress: BuildProg
         _run_task(task, progress, _copy_one)
 
 
-def _geometry_tasks(*, data_dir: Path, selected_levels: set[str]) -> tuple[BuildTask, ...]:
+def _geometry_tasks(
+    *,
+    data_dir: Path,
+    selected_levels: set[str],
+    selected_admin_states: tuple[str, ...] = (),
+    include_shared_admin_artifacts: bool = True,
+) -> tuple[BuildTask, ...]:
     cfg = get_paths_config()
     tasks: list[BuildTask] = []
+    selected_admin_state_set = {str(state).strip() for state in selected_admin_states if str(state).strip()}
 
     if "district" in selected_levels:
         adm2 = ensure_adm2_columns(gpd.read_file(cfg.districts_path).to_crs(4326))
-        for state_name in sorted({str(v).strip() for v in adm2["state_name"].astype(str).tolist()}):
+        district_states = sorted({str(v).strip() for v in adm2["state_name"].astype(str).tolist()})
+        if selected_admin_state_set:
+            district_states = [state_name for state_name in district_states if state_name in selected_admin_state_set]
+        for state_name in district_states:
             tasks.append(
                 BuildTask(
                     stage="geometry",
@@ -1016,10 +1141,23 @@ def _geometry_tasks(*, data_dir: Path, selected_levels: set[str]) -> tuple[Build
                     target_path=optimized_geometry_path(level="district", state=state_name, data_dir=data_dir),
                 )
             )
+        if include_shared_admin_artifacts:
+            tasks.append(
+                BuildTask(
+                    stage="geometry",
+                    label="adm1 state polygons",
+                    level="adm1",
+                    source_path=Path(cfg.districts_path),
+                    target_path=optimized_adm1_path(data_dir=data_dir),
+                )
+            )
 
     if "block" in selected_levels:
         adm3 = ensure_adm3_columns(gpd.read_file(cfg.blocks_path).to_crs(4326))
-        for state_name in sorted({str(v).strip() for v in adm3["state_name"].astype(str).tolist()}):
+        block_states = sorted({str(v).strip() for v in adm3["state_name"].astype(str).tolist()})
+        if selected_admin_state_set:
+            block_states = [state_name for state_name in block_states if state_name in selected_admin_state_set]
+        for state_name in block_states:
             tasks.append(
                 BuildTask(
                     stage="geometry",
@@ -1031,54 +1169,17 @@ def _geometry_tasks(*, data_dir: Path, selected_levels: set[str]) -> tuple[Build
                 )
             )
 
-    if "basin" in selected_levels:
-        tasks.append(
-            BuildTask(
-                stage="geometry",
-                label="basin geometry",
-                level="basin",
-                source_path=Path(cfg.basins_path),
-                target_path=optimized_geometry_path(level="basin", data_dir=data_dir),
-            )
-        )
-
-    sub: Optional[gpd.GeoDataFrame] = None
-    if "sub_basin" in selected_levels or {"basin", "sub_basin"} & selected_levels:
-        sub = ensure_hydro_columns(gpd.read_file(cfg.subbasins_path).to_crs(4326), level="sub_basin")
-
-    if "sub_basin" in selected_levels and sub is not None:
-        for basin_id in sorted({str(v).strip() for v in sub["basin_id"].astype(str).tolist()}):
+    if "block" in selected_levels:
+        if include_shared_admin_artifacts:
             tasks.append(
                 BuildTask(
                     stage="geometry",
-                    label=f"sub-basin geometry | {basin_id}",
-                    level="sub_basin",
-                    source_path=Path(cfg.subbasins_path),
-                    target_path=optimized_geometry_path(level="sub_basin", basin_id=basin_id, data_dir=data_dir),
+                    label="admin block index",
+                    level="admin_block_index",
+                    source_path=Path(cfg.blocks_path),
+                    target_path=optimized_context_path("admin_block_index.parquet", data_dir=data_dir),
                 )
             )
-
-    if "block" in selected_levels:
-        tasks.append(
-            BuildTask(
-                stage="geometry",
-                label="admin block index",
-                level="admin_block_index",
-                source_path=Path(cfg.blocks_path),
-                target_path=optimized_context_path("admin_block_index.parquet", data_dir=data_dir),
-            )
-        )
-
-    if "sub_basin" in selected_levels and sub is not None:
-        tasks.append(
-            BuildTask(
-                stage="geometry",
-                label="hydro sub-basin index",
-                level="hydro_subbasin_index",
-                source_path=Path(cfg.subbasins_path),
-                target_path=optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir),
-            )
-        )
 
     return tuple(tasks)
 
@@ -1088,6 +1189,7 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
 
     task_map = {(task.level, task.state, str(task.target_path)): task for task in tasks}
 
+    adm2_for_adm1: Optional[gpd.GeoDataFrame] = None
     if any(task.level == "district" for task in tasks):
         adm2 = gpd.read_file(cfg.districts_path).to_crs(4326)
         adm2 = ensure_adm2_columns(adm2)
@@ -1095,6 +1197,7 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
             adm2["district_name"].astype(str).map(alias),
             sep="|",
         )
+        adm2_for_adm1 = adm2
         for state_name, state_gdf in adm2.groupby(adm2["state_name"].astype(str).str.strip(), dropna=False):
             out = _simplify_geometry(
                 state_gdf,
@@ -1105,6 +1208,20 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
             task = task_map.get(("district", str(state_name), str(out_path)))
             if task is not None:
                 _run_task(task, progress, lambda out=out, out_path=out_path: _write_geojson(out, out_path))
+
+    if any(task.level == "adm1" for task in tasks) and adm2_for_adm1 is not None:
+        from india_resilience_tool.data.adm2_loader import build_adm1_from_adm2
+
+        adm1 = build_adm1_from_adm2(adm2_for_adm1, state_col="state_name")
+        adm1["geometry"] = adm1["geometry"].simplify(
+            tolerance=float(SIMPLIFY_TOL_ADM1), preserve_topology=True
+        )
+        adm1_keep = [c for c in ("state_name", "shapeName") if c in adm1.columns]
+        adm1_out = adm1[[*adm1_keep, "geometry"]].reset_index(drop=True)
+        adm1_path = optimized_adm1_path(data_dir=data_dir)
+        adm1_task = task_map.get(("adm1", None, str(adm1_path)))
+        if adm1_task is not None:
+            _run_task(adm1_task, progress, lambda: _write_geojson(adm1_out, adm1_path))
 
     adm3: Optional[gpd.GeoDataFrame] = None
     if any(task.level in {"block", "admin_block_index"} for task in tasks):
@@ -1148,59 +1265,6 @@ def _write_geometry_bundle(*, data_dir: Path, tasks: tuple[BuildTask, ...], prog
                 admin_block_index_task,
                 progress,
                 lambda: _write_parquet(admin_block_index, admin_block_index_path),
-            )
-
-    if any(task.level == "basin" for task in tasks):
-        basin = gpd.read_file(cfg.basins_path).to_crs(4326)
-        basin = ensure_hydro_columns(basin, level="basin")
-        basin_out = _simplify_geometry(
-            basin,
-            keep_cols=["basin_id", "basin_name", "hydro_level"],
-            tolerance=SIMPLIFY_TOL_BASIN_RENDER,
-        )
-        basin_path = optimized_geometry_path(level="basin", data_dir=data_dir)
-        basin_task = task_map.get(("basin", None, str(basin_path)))
-        if basin_task is not None:
-            _run_task(basin_task, progress, lambda: _write_geojson(basin_out, basin_path))
-
-    sub: Optional[gpd.GeoDataFrame] = None
-    if any(task.level in {"sub_basin", "hydro_subbasin_index"} for task in tasks):
-        sub = gpd.read_file(cfg.subbasins_path).to_crs(4326)
-        sub = ensure_hydro_columns(sub, level="sub_basin")
-
-    if any(task.level == "sub_basin" for task in tasks) and sub is not None:
-        sub_out = _simplify_geometry(
-            sub,
-            keep_cols=["subbasin_id", "subbasin_code", "subbasin_name", "basin_id", "basin_name", "hydro_level"],
-            tolerance=SIMPLIFY_TOL_SUBBASIN_RENDER,
-        )
-        for basin_id, basin_gdf in sub_out.groupby("basin_id", dropna=False):
-            out_path = optimized_geometry_path(level="sub_basin", basin_id=str(basin_id), data_dir=data_dir)
-            task = task_map.get(("sub_basin", None, str(out_path)))
-            if task is not None:
-                _run_task(task, progress, lambda basin_gdf=basin_gdf, out_path=out_path: _write_geojson(basin_gdf, out_path))
-
-    if any(task.level == "hydro_subbasin_index" for task in tasks) and sub is not None:
-        hydro_subbasin_index = (
-            sub[["basin_id", "basin_name", "subbasin_id", "subbasin_name"]]
-            .copy()
-            .dropna(subset=["basin_id", "basin_name", "subbasin_id", "subbasin_name"])
-        )
-        for col in ("basin_id", "basin_name", "subbasin_id", "subbasin_name"):
-            hydro_subbasin_index[col] = hydro_subbasin_index[col].astype("string").str.strip()
-        hydro_subbasin_index = hydro_subbasin_index[
-            (hydro_subbasin_index["basin_id"] != "")
-            & (hydro_subbasin_index["basin_name"] != "")
-            & (hydro_subbasin_index["subbasin_id"] != "")
-            & (hydro_subbasin_index["subbasin_name"] != "")
-        ].drop_duplicates().sort_values(["basin_name", "subbasin_name"]).reset_index(drop=True)
-        hydro_subbasin_index_path = optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir)
-        hydro_subbasin_index_task = task_map.get(("hydro_subbasin_index", None, str(hydro_subbasin_index_path)))
-        if hydro_subbasin_index_task is not None:
-            _run_task(
-                hydro_subbasin_index_task,
-                progress,
-                lambda: _write_parquet(hydro_subbasin_index, hydro_subbasin_index_path),
             )
 
 
@@ -1253,10 +1317,20 @@ def _write_manifest(
         "summary_semantics": "bundle_inventory",
         "stats_contract": {
             "climate": ["mean", "median"],
+            "proposal_bundle": [
+                "mean",
+                "score",
+                "abs_score",
+                "chg_score",
+                "imp_score",
+                "available_rule_count",
+                "available_rule_weight_fraction",
+            ],
             "static_snapshot": ["mean"],
             "removed": ["std", "p05", "p95", "n_models", "values_per_model", "models"],
         },
         "summaries": _bundle_inventory_summaries(data_dir=data_dir),
+        "glance_view_model": glance_manifest_payload(data_dir=data_dir),
     }
     path = bundle_manifest_path(data_dir=data_dir)
 
@@ -1295,19 +1369,92 @@ def _selected_levels(levels: Optional[list[str]]) -> tuple[str, ...]:
     return tuple(resolved or LEVEL_SELECTIONS["all"])
 
 
+def _effective_levels(levels: Optional[list[str]], *, states: Optional[list[str]]) -> Optional[list[str]]:
+    """Resolve the requested level filter, defaulting scoped state runs to admin."""
+    if states and not levels:
+        return ["admin"]
+    return levels
+
+
+def _normalized_state_key(value: str) -> str:
+    """Return the canonical comparison token for one admin state name."""
+    return alias(normalize_name(str(value or "").strip()))
+
+
+def _resolve_requested_state_names(
+    discovered_states: Iterable[str],
+    requested_states: Optional[list[str]],
+) -> tuple[str, ...]:
+    """Resolve user-requested states to discovered legacy state root names."""
+    discovered = [str(state).strip() for state in discovered_states if str(state).strip()]
+    if not requested_states:
+        return tuple(discovered)
+
+    normalized_map: dict[str, list[str]] = {}
+    for state in discovered:
+        normalized_map.setdefault(_normalized_state_key(state), []).append(state)
+
+    resolved: list[str] = []
+    for requested in requested_states:
+        token = _normalized_state_key(requested)
+        matches = sorted(normalized_map.get(token, []))
+        if not matches:
+            raise ValueError(
+                f"Requested state {requested!r} was not found in discovered legacy roots: {', '.join(sorted(discovered))}"
+            )
+        if len(matches) > 1:
+            raise ValueError(
+                f"Requested state {requested!r} is ambiguous across discovered legacy roots: {', '.join(matches)}"
+            )
+        if matches[0] not in resolved:
+            resolved.append(matches[0])
+    return tuple(resolved)
+
+
+def _state_scoped_admin_run(*, states: Optional[list[str]], levels: Optional[list[str]]) -> bool:
+    """Return True when the request is scoped to admin state-owned artifacts."""
+    if not states:
+        return False
+    return bool({"district", "block"} & set(_selected_levels(_effective_levels(levels, states=states))))
+
+
+def _admin_sources_for_glance_slug(slug: str, *, data_dir: Path) -> bool:
+    """Return whether a dashboard composite has district master inputs for Glance."""
+    optimized_root = resolve_optimized_metric_root(slug, data_dir=data_dir)
+    if optimized_root.exists():
+        if any(
+            path.exists()
+            for path in optimized_master_sources_from_metric_root(
+                optimized_root,
+                level="district",
+                selected_state="All",
+            )
+        ):
+            return True
+
+    legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
+    if not legacy_root.exists():
+        return False
+    master_name = LEGACY_MASTER_FILENAMES["district"]
+    return any(_legacy_master_source(state_root / master_name) is not None for state_root in _iter_state_dirs(legacy_root))
+
+
 def _build_execution_plan(
     *,
     data_dir: Path,
     metrics: Optional[list[str]] = None,
     levels: Optional[list[str]] = None,
+    states: Optional[list[str]] = None,
     include_geometry: bool = True,
     include_context: bool = True,
+    include_shared_admin_artifacts: bool = True,
 ) -> BuildPlan:
     summaries_seed: list[MetricBundleSummary] = []
     master_tasks: list[BuildTask] = []
     yearly_model_jobs: list[YearlyModelsJob] = []
     yearly_ensemble_jobs: list[YearlyEnsembleJob] = []
-    selected_levels = set(_selected_levels(levels))
+    selected_levels = set(_selected_levels(_effective_levels(levels, states=states)))
+    selected_admin_state_names_union: set[str] = set()
 
     for slug in _selected_slugs(metrics):
         legacy_root = resolve_processed_root(slug, data_dir=data_dir, mode="portfolio")
@@ -1325,7 +1472,15 @@ def _build_execution_plan(
             )
         )
 
-        for state_root in _iter_state_dirs(legacy_root):
+        discovered_state_roots = tuple(_iter_state_dirs(legacy_root))
+        selected_state_names = _resolve_requested_state_names(
+            (state_root.name for state_root in discovered_state_roots),
+            states,
+        )
+        selected_admin_state_names_union.update(selected_state_names)
+        for state_root in discovered_state_roots:
+            if selected_state_names and state_root.name not in set(selected_state_names):
+                continue
             for level in ("district", "block"):
                 if level not in selected_levels:
                     continue
@@ -1433,82 +1588,9 @@ def _build_execution_plan(
                         )
                     )
 
-        hydro_root = legacy_root / "hydro"
-        if hydro_root.exists():
-            for level in ("basin", "sub_basin"):
-                if level not in selected_levels:
-                    continue
-                source = _legacy_master_source(hydro_root / LEGACY_MASTER_FILENAMES[level])
-                if source is None:
-                    continue
-                master_tasks.append(
-                    BuildTask(
-                        stage="masters",
-                        label=f"{slug} | hydro | {level}",
-                        slug=slug,
-                        level=level,
-                        source_path=source,
-                        target_path=optimized_master_path(slug, level=level, data_dir=data_dir),
-                    )
-                )
-                if bool(varcfg.get("supports_yearly_trend", True)):
-                    hydro_sources = tuple(
-                        YearlyEnsembleSource(
-                            scenario=scenario,
-                            csv_path=csv_path,
-                            name_1=basin_name,
-                            name_2=subbasin_name,
-                        )
-                        for basin_name, subbasin_name, scenario, csv_path in iter_hydro_yearly_ensemble_files(
-                            ts_root=legacy_root,
-                            level=level,
-                        )
-                    )
-                    if hydro_sources:
-                        yearly_ensemble_jobs.append(
-                            YearlyEnsembleJob(
-                                slug=slug,
-                                level=level,
-                                target_path=optimized_yearly_ensemble_path(
-                                    slug,
-                                    level=level,
-                                    data_dir=data_dir,
-                                ),
-                                source_mode="legacy_ensemble",
-                                sources=hydro_sources,
-                            )
-                        )
-                    else:
-                        hydro_model_sources = tuple(
-                            YearlyEnsembleSource(
-                                scenario=scenario,
-                                csv_path=csv_path,
-                                name_1=basin_name,
-                                name_2=subbasin_name,
-                                model=model_name,
-                            )
-                            for basin_name, subbasin_name, model_name, scenario, csv_path in iter_hydro_yearly_model_files(
-                                ts_root=legacy_root,
-                                level=level,
-                            )
-                        )
-                        if hydro_model_sources:
-                            yearly_ensemble_jobs.append(
-                                YearlyEnsembleJob(
-                                    slug=slug,
-                                    level=level,
-                                    target_path=optimized_yearly_ensemble_path(
-                                        slug,
-                                        level=level,
-                                        data_dir=data_dir,
-                                    ),
-                                    source_mode="hydro_model_fallback",
-                                    sources=hydro_model_sources,
-                                )
-                            )
-
     context_tasks: list[BuildTask] = []
-    if include_context:
+    scoped_admin_run = _state_scoped_admin_run(states=states, levels=levels)
+    if include_context and (not scoped_admin_run or include_shared_admin_artifacts):
         for src, dst in _context_map(data_dir=data_dir).items():
             if not src.exists():
                 continue
@@ -1522,14 +1604,33 @@ def _build_execution_plan(
             )
 
     geometry_tasks = (
-        _geometry_tasks(data_dir=data_dir, selected_levels=selected_levels)
+        _geometry_tasks(
+            data_dir=data_dir,
+            selected_levels=selected_levels,
+            selected_admin_states=tuple(sorted(selected_admin_state_names_union)),
+            include_shared_admin_artifacts=(not scoped_admin_run or include_shared_admin_artifacts),
+        )
         if include_geometry
         else tuple()
     )
+    glance_slugs: tuple[str, ...] = ()
+    if include_context and "district" in selected_levels and (not scoped_admin_run or include_shared_admin_artifacts):
+        selected_metric_set = {str(slug).strip() for slug in metrics or [] if str(slug).strip()}
+        dashboard_specs = [
+            spec
+            for spec in get_dashboard_bundle_specs()
+            if spec.show_in_landing
+            and (not selected_metric_set or spec.composite_slug in selected_metric_set)
+        ]
+        glance_slugs = tuple(
+            spec.composite_slug
+            for spec in dashboard_specs
+            if _admin_sources_for_glance_slug(spec.composite_slug, data_dir=data_dir)
+        )
     manifest_task = BuildTask(
         stage="manifest",
         label="bundle manifest",
-        target_path=bundle_manifest_path(data_dir=data_dir),
+        target_path=None if scoped_admin_run else bundle_manifest_path(data_dir=data_dir),
     )
 
     return BuildPlan(
@@ -1539,6 +1640,7 @@ def _build_execution_plan(
         yearly_ensemble_jobs=tuple(yearly_ensemble_jobs),
         context_tasks=tuple(context_tasks),
         geometry_tasks=tuple(geometry_tasks),
+        glance_slugs=glance_slugs,
         manifest_task=manifest_task,
     )
 
@@ -1559,6 +1661,7 @@ def _validate_build_request(
     plan: BuildPlan,
     metrics: Optional[list[str]],
     levels: Optional[list[str]],
+    states: Optional[list[str]],
     overwrite: bool,
     prune_scope: bool,
     full_rebuild: bool,
@@ -1579,6 +1682,8 @@ def _validate_build_request(
         raise ValueError("--full-rebuild cannot be combined with --skip-geometry.")
     if full_rebuild and not include_context:
         raise ValueError("--full-rebuild cannot be combined with --skip-context.")
+    if full_rebuild and states:
+        raise ValueError("--full-rebuild cannot be combined with --state.")
 
     explicit_selection = bool(metrics) or bool(levels)
     metric_task_count = _metric_task_count(plan)
@@ -1609,77 +1714,34 @@ def _iter_unique_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
     return tuple(ordered)
 
 
-def _owned_scope_paths(
-    *,
-    data_dir: Path,
-    slugs: Iterable[str],
-    levels: Iterable[str],
-    include_geometry: bool,
-    include_context: bool,
-) -> tuple[Path, ...]:
-    bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
-    metrics_root = bundle_root / "metrics"
+def _state_owned_plan_paths(plan: BuildPlan) -> tuple[Path, ...]:
+    """Return exact state-owned target paths represented by the execution plan."""
     owned: list[Path] = []
-
-    for slug in slugs:
-        metric_root = metrics_root / slug
-        if "district" in levels:
-            owned.extend(
-                [
-                    metric_root / "masters" / "admin" / "district",
-                    metric_root / "yearly_models" / "admin" / "district",
-                    metric_root / "yearly_ensemble" / "admin" / "district",
-                ]
-            )
-        if "block" in levels:
-            owned.extend(
-                [
-                    metric_root / "masters" / "admin" / "block",
-                    metric_root / "yearly_models" / "admin" / "block",
-                    metric_root / "yearly_ensemble" / "admin" / "block",
-                ]
-            )
-        if "basin" in levels:
-            owned.extend(
-                [
-                    metric_root / "masters" / "hydro" / "basin",
-                    metric_root / "yearly_ensemble" / "hydro" / "basin",
-                ]
-            )
-        if "sub_basin" in levels:
-            owned.extend(
-                [
-                    metric_root / "masters" / "hydro" / "sub_basin",
-                    metric_root / "yearly_ensemble" / "hydro" / "sub_basin",
-                ]
-            )
-
-    if include_geometry:
-        geometry_root = bundle_root / "geometry"
-        if "district" in levels:
-            owned.append(geometry_root / "admin" / "district")
-        if "block" in levels:
-            owned.append(geometry_root / "admin" / "block")
-        if "basin" in levels:
-            owned.append(geometry_root / "hydro" / "basin.geojson")
-        if "sub_basin" in levels:
-            owned.append(geometry_root / "hydro" / "sub_basin")
-
-    if include_context:
-        if "block" in levels:
-            owned.append(optimized_context_path("admin_block_index.parquet", data_dir=data_dir))
-        if "sub_basin" in levels:
-            owned.append(optimized_context_path("hydro_subbasin_index.parquet", data_dir=data_dir))
-
+    for task in plan.master_tasks:
+        if task.target_path is not None:
+            owned.append(task.target_path)
+    for job in plan.yearly_model_jobs:
+        owned.append(job.models_path)
+    for job in plan.yearly_ensemble_jobs:
+        owned.append(job.target_path)
+    for task in plan.geometry_tasks:
+        if task.target_path is None:
+            continue
+        if task.level in {"district", "block"}:
+            owned.append(task.target_path)
     return _iter_unique_paths(owned)
 
 
 def _delete_owned_paths(paths: Iterable[Path]) -> None:
     for path in paths:
-        if path.exists() and path.is_dir():
-            remove_tree(path)
-            continue
         unlink_file(path)
+        parent = path.parent
+        while parent.exists() and parent.is_dir() and parent != parent.parent:
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
 
 
 def _invalidate_bundle_metadata(*, data_dir: Path) -> None:
@@ -1716,7 +1778,13 @@ def _validate_full_rebuild_root(*, bundle_root: Path, data_dir: Path) -> None:
         raise ValueError(f"Refusing to delete custom root that does not look like an optimized bundle: {resolved_root}")
 
 
-def _collect_write_targets(*, plan: BuildPlan, data_dir: Path, run_audit: bool) -> tuple[Path, ...]:
+def _collect_write_targets(
+    *,
+    plan: BuildPlan,
+    data_dir: Path,
+    run_audit: bool,
+    report_path: Optional[Path] = None,
+) -> tuple[Path, ...]:
     targets: list[Path] = []
     for task in plan.master_tasks:
         if task.target_path is not None:
@@ -1731,10 +1799,19 @@ def _collect_write_targets(*, plan: BuildPlan, data_dir: Path, run_audit: bool) 
     for task in plan.geometry_tasks:
         if task.target_path is not None:
             targets.append(task.target_path)
+    for slug in plan.glance_slugs:
+        for result in build_glance_view_models(
+            data_dir=data_dir,
+            composite_slugs=[slug],
+            overwrite=True,
+            dry_run=True,
+        ):
+            for filename in GLANCE_FILENAMES:
+                targets.append(result.output_root / filename)
     if plan.manifest_task.target_path is not None:
         targets.append(plan.manifest_task.target_path)
-    if run_audit:
-        targets.append(_parity_report_path(data_dir=data_dir))
+    if run_audit and report_path is not None:
+        targets.append(report_path)
     return _iter_unique_paths(targets)
 
 
@@ -1749,27 +1826,22 @@ def _print_dry_run(
     include_geometry: bool,
     include_context: bool,
     run_audit: bool,
+    report_path: Optional[Path],
     levels: Optional[list[str]],
 ) -> None:
-    selected_slugs = [seed.slug for seed in plan.summaries_seed]
-    selected_levels = _selected_levels(levels)
     print("PROCESSED OPTIMISED DRY RUN")
     print(f"data_dir: {Path(data_dir).resolve()}")
     print(f"bundle_root: {bundle_root}")
     if full_rebuild:
         print(f"full_rebuild_delete_root: {bundle_root}")
-    print(f"metadata_invalidated: {bundle_manifest_path(data_dir=data_dir)}")
-    print(f"metadata_invalidated: {_parity_report_path(data_dir=data_dir)}")
+    if plan.manifest_task.target_path is not None:
+        print(f"metadata_invalidated: {bundle_manifest_path(data_dir=data_dir)}")
+    if report_path is not None:
+        print(f"metadata_invalidated: {report_path}")
     if overwrite and prune_scope:
-        for path in _owned_scope_paths(
-            data_dir=data_dir,
-            slugs=selected_slugs,
-            levels=selected_levels,
-            include_geometry=include_geometry,
-            include_context=include_context,
-        ):
+        for path in _state_owned_plan_paths(plan):
             print(f"scope_prune: {path}")
-    for path in _collect_write_targets(plan=plan, data_dir=data_dir, run_audit=run_audit):
+    for path in _collect_write_targets(plan=plan, data_dir=data_dir, run_audit=run_audit, report_path=report_path):
         print(f"write_target: {path}")
 
 
@@ -1777,11 +1849,7 @@ def _required_columns_for_master(level: str) -> set[str]:
     level_norm = str(level).strip().lower()
     if level_norm == "district":
         return {"state", "district", "district_key"}
-    if level_norm == "block":
-        return {"state", "district", "block", "block_key"}
-    if level_norm == "basin":
-        return {"basin_id", "basin_name"}
-    return {"basin_id", "basin_name", "subbasin_id", "subbasin_name"}
+    return {"state", "district", "block", "block_key"}
 
 
 def _required_columns_for_yearly_models(level: str) -> set[str]:
@@ -1793,11 +1861,7 @@ def _required_columns_for_yearly_ensemble(level: str) -> set[str]:
     level_norm = str(level).strip().lower()
     if level_norm == "district":
         return {"district_key", "scenario", "year", "mean"}
-    if level_norm == "block":
-        return {"block_key", "scenario", "year", "mean"}
-    if level_norm == "basin":
-        return {"basin_name", "scenario", "year", "mean"}
-    return {"basin_name", "subbasin_name", "scenario", "year", "mean"}
+    return {"block_key", "scenario", "year", "mean"}
 
 
 def _table_has_required_columns(path: Path, required_columns: set[str]) -> tuple[bool, list[str]]:
@@ -1811,22 +1875,66 @@ def _table_has_required_columns(path: Path, required_columns: set[str]) -> tuple
     return not missing, missing
 
 
+
+def _issue(
+    *,
+    stage: str,
+    slug: str,
+    level: str,
+    target: Path | str,
+    missing_columns: list[str] | None = None,
+    severity: str = "error",
+    reason: str = "",
+) -> dict[str, str | list[str]]:
+    """Build one parity issue payload with a stable severity field."""
+    payload: dict[str, str | list[str]] = {
+        "stage": stage,
+        "slug": slug,
+        "level": level,
+        "target": str(target),
+        "missing_columns": missing_columns or [],
+        "severity": severity,
+    }
+    if reason:
+        payload["reason"] = reason
+    return payload
+
+
+def _state_names_for_block_yearly_model_audit(
+    *,
+    data_dir: Path,
+    slug: str,
+    requested_states: Optional[list[str]],
+) -> tuple[str, ...]:
+    if requested_states:
+        return tuple(str(state).strip() for state in requested_states if str(state).strip())
+    level_dir = resolve_optimized_metric_root(slug, data_dir=data_dir) / "yearly_ensemble" / "admin" / "block"
+    return tuple(sorted(path.stem.removeprefix("state=") for path in level_dir.glob("state=*.parquet")))
+
 def audit_processed_optimised_parity(
     *,
     data_dir: Path,
     metrics: Optional[list[str]] = None,
     levels: Optional[list[str]] = None,
+    states: Optional[list[str]] = None,
     include_geometry: bool = True,
     include_context: bool = True,
+    include_shared_admin_artifacts: bool = True,
     write_report: bool = True,
+    report_path: Optional[Path] = None,
+    require_block_yearly_models: bool = False,
 ) -> dict:
     """Validate that optimized artifacts exist for every dashboard-visible legacy source."""
+    effective_levels = _effective_levels(levels, states=states)
+    scoped_admin_run = _state_scoped_admin_run(states=states, levels=effective_levels)
     plan = _build_execution_plan(
         data_dir=data_dir,
         metrics=metrics,
-        levels=levels,
+        levels=effective_levels,
+        states=states,
         include_geometry=include_geometry,
         include_context=include_context,
+        include_shared_admin_artifacts=include_shared_admin_artifacts,
     )
     bundle_root = resolve_optimized_bundle_root(data_dir=data_dir)
     issues: list[dict[str, str | list[str]]] = []
@@ -1885,6 +1993,27 @@ def audit_processed_optimised_parity(
                 }
             )
 
+    for slug in plan.glance_slugs:
+        for result in build_glance_view_models(
+            data_dir=data_dir,
+            composite_slugs=[slug],
+            overwrite=True,
+            dry_run=True,
+        ):
+            for filename in GLANCE_FILENAMES:
+                path = result.output_root / filename
+                ok, missing_cols = _table_has_required_columns(path, GLANCE_REQUIRED_COLUMNS[filename])
+                if not ok:
+                    issues.append(
+                        {
+                            "stage": "glance",
+                            "slug": slug,
+                            "level": "district",
+                            "target": str(path),
+                            "missing_columns": missing_cols,
+                        }
+                    )
+
     for task in plan.geometry_tasks:
         if task.target_path is not None and not task.target_path.exists():
             issues.append(
@@ -1897,7 +2026,7 @@ def audit_processed_optimised_parity(
                 }
             )
 
-    if not plan.manifest_task.target_path or not plan.manifest_task.target_path.exists():
+    if plan.manifest_task.target_path is not None and not plan.manifest_task.target_path.exists():
         issues.append(
             {
                 "stage": "manifest",
@@ -1908,6 +2037,66 @@ def audit_processed_optimised_parity(
             }
         )
 
+
+    # Non-fatal presence check: the precomputed area-weighted state-values table
+    # is an optional read-path accelerator (the app falls back to live
+    # computation), so its absence is a warning, not a publish-blocking error.
+    _state_values_seen: set[tuple[str, str]] = set()
+    for task in plan.master_tasks:
+        slug = str(task.slug or "").strip()
+        level = str(task.level or "").strip().lower()
+        if not slug or level not in {"district", "block"}:
+            continue
+        if (slug, level) in _state_values_seen:
+            continue
+        _state_values_seen.add((slug, level))
+        state_values_target = optimized_state_values_path(slug, level=level, data_dir=data_dir)
+        if not state_values_target.exists():
+            issues.append(
+                _issue(
+                    stage="state-values",
+                    slug=slug,
+                    level=level,
+                    target=state_values_target,
+                    severity="warning",
+                    reason="precomputed_state_values_missing",
+                )
+            )
+
+    if require_block_yearly_models and "block" in set(_selected_levels(effective_levels)):
+        for slug in _selected_slugs(metrics):
+            for state_name in _state_names_for_block_yearly_model_audit(
+                data_dir=data_dir,
+                slug=slug,
+                requested_states=states,
+            ):
+                ensemble_path = optimized_yearly_ensemble_path(
+                    slug,
+                    level="block",
+                    state=state_name,
+                    data_dir=data_dir,
+                )
+                models_path = optimized_yearly_models_path(
+                    slug,
+                    level="block",
+                    state=state_name,
+                    data_dir=data_dir,
+                )
+                if ensemble_path.exists() and not models_path.exists():
+                    issues.append(
+                        _issue(
+                            stage="yearly-models",
+                            slug=slug,
+                            level="block",
+                            target=models_path,
+                            severity="error",
+                            reason="block_yearly_ensemble_without_yearly_models",
+                        )
+                    )
+
+    for issue in issues:
+        issue.setdefault("severity", "error")
+
     report = {
         "bundle_root": str(bundle_root),
         "metrics_considered": len(plan.summaries_seed),
@@ -1916,14 +2105,17 @@ def audit_processed_optimised_parity(
         "expected_yearly_ensemble_outputs": len(plan.yearly_ensemble_jobs),
         "expected_context_outputs": len(plan.context_tasks),
         "expected_geometry_outputs": len(plan.geometry_tasks),
+        "expected_glance_outputs": len(plan.glance_slugs) * len(GLANCE_FILENAMES),
         "issue_count": len(issues),
         "issues": issues,
     }
 
-    if write_report:
-        report_path = bundle_root / "parity_report.json"
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    report_target = report_path
+    if report_target is None and write_report and not scoped_admin_run:
+        report_target = bundle_root / "parity_report.json"
+    if report_target is not None:
+        report_target.parent.mkdir(parents=True, exist_ok=True)
+        report_target.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
 
     return report
 
@@ -1933,6 +2125,7 @@ def build_processed_optimised_bundle(
     data_dir: Path,
     metrics: Optional[list[str]] = None,
     levels: Optional[list[str]] = None,
+    states: Optional[list[str]] = None,
     workers: Optional[int] = None,
     overwrite: bool = False,
     prune_scope: bool = False,
@@ -1940,24 +2133,31 @@ def build_processed_optimised_bundle(
     dry_run: bool = False,
     include_geometry: bool = True,
     include_context: bool = True,
+    include_shared_admin_artifacts: bool = True,
     show_progress: Optional[bool] = None,
     run_audit: bool = True,
+    report_path: Optional[Path] = None,
 ) -> list[MetricBundleSummary]:
     """
     Build the optimized runtime bundle from the current legacy processed tree.
     """
+    effective_levels = _effective_levels(levels, states=states)
+    scoped_admin_run = _state_scoped_admin_run(states=states, levels=effective_levels)
     plan = _build_execution_plan(
         data_dir=data_dir,
         metrics=metrics,
-        levels=levels,
+        levels=effective_levels,
+        states=states,
         include_geometry=include_geometry,
         include_context=include_context,
+        include_shared_admin_artifacts=include_shared_admin_artifacts,
     )
     _validate_build_request(
         data_dir=data_dir,
         plan=plan,
         metrics=metrics,
-        levels=levels,
+        levels=effective_levels,
+        states=states,
         overwrite=overwrite,
         prune_scope=prune_scope,
         full_rebuild=full_rebuild,
@@ -1993,31 +2193,27 @@ def build_processed_optimised_bundle(
             include_geometry=include_geometry,
             include_context=include_context,
             run_audit=run_audit,
-            levels=levels,
+            report_path=report_path,
+            levels=effective_levels,
         )
         return [MetricBundleSummary(**payload) for payload in summaries_map.values()]
 
     if full_rebuild:
         _validate_full_rebuild_root(bundle_root=bundle_root, data_dir=data_dir)
         remove_tree(bundle_root)
-    else:
+    elif not scoped_admin_run:
         _invalidate_bundle_metadata(data_dir=data_dir)
         if overwrite and prune_scope:
-            _delete_owned_paths(
-                _owned_scope_paths(
-                    data_dir=data_dir,
-                    slugs=[seed.slug for seed in plan.summaries_seed],
-                    levels=_selected_levels(levels),
-                    include_geometry=include_geometry,
-                    include_context=include_context,
-                )
-            )
+            _delete_owned_paths(_state_owned_plan_paths(plan))
+    elif overwrite and prune_scope:
+        _delete_owned_paths(_state_owned_plan_paths(plan))
 
     progress = BuildProgress(plan, enabled=_progress_enabled(show_progress))
     progress.print_plan_summary()
     resolved_workers = resolve_build_workers(workers)
 
     try:
+        roster_violations: dict = {}
         for task in plan.master_tasks:
             slug = task.slug or ""
             varcfg = VARIABLES.get(slug, {})
@@ -2031,10 +2227,15 @@ def build_processed_optimised_bundle(
                 df = _read_legacy_master(source)
                 if df.empty:
                     return
-                out = _select_master_columns(df, level=str(task.level), supported_stats=supported_stats)
+                out = _select_master_columns(df, slug=slug, level=str(task.level), supported_stats=supported_stats)
                 if out.empty:
                     return
-                _write_parquet(out, target)
+                frame, offenders = _check_canonical_roster(out, slug=slug, level=str(task.level))
+                if offenders:
+                    roster_violations.setdefault(slug, []).extend(offenders)
+                if frame is None or frame.empty:
+                    return
+                _write_parquet(frame, target)
                 summaries_map[slug]["wrote_masters"] = True
 
             _run_task(task, progress, _write_master)
@@ -2067,43 +2268,19 @@ def build_processed_optimised_bundle(
             _run_task(model_task, progress, _write_models)
 
         for job in plan.yearly_ensemble_jobs:
-            label_prefix = f"{job.slug} | {job.state or 'hydro'} | {job.level}"
-            basin_map: dict[str, tuple[str, str]] = {}
-            subbasin_map: dict[str, tuple[str, str, str, str]] = {}
-            if job.level in {"basin", "sub_basin"}:
-                basin_map, subbasin_map = _hydro_name_maps(
-                    data_dir=data_dir,
-                    slug=job.slug,
-                    level=job.level,
-                )
-
-            if job.source_mode == "hydro_model_fallback":
-                hydro_model_df = _load_legacy_hydro_yearly_models(
-                    level=job.level,
-                    sources=job.sources,
-                    basin_map=basin_map,
-                    subbasin_map=subbasin_map,
-                    progress=progress,
-                    label_prefix=label_prefix,
-                    workers=resolved_workers,
-                )
-                ensemble_df = pd.DataFrame()
-            else:
-                ensemble_df = _load_legacy_yearly_ensemble(
-                    level=job.level,
-                    state_name=job.state,
-                    sources=job.sources,
-                    basin_map=basin_map,
-                    subbasin_map=subbasin_map,
-                    progress=progress,
-                    label_prefix=label_prefix,
-                    workers=resolved_workers,
-                )
-                hydro_model_df = pd.DataFrame()
+            label_prefix = f"{job.slug} | {job.state} | {job.level}"
+            ensemble_df = _load_legacy_yearly_ensemble(
+                level=job.level,
+                state_name=job.state,
+                sources=job.sources,
+                progress=progress,
+                label_prefix=label_prefix,
+                workers=resolved_workers,
+            )
 
             ensemble_task = BuildTask(
                 stage="yearly-ensemble",
-                label=f"{job.slug} | {job.state or 'hydro'} | {job.level} | ensemble parquet",
+                label=f"{job.slug} | {job.state} | {job.level} | ensemble parquet",
                 slug=job.slug,
                 state=job.state,
                 level=job.level,
@@ -2111,13 +2288,6 @@ def build_processed_optimised_bundle(
             )
 
             def _write_ensemble() -> None:
-                if job.source_mode == "hydro_model_fallback":
-                    derived_df = _build_hydro_yearly_ensemble_from_models(hydro_model_df, level=job.level)
-                    if derived_df.empty:
-                        return
-                    _write_parquet(derived_df, job.target_path)
-                    summaries_map[job.slug]["wrote_yearly_ensemble"] = True
-                    return
                 if ensemble_df.empty:
                     return
                 _write_parquet(_safe_numeric_downcast(ensemble_df), job.target_path)
@@ -2127,30 +2297,49 @@ def build_processed_optimised_bundle(
 
         if include_context:
             _copy_context_artifacts(tasks=plan.context_tasks, progress=progress)
+            for slug in plan.glance_slugs:
+                task = BuildTask(stage="glance", label=f"glance | {slug}", slug=slug)
+
+                def _write_glance(slug=slug) -> None:
+                    build_glance_view_models(
+                        data_dir=data_dir,
+                        composite_slugs=[slug],
+                        overwrite=overwrite,
+                        dry_run=False,
+                    )
+
+                _run_task(task, progress, _write_glance)
         if include_geometry:
             _write_geometry_bundle(data_dir=data_dir, tasks=plan.geometry_tasks, progress=progress)
 
         summaries = [MetricBundleSummary(**payload) for payload in summaries_map.values()]
-        _write_manifest(
-            data_dir=data_dir,
-            progress=progress,
-            task=plan.manifest_task,
-        )
+        if plan.manifest_task.target_path is not None:
+            _write_manifest(
+                data_dir=data_dir,
+                progress=progress,
+                task=plan.manifest_task,
+            )
         progress.close()
         if run_audit:
             parity = audit_processed_optimised_parity(
                 data_dir=data_dir,
                 metrics=metrics,
-                levels=levels,
+                levels=effective_levels,
+                states=states,
                 include_geometry=include_geometry,
                 include_context=include_context,
-                write_report=True,
+                include_shared_admin_artifacts=include_shared_admin_artifacts,
+                write_report=not scoped_admin_run and report_path is None,
+                report_path=report_path,
+                require_block_yearly_models=False,
             )
             print(
                 "PARITY AUDIT "
                 f"(metrics={parity['metrics_considered']}, issues={parity['issue_count']}, "
-                f"report={resolve_optimized_bundle_root(data_dir=data_dir) / 'parity_report.json'})"
+                f"report={report_path or (resolve_optimized_bundle_root(data_dir=data_dir) / 'parity_report.json' if not scoped_admin_run else 'not-written')})"
             )
+        if roster_violations and _roster_gate_mode() == "strict":
+            raise CanonicalRosterError(_roster_violations_report(roster_violations))
         return summaries
     except Exception:
         progress.close()
@@ -2161,6 +2350,7 @@ def build_processed_optimised_bundle(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build the processed_optimised runtime bundle.")
     parser.add_argument("--metric", action="append", dest="metrics", help="One metric slug to include. Repeatable.")
+    parser.add_argument("--state", action="append", dest="states", help="One admin state to include. Repeatable.")
     parser.add_argument(
         "--level",
         action="append",
@@ -2190,7 +2380,17 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--skip-geometry", action="store_true", help="Skip optimized geometry generation.")
     parser.add_argument("--skip-context", action="store_true", help="Skip optimized context artifacts.")
+    parser.add_argument(
+        "--include-shared-admin-artifacts",
+        action="store_true",
+        help="With --state, also rebuild shared-global admin artifacts such as adm1, admin_block_index, and Glance.",
+    )
     parser.add_argument("--skip-audit", action="store_true", help="Skip the post-build parity audit.")
+    parser.add_argument(
+        "--report-path",
+        type=Path,
+        help="Explicit parity report output path. Scoped --state runs leave the global report untouched unless this is provided.",
+    )
     parser.add_argument(
         "--workers",
         type=int,
@@ -2208,6 +2408,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         data_dir=data_dir,
         metrics=args.metrics,
         levels=args.levels,
+        states=args.states,
         workers=args.workers,
         overwrite=bool(args.overwrite),
         prune_scope=bool(args.prune_scope),
@@ -2215,8 +2416,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         dry_run=bool(args.dry_run),
         include_geometry=not bool(args.skip_geometry),
         include_context=not bool(args.skip_context),
+        include_shared_admin_artifacts=bool(args.include_shared_admin_artifacts),
         show_progress=False if bool(args.no_progress) else None,
         run_audit=not bool(args.skip_audit),
+        report_path=args.report_path.expanduser().resolve() if args.report_path else None,
     )
 
     print("PROCESSED OPTIMISED BUNDLE")

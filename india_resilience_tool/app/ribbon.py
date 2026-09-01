@@ -8,33 +8,45 @@ preserving widget keys and session_state contracts.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Optional
 
 import pandas as pd
 import streamlit as st
 
+from india_resilience_tool.app.dashboard_bundle_runtime import (
+    available_dashboard_bundle_names,
+    dashboard_bundle_display,
+)
 from india_resilience_tool.app.geography import list_available_states_from_processed_root
 from india_resilience_tool.app.help_text import RIBBON_HELP_MD, help_md_to_plain_text
+from india_resilience_tool.app.map_pipeline import _uses_fixed_class_scale
 from india_resilience_tool.app.master_cache import make_load_master_and_schema_fn
 from india_resilience_tool.config.paths import resolve_processed_root as resolve_legacy_processed_root
 from india_resilience_tool.config.constants import SCENARIO_HELP_MD, SCENARIO_UI_LABEL
+from india_resilience_tool.config.dashboard_bundles import is_dashboard_bundle, is_dashboard_bundle_slug
 from india_resilience_tool.config.variables import (
     VARIABLES,
     get_domain_description,
     get_domains_for_pillar,
     get_metrics_for_domain,
     normalize_domain_name,
-    get_pillar_description,
-    get_pillar_for_domain,
     get_pillars,
 )
+from india_resilience_tool.data.master_loader import resolve_preferred_master_path
+from india_resilience_tool.data.admin_coverage import (
+    AdminMasterSourceAudit,
+    audit_admin_master_source,
+)
+from india_resilience_tool.data.master_loader import load_master_csvs, master_source_signature
 from india_resilience_tool.data.optimized_bundle import (
     is_optimized_metric_root,
-    optimized_master_path_from_metric_root,
+    list_optimized_states_for_metric_root,
     optimized_master_sources_from_metric_root,
+    resolve_optimized_bundle_root,
 )
-from india_resilience_tool.utils.processed_io import read_table
+from india_resilience_tool.utils.naming import alias
 from india_resilience_tool.viz.charts import (
     PERIOD_ORDER,
     canonical_period_label,
@@ -67,34 +79,6 @@ class RibbonContext:
     load_master_and_schema_fn: Callable[[Path | tuple[Path, ...], str], tuple[pd.DataFrame, list[dict], list[str], dict]]
 
 
-def _hydro_output_glob(level: str) -> str:
-    """Return the relative glob used to detect hydro period outputs for a level."""
-    if str(level).strip().lower() == "sub_basin":
-        return "hydro/sub_basins/**/*_periods.csv"
-    return "hydro/basins/**/*_periods.csv"
-
-
-def _hydro_outputs_available(processed_root: Path, level: str) -> bool:
-    """Return True when hydro processed period CSVs exist for the requested level."""
-    try:
-        return any(processed_root.glob(_hydro_output_glob(level)))
-    except Exception:
-        return False
-
-
-def _hydro_master_contract_ready(master_csv_path: Path, level: str) -> bool:
-    """Return True when a hydro master CSV contains the canonical hydro ID columns."""
-    if not master_csv_path.exists():
-        return False
-    try:
-        cols = set(read_table(master_csv_path).columns)
-    except Exception:
-        return False
-    if str(level).strip().lower() == "sub_basin":
-        return {"basin_id", "subbasin_id"}.issubset(cols)
-    return {"basin_id"}.issubset(cols)
-
-
 def _is_external_metric(varcfg: Optional[dict]) -> bool:
     """Return True when the selected metric is backed by an external prebuilt source."""
     return str((varcfg or {}).get("source_type") or "").strip().lower() == "external"
@@ -125,23 +109,72 @@ def _supported_statistics(varcfg: Optional[dict]) -> list[str]:
 
 
 def _supports_baseline_comparison(varcfg: Optional[dict]) -> bool:
-    return bool((varcfg or {}).get("supports_baseline_comparison", True))
+    cfg = varcfg or {}
+    return bool(cfg.get("supports_baseline_comparison", True)) and not _uses_fixed_class_scale(
+        str(cfg.get("slug") or ""),
+        cfg,
+    )
 
 
 def _metric_rebuild_command(varcfg: Optional[dict], *, level: str) -> Optional[str]:
-    level_norm = str(level).strip().lower()
-    key = "hydro_rebuild_command" if level_norm in {"basin", "sub_basin"} else "admin_rebuild_command"
-    cmd = str((varcfg or {}).get(key) or "").strip()
+    _ = level
+    cmd = str((varcfg or {}).get("admin_rebuild_command") or "").strip()
     return cmd or None
 
 
 def _selected_state_for_admin_master_loading() -> str:
-    """Return the best available admin-state selection for master loading."""
+    """Return the best available admin-state selection for master loading.
+
+    If a metric declares restricted admin-state support, clamp the pending/current
+    state before resolving master sources. This avoids loading a stale state
+    shard that the sidebar will replace later in the same rerun.
+    """
     pending = st.session_state.get("pending_selected_state")
     if pending not in (None, ""):
-        return str(pending).strip() or "All"
-    selected = st.session_state.get("selected_state", "All")
-    return str(selected).strip() or "All"
+        candidate = str(pending).strip() or "All"
+    else:
+        selected = st.session_state.get("selected_state", "All")
+        candidate = str(selected).strip() or "All"
+
+    slug = str(st.session_state.get("selected_var", "") or "").strip()
+    supported_states = [
+        str(state).strip()
+        for state in ((VARIABLES.get(slug) or {}).get("supported_admin_states") or ())
+        if str(state).strip()
+    ]
+    if supported_states and candidate not in supported_states:
+        return supported_states[0]
+    return candidate
+
+
+def _domain_display_label(domain: str) -> str:
+    """Return the user-facing label for one ribbon domain option."""
+    return dashboard_bundle_display(domain) if is_dashboard_bundle(domain) else str(domain)
+
+
+def _domain_options_for_context(
+    *,
+    selected_pillar: str,
+    spatial_family: str,
+    current_level: str,
+    data_dir: Path,
+) -> list[str]:
+    """Return ordered domain options for the current ribbon context."""
+    all_domains = get_domains_for_pillar(
+        selected_pillar,
+        spatial_family=spatial_family,
+        level=current_level,
+    )
+    if not (
+        spatial_family == "admin"
+        and current_level in {"district", "block"}
+        and selected_pillar == "Climate Hazards"
+    ):
+        return all_domains
+
+    dashboard_domains = available_dashboard_bundle_names(level=current_level, data_dir=data_dir)
+    remaining_domains = [domain for domain in all_domains if not is_dashboard_bundle(domain)]
+    return dashboard_domains + remaining_domains
 
 
 def _resolve_external_admin_master_sources(
@@ -175,8 +208,8 @@ def _resolve_external_admin_master_sources(
 def _master_source_exists(master_source: Path | tuple[Path, ...]) -> bool:
     """Return True when the resolved master source has at least one readable file."""
     if isinstance(master_source, tuple):
-        return bool(master_source) and all(path.exists() for path in master_source)
-    return master_source.exists()
+        return bool(master_source) and all(resolve_preferred_master_path(path).exists() for path in master_source)
+    return resolve_preferred_master_path(master_source).exists()
 
 
 def _master_source_label(master_source: Path | tuple[Path, ...]) -> str:
@@ -191,34 +224,190 @@ def _master_source_label(master_source: Path | tuple[Path, ...]) -> str:
     return str(master_source)
 
 
-def _resolve_hydro_master_source(
+def _admin_source_states(master_sources: tuple[Path, ...], *, optimized: bool) -> tuple[str, ...]:
+    """Return ordered state names represented by one admin master source tuple."""
+    states: list[str] = []
+    for path in master_sources:
+        if optimized:
+            stem = path.stem
+            if stem.startswith("state="):
+                state_name = stem.split("=", 1)[1].strip()
+            else:
+                state_name = ""
+        else:
+            state_name = path.parent.name.strip()
+        if state_name and state_name not in states:
+            states.append(state_name)
+    return tuple(states)
+
+
+@lru_cache(maxsize=8)
+def _expected_admin_geometry_states(level: str, data_dir_str: str) -> tuple[str, ...]:
+    """Return the expected nationwide admin geometry state universe for one level."""
+    level_norm = str(level or "district").strip().lower()
+    optimized_geometry_dir = resolve_optimized_bundle_root(data_dir=Path(data_dir_str)) / "geometry" / "admin" / level_norm
+    if optimized_geometry_dir.exists():
+        states = [
+            path.stem.split("=", 1)[1].strip()
+            for path in sorted(optimized_geometry_dir.glob("state=*.geojson"))
+            if path.stem.startswith("state=")
+        ]
+        if states:
+            return tuple(sorted({alias(state_name) for state_name in states if str(state_name).strip()}))
+
+    boundary_name = "blocks_4326.geojson" if level_norm == "block" else "districts_4326.geojson"
+    boundary_path = Path(data_dir_str) / boundary_name
+    if not boundary_path.exists():
+        return ()
+
+    import geopandas as gpd
+
+    gdf = gpd.read_file(boundary_path)
+    for column in ("state_name", "state", "adm1_name", "shapeName_0", "shapeGroup"):
+        if column not in gdf.columns:
+            continue
+        states = gdf[column].dropna().astype(str).str.strip().tolist()
+        return tuple(sorted({alias(state_name) for state_name in states if alias(state_name)}))
+    return ()
+
+
+@lru_cache(maxsize=32)
+def _audit_admin_master_sources_cached(
+    source_signature: tuple[tuple[str, Optional[float]], ...],
+    *,
+    source_paths: tuple[str, ...],
+    level: str,
+    variable_slug: str,
+) -> AdminMasterSourceAudit:
+    """Audit one admin source family using actual loaded master content."""
+    _ = source_signature
+    master_df = load_master_csvs(tuple(Path(path) for path in source_paths))
+    return audit_admin_master_source(
+        master_df,
+        level=level,
+        alias_fn=alias,
+        variable_slug=variable_slug,
+    )
+
+
+def _admin_audit_score(
+    audit: AdminMasterSourceAudit,
+    *,
+    expected_state_keys: tuple[str, ...],
+) -> tuple[int, int, int, int]:
+    """Return a stable completeness score for admin source-family selection."""
+    expected = set(expected_state_keys)
+    present_overlap = len(expected.intersection(audit.distinct_state_keys)) if expected else len(audit.distinct_state_keys)
+    valued_overlap = len(expected.intersection(audit.valued_state_keys)) if expected else len(audit.valued_state_keys)
+    return (
+        valued_overlap,
+        present_overlap,
+        -audit.malformed_identity_row_count,
+        -len(audit.duplicate_identity_keys),
+    )
+
+
+def _resolve_admin_master_source(
     processed_root: Path,
     *,
     variable_slug: str,
     level: str,
+    selected_state: str,
     data_dir: Path,
-) -> tuple[Path, Path, Optional[Path]]:
+    optimized_intent: bool = False,
+) -> tuple[Path, tuple[Path, ...], Optional[Path]]:
     """
-    Resolve the best available hydro master source.
+    Resolve the best available admin master source.
 
     When the runtime points at an optimized metric root but the optimized bundle
-    does not yet contain hydro artifacts, fall back to the legacy processed root
-    if a hydro master or hydro yearly source outputs exist there.
+    does not yet contain the requested admin master shard, fall back to the
+    legacy processed root if that state-level admin master exists there.
     """
-    master_name = get_master_csv_filename(level)
-    if not is_optimized_metric_root(processed_root):
-        return processed_root, processed_root / "hydro" / master_name, None
+    if not optimized_intent:
+        return (
+            processed_root,
+            _resolve_external_admin_master_sources(
+                processed_root,
+                level=level,
+                selected_state=selected_state,
+            ),
+            None,
+        )
 
-    optimized_master = optimized_master_path_from_metric_root(processed_root, level=level)
-    if optimized_master.exists():
-        return processed_root, optimized_master, None
+    selected_state_norm = str(selected_state or "All").strip() or "All"
+    optimized_sources = optimized_master_sources_from_metric_root(
+        processed_root,
+        level=level,
+        selected_state=selected_state_norm,
+    )
+    if selected_state_norm != "All" and _master_source_exists(optimized_sources):
+        return processed_root, optimized_sources, None
 
     legacy_root = resolve_legacy_processed_root(variable_slug, data_dir=data_dir, mode="portfolio")
-    legacy_master = legacy_root / "hydro" / master_name
-    if legacy_master.exists() or _hydro_outputs_available(legacy_root, level):
-        return legacy_root, legacy_master, legacy_root
+    legacy_sources = _resolve_external_admin_master_sources(
+        legacy_root,
+        level=level,
+        selected_state=selected_state_norm,
+    )
+    if selected_state_norm == "All":
+        optimized_ready = _master_source_exists(optimized_sources)
+        legacy_ready = _master_source_exists(legacy_sources)
+        if optimized_ready and not legacy_ready:
+            return processed_root, optimized_sources, legacy_root
+        if legacy_ready and not optimized_ready:
+            return legacy_root, legacy_sources, legacy_root
+        if optimized_ready and legacy_ready:
+            optimized_states = set(list_optimized_states_for_metric_root(processed_root, level=level))
+            legacy_states = set(_admin_source_states(legacy_sources, optimized=False))
+            expected_state_keys = _expected_admin_geometry_states(level, str(data_dir))
+            optimized_audit = _audit_admin_master_sources_cached(
+                master_source_signature(optimized_sources),
+                source_paths=tuple(str(path) for path in optimized_sources),
+                level=level,
+                variable_slug=variable_slug,
+            )
+            legacy_audit = _audit_admin_master_sources_cached(
+                master_source_signature(legacy_sources),
+                source_paths=tuple(str(path) for path in legacy_sources),
+                level=level,
+                variable_slug=variable_slug,
+            )
+            optimized_score = _admin_audit_score(optimized_audit, expected_state_keys=expected_state_keys)
+            legacy_score = _admin_audit_score(legacy_audit, expected_state_keys=expected_state_keys)
+            if optimized_states == legacy_states and optimized_score >= legacy_score:
+                return processed_root, optimized_sources, legacy_root
+            if optimized_score >= legacy_score:
+                return processed_root, optimized_sources, legacy_root
+            return legacy_root, legacy_sources, legacy_root
+        if optimized_ready:
+            return processed_root, optimized_sources, legacy_root
+        return processed_root, optimized_sources, legacy_root
 
-    return processed_root, optimized_master, legacy_root
+    if _master_source_exists(legacy_sources):
+        return legacy_root, legacy_sources, legacy_root
+
+    return processed_root, optimized_sources, legacy_root
+
+
+def _warn_once_for_admin_legacy_fallback(
+    *,
+    variable_slug: str,
+    level: str,
+    selected_state: str,
+) -> None:
+    """Emit one warning per active slug/level/state when optimized intent falls back to legacy."""
+    warning_key = (
+        f"_legacy_admin_fallback_warned::{variable_slug}::{str(level).strip().lower()}::{str(selected_state or 'All').strip() or 'All'}"
+    )
+    if st.session_state.get(warning_key):
+        return
+    label = VARIABLES.get(variable_slug, {}).get("label", variable_slug)
+    st.warning(
+        f"Using legacy processed master for {label} because processed_optimised is missing the requested admin shard. "
+        f"Run `python -m tools.optimized.build_processed_optimised --metric {variable_slug} --level {level} --overwrite --prune-scope` "
+        "to refresh the runtime bundle."
+    )
+    st.session_state[warning_key] = True
 
 
 def _coerce_selection(
@@ -243,6 +432,7 @@ def render_metric_ribbon(
     data_dir: Path,
     pilot_state: str,
     resolve_processed_root_fn: Callable[..., Path],
+    prefer_optimized_runtime: bool = False,
     attach_centroid_geojson: str | None,
     master_needs_rebuild_fn: Callable[[Path | tuple[Path, ...], Path, str], bool],
     state_profile_files_missing_fn: Callable[[Path, str, str], bool],
@@ -258,7 +448,7 @@ def render_metric_ribbon(
     - Preserves placeholder-first selection behavior.
     """
     # Force deliberate choices for ribbon controls
-    for k in ("selected_pillar", "selected_bundle", "selected_var", "sel_scenario", "sel_period", "sel_stat"):
+    for k in ("selected_pillar", "selected_bundle", "selected_var", "sel_scenario", "sel_period", "sel_stat", "map_mode"):
         st.session_state.setdefault(k, sel_placeholder)
 
     # Bound once a metric is selected (safe defaults otherwise)
@@ -266,8 +456,6 @@ def render_metric_ribbon(
     varcfg: Optional[dict] = None
     processed_root: Optional[Path] = None
     master_csv_path: Optional[Path | tuple[Path, ...]] = None
-    hydro_checked_legacy_root: Optional[Path] = None
-    optimized_hydro_master_path: Optional[Path] = None
 
     df: Optional[pd.DataFrame] = None
     schema_items: list[dict] = []
@@ -287,46 +475,71 @@ def render_metric_ribbon(
         return False, "disabled (select a metric first)"
 
     with col:
-        row1 = st.columns([2.2, 3.0, 1.8])
-        row2 = st.columns([1.8, 2.2, 1.4])
-        row3 = st.columns([2.4, 1.2, 1.8])
+        body_ct = st.container()
+        toggle_ct = st.container()
+
+    _ribbon_collapsed = bool(st.session_state.get("ribbon_collapsed", False))
+    if _ribbon_collapsed:
+        # Hide the ribbon body container (matched via the marker div below)
+        # without skipping the render — widgets keep their session_state
+        # values so ribbon_ctx stays valid downstream.
+        st.markdown(
+            "<style>"
+            # Hide the innermost stVerticalBlock that contains the ribbon body
+            # marker. The `:not(:has(... nested))` clause excludes outer
+            # vertical blocks (e.g. the left workspace column) which would
+            # also be ancestors and would hide the toggle button strip too.
+            "[data-testid='stVerticalBlock']:has(.irt-ribbon-body-marker)"
+            ":not(:has([data-testid='stVerticalBlock'] .irt-ribbon-body-marker))"
+            "{display:none !important;}"
+            "</style>",
+            unsafe_allow_html=True,
+        )
+
+    with body_ct:
+        st.markdown(
+            '<div class="irt-ribbon-body-marker"></div>',
+            unsafe_allow_html=True,
+        )
+        # Tighten the ribbon grid without leaking to the rest of the page. The
+        # markers are empty divs, not wrappers, so each rule has to reach its
+        # owning Streamlit block via :has() (same shape as the collapse selector
+        # above); the :not(:has(... nested)) clause pins it to the innermost block.
+        st.markdown(
+            "<style>"
+            # Row gap between the two selectbox rows.
+            "[data-testid='stVerticalBlock']:has(.irt-ribbon-body-marker)"
+            ":not(:has([data-testid='stVerticalBlock'] .irt-ribbon-body-marker))"
+            "{gap:0.35rem !important;}"
+            # Drop the marker div's own block spacing.
+            "[data-testid='stVerticalBlock']:has(.irt-ribbon-body-marker)"
+            ":not(:has([data-testid='stVerticalBlock'] .irt-ribbon-body-marker))"
+            " [data-testid='stMarkdownContainer']:has(.irt-ribbon-body-marker)"
+            "{display:none !important;}"
+            # Chevron: cap its width so it reads as a centred affordance rather
+            # than a full-width bar. Scoped through the toggle marker only.
+            "[data-testid='stVerticalBlock']:has(.irt-ribbon-toggle-marker)"
+            ":not(:has([data-testid='stVerticalBlock'] .irt-ribbon-toggle-marker))"
+            "{gap:0.2rem !important;}"
+            "</style>",
+            unsafe_allow_html=True,
+        )
+        row1 = st.columns(3, gap="medium")
+        row2 = st.columns(3, gap="medium")
         spatial_family = str(st.session_state.get("spatial_family", "admin")).strip().lower()
         current_level = str(st.session_state.get("admin_level", "district")).strip().lower()
 
-        # --- Pillar selection ---
+        # --- Pillar selection (collapsed to a single Climate Hazards pillar) ---
+        # The taxonomy now exposes exactly one pillar, so there is no dropdown:
+        # force-select it and keep session state consistent for downstream reads.
         all_pillars = get_pillars(spatial_family=spatial_family, level=current_level)
         if not all_pillars:
             st.error("No assessment pillars defined in metrics_registry.py")
             render_perf_panel_safe()
             st.stop()
 
-        pillar_options = [sel_placeholder] + all_pillars
-        cur_pillar = st.session_state.get("selected_pillar", sel_placeholder)
-        if cur_pillar not in pillar_options:
-            inferred_pillar = get_pillar_for_domain(st.session_state.get("selected_bundle", ""))
-            if inferred_pillar in all_pillars:
-                cur_pillar = inferred_pillar
-                st.session_state["selected_pillar"] = inferred_pillar
-            else:
-                cur_pillar = sel_placeholder
-                st.session_state["selected_pillar"] = sel_placeholder
-
-        with row1[0]:
-            pillar_help = help_md_to_plain_text(RIBBON_HELP_MD["assessment_pillar"])
-            selected_pillar_preview = st.session_state.get("selected_pillar", sel_placeholder)
-            if selected_pillar_preview != sel_placeholder:
-                pillar_desc_preview = get_pillar_description(selected_pillar_preview)
-                if pillar_desc_preview:
-                    pillar_help += f"\n\nThis pillar covers:\n- {pillar_desc_preview}"
-
-            selected_pillar = st.selectbox(
-                "Assessment pillar",
-                options=pillar_options,
-                index=pillar_options.index(cur_pillar),
-                key="selected_pillar",
-                label_visibility="visible",
-                help=pillar_help,
-            )
+        selected_pillar = all_pillars[0]
+        st.session_state["selected_pillar"] = selected_pillar
 
         # --- Domain selection ---
         domain_disabled = selected_pillar == sel_placeholder
@@ -334,10 +547,11 @@ def render_metric_ribbon(
             all_domains: list[str] = []
             domain_options = [sel_placeholder]
         else:
-            all_domains = get_domains_for_pillar(
-                selected_pillar,
+            all_domains = _domain_options_for_context(
+                selected_pillar=selected_pillar,
                 spatial_family=spatial_family,
-                level=current_level,
+                current_level=current_level,
+                data_dir=data_dir,
             )
             domain_options = [sel_placeholder] + all_domains
 
@@ -350,7 +564,7 @@ def render_metric_ribbon(
         elif cur_bundle != st.session_state.get("selected_bundle", sel_placeholder):
             st.session_state["selected_bundle"] = cur_bundle
 
-        with row1[1]:
+        with row1[0]:
             bundle_help = help_md_to_plain_text(RIBBON_HELP_MD["risk_domain"])
             selected_bundle_preview = st.session_state.get("selected_bundle", sel_placeholder)
             if selected_bundle_preview != sel_placeholder:
@@ -361,11 +575,11 @@ def render_metric_ribbon(
             selected_bundle = st.selectbox(
                 "Domain",
                 options=domain_options,
-                index=domain_options.index(cur_bundle),
                 key="selected_bundle",
                 label_visibility="visible",
                 disabled=domain_disabled,
                 help=bundle_help,
+                format_func=_domain_display_label,
             )
 
         # --- Metric selection (filtered by domain) ---
@@ -391,7 +605,7 @@ def render_metric_ribbon(
                 st.session_state["selected_var"] = index_slugs[0]
         cur_var = st.session_state.get("selected_var", sel_placeholder)
 
-        with row1[2]:
+        with row1[1]:
             metric_help = help_md_to_plain_text(RIBBON_HELP_MD["metric"])
             selected_metric_preview = st.session_state.get("selected_var", sel_placeholder)
             if selected_metric_preview != sel_placeholder and selected_metric_preview in VARIABLES:
@@ -411,7 +625,6 @@ def render_metric_ribbon(
             selected_var = st.selectbox(
                 "Metric",
                 options=metric_options,
-                index=metric_options.index(cur_var) if cur_var in metric_options else 0,
                 key="selected_var",
                 label_visibility="visible",
                 format_func=lambda k: VARIABLES[k]["label"] if k in VARIABLES else k,
@@ -430,29 +643,23 @@ def render_metric_ribbon(
             processed_root = resolve_processed_root_fn(variable_slug, data_dir=data_dir, mode="portfolio")
             level = str(st.session_state.get("admin_level", "district")).strip().lower()
             selected_admin_state = _selected_state_for_admin_master_loading()
-            if is_optimized_metric_root(processed_root):
-                if level in {"basin", "sub_basin"}:
-                    optimized_hydro_master_path = optimized_master_path_from_metric_root(
-                        processed_root,
-                        level=level,
-                    )
-                    processed_root, master_csv_path, hydro_checked_legacy_root = _resolve_hydro_master_source(
-                        processed_root,
-                        variable_slug=variable_slug,
-                        level=level,
-                        data_dir=data_dir,
-                    )
-                else:
-                    master_csv_path = optimized_master_sources_from_metric_root(
-                        processed_root,
-                        level=level,
-                        selected_state=selected_admin_state,
-                    )
-            elif level in {"basin", "sub_basin"}:
-                master_name = get_master_csv_filename(level)
-                master_root = processed_root / "hydro"
-                master_root.mkdir(parents=True, exist_ok=True)
-                master_csv_path = master_root / master_name
+            admin_checked_legacy_root: Optional[Path] = None
+            optimized_admin_master_sources: tuple[Path, ...] = ()
+            optimized_admin_intent = prefer_optimized_runtime and level in {"district", "block"}
+            if optimized_admin_intent:
+                optimized_admin_master_sources = optimized_master_sources_from_metric_root(
+                    processed_root,
+                    level=level,
+                    selected_state=selected_admin_state,
+                )
+                processed_root, master_csv_path, admin_checked_legacy_root = _resolve_admin_master_source(
+                    processed_root,
+                    variable_slug=variable_slug,
+                    level=level,
+                    selected_state=selected_admin_state,
+                    data_dir=data_dir,
+                    optimized_intent=True,
+                )
             elif _is_external_metric(varcfg):
                 master_csv_path = _resolve_external_admin_master_sources(
                     processed_root,
@@ -470,8 +677,10 @@ def render_metric_ribbon(
                 force: bool = False, attach_centroid_geojson: str | None = None
             ) -> tuple[bool, str]:
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
-                is_hydro = level in {"basin", "sub_basin"}
                 is_external = _is_external_metric(varcfg)
+                uses_dedicated_dashboard_bundle_builder = (
+                    level in {"district", "block"} and is_dashboard_bundle_slug(variable_slug)
+                )
                 if is_external:
                     if _master_source_exists(master_csv_path):
                         return False, "up-to-date"
@@ -484,18 +693,29 @@ def render_metric_ribbon(
                                 f"run {rebuild_cmd or 'the metric-specific admin master builder'}"
                             ),
                         )
-                    if level in {"basin", "sub_basin"}:
+                    return False, "external metric master CSV missing"
+                if uses_dedicated_dashboard_bundle_builder:
+                    if _master_source_exists(master_csv_path):
+                        return False, "up-to-date"
+                    rebuild_cmd = _metric_rebuild_command(varcfg, level=level)
+                    if admin_checked_legacy_root is not None and prefer_optimized_runtime:
                         return (
                             False,
                             (
-                                "external hydro masters are built by dedicated geodata tooling; "
-                                f"run {rebuild_cmd or 'the metric-specific hydro master builder'}"
+                                "dashboard bundle master not found in the optimized runtime bundle and no legacy admin "
+                                f"master was found under {admin_checked_legacy_root}; run "
+                                f"{rebuild_cmd or 'the bundle-specific admin builder'} and rebuild processed_optimised"
                             ),
                         )
-                    return False, "external metric master CSV missing"
+                    return (
+                        False,
+                        (
+                            "dashboard bundle masters are built by dedicated tooling; "
+                            f"run {rebuild_cmd or 'the bundle-specific admin builder'}"
+                        ),
+                    )
                 needs = (
                     force
-                    or (is_hydro and not _hydro_master_contract_ready(master_csv_path, level))
                     or (
                         level in {"district", "block"}
                         and master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state))
@@ -507,19 +727,6 @@ def render_metric_ribbon(
                 )
                 if not needs:
                     return False, "up-to-date"
-                if is_hydro and not _hydro_outputs_available(processed_root, level):
-                    legacy_hint = ""
-                    if hydro_checked_legacy_root is not None and is_optimized_metric_root(processed_root):
-                        legacy_hint = (
-                            f" no legacy hydro processed outputs were found under {hydro_checked_legacy_root / 'hydro'};"
-                        )
-                    return (
-                        False,
-                        (
-                            f"no hydro processed outputs found under {processed_root / 'hydro'};{legacy_hint} "
-                            f"run compute_indices_multiprocess for --level {level} first"
-                        ),
-                    )
                 try:
                     from india_resilience_tool.compute.master_builder import build_master_metrics
                 except Exception as e:
@@ -527,7 +734,7 @@ def render_metric_ribbon(
                 try:
                     master_df = build_master_metrics(
                         str(processed_root),
-                        ("hydro" if level in {"basin", "sub_basin"} else str(pilot_state)),
+                        str(pilot_state),
                         metric_col_in_periods=varcfg["periods_metric_col"],
                         out_path=str(master_csv_path),
                         attach_centroid_geojson=attach_centroid_geojson,
@@ -537,7 +744,8 @@ def render_metric_ribbon(
                     if master_csv_path.exists():
                         return True, "rebuilt"
                     if getattr(master_df, "empty", True):
-                        return False, f"builder found no source rows for {level} under {master_root}"
+                        source_root = processed_root / str(pilot_state)
+                        return False, f"builder found no source rows for {level} under {source_root}"
                     return False, f"builder finished but did not create {master_csv_path}"
                 except Exception as e:
                     return False, f"rebuild failed: {e}"
@@ -545,6 +753,18 @@ def render_metric_ribbon(
             # Ensure master exists/fresh for this metric (only once a metric is chosen)
             try:
                 level = str(st.session_state.get("admin_level", "district")).strip().lower()
+                if (
+                    prefer_optimized_runtime
+                    and level in {"district", "block"}
+                    and admin_checked_legacy_root is not None
+                    and processed_root == admin_checked_legacy_root
+                    and _master_source_exists(master_csv_path)
+                ):
+                    _warn_once_for_admin_legacy_fallback(
+                        variable_slug=variable_slug,
+                        level=level,
+                        selected_state=selected_admin_state,
+                    )
                 needs_rebuild = False
                 if _is_external_metric(varcfg):
                     needs_rebuild = not _master_source_exists(master_csv_path)
@@ -552,9 +772,6 @@ def render_metric_ribbon(
                     needs_rebuild = master_needs_rebuild_fn(master_csv_path, processed_root, str(pilot_state)) or state_profile_files_missing_fn(
                         processed_root, str(pilot_state), level
                     )
-                if level in {"basin", "sub_basin"} and not _hydro_master_contract_ready(master_csv_path, level):
-                    needs_rebuild = True
-
                 if needs_rebuild:
                     with st.spinner("Master CSV missing or stale — rebuilding now..."):
                         ok, msg = rebuild_master_csv_if_needed(
@@ -573,32 +790,28 @@ def render_metric_ribbon(
                             f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
                             f"Run `{rebuild_cmd or 'the metric-specific admin master builder'}` first."
                         )
-                    elif level in {"basin", "sub_basin"}:
-                        st.error(
-                            f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
-                            f"Run `{rebuild_cmd or 'the metric-specific hydro master builder'}` first."
-                        )
                     else:
                         st.error(
                             f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}."
                         )
-                elif level in {"basin", "sub_basin"} and not _hydro_outputs_available(processed_root, level):
-                    if optimized_hydro_master_path is not None and hydro_checked_legacy_root is not None:
+                elif level in {"district", "block"} and is_dashboard_bundle_slug(variable_slug):
+                    rebuild_cmd = _metric_rebuild_command(varcfg, level=level)
+                    if admin_checked_legacy_root is not None and optimized_admin_master_sources:
+                        optimized_label = _master_source_label(optimized_admin_master_sources)
                         st.error(
-                            f"Hydro master CSV not found for {VARIABLES[variable_slug]['label']} at {optimized_hydro_master_path}. "
-                            f"No legacy hydro processed outputs were found under {hydro_checked_legacy_root / 'hydro'}. "
-                            f"Run the hydro compute pipeline for `--level {level}` on the legacy processed tree, then rebuild `processed_optimised`."
+                            f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {optimized_label}. "
+                            f"No legacy admin master was found under {admin_checked_legacy_root}. "
+                            f"Run `{rebuild_cmd or 'the bundle-specific admin builder'}` and rebuild `processed_optimised`."
                         )
                     else:
                         st.error(
-                            f"Hydro boundary files are loaded, but no hydro processed outputs were found for "
-                            f"{VARIABLES[variable_slug]['label']} under {processed_root / 'hydro'}. "
-                            f"Run the hydro compute pipeline for `--level {level}` first, then rebuild the master CSV."
+                            f"Admin master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
+                            f"Run `{rebuild_cmd or 'the bundle-specific admin builder'}` first."
                         )
                 else:
                     st.error(
                         f"Master CSV not found for {VARIABLES[variable_slug]['label']} at {master_source_label}. "
-                        f"Click 'Rebuild now' in the sidebar under 'Master dataset'."
+                        "Run `python -m tools.pipeline.build_master_metrics` to rebuild admin masters, then rerun the dashboard."
                     )
                 render_perf_panel_safe()
                 st.stop()
@@ -624,7 +837,7 @@ def render_metric_ribbon(
             )
             allowed_list = [
                 str(s).strip().lower()
-                for s in (varcfg.get("supported_scenarios") or ("ssp245", "ssp585"))
+                for s in (varcfg.get("supported_scenarios") or ("historical", "ssp245", "ssp585"))
                 if str(s).strip()
             ]
             allowed = set(allowed_list)
@@ -651,7 +864,7 @@ def render_metric_ribbon(
             default=_fixed_scenario(varcfg) if _is_static_snapshot_metric(varcfg) else sel_placeholder,
         )
 
-        with row2[0]:
+        with row1[2]:
             scenario_help = help_md_to_plain_text(RIBBON_HELP_MD["scenario"])
             if _is_static_snapshot_metric(varcfg):
                 scenario_help = "This metric uses a fixed snapshot selection and does not expose multiple scenarios."
@@ -664,7 +877,6 @@ def render_metric_ribbon(
             sel_scenario = st.selectbox(
                 "Scenario",
                 options=scenario_options,
-                index=scenario_options.index(cur_scn),
                 key="sel_scenario",
                 label_visibility="visible",
                 disabled=scenario_disabled,
@@ -712,14 +924,13 @@ def render_metric_ribbon(
             default=canonical_period_label(_fixed_period(varcfg)) if _is_static_snapshot_metric(varcfg) else sel_placeholder,
         )
 
-        with row2[1]:
+        with row2[0]:
             period_help = help_md_to_plain_text(RIBBON_HELP_MD["period"])
             if _is_static_snapshot_metric(varcfg):
                 period_help = "This metric uses a fixed data snapshot year and does not expose multi-period climate windows."
             sel_period = st.selectbox(
                 "Period",
                 options=period_options,
-                index=period_options.index(cur_per),
                 key="sel_period",
                 label_visibility="visible",
                 disabled=period_disabled,
@@ -740,12 +951,11 @@ def render_metric_ribbon(
             default=(stat_values[0] if (_is_static_snapshot_metric(varcfg) and stat_values) else sel_placeholder),
         )
 
-        with row2[2]:
+        with row2[1]:
             statistic_help = help_md_to_plain_text(RIBBON_HELP_MD["statistic"])
             sel_stat = st.selectbox(
                 "Statistic",
                 options=stat_options,
-                index=stat_options.index(cur_stat),
                 key="sel_stat",
                 label_visibility="visible",
                 disabled=stat_disabled,
@@ -754,7 +964,12 @@ def render_metric_ribbon(
 
         # --- Map mode selection ---
         baseline_map_mode_label = "Change from baseline" if _is_external_metric(varcfg) else "Change from 1990-2010 baseline"
-        if metric_ready and not _supports_baseline_comparison(varcfg):
+        sel_scenario_is_historical = (
+            metric_ready
+            and sel_scenario != sel_placeholder
+            and str(sel_scenario).strip().lower() == "historical"
+        )
+        if metric_ready and (not _supports_baseline_comparison(varcfg) or sel_scenario_is_historical):
             map_mode_options = ["Absolute value"]
         else:
             map_mode_options = [sel_placeholder, "Absolute value", baseline_map_mode_label]
@@ -765,19 +980,63 @@ def render_metric_ribbon(
             default=("Absolute value" if map_mode_options == ["Absolute value"] else sel_placeholder),
         )
 
-        with row3[0]:
+        with row2[2]:
             map_mode_help = help_md_to_plain_text(RIBBON_HELP_MD["map_mode"])
             if metric_ready and not _supports_baseline_comparison(varcfg):
                 map_mode_help = "This metric only supports absolute-value mapping; baseline change mode is not available."
+            elif sel_scenario_is_historical:
+                map_mode_help = "Historical view shows the 1990-2010 reference period directly; change-from-baseline mode is unavailable for the historical scenario."
             map_mode = st.selectbox(
                 "Map mode",
                 options=map_mode_options,
-                index=map_mode_options.index(cur_map_mode),
                 key="map_mode",
                 label_visibility="visible",
                 disabled=(metric_ready and map_mode_options == ["Absolute value"]),
                 help=map_mode_help,
             )
+
+    def _toggle_ribbon_collapsed() -> None:
+        st.session_state["ribbon_collapsed"] = not bool(
+            st.session_state.get("ribbon_collapsed", False)
+        )
+
+    with toggle_ct:
+        st.markdown(
+            '<div class="irt-ribbon-toggle-marker"></div>',
+            unsafe_allow_html=True,
+        )
+        _t_left, _t_mid, _t_right = st.columns([1, 0.25, 0.55])
+        with _t_mid:
+            if _ribbon_collapsed:
+                st.button(
+                    "⌄",
+                    key="btn_ribbon_expand",
+                    help="Expand metric ribbon",
+                    use_container_width=True,
+                    type="secondary",
+                    on_click=_toggle_ribbon_collapsed,
+                )
+            else:
+                st.button(
+                    "⌃",
+                    key="btn_ribbon_collapse",
+                    help="Collapse metric ribbon",
+                    use_container_width=True,
+                    type="secondary",
+                    on_click=_toggle_ribbon_collapsed,
+                )
+        with _t_right:
+            # Rendered here (not in left_panel_runtime) so the pending-selection
+            # writes land *before* runtime.py syncs them, letting a reset apply to
+            # the same run's map build instead of the next interaction.
+            if st.button("⟲ Reset View", key="reset_map_view", use_container_width=True):
+                from india_resilience_tool.app.state import reset_district_option_state
+
+                st.session_state["pending_selected_state"] = "All"
+                st.session_state["pending_selected_district"] = "All"
+                st.session_state["crosswalk_overlay"] = None
+                st.session_state["map_reset_requested"] = True
+                reset_district_option_state(st.session_state)
 
     sel_metric = str(st.session_state.get("registry_metric", registry_metric) or "").strip()
     metric_col: Optional[str] = None

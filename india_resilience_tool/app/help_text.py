@@ -28,16 +28,9 @@ def help_md_to_plain_text(md: str) -> str:
 
 
 RIBBON_HELP_MD: dict[str, str] = {
-    "assessment_pillar": (
-        "### Assessment pillar\n"
-        "An assessment pillar is the broadest thematic layer in the dashboard "
-        "(for example, Climate Hazards or Bio-physical Hazards).\n\n"
-        "**How to use**\n"
-        "- Start here to choose the kind of layer you want to explore."
-    ),
     "risk_domain": (
         "### Domain\n"
-        "A domain groups related metrics into a narrower theme within the selected assessment pillar.\n\n"
+        "A domain groups related metrics into a narrower theme.\n\n"
         "**How to use**\n"
         "- Choose a domain to narrow the metric list to what you care about."
     ),
@@ -79,5 +72,10 @@ RIBBON_HELP_MD: dict[str, str] = {
         "- **Change from baseline:** maps (future period − baseline) to show how conditions shift.\n\n"
         "**Example**\n"
         "If TXx is 42°C in 2041–2060 and 40°C in baseline, change = +2°C."
+    ),
+    "built_up_area_exposure": (
+        "### Built-up Area Exposure\n"
+        "Current snapshot metrics derived from the cleaned built-surface raster. "
+        "Built-up area is reported in km²; share uses full polygon area in EPSG:6933."
     ),
 }

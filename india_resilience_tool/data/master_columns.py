@@ -13,12 +13,19 @@ import re
 from typing import Any, Optional, Sequence
 
 
+def _normalize_period_token(period: str) -> str:
+    """Normalize cosmetic period separators for baseline/period comparisons."""
+    return str(period or "").strip().replace("_", "-").replace("–", "-").replace(" ", "").lower()
+
+
 def resolve_metric_column(
     df_or_cols: Any,
     base_metric: str,
     scenario: str,
     period: str,
     stat: str,
+    *,
+    strict: bool = False,
 ) -> Optional[str]:
     """
     Resolve the master CSV column name for a metric/scenario/period/stat.
@@ -35,6 +42,11 @@ def resolve_metric_column(
         scenario: scenario key (e.g., "historical", "ssp245").
         period: period token (e.g., "1990-2010", "2020-2040").
         stat: stat token (e.g., "mean", "median", "p95").
+        strict: When True, the requested period must match the column's period
+            after normalization (`_` <-> `-`). The permissive fallback that
+            returned the first scenario+stat-matching column when the period
+            did not match is disabled, so callers receive ``None`` instead of
+            a silently-substituted column. Period-format tolerance is preserved.
 
     Returns:
         The matching column name (preserving original casing) if found, else None.
@@ -63,18 +75,32 @@ def resolve_metric_column(
     # Fallback: match by pieces (handles minor period formatting differences).
     try:
         pat = re.compile(
-            rf"^{re.escape(metric)}__{re.escape(scen)}__.+__{re.escape(stt)}$",
+            rf"^{re.escape(metric)}__{re.escape(scen)}__(?P<period>.+)__{re.escape(stt)}$",
             flags=re.IGNORECASE,
         )
-        matches = [str(c) for c in cols if pat.match(str(c))]
+        matches: list[tuple[str, str]] = []
+        for c in cols:
+            m = pat.match(str(c))
+            if m:
+                matches.append((str(c), m.group("period")))
         if not matches:
             return None
 
-        per_l = per.lower()
-        for c in matches:
-            if per_l in c.lower():
+        per_norm = _normalize_period_token(per)
+        for c, col_period in matches:
+            col_period_norm = _normalize_period_token(col_period)
+            if col_period_norm == per_norm:
                 return c
-        return matches[0]
+        if strict:
+            return None
+        # Legacy permissive fallback: previously this returned the first scenario+stat
+        # match even when the period did not match, which produced silent substitution.
+        # Retained for non-strict callers (dashboard, optimized-bundle paths).
+        per_substr = per_norm
+        for c, _col_period in matches:
+            if per_substr in _normalize_period_token(c):
+                return c
+        return matches[0][0]
     except Exception:
         return None
 
@@ -102,7 +128,7 @@ def find_baseline_column_for_stat(
         return None
 
     pat = re.compile(
-        rf"^{re.escape(metric)}__(?P<scenario>[^_]+)__(?P<period>[^_]+)__{re.escape(stt)}$"
+        rf"^{re.escape(metric)}__(?P<scenario>[^_]+)__(?P<period>.+)__{re.escape(stt)}$"
     )
     candidates: list[tuple[str, str]] = []
     for c in df_cols:
@@ -118,12 +144,12 @@ def find_baseline_column_for_stat(
     if not candidates:
         return None
 
-    pref = str(preferred_period).strip().replace("_", "-")
+    pref = _normalize_period_token(preferred_period)
     for c, p in candidates:
-        if p.replace("_", "-") == pref:
+        if _normalize_period_token(p) == pref:
             return c
 
-    candidates.sort(key=lambda x: x[1])
+    candidates.sort(key=lambda x: _normalize_period_token(x[1]))
     return candidates[0][0]
 
 
@@ -131,15 +157,15 @@ def find_baseline_column_for_metric(
     df_cols: Sequence[str],
     *,
     base_metric: str,
-    preferred_period_tokens: Sequence[str] = ("1995-2014", "1995_2014", "1985-2014"),
+    preferred_period_tokens: Sequence[str] = ("1990-2010", "1995-2014", "1995_2014", "1985-2014"),
 ) -> Optional[str]:
     """
     Find a historical baseline column for the given metric (legacy heuristic).
 
-    Contract (legacy):
+    Contract:
       - Only considers columns ending in `__mean`
       - Only considers `historical` scenario
-      - Prefers a small set of historical periods when present
+      - Prefers historical periods in the caller-provided order
       - Otherwise returns the lexicographically earliest historical period
 
     Returns:
@@ -150,7 +176,7 @@ def find_baseline_column_for_metric(
         return None
 
     pat = re.compile(
-        rf"^{re.escape(metric)}__(?P<scenario>[^_]+)__(?P<period>[^_]+)__mean$"
+        rf"^{re.escape(metric)}__(?P<scenario>[^_]+)__(?P<period>.+)__mean$"
     )
 
     candidates: list[tuple[str, str]] = []
@@ -162,10 +188,13 @@ def find_baseline_column_for_metric(
     if not candidates:
         return None
 
-    pref = {str(p).replace(" ", "") for p in preferred_period_tokens if str(p).strip()}
-    for c, p in candidates:
-        if p.replace(" ", "") in pref:
-            return c
+    for preferred in preferred_period_tokens:
+        preferred_norm = _normalize_period_token(str(preferred))
+        if not preferred_norm:
+            continue
+        for c, p in candidates:
+            if _normalize_period_token(p) == preferred_norm:
+                return c
 
-    candidates.sort(key=lambda x: x[1])
+    candidates.sort(key=lambda x: _normalize_period_token(x[1]))
     return candidates[0][0]

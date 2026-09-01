@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import geopandas as gpd
@@ -9,17 +10,24 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 from shapely.geometry import box
+from PIL import Image
 
 from tools.geodata.build_jrc_flood_depth_admin_masters import (
     DERIVED_EXTENT_METRIC_SLUG,
     DERIVED_INDEX_METRIC_SLUG,
     JRC_FILE_MAP,
+    STRICT_RP100_RESOLUTION_DEGREES,
     _build_derived_extent_outputs,
     _build_district_frames,
     _classify_depth_index,
     _classify_extent_index,
+    _default_qa_dir,
+    _supported_area_exceeds_district_area,
     _lookup_severity_index,
+    _validate_strict_rp100_contract,
     build_jrc_flood_depth_outputs,
+    build_jrc_rp100_strict_outputs,
+    export_rp100_depth_overlay,
 )
 
 
@@ -43,6 +51,68 @@ def _write_boundaries(tmp_path: Path) -> tuple[Path, Path]:
     )
     districts_path = tmp_path / "districts_4326.geojson"
     blocks_path = tmp_path / "blocks_4326.geojson"
+    districts.to_file(districts_path, driver="GeoJSON")
+    blocks.to_file(blocks_path, driver="GeoJSON")
+    return districts_path, blocks_path
+
+
+def _write_strict_boundaries(tmp_path: Path, *, pixel_size: float = STRICT_RP100_RESOLUTION_DEGREES) -> tuple[Path, Path]:
+    districts = gpd.GeoDataFrame(
+        {
+            "state_name": ["Telangana", "Telangana"],
+            "district_name": ["Hyderabad", "Warangal"],
+            "geometry": [
+                box(0, 2 * pixel_size, 4 * pixel_size, 4 * pixel_size),
+                box(10 * pixel_size, 10 * pixel_size, 12 * pixel_size, 12 * pixel_size),
+            ],
+        },
+        crs="EPSG:4326",
+    )
+    blocks = gpd.GeoDataFrame(
+        {
+            "state_name": ["Telangana", "Telangana", "Telangana"],
+            "district_name": ["Hyderabad", "Hyderabad", "Warangal"],
+            "block_name": ["North", "South", "Outside"],
+            "geometry": [
+                box(0, 2 * pixel_size, 2 * pixel_size, 4 * pixel_size),
+                box(2 * pixel_size, 2 * pixel_size, 4 * pixel_size, 4 * pixel_size),
+                box(10 * pixel_size, 10 * pixel_size, 12 * pixel_size, 12 * pixel_size),
+            ],
+        },
+        crs="EPSG:4326",
+    )
+    districts_path = tmp_path / "strict_districts_4326.geojson"
+    blocks_path = tmp_path / "strict_blocks_4326.geojson"
+    districts.to_file(districts_path, driver="GeoJSON")
+    blocks.to_file(blocks_path, driver="GeoJSON")
+    return districts_path, blocks_path
+
+
+def _write_subcell_strict_boundaries(
+    tmp_path: Path,
+    *,
+    pixel_size: float = STRICT_RP100_RESOLUTION_DEGREES,
+) -> tuple[Path, Path]:
+    tiny = box(0.10 * pixel_size, 3.80 * pixel_size, 0.20 * pixel_size, 3.90 * pixel_size)
+    districts = gpd.GeoDataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Hyderabad"],
+            "geometry": [tiny],
+        },
+        crs="EPSG:4326",
+    )
+    blocks = gpd.GeoDataFrame(
+        {
+            "state_name": ["Telangana"],
+            "district_name": ["Hyderabad"],
+            "block_name": ["Tiny"],
+            "geometry": [tiny],
+        },
+        crs="EPSG:4326",
+    )
+    districts_path = tmp_path / "strict_subcell_districts_4326.geojson"
+    blocks_path = tmp_path / "strict_subcell_blocks_4326.geojson"
     districts.to_file(districts_path, driver="GeoJSON")
     blocks.to_file(blocks_path, driver="GeoJSON")
     return districts_path, blocks_path
@@ -193,6 +263,71 @@ def _write_rasters(
                 dst.write_mask(mask)
 
 
+def _write_strict_rp100_source(
+    tmp_path: Path,
+    *,
+    depth_data: np.ndarray,
+    coverage_data: np.ndarray,
+    pixel_size: float = STRICT_RP100_RESOLUTION_DEGREES,
+    depth_crs: str = "EPSG:4326",
+    coverage_crs: str | None = None,
+    depth_nodata: float = -9999.0,
+    coverage_transform_shift_x: float = 0.0,
+    coverage_dtype: str = "uint8",
+    manifest_payload: dict[str, object] | None = None,
+) -> Path:
+    source_dir = tmp_path / "strict_jrc"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    transform = from_origin(0, 4 * pixel_size, pixel_size, pixel_size)
+    coverage_transform = from_origin(
+        coverage_transform_shift_x,
+        4 * pixel_size,
+        pixel_size,
+        pixel_size,
+    )
+    coverage_crs = coverage_crs or depth_crs
+    depth_path = source_dir / "RP100_depth.tif"
+    coverage_path = source_dir / "RP100_tile_coverage.tif"
+    with rasterio.open(
+        depth_path,
+        "w",
+        driver="GTiff",
+        height=depth_data.shape[0],
+        width=depth_data.shape[1],
+        count=1,
+        dtype="float32",
+        crs=depth_crs,
+        transform=transform,
+        nodata=depth_nodata,
+    ) as dst:
+        dst.write(np.asarray(depth_data, dtype=np.float32), 1)
+    with rasterio.open(
+        coverage_path,
+        "w",
+        driver="GTiff",
+        height=coverage_data.shape[0],
+        width=coverage_data.shape[1],
+        count=1,
+        dtype=coverage_dtype,
+        crs=coverage_crs,
+        transform=coverage_transform,
+        nodata=0,
+    ) as dst:
+        dst.write(np.asarray(coverage_data, dtype=coverage_dtype), 1)
+    manifest_path = source_dir / "source_manifest.json"
+    payload = (
+        {
+            "dataset_version": "2.1.2",
+            "rp100_depth_vrt": depth_path.name,
+            "rp100_tile_coverage_vrt": coverage_path.name,
+        }
+        if manifest_payload is None
+        else manifest_payload
+    )
+    manifest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return manifest_path
+
+
 def _build(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -203,6 +338,7 @@ def _build(
     write_full_valid_mask: bool = False,
     invalid_mask_coords: set[tuple[int, int]] | None = None,
     data: np.ndarray | None = None,
+    state: str = "Telangana",
 ):
     data_dir = tmp_path / "irt_data"
     monkeypatch.setenv("IRT_DATA_DIR", str(data_dir))
@@ -224,6 +360,7 @@ def _build(
         assume_units="m",
         overwrite=overwrite,
         dry_run=False,
+        state=state,
     )
 
 
@@ -253,6 +390,7 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     extent_block_qa = derived_extent["block_qa_df"]
     extent_district_qa = derived_extent["district_qa_df"]
     run_summary = outputs["run_summary_df"]
+    overlay = outputs["rp100_overlay"]
 
     value_col = "jrc_flood_depth_rp10__snapshot__Current__mean"
     derived_col = "jrc_flood_depth_index_rp100__snapshot__Current__mean"
@@ -284,6 +422,26 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     warangal = district_master.loc[district_master["district"] == "Warangal", value_col].iloc[0]
     assert hyderabad == pytest.approx(3.72)
     assert pd.isna(warangal)
+    assert overlay["png_path"].exists()
+    assert overlay["meta_path"].exists()
+    metadata = json.loads(overlay["meta_path"].read_text(encoding="utf-8"))
+    assert metadata["overlay_id"] == "rp100_flood_depth_raster"
+    assert metadata["source_raster_name"] == "RP100_depth.tif"
+    assert metadata["source_crs"] == "EPSG:4326"
+    assert metadata["image_crs"] == "EPSG:3857"
+    assert np.allclose(np.asarray(metadata["bounds_latlon"]), np.array([[0.0, 0.0], [4.0, 4.0]]), atol=0.05)
+    assert metadata["display_value_min_m"] == 0.0
+    assert metadata["display_value_max_m"] == 10.0
+    assert metadata["display_units"] == "meters"
+    assert metadata["width_px"] > 0
+    assert metadata["height_px"] > 0
+    assert metadata["source_positive_max_m"] == pytest.approx(5.0)
+    assert metadata["clipped_above_display_max"] is False
+    overlay_rgba = np.asarray(Image.open(overlay["png_path"]))
+    assert overlay_rgba.shape[2] == 4
+    assert overlay_rgba[0, 0, 3] == 255
+    assert overlay_rgba[1, 0, 3] == 0
+    assert overlay_rgba[3, 0, 3] == 0
     assert float(derived_block_master.loc[derived_block_master["block"] == "North", derived_col].iloc[0]) == 5.0
     assert float(derived_block_master.loc[derived_block_master["block"] == "South", derived_col].iloc[0]) == 5.0
     assert pd.isna(derived_block_master.loc[derived_block_master["block"] == "Outside", derived_col].iloc[0])
@@ -325,14 +483,12 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
         "state",
         "district",
         "district_key",
-        "raw_rp100_depth_m",
         "district_valid_support_fraction",
-        "raw_rp100_extent_fraction",
-        "depth_class_index",
-        "depth_class_label",
-        "extent_class_index",
-        "extent_class_label",
-        "class_index",
+        "district_severity_index",
+        "flooded_block_count",
+        "total_flooded_area_km2",
+        "min_block_severity",
+        "max_block_severity",
         "class_label",
     ]
     north_index = derived_block_qa.loc[derived_block_qa["block"] == "North"].iloc[0]
@@ -386,7 +542,7 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     assert derived_summary["metric_kind"] == "derived_severity_matrix"
     assert derived_summary["source_metric_slug"] == "jrc_flood_depth_rp100"
     assert derived_summary["component_metric_slugs"] == "jrc_flood_depth_rp100;jrc_flood_extent_rp100"
-    assert derived_summary["severity_method"] == "rp100_depth_extent_matrix_v1"
+    assert derived_summary["severity_method"] == "rp100_block_severity_flooded_area_weighted_v1"
     extent_summary = run_summary.loc[run_summary["metric_slug"] == DERIVED_EXTENT_METRIC_SLUG].iloc[0]
     assert extent_summary["metric_kind"] == "derived_extent"
     assert extent_summary["source_metric_slug"] == "jrc_flood_depth_rp100"
@@ -406,6 +562,45 @@ def test_jrc_builder_writes_expected_telangana_outputs_and_summary(
     assert (qa_dir / "jrc_flood_extent_rp100_district_qa.csv").exists()
     assert (qa_dir / "admin_boundary_join_qa.csv").exists()
     assert (qa_dir / "run_summary.csv").exists()
+
+
+def test_rp100_overlay_export_uses_mercator_png_with_wgs84_bounds(tmp_path: Path) -> None:
+    raster_path = tmp_path / "RP100_depth.tif"
+    data = np.array(
+        [
+            [1.0, 2.0, 0.0, -9999.0],
+            [0.0, 3.0, 4.0, -9999.0],
+            [0.0, 0.0, 5.0, -9999.0],
+            [-9999.0, -9999.0, -9999.0, -9999.0],
+        ],
+        dtype=np.float32,
+    )
+    with rasterio.open(
+        raster_path,
+        "w",
+        driver="GTiff",
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype="float32",
+        crs="EPSG:4326",
+        transform=from_origin(70.0, 14.0, 1.0, 1.0),
+        nodata=-9999.0,
+    ) as dst:
+        dst.write(data, 1)
+
+    overlay = export_rp100_depth_overlay(
+        raster_path=raster_path,
+        overlay_dir=tmp_path / "overlay",
+        overwrite=True,
+        dry_run=False,
+    )
+
+    metadata = overlay["metadata"]
+    assert overlay["png_path"].exists()
+    assert metadata["source_crs"] == "EPSG:4326"
+    assert metadata["image_crs"] == "EPSG:3857"
+    assert np.allclose(np.asarray(metadata["bounds_latlon"]), np.array([[10.0, 70.0], [14.0, 74.0]]), atol=0.05)
 
 
 def test_jrc_builder_refuses_existing_outputs_without_overwrite(
@@ -489,6 +684,223 @@ def test_jrc_builder_returns_zero_for_covered_dry_blocks_inside_raster_extent(
     assert float(extent_block_master.loc[extent_block_master["block"] == "North", extent_col].iloc[0]) == 0.0
     assert float(extent_block_master.loc[extent_block_master["block"] == "South", extent_col].iloc[0]) == 0.0
     assert float(extent_district_master.loc[extent_district_master["district"] == "Hyderabad", extent_col].iloc[0]) == 0.0
+
+
+def test_strict_rp100_uses_source_coverage_not_depth_nodata_for_support(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path / "irt_data"))
+    districts_path, blocks_path = _write_strict_boundaries(tmp_path)
+    depth_data = np.array(
+        [
+            [-9999.0, -9999.0, 2.0, 4.0],
+            [-9999.0, -9999.0, 0.0, -9999.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [-9999.0, -9999.0, -9999.0, -9999.0],
+        ],
+        dtype=np.float32,
+    )
+    coverage_data = np.array(
+        [
+            [1, 1, 1, 1],
+            [1, 1, 1, 1],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ],
+        dtype=np.uint8,
+    )
+    manifest_path = _write_strict_rp100_source(
+        tmp_path,
+        depth_data=depth_data,
+        coverage_data=coverage_data,
+    )
+
+    outputs = build_jrc_rp100_strict_outputs(
+        source_manifest=manifest_path,
+        districts_path=districts_path,
+        blocks_path=blocks_path,
+        qa_dir=tmp_path / "irt_data" / "jrc_flood_depth" / "qa",
+        overlay_dir=tmp_path / "overlay",
+        overwrite=True,
+        dry_run=False,
+        state="Telangana",
+    )
+
+    value_col = "jrc_flood_depth_rp100__snapshot__Current__mean"
+    extent_col = "jrc_flood_extent_rp100__snapshot__Current__mean"
+    block_master = outputs["jrc_flood_depth_rp100"]["block_master_df"]
+    block_qa = outputs["jrc_flood_depth_rp100"]["block_qa_df"]
+    extent_block_master = outputs[DERIVED_EXTENT_METRIC_SLUG]["block_master_df"]
+    run_summary = outputs["run_summary_df"]
+
+    north = block_master.loc[block_master["block"] == "North", value_col].iloc[0]
+    south = float(block_master.loc[block_master["block"] == "South", value_col].iloc[0])
+    outside = block_master.loc[block_master["block"] == "Outside", value_col].iloc[0]
+    assert north == 0.0
+    assert south == pytest.approx(3.9)
+    assert pd.isna(outside)
+
+    north_qa = block_qa.loc[block_qa["block"] == "North"].iloc[0]
+    assert int(north_qa["source_covered_cell_count"]) == 4
+    assert int(north_qa["dry_source_cell_count"]) == 4
+    assert int(north_qa["flooded_source_cell_count"]) == 0
+    assert north_qa["source_coverage_state"] == "full"
+    assert north_qa["sampling_mode"] == "cell_center_mask"
+    assert float(extent_block_master.loc[extent_block_master["block"] == "North", extent_col].iloc[0]) == 0.0
+    assert pd.isna(extent_block_master.loc[extent_block_master["block"] == "Outside", extent_col].iloc[0])
+    assert set(run_summary["metric_kind"]) == {
+        "raw_raster_strict_rp100",
+        "derived_extent_strict_rp100",
+        "derived_severity_matrix_strict_rp100",
+    }
+
+
+@pytest.mark.parametrize(
+    ("helper_kwargs", "expected_message"),
+    [
+        ({"coverage_transform_shift_x": STRICT_RP100_RESOLUTION_DEGREES}, "share CRS, transform, shape, bounds, and resolution"),
+        ({"coverage_data": np.full((4, 4), 2, dtype=np.uint8)}, "coverage raster values must be restricted to 0/1"),
+        ({"depth_nodata": 0.0}, "depth nodata must be -9999"),
+        ({"depth_crs": "EPSG:3857"}, "depth raster must be EPSG:4326"),
+        ({"pixel_size": 1.0}, "resolution must be exactly 3 arc-seconds"),
+        (
+            {"manifest_payload": {"rp100_depth_vrt": "RP100_depth.tif", "rp100_tile_coverage_vrt": "RP100_tile_coverage.tif"}},
+            "dataset_version",
+        ),
+        (
+            {"manifest_payload": {"dataset_version": "2.1.2", "rp100_tile_coverage_vrt": "RP100_tile_coverage.tif"}},
+            "rp100_depth_vrt",
+        ),
+        (
+            {"manifest_payload": {"dataset_version": "2.1.2", "rp100_depth_vrt": "RP100_depth.tif"}},
+            "rp100_tile_coverage_vrt",
+        ),
+    ],
+)
+def test_strict_rp100_contract_fail_closed_guards(
+    tmp_path: Path,
+    helper_kwargs: dict[str, object],
+    expected_message: str,
+) -> None:
+    depth_data = np.ones((4, 4), dtype=np.float32)
+    coverage_data = np.ones((4, 4), dtype=np.uint8)
+    kwargs = {"depth_data": depth_data, "coverage_data": coverage_data}
+    kwargs.update(helper_kwargs)
+    manifest_path = _write_strict_rp100_source(tmp_path, **kwargs)
+
+    with pytest.raises((FileNotFoundError, ValueError), match=expected_message):
+        _validate_strict_rp100_contract(manifest_path)
+
+
+def test_strict_rp100_partial_coverage_publishes_from_covered_support(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path / "irt_data"))
+    districts_path, blocks_path = _write_strict_boundaries(tmp_path)
+    depth_data = np.array(
+        [
+            [2.0, 9.0, 0.0, 0.0],
+            [7.0, 8.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [-9999.0, -9999.0, -9999.0, -9999.0],
+        ],
+        dtype=np.float32,
+    )
+    coverage_data = np.array(
+        [
+            [1, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ],
+        dtype=np.uint8,
+    )
+    manifest_path = _write_strict_rp100_source(
+        tmp_path,
+        depth_data=depth_data,
+        coverage_data=coverage_data,
+    )
+
+    outputs = build_jrc_rp100_strict_outputs(
+        source_manifest=manifest_path,
+        districts_path=districts_path,
+        blocks_path=blocks_path,
+        qa_dir=tmp_path / "irt_data" / "jrc_flood_depth" / "qa",
+        overlay_dir=tmp_path / "overlay",
+        overwrite=True,
+        dry_run=False,
+        state="Telangana",
+    )
+
+    value_col = "jrc_flood_depth_rp100__snapshot__Current__mean"
+    extent_col = "jrc_flood_extent_rp100__snapshot__Current__mean"
+    block_master = outputs["jrc_flood_depth_rp100"]["block_master_df"]
+    block_qa = outputs["jrc_flood_depth_rp100"]["block_qa_df"]
+    extent_block_master = outputs[DERIVED_EXTENT_METRIC_SLUG]["block_master_df"]
+    north_value = float(block_master.loc[block_master["block"] == "North", value_col].iloc[0])
+    north_qa = block_qa.loc[block_qa["block"] == "North"].iloc[0]
+
+    assert north_value == pytest.approx(2.0)
+    assert float(north_qa["source_coverage_fraction"]) == pytest.approx(0.25)
+    assert north_qa["source_coverage_state"] == "partial"
+    assert bool(north_qa["partial_coverage"]) is True
+    assert int(north_qa["flooded_source_cell_count"]) == 1
+    assert float(extent_block_master.loc[extent_block_master["block"] == "North", extent_col].iloc[0]) == pytest.approx(0.25)
+    summary = outputs["run_summary_df"].set_index("metric_slug")
+    assert int(summary.loc["jrc_flood_depth_rp100", "blocks_partial_coverage"]) >= 1
+
+
+def test_strict_rp100_representative_point_fallback_for_subcell_polygon(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IRT_DATA_DIR", str(tmp_path / "irt_data"))
+    districts_path, blocks_path = _write_subcell_strict_boundaries(tmp_path)
+    depth_data = np.array(
+        [
+            [6.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [-9999.0, -9999.0, -9999.0, -9999.0],
+        ],
+        dtype=np.float32,
+    )
+    coverage_data = np.array(
+        [
+            [1, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+        ],
+        dtype=np.uint8,
+    )
+    manifest_path = _write_strict_rp100_source(
+        tmp_path,
+        depth_data=depth_data,
+        coverage_data=coverage_data,
+    )
+
+    outputs = build_jrc_rp100_strict_outputs(
+        source_manifest=manifest_path,
+        districts_path=districts_path,
+        blocks_path=blocks_path,
+        qa_dir=tmp_path / "irt_data" / "jrc_flood_depth" / "qa",
+        overlay_dir=tmp_path / "overlay",
+        overwrite=True,
+        dry_run=False,
+        state="Telangana",
+    )
+
+    value_col = "jrc_flood_depth_rp100__snapshot__Current__mean"
+    block_master = outputs["jrc_flood_depth_rp100"]["block_master_df"]
+    block_qa = outputs["jrc_flood_depth_rp100"]["block_qa_df"].iloc[0]
+
+    assert float(block_master.loc[0, value_col]) == pytest.approx(6.0)
+    assert block_qa["sampling_mode"] == "representative_point_fallback"
+    assert int(block_qa["source_covered_cell_count"]) == 1
+    assert int(block_qa["flooded_source_cell_count"]) == 1
 
 
 def test_jrc_builder_matches_variant_telangana_district_names_via_normalized_join_keys(
@@ -694,6 +1106,33 @@ def test_jrc_builder_uses_authoritative_district_polygon_area_as_denominator(
     assert float(hyderabad["delta_vs_direct_p95_positive_m"]) < 0.0
 
 
+def test_jrc_district_supported_area_tolerance_allows_meter_scale_boundary_drift() -> None:
+    district_area_km2 = 1747.033333564752
+
+    assert not _supported_area_exceeds_district_area(
+        district_area_km2 + 0.000001342528,
+        district_area_km2,
+    )
+    assert _supported_area_exceeds_district_area(
+        district_area_km2 + 0.01,
+        district_area_km2,
+    )
+
+    # Kargil (Ladakh): worst observed national block-vs-district drift, 65 m^2 over
+    # 14,205 km^2 (4.59e-9 relative). Fully covered only under the strict v2.1.2
+    # source, which is why it first failed there and not in the pilot states.
+    kargil_area_km2 = 14205.223836
+    assert not _supported_area_exceeds_district_area(
+        kargil_area_km2 + 0.00006514709275506902,
+        kargil_area_km2,
+    )
+    # A gross masking/units error must still be rejected.
+    assert _supported_area_exceeds_district_area(
+        kargil_area_km2 * 1.001,
+        kargil_area_km2,
+    )
+
+
 def test_jrc_builder_fails_when_flooded_blocks_are_missing_p95_values(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -883,3 +1322,98 @@ def test_invalid_depth_and_extent_inputs_raise() -> None:
         _classify_extent_index(1.01)
     with pytest.raises(ValueError, match="expects classes 1..5"):
         _lookup_severity_index(6, 1)
+
+
+# --- CHG-0064: state parameterization -----------------------------------------
+
+def _write_two_state_boundaries(tmp_path: Path) -> tuple[Path, Path]:
+    """Maharashtra rows over the raster extent, plus a Telangana decoy that the
+    --state filter must drop before any join validation/aggregation runs."""
+    districts = gpd.GeoDataFrame(
+        {
+            "state_name": ["Maharashtra", "Maharashtra", "Telangana"],
+            "district_name": ["Pune", "Nagpur", "Hyderabad"],
+            "geometry": [box(0, 2, 4, 4), box(10, 10, 12, 12), box(0, 2, 4, 4)],
+        },
+        crs="EPSG:4326",
+    )
+    blocks = gpd.GeoDataFrame(
+        {
+            "state_name": ["Maharashtra", "Maharashtra", "Maharashtra", "Telangana"],
+            "district_name": ["Pune", "Pune", "Nagpur", "Hyderabad"],
+            "block_name": ["North", "South", "Outside", "Decoy"],
+            "geometry": [box(0, 2, 2, 4), box(2, 2, 4, 4), box(10, 10, 12, 12), box(0, 2, 2, 4)],
+        },
+        crs="EPSG:4326",
+    )
+    districts_path = tmp_path / "districts_4326.geojson"
+    blocks_path = tmp_path / "blocks_4326.geojson"
+    districts.to_file(districts_path, driver="GeoJSON")
+    blocks.to_file(blocks_path, driver="GeoJSON")
+    return districts_path, blocks_path
+
+
+def test_jrc_builder_targets_selected_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    outputs = _build(
+        tmp_path,
+        monkeypatch,
+        overwrite=True,
+        boundaries_writer=_write_two_state_boundaries,
+        state="Maharashtra",
+    )
+    rp10 = outputs["jrc_flood_depth_rp10"]
+    block_master = rp10["block_master_df"]
+    district_master = rp10["district_master_df"]
+
+    # Every emitted row carries the requested state; the Telangana decoy is gone.
+    assert set(block_master["state"]) == {"Maharashtra"}
+    assert set(district_master["state"]) == {"Maharashtra"}
+    assert set(district_master["district"]) <= {"Pune", "Nagpur"}
+
+    # Masters are written under the state-scoped processed root, not Telangana.
+    data_dir = tmp_path / "irt_data"
+    written = list(data_dir.rglob("master_metrics_by_district.csv"))
+    assert written, "expected at least one district master to be written"
+    assert all("Maharashtra" in str(p) for p in written)
+    assert not list(data_dir.rglob("*Telangana*master_metrics_by_district.csv"))
+
+
+def test_jrc_default_state_back_compat_is_telangana(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Omitting state keeps the historical Telangana behavior.
+    outputs = _build(tmp_path, monkeypatch, overwrite=True)
+    assert set(outputs["jrc_flood_depth_rp10"]["block_master_df"]["state"]) == {"Telangana"}
+
+
+def test_default_qa_dir_is_state_scoped() -> None:
+    tg = _default_qa_dir("Telangana")
+    mh = _default_qa_dir("Maharashtra")
+    assert tg != mh
+    assert tg.parts[-2] == "Telangana" and tg.parts[-1] == "qa"
+    assert mh.parts[-2] == "Maharashtra" and mh.parts[-1] == "qa"
+
+
+def test_overlay_reused_across_states_without_overwrite(tmp_path: Path) -> None:
+    # The pan-India overlay is reused (skipped, not re-raised) when it already
+    # exists and --overwrite is not set, so a second state's run does not fail.
+    from tools.geodata.build_jrc_flood_depth_admin_masters import _rp100_overlay_paths
+
+    overlay_dir = tmp_path / "overlay"
+    overlay_dir.mkdir(parents=True, exist_ok=True)
+    png_path, meta_path = _rp100_overlay_paths(overlay_dir=overlay_dir)
+    png_path.write_bytes(b"existing-png")
+    meta_path.write_text(json.dumps({"sentinel": True}), encoding="utf-8")
+
+    result = export_rp100_depth_overlay(
+        raster_path=tmp_path / "does_not_matter.tif",  # not opened on the skip path
+        overlay_dir=overlay_dir,
+        overwrite=False,
+        dry_run=False,
+    )
+    assert result.get("skipped") is True
+    assert png_path.read_bytes() == b"existing-png"  # untouched

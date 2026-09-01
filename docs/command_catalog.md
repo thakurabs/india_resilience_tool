@@ -10,6 +10,21 @@ python -m tools.runs.prepare_dashboard --help
 
 Run it from the repo root with the correct Conda environment active.
 
+## Documentation assets
+
+### Regenerate the in-dashboard Technical Guidance Note
+
+```bash
+python -m tools.docs.build_technical_note_html
+```
+
+Use `--dry-run` to validate the 16 approved figure callouts, embedded KaTeX
+bundle, and generated HTML size without writing the committed asset:
+
+```bash
+python -m tools.docs.build_technical_note_html --dry-run
+```
+
 ## Canonical runner
 
 ### List available bundles and steps
@@ -38,6 +53,7 @@ Default bundle contents:
 - admin masters
 - hydro masters
 - `processed_optimised` refresh
+- persisted Glance view-model refresh under `processed_optimised/context/glance/v1/`
 - optimized parity audit
 - Aqueduct validation
 
@@ -84,11 +100,88 @@ python -m tools.runs.prepare_dashboard climate-hazards --skip-optimised
 python -m tools.runs.prepare_dashboard climate-hazards --audit-only
 ```
 
+### Refresh dashboard climate bundles only
+
+Use this PowerShell wrapper when the goal is to refresh active admin dashboard
+climate bundles from raw NEX inputs through `processed_optimised`, without
+recomputing legacy diagnostics that are no longer used by thematic or
+sector-wise bundle definitions.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all
+```
+
+Each executed stage streams to the terminal and writes stdout/stderr to a
+separate log under
+`processed_optimised/logs/dashboard_climate_refresh/<state>/<timestamp>/` by
+default. Use `-LogRoot <path>` to place the logs elsewhere.
+
+Preview the resolved source metrics, thematic composites, sector-wise composites,
+and commands without executing the expensive stages:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level all -PlanOnly
+```
+
+Common variants:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level district
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level block -Workers 36
+```
+
+Per-task compute failures (e.g. metrics whose input years are truncated/missing)
+are surfaced as warnings, a `COMPUTE WARNINGS` block in the run summary, and a
+`*_compute_failures.json` sidecar beside the parity report — they do not block
+publishing by default. Add `-FailOnComputeError` to escalate any bundle that had
+compute-task failures to a bundle failure (taint + skip publish + non-zero exit),
+for strict/CI use (ensemble failures always hard-fail regardless):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_climate_bundles.ps1 -State Telangana -Level district -Bundle "Drought Risk" -FailOnComputeError
+```
+
+The script orchestrates, per requested admin level:
+- `tools.pipeline.compute_indices_multiprocess` for active dashboard source metrics only
+- `tools.pipeline.build_master_metrics`
+- `tools.pipeline.build_composite_metrics` for active thematic composites, excluding Riverine Flood because it comes from the JRC workflow
+- `tools.pipeline.build_proposal_bundles` for active sector-wise composites
+- `tools.optimized.build_processed_optimised`
+- `tools.optimized.audit_processed_optimised_parity`
+
+### Recover Telangana block model-member yearly artifacts
+
+Preflight disk headroom before running full-state block recovery because yearly-cleanup-policy preserve retains per-model yearly CSVs under IRT_DATA_DIR/processed/. Start with a one-metric pilot:
+
+python -m tools.pipeline.compute_indices_multiprocess --state Telangana --level block --overwrite --yearly-cleanup-policy preserve --metrics tas_annual_mean
+python -m tools.optimized.build_processed_optimised --state Telangana --level block --overwrite --prune-scope --skip-geometry --skip-context --metric tas_annual_mean
+
+Generate full-run metric flags from optimized yearly artifacts:
+
+python -m tools.diagnostics.list_optimized_yearly_metrics --state Telangana --level block --format args
+
+After compute succeeds, rebuild optimized block artifacts with the same repeated metric flags, then run strict parity:
+
+python -m tools.optimized.audit_processed_optimised_parity --state Telangana --level block --require-block-yearly-models --strict --report-path D:/projects/irt_data/processed_optimised/parity_report_telangana_block_yearly_models.json
+
+Cleanup policy contract:
+- default: block uses delete_after_ensemble; district, basin, and sub-basin use preserve
+- preserve: all levels keep per-model yearly CSVs
+- delete_after_ensemble: valid only with level block
+- compute marker schema version 5 and ensemble marker schema version 4 invalidate older cleanup-policy-blind markers
+
 ### Build population exposure masters
 
 ```bash
 python -m tools.runs.prepare_dashboard population-exposure
 ```
+
+Builds district/block population total and density masters and exports the display-only `Population exposure (2025)` reference overlay:
+- `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay.png`
+- `IRT_DATA_DIR/population/overlay/population_exposure_2025_overlay_meta.json`
+- optimized copies under `IRT_DATA_DIR/processed_optimised/context/population/overlay/`
+
+The overlay uses binned people-per-source-cell colors and is runtime context only; the dashboard does not read the raw population TIFF.
 
 Optional raster override:
 
@@ -96,11 +189,97 @@ Optional raster override:
 python -m tools.runs.prepare_dashboard population-exposure --population-raster /path/to/ind_pop_2025_CN_1km_R2025A_UA_v1.tif
 ```
 
+### Build rural facilities exposure masters
+
+```bash
+python -m tools.runs.prepare_dashboard rural-facilities
+python -m tools.runs.prepare_dashboard rural-facilities --overwrite
+python -m tools.runs.prepare_dashboard dashboard-package --include-rural-facilities
+python -m tools.runs.prepare_dashboard dashboard-package --include-rural-facilities --overwrite
+```
+
+Builds district/block rural facilities counts and per-100k people rates for the `2019-2021` snapshot, plus category-selectable display overlays:
+- `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_total_overlay.png`
+- `IRT_DATA_DIR/rural_facilities/overlay/rural_facilities_density_<agro|education|health|service>_overlay.png`
+- matching `_meta.json` files and optimized copies under `IRT_DATA_DIR/processed_optimised/context/rural_facilities/overlay/`
+- `IRT_DATA_DIR/processed_optimised/context/admin_exposure_summary.parquet`, which feeds the right-panel Exposure Snapshot cards
+
+Optional overrides:
+
+```bash
+python -m tools.runs.prepare_dashboard rural-facilities --rural-facilities-source-dir /path/to/Ruralfacilties_4files --rural-facilities-qa-dir /path/to/qa --rural-facilities-overlay-dir /path/to/overlay
+```
+
+Use `--overwrite` when refreshing rural facilities for dashboard display; otherwise the runner may only audit existing optimized metric artifacts and leave the Exposure Snapshot context summary unchanged.
+
+If the rural facilities masters already exist and only the right-panel Exposure Snapshot cards are stale, rebuild the context summary directly:
+
+```bash
+python -m tools.pipeline.build_admin_exposure_summary --data-dir /path/to/irt_data
+```
+
+### Build built-up area exposure masters
+
+Canonical source placement:
+
+```bash
+mkdir -p "$IRT_DATA_DIR/built_up_area"
+mv /path/to/Cleaned_India_Built_Surface_WGS84.tif "$IRT_DATA_DIR/built_up_area/Cleaned_India_Built_Surface_WGS84.tif"
+```
+
+Preview the dashboard-ready run:
+
+```bash
+python -m tools.geodata.build_built_up_area_admin_masters --help
+python -m tools.runs.prepare_dashboard built-up-area --built-up-raster "<path-to-Cleaned_India_Built_Surface_WGS84.tif>" --plan-only
+```
+
+Builds district/block built-up area and built-up area share masters for the `snapshot` / `Current` selector pair, plus the display-only reference overlay:
+- `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay.png`
+- `IRT_DATA_DIR/built_up_area/overlay/built_up_area_current_overlay_meta.json`
+- optimized copies under `IRT_DATA_DIR/processed_optimised/context/built_up_area/overlay/`
+- `IRT_DATA_DIR/processed_optimised/context/admin_exposure_summary.parquet`, which can feed the right-panel Exposure Snapshot cards
+
+Notes:
+- source values are interpreted as `m2/source cell`; `0` is valid no built-up and `65535` is invalid/background
+- the builder validates the national total before writes and fails outside `43,000-220,000 km2` unless `--allow-total-outlier` is supplied
+- metrics tabulate in the source raster CRS by reprojecting vectors, while the display overlay is an EPSG:3857 PNG
+- built-up metrics are not included in v1 composites, proposal bundles, or bundle weights
+
 The runner refreshes the canonical block boundaries first:
 
 ```bash
 python -m tools.runs.prepare_dashboard blocks-geojson
 ```
+
+### Build agricultural LULC exposure masters
+
+Canonical source placement:
+
+```bash
+mkdir -p "$IRT_DATA_DIR/lulc"
+mv /path/to/LULC_2_Agri.tif "$IRT_DATA_DIR/lulc/LULC_2_Agri.tif"
+```
+
+Preview the dashboard-ready run:
+
+```bash
+python -m tools.geodata.build_lulc_admin_masters --help
+python -m tools.runs.prepare_dashboard lulc --lulc-raster "<path-to-LULC_2_Agri.tif>" --plan-only
+```
+
+Builds district/block agricultural LULC area and agricultural LULC share masters for the `snapshot` / `Current` selector pair, plus the display-only reference overlay:
+- `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay.png`
+- `IRT_DATA_DIR/lulc/overlay/lulc_agri_current_overlay_meta.json`
+- optimized copies under `IRT_DATA_DIR/processed_optimised/context/lulc/overlay/`
+- `IRT_DATA_DIR/processed_optimised/context/admin_exposure_summary.parquet`, which can feed the right-panel Exposure Snapshot cards
+
+Notes:
+- source values are binary: `1` is agricultural LULC; `0` is nodata/background, not an explicit non-agriculture class
+- unexpected raster values fail by default; use `--lulc-allow-unexpected-values` only after validating the source
+- metrics tabulate through a nearest-neighbor `EPSG:6933` equal-area WarpedVRT with `all_touched=False`; shares use full polygon area in `EPSG:6933`
+- guardrails fail national totals outside `1,200,000-2,300,000 km2` unless `--lulc-allow-total-outlier` is supplied and district/block shares above `100.01%` unless `--lulc-allow-share-outlier` is supplied
+- LULC metrics are not included in v1 composites, proposal bundles, or bundle weights
 
 ### Build groundwater district masters
 
@@ -120,10 +299,10 @@ This bundle writes district-only masters for:
 - `gw_extractable_resource_ham`
 - `gw_total_extraction_ham`
 
-### Build Telangana JRC flood-depth masters
+### Build JRC flood-depth masters for one state
 
 ```bash
-python -m tools.runs.prepare_dashboard jrc-flood-depth --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
+python -m tools.runs.prepare_dashboard jrc-flood-depth --state Telangana --source-dir /path/to/Floodlayers_JRC --assume-units m --overwrite
 ```
 
 This bundle runs:
@@ -133,7 +312,7 @@ This bundle runs:
 4. `processed-optimised-audit`
 
 Notes:
-- Telangana-only pilot coverage
+- state-scoped coverage for the selected `--state`
 - fixed snapshot selectors: `snapshot`, `Current`, `mean`
 - the JRC workflow now also writes the derived `jrc_flood_depth_index_rp100` Flood Severity Index masters exposed only under `Bio-physical Hazards -> Flood Inundation Depth (JRC)` in this pass
 - the same RP-100 workflow also writes `jrc_flood_extent_rp100`, stored as a `0-1` fraction and displayed as a percent
@@ -144,6 +323,20 @@ Notes:
 - runner `--overwrite` refreshes JRC masters and QA outputs without wiping unrelated `processed_optimised` artifacts
 - zero values inside raster extent are treated as dry cells for this JRC raster family
 - `dashboard-package --include-jrc-flood-depth` also requires `--jrc-source-dir` and `--jrc-assume-units m` unless `--audit-only` is set
+
+### Refresh the full Riverine Flood bundle for one state
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/runs/refresh_dashboard_riverine_flood_bundle.ps1 -State Maharashtra -JrcDir D:/projects/irt_data/Floodlayers_JRC
+```
+
+This script runs:
+1. `python -m tools.runs.prepare_dashboard jrc-flood-depth --state <STATE> --source-dir <JRC_DIR> --assume-units m [--overwrite]`
+2. `python -m tools.pipeline.build_composite_metrics --metric composite_flood_jrc_depth --state <STATE> --level district --level block [--overwrite]`
+3. `python -m tools.optimized.build_processed_optimised --state <STATE> --level district --level block --metric composite_flood_jrc_depth --metric jrc_flood_depth_index_rp100 --metric jrc_flood_extent_rp100 --metric jrc_flood_depth_rp100 --skip-audit`
+4. `python -m tools.optimized.audit_processed_optimised_parity --state <STATE> --level district --level block --metric composite_flood_jrc_depth --metric jrc_flood_depth_index_rp100 --metric jrc_flood_extent_rp100 --metric jrc_flood_depth_rp100`
+
+Use `-PlanOnly` to print the exact commands without running them.
 
 ### Prepare the dashboard package end to end
 
@@ -157,6 +350,8 @@ This bundle now includes:
 - optimized bundle refresh + audit
 - Aqueduct prep + validation
 - population exposure master builds
+- built-up area exposure master builds
+- agricultural LULC exposure master builds
 - groundwater district master builds
 - optional Telangana JRC flood-depth prep when `--include-jrc-flood-depth` is set
 
@@ -238,6 +433,53 @@ The corresponding optimized outputs are generated by the normal optimized runtim
 - `IRT_DATA_DIR/processed_optimised/metrics/<composite_slug>/masters/admin/district/state=<State>.parquet`
 - `IRT_DATA_DIR/processed_optimised/metrics/<composite_slug>/masters/admin/block/state=<State>.parquet`
 
+### Glance view model
+
+```bash
+python -m tools.pipeline.build_glance_view_model --help
+```
+
+Normal operators should run `python -m tools.optimized.build_processed_optimised`, which writes Glance artifacts after optimized master Parquet files and before manifest/audit. The direct command is useful for debugging selected dashboard composites:
+
+```bash
+python -m tools.pipeline.build_glance_view_model --metric composite_heat_risk --overwrite
+```
+
+Outputs:
+- `IRT_DATA_DIR/processed_optimised/context/glance/v1/{composite_slug}/{scenario}/{period}/district.parquet`
+- `state.parquet`
+- `drivers.parquet`
+- `attributes.parquet`
+- `distributions.parquet`
+
+Dashboard Glance runtime reads these persisted artifacts only. It does not compute bundle scores, ranks, bands, drivers, attributes, or distribution charts while Streamlit is running.
+
+### Proposal climate-risk bundles
+
+```bash
+python -m tools.pipeline.build_proposal_bundles --help
+```
+
+Examples:
+
+```bash
+python -m tools.pipeline.build_proposal_bundles --level district
+```
+
+```bash
+python -m tools.pipeline.build_proposal_bundles --level district --bundle composite_health_risk
+```
+
+```bash
+python -m tools.pipeline.build_proposal_bundles --level admin --state Telangana --dry-run
+```
+
+Notes:
+- proposal bundles are offline admin-only products for `district` and `block`
+- the builder writes persisted proposal bundle masters under `IRT_DATA_DIR/processed/<proposal_composite_slug>/<state>/`
+- hydropower proposal runs also persist the helper `r95p_interannual_variability` masters under `IRT_DATA_DIR/processed/r95p_interannual_variability/<state>/`
+- proposal bundles are intentionally not added to the current dashboard UI in this pass
+
 ### Aqueduct
 
 ```bash
@@ -282,6 +524,8 @@ python -m tools.optimized.build_processed_optimised
 ```
 
 This build prefers legacy hydro yearly ensemble CSVs and falls back to legacy hydro per-model yearly CSVs when needed so basin/sub-basin trend panels can still be served from `processed_optimised`.
+
+For admin district/all scopes, this build also writes persisted Glance view-model artifacts unless `--skip-context` is used. Hydro-only, basin-only, sub-basin-only, and block-only scopes skip Glance.
 
 Resume after a late failure without deleting the partial bundle first:
 
@@ -353,6 +597,13 @@ python -m pytest -q tests/test_build_blocks_geojson.py tests/test_prepare_aquedu
 - block-boundary QA outputs under `IRT_DATA_DIR/block_boundary_*.csv`
 - district/block masters under `IRT_DATA_DIR/processed/population_{total,density}/{state}/`
 - QA bundles under `IRT_DATA_DIR/population/`
+
+### Rural facilities exposure
+- district/block count masters under `IRT_DATA_DIR/processed/rural_facilities_<total|agro|education|health|service>_count/{state}/`
+- district/block rate masters under `IRT_DATA_DIR/processed/rural_facilities_<total|agro|education|health|service>_count_per_100k/{state}/`
+- density overlay PNG/metadata pairs under `IRT_DATA_DIR/rural_facilities/overlay/`
+- optimized overlay copies under `IRT_DATA_DIR/processed_optimised/context/rural_facilities/overlay/`
+- Exposure Snapshot context summary at `IRT_DATA_DIR/processed_optimised/context/admin_exposure_summary.parquet`
 
 ### Groundwater
 - district masters under `IRT_DATA_DIR/processed/gw_*/{state}/`

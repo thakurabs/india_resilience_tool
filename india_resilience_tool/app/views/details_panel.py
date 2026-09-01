@@ -21,6 +21,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Union
 import html
 import pandas as pd
 
+from india_resilience_tool.app._ui_text import rank_phrasing
 from india_resilience_tool.app.state import VIEW_RANKINGS
 from india_resilience_tool.data.crosswalks import CrosswalkContext, CrosswalkOverlap
 from india_resilience_tool.viz.formatting import (
@@ -336,17 +337,17 @@ def render_risk_summary(
                 st.markdown("**Position in district**")
                 if rank_in_district is not None and n_in_district is not None:
                     district_label = parent_district_name or "selected district"
-                    rank_1_meaning = "highest" if rank_higher_is_worse else "lowest"
+                    _phr = rank_phrasing(rank_higher_is_worse)
                     if percentile_district is not None:
                         help_text = (
-                            f"Percentile (higher = worse): {percentile_district:.0f}th\n"
+                            f"Percentile ({_phr.percentile_legend}): {percentile_district:.0f}th\n"
                             f"Computed among {n_in_district} blocks with available data in {district_label}. "
-                            f"Rank 1 = {rank_1_meaning} value."
+                            f"Rank 1 = {_phr.rank_1_meaning} value."
                         )
                     else:
                         help_text = (
                             f"Computed among {n_in_district} blocks with available data in {district_label}. "
-                            f"Rank 1 = {rank_1_meaning} value."
+                            f"Rank 1 = {_phr.rank_1_meaning} value."
                         )
 
                     st.markdown(
@@ -380,17 +381,17 @@ def render_risk_summary(
 
             if rank_in_state is not None and n_in_state is not None:
                 unit_word = "blocks" if is_block else "districts"
-                rank_1_meaning = "highest" if rank_higher_is_worse else "lowest"
+                _phr = rank_phrasing(rank_higher_is_worse)
                 if percentile_state is not None:
                     help_text = (
-                        f"Percentile (higher = worse): {percentile_state:.0f}th\n"
+                        f"Percentile ({_phr.percentile_legend}): {percentile_state:.0f}th\n"
                         f"Computed among {n_in_state} {unit_word} with available data in {state_to_show}. "
-                        f"Rank 1 = {rank_1_meaning} value."
+                        f"Rank 1 = {_phr.rank_1_meaning} value."
                     )
                 else:
                     help_text = (
                         f"Computed among {n_in_state} {unit_word} with available data in {state_to_show}. "
-                        f"Rank 1 = {rank_1_meaning} value."
+                        f"Rank 1 = {_phr.rank_1_meaning} value."
                     )
 
                 st.markdown(
@@ -446,7 +447,6 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
     import streamlit as st
     from india_resilience_tool.app.crosswalk_runtime import (
         clear_crosswalk_overlay,
-        navigate_from_crosswalk_overlap,
         overlay_matches_context,
         set_crosswalk_overlay_from_context,
     )
@@ -509,27 +509,8 @@ def render_crosswalk_context(*, context: CrosswalkContext) -> None:
             for idx, ov in enumerate(context.overlaps):
                 title = _crosswalk_overlap_title(context, ov)
                 subtitle = _crosswalk_overlap_subtitle(context, ov)
-                cols = st.columns([4, 1], gap="small")
-                with cols[0]:
-                    st.markdown(f"**{title}**")
-                    st.caption(subtitle)
-                with cols[1]:
-                    if st.button(
-                        context.open_action_label,
-                        key=f"btn_crosswalk_open_{context.direction}_{idx}_{ov.counterpart_id}_{context.counterpart_level}",
-                        use_container_width=True,
-                    ):
-                        navigate_from_crosswalk_overlap(
-                            st.session_state,
-                            context=context,
-                            overlap={
-                                "counterpart_name": ov.counterpart_name,
-                                "counterpart_state_name": ov.counterpart_state_name,
-                                "counterpart_parent_name": ov.counterpart_parent_name,
-                                "basin_name": ov.basin_name,
-                            },
-                        )
-                        st.rerun()
+                st.markdown(f"**{title}**")
+                st.caption(subtitle)
 
         if context.coordination_note:
             st.caption(context.coordination_note)
@@ -1403,6 +1384,82 @@ def render_case_study_export(
 
 
 
+def render_geography_header(
+    *,
+    row: Any,
+    district_name: str,
+    state_to_show: str,
+    selected_district: str,
+    level: str = "district",
+    block_name: Optional[str] = None,
+    parent_district_name: Optional[str] = None,
+) -> None:
+    """Render the geography subheader (e.g. district + breadcrumb) used in the
+    Climate Profile panel. Extracted from `render_details_panel` so the title
+    can be rendered directly under the panel header, ahead of context cards.
+    """
+    import streamlit as st
+
+    level_norm = str(level).strip().lower()
+    is_block = level_norm == "block"
+
+    district_title = (str(district_name or "").strip() or str(selected_district or "").strip())
+    state_title = str(state_to_show or "").strip()
+
+    def _row_get(key: str) -> str:
+        try:
+            if isinstance(row, Mapping):
+                val = row.get(key, "")
+            else:
+                val = getattr(row, key, "")
+                if val is None and hasattr(row, "get"):
+                    val = row.get(key, "")
+        except Exception:
+            val = ""
+        return str(val or "").strip()
+
+    if is_block:
+        block_title = (str(block_name or "").strip() or _row_get("block_name")).strip()
+        parent_dist_title = (
+            str(parent_district_name or "").strip()
+            or _row_get("district_name")
+            or str(selected_district or "").strip()
+        ).strip()
+
+        if block_title:
+            st.subheader(block_title)
+            parts: list[str] = ["Block"]
+            if parent_dist_title:
+                parts.append(parent_dist_title)
+            if state_title:
+                parts.append(state_title)
+            st.caption(" • ".join(parts))
+        else:
+            st.subheader(district_title)
+            parts = ["District"]
+            if state_title:
+                parts.append(state_title)
+            st.caption(" • ".join(parts))
+    elif level_norm == "sub_basin":
+        subbasin_title = _row_get("subbasin_name") or district_title
+        basin_title = _row_get("basin_name")
+        st.subheader(subbasin_title)
+        parts = ["Sub-basin"]
+        if basin_title:
+            parts.append(basin_title)
+        st.caption(" • ".join(parts))
+    elif level_norm == "basin":
+        basin_title = _row_get("basin_name") or district_title
+        st.subheader(basin_title)
+        st.caption(" • ".join(["Basin", state_title] if state_title else ["Basin"]))
+    else:
+        st.subheader(district_title)
+        parts = ["District"]
+        if state_title:
+            parts.append(state_title)
+        st.caption(" • ".join(parts))
+
+
 def render_details_panel(
     *,
     # Core district/state context
@@ -1494,87 +1551,9 @@ def render_details_panel(
     level_norm = str(level).strip().lower()
     is_block = level_norm == "block"
 
-    # Header (single source of truth)
-    district_title = (str(district_name or "").strip() or str(selected_district or "").strip())
-    state_title = str(state_to_show or "").strip()
-
-    if is_block:
-        block_title = (
-            str(block_name or "").strip()
-            or (str(row.get("block_name")).strip() if "block_name" in row else "")
-        ).strip()
-        parent_dist_title = (
-            str(parent_district_name or "").strip()
-            or (str(row.get("district_name")).strip() if "district_name" in row else "")
-            or str(selected_district or "").strip()
-        ).strip()
-
-        if block_title:
-            st.subheader(block_title)
-            parts: list[str] = ["Block"]
-            if parent_dist_title:
-                parts.append(parent_dist_title)
-            if state_title:
-                parts.append(state_title)
-            st.caption(" • ".join(parts))
-        else:
-            st.subheader(district_title)
-            parts: list[str] = ["District"]
-            if state_title:
-                parts.append(state_title)
-            st.caption(" • ".join(parts))
-    elif level_norm == "sub_basin":
-        subbasin_title = str(row.get("subbasin_name", "")).strip() or district_title
-        basin_title = str(row.get("basin_name", "")).strip()
-        st.subheader(subbasin_title)
-        parts: list[str] = ["Sub-basin"]
-        if basin_title:
-            parts.append(basin_title)
-        st.caption(" • ".join(parts))
-    elif level_norm == "basin":
-        basin_title = str(row.get("basin_name", "")).strip() or district_title
-        st.subheader(basin_title)
-        st.caption(" • ".join(["Basin", state_title] if state_title else ["Basin"]))
-    else:
-        st.subheader(district_title)
-        parts: list[str] = ["District"]
-        if state_title:
-            parts.append(state_title)
-        st.caption(" • ".join(parts))
-
-    if crosswalk_contexts:
-        if level_norm in {"district", "block"}:
-            for hydro_level in ("basin", "sub_basin"):
-                context = crosswalk_contexts.get(hydro_level)
-                if context is not None:
-                    render_crosswalk_context(context=context)
-        elif level_norm in {"basin", "sub_basin"}:
-            available_admin_levels = [
-                admin_level
-                for admin_level in ("district", "block")
-                if crosswalk_contexts.get(admin_level) is not None
-            ]
-            if available_admin_levels:
-                if st.session_state.get("hydro_admin_context_level") not in available_admin_levels:
-                    preferred = "district" if "district" in available_admin_levels else available_admin_levels[0]
-                    st.session_state["hydro_admin_context_level"] = preferred
-                if len(available_admin_levels) > 1:
-                    selected_admin_context = st.radio(
-                        "Administrative context granularity",
-                        options=available_admin_levels,
-                        format_func=_display_level_name,
-                        horizontal=True,
-                        key="hydro_admin_context_level",
-                    )
-                else:
-                    selected_admin_context = available_admin_levels[0]
-                    st.session_state["hydro_admin_context_level"] = selected_admin_context
-                context = crosswalk_contexts.get(selected_admin_context)
-                if context is not None:
-                    render_crosswalk_context(context=context)
-
-    if level_norm in {"basin", "sub_basin"} and river_context is not None:
-        render_river_context(context=river_context)
+    # Geography header is rendered upstream by `render_geography_header` so it
+    # can sit directly under the "Climate Profile" panel header, above the
+    # Exposure / Hydrological context cards.
 
     # Normalize panel figure size to 16:9 (dashboard style contract)
     fig_size_panel_169 = fig_size_panel

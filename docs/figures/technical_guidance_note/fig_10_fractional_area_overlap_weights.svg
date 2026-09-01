@@ -1,0 +1,142 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="498.95" viewBox="0 123.45 1200 498.95" role="img" aria-labelledby="title desc">
+<title id="title">FIG-10. Fractional-area overlap weights</title>
+<desc id="desc">Schematic of polygon-cell area weights.</desc>
+<style>
+text { font-family: Arial, Helvetica, sans-serif; fill: #1f2933; }
+.title { font-size: 26px; font-weight: 700; }
+.subtitle { font-size: 15px; fill: #52606d; }
+.label { font-size: 15px; font-weight: 700; }
+.small { font-size: 12px; fill: #52606d; }
+.tiny { font-size: 10.5px; fill: #52606d; }
+.note { font-size: 12px; fill: #3e4c59; font-style: italic; }
+.axis { stroke: #52606d; stroke-width: 1.2; }
+.gridline { stroke: #d9e2ec; stroke-width: 1; }
+.arrow { stroke: #52606d; stroke-width: 2.0; fill: none; marker-end: url(#arrow); }
+</style>
+<defs>
+<marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+<path d="M 1 1 L 11 6 L 1 11 z" fill="#52606d"/>
+</marker>
+</defs>
+<rect x="0" y="123.45" width="1200" height="498.95" fill="white" data-bg="canvas"/>
+<rect x="88" y="140" width="96" height="96" rx="0" fill="#edf7fb" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="174.0" y="160.0" class="tiny" text-anchor="end">v1=22</text>
+<rect x="184" y="140" width="96" height="96" rx="0" fill="#d7eef7" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="270.0" y="160.0" class="tiny" text-anchor="end">v2=35</text>
+<rect x="280" y="140" width="96" height="96" rx="0" fill="#bde1f1" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="366.0" y="160.0" class="tiny" text-anchor="end">v3=48</text>
+<rect x="376" y="140" width="96" height="96" rx="0" fill="#edf7fb" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="462.0" y="160.0" class="tiny" text-anchor="end">v4=31</text>
+<rect x="88" y="236" width="96" height="96" rx="0" fill="#bde1f1" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="174.0" y="256.0" class="tiny" text-anchor="end">v5=55</text>
+<rect x="184" y="236" width="96" height="96" rx="0" fill="#92cde7" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="270.0" y="256.0" class="tiny" text-anchor="end">v6=64</text>
+<rect x="280" y="236" width="96" height="96" rx="0" fill="#d7eef7" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="366.0" y="256.0" class="tiny" text-anchor="end">v7=46</text>
+<rect x="376" y="236" width="96" height="96" rx="0" fill="#92cde7" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="462.0" y="256.0" class="tiny" text-anchor="end">v8=70</text>
+<rect x="88" y="332" width="96" height="96" rx="0" fill="#5ab3d6" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="174.0" y="352.0" class="tiny" text-anchor="end">v9=82</text>
+<rect x="184" y="332" width="96" height="96" rx="0" fill="#d7eef7" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="270.0" y="352.0" class="tiny" text-anchor="end">v10=39</text>
+<rect x="280" y="332" width="96" height="96" rx="0" fill="#bde1f1" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="366.0" y="352.0" class="tiny" text-anchor="end">v11=52</text>
+<rect x="376" y="332" width="96" height="96" rx="0" fill="#bde1f1" stroke="#d9e2ec" stroke-width="1.1"/>
+<text x="462.0" y="352.0" class="tiny" text-anchor="end">v12=61</text>
+<polygon points="230.0,150.0 280.0,150.0 280.0,236.0 184.0,236.0" fill="#2b8a7e" fill-opacity="0.50" stroke="#d9e2ec" stroke-width="1.1"/>
+<polygon points="280.0,236.0 280.0,150.0 340.0,150.0 376.0,236.0" fill="#2b8a7e" fill-opacity="0.52" stroke="#d9e2ec" stroke-width="1.1"/>
+<polygon points="184.0,236.0 280.0,236.0 280.0,332.0 184.0,332.0" fill="#2b8a7e" fill-opacity="0.66" stroke="#d9e2ec" stroke-width="1.1"/>
+<polygon points="280.0,332.0 280.0,236.0 376.0,236.0 376.0,332.0" fill="#2b8a7e" fill-opacity="0.66" stroke="#d9e2ec" stroke-width="1.1"/>
+<polygon points="376.0,236.0 430.0,288.0 376.0,332.0" fill="#2b8a7e" fill-opacity="0.30" stroke="#d9e2ec" stroke-width="1.1"/>
+<polygon points="280.0,332.0 280.0,410.6 240.0,412.0 184.0,332.0" fill="#2b8a7e" fill-opacity="0.45" stroke="#d9e2ec" stroke-width="1.1"/>
+<polygon points="280.0,332.0 376.0,332.0 356.0,408.0 280.0,410.6" fill="#2b8a7e" fill-opacity="0.52" stroke="#d9e2ec" stroke-width="1.1"/>
+<polygon points="230.0,150.0 340.0,150.0 376.0,236.0 430.0,288.0 376.0,332.0 356.0,408.0 240.0,412.0 184.0,332.0 184.0,236.0" fill="none" stroke="#b8324f" stroke-width="3"/>
+<text x="242.3" y="201.5" class="small" text-anchor="middle">0.68</text>
+<text x="319.7" y="200.3" class="small" text-anchor="middle">0.73</text>
+<text x="232.0" y="288.0" class="label" text-anchor="middle">1.00</text>
+<text x="328.0" y="288.0" class="label" text-anchor="middle">1.00</text>
+<text x="394.0" y="289.3" class="small" text-anchor="middle">0.28</text>
+<text x="244.0" y="370.3" class="small" text-anchor="middle">0.59</text>
+<text x="322.9" y="373.1" class="small" text-anchor="middle">0.72</text>
+<text x="300.0" y="470.0" class="small" text-anchor="middle">Grid lines cut the district into one sliver per cell it covers.</text>
+<g class="math-label" data-math-tex="\mathrm{Sliver\ area}=a_{ij};\ \mathrm{number\ in\ sliver}=a_{ij}\ \mathrm{as\ a\ fraction\ of\ the\ cell.}" data-math-x="300" data-math-y="491" data-math-anchor="middle" data-math-size="10.5" data-math-display="0"><text x="300.0" y="491.0" class="tiny" text-anchor="middle">Sliver area = a_ij; number in sliver = a_ij as a fraction of the cell.</text></g>
+<text x="705.0" y="156.0" class="label" text-anchor="middle">Weighted average</text>
+<g class="math-label" data-math-tex="\bar{v}_i = \frac{\sum_j a_{ij}v_j}{\sum_j a_{ij}}" data-math-x="705" data-math-y="194" data-math-anchor="middle" data-math-size="15" data-math-display="1"><text x="705.0" y="194.0" class="label" text-anchor="middle">vbar_i = sum_j a_ij v_j / sum_j a_ij</text></g>
+<path class="arrow" d="M 492.0 300.0 L 590.0 210.0"/>
+<rect x="600" y="232" width="410" height="79" rx="5" fill="#fff8e6" stroke="#c77700" stroke-width="1.8" class="flow-box"/>
+<text x="805.0" y="255.0" class="label" text-anchor="middle" data-box="600,232,410,79">Equal-area rule</text>
+<text x="805.0" y="278.0" class="small" text-anchor="middle" data-box="600,232,410,79">Cells are equal-area after EPSG:6933 reprojection, so area</text>
+<text x="805.0" y="295.0" class="small" text-anchor="middle" data-box="600,232,410,79">fraction is proportional to a_ij.</text>
+<rect x="618" y="336" width="78" height="30" rx="0" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.0"/>
+<text x="657.0" y="356.0" class="tiny" text-anchor="middle">cell</text>
+<rect x="696" y="336" width="74" height="30" rx="0" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.0"/>
+<text x="733.0" y="356.0" class="tiny" text-anchor="middle">value</text>
+<rect x="770" y="336" width="104" height="30" rx="0" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.0"/>
+<text x="822.0" y="356.0" class="tiny" text-anchor="middle">area frac.</text>
+<rect x="874" y="336" width="96" height="30" rx="0" fill="#f4f6f8" stroke="#8b95a1" stroke-width="1.0"/>
+<text x="922.0" y="356.0" class="tiny" text-anchor="middle">contrib.</text>
+<rect x="618" y="366" width="78" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="657.0" y="386.0" class="tiny" text-anchor="middle">j2</text>
+<rect x="696" y="366" width="74" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="733.0" y="386.0" class="tiny" text-anchor="middle">35</text>
+<rect x="770" y="366" width="104" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="822.0" y="386.0" class="tiny" text-anchor="middle">0.68</text>
+<rect x="874" y="366" width="96" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="922.0" y="386.0" class="tiny" text-anchor="middle">23.8</text>
+<rect x="618" y="396" width="78" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="657.0" y="416.0" class="tiny" text-anchor="middle">j3</text>
+<rect x="696" y="396" width="74" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="733.0" y="416.0" class="tiny" text-anchor="middle">48</text>
+<rect x="770" y="396" width="104" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="822.0" y="416.0" class="tiny" text-anchor="middle">0.73</text>
+<rect x="874" y="396" width="96" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="922.0" y="416.0" class="tiny" text-anchor="middle">34.9</text>
+<rect x="618" y="426" width="78" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="657.0" y="446.0" class="tiny" text-anchor="middle">j6</text>
+<rect x="696" y="426" width="74" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="733.0" y="446.0" class="tiny" text-anchor="middle">64</text>
+<rect x="770" y="426" width="104" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="822.0" y="446.0" class="tiny" text-anchor="middle">1.00</text>
+<rect x="874" y="426" width="96" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="922.0" y="446.0" class="tiny" text-anchor="middle">64.0</text>
+<rect x="618" y="456" width="78" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="657.0" y="476.0" class="tiny" text-anchor="middle">j7</text>
+<rect x="696" y="456" width="74" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="733.0" y="476.0" class="tiny" text-anchor="middle">46</text>
+<rect x="770" y="456" width="104" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="822.0" y="476.0" class="tiny" text-anchor="middle">1.00</text>
+<rect x="874" y="456" width="96" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="922.0" y="476.0" class="tiny" text-anchor="middle">46.0</text>
+<rect x="618" y="486" width="78" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="657.0" y="506.0" class="tiny" text-anchor="middle">j8</text>
+<rect x="696" y="486" width="74" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="733.0" y="506.0" class="tiny" text-anchor="middle">70</text>
+<rect x="770" y="486" width="104" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="822.0" y="506.0" class="tiny" text-anchor="middle">0.28</text>
+<rect x="874" y="486" width="96" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="922.0" y="506.0" class="tiny" text-anchor="middle">19.7</text>
+<rect x="618" y="516" width="78" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="657.0" y="536.0" class="tiny" text-anchor="middle">j10</text>
+<rect x="696" y="516" width="74" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="733.0" y="536.0" class="tiny" text-anchor="middle">39</text>
+<rect x="770" y="516" width="104" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="822.0" y="536.0" class="tiny" text-anchor="middle">0.59</text>
+<rect x="874" y="516" width="96" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="922.0" y="536.0" class="tiny" text-anchor="middle">22.9</text>
+<rect x="618" y="546" width="78" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="657.0" y="566.0" class="tiny" text-anchor="middle">j11</text>
+<rect x="696" y="546" width="74" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="733.0" y="566.0" class="tiny" text-anchor="middle">52</text>
+<rect x="770" y="546" width="104" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="822.0" y="566.0" class="tiny" text-anchor="middle">0.72</text>
+<rect x="874" y="546" width="96" height="30" rx="0" fill="white" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="922.0" y="566.0" class="tiny" text-anchor="middle">37.4</text>
+<rect x="618" y="576" width="78" height="30" rx="0" fill="#f8fafc" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="657.0" y="596.0" class="tiny" text-anchor="middle">v̄_i</text>
+<rect x="696" y="576" width="74" height="30" rx="0" fill="#f8fafc" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="733.0" y="596.0" class="tiny" text-anchor="middle"></text>
+<rect x="770" y="576" width="104" height="30" rx="0" fill="#f8fafc" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="822.0" y="596.0" class="tiny" text-anchor="middle">5.00</text>
+<rect x="874" y="576" width="96" height="30" rx="0" fill="#f8fafc" stroke="#d9e2ec" stroke-width="0.8"/>
+<text x="922.0" y="596.0" class="tiny" text-anchor="middle">49.8</text>
+</svg>

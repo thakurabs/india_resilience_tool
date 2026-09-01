@@ -7,7 +7,6 @@ import pandas as pd
 from india_resilience_tool.analysis.timeseries import (
     load_block_yearly,
     load_district_yearly,
-    load_hydro_yearly,
     load_state_yearly,
     load_unit_yearly_models,
 )
@@ -118,27 +117,3 @@ def test_load_unit_yearly_models_from_optimized_metric_root(tmp_path: Path) -> N
     assert sorted(out["model"].tolist()) == ["A", "B"]
     assert out["value"].sum() == 3.0
 
-
-def test_load_hydro_yearly_from_optimized_metric_root(tmp_path: Path) -> None:
-    metric_root = tmp_path / "metrics" / "txx_annual_max"
-    path = metric_root / "yearly_ensemble" / "hydro" / "basin" / "master.parquet"
-    path.parent.mkdir(parents=True)
-    pd.DataFrame(
-        {
-            "basin_name": ["Godavari Basin", "Godavari Basin"],
-            "scenario": ["historical", "ssp245"],
-            "year": [2000, 2030],
-            "mean": [1.0, 2.0],
-        }
-    ).to_parquet(path, index=False)
-
-    out = load_hydro_yearly(
-        ts_root=metric_root,
-        level="basin",
-        basin_display="Godavari Basin",
-        subbasin_display=None,
-        scenario_name="ssp245",
-    )
-
-    assert out["year"].tolist() == [2030]
-    assert out["mean"].tolist() == [2.0]

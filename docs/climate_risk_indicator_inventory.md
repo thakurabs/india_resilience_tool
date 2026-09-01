@@ -1,0 +1,388 @@
+# Climate Risk Indicator Inventory
+
+This note is a working inventory for aligning the current dashboard taxonomy with the indicators proposed in `D:\projects\irt_data\Climate Risk Indicators.docx`.
+
+Sources used:
+- Current dashboard/configuration: [india_resilience_tool/config/metrics_registry.py](/mnt/d/projects/india_resilience_tool/india_resilience_tool/config/metrics_registry.py)
+- Current Glance bundle composites: [india_resilience_tool/config/composite_metrics.py](/mnt/d/projects/india_resilience_tool/india_resilience_tool/config/composite_metrics.py)
+- Proposal document: `D:\projects\irt_data\Climate Risk Indicators.docx`
+
+## 1. Metrics already present in the dashboard
+
+This section lists the metrics currently encoded in the dashboard registry and available through the dashboard taxonomy. Where a metric has an explicit threshold or baseline rule, it is stated below.
+
+### 1.1 Heat Risk
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `composite_heat_risk` | Composite Heat Risk | No direct threshold; persisted weighted composite score for the bundle |
+| `tas_annual_mean` | Annual Mean Temperature (TM Mean) | Admin district/block: grid-first annual cell mean in `deg C`; hydro remains legacy polygon-first |
+| `txx_annual_max` | Annual Maximum Temperature (TXx) | No explicit threshold |
+| `txge30_hot_days` | Hot Days (TX ≥ 30°C) | Admin district/block: count of cell-days with maximum temperature `>= 30°C`, then area-weight to polygons; hydro remains legacy polygon-first |
+| `txge35_extreme_heat_days` | Extreme Heat Days (TX ≥ 35°C) | Count of days with maximum temperature `>= 35°C` |
+| `tasmin_tropical_nights_gt25` | Tropical Nights (TR, TN > 25°C) | Admin district/block: count of cell-days with minimum temperature `> 25°C`, then area-weight to polygons; hydro remains legacy polygon-first |
+| `tx90p_hot_days_pct` | Hot Days (TX90p) | Percent of days above the rolling 90th percentile baseline; baseline years `1981-2010`, `5`-day window |
+| `tn90p_warm_nights_pct` | Warm Nights (TN90p) | Percent of nights above the rolling 90th percentile baseline; baseline years `1981-2010`, `5`-day window |
+| `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | Warm-spell days above the 90th percentile baseline; baseline years `1981-2010`, `5`-day window, minimum spell length `6` days |
+| `hwfi_tmean_90p` | Heat Wave Frequency Index (HWFI, #Days) | Count of heatwave days above the 90th percentile baseline; baseline years `1981-2010`, `5`-day window, minimum spell length `5` days |
+| `hwfi_events_tmean_90p` | Heat Wave Frequency (tasmax 90p, #Events) | Count of heatwave events above the 90th percentile baseline; baseline years `1981-2010`, `5`-day window, minimum spell length `5` days |
+| `hwa_heatwave_amplitude` | Heatwave Amplitude (peak day) | Amplitude of peak heatwave day within events defined using the 90th percentile baseline; baseline years `1981-2010`, `5`-day window, minimum spell length `5` days |
+| `tnx_annual_max` | Warmest Night | No explicit threshold |
+| `tasmax_summer_mean` | Summer Max Temperature (MAM Mean) | Admin district/block: March-May grid-first seasonal mean in `deg C`; hydro remains legacy polygon-first |
+| `tas_summer_mean` | Summer Mean Temperature (TM; MAM Mean) | Admin district/block: March-May grid-first seasonal mean in `deg C`; hydro remains legacy polygon-first |
+
+### 1.2 Heat Stress
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `composite_heat_stress` | Composite Heat Stress | No direct threshold; persisted weighted composite score for the bundle |
+| `twb_annual_mean` | Wet-Bulb Temperature (Annual Mean) | No explicit threshold |
+| `twb_summer_mean` | Wet-Bulb Temperature (Summer Mean; MAM Mean) | March-May seasonal mean |
+| `twb_annual_max` | Wet-Bulb Temperature (Annual Max) | No explicit threshold |
+| `twb_days_ge_28` | Heat Stress Days (Twb ≥ 28°C) | Count of days with wet-bulb temperature `>= 28°C` |
+| `twb_days_ge_30` | Wet-Bulb Days (Twb ≥ 30°C) | Count of days with wet-bulb temperature `>= 30°C` |
+| `tasmin_tropical_nights_gt28` | Tropical Nights (TR, TN > 28°C) | Count of days with minimum temperature `> 28°C` |
+| `tn90p_warm_nights_pct` | Warm Nights (TN90p) | Percent of nights above the rolling 90th percentile baseline; Heat Risk v2 shared baseline path |
+| `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | Warm-spell days above the 90th percentile baseline; Heat Risk v2 shared baseline path, minimum spell length `6` days |
+
+WBD legacy slugs remain registered for backward compatibility and are not Heat Stress domain members. WBGT and simplified WBGT slugs (8 total: Shaded WBGT and Outdoor sWBGT, each with annual mean and ≥28/30/32°C threshold-day counts) are listed under the Heat Stress domain as **diagnostics only** — visible for inspection, not scored in `composite_heat_stress` (which would double-count Twb-based humid-heat signal). These slugs use the legacy admin-first compute path, not the v2 grid-first cache.
+
+### 1.3 Cold Risk
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `composite_cold_risk` | Composite Cold Risk | No direct threshold; persisted weighted composite score for the bundle |
+| `tas_winter_mean` | Winter Mean Temperature (TM; DJF Mean) | December-February seasonal mean |
+| `tasmin_winter_mean` | Winter Min Temperature (DJF Mean) | December-February seasonal mean |
+| `tnn_annual_min` | Annual Minimum of Daily Minimum Temperature (TNn) | No explicit threshold |
+| `tasmin_winter_min` | Winter Minimum Tmin (DJF Min TN) | December-February seasonal minimum |
+| `tnle10_cold_nights` | Cold Nights (TN <= 10°C) | Count of nights with minimum temperature `<= 10°C` |
+| `tnle5_severe_cold_nights` | Severe Cold Nights (TN <= 5°C) | Count of nights with minimum temperature `<= 5°C` |
+| `txle15_cold_days` | Cold Days (TX <= 15°C) | Count of days with maximum temperature `<= 15°C` |
+| `tx10p_cool_days_pct` | Cool Days (TX10p) | Percent of days below the rolling 10th percentile baseline; baseline years `1981-2010`, `5`-day window |
+| `tn10p_cool_nights_pct` | Cool Nights (TN10p) | Percent of nights below the rolling 10th percentile baseline; baseline years `1981-2010`, `5`-day window |
+| `csdi_cold_spell_days` | Cold Spell Duration Index (CSDI) | Cold-spell days below the 10th percentile baseline; baseline years `1981-2010`, `5`-day window, minimum spell length `6` days |
+| `tnle10_consecutive_cold_nights` | Consecutive Cold Nights (TN <= 10°C) | Spell metric using nights with minimum temperature `<= 10°C` |
+
+### 1.4 Retired Agriculture & Growing Conditions / Active Agricultural Risk
+
+`Agriculture & Growing Conditions` and `composite_agriculture_growing_conditions`
+are retired history. Active agriculture scoring is now
+`Sector-wise - Agricultural Risk` / `composite_agricultural_risk`.
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `composite_agriculture_growing_conditions` | Composite Agriculture & Growing Conditions | Retired; legacy artifacts are pruned only with the explicit retired-artifact prune flag |
+| `gsl_growing_season` | Growing Season Length (GSL) | Growing-season metric using threshold `5°C` (`278.15 K`) and minimum spell length `6` days |
+| `tasmax_summer_mean` | Summer Max Temperature (MAM Mean) | March-May seasonal mean |
+| `tasmin_winter_mean` | Winter Min Temperature (DJF Mean) | December-February seasonal mean |
+| `dtr_daily_temp_range` | Daily Temperature Range (DTR) | No explicit threshold |
+| `txge35_extreme_heat_days` | Extreme Heat Days (TX ≥ 35°C) | Count of days with maximum temperature `>= 35°C` |
+| `tnle10_cold_nights` | Cold Nights (TN <= 10°C) | Count of nights with minimum temperature `<= 10°C` |
+| `wsdi_warm_spell_days` | Warm Spell Duration Index (WSDI) | Warm-spell days above the 90th percentile baseline; baseline years `1981-2010`, `5`-day window, minimum spell length `6` days |
+| `spi3_drought_index` | Standardised Precipitation Index 3-month (SPI3) | SPI at `3`-month scale using baseline years `1981-2010` |
+| `prcptot_annual_total` | Total Wet-Day Precipitation (PRCPTOT) | Annual total over wet days defined as precipitation `>= 1 mm` |
+
+### 1.5 Flood & Extreme Rainfall Risk
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `composite_flood_extreme_rainfall_risk` | Composite Flood & Extreme Rainfall Risk | No direct threshold; persisted weighted composite score for the bundle |
+| `pr_max_1day_precip` | Maximum 1-day Precipitation (Rx1day) | No fixed threshold in code; annual maximum 1-day precipitation |
+| `pr_max_5day_precip` | Maximum 5-day Precipitation (Rx5day) | No fixed threshold in code; annual maximum 5-day precipitation |
+| `r20mm_very_heavy_precip_days` | Very Heavy Precipitation Days (R20mm) | Count of days with precipitation `>= 20 mm` |
+| `r95p_very_wet_precip` | Very Wet Day Precipitation (R95p) | Admin v2 uses grid-first thresholds from `1990-2010` historical wet days (`>= 1 mm`), linear quantile, and strict `>` exceedance; hydro remains on the legacy registry semantics (`1981-2010`, nearest, inclusive) until migrated |
+| `r95ptot_contribution_pct` | Very Wet Day Contribution (R95pTOT) | Admin v2 uses the same `1990-2010` / linear / strict R95p semantics before computing percent wet-day contribution; hydro remains on the legacy registry semantics until migrated |
+| `cwd_consecutive_wet_days` | Consecutive Wet Days (CWD) | Maximum spell length of consecutive wet days with precipitation `>= 1 mm` |
+
+### 1.6 Rainfall Totals & Typical Wetness
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `prcptot_annual_total` | Total Wet-Day Precipitation (PRCPTOT) | Annual total over wet days defined as precipitation `>= 1 mm` |
+| `pr_simple_daily_intensity` | Simple Daily Intensity Index (SDII) | Mean precipitation on wet days defined as precipitation `>= 1 mm` |
+| `rain_gt_2p5mm` | Rainy Days (PR > 2.5mm) | Count of days with precipitation `> 2.5 mm` |
+
+### 1.7 Drought Risk
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `composite_drought_risk` | Composite Drought Risk | No direct threshold; persisted weighted composite score for the bundle |
+| `spi3_count_events_lt_minus1` | SPI3: Count of drought events with SPI < -1 | Event count at `3`-month SPI scale using threshold `< -1.0`; baseline years `1981-2010` |
+| `spi6_count_events_lt_minus1` | SPI6: Count of drought events with SPI < -1 | Event count at `6`-month SPI scale using threshold `< -1.0`; baseline years `1981-2010` |
+| `spi12_count_events_lt_minus1` | SPI12: Count of drought events with SPI < -1 | Event count at `12`-month SPI scale using threshold `< -1.0`; baseline years `1981-2010` |
+
+### 1.8 Drought Risk (Advanced)
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `spi3_drought_index` | Standardised Precipitation Index 3-month (SPI3) | SPI at `3`-month scale using baseline years `1981-2010` |
+| `spi3_count_months_lt_minus1` | SPI3: Count of months with SPI < -1 (moderate drought) | Admin district/block: grid-first yearly count of qualifying months with explicit `period_mean` rollup and standard Drought v2 coverage floors; hydro remains legacy |
+| `spi3_count_months_lt_minus2` | SPI3: Count of months with SPI < -2 (severe drought) | Monthly count threshold `< -2.0`; baseline years `1981-2010` |
+| `spi6_drought_index` | Standardised Precipitation Index 6-month (SPI6) | SPI at `6`-month scale using baseline years `1981-2010` |
+| `spi6_count_months_lt_minus1` | SPI6: Count of months with SPI < -1 (moderate drought) | Monthly count threshold `< -1.0`; baseline years `1981-2010` |
+| `spi6_count_months_lt_minus2` | SPI6: Count of months with SPI < -2 (severe drought) | Monthly count threshold `< -2.0`; baseline years `1981-2010` |
+| `spi12_drought_index` | Standardised Precipitation Index 12-month (SPI12) | SPI at `12`-month scale using baseline years `1981-2010` |
+| `spi12_count_months_lt_minus1` | SPI12: Count of months with SPI < -1 (moderate drought) | Monthly count threshold `< -1.0`; baseline years `1981-2010` |
+| `spi12_count_months_lt_minus2` | SPI12: Count of months with SPI < -2 (severe drought) | Monthly count threshold `< -2.0`; baseline years `1981-2010` |
+
+### 1.9 Temperature Variability
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `dtr_daily_temp_range` | Daily Temperature Range (DTR) | No explicit threshold |
+| `etr_extreme_temp_range` | Extreme Temperature Range (ETR) | No explicit threshold |
+
+### 1.10 Population Exposure
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `population_total` | Total Population | No explicit threshold |
+| `population_density` | Population Density | No explicit threshold |
+
+### 1.11 Aqueduct Water Risk
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `aq_water_stress` | Aqueduct Water Stress | No explicit threshold in dashboard registry |
+| `aq_interannual_variability` | Aqueduct Interannual Variability | No explicit threshold in dashboard registry |
+| `aq_seasonal_variability` | Aqueduct Seasonal Variability | No explicit threshold in dashboard registry |
+| `aq_water_depletion` | Aqueduct Water Depletion | No explicit threshold in dashboard registry |
+
+### 1.12 Groundwater Status & Availability
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `gw_stage_extraction_pct` | Stage of Ground Water Extraction | No explicit threshold in dashboard registry |
+| `gw_future_availability_ham` | Net Annual Ground Water Availability for Future Use | No explicit threshold in dashboard registry |
+| `gw_extractable_resource_ham` | Annual Extractable Ground Water Resource | No explicit threshold in dashboard registry |
+| `gw_total_extraction_ham` | Ground Water Extraction for All Uses | No explicit threshold in dashboard registry |
+
+### 1.13 Flood Inundation Depth (JRC)
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `jrc_flood_depth_index_rp100` | Flood Severity Index (RP-100) | Derived severity class metric; no threshold exposed in registry table |
+| `jrc_flood_extent_rp100` | RP-100 Flood Extent | No explicit threshold in registry; stored as area fraction |
+| `jrc_flood_depth_rp10` | RP-10 Flood Depth | No explicit threshold |
+| `jrc_flood_depth_rp50` | RP-50 Flood Depth | No explicit threshold |
+| `jrc_flood_depth_rp100` | RP-100 Flood Depth | No explicit threshold |
+| `jrc_flood_depth_rp500` | RP-500 Flood Depth | No explicit threshold |
+
+### 1.14 Present in code but not currently assigned to a dashboard domain
+
+These metrics already exist in the registry and may be useful later, but they are not currently attached to a displayed dashboard domain/bundle.
+
+| Slug | Dashboard label | Threshold / rule currently used |
+|---|---|---|
+| `pr_consecutive_dry_days_lt1mm` | Consecutive Dry Days (CDD) | Maximum spell length of dry days with precipitation `< 1 mm` |
+
+## 2. Metrics and thresholds prescribed in the proposal document
+
+This section rewrites the document's prescribed indicators as an inventory. The wording here follows the proposal document, including the thresholds that are explicitly stated there.
+
+### 2.1 Master list of all proposed indicators
+
+This is a consolidated list of indicators that appear in the document's `Sector-specific Climate Risk Indicators` section. Where the same indicator is used with different thresholds or rule forms across sectors, those are listed below as separate entries.
+
+| Proposed indicator | Threshold / rule prescribed in the document | Context in the document |
+|---|---|---|
+| Rx1day | `>= 150 mm` | Health Risk; Industrial Risk |
+| Rx1day | `>= 200 mm` | Agricultural Risk; Health Risk; Life & Livelihood Loss Risk |
+| Rx5day | `>= 250 mm` | Industrial Risk |
+| Rx5day | `>= 300 mm` | Agricultural Risk |
+| Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` | Asset Risk (Hydropower Plants) |
+| CDD | `>= 20 days` | Agricultural Risk |
+| CDD | `>= 30 days` | Industrial Risk; Asset Risk (Thermal Power Plants) |
+| CDD | `>= 40 days` | Life & Livelihood Loss Risk |
+| CDD | Lens-decomposed pressure, impact band `30-90 days` | Asset Risk (Hydropower Plants) |
+| CDD | Lens-decomposed pressure, impact band `30-90 days` | Investment / Financial Risk |
+| TXx | `>= 40°C` in plains | Agricultural Risk |
+| TXx | `>= 45°C` | Health Risk; Industrial Risk; Asset Risk (Thermal Power Plants) |
+| R95p change | `> 20% from baseline` | Agricultural Risk |
+| TNx | `>= 30°C` | Health Risk |
+| CWD | `>= 5 days` | Health Risk |
+| Rx1day | Lens-decomposed pressure, impact band `115.6-204.5 mm/day` | Investment / Financial Risk |
+| Rx1day | Lens-decomposed pressure, impact band `115.6-204.5 mm/day` | Infrastructure Risk |
+| Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` | Investment / Financial Risk |
+| Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` | Infrastructure Risk |
+| R99p | Lens-decomposed emergence / concentration signal, no impact band | Investment / Financial Risk |
+| HWFI | Lens-decomposed pressure, impact band `5-15 days/yr` | Investment / Financial Risk |
+| TXx | Lens-decomposed pressure, impact band `40-45°C` | Infrastructure Risk |
+| Hourly rainfall | `>= 50 mm/hr` | Infrastructure Risk |
+| River flow reduction linked to drought indices | No numeric threshold given | Asset Risk (Thermal Power Plants) |
+| R95p interannual variability | Lens-decomposed pressure (absolute + change), no impact band | Asset Risk (Hydropower Plants) |
+| Multi-day heavy rainfall | `>= 2 consecutive days >= 150 mm` | Life & Livelihood Loss Risk |
+| Heatwave duration | `>= 5 consecutive days >= 40°C` | Health Risk |
+| Heatwave duration | `>= 5 days` | Life & Livelihood Loss Risk |
+
+### 2.2 Bundle-specific metrics and thresholds from the proposal document
+
+#### Agricultural Risk
+
+| Proposed metric | Threshold / rule prescribed in the document |
+|---|---|
+| Rx1day | `>= 200 mm` |
+| Rx5day | `>= 300 mm` |
+| CDD | `>= 20 days` |
+| TXx | `>= 40°C` in plains |
+| R95p increase | `> 20% from baseline` |
+
+#### Health Risk
+
+| Proposed metric | Threshold / rule prescribed in the document |
+|---|---|
+| TXx / heatwave | `>= 45°C` |
+| Heatwave duration / heatwave | `>= 5 consecutive days >= 40°C` |
+| TNx | `>= 30°C` |
+| Rx1day | `>= 200 mm` |
+| CWD | `>= 5 days` |
+
+#### Industrial Risk
+
+| Proposed metric | Threshold / rule prescribed in the document |
+|---|---|
+| Rx1day | `>= 150 mm` |
+| Rx5day | `>= 250 mm` |
+| CDD | `>= 30 days` |
+| TXx | `>= 45°C` |
+
+#### Investment / Financial Risk
+
+| Proposed metric | Threshold / rule prescribed in the document |
+|---|---|
+| Rx1day | Lens-decomposed pressure, impact band `115.6-204.5 mm/day` |
+| Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` |
+| R99p | Lens-decomposed emergence / concentration signal, no impact band |
+| CDD | Lens-decomposed pressure, impact band `30-90 days` |
+| HWFI | Lens-decomposed pressure, impact band `5-15 days/yr` |
+
+#### Infrastructure Risk
+
+| Proposed metric | Threshold / rule prescribed in the document |
+|---|---|
+| Rx1day | Lens-decomposed pressure, impact band `115.6-204.5 mm/day` |
+| Rx5day | Lens-decomposed pressure, impact band `250-500 mm/5 days` |
+| Hourly rainfall | `>= 50 mm/hr` |
+| TXx | Lens-decomposed pressure, impact band `40-45°C` |
+
+#### Asset Risk (Thermal Power Plants)
+
+| Proposed metric | Threshold / rule prescribed in the document |
+|---|---|
+| CDD | `>= 30 days` |
+| TXx | `>= 45°C` |
+| River flow reduction linked to drought indices | No numeric threshold given |
+
+#### Asset Risk (Hydropower Plants)
+
+Landed config (CHG-0036, lens dossier §11) — the proposal-document
+thresholds (`Rx5day >= 500 mm`, `CDD >= 60 days`) are superseded by
+lens-decomposed pressure with self-derived impact bands; legacy slugs are
+retained pending the deferred CHG-0024 renames.
+
+| Implemented rule (slug) | Lens decomposition |
+|---|---|
+| Rx5day (`rx5day_ge_500`) | Lens-decomposed pressure, impact band `250-500 mm/5 days` |
+| CDD (`cdd_ge_60`) | Lens-decomposed pressure, impact band `30-90 days` |
+| R95p interannual variability (`r95p_interannual_variability_norm`) | Lens-decomposed pressure (absolute + change), no impact band |
+
+#### Life & Livelihood Loss Risk
+
+| Proposed metric | Threshold / rule prescribed in the document |
+|---|---|
+| Rx1day | `>= 200 mm` |
+| Multi-day heavy rainfall | `>= 2 consecutive days >= 150 mm` |
+| CDD | `>= 40 days` |
+| Heatwave duration | `>= 5 days` |
+
+## 3. Proposed indicators from section 2.1 that are absent from section 1
+
+This section consolidates the indicators in section `2.1` that are not presently represented in section `1` as current dashboard metrics. Some of these are completely missing base metrics. Others are thresholded or rule-based derived indicators that are not currently encoded, even where a related raw metric already exists.
+
+| Proposed indicator from section 2.1 | Why it is absent from section 1 | Closest current dashboard coverage |
+|---|---|---|
+| Rx1day | Section `1` has raw `Rx1day`, but not the thresholded sector-specific indicators at `>= 150 mm` and `>= 200 mm` | `pr_max_1day_precip` |
+| Rx5day | Section `1` has raw `Rx5day`, but not the thresholded sector-specific indicators at `>= 250 mm`, `>= 300 mm`, `>= 400 mm`, and `>= 500 mm` | `pr_max_5day_precip` |
+| CDD | Section `1` includes raw `CDD` in `1.14`, but not the sector-specific thresholded or trend-based versions | `pr_consecutive_dry_days_lt1mm` |
+| TXx | Section `1` has raw `TXx`, but not the sector-specific thresholded indicators at `>= 40°C` in plains and `>= 45°C` | `txx_annual_max` |
+| R95p change | Section `1` has raw `R95p`, but not the sector-specific change indicator `> 20% from baseline` | `r95p_very_wet_precip`, `r95ptot_contribution_pct` |
+| TNx | Section `1` has raw `TNx`, but not the thresholded sector-specific indicator at `>= 30°C` | `tnx_annual_max` |
+| CWD | Section `1` has raw `CWD`, but not the thresholded sector-specific indicator at `>= 5 days` | `cwd_consecutive_wet_days` |
+| Rx1day / Rx5day frequency | No trend-based frequency indicator appears in section `1` | `pr_max_1day_precip`, `pr_max_5day_precip` |
+| R99p | No `R99p` metric appears in section `1` | `r95p_very_wet_precip`, `r95ptot_contribution_pct` |
+| Heatwave days | Section `1` has heatwave-related metrics, but not the sector-specific trend indicator named in the proposal document | `hwfi_tmean_90p`, `hwfi_events_tmean_90p`, `wsdi_warm_spell_days` |
+| Hourly rainfall | No hourly rainfall metric appears in section `1` | No direct current dashboard equivalent |
+| Low River Flow Months (SPI3 proxy) | No explicit low-river-flow proxy metric appears in section `1`; proposed definition is count of months in a year where `SPI3 < -1`, with higher values treated as worse | SPI drought metrics; Aqueduct water-risk metrics |
+| R95p variability | Section `1` has raw `R95p`, but not the variability indicator named for hydropower risk | `r95p_very_wet_precip`, `r95ptot_contribution_pct` |
+| Multi-day heavy rainfall | No dedicated multi-day heavy-rainfall trigger exists in section `1` | `pr_max_5day_precip`, `cwd_consecutive_wet_days` |
+| Heatwave duration | Section `1` has heatwave-related duration metrics, but not the thresholded sector-specific versions used in section `2.1` | `wsdi_warm_spell_days`, `hwfi_tmean_90p` |
+
+## 4. Implementation-ready metric reference
+
+This section is the implementation-ready reference for incorporating the proposal metrics into the dashboard. It is populated from section `3`, but adds the implementation shape needed for code work:
+
+- whether the proposal item is trend-based
+- the threshold or rule that must be implemented
+- whether the work is a threshold layer on an existing metric, a trend layer on existing yearly outputs, or a net-new compute primitive
+- the closest functional reference in `tools/pipeline/compute_indices_multiprocess.py` when one exists
+
+Implementation contract used in this section:
+
+- Reuse existing percentile-based heat metrics instead of introducing new geography-specific absolute heatwave thresholds.
+- Persist reusable new metrics and reusable derived metrics.
+- Keep simple threshold checks as bundle-level derivations from persisted continuous metrics wherever practical.
+- Exclude hourly-rainfall implementation because the current workflow only has daily raw inputs.
+
+| Proposed metric to implement | Trend-based | Threshold / rule to implement | Implementation status | Implementation shape | Existing metric / closest dashboard coverage | Functional reference(s) |
+|---|---|---|---|---|---|---|
+| Rx1day | No | Thresholded sector-specific indicators at `>= 150 mm` and `>= 200 mm` | need only thresholding / derivation | Derive threshold flags / counts from existing raw `Rx1day` outputs; no new base climate metric required | `pr_max_1day_precip` | Registry slug `pr_max_1day_precip`; compute name `rx1day`; function `rx1day()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1523) |
+| Rx5day | No | Thresholded sector-specific indicators at `>= 250 mm`, `>= 300 mm`, `>= 400 mm`, `>= 500 mm` | need only thresholding / derivation | Derive threshold flags / counts from existing raw `Rx5day` outputs; no new base climate metric required | `pr_max_5day_precip` | Registry slug `pr_max_5day_precip`; compute name `rx5day`; function `rx5day()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1527) |
+| CDD | Mixed | Thresholded sector-specific indicators at `>= 20 days`, `>= 30 days`, `>= 40 days`, `>= 60 days`; Investment now uses lens-decomposed pressure with impact band `30-90 days` | need only thresholding / derivation | Reuse raw `CDD` for thresholded variants; Investment now layers absolute/change/impact scoring on the same base metric rather than a yearly-trend rule | `pr_consecutive_dry_days_lt1mm` | Registry slug `pr_consecutive_dry_days_lt1mm`; compute name `consecutive_dry_days`. Admin district/block: grid-first via `_cdd()` in `india_resilience_tool/compute/extreme_rainfall_gridfirst.py` (dispatched through `EXTREME_RAINFALL_GRIDFIRST_SLUGS`, CHG-0029). Hydro and non-admin callers: legacy polygon-first `consecutive_dry_days()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1794) |
+| TXx | No | Thresholded sector-specific indicators at `>= 40°C` in plains and `>= 45°C` | need only thresholding / derivation | Derive threshold flags / counts from existing raw `TXx` outputs; no new base climate metric required | `txx_annual_max` | Registry slug `txx_annual_max`; compute name `annual_max_temperature`; function `annual_max_temperature()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1125) |
+| R95p change | Yes | `> 20% from baseline` | need only thresholding / derivation | Add change-vs-baseline logic on top of existing R95p outputs; likely a derived comparison metric rather than a new climate primitive | `r95p_very_wet_precip`, `r95ptot_contribution_pct` | Registry slug `r95p_very_wet_precip`; compute name `percentile_precipitation_total`; function `percentile_precipitation_total()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1566) |
+| TNx | No | Thresholded sector-specific indicator at `>= 30°C` | need only thresholding / derivation | Derive threshold flags / counts from existing raw `TNx` outputs; no new base climate metric required | `tnx_annual_max` | Registry slug `tnx_annual_max`; compute name `annual_max_temperature`; function `annual_max_temperature()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1125) |
+| CWD | No | Thresholded sector-specific indicator at `>= 5 days` | need only thresholding / derivation | Derive threshold flag from existing raw `CWD` outputs | `cwd_consecutive_wet_days` | Registry slug `cwd_consecutive_wet_days`; compute name `consecutive_wet_days`; function `consecutive_wet_days()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1549) |
+| Rx1day / Rx5day frequency | Yes | Investment now uses lens-decomposed pressure on `Rx1day` and `Rx5day` rather than yearly trend rules | need only thresholding / derivation | Reuse existing `Rx1day` / `Rx5day` masters as the absolute/change/impact inputs for the Investment bundle; no yearly-trend layer required | `pr_max_1day_precip`, `pr_max_5day_precip` | Functions `rx1day()` and `rx5day()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1523) and [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1527) |
+| R99p | Yes | Investment now uses lens-decomposed emergence / concentration scoring with no impact band | implemented | Proposal-only base metric now uses the admin grid-first percentile-rainfall path with locked `1990-2010` baseline, `linear` quantile, and strict `>` exceedance; hydro remains legacy | `r99p_extreme_wet_precip` | Registry slug `r99p_extreme_wet_precip`; admin district/block grid-first compute lives in `india_resilience_tool/compute/extreme_rainfall_gridfirst.py`, while hydro and non-admin callers stay on the legacy `percentile_precipitation_total()` path in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1566) |
+| Heatwave days | Yes | Investment now uses lens-decomposed HWFI pressure with impact band `5-15 days/yr` | need only thresholding / derivation | Reuse existing percentile-based heatwave-days metric as the absolute/change/impact input for Investment rather than computing a yearly trend | `hwfi_tmean_90p` | Existing function `heatwave_frequency_percentile()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1273); current registry slug `hwfi_tmean_90p` in [india_resilience_tool/config/metrics_registry.py](/mnt/d/projects/india_resilience_tool/india_resilience_tool/config/metrics_registry.py:704) |
+| Hourly rainfall | No | `>= 50 mm/hr` | need new data source | Explicitly excluded from implementation with current daily-input workflow; do not implement unless hourly source data are onboarded later | No direct current dashboard equivalent | No current daily-pipeline function; `compute_indices_multiprocess.py` currently operates on daily data inputs |
+| Low River Flow Months (SPI3 proxy) | No | Count of months in a year where `SPI3 < -1`; higher is worse | need only thresholding / derivation | Persist a reusable SPI3-derived low-flow proxy metric using the existing SPI3 threshold-count pattern | Closest current coverage: SPI drought metrics; Aqueduct water-risk metrics | Closest existing registry pattern: SPI3 threshold-count metrics in [india_resilience_tool/config/metrics_registry.py](/mnt/d/projects/india_resilience_tool/india_resilience_tool/config/metrics_registry.py:1360) |
+| R95p variability | No | Interannual CV of yearly `R95p`; if mean `R95p` is too small for stable CV, fall back to interannual standard deviation | need new compute | New derived variability metric on top of existing yearly `R95p` outputs using CV as the default hydrology-oriented variability measure, with SD fallback for low-mean cases | `r95p_very_wet_precip`, `r95ptot_contribution_pct` | Base function `percentile_precipitation_total()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1566) |
+| Multi-day heavy rainfall | No | `>= 2 consecutive days >= 150 mm` | need new compute | Net-new event-style metric; related to Rx / wet-spell logic but not currently encoded as written | Closest current coverage: `pr_max_5day_precip`, `cwd_consecutive_wet_days` | No direct current function; adjacent functions are `rx5day()` and `consecutive_wet_days()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1527) and [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1549) |
+| Heatwave duration | No | Reuse `wsdi_warm_spell_days` for proposal-aligned heatwave duration handling | need only thresholding / derivation | Reuse existing percentile-based spell-duration metric instead of introducing literal geography-specific threshold logic | `wsdi_warm_spell_days` | Existing heatwave helpers include `warm_spell_duration_index()` in [tools/pipeline/compute_indices_multiprocess.py](/mnt/d/projects/india_resilience_tool/tools/pipeline/compute_indices_multiprocess.py:1197) |
+
+### 4.1 Persistence contract
+
+Persist these as reusable metrics:
+
+- `R99p`
+- `Low River Flow Months (SPI3 proxy)`
+- `R95p variability`
+
+Keep these as bundle-level derivations from persisted continuous metrics:
+
+- thresholded `Rx1day` rules
+- thresholded `Rx5day` rules
+- thresholded `CDD` rules
+- thresholded `TXx` rules
+- thresholded `TNx` rules
+- thresholded `CWD` rules
+- `R95p change > 20% from baseline`
+- trend interpretations such as increasing `Rx1day / Rx5day frequency`
+
+Rationale:
+
+- Persist continuous or reusable derived metrics when they have standalone analytical value or are likely to be reused across bundles and views.
+- Avoid persisting every thresholded bundle rule, because that would create unnecessary metric sprawl when the dashboard can derive those rules from already-persisted continuous metrics.
+
+### 4.2 Explicit exclusions
+
+- `Hourly rainfall >= 50 mm/hr` is excluded from implementation in the current workflow because only daily raw inputs are available.
+
+## 5. Notes for the next comparison step
+
+- The dashboard already contains strong coverage for `Rx1day`, `Rx5day`, `R20mm`, `R95p`, `R95pTOT`, `CWD`, `TXx`, `TNx`, `TN90p`, wet-bulb heat metrics, SPI drought metrics, and several exposure / water-risk metrics.
+- The document introduces several thresholded sector bundles that do not yet exist as dashboard bundles.
+- The main immediately relevant gap is `CDD`: it already exists in code as `pr_consecutive_dry_days_lt1mm`, but it is not yet attached to a current dashboard domain.
+- Additional possible gaps relative to the sector-specific proposal list include `R99p`, hourly rainfall thresholds, `R95p` variability, and explicit thresholded heatwave-duration logic.
