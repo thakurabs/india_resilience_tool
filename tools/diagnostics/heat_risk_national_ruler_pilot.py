@@ -133,6 +133,25 @@ BASELINE_REFERENCED_SLUGS: frozenset[str] = frozenset(
 #: alongside the exact mid-rank ruler purely to measure what re-quantizing to a
 #: compact knot set would cost (CHG-0353, P-05/P-11).
 CDF_QUANTILES: np.ndarray = np.linspace(0.0, 1.0, 21)
+
+#: Columns of the long-form exact CDF support artifact (``cdf_support.csv``).
+CDF_SUPPORT_COLUMNS: tuple[str, ...] = (
+    "ruler",
+    "metric_slug",
+    "knot_value",
+    "midrank_score",
+    "tie_count",
+)
+
+#: Columns of the roster reconciliation artifact (``roster_reconciliation.csv``).
+RECONCILIATION_COLUMNS: tuple[str, ...] = (
+    "district_key",
+    "state",
+    "district",
+    "n_slices_with_any_metric",
+    "has_master_row",
+    "status",
+)
 LINEAR_LOW_Q = 0.01
 LINEAR_HIGH_Q = 0.99
 DEFAULT_COVERAGE_GATE = 0.70
@@ -332,7 +351,11 @@ def district_geometry_root(data_dir: Path) -> Path:
 
 
 def load_district_roster(
-    data_dir: Path, states: Optional[Sequence[str]] = None, *, verbose: bool = True
+    data_dir: Path,
+    states: Optional[Sequence[str]] = None,
+    *,
+    verbose: bool = True,
+    require_all: bool = True,
 ) -> pd.DataFrame:
     """Canonical district universe and areas, from the geometry property tables.
 
@@ -342,14 +365,22 @@ def load_district_roster(
     plotting stack being importable (CHG-0349/0354).
 
     Returns one row per ``district_key`` with ``state``, ``district`` and
-    ``area_m2``. Raises ``FileNotFoundError`` when no geometry is present at all.
+    ``area_m2``. Raises ``FileNotFoundError`` when no geometry is present at all,
+    and — under ``require_all`` — when any *explicitly requested* state shard is
+    missing: silently returning the states that happen to exist would shrink the
+    coverage universe, which is the exact failure the roster exists to detect
+    (CHG-0356, P-09).
     """
     root = district_geometry_root(data_dir)
     if states:
         wanted = [root / f"state={name}.geojson" for name in states]
-        absent = [path.name for path in wanted if not path.exists()]
-        if absent and verbose:
-            print(f"  [warn] no district geometry for: {', '.join(sorted(absent))}", file=sys.stderr)
+        absent = sorted(path.name for path in wanted if not path.exists())
+        if absent:
+            message = f"no district geometry for requested states: {', '.join(absent)}"
+            if require_all:
+                raise FileNotFoundError(message)
+            if verbose:
+                print(f"  [warn] {message}", file=sys.stderr)
         files = [path for path in wanted if path.exists()]
     else:
         files = sorted(root.glob("state=*.geojson"))
@@ -413,8 +444,19 @@ def expand_to_roster(
     reconciliation["n_slices_with_any_metric"] = (
         reconciliation["n_slices_with_any_metric"].fillna(0).astype(int)
     )
-    reconciliation["status"] = np.where(
-        reconciliation["n_slices_with_any_metric"] > 0, "roster_and_master", "roster_no_master"
+    # "no master row at all" is a roster/boundary problem; "master rows but every
+    # slice NaN" is a regeneration problem. Collapsing them sends the reader to the
+    # wrong place, so they are reported separately (CHG-0358, P-09/P-10).
+    reconciliation["has_master_row"] = reconciliation["district_key"].isin(
+        set(long_frame["district_key"].dropna())
+    )
+    reconciliation["status"] = np.select(
+        [
+            reconciliation["n_slices_with_any_metric"] > 0,
+            reconciliation["has_master_row"],
+        ],
+        ["roster_and_master", "roster_master_no_finite_value"],
+        default="roster_no_master_row",
     )
 
     orphan_keys = sorted(set(long_frame["district_key"].dropna()) - set(roster["district_key"]))
@@ -430,6 +472,7 @@ def expand_to_roster(
                 "state": [orphan_states.at[key, "state"] for key in orphan_keys],
                 "district": [orphan_states.at[key, "district"] for key in orphan_keys],
                 "n_slices_with_any_metric": np.nan,
+                "has_master_row": True,
                 "status": "master_not_in_roster",
             }
         )
@@ -757,9 +800,7 @@ def cdf_support_frame(rulers: dict[str, MetricRuler], *, ruler_kind: str) -> pd.
             )
         )
     if not rows:
-        return pd.DataFrame(
-            columns=["ruler", "metric_slug", "knot_value", "midrank_score", "tie_count"]
-        )
+        return pd.DataFrame(columns=CDF_SUPPORT_COLUMNS)
     return pd.concat(rows, ignore_index=True)
 
 
@@ -989,8 +1030,16 @@ def _write_summary(
     else:
         counts = reconciliation["status"].value_counts()
         for status, label in (
-            ("roster_and_master", "roster districts with at least one master row"),
-            ("roster_no_master", "roster districts with **no** master row in any slice"),
+            ("roster_and_master", "roster districts with at least one finite metric value"),
+            (
+                "roster_master_no_finite_value",
+                "roster districts with master rows but **no finite value** in any slice "
+                "(regeneration gap, P-10)",
+            ),
+            (
+                "roster_no_master_row",
+                "roster districts with **no master row at all** (roster/boundary gap, P-09)",
+            ),
             ("master_not_in_roster", "master district_keys absent from the roster (dropped)"),
         ):
             lines.append(f"- {int(counts.get(status, 0))} {label}")
@@ -1055,8 +1104,8 @@ def _write_summary(
         "- The exact mid-rank `cdf` ruler cannot return a hard 0 or 100 by construction, so "
         "`pct_score_ge_99` / `pct_score_le_1` read lower for it than for `linear` at equal "
         "saturation. Compare each ruler against itself across slices, not across rulers.\n"
-        "- `roster_no_master` districts are scored NaN, not 0. They lower coverage, they do "
-        "not lower the composite (P-09).\n"
+        "- `roster_no_master_row` and `roster_master_no_finite_value` districts are scored "
+        "NaN, not 0. They lower coverage, they do not lower the composite (P-09).\n"
     )
     (out_dir / "summary.md").write_text("\n".join(lines), encoding="utf-8")
 
@@ -1078,7 +1127,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--states",
         default=None,
-        help="Comma-separated state subset for a fast smoke run. Default: all discovered states.",
+        help=(
+            "Comma-separated state subset for a fast smoke run. Default: every state in the "
+            "canonical district roster. A requested state with no geometry shard is an error "
+            "unless --allow-missing-geometry is passed."
+        ),
     )
     parser.add_argument(
         "--rulers",
@@ -1134,7 +1187,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # source for area aggregation, so it is loaded before any master (CHG-0354).
     roster: Optional[pd.DataFrame] = None
     try:
-        roster = load_district_roster(data_dir, states=requested_states, verbose=verbose)
+        roster = load_district_roster(
+            data_dir,
+            states=requested_states,
+            verbose=verbose,
+            require_all=not args.allow_missing_geometry,
+        )
     except Exception as exc:
         if not args.allow_missing_geometry:
             print(
@@ -1146,19 +1204,35 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             return 2
         print(f"[warn] roster unavailable ({exc}); continuing degraded.", file=sys.stderr)
 
+    # A district whose area is missing, zero, negative or non-finite is dropped from
+    # the weighted mean by state_scores() without appearing in any output, so the gate
+    # is per-district rather than "at least one usable area" (CHG-0357, P-12).
     areas: Optional[pd.DataFrame] = None
     if roster is not None:
-        if roster["area_m2"].notna().any():
+        area_values = pd.to_numeric(roster["area_m2"], errors="coerce").to_numpy(
+            dtype=float, na_value=np.nan
+        )
+        usable = np.isfinite(area_values) & (area_values > 0.0)
+        if usable.all():
             areas = roster.loc[:, ["district_key", "area_m2"]].copy()
         elif not args.allow_missing_geometry:
+            bad = roster.loc[~usable, "district_key"].astype(str).tolist()
+            preview = ", ".join(bad[:10]) + (f" (+{len(bad) - 10} more)" if len(bad) > 10 else "")
             print(
-                "[error] district roster carries no area_m2; area-weighted state means "
-                "(P-12) would be blank. Re-run with --allow-missing-geometry to proceed.",
+                f"[error] {len(bad)} of {len(roster)} roster districts have no usable area_m2 "
+                f"(missing, zero, negative or non-finite): {preview}. These would be dropped "
+                "from area-weighted state means (P-12) without appearing in any output. "
+                "Re-run with --allow-missing-geometry to proceed.",
                 file=sys.stderr,
             )
             return 2
         else:
-            print("[warn] roster carries no area_m2; state means will be unweighted.", file=sys.stderr)
+            print(
+                f"[warn] {int((~usable).sum())} roster districts have no usable area_m2; "
+                "they are excluded from area weighting.",
+                file=sys.stderr,
+            )
+            areas = roster.loc[:, ["district_key", "area_m2"]].copy() if usable.any() else None
 
     if requested_states:
         states = requested_states
@@ -1172,23 +1246,31 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         metric_slugs, level=level, states=states, data_dir=data_dir, verbose=verbose
     )
     if long_frame.empty and roster is None:
+        # The advertised artifact exists even on an empty degraded run (CHG-0359).
+        pd.DataFrame(columns=RECONCILIATION_COLUMNS).to_csv(
+            out_dir / "roster_reconciliation.csv", index=False
+        )
         print("No data assembled; nothing to do.", file=sys.stderr)
         return 1
     print(f"Assembled {len(long_frame):,} district-slice rows from masters.", file=sys.stderr)
 
     if roster is not None:
         long_frame, reconciliation = expand_to_roster(long_frame, roster, metric_slugs)
-        reconciliation.to_csv(out_dir / "roster_reconciliation.csv", index=False)
-        n_no_master = int((reconciliation["status"] == "roster_no_master").sum())
+        n_no_row = int((reconciliation["status"] == "roster_no_master_row").sum())
+        n_no_value = int((reconciliation["status"] == "roster_master_no_finite_value").sum())
         n_orphan = int((reconciliation["status"] == "master_not_in_roster").sum())
         print(
             f"Roster grid: {len(long_frame):,} district-slice rows "
-            f"({n_no_master} roster districts with no master row, "
+            f"({n_no_row} roster districts with no master row, "
+            f"{n_no_value} with master rows but no finite value, "
             f"{n_orphan} master keys not in the roster).",
             file=sys.stderr,
         )
     else:
-        reconciliation = pd.DataFrame(columns=["district_key", "state", "district", "status"])
+        reconciliation = pd.DataFrame(columns=RECONCILIATION_COLUMNS)
+    # Written unconditionally so the output contract holds in degraded mode too
+    # (CHG-0359).
+    reconciliation.to_csv(out_dir / "roster_reconciliation.csv", index=False)
 
     coverage_report(long_frame, metric_slugs).to_csv(out_dir / "coverage_report.csv", index=False)
 
@@ -1275,7 +1357,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     specs_frame = pd.concat(all_specs, ignore_index=True)
     summary_frame = pd.concat(all_summaries, ignore_index=True)
     fit_frame = pd.concat(all_fits, ignore_index=True)
-    support_frame = pd.concat(all_support, ignore_index=True)
+    # The linear ruler contributes an all-empty support frame; concatenating it
+    # raises a pandas FutureWarning and adds nothing (CHG-0360).
+    non_empty_support = [frame for frame in all_support if not frame.empty]
+    support_frame = (
+        pd.concat(non_empty_support, ignore_index=True)
+        if non_empty_support
+        else pd.DataFrame(columns=CDF_SUPPORT_COLUMNS)
+    )
     fit_frame.to_csv(out_dir / "metric_fit_report.csv", index=False)
     support_frame.to_csv(out_dir / "cdf_support.csv", index=False)
     specs_frame.to_csv(out_dir / "metric_ruler_spec.csv", index=False)

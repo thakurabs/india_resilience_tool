@@ -1,6 +1,6 @@
-"""Regression guards for the Heat Risk national-ruler pilot (CHG-0349..0354).
+"""Regression guards for the Heat Risk national-ruler pilot (CHG-0349..0360).
 
-Each test pins one defect found in review of the first pilot run. All six were
+Each test pins one defect found in review of a pilot run. All of them were
 silent — they produced plausible tables rather than errors — so they are exactly
 the class of bug the pilot's own conclusions would have been drawn from.
 """
@@ -146,7 +146,7 @@ def test_roster_district_without_master_survives_as_an_uncovered_row(tmp_path):
     assert len(missing) == len(pilot.SLICES) and missing.isna().all()
     assert reconciliation.loc[
         reconciliation["district_key"] == "s|b", "status"
-    ].tolist() == ["roster_no_master"]
+    ].tolist() == ["roster_no_master_row"]
 
 
 def test_national_coverage_totals_are_summed_from_the_state_rows():
@@ -194,3 +194,87 @@ def test_missing_roster_fails_the_run_by_default(tmp_path):
         ["--data-dir", str(tmp_path), "--out-dir", str(tmp_path / "out"), "--no-maps"]
     )
     assert code == 2
+
+
+# --- CHG-0356: a requested state with no geometry shard is an error ------------
+
+
+def test_missing_requested_state_shard_fails_by_default(tmp_path):
+    """Returning only the states that happen to exist silently shrinks the universe."""
+    _write_roster(tmp_path, "S", [("s|a", "A", 100.0)])
+    with pytest.raises(FileNotFoundError, match="Absentia"):
+        pilot.load_district_roster(tmp_path, states=["S", "Absentia"])
+
+    degraded = pilot.load_district_roster(
+        tmp_path, states=["S", "Absentia"], require_all=False, verbose=False
+    )
+    assert degraded["district_key"].tolist() == ["s|a"]
+
+
+# --- CHG-0357: every retained district needs a usable area --------------------
+
+
+def test_zero_area_district_fails_the_area_gate(tmp_path):
+    """One usable area is not enough: unusable areas vanish from the weighted mean."""
+    _write_roster(tmp_path, "S", [("s|a", "A", 100.0), ("s|b", "B", 0.0)])
+    code = pilot.main(
+        ["--data-dir", str(tmp_path), "--out-dir", str(tmp_path / "out"), "--no-maps"]
+    )
+    assert code == 2
+
+
+# --- CHG-0358: "no master row" and "no finite value" are different faults ------
+
+
+def test_district_with_master_rows_but_all_nan_is_not_reported_as_missing():
+    """A regeneration gap must not be reported as a roster/boundary gap."""
+    roster = pd.DataFrame(
+        {
+            "district_key": ["s|a", "s|b"],
+            "state": ["S", "S"],
+            "district": ["A", "B"],
+            "area_m2": [100.0, 200.0],
+        }
+    )
+    long_frame = pd.DataFrame(
+        {
+            "state": ["S"] * len(pilot.SLICES),
+            "district": ["B"] * len(pilot.SLICES),
+            "district_key": ["s|b"] * len(pilot.SLICES),
+            "scenario": [scenario for scenario, _ in pilot.SLICES],
+            "period": [period for _, period in pilot.SLICES],
+            "m": [np.nan] * len(pilot.SLICES),
+        }
+    )
+    _, reconciliation = pilot.expand_to_roster(long_frame, roster, ["m"])
+    status = reconciliation.set_index("district_key")["status"]
+    assert status["s|b"] == "roster_master_no_finite_value"
+    assert status["s|a"] == "roster_no_master_row"
+
+
+# --- CHG-0359: the output contract holds in degraded mode ---------------------
+
+
+def test_reconciliation_is_written_even_without_a_roster(tmp_path):
+    """An advertised artifact must exist, empty, rather than be silently skipped."""
+    out_dir = tmp_path / "out"
+    pilot.main(
+        [
+            "--data-dir",
+            str(tmp_path),
+            "--out-dir",
+            str(out_dir),
+            "--no-maps",
+            "--allow-missing-geometry",
+        ]
+    )
+    written = out_dir / "roster_reconciliation.csv"
+    assert written.exists()
+    assert list(pd.read_csv(written).columns) == [
+        "district_key",
+        "state",
+        "district",
+        "n_slices_with_any_metric",
+        "has_master_row",
+        "status",
+    ]

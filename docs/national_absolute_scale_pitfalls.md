@@ -148,7 +148,11 @@ from `processed_optimised/geometry/admin/district/` — every roster district x 
 7 slices, so absence appears as an NaN row rather than a missing one. Coverage is
 reported at state x metric x slice with national totals summed from those same
 rows, alongside a roster reconciliation naming roster districts with no master
-row and master keys absent from the roster. Delivered by the pilot (CHG-0354).
+row, roster districts whose master rows carry no finite value in any slice, and
+master keys absent from the roster. Delivered by the pilot (CHG-0354). The first
+two are separated by CHG-0358 because they are different faults: no master row is
+a roster/boundary gap, while master rows with no finite value is a regeneration
+gap (P-10) and sends the reader somewhere else entirely.
 Still open, and not a pilot question: the explicit rule for a state whose grid is
 a strict subset.
 
@@ -236,6 +240,12 @@ P-09 moved into scope with CHG-0354: the pilot now measures coverage against the
 canonical roster rather than against whatever the masters contain, which is the
 only way absence can be observed at all. What remains outside the pilot is the
 *policy* for a state whose slice grid is a strict subset.
+
+P-12's evidence is only as good as the area column behind it. CHG-0357 requires a
+finite `area_m2 > 0` for **every** retained roster district: a district with a
+missing, zero or non-finite area is dropped from the weighted mean without
+appearing in any output, so a partial area set produces a wrong number rather
+than a visibly degraded one.
 
 P-05 likewise moved from "reported" to "resolved" with CHG-0353: the `cdf` ruler
 is the exact pooled mid-rank CDF, and the compact 21-knot grid it replaces is
