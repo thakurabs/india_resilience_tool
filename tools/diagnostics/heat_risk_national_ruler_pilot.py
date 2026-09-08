@@ -10,8 +10,14 @@ The two rulers, both fitted on the same pooled full-span sample:
 
 - ``linear``  — clip to the pooled p1..p99 range and scale linearly. Preserves
   magnitude; a district twice as far above p1 scores twice as high.
-- ``cdf``     — map through the pooled empirical CDF (21 knots, duplicate knots
-  collapsed to their mid-rank score). Preserves rank only; uniformizes.
+- ``cdf``     — map through the **exact** pooled empirical CDF: one knot per
+  distinct pooled value, scored at its tie mid-rank ``100*(b + c/2)/n``.
+  Preserves rank only; uniformizes. The 21-knot quantile grid is retained only
+  as a *measured approximation* of this exact ruler — its maximum and mean score
+  error against the pooled sample are reported per metric (P-05).
+
+The pilot is **district-level only**: block geometry and block aggregation are a
+separate initiative, and the ruler question is answered at district level.
 
 The pool for every metric is all districts x all 7 scenario/period slices
 (``historical/1990-2010`` + {ssp245, ssp585} x {2020-2040, 2040-2060,
@@ -29,11 +35,21 @@ touched, no config is changed, no composite master is rewritten):
 - ``district_scores.csv``    one row per district x slice x ruler: composite,
   the two sub-composites, weight coverage, and the coverage-gated composite
 - ``state_scores.csv``       area-weighted vs unweighted state means (P-12)
+- ``roster_reconciliation.csv`` districts in the roster with no master row, and
+  master rows whose ``district_key`` is not in the roster (P-09, P-10)
 - ``slice_summary.csv``      realized composite range / IQR, saturation and
   clamping counts per slice x ruler (P-02, P-03, P-06, P-07)
 - ``metric_ruler_spec.csv``  per metric: p1/p99, pooled min/max, modal value and
-  its mass, duplicate-knot count, and the 21 CDF knots (P-05, P-06)
-- ``coverage_report.csv``    per metric x slice: districts with a finite value (P-09)
+  its mass, tied-observation count, and — for ``cdf`` — the 21-knot grid's max and
+  mean score error against the exact ruler (P-05, P-06)
+- ``cdf_support.csv``        long-form exact CDF support: one row per (metric,
+  distinct pooled value) with its tie count and mid-rank score. Kept out of
+  ``metric_ruler_spec.csv`` so the spec stays one readable row per metric (P-05)
+- ``metric_fit_report.csv``  per metric: configured weight, whether the column was
+  present, whether a ruler was fitted, and why not (P-08)
+- ``coverage_report.csv``    finite values per state x metric x slice against the
+  **canonical district roster**, with national totals derived from those same
+  rows (P-09)
 - ``maps/*.png``             national district choropleths, one 2x4 panel per
   ruler x score field (composite, baseline-referenced, absolute-threshold)
 - ``summary.md``             the headline numbers, pitfall-tagged
@@ -48,8 +64,13 @@ Usage
     python -m tools.diagnostics.heat_risk_national_ruler_pilot \\
         --out-dir docs/diagnostics/heat_risk_pilot
 
-Maps need geopandas + matplotlib; pass ``--no-maps`` to skip them and produce the
-tables only.
+The canonical district roster and district areas are read from the geometry
+GeoJSON **property tables** with the stdlib ``json`` module, so every table —
+including the area-weighted state means — is produced without geopandas. A
+missing or area-less roster is a hard error by default (pass
+``--allow-missing-geometry`` to degrade to unweighted state means). geopandas and
+matplotlib are needed only to *render* the choropleths; ``--no-maps`` skips that
+step and changes no table.
 """
 
 from __future__ import annotations
@@ -77,6 +98,11 @@ from india_resilience_tool.config.paths import get_paths_config, resolve_process
 
 BUNDLE_DOMAIN = "Heat Risk"
 
+#: The pilot is district-level only (CHG-0352). Block identifiers use ``block_key``
+#: rather than ``district_key``, and neither the geometry roster nor the state
+#: aggregation below is defined for them, so the level is a constant, not a flag.
+LEVEL = "district"
+
 #: The frozen slice grid the rulers are fitted on. Changing this changes every
 #: score (pitfall P-04), so it is written into the outputs verbatim.
 SLICES: tuple[tuple[str, str], ...] = (
@@ -103,6 +129,9 @@ BASELINE_REFERENCED_SLUGS: frozenset[str] = frozenset(
     }
 )
 
+#: The 21-point quantile grid. No longer the ``cdf`` ruler itself — it is fitted
+#: alongside the exact mid-rank ruler purely to measure what re-quantizing to a
+#: compact knot set would cost (CHG-0353, P-05/P-11).
 CDF_QUANTILES: np.ndarray = np.linspace(0.0, 1.0, 21)
 LINEAR_LOW_Q = 0.01
 LINEAR_HIGH_Q = 0.99
@@ -129,6 +158,12 @@ class MetricRuler:
     duplicate_knots: int
     modal_value: float
     modal_mass: float
+    #: Observation count behind each knot. Only the exact ``cdf`` ruler has one.
+    knot_counts: Optional[np.ndarray] = None
+    #: Max/mean |score| deviation of the 21-knot grid from this exact ruler,
+    #: evaluated on the pooled sample. NaN for ``linear`` (CHG-0353).
+    approx_max_score_error: float = float("nan")
+    approx_mean_score_error: float = float("nan")
 
     def apply(self, values: pd.Series) -> pd.Series:
         """Score a value series against this ruler, clamping outside the knot range."""
@@ -177,6 +212,50 @@ def _collapse_duplicate_knots(
     )
 
 
+def _exact_midrank_cdf(pool: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Exact empirical mid-rank CDF of a pooled sample (CHG-0353, pitfall P-05).
+
+    A value observed ``c`` times with ``b`` strictly smaller observations scores
+    ``100 * (b + c / 2) / n``. This is the exact mid-rank of the tied block; a
+    fixed quantile grid reproduces it only when tie boundaries happen to fall on
+    grid points, which is precisely what P-05 warns about.
+
+    Note the range is open: the lowest score is ``100 * (c / 2) / n > 0`` and the
+    highest is below 100, so no district is scored a hard 0 or 100 by rank alone.
+
+    Returns ``(distinct_values, midrank_scores, tie_counts)``.
+    """
+    values, counts = np.unique(pool, return_counts=True)
+    n = float(pool.size)
+    below = np.concatenate(([0.0], np.cumsum(counts, dtype=float)[:-1]))
+    scores = 100.0 * (below + counts / 2.0) / n
+    return values.astype(float), scores.astype(float), counts.astype(np.int64)
+
+
+def _grid_approximation_error(
+    pool: np.ndarray, exact_values: np.ndarray, exact_scores: np.ndarray
+) -> tuple[float, float]:
+    """Score error of the 21-knot grid against the exact ruler, on the pooled sample.
+
+    This is the number that says whether a compact frozen artifact can replace the
+    exact support without changing anyone's score materially (P-05, P-11).
+    """
+    if pool.size == 0:
+        return (float("nan"), float("nan"))
+    raw_values = np.quantile(pool, CDF_QUANTILES)
+    knot_values, knot_scores, _ = _collapse_duplicate_knots(raw_values, CDF_QUANTILES * 100.0)
+    if knot_values.size < 2:
+        approx = np.full(pool.shape, 50.0)
+    else:
+        approx = np.interp(pool, knot_values, knot_scores)
+    if exact_values.size < 2:
+        exact = np.full(pool.shape, 50.0)
+    else:
+        exact = np.interp(pool, exact_values, exact_scores)
+    deviation = np.abs(approx - exact)
+    return (float(deviation.max()), float(deviation.mean()))
+
+
 def _pool_stats(pool: np.ndarray) -> tuple[float, float]:
     """Return (modal_value, modal_mass) for a pooled sample."""
     if pool.size == 0:
@@ -200,6 +279,10 @@ def build_ruler(
     pooled_min = float(pool.min())
     pooled_max = float(pool.max())
 
+    knot_counts: Optional[np.ndarray] = None
+    approx_max = float("nan")
+    approx_mean = float("nan")
+
     if kind == "linear":
         low = float(np.quantile(pool, LINEAR_LOW_Q))
         high = float(np.quantile(pool, LINEAR_HIGH_Q))
@@ -212,12 +295,11 @@ def build_ruler(
             knot_scores = np.array([0.0, 100.0], dtype=float)
             duplicates = 0
     elif kind == "cdf":
-        raw_values = np.quantile(pool, CDF_QUANTILES)
-        raw_scores = CDF_QUANTILES * 100.0
-        knot_values, knot_scores, duplicates = _collapse_duplicate_knots(raw_values, raw_scores)
-        if knot_values.size < 2:
-            knot_values = np.array([pooled_min], dtype=float)
-            knot_scores = np.array([50.0], dtype=float)
+        knot_values, knot_scores, knot_counts = _exact_midrank_cdf(pool)
+        approx_max, approx_mean = _grid_approximation_error(pool, knot_values, knot_scores)
+        # Every observation beyond the first in each tied block: the tie mass the
+        # 21-knot grid used to approximate away (P-05).
+        duplicates = int(pool.size - knot_values.size)
     else:
         raise ValueError(f"Unknown ruler kind: {kind!r}")
 
@@ -233,12 +315,127 @@ def build_ruler(
         duplicate_knots=duplicates,
         modal_value=modal_value,
         modal_mass=modal_mass,
+        knot_counts=knot_counts,
+        approx_max_score_error=approx_max,
+        approx_mean_score_error=approx_mean,
     )
 
 
 # ---------------------------------------------------------------------------
 # Data assembly
 # ---------------------------------------------------------------------------
+
+
+def district_geometry_root(data_dir: Path) -> Path:
+    """Directory holding the canonical per-state district geometry files."""
+    return Path(data_dir) / "processed_optimised" / "geometry" / "admin" / "district"
+
+
+def load_district_roster(
+    data_dir: Path, states: Optional[Sequence[str]] = None, *, verbose: bool = True
+) -> pd.DataFrame:
+    """Canonical district universe and areas, from the geometry property tables.
+
+    Parsed with the stdlib ``json`` module rather than geopandas: the roster is a
+    table concern (it defines the expected universe for coverage, P-09, and the
+    weights for area aggregation, P-12) and must not be contingent on the
+    plotting stack being importable (CHG-0349/0354).
+
+    Returns one row per ``district_key`` with ``state``, ``district`` and
+    ``area_m2``. Raises ``FileNotFoundError`` when no geometry is present at all.
+    """
+    root = district_geometry_root(data_dir)
+    if states:
+        wanted = [root / f"state={name}.geojson" for name in states]
+        absent = [path.name for path in wanted if not path.exists()]
+        if absent and verbose:
+            print(f"  [warn] no district geometry for: {', '.join(sorted(absent))}", file=sys.stderr)
+        files = [path for path in wanted if path.exists()]
+    else:
+        files = sorted(root.glob("state=*.geojson"))
+    if not files:
+        raise FileNotFoundError(f"No district geometry found under {root}")
+
+    rows: list[dict[str, object]] = []
+    for path in files:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for feature in payload.get("features") or []:
+            props = feature.get("properties") or {}
+            rows.append(
+                {
+                    "district_key": props.get("district_key"),
+                    "state": props.get("state_name"),
+                    "district": props.get("district_name"),
+                    "area_m2": pd.to_numeric(props.get("area_m2"), errors="coerce"),
+                }
+            )
+    roster = pd.DataFrame(rows)
+    if roster.empty:
+        raise FileNotFoundError(f"District geometry under {root} carries no features")
+    roster = roster.loc[roster["district_key"].notna()].drop_duplicates(subset=["district_key"])
+    return roster.reset_index(drop=True)
+
+
+def expand_to_roster(
+    long_frame: pd.DataFrame, roster: pd.DataFrame, metric_slugs: Sequence[str]
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Reindex the assembled frame onto the full roster x slice grid (P-09).
+
+    A district present in the roster but absent from every master must appear as
+    an all-NaN row rather than vanish, otherwise coverage is measured against
+    "what exists" and can never detect absence (CHG-0354). Master rows whose
+    ``district_key`` is not in the roster are dropped from scoring — the roster is
+    the universe — but are reported in the returned reconciliation frame.
+
+    Returns ``(expanded_frame, reconciliation)``.
+    """
+    slices = pd.DataFrame(list(SLICES), columns=["scenario", "period"])
+    grid = roster.loc[:, ["district_key", "state", "district"]].merge(slices, how="cross")
+
+    value_columns = [slug for slug in metric_slugs if slug in long_frame.columns]
+    payload = long_frame.loc[:, ["district_key", "scenario", "period"] + value_columns]
+    expanded = grid.merge(payload, on=["district_key", "scenario", "period"], how="left")
+    for slug in metric_slugs:
+        if slug not in expanded.columns:
+            expanded[slug] = np.nan
+        expanded[slug] = pd.to_numeric(expanded[slug], errors="coerce")
+
+    finite = _finite_mask_frame(expanded, metric_slugs)
+    present = (
+        finite.any(axis=1)
+        .groupby(expanded["district_key"], sort=False)
+        .sum()
+        .rename("n_slices_with_any_metric")
+    )
+    reconciliation = roster.loc[:, ["district_key", "state", "district"]].merge(
+        present, left_on="district_key", right_index=True, how="left"
+    )
+    reconciliation["n_slices_with_any_metric"] = (
+        reconciliation["n_slices_with_any_metric"].fillna(0).astype(int)
+    )
+    reconciliation["status"] = np.where(
+        reconciliation["n_slices_with_any_metric"] > 0, "roster_and_master", "roster_no_master"
+    )
+
+    orphan_keys = sorted(set(long_frame["district_key"].dropna()) - set(roster["district_key"]))
+    if orphan_keys:
+        orphan_states = (
+            long_frame.loc[long_frame["district_key"].isin(orphan_keys)]
+            .drop_duplicates(subset=["district_key"])
+            .set_index("district_key")
+        )
+        orphans = pd.DataFrame(
+            {
+                "district_key": orphan_keys,
+                "state": [orphan_states.at[key, "state"] for key in orphan_keys],
+                "district": [orphan_states.at[key, "district"] for key in orphan_keys],
+                "n_slices_with_any_metric": np.nan,
+                "status": "master_not_in_roster",
+            }
+        )
+        reconciliation = pd.concat([reconciliation, orphans], ignore_index=True)
+
+    return expanded, reconciliation
 
 
 def discover_states(metric_slugs: Sequence[str], *, data_dir: Path) -> list[str]:
@@ -308,20 +505,48 @@ def load_national_long_frame(
 # ---------------------------------------------------------------------------
 
 
+def _finite_mask_frame(frame: pd.DataFrame, columns: Sequence[str]) -> pd.DataFrame:
+    """Boolean frame: True where a column holds a finite value.
+
+    `MetricRuler.apply` scores only finite values, so every count of "available"
+    data — coverage report included — must use this mask rather than `.notna()`,
+    which admits +/-inf and would report coverage a district never receives
+    (CHG-0351).
+    """
+    present = [column for column in columns if column in frame.columns]
+    numeric = frame.loc[:, present].apply(pd.to_numeric, errors="coerce")
+    return pd.DataFrame(
+        np.isfinite(numeric.to_numpy(dtype=float, na_value=np.nan)),
+        index=frame.index,
+        columns=present,
+    )
+
+
 def _weighted_row_score(
-    score_frame: pd.DataFrame, weights: pd.Series
+    score_frame: pd.DataFrame,
+    weights: pd.Series,
+    *,
+    total_weight: Optional[float] = None,
 ) -> tuple[pd.Series, pd.Series]:
     """Weighted mean over available columns, renormalized per row.
 
     Returns (score, available_weight_fraction). Mirrors
     `analysis/bundle_scores.compute_bundle_score_frame` so the pilot's composite
     is comparable to the production one apart from the normalization step.
+
+    `total_weight` is the coverage **denominator** and must be the total
+    *configured* bundle weight. Defaulting it to `weights.sum()` would silently
+    drop a metric that is absent from the whole pool out of both numerator and
+    denominator, letting such rows report full coverage against a smaller
+    universe than the gate claims (CHG-0350).
     """
-    total_weight = float(weights.sum())
-    available = score_frame.notna().mul(weights, axis=1).sum(axis=1)
+    denominator = float(weights.sum()) if total_weight is None else float(total_weight)
+    available = _finite_mask_frame(score_frame, list(score_frame.columns)).mul(
+        weights, axis=1
+    ).sum(axis=1)
     weighted = score_frame.mul(weights, axis=1).sum(axis=1, skipna=True)
     score = weighted.div(available.where(available > 0.0))
-    coverage = available / total_weight if total_weight > 0 else available * np.nan
+    coverage = available / denominator if denominator > 0 else available * np.nan
     return score, coverage
 
 
@@ -353,7 +578,16 @@ def score_national_frame(
         dtype=float,
     )
 
-    composite, coverage = _weighted_row_score(score_frame, weights)
+    # Denominators come from the configured bundle, not from what happened to fit.
+    configured_total = sum(float(spec.weight) for spec in metric_specs)
+    configured_baseline = sum(
+        float(spec.weight) for spec in metric_specs if spec.slug in BASELINE_REFERENCED_SLUGS
+    )
+    configured_absolute = configured_total - configured_baseline
+
+    composite, coverage = _weighted_row_score(
+        score_frame, weights, total_weight=configured_total
+    )
     out["composite"] = composite
     out["weight_coverage"] = coverage
     out["composite_gated"] = composite.where(coverage >= coverage_gate)
@@ -362,11 +596,21 @@ def score_national_frame(
     baseline_cols = [c for c in score_frame.columns if c in BASELINE_REFERENCED_SLUGS]
     absolute_cols = [c for c in score_frame.columns if c not in BASELINE_REFERENCED_SLUGS]
     if baseline_cols:
-        sub, _ = _weighted_row_score(score_frame[baseline_cols], weights[baseline_cols])
+        sub, sub_coverage = _weighted_row_score(
+            score_frame[baseline_cols],
+            weights[baseline_cols],
+            total_weight=configured_baseline,
+        )
         out["composite_baseline_referenced"] = sub
+        out["coverage_baseline_referenced"] = sub_coverage
     if absolute_cols:
-        sub, _ = _weighted_row_score(score_frame[absolute_cols], weights[absolute_cols])
+        sub, sub_coverage = _weighted_row_score(
+            score_frame[absolute_cols],
+            weights[absolute_cols],
+            total_weight=configured_absolute,
+        )
         out["composite_absolute_threshold"] = sub
+        out["coverage_absolute_threshold"] = sub_coverage
 
     for slug, series in scored.items():
         out[f"score__{slug}"] = series
@@ -421,40 +665,149 @@ def ruler_spec_frame(rulers: dict[str, MetricRuler]) -> pd.DataFrame:
                 "knot_low": float(ruler.knot_values[0]),
                 "knot_high": float(ruler.knot_values[-1]),
                 "n_knots": int(ruler.knot_values.size),
-                "duplicate_knots": ruler.duplicate_knots,
+                "tied_observations": ruler.duplicate_knots,
+                "tied_fraction": (
+                    ruler.duplicate_knots / ruler.pooled_n if ruler.pooled_n else np.nan
+                ),
                 "modal_value": ruler.modal_value,
                 "modal_mass_fraction": ruler.modal_mass,
-                "knots_json": json.dumps(
-                    [
-                        [float(v), float(s)]
-                        for v, s in zip(ruler.knot_values.tolist(), ruler.knot_scores.tolist())
-                    ]
+                "grid21_max_score_error": ruler.approx_max_score_error,
+                "grid21_mean_score_error": ruler.approx_mean_score_error,
+                # The exact CDF has one knot per distinct pooled value, which does
+                # not belong in a spreadsheet cell — it is written to
+                # ``cdf_support.csv`` instead (CHG-0353).
+                "knots_json": (
+                    json.dumps(
+                        [
+                            [float(v), float(sc)]
+                            for v, sc in zip(
+                                ruler.knot_values.tolist(), ruler.knot_scores.tolist()
+                            )
+                        ]
+                    )
+                    if ruler.knot_values.size <= CDF_QUANTILES.size
+                    else "see cdf_support.csv"
                 ),
             }
         )
     return pd.DataFrame(rows).sort_values(["ruler", "metric_slug"]).reset_index(drop=True)
 
 
-def coverage_report(long_frame: pd.DataFrame, metric_slugs: Sequence[str]) -> pd.DataFrame:
-    """Districts with a finite value per metric x slice (P-09)."""
+def metric_fit_report(
+    metric_specs: Sequence[BundleMetricSpec],
+    rulers: dict[str, MetricRuler],
+    long_frame: pd.DataFrame,
+    *,
+    ruler_kind: str,
+) -> pd.DataFrame:
+    """Per configured metric: is it present, did a ruler fit, and what weight rides on it.
+
+    A metric absent from the entire pool contributes weight to the coverage
+    denominator but can never contribute score. That gap is invisible in the
+    scored frame, so it is reported explicitly here (CHG-0350).
+    """
+    configured_total = sum(float(spec.weight) for spec in metric_specs)
     rows: list[dict[str, object]] = []
-    for (scenario, period), group in long_frame.groupby(["scenario", "period"], sort=False):
+    for spec in metric_specs:
+        present = spec.slug in long_frame.columns
+        n_finite = (
+            int(_finite_mask_frame(long_frame, [spec.slug])[spec.slug].sum()) if present else 0
+        )
+        ruler = rulers.get(spec.slug)
+        if ruler is not None:
+            reason = ""
+        elif not present:
+            reason = "column absent from assembled frame"
+        elif n_finite == 0:
+            reason = "no finite value anywhere in the pool"
+        else:
+            reason = "ruler fit failed"
+        rows.append(
+            {
+                "ruler": ruler_kind,
+                "metric_slug": spec.slug,
+                "weight": float(spec.weight),
+                "weight_fraction": (
+                    float(spec.weight) / configured_total if configured_total > 0 else np.nan
+                ),
+                "present_in_frame": present,
+                "n_finite": n_finite,
+                "ruler_fitted": ruler is not None,
+                "reason_not_fitted": reason,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def cdf_support_frame(rulers: dict[str, MetricRuler], *, ruler_kind: str) -> pd.DataFrame:
+    """Long-form exact CDF support: one row per (metric, distinct pooled value)."""
+    rows: list[pd.DataFrame] = []
+    for slug, ruler in rulers.items():
+        if ruler.knot_counts is None:
+            continue
+        rows.append(
+            pd.DataFrame(
+                {
+                    "ruler": ruler_kind,
+                    "metric_slug": slug,
+                    "knot_value": ruler.knot_values,
+                    "midrank_score": ruler.knot_scores,
+                    "tie_count": ruler.knot_counts,
+                }
+            )
+        )
+    if not rows:
+        return pd.DataFrame(
+            columns=["ruler", "metric_slug", "knot_value", "midrank_score", "tie_count"]
+        )
+    return pd.concat(rows, ignore_index=True)
+
+
+def coverage_report(long_frame: pd.DataFrame, metric_slugs: Sequence[str]) -> pd.DataFrame:
+    """Finite values per state x metric x slice, with national totals (P-09).
+
+    The input must already be expanded onto the canonical roster grid, so
+    ``n_rows`` is the *expected* district count for that state and slice rather
+    than however many rows a master happened to contain. National rows are summed
+    from the same state rows, so the two levels cannot disagree (CHG-0354).
+    """
+    finite = _finite_mask_frame(long_frame, metric_slugs)
+    keys = long_frame.loc[:, ["state", "scenario", "period"]]
+
+    rows: list[dict[str, object]] = []
+    for (state, scenario, period), index in keys.groupby(
+        ["state", "scenario", "period"], sort=False
+    ).groups.items():
+        block = finite.loc[index]
         for slug in metric_slugs:
-            if slug not in group.columns:
-                n_finite = 0
-            else:
-                n_finite = int(pd.to_numeric(group[slug], errors="coerce").notna().sum())
+            n_finite = int(block[slug].sum()) if slug in block.columns else 0
             rows.append(
                 {
+                    "scope": "state",
+                    "state": state,
                     "scenario": scenario,
                     "period": period,
                     "metric_slug": slug,
-                    "n_rows": int(len(group)),
+                    "n_rows": int(len(index)),
                     "n_finite": n_finite,
-                    "coverage_pct": round(100.0 * n_finite / max(len(group), 1), 2),
+                    "coverage_pct": round(100.0 * n_finite / max(len(index), 1), 2),
                 }
             )
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return frame
+
+    national = (
+        frame.groupby(["scenario", "period", "metric_slug"], as_index=False, sort=False)[
+            ["n_rows", "n_finite"]
+        ]
+        .sum()
+        .assign(scope="national", state="__ALL_STATES__")
+    )
+    national["coverage_pct"] = (
+        100.0 * national["n_finite"] / national["n_rows"].where(national["n_rows"] > 0)
+    ).round(2)
+    return pd.concat([frame, national.loc[:, frame.columns]], ignore_index=True)
 
 
 def state_scores(
@@ -500,12 +853,20 @@ def state_scores(
 # ---------------------------------------------------------------------------
 
 
-def load_district_geometry(data_dir: Path):
-    """Load the national district geometry from the optimized bundle."""
+def load_district_geometry(data_dir: Path, states: Optional[Sequence[str]] = None):
+    """Load district geometry for rendering, optionally restricted to some states.
+
+    Rendering is the only step that needs geopandas; the roster and areas that
+    feed the tables are read from the same files with `json` (CHG-0349).
+    """
     import geopandas as gpd  # local import: tables-only runs must not require geopandas
 
-    root = Path(data_dir) / "processed_optimised" / "geometry" / "admin" / "district"
-    files = sorted(root.glob("state=*.geojson"))
+    root = district_geometry_root(data_dir)
+    if states:
+        wanted = [root / f"state={name}.geojson" for name in states]
+        files = [path for path in wanted if path.exists()]
+    else:
+        files = sorted(root.glob("state=*.geojson"))
     if not files:
         raise FileNotFoundError(f"No district geometry found under {root}")
     frames = [gpd.read_file(path) for path in files]
@@ -592,6 +953,8 @@ def _write_summary(
     specs: pd.DataFrame,
     coverage_gate: float,
     scored_by_ruler: dict[str, pd.DataFrame],
+    fit_frame: pd.DataFrame,
+    reconciliation: pd.DataFrame,
 ) -> None:
     lines: list[str] = []
     lines.append("# Heat Risk national-ruler pilot — summary\n")
@@ -620,15 +983,53 @@ def _write_summary(
     ]
     lines.append(_as_table(summaries.loc[:, cols]))
 
+    lines.append("\n\n## Roster reconciliation (P-09, P-10)\n")
+    if reconciliation.empty:
+        lines.append("- No canonical roster was available; coverage below is not against a fixed universe.")
+    else:
+        counts = reconciliation["status"].value_counts()
+        for status, label in (
+            ("roster_and_master", "roster districts with at least one master row"),
+            ("roster_no_master", "roster districts with **no** master row in any slice"),
+            ("master_not_in_roster", "master district_keys absent from the roster (dropped)"),
+        ):
+            lines.append(f"- {int(counts.get(status, 0))} {label}")
+
+    lines.append("\n\n## Metric fit (P-08)\n")
+    unfitted = fit_frame.loc[~fit_frame["ruler_fitted"]]
+    if unfitted.empty:
+        lines.append(
+            "- Every configured metric fitted a ruler for every ruler kind. "
+            "The coverage denominator is the full configured bundle weight."
+        )
+    else:
+        lines.append(
+            _as_table(
+                unfitted.loc[
+                    :, ["ruler", "metric_slug", "weight_fraction", "n_finite", "reason_not_fitted"]
+                ]
+            )
+        )
+        lines.append(
+            "\nThis weight remains in the coverage denominator and can never be scored, "
+            "so affected rows are correctly reported as short of full coverage (CHG-0350)."
+        )
+
     lines.append("\n\n## Ruler fit (P-05, P-06)\n")
     lines.append(
         _as_table(
             specs.loc[
                 :,
-                ["ruler", "metric_slug", "pooled_n", "knot_low", "knot_high",
-                 "duplicate_knots", "modal_value", "modal_mass_fraction"],
+                ["ruler", "metric_slug", "pooled_n", "knot_low", "knot_high", "n_knots",
+                 "tied_fraction", "modal_mass_fraction",
+                 "grid21_max_score_error", "grid21_mean_score_error"],
             ]
         )
+    )
+    lines.append(
+        "\n`grid21_*_score_error` is how far the compact 21-knot quantile grid departs "
+        "from the exact mid-rank CDF on the pooled sample. Small values mean a frozen "
+        "artifact can carry the grid instead of the full support (P-05, P-11)."
     )
 
     lines.append("\n\n## Coverage gate effect (P-08)\n")
@@ -651,6 +1052,11 @@ def _write_summary(
         "saturating and late-century differences are being lost (P-07).\n"
         "- If the baseline slice is near-uniform, that is expected under a full-span pooled "
         "ruler and is a product decision, not a defect (P-03).\n"
+        "- The exact mid-rank `cdf` ruler cannot return a hard 0 or 100 by construction, so "
+        "`pct_score_ge_99` / `pct_score_le_1` read lower for it than for `linear` at equal "
+        "saturation. Compare each ruler against itself across slices, not across rulers.\n"
+        "- `roster_no_master` districts are scored NaN, not 0. They lower coverage, they do "
+        "not lower the composite (P-09).\n"
     )
     (out_dir / "summary.md").write_text("\n".join(lines), encoding="utf-8")
 
@@ -664,7 +1070,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default="docs/diagnostics/heat_risk_pilot",
         help="Directory for pilot outputs (created if absent). Default: %(default)s",
     )
-    parser.add_argument("--level", default="district", choices=("district", "block"))
     parser.add_argument(
         "--data-dir",
         default=None,
@@ -688,6 +1093,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--no-maps", action="store_true", help="Skip choropleths; tables only.")
     parser.add_argument(
+        "--allow-missing-geometry",
+        action="store_true",
+        help=(
+            "Continue when the canonical district roster or its areas are missing. "
+            "Off by default: without the roster there is no expected universe for "
+            "coverage (P-09) and no weights for area aggregation (P-12), so the run "
+            "would emit blank diagnostics that read as passes."
+        ),
+    )
+    parser.add_argument(
         "--map-domain",
         default="fixed",
         choices=("fixed", "auto"),
@@ -699,7 +1114,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     data_dir = Path(args.data_dir) if args.data_dir else get_paths_config().data_dir
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    level = args.level
+    level = LEVEL
     verbose = not args.quiet
     ruler_kinds = [k.strip() for k in str(args.rulers).split(",") if k.strip()]
 
@@ -711,8 +1126,44 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     metric_slugs = [s.slug for s in metric_specs]
     id_columns = list(_required_id_columns(level))
 
-    if args.states:
-        states = [s.strip() for s in args.states.split(",") if s.strip()]
+    requested_states = (
+        [name.strip() for name in args.states.split(",") if name.strip()] if args.states else None
+    )
+
+    # The canonical roster is the expected universe for coverage and the weight
+    # source for area aggregation, so it is loaded before any master (CHG-0354).
+    roster: Optional[pd.DataFrame] = None
+    try:
+        roster = load_district_roster(data_dir, states=requested_states, verbose=verbose)
+    except Exception as exc:
+        if not args.allow_missing_geometry:
+            print(
+                f"[error] canonical district roster unavailable ({exc}). "
+                "Coverage and area weighting cannot be computed. "
+                "Re-run with --allow-missing-geometry to proceed without them.",
+                file=sys.stderr,
+            )
+            return 2
+        print(f"[warn] roster unavailable ({exc}); continuing degraded.", file=sys.stderr)
+
+    areas: Optional[pd.DataFrame] = None
+    if roster is not None:
+        if roster["area_m2"].notna().any():
+            areas = roster.loc[:, ["district_key", "area_m2"]].copy()
+        elif not args.allow_missing_geometry:
+            print(
+                "[error] district roster carries no area_m2; area-weighted state means "
+                "(P-12) would be blank. Re-run with --allow-missing-geometry to proceed.",
+                file=sys.stderr,
+            )
+            return 2
+        else:
+            print("[warn] roster carries no area_m2; state means will be unweighted.", file=sys.stderr)
+
+    if requested_states:
+        states = requested_states
+    elif roster is not None:
+        states = sorted(roster["state"].dropna().unique().tolist())
     else:
         states = discover_states(metric_slugs, data_dir=data_dir)
     print(f"Heat Risk pilot: {len(metric_slugs)} metrics, {len(states)} states, level={level}", file=sys.stderr)
@@ -720,30 +1171,41 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     long_frame = load_national_long_frame(
         metric_slugs, level=level, states=states, data_dir=data_dir, verbose=verbose
     )
-    if long_frame.empty:
+    if long_frame.empty and roster is None:
         print("No data assembled; nothing to do.", file=sys.stderr)
         return 1
-    print(f"Assembled {len(long_frame):,} district-slice rows.", file=sys.stderr)
+    print(f"Assembled {len(long_frame):,} district-slice rows from masters.", file=sys.stderr)
+
+    if roster is not None:
+        long_frame, reconciliation = expand_to_roster(long_frame, roster, metric_slugs)
+        reconciliation.to_csv(out_dir / "roster_reconciliation.csv", index=False)
+        n_no_master = int((reconciliation["status"] == "roster_no_master").sum())
+        n_orphan = int((reconciliation["status"] == "master_not_in_roster").sum())
+        print(
+            f"Roster grid: {len(long_frame):,} district-slice rows "
+            f"({n_no_master} roster districts with no master row, "
+            f"{n_orphan} master keys not in the roster).",
+            file=sys.stderr,
+        )
+    else:
+        reconciliation = pd.DataFrame(columns=["district_key", "state", "district", "status"])
 
     coverage_report(long_frame, metric_slugs).to_csv(out_dir / "coverage_report.csv", index=False)
 
-    areas: Optional[pd.DataFrame] = None
     gdf = None
     if not args.no_maps:
         try:
-            gdf = load_district_geometry(data_dir)
-            if "area_m2" in gdf.columns:
-                areas = pd.DataFrame(gdf.loc[:, ["district_key", "area_m2"]]).drop_duplicates(
-                    subset=["district_key"]
-                )
-        except Exception as exc:  # geometry is optional for the tables
-            print(f"[warn] geometry unavailable ({exc}); continuing without maps.", file=sys.stderr)
+            gdf = load_district_geometry(data_dir, states=states)
+        except Exception as exc:  # rendering is the only geopandas-dependent step
+            print(f"[warn] geometry not renderable ({exc}); continuing without maps.", file=sys.stderr)
             gdf = None
 
     all_specs: list[pd.DataFrame] = []
     all_summaries: list[pd.DataFrame] = []
     all_scores: list[pd.DataFrame] = []
     all_states: list[pd.DataFrame] = []
+    all_fits: list[pd.DataFrame] = []
+    all_support: list[pd.DataFrame] = []
     scored_by_ruler: dict[str, pd.DataFrame] = {}
 
     for kind in ruler_kinds:
@@ -762,7 +1224,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             if ruler is not None:
                 rulers[metric_spec.slug] = ruler
+        fit_report = metric_fit_report(metric_specs, rulers, long_frame, ruler_kind=kind)
+        unfitted = fit_report.loc[~fit_report["ruler_fitted"]]
         print(f"[{kind}] fitted {len(rulers)}/{len(metric_specs)} metric rulers.", file=sys.stderr)
+        if not unfitted.empty:
+            # This weight stays in the coverage denominator and can never be
+            # scored, so it is never silent (CHG-0350).
+            print(
+                f"[{kind}] {len(unfitted)} metric(s) unfitted, "
+                f"{unfitted['weight_fraction'].sum():.1%} of bundle weight: "
+                + ", ".join(unfitted["metric_slug"].tolist()),
+                file=sys.stderr,
+            )
 
         scored = score_national_frame(
             long_frame,
@@ -774,6 +1247,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         scored.insert(0, "ruler", kind)
         scored_by_ruler[kind] = scored
 
+        all_fits.append(fit_report)
+        all_support.append(cdf_support_frame(rulers, ruler_kind=kind))
         all_specs.append(ruler_spec_frame(rulers))
         all_summaries.append(slice_summary(scored, ruler_kind=kind))
         all_scores.append(scored)
@@ -799,6 +1274,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     specs_frame = pd.concat(all_specs, ignore_index=True)
     summary_frame = pd.concat(all_summaries, ignore_index=True)
+    fit_frame = pd.concat(all_fits, ignore_index=True)
+    support_frame = pd.concat(all_support, ignore_index=True)
+    fit_frame.to_csv(out_dir / "metric_fit_report.csv", index=False)
+    support_frame.to_csv(out_dir / "cdf_support.csv", index=False)
     specs_frame.to_csv(out_dir / "metric_ruler_spec.csv", index=False)
     summary_frame.to_csv(out_dir / "slice_summary.csv", index=False)
     pd.concat(all_scores, ignore_index=True).to_csv(out_dir / "district_scores.csv", index=False)
@@ -813,6 +1292,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         specs=specs_frame,
         coverage_gate=float(args.coverage_gate),
         scored_by_ruler=scored_by_ruler,
+        fit_frame=fit_frame,
+        reconciliation=reconciliation,
     )
     print(f"Done. Outputs under {out_dir}", file=sys.stderr)
     return 0

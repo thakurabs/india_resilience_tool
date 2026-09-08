@@ -138,8 +138,19 @@ scenario-period availability *within a state*, so the panel is uneven: a state
 missing a pair contributes fewer rows to the pool and has no score for that
 slice.
 
-**Resolution:** coverage report per (metric, slice) before freezing; an explicit
-rule for a state whose grid is a strict subset.
+A first pass measured this against "what exists": states were discovered from the
+component roots, and coverage was aggregated nationally with no state dimension,
+so a state or district absent from every master was invisible and a national
+percentage could not say *which* state lacked a slice.
+
+**Resolution:** the expected universe is the **canonical district roster**, read
+from `processed_optimised/geometry/admin/district/` — every roster district x all
+7 slices, so absence appears as an NaN row rather than a missing one. Coverage is
+reported at state x metric x slice with national totals summed from those same
+rows, alongside a roster reconciliation naming roster districts with no master
+row and master keys absent from the roster. Delivered by the pilot (CHG-0354).
+Still open, and not a pilot question: the explicit rule for a state whose grid is
+a strict subset.
 
 ### P-10 Freezing a ruler over data that is still being regenerated
 
@@ -218,6 +229,18 @@ simply scored.
 ## Pilot coverage
 
 `tools/diagnostics/heat_risk_national_ruler_pilot.py` (CHG-0346) is scoped to
-answer P-01, P-02, P-03, P-05, P-06, P-07, P-08 and P-12 with data before any
-ruler is frozen. P-04, P-09, P-10, P-11 are design/process items resolved in
+answer P-01, P-02, P-03, P-05, P-06, P-07, P-08, P-09 and P-12 with data before
+any ruler is frozen.
+
+P-09 moved into scope with CHG-0354: the pilot now measures coverage against the
+canonical roster rather than against whatever the masters contain, which is the
+only way absence can be observed at all. What remains outside the pilot is the
+*policy* for a state whose slice grid is a strict subset.
+
+P-05 likewise moved from "reported" to "resolved" with CHG-0353: the `cdf` ruler
+is the exact pooled mid-rank CDF, and the compact 21-knot grid it replaces is
+retained only as an approximation whose max/mean score error is measured per
+metric — which is also the input to P-11's artifact-size question.
+
+P-04, P-10 and P-11 remain design/process items resolved in
 `config/absolute_scales.py` and the audit, not by the pilot.
