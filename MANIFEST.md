@@ -380,6 +380,7 @@ Aqueduct methodology note:
 |------|---------|
 | `__init__.py` | Package marker |
 | `debug_build_master.py` | Diagnose master-building issues |
+| `heat_risk_national_ruler_pilot.py` | **Read-only** national-absolute-scale pilot (CHG-0346): scores the thematic Heat Risk composite for all districts against two candidate frozen national rulers — `linear` (pooled p1..p99, clipped) and `cdf` (pooled empirical CDF, 21 knots, ties collapsed to mid-rank) — pooled over 7 scenario/period slices, replacing the production per-state min-max. Emits district/state score tables, per-slice spread + saturation + clamping summaries, ruler-fit specs, a coverage report and national choropleth panels under `--out-dir` only. Evidence for `docs/national_absolute_scale_pitfalls.md` |
 | `spi_diagnostic.py` | SPI output sanity checks and diagnostics |
 | `verify_states_geojson.py` | Verify `states_4326.geojson` is consistent with `districts_4326.geojson` |
 | `verify_districts_blocks_geojson.py` | Sanity + parity checks for `districts_4326.geojson` and `blocks_4326.geojson` |
