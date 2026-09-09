@@ -6,7 +6,8 @@
 > the State/UT headline is the area-weighted mean of its district scores. Three earlier rules
 > reverse: a State mean is now permitted as the national value, national results *are* absolute
 > interstate comparisons, and `coverage_fraction` moves from a shipped field to a build gate.
-> The District-view contract is unresolved and is marked in place.
+> A district selection is an inspection state inside the State view; the District-view layout
+> contract and the third breadcrumb level are withdrawn.
 >
 > Rationale, evidence and the vendor handoff contract:
 > [`docs/composite_scale_decisions.md`](docs/composite_scale_decisions.md).
@@ -450,7 +451,7 @@ National view: continuous district composite-score colour
     → select state
 State view:    continuous block composite-score colour
                thick district boundary, thin block boundary
-               + five-band district distribution and district-level interaction
+               + five-band district distribution, district and block inspection
 ```
 
 Both views preserve the same fixed `0-100` colour domain and the same level-neutral legend title,
@@ -500,6 +501,8 @@ Map
 
 Supporting evidence
     Five-band interactive distribution + top-10 district shortlist + metric/rule signals
+    District inspection panel when a district is selected; block panel beneath it when a
+    block within that district is selected
 
 Context and Evidence
     Collapsed exposure, hydrology, data-quality, and optional-overlay content
@@ -512,53 +515,46 @@ The district ranking denominator is the number of valid districts in the selecte
 the number expected when some scores are invalid. A valid district score remains visible when the
 parent State/UT cohort is ineligible for ranking.
 
-> **Unresolved — 2026-09-09.** With blocks painted in the State view there is no finer map for a
-> District view to introduce, so a district selection is most likely an inspection state inside the
-> State view: block fill retained, the selected district's outline promoted to the selection
-> stroke, breadcrumb stopping at `India > State/UT`, and the panel showing the district score,
-> band, rank within the State/UT, drivers, and the range of its blocks. That has not been decided.
-> The contract below is retained verbatim pending that decision and must not be implemented as-is
-> without re-reading it against the frozen-scale amendment.
+A district selection is an **inspection state inside the State view**, not a navigation level. It
+does not change the map encoding: block fill is retained, and the colourbar, its title and its
+domain do not change. The breadcrumb stops at `India > State/UT`. Under the frozen ruler there is
+no finer map for a District view to introduce — its map would repaint the same blocks, on the same
+ruler, against the same colourbar, at a smaller extent — so the level is withdrawn rather than
+retained as a redundant re-render.
 
-The District-view layout contract is:
+Selecting a district promotes its outline to the accent selection stroke and shows:
 
 ```text
-Header
+District inspection panel
     District name + parent State/UT
-    Persistent Bundle, Scenario, and Period selectors
-
-District answer
-    District Bundle Score + five-band classification
-    District rank within State/UT when the parent cohort is eligible
+    District composite score + five-band classification
+    District rank within the selected State/UT, when the parent cohort is eligible
     Relevant coverage or quality status
-
-Drivers
     Up to three valid District-scoped metric drivers or rule signals
-
-Map and within-District variation
-    Continuous Block Bundle Score on a fixed 0–100 display scale
-    Interactive Block inspection
-    Five-band Block distribution + top-10 Blocks ranked within the District
-
-Context and Evidence
-    Collapsed exposure, hydrology, data-quality, and optional-overlay content
-
-Navigation
-    India > State/UT > District breadcrumb
+    The score range of its blocks, with the block count
 ```
 
-Do not add an Elevated Block Concentration headline or rank districts by block concentration in
-Phase 1. Block information explains within-District heterogeneity; it does not redefine the
-District's primary score.
+A district may be selected from the map, from the five-band district distribution, or from the
+top-10 district shortlist. The block range is a minimum, maximum and count on the frozen scale —
+not a distribution and not a ranking. The median district holds 8 blocks and cohorts run from 1 to
+38, so a five-band histogram at that scope would usually leave three bands empty, and blocks are
+not ranked at any scope.
 
-A selected Block is an inspection state within District view, not a fourth full Overview
-navigation level. Keep the District map visible and show the Block name, parent District and
-State/UT, Block Bundle Score, five-band classification, eligible rank among valid Blocks within the
-selected District, relevant data-quality state, and valid Block-scoped driver/rule signals. A new
-Block selection replaces the previous one and may be cleared without leaving District view. The
-breadcrumb remains `India > State/UT > District`. Do not show Elevated Block Concentration,
-State-wide or national Block rank, another nested distribution, or a duplicated full Context and
-Evidence hierarchy. Show `View Detailed Analysis` only when a registered valid route exists.
+Districts and blocks are two independent inspection targets within one view, and their precedence
+is explicit. Selecting a district clears any selected block. Selecting a block inside the selected
+district retains the district selection and adds the block panel beneath it. Selecting a block
+outside it replaces the district selection with that block's parent district, so the block panel
+always sits under its own district. At most one district and one block are selected at a time,
+either may be cleared without leaving the State view, and neither adds a breadcrumb level.
+
+A selected block shows its name, parent district and State/UT, its composite score, five-band
+classification, relevant data-quality state, and valid Block-scoped driver or rule signals. Do not
+show a State-wide or national block rank, a block rank within the district, a nested distribution,
+or a duplicated Context and Evidence hierarchy. Show `View Detailed Analysis` only when a
+registered valid route exists.
+
+Do not rank districts by any block-derived statistic in Phase 1. Block information explains
+within-district heterogeneity; it does not redefine the district's primary score.
 
 The application should avoid an empty first screen that requires the user to complete a series
 of controls before seeing any information. Defaults must be visible and clearly identified so
@@ -581,7 +577,8 @@ Detailed Analysis.
 Administrative level should appear contextually through the geographic drill-down:
 
 ```text
-India → States → Districts → Blocks
+India → States           (two navigation levels)
+    ↳ Districts, Blocks  (inspection states within the State view)
 ```
 
 Geography should be navigated through search or direct map interaction rather than treated as a
@@ -589,7 +586,8 @@ fourth analysis selector. This is easier to understand than requiring every geog
 to be configured before the map becomes useful.
 
 Bundle, Scenario, and Period selections should persist throughout drill-down. Breadcrumbs should
-provide the reversible geographic path, for example `India > Uttar Pradesh > Kaushambi`. Browser
+provide the reversible geographic path, for example `India > Uttar Pradesh`. District and
+block selections are inspection states and do not extend the breadcrumb. Browser
 Back is outside the Overview analytical-state model; breadcrumbs and in-application navigation are
 authoritative for moving through analytical states. Existing application-shell Browser Back
 behavior is not redefined by this workflow.
@@ -785,7 +783,7 @@ for the first useful result.
 Overview should reuse the existing persisted Glance driver contract rather than introduce a new
 weighted-contribution calculation. For thematic bundles, show `Metric Drivers`; for sectoral
 bundles, show `Top Rule Signals`. At State/UT scope, rank each available metric or rule using its
-existing mean normalized score across valid districts. District and Block views must use valid
+existing mean normalized score across valid districts. District and block inspection must use valid
 persisted rows scoped to that exact administrative level. Do not infer, interpolate, or borrow
 driver signals from another level.
 
@@ -813,7 +811,7 @@ driver/rule-to-Detailed-Analysis route registry controls clickability.
 - bundle;
 - scenario;
 - period;
-- selected Block inspection state, where applicable;
+- selected District and Block inspection states, where applicable;
 - map extent; and
 - major panel expansion state where technically supported.
 
@@ -907,7 +905,10 @@ At minimum, synthetic and artifact-contract tests must prove:
 - Bundle, Scenario, Period, and administrative-level changes clear the local band filter;
 - a roster-valid no-data geography remains selected with a no-data state;
 - an obsolete or unsupported Block, District, or State falls back only to its nearest valid parent;
-- Block inspection does not create a fourth breadcrumb level; and
+- district and block inspection create no breadcrumb level beyond `India > State/UT`;
+- selecting a district clears a selected block; selecting a block outside the selected district
+  reselects that block's parent district; at most one district and one block are selected at once;
+- no block is ranked within a district, and no district is ranked by a block-derived statistic; and
 - Detailed Analysis routing and return preserve only the declared durable state.
 
 ### Maps, routing, and data states

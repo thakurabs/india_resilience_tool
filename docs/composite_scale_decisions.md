@@ -510,10 +510,14 @@ Headline
 and the Map block becomes `Continuous block composite-score colour + district interaction`.
 
 The District-view layout contract (lines 466–491) and the block-inspection paragraph (lines
-497–504) are **deferred, not resolved**. With blocks painted at State view there is no finer map
-to introduce, so a district click is most likely an inspection state within State view —
-breadcrumb `India > State/UT`, panel showing the district score, band, rank within the State,
-drivers, and its blocks' range. This is not decided.
+497–504) are **withdrawn — decided 2026-09-09**. With blocks painted at State view there is no
+finer map to introduce: a District view would repaint the same blocks, on the same ruler, against
+the same colourbar, at a smaller extent. Its `top-10 Blocks ranked within the District` clause also
+contradicted the two-tier ranking rule, and a five-band block histogram is not viable over a median
+of 8 blocks. A district click is an inspection state within State view — breadcrumb
+`India > State/UT`, panel showing the district score, band, rank within the State/UT, drivers, and
+its blocks' min–max range and count. District and block are independent inspection targets with an
+explicit precedence rule; neither adds a breadcrumb level.
 
 ### C7. Production migration contract — lines 772–811
 
@@ -633,7 +637,7 @@ must carry `data_snapshot_hash` so a mismatch is loud rather than silent.
 | P-13 | Five-band cuts are near-tautological under a CDF: `>= 80` reads as "worse than 80% of pooled observations". Either document that plainly or set band cuts from physical values. | Undecided. B7 shows band cuts already dominating the area-vs-population comparison. |
 | P-14 | `75` has changed meaning without the widget changing. Needs UI copy, not a docs change. | Undecided. |
 | P-03 | The pool is 86% future-weighted; the absolute-half baseline median is 38.8 against 78.8 at SSP5-8.5 2060-2080. The baseline map will look benign. | Presentation treatment undecided. |
-| — | District view: inspection state within State view, or a level of its own. | Deferred by decision. |
+| — | District view: inspection state within State view, or a level of its own. | **Resolved 2026-09-09** — inspection state. Workflow doc amended (CHG-0379). |
 | P-04 | Freeze the 7-slice grid with its own version; the validator must refuse off-grid slices. | Not done. |
 | P-10 | Data still regenerating. Blocks D4. | Blocking. |
 | P-11 | A frozen CDF must carry the full 5,488-value support per metric, or accept the 21-knot grid's up-to-4.2-point error. | Not decided. |
