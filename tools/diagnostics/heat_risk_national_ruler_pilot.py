@@ -50,8 +50,19 @@ touched, no config is changed, no composite master is rewritten):
 - ``coverage_report.csv``    finite values per state x metric x slice against the
   **canonical district roster**, with national totals derived from those same
   rows (P-09)
+- ``ruler_disagreement.csv`` one row per district x slice for each ruler pair:
+  both composites, their difference, and the within-slice rank each assigns.
+  The maps show that two rulers differ; this says by how much and where (P-01)
+- ``ruler_disagreement_summary.csv`` the same, aggregated per slice: mean/p95/max
+  absolute score gap, share of districts moving more than 10 and 20 points,
+  Spearman rank correlation, and worst-50 set overlap (P-01, P-13)
+- ``disagreement_spotcheck.csv`` for the district-slices where the rulers disagree
+  most, every metric's **raw physical value** beside its score under each ruler.
+  A choropleth cannot say which ruler is right about a district; this can (P-01)
 - ``maps/*.png``             national district choropleths, one 2x4 panel per
-  ruler x score field (composite, baseline-referenced, absolute-threshold)
+  ruler x score field (composite, baseline-referenced, absolute-threshold) x
+  colour domain (``fixed`` 0-100 and ``auto``, since the exact mid-rank CDF
+  cannot reach either end of a fixed domain by construction) x colour ramp
 - ``summary.md``             the headline numbers, pitfall-tagged
 
 Pilot-grade caveat: national coverage is still in flux (AP republish, Lakshadweep
@@ -76,6 +87,7 @@ step and changes no table.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import sys
 from dataclasses import dataclass
@@ -155,6 +167,25 @@ RECONCILIATION_COLUMNS: tuple[str, ...] = (
 LINEAR_LOW_Q = 0.01
 LINEAR_HIGH_Q = 0.99
 DEFAULT_COVERAGE_GATE = 0.70
+
+#: Directory of vendored NCL colour tables, loadable by `--map-cmap` by stem.
+NCL_COLORMAP_DIR = Path(__file__).resolve().with_name("colormaps")
+
+#: Colormap for the choropleths. Sequential by default: a score is an ordered
+#: quantity, and a sequential ramp is the honest encoding for one. ``turbo`` is
+#: available for readers who want the wider blue-green-yellow-orange-red span —
+#: it resolves far more detail at the low end, at the cost of introducing
+#: apparent boundaries where the data is smooth.
+DEFAULT_MAP_CMAP = "YlOrRd"
+
+#: How many maximally-disagreeing district-slices per ruler pair get their raw
+#: physical values printed (CHG-0363). Small on purpose: the spot-check is read
+#: by a human deciding which ruler tells the truth, not scanned in bulk.
+SPOTCHECK_TOP_N = 10
+
+#: Score gaps at which a ruler disagreement stops being cosmetic. 10 points is a
+#: half-band on the five-band scale; 20 points is a full band (P-13).
+DISAGREEMENT_THRESHOLDS: tuple[float, ...] = (10.0, 20.0)
 
 
 # ---------------------------------------------------------------------------
@@ -894,6 +925,196 @@ def state_scores(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Ruler disagreement (P-01)
+# ---------------------------------------------------------------------------
+
+
+def _within_slice_rank(frame: pd.DataFrame, value_col: str) -> pd.Series:
+    """Rank districts within each slice, 1 = worst (highest composite)."""
+    return frame.groupby(["scenario", "period"])[value_col].rank(
+        ascending=False, method="average"
+    )
+
+
+def _spearman(left: pd.Series, right: pd.Series) -> float:
+    """Spearman correlation as Pearson on ranks — pandas' own needs scipy."""
+    a = pd.to_numeric(left, errors="coerce").to_numpy(dtype=float)
+    b = pd.to_numeric(right, errors="coerce").to_numpy(dtype=float)
+    mask = np.isfinite(a) & np.isfinite(b)
+    if int(mask.sum()) < 2:
+        return float("nan")
+    a, b = a[mask], b[mask]
+    if a.std() == 0.0 or b.std() == 0.0:
+        return float("nan")
+    return float(np.corrcoef(a, b)[0, 1])
+
+
+def ruler_disagreement(
+    scored_by_ruler: dict[str, pd.DataFrame],
+    *,
+    id_columns: Sequence[str],
+    value_col: str = "composite",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Per district-slice and per-slice comparison of each pair of rulers (P-01).
+
+    The choropleths can show that two rulers disagree; they cannot say by how
+    much, where, or whether the disagreement reorders anything. Both are needed
+    to argue the ruler choice rather than default it.
+
+    Rows are compared only where **both** rulers produce a finite score, so the
+    within-slice ranks are drawn over one identical district set. In practice
+    that drops nothing — score finiteness depends on the input mask, not the
+    ruler — but it keeps the rank comparison honest if that ever stops holding.
+
+    Returns ``(detail, per_slice)``; both are empty frames when fewer than two
+    rulers carry ``value_col``.
+    """
+    keys = list(id_columns) + ["scenario", "period"]
+    kinds = [k for k, frame in scored_by_ruler.items() if value_col in frame.columns]
+    details: list[pd.DataFrame] = []
+    summaries: list[dict[str, object]] = []
+
+    for kind_a, kind_b in itertools.combinations(kinds, 2):
+        left = scored_by_ruler[kind_a].loc[:, keys + [value_col]].rename(
+            columns={value_col: "score_a"}
+        )
+        right = scored_by_ruler[kind_b].loc[:, keys + [value_col]].rename(
+            columns={value_col: "score_b"}
+        )
+        merged = left.merge(right, on=keys, how="inner", validate="one_to_one")
+        finite = np.isfinite(
+            pd.to_numeric(merged["score_a"], errors="coerce").to_numpy(dtype=float, na_value=np.nan)
+        ) & np.isfinite(
+            pd.to_numeric(merged["score_b"], errors="coerce").to_numpy(dtype=float, na_value=np.nan)
+        )
+        merged = merged.loc[finite].copy()
+        if merged.empty:
+            continue
+
+        merged.insert(0, "ruler_b", kind_b)
+        merged.insert(0, "ruler_a", kind_a)
+        merged["delta"] = merged["score_b"] - merged["score_a"]
+        merged["abs_delta"] = merged["delta"].abs()
+        merged["rank_a"] = _within_slice_rank(merged, "score_a")
+        merged["rank_b"] = _within_slice_rank(merged, "score_b")
+        merged["rank_delta"] = merged["rank_b"] - merged["rank_a"]
+        details.append(merged)
+
+        for (scenario, period), group in merged.groupby(["scenario", "period"], sort=False):
+            n = int(len(group))
+            worst_n = min(50, n)
+            worst_a = set(group.nsmallest(worst_n, "rank_a")["district_key"])
+            worst_b = set(group.nsmallest(worst_n, "rank_b")["district_key"])
+            decile = max(1, n // 10)
+            decile_a = set(group.nsmallest(decile, "rank_a")["district_key"])
+            decile_b = set(group.nsmallest(decile, "rank_b")["district_key"])
+            row: dict[str, object] = {
+                "ruler_a": kind_a,
+                "ruler_b": kind_b,
+                "scenario": scenario,
+                "period": period,
+                "n_compared": n,
+                "mean_abs_delta": float(group["abs_delta"].mean()),
+                "p95_abs_delta": float(group["abs_delta"].quantile(0.95)),
+                "max_abs_delta": float(group["abs_delta"].max()),
+                "median_delta": float(group["delta"].median()),
+                "spearman_rank_corr": _spearman(group["rank_a"], group["rank_b"]),
+                "max_abs_rank_delta": float(group["rank_delta"].abs().max()),
+                "worst_n": worst_n,
+                "worst_n_overlap": int(len(worst_a & worst_b)),
+                "worst_decile_overlap_pct": float(100.0 * len(decile_a & decile_b) / decile),
+            }
+            for threshold in DISAGREEMENT_THRESHOLDS:
+                row[f"pct_abs_delta_gt{int(threshold)}"] = float(
+                    (group["abs_delta"] > threshold).mean() * 100.0
+                )
+            summaries.append(row)
+
+    if not details:
+        return pd.DataFrame(), pd.DataFrame()
+    return pd.concat(details, ignore_index=True), pd.DataFrame(summaries)
+
+
+def disagreement_spotcheck(
+    detail: pd.DataFrame,
+    long_frame: pd.DataFrame,
+    scored_by_ruler: dict[str, pd.DataFrame],
+    metric_specs: Sequence[BundleMetricSpec],
+    *,
+    id_columns: Sequence[str],
+    top_n: int = SPOTCHECK_TOP_N,
+) -> pd.DataFrame:
+    """Raw physical values behind the largest ruler disagreements (P-01).
+
+    P-01's failure mode — a CDF manufacturing contrast out of a physically tight
+    distribution — looks exactly like a CDF revealing real contrast. The two are
+    separable only by reading the degrees, days and percentages underneath. For
+    each ruler pair's ``top_n`` worst-disagreeing district-slices this emits one
+    row per metric: the raw value, its weight, and its score under each ruler.
+    """
+    keys = list(id_columns) + ["scenario", "period"]
+    slugs = [s.slug for s in metric_specs if s.slug in long_frame.columns]
+    weights = {s.slug: float(s.weight) for s in metric_specs}
+    if detail.empty or not slugs:
+        return pd.DataFrame()
+
+    frames: list[pd.DataFrame] = []
+    for (kind_a, kind_b), pair in detail.groupby(["ruler_a", "ruler_b"], sort=False):
+        selected = pair.nlargest(int(top_n), "abs_delta").copy()
+        selected["disagreement_rank"] = np.arange(1, len(selected) + 1)
+        picked = selected.loc[
+            :, keys + ["disagreement_rank", "score_a", "score_b", "delta", "rank_a", "rank_b"]
+        ]
+
+        raw = long_frame.merge(picked, on=keys, how="inner").melt(
+            id_vars=keys + ["disagreement_rank", "score_a", "score_b", "delta", "rank_a", "rank_b"],
+            value_vars=slugs,
+            var_name="metric_slug",
+            value_name="raw_value",
+        )
+        for kind, suffix in ((kind_a, "a"), (kind_b, "b")):
+            scored = scored_by_ruler[kind]
+            score_cols = {f"score__{slug}": slug for slug in slugs if f"score__{slug}" in scored}
+            melted = (
+                scored.loc[:, keys + list(score_cols)]
+                .rename(columns=score_cols)
+                .melt(
+                    id_vars=keys,
+                    value_vars=list(score_cols.values()),
+                    var_name="metric_slug",
+                    value_name=f"metric_score_{suffix}",
+                )
+            )
+            raw = raw.merge(melted, on=keys + ["metric_slug"], how="left")
+
+        raw["metric_score_delta"] = raw["metric_score_b"] - raw["metric_score_a"]
+        raw["weight"] = raw["metric_slug"].map(weights)
+        raw["frame"] = np.where(
+            raw["metric_slug"].isin(BASELINE_REFERENCED_SLUGS),
+            "baseline_referenced",
+            "absolute_threshold",
+        )
+        raw.insert(0, "ruler_b", kind_b)
+        raw.insert(0, "ruler_a", kind_a)
+        raw = raw.rename(
+            columns={
+                "score_a": "composite_a",
+                "score_b": "composite_b",
+                "delta": "composite_delta",
+                "rank_a": "composite_rank_a",
+                "rank_b": "composite_rank_b",
+            }
+        )
+        frames.append(
+            raw.sort_values(
+                ["disagreement_rank", "weight", "metric_slug"], ascending=[True, False, True]
+            )
+        )
+
+    return pd.concat(frames, ignore_index=True)
+
+
 def load_district_geometry(data_dir: Path, states: Optional[Sequence[str]] = None):
     """Load district geometry for rendering, optionally restricted to some states.
 
@@ -917,6 +1138,43 @@ def load_district_geometry(data_dir: Path, states: Optional[Sequence[str]] = Non
     return gdf.loc[:, keep + ["geometry"]]
 
 
+def _load_cmap(name: str):
+    """Resolve a colormap name to a matplotlib colormap.
+
+    A stem matching an NCL ``.rgb`` table in :data:`NCL_COLORMAP_DIR` wins over a
+    matplotlib builtin, so a vendored table can be requested by its own name. NCL
+    files carry an ``ncolors=`` header, a ``# r g b`` comment line and one triple
+    per line, sometimes with a trailing per-colour comment.
+    """
+    import matplotlib
+    from matplotlib.colors import LinearSegmentedColormap
+
+    path = NCL_COLORMAP_DIR / f"{name}.rgb"
+    if not path.exists():
+        return matplotlib.colormaps[name]
+
+    triples: list[tuple[float, float, float]] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#")[0].strip()
+        if not line or "=" in line:
+            continue
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        try:
+            channels = tuple(float(value) for value in parts[:3])
+        except ValueError:
+            continue
+        triples.append(channels)  # type: ignore[arg-type]
+
+    if len(triples) < 2:
+        raise ValueError(f"NCL colour table {path} carries fewer than two colours")
+    scale = 255.0 if max(max(c) for c in triples) > 1.0 else 1.0
+    return LinearSegmentedColormap.from_list(
+        name, [(r / scale, g / scale, b / scale) for r, g, b in triples]
+    )
+
+
 def render_map_panel(
     gdf,
     scored: pd.DataFrame,
@@ -925,6 +1183,7 @@ def render_map_panel(
     title: str,
     out_path: Path,
     fixed_domain: bool,
+    cmap=DEFAULT_MAP_CMAP,
 ) -> None:
     """Render one 2x4 panel of national district choropleths, one per slice."""
     import matplotlib
@@ -950,7 +1209,7 @@ def render_map_panel(
         merged.plot(
             column=value_col,
             ax=ax,
-            cmap="YlOrRd",
+            cmap=cmap,
             vmin=vmin,
             vmax=vmax,
             linewidth=0.05,
@@ -962,7 +1221,7 @@ def render_map_panel(
     for ax in axes[len(SLICES):]:
         ax.set_axis_off()
 
-    sm = plt.cm.ScalarMappable(cmap="YlOrRd", norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=vmin, vmax=vmax))
     cbar = fig.colorbar(sm, ax=axes.tolist(), fraction=0.02, pad=0.02)
     cbar.set_label(f"{value_col} ({domain_note})")
     fig.suptitle(title, fontsize=14)
@@ -996,6 +1255,9 @@ def _write_summary(
     scored_by_ruler: dict[str, pd.DataFrame],
     fit_frame: pd.DataFrame,
     reconciliation: pd.DataFrame,
+    disagreement: pd.DataFrame,
+    disagreement_summary: pd.DataFrame,
+    spotcheck: pd.DataFrame,
 ) -> None:
     lines: list[str] = []
     lines.append("# Heat Risk national-ruler pilot — summary\n")
@@ -1081,6 +1343,41 @@ def _write_summary(
         "artifact can carry the grid instead of the full support (P-05, P-11)."
     )
 
+    lines.append("\n\n## Ruler disagreement (P-01)\n")
+    if disagreement_summary.empty:
+        lines.append("- Fewer than two rulers were scored; no comparison is possible.")
+    else:
+        cols = [
+            "ruler_a", "ruler_b", "scenario", "period", "n_compared",
+            "mean_abs_delta", "p95_abs_delta", "max_abs_delta",
+        ]
+        cols += [f"pct_abs_delta_gt{int(v)}" for v in DISAGREEMENT_THRESHOLDS]
+        cols += ["spearman_rank_corr", "worst_n", "worst_n_overlap", "worst_decile_overlap_pct"]
+        lines.append(_as_table(disagreement_summary.loc[:, cols]))
+        lines.append(
+            "\nA high `spearman_rank_corr` with a large `mean_abs_delta` means the rulers "
+            "agree on the ordering and disagree only on how far apart the districts are — "
+            "which is the whole of P-01: same map shape, different claim about magnitude. "
+            "A `worst_decile_overlap_pct` below ~80 means the ruler choice changes *which* "
+            "districts are called worst, and the choice can no longer be defaulted."
+        )
+
+        top = disagreement.nlargest(SPOTCHECK_TOP_N, "abs_delta").loc[
+            :, ["ruler_a", "ruler_b", "state", "district", "scenario", "period",
+                "score_a", "score_b", "delta", "rank_a", "rank_b"]
+        ]
+        lines.append("\n\n### Where they disagree most\n")
+        lines.append(_as_table(top))
+        if not spotcheck.empty:
+            lines.append(
+                f"\n`disagreement_spotcheck.csv` carries all {len(spotcheck):,} metric rows "
+                "behind these district-slices: each metric's raw physical value (degrees C, "
+                "days, percent) beside its score under each ruler. Read those values before "
+                "choosing — a large `delta` on a physically tight metric is manufactured "
+                "contrast, and a large `delta` on a physically wide one is contrast the "
+                "linear ruler is hiding."
+            )
+
     lines.append("\n\n## Coverage gate effect (P-08)\n")
     for kind, scored in scored_by_ruler.items():
         dropped = float(scored["composite_gated"].isna().mean() * 100.0)
@@ -1106,6 +1403,10 @@ def _write_summary(
         "saturation. Compare each ruler against itself across slices, not across rulers.\n"
         "- `roster_no_master_row` and `roster_master_no_finite_value` districts are scored "
         "NaN, not 0. They lower coverage, they do not lower the composite (P-09).\n"
+        "- Each map is rendered on both a fixed 0-100 domain and an auto-scaled one. "
+        "Comparing the two rulers is only valid on the fixed domain; the auto panels show "
+        "what each ruler resolves at full contrast, and the gap between the two renderings "
+        "is itself the P-02 measurement.\n"
     )
     (out_dir / "summary.md").write_text("\n".join(lines), encoding="utf-8")
 
@@ -1157,9 +1458,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument(
         "--map-domain",
-        default="fixed",
-        choices=("fixed", "auto"),
-        help="Colour domain for the maps: fixed 0-100, or auto-scaled to the data. Default: %(default)s",
+        default="both",
+        choices=("fixed", "auto", "both"),
+        help=(
+            "Colour domain for the maps. `fixed` 0-100 is comparable across rulers and "
+            "slices but reads washed out for the exact mid-rank CDF, which cannot reach "
+            "either end by construction; `auto` shows each panel at full contrast but on "
+            "a scale that is no longer comparable between files. `both` renders each map "
+            "twice from one compute pass, which is the only way to tell the two effects "
+            "apart (P-01, P-02). Default: %(default)s"
+        ),
+    )
+    parser.add_argument(
+        "--map-cmap",
+        default=DEFAULT_MAP_CMAP,
+        help=(
+            "Comma-separated colormaps for the choropleths. Each name is a matplotlib "
+            "colormap or the stem of a vendored NCL table in tools/diagnostics/colormaps "
+            "(e.g. `WhiteBlueGreenYellowRed`). Every requested ramp is rendered from one "
+            "compute pass. Default: %(default)s"
+        ),
     )
     parser.add_argument("--quiet", action="store_true", help="Suppress per-state progress lines.")
     args = parser.parse_args(argv)
@@ -1274,6 +1592,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     coverage_report(long_frame, metric_slugs).to_csv(out_dir / "coverage_report.csv", index=False)
 
+    # One compute pass, every requested colour ramp (CHG-0366). Resolved before the
+    # ruler loop so an unknown name fails immediately rather than after the compute.
+    map_cmaps: list[str] = [c.strip() for c in str(args.map_cmap).split(",") if c.strip()]
+    resolved_cmaps: dict[str, object] = {}
+    if not args.no_maps:
+        try:
+            resolved_cmaps = {name: _load_cmap(name) for name in map_cmaps}
+        except Exception as exc:
+            print(f"[error] colormap could not be resolved ({exc}).", file=sys.stderr)
+            return 2
+
+    # One compute pass, both renderings (CHG-0361).
+    map_domains: tuple[str, ...] = (
+        ("fixed", "auto") if args.map_domain == "both" else (str(args.map_domain),)
+    )
+
     gdf = None
     if not args.no_maps:
         try:
@@ -1344,14 +1678,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             ):
                 if value_col not in scored.columns:
                     continue
-                render_map_panel(
-                    gdf,
-                    scored,
-                    value_col=value_col,
-                    title=f"{label} — {kind} national ruler (pilot-grade)",
-                    out_path=out_dir / "maps" / f"{kind}__{value_col}.png",
-                    fixed_domain=(args.map_domain == "fixed"),
-                )
+                for domain in map_domains:
+                    for cmap_name, cmap_obj in resolved_cmaps.items():
+                        render_map_panel(
+                            gdf,
+                            scored,
+                            value_col=value_col,
+                            title=(
+                                f"{label} — {kind} national ruler, {domain} domain, "
+                                f"{cmap_name} (pilot-grade)"
+                            ),
+                            out_path=(
+                                out_dir / "maps"
+                                / f"{kind}__{value_col}__{domain}__{cmap_name}.png"
+                            ),
+                            fixed_domain=(domain == "fixed"),
+                            cmap=cmap_obj,
+                        )
             print(f"[{kind}] maps written to {out_dir / 'maps'}", file=sys.stderr)
 
     specs_frame = pd.concat(all_specs, ignore_index=True)
@@ -1372,6 +1715,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pd.concat(all_scores, ignore_index=True).to_csv(out_dir / "district_scores.csv", index=False)
     pd.concat(all_states, ignore_index=True).to_csv(out_dir / "state_scores.csv", index=False)
 
+    # The ruler decision (P-01) rests on how far the rulers actually diverge and
+    # on what the physical values say about the districts where they diverge
+    # most — neither of which a choropleth can show (CHG-0362, CHG-0363).
+    disagreement, disagreement_summary = ruler_disagreement(
+        scored_by_ruler, id_columns=id_columns
+    )
+    spotcheck = disagreement_spotcheck(
+        disagreement,
+        long_frame,
+        scored_by_ruler,
+        metric_specs,
+        id_columns=id_columns,
+    )
+    disagreement.to_csv(out_dir / "ruler_disagreement.csv", index=False)
+    disagreement_summary.to_csv(out_dir / "ruler_disagreement_summary.csv", index=False)
+    spotcheck.to_csv(out_dir / "disagreement_spotcheck.csv", index=False)
+    if disagreement.empty:
+        print(
+            "[warn] fewer than two rulers scored; no ruler comparison written.",
+            file=sys.stderr,
+        )
+
     _write_summary(
         out_dir,
         level=level,
@@ -1383,6 +1748,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         scored_by_ruler=scored_by_ruler,
         fit_frame=fit_frame,
         reconciliation=reconciliation,
+        disagreement=disagreement,
+        disagreement_summary=disagreement_summary,
+        spotcheck=spotcheck,
     )
     print(f"Done. Outputs under {out_dir}", file=sys.stderr)
     return 0

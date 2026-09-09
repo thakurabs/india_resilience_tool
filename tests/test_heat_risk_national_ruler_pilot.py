@@ -278,3 +278,99 @@ def test_reconciliation_is_written_even_without_a_roster(tmp_path):
         "has_master_row",
         "status",
     ]
+
+
+# --- CHG-0362: ruler disagreement is measured, not eyeballed -------------------
+
+
+def _scored(kind: str, composites) -> pd.DataFrame:
+    n = len(composites)
+    return pd.DataFrame(
+        {
+            "ruler": [kind] * n,
+            "state": ["S"] * n,
+            "district": [f"D{i}" for i in range(n)],
+            "district_key": [f"s|d{i}" for i in range(n)],
+            "scenario": ["historical"] * n,
+            "period": ["1990-2010"] * n,
+            "composite": list(composites),
+        }
+    )
+
+
+def test_disagreement_separates_rank_agreement_from_magnitude_disagreement():
+    """Same ordering, different spread, is P-01's exact signature and must show as such."""
+    by_ruler = {
+        "linear": _scored("linear", [40.0, 45.0, 50.0, 55.0]),
+        "cdf": _scored("cdf", [10.0, 40.0, 60.0, 90.0]),
+    }
+    detail, per_slice = pilot.ruler_disagreement(
+        by_ruler, id_columns=("state", "district", "district_key")
+    )
+    row = per_slice.iloc[0]
+    assert row["spearman_rank_corr"] == pytest.approx(1.0)
+    assert row["mean_abs_delta"] > 0.0
+    assert row["worst_n_overlap"] == 4
+    assert detail["rank_a"].tolist() == detail["rank_b"].tolist()
+
+
+def test_disagreement_detects_a_reordering():
+    """If the rulers reorder the districts, rank correlation must fall below 1."""
+    by_ruler = {
+        "linear": _scored("linear", [10.0, 20.0, 30.0, 40.0]),
+        "cdf": _scored("cdf", [40.0, 30.0, 20.0, 10.0]),
+    }
+    _, per_slice = pilot.ruler_disagreement(
+        by_ruler, id_columns=("state", "district", "district_key")
+    )
+    assert per_slice.iloc[0]["spearman_rank_corr"] == pytest.approx(-1.0)
+
+
+def test_disagreement_is_empty_with_a_single_ruler():
+    """main() writes the artifact unconditionally, so the empty case must be a frame."""
+    detail, per_slice = pilot.ruler_disagreement(
+        {"linear": _scored("linear", [1.0, 2.0])},
+        id_columns=("state", "district", "district_key"),
+    )
+    assert detail.empty and per_slice.empty
+
+
+# --- CHG-0363: the spot-check carries the physical values ---------------------
+
+
+def test_spotcheck_puts_raw_values_beside_both_metric_scores():
+    """A choropleth cannot say which ruler is right; the raw degrees and days can."""
+    specs = [_spec("a", 0.6), _spec("b", 0.4)]
+    id_columns = ("state", "district", "district_key")
+    long_frame = pd.DataFrame(
+        {
+            "state": ["S", "S"],
+            "district": ["D0", "D1"],
+            "district_key": ["s|d0", "s|d1"],
+            "scenario": ["historical"] * 2,
+            "period": ["1990-2010"] * 2,
+            "a": [31.5, 33.0],
+            "b": [120.0, 200.0],
+        }
+    )
+    by_ruler = {}
+    for kind, composites, a_scores in (
+        ("linear", [40.0, 45.0], [38.0, 44.0]),
+        ("cdf", [10.0, 90.0], [12.0, 88.0]),
+    ):
+        frame = _scored(kind, composites)
+        frame["score__a"] = a_scores
+        frame["score__b"] = composites
+        by_ruler[kind] = frame
+
+    detail, _ = pilot.ruler_disagreement(by_ruler, id_columns=id_columns)
+    spot = pilot.disagreement_spotcheck(
+        detail, long_frame, by_ruler, specs, id_columns=id_columns, top_n=1
+    )
+    worst = spot.loc[spot["metric_slug"] == "a"].iloc[0]
+    assert worst["district_key"] == "s|d1"  # |90-45| > |10-40|
+    assert worst["raw_value"] == pytest.approx(33.0)
+    assert worst["metric_score_a"] == pytest.approx(44.0)
+    assert worst["metric_score_b"] == pytest.approx(88.0)
+    assert worst["weight"] == pytest.approx(0.6)
+    assert set(spot["metric_slug"]) == {"a", "b"}
