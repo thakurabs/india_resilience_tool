@@ -1,5 +1,16 @@
 # Recommended Target Workflow
 
+> **Revision — 2026-09-09.** Section 1 has been amended for the frozen national scoring scale.
+> `Elevated Bundle-Score Concentration (%)` and its `>= 50` threshold are withdrawn; the national
+> map paints districts directly from their composite scores, the State view paints blocks, and
+> the State/UT headline is the area-weighted mean of its district scores. Three earlier rules
+> reverse: a State mean is now permitted as the national value, national results *are* absolute
+> interstate comparisons, and `coverage_fraction` moves from a shipped field to a build gate.
+> The District-view contract is unresolved and is marked in place.
+>
+> Rationale, evidence and the vendor handoff contract:
+> [`docs/composite_scale_decisions.md`](docs/composite_scale_decisions.md).
+
 ## Working direction
 
 The recommended direction is a single progressive-disclosure workflow:
@@ -28,34 +39,32 @@ The first screen should already contain a useful result:
 - a clearly labelled default bundle;
 - a clearly labelled default scenario;
 - a clearly labelled default period;
-- an `Elevated Bundle-Score Concentration (%)` legend;
-- the eligible states and union territories with the highest concentrations; and
-- a concise explanation of what the screening statistic represents.
+- a continuous bundle-score legend on the fixed `0-100` national scale;
+- the eligible states and union territories with the highest area-weighted mean district
+  scores; and
+- a concise explanation of what the score represents and what it excludes.
 
-The national map should not average State/cohort-normalized district or block composite scores
-and present the result as an absolute pan-India climate-risk comparison. Instead, the Phase 1
-district overview should use `Elevated Bundle-Score Concentration (%)`:
+The national map paints **districts** directly from their bundle composite scores on the frozen
+`0-100` national scale. Because every score comes from one frozen national ruler rather than a
+per-State normalization, district scores are directly comparable between States, and a pan-India
+district map is a valid absolute comparison rather than a screening proxy.
 
-```text
-Elevated Bundle-Score Concentration (%)
-=
-100 x
-(number of valid districts with bundle composite score >= 50)
-/
-(number of valid districts)
-```
+The State/UT headline statistic is the **area-weighted mean of its valid district composite
+scores**. A population-weighted mean is retained as a secondary field. Neither is a percentile
+among States: the number is the area-weighted average of that State's districts' national
+percentiles, and must be labelled as such.
 
-The elevated-score threshold is fixed at `50`. The concentration statistic ranges from 0%, when
-no valid district reaches the threshold, to 100%, when every valid district reaches it. This
-threshold is independent of the five interpretive score bands: it includes the upper half of the
-`Moderate` band together with the complete `High` and `Extreme` bands. The interface should state
-the `>= 50` rule in the headline and method note without subdividing the Moderate band in the
-distribution chart.
+The State statistic is used for ranking, the answer card, the tooltip and exports. It is **not a
+map encoding**: no State/UT polygon is filled from it at any zoom. The national map paints
+districts; the State view paints blocks. Those are the only two score-derived fills in the
+product.
 
-`Elevated Bundle-Score Concentration (%)` is the single headline national screening statistic.
-Do not add a State/UT median bundle score as a second headline or parallel national ranking
-measure. The five-band distribution provides the supporting view of the complete score
-distribution without introducing a competing summary statistic.
+`Elevated Bundle-Score Concentration (%)`, the fixed `>= 50` elevated-score threshold, and the
+prohibition on a State mean as the national value are all withdrawn. The threshold saturated at
+both ends of the slice grid — at the historical baseline more than half of all State/UTs sat at
+exactly 0%, and at end-century the median exceeded 80% — and it tied large groups of State/UTs at
+identical values. The five-band distribution remains the supporting view of the complete score
+distribution.
 
 The national screening surface is limited to the 13 scenario-based thematic and sector-wise
 bundles:
@@ -105,91 +114,89 @@ End century (2060–2080)
 
 The national statistic answers:
 
-> Within this State/UT, what proportion of valid districts meet or exceed the defined
-> elevated-score threshold under the selected IRT bundle methodology?
+> Within this State/UT, what is the area-weighted average bundle composite score of its
+> districts, on the frozen national scale?
 
-It does not answer which State/UT has greater absolute physical climate hazard or climate risk.
-The statistic summarizes the concentration of State/cohort-normalized bundle scores and must be
-described as a national screening view. For Phase 1 climate bundles, use `bundle-score
-concentration` or `hazard-pressure screening` language rather than `highest-risk state`,
-`national climate-risk score`, or `absolute interstate risk`.
+Because the scale is frozen nationally, this **is** an absolute interstate comparison and may be
+described as one. The caveat that survives is about scope, not normalization: the score is
+hazard-only, it does not include exposure, vulnerability or resilience, and it is not comparable
+across bundles. Avoid `national climate-risk score`, which implies the excluded dimensions.
 
-District and block results must be calculated separately and must never be mixed in one
-concentration statistic. The Phase 1 national overview uses districts consistently across all
-State/UTs. A block-level overview may be introduced only as a separately declared view after its
-data and denominator contracts have been validated.
+District and block scores are produced on the same frozen national ruler and are therefore
+directly comparable: a district and a block holding the same physical value receive the same
+score and the same colour. Neither level is derived from the other — each is scored from its own
+physical values, and because the ruler is non-linear the area-weighted mean of a district's block
+scores does not equal that district's own score. The national overview uses districts across all
+State/UTs; the State view uses blocks.
 
-### Coverage and ranking eligibility
+### Ranking eligibility and data quality
 
-Coverage validity and ranking stability are separate quality checks:
+Coverage validity and ranking stability remain separate checks:
 
 ```text
 coverage_fraction = n_valid / n_expected
 ```
 
-The initial screening contract is:
+`coverage_fraction` is **not a shipped artifact field**. It is computed during the artifact build,
+and the build fails when a State/UT falls below the floor, so a published artifact is complete by
+construction. The rules below therefore govern the build and the interface's no-data handling,
+not a runtime suppression path over shipped values:
 
 ```text
 coverage < 90%
-    -> show Insufficient coverage
-    -> suppress the concentration percentage and rank
+    -> the artifact build fails for that bundle x scenario x period
+    -> nothing is published for the affected State/UT
 
 coverage >= 90% and n_valid < 10
-    -> show the concentration percentage
+    -> publish the State mean
     -> suppress the rank
     -> flag Small cohort
 
 coverage >= 90% and n_valid >= 10
-    -> show the concentration percentage
+    -> publish the State mean
     -> eligible for ranking
 ```
 
-If coverage and cohort-size requirements both fail, show both `Insufficient coverage` and `Small
-cohort`; do not invent another combined category. When coverage is below 90%, show `n_valid`,
-`n_expected`, and coverage but suppress the concentration percentage and rank. When coverage is at
-least 90% but the cohort is small, show the calculable concentration percentage and suppress only
-the rank. If `n_valid = 0`, show `No valid data` and no score or concentration, band, rank, or
-drivers.
+When a cohort is small, show the calculable State mean and suppress only the rank. If
+`n_valid = 0`, show `No valid data` and no score, band, rank, or drivers.
 
-All cohorts with `n_valid < 10` use the single label `Small cohort` and remain unranked. Units with
-no valid composite data should show `No valid data`. A geography may remain available for
-drill-down when usable lower-level data exists even if its parent-level concentration or rank is
-suppressed.
+All cohorts with `n_valid < 10` use the single label `Small cohort` and remain unranked. Units
+with no valid composite data should show `No valid data`. A geography may remain available for
+drill-down when usable lower-level data exists even if its parent-level rank is suppressed.
 
 Ranking is hierarchical and comparison-cohort-specific:
 
 ```text
 National view
-    Rank State/UTs by Elevated Bundle-Score Concentration.
+    Rank State/UTs by the area-weighted mean district composite score.
     Publish rank only when the State/UT has district coverage >= 90%
     and at least 10 valid districts.
 
 State view
-    Rank individual District Bundle Scores within the selected State/UT.
+    Rank individual district composite scores within the selected State/UT.
     Publish district ranks only when the parent State/UT district cohort has
     coverage >= 90% and at least 10 valid districts.
-
-District view
-    Rank individual Block Bundle Scores within the selected district.
-    Publish block ranks only when the parent district block cohort has
-    coverage >= 90% and at least 10 valid blocks.
 ```
 
-Rank eligibility controls whether a rank may be shown; it does not determine whether a valid
-individual district or block score may be shown. Do not rank districts by block concentration in
-Phase 1, and do not expose State-wide or national block ranks in Overview.
+Ranking is two-tier. Blocks are painted but not ranked: block cohorts run from 1 to 38 per
+district, far below the ten-unit minimum, and the roster's subdivision density reflects State
+administration rather than geography.
 
-The national rank denominator is the number of rank-eligible State/UTs. The District rank
-denominator is `n_valid` districts in the selected State/UT, and the Block rank denominator is
-`n_valid` blocks in the selected District. Missing or invalid units do not participate in ranking,
-and `n_expected` must not be presented as the rank denominator when some units are invalid. No
-separate `n_ranked` field or public term is required.
+Rank eligibility controls whether a rank may be shown; it does not determine whether a valid
+individual district or block score may be shown. Do not expose State-wide or national block ranks
+in Overview. Note that the reason has changed: block scores *are* nationally comparable under the
+frozen ruler, and the objection is cohort size and administrative unevenness, not comparability.
+
+The national rank denominator is the number of rank-eligible State/UTs, and the District rank
+denominator is `n_valid` districts in the selected State/UT. Missing or invalid units do not
+participate in ranking, and `n_expected` must not be presented as the rank denominator when some
+units are invalid. No separate `n_ranked` field or public term is required.
 
 Rankings should use competition ranks, so identical values receive the same rank and the following
 rank reflects the number of preceding entries. Alphabetical or stable administrative-code sorting
 may order tied rows visually but must not break the statistical tie. Show a top-10 shortlist by
-default with a `View all` action. Calculate thresholds, band assignment, eligibility, and ranks
-from full-precision stored values; round only for display. Exact full-precision equality receives a
+default with a `View all` action. Calculate band assignment, eligibility, and ranks from
+full-precision stored values; round only for display. Exact full-precision equality receives a
 tied rank. If two unequal values appear identical at the default display precision, the tooltip or
 expanded ranking should expose sufficient additional decimal precision to explain their order.
 When a genuine tie exists, user-facing text may say `Rank N (tied) of M valid units`.
@@ -198,10 +205,13 @@ Use the following display precision:
 
 ```text
 Bundle scores:             1 decimal place
-Concentration percentages: 1 decimal place
-Coverage percentages:      1 decimal place
-Counts and ranks:           integers
+State mean scores:         1 decimal place
+Counts and ranks:          integers
 ```
+
+Scores are stored at full `float64` precision and rounded only for display. Artifacts must not be
+rounded: the ranking contract awards tied ranks on exact full-precision equality, and rounding
+manufactures ties that do not exist.
 
 A redundant `.0` may be suppressed where useful, for example `100%`.
 
@@ -244,7 +254,15 @@ block_boundary_hash
 expected_district_count
 expected_block_count
 expected counts by State/UT
+ruler_id
+colour_scale_id
+data_snapshot_hash
 ```
+
+`ruler_id` names the frozen ruler support that produced the scores, `colour_scale_id` the palette
+and domain they are rendered against, and `data_snapshot_hash` the input snapshot the ruler was
+fitted over. A score without a `ruler_id` is unfalsifiable: a correctly rendered new ruler cannot
+be distinguished from a wrongly rendered old one.
 
 Any change to the canonical roster, including the addition, removal, merger, split, or renaming of
 an administrative unit, requires an explicit boundary-scope decision, a new roster version, updated
@@ -259,17 +277,18 @@ bundle_id
 scenario
 period
 admin_level
-threshold
 n_expected
 n_valid
-coverage_fraction
-n_ge_threshold
-pct_ge_threshold
+state_mean_area_weighted
+state_mean_population_weighted
 rank_eligible
 national_rank
 quality_flag
 admin_roster_version
 boundary_source_date_or_version
+ruler_id
+colour_scale_id
+data_snapshot_hash
 ```
 
 Each released analytical artifact set must also have a unique reproducible build identity that
@@ -297,9 +316,12 @@ Optimized parity issues:       0
 ```
 
 The refreshed artifacts also contain valid Heat Risk scores for all three districts in `Dadra,
-Nagar Haveli, Daman & Diu`. Under the default selection and threshold, its value is visible but its
-national rank is suppressed because `n_valid = 3` is below the ranking minimum of 10. This is the
-intended small-cohort treatment, not a missing-data case.
+Nagar Haveli, Daman & Diu`. Under the default selection its State mean is visible but its national
+rank is suppressed because `n_valid = 3` is below the ranking minimum of 10. This is the intended
+small-cohort treatment, not a missing-data case.
+
+This baseline predates the frozen-scale amendment and its threshold-diagnostic row count refers to
+the withdrawn statistic. It must be rebuilt against the frozen ruler before it is cited again.
 
 This case-study baseline is methodology evidence rather than a released provenance identity. The
 production acceptance rebuild must record its build timestamp, source commit, manifest checksum,
@@ -307,50 +329,60 @@ and concrete `admin_roster_version` before these values become a release baselin
 
 ### National map visual encoding
 
-The pan-India map should use a continuous, hierarchical colour treatment rather than assigning
-State/UTs to discrete colour classes.
+The pan-India map paints each district directly from its bundle composite score on the frozen
+`0-100` domain, through the vendored `WhiteBlueGreenYellowRed` colour table sampled at 101 stops
+starting at fraction `0.045` so that no valid score renders as pure white. Colour is a pure
+function of the score — `index = round(score)` — with no binning, smoothing, or parent-geography
+effect.
 
-For the active bundle, scenario, and period, each valid State/UT concentration should be positioned
-on a fixed `0-100%` colour scale. Values should be interpolated through a five-anchor palette:
+There is **one** continuous colourbar with fixed numeric ticks, titled level-neutrally
+(`<Bundle> score`, not `District Bundle Score` or `Block Bundle Score`). One frozen ruler means one
+legend; separate per-level titles would describe a distinction the methodology no longer makes.
 
-```text
-0%   -> green
-25%  -> light green
-50%  -> yellow
-75%  -> orange
-100% -> red
-```
+The domain never rescales. Not when the bundle, scenario, or period changes, and not when a
+State/UT is selected. Identical colours represent identical scores across every selection and both
+administrative levels.
 
-The five palette colours are anchors in one continuous scale, not class bins. The map should show
-one continuous `Elevated Bundle-Score Concentration (%)` colourbar with fixed numeric ticks. The scale
-must not rescale to the observed State/UT range when the bundle, scenario, or period changes;
-identical colours should continue to represent identical percentages across selections.
+State and union-territory polygons are **never filled**. At national zoom they contribute the
+coarse boundary stroke only; their headline statistic lives in the ranking, the tooltip and the
+answer card. There is one score-derived fill per view.
 
-State and union-territory interiors should retain visible district boundaries. Within each state,
-district composite scores should control the strength of the state's assigned colour:
+Boundary weight carries the administrative level:
 
 ```text
-district tint strength = 30% + 70% x (district composite score / 100)
+National view: thick State/UT boundary, thin district boundary
+State view:    thick district boundary, thin block boundary
 ```
 
-A district score of 0 therefore receives a light 30% tint of its state's colour rather than
-white, while a score of 100 receives the full state colour. Intermediate scores receive
-progressively stronger tints. The 30% floor is the initial visual specification and may be tuned
-through accessibility and visual-regression testing without changing the analytical method.
-Colour interpolation should use a perceptual colour space such as OKLCH or CIELAB so the gradient
-appears visually even and avoids muddy intermediate colours.
+The thick stroke is always the unit the previous view was painting; the thin stroke is the unit
+this view is painting. Both use one hue differing only in width and opacity:
 
-At national zoom, district tint is supporting within-State variation only. It must not imply that
-district scores are absolute interstate comparisons. When a State/UT is selected, the national
-concentration encoding ends: districts are recoloured directly from their own scores on the fixed
-0–100 District Bundle Score display scale, and the parent State's national hue is not inherited.
+```text
+light #7a8794      dark #8e9ba8
+fine    stroke-opacity 0.45, ~0.45px
+coarse  stroke-opacity 0.95, ~1.9px
+both    vector-effect: non-scaling-stroke
+```
 
-State boundaries should use a strong neutral stroke, while district boundaries should use a thin,
-subtle neutral stroke. Grey should identify missing composite data. A distinct dashed State/UT
-outline may identify a small cohort whose percentage remains visible but is not rank eligible.
-The map should not add a separate district-level colourbar because district tint is supporting
-context rather than the national headline statistic. A compact persistent method note should
-explain the State/UT statistic, district tint, quality flags, and interstate interpretation caveat.
+Strokes must not use the page background colour, which would dissolve boundaries between pale
+low-scoring districts, nor black, which reads as dirt over the hot end of the ramp. The fine layer
+is dropped entirely below approximately one screen pixel. Selection is a third stroke in the accent
+hue rather than a fourth grey weight, so it cannot be mistaken for another administrative level.
+
+A bracket on the colourbar marks the score range present in the current view, with a numeric
+readout beside it — a State/UT whose blocks genuinely span two points should read as narrow, not
+as broken. A `Local contrast` view may rescale the domain to the visible extent; it is off by
+default, explicitly labelled as not comparable across selections, and is never the landing state.
+Its extent is computed from the visible scores at render time and is never a stored normalization
+parameter.
+
+`#d5d8dc` identifies missing composite data and carries its own legend swatch. A distinct dashed
+State/UT outline may identify a small cohort whose State mean remains visible but is not rank
+eligible. A compact persistent method note should explain the frozen scale, the boundary grammar,
+quality flags, and the hazard-only interpretation boundary.
+
+Colour interpolation should use a perceptual colour space such as OKLCH or CIELAB where the
+implementation resamples the table.
 
 No-data units must use one consistent neutral treatment and must never be mapped onto the valid
 low-score end of the palette. Insufficient coverage and small cohort are quality flags rather than
@@ -372,22 +404,33 @@ In the pan-India view, hovering anywhere within a state should highlight the who
 state-level information only:
 
 - state or union-territory name;
-- Elevated Bundle-Score Concentration (%);
-- districts meeting the threshold over valid districts;
-- valid districts over expected districts and the coverage percentage;
+- the area-weighted mean district bundle score and its five-band classification;
+- the population-weighted mean, as a secondary line;
 - national rank and the number of rank-eligible State/UTs, when eligible; and
 - a quality flag and an explanation that rank is suppressed, when not eligible.
 
 District names, district composite scores, and district score bands should not appear in the
-pan-India tooltip even though district boundaries and tint variation remain visible on the map.
+pan-India tooltip even though districts are individually painted. Districts become inspectable
+only after a State/UT is selected.
 
-Clicking anywhere within a state should select and zoom to that state, transition to the district
-analysis view, replace the national concentration colourbar with a continuous fixed `0-100`
-colourbar titled `District Bundle Score`, and enable district-level hover and selection. Districts
-should use their composite scores directly on this scale. Block boundaries should be shown as thin,
-subtle context outlines only; block scores, tint, hover, and selection should not be introduced
-until the user enters the district view. Block geometry should be loaded only after a State/UT is
-selected.
+Clicking anywhere within a state should select and zoom to that state, load that State/UT's block
+geometry and attributes, and repaint the map from **block** composite scores. The district boundary
+becomes the coarse stroke and the block boundary the fine stroke. The colourbar, its title and its
+domain do not change.
+
+A `District fill` toggle is available in the State view for users who want the map to match the
+district ranking exactly; block fill is the default.
+
+Expect the amount of visual change on selection to vary greatly by State/UT, because the district
+roster is unevenly coarse. In Uttar Pradesh only 3.8% of within-State block variance lies inside
+districts, so the block map looks almost identical to the district map; in Kerala it is 47.5% and
+in Goa 74.5%, where the map transforms. Interface copy must promise the same *scale*, never the
+same *map*.
+
+Block geometry and attributes load together, only after a State/UT is selected. Payload is not a
+constraint: the median State/UT is 144 blocks (~0.56 MB) and the largest, Uttar Pradesh, is 822
+blocks (~3.9 MB), against 31.6 MB nationally — which is why the national view stays at district
+resolution.
 
 The five interpretive score bands are:
 
@@ -402,27 +445,26 @@ Extreme:  80 <= score <= 100
 The visual hierarchy is therefore:
 
 ```text
-National view: continuous State/UT concentration colour + district composite-score tint
+National view: continuous district composite-score colour
+               thick State/UT boundary, thin district boundary
     → select state
-State view: continuous district composite-score colour + block outlines
-            + five-band distribution and district-level interaction
-    → select district
-District view: continuous block composite-score colour + block-level interaction
+State view:    continuous block composite-score colour
+               thick district boundary, thin block boundary
+               + five-band district distribution and district-level interaction
 ```
 
-The State and district views should preserve the fixed `0-100` colour domain so identical colours
-retain identical score meanings across geography, bundle, scenario, and period selections. The
-district-view legend title should be `Block Bundle Score`. The continuous map colourbar and the
-five-band distribution serve different purposes: the colourbar encodes exact mapped scores, while
-the bands provide a compact interpretive and filtering aid.
+Both views preserve the same fixed `0-100` colour domain and the same level-neutral legend title,
+so identical colours retain identical score meanings across geography, administrative level,
+bundle, scenario, and period. The continuous map colourbar and the five-band distribution serve
+different purposes: the colourbar encodes exact mapped scores, while the bands provide a compact
+interpretive and filtering aid.
 
-The threshold statistic is not the complete evidence surface. The selected State/UT overview
-should retain the full district bundle-score distribution alongside the headline count, for
-example:
+The State mean is not the complete evidence surface. The selected State/UT overview should retain
+the full district bundle-score distribution alongside the headline, for example:
 
 ```text
-Elevated Bundle-Score Concentration
-11 of 33 valid districts >= 50
+Telangana — Heat Risk
+77.8 area-weighted mean district score · High · 33 valid districts
 
 District bundle-score distribution
 [five-band interactive bar chart]
@@ -433,8 +475,13 @@ the default display; percentages and exact score ranges may appear in tooltips. 
 selected at a time. Selecting a bar should highlight matching districts, mute rather than hide the
 remaining districts, and filter the ranking shortlist. Selecting the active bar again or using
 `Clear filter` should restore all districts. Zero-count bars should remain visible but disabled.
-The Moderate bar should remain a single ordinary band; it should not be split or given a special
-two-tone treatment around the `>= 50` concentration threshold.
+All five bars are ordinary bands; none is split or given special treatment, and no secondary cut
+point is introduced anywhere in the Overview.
+
+Note that the band cuts become close to definitional under a rank-based ruler, where `>= 80` reads
+as "worse than 80% of pooled national observations". Whether to state that plainly or to set the
+cuts from physical values is an open methodological question; see
+[`docs/composite_scale_decisions.md`](docs/composite_scale_decisions.md), Part E.
 
 The State-view layout contract is:
 
@@ -443,11 +490,13 @@ Header
     State/UT name + persistent Bundle, Scenario, and Period selectors
 
 Headline
-    Elevated District Bundle-Score Concentration (%)
-    n >= 50 / n_valid + coverage + eligible national rank or quality explanation
+    Area-weighted mean district bundle score + five-band classification
+    Population-weighted mean (secondary)
+    n_valid + eligible national rank or quality explanation
 
 Map
-    Continuous District Bundle Score colour + district interaction + block outlines
+    Continuous block composite-score colour + district interaction
+    Thick district boundary, thin block boundary
 
 Supporting evidence
     Five-band interactive distribution + top-10 district shortlist + metric/rule signals
@@ -462,6 +511,14 @@ Navigation
 The district ranking denominator is the number of valid districts in the selected State/UT, not
 the number expected when some scores are invalid. A valid district score remains visible when the
 parent State/UT cohort is ineligible for ranking.
+
+> **Unresolved — 2026-09-09.** With blocks painted in the State view there is no finer map for a
+> District view to introduce, so a district selection is most likely an inspection state inside the
+> State view: block fill retained, the selected district's outline promoted to the selection
+> stroke, breadcrumb stopping at `India > State/UT`, and the panel showing the district score,
+> band, rank within the State/UT, drivers, and the range of its blocks. That has not been decided.
+> The contract below is retained verbatim pending that decision and must not be implemented as-is
+> without re-reading it against the frozen-scale amendment.
 
 The District-view layout contract is:
 
@@ -772,8 +829,12 @@ navigation must provide the complete reversible path without depending on Browse
 ## 9. Production migration contract
 
 The current Glance implementation is legacy input to a migration, not authority for the new
-Overview. It must not silently preserve State mean as the national value, four-band artifacts, old
+Overview. It must not silently preserve per-State min-max normalization, four-band artifacts, old
 ranking/filter semantics, name-derived administrative joins, or inferred navigation routes.
+
+The earlier prohibition on a State mean as the national value is withdrawn. It was correct while
+scores were normalized within each State, and is void under one frozen national ruler: the State
+mean is now the national value. What must not survive is the normalization, not the mean.
 
 The national State/UT artifact must provide at least:
 
@@ -784,31 +845,39 @@ bundle_id
 scenario
 period
 admin_level
-threshold
 n_expected
 n_valid
-coverage_fraction
-n_ge_threshold
-pct_ge_threshold
+state_mean_area_weighted
+state_mean_population_weighted
 rank_eligible
 national_rank
 eligible_state_count
 quality_flag
 admin_roster_version
 artifact_build_id
+ruler_id
+colour_scale_id
+data_snapshot_hash
 ```
 
+Per-unit district and block artifacts carry the stable administrative identifier, the geographic
+key, `bundle_id`, `scenario`, `period`, `admin_level`, `score`, and quality flags — and nothing
+else. They must not carry raw metric values, normalization parameters, ruler support, or per-State
+extents. Omitting those inputs is what makes a per-State renormalization downstream
+unconstructible rather than merely discouraged. The colour table and its domain ship alongside as a
+versioned scale definition rather than as prose, so that rendering is a lookup with no judgement in
+it.
+
 The five-band migration must replace the current four-band fields and distributions throughout the
-Overview; all assignment uses full-precision scores. National maps use State/UT concentration
-colour with district tint as supporting within-State variation. State maps end that encoding and
-use District Bundle Score directly on the fixed 0–100 display scale. District maps use Block Bundle
-Score on that same fixed display scale, without inherited parent hue.
+Overview; all assignment uses full-precision scores. National maps paint districts from their own
+composite scores on the frozen `0-100` scale, with State/UT polygons unfilled. State maps paint
+blocks on that same scale, with no inherited parent hue and no change of colourbar. There is one
+score-derived fill per view and one colourbar for both.
 
 Production work must also implement the canonical route registries, selector/filter/geography
 state transitions, quality states, stable administrative-ID joins, immutable roster/build identity,
-progressive geometry loading, and accessibility requirements defined above. Block geometry should
-load only after State selection; Block attributes and interaction should activate only in District
-view.
+progressive geometry loading, and accessibility requirements defined above. Block geometry and
+Block attributes load together, only after State selection.
 
 ## 10. Minimum acceptance-test contract
 
@@ -816,20 +885,20 @@ At minimum, synthetic and artifact-contract tests must prove:
 
 ### Ranking and coverage
 
-- national State ranking uses concentration rather than State mean;
+- national State ranking uses the area-weighted mean district composite score;
 - District ranking is within the selected State/UT only;
-- Block ranking is within the selected District only;
-- rank is suppressed when coverage is below 90% or `n_valid < 10`;
-- concentration is also suppressed when coverage is below 90%;
+- blocks are painted but never ranked, at any scope;
+- rank is suppressed when `n_valid < 10`;
+- the artifact build fails when coverage is below 90%, rather than publishing a suppressed value;
 - valid individual scores remain visible when parent-cohort rank is suppressed;
 - competition-ranking ties and rank denominators are correct;
 - `n_expected` comes from the versioned roster rather than score rows; and
-- missing score rows reduce coverage and never participate in ranking.
+- missing score rows never participate in ranking.
 
 ### Precision and bands
 
-- threshold `>= 50`, five-band assignment, eligibility, and ranking use full precision;
-- display rounding cannot change a threshold result, band, rank, or tie; and
+- five-band assignment, eligibility, and ranking use full precision;
+- artifacts store unrounded scores, and display rounding cannot change a band, rank, or tie; and
 - the legacy four-band labels cannot enter new Overview artifacts.
 
 ### Interaction and navigation
@@ -843,8 +912,17 @@ At minimum, synthetic and artifact-contract tests must prove:
 
 ### Maps, routing, and data states
 
-- India, State, and District views use their declared legend titles and encodings;
-- the same lower-level score maps to the same colour regardless of parent geography;
+- the India and State views use one level-neutral legend title and the frozen `0-100` domain;
+- the same score maps to the same colour at both zooms and at both administrative levels,
+  regardless of parent geography;
+- a district and a block holding the same physical value receive the same score;
+- no State/UT polygon carries a score-derived fill at any zoom;
+- the colour domain never rescales outside the labelled local-contrast view;
+- for every district-slice, the district's own score and the area-weighted mean of its block
+  scores differ by less than 10 points, guarding the nesting of the two levels;
+- the canary geographies render as expected: a State/UT whose blocks span under two points, such
+  as Ladakh at SSP5-8.5 2040-2060, must render as one visually uniform fill, since more than one
+  distinct colour there proves the domain has been rescaled;
 - clickable drivers have registered routes and valid unroutable drivers remain visible;
 - unsupported combinations, missing expected artifacts, version mismatch, and valid no-data
   artifacts have distinct behaviors; and
@@ -869,16 +947,20 @@ refinement:
 - Advanced capability is discoverable without being compulsory.
 - Overview and Detailed Analysis use one canonical analysis context.
 - Scores, bands, ranks, legends, and comparison scopes remain consistent between levels.
-- Maps use continuous fixed `0-100` score or concentration colour domains with view-specific legend
-  titles; discrete bands are interpretive and interactive supporting evidence.
+- Maps use one continuous fixed `0-100` score colour domain and one level-neutral legend title at
+  every level; discrete bands are interpretive and interactive supporting evidence.
+- There is exactly one score-derived fill per view — districts nationally, blocks within a
+  State/UT — and aggregate statistics are never rendered as a choropleth.
 - Switching levels does not clear or silently reinterpret the user's selections.
 - Exposure and hydrology remain clearly identified as contextual information unless they are
   explicitly included in a score.
 - Missing or partial data is visible and does not silently become a valid-looking score.
-- National screening results are never described as absolute interstate climate-risk scores.
-- Coverage validity and denominator-based ranking eligibility remain explicit and separate.
+- National results are absolute interstate hazard comparisons on one frozen scale; they remain
+  hazard-only and are not comparable across bundles.
+- Coverage is enforced at the artifact build, and denominator-based ranking eligibility remains
+  explicit and separate from it.
 - Rankings use top-10 shortlists, competition ranks, stable alphabetical or administrative-code
   display order within ties, and original ranks under filtering.
-- Geometry is loaded progressively: national district context first, State-scoped block outlines
-  after State selection, and block attributes/interactions only when needed.
+- Geometry is loaded progressively: national district context first, then State-scoped block
+  geometry and attributes together on State selection.
 - The interface answers a user question before offering additional analytical controls.

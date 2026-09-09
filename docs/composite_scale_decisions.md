@@ -2,9 +2,9 @@
 
 Consolidated record of the national-absolute-scale work, 2026-09-08 to 2026-09-09.
 
-**Status.** Part A is decided. Part C is the amendment to
-[`recommended_target_workflow.md`](../recommended_target_workflow.md) and is **not applied** —
-it is replacement text awaiting `APPROVED: APPLY`. Part E lists what is still open.
+**Status.** Part A is decided. Part C was **applied to**
+[`recommended_target_workflow.md`](../recommended_target_workflow.md) on 2026-09-09; that file now
+carries a revision header pointing back here. Part E lists what is still open.
 
 **Scope.** Everything here was piloted on **Heat Risk at district and block level**. The
 decisions are intended to generalize to all 13 eligible bundles, but only Heat Risk has been
@@ -127,6 +127,13 @@ area-weighted mean of its district composite scores.
   difference +0.00) but the value-first construction would require shipping raw metric values,
   reopening the door D1 closes.
 
+**The State mean is a statistic, never a map encoding.** It appears in the ranking shortlist,
+the answer card, the pan-India tooltip and the export. It is never painted: no State/UT polygon
+is ever filled from it, at any zoom, in any view. The national map paints districts and the State
+view paints blocks — those are the only two fills in the product. A State choropleth would
+reintroduce a second spatial encoding competing with the district fill underneath it, which is
+precisely the layered construction (`State hue + district tint`) that this amendment removes.
+
 Label it accurately: a state at 57.8 is *the area-weighted average of its districts' national
 percentiles*, not "the 58th percentile among states".
 
@@ -151,6 +158,9 @@ State view:    blocks painted from block composite scores
 
 Thick stroke = the unit the previous view was painting. Thin stroke = the unit this view is
 painting. The same grammar repeats at both levels, which is why the legend title never changes.
+
+These are the **only two fills in the product**. States and union territories are drawn as a
+boundary at national zoom and are never filled; see A7.
 
 Strokes are **one hue, two weights**:
 
@@ -329,7 +339,11 @@ about a ruler without first checking the ramp.**
 
 ## Part C — Amendment to `recommended_target_workflow.md`
 
-Not applied. Line references are against the current file.
+**Applied 2026-09-09** (257 insertions, 175 deletions). Line references below are against the
+**pre-amendment** file and are historical: the numbering has since shifted. Read this part as the
+migration record for what changed and why, not as an index into the current document. The
+District-view contract (then lines 466–504) was deliberately left in place and is now marked
+`Unresolved` there.
 
 ### C1. §1 opening list and the concentration definition — lines 23–120
 
@@ -348,6 +362,10 @@ Delete the concentration formula and its surrounding rationale (lines 35–58) a
 > scores**. A population-weighted mean is retained as a secondary field. Neither is a percentile
 > among States: the number is the area-weighted average of that State's districts' national
 > percentiles, and must be labelled as such.
+>
+> The State statistic is used for ranking, the answer card, the tooltip and exports. It is **not
+> a map encoding**: no State/UT polygon is filled from it at any zoom. The national map paints
+> districts; the State view paints blocks.
 >
 > `Elevated Bundle-Score Concentration (%)`, the fixed `>= 50` elevated-score threshold, and the
 > prohibition on a State mean as the national value are all withdrawn. The threshold saturated at
@@ -427,6 +445,10 @@ go.
 > readout beside it. A `Local contrast` view may rescale the domain to the visible extent; it is
 > off by default, explicitly labelled as not comparable across selections, and is never the
 > landing state.
+>
+> State and union-territory polygons are **never filled**. At national zoom they contribute the
+> coarse boundary stroke only; their headline statistic lives in the ranking, tooltip and answer
+> card. There is one fill per view and one colourbar for both.
 >
 > `#d5d8dc` identifies missing composite data and carries its own legend swatch.
 
@@ -519,6 +541,7 @@ Lines 802–805 are replaced by the two-level encoding in C4/C6.
 Add:
 
 - a district and a block holding the same physical value receive the same score;
+- no State/UT polygon carries a score-derived fill at any zoom;
 - the domain never rescales outside the labelled local-contrast view;
 - `|district_direct − area_weighted_block_rollup| < 10` per district-slice;
 - the canary geographies in D3 render as expected.
@@ -533,6 +556,8 @@ Add:
 - Line 879 ("Coverage validity and denominator-based ranking eligibility remain explicit and
   separate") becomes a build-gate principle.
 - Line 883 gains: block **attributes** load with State selection, not after a further click.
+- Add a principle: there is exactly one score-derived fill per view — districts nationally,
+  blocks within a State — and aggregate statistics are never rendered as a choropleth.
 
 ---
 
@@ -626,5 +651,9 @@ must carry `data_snapshot_hash` so a mismatch is loud rather than silent.
 | `tools/diagnostics/build_heat_risk_frozen_map.py` | national district map, frozen settings |
 | `tools/diagnostics/build_resolution_comparison.py` | district-fill vs block-fill, UP / Kerala / Goa |
 | `tools/diagnostics/build_state_weighting_comparison.py` | area vs population State means |
+
+The State-weighting page paints State/UT polygons because that was the fastest way to compare two
+candidate weightings side by side. It is a **decision aid, not a product mock** — per A7 the
+product never fills a State polygon.
 
 Pitfall references `P-xx` are to [`docs/national_absolute_scale_pitfalls.md`](national_absolute_scale_pitfalls.md).
