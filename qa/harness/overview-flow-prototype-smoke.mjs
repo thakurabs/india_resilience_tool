@@ -24,6 +24,10 @@ await p.waitForTimeout(1200);
 await p.screenshot({ path: out + '/01-india.png', fullPage: true });
 console.log('rank row 1     :', line(await p.locator('#ranking tbody tr').first().innerText()));
 
+
+// Context and Evidence: present from the State view onward, collapsed, scoped to
+// the State/UT, and honest about the basin context it does not carry there
+console.log('ctx hidden India:', await p.locator('#context').isHidden());
 // a non-live State must hover but refuse selection
 await p.locator('#g-dist path').nth(400).hover({ force: true });
 await p.waitForTimeout(300);
@@ -47,6 +51,14 @@ await p.waitForTimeout(350);
 console.log('state hover    :', line(await p.locator('#tip').innerText()));
 console.log('blocks lit     :', await p.locator('#g-block path.hl').count());
 
+
+console.log('ctx summary     :', line(await p.locator('#context summary').innerText()));
+console.log('ctx open by dflt:', await p.locator('#context details').evaluate(d => d.open));
+await p.locator('#context summary').click();
+await p.waitForTimeout(300);
+console.log('ctx state expo  :', line(await p.locator('#context .ctx-sec').first().innerText()).slice(0, 200));
+console.log('ctx state hydro :', line(await p.locator('#context .ctx-sec').nth(1).innerText()).slice(0, 150));
+await p.screenshot({ path: out + '/02c-context-state.png', fullPage: true });
 // local contrast: map fill stretches, ticks leave 0-100, the frozen state returns
 const tick0 = () => p.locator('#cbar-ticks span').first().innerText();
 const fill0 = () => p.locator('#g-block path').first().getAttribute('fill');
@@ -68,6 +80,10 @@ console.log('dist headline  :', line(await p.locator('#headline').innerText()).s
 console.log('dist painted   :', await p.locator('#painted').innerText());
 await p.screenshot({ path: out + '/03-district.png', fullPage: true });
 
+
+// context follows the selection down: district scope gains real basin context
+console.log('ctx dist scope  :', line(await p.locator('#context summary').innerText()));
+console.log('ctx dist hydro  :', line(await p.locator('#context .ctx-sec').nth(1).innerText()).slice(0, 170));
 // select a block inside it -> inspection + Detailed Analysis
 const shown = p.locator('#g-block path:not(.muted)');
 console.log('blocks in view :', await shown.count());
@@ -78,6 +94,7 @@ await shown.first().click({ force: true });
 await p.waitForTimeout(600);
 console.log('inspection     :', line(await p.locator('#inspection').innerText()).slice(0, 260));
 await p.screenshot({ path: out + '/04-block-da.png', fullPage: true });
+console.log('ctx block scope :', line(await p.locator('#context summary').innerText()));
 
 // a driver must route into Detailed Analysis carrying that metric
 await p.locator('#headline ul.drv button').first().click();

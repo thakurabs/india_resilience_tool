@@ -1,5 +1,6 @@
 """Overview flow prototype — the national screening workflow as one
-self-contained HTML page (CHG-0385, extended by CHG-0392 and CHG-0393).
+self-contained HTML page (CHG-0385, extended by CHG-0392, CHG-0393 and
+CHG-0399..0402).
 
 This is a *workflow* prototype for vendor handoff, not a data product. It renders
 the flow specified by ``recommended_target_workflow.md`` section 1-8 so the
@@ -27,11 +28,15 @@ bracket marking the range present in the current view, and an opt-in
 painted units. That extent is recomputed on every render and never stored --
 precomputing it per State/UT would be per-state min-max in a new hat.
 
-Two honest departures from the target spec, both surfaced in the page itself:
+Three honest departures from the target spec, all surfaced in the page itself:
 
 - **Only Telangana opens below the national view.** Its 588 blocks are the only
   blocks scored on the frozen ruler, so every other State/UT hovers normally but
   is not selectable. One worked State/UT demonstrates the whole flow.
+- **Context and Evidence carries no map overlays**, and no basin context at
+  State/UT scope: a State/UT basin share needs a State-to-basin geometry
+  intersection, and counting districts' dominant basins would be a different
+  quantity under the same label.
 - **Detailed Analysis is a stub.** The transition and the state it carries are
   real, including the selected driver metric; the destination is a panel that
   displays that state and nothing more.
@@ -471,6 +476,240 @@ def _build_block_shapes(
     return out
 
 
+# ---------------------------------------------------------------------------
+# Context and Evidence (CHG-0399, CHG-0400)
+# ---------------------------------------------------------------------------
+
+#: Exposure fields carried into the page, as ``(source column, payload key)``.
+#: Payload keys are short because every one of them is repeated ~1,400 times.
+EXPOSURE_FIELDS: tuple[tuple[str, str], ...] = (
+    ("pop_2020", "pop"),
+    ("population_share_parent_pct", "pshare"),
+    ("rural_facilities_total_count", "rf"),
+    ("rural_facilities_agro_count", "rf_agro"),
+    ("rural_facilities_education_count", "rf_edu"),
+    ("rural_facilities_health_count", "rf_health"),
+    ("rural_facilities_service_count", "rf_service"),
+    ("rural_facilities_total_count_per_100k", "rf_per100k"),
+    ("built_up_area_km2", "bu"),
+    ("built_up_area_share_pct", "bu_pct"),
+    ("lulc_agri_area_km2", "ag"),
+    ("lulc_agri_share_pct", "ag_pct"),
+)
+
+#: Hydrology fields carried into the page. ``drainage_area_km2`` and
+#: ``runoff_coeff`` are omitted deliberately: both are null for every district
+#: and block in scope, and the workflow says to omit an unavailable field rather
+#: than render an empty row.
+HYDRO_TEXT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("basin_name", "basin"),
+    ("subbasin_name", "sub"),
+    ("primary_river", "river"),
+    ("hydro_type", "htype"),
+)
+HYDRO_NUM_FIELDS: tuple[tuple[str, str], ...] = (
+    ("basin_frac", "bfrac"),
+    ("subbasin_frac", "sfrac"),
+)
+
+#: Source, unit and vintage for each context subsection, shown in the page so a
+#: reader never has to guess what a number is or when it was measured.
+CONTEXT_PROVENANCE: dict[str, str] = {
+    "population": "Population: WorldPop-derived admin master, 2025 snapshot",
+    "facilities": "Rural facilities: Mission Antyodaya, 2019–2021 snapshot",
+    "built_up": "Built-up area: LULC-derived admin master, current snapshot",
+    "lulc": "Agricultural LULC: LULC-derived admin master, current snapshot",
+    "hydro": "Basins and rivers: IRT hydrology crosswalk over the admin roster",
+}
+
+
+def _clean_number(value: object, places: int) -> Optional[float]:
+    """A finite float rounded for transport, or ``None`` for anything else."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(number):
+        return None
+    return round(number, places)
+
+
+def _parse_also(raw: object) -> list[list]:
+    """The two largest secondary basins as ``[name, percent]`` pairs."""
+    if not isinstance(raw, str) or not raw.strip():
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    rows = []
+    for item in parsed:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("basin_name") or "").strip()
+        frac = _clean_number(item.get("basin_frac", item.get("overlap_frac")), 4)
+        if name and frac is not None:
+            rows.append([name, frac])
+    rows.sort(key=lambda row: row[1], reverse=True)
+    return rows[:2]
+
+
+def _state_exposure_rows(
+    exposure: pd.DataFrame,
+    wanted_districts: set[str],
+    areas: dict[str, float],
+) -> dict[str, dict]:
+    """Aggregate district exposure into one row per State/UT.
+
+    Follows the workflow's State/UT aggregation rules literally: counts and areas
+    are summed, and every share and rate is recomputed from the State/UT totals
+    rather than averaged over district percentages. The share denominator is the
+    canonical district area used for the score's own area weighting, so the two
+    cannot drift apart.
+    """
+    frame = exposure.loc[exposure["admin_key"].isin(wanted_districts)].copy()
+    if frame.empty:
+        return {}
+
+    frame["area_km2"] = [
+        areas.get(str(key), float("nan")) / 1e6 for key in frame["admin_key"]
+    ]
+    national_pop = float(pd.to_numeric(frame["pop_2020"], errors="coerce").sum())
+
+    out: dict[str, dict] = {}
+    for state, group in frame.groupby("state_name", sort=True):
+        totals = {
+            column: float(pd.to_numeric(group[column], errors="coerce").sum())
+            for column in (
+                "pop_2020",
+                "rural_facilities_total_count",
+                "rural_facilities_agro_count",
+                "rural_facilities_education_count",
+                "rural_facilities_health_count",
+                "rural_facilities_service_count",
+                "built_up_area_km2",
+                "lulc_agri_area_km2",
+                "area_km2",
+            )
+        }
+        area = totals["area_km2"]
+        population = totals["pop_2020"]
+        row: dict[str, object] = {
+            "pop": _clean_number(population, 0),
+            "rf": _clean_number(totals["rural_facilities_total_count"], 0),
+            "rf_agro": _clean_number(totals["rural_facilities_agro_count"], 0),
+            "rf_edu": _clean_number(totals["rural_facilities_education_count"], 0),
+            "rf_health": _clean_number(totals["rural_facilities_health_count"], 0),
+            "rf_service": _clean_number(totals["rural_facilities_service_count"], 0),
+            "bu": _clean_number(totals["built_up_area_km2"], 1),
+            "ag": _clean_number(totals["lulc_agri_area_km2"], 1),
+            "n": int(len(group)),
+        }
+        if population > 0:
+            row["rf_per100k"] = _clean_number(
+                1e5 * totals["rural_facilities_total_count"] / population, 1
+            )
+        if national_pop > 0:
+            row["pshare"] = _clean_number(100.0 * population / national_pop, 2)
+            row["plevel"] = "India"
+        if area > 0:
+            row["bu_pct"] = _clean_number(100.0 * totals["built_up_area_km2"] / area, 2)
+            row["ag_pct"] = _clean_number(100.0 * totals["lulc_agri_area_km2"] / area, 2)
+        out[str(state)] = {k: v for k, v in row.items() if v is not None}
+    return out
+
+
+def load_context(
+    data_dir: Path,
+    district_keys: set[str],
+    block_keys: set[str],
+    areas: dict[str, float],
+) -> dict:
+    """Exposure and hydrology context for exactly the units this page can select.
+
+    Both artifacts are optional. A missing or malformed one yields empty tables
+    rather than an exception: the workflow requires that Context and Evidence be
+    supplementary, so its absence must never invalidate a score.
+    """
+    root = Path(data_dir) / "processed_optimised" / "context"
+    wanted = district_keys | block_keys
+
+    def _read(name: str) -> pd.DataFrame:
+        path = root / name
+        if not path.exists():
+            print(f"context   : {name} absent — that subsection will be omitted",
+                  file=sys.stderr)
+            return pd.DataFrame()
+        try:
+            return pd.read_parquet(path)
+        except Exception as exc:  # pragma: no cover - depends on the local bundle
+            print(f"context   : {name} unreadable ({exc}) — subsection omitted",
+                  file=sys.stderr)
+            return pd.DataFrame()
+
+    exposure_raw = _read("admin_exposure_summary.parquet")
+    hydro_raw = _read("admin_hydro_summary.parquet")
+
+    exposure: dict[str, dict] = {}
+    if not exposure_raw.empty and "admin_key" in exposure_raw.columns:
+        frame = exposure_raw.loc[exposure_raw["admin_key"].isin(wanted)]
+        for row in frame.itertuples(index=False):
+            entry: dict[str, object] = {}
+            for column, key in EXPOSURE_FIELDS:
+                value = _clean_number(getattr(row, column, None),
+                                      2 if key.endswith(("_pct", "share")) else
+                                      (1 if key in {"bu", "ag", "rf_per100k"} else 0))
+                if value is not None:
+                    entry[key] = value
+            parent = str(getattr(row, "parent_name", "") or "").strip()
+            if parent:
+                entry["plevel"] = parent
+            if entry:
+                exposure[str(row.admin_key)] = entry
+
+    hydro: dict[str, dict] = {}
+    if not hydro_raw.empty and "admin_key" in hydro_raw.columns:
+        frame = hydro_raw.loc[hydro_raw["admin_key"].isin(wanted)]
+        for row in frame.itertuples(index=False):
+            entry: dict[str, object] = {}
+            for column, key in HYDRO_TEXT_FIELDS:
+                text = str(getattr(row, column, "") or "").strip()
+                if text:
+                    entry[key] = text
+            for column, key in HYDRO_NUM_FIELDS:
+                value = _clean_number(getattr(row, column, None), 4)
+                if value is not None:
+                    entry[key] = value
+            also = _parse_also(getattr(row, "also_intersects_basin_json", None))
+            if also:
+                entry["also"] = also
+            if entry:
+                hydro[str(row.admin_key)] = entry
+
+    states = _state_exposure_rows(exposure_raw, district_keys, areas) if not exposure_raw.empty else {}
+
+    matched_districts = len(district_keys & set(exposure)) if exposure else 0
+    matched_blocks = len(block_keys & set(exposure)) if exposure else 0
+    print(f"context   : exposure {matched_districts}/{len(district_keys)} districts, "
+          f"{matched_blocks}/{len(block_keys)} blocks, {len(states)} State/UT rows")
+    unmatched = sorted(district_keys - set(exposure))
+    if unmatched:
+        print(f"context   : {len(unmatched)} districts carry no context row, "
+              f"e.g. {unmatched[:3]} — they will read 'Not available'", file=sys.stderr)
+    matched_hydro = len(district_keys & set(hydro)) if hydro else 0
+    print(f"context   : hydrology {matched_hydro}/{len(district_keys)} districts, "
+          f"{len(block_keys & set(hydro))}/{len(block_keys)} blocks")
+
+    return {
+        "exposure": exposure,
+        "hydro": hydro,
+        "states": states,
+        "provenance": CONTEXT_PROVENANCE,
+    }
+
+
 def district_areas(data_dir: Path) -> dict[str, float]:
     """Canonical district areas in m^2, read from the geometry property tables."""
     root = Path(data_dir) / "processed_optimised" / "geometry" / "admin" / "district"
@@ -697,6 +936,29 @@ PAGE_TEMPLATE = r"""<!doctype html>
           padding: 12px 14px; font-size: 12.5px; color: var(--ink-2); }
   .stub h3 { margin: 0 0 8px; font-size: 13px; }
 
+
+  /* ---- Context and Evidence (CHG-0401) ---- */
+  details.ctx > summary { cursor: pointer; font-size: 13px; font-weight: 600;
+                          display: flex; align-items: baseline; gap: 8px; }
+  details.ctx > summary .ctx-for { font-weight: 400; font-size: 12px; color: var(--ink-3); }
+  .ctx-body { margin-top: 10px; }
+  .ctx-sec { border-top: 1px solid var(--rule); padding-top: 10px; margin-top: 10px; }
+  .ctx-sec:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+  .ctx-sec h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase;
+                letter-spacing: .06em; color: var(--ink-3); }
+  .ctx-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 8px 14px; }
+  .ctx-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .ctx-cell .lab { font-size: 11px; color: var(--ink-3); display: block; }
+  .ctx-cell .val { font-size: 14px; font-weight: 650; }
+  .ctx-cell .val small { font-weight: 400; font-size: 11.5px; color: var(--ink-3); }
+  .ctx-chip { display: inline-flex; align-items: baseline; gap: 6px; font-size: 12.5px;
+              background: var(--ground); border: 1px solid var(--rule); border-radius: 999px;
+              padding: 3px 10px; margin: 0 6px 6px 0; }
+  .ctx-chip em { font-style: normal; color: var(--ink-3); font-size: 11.5px; }
+  .ctx-none { font-size: 12px; color: var(--ink-3); font-style: italic; margin: 0; }
+  .ctx-prov { margin: 10px 0 0; font-size: 11px; color: var(--ink-3); line-height: 1.5;
+              border-top: 1px dashed var(--rule); padding-top: 8px; }
   /* ---- tooltip ---- */
   #tip { position: fixed; pointer-events: none; z-index: 60; background: #16202c; color: #fff;
          border-radius: 7px; padding: 9px 11px; font-size: 12.5px; max-width: 290px;
@@ -744,7 +1006,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
 <div class="wrap">
   <div class="banner">
     <div>
-      <p style="margin:0 0 6px"><b>Two departures from the target spec, both deliberate.</b></p>
+      <p style="margin:0 0 6px"><b>Two departures in the flow itself, both deliberate.</b></p>
       <p style="margin:0">
       <b>1. Only Telangana opens below the national view.</b> Its 588 blocks are scored on the
       frozen ruler and painted for real. Every other State/UT hovers normally — whole-state
@@ -752,6 +1014,8 @@ PAGE_TEMPLATE = r"""<!doctype html>
       has been scored. One worked State/UT demonstrates the workflow.
       <br><b>2. Detailed Analysis is a stub.</b> The action and the state it carries are real,
       including which driver metric was selected; the destination only displays that state.
+      <br>Context and Evidence carries no map overlays and no basin context at State/UT scope; the
+      card and the method note say why.
       </p>
     </div>
   </div>
@@ -804,6 +1068,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
       </div>
       <div class="card" id="ranking"></div>
       <div id="inspection"></div>
+      <div class="card" id="context" hidden></div>
       <div class="card">
         <details class="method-wrap">
           <summary>Method note</summary>
@@ -837,6 +1102,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     pinned: null,
     showAll: false,
     local: false,          /* the local-contrast view; opt-in, never the landing state */
+    ctxOpen: false,        /* Context and Evidence is collapsed on arrival, by contract */
     da: null
   };
 
@@ -1635,6 +1901,179 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (bo) bo.addEventListener("click", function () { S.da = null; render(); });
   }
 
+  /* ================= Context and Evidence ================= */
+  /* Supplementary by contract: this section may be entirely absent without
+     invalidating a score, a band, a rank or a driver. It is collapsed by
+     default, appears from the State view onward, and describes the most local
+     unit currently selected. Fields absent from the artifact are omitted rather
+     than rendered empty, and nothing is ever inferred from another level. */
+
+  function cxPop(v) {
+    if (v === undefined || v === null || isNaN(v)) return null;
+    if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2).replace(/\.00$/, "") + " million";
+    return Math.round(v).toLocaleString("en-IN");
+  }
+  function cxCount(v) {
+    if (v === undefined || v === null || isNaN(v)) return null;
+    return Math.round(v).toLocaleString("en-IN");
+  }
+  function cxRate(v) {
+    if (v === undefined || v === null || isNaN(v)) return null;
+    return v.toFixed(1).replace(/\.0$/, "");
+  }
+  function cxPct(v, isFraction) {
+    if (v === undefined || v === null || isNaN(v)) return null;
+    var x = isFraction ? v * 100 : v;
+    return (Math.abs(x - Math.round(x)) < 0.05 ? x.toFixed(0) : x.toFixed(1)) + "%";
+  }
+  function cxArea(v) {
+    if (v === undefined || v === null || isNaN(v)) return null;
+    return v.toLocaleString("en-IN", { maximumFractionDigits: 1 }) + " km²";
+  }
+  function cxCell(label, value, note) {
+    if (value === null) return "";
+    return "<div class='ctx-cell'><span class='lab'>" + esc(label) + "</span>" +
+           "<span class='val'>" + value + (note ? " <small>" + esc(note) + "</small>" : "") +
+           "</span></div>";
+  }
+
+  /* The most local selected unit, and the row that describes it. */
+  function contextScope() {
+    if (S.view === "district" && S.block && blockByKey[S.block]) {
+      var b = blockByKey[S.block];
+      var parent = byKey[b.dk];
+      return { key: b.k, level: "block", name: b.n,
+               where: (parent ? parent.n + " · " : "") + b.s };
+    }
+    if (S.view === "district" && byKey[S.district]) {
+      return { key: S.district, level: "district", name: byKey[S.district].n, where: S.state };
+    }
+    if (S.view === "state" || S.view === "district") {
+      return { key: null, level: "state", name: S.state, where: "India" };
+    }
+    return null;
+  }
+
+  function ctxExposureHtml(scope, cx) {
+    var row = scope.level === "state" ? (cx.states || {})[scope.name]
+                                      : (cx.exposure || {})[scope.key];
+    if (!row) {
+      return "<div class='ctx-sec'><h3>Exposure snapshot</h3>" +
+             "<p class='ctx-none'>No exposure summary is published for this " +
+             scope.level + ".</p></div>";
+    }
+    var html = "<div class='ctx-sec'><h3>Exposure snapshot</h3>";
+
+    var pop = cxPop(row.pop);
+    if (pop !== null) {
+      html += "<div class='ctx-grid'>" +
+        cxCell("Population", pop) +
+        cxCell("Share of " + (scope.level === "state" ? "India" : (row.plevel || "parent")),
+               cxPct(row.pshare, false)) +
+        "</div>";
+    }
+
+    var rf = cxCount(row.rf);
+    if (rf !== null) {
+      html += "<div class='ctx-grid' style='margin-top:10px'>" +
+        cxCell("Rural facilities", rf) +
+        cxCell("Per 100k people", cxRate(row.rf_per100k)) +
+        "</div>" +
+        "<div class='ctx-grid four' style='margin-top:8px'>" +
+        cxCell("Agro", cxCount(row.rf_agro)) +
+        cxCell("Education", cxCount(row.rf_edu)) +
+        cxCell("Health", cxCount(row.rf_health)) +
+        cxCell("Service", cxCount(row.rf_service)) +
+        "</div>";
+    }
+
+    var bu = cxArea(row.bu), ag = cxArea(row.ag);
+    if (bu !== null || ag !== null) {
+      html += "<div class='ctx-grid' style='margin-top:10px'>" +
+        cxCell("Built-up area", bu) +
+        cxCell("Built-up share", cxPct(row.bu_pct, false)) +
+        cxCell("Agricultural LULC", ag) +
+        cxCell("Agricultural share", cxPct(row.ag_pct, false)) +
+        "</div>";
+    }
+
+    if (scope.level === "state" && row.n) {
+      html += "<p class='ctx-none' style='margin-top:9px'>Summed over " + row.n +
+              " districts; every share and rate is recomputed from the State/UT totals, " +
+              "never averaged over district percentages.</p>";
+    }
+    return html + "</div>";
+  }
+
+  function ctxHydroHtml(scope, cx) {
+    var html = "<div class='ctx-sec'><h3>Hydrological context</h3>";
+    /* Deliberately absent at State/UT scope. The workflow forbids counting the
+       dominant basins of districts, and a correct State/UT basin share needs a
+       State-to-basin geometry intersection this prototype does not carry. An
+       honest gap beats a wrong number inferred from another level. */
+    if (scope.level === "state") {
+      return html + "<p class='ctx-none'>Not available at State/UT level. A State/UT " +
+             "basin share must come from a State-to-basin geometry intersection, not from " +
+             "counting its districts' dominant basins — so it is omitted rather than " +
+             "approximated. Select a district to see basin context.</p></div>";
+    }
+    var row = (cx.hydro || {})[scope.key];
+    if (!row) {
+      return html + "<p class='ctx-none'>No hydrological summary is published for this " +
+             scope.level + ".</p></div>";
+    }
+    if (row.basin) {
+      html += "<span class='lab' style='font-size:11px;color:var(--ink-3)'>Dominant basin</span><br>" +
+        "<span class='ctx-chip'>" + esc(row.basin) +
+        (cxPct(row.bfrac, true) ? "<em>" + cxPct(row.bfrac, true) + "</em>" : "") + "</span>";
+    }
+    if (row.sub) {
+      html += "<br><span class='lab' style='font-size:11px;color:var(--ink-3)'>Dominant sub-basin</span><br>" +
+        "<span class='ctx-chip'>" + esc(row.sub) +
+        (cxPct(row.sfrac, true) ? "<em>" + cxPct(row.sfrac, true) + "</em>" : "") + "</span>";
+    }
+    if (row.also && row.also.length) {
+      html += "<br><span class='lab' style='font-size:11px;color:var(--ink-3)'>Also intersects</span><br>";
+      row.also.forEach(function (pair) {
+        html += "<span class='ctx-chip'>" + esc(pair[0]) +
+                "<em>" + cxPct(pair[1], true) + "</em></span>";
+      });
+    }
+    html += "<div class='ctx-grid' style='margin-top:8px'>" +
+      cxCell("Hydro type", row.htype ? esc(row.htype) : null) +
+      cxCell("Primary river", row.river ? esc(row.river) : null) +
+      "</div>";
+    return html + "</div>";
+  }
+
+  function renderContext() {
+    var host = document.getElementById("context");
+    var scope = contextScope();
+    var cx = D.context;
+    if (!scope || !cx) { host.hidden = true; host.innerHTML = ""; return; }
+    host.hidden = false;
+
+    var prov = cx.provenance || {};
+    var lines = Object.keys(prov).map(function (k) { return prov[k]; });
+
+    host.innerHTML =
+      "<details class='ctx'" + (S.ctxOpen ? " open" : "") + ">" +
+      "<summary>Context and Evidence" +
+        "<span class='ctx-for'>" + esc(scope.name) + " · " + scope.level +
+        " · " + esc(scope.where) + "</span></summary>" +
+      "<div class='ctx-body'>" +
+        ctxExposureHtml(scope, cx) +
+        ctxHydroHtml(scope, cx) +
+        "<p class='ctx-prov'>Contextual only — it does not enter the bundle score, " +
+        "which stays hazard-only. " + lines.map(esc).join(" · ") + ". Map overlays " +
+        "(basin boundaries, river network) are not implemented in this prototype and are " +
+        "omitted from the controls rather than shown disabled.</p>" +
+      "</div></details>";
+
+    var det = host.querySelector("details.ctx");
+    det.addEventListener("toggle", function () { S.ctxOpen = det.open; });
+  }
+
   /* ================= chrome ================= */
   function renderCrumbs() {
     var host = document.getElementById("crumbs");
@@ -1702,6 +2141,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
     renderHeadline();
     renderRanking();
     renderInspection();
+    renderContext();
   }
 
   /* ---------- selectors ---------- */
@@ -1860,14 +2300,31 @@ cohort-size minimum, so a State/UT with three valid districts ranks against one 
 Filtering by a histogram bin retains each unit's original rank and never recomputes rank inside the
 filtered subset.</p>
 
+<h3>Context and Evidence</h3>
+<p>Collapsed by default and available from the State view onward, describing the most local unit
+selected: the block if one is selected, otherwise the district, otherwise the State/UT. It is
+supplementary by contract — its absence never invalidates a score, band, rank or driver, and it
+never enters the score, which stays hazard-only.</p>
+<p>State/UT exposure is aggregated from its districts under the workflow's rules: counts and areas
+are summed, and every share and per-capita rate is recomputed from the State/UT totals rather than
+averaged over district percentages. The share denominator is the same canonical district area that
+weights the State/UT headline, so the two cannot drift apart.</p>
+<p><b>Hydrological context is deliberately absent at State/UT scope.</b> A State/UT basin share
+must come from a State-to-basin geometry intersection; counting the dominant basins of districts
+would be a different quantity wearing the same label. It is omitted rather than approximated, which
+is the same rule that governs every other field here: an unavailable field is dropped, an
+unavailable subsection says so plainly, and nothing is inferred from another geography level.</p>
+<p>Map overlays — basin boundaries and the river network — are not implemented, so they are omitted
+from the controls rather than shown disabled.</p>
+
 <h3>Not implemented here</h3>
 <ul>
   <li><b>Blocks outside the live State/UT.</b> Only Telangana's 588 blocks are scored, so only
       Telangana opens below the national view. Every other State/UT hovers normally.</li>
   <li><b>Detailed Analysis.</b> The transition and its carried state are real; the destination is a
       stub.</li>
-  <li><b>Twelve of the thirteen eligible bundles</b>, Context and Evidence, coordinate entry,
-      exports, and the provenance quartet.</li>
+  <li><b>Twelve of the thirteen eligible bundles</b>, coordinate entry, exports, comparison,
+      map overlays, State/UT-level basin context, and the provenance quartet.</li>
 </ul>
 <p>Scores come from the Heat Risk national pilot and predate the production frozen-scale change.
 They are indicative of shape, not a release baseline.</p>
@@ -1882,6 +2339,7 @@ def build_html(
     block_shapes: list[dict],
     height: float,
     areas: dict[str, float],
+    context: dict,
 ) -> str:
     """One self-contained page: inline SVG, inline data, no network calls."""
     district_scores, state_stats, drivers = build_tables(scores, areas)
@@ -1911,6 +2369,7 @@ def build_html(
         "width": CANVAS_WIDTH,
         "height": round(height, 2),
         "method_html": METHOD_HTML,
+        "context": context,
     }
     blob = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
     # The payload lives in a <script type="application/json"> block, so only a
@@ -1979,8 +2438,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"WARNING   : {len(orphan_shapes)} drawn districts have no score, "
               f"e.g. {orphan_shapes[:3]}", file=sys.stderr)
 
+    context = load_context(
+        data_dir,
+        district_keys={d["k"] for d in districts},
+        block_keys={b["k"] for b in block_shapes},
+        areas=areas,
+    )
+
     html_text = build_html(
-        scores, blocks, districts, state_paths, block_shapes, height, areas
+        scores, blocks, districts, state_paths, block_shapes, height, areas, context
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(html_text, encoding="utf-8")
