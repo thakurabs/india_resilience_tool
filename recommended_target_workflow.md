@@ -661,7 +661,8 @@ Distribution bin filters are view-local transient state. Clear them when Bundle,
 or view changes. Applying a filter must not clear an already selected geography that falls outside
 the bin; selection takes precedence over filter emphasis. Breadcrumb navigation
 preserves Bundle, Scenario, and Period, clears selections below the destination level, and clears
-the previous view's filters.
+the previous view's filters. Compare-tray membership is not transient state and is exempt from
+these rules; see `Compare locations` in section 4.
 
 Coordinate analysis should remain available as an alternate location-entry path, but it should
 not compete visually with the default geography-first workflow. A clear action such as
@@ -720,8 +721,109 @@ than recalculating rank within the filtered subset, and the active filter and co
 should remain visible. Rankings, answer cards and method copy should use the same band order
 throughout: `Very Low`, `Low`, `Moderate`, `High`, `Extreme`.
 
+### Compare locations
+
 Comparison should be a deliberate follow-up action. It should not add controls to the initial
-path before the user has understood the first result.
+path before the user has understood the first result: the tray is absent until the user puts
+something in it.
+
+The frozen national ruler is what makes this feature possible. Under per-State normalization two
+districts in different States shared no scale and could not be compared; under one ruler fitted
+once over the national district pool across every declared scenario/period slice, they can — and
+so can one place against its own futures. Both comparisons are valid, and the tray supports both.
+
+**One axis varies at a time.** The tray is in one of two modes, and the mode fixes what is held
+constant:
+
+```text
+Places mode     slots differ by place
+                scenario and period are locked to the header selectors and
+                move every slot together
+
+Futures mode    slots differ by scenario x period
+                the place is fixed to one selected unit
+```
+
+A tray that allowed place and future to vary at once would produce confounded comparisons —
+`Warangal at SSP2-4.5 early century` beside `Kozhikode at SSP5-8.5 end century` differ in two ways
+and support no inference. The mode switch is what prevents that, and it is not optional.
+
+Tray state is:
+
+```text
+mode          places | futures
+members       up to 4 slots
+subject       the fixed place, in futures mode only
+```
+
+Four is the cap in both modes. Beyond four, side-by-side reading fails and the question has become
+a ranking, which the Overview already answers.
+
+Entering and leaving futures mode is reversible. From places mode the user names one member as the
+subject; the tray seeds with the current scenario across all three periods and the other members
+are released. Returning to places mode leaves the subject as the sole member. Neither transition
+leaves the Overview or extends the breadcrumb.
+
+Adding a member is a single control wherever a unit is already named — the State/UT headline, the
+district and block inspection panels, a ranking row, and geography search. No separate picker is
+introduced.
+
+The tray survives geography navigation, view changes, and selector changes. Members are recomputed
+in place, never discarded:
+
+```text
+scenario or period changes (places mode)  every slot recomputes on the new slice
+bundle changes                            members are retained and repopulated
+                                          with the new bundle's scores, bands,
+                                          ranks and drivers
+view or geography changes                 the tray is unaffected
+```
+
+Retaining members across a bundle change is deliberate. The units stay valid and the user's
+shortlist is the expensive thing to rebuild; only the figures are replaced. Because the previous
+bundle's figures are gone and were never comparable to the new ones, the panel states the active
+bundle on its face and carries no residue of the previous one. Bin filters, hover and temporary
+emphasis are transient and clear as they do elsewhere; tray membership is not transient state.
+
+The comparison panel presents one column per slot and one row per attribute: score, band, rank with
+its scope, drivers, and the block range with its count. Column headers carry the place and its
+parent in places mode, and the scenario and period labels in futures mode.
+
+Ranks compare only within one cohort. Ranking is cohort-specific, so in places mode a rank must
+render as a scoped string — `4 of 33 in Telangana` — on its own line, never as a sortable numeric
+column. Two districts from different States hold ranks that cannot be ordered against each other,
+and a numeric column is precisely the affordance that invites that false ordering. In futures mode
+the cohort is identical across slots and ranks *are* comparable, because the same units are ranked
+on a different slice; the panel may show rank movement directly. Where `n_valid` differs between
+slices the denominators differ, and the panel says so rather than presenting the movement as clean.
+
+Differences are expressed in scale points. The ruler is rank-based, so a gap of 12.3 is a
+difference in national percentile position and must be labelled as such — never as a physical
+difference, a percentage, or a multiple. Blocks carry no rank at any scope, in either mode.
+
+Mixed administrative levels are permitted and must be labelled. A district and a block may share a
+tray, because both are scored on the same ruler and a district and a block holding the same
+physical value receive the same score. Each column states its level, since the rank and block-range
+rows differ in kind between them.
+
+Shared drivers are the analytical output. Drivers common to several columns should be visually
+distinguished from those unique to one: a shared driver means one intervention addresses several
+places, and a unique driver means it does not. Driver display follows the existing contract — at
+most three, ordered by full-precision signal strength, with no numeric signal values shown.
+
+Tray members visible in the current view carry a persistent outline in a hue distinct from the
+accent selection stroke, and never as a fourth grey boundary weight. Members outside the current
+view are simply not outlined; the panel is authoritative and the map emphasis is a convenience.
+Precedence runs selection, then compare membership, then bin-filter emphasis.
+
+One bundle at a time. The tray holds locations and futures, never bundle pairs. Scores are not
+comparable across bundles, and a comparison table is the single most likely place for that
+prohibition to be breached.
+
+The tray is the comparison context carried into Detailed Analysis where a route supports it, and
+dropped cleanly where none does.
+
+### Overview exports
 
 Overview exports should focus on the current answer and visible evidence:
 
@@ -967,6 +1069,23 @@ At minimum, synthetic and artifact-contract tests must prove:
   reselects that block's parent district; at most one district and one block are selected at once;
 - no block is ranked within a district, and no district is ranked by a block-derived statistic; and
 - Detailed Analysis routing and return preserve only the declared durable state.
+
+### Comparison
+
+- the tray holds at most four members, and place and future never vary at once;
+- entering futures mode fixes one subject and releases other members; leaving it retains the
+  subject as the sole member;
+- scenario or period changes recompute every places-mode slot on the new slice;
+- a bundle change retains membership and replaces every figure, with no previous-bundle value
+  surviving in the panel;
+- a cross-State places-mode comparison exposes no orderable rank column, while a futures-mode
+  comparison may compare ranks, and flags a differing `n_valid`;
+- no block carries a rank in either mode;
+- differences are reported in scale points and never as physical or percentage differences;
+- compare emphasis never overrides a selection, and never renders as an administrative boundary
+  weight; and
+- tray membership survives geography and view changes, and is not cleared by the transient-state
+  rules that clear bin filters and hover.
 
 ### Maps, routing, and data states
 
