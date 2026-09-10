@@ -914,6 +914,19 @@ PAGE_TEMPLATE = r"""<!doctype html>
   function metricLabel(slug) { return D.metric_labels[slug] || slug; }
 
   /* ---------- competition ranks over the current cohort ---------- */
+  /* One district's place in its State/UT ranking, for the State-view hover. */
+  function districtRank(key) {
+    var d = byKey[key];
+    if (!d) return null;
+    var rows = rankedDistricts(d.s);
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].key === key) {
+        return { score: rows[i].score, rank: rows[i].rank, total: rows.length };
+      }
+    }
+    return null;
+  }
+
   function rankedDistricts(state) {
     var sc = dScores();
     var rows = (statesOf[state] || []).map(function (d) {
@@ -1155,6 +1168,12 @@ PAGE_TEMPLATE = r"""<!doctype html>
           " is scored below district level in this prototype</div>"), ev);
   }
 
+  /* Hover always describes the unit this view can *select*, never the unit it
+     paints. Nationally that means districts are painted but a hover reports the
+     State/UT and highlights the whole State/UT. The State view inherits exactly
+     that: blocks are painted, but a hover reports the parent district and
+     highlights all of that district's blocks. Only in the District view, where
+     the block is itself the selectable unit, does a hover report the block. */
   function onBlockHover(ev) {
     var t = ev.target;
     if (!t.dataset || !t.dataset.block || S.view === "india") { hideTip(); return; }
@@ -1162,6 +1181,30 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (!b) { hideTip(); return; }
     if (S.view === "district" && b.dk !== S.district) { hideTip(); return; }
     for (var k in nodes) nodes[k].classList.remove("hl");
+
+    if (S.view === "state") {
+      var d = byKey[b.dk];
+      var sibs = blocksOfDistrict[b.dk] || [];
+      sibs.forEach(function (x) {
+        var node = nodes["B:" + x.k];
+        if (node) node.classList.add("hl");
+      });
+      if (!d) { hideTip(); return; }
+      var info = districtRank(b.dk);
+      showTip(
+        "<b>" + esc(d.n) + "</b>" +
+        "<div class='t-row'>" + esc(d.s) + "</div>" +
+        (info === null
+          ? "<div class='t-row'>No valid data</div>"
+          : "<div class='t-row'>Composite score <em>" + fmt(info.score) + "</em> · " +
+            esc(band(info.score)) + "</div>" +
+            "<div class='t-row'>Rank <em>" + info.rank + "</em> of " + info.total +
+            " valid districts in " + esc(d.s) + "</div>") +
+        "<div class='t-row'>" + sibs.length + " blocks painted</div>" +
+        "<div class='t-row t-go'>Select to open the District view</div>", ev);
+      return;
+    }
+
     nodes["B:" + b.k].classList.add("hl");
     var v = bScores()[b.k];
     var parent = byKey[b.dk];
@@ -1172,10 +1215,7 @@ PAGE_TEMPLATE = r"""<!doctype html>
         ? "<div class='t-row'>No valid data</div>"
         : "<div class='t-row'>Score <em>" + fmt(v) + "</em> · " + esc(band(v)) + "</div>" +
           "<div class='t-row t-off'>Blocks are painted, never ranked</div>") +
-      "<div class='t-row t-go'>" +
-        (S.view === "district"
-          ? "Select to open Detailed Analysis"
-          : "Select its district to open the District view") + "</div>", ev);
+      "<div class='t-row t-go'>Select to open Detailed Analysis</div>", ev);
   }
 
   function onMapClick(ev) {
@@ -1628,11 +1668,11 @@ PAGE_TEMPLATE = r"""<!doctype html>
     if (S.view === "india") {
       title = "National view — districts painted";
       sub = "Thick State/UT boundary, thin district boundary. State/UT polygons are never " +
-            "filled. Hover any State/UT; only " + D.live_state + " opens.";
+            "filled. Hover reports the State/UT; only " + D.live_state + " opens.";
     } else if (S.view === "state") {
       title = S.state + " — blocks painted";
       sub = "Thick district boundary, thin block boundary. Blocks are painted; districts are " +
-            "what this view ranks.";
+            "what this view ranks, hovers report and clicks open.";
     } else {
       title = byKey[S.district].n + " — its blocks painted";
       sub = "The same blocks on the same ruler against the same colourbar, at this district's " +
@@ -1796,6 +1836,11 @@ blocks in production.</p>
       it keeps its parent State/UT's district ranking and distribution, because blocks are
       never ranked.</li>
 </ul>
+<p>Hover follows the same rule as ranking, not painting: it reports the unit the view can
+<i>select</i>. Nationally a hover over a painted district reports its State/UT and highlights the
+whole State/UT; in the State view a hover over a painted block reports its parent district and
+highlights all of that district's blocks. Only in the District view, where the block is itself the
+selectable unit, does a hover report the block.</p>
 <p>The histogram bins the units the view <i>ranks</i>, never the units it <i>paints</i>. A mean is
 a summary, so a State's bin does not constrain its districts: hovering a bin can emphasise
 districts painted in several different colours. The widget title is what stops that being read as

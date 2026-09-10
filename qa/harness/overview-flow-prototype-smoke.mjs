@@ -40,6 +40,13 @@ console.log('state headline :', line(await p.locator('#headline').innerText()).s
 console.log('state painted  :', await p.locator('#painted').innerText());
 await p.screenshot({ path: out + '/02-state.png', fullPage: true });
 
+// State-view hover must report the parent DISTRICT and highlight all its blocks,
+// mirroring the national view's State/UT hover over painted districts
+await p.locator('#g-block path').nth(120).hover({ force: true });
+await p.waitForTimeout(350);
+console.log('state hover    :', line(await p.locator('#tip').innerText()));
+console.log('blocks lit     :', await p.locator('#g-block path.hl').count());
+
 // local contrast: map fill stretches, ticks leave 0-100, the frozen state returns
 const tick0 = () => p.locator('#cbar-ticks span').first().innerText();
 const fill0 = () => p.locator('#g-block path').first().getAttribute('fill');
@@ -64,6 +71,9 @@ await p.screenshot({ path: out + '/03-district.png', fullPage: true });
 // select a block inside it -> inspection + Detailed Analysis
 const shown = p.locator('#g-block path:not(.muted)');
 console.log('blocks in view :', await shown.count());
+await shown.first().hover({ force: true });
+await p.waitForTimeout(350);
+console.log('dist hover     :', line(await p.locator('#tip').innerText()));
 await shown.first().click({ force: true });
 await p.waitForTimeout(600);
 console.log('inspection     :', line(await p.locator('#inspection').innerText()).slice(0, 260));
